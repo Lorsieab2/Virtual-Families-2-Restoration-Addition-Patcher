@@ -1,0 +1,863 @@
+Microsoft (R) COFF/PE Dumper Version 14.51.36247.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\Villager.obj
+
+File Type: COFF OBJECT
+
+COFF SYMBOL TABLE
+000 0105673C ABS    notype       Static       | @comp.id
+001 80000191 ABS    notype       Static       | @feat.00
+002 00000000 SECT1  notype       Static       | .drectve
+    Section length   62, #relocs    0, #linenums    0, checksum        0
+004 00000000 SECT2  notype       Static       | .debug$S
+    Section length B270, #relocs   4C, #linenums    0, checksum        0
+006 00000000 SECT3  notype       Static       | .debug$T
+    Section length   7C, #relocs    0, #linenums    0, checksum        0
+008 00000000 SECT4  notype       Static       | .data
+    Section length   54, #relocs    0, #linenums    0, checksum F7CC79B0
+00A 00000000 SECT4  notype       External     | ?m_eDetailHeadDirection@CVillager@@0W4EHeadDirection@@A (private: static enum EHeadDirection CVillager::m_eDetailHeadDirection)
+00B 00000000 SECT5  notype       Static       | .text$mn
+    Section length   F6, #relocs    7, #linenums    0, checksum 1B35F231, selection    1 (pick no duplicates)
+00D 00000000 SECT6  notype       Static       | .debug$S
+    Section length  25C, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x5)
+00F 00000000 SECT7  notype       Static       | .text$mn
+    Section length   1E, #relocs    0, #linenums    0, checksum 6A3BA80A, selection    2 (pick any)
+011 00000000 SECT8  notype       Static       | .debug$S
+    Section length  150, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x7)
+013 00000000 SECT9  notype       Static       | .text$mn
+    Section length   11, #relocs    0, #linenums    0, checksum DE2EFFD4, selection    2 (pick any)
+015 00000000 SECTA  notype       Static       | .debug$S
+    Section length   FC, #relocs    5, #linenums    0, checksum        0, selection    5 (pick associative Section 0x9)
+017 00000000 SECTB  notype       Static       | .text$mn
+    Section length   26, #relocs    0, #linenums    0, checksum BF89B839, selection    2 (pick any)
+019 00000000 SECTC  notype       Static       | .debug$S
+    Section length  228, #relocs   13, #linenums    0, checksum        0, selection    5 (pick associative Section 0xB)
+01B 00000000 SECTD  notype       Static       | .text$mn
+    Section length   8F, #relocs    9, #linenums    0, checksum E9FAC737, selection    1 (pick no duplicates)
+01D 00000000 SECTE  notype       Static       | .debug$S
+    Section length  2A0, #relocs   19, #linenums    0, checksum        0, selection    5 (pick associative Section 0xD)
+01F 00000000 SECTF  notype       Static       | .text$mn
+    Section length  152, #relocs    8, #linenums    0, checksum EBBF9F02, selection    1 (pick no duplicates)
+021 00000000 SECT10 notype       Static       | .debug$S
+    Section length  3DC, #relocs   13, #linenums    0, checksum        0, selection    5 (pick associative Section 0xF)
+023 00000000 SECT11 notype       Static       | .text$mn
+    Section length   F8, #relocs    5, #linenums    0, checksum 380AB72D, selection    1 (pick no duplicates)
+025 00000000 SECT12 notype       Static       | .debug$S
+    Section length  348, #relocs   19, #linenums    0, checksum        0, selection    5 (pick associative Section 0x11)
+027 00000000 SECT13 notype       Static       | .text$mn
+    Section length   52, #relocs    4, #linenums    0, checksum C741B8E6, selection    1 (pick no duplicates)
+029 00000000 SECT14 notype       Static       | .debug$S
+    Section length  1B8, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x13)
+02B 00000000 SECT15 notype       Static       | .text$mn
+    Section length   E0, #relocs    B, #linenums    0, checksum 326C4C23, selection    1 (pick no duplicates)
+02D 00000000 SECT16 notype       Static       | .debug$S
+    Section length  340, #relocs   1B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x15)
+02F 00000000 SECT17 notype       Static       | .text$mn
+    Section length  152, #relocs    D, #linenums    0, checksum A0217169, selection    1 (pick no duplicates)
+031 00000000 SECT18 notype       Static       | .debug$S
+    Section length  2FC, #relocs    F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x17)
+033 00000000 SECT19 notype       Static       | .text$mn
+    Section length   3D, #relocs    1, #linenums    0, checksum 8490535B, selection    1 (pick no duplicates)
+035 00000000 SECT1A notype       Static       | .debug$S
+    Section length  248, #relocs    F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x19)
+037 00000000 SECT1B notype       Static       | .text$mn
+    Section length   A8, #relocs    1, #linenums    0, checksum 9F754C39, selection    1 (pick no duplicates)
+039 00000000 SECT1C notype       Static       | .debug$S
+    Section length  360, #relocs   2B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x1B)
+03B 00000000 SECT1D notype       Static       | .text$mn
+    Section length   38, #relocs    1, #linenums    0, checksum 3DCCA20C, selection    1 (pick no duplicates)
+03D 00000000 SECT1E notype       Static       | .debug$S
+    Section length  170, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x1D)
+03F 00000000 SECT1F notype       Static       | .text$mn
+    Section length   3A, #relocs    3, #linenums    0, checksum 2076F59E, selection    1 (pick no duplicates)
+041 00000000 SECT20 notype       Static       | .debug$S
+    Section length  188, #relocs    B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x1F)
+043 00000000 SECT21 notype       Static       | .text$mn
+    Section length  1F1, #relocs   15, #linenums    0, checksum  E25FDA3, selection    1 (pick no duplicates)
+045 00000000 SECT22 notype       Static       | .debug$S
+    Section length  760, #relocs   3D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x21)
+047 00000000 SECT23 notype       Static       | .text$mn
+    Section length   DB, #relocs    8, #linenums    0, checksum BEF71E93, selection    1 (pick no duplicates)
+049 00000000 SECT24 notype       Static       | .debug$S
+    Section length  194, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x23)
+04B 00000000 SECT25 notype       Static       | .text$mn
+    Section length  208, #relocs   14, #linenums    0, checksum 405BCABB, selection    1 (pick no duplicates)
+04D 00000000 SECT26 notype       Static       | .debug$S
+    Section length  87C, #relocs   3F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x25)
+04F 00000000 SECT27 notype       Static       | .text$mn
+    Section length   40, #relocs    3, #linenums    0, checksum DD2B911C, selection    1 (pick no duplicates)
+051 00000000 SECT28 notype       Static       | .debug$S
+    Section length  1BC, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x27)
+053 00000000 SECT29 notype       Static       | .text$mn
+    Section length   4E, #relocs    3, #linenums    0, checksum 8862B001, selection    1 (pick no duplicates)
+055 00000000 SECT2A notype       Static       | .debug$S
+    Section length  1D0, #relocs    F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x29)
+057 00000000 SECT2B notype       Static       | .text$mn
+    Section length   10, #relocs    0, #linenums    0, checksum 67970613, selection    1 (pick no duplicates)
+059 00000000 SECT2C notype       Static       | .debug$S
+    Section length  148, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x2B)
+05B 00000000 SECT2D notype       Static       | .text$mn
+    Section length    B, #relocs    1, #linenums    0, checksum 73839FD8, selection    1 (pick no duplicates)
+05D 00000000 SECT2E notype       Static       | .debug$S
+    Section length   D4, #relocs    5, #linenums    0, checksum        0, selection    5 (pick associative Section 0x2D)
+05F 00000000 SECT2F notype       Static       | .text$mn
+    Section length    E, #relocs    1, #linenums    0, checksum 238E8245, selection    1 (pick no duplicates)
+061 00000000 SECT30 notype       Static       | .debug$S
+    Section length   D0, #relocs    5, #linenums    0, checksum        0, selection    5 (pick associative Section 0x2F)
+063 00000000 SECT31 notype       Static       | .text$mn
+    Section length    E, #relocs    1, #linenums    0, checksum B564AB6F, selection    1 (pick no duplicates)
+065 00000000 SECT32 notype       Static       | .debug$S
+    Section length   D4, #relocs    5, #linenums    0, checksum        0, selection    5 (pick associative Section 0x31)
+067 00000000 SECT33 notype       Static       | .text$mn
+    Section length   41, #relocs    0, #linenums    0, checksum 2BA2EF03, selection    1 (pick no duplicates)
+069 00000000 SECT34 notype       Static       | .debug$S
+    Section length  240, #relocs   13, #linenums    0, checksum        0, selection    5 (pick associative Section 0x33)
+06B 00000000 SECT35 notype       Static       | .text$mn
+    Section length  2D7, #relocs   34, #linenums    0, checksum  608E427, selection    1 (pick no duplicates)
+06D 00000000 SECT36 notype       Static       | .debug$S
+    Section length  8A8, #relocs   3D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x35)
+06F 00000000 SECT37 notype       Static       | .text$mn
+    Section length   4D, #relocs    1, #linenums    0, checksum 517C49FF, selection    1 (pick no duplicates)
+071 00000000 SECT38 notype       Static       | .debug$S
+    Section length  184, #relocs    B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x37)
+073 00000000 SECT39 notype       Static       | .text$mn
+    Section length  472, #relocs   39, #linenums    0, checksum FD243A0E, selection    1 (pick no duplicates)
+075 00000000 SECT3A notype       Static       | .debug$S
+    Section length  A30, #relocs   3B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x39)
+077 00000000 SECT3B notype       Static       | .text$mn
+    Section length 49B0, #relocs   C7, #linenums    0, checksum 2CD08345, selection    1 (pick no duplicates)
+079 00000000 SECT3C notype       Static       | .debug$S
+    Section length 3E70, #relocs  193, #linenums    0, checksum        0, selection    5 (pick associative Section 0x3B)
+07B 00000000 SECT3D notype       Static       | .text$mn
+    Section length  137, #relocs    B, #linenums    0, checksum EF9B1D38, selection    1 (pick no duplicates)
+07D 00000000 SECT3E notype       Static       | .debug$S
+    Section length  250, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x3D)
+07F 00000000 SECT3F notype       Static       | .text$mn
+    Section length   9A, #relocs    1, #linenums    0, checksum DE31B5FD, selection    1 (pick no duplicates)
+081 00000000 SECT40 notype       Static       | .debug$S
+    Section length  238, #relocs   11, #linenums    0, checksum        0, selection    5 (pick associative Section 0x3F)
+083 00000000 SECT41 notype       Static       | .text$mn
+    Section length   B8, #relocs    4, #linenums    0, checksum 40576933, selection    1 (pick no duplicates)
+085 00000000 SECT42 notype       Static       | .debug$S
+    Section length  1F4, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x41)
+087 00000000 SECT43 notype       Static       | .text$mn
+    Section length  20A, #relocs   1B, #linenums    0, checksum CC96BE0C, selection    1 (pick no duplicates)
+089 00000000 SECT44 notype       Static       | .debug$S
+    Section length  2F4, #relocs    F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x43)
+08B 00000000 SECT45 notype       Static       | .text$mn
+    Section length   7D, #relocs    2, #linenums    0, checksum D9D23F68, selection    1 (pick no duplicates)
+08D 00000000 SECT46 notype       Static       | .debug$S
+    Section length  1C4, #relocs    F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x45)
+08F 00000000 SECT47 notype       Static       | .text$mn
+    Section length   58, #relocs    1, #linenums    0, checksum 272AD441, selection    1 (pick no duplicates)
+091 00000000 SECT48 notype       Static       | .debug$S
+    Section length  1E4, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x47)
+093 00000000 SECT49 notype       Static       | .text$mn
+    Section length    5, #relocs    1, #linenums    0, checksum 25C4A5AE, selection    1 (pick no duplicates)
+095 00000000 SECT4A notype       Static       | .debug$S
+    Section length  108, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x49)
+097 00000000 SECT4B notype       Static       | .text$mn
+    Section length  18D, #relocs   12, #linenums    0, checksum 7D05C3F3, selection    1 (pick no duplicates)
+099 00000000 SECT4C notype       Static       | .debug$S
+    Section length  3C0, #relocs   1D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x4B)
+09B 00000000 SECT4D notype       Static       | .text$mn
+    Section length   34, #relocs    1, #linenums    0, checksum 3AC0DE65, selection    1 (pick no duplicates)
+09D 00000000 SECT4E notype       Static       | .debug$S
+    Section length  170, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x4D)
+09F 00000000 SECT4F notype       Static       | .text$mn
+    Section length  11F, #relocs    D, #linenums    0, checksum F9AD0CC2, selection    1 (pick no duplicates)
+0A1 00000000 SECT50 notype       Static       | .debug$S
+    Section length  4A0, #relocs   2D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x4F)
+0A3 00000000 SECT51 notype       Static       | .text$mn
+    Section length  234, #relocs    C, #linenums    0, checksum E2AC7A2C, selection    1 (pick no duplicates)
+0A5 00000000 SECT52 notype       Static       | .debug$S
+    Section length  568, #relocs   33, #linenums    0, checksum        0, selection    5 (pick associative Section 0x51)
+0A7 00000000 SECT53 notype       Static       | .text$mn
+    Section length  39D, #relocs   18, #linenums    0, checksum AAA9DE95, selection    1 (pick no duplicates)
+0A9 00000000 SECT54 notype       Static       | .debug$S
+    Section length  734, #relocs   3F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x53)
+0AB 00000000 SECT55 notype       Static       | .text$mn
+    Section length   BE, #relocs    9, #linenums    0, checksum 6B8D9D24, selection    1 (pick no duplicates)
+0AD 00000000 SECT56 notype       Static       | .debug$S
+    Section length  278, #relocs   13, #linenums    0, checksum        0, selection    5 (pick associative Section 0x55)
+0AF 00000000 SECT57 notype       Static       | .text$mn
+    Section length  171, #relocs    C, #linenums    0, checksum E1A8F26F, selection    1 (pick no duplicates)
+0B1 00000000 SECT58 notype       Static       | .debug$S
+    Section length  304, #relocs    F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x57)
+0B3 00000000 SECT59 notype       Static       | .text$mn
+    Section length   41, #relocs    3, #linenums    0, checksum FC1C4923, selection    1 (pick no duplicates)
+0B5 00000000 SECT5A notype       Static       | .debug$S
+    Section length  154, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x59)
+0B7 00000000 SECT5B notype       Static       | .text$mn
+    Section length  30A, #relocs    F, #linenums    0, checksum 4EDDCB82, selection    1 (pick no duplicates)
+0B9 00000000 SECT5C notype       Static       | .debug$S
+    Section length  454, #relocs   15, #linenums    0, checksum        0, selection    5 (pick associative Section 0x5B)
+0BB 00000000 SECT5D notype       Static       | .text$mn
+    Section length  1C5, #relocs   16, #linenums    0, checksum AE927477, selection    1 (pick no duplicates)
+0BD 00000000 SECT5E notype       Static       | .debug$S
+    Section length  26C, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x5D)
+0BF 00000000 SECT5F notype       Static       | .text$mn
+    Section length   98, #relocs    7, #linenums    0, checksum 4AD5F1B4, selection    1 (pick no duplicates)
+0C1 00000000 SECT60 notype       Static       | .debug$S
+    Section length  240, #relocs   13, #linenums    0, checksum        0, selection    5 (pick associative Section 0x5F)
+0C3 00000000 SECT61 notype       Static       | .text$mn
+    Section length   59, #relocs    0, #linenums    0, checksum DDA68CF9, selection    1 (pick no duplicates)
+0C5 00000000 SECT62 notype       Static       | .debug$S
+    Section length  1D4, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x61)
+0C7 00000000 SECT63 notype       Static       | .text$mn
+    Section length   AC, #relocs    4, #linenums    0, checksum E5520C08, selection    1 (pick no duplicates)
+0C9 00000000 SECT64 notype       Static       | .debug$S
+    Section length  1F4, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x63)
+0CB 00000000 SECT65 notype       Static       | .text$mn
+    Section length   9C, #relocs    6, #linenums    0, checksum 564F3B03, selection    1 (pick no duplicates)
+0CD 00000000 SECT66 notype       Static       | .debug$S
+    Section length  1C4, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x65)
+0CF 00000000 SECT67 notype       Static       | .text$mn
+    Section length   42, #relocs    2, #linenums    0, checksum 41DFF42E, selection    1 (pick no duplicates)
+0D1 00000000 SECT68 notype       Static       | .debug$S
+    Section length  130, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x67)
+0D3 00000000 SECT69 notype       Static       | .text$mn
+    Section length   74, #relocs    0, #linenums    0, checksum E45B8B6A, selection    1 (pick no duplicates)
+0D5 00000000 SECT6A notype       Static       | .debug$S
+    Section length  174, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x69)
+0D7 00000000 SECT6B notype       Static       | .text$mn
+    Section length   43, #relocs    5, #linenums    0, checksum 67CDEFA7, selection    1 (pick no duplicates)
+0D9 00000000 SECT6C notype       Static       | .debug$S
+    Section length  1D8, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x6B)
+0DB 00000000 SECT6D notype       Static       | .text$mn
+    Section length   4C, #relocs    3, #linenums    0, checksum 22D558B7, selection    1 (pick no duplicates)
+0DD 00000000 SECT6E notype       Static       | .debug$S
+    Section length  1BC, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x6D)
+0DF 00000000 SECT6F notype       Static       | .text$mn
+    Section length   1C, #relocs    2, #linenums    0, checksum A6406C83, selection    1 (pick no duplicates)
+0E1 00000000 SECT70 notype       Static       | .debug$S
+    Section length  13C, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x6F)
+0E3 00000000 SECT71 notype       Static       | .text$mn
+    Section length   49, #relocs    4, #linenums    0, checksum B49277F3, selection    1 (pick no duplicates)
+0E5 00000000 SECT72 notype       Static       | .debug$S
+    Section length  1AC, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x71)
+0E7 00000000 SECT73 notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum 45057891, selection    1 (pick no duplicates)
+0E9 00000000 SECT74 notype       Static       | .debug$S
+    Section length  10C, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x73)
+0EB 00000000 SECT75 notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum E3727325, selection    1 (pick no duplicates)
+0ED 00000000 SECT76 notype       Static       | .debug$S
+    Section length  10C, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x75)
+0EF 00000000 SECT77 notype       Static       | .text$mn
+    Section length   57, #relocs    1, #linenums    0, checksum BAE1710C, selection    1 (pick no duplicates)
+0F1 00000000 SECT78 notype       Static       | .debug$S
+    Section length  14C, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x77)
+0F3 00000000 SECT79 notype       Static       | .text$mn
+    Section length   4A, #relocs    2, #linenums    0, checksum EAB2045C, selection    1 (pick no duplicates)
+0F5 00000000 SECT7A notype       Static       | .debug$S
+    Section length  18C, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x79)
+0F7 00000000 SECT7B notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum 47022C6B, selection    1 (pick no duplicates)
+0F9 00000000 SECT7C notype       Static       | .debug$S
+    Section length  10C, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x7B)
+0FB 00000000 SECT7D notype       Static       | .text$mn
+    Section length   96, #relocs    4, #linenums    0, checksum 83091D4B, selection    1 (pick no duplicates)
+0FD 00000000 SECT7E notype       Static       | .debug$S
+    Section length  188, #relocs    F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x7D)
+0FF 00000000 SECT7F notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum 62CC0E05, selection    1 (pick no duplicates)
+101 00000000 SECT80 notype       Static       | .debug$S
+    Section length  110, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x7F)
+103 00000000 SECT81 notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum D694C04C, selection    1 (pick no duplicates)
+105 00000000 SECT82 notype       Static       | .debug$S
+    Section length  114, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x81)
+107 00000000 SECT83 notype       Static       | .text$mn
+    Section length  2FB, #relocs   29, #linenums    0, checksum F5E65BCF, selection    1 (pick no duplicates)
+109 00000000 SECT84 notype       Static       | .debug$S
+    Section length  604, #relocs   17, #linenums    0, checksum        0, selection    5 (pick associative Section 0x83)
+10B 00000000 SECT85 notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum 153A03CC, selection    1 (pick no duplicates)
+10D 00000000 SECT86 notype       Static       | .debug$S
+    Section length  110, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x85)
+10F 00000000 SECT87 notype       Static       | .text$mn
+    Section length   E7, #relocs    C, #linenums    0, checksum 3678648F, selection    1 (pick no duplicates)
+111 00000000 SECT88 notype       Static       | .debug$S
+    Section length  2B4, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x87)
+113 00000000 SECT89 notype       Static       | .text$mn
+    Section length   33, #relocs    0, #linenums    0, checksum 27E82C6F, selection    1 (pick no duplicates)
+115 00000000 SECT8A notype       Static       | .debug$S
+    Section length  120, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x89)
+117 00000000 SECT8B notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum B34D0878, selection    1 (pick no duplicates)
+119 00000000 SECT8C notype       Static       | .debug$S
+    Section length  114, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x8B)
+11B 00000000 SECT8D notype       Static       | .text$mn
+    Section length   79, #relocs    3, #linenums    0, checksum 6926A35D, selection    1 (pick no duplicates)
+11D 00000000 SECT8E notype       Static       | .debug$S
+    Section length  1DC, #relocs   11, #linenums    0, checksum        0, selection    5 (pick associative Section 0x8D)
+11F 00000000 SECT8F notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum 410BD165, selection    1 (pick no duplicates)
+121 00000000 SECT90 notype       Static       | .debug$S
+    Section length  110, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x8F)
+123 00000000 SECT91 notype       Static       | .text$mn
+    Section length   47, #relocs    4, #linenums    0, checksum 9A1753BB, selection    1 (pick no duplicates)
+125 00000000 SECT92 notype       Static       | .debug$S
+    Section length  19C, #relocs    B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x91)
+127 00000000 SECT93 notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum 70E3CBF8, selection    1 (pick no duplicates)
+129 00000000 SECT94 notype       Static       | .debug$S
+    Section length  10C, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x93)
+12B 00000000 SECT95 notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum E77CDAD1, selection    1 (pick no duplicates)
+12D 00000000 SECT96 notype       Static       | .debug$S
+    Section length  110, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x95)
+12F 00000000 SECT97 notype       Static       | .text$mn
+    Section length   C1, #relocs    A, #linenums    0, checksum   174E13, selection    1 (pick no duplicates)
+131 00000000 SECT98 notype       Static       | .debug$S
+    Section length  224, #relocs    B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x97)
+133 00000000 SECT99 notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum D09D3D42, selection    1 (pick no duplicates)
+135 00000000 SECT9A notype       Static       | .debug$S
+    Section length  110, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x99)
+137 00000000 SECT9B notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum E17527DF, selection    1 (pick no duplicates)
+139 00000000 SECT9C notype       Static       | .debug$S
+    Section length  110, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x9B)
+13B 00000000 SECT9D notype       Static       | .text$mn
+    Section length   BD, #relocs    9, #linenums    0, checksum F81408F1, selection    1 (pick no duplicates)
+13D 00000000 SECT9E notype       Static       | .debug$S
+    Section length  308, #relocs   13, #linenums    0, checksum        0, selection    5 (pick associative Section 0x9D)
+13F 00000000 SECT9F notype       Static       | .text$mn
+    Section length   B5, #relocs    A, #linenums    0, checksum 6D48FB0A, selection    1 (pick no duplicates)
+141 00000000 SECTA0 notype       Static       | .debug$S
+    Section length  248, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x9F)
+143 00000000 SECTA1 notype       Static       | .text$mn
+    Section length   2C, #relocs    1, #linenums    0, checksum C4BB05B1, selection    1 (pick no duplicates)
+145 00000000 SECTA2 notype       Static       | .debug$S
+    Section length  10C, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0xA1)
+147 00000000 SECTA3 notype       Static       | .text$mn
+    Section length   33, #relocs    1, #linenums    0, checksum A80044A3, selection    1 (pick no duplicates)
+149 00000000 SECTA4 notype       Static       | .debug$S
+    Section length  11C, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0xA3)
+14B 00000000 SECTA5 notype       Static       | .text$mn
+    Section length  18B, #relocs   10, #linenums    0, checksum A5EDF3DD, selection    1 (pick no duplicates)
+14D 00000000 SECTA6 notype       Static       | .debug$S
+    Section length  390, #relocs   17, #linenums    0, checksum        0, selection    5 (pick associative Section 0xA5)
+14F 00000000 SECTA7 notype       Static       | .text$mn
+    Section length   4A, #relocs    4, #linenums    0, checksum 5BA6CC78, selection    1 (pick no duplicates)
+151 00000000 SECTA8 notype       Static       | .debug$S
+    Section length  168, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0xA7)
+153 00000000 SECTA9 notype       Static       | .text$mn
+    Section length    6, #relocs    1, #linenums    0, checksum F4F40212, selection    2 (pick any)
+155 00000000 SECTAA notype       Static       | .debug$S
+    Section length   F4, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0xA9)
+157 00000000 SECTAB notype       Static       | .text$mn
+    Section length   31, #relocs    2, #linenums    0, checksum 5973C45B, selection    2 (pick any)
+159 00000000 SECTAC notype       Static       | .debug$S
+    Section length  1BC, #relocs    B, #linenums    0, checksum        0, selection    5 (pick associative Section 0xAB)
+15B 00000000 SECTB  notype ()    External     | ??_H@YGXPAXIIP6EPAX0@Z@Z (void __stdcall `vector constructor iterator'(void *,unsigned int,unsigned int,void * (__thiscall*)(void *)))
+15C 00000000 UNDEF  notype ()    External     | _strncpy
+15D 00000000 SECTA9 notype ()    External     | ___local_stdio_printf_options
+15E 00000000 UNDEF  notype ()    External     | ___stdio_common_vsprintf
+15F 00000000 SECTAB notype ()    External     | _sprintf
+160 00000000 UNDEF  notype ()    External     | ?Play@CSound@@QAEXW4ESound@@@Z (public: void __thiscall CSound::Play(enum ESound))
+161 00000000 UNDEF  notype ()    External     | ?GetColumnCount@ldwImageGrid@@QAEHXZ (public: int __thiscall ldwImageGrid::GetColumnCount(void))
+162 00000000 UNDEF  notype ()    External     | ??0CVillagerBio@@QAE@XZ (public: __thiscall CVillagerBio::CVillagerBio(void))
+163 00000000 UNDEF  notype ()    External     | ?Copy@CVillagerBio@@QAEXAAV1@@Z (public: void __thiscall CVillagerBio::Copy(class CVillagerBio &))
+164 00000000 UNDEF  notype ()    External     | ?Reset@CVillagerBio@@QAEXXZ (public: void __thiscall CVillagerBio::Reset(void))
+165 00000000 UNDEF  notype ()    External     | ?IsOld@CVillagerBio@@QBE?B_NXZ (public: bool const __thiscall CVillagerBio::IsOld(void)const )
+166 00000000 UNDEF  notype ()    External     | ?SetRandomName@CVillagerBio@@QAEXH@Z (public: void __thiscall CVillagerBio::SetRandomName(int))
+167 00000000 UNDEF  notype ()    External     | ?RandomHeadDirection@CAnimManager@@QBE?BW4EHeadDirection@@W4EDirection@@_N@Z (public: enum EHeadDirection const __thiscall CAnimManager::RandomHeadDirection(enum EDirection,bool)const )
+168 00000000 UNDEF  notype ()    External     | ?RandomDirection@CAnimManager@@QBE?BW4EDirection@@XZ (public: enum EDirection const __thiscall CAnimManager::RandomDirection(void)const )
+169 00000000 UNDEF  notype ()    External     | ?IsValidHeadDirection@CAnimManager@@QBE?B_NW4EHeadDirection@@W4EDirection@@@Z (public: bool const __thiscall CAnimManager::IsValidHeadDirection(enum EHeadDirection,enum EDirection)const )
+16A 00000000 UNDEF  notype ()    External     | ?GetScaledLinkToPrevPt@CAnimManager@@QAE?AUldwPoint@@W4EAnimFrame@@W4EAnimPart@@W4EAnimGender@@HM@Z (public: struct ldwPoint __thiscall CAnimManager::GetScaledLinkToPrevPt(enum EAnimFrame,enum EAnimPart,enum EAnimGender,int,float))
+16B 00000000 UNDEF  notype ()    External     | ?GetScaledLinkToNextPt@CAnimManager@@QAE?AUldwPoint@@W4EAnimFrame@@W4EAnimPart@@W4EAnimGender@@HMPAPAVldwImageGrid@@PAH@Z (public: struct ldwPoint __thiscall CAnimManager::GetScaledLinkToNextPt(enum EAnimFrame,enum EAnimPart,enum EAnimGender,int,float,class ldwImageGrid * *,int *))
+16C 00000000 UNDEF  notype ()    External     | ?GetScaledLinkToNextPt@CAnimManager@@QAE?AUldwPoint@@W4EHeadDirection@@W4EAnimGender@@HMPAPAVldwImageGrid@@PAH@Z (public: struct ldwPoint __thiscall CAnimManager::GetScaledLinkToNextPt(enum EHeadDirection,enum EAnimGender,int,float,class ldwImageGrid * *,int *))
+16D 00000000 UNDEF  notype ()    External     | ?GetAnimFrame@CAnimManager@@QAEXW4EBodyPosition@@AAW4EAnimFrame@@AAW4EDirection@@@Z (public: void __thiscall CAnimManager::GetAnimFrame(enum EBodyPosition,enum EAnimFrame &,enum EDirection &))
+16E 00000000 UNDEF  notype ()    External     | ??0CAnimControl@@QAE@XZ (public: __thiscall CAnimControl::CAnimControl(void))
+16F 00000000 UNDEF  notype ()    External     | ?Reset@CAnimControl@@QAEXXZ (public: void __thiscall CAnimControl::Reset(void))
+170 00000000 UNDEF  notype ()    External     | ?Update@CAnimControl@@QAEXAAW4EAnimFrame@@AAW4EHeadDirection@@AAW4EDirection@@@Z (public: void __thiscall CAnimControl::Update(enum EAnimFrame &,enum EHeadDirection &,enum EDirection &))
+171 00000000 UNDEF  notype ()    External     | ?Play@CAnimControl@@QAEXW4EAnim@@_NM@Z (public: void __thiscall CAnimControl::Play(enum EAnim,bool,float))
+172 00000000 UNDEF  notype ()    External     | ?Stop@CAnimControl@@QAEXXZ (public: void __thiscall CAnimControl::Stop(void))
+173 00000000 UNDEF  notype ()    External     | ?SetSpeed@CAnimControl@@QAEXM@Z (public: void __thiscall CAnimControl::SetSpeed(float))
+174 00000000 UNDEF  notype ()    External     | ?Carry@CCollectable@@QBE?B_NAAVCVillager@@W4ECarrying@@@Z (public: bool const __thiscall CCollectable::Carry(class CVillager &,enum ECarrying)const )
+175 00000000 UNDEF  notype ()    External     | ?Drop@CCollectable@@QBEXAAVCVillager@@W4ECarrying@@@Z (public: void __thiscall CCollectable::Drop(class CVillager &,enum ECarrying)const )
+176 00000000 UNDEF  notype ()    External     | ?Get@theStringManager@@SAPAV1@XZ (public: static class theStringManager * __cdecl theStringManager::Get(void))
+177 00000000 UNDEF  notype ()    External     | ?GetString@theStringManager@@QAEPADW4StringId@@@Z (public: char * __thiscall theStringManager::GetString(enum StringId))
+178 00000000 UNDEF  notype ()    External     | ?BeginNewBehavior@CBehavior@@IBE?B_NAAVCVillager@@W4EBehavior@@ABUSBehaviorData@@@Z (protected: bool const __thiscall CBehavior::BeginNewBehavior(class CVillager &,enum EBehavior,struct SBehaviorData const &)const )
+179 00000000 UNDEF  notype ()    External     | ??0CLikeList@@QAE@XZ (public: __thiscall CLikeList::CLikeList(void))
+17A 00000000 UNDEF  notype ()    External     | ?Initialize@CLikeList@@QAEXXZ (public: void __thiscall CLikeList::Initialize(void))
+17B 00000000 UNDEF  notype ()    External     | ?Contains@CLikeList@@QBE?B_NW4ELike@@@Z (public: bool const __thiscall CLikeList::Contains(enum ELike)const )
+17C 00000000 UNDEF  notype ()    External     | ??0CDislikeList@@QAE@XZ (public: __thiscall CDislikeList::CDislikeList(void))
+17D 00000000 UNDEF  notype ()    External     | ?Initialize@CDislikeList@@QAEXAAVCLikeList@@@Z (public: void __thiscall CDislikeList::Initialize(class CLikeList &))
+17E 00000000 UNDEF  notype ()    External     | ?Contains@CDislikeList@@QBE?B_NW4ELike@@@Z (public: bool const __thiscall CDislikeList::Contains(enum ELike)const )
+17F 00000000 UNDEF  notype ()    External     | ?GetRandom@ldwGameState@@SAHH@Z (public: static int __cdecl ldwGameState::GetRandom(int))
+180 00000000 UNDEF  notype ()    External     | ?GetSecondsFromGameStart@ldwGameState@@QAEIXZ (public: unsigned int __thiscall ldwGameState::GetSecondsFromGameStart(void))
+181 00000000 UNDEF  notype ()    External     | ??0CVillagerSkills@@QAE@XZ (public: __thiscall CVillagerSkills::CVillagerSkills(void))
+182 00000000 UNDEF  notype ()    External     | ?Copy@CVillagerSkills@@QAEXAAV1@@Z (public: void __thiscall CVillagerSkills::Copy(class CVillagerSkills &))
+183 00000000 UNDEF  notype ()    External     | ?Reset@CVillagerSkills@@QAEXXZ (public: void __thiscall CVillagerSkills::Reset(void))
+184 00000000 UNDEF  notype ()    External     | ?SetNoCareer@CVillagerSkills@@QAEXXZ (public: void __thiscall CVillagerSkills::SetNoCareer(void))
+185 00000000 UNDEF  notype ()    External     | ?Update@CVillagerSkills@@QAEXAAVCVillager@@@Z (public: void __thiscall CVillagerSkills::Update(class CVillager &))
+186 00000000 UNDEF  notype ()    External     | ?UpdateSalary@CVillagerSkills@@QAEXXZ (public: void __thiscall CVillagerSkills::UpdateSalary(void))
+187 00000000 UNDEF  notype ()    External     | ??0CVillagerState@@QAE@XZ (public: __thiscall CVillagerState::CVillagerState(void))
+188 00000000 UNDEF  notype ()    External     | ?Copy@CVillagerState@@QAEXAAV1@@Z (public: void __thiscall CVillagerState::Copy(class CVillagerState &))
+189 00000000 UNDEF  notype ()    External     | ?Reset@CVillagerState@@QAEXH@Z (public: void __thiscall CVillagerState::Reset(int))
+18A 00000000 UNDEF  notype ()    External     | ?Update@CVillagerState@@QAEXAAVCVillager@@@Z (public: void __thiscall CVillagerState::Update(class CVillager &))
+18B 00000000 UNDEF  notype ()    External     | ?IsSick@CVillagerState@@QAE_NXZ (public: bool __thiscall CVillagerState::IsSick(void))
+18C 00000000 UNDEF  notype ()    External     | ?SetEnergy@CVillagerState@@QAEXH@Z (public: void __thiscall CVillagerState::SetEnergy(int))
+18D 00000000 UNDEF  notype ()    External     | ?SetHappiness@CVillagerState@@QAEXH@Z (public: void __thiscall CVillagerState::SetHappiness(int))
+18E 00000000 UNDEF  notype ()    External     | ?SetHappinessTrend@CVillagerState@@QAEXH@Z (public: void __thiscall CVillagerState::SetHappinessTrend(int))
+18F 00000000 UNDEF  notype ()    External     | ?SetHunger@CVillagerState@@QAEXH@Z (public: void __thiscall CVillagerState::SetHunger(int))
+190 00000000 UNDEF  notype ()    External     | ?SetDirtiness@CVillagerState@@QAEXH@Z (public: void __thiscall CVillagerState::SetDirtiness(int))
+191 00000000 UNDEF  notype ()    External     | ?SetPoo@CVillagerState@@QAEXH@Z (public: void __thiscall CVillagerState::SetPoo(int))
+192 00000000 UNDEF  notype ()    External     | ?SetFertility@CVillagerState@@QAEXH@Z (public: void __thiscall CVillagerState::SetFertility(int))
+193 00000000 UNDEF  notype ()    External     | ?SetProcreationDesire@CVillagerState@@QAEXH@Z (public: void __thiscall CVillagerState::SetProcreationDesire(int))
+194 00000000 UNDEF  notype ()    External     | ?IncrementProgress@CAchievement@@QAEXW4EAchievement@@H@Z (public: void __thiscall CAchievement::IncrementProgress(enum EAchievement,int))
+195 00000000 UNDEF  notype ()    External     | ?AddAnim@CFloatingAnim@@QAE?BHW4EFloatingAnim@@UldwPoint@@H_NW4EFloatingAnimEffect@@W4EScenePriority@@2@Z (public: int const __thiscall CFloatingAnim::AddAnim(enum EFloatingAnim,struct ldwPoint,int,bool,enum EFloatingAnimEffect,enum EScenePriority,bool))
+196 00000000 UNDEF  notype ()    External     | ?AddSound@CEnvironmentalSound@@QAE?BHW4ESound@@HW4ESoundType@@UldwPoint@@MM@Z (public: int const __thiscall CEnvironmentalSound::AddSound(enum ESound,int,enum ESoundType,struct ldwPoint,float,float))
+197 00000000 UNDEF  notype ()    External     | ?FindLegalTerrain@CContentMap@@QAE?BUldwPoint@@U2@W4EDirection@@_N@Z (public: struct ldwPoint const __thiscall CContentMap::FindLegalTerrain(struct ldwPoint,enum EDirection,bool))
+198 00000000 UNDEF  notype ()    External     | ?IsBlocking@CContentMap@@QAE?B_NUldwPoint@@@Z (public: bool const __thiscall CContentMap::IsBlocking(struct ldwPoint))
+199 00000000 UNDEF  notype ()    External     | ?GetMaterial@CContentMap@@QAE?BW4EMaterial@1@UldwPoint@@@Z (public: enum CContentMap::EMaterial const __thiscall CContentMap::GetMaterial(struct ldwPoint))
+19A 00000000 UNDEF  notype ()    External     | ?GetRedirector@CContentMap@@QAE?BW4ERedirector@1@UldwPoint@@@Z (public: enum CContentMap::ERedirector const __thiscall CContentMap::GetRedirector(struct ldwPoint))
+19B 00000000 UNDEF  notype ()    External     | ?PropIsActive@CEnvironment@@QAE_NW4EPropEnum@@@Z (public: bool __thiscall CEnvironment::PropIsActive(enum EPropEnum))
+19C 00000000 UNDEF  notype ()    External     | ?ApplyFmapContent@CFurnitureManager@@QAEXXZ (public: void __thiscall CFurnitureManager::ApplyFmapContent(void))
+19D 00000000 UNDEF  notype ()    External     | ?ClearFmapContent@CFurnitureManager@@QAEXXZ (public: void __thiscall CFurnitureManager::ClearFmapContent(void))
+19E 00000000 UNDEF  notype ()    External     | ?LinkPeepToFurniture@CFurnitureManager@@QAE_NW4EObject@CContentMap@@PAVCVillager@@AAUsFurnitureInfo2@@_NH3@Z (public: bool __thiscall CFurnitureManager::LinkPeepToFurniture(enum CContentMap::EObject,class CVillager *,struct sFurnitureInfo2 &,bool,int,bool))
+19F 00000000 UNDEF  notype ()    External     | ?FindFurniture@CFurnitureManager@@QAE_NW4EObject@CContentMap@@UldwPoint@@AAUsFurnitureInfo2@@_NH3@Z (public: bool __thiscall CFurnitureManager::FindFurniture(enum CContentMap::EObject,struct ldwPoint,struct sFurnitureInfo2 &,bool,int,bool))
+1A0 00000000 SECT7  notype ()    External     | ??0SActionPlan@CVillagerPlans@@QAE@XZ (public: __thiscall CVillagerPlans::SActionPlan::SActionPlan(void))
+1A1 00000000 UNDEF  notype ()    External     | ?NextPlan@CVillagerPlans@@QAEXAAVCVillager@@_N@Z (public: void __thiscall CVillagerPlans::NextPlan(class CVillager &,bool))
+1A2 00000000 UNDEF  notype ()    External     | ?AbortPlans@CVillagerPlans@@QAEXXZ (public: void __thiscall CVillagerPlans::AbortPlans(void))
+1A3 00000000 UNDEF  notype ()    External     | ?ForgetPlans@CVillagerPlans@@QAEXAAVCVillager@@_N@Z (public: void __thiscall CVillagerPlans::ForgetPlans(class CVillager &,bool))
+1A4 00000000 UNDEF  notype ()    External     | ?PlanToWait@CVillagerPlans@@QAEXHW4EBodyPosition@@@Z (public: void __thiscall CVillagerPlans::PlanToWait(int,enum EBodyPosition))
+1A5 00000000 UNDEF  notype ()    External     | ?PlanToFollowPath@CVillagerPlans@@QAEXHHW4ESpeed@@@Z (public: void __thiscall CVillagerPlans::PlanToFollowPath(int,int,enum ESpeed))
+1A6 00000000 UNDEF  notype ()    External     | ?Reset@CVillagerAI@@QAEXAAVCVillager@@@Z (public: void __thiscall CVillagerAI::Reset(class CVillager &))
+1A7 00000000 UNDEF  notype ()    External     | ?Update@CVillagerAI@@QAEXAAVCVillager@@@Z (public: void __thiscall CVillagerAI::Update(class CVillager &))
+1A8 00000000 UNDEF  notype ()    External     | ?AcquireTarget@CVillagerAI@@QAEXAAVCVillager@@HHW4ESpeed@@@Z (public: void __thiscall CVillagerAI::AcquireTarget(class CVillager &,int,int,enum ESpeed))
+1A9 00000000 UNDEF  notype ()    External     | ??0CWorldPath@@QAE@XZ (public: __thiscall CWorldPath::CWorldPath(void))
+1AA 00000000 UNDEF  notype ()    External     | ?FindPath@CWorldPath@@QAE_NUldwPoint@@0_N@Z (public: bool __thiscall CWorldPath::FindPath(struct ldwPoint,struct ldwPoint,bool))
+1AB 00000000 UNDEF  notype ()    External     | ?NextPoint@CWorldPath@@QAE?AUldwPoint@@XZ (public: struct ldwPoint __thiscall CWorldPath::NextPoint(void))
+1AC 00000000 UNDEF  notype ()    External     | ?Completed@CWorldPath@@QAE_NXZ (public: bool __thiscall CWorldPath::Completed(void))
+1AD 00000000 SECT9  notype ()    External     | ??0SAttachment@CVillager@@QAE@XZ (public: __thiscall CVillager::SAttachment::SAttachment(void))
+1AE 00000000 SECT2D notype ()    External     | ?GenCommonBodyType@CVillager@@SAHXZ (public: static int __cdecl CVillager::GenCommonBodyType(void))
+1AF 00000000 SECT31 notype ()    External     | ?GenUncommonBodyType@CVillager@@SAHXZ (public: static int __cdecl CVillager::GenUncommonBodyType(void))
+1B0 00000000 SECT2F notype ()    External     | ?GenRareBodyType@CVillager@@SAHXZ (public: static int __cdecl CVillager::GenRareBodyType(void))
+1B1 00000000 SECT5  notype ()    External     | ??0CVillager@@QAE@XZ (public: __thiscall CVillager::CVillager(void))
+1B2 00000000 SECT5D notype ()    External     | ?Reset@CVillager@@QAEXXZ (public: void __thiscall CVillager::Reset(void))
+1B3 00000000 SECT39 notype ()    External     | ?Init@CVillager@@QAEXHW4EGender@@HPBD1HHHHHH_N@Z (public: void __thiscall CVillager::Init(int,enum EGender,int,char const *,char const *,int,int,int,int,int,int,bool))
+1B4 00000000 SECT3B notype ()    External     | ?InitAI@CVillager@@QAEXXZ (public: void __thiscall CVillager::InitAI(void))
+1B5 00000000 SECT3F notype ()    External     | ?LoadAI@CVillager@@QAEXAAUSSaveState@1@@Z (public: void __thiscall CVillager::LoadAI(struct CVillager::SSaveState &))
+1B6 00000000 SECT61 notype ()    External     | ?SaveAI@CVillager@@QAEXAAUSSaveState@1@@Z (public: void __thiscall CVillager::SaveAI(struct CVillager::SSaveState &))
+1B7 00000000 SECT3D notype ()    External     | ?InitTwin@CVillager@@QAEXAAV1@@Z (public: void __thiscall CVillager::InitTwin(class CVillager &))
+1B8 00000000 SECT17 notype ()    External     | ?CloneAsAdult@CVillager@@QAEXAAV1@@Z (public: void __thiscall CVillager::CloneAsAdult(class CVillager &))
+1B9 00000000 SECT63 notype ()    External     | ?SaveState@CVillager@@QAE?B_NAAUSSaveState@1@@Z (public: bool const __thiscall CVillager::SaveState(struct CVillager::SSaveState &))
+1BA 00000000 SECT41 notype ()    External     | ?LoadState@CVillager@@QAE?B_NAAUSSaveState@1@@Z (public: bool const __thiscall CVillager::LoadState(struct CVillager::SSaveState &))
+1BB 00000000 SECT21 notype ()    External     | ?DrawDetailVillager@CVillager@@QAEXUldwPoint@@_N@Z (public: void __thiscall CVillager::DrawDetailVillager(struct ldwPoint,bool))
+1BC 00000000 SECT23 notype ()    External     | ?DrawDetailVillagerParents@CVillager@@QAEXXZ (public: void __thiscall CVillager::DrawDetailVillagerParents(void))
+1BD 00000000 SECT25 notype ()    External     | ?DrawEventVillager@CVillager@@QAEXHHW4EBodyPosition@@M_N@Z (public: void __thiscall CVillager::DrawEventVillager(int,int,enum EBodyPosition,float,bool))
+1BE 00000000 SECTA5 notype ()    External     | ?Update@CVillager@@QAEXXZ (public: void __thiscall CVillager::Update(void))
+1BF 00000000 SECT43 notype ()    External     | ?NewBehavior@CVillager@@QAEXW4EBehavior@@ABUSBehaviorData@@@Z (public: void __thiscall CVillager::NewBehavior(enum EBehavior,struct SBehaviorData const &))
+1C0 00000000 SECT9D notype ()    External     | ?StartWaiting@CVillager@@QAEXW4EBodyPosition@@W4EDirection@@W4EHeadDirection@@@Z (public: void __thiscall CVillager::StartWaiting(enum EBodyPosition,enum EDirection,enum EHeadDirection))
+1C1 00000000 SECT19 notype ()    External     | ?ConceiveChildWith@CVillager@@QAEXPAV1@_N@Z (public: void __thiscall CVillager::ConceiveChildWith(class CVillager *,bool))
+1C2 00000000 SECT35 notype ()    External     | ?Impregnate@CVillager@@QAE_NHPBDHH_N@Z (public: bool __thiscall CVillager::Impregnate(int,char const *,int,int,bool))
+1C3 00000000 SECT27 notype ()    External     | ?DropVillager@CVillager@@QAEXXZ (public: void __thiscall CVillager::DropVillager(void))
+1C4 00000000 SECT45 notype ()    External     | ?NormVel@CVillager@@QAEXH@Z (public: void __thiscall CVillager::NormVel(int))
+1C5 00000000 SECTA3 notype ()    External     | ?Stop@CVillager@@QAEXXZ (public: void __thiscall CVillager::Stop(void))
+1C6 00000000 SECT71 notype ()    External     | ?SetVillagerInHand@CVillager@@QAEXXZ (public: void __thiscall CVillager::SetVillagerInHand(void))
+1C7 00000000 SECT13 notype ()    External     | ?ChanceOfDisease@CVillager@@QAE?BHXZ (public: int const __thiscall CVillager::ChanceOfDisease(void))
+1C8 00000000 SECT11 notype ()    External     | ?Attach@CVillager@@QAE?B_NAAVIVillagerAttachment@@HUldwPoint@@H@Z (public: bool const __thiscall CVillager::Attach(class IVillagerAttachment &,int,struct ldwPoint,int))
+1C9 00000000 SECT1B notype ()    External     | ?Detach@CVillager@@QAEXAAVIVillagerAttachment@@AAH@Z (public: void __thiscall CVillager::Detach(class IVillagerAttachment &,int &))
+1CA 00000000 SECT1D notype ()    External     | ?DetachAll@CVillager@@QAEXXZ (public: void __thiscall CVillager::DetachAll(void))
+1CB 00000000 SECT6F notype ()    External     | ?SetLeftHome@CVillager@@QAEXXZ (public: void __thiscall CVillager::SetLeftHome(void))
+1CC 00000000 SECTA7 notype ()    External     | ?YearsAwayFromHome@CVillager@@QAEIXZ (public: unsigned int __thiscall CVillager::YearsAwayFromHome(void))
+1CD 00000000 SECT67 notype ()    External     | ?Scale@CVillager@@QBE?BMXZ (public: float const __thiscall CVillager::Scale(void)const )
+1CE 00000000 SECT1F notype ()    External     | ?Dimensions@CVillager@@QBE?BUldwPoint@@XZ (public: struct ldwPoint const __thiscall CVillager::Dimensions(void)const )
+1CF 00000000 SECT6D notype ()    External     | ?SetFeetPos@CVillager@@QAEXUldwPoint@@@Z (public: void __thiscall CVillager::SetFeetPos(struct ldwPoint))
+1D0 00000000 SECT29 notype ()    External     | ?FeetPos@CVillager@@QBE?BUldwPoint@@XZ (public: struct ldwPoint const __thiscall CVillager::FeetPos(void)const )
+1D1 00000000 SECT6B notype ()    External     | ?SetCarrying@CVillager@@QAEXW4ECarrying@@@Z (public: void __thiscall CVillager::SetCarrying(enum ECarrying))
+1D2 00000000 SECT2B notype ()    External     | ?ForceCarrying@CVillager@@QAEXW4ECarrying@@@Z (public: void __thiscall CVillager::ForceCarrying(enum ECarrying))
+1D3 00000000 SECT33 notype ()    External     | ?HasAttachment@CVillager@@QBE?B_NAAVIVillagerAttachment@@H@Z (public: bool const __thiscall CVillager::HasAttachment(class IVillagerAttachment &,int)const )
+1D4 00000000 SECT65 notype ()    External     | ?SayOh@CVillager@@QAEXXZ (public: void __thiscall CVillager::SayOh(void))
+1D5 00000000 SECT37 notype ()    External     | ?InBed@CVillager@@QAE_NXZ (public: bool __thiscall CVillager::InBed(void))
+1D6 00000000 SECT73 notype ()    External     | ?StartBending@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartBending(void))
+1D7 00000000 SECT75 notype ()    External     | ?StartCheering@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartCheering(void))
+1D8 00000000 SECT9B notype ()    External     | ?StartTwirlingCW@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartTwirlingCW(void))
+1D9 00000000 SECT99 notype ()    External     | ?StartTwirlingCCW@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartTwirlingCCW(void))
+1DA 00000000 SECT7B notype ()    External     | ?StartDiscoing@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartDiscoing(void))
+1DB 00000000 SECT81 notype ()    External     | ?StartDoingTheMonkey@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartDoingTheMonkey(void))
+1DC 00000000 SECT93 notype ()    External     | ?StartReveling@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartReveling(void))
+1DD 00000000 SECT8F notype ()    External     | ?StartLyingDown@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartLyingDown(void))
+1DE 00000000 SECT95 notype ()    External     | ?StartScrubbing@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartScrubbing(void))
+1DF 00000000 SECT85 notype ()    External     | ?StartExorcisting@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartExorcisting(void))
+1E0 00000000 SECT8B notype ()    External     | ?StartJoyTwirlingCW@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartJoyTwirlingCW(void))
+1E1 00000000 SECT77 notype ()    External     | ?StartClimbing@CVillager@@IAEXUSClimbData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::StartClimbing(struct CVillagerPlans::SClimbData))
+1E2 00000000 SECT79 notype ()    External     | ?StartDancing@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartDancing(void))
+1E3 00000000 SECT7D notype ()    External     | ?StartDiving@CVillager@@IAEXAAUSDiveData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::StartDiving(struct CVillagerPlans::SDiveData &))
+1E4 00000000 SECT83 notype ()    External     | ?StartEmbrace@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartEmbrace(void))
+1E5 00000000 SECT87 notype ()    External     | ?StartGoing@CVillager@@IAEXAAUSGoingData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::StartGoing(struct CVillagerPlans::SGoingData &))
+1E6 00000000 SECT89 notype ()    External     | ?StartHiding@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartHiding(void))
+1E7 00000000 SECT8D notype ()    External     | ?StartJumping@CVillager@@IAEXAAUSJumpData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::StartJumping(struct CVillagerPlans::SJumpData &))
+1E8 00000000 SECT91 notype ()    External     | ?StartNothing@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartNothing(void))
+1E9 00000000 SECT97 notype ()    External     | ?StartSwimming@CVillager@@IAEXUSSwimData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::StartSwimming(struct CVillagerPlans::SSwimData))
+1EA 00000000 SECT9F notype ()    External     | ?StartWandering@CVillager@@IAEXAAUSWanderingData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::StartWandering(struct CVillagerPlans::SWanderingData &))
+1EB 00000000 SECTA1 notype ()    External     | ?StartWorking@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartWorking(void))
+1EC 00000000 SECT7F notype ()    External     | ?StartDoingPushups@CVillager@@IAEXXZ (protected: void __thiscall CVillager::StartDoingPushups(void))
+1ED 00000000 SECT47 notype ()    External     | ?ProcessClimbing@CVillager@@IAEXUSClimbData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::ProcessClimbing(struct CVillagerPlans::SClimbData))
+1EE 00000000 SECT49 notype ()    External     | ?ProcessDancing@CVillager@@IAEXXZ (protected: void __thiscall CVillager::ProcessDancing(void))
+1EF 00000000 SECT4B notype ()    External     | ?ProcessDiving@CVillager@@IAEXAAUSDiveData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::ProcessDiving(struct CVillagerPlans::SDiveData &))
+1F0 00000000 SECT4D notype ()    External     | ?ProcessEmbrace@CVillager@@IAEXXZ (protected: void __thiscall CVillager::ProcessEmbrace(void))
+1F1 00000000 SECT51 notype ()    External     | ?ProcessFollowPath@CVillager@@IAEXAAUSGoingData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::ProcessFollowPath(struct CVillagerPlans::SGoingData &))
+1F2 00000000 SECT4F notype ()    External     | ?ProcessFindPath@CVillager@@IAEXAAUSGoingData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::ProcessFindPath(struct CVillagerPlans::SGoingData &))
+1F3 00000000 SECT53 notype ()    External     | ?ProcessGoing@CVillager@@IAEXAAUSGoingData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::ProcessGoing(struct CVillagerPlans::SGoingData &))
+1F4 00000000 SECT55 notype ()    External     | ?ProcessJumping@CVillager@@IAEXUSJumpData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::ProcessJumping(struct CVillagerPlans::SJumpData))
+1F5 00000000 SECT57 notype ()    External     | ?ProcessSwimming@CVillager@@IAEXXZ (protected: void __thiscall CVillager::ProcessSwimming(void))
+1F6 00000000 SECT59 notype ()    External     | ?ProcessWaiting@CVillager@@IAEXXZ (protected: void __thiscall CVillager::ProcessWaiting(void))
+1F7 00000000 SECT5B notype ()    External     | ?ProcessWandering@CVillager@@IAEXAAUSWanderingData@CVillagerPlans@@@Z (protected: void __thiscall CVillager::ProcessWandering(struct CVillagerPlans::SWanderingData &))
+1F8 00000000 SECT5F notype ()    External     | ?ResetToNeutralBodyPosition@CVillager@@IAEXXZ (protected: void __thiscall CVillager::ResetToNeutralBodyPosition(void))
+1F9 00000000 SECT15 notype ()    External     | ?CheckPath@CVillager@@IAE_NUldwPoint@@AAU2@@Z (protected: bool __thiscall CVillager::CheckPath(struct ldwPoint,struct ldwPoint &))
+1FA 00000000 SECT69 notype ()    External     | ?SelectDirectionBasedOnVelocity@CVillager@@AAEXXZ (private: void __thiscall CVillager::SelectDirectionBasedOnVelocity(void))
+1FB 00000000 SECTF  notype ()    External     | ?AddFootprints@CVillager@@AAEXXZ (private: void __thiscall CVillager::AddFootprints(void))
+1FC 00000000 SECTD  notype ()    External     | ?AddDust@CVillager@@AAEXXZ (private: void __thiscall CVillager::AddDust(void))
+1FD 00000000 UNDEF  notype ()    External     | ?Get@ldwGameWindow@@SAPAV1@XZ (public: static class ldwGameWindow * __cdecl ldwGameWindow::Get(void))
+1FE 00000000 UNDEF  notype ()    External     | ?Draw@ldwGameWindow@@QAEXPAVldwImageGrid@@HHHM@Z (public: void __thiscall ldwGameWindow::Draw(class ldwImageGrid *,int,int,int,float))
+1FF 00000000 UNDEF  notype ()    External     | ?DrawScaled@ldwGameWindow@@QAEXPAVldwImage@@HHH_N1@Z (public: void __thiscall ldwGameWindow::DrawScaled(class ldwImage *,int,int,int,bool,bool))
+200 00000000 UNDEF  notype ()    External     | ?DrawScaled@ldwGameWindow@@QAEXPAVldwImageGrid@@HHHHH_N@Z (public: void __thiscall ldwGameWindow::DrawScaled(class ldwImageGrid *,int,int,int,int,int,bool))
+201 00000000 UNDEF  notype ()    External     | ?SpawnSpecificPeep@CVillagerManager@@QAE?BHHW4EGender@@HPBD1HHHHHH_N@Z (public: int const __thiscall CVillagerManager::SpawnSpecificPeep(int,enum EGender,int,char const *,char const *,int,int,int,int,int,int,bool))
+202 00000000 UNDEF  notype ()    External     | ?SpawnSpecificPeep@CVillagerManager@@QAE?BHAAVCVillager@@@Z (public: int const __thiscall CVillagerManager::SpawnSpecificPeep(class CVillager &))
+203 00000000 UNDEF  notype ()    External     | ?ExtremeLimitGenderCorrect@CVillagerManager@@QAE?BW4EGender@@XZ (public: enum EGender const __thiscall CVillagerManager::ExtremeLimitGenderCorrect(void))
+204 00000000 UNDEF  notype ()    External     | ?GetVillagerWaitingAt@CVillagerManager@@QAEPAVCVillager@@UldwPoint@@PBV2@@Z (public: class CVillager * __thiscall CVillagerManager::GetVillagerWaitingAt(struct ldwPoint,class CVillager const *))
+205 00000000 UNDEF  notype ()    External     | ?GetMatriarch@CVillagerManager@@QAEPAVCVillager@@XZ (public: class CVillager * __thiscall CVillagerManager::GetMatriarch(void))
+206 00000000 UNDEF  notype ()    External     | ?GetPatriarch@CVillagerManager@@QAEPAVCVillager@@XZ (public: class CVillager * __thiscall CVillagerManager::GetPatriarch(void))
+207 00000000 UNDEF  notype ()    External     | ?Population@CVillagerManager@@QAE?BHXZ (public: int const __thiscall CVillagerManager::Population(void))
+208 00000000 UNDEF  notype ()    External     | ?RefreshDecals@CDecal@@QAEXXZ (public: void __thiscall CDecal::RefreshDecals(void))
+209 00000000 UNDEF  notype ()    External     | ?Seconds@CGameTime@@QAE?BIXZ (public: unsigned int const __thiscall CGameTime::Seconds(void))
+20A 00000000 UNDEF  notype ()    External     | ?Queue@CTutorialTip@@QAEXW4StringId@@W4EGameScene@@_N@Z (public: void __thiscall CTutorialTip::Queue(enum StringId,enum EGameScene,bool))
+20B 00000000 UNDEF  notype ()    External     | ?WasDisplayed@CTutorialTip@@QBE?B_NW4StringId@@@Z (public: bool const __thiscall CTutorialTip::WasDisplayed(enum StringId)const )
+20C 00000000 UNDEF  notype ()    External     | ?AddOffspring@CFamilyTree@@QAE_NABVCVillager@@@Z (public: bool __thiscall CFamilyTree::AddOffspring(class CVillager const &))
+20D 00000000 UNDEF  notype ()    External     | ?EmptyOffspringSlots@CFamilyTree@@QAEHXZ (public: int __thiscall CFamilyTree::EmptyOffspringSlots(void))
+20E 00000000 UNDEF  notype ()    External     | ?Get@theGameState@@SAPAV1@XZ (public: static class theGameState * __cdecl theGameState::Get(void))
+20F 00000000 UNDEF  notype ()    External     | ?Say@CDealerSay@@QAEXW4StringId@@H@Z (public: void __thiscall CDealerSay::Say(enum StringId,int))
+210 00000000 UNDEF  notype ()    External     | ?Say@CDealerSay@@QAEXPBD@Z (public: void __thiscall CDealerSay::Say(char const *))
+211 00000000 UNDEF  notype ()    External     | ?Dispatch@CRedirect@@QBE?B_NAAVCVillager@@W4ERedirector@CContentMap@@@Z (public: bool const __thiscall CRedirect::Dispatch(class CVillager &,enum CContentMap::ERedirector)const )
+212 00000000 UNDEF  notype ()    External     | ?Get@ldwLog@@SAPAV1@XZ (public: static class ldwLog * __cdecl ldwLog::Get(void))
+213 00000000 UNDEF  notype ()    External     | @__security_check_cookie@4
+214 00000000 UNDEF  notype ()    External     | __libm_sse2_sqrt_precise
+215 00000000 UNDEF  notype ()    External     | _memcpy
+216 00004818 SECT3B notype       Static       | $LN205
+217 0000451C SECT3B notype       Static       | $LN249
+218 0000026C SECT3B notype       Label        | $LN7
+219 000002B6 SECT3B notype       Label        | $LN8
+21A 00000300 SECT3B notype       Label        | $LN9
+21B 0000034A SECT3B notype       Label        | $LN10
+21C 00000394 SECT3B notype       Label        | $LN11
+21D 000003DE SECT3B notype       Label        | $LN12
+21E 00000428 SECT3B notype       Label        | $LN13
+21F 00000472 SECT3B notype       Label        | $LN14
+220 000004CA SECT3B notype       Label        | $LN15
+221 0000050C SECT3B notype       Label        | $LN16
+222 00000564 SECT3B notype       Label        | $LN17
+223 00000570 SECT3B notype       Label        | $LN18
+224 000005CC SECT3B notype       Label        | $LN19
+225 00000633 SECT3B notype       Label        | $LN20
+226 00000684 SECT3B notype       Label        | $LN21
+227 000006CD SECT3B notype       Label        | $LN22
+228 00000730 SECT3B notype       Label        | $LN23
+229 0000073F SECT3B notype       Label        | $LN24
+22A 00000793 SECT3B notype       Label        | $LN25
+22B 000007EB SECT3B notype       Label        | $LN26
+22C 0000084E SECT3B notype       Label        | $LN27
+22D 000008AE SECT3B notype       Label        | $LN28
+22E 00000906 SECT3B notype       Label        | $LN29
+22F 00000987 SECT3B notype       Label        | $LN30
+230 000009E7 SECT3B notype       Label        | $LN31
+231 00000A31 SECT3B notype       Label        | $LN32
+232 00000AB9 SECT3B notype       Label        | $LN33
+233 00000B1F SECT3B notype       Label        | $LN34
+234 00000B51 SECT3B notype       Label        | $LN35
+235 00000B83 SECT3B notype       Label        | $LN36
+236 00000BB5 SECT3B notype       Label        | $LN37
+237 00000C17 SECT3B notype       Label        | $LN38
+238 00000C2E SECT3B notype       Label        | $LN39
+239 00000C86 SECT3B notype       Label        | $LN40
+23A 00000CD0 SECT3B notype       Label        | $LN41
+23B 00000D46 SECT3B notype       Label        | $LN42
+23C 00000DBF SECT3B notype       Label        | $LN43
+23D 00000E18 SECT3B notype       Label        | $LN44
+23E 00000E7E SECT3B notype       Label        | $LN45
+23F 00000EEC SECT3B notype       Label        | $LN46
+240 00000F65 SECT3B notype       Label        | $LN47
+241 00000F9C SECT3B notype       Label        | $LN48
+242 00000FEF SECT3B notype       Label        | $LN49
+243 0000104D SECT3B notype       Label        | $LN50
+244 000010A8 SECT3B notype       Label        | $LN51
+245 00001113 SECT3B notype       Label        | $LN52
+246 00001158 SECT3B notype       Label        | $LN53
+247 000011B8 SECT3B notype       Label        | $LN54
+248 000011DA SECT3B notype       Label        | $LN55
+249 00001248 SECT3B notype       Label        | $LN56
+24A 000012AB SECT3B notype       Label        | $LN57
+24B 0000130E SECT3B notype       Label        | $LN58
+24C 0000131D SECT3B notype       Label        | $LN59
+24D 00001383 SECT3B notype       Label        | $LN60
+24E 000013D3 SECT3B notype       Label        | $LN61
+24F 00001462 SECT3B notype       Label        | $LN62
+250 000014D0 SECT3B notype       Label        | $LN63
+251 00001528 SECT3B notype       Label        | $LN64
+252 0000158B SECT3B notype       Label        | $LN65
+253 0000159A SECT3B notype       Label        | $LN66
+254 000015EA SECT3B notype       Label        | $LN67
+255 0000162F SECT3B notype       Label        | $LN68
+256 0000169D SECT3B notype       Label        | $LN69
+257 000016F8 SECT3B notype       Label        | $LN70
+258 00001771 SECT3B notype       Label        | $LN71
+259 000017E1 SECT3B notype       Label        | $LN72
+25A 00001844 SECT3B notype       Label        | $LN73
+25B 00001881 SECT3B notype       Label        | $LN74
+25C 000018EE SECT3B notype       Label        | $LN75
+25D 0000194D SECT3B notype       Label        | $LN76
+25E 000019A8 SECT3B notype       Label        | $LN77
+25F 000019D7 SECT3B notype       Label        | $LN78
+260 00001A27 SECT3B notype       Label        | $LN79
+261 00001A98 SECT3B notype       Label        | $LN80
+262 00001AFB SECT3B notype       Label        | $LN81
+263 00001B66 SECT3B notype       Label        | $LN82
+264 00001BC9 SECT3B notype       Label        | $LN83
+265 00001C37 SECT3B notype       Label        | $LN84
+266 00001C9A SECT3B notype       Label        | $LN85
+267 00001CCD SECT3B notype       Label        | $LN86
+268 00001D2E SECT3B notype       Label        | $LN87
+269 00001D7C SECT3B notype       Label        | $LN88
+26A 00001DC7 SECT3B notype       Label        | $LN89
+26B 00001E0A SECT3B notype       Label        | $LN90
+26C 00001E4D SECT3B notype       Label        | $LN91
+26D 00001E82 SECT3B notype       Label        | $LN92
+26E 00001EE3 SECT3B notype       Label        | $LN93
+26F 00001F57 SECT3B notype       Label        | $LN94
+270 00001FCB SECT3B notype       Label        | $LN95
+271 0000203F SECT3B notype       Label        | $LN96
+272 000020B3 SECT3B notype       Label        | $LN97
+273 00002114 SECT3B notype       Label        | $LN98
+274 00002196 SECT3B notype       Label        | $LN99
+275 00002218 SECT3B notype       Label        | $LN100
+276 0000229A SECT3B notype       Label        | $LN101
+277 0000229E SECT3B notype       Label        | $LN102
+278 000022FF SECT3B notype       Label        | $LN103
+279 00002352 SECT3B notype       Label        | $LN104
+27A 000023B0 SECT3B notype       Label        | $LN105
+27B 00002403 SECT3B notype       Label        | $LN106
+27C 00002443 SECT3B notype       Label        | $LN107
+27D 00002499 SECT3B notype       Label        | $LN108
+27E 000024E7 SECT3B notype       Label        | $LN109
+27F 00002527 SECT3B notype       Label        | $LN111
+280 00002575 SECT3B notype       Label        | $LN112
+281 000025E1 SECT3B notype       Label        | $LN113
+282 00002645 SECT3B notype       Label        | $LN114
+283 00002682 SECT3B notype       Label        | $LN115
+284 000026AC SECT3B notype       Label        | $LN116
+285 000026F7 SECT3B notype       Label        | $LN117
+286 0000272F SECT3B notype       Label        | $LN118
+287 0000277D SECT3B notype       Label        | $LN119
+288 00002797 SECT3B notype       Label        | $LN120
+289 000027B1 SECT3B notype       Label        | $LN121
+28A 000027C7 SECT3B notype       Label        | $LN122
+28B 000027EF SECT3B notype       Label        | $LN123
+28C 0000285F SECT3B notype       Label        | $LN124
+28D 000028B0 SECT3B notype       Label        | $LN125
+28E 00002914 SECT3B notype       Label        | $LN126
+28F 0000298B SECT3B notype       Label        | $LN127
+290 000029CE SECT3B notype       Label        | $LN128
+291 00002A11 SECT3B notype       Label        | $LN129
+292 00002A57 SECT3B notype       Label        | $LN130
+293 00002ACE SECT3B notype       Label        | $LN131
+294 00002ADA SECT3B notype       Label        | $LN132
+295 00002B1D SECT3B notype       Label        | $LN133
+296 00002B4D SECT3B notype       Label        | $LN134
+297 00002BB9 SECT3B notype       Label        | $LN135
+298 00002C07 SECT3B notype       Label        | $LN136
+299 00002C94 SECT3B notype       Label        | $LN137
+29A 00002D00 SECT3B notype       Label        | $LN138
+29B 00002D77 SECT3B notype       Label        | $LN139
+29C 00002DF9 SECT3B notype       Label        | $LN140
+29D 00002E44 SECT3B notype       Label        | $LN141
+29E 00002E8F SECT3B notype       Label        | $LN142
+29F 00002EDA SECT3B notype       Label        | $LN143
+2A0 00002F30 SECT3B notype       Label        | $LN144
+2A1 00002F86 SECT3B notype       Label        | $LN145
+2A2 00002FE4 SECT3B notype       Label        | $LN146
+2A3 00003045 SECT3B notype       Label        | $LN147
+2A4 0000309E SECT3B notype       Label        | $LN148
+2A5 000030F7 SECT3B notype       Label        | $LN149
+2A6 00003163 SECT3B notype       Label        | $LN150
+2A7 000031B4 SECT3B notype       Label        | $LN151
+2A8 00003212 SECT3B notype       Label        | $LN152
+2A9 0000327B SECT3B notype       Label        | $LN153
+2AA 000032D1 SECT3B notype       Label        | $LN154
+2AB 00003309 SECT3B notype       Label        | $LN155
+2AC 0000335F SECT3B notype       Label        | $LN156
+2AD 00003397 SECT3B notype       Label        | $LN157
+2AE 0000340E SECT3B notype       Label        | $LN158
+2AF 0000346F SECT3B notype       Label        | $LN159
+2B0 000034D0 SECT3B notype       Label        | $LN160
+2B1 00003513 SECT3B notype       Label        | $LN161
+2B2 00003574 SECT3B notype       Label        | $LN162
+2B3 000035D5 SECT3B notype       Label        | $LN163
+2B4 00003636 SECT3B notype       Label        | $LN164
+2B5 00003697 SECT3B notype       Label        | $LN165
+2B6 00003703 SECT3B notype       Label        | $LN166
+2B7 00003751 SECT3B notype       Label        | $LN167
+2B8 000037A7 SECT3B notype       Label        | $LN168
+2B9 00003808 SECT3B notype       Label        | $LN169
+2BA 00003882 SECT3B notype       Label        | $LN170
+2BB 000038FC SECT3B notype       Label        | $LN171
+2BC 00003973 SECT3B notype       Label        | $LN172
+2BD 000039F5 SECT3B notype       Label        | $LN173
+2BE 00003A64 SECT3B notype       Label        | $LN174
+2BF 00003AC8 SECT3B notype       Label        | $LN175
+2C0 00003B21 SECT3B notype       Label        | $LN176
+2C1 00003B9B SECT3B notype       Label        | $LN177
+2C2 00003C0A SECT3B notype       Label        | $LN178
+2C3 00003C66 SECT3B notype       Label        | $LN179
+2C4 00003CBC SECT3B notype       Label        | $LN180
+2C5 00003D12 SECT3B notype       Label        | $LN181
+2C6 00003D68 SECT3B notype       Label        | $LN182
+2C7 00003DE2 SECT3B notype       Label        | $LN183
+2C8 00003E67 SECT3B notype       Label        | $LN184
+2C9 00003ED6 SECT3B notype       Label        | $LN185
+2CA 00003F2C SECT3B notype       Label        | $LN186
+2CB 00003F8A SECT3B notype       Label        | $LN187
+2CC 00004004 SECT3B notype       Label        | $LN188
+2CD 0000407E SECT3B notype       Label        | $LN189
+2CE 000040F8 SECT3B notype       Label        | $LN190
+2CF 00004172 SECT3B notype       Label        | $LN191
+2D0 000041F7 SECT3B notype       Label        | $LN192
+2D1 00004271 SECT3B notype       Label        | $LN193
+2D2 000042EB SECT3B notype       Label        | $LN194
+2D3 00004370 SECT3B notype       Label        | $LN195
+2D4 000043F5 SECT3B notype       Label        | $LN196
+2D5 0000446C SECT3B notype       Label        | $LN197
+2D6 000044CA SECT3B notype       Label        | $LN207
+2D7 00000088 SECT5F notype       Static       | $LN12
+2D8 00000030 SECT5F notype       Label        | $LN4
+2D9 00000046 SECT5F notype       Label        | $LN5
+2DA 0000005C SECT5F notype       Label        | $LN6
+2DB 00000072 SECT5F notype       Label        | $LN7
+2DC 00000000 SECTAD notype       Static       | .bss
+    Section length    4, #relocs    0, #linenums    0, checksum        0
+2DE 00000000 SECTAD notype       Static       | ?cLdwNoColor@@3UldwColor@@B (struct ldwColor const cLdwNoColor)
+2DF 00000004 SECT4  notype       Static       | ?cLdwBlack@@3UldwColor@@B (struct ldwColor const cLdwBlack)
+2E0 00000008 SECT4  notype       Static       | ?cLdwWhite@@3UldwColor@@B (struct ldwColor const cLdwWhite)
+2E1 0000000C SECT4  notype       Static       | ?cLdwLightGrey@@3UldwColor@@B (struct ldwColor const cLdwLightGrey)
+2E2 00000010 SECT4  notype       Static       | ?cLdwDarkGrey@@3UldwColor@@B (struct ldwColor const cLdwDarkGrey)
+2E3 00000014 SECT4  notype       Static       | ?cLdwRed@@3UldwColor@@B (struct ldwColor const cLdwRed)
+2E4 00000018 SECT4  notype       Static       | ?cLdwGreen@@3UldwColor@@B (struct ldwColor const cLdwGreen)
+2E5 0000001C SECT4  notype       Static       | ?cLdwBlue@@3UldwColor@@B (struct ldwColor const cLdwBlue)
+2E6 00000000 SECTAE notype       Static       | .bss
+    Section length    8, #relocs    0, #linenums    0, checksum        0, selection    2 (pick any)
+2E8 00000000 SECTAE notype       External     | ?_OptionsStorage@?1??__local_stdio_printf_options@@9@4_KA (unsigned __int64 `__local_stdio_printf_options'::`2'::_OptionsStorage)
+2E9 00000000 UNDEF  notype       External     | ?Sound@@3VCSound@@A (class CSound Sound)
+2EA 00000020 SECT4  notype       Static       | ?UI_ButtonUpColor@@3UldwColor@@B (struct ldwColor const UI_ButtonUpColor)
+2EB 00000024 SECT4  notype       Static       | ?UI_ButtonOverColor@@3UldwColor@@B (struct ldwColor const UI_ButtonOverColor)
+2EC 00000028 SECT4  notype       Static       | ?UI_ButtonDownColor@@3UldwColor@@B (struct ldwColor const UI_ButtonDownColor)
+2ED 0000002C SECT4  notype       Static       | ?UI_LabelColor@@3UldwColor@@B (struct ldwColor const UI_LabelColor)
+2EE 00000030 SECT4  notype       Static       | ?UI_DiplomaColor@@3UldwColor@@B (struct ldwColor const UI_DiplomaColor)
+2EF 00000034 SECT4  notype       Static       | ?UI_HandCursorHotSpot@@3UldwPoint@@B (struct ldwPoint const UI_HandCursorHotSpot)
+2F0 00000000 UNDEF  notype       External     | ?AnimManager@@3VCAnimManager@@A (class CAnimManager AnimManager)
+2F1 00000000 UNDEF  notype       External     | ?Collectable@@3VCCollectable@@A (class CCollectable Collectable)
+2F2 00000000 UNDEF  notype       External     | ?Behavior@@3VCBehavior@@A (class CBehavior Behavior)
+2F3 00000000 UNDEF  notype       External     | ?Potion@@3VCPotion@@A (class CPotion Potion)
+2F4 00000000 UNDEF  notype       External     | ?Weather@@3VCWeather@@A (class CWeather Weather)
+2F5 00000000 UNDEF  notype       External     | ?Achievement@@3VCAchievement@@A (class CAchievement Achievement)
+2F6 00000000 UNDEF  notype       External     | ?FloatingAnim@@3VCFloatingAnim@@A (class CFloatingAnim FloatingAnim)
+2F7 00000000 UNDEF  notype       External     | ?EnvironmentalSound@@3VCEnvironmentalSound@@A (class CEnvironmentalSound EnvironmentalSound)
+2F8 0000003C SECT4  notype       Static       | ?ContentMap_c_sSnapToCenter@@3UldwPoint@@B (struct ldwPoint const ContentMap_c_sSnapToCenter)
+2F9 00000000 UNDEF  notype       External     | ?ContentMap@@3VCContentMap@@A (class CContentMap ContentMap)
+2FA 00000044 SECT4  notype       Static       | ?Environment_c_sAlchemyLabPos@@3UldwPoint@@B (struct ldwPoint const Environment_c_sAlchemyLabPos)
+2FB 0000004C SECT4  notype       Static       | ?Environment_c_sScienceLabPos@@3UldwPoint@@B (struct ldwPoint const Environment_c_sScienceLabPos)
+2FC 00000000 UNDEF  notype       External     | ?Environment@@3VCEnvironment@@A (class CEnvironment Environment)
+2FD 00000000 UNDEF  notype       External     | ?FurnitureManager@@3VCFurnitureManager@@A (class CFurnitureManager FurnitureManager)
+2FE 00000000 UNDEF  notype       External     | ?VillagerManager@@3VCVillagerManager@@A (class CVillagerManager VillagerManager)
+2FF 00000000 UNDEF  notype       External     | ?Decal@@3VCDecal@@A (class CDecal Decal)
+300 00000000 UNDEF  notype       External     | ?GameStats@@3VCGameStats@@A (class CGameStats GameStats)
+301 00000000 UNDEF  notype       External     | ?GameTime@@3VCGameTime@@A (class CGameTime GameTime)
+302 00000000 UNDEF  notype       External     | ?TutorialTip@@3VCTutorialTip@@A (class CTutorialTip TutorialTip)
+303 00000000 UNDEF  notype       External     | ?FamilyTree@@3VCFamilyTree@@A (class CFamilyTree FamilyTree)
+304 00000000 UNDEF  notype       External     | ?DealerSay@@3VCDealerSay@@A (class CDealerSay DealerSay)
+305 00000000 UNDEF  notype       External     | ?Redirect@@3VCRedirect@@A (class CRedirect Redirect)
+306 00000000 SECTAF notype       Static       | .rdata
+    Section length    3, #relocs    0, #linenums    0, checksum 3A94AE3E, selection    2 (pick any)
+308 00000000 SECTAF notype       External     | ??_C@_02DKCKIIND@?$CFs?$AA@ (`string')
+309 00000000 SECTB0 notype       Static       | .rdata
+    Section length    1, #relocs    0, #linenums    0, checksum        0, selection    2 (pick any)
+30B 00000000 SECTB0 notype       External     | ??_C@_00CNPNBAHC@?$AA@ (`string')
+30C 00000000 SECTB1 notype       Static       | .rdata
+    Section length   1E, #relocs    0, #linenums    0, checksum BF4DF86C, selection    2 (pick any)
+30E 00000000 SECTB1 notype       External     | ??_C@_0BO@EALGDJCG@They?5need?5a?5couch?5or?5a?5bed?4?4?4?$AA@ (`string')
+30F 00000000 UNDEF  notype       External     | ___security_cookie
+310 00000000 UNDEF  notype       External     | __fltused
+311 00000000 SECTB2 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum        0, selection    2 (pick any)
+313 00000000 SECTB2 notype       External     | __real@00000000
+314 00000000 SECTB3 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum B6662D3D, selection    2 (pick any)
+316 00000000 SECTB3 notype       External     | __real@3f000000
+317 00000000 SECTB4 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 8DE5B576, selection    2 (pick any)
+319 00000000 SECTB4 notype       External     | __real@3f800000
+31A 00000000 SECTB5 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 7D9CFA73, selection    2 (pick any)
+31C 00000000 SECTB5 notype       External     | __real@3fc00000
+31D 00000000 SECTB6 notype       Static       | .rdata
+    Section length    8, #relocs    0, #linenums    0, checksum BE05CB98, selection    2 (pick any)
+31F 00000000 SECTB6 notype       External     | __real@4008000000000000
+320 00000000 SECTB7 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 64261AA1, selection    2 (pick any)
+322 00000000 SECTB7 notype       External     | __real@41600000
+323 00000000 SECTB8 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 5FA582EA, selection    2 (pick any)
+325 00000000 SECTB8 notype       External     | __real@41e00000
+326 00000000 SECTB9 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 98D220BC, selection    2 (pick any)
+328 00000000 SECTB9 notype       External     | __real@42000000
+329 00000000 SECTBA notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 500BAAB4, selection    2 (pick any)
+32B 00000000 SECTBA notype       External     | __real@42080000
+32C 00000000 SECTBB notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum FD2F4B1B, selection    2 (pick any)
+32E 00000000 SECTBB notype       External     | __real@42600000
+32F 00000000 SECTBC notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 36D59C55, selection    2 (pick any)
+331 00000000 SECTBC notype       External     | __real@42a00000
+332 00000000 SECTBD notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum  4E3FED7, selection    2 (pick any)
+334 00000000 SECTBD notype       External     | __real@42a20000
+335 00000000 SECTBE notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 2A4D2982, selection    2 (pick any)
+337 00000000 SECTBE notype       External     | __real@42b60000
+338 00000000 SECTBF notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 9BF17DFA, selection    2 (pick any)
+33A 00000000 SECTBF notype       External     | __real@42c80000
+33B 00000000 SECTC0 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 63ADBDE4, selection    2 (pick any)
+33D 00000000 SECTC0 notype       External     | __real@442f0000
+33E 00000000 SECTC1 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum B21D01CA, selection    2 (pick any)
+340 00000000 SECTC1 notype       External     | __real@c1e00000
+341 00000000 SECTC2 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum E95B7DF7, selection    2 (pick any)
+343 00000000 SECTC2 notype       External     | __real@c2a20000
+344 00000000 SECTC3 notype       Static       | .rdata
+    Section length   10, #relocs    0, #linenums    0, checksum 7B2C8188, selection    2 (pick any)
+346 00000000 SECTC3 notype       External     | __xmm@0000005b000000600000005a00000012
+347 00000000 SECTC4 notype       Static       | .chks64
+    Section length  620, #relocs    0, #linenums    0, checksum        0
+
+String Table Size = 0x2716 bytes
+
+  Summary
+
+           C .bss
+         620 .chks64
+          54 .data
+       1B414 .debug$S
+          7C .debug$T
+          62 .drectve
+          7A .rdata
+        8519 .text$mn

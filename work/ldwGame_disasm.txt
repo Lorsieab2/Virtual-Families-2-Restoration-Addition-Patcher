@@ -1,0 +1,225 @@
+﻿Microsoft (R) COFF/PE Dumper Version 14.51.36247.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file work\desktop_obj_files\ldwGame.obj
+
+File Type: COFF OBJECT
+
+??0ldwGame@@QAE@XZ (public: __thiscall ldwGame::ldwGame(void)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 6A FF              push        0FFFFFFFFh
+  00000005: 68 00 00 00 00     push        offset __ehhandler$??0ldwGame@@QAE@XZ
+  0000000A: 64 A1 00 00 00 00  mov         eax,dword ptr fs:[00000000h]
+  00000010: 50                 push        eax
+  00000011: 51                 push        ecx
+  00000012: 56                 push        esi
+  00000013: 57                 push        edi
+  00000014: A1 00 00 00 00     mov         eax,dword ptr [___security_cookie]
+  00000019: 33 C5              xor         eax,ebp
+  0000001B: 50                 push        eax
+  0000001C: 8D 45 F4           lea         eax,[ebp-0Ch]
+  0000001F: 64 A3 00 00 00 00  mov         dword ptr fs:[00000000h],eax
+  00000025: 8B F1              mov         esi,ecx
+  00000027: 89 75 F0           mov         dword ptr [ebp-10h],esi
+  0000002A: C7 45 FC 00 00 00  mov         dword ptr [ebp-4],0
+            00
+  00000031: C7 06 00 00 00 00  mov         dword ptr [esi],offset ??_7ldwGame@@6B@
+  00000037: E8 00 00 00 00     call        ?Get@ldwGameState@@SAPAV1@XZ
+  0000003C: 8B F8              mov         edi,eax
+  0000003E: 85 FF              test        edi,edi
+  00000040: 74 44              je          00000086
+  00000042: 8B 17              mov         edx,dword ptr [edi]
+  00000044: 8B CF              mov         ecx,edi
+  00000046: FF 52 28           call        dword ptr [edx+28h]
+  00000049: 8B 17              mov         edx,dword ptr [edi]
+  0000004B: 8B CF              mov         ecx,edi
+  0000004D: 50                 push        eax
+  0000004E: FF 52 20           call        dword ptr [edx+20h]
+  00000051: 50                 push        eax
+  00000052: 8B 07              mov         eax,dword ptr [edi]
+  00000054: 8B CF              mov         ecx,edi
+  00000056: 8B 40 30           mov         eax,dword ptr [eax+30h]
+  00000059: FF D0              call        eax
+  0000005B: 0F B6 C0           movzx       eax,al
+  0000005E: 8B CF              mov         ecx,edi
+  00000060: 50                 push        eax
+  00000061: 8B 07              mov         eax,dword ptr [edi]
+  00000063: FF 50 10           call        dword ptr [eax+10h]
+  00000066: 50                 push        eax
+  00000067: 8B 07              mov         eax,dword ptr [edi]
+  00000069: 8B CF              mov         ecx,edi
+  0000006B: FF 50 1C           call        dword ptr [eax+1Ch]
+  0000006E: 50                 push        eax
+  0000006F: 8B 07              mov         eax,dword ptr [edi]
+  00000071: 8B CF              mov         ecx,edi
+  00000073: FF 50 18           call        dword ptr [eax+18h]
+  00000076: 50                 push        eax
+  00000077: E8 00 00 00 00     call        ?Create@ldwGameWindow@@SAPAV1@HHPBD_NH@Z
+  0000007C: 83 C4 14           add         esp,14h
+  0000007F: 8B C8              mov         ecx,eax
+  00000081: E8 00 00 00 00     call        ?SetFrameRate@ldwGameWindow@@QAEXH@Z
+  00000086: 8B C6              mov         eax,esi
+  00000088: 8B 4D F4           mov         ecx,dword ptr [ebp-0Ch]
+  0000008B: 64 89 0D 00 00 00  mov         dword ptr fs:[0],ecx
+            00
+  00000092: 59                 pop         ecx
+  00000093: 5F                 pop         edi
+  00000094: 5E                 pop         esi
+  00000095: 8B E5              mov         esp,ebp
+  00000097: 5D                 pop         ebp
+  00000098: C3                 ret
+
+__unwindfunclet$??0ldwGame@@QAE@XZ$0:
+  00000000: 8B 4D F0           mov         ecx,dword ptr [ebp-10h]
+  00000003: E9 00 00 00 00     jmp         ??1ldwEventHandler@@UAE@XZ
+__ehhandler$??0ldwGame@@QAE@XZ:
+  00000008: 8B 54 24 08        mov         edx,dword ptr [esp+8]
+  0000000C: 8D 42 0C           lea         eax,[edx+0Ch]
+  0000000F: 8B 4A F0           mov         ecx,dword ptr [edx-10h]
+  00000012: 33 C8              xor         ecx,eax
+  00000014: E8 00 00 00 00     call        @__security_check_cookie@4
+  00000019: B8 00 00 00 00     mov         eax,offset __ehfuncinfo$??0ldwGame@@QAE@XZ
+  0000001E: E9 00 00 00 00     jmp         ___CxxFrameHandler3
+
+??1ldwEventHandler@@UAE@XZ (public: virtual __thiscall ldwEventHandler::~ldwEventHandler(void)):
+  00000000: C7 01 00 00 00 00  mov         dword ptr [ecx],offset ??_7ldwEventHandler@@6B@
+  00000006: C3                 ret
+
+??1ldwGame@@UAE@XZ (public: virtual __thiscall ldwGame::~ldwGame(void)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 6A FF              push        0FFFFFFFFh
+  00000005: 68 00 00 00 00     push        offset __ehhandler$??1ldwGame@@UAE@XZ
+  0000000A: 64 A1 00 00 00 00  mov         eax,dword ptr fs:[00000000h]
+  00000010: 50                 push        eax
+  00000011: 56                 push        esi
+  00000012: A1 00 00 00 00     mov         eax,dword ptr [___security_cookie]
+  00000017: 33 C5              xor         eax,ebp
+  00000019: 50                 push        eax
+  0000001A: 8D 45 F4           lea         eax,[ebp-0Ch]
+  0000001D: 64 A3 00 00 00 00  mov         dword ptr fs:[00000000h],eax
+  00000023: 8B F1              mov         esi,ecx
+  00000025: C7 06 00 00 00 00  mov         dword ptr [esi],offset ??_7ldwGame@@6B@
+  0000002B: E8 00 00 00 00     call        ?Destroy@ldwGameWindow@@SAXXZ
+  00000030: E8 00 00 00 00     call        ?Destroy@ldwEventManager@@SAXXZ
+  00000035: E8 00 00 00 00     call        ?Destroy@ldwLog@@SAXXZ
+  0000003A: C7 06 00 00 00 00  mov         dword ptr [esi],offset ??_7ldwEventHandler@@6B@
+  00000040: 8B 4D F4           mov         ecx,dword ptr [ebp-0Ch]
+  00000043: 64 89 0D 00 00 00  mov         dword ptr fs:[0],ecx
+            00
+  0000004A: 59                 pop         ecx
+  0000004B: 5E                 pop         esi
+  0000004C: 8B E5              mov         esp,ebp
+  0000004E: 5D                 pop         ebp
+  0000004F: C3                 ret
+
+__ehhandler$??1ldwGame@@UAE@XZ:
+  00000000: 8B 54 24 08        mov         edx,dword ptr [esp+8]
+  00000004: 8D 42 0C           lea         eax,[edx+0Ch]
+  00000007: 8B 4A F8           mov         ecx,dword ptr [edx-8]
+  0000000A: 33 C8              xor         ecx,eax
+  0000000C: E8 00 00 00 00     call        @__security_check_cookie@4
+  00000011: B8 00 00 00 00     mov         eax,offset __ehfuncinfo$??1ldwGame@@UAE@XZ
+  00000016: E9 00 00 00 00     jmp         ___CxxFrameHandler3
+
+??_GldwEventHandler@@UAEPAXI@Z (public: virtual void * __thiscall ldwEventHandler::`scalar deleting destructor'(unsigned int)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: F6 45 08 01        test        byte ptr [ebp+8],1
+  00000007: 56                 push        esi
+  00000008: 8B F1              mov         esi,ecx
+  0000000A: C7 06 00 00 00 00  mov         dword ptr [esi],offset ??_7ldwEventHandler@@6B@
+  00000010: 74 0B              je          0000001D
+  00000012: 6A 04              push        4
+  00000014: 56                 push        esi
+  00000015: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  0000001A: 83 C4 08           add         esp,8
+  0000001D: 8B C6              mov         eax,esi
+  0000001F: 5E                 pop         esi
+  00000020: 5D                 pop         ebp
+  00000021: C2 04 00           ret         4
+
+??_GldwGame@@UAEPAXI@Z (public: virtual void * __thiscall ldwGame::`scalar deleting destructor'(unsigned int)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 56                 push        esi
+  00000004: 8B F1              mov         esi,ecx
+  00000006: E8 00 00 00 00     call        ??1ldwGame@@UAE@XZ
+  0000000B: F6 45 08 01        test        byte ptr [ebp+8],1
+  0000000F: 74 0B              je          0000001C
+  00000011: 6A 04              push        4
+  00000013: 56                 push        esi
+  00000014: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  00000019: 83 C4 08           add         esp,8
+  0000001C: 8B C6              mov         eax,esi
+  0000001E: 5E                 pop         esi
+  0000001F: 5D                 pop         ebp
+  00000020: C2 04 00           ret         4
+
+?HandleKey@ldwEventHandler@@UAE_NHHH@Z (public: virtual bool __thiscall ldwEventHandler::HandleKey(int,int,int)):
+  00000000: 32 C0              xor         al,al
+  00000002: C2 0C 00           ret         0Ch
+
+?HandleMessage@ldwEventHandler@@UAE_NHJ@Z (public: virtual bool __thiscall ldwEventHandler::HandleMessage(int,long)):
+  00000000: 32 C0              xor         al,al
+  00000002: C2 08 00           ret         8
+
+?HandleMouse@ldwEventHandler@@UAE_NHUldwPoint@@@Z (public: virtual bool __thiscall ldwEventHandler::HandleMouse(int,struct ldwPoint)):
+  00000000: 32 C0              xor         al,al
+  00000002: C2 0C 00           ret         0Ch
+
+?LaunchURL@ldwGame@@SAXPBD@Z (public: static void __cdecl ldwGame::LaunchURL(char const *)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 6A 05              push        5
+  00000005: 6A 00              push        0
+  00000007: 6A 00              push        0
+  00000009: FF 75 08           push        dword ptr [ebp+8]
+  0000000C: 68 00 00 00 00     push        offset ??_C@_04PMOCAHAA@open?$AA@
+  00000011: 6A 00              push        0
+  00000013: FF 15 00 00 00 00  call        dword ptr [__imp__ShellExecuteA@24]
+  00000019: 5D                 pop         ebp
+  0000001A: C3                 ret
+
+?Run@ldwGame@@UAEXXZ (public: virtual void __thiscall ldwGame::Run(void)):
+  00000000: 56                 push        esi
+  00000001: 57                 push        edi
+  00000002: 8B F1              mov         esi,ecx
+  00000004: E8 00 00 00 00     call        ?Get@ldwGameWindow@@SAPAV1@XZ
+  00000009: 8B F8              mov         edi,eax
+  0000000B: 85 FF              test        edi,edi
+  0000000D: 74 21              je          00000030
+  0000000F: 90                 nop
+  00000010: 8B 16              mov         edx,dword ptr [esi]
+  00000012: 8B CE              mov         ecx,esi
+  00000014: FF 52 1C           call        dword ptr [edx+1Ch]
+  00000017: 8B 06              mov         eax,dword ptr [esi]
+  00000019: 8B CE              mov         ecx,esi
+  0000001B: FF 50 20           call        dword ptr [eax+20h]
+  0000001E: 8B CF              mov         ecx,edi
+  00000020: E8 00 00 00 00     call        ?Update@ldwGameWindow@@QAEXXZ
+  00000025: 8B CF              mov         ecx,edi
+  00000027: E8 00 00 00 00     call        ?HasClosed@ldwGameWindow@@QAE_NXZ
+  0000002C: 84 C0              test        al,al
+  0000002E: 74 E0              je          00000010
+  00000030: 5F                 pop         edi
+  00000031: 5E                 pop         esi
+  00000032: C3                 ret
+
+  Summary
+
+           4 .bss
+         170 .chks64
+          1C .data
+          34 .data$r
+        57A4 .debug$S
+          7C .debug$T
+          90 .drectve
+          41 .rdata
+          8E .rdata$r
+           8 .sxdata
+         194 .text$mn
+          3E .text$x
+          50 .xdata$x

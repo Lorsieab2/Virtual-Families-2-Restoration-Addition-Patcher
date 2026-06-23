@@ -1,18 +1,74 @@
-# This .gitignore is appropriate for repositories deployed to GitHub Pages and using
-# a Gemfile as specified at https://github.com/github/pages-gem#conventional
+# Generated game packages belong in GitHub Releases, not Git history.
+/outputs/
+/release-artifacts/
+/build/
+/dist/
+/cache/
+/.env
+/node_modules/
+/.venv/
 
-# Basic Jekyll gitignores (synchronize to Jekyll.gitignore)
-_site/
-.sass-cache/
-.jekyll-cache/
-.jekyll-metadata
+# Build logs, link maps, and locally generated binary/object trees.
+/*.log
+/work/*.log
+/work/desktop_obj_files/
+/work/patched_mobile_furniture_pack_objs/
+/work/generated_import_libs/
+/work/pydeps/
+/work/vf2_apk_extract/
+/work/vf3_apk/
+/work/b19_overlay/
 
-# Additional Ruby/bundler ignore for when you run: bundle install
-/vendor
+# `work` is primarily a local reverse-engineering/build cache. Keep only its
+# editable source, manifests, tables, and notes under version control.
+/work/**
+!/work/*.py
+!/work/*.ps1
+!/work/*.bat
+!/work/*.c
+!/work/*.cpp
+!/work/*.h
+!/work/*.hpp
+!/work/*.rsp
+!/work/*.json
+!/work/*.csv
+!/work/*.txt
+!/work/*.md
+!/work/*.idc
 
-# Specific ignore for GitHub Pages
-# GitHub Pages will always use its own deployed version of pages-gem
-# This means GitHub Pages will NOT use your Gemfile.lock and therefore it is
-# counterproductive to check this file into the repository.
-# Details at https://github.com/github/pages-gem/issues/768
-Gemfile.lock
+# Game payloads and compiled artifacts are release assets or local inputs.
+*.apk
+*.xapk
+*.obb
+*.pvr
+*.zip
+*.7z
+*.exe
+*.dll
+*.lib
+*.obj
+*.pdb
+*.map
+*.swf
+*.xcf
+
+# Preserve editable project source/configuration only from historical folders.
+/Unneeded crap/**
+!/Unneeded crap/**/*.md
+!/Unneeded crap/**/*.txt
+!/Unneeded crap/**/*.json
+!/Unneeded crap/**/*.csv
+!/Unneeded crap/**/*.ps1
+!/Unneeded crap/**/*.py
+!/Unneeded crap/**/*.c
+!/Unneeded crap/**/*.cpp
+!/Unneeded crap/**/*.cs
+!/Unneeded crap/**/*.h
+!/Unneeded crap/**/*.hpp
+!/Unneeded crap/**/*.bat
+!/Unneeded crap/**/*.rsp
+
+# Never commit local Git/Codex state.
+/.git/
+/.codex/
+/.agents/

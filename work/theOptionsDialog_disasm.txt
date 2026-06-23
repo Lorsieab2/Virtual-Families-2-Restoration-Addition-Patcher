@@ -1,0 +1,2130 @@
+﻿Microsoft (R) COFF/PE Dumper Version 14.51.36247.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\desktop_obj_files\theOptionsDialog.obj
+
+File Type: COFF OBJECT
+
+??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z (public: __thiscall theOptionsDialog::theOptionsDialog(char *,enum DialogColorEnum)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 6A FF              push        0FFFFFFFFh
+  00000005: 68 00 00 00 00     push        offset __ehhandler$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z
+  0000000A: 64 A1 00 00 00 00  mov         eax,dword ptr fs:[00000000h]
+  00000010: 50                 push        eax
+  00000011: 83 EC 08           sub         esp,8
+  00000014: 53                 push        ebx
+  00000015: 56                 push        esi
+  00000016: 57                 push        edi
+  00000017: A1 00 00 00 00     mov         eax,dword ptr [___security_cookie]
+  0000001C: 33 C5              xor         eax,ebp
+  0000001E: 50                 push        eax
+  0000001F: 8D 45 F4           lea         eax,[ebp-0Ch]
+  00000022: 64 A3 00 00 00 00  mov         dword ptr fs:[00000000h],eax
+  00000028: 8B D9              mov         ebx,ecx
+  0000002A: 89 5D EC           mov         dword ptr [ebp-14h],ebx
+  0000002D: 6A 01              push        1
+  0000002F: E8 00 00 00 00     call        ??0ldwTiledDialog@@QAE@_N@Z
+  00000034: C7 03 00 00 00 00  mov         dword ptr [ebx],offset ??_7theOptionsDialog@@6B@
+  0000003A: C7 43 4C 00 00 00  mov         dword ptr [ebx+4Ch],0
+            00
+  00000041: C7 43 50 00 00 00  mov         dword ptr [ebx+50h],0
+            00
+  00000048: C7 43 54 00 00 00  mov         dword ptr [ebx+54h],0
+            00
+  0000004F: C7 43 58 00 00 00  mov         dword ptr [ebx+58h],0
+            00
+  00000056: C7 45 FC 00 00 00  mov         dword ptr [ebp-4],0
+            00
+  0000005D: C7 43 74 02 00 00  mov         dword ptr [ebx+74h],2
+            00
+  00000064: C7 43 78 03 00 00  mov         dword ptr [ebx+78h],3
+            00
+  0000006B: C7 43 7C 04 00 00  mov         dword ptr [ebx+7Ch],4
+            00
+  00000072: C7 83 D8 00 00 00  mov         dword ptr [ebx+0D8h],0
+            00 00 00 00
+  0000007C: E8 00 00 00 00     call        ?Get@ldwGameWindow@@SAPAV1@XZ
+  00000081: 89 83 A8 00 00 00  mov         dword ptr [ebx+0A8h],eax
+  00000087: E8 00 00 00 00     call        ?Get@theGraphicsManager@@SAPAV1@XZ
+  0000008C: 8B F8              mov         edi,eax
+  0000008E: 68 63 01 00 00     push        163h
+  00000093: 8B CF              mov         ecx,edi
+  00000095: 89 7D F0           mov         dword ptr [ebp-10h],edi
+  00000098: E8 00 00 00 00     call        ?GetImage@theGraphicsManager@@QAEPAVldwImage@@W4EImage@@@Z
+  0000009D: 68 64 01 00 00     push        164h
+  000000A2: 8B CF              mov         ecx,edi
+  000000A4: 89 83 98 00 00 00  mov         dword ptr [ebx+98h],eax
+  000000AA: E8 00 00 00 00     call        ?GetImage@theGraphicsManager@@QAEPAVldwImage@@W4EImage@@@Z
+  000000AF: 68 65 01 00 00     push        165h
+  000000B4: 8B CF              mov         ecx,edi
+  000000B6: 89 83 9C 00 00 00  mov         dword ptr [ebx+9Ch],eax
+  000000BC: E8 00 00 00 00     call        ?GetImageStrip@theGraphicsManager@@QAEPAVldwImageStrip@@W4EImage@@@Z
+  000000C1: 68 67 01 00 00     push        167h
+  000000C6: 8B CF              mov         ecx,edi
+  000000C8: 89 83 90 00 00 00  mov         dword ptr [ebx+90h],eax
+  000000CE: E8 00 00 00 00     call        ?GetImage@theGraphicsManager@@QAEPAVldwImage@@W4EImage@@@Z
+  000000D3: 68 68 01 00 00     push        168h
+  000000D8: 8B CF              mov         ecx,edi
+  000000DA: 89 83 A0 00 00 00  mov         dword ptr [ebx+0A0h],eax
+  000000E0: E8 00 00 00 00     call        ?GetImage@theGraphicsManager@@QAEPAVldwImage@@W4EImage@@@Z
+  000000E5: 89 83 A4 00 00 00  mov         dword ptr [ebx+0A4h],eax
+  000000EB: E8 00 00 00 00     call        ?Get@theGameState@@SAPAV1@XZ
+  000000F0: 89 83 80 00 00 00  mov         dword ptr [ebx+80h],eax
+  000000F6: E8 00 00 00 00     call        ?Get@theStringManager@@SAPAV1@XZ
+  000000FB: 8B 75 0C           mov         esi,dword ptr [ebp+0Ch]
+  000000FE: 8B CF              mov         ecx,edi
+  00000100: 68 F2 01 00 00     push        1F2h
+  00000105: 68 80 02 00 00     push        280h
+  0000010A: 56                 push        esi
+  0000010B: 89 83 B4 00 00 00  mov         dword ptr [ebx+0B4h],eax
+  00000111: E8 00 00 00 00     call        ?GetImageGridForCanvas@theGraphicsManager@@QAEPAVldwImageGrid@@H@Z
+  00000116: 50                 push        eax
+  00000117: 8B CB              mov         ecx,ebx
+  00000119: E8 00 00 00 00     call        ?SetTiling@ldwTiledDialog@@IAEXPAVldwImageGrid@@HH@Z
+  0000011E: 56                 push        esi
+  0000011F: 8D 45 0C           lea         eax,[ebp+0Ch]
+  00000122: 8B CF              mov         ecx,edi
+  00000124: 50                 push        eax
+  00000125: E8 00 00 00 00     call        ?GetTextColorForCanvas@theGraphicsManager@@QAE?AUldwColor@@H@Z
+  0000012A: 68 00 00 00 00     push        offset ??_C@_07LKOONPMF@ldw?4ini?$AA@
+  0000012F: 6A 00              push        0
+  00000131: 68 00 00 00 00     push        offset ??_C@_0BA@MFIPFIDM@ForceFullScreen?$AA@
+  00000136: E8 00 00 00 00     call        ?GetConfigValue@ldwGameState@@SAHPBDH0@Z
+  0000013B: 83 C4 0C           add         esp,0Ch
+  0000013E: 85 C0              test        eax,eax
+  00000140: 75 1B              jne         0000015D
+  00000142: 68 00 00 00 00     push        offset ??_C@_07LKOONPMF@ldw?4ini?$AA@
+  00000147: 50                 push        eax
+  00000148: 68 00 00 00 00     push        offset ??_C@_0O@LLEJCHHI@ForceWindowed?$AA@
+  0000014D: E8 00 00 00 00     call        ?GetConfigValue@ldwGameState@@SAHPBDH0@Z
+  00000152: 83 C4 0C           add         esp,0Ch
+  00000155: 85 C0              test        eax,eax
+  00000157: 75 04              jne         0000015D
+  00000159: B0 01              mov         al,1
+  0000015B: EB 02              jmp         0000015F
+  0000015D: 32 C0              xor         al,al
+  0000015F: 88 43 60           mov         byte ptr [ebx+60h],al
+  00000162: 8B 4B 14           mov         ecx,dword ptr [ebx+14h]
+  00000165: 8B 43 1C           mov         eax,dword ptr [ebx+1Ch]
+  00000168: 2B C1              sub         eax,ecx
+  0000016A: 2D 80 02 00 00     sub         eax,280h
+  0000016F: 99                 cdq
+  00000170: 2B C2              sub         eax,edx
+  00000172: D1 F8              sar         eax,1
+  00000174: 03 C1              add         eax,ecx
+  00000176: 89 83 84 00 00 00  mov         dword ptr [ebx+84h],eax
+  0000017C: 8B 43 1C           mov         eax,dword ptr [ebx+1Ch]
+  0000017F: 2B C1              sub         eax,ecx
+  00000181: 8B 8B 80 00 00 00  mov         ecx,dword ptr [ebx+80h]
+  00000187: 99                 cdq
+  00000188: 2B C2              sub         eax,edx
+  0000018A: D1 F8              sar         eax,1
+  0000018C: 03 43 14           add         eax,dword ptr [ebx+14h]
+  0000018F: 89 83 88 00 00 00  mov         dword ptr [ebx+88h],eax
+  00000195: 8B 43 20           mov         eax,dword ptr [ebx+20h]
+  00000198: 2B 43 18           sub         eax,dword ptr [ebx+18h]
+  0000019B: 2D F2 01 00 00     sub         eax,1F2h
+  000001A0: 66 C7 83 B8 00 00  mov         word ptr [ebx+0B8h],1
+            00 01 00
+  000001A9: 99                 cdq
+  000001AA: 2B C2              sub         eax,edx
+  000001AC: 66 C7 43 68 00 00  mov         word ptr [ebx+68h],0
+  000001B2: D1 F8              sar         eax,1
+  000001B4: 03 43 18           add         eax,dword ptr [ebx+18h]
+  000001B7: 89 83 8C 00 00 00  mov         dword ptr [ebx+8Ch],eax
+  000001BD: C7 83 BC 00 00 00  mov         dword ptr [ebx+0BCh],1
+            01 00 00 00
+  000001C7: F3 0F 10 89 0C 5B  movss       xmm1,dword ptr [ecx+25B0Ch]
+            02 00
+  000001CF: F3 0F 11 8B C4 00  movss       dword ptr [ebx+0C4h],xmm1
+            00 00
+  000001D7: F3 0F 59 0D 00 00  mulss       xmm1,dword ptr [__real@43838000]
+            00 00
+  000001DF: 6A 14              push        14h
+  000001E1: F3 0F 10 91 10 5B  movss       xmm2,dword ptr [ecx+25B10h]
+            02 00
+  000001E9: F3 0F 11 93 C8 00  movss       dword ptr [ebx+0C8h],xmm2
+            00 00
+  000001F1: F3 0F 59 15 00 00  mulss       xmm2,dword ptr [__real@43838000]
+            00 00
+  000001F9: C7 83 C0 00 00 00  mov         dword ptr [ebx+0C0h],1
+            01 00 00 00
+  00000203: F3 0F 2C C1        cvttss2si   eax,xmm1
+  00000207: 89 43 6C           mov         dword ptr [ebx+6Ch],eax
+  0000020A: F3 0F 2C C2        cvttss2si   eax,xmm2
+  0000020E: 89 43 70           mov         dword ptr [ebx+70h],eax
+  00000211: 8A 81 29 5B 02 00  mov         al,byte ptr [ecx+25B29h]
+  00000217: 88 83 B9 00 00 00  mov         byte ptr [ebx+0B9h],al
+  0000021D: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  00000222: 8B F0              mov         esi,eax
+  00000224: 83 C4 04           add         esp,4
+  00000227: 89 75 0C           mov         dword ptr [ebp+0Ch],esi
+  0000022A: C6 45 FC 01        mov         byte ptr [ebp-4],1
+  0000022E: 85 F6              test        esi,esi
+  00000230: 74 22              je          00000254
+  00000232: 6A 00              push        0
+  00000234: 53                 push        ebx
+  00000235: 6A 00              push        0
+  00000237: 6A 00              push        0
+  00000239: 68 28 01 00 00     push        128h
+  0000023E: 8B CF              mov         ecx,edi
+  00000240: E8 00 00 00 00     call        ?GetImageGrid@theGraphicsManager@@QAEPAVldwImageGrid@@W4EImage@@@Z
+  00000245: 50                 push        eax
+  00000246: FF 73 74           push        dword ptr [ebx+74h]
+  00000249: 8B CE              mov         ecx,esi
+  0000024B: E8 00 00 00 00     call        ??0ldwButton@@QAE@HPAVldwImageGrid@@UldwPoint@@PAVldwScene@@_N@Z
+  00000250: 8B C8              mov         ecx,eax
+  00000252: EB 02              jmp         00000256
+  00000254: 33 C9              xor         ecx,ecx
+  00000256: 89 8B D4 00 00 00  mov         dword ptr [ebx+0D4h],ecx
+  0000025C: 8B 01              mov         eax,dword ptr [ecx]
+  0000025E: C6 45 FC 00        mov         byte ptr [ebp-4],0
+  00000262: FF 50 0C           call        dword ptr [eax+0Ch]
+  00000265: 8B 8B D4 00 00 00  mov         ecx,dword ptr [ebx+0D4h]
+  0000026B: 8B F0              mov         esi,eax
+  0000026D: 8B 11              mov         edx,dword ptr [ecx]
+  0000026F: FF 52 10           call        dword ptr [edx+10h]
+  00000272: 89 45 0C           mov         dword ptr [ebp+0Ch],eax
+  00000275: 8B 43 1C           mov         eax,dword ptr [ebx+1Ch]
+  00000278: 2B 43 14           sub         eax,dword ptr [ebx+14h]
+  0000027B: 8B 8B D4 00 00 00  mov         ecx,dword ptr [ebx+0D4h]
+  00000281: 99                 cdq
+  00000282: 2B C2              sub         eax,edx
+  00000284: 8B F8              mov         edi,eax
+  00000286: 8B C6              mov         eax,esi
+  00000288: 99                 cdq
+  00000289: 2B C2              sub         eax,edx
+  0000028B: D1 FF              sar         edi,1
+  0000028D: 8B 11              mov         edx,dword ptr [ecx]
+  0000028F: D1 F8              sar         eax,1
+  00000291: 2B F8              sub         edi,eax
+  00000293: 8B 43 20           mov         eax,dword ptr [ebx+20h]
+  00000296: 2B 43 18           sub         eax,dword ptr [ebx+18h]
+  00000299: 2B 45 0C           sub         eax,dword ptr [ebp+0Ch]
+  0000029C: 83 E8 1E           sub         eax,1Eh
+  0000029F: 50                 push        eax
+  000002A0: 57                 push        edi
+  000002A1: FF 52 04           call        dword ptr [edx+4]
+  000002A4: 8B 8B B4 00 00 00  mov         ecx,dword ptr [ebx+0B4h]
+  000002AA: E8 00 00 00 00     call        ?GetLargeFont@theStringManager@@QAEPAVldwFont@@XZ
+  000002AF: 8B 8B D4 00 00 00  mov         ecx,dword ptr [ebx+0D4h]
+  000002B5: 50                 push        eax
+  000002B6: A1 00 00 00 00     mov         eax,dword ptr [?cLdwWhite@@3UldwColor@@B]
+  000002BB: 50                 push        eax
+  000002BC: 50                 push        eax
+  000002BD: 50                 push        eax
+  000002BE: FF 75 08           push        dword ptr [ebp+8]
+  000002C1: E8 00 00 00 00     call        ?SetText@ldwButton@@QAEXPBDUldwColor@@11PAVldwFont@@@Z
+  000002C6: FF B3 D4 00 00 00  push        dword ptr [ebx+0D4h]
+  000002CC: 8B CB              mov         ecx,ebx
+  000002CE: E8 00 00 00 00     call        ?AddControl@ldwScene@@IAEXPAVldwControl@@@Z
+  000002D3: 83 3D 00 00 00 00  cmp         dword ptr [?FamilyTree@@3VCFamilyTree@@A],0
+            00
+  000002DA: 0F 85 80 00 00 00  jne         00000360
+  000002E0: 83 3D 04 00 00 00  cmp         dword ptr [?FamilyTree@@3VCFamilyTree@@A+4],2
+            02
+  000002E7: 7D 77              jge         00000360
+  000002E9: 6A 14              push        14h
+  000002EB: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  000002F0: 8B F0              mov         esi,eax
+  000002F2: 83 C4 04           add         esp,4
+  000002F5: 89 75 08           mov         dword ptr [ebp+8],esi
+  000002F8: C6 45 FC 02        mov         byte ptr [ebp-4],2
+  000002FC: 85 F6              test        esi,esi
+  000002FE: 74 31              je          00000331
+  00000300: 8B 4B 20           mov         ecx,dword ptr [ebx+20h]
+  00000303: 2B 4B 18           sub         ecx,dword ptr [ebx+18h]
+  00000306: 2B 4D 0C           sub         ecx,dword ptr [ebp+0Ch]
+  00000309: 6A 00              push        0
+  0000030B: 53                 push        ebx
+  0000030C: 83 E9 1E           sub         ecx,1Eh
+  0000030F: 51                 push        ecx
+  00000310: 8B 4D F0           mov         ecx,dword ptr [ebp-10h]
+  00000313: 68 D2 01 00 00     push        1D2h
+  00000318: 68 28 01 00 00     push        128h
+  0000031D: E8 00 00 00 00     call        ?GetImageGrid@theGraphicsManager@@QAEPAVldwImageGrid@@W4EImage@@@Z
+  00000322: 50                 push        eax
+  00000323: FF 73 7C           push        dword ptr [ebx+7Ch]
+  00000326: 8B CE              mov         ecx,esi
+  00000328: E8 00 00 00 00     call        ??0ldwButton@@QAE@HPAVldwImageGrid@@UldwPoint@@PAVldwScene@@_N@Z
+  0000032D: 8B F0              mov         esi,eax
+  0000032F: EB 02              jmp         00000333
+  00000331: 33 F6              xor         esi,esi
+  00000333: 8B 8B B4 00 00 00  mov         ecx,dword ptr [ebx+0B4h]
+  00000339: C6 45 FC 00        mov         byte ptr [ebp-4],0
+  0000033D: E8 00 00 00 00     call        ?GetMediumFont@theStringManager@@QAEPAVldwFont@@XZ
+  00000342: 8B 8B B4 00 00 00  mov         ecx,dword ptr [ebx+0B4h]
+  00000348: 50                 push        eax
+  00000349: A1 00 00 00 00     mov         eax,dword ptr [?cLdwWhite@@3UldwColor@@B]
+  0000034E: 50                 push        eax
+  0000034F: 50                 push        eax
+  00000350: 50                 push        eax
+  00000351: 6A 10              push        10h
+  00000353: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  00000358: 50                 push        eax
+  00000359: 8B CE              mov         ecx,esi
+  0000035B: E8 00 00 00 00     call        ?SetText@ldwButton@@QAEXPBDUldwColor@@11PAVldwFont@@@Z
+  00000360: 6A 14              push        14h
+  00000362: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  00000367: 83 C4 04           add         esp,4
+  0000036A: 89 45 0C           mov         dword ptr [ebp+0Ch],eax
+  0000036D: C6 45 FC 03        mov         byte ptr [ebp-4],3
+  00000371: 85 C0              test        eax,eax
+  00000373: 74 30              je          000003A5
+  00000375: 8B 8B 8C 00 00 00  mov         ecx,dword ptr [ebx+8Ch]
+  0000037B: 6A 00              push        0
+  0000037D: FF 35 00 00 00 00  push        dword ptr [?cLdwWhite@@3UldwColor@@B]
+  00000383: 83 C1 4B           add         ecx,4Bh
+  00000386: 68 00 00 00 00     push        offset ??_C@_00CNPNBAHC@?$AA@
+  0000038B: 53                 push        ebx
+  0000038C: 51                 push        ecx
+  0000038D: 68 0B 01 00 00     push        10Bh
+  00000392: FF B3 90 00 00 00  push        dword ptr [ebx+90h]
+  00000398: 8B C8              mov         ecx,eax
+  0000039A: 6A 05              push        5
+  0000039C: E8 00 00 00 00     call        ??0ldwRadioButton@@QAE@HPAVldwImageStrip@@UldwPoint@@PAVldwScene@@PBDUldwColor@@PAVldwFont@@@Z
+  000003A1: 8B F0              mov         esi,eax
+  000003A3: EB 02              jmp         000003A7
+  000003A5: 33 F6              xor         esi,esi
+  000003A7: 56                 push        esi
+  000003A8: 8B CB              mov         ecx,ebx
+  000003AA: C6 45 FC 00        mov         byte ptr [ebp-4],0
+  000003AE: E8 00 00 00 00     call        ?AddControl@ldwScene@@IAEXPAVldwControl@@@Z
+  000003B3: 8B 83 80 00 00 00  mov         eax,dword ptr [ebx+80h]
+  000003B9: 8B CE              mov         ecx,esi
+  000003BB: 80 B8 07 5B 02 00  cmp         byte ptr [eax+25B07h],0
+            00
+  000003C2: 0F 95 C0           setne       al
+  000003C5: 0F B6 C0           movzx       eax,al
+  000003C8: 50                 push        eax
+  000003C9: E8 00 00 00 00     call        ?SetCheck@ldwRadioButton@@QAEX_N@Z
+  000003CE: 6A 14              push        14h
+  000003D0: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  000003D5: 83 C4 04           add         esp,4
+  000003D8: 89 45 0C           mov         dword ptr [ebp+0Ch],eax
+  000003DB: C6 45 FC 04        mov         byte ptr [ebp-4],4
+  000003DF: 85 C0              test        eax,eax
+  000003E1: 74 30              je          00000413
+  000003E3: 8B 8B 8C 00 00 00  mov         ecx,dword ptr [ebx+8Ch]
+  000003E9: 6A 00              push        0
+  000003EB: FF 35 00 00 00 00  push        dword ptr [?cLdwWhite@@3UldwColor@@B]
+  000003F1: 83 C1 4B           add         ecx,4Bh
+  000003F4: 68 00 00 00 00     push        offset ??_C@_00CNPNBAHC@?$AA@
+  000003F9: 53                 push        ebx
+  000003FA: 51                 push        ecx
+  000003FB: 68 63 01 00 00     push        163h
+  00000400: FF B3 90 00 00 00  push        dword ptr [ebx+90h]
+  00000406: 8B C8              mov         ecx,eax
+  00000408: 6A 06              push        6
+  0000040A: E8 00 00 00 00     call        ??0ldwRadioButton@@QAE@HPAVldwImageStrip@@UldwPoint@@PAVldwScene@@PBDUldwColor@@PAVldwFont@@@Z
+  0000040F: 8B F0              mov         esi,eax
+  00000411: EB 02              jmp         00000415
+  00000413: 33 F6              xor         esi,esi
+  00000415: 56                 push        esi
+  00000416: 8B CB              mov         ecx,ebx
+  00000418: C6 45 FC 00        mov         byte ptr [ebp-4],0
+  0000041C: E8 00 00 00 00     call        ?AddControl@ldwScene@@IAEXPAVldwControl@@@Z
+  00000421: 8B 83 80 00 00 00  mov         eax,dword ptr [ebx+80h]
+  00000427: 8B CE              mov         ecx,esi
+  00000429: 80 B8 08 5B 02 00  cmp         byte ptr [eax+25B08h],0
+            00
+  00000430: 0F 95 C0           setne       al
+  00000433: 0F B6 C0           movzx       eax,al
+  00000436: 50                 push        eax
+  00000437: E8 00 00 00 00     call        ?SetCheck@ldwRadioButton@@QAEX_N@Z
+  0000043C: 6A 14              push        14h
+  0000043E: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  00000443: 83 C4 04           add         esp,4
+  00000446: 89 45 0C           mov         dword ptr [ebp+0Ch],eax
+  00000449: C6 45 FC 05        mov         byte ptr [ebp-4],5
+  0000044D: 85 C0              test        eax,eax
+  0000044F: 74 30              je          00000481
+  00000451: 8B 8B 8C 00 00 00  mov         ecx,dword ptr [ebx+8Ch]
+  00000457: 6A 00              push        0
+  00000459: FF 35 00 00 00 00  push        dword ptr [?cLdwWhite@@3UldwColor@@B]
+  0000045F: 83 C1 4B           add         ecx,4Bh
+  00000462: 68 00 00 00 00     push        offset ??_C@_00CNPNBAHC@?$AA@
+  00000467: 53                 push        ebx
+  00000468: 51                 push        ecx
+  00000469: 68 BB 01 00 00     push        1BBh
+  0000046E: FF B3 90 00 00 00  push        dword ptr [ebx+90h]
+  00000474: 8B C8              mov         ecx,eax
+  00000476: 6A 07              push        7
+  00000478: E8 00 00 00 00     call        ??0ldwRadioButton@@QAE@HPAVldwImageStrip@@UldwPoint@@PAVldwScene@@PBDUldwColor@@PAVldwFont@@@Z
+  0000047D: 8B F0              mov         esi,eax
+  0000047F: EB 02              jmp         00000483
+  00000481: 33 F6              xor         esi,esi
+  00000483: 56                 push        esi
+  00000484: 8B CB              mov         ecx,ebx
+  00000486: C6 45 FC 00        mov         byte ptr [ebp-4],0
+  0000048A: E8 00 00 00 00     call        ?AddControl@ldwScene@@IAEXPAVldwControl@@@Z
+  0000048F: 8B 83 80 00 00 00  mov         eax,dword ptr [ebx+80h]
+  00000495: 8B CE              mov         ecx,esi
+  00000497: 80 B8 09 5B 02 00  cmp         byte ptr [eax+25B09h],0
+            00
+  0000049E: 0F 95 C0           setne       al
+  000004A1: 0F B6 C0           movzx       eax,al
+  000004A4: 50                 push        eax
+  000004A5: E8 00 00 00 00     call        ?SetCheck@ldwRadioButton@@QAEX_N@Z
+  000004AA: 6A 14              push        14h
+  000004AC: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  000004B1: 83 C4 04           add         esp,4
+  000004B4: 89 45 0C           mov         dword ptr [ebp+0Ch],eax
+  000004B7: C6 45 FC 06        mov         byte ptr [ebp-4],6
+  000004BB: 85 C0              test        eax,eax
+  000004BD: 74 30              je          000004EF
+  000004BF: 8B 8B 8C 00 00 00  mov         ecx,dword ptr [ebx+8Ch]
+  000004C5: 6A 00              push        0
+  000004C7: FF 35 00 00 00 00  push        dword ptr [?cLdwWhite@@3UldwColor@@B]
+  000004CD: 83 C1 4B           add         ecx,4Bh
+  000004D0: 68 00 00 00 00     push        offset ??_C@_00CNPNBAHC@?$AA@
+  000004D5: 53                 push        ebx
+  000004D6: 51                 push        ecx
+  000004D7: 68 13 02 00 00     push        213h
+  000004DC: FF B3 90 00 00 00  push        dword ptr [ebx+90h]
+  000004E2: 8B C8              mov         ecx,eax
+  000004E4: 6A 08              push        8
+  000004E6: E8 00 00 00 00     call        ??0ldwRadioButton@@QAE@HPAVldwImageStrip@@UldwPoint@@PAVldwScene@@PBDUldwColor@@PAVldwFont@@@Z
+  000004EB: 8B F0              mov         esi,eax
+  000004ED: EB 02              jmp         000004F1
+  000004EF: 33 F6              xor         esi,esi
+  000004F1: 56                 push        esi
+  000004F2: 8B CB              mov         ecx,ebx
+  000004F4: C6 45 FC 00        mov         byte ptr [ebp-4],0
+  000004F8: E8 00 00 00 00     call        ?AddControl@ldwScene@@IAEXPAVldwControl@@@Z
+  000004FD: 8B 83 80 00 00 00  mov         eax,dword ptr [ebx+80h]
+  00000503: 8B CE              mov         ecx,esi
+  00000505: 80 B8 0A 5B 02 00  cmp         byte ptr [eax+25B0Ah],0
+            00
+  0000050C: 0F 95 C0           setne       al
+  0000050F: 0F B6 C0           movzx       eax,al
+  00000512: 50                 push        eax
+  00000513: E8 00 00 00 00     call        ?SetCheck@ldwRadioButton@@QAEX_N@Z
+  00000518: 83 3D 00 00 00 00  cmp         dword ptr [?GameStats@@3VCGameStats@@A],0
+            00
+  0000051F: C7 43 64 00 00 00  mov         dword ptr [ebx+64h],0
+            00
+  00000526: 0F 94 C0           sete        al
+  00000529: 88 43 61           mov         byte ptr [ebx+61h],al
+  0000052C: 8B C3              mov         eax,ebx
+  0000052E: 8B 4D F4           mov         ecx,dword ptr [ebp-0Ch]
+  00000531: 64 89 0D 00 00 00  mov         dword ptr fs:[0],ecx
+            00
+  00000538: 59                 pop         ecx
+  00000539: 5F                 pop         edi
+  0000053A: 5E                 pop         esi
+  0000053B: 5B                 pop         ebx
+  0000053C: 8B E5              mov         esp,ebp
+  0000053E: 5D                 pop         ebp
+  0000053F: C2 08 00           ret         8
+
+__unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$0:
+  00000000: 8B 4D EC           mov         ecx,dword ptr [ebp-14h]
+  00000003: E9 00 00 00 00     jmp         ??1ldwTiledDialog@@UAE@XZ
+__unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$1:
+  00000008: 6A 14              push        14h
+  0000000A: 8B 45 0C           mov         eax,dword ptr [ebp+0Ch]
+  0000000D: 50                 push        eax
+  0000000E: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  00000013: 83 C4 08           add         esp,8
+  00000016: C3                 ret
+__unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$2:
+  00000017: 6A 14              push        14h
+  00000019: 8B 45 08           mov         eax,dword ptr [ebp+8]
+  0000001C: 50                 push        eax
+  0000001D: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  00000022: 83 C4 08           add         esp,8
+  00000025: C3                 ret
+__unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$3:
+  00000026: 6A 14              push        14h
+  00000028: 8B 45 0C           mov         eax,dword ptr [ebp+0Ch]
+  0000002B: 50                 push        eax
+  0000002C: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  00000031: 83 C4 08           add         esp,8
+  00000034: C3                 ret
+__unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$4:
+  00000035: 6A 14              push        14h
+  00000037: 8B 45 0C           mov         eax,dword ptr [ebp+0Ch]
+  0000003A: 50                 push        eax
+  0000003B: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  00000040: 83 C4 08           add         esp,8
+  00000043: C3                 ret
+__unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$5:
+  00000044: 6A 14              push        14h
+  00000046: 8B 45 0C           mov         eax,dword ptr [ebp+0Ch]
+  00000049: 50                 push        eax
+  0000004A: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  0000004F: 83 C4 08           add         esp,8
+  00000052: C3                 ret
+__unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$6:
+  00000053: 6A 14              push        14h
+  00000055: 8B 45 0C           mov         eax,dword ptr [ebp+0Ch]
+  00000058: 50                 push        eax
+  00000059: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  0000005E: 83 C4 08           add         esp,8
+  00000061: C3                 ret
+__ehhandler$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z:
+  00000062: 8B 54 24 08        mov         edx,dword ptr [esp+8]
+  00000066: 8D 42 0C           lea         eax,[edx+0Ch]
+  00000069: 8B 4A E8           mov         ecx,dword ptr [edx-18h]
+  0000006C: 33 C8              xor         ecx,eax
+  0000006E: E8 00 00 00 00     call        @__security_check_cookie@4
+  00000073: B8 00 00 00 00     mov         eax,offset __ehfuncinfo$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z
+  00000078: E9 00 00 00 00     jmp         ___CxxFrameHandler3
+
+??1theOptionsDialog@@UAE@XZ (public: virtual __thiscall theOptionsDialog::~theOptionsDialog(void)):
+  00000000: C7 01 00 00 00 00  mov         dword ptr [ecx],offset ??_7theOptionsDialog@@6B@
+  00000006: E9 00 00 00 00     jmp         ??1ldwTiledDialog@@UAE@XZ
+
+??_GtheOptionsDialog@@UAEPAXI@Z (public: virtual void * __thiscall theOptionsDialog::`scalar deleting destructor'(unsigned int)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 56                 push        esi
+  00000004: 8B F1              mov         esi,ecx
+  00000006: E8 00 00 00 00     call        ??1theOptionsDialog@@UAE@XZ
+  0000000B: F6 45 08 01        test        byte ptr [ebp+8],1
+  0000000F: 74 0E              je          0000001F
+  00000011: 68 DC 00 00 00     push        0DCh
+  00000016: 56                 push        esi
+  00000017: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  0000001C: 83 C4 08           add         esp,8
+  0000001F: 8B C6              mov         eax,esi
+  00000021: 5E                 pop         esi
+  00000022: 5D                 pop         ebp
+  00000023: C2 04 00           ret         4
+
+??_H@YGXPAXIIP6EPAX0@Z@Z (void __stdcall `vector constructor iterator'(void *,unsigned int,unsigned int,void * (__thiscall*)(void *))):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 56                 push        esi
+  00000004: 8B 75 10           mov         esi,dword ptr [ebp+10h]
+  00000007: 85 F6              test        esi,esi
+  00000009: 74 16              je          00000021
+  0000000B: 53                 push        ebx
+  0000000C: 8B 5D 14           mov         ebx,dword ptr [ebp+14h]
+  0000000F: 57                 push        edi
+  00000010: 8B 7D 08           mov         edi,dword ptr [ebp+8]
+  00000013: 8B CF              mov         ecx,edi
+  00000015: FF D3              call        ebx
+  00000017: 03 7D 0C           add         edi,dword ptr [ebp+0Ch]
+  0000001A: 83 EE 01           sub         esi,1
+  0000001D: 75 F4              jne         00000013
+  0000001F: 5F                 pop         edi
+  00000020: 5B                 pop         ebx
+  00000021: 5E                 pop         esi
+  00000022: 5D                 pop         ebp
+  00000023: C2 10 00           ret         10h
+
+?DrawBackground@ldwTiledDialog@@UAEXM@Z (public: virtual void __thiscall ldwTiledDialog::DrawBackground(float)):
+  00000000: C2 04 00           ret         4
+
+?DrawNoFadeScene@theOptionsDialog@@MAEXXZ (protected: virtual void __thiscall theOptionsDialog::DrawNoFadeScene(void)):
+  00000000: 56                 push        esi
+  00000001: 8B F1              mov         esi,ecx
+  00000003: 6A 00              push        0
+  00000005: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  0000000B: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  00000011: 8A 80 29 5B 02 00  mov         al,byte ptr [eax+25B29h]
+  00000017: 88 86 B9 00 00 00  mov         byte ptr [esi+0B9h],al
+  0000001D: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  00000023: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000029: 83 C0 0A           add         eax,0Ah
+  0000002C: 50                 push        eax
+  0000002D: FF B6 88 00 00 00  push        dword ptr [esi+88h]
+  00000033: 68 77 07 00 00     push        777h
+  00000038: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  0000003D: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000043: 50                 push        eax
+  00000044: E8 00 00 00 00     call        ?DrawStringCentered@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  00000049: 80 7E 60 00        cmp         byte ptr [esi+60h],0
+  0000004D: 0F 84 42 01 00 00  je          00000195
+  00000053: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000059: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  0000005F: 05 FA 00 00 00     add         eax,0FAh
+  00000064: 6A 00              push        0
+  00000066: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  0000006C: 50                 push        eax
+  0000006D: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  00000073: 05 D2 00 00 00     add         eax,0D2h
+  00000078: 50                 push        eax
+  00000079: 68 5E 0A 00 00     push        0A5Eh
+  0000007E: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  00000083: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000089: 50                 push        eax
+  0000008A: E8 00 00 00 00     call        ?DrawStringRight@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  0000008F: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000095: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  0000009B: 05 1D 01 00 00     add         eax,11Dh
+  000000A0: 6A 00              push        0
+  000000A2: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  000000A8: 50                 push        eax
+  000000A9: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  000000AF: 05 F2 00 00 00     add         eax,0F2h
+  000000B4: 50                 push        eax
+  000000B5: 68 5F 0A 00 00     push        0A5Fh
+  000000BA: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  000000BF: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  000000C5: 50                 push        eax
+  000000C6: E8 00 00 00 00     call        ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  000000CB: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  000000D1: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  000000D7: 05 1D 01 00 00     add         eax,11Dh
+  000000DC: 6A 00              push        0
+  000000DE: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  000000E4: 50                 push        eax
+  000000E5: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  000000EB: 05 48 01 00 00     add         eax,148h
+  000000F0: 50                 push        eax
+  000000F1: 68 60 0A 00 00     push        0A60h
+  000000F6: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  000000FB: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000101: 50                 push        eax
+  00000102: E8 00 00 00 00     call        ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  00000107: 8B 96 84 00 00 00  mov         edx,dword ptr [esi+84h]
+  0000010D: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000113: 81 C2 F0 00 00 00  add         edx,0F0h
+  00000119: 80 BE B9 00 00 00  cmp         byte ptr [esi+0B9h],0
+            00
+  00000120: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000126: 74 32              je          0000015A
+  00000128: 05 F5 00 00 00     add         eax,0F5h
+  0000012D: 50                 push        eax
+  0000012E: 52                 push        edx
+  0000012F: FF B6 9C 00 00 00  push        dword ptr [esi+9Ch]
+  00000135: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  0000013A: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000140: 05 F5 00 00 00     add         eax,0F5h
+  00000145: 50                 push        eax
+  00000146: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  0000014C: 05 48 01 00 00     add         eax,148h
+  00000151: 50                 push        eax
+  00000152: FF B6 98 00 00 00  push        dword ptr [esi+98h]
+  00000158: EB 30              jmp         0000018A
+  0000015A: 05 FA 00 00 00     add         eax,0FAh
+  0000015F: 50                 push        eax
+  00000160: 52                 push        edx
+  00000161: FF B6 98 00 00 00  push        dword ptr [esi+98h]
+  00000167: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  0000016C: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000172: 05 FA 00 00 00     add         eax,0FAh
+  00000177: 50                 push        eax
+  00000178: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  0000017E: 05 48 01 00 00     add         eax,148h
+  00000183: 50                 push        eax
+  00000184: FF B6 9C 00 00 00  push        dword ptr [esi+9Ch]
+  0000018A: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000190: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  00000195: 80 7E 61 00        cmp         byte ptr [esi+61h],0
+  00000199: 0F 85 95 02 00 00  jne         00000434
+  0000019F: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  000001A5: 8B 80 18 5B 02 00  mov         eax,dword ptr [eax+25B18h]
+  000001AB: 3D E7 03 00 00     cmp         eax,3E7h
+  000001B0: 7C 49              jl          000001FB
+  000001B2: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  000001B8: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  000001BE: 05 3B 01 00 00     add         eax,13Bh
+  000001C3: 50                 push        eax
+  000001C4: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  000001CA: 05 F0 00 00 00     add         eax,0F0h
+  000001CF: 50                 push        eax
+  000001D0: FF B6 9C 00 00 00  push        dword ptr [esi+9Ch]
+  000001D6: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  000001DB: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  000001E1: 05 3B 01 00 00     add         eax,13Bh
+  000001E6: 50                 push        eax
+  000001E7: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  000001ED: 05 48 01 00 00     add         eax,148h
+  000001F2: 50                 push        eax
+  000001F3: FF B6 98 00 00 00  push        dword ptr [esi+98h]
+  000001F9: EB 4C              jmp         00000247
+  000001FB: 83 F8 0A           cmp         eax,0Ah
+  000001FE: 75 52              jne         00000252
+  00000200: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000206: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  0000020C: 05 3B 01 00 00     add         eax,13Bh
+  00000211: 50                 push        eax
+  00000212: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  00000218: 05 F0 00 00 00     add         eax,0F0h
+  0000021D: 50                 push        eax
+  0000021E: FF B6 98 00 00 00  push        dword ptr [esi+98h]
+  00000224: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  00000229: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  0000022F: 05 3B 01 00 00     add         eax,13Bh
+  00000234: 50                 push        eax
+  00000235: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  0000023B: 05 48 01 00 00     add         eax,148h
+  00000240: 50                 push        eax
+  00000241: FF B6 9C 00 00 00  push        dword ptr [esi+9Ch]
+  00000247: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  0000024D: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  00000252: 8B 96 8C 00 00 00  mov         edx,dword ptr [esi+8Ch]
+  00000258: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  0000025E: 81 C2 86 01 00 00  add         edx,186h
+  00000264: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  0000026A: 57                 push        edi
+  0000026B: 8B BE 84 00 00 00  mov         edi,dword ptr [esi+84h]
+  00000271: 81 C7 F0 00 00 00  add         edi,0F0h
+  00000277: 80 B8 1C 5B 02 00  cmp         byte ptr [eax+25B1Ch],0
+            00
+  0000027E: 52                 push        edx
+  0000027F: 57                 push        edi
+  00000280: 74 13              je          00000295
+  00000282: FF B6 9C 00 00 00  push        dword ptr [esi+9Ch]
+  00000288: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  0000028D: 8B 96 98 00 00 00  mov         edx,dword ptr [esi+98h]
+  00000293: EB 11              jmp         000002A6
+  00000295: FF B6 98 00 00 00  push        dword ptr [esi+98h]
+  0000029B: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  000002A0: 8B 96 9C 00 00 00  mov         edx,dword ptr [esi+9Ch]
+  000002A6: 8B 8E 8C 00 00 00  mov         ecx,dword ptr [esi+8Ch]
+  000002AC: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  000002B2: 81 C1 86 01 00 00  add         ecx,186h
+  000002B8: 51                 push        ecx
+  000002B9: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  000002BF: 05 48 01 00 00     add         eax,148h
+  000002C4: 50                 push        eax
+  000002C5: 52                 push        edx
+  000002C6: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  000002CB: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  000002D1: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  000002D7: 05 8B 01 00 00     add         eax,18Bh
+  000002DC: 6A 00              push        0
+  000002DE: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  000002E4: 50                 push        eax
+  000002E5: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  000002EB: 05 D2 00 00 00     add         eax,0D2h
+  000002F0: 50                 push        eax
+  000002F1: 68 61 0A 00 00     push        0A61h
+  000002F6: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  000002FB: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000301: 50                 push        eax
+  00000302: E8 00 00 00 00     call        ?DrawStringRight@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  00000307: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  0000030D: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  00000313: 05 A9 01 00 00     add         eax,1A9h
+  00000318: 6A 00              push        0
+  0000031A: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  00000320: 50                 push        eax
+  00000321: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  00000327: 05 F0 00 00 00     add         eax,0F0h
+  0000032C: 50                 push        eax
+  0000032D: 68 5A 0A 00 00     push        0A5Ah
+  00000332: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  00000337: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  0000033D: 50                 push        eax
+  0000033E: E8 00 00 00 00     call        ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  00000343: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000349: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  0000034F: 05 A9 01 00 00     add         eax,1A9h
+  00000354: 6A 00              push        0
+  00000356: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  0000035C: 50                 push        eax
+  0000035D: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  00000363: 05 48 01 00 00     add         eax,148h
+  00000368: 50                 push        eax
+  00000369: 68 5B 0A 00 00     push        0A5Bh
+  0000036E: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  00000373: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000379: 50                 push        eax
+  0000037A: E8 00 00 00 00     call        ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  0000037F: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000385: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  0000038B: 05 40 01 00 00     add         eax,140h
+  00000390: 6A 00              push        0
+  00000392: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  00000398: 50                 push        eax
+  00000399: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  0000039F: 05 D2 00 00 00     add         eax,0D2h
+  000003A4: 50                 push        eax
+  000003A5: 68 59 0A 00 00     push        0A59h
+  000003AA: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  000003AF: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  000003B5: 50                 push        eax
+  000003B6: E8 00 00 00 00     call        ?DrawStringRight@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  000003BB: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  000003C1: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  000003C7: 05 63 01 00 00     add         eax,163h
+  000003CC: 6A 00              push        0
+  000003CE: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  000003D4: 50                 push        eax
+  000003D5: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  000003DB: 05 F0 00 00 00     add         eax,0F0h
+  000003E0: 50                 push        eax
+  000003E1: 68 5A 0A 00 00     push        0A5Ah
+  000003E6: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  000003EB: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  000003F1: 50                 push        eax
+  000003F2: E8 00 00 00 00     call        ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  000003F7: 6A 00              push        0
+  000003F9: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  000003FF: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000405: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  0000040B: 05 63 01 00 00     add         eax,163h
+  00000410: 50                 push        eax
+  00000411: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  00000417: 05 48 01 00 00     add         eax,148h
+  0000041C: 50                 push        eax
+  0000041D: 68 5B 0A 00 00     push        0A5Bh
+  00000422: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  00000427: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  0000042D: 50                 push        eax
+  0000042E: E8 00 00 00 00     call        ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  00000433: 5F                 pop         edi
+  00000434: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  0000043A: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000440: 83 C0 3C           add         eax,3Ch
+  00000443: 50                 push        eax
+  00000444: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  0000044A: 05 F0 00 00 00     add         eax,0F0h
+  0000044F: 50                 push        eax
+  00000450: FF B6 A0 00 00 00  push        dword ptr [esi+0A0h]
+  00000456: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  0000045B: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000461: 8B 4E 6C           mov         ecx,dword ptr [esi+6Ch]
+  00000464: 83 C0 3C           add         eax,3Ch
+  00000467: 50                 push        eax
+  00000468: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  0000046E: 81 C1 F4 00 00 00  add         ecx,0F4h
+  00000474: 03 C1              add         eax,ecx
+  00000476: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  0000047C: 50                 push        eax
+  0000047D: FF B6 A4 00 00 00  push        dword ptr [esi+0A4h]
+  00000483: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  00000488: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  0000048E: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000494: 83 C0 64           add         eax,64h
+  00000497: 50                 push        eax
+  00000498: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  0000049E: 05 F0 00 00 00     add         eax,0F0h
+  000004A3: 50                 push        eax
+  000004A4: FF B6 A0 00 00 00  push        dword ptr [esi+0A0h]
+  000004AA: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  000004AF: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  000004B5: 8B 4E 70           mov         ecx,dword ptr [esi+70h]
+  000004B8: 83 C0 64           add         eax,64h
+  000004BB: 50                 push        eax
+  000004BC: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  000004C2: 81 C1 F4 00 00 00  add         ecx,0F4h
+  000004C8: 03 C1              add         eax,ecx
+  000004CA: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  000004D0: 50                 push        eax
+  000004D1: FF B6 A4 00 00 00  push        dword ptr [esi+0A4h]
+  000004D7: E8 00 00 00 00     call        ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z
+  000004DC: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  000004E2: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  000004E8: 83 C0 3C           add         eax,3Ch
+  000004EB: 6A 00              push        0
+  000004ED: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  000004F3: 50                 push        eax
+  000004F4: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  000004FA: 05 D2 00 00 00     add         eax,0D2h
+  000004FF: 50                 push        eax
+  00000500: 68 4F 0A 00 00     push        0A4Fh
+  00000505: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  0000050A: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000510: 50                 push        eax
+  00000511: E8 00 00 00 00     call        ?DrawStringRight@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  00000516: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  0000051C: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  00000522: 83 C0 64           add         eax,64h
+  00000525: 6A 00              push        0
+  00000527: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  0000052D: 50                 push        eax
+  0000052E: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  00000534: 05 D2 00 00 00     add         eax,0D2h
+  00000539: 50                 push        eax
+  0000053A: 68 50 0A 00 00     push        0A50h
+  0000053F: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  00000544: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  0000054A: 50                 push        eax
+  0000054B: E8 00 00 00 00     call        ?DrawStringRight@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  00000550: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000556: 8B 8E B4 00 00 00  mov         ecx,dword ptr [esi+0B4h]
+  0000055C: 05 B2 00 00 00     add         eax,0B2h
+  00000561: 6A 00              push        0
+  00000563: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  00000569: 50                 push        eax
+  0000056A: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  00000570: 05 D2 00 00 00     add         eax,0D2h
+  00000575: 50                 push        eax
+  00000576: 68 52 0A 00 00     push        0A52h
+  0000057B: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  00000580: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000586: 50                 push        eax
+  00000587: E8 00 00 00 00     call        ?DrawStringRight@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  0000058C: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000592: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000598: 05 D6 00 00 00     add         eax,0D6h
+  0000059D: 6A 00              push        0
+  0000059F: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  000005A5: 50                 push        eax
+  000005A6: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  000005AC: 05 FB 00 00 00     add         eax,0FBh
+  000005B1: 50                 push        eax
+  000005B2: 68 00 00 00 00     push        offset ??_C@_01HIHLOKLC@1?$AA@
+  000005B7: E8 00 00 00 00     call        ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  000005BC: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  000005C2: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  000005C8: 05 D6 00 00 00     add         eax,0D6h
+  000005CD: 6A 00              push        0
+  000005CF: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  000005D5: 50                 push        eax
+  000005D6: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  000005DC: 05 53 01 00 00     add         eax,153h
+  000005E1: 50                 push        eax
+  000005E2: 68 00 00 00 00     push        offset ??_C@_01FDFGLJHB@2?$AA@
+  000005E7: E8 00 00 00 00     call        ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  000005EC: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  000005F2: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  000005F8: 05 D6 00 00 00     add         eax,0D6h
+  000005FD: 6A 00              push        0
+  000005FF: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  00000605: 50                 push        eax
+  00000606: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  0000060C: 05 AB 01 00 00     add         eax,1ABh
+  00000611: 50                 push        eax
+  00000612: 68 00 00 00 00     push        offset ??_C@_01EKENIIDA@3?$AA@
+  00000617: E8 00 00 00 00     call        ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  0000061C: 8B 86 8C 00 00 00  mov         eax,dword ptr [esi+8Ch]
+  00000622: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000628: 05 D6 00 00 00     add         eax,0D6h
+  0000062D: 6A 00              push        0
+  0000062F: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  00000635: 50                 push        eax
+  00000636: 8B 86 84 00 00 00  mov         eax,dword ptr [esi+84h]
+  0000063C: 05 03 02 00 00     add         eax,203h
+  00000641: 50                 push        eax
+  00000642: 68 00 00 00 00     push        offset ??_C@_01FAMBOPH@4?$AA@
+  00000647: E8 00 00 00 00     call        ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  0000064C: 5E                 pop         esi
+  0000064D: C3                 ret
+
+?DrawSceneFinal@theOptionsDialog@@MAEXXZ (protected: virtual void __thiscall theOptionsDialog::DrawSceneFinal(void)):
+  00000000: C3                 ret
+
+?EvictFamily@theOptionsDialog@@AAEXXZ (private: void __thiscall theOptionsDialog::EvictFamily(void)):
+  00000000: 56                 push        esi
+  00000001: 8B F1              mov         esi,ecx
+  00000003: B9 00 00 00 00     mov         ecx,offset ?FamilyTree@@3VCFamilyTree@@A
+  00000008: E8 00 00 00 00     call        ?EvictFamily@CFamilyTree@@QAEXXZ
+  0000000D: B9 00 00 00 00     mov         ecx,offset ?VillagerManager@@3VCVillagerManager@@A
+  00000012: E8 00 00 00 00     call        ?Reset@CVillagerManager@@QAEXXZ
+  00000017: E8 00 00 00 00     call        ?Ref@CAdoptionScene@@SAAAV1@XZ
+  0000001C: C7 40 1C 02 00 00  mov         dword ptr [eax+1Ch],2
+            00
+  00000023: E8 00 00 00 00     call        ?Get@theGameState@@SAPAV1@XZ
+  00000028: 8B 88 B8 5C 02 00  mov         ecx,dword ptr [eax+25CB8h]
+  0000002E: 89 88 BC 5C 02 00  mov         dword ptr [eax+25CBCh],ecx
+  00000034: 8B CE              mov         ecx,esi
+  00000036: C7 80 B8 5C 02 00  mov         dword ptr [eax+25CB8h],6
+            06 00 00 00
+  00000040: 5E                 pop         esi
+  00000041: E9 00 00 00 00     jmp         ?EndDialog@ldwTiledDialog@@IAEXXZ
+
+?Finished@ldwTiledDialog@@UAE_NXZ (public: virtual bool __thiscall ldwTiledDialog::Finished(void)):
+  00000000: 8A 41 48           mov         al,byte ptr [ecx+48h]
+  00000003: C3                 ret
+
+?GetResult@theOptionsDialog@@UAEHXZ (public: virtual int __thiscall theOptionsDialog::GetResult(void)):
+  00000000: 8B 81 D8 00 00 00  mov         eax,dword ptr [ecx+000000D8h]
+  00000006: C3                 ret
+
+?HandleKey@ldwEventHandler@@UAE_NHHH@Z (public: virtual bool __thiscall ldwEventHandler::HandleKey(int,int,int)):
+  00000000: 32 C0              xor         al,al
+  00000002: C2 0C 00           ret         0Ch
+
+?HandleMessage@theOptionsDialog@@UAE_NHJ@Z (public: virtual bool __thiscall theOptionsDialog::HandleMessage(int,long)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 6A FF              push        0FFFFFFFFh
+  00000005: 68 00 00 00 00     push        offset __ehhandler$?HandleMessage@theOptionsDialog@@UAE_NHJ@Z
+  0000000A: 64 A1 00 00 00 00  mov         eax,dword ptr fs:[00000000h]
+  00000010: 50                 push        eax
+  00000011: 81 EC 80 00 00 00  sub         esp,80h
+  00000017: A1 00 00 00 00     mov         eax,dword ptr [___security_cookie]
+  0000001C: 33 C5              xor         eax,ebp
+  0000001E: 89 45 F0           mov         dword ptr [ebp-10h],eax
+  00000021: 56                 push        esi
+  00000022: 57                 push        edi
+  00000023: 50                 push        eax
+  00000024: 8D 45 F4           lea         eax,[ebp-0Ch]
+  00000027: 64 A3 00 00 00 00  mov         dword ptr fs:[00000000h],eax
+  0000002D: 8B F1              mov         esi,ecx
+  0000002F: 83 7D 08 08        cmp         dword ptr [ebp+8],8
+  00000033: 0F 85 AE 01 00 00  jne         000001E7
+  00000039: 8B 7D 0C           mov         edi,dword ptr [ebp+0Ch]
+  0000003C: 3B 7E 74           cmp         edi,dword ptr [esi+74h]
+  0000003F: 75 1B              jne         0000005C
+  00000041: E8 00 00 00 00     call        ?EndDialog@ldwTiledDialog@@IAEXXZ
+  00000046: 68 8A 00 00 00     push        8Ah
+  0000004B: B9 00 00 00 00     mov         ecx,offset ?Sound@@3VCSound@@A
+  00000050: E8 00 00 00 00     call        ?Play@CSound@@QAEXW4ESound@@@Z
+  00000055: B0 01              mov         al,1
+  00000057: E9 8D 01 00 00     jmp         000001E9
+  0000005C: 3B 7E 78           cmp         edi,dword ptr [esi+78h]
+  0000005F: 75 5C              jne         000000BD
+  00000061: 8D 8D 74 FF FF FF  lea         ecx,[ebp-8Ch]
+  00000067: E8 00 00 00 00     call        ??0RedeemCreditDlg@@QAE@XZ
+  0000006C: 6A 00              push        0
+  0000006E: 56                 push        esi
+  0000006F: 8D 8D 74 FF FF FF  lea         ecx,[ebp-8Ch]
+  00000075: C7 45 FC 00 00 00  mov         dword ptr [ebp-4],0
+            00
+  0000007C: E8 00 00 00 00     call        ?DoModal@ldwDialog@@QAEHPAVldwScene@@_N@Z
+  00000081: 85 C0              test        eax,eax
+  00000083: 75 26              jne         000000AB
+  00000085: 8D 8D 74 FF FF FF  lea         ecx,[ebp-8Ch]
+  0000008B: E8 00 00 00 00     call        ?GetName@RedeemCreditDlg@@QAEPADXZ
+  00000090: BA 00 00 00 00     mov         edx,offset ?gLastCreditCodeUsed@@3PADA
+  00000095: 2B D0              sub         edx,eax
+  00000097: 8A 08              mov         cl,byte ptr [eax]
+  00000099: 8D 40 01           lea         eax,[eax+1]
+  0000009C: 88 4C 02 FF        mov         byte ptr [edx+eax-1],cl
+  000000A0: 84 C9              test        cl,cl
+  000000A2: 75 F3              jne         00000097
+  000000A4: 8B CE              mov         ecx,esi
+  000000A6: E8 00 00 00 00     call        ?HandleRedeemCredit@theOptionsDialog@@AAEXXZ
+  000000AB: 8D 8D 74 FF FF FF  lea         ecx,[ebp-8Ch]
+  000000B1: E8 00 00 00 00     call        ??1RedeemCreditDlg@@UAE@XZ
+  000000B6: B0 01              mov         al,1
+  000000B8: E9 2C 01 00 00     jmp         000001E9
+  000000BD: 3B 7E 7C           cmp         edi,dword ptr [esi+7Ch]
+  000000C0: 75 21              jne         000000E3
+  000000C2: 6A 01              push        1
+  000000C4: 6A 00              push        0
+  000000C6: 6A 11              push        11h
+  000000C8: 56                 push        esi
+  000000C9: E8 00 00 00 00     call        ?ShowMessageBox@@YAHPAVldwScene@@W4StringId@@H_N@Z
+  000000CE: 83 C4 10           add         esp,10h
+  000000D1: 85 C0              test        eax,eax
+  000000D3: 75 07              jne         000000DC
+  000000D5: 8B CE              mov         ecx,esi
+  000000D7: E8 00 00 00 00     call        ?EvictFamily@theOptionsDialog@@AAEXXZ
+  000000DC: B0 01              mov         al,1
+  000000DE: E9 06 01 00 00     jmp         000001E9
+  000000E3: 6A 05              push        5
+  000000E5: E8 00 00 00 00     call        ?GetControl@ldwScene@@IAEPAVldwControl@@H@Z
+  000000EA: 8B C8              mov         ecx,eax
+  000000EC: E8 00 00 00 00     call        ?IsChecked@ldwRadioButton@@QAE_NXZ
+  000000F1: 84 C0              test        al,al
+  000000F3: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  000000F9: 6A 06              push        6
+  000000FB: 0F 95 C1           setne       cl
+  000000FE: 88 88 07 5B 02 00  mov         byte ptr [eax+25B07h],cl
+  00000104: 8B CE              mov         ecx,esi
+  00000106: E8 00 00 00 00     call        ?GetControl@ldwScene@@IAEPAVldwControl@@H@Z
+  0000010B: 8B C8              mov         ecx,eax
+  0000010D: E8 00 00 00 00     call        ?IsChecked@ldwRadioButton@@QAE_NXZ
+  00000112: 84 C0              test        al,al
+  00000114: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  0000011A: 6A 07              push        7
+  0000011C: 0F 95 C1           setne       cl
+  0000011F: 88 88 08 5B 02 00  mov         byte ptr [eax+25B08h],cl
+  00000125: 8B CE              mov         ecx,esi
+  00000127: E8 00 00 00 00     call        ?GetControl@ldwScene@@IAEPAVldwControl@@H@Z
+  0000012C: 8B C8              mov         ecx,eax
+  0000012E: E8 00 00 00 00     call        ?IsChecked@ldwRadioButton@@QAE_NXZ
+  00000133: 84 C0              test        al,al
+  00000135: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  0000013B: 6A 08              push        8
+  0000013D: 0F 95 C1           setne       cl
+  00000140: 88 88 09 5B 02 00  mov         byte ptr [eax+25B09h],cl
+  00000146: 8B CE              mov         ecx,esi
+  00000148: E8 00 00 00 00     call        ?GetControl@ldwScene@@IAEPAVldwControl@@H@Z
+  0000014D: 8B C8              mov         ecx,eax
+  0000014F: E8 00 00 00 00     call        ?IsChecked@ldwRadioButton@@QAE_NXZ
+  00000154: 84 C0              test        al,al
+  00000156: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  0000015C: 0F 95 C1           setne       cl
+  0000015F: 83 C7 FB           add         edi,0FFFFFFFBh
+  00000162: 88 88 0A 5B 02 00  mov         byte ptr [eax+25B0Ah],cl
+  00000168: B9 FF FF FF FF     mov         ecx,0FFFFFFFFh
+  0000016D: 83 FF 03           cmp         edi,3
+  00000170: 77 6A              ja          000001DC
+  00000172: FF 24 BD 00 00 00  jmp         dword ptr $LN29[edi*4]
+            00
+$LN13:
+  00000179: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  0000017F: 33 C9              xor         ecx,ecx
+  00000181: 38 88 07 5B 02 00  cmp         byte ptr [eax+25B07h],cl
+  00000187: 0F 95 C1           setne       cl
+  0000018A: 8D 0C 4D FF FF FF  lea         ecx,[ecx*2-1]
+            FF
+  00000191: EB 49              jmp         000001DC
+$LN15:
+  00000193: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  00000199: 83 CA FF           or          edx,0FFFFFFFFh
+  0000019C: B9 02 00 00 00     mov         ecx,2
+  000001A1: 80 B8 08 5B 02 00  cmp         byte ptr [eax+25B08h],0
+            00
+  000001A8: 0F 44 CA           cmove       ecx,edx
+  000001AB: EB 2F              jmp         000001DC
+$LN17:
+  000001AD: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  000001B3: 33 C9              xor         ecx,ecx
+  000001B5: 38 88 09 5B 02 00  cmp         byte ptr [eax+25B09h],cl
+  000001BB: 0F 95 C1           setne       cl
+  000001BE: 8D 0C 8D FF FF FF  lea         ecx,[ecx*4-1]
+            FF
+  000001C5: EB 15              jmp         000001DC
+$LN19:
+  000001C7: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  000001CD: BA 04 00 00 00     mov         edx,4
+  000001D2: 80 B8 0A 5B 02 00  cmp         byte ptr [eax+25B0Ah],0
+            00
+  000001D9: 0F 45 CA           cmovne      ecx,edx
+  000001DC: 51                 push        ecx
+  000001DD: B9 00 00 00 00     mov         ecx,offset ?SoundTrack@@3VCSoundTrack@@A
+  000001E2: E8 00 00 00 00     call        ?Update@CSoundTrack@@QAEXW4ESoundTrack@@@Z
+  000001E7: 32 C0              xor         al,al
+  000001E9: 8B 4D F4           mov         ecx,dword ptr [ebp-0Ch]
+  000001EC: 64 89 0D 00 00 00  mov         dword ptr fs:[0],ecx
+            00
+  000001F3: 59                 pop         ecx
+  000001F4: 5F                 pop         edi
+  000001F5: 5E                 pop         esi
+  000001F6: 8B 4D F0           mov         ecx,dword ptr [ebp-10h]
+  000001F9: 33 CD              xor         ecx,ebp
+  000001FB: E8 00 00 00 00     call        @__security_check_cookie@4
+  00000200: 8B E5              mov         esp,ebp
+  00000202: 5D                 pop         ebp
+  00000203: C2 08 00           ret         8
+  00000206: 66 90              nop
+$LN29:
+  00000208: 00 00              add         byte ptr [eax],al
+  0000020A: 00 00              add         byte ptr [eax],al
+  0000020C: 00 00              add         byte ptr [eax],al
+  0000020E: 00 00              add         byte ptr [eax],al
+  00000210: 00 00              add         byte ptr [eax],al
+  00000212: 00 00              add         byte ptr [eax],al
+  00000214: 00 00              add         byte ptr [eax],al
+  00000216: 00 00              add         byte ptr [eax],al
+
+__unwindfunclet$?HandleMessage@theOptionsDialog@@UAE_NHJ@Z$0:
+  00000000: 8D 8D 74 FF FF FF  lea         ecx,[ebp-8Ch]
+  00000006: E9 00 00 00 00     jmp         ??1RedeemCreditDlg@@UAE@XZ
+__ehhandler$?HandleMessage@theOptionsDialog@@UAE_NHJ@Z:
+  0000000B: 8B 54 24 08        mov         edx,dword ptr [esp+8]
+  0000000F: 8D 42 0C           lea         eax,[edx+0Ch]
+  00000012: 8B 8A 74 FF FF FF  mov         ecx,dword ptr [edx-8Ch]
+  00000018: 33 C8              xor         ecx,eax
+  0000001A: E8 00 00 00 00     call        @__security_check_cookie@4
+  0000001F: 8B 4A FC           mov         ecx,dword ptr [edx-4]
+  00000022: 33 C8              xor         ecx,eax
+  00000024: E8 00 00 00 00     call        @__security_check_cookie@4
+  00000029: B8 00 00 00 00     mov         eax,offset __ehfuncinfo$?HandleMessage@theOptionsDialog@@UAE_NHJ@Z
+  0000002E: E9 00 00 00 00     jmp         ___CxxFrameHandler3
+
+?HandleMouse@theOptionsDialog@@UAE_NHUldwPoint@@@Z (public: virtual bool __thiscall theOptionsDialog::HandleMouse(int,struct ldwPoint)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 81 EC 80 00 00 00  sub         esp,80h
+  00000009: 53                 push        ebx
+  0000000A: 8B D9              mov         ebx,ecx
+  0000000C: 56                 push        esi
+  0000000D: 57                 push        edi
+  0000000E: 8B BB 8C 00 00 00  mov         edi,dword ptr [ebx+8Ch]
+  00000014: 8B 83 84 00 00 00  mov         eax,dword ptr [ebx+84h]
+  0000001A: 8D 97 F5 00 00 00  lea         edx,[edi+0F5h]
+  00000020: 8D 88 F0 00 00 00  lea         ecx,[eax+0F0h]
+  00000026: 89 55 F4           mov         dword ptr [ebp-0Ch],edx
+  00000029: 8D 90 10 01 00 00  lea         edx,[eax+110h]
+  0000002F: 89 4D F8           mov         dword ptr [ebp-8],ecx
+  00000032: 8D B0 48 01 00 00  lea         esi,[eax+148h]
+  00000038: 89 55 FC           mov         dword ptr [ebp-4],edx
+  0000003B: 8D 97 15 01 00 00  lea         edx,[edi+115h]
+  00000041: 89 4D B0           mov         dword ptr [ebp-50h],ecx
+  00000044: 89 55 F0           mov         dword ptr [ebp-10h],edx
+  00000047: 8D 8F 3B 01 00 00  lea         ecx,[edi+13Bh]
+  0000004D: 8D 97 F5 00 00 00  lea         edx,[edi+0F5h]
+  00000053: 89 4D B4           mov         dword ptr [ebp-4Ch],ecx
+  00000056: 89 55 C4           mov         dword ptr [ebp-3Ch],edx
+  00000059: 8D 90 68 01 00 00  lea         edx,[eax+168h]
+  0000005F: 8D 87 15 01 00 00  lea         eax,[edi+115h]
+  00000065: 89 4D A4           mov         dword ptr [ebp-5Ch],ecx
+  00000068: 89 45 CC           mov         dword ptr [ebp-34h],eax
+  0000006B: 8B 45 FC           mov         eax,dword ptr [ebp-4]
+  0000006E: 89 45 B8           mov         dword ptr [ebp-48h],eax
+  00000071: 8D 87 5B 01 00 00  lea         eax,[edi+15Bh]
+  00000077: 8B BB 84 00 00 00  mov         edi,dword ptr [ebx+84h]
+  0000007D: 89 45 BC           mov         dword ptr [ebp-44h],eax
+  00000080: 81 C7 F4 00 00 00  add         edi,0F4h
+  00000086: 89 45 AC           mov         dword ptr [ebp-54h],eax
+  00000089: 8B 43 6C           mov         eax,dword ptr [ebx+6Ch]
+  0000008C: 03 F8              add         edi,eax
+  0000008E: 89 7D DC           mov         dword ptr [ebp-24h],edi
+  00000091: 05 0A 01 00 00     add         eax,10Ah
+  00000096: 8B BB 8C 00 00 00  mov         edi,dword ptr [ebx+8Ch]
+  0000009C: 89 75 C0           mov         dword ptr [ebp-40h],esi
+  0000009F: 89 55 C8           mov         dword ptr [ebp-38h],edx
+  000000A2: 89 75 A0           mov         dword ptr [ebp-60h],esi
+  000000A5: 8D 4F 3C           lea         ecx,[edi+3Ch]
+  000000A8: 89 55 A8           mov         dword ptr [ebp-58h],edx
+  000000AB: 89 4D D4           mov         dword ptr [ebp-2Ch],ecx
+  000000AE: 8B 8B 84 00 00 00  mov         ecx,dword ptr [ebx+84h]
+  000000B4: 03 C1              add         eax,ecx
+  000000B6: 89 45 D8           mov         dword ptr [ebp-28h],eax
+  000000B9: 8D 47 5C           lea         eax,[edi+5Ch]
+  000000BC: 89 45 D0           mov         dword ptr [ebp-30h],eax
+  000000BF: 8B 43 70           mov         eax,dword ptr [ebx+70h]
+  000000C2: 8D B9 F4 00 00 00  lea         edi,[ecx+0F4h]
+  000000C8: 89 75 80           mov         dword ptr [ebp-80h],esi
+  000000CB: 03 F8              add         edi,eax
+  000000CD: 89 55 88           mov         dword ptr [ebp-78h],edx
+  000000D0: 89 7D EC           mov         dword ptr [ebp-14h],edi
+  000000D3: 05 0A 01 00 00     add         eax,10Ah
+  000000D8: 8B BB 8C 00 00 00  mov         edi,dword ptr [ebx+8Ch]
+  000000DE: 8D 4F 64           lea         ecx,[edi+64h]
+  000000E1: 89 4D E4           mov         dword ptr [ebp-1Ch],ecx
+  000000E4: 8B 8B 84 00 00 00  mov         ecx,dword ptr [ebx+84h]
+  000000EA: 03 C1              add         eax,ecx
+  000000EC: 89 45 E8           mov         dword ptr [ebp-18h],eax
+  000000EF: 8D 87 84 00 00 00  lea         eax,[edi+84h]
+  000000F5: 89 45 E0           mov         dword ptr [ebp-20h],eax
+  000000F8: 8D 81 F0 00 00 00  lea         eax,[ecx+0F0h]
+  000000FE: 89 45 90           mov         dword ptr [ebp-70h],eax
+  00000101: 8D 8F 86 01 00 00  lea         ecx,[edi+186h]
+  00000107: 8B 45 FC           mov         eax,dword ptr [ebp-4]
+  0000010A: 89 45 98           mov         dword ptr [ebp-68h],eax
+  0000010D: 8D 87 A6 01 00 00  lea         eax,[edi+1A6h]
+  00000113: 89 45 9C           mov         dword ptr [ebp-64h],eax
+  00000116: 89 45 8C           mov         dword ptr [ebp-74h],eax
+  00000119: 8B 45 08           mov         eax,dword ptr [ebp+8]
+  0000011C: 89 4D 94           mov         dword ptr [ebp-6Ch],ecx
+  0000011F: 89 4D 84           mov         dword ptr [ebp-7Ch],ecx
+  00000122: 83 E8 01           sub         eax,1
+  00000125: 0F 84 11 02 00 00  je          0000033C
+  0000012B: 83 E8 01           sub         eax,1
+  0000012E: 74 39              je          00000169
+  00000130: 83 E8 01           sub         eax,1
+  00000133: 0F 85 2F 03 00 00  jne         00000468
+  00000139: 38 43 68           cmp         byte ptr [ebx+68h],al
+  0000013C: 74 12              je          00000150
+  0000013E: 68 8A 00 00 00     push        8Ah
+  00000143: B9 00 00 00 00     mov         ecx,offset ?Sound@@3VCSound@@A
+  00000148: 88 43 68           mov         byte ptr [ebx+68h],al
+  0000014B: E8 00 00 00 00     call        ?Play@CSound@@QAEXW4ESound@@@Z
+  00000150: 80 7B 69 00        cmp         byte ptr [ebx+69h],0
+  00000154: 0F 84 0E 03 00 00  je          00000468
+  0000015A: 5F                 pop         edi
+  0000015B: 5E                 pop         esi
+  0000015C: C6 43 69 00        mov         byte ptr [ebx+69h],0
+  00000160: 32 C0              xor         al,al
+  00000162: 5B                 pop         ebx
+  00000163: 8B E5              mov         esp,ebp
+  00000165: 5D                 pop         ebp
+  00000166: C2 0C 00           ret         0Ch
+  00000169: 80 7B 60 00        cmp         byte ptr [ebx+60h],0
+  0000016D: 0F 84 86 00 00 00  je          000001F9
+  00000173: 8B 7D 0C           mov         edi,dword ptr [ebp+0Ch]
+  00000176: 8B 75 10           mov         esi,dword ptr [ebp+10h]
+  00000179: 3B 7D F8           cmp         edi,dword ptr [ebp-8]
+  0000017C: 7C 3F              jl          000001BD
+  0000017E: 3B 7D FC           cmp         edi,dword ptr [ebp-4]
+  00000181: 7F 3A              jg          000001BD
+  00000183: 3B 75 F4           cmp         esi,dword ptr [ebp-0Ch]
+  00000186: 7C 35              jl          000001BD
+  00000188: 3B 75 F0           cmp         esi,dword ptr [ebp-10h]
+  0000018B: 7F 30              jg          000001BD
+  0000018D: 8B 83 80 00 00 00  mov         eax,dword ptr [ebx+80h]
+  00000193: C6 83 B9 00 00 00  mov         byte ptr [ebx+0B9h],1
+            01
+  0000019A: C6 80 29 5B 02 00  mov         byte ptr [eax+25B29h],1
+            01
+  000001A1: 8B 8B A8 00 00 00  mov         ecx,dword ptr [ebx+0A8h]
+  000001A7: E8 00 00 00 00     call        ?IsWindowed@ldwGameWindow@@QAE_NXZ
+  000001AC: 84 C0              test        al,al
+  000001AE: 74 49              je          000001F9
+  000001B0: 8B 8B A8 00 00 00  mov         ecx,dword ptr [ebx+0A8h]
+  000001B6: E8 00 00 00 00     call        ?MakeFullScreen@ldwGameWindow@@QAEXXZ
+  000001BB: EB 3C              jmp         000001F9
+  000001BD: 56                 push        esi
+  000001BE: 57                 push        edi
+  000001BF: 8D 4D C0           lea         ecx,[ebp-40h]
+  000001C2: E8 00 00 00 00     call        ?PtInRect@ldwRect@@QBE_NUldwPoint@@@Z
+  000001C7: 84 C0              test        al,al
+  000001C9: 74 34              je          000001FF
+  000001CB: 8B 83 80 00 00 00  mov         eax,dword ptr [ebx+80h]
+  000001D1: C6 83 B9 00 00 00  mov         byte ptr [ebx+0B9h],0
+            00
+  000001D8: C6 80 29 5B 02 00  mov         byte ptr [eax+25B29h],0
+            00
+  000001DF: 8B 8B A8 00 00 00  mov         ecx,dword ptr [ebx+0A8h]
+  000001E5: E8 00 00 00 00     call        ?IsWindowed@ldwGameWindow@@QAE_NXZ
+  000001EA: 84 C0              test        al,al
+  000001EC: 75 0B              jne         000001F9
+  000001EE: 8B 8B A8 00 00 00  mov         ecx,dword ptr [ebx+0A8h]
+  000001F4: E8 00 00 00 00     call        ?MakeWindowed@ldwGameWindow@@QAEXXZ
+  000001F9: 8B 75 10           mov         esi,dword ptr [ebp+10h]
+  000001FC: 8B 7D 0C           mov         edi,dword ptr [ebp+0Ch]
+  000001FF: 3B 7D EC           cmp         edi,dword ptr [ebp-14h]
+  00000202: 7C 1E              jl          00000222
+  00000204: 3B 7D E8           cmp         edi,dword ptr [ebp-18h]
+  00000207: 7F 19              jg          00000222
+  00000209: 3B 75 E4           cmp         esi,dword ptr [ebp-1Ch]
+  0000020C: 7C 14              jl          00000222
+  0000020E: 3B 75 E0           cmp         esi,dword ptr [ebp-20h]
+  00000211: 7F 0F              jg          00000222
+  00000213: 5F                 pop         edi
+  00000214: 5E                 pop         esi
+  00000215: C6 43 69 01        mov         byte ptr [ebx+69h],1
+  00000219: 32 C0              xor         al,al
+  0000021B: 5B                 pop         ebx
+  0000021C: 8B E5              mov         esp,ebp
+  0000021E: 5D                 pop         ebp
+  0000021F: C2 0C 00           ret         0Ch
+  00000222: 3B 7D DC           cmp         edi,dword ptr [ebp-24h]
+  00000225: 7C 1E              jl          00000245
+  00000227: 3B 7D D8           cmp         edi,dword ptr [ebp-28h]
+  0000022A: 7F 19              jg          00000245
+  0000022C: 3B 75 D4           cmp         esi,dword ptr [ebp-2Ch]
+  0000022F: 7C 14              jl          00000245
+  00000231: 3B 75 D0           cmp         esi,dword ptr [ebp-30h]
+  00000234: 7F 0F              jg          00000245
+  00000236: 5F                 pop         edi
+  00000237: 5E                 pop         esi
+  00000238: C6 43 68 01        mov         byte ptr [ebx+68h],1
+  0000023C: 32 C0              xor         al,al
+  0000023E: 5B                 pop         ebx
+  0000023F: 8B E5              mov         esp,ebp
+  00000241: 5D                 pop         ebp
+  00000242: C2 0C 00           ret         0Ch
+  00000245: 80 7B 61 00        cmp         byte ptr [ebx+61h],0
+  00000249: 0F 85 19 02 00 00  jne         00000468
+  0000024F: 56                 push        esi
+  00000250: 57                 push        edi
+  00000251: 8D 4D B0           lea         ecx,[ebp-50h]
+  00000254: E8 00 00 00 00     call        ?PtInRect@ldwRect@@QBE_NUldwPoint@@@Z
+  00000259: 84 C0              test        al,al
+  0000025B: 74 42              je          0000029F
+  0000025D: E8 00 00 00 00     call        ?Get@theRealtimeManager@@SAPAV1@XZ
+  00000262: 8B C8              mov         ecx,eax
+  00000264: E8 00 00 00 00     call        ?UpdateAll@theRealtimeManager@@QAEXXZ
+  00000269: 68 E7 03 00 00     push        3E7h
+  0000026E: B9 00 00 00 00     mov         ecx,offset ?GameTime@@3VCGameTime@@A
+  00000273: E8 00 00 00 00     call        ?SetSpeed@CGameTime@@QAEXH@Z
+  00000278: 8B 83 80 00 00 00  mov         eax,dword ptr [ebx+80h]
+  0000027E: 81 80 18 5B 02 00  add         dword ptr [eax+25B18h],3E7h
+            E7 03 00 00
+  00000288: E8 00 00 00 00     call        ?Get@theRealtimeManager@@SAPAV1@XZ
+  0000028D: 8B C8              mov         ecx,eax
+  0000028F: E8 00 00 00 00     call        ?UpdateAll@theRealtimeManager@@QAEXXZ
+  00000294: 5F                 pop         edi
+  00000295: 5E                 pop         esi
+  00000296: 32 C0              xor         al,al
+  00000298: 5B                 pop         ebx
+  00000299: 8B E5              mov         esp,ebp
+  0000029B: 5D                 pop         ebp
+  0000029C: C2 0C 00           ret         0Ch
+  0000029F: 56                 push        esi
+  000002A0: 57                 push        edi
+  000002A1: 8D 4D A0           lea         ecx,[ebp-60h]
+  000002A4: E8 00 00 00 00     call        ?PtInRect@ldwRect@@QBE_NUldwPoint@@@Z
+  000002A9: 84 C0              test        al,al
+  000002AB: 74 3F              je          000002EC
+  000002AD: E8 00 00 00 00     call        ?Get@theRealtimeManager@@SAPAV1@XZ
+  000002B2: 8B C8              mov         ecx,eax
+  000002B4: E8 00 00 00 00     call        ?UpdateAll@theRealtimeManager@@QAEXXZ
+  000002B9: 6A 0A              push        0Ah
+  000002BB: B9 00 00 00 00     mov         ecx,offset ?GameTime@@3VCGameTime@@A
+  000002C0: E8 00 00 00 00     call        ?SetSpeed@CGameTime@@QAEXH@Z
+  000002C5: 8B 83 80 00 00 00  mov         eax,dword ptr [ebx+80h]
+  000002CB: C7 80 18 5B 02 00  mov         dword ptr [eax+25B18h],0Ah
+            0A 00 00 00
+  000002D5: E8 00 00 00 00     call        ?Get@theRealtimeManager@@SAPAV1@XZ
+  000002DA: 8B C8              mov         ecx,eax
+  000002DC: E8 00 00 00 00     call        ?UpdateAll@theRealtimeManager@@QAEXXZ
+  000002E1: 5F                 pop         edi
+  000002E2: 5E                 pop         esi
+  000002E3: 32 C0              xor         al,al
+  000002E5: 5B                 pop         ebx
+  000002E6: 8B E5              mov         esp,ebp
+  000002E8: 5D                 pop         ebp
+  000002E9: C2 0C 00           ret         0Ch
+  000002EC: 56                 push        esi
+  000002ED: 57                 push        edi
+  000002EE: 8D 4D 90           lea         ecx,[ebp-70h]
+  000002F1: E8 00 00 00 00     call        ?PtInRect@ldwRect@@QBE_NUldwPoint@@@Z
+  000002F6: 84 C0              test        al,al
+  000002F8: 74 18              je          00000312
+  000002FA: 8B 83 80 00 00 00  mov         eax,dword ptr [ebx+80h]
+  00000300: 5F                 pop         edi
+  00000301: 5E                 pop         esi
+  00000302: 5B                 pop         ebx
+  00000303: C6 80 1C 5B 02 00  mov         byte ptr [eax+25B1Ch],1
+            01
+  0000030A: 32 C0              xor         al,al
+  0000030C: 8B E5              mov         esp,ebp
+  0000030E: 5D                 pop         ebp
+  0000030F: C2 0C 00           ret         0Ch
+  00000312: 56                 push        esi
+  00000313: 57                 push        edi
+  00000314: 8D 4D 80           lea         ecx,[ebp-80h]
+  00000317: E8 00 00 00 00     call        ?PtInRect@ldwRect@@QBE_NUldwPoint@@@Z
+  0000031C: 84 C0              test        al,al
+  0000031E: 0F 84 44 01 00 00  je          00000468
+  00000324: 8B 83 80 00 00 00  mov         eax,dword ptr [ebx+80h]
+  0000032A: 5F                 pop         edi
+  0000032B: 5E                 pop         esi
+  0000032C: 5B                 pop         ebx
+  0000032D: C6 80 1C 5B 02 00  mov         byte ptr [eax+25B1Ch],0
+            00
+  00000334: 32 C0              xor         al,al
+  00000336: 8B E5              mov         esp,ebp
+  00000338: 5D                 pop         ebp
+  00000339: C2 0C 00           ret         0Ch
+  0000033C: 80 7B 68 00        cmp         byte ptr [ebx+68h],0
+  00000340: 0F 84 82 00 00 00  je          000003C8
+  00000346: 8B 45 0C           mov         eax,dword ptr [ebp+0Ch]
+  00000349: 2B 83 84 00 00 00  sub         eax,dword ptr [ebx+84h]
+  0000034F: 05 02 FF FF FF     add         eax,0FFFFFF02h
+  00000354: 89 43 6C           mov         dword ptr [ebx+6Ch],eax
+  00000357: 79 09              jns         00000362
+  00000359: C7 43 6C 00 00 00  mov         dword ptr [ebx+6Ch],0
+            00
+  00000360: 33 C0              xor         eax,eax
+  00000362: 3D 0B 01 00 00     cmp         eax,10Bh
+  00000367: 7E 0C              jle         00000375
+  00000369: C7 43 6C 0B 01 00  mov         dword ptr [ebx+6Ch],10Bh
+            00
+  00000370: B8 0B 01 00 00     mov         eax,10Bh
+  00000375: 66 0F 6E C0        movd        xmm0,eax
+  00000379: 0F 5B C0           cvtdq2ps    xmm0,xmm0
+  0000037C: 5F                 pop         edi
+  0000037D: 5E                 pop         esi
+  0000037E: F3 0F 59 05 00 00  mulss       xmm0,dword ptr [__real@3b792fb2]
+            00 00
+  00000386: F3 0F 11 83 C4 00  movss       dword ptr [ebx+0C4h],xmm0
+            00 00
+  0000038E: F3 0F 11 05 60 13  movss       dword ptr [?Sound@@3VCSound@@A+1360h],xmm0
+            00 00
+  00000396: 8B 8B 80 00 00 00  mov         ecx,dword ptr [ebx+80h]
+  0000039C: 8B 83 C4 00 00 00  mov         eax,dword ptr [ebx+0C4h]
+  000003A2: 89 81 0C 5B 02 00  mov         dword ptr [ecx+25B0Ch],eax
+  000003A8: F3 0F 10 83 C4 00  movss       xmm0,dword ptr [ebx+0C4h]
+            00 00
+  000003B0: F3 0F 59 05 00 00  mulss       xmm0,dword ptr [__real@43838000]
+            00 00
+  000003B8: F3 0F 2C C0        cvttss2si   eax,xmm0
+  000003BC: 89 43 6C           mov         dword ptr [ebx+6Ch],eax
+  000003BF: 32 C0              xor         al,al
+  000003C1: 5B                 pop         ebx
+  000003C2: 8B E5              mov         esp,ebp
+  000003C4: 5D                 pop         ebp
+  000003C5: C2 0C 00           ret         0Ch
+  000003C8: 80 7B 69 00        cmp         byte ptr [ebx+69h],0
+  000003CC: 0F 84 96 00 00 00  je          00000468
+  000003D2: 8B 45 0C           mov         eax,dword ptr [ebp+0Ch]
+  000003D5: 2B 83 84 00 00 00  sub         eax,dword ptr [ebx+84h]
+  000003DB: 05 02 FF FF FF     add         eax,0FFFFFF02h
+  000003E0: 89 43 70           mov         dword ptr [ebx+70h],eax
+  000003E3: 79 09              jns         000003EE
+  000003E5: C7 43 70 00 00 00  mov         dword ptr [ebx+70h],0
+            00
+  000003EC: 33 C0              xor         eax,eax
+  000003EE: 3D 0B 01 00 00     cmp         eax,10Bh
+  000003F3: 7E 0C              jle         00000401
+  000003F5: C7 43 70 0B 01 00  mov         dword ptr [ebx+70h],10Bh
+            00
+  000003FC: B8 0B 01 00 00     mov         eax,10Bh
+  00000401: 66 0F 6E C0        movd        xmm0,eax
+  00000405: 0F 5B C0           cvtdq2ps    xmm0,xmm0
+  00000408: F3 0F 59 05 00 00  mulss       xmm0,dword ptr [__real@3b792fb2]
+            00 00
+  00000410: F3 0F 11 83 C8 00  movss       dword ptr [ebx+0C8h],xmm0
+            00 00
+  00000418: 8B 0D 14 00 00 00  mov         ecx,dword ptr [?SoundTrack@@3VCSoundTrack@@A+14h]
+  0000041E: F3 0F 11 45 08     movss       dword ptr [ebp+8],xmm0
+  00000423: 85 C9              test        ecx,ecx
+  00000425: 74 10              je          00000437
+  00000427: 51                 push        ecx
+  00000428: F3 0F 11 04 24     movss       dword ptr [esp],xmm0
+  0000042D: E8 00 00 00 00     call        ?SetVolume@ldwSoundTrack@@QAEXM@Z
+  00000432: F3 0F 10 45 08     movss       xmm0,dword ptr [ebp+8]
+  00000437: F3 0F 11 05 18 00  movss       dword ptr [?SoundTrack@@3VCSoundTrack@@A+18h],xmm0
+            00 00
+  0000043F: 8B 8B 80 00 00 00  mov         ecx,dword ptr [ebx+80h]
+  00000445: 8B 83 C8 00 00 00  mov         eax,dword ptr [ebx+0C8h]
+  0000044B: 89 81 10 5B 02 00  mov         dword ptr [ecx+25B10h],eax
+  00000451: F3 0F 10 83 C8 00  movss       xmm0,dword ptr [ebx+0C8h]
+            00 00
+  00000459: F3 0F 59 05 00 00  mulss       xmm0,dword ptr [__real@43838000]
+            00 00
+  00000461: F3 0F 2C C0        cvttss2si   eax,xmm0
+  00000465: 89 43 70           mov         dword ptr [ebx+70h],eax
+  00000468: 5F                 pop         edi
+  00000469: 5E                 pop         esi
+  0000046A: 32 C0              xor         al,al
+  0000046C: 5B                 pop         ebx
+  0000046D: 8B E5              mov         esp,ebp
+  0000046F: 5D                 pop         ebp
+  00000470: C2 0C 00           ret         0Ch
+
+?HandleRedeemCredit@theOptionsDialog@@AAEXXZ (private: void __thiscall theOptionsDialog::HandleRedeemCredit(void)):
+  00000000: 51                 push        ecx
+  00000001: 68 00 00 00 00     push        offset ?PromoCodeCallback@@YAXPBDHPAX@Z
+  00000006: 68 00 00 00 00     push        offset ??_C@_03KJLKNFJO@VF2?$AA@
+  0000000B: 68 00 00 00 00     push        offset ?gLastCreditCodeUsed@@3PADA
+  00000010: B9 00 00 00 00     mov         ecx,offset ?PromoCode@@3VCPromoCode@@A
+  00000015: E8 00 00 00 00     call        ?Submit@CPromoCode@@QAE?B_NPBD0P6AX0HPAX@Z1@Z
+  0000001A: C3                 ret
+
+?HandleResult@ldwDialog@@MAEXXZ (protected: virtual void __thiscall ldwDialog::HandleResult(void)):
+  00000000: C3                 ret
+
+?PromoCodeCallback@@YAXPBDHPAX@Z (void __cdecl PromoCodeCallback(char const *,int,void *)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 6A FF              push        0FFFFFFFFh
+  00000005: 68 00 00 00 00     push        offset __ehhandler$?PromoCodeCallback@@YAXPBDHPAX@Z
+  0000000A: 64 A1 00 00 00 00  mov         eax,dword ptr fs:[00000000h]
+  00000010: 50                 push        eax
+  00000011: 81 EC 34 01 00 00  sub         esp,134h
+  00000017: A1 00 00 00 00     mov         eax,dword ptr [___security_cookie]
+  0000001C: 33 C5              xor         eax,ebp
+  0000001E: 89 45 F0           mov         dword ptr [ebp-10h],eax
+  00000021: 53                 push        ebx
+  00000022: 56                 push        esi
+  00000023: 50                 push        eax
+  00000024: 8D 45 F4           lea         eax,[ebp-0Ch]
+  00000027: 64 A3 00 00 00 00  mov         dword ptr fs:[00000000h],eax
+  0000002D: 8B 55 08           mov         edx,dword ptr [ebp+8]
+  00000030: B9 00 00 00 00     mov         ecx,offset ??_C@_07MALOAKCI@invalid?$AA@
+  00000035: 8B 75 0C           mov         esi,dword ptr [ebp+0Ch]
+  00000038: 8B C2              mov         eax,edx
+  0000003A: 66 0F 1F 44 00 00  nop         word ptr [eax+eax]
+  00000040: 8A 18              mov         bl,byte ptr [eax]
+  00000042: 3A 19              cmp         bl,byte ptr [ecx]
+  00000044: 75 1A              jne         00000060
+  00000046: 84 DB              test        bl,bl
+  00000048: 74 12              je          0000005C
+  0000004A: 8A 58 01           mov         bl,byte ptr [eax+1]
+  0000004D: 3A 59 01           cmp         bl,byte ptr [ecx+1]
+  00000050: 75 0E              jne         00000060
+  00000052: 83 C0 02           add         eax,2
+  00000055: 83 C1 02           add         ecx,2
+  00000058: 84 DB              test        bl,bl
+  0000005A: 75 E4              jne         00000040
+  0000005C: 33 C0              xor         eax,eax
+  0000005E: EB 05              jmp         00000065
+  00000060: 1B C0              sbb         eax,eax
+  00000062: 83 C8 01           or          eax,1
+  00000065: 85 C0              test        eax,eax
+  00000067: 75 0A              jne         00000073
+  00000069: BE 00 00 00 00     mov         esi,offset ??_C@_0CI@HGIDKFLM@The?5code?5that?5was?5entered?5is?5not@
+  0000006E: E9 15 01 00 00     jmp         00000188
+  00000073: B9 00 00 00 00     mov         ecx,offset ??_C@_05NLEKLHKC@coins?$AA@
+  00000078: 8B C2              mov         eax,edx
+  0000007A: 66 0F 1F 44 00 00  nop         word ptr [eax+eax]
+  00000080: 8A 18              mov         bl,byte ptr [eax]
+  00000082: 3A 19              cmp         bl,byte ptr [ecx]
+  00000084: 75 1A              jne         000000A0
+  00000086: 84 DB              test        bl,bl
+  00000088: 74 12              je          0000009C
+  0000008A: 8A 58 01           mov         bl,byte ptr [eax+1]
+  0000008D: 3A 59 01           cmp         bl,byte ptr [ecx+1]
+  00000090: 75 0E              jne         000000A0
+  00000092: 83 C0 02           add         eax,2
+  00000095: 83 C1 02           add         ecx,2
+  00000098: 84 DB              test        bl,bl
+  0000009A: 75 E4              jne         00000080
+  0000009C: 33 C0              xor         eax,eax
+  0000009E: EB 05              jmp         000000A5
+  000000A0: 1B C0              sbb         eax,eax
+  000000A2: 83 C8 01           or          eax,1
+  000000A5: 85 C0              test        eax,eax
+  000000A7: 75 38              jne         000000E1
+  000000A9: 66 0F 6E C6        movd        xmm0,esi
+  000000AD: 0F 5B C0           cvtdq2ps    xmm0,xmm0
+  000000B0: 50                 push        eax
+  000000B1: 51                 push        ecx
+  000000B2: B9 00 00 00 00     mov         ecx,offset ?Money@@3VCMoney@@A
+  000000B7: F3 0F 11 04 24     movss       dword ptr [esp],xmm0
+  000000BC: E8 00 00 00 00     call        ?Adjust@CMoney@@QAEXM_N@Z
+  000000C1: 56                 push        esi
+  000000C2: 8D 85 C4 FE FF FF  lea         eax,[ebp-13Ch]
+  000000C8: 68 00 00 00 00     push        offset ??_C@_0CK@IPCCOEPN@?$CFd?5coins?5have?5been?5added?5to?5your@
+  000000CD: 50                 push        eax
+  000000CE: E8 00 00 00 00     call        _sprintf
+  000000D3: 83 C4 0C           add         esp,0Ch
+  000000D6: 8D B5 C4 FE FF FF  lea         esi,[ebp-13Ch]
+  000000DC: E9 A7 00 00 00     jmp         00000188
+  000000E1: B8 00 00 00 00     mov         eax,offset ??_C@_09JKOLPNPI@brokerage?$AA@
+  000000E6: 8A 0A              mov         cl,byte ptr [edx]
+  000000E8: 3A 08              cmp         cl,byte ptr [eax]
+  000000EA: 75 1A              jne         00000106
+  000000EC: 84 C9              test        cl,cl
+  000000EE: 74 12              je          00000102
+  000000F0: 8A 4A 01           mov         cl,byte ptr [edx+1]
+  000000F3: 3A 48 01           cmp         cl,byte ptr [eax+1]
+  000000F6: 75 0E              jne         00000106
+  000000F8: 83 C2 02           add         edx,2
+  000000FB: 83 C0 02           add         eax,2
+  000000FE: 84 C9              test        cl,cl
+  00000100: 75 E4              jne         000000E6
+  00000102: 33 C0              xor         eax,eax
+  00000104: EB 05              jmp         0000010B
+  00000106: 1B C0              sbb         eax,eax
+  00000108: 83 C8 01           or          eax,1
+  0000010B: 85 C0              test        eax,eax
+  0000010D: 75 74              jne         00000183
+  0000010F: F3 0F 10 05 08 00  movss       xmm0,dword ptr [?Money@@3VCMoney@@A+8]
+            00 00
+  00000117: 33 C9              xor         ecx,ecx
+  00000119: 83 FE 08           cmp         esi,8
+  0000011C: 7C 27              jl          00000145
+  0000011E: F3 0F 10 0D 00 00  movss       xmm1,dword ptr [__real@3e23d709]
+            00 00
+  00000126: 8D 46 F8           lea         eax,[esi-8]
+  00000129: C1 E8 03           shr         eax,3
+  0000012C: 40                 inc         eax
+  0000012D: 8D 0C C5 00 00 00  lea         ecx,[eax*8]
+            00
+  00000134: F3 0F 58 C1        addss       xmm0,xmm1
+  00000138: 83 E8 01           sub         eax,1
+  0000013B: 75 F7              jne         00000134
+  0000013D: F3 0F 11 05 08 00  movss       dword ptr [?Money@@3VCMoney@@A+8],xmm0
+            00 00
+  00000145: 3B CE              cmp         ecx,esi
+  00000147: 7D 1D              jge         00000166
+  00000149: F3 0F 10 0D 00 00  movss       xmm1,dword ptr [__real@3ca3d70a]
+            00 00
+  00000151: 8B C6              mov         eax,esi
+  00000153: 2B C1              sub         eax,ecx
+  00000155: F3 0F 58 C1        addss       xmm0,xmm1
+  00000159: 83 E8 01           sub         eax,1
+  0000015C: 75 F7              jne         00000155
+  0000015E: F3 0F 11 05 08 00  movss       dword ptr [?Money@@3VCMoney@@A+8],xmm0
+            00 00
+  00000166: 56                 push        esi
+  00000167: 8D 85 C4 FE FF FF  lea         eax,[ebp-13Ch]
+  0000016D: 68 00 00 00 00     push        offset ??_C@_0DG@EKPINIGO@Your?5brokerage?5has?5increased?5you@
+  00000172: 50                 push        eax
+  00000173: E8 00 00 00 00     call        _sprintf
+  00000178: 83 C4 0C           add         esp,0Ch
+  0000017B: 8D B5 C4 FE FF FF  lea         esi,[ebp-13Ch]
+  00000181: EB 05              jmp         00000188
+  00000183: BE 00 00 00 00     mov         esi,offset ??_C@_0GD@FNGHBNBO@There?5was?5a?5problem?5redeeming?5th@
+  00000188: 6A 70              push        70h
+  0000018A: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  0000018F: 83 C4 04           add         esp,4
+  00000192: 89 85 C0 FE FF FF  mov         dword ptr [ebp-140h],eax
+  00000198: C7 45 FC 00 00 00  mov         dword ptr [ebp-4],0
+            00
+  0000019F: 85 C0              test        eax,eax
+  000001A1: 74 17              je          000001BA
+  000001A3: 6A 00              push        0
+  000001A5: 6A 00              push        0
+  000001A7: 6A 00              push        0
+  000001A9: 6A 00              push        0
+  000001AB: 56                 push        esi
+  000001AC: 8B C8              mov         ecx,eax
+  000001AE: E8 00 00 00 00     call        ??0theMessageBoxDlg@@QAE@PBDH_NPAD2@Z
+  000001B3: A3 00 00 00 00     mov         dword ptr [?gpMessageBoxDlg@@3PAVtheMessageBoxDlg@@A],eax
+  000001B8: EB 0A              jmp         000001C4
+  000001BA: C7 05 00 00 00 00  mov         dword ptr [?gpMessageBoxDlg@@3PAVtheMessageBoxDlg@@A],0
+            00 00 00 00
+  000001C4: 8B 4D F4           mov         ecx,dword ptr [ebp-0Ch]
+  000001C7: 64 89 0D 00 00 00  mov         dword ptr fs:[0],ecx
+            00
+  000001CE: 59                 pop         ecx
+  000001CF: 5E                 pop         esi
+  000001D0: 5B                 pop         ebx
+  000001D1: 8B 4D F0           mov         ecx,dword ptr [ebp-10h]
+  000001D4: 33 CD              xor         ecx,ebp
+  000001D6: E8 00 00 00 00     call        @__security_check_cookie@4
+  000001DB: 8B E5              mov         esp,ebp
+  000001DD: 5D                 pop         ebp
+  000001DE: C3                 ret
+
+__unwindfunclet$?PromoCodeCallback@@YAXPBDHPAX@Z$0:
+  00000000: 6A 70              push        70h
+  00000002: 8B 85 C0 FE FF FF  mov         eax,dword ptr [ebp-140h]
+  00000008: 50                 push        eax
+  00000009: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  0000000E: 83 C4 08           add         esp,8
+  00000011: C3                 ret
+__ehhandler$?PromoCodeCallback@@YAXPBDHPAX@Z:
+  00000012: 8B 54 24 08        mov         edx,dword ptr [esp+8]
+  00000016: 8D 42 0C           lea         eax,[edx+0Ch]
+  00000019: 8B 8A C0 FE FF FF  mov         ecx,dword ptr [edx-140h]
+  0000001F: 33 C8              xor         ecx,eax
+  00000021: E8 00 00 00 00     call        @__security_check_cookie@4
+  00000026: 8B 4A FC           mov         ecx,dword ptr [edx-4]
+  00000029: 33 C8              xor         ecx,eax
+  0000002B: E8 00 00 00 00     call        @__security_check_cookie@4
+  00000030: B8 00 00 00 00     mov         eax,offset __ehfuncinfo$?PromoCodeCallback@@YAXPBDHPAX@Z
+  00000035: E9 00 00 00 00     jmp         ___CxxFrameHandler3
+
+?PtInRect@ldwRect@@QBE_NUldwPoint@@@Z (public: bool __thiscall ldwRect::PtInRect(struct ldwPoint)const ):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 8B 45 08           mov         eax,dword ptr [ebp+8]
+  00000006: 3B 01              cmp         eax,dword ptr [ecx]
+  00000008: 7C 18              jl          00000022
+  0000000A: 3B 41 08           cmp         eax,dword ptr [ecx+8]
+  0000000D: 7F 13              jg          00000022
+  0000000F: 8B 45 0C           mov         eax,dword ptr [ebp+0Ch]
+  00000012: 3B 41 04           cmp         eax,dword ptr [ecx+4]
+  00000015: 7C 0B              jl          00000022
+  00000017: 3B 41 0C           cmp         eax,dword ptr [ecx+0Ch]
+  0000001A: 7F 06              jg          00000022
+  0000001C: B0 01              mov         al,1
+  0000001E: 5D                 pop         ebp
+  0000001F: C2 08 00           ret         8
+  00000022: 32 C0              xor         al,al
+  00000024: 5D                 pop         ebp
+  00000025: C2 08 00           ret         8
+
+?UpdateScene@theOptionsDialog@@MAEXXZ (protected: virtual void __thiscall theOptionsDialog::UpdateScene(void)):
+  00000000: 56                 push        esi
+  00000001: 8B F1              mov         esi,ecx
+  00000003: 8B 8E A8 00 00 00  mov         ecx,dword ptr [esi+0A8h]
+  00000009: E8 00 00 00 00     call        ?IsFullScreen@ldwGameWindow@@QAE_NXZ
+  0000000E: 8B 96 80 00 00 00  mov         edx,dword ptr [esi+80h]
+  00000014: 8B 0D 00 00 00 00  mov         ecx,dword ptr [?gpMessageBoxDlg@@3PAVtheMessageBoxDlg@@A]
+  0000001A: 88 82 29 5B 02 00  mov         byte ptr [edx+25B29h],al
+  00000020: 8B 86 80 00 00 00  mov         eax,dword ptr [esi+80h]
+  00000026: 8A 80 29 5B 02 00  mov         al,byte ptr [eax+25B29h]
+  0000002C: 88 86 B9 00 00 00  mov         byte ptr [esi+0B9h],al
+  00000032: 85 C9              test        ecx,ecx
+  00000034: 74 22              je          00000058
+  00000036: 6A 00              push        0
+  00000038: 56                 push        esi
+  00000039: E8 00 00 00 00     call        ?DoModal@ldwDialog@@QAEHPAVldwScene@@_N@Z
+  0000003E: 8B 0D 00 00 00 00  mov         ecx,dword ptr [?gpMessageBoxDlg@@3PAVtheMessageBoxDlg@@A]
+  00000044: 85 C9              test        ecx,ecx
+  00000046: 74 06              je          0000004E
+  00000048: 8B 01              mov         eax,dword ptr [ecx]
+  0000004A: 6A 01              push        1
+  0000004C: FF 10              call        dword ptr [eax]
+  0000004E: C7 05 00 00 00 00  mov         dword ptr [?gpMessageBoxDlg@@3PAVtheMessageBoxDlg@@A],0
+            00 00 00 00
+  00000058: 8B CE              mov         ecx,esi
+  0000005A: 5E                 pop         esi
+  0000005B: E9 00 00 00 00     jmp         ?UpdateScene@ldwTiledDialog@@MAEXXZ
+
+___local_stdio_printf_options:
+  00000000: B8 00 00 00 00     mov         eax,offset ?_OptionsStorage@?1??__local_stdio_printf_options@@9@4_KA
+  00000005: C3                 ret
+
+_sprintf:
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 8D 45 10           lea         eax,[ebp+10h]
+  00000006: 50                 push        eax
+  00000007: 6A 00              push        0
+  00000009: FF 75 0C           push        dword ptr [ebp+0Ch]
+  0000000C: 6A FF              push        0FFFFFFFFh
+  0000000E: FF 75 08           push        dword ptr [ebp+8]
+  00000011: E8 00 00 00 00     call        ___local_stdio_printf_options
+  00000016: 8B 08              mov         ecx,dword ptr [eax]
+  00000018: FF 70 04           push        dword ptr [eax+4]
+  0000001B: 83 C9 01           or          ecx,1
+  0000001E: 51                 push        ecx
+  0000001F: E8 00 00 00 00     call        ___stdio_common_vsprintf
+  00000024: 83 C9 FF           or          ecx,0FFFFFFFFh
+  00000027: 83 C4 1C           add         esp,1Ch
+  0000002A: 85 C0              test        eax,eax
+  0000002C: 0F 48 C1           cmovs       eax,ecx
+  0000002F: 5D                 pop         ebp
+  00000030: C3                 ret
+
+COFF SYMBOL TABLE
+000 0105673C ABS    notype       Static       | @comp.id
+001 80000191 ABS    notype       Static       | @feat.00
+002 00000000 SECT1  notype       Static       | .drectve
+    Section length   62, #relocs    0, #linenums    0, checksum        0
+004 00000000 SECT2  notype       Static       | .debug$S
+    Section length 6EF0, #relocs   38, #linenums    0, checksum        0
+006 00000000 SECT3  notype       Static       | .debug$T
+    Section length   7C, #relocs    0, #linenums    0, checksum        0
+008 00000000 SECT4  notype       Static       | .text$mn
+    Section length  542, #relocs   41, #linenums    0, checksum 6467B5F5, selection    1 (pick no duplicates)
+00A 00000000 SECT5  notype       Static       | .debug$S
+    Section length  908, #relocs   4B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x4)
+00C 00000000 SECT6  notype       Static       | .text$x
+    Section length   7D, #relocs    A, #linenums    0, checksum 2F6071C6, selection    5 (pick associative Section 0x4)
+00E 00000000 SECT7  notype       Static       | .text$mn
+    Section length    B, #relocs    2, #linenums    0, checksum 4294F763, selection    1 (pick no duplicates)
+010 00000000 SECT8  notype       Static       | .debug$S
+    Section length  110, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x7)
+012 00000000 SECT9  notype       Static       | .text$mn
+    Section length   26, #relocs    2, #linenums    0, checksum D14021B5, selection    2 (pick any)
+014 00000000 SECTA  notype       Static       | .debug$S
+    Section length  110, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x9)
+016 00000000 SECTB  notype       Static       | .text$mn
+    Section length   26, #relocs    0, #linenums    0, checksum BF89B839, selection    2 (pick any)
+018 00000000 SECTC  notype       Static       | .debug$S
+    Section length  228, #relocs   13, #linenums    0, checksum        0, selection    5 (pick associative Section 0xB)
+01A 00000000 SECTD  notype       Static       | .text$mn
+    Section length    3, #relocs    0, #linenums    0, checksum F647872A, selection    2 (pick any)
+01C 00000000 SECTE  notype       Static       | .debug$S
+    Section length  138, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0xD)
+01E 00000000 SECTF  notype       Static       | .text$mn
+    Section length  64E, #relocs   40, #linenums    0, checksum 7AD4FEDE, selection    1 (pick no duplicates)
+020 00000000 SECT10 notype       Static       | .debug$S
+    Section length  350, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0xF)
+022 00000000 SECT11 notype       Static       | .text$mn
+    Section length    1, #relocs    0, #linenums    0, checksum  26D930A, selection    1 (pick no duplicates)
+024 00000000 SECT12 notype       Static       | .debug$S
+    Section length  100, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x11)
+026 00000000 SECT13 notype       Static       | .text$mn
+    Section length   46, #relocs    7, #linenums    0, checksum 2EFE530A, selection    1 (pick no duplicates)
+028 00000000 SECT14 notype       Static       | .debug$S
+    Section length  1F8, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x13)
+02A 00000000 SECT15 notype       Static       | .text$mn
+    Section length    4, #relocs    0, #linenums    0, checksum C971E7AF, selection    2 (pick any)
+02C 00000000 SECT16 notype       Static       | .debug$S
+    Section length   F0, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x15)
+02E 00000000 SECT17 notype       Static       | .text$mn
+    Section length    7, #relocs    0, #linenums    0, checksum E415DEE7, selection    1 (pick no duplicates)
+030 00000000 SECT18 notype       Static       | .debug$S
+    Section length  104, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x17)
+032 00000000 SECT19 notype       Static       | .text$mn
+    Section length    5, #relocs    0, #linenums    0, checksum 933208C2, selection    2 (pick any)
+034 00000000 SECT1A notype       Static       | .debug$S
+    Section length  1C8, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x19)
+036 00000000 SECT1B notype       Static       | .text$mn
+    Section length  218, #relocs   1D, #linenums    0, checksum 74147363, selection    1 (pick no duplicates)
+038 00000000 SECT1C notype       Static       | .debug$S
+    Section length  478, #relocs   2B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x1B)
+03A 00000000 SECT1D notype       Static       | .text$x
+    Section length   33, #relocs    5, #linenums    0, checksum 9D620532, selection    5 (pick associative Section 0x1B)
+03C 00000000 SECT1E notype       Static       | .text$mn
+    Section length  473, #relocs   1F, #linenums    0, checksum A9DF122E, selection    1 (pick no duplicates)
+03E 00000000 SECT1F notype       Static       | .debug$S
+    Section length  A20, #relocs   2F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x1E)
+040 00000000 SECT20 notype       Static       | .text$mn
+    Section length   1B, #relocs    5, #linenums    0, checksum 5C48D85B, selection    1 (pick no duplicates)
+042 00000000 SECT21 notype       Static       | .debug$S
+    Section length  118, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x20)
+044 00000000 SECT22 notype       Static       | .text$mn
+    Section length    1, #relocs    0, #linenums    0, checksum  26D930A, selection    2 (pick any)
+046 00000000 SECT23 notype       Static       | .debug$S
+    Section length   F0, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x22)
+048 00000000 SECT24 notype       Static       | .text$mn
+    Section length  1DF, #relocs   17, #linenums    0, checksum  EB2FFEB, selection    1 (pick no duplicates)
+04A 00000000 SECT25 notype       Static       | .debug$S
+    Section length  3E0, #relocs   1D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x24)
+04C 00000000 SECT26 notype       Static       | .text$x
+    Section length   3A, #relocs    5, #linenums    0, checksum BAD67C77, selection    5 (pick associative Section 0x24)
+04E 00000000 SECT27 notype       Static       | .text$mn
+    Section length   28, #relocs    0, #linenums    0, checksum 82A0B43F, selection    2 (pick any)
+050 00000000 SECT28 notype       Static       | .debug$S
+    Section length  194, #relocs   11, #linenums    0, checksum        0, selection    5 (pick associative Section 0x27)
+052 00000000 SECT29 notype       Static       | .text$mn
+    Section length   60, #relocs    6, #linenums    0, checksum 618F895C, selection    1 (pick no duplicates)
+054 00000000 SECT2A notype       Static       | .debug$S
+    Section length  1AC, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x29)
+056 00000000 SECT2B notype       Static       | .text$mn
+    Section length    6, #relocs    1, #linenums    0, checksum F4F40212, selection    2 (pick any)
+058 00000000 SECT2C notype       Static       | .debug$S
+    Section length   F4, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x2B)
+05A 00000000 SECT2D notype       Static       | .text$mn
+    Section length   31, #relocs    2, #linenums    0, checksum 5973C45B, selection    2 (pick any)
+05C 00000000 SECT2E notype       Static       | .debug$S
+    Section length  1BC, #relocs    B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x2D)
+05E 00000000 SECTB  notype ()    External     | ??_H@YGXPAXIIP6EPAX0@Z@Z (void __stdcall `vector constructor iterator'(void *,unsigned int,unsigned int,void * (__thiscall*)(void *)))
+05F 00000000 UNDEF  notype ()    External     | ??2@YAPAXI@Z (void * __cdecl operator new(unsigned int))
+060 00000000 UNDEF  notype ()    External     | ??3@YAXPAXI@Z (void __cdecl operator delete(void *,unsigned int))
+061 00000000 SECT27 notype ()    External     | ?PtInRect@ldwRect@@QBE_NUldwPoint@@@Z (public: bool __thiscall ldwRect::PtInRect(struct ldwPoint)const )
+062 00000000 SECT2B notype ()    External     | ___local_stdio_printf_options
+063 00000000 UNDEF  notype ()    External     | ___stdio_common_vsprintf
+064 00000000 SECT2D notype ()    External     | _sprintf
+065 00000000 SECT19 notype ()    External     | ?HandleKey@ldwEventHandler@@UAE_NHHH@Z (public: virtual bool __thiscall ldwEventHandler::HandleKey(int,int,int))
+066 00000000 UNDEF  notype ()    External     | ?AddControl@ldwScene@@IAEXPAVldwControl@@@Z (protected: void __thiscall ldwScene::AddControl(class ldwControl *))
+067 00000000 UNDEF  notype ()    External     | ?GetControl@ldwScene@@IAEPAVldwControl@@H@Z (protected: class ldwControl * __thiscall ldwScene::GetControl(int))
+068 00000000 UNDEF  notype ()    External     | ?DoModal@ldwDialog@@QAEHPAVldwScene@@_N@Z (public: int __thiscall ldwDialog::DoModal(class ldwScene *,bool))
+069 00000000 UNDEF  notype ()    External     | ?Draw@ldwDialog@@UAEXXZ (public: virtual void __thiscall ldwDialog::Draw(void))
+06A 00000000 UNDEF  notype ()    External     | ?Update@ldwDialog@@UAEXXZ (public: virtual void __thiscall ldwDialog::Update(void))
+06B 00000000 SECT22 notype ()    External     | ?HandleResult@ldwDialog@@MAEXXZ (protected: virtual void __thiscall ldwDialog::HandleResult(void))
+06C 00000000 UNDEF  notype ()    External     | ??0ldwTiledDialog@@QAE@_N@Z (public: __thiscall ldwTiledDialog::ldwTiledDialog(bool))
+06D 00000000 UNDEF  notype ()    External     | ??1ldwTiledDialog@@UAE@XZ (public: virtual __thiscall ldwTiledDialog::~ldwTiledDialog(void))
+06E 00000000 SECTD  notype ()    External     | ?DrawBackground@ldwTiledDialog@@UAEXM@Z (public: virtual void __thiscall ldwTiledDialog::DrawBackground(float))
+06F 00000000 SECT15 notype ()    External     | ?Finished@ldwTiledDialog@@UAE_NXZ (public: virtual bool __thiscall ldwTiledDialog::Finished(void))
+070 00000000 UNDEF  notype ()    External     | ?SetTiling@ldwTiledDialog@@IAEXPAVldwImageGrid@@HH@Z (protected: void __thiscall ldwTiledDialog::SetTiling(class ldwImageGrid *,int,int))
+071 00000000 UNDEF  notype ()    External     | ?Activate@ldwTiledDialog@@MAEX_N@Z (protected: virtual void __thiscall ldwTiledDialog::Activate(bool))
+072 00000000 UNDEF  notype ()    External     | ?UpdateScene@ldwTiledDialog@@MAEXXZ (protected: virtual void __thiscall ldwTiledDialog::UpdateScene(void))
+073 00000000 UNDEF  notype ()    External     | ?DrawScene@ldwTiledDialog@@MAEXXZ (protected: virtual void __thiscall ldwTiledDialog::DrawScene(void))
+074 00000000 UNDEF  notype ()    External     | ?EndDialog@ldwTiledDialog@@IAEXXZ (protected: void __thiscall ldwTiledDialog::EndDialog(void))
+075 00000000 UNDEF  notype ()    External     | ?Get@ldwGameWindow@@SAPAV1@XZ (public: static class ldwGameWindow * __cdecl ldwGameWindow::Get(void))
+076 00000000 UNDEF  notype ()    External     | ?Draw@ldwGameWindow@@QAEXPAVldwImage@@HH@Z (public: void __thiscall ldwGameWindow::Draw(class ldwImage *,int,int))
+077 00000000 UNDEF  notype ()    External     | ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z (public: void __thiscall ldwGameWindow::DrawString(char const *,int,int,struct ldwColor,class ldwFont *))
+078 00000000 UNDEF  notype ()    External     | ?DrawStringRight@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z (public: void __thiscall ldwGameWindow::DrawStringRight(char const *,int,int,struct ldwColor,class ldwFont *))
+079 00000000 UNDEF  notype ()    External     | ?DrawStringCentered@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z (public: void __thiscall ldwGameWindow::DrawStringCentered(char const *,int,int,struct ldwColor,class ldwFont *))
+07A 00000000 UNDEF  notype ()    External     | ?IsWindowed@ldwGameWindow@@QAE_NXZ (public: bool __thiscall ldwGameWindow::IsWindowed(void))
+07B 00000000 UNDEF  notype ()    External     | ?IsFullScreen@ldwGameWindow@@QAE_NXZ (public: bool __thiscall ldwGameWindow::IsFullScreen(void))
+07C 00000000 UNDEF  notype ()    External     | ?MakeWindowed@ldwGameWindow@@QAEXXZ (public: void __thiscall ldwGameWindow::MakeWindowed(void))
+07D 00000000 UNDEF  notype ()    External     | ?MakeFullScreen@ldwGameWindow@@QAEXXZ (public: void __thiscall ldwGameWindow::MakeFullScreen(void))
+07E 00000000 UNDEF  notype ()    External     | ?Get@theGraphicsManager@@SAPAV1@XZ (public: static class theGraphicsManager * __cdecl theGraphicsManager::Get(void))
+07F 00000000 UNDEF  notype ()    External     | ?GetImage@theGraphicsManager@@QAEPAVldwImage@@W4EImage@@@Z (public: class ldwImage * __thiscall theGraphicsManager::GetImage(enum EImage))
+080 00000000 UNDEF  notype ()    External     | ?GetImageStrip@theGraphicsManager@@QAEPAVldwImageStrip@@W4EImage@@@Z (public: class ldwImageStrip * __thiscall theGraphicsManager::GetImageStrip(enum EImage))
+081 00000000 UNDEF  notype ()    External     | ?GetImageGrid@theGraphicsManager@@QAEPAVldwImageGrid@@W4EImage@@@Z (public: class ldwImageGrid * __thiscall theGraphicsManager::GetImageGrid(enum EImage))
+082 00000000 UNDEF  notype ()    External     | ?GetImageGridForCanvas@theGraphicsManager@@QAEPAVldwImageGrid@@H@Z (public: class ldwImageGrid * __thiscall theGraphicsManager::GetImageGridForCanvas(int))
+083 00000000 UNDEF  notype ()    External     | ?GetTextColorForCanvas@theGraphicsManager@@QAE?AUldwColor@@H@Z (public: struct ldwColor __thiscall theGraphicsManager::GetTextColorForCanvas(int))
+084 00000000 UNDEF  notype ()    External     | ?Get@theStringManager@@SAPAV1@XZ (public: static class theStringManager * __cdecl theStringManager::Get(void))
+085 00000000 UNDEF  notype ()    External     | ?GetLargeFont@theStringManager@@QAEPAVldwFont@@XZ (public: class ldwFont * __thiscall theStringManager::GetLargeFont(void))
+086 00000000 UNDEF  notype ()    External     | ?GetMediumFont@theStringManager@@QAEPAVldwFont@@XZ (public: class ldwFont * __thiscall theStringManager::GetMediumFont(void))
+087 00000000 UNDEF  notype ()    External     | ?GetString@theStringManager@@QAEPADW4StringId@@@Z (public: char * __thiscall theStringManager::GetString(enum StringId))
+088 00000000 UNDEF  notype ()    External     | ?SetSpeed@CGameTime@@QAEXH@Z (public: void __thiscall CGameTime::SetSpeed(int))
+089 00000000 UNDEF  notype ()    External     | ?Adjust@CMoney@@QAEXM_N@Z (public: void __thiscall CMoney::Adjust(float,bool))
+08A 00000000 UNDEF  notype ()    External     | ?SetVolume@ldwSoundTrack@@QAEXM@Z (public: void __thiscall ldwSoundTrack::SetVolume(float))
+08B 00000000 UNDEF  notype ()    External     | ?Play@CSound@@QAEXW4ESound@@@Z (public: void __thiscall CSound::Play(enum ESound))
+08C 00000000 UNDEF  notype ()    External     | ?Update@CSoundTrack@@QAEXW4ESoundTrack@@@Z (public: void __thiscall CSoundTrack::Update(enum ESoundTrack))
+08D 00000000 UNDEF  notype ()    External     | ?GetConfigValue@ldwGameState@@SAHPBDH0@Z (public: static int __cdecl ldwGameState::GetConfigValue(char const *,int,char const *))
+08E 00000000 UNDEF  notype ()    External     | ?EvictFamily@CFamilyTree@@QAEXXZ (public: void __thiscall CFamilyTree::EvictFamily(void))
+08F 00000000 UNDEF  notype ()    External     | ?Reset@CVillagerManager@@QAEXXZ (public: void __thiscall CVillagerManager::Reset(void))
+090 00000000 UNDEF  notype ()    External     | ?Get@theGameState@@SAPAV1@XZ (public: static class theGameState * __cdecl theGameState::Get(void))
+091 00000000 UNDEF  notype ()    External     | ?Get@theRealtimeManager@@SAPAV1@XZ (public: static class theRealtimeManager * __cdecl theRealtimeManager::Get(void))
+092 00000000 UNDEF  notype ()    External     | ?UpdateAll@theRealtimeManager@@QAEXXZ (public: void __thiscall theRealtimeManager::UpdateAll(void))
+093 00000000 SECT4  notype ()    External     | ??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z (public: __thiscall theOptionsDialog::theOptionsDialog(char *,enum DialogColorEnum))
+094 00000000 SECT7  notype ()    External     | ??1theOptionsDialog@@UAE@XZ (public: virtual __thiscall theOptionsDialog::~theOptionsDialog(void))
+095 00000000 SECT17 notype ()    External     | ?GetResult@theOptionsDialog@@UAEHXZ (public: virtual int __thiscall theOptionsDialog::GetResult(void))
+096 00000000 SECT1E notype ()    External     | ?HandleMouse@theOptionsDialog@@UAE_NHUldwPoint@@@Z (public: virtual bool __thiscall theOptionsDialog::HandleMouse(int,struct ldwPoint))
+097 00000000 SECT1B notype ()    External     | ?HandleMessage@theOptionsDialog@@UAE_NHJ@Z (public: virtual bool __thiscall theOptionsDialog::HandleMessage(int,long))
+098 00000000 SECT13 notype ()    External     | ?EvictFamily@theOptionsDialog@@AAEXXZ (private: void __thiscall theOptionsDialog::EvictFamily(void))
+099 00000000 SECT20 notype ()    External     | ?HandleRedeemCredit@theOptionsDialog@@AAEXXZ (private: void __thiscall theOptionsDialog::HandleRedeemCredit(void))
+09A 00000000 SECT29 notype ()    External     | ?UpdateScene@theOptionsDialog@@MAEXXZ (protected: virtual void __thiscall theOptionsDialog::UpdateScene(void))
+09B 00000000 SECTF  notype ()    External     | ?DrawNoFadeScene@theOptionsDialog@@MAEXXZ (protected: virtual void __thiscall theOptionsDialog::DrawNoFadeScene(void))
+09C 00000000 SECT11 notype ()    External     | ?DrawSceneFinal@theOptionsDialog@@MAEXXZ (protected: virtual void __thiscall theOptionsDialog::DrawSceneFinal(void))
+09D 00000000 SECT9  notype ()    External     | ??_GtheOptionsDialog@@UAEPAXI@Z (public: virtual void * __thiscall theOptionsDialog::`scalar deleting destructor'(unsigned int))
+09E 00000000 UNDEF  notype ()    WeakExternal | ??_EtheOptionsDialog@@UAEPAXI@Z (public: virtual void * __thiscall theOptionsDialog::`vector deleting destructor'(unsigned int))
+    Default index       9D Library search
+0A0 00000000 UNDEF  notype ()    External     | ??0theMessageBoxDlg@@QAE@PBDH_NPAD2@Z (public: __thiscall theMessageBoxDlg::theMessageBoxDlg(char const *,int,bool,char *,char *))
+0A1 00000000 UNDEF  notype ()    External     | ?ShowMessageBox@@YAHPAVldwScene@@W4StringId@@H_N@Z (int __cdecl ShowMessageBox(class ldwScene *,enum StringId,int,bool))
+0A2 00000000 UNDEF  notype ()    External     | ??0RedeemCreditDlg@@QAE@XZ (public: __thiscall RedeemCreditDlg::RedeemCreditDlg(void))
+0A3 00000000 UNDEF  notype ()    External     | ??1RedeemCreditDlg@@UAE@XZ (public: virtual __thiscall RedeemCreditDlg::~RedeemCreditDlg(void))
+0A4 00000000 UNDEF  notype ()    External     | ?GetName@RedeemCreditDlg@@QAEPADXZ (public: char * __thiscall RedeemCreditDlg::GetName(void))
+0A5 00000000 UNDEF  notype ()    External     | ?Ref@CAdoptionScene@@SAAAV1@XZ (public: static class CAdoptionScene & __cdecl CAdoptionScene::Ref(void))
+0A6 00000000 UNDEF  notype ()    External     | ?Submit@CPromoCode@@QAE?B_NPBD0P6AX0HPAX@Z1@Z (public: bool const __thiscall CPromoCode::Submit(char const *,char const *,void (__cdecl*)(char const *,int,void *),void *))
+0A7 00000000 UNDEF  notype ()    External     | ??0ldwButton@@QAE@HPAVldwImageGrid@@UldwPoint@@PAVldwScene@@_N@Z (public: __thiscall ldwButton::ldwButton(int,class ldwImageGrid *,struct ldwPoint,class ldwScene *,bool))
+0A8 00000000 UNDEF  notype ()    External     | ?SetText@ldwButton@@QAEXPBDUldwColor@@11PAVldwFont@@@Z (public: void __thiscall ldwButton::SetText(char const *,struct ldwColor,struct ldwColor,struct ldwColor,class ldwFont *))
+0A9 00000000 UNDEF  notype ()    External     | ??0ldwRadioButton@@QAE@HPAVldwImageStrip@@UldwPoint@@PAVldwScene@@PBDUldwColor@@PAVldwFont@@@Z (public: __thiscall ldwRadioButton::ldwRadioButton(int,class ldwImageStrip *,struct ldwPoint,class ldwScene *,char const *,struct ldwColor,class ldwFont *))
+0AA 00000000 UNDEF  notype ()    External     | ?SetCheck@ldwRadioButton@@QAEX_N@Z (public: void __thiscall ldwRadioButton::SetCheck(bool))
+0AB 00000000 UNDEF  notype ()    External     | ?IsChecked@ldwRadioButton@@QAE_NXZ (public: bool __thiscall ldwRadioButton::IsChecked(void))
+0AC 00000000 SECT24 notype ()    Static       | ?PromoCodeCallback@@YAXPBDHPAX@Z (void __cdecl PromoCodeCallback(char const *,int,void *))
+0AD 00000000 UNDEF  notype ()    External     | @__security_check_cookie@4
+0AE 00000000 UNDEF  notype ()    External     | ___CxxFrameHandler3
+0AF 00000062 SECT6  notype ()    Static       | __ehhandler$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z
+0B0 00000000 SECT2F notype       Static       | .sxdata
+    Section length    C, #relocs    0, #linenums    0, checksum B59608E3
+0B2 00000000 SECT6  notype ()    Static       | __unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$0
+0B3 00000008 SECT6  notype ()    Static       | __unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$1
+0B4 00000017 SECT6  notype ()    Static       | __unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$2
+0B5 00000026 SECT6  notype ()    Static       | __unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$3
+0B6 00000035 SECT6  notype ()    Static       | __unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$4
+0B7 00000044 SECT6  notype ()    Static       | __unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$5
+0B8 00000053 SECT6  notype ()    Static       | __unwindfunclet$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z$6
+0B9 0000000B SECT1D notype ()    Static       | __ehhandler$?HandleMessage@theOptionsDialog@@UAE_NHJ@Z
+0BA 00000208 SECT1B notype       Static       | $LN29
+0BB 00000179 SECT1B notype       Label        | $LN13
+0BC 00000193 SECT1B notype       Label        | $LN15
+0BD 000001AD SECT1B notype       Label        | $LN17
+0BE 000001C7 SECT1B notype       Label        | $LN19
+0BF 00000000 SECT1D notype ()    Static       | __unwindfunclet$?HandleMessage@theOptionsDialog@@UAE_NHJ@Z$0
+0C0 00000012 SECT26 notype ()    Static       | __ehhandler$?PromoCodeCallback@@YAXPBDHPAX@Z
+0C1 00000000 SECT26 notype ()    Static       | __unwindfunclet$?PromoCodeCallback@@YAXPBDHPAX@Z$0
+0C2 00000000 SECT30 notype       Static       | .xdata$x
+    Section length   5C, #relocs    8, #linenums    0, checksum 82212FB5, selection    5 (pick associative Section 0x4)
+0C4 00000000 SECT30 notype       Static       | __ehfuncinfo$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z
+0C5 00000024 SECT30 notype       Static       | __unwindtable$??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z
+0C6 00000000 SECT31 notype       Static       | .xdata$x
+    Section length   2C, #relocs    2, #linenums    0, checksum A7F7E1EC, selection    5 (pick associative Section 0x1B)
+0C8 00000008 SECT31 notype       Static       | __ehfuncinfo$?HandleMessage@theOptionsDialog@@UAE_NHJ@Z
+0C9 00000000 SECT31 notype       Static       | __unwindtable$?HandleMessage@theOptionsDialog@@UAE_NHJ@Z
+0CA 00000000 SECT32 notype       Static       | .xdata$x
+    Section length   2C, #relocs    2, #linenums    0, checksum A7F7E1EC, selection    5 (pick associative Section 0x24)
+0CC 00000008 SECT32 notype       Static       | __ehfuncinfo$?PromoCodeCallback@@YAXPBDHPAX@Z
+0CD 00000000 SECT32 notype       Static       | __unwindtable$?PromoCodeCallback@@YAXPBDHPAX@Z
+0CE 00000000 SECT33 notype       Static       | .bss
+    Section length   31, #relocs    0, #linenums    0, checksum        0
+0D0 00000000 SECT33 notype       Static       | ?cLdwNoColor@@3UldwColor@@B (struct ldwColor const cLdwNoColor)
+0D1 00000000 SECT34 notype       Static       | .data
+    Section length   54, #relocs    0, #linenums    0, checksum BAFD5CA1
+0D3 00000000 SECT34 notype       Static       | ?cLdwBlack@@3UldwColor@@B (struct ldwColor const cLdwBlack)
+0D4 00000004 SECT34 notype       Static       | ?cLdwWhite@@3UldwColor@@B (struct ldwColor const cLdwWhite)
+0D5 00000008 SECT34 notype       Static       | ?cLdwLightGrey@@3UldwColor@@B (struct ldwColor const cLdwLightGrey)
+0D6 0000000C SECT34 notype       Static       | ?cLdwDarkGrey@@3UldwColor@@B (struct ldwColor const cLdwDarkGrey)
+0D7 00000010 SECT34 notype       Static       | ?cLdwRed@@3UldwColor@@B (struct ldwColor const cLdwRed)
+0D8 00000014 SECT34 notype       Static       | ?cLdwGreen@@3UldwColor@@B (struct ldwColor const cLdwGreen)
+0D9 00000018 SECT34 notype       Static       | ?cLdwBlue@@3UldwColor@@B (struct ldwColor const cLdwBlue)
+0DA 00000000 SECT35 notype       Static       | .bss
+    Section length    8, #relocs    0, #linenums    0, checksum        0, selection    2 (pick any)
+0DC 00000000 SECT35 notype       External     | ?_OptionsStorage@?1??__local_stdio_printf_options@@9@4_KA (unsigned __int64 `__local_stdio_printf_options'::`2'::_OptionsStorage)
+0DD 0000001C SECT34 notype       Static       | ?UI_ButtonUpColor@@3UldwColor@@B (struct ldwColor const UI_ButtonUpColor)
+0DE 00000020 SECT34 notype       Static       | ?UI_ButtonOverColor@@3UldwColor@@B (struct ldwColor const UI_ButtonOverColor)
+0DF 00000024 SECT34 notype       Static       | ?UI_ButtonDownColor@@3UldwColor@@B (struct ldwColor const UI_ButtonDownColor)
+0E0 00000028 SECT34 notype       Static       | ?UI_LabelColor@@3UldwColor@@B (struct ldwColor const UI_LabelColor)
+0E1 0000002C SECT34 notype       Static       | ?UI_DiplomaColor@@3UldwColor@@B (struct ldwColor const UI_DiplomaColor)
+0E2 00000030 SECT34 notype       Static       | ?UI_HandCursorHotSpot@@3UldwPoint@@B (struct ldwPoint const UI_HandCursorHotSpot)
+0E3 00000000 UNDEF  notype       External     | ?GameStats@@3VCGameStats@@A (class CGameStats GameStats)
+0E4 00000000 UNDEF  notype       External     | ?GameTime@@3VCGameTime@@A (class CGameTime GameTime)
+0E5 00000000 UNDEF  notype       External     | ?Money@@3VCMoney@@A (class CMoney Money)
+0E6 00000038 SECT34 notype       Static       | ?ContentMap_c_sSnapToCenter@@3UldwPoint@@B (struct ldwPoint const ContentMap_c_sSnapToCenter)
+0E7 00000000 UNDEF  notype       External     | ?Sound@@3VCSound@@A (class CSound Sound)
+0E8 00000040 SECT34 notype       Static       | ?Environment_c_sAlchemyLabPos@@3UldwPoint@@B (struct ldwPoint const Environment_c_sAlchemyLabPos)
+0E9 00000048 SECT34 notype       Static       | ?Environment_c_sScienceLabPos@@3UldwPoint@@B (struct ldwPoint const Environment_c_sScienceLabPos)
+0EA 00000000 UNDEF  notype       External     | ?SoundTrack@@3VCSoundTrack@@A (class CSoundTrack SoundTrack)
+0EB 00000000 UNDEF  notype       External     | ?FamilyTree@@3VCFamilyTree@@A (class CFamilyTree FamilyTree)
+0EC 00000000 UNDEF  notype       External     | ?VillagerManager@@3VCVillagerManager@@A (class CVillagerManager VillagerManager)
+0ED 00000000 SECT36 notype       Static       | .rdata
+    Section length   40, #relocs   10, #linenums    0, checksum        0, selection    6 (pick largest)
+0EF 00000004 SECT36 notype       External     | ??_7theOptionsDialog@@6B@ (const theOptionsDialog::`vftable')
+0F0 00000000 UNDEF  notype       External     | ?PromoCode@@3VCPromoCode@@A (class CPromoCode PromoCode)
+0F1 00000050 SECT34 notype       Static       | ?cDefaultDisabledTint@@3UldwColor@@B (struct ldwColor const cDefaultDisabledTint)
+0F2 00000004 SECT33 notype       Static       | ?gpMessageBoxDlg@@3PAVtheMessageBoxDlg@@A (class theMessageBoxDlg * gpMessageBoxDlg)
+0F3 00000008 SECT33 notype       Static       | ?gLastCreditCodeUsed@@3PADA (char * gLastCreditCodeUsed)
+0F4 00000000 SECT37 notype       Static       | .rdata
+    Section length    8, #relocs    0, #linenums    0, checksum 5A632ABE, selection    2 (pick any)
+0F6 00000000 SECT37 notype       External     | ??_C@_07MALOAKCI@invalid?$AA@ (`string')
+0F7 00000000 SECT38 notype       Static       | .rdata
+    Section length   28, #relocs    0, #linenums    0, checksum 609067F2, selection    2 (pick any)
+0F9 00000000 SECT38 notype       External     | ??_C@_0CI@HGIDKFLM@The?5code?5that?5was?5entered?5is?5not@ (`string')
+0FA 00000000 SECT39 notype       Static       | .rdata
+    Section length    6, #relocs    0, #linenums    0, checksum 9577E9FE, selection    2 (pick any)
+0FC 00000000 SECT39 notype       External     | ??_C@_05NLEKLHKC@coins?$AA@ (`string')
+0FD 00000000 SECT3A notype       Static       | .rdata
+    Section length   2A, #relocs    0, #linenums    0, checksum 94B233F9, selection    2 (pick any)
+0FF 00000000 SECT3A notype       External     | ??_C@_0CK@IPCCOEPN@?$CFd?5coins?5have?5been?5added?5to?5your@ (`string')
+100 00000000 SECT3B notype       Static       | .rdata
+    Section length    A, #relocs    0, #linenums    0, checksum 869E6A71, selection    2 (pick any)
+102 00000000 SECT3B notype       External     | ??_C@_09JKOLPNPI@brokerage?$AA@ (`string')
+103 00000000 SECT3C notype       Static       | .rdata
+    Section length   36, #relocs    0, #linenums    0, checksum 80A44A6C, selection    2 (pick any)
+105 00000000 SECT3C notype       External     | ??_C@_0DG@EKPINIGO@Your?5brokerage?5has?5increased?5you@ (`string')
+106 00000000 SECT3D notype       Static       | .rdata
+    Section length   63, #relocs    0, #linenums    0, checksum 2C65E2C4, selection    2 (pick any)
+108 00000000 SECT3D notype       External     | ??_C@_0GD@FNGHBNBO@There?5was?5a?5problem?5redeeming?5th@ (`string')
+109 00000000 SECT3E notype       Static       | .rdata
+    Section length    8, #relocs    0, #linenums    0, checksum 2033FF53, selection    2 (pick any)
+10B 00000000 SECT3E notype       External     | ??_C@_07LKOONPMF@ldw?4ini?$AA@ (`string')
+10C 00000000 SECT3F notype       Static       | .rdata
+    Section length   10, #relocs    0, #linenums    0, checksum D6CBEC96, selection    2 (pick any)
+10E 00000000 SECT3F notype       External     | ??_C@_0BA@MFIPFIDM@ForceFullScreen?$AA@ (`string')
+10F 00000000 SECT40 notype       Static       | .rdata
+    Section length    E, #relocs    0, #linenums    0, checksum 950DA140, selection    2 (pick any)
+111 00000000 SECT40 notype       External     | ??_C@_0O@LLEJCHHI@ForceWindowed?$AA@ (`string')
+112 00000000 SECT41 notype       Static       | .rdata
+    Section length    1, #relocs    0, #linenums    0, checksum        0, selection    2 (pick any)
+114 00000000 SECT41 notype       External     | ??_C@_00CNPNBAHC@?$AA@ (`string')
+115 00000000 SECT42 notype       Static       | .rdata
+    Section length    2, #relocs    0, #linenums    0, checksum C65D07B2, selection    2 (pick any)
+117 00000000 SECT42 notype       External     | ??_C@_01HIHLOKLC@1?$AA@ (`string')
+118 00000000 SECT43 notype       Static       | .rdata
+    Section length    2, #relocs    0, #linenums    0, checksum ED705471, selection    2 (pick any)
+11A 00000000 SECT43 notype       External     | ??_C@_01FDFGLJHB@2?$AA@ (`string')
+11B 00000000 SECT44 notype       Static       | .rdata
+    Section length    2, #relocs    0, #linenums    0, checksum F46B6530, selection    2 (pick any)
+11D 00000000 SECT44 notype       External     | ??_C@_01EKENIIDA@3?$AA@ (`string')
+11E 00000000 SECT45 notype       Static       | .rdata
+    Section length    2, #relocs    0, #linenums    0, checksum BB2AF3F7, selection    2 (pick any)
+120 00000000 SECT45 notype       External     | ??_C@_01FAMBOPH@4?$AA@ (`string')
+121 00000000 SECT46 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 7701F57D, selection    2 (pick any)
+123 00000000 SECT46 notype       External     | ??_C@_03KJLKNFJO@VF2?$AA@ (`string')
+124 00000000 SECT47 notype       Static       | .data$r
+    Section length   1E, #relocs    1, #linenums    0, checksum FD14C4E2, selection    2 (pick any)
+126 00000000 SECT47 notype       External     | ??_R0?AVldwEventHandler@@@8 (class ldwEventHandler `RTTI Type Descriptor')
+127 00000000 SECT48 notype       Static       | .rdata$r
+    Section length   10, #relocs    1, #linenums    0, checksum CCAA009E, selection    2 (pick any)
+129 00000000 SECT48 notype       External     | ??_R3ldwEventHandler@@8 (ldwEventHandler::`RTTI Class Hierarchy Descriptor')
+12A 00000000 SECT49 notype       Static       | .rdata$r
+    Section length    5, #relocs    1, #linenums    0, checksum        0, selection    2 (pick any)
+12C 00000000 SECT49 notype       External     | ??_R2ldwEventHandler@@8 (ldwEventHandler::`RTTI Base Class Array')
+12D 00000000 SECT4A notype       Static       | .rdata$r
+    Section length   1C, #relocs    2, #linenums    0, checksum 3AD97647, selection    2 (pick any)
+12F 00000000 SECT4A notype       External     | ??_R1A@?0A@EA@ldwEventHandler@@8 (ldwEventHandler::`RTTI Base Class Descriptor at (0,-1,0,64)')
+130 00000000 SECT4B notype       Static       | .rdata$r
+    Section length   14, #relocs    2, #linenums    0, checksum        0, selection    2 (pick any)
+132 00000000 SECT4B notype       External     | ??_R4theOptionsDialog@@6B@ (const theOptionsDialog::`RTTI Complete Object Locator')
+133 00000000 SECT4C notype       Static       | .data$r
+    Section length   1F, #relocs    1, #linenums    0, checksum 741F8FD5, selection    2 (pick any)
+135 00000000 SECT4C notype       External     | ??_R0?AVtheOptionsDialog@@@8 (class theOptionsDialog `RTTI Type Descriptor')
+136 00000000 SECT4D notype       Static       | .rdata$r
+    Section length   10, #relocs    1, #linenums    0, checksum 48E00E64, selection    2 (pick any)
+138 00000000 SECT4D notype       External     | ??_R3theOptionsDialog@@8 (theOptionsDialog::`RTTI Class Hierarchy Descriptor')
+139 00000000 SECT4E notype       Static       | .rdata$r
+    Section length   15, #relocs    5, #linenums    0, checksum        0, selection    2 (pick any)
+13B 00000000 SECT4E notype       External     | ??_R2theOptionsDialog@@8 (theOptionsDialog::`RTTI Base Class Array')
+13C 00000000 SECT4F notype       Static       | .rdata$r
+    Section length   1C, #relocs    2, #linenums    0, checksum 53DFE818, selection    2 (pick any)
+13E 00000000 SECT4F notype       External     | ??_R1A@?0A@EA@theOptionsDialog@@8 (theOptionsDialog::`RTTI Base Class Descriptor at (0,-1,0,64)')
+13F 00000000 SECT50 notype       Static       | .rdata$r
+    Section length   1C, #relocs    2, #linenums    0, checksum 62C7DF6F, selection    2 (pick any)
+141 00000000 SECT50 notype       External     | ??_R1A@?0A@EA@ldwTiledDialog@@8 (ldwTiledDialog::`RTTI Base Class Descriptor at (0,-1,0,64)')
+142 00000000 SECT51 notype       Static       | .data$r
+    Section length   1D, #relocs    1, #linenums    0, checksum 1481D2C2, selection    2 (pick any)
+144 00000000 SECT51 notype       External     | ??_R0?AVldwTiledDialog@@@8 (class ldwTiledDialog `RTTI Type Descriptor')
+145 00000000 SECT52 notype       Static       | .rdata$r
+    Section length   10, #relocs    1, #linenums    0, checksum 844A0EFA, selection    2 (pick any)
+147 00000000 SECT52 notype       External     | ??_R3ldwTiledDialog@@8 (ldwTiledDialog::`RTTI Class Hierarchy Descriptor')
+148 00000000 SECT53 notype       Static       | .rdata$r
+    Section length   11, #relocs    4, #linenums    0, checksum        0, selection    2 (pick any)
+14A 00000000 SECT53 notype       External     | ??_R2ldwTiledDialog@@8 (ldwTiledDialog::`RTTI Base Class Array')
+14B 00000000 SECT54 notype       Static       | .rdata$r
+    Section length   1C, #relocs    2, #linenums    0, checksum E3E2BA48, selection    2 (pick any)
+14D 00000000 SECT54 notype       External     | ??_R1A@?0A@EA@ldwDialog@@8 (ldwDialog::`RTTI Base Class Descriptor at (0,-1,0,64)')
+14E 00000000 SECT55 notype       Static       | .data$r
+    Section length   18, #relocs    1, #linenums    0, checksum 20D6C76B, selection    2 (pick any)
+150 00000000 SECT55 notype       External     | ??_R0?AVldwDialog@@@8 (class ldwDialog `RTTI Type Descriptor')
+151 00000000 SECT56 notype       Static       | .rdata$r
+    Section length   10, #relocs    1, #linenums    0, checksum 8E8F07E3, selection    2 (pick any)
+153 00000000 SECT56 notype       External     | ??_R3ldwDialog@@8 (ldwDialog::`RTTI Class Hierarchy Descriptor')
+154 00000000 SECT57 notype       Static       | .rdata$r
+    Section length    D, #relocs    3, #linenums    0, checksum        0, selection    2 (pick any)
+156 00000000 SECT57 notype       External     | ??_R2ldwDialog@@8 (ldwDialog::`RTTI Base Class Array')
+157 00000000 SECT58 notype       Static       | .rdata$r
+    Section length   1C, #relocs    2, #linenums    0, checksum BBFC1360, selection    2 (pick any)
+159 00000000 SECT58 notype       External     | ??_R1A@?0A@EA@ldwScene@@8 (ldwScene::`RTTI Base Class Descriptor at (0,-1,0,64)')
+15A 00000000 SECT59 notype       Static       | .data$r
+    Section length   17, #relocs    1, #linenums    0, checksum AE7E5FEE, selection    2 (pick any)
+15C 00000000 SECT59 notype       External     | ??_R0?AVldwScene@@@8 (class ldwScene `RTTI Type Descriptor')
+15D 00000000 SECT5A notype       Static       | .rdata$r
+    Section length   10, #relocs    1, #linenums    0, checksum 4225077D, selection    2 (pick any)
+15F 00000000 SECT5A notype       External     | ??_R3ldwScene@@8 (ldwScene::`RTTI Class Hierarchy Descriptor')
+160 00000000 SECT5B notype       Static       | .rdata$r
+    Section length    9, #relocs    2, #linenums    0, checksum        0, selection    2 (pick any)
+162 00000000 SECT5B notype       External     | ??_R2ldwScene@@8 (ldwScene::`RTTI Base Class Array')
+163 00000000 UNDEF  notype       External     | ??_7type_info@@6B@ (const type_info::`vftable')
+164 00000000 UNDEF  notype       External     | ___security_cookie
+165 00000000 UNDEF  notype       External     | __fltused
+166 00000000 SECT5C notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum AA458271, selection    2 (pick any)
+168 00000000 SECT5C notype       External     | __real@3a83126f
+169 00000000 SECT5D notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum CB9CAC57, selection    2 (pick any)
+16B 00000000 SECT5D notype       External     | __real@3b792fb2
+16C 00000000 SECT5E notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 4D3E507C, selection    2 (pick any)
+16E 00000000 SECT5E notype       External     | __real@3ca3d70a
+16F 00000000 SECT5F notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 8A0606F5, selection    2 (pick any)
+171 00000000 SECT5F notype       External     | __real@3e23d709
+172 00000000 SECT60 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum 1E4EC022, selection    2 (pick any)
+174 00000000 SECT60 notype       External     | __real@43838000
+175 00000000 SECT61 notype       Static       | .debug$S
+    Section length   38, #relocs    2, #linenums    0, checksum        0, selection    5 (pick associative Section 0x36)
+177 00000000 SECT62 notype       Static       | .chks64
+    Section length  310, #relocs    0, #linenums    0, checksum        0
+
+String Table Size = 0x1914 bytes
+
+  Summary
+
+          39 .bss
+         310 .chks64
+          54 .data
+          89 .data$r
+        A224 .debug$S
+          7C .debug$T
+          62 .drectve
+         18A .rdata
+         131 .rdata$r
+           C .sxdata
+        1586 .text$mn
+          EA .text$x
+          B4 .xdata$x

@@ -1,0 +1,14 @@
+/nologo
+/c
+/O2
+/FoC:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\
+"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\vf2_fmod_thunks.cpp"
+"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\vf2_debug_features.cpp"
+"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\vf2_generation_locks.cpp"
+"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\vf2_island_events.cpp"
+"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\vf2_plan_logger.cpp"
+"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\vf2_spontaneous_behaviors.cpp"
+"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\vf2_special_upgrade_effects.cpp"
+"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\vf2_store_scrollbar.cpp"
+"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\vf2_mobile_furniture_strings.c"
+"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\vf2_mobile_string_table.c"

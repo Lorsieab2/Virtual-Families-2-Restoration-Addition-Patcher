@@ -1,0 +1,4481 @@
+from pathlib import Path
+import csv
+import json
+import os
+import shutil
+import struct
+import sys
+from io import BytesIO
+from zipfile import ZipFile
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from coff_patch import CoffObject
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC_OBJS = ROOT / "work" / "desktop_obj_files"
+PATCHED = ROOT / "work" / "patched_mobile_furniture_pack_objs"
+OUT = Path(os.environ.get("VF2_PATCH_OUT", ROOT / "outputs" / "VF2-Mobile-Additive-Furniture-Pack"))
+ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "0") == "1"
+ANALYSIS = ROOT / "outputs" / "VF2-Desktop-Object-Analysis"
+if not (ANALYSIS / "furniture-records.json").exists():
+    ANALYSIS = ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis"
+
+ITEMINFO = "?itemInfo@@3PAUsFurnitureInfo@@A"
+ITEMLOOKUP = "?itemInfoLookup@@3PAPAUsFurnitureInfo@@A"
+IMAGELIST = "?ImageList@@3PAUImageDescriptor@@A"
+IMAGEINDEX = "?ImageIndex@@3PAPAUImageDescriptor@@A"
+STRINGTABLE = "?stringTable@@3PAUStringItem@@A"
+STRINGLOOKUP = "?lookupTable@@3PAPAUStringItem@@A"
+INVENTORY_ITEMINFO = "?itemInfo@@3PAUsInventoryItemInfo@@A"
+GSERVICESLIST = "?gServicesList@@3PAW4EInventoryItem@@A"
+GET_CATEGORY_ITEM = "?GetCategoryItem@CInventoryManager@@QAE?AW4EInventoryItem@@W4EInventoryCategory@@H@Z"
+GET_CATEGORY_ITEM_COUNT = "?GetCategoryItemCount@CInventoryManager@@QAEHW4EInventoryCategory@@@Z"
+IMAGE_REL_I386_REL32 = 0x0014
+
+RECORD_SIZE = 0x6C
+DESC_SIZE = 0x30
+STRING_RECORD_SIZE = 0x10
+ORIG_FURNITURE_COUNT = 252
+ORIG_IMAGE_COUNT = 637
+ORIG_IMAGE_MAX = 0x27C
+LOCKED_IMAGE_ID = 632
+LOCKED_GENERATION_FRAME_COUNT = 29
+LOCKED_GENERATION_CELL_WIDTH = 30
+LOCKED_GENERATION_CELL_HEIGHT = 46
+LOCKED_PNG_SOURCE = Path(r"C:\Users\Owner\Downloads\locked.png")
+VF3_SPRITE_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\Sprite")
+INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\Virtual Families 2 - Copy Official\Images\Furniture")
+HOLIDAY_OUTFIT_ARCHIVE = Path(r"C:\Users\Owner\Downloads\VF2_Holiday_Content\Holiday Outfits.zip")
+HOLIDAY_BODY_SET_IDS = (51, 52, 53, 54)
+HOLIDAY_BODY_FRAME_COUNT = 32
+HOLIDAY_BODY_CELL_SIZE = 91
+HOLIDAY_BODY_BASE_ROWS = 50
+LARGE_TV_ANIMATION_SHEETS = {
+    "Large": Path(r"C:\Users\Owner\Downloads\TVAnimBig.png"),
+    "LargeEast": Path(r"C:\Users\Owner\Downloads\TVAnimBigE.png"),
+}
+VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
+    0x117: "BrokerUpgrade_icon.png",
+    0x118: "FoodClub_icon.png",
+    0x119: "HealthPlan_icon.png",
+    0x11A: "LuckyRock_icon.png",
+}
+CHARACTER_SHEET_SPECS = {
+    "female_heads": {
+        "image_id": 576,
+        "probe_file": "female_heads00.png",
+        "cell_size": (28, 56),
+        "original_grid": (24, 50),
+    },
+    "female_bodies00.png": {
+        "image_id": 577,
+        "probe_file": "female_bodies00.png",
+        "cell_size": (91, 91),
+        "original_grid": (32, 50),
+    },
+    "male_heads": {
+        "image_id": 580,
+        "probe_file": "male_heads00.png",
+        "cell_size": (28, 56),
+        "original_grid": (24, 50),
+    },
+    "male_bodies00.png": {
+        "image_id": 581,
+        "probe_file": "male_bodies00.png",
+        "cell_size": (91, 91),
+        "original_grid": (32, 50),
+    },
+    "highrez_bodies_final2.png": {
+        "image_id": 22,
+        "probe_file": "highrez_bodies_final2.png",
+        "cell_size": (164, 164),
+        "original_grid": (2, 50),
+    },
+}
+ORIG_STRING_COUNT = 0xA5D
+ORIG_STRING_ONE_PAST_MAX = 0xA69
+ORIG_STRING_GET_MAX_MINUS_ONE = 0xA67
+ORIG_STRING_LOOKUP_BYTES = 0x29A4
+SPECIAL_UPGRADE_DESCRIPTION_COUNT = 4
+BEHAVIOR_LABELS = [
+    ("eString_PlayingPachinko", "Playing pachinko"),
+    ("eString_PlayingPinball", "Playing pinball"),
+]
+
+MOBILE_CSV = Path(
+    r"C:\Users\Owner\Documents\Codex\2026-06-01\virtual-families-2-has-a-lot\outputs\mobile-port-analysis\vf2_desktop_base_and_mobile_furniture_sections.csv"
+)
+MOBILE_EVENT_TEXT_PACK = Path(
+    r"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\mobile_only_event_text_pack.csv"
+)
+MOBILE_EVENT_MAPPING_CSV = Path(
+    r"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\mobile_event_shell_mapping.csv"
+)
+
+SECTION_LIST = {
+    "Accessory/Small Decor": "gAccessories",
+    "Welcome Mat/Floor Decor": "gAccessories",
+    "Furniture/Placeable": "gFurniture5",
+    "Outdoor Ground/Patio": "gFurniture5",
+}
+
+CATEGORY_BY_PATH = {
+    "Furniture/ChristmasTree1.png": "gAccessories",
+    "Furniture/ChristmasTree2.png": "gAccessories",
+    "Furniture/TowelRackBathroomBrownStd.png": "gAccessories",
+    "Furniture/TowelRackBathroomPinkStd.png": "gAccessories",
+}
+
+DONOR_BY_PATH = {
+    "Furniture/Chaise_blue.png": 0x26E,
+    "Furniture/Chaise_brown.png": 0x26F,
+    "Furniture/Chaise_green.png": 0x270,
+    "Furniture/Chaise_red.png": 0x272,
+    "Furniture/Patio_brick.png": 0x29A,
+    "Furniture/Patio_cobblestone.png": 0x29B,
+    "Furniture/Patio_table.png": 0x1D8,
+    "Furniture/Patio_umbrella.png": 0x233,
+    "Furniture/Picnic_table.png": 0x1D8,
+    "Furniture/WelcomeMat.png": 0x21D,
+    "Furniture/TowelRackBathroomBrownStd.png": 0x1EF,
+    "Furniture/TowelRackBathroomPinkStd.png": 0x1EF,
+    "Furniture/SoapBlackStd.png": 0x1EB,
+    "Furniture/SoapGreenStd.png": 0x1EB,
+    "Furniture/Lamp_office_black.png": 0x203,
+    "Furniture/Lamp_office_chrome.png": 0x203,
+}
+
+DESCRIPTION_OVERRIDES_BY_PATH = {
+    "Furniture/SoapBlackStd.png": {
+        "short_description": "Black Designer Soap",
+        "long_description": "Fancy, miniature black soap bars with an attractive soap dish. Helps your family stay clean while adding a decorative touch to their bathroom.",
+    },
+    "Furniture/SoapGreenStd.png": {
+        "short_description": "Green Designer Soap",
+        "long_description": "Fancy, miniature green soap bars with an attractive soap dish. Helps your family stay clean while adding a decorative touch to their bathroom.",
+    },
+    "Furniture/TowelRackBathroomBrownStd.png": {
+        "short_description": "Brown Towel Set",
+        "long_description": "A deluxe set of color-coordinated brown towels, complete with towel heater.",
+    },
+    "Furniture/TowelRackBathroomPinkStd.png": {
+        "short_description": "Pink Towel Set",
+        "long_description": "A deluxe set of color-coordinated pink towels, complete with towel heater.",
+    },
+    "Furniture/Patio_cobblestone.png": {
+        "long_description": "Give your family a stylish outdoor area for barbecues, picnics, or just relaxing outside!",
+    },
+}
+
+CUSTOM_ITEMS = [
+    {
+        "name": "LDWModernPainting4",
+        "item_id": 0x2E9,
+        "donor": 0x230,
+        "list": "gAccessories",
+        "price": 2795,
+        "lock_generation": 30,
+        "item_type": 5,
+        "short_symbol": "eString_LDWModernPainting4ShortDesc",
+        "long_symbol": "eString_LDWModernPainting4LongDesc",
+        "short_description": "Virtual Villagers Painting",
+        "long_description": "A landscape painting depicting one of many island adventures on Isola!",
+    },
+    {
+        "name": "LDWModernPainting5",
+        "item_id": 0x2EA,
+        "donor": 0x231,
+        "list": "gAccessories",
+        "price": 12995,
+        "lock_generation": 30,
+        "item_type": 5,
+        "short_symbol": "eString_LDWModernPainting5ShortDesc",
+        "long_symbol": "eString_LDWModernPainting5LongDesc",
+        "short_description": "Painting of Isola",
+        "long_description": "A lovingly-painted rendition of the fabled island of Isola.",
+    },
+    {
+        "name": "LDWPoster1Std",
+        "item_id": 0x2EB,
+        "donor": 0x20D,
+        "list": "gFurniture4",
+        "price": 35,
+        "lock_generation": 25,
+        "item_type": 5,
+        "short_symbol": "eString_LDWPoster1StdShortDesc",
+        "long_symbol": "eString_LDWPoster1StdLongDesc",
+        "short_description": "Last Day of Work Poster",
+        "long_description": "Show your love for LDW games with this poster!",
+    },
+    {
+        "name": "LDWPoster2Std",
+        "item_id": 0x2EC,
+        "donor": 0x20E,
+        "list": "gFurniture4",
+        "price": 35,
+        "lock_generation": 25,
+        "item_type": 5,
+        "short_symbol": "eString_LDWPoster2StdShortDesc",
+        "long_symbol": "eString_LDWPoster2StdLongDesc",
+        "short_description": "Casino Game Posters and Wall Calendar",
+        "long_description": "Dedicated to only the most longtime Palm OS fans!",
+    },
+    {
+        "name": "LDWPoster3Std",
+        "item_id": 0x2ED,
+        "donor": 0x20F,
+        "list": "gFurniture4",
+        "price": 55,
+        "lock_generation": 25,
+        "item_type": 5,
+        "short_symbol": "eString_LDWPoster3StdShortDesc",
+        "long_symbol": "eString_LDWPoster3StdLongDesc",
+        "short_description": "Virtual Families and Tycoon Games Posters",
+        "long_description": "For the love of family, friends, fish and plants!",
+    },
+    {
+        "name": "LDWPoster4Std",
+        "item_id": 0x2EE,
+        "donor": 0x210,
+        "list": "gFurniture4",
+        "price": 75,
+        "lock_generation": 25,
+        "item_type": 5,
+        "short_symbol": "eString_LDWPoster4StdShortDesc",
+        "long_symbol": "eString_LDWPoster4StdLongDesc",
+        "short_description": "Virtual Town and Cook Off Posters",
+        "long_description": "For LDW fans both old and new!",
+    },
+    {
+        "name": "CouchNeonPurpleStd",
+        "item_id": 0x2EF,
+        "donor": 0x1BD,
+        "list": "gFurniture2",
+        "price": 750,
+        "lock_generation": 19,
+        "item_type": 5,
+        "short_symbol": "eString_CouchNeonPurpleStdShortDesc",
+        "long_symbol": "eString_CouchNeonPurpleStdLongDesc",
+        "short_description": "Vibrant Purple Couch",
+        "long_description": "A neon-purple couch!",
+    },
+    {
+        "name": "CouchBrownColorfulStd",
+        "item_id": 0x2F0,
+        "donor": 0x1BE,
+        "list": "gFurniture2",
+        "price": 700,
+        "lock_generation": 17,
+        "item_type": 5,
+        "short_symbol": "eString_CouchBrownColorfulStdShortDesc",
+        "long_symbol": "eString_CouchBrownColorfulStdLongDesc",
+        "short_description": "Vibrant Brown Couch",
+        "long_description": "A classic brown couch.",
+    },
+    {
+        "name": "CouchGoldColorfulStd",
+        "item_id": 0x2F1,
+        "donor": 0x1BF,
+        "list": "gFurniture2",
+        "price": 1800,
+        "lock_generation": 17,
+        "item_type": 5,
+        "short_symbol": "eString_CouchGoldColorfulStdShortDesc",
+        "long_symbol": "eString_CouchGoldColorfulStdLongDesc",
+        "short_description": "Vibrant Gold Couch",
+        "long_description": "A vibrant gold couch to lounge on.",
+    },
+    {
+        "name": "CouchAquaStd",
+        "item_id": 0x2F2,
+        "donor": 0x1C3,
+        "list": "gFurniture2",
+        "price": 750,
+        "lock_generation": 19,
+        "item_type": 5,
+        "short_symbol": "eString_CouchAquaStdShortDesc",
+        "long_symbol": "eString_CouchAquaStdLongDesc",
+        "short_description": "Vibrant Aqua Couch",
+        "long_description": "A sea-blue couch to relax on!",
+    },
+    {
+        "name": "CouchPinkColorfulStd",
+        "item_id": 0x2F3,
+        "donor": 0x1C2,
+        "list": "gFurniture2",
+        "price": 750,
+        "lock_generation": 19,
+        "item_type": 5,
+        "short_symbol": "eString_CouchPinkColorfulStdShortDesc",
+        "long_symbol": "eString_CouchPinkColorfulStdLongDesc",
+        "short_description": "Vibrant Pink Couch",
+        "long_description": "A blush-pink couch!",
+    },
+    {
+        "name": "CouchVioletStd",
+        "item_id": 0x2F4,
+        "donor": 0x1C4,
+        "list": "gFurniture2",
+        "price": 900,
+        "lock_generation": 17,
+        "item_type": 5,
+        "short_symbol": "eString_CouchVioletStdShortDesc",
+        "long_symbol": "eString_CouchVioletStdLongDesc",
+        "short_description": "Vibrant Violet Couch",
+        "long_description": "A comfy violet couch to rest on.",
+    },
+    {
+        "name": "CouchLimeGreenStd",
+        "item_id": 0x2F5,
+        "donor": 0x1C5,
+        "list": "gFurniture2",
+        "price": 750,
+        "lock_generation": 17,
+        "item_type": 5,
+        "short_symbol": "eString_CouchLimeGreenStdShortDesc",
+        "long_symbol": "eString_CouchLimeGreenStdLongDesc",
+        "short_description": "Vibrant Lime Couch",
+        "long_description": "A fluorescent green couch to light up the room!",
+    },
+]
+
+VF3_CUSTOM_ITEMS = [
+    {
+        "name": "AntiqueRadioStd",
+        "item_id": 0x2F6,
+        "donor": 0x256,
+        "list": "gFurniture4",
+        "price": 450,
+        "lock_generation": 12,
+        "item_type": 5,
+        "short_description": "Antique Radio",
+        "long_description": "A handsome vintage radio from Virtual Families 3, adapted as a decorative furniture piece.",
+    },
+    {
+        "name": "AqauriumStd",
+        "item_id": 0x2F7,
+        "donor": 0x256,
+        "list": "gAccessories",
+        "price": 950,
+        "lock_generation": 14,
+        "item_type": 5,
+        "short_description": "Aquarium",
+        "long_description": "A lively aquarium from Virtual Families 3, brought over as a decorative display item.",
+    },
+    {
+        "name": "BallonsStd",
+        "item_id": 0x2F8,
+        "donor": 0x256,
+        "list": "gAccessories",
+        "price": 125,
+        "lock_generation": 6,
+        "item_type": 5,
+        "short_description": "Party Balloons",
+        "long_description": "A cheerful bunch of balloons from Virtual Families 3 for brightening up the house.",
+    },
+    {
+        "name": "BookshelfBlue",
+        "item_id": 0x2F9,
+        "donor": 0x256,
+        "list": "gFurniture4",
+        "price": 725,
+        "lock_generation": 9,
+        "item_type": 5,
+        "short_description": "Blue Bookshelf",
+        "long_description": "A blue bookshelf from Virtual Families 3, adapted as decorative study furniture.",
+    },
+    {
+        "name": "BBQSmallStd",
+        "item_id": 0x2FA,
+        "donor": 0x256,
+        "list": "gFurniture5",
+        "price": 750,
+        "lock_generation": 10,
+        "item_type": 5,
+        "short_description": "Small BBQ",
+        "long_description": "A compact backyard barbecue from Virtual Families 3.",
+    },
+    {
+        "name": "BBQUltimateStd",
+        "item_id": 0x2FB,
+        "donor": 0x256,
+        "list": "gFurniture5",
+        "price": 1750,
+        "lock_generation": 18,
+        "item_type": 5,
+        "short_description": "Ultimate BBQ",
+        "long_description": "A deluxe outdoor grill from Virtual Families 3 for serious patio style.",
+    },
+    {
+        "name": "BedAdultBrownStd",
+        "item_id": 0x2FC,
+        "donor": 0x256,
+        "list": "gFurniture3",
+        "price": 1295,
+        "lock_generation": 12,
+        "item_type": 5,
+        "short_description": "Brown Adult Bed",
+        "long_description": "A brown adult bed from Virtual Families 3, imported as decorative bedroom furniture.",
+    },
+    {
+        "name": "BedAdultGreenStd",
+        "item_id": 0x2FD,
+        "donor": 0x256,
+        "list": "gFurniture3",
+        "price": 1295,
+        "lock_generation": 12,
+        "item_type": 5,
+        "short_description": "Green Adult Bed",
+        "long_description": "A green adult bed from Virtual Families 3, imported as decorative bedroom furniture.",
+    },
+    {
+        "name": "BedAdultOrangeStd",
+        "item_id": 0x2FE,
+        "donor": 0x256,
+        "list": "gFurniture3",
+        "price": 1295,
+        "lock_generation": 12,
+        "item_type": 5,
+        "short_description": "Orange Adult Bed",
+        "long_description": "An orange adult bed from Virtual Families 3, imported as decorative bedroom furniture.",
+    },
+    {
+        "name": "BedAdultRedStd",
+        "item_id": 0x2FF,
+        "donor": 0x256,
+        "list": "gFurniture3",
+        "price": 1295,
+        "lock_generation": 12,
+        "item_type": 5,
+        "short_description": "Red Adult Bed",
+        "long_description": "A red adult bed from Virtual Families 3, imported as decorative bedroom furniture.",
+    },
+    {
+        "name": "BedBoatStd",
+        "item_id": 0x300,
+        "donor": 0x256,
+        "list": "gFurniture3",
+        "price": 1095,
+        "lock_generation": 10,
+        "item_type": 5,
+        "short_description": "Boat Bed",
+        "long_description": "A playful boat-shaped bed from Virtual Families 3, imported as decorative furniture.",
+    },
+    {
+        "name": "BedCarRedStd",
+        "item_id": 0x301,
+        "donor": 0x256,
+        "list": "gFurniture3",
+        "price": 1095,
+        "lock_generation": 10,
+        "item_type": 5,
+        "short_description": "Red Car Bed",
+        "long_description": "A red car bed from Virtual Families 3, imported as decorative furniture.",
+    },
+    {
+        "name": "BedKidsBlueStd",
+        "item_id": 0x302,
+        "donor": 0x256,
+        "list": "gFurniture3",
+        "price": 895,
+        "lock_generation": 8,
+        "item_type": 5,
+        "short_description": "Blue Kids Bed",
+        "long_description": "A blue children's bed from Virtual Families 3, adapted for this furniture pack.",
+    },
+    {
+        "name": "BedKidsPinkStd",
+        "item_id": 0x303,
+        "donor": 0x256,
+        "list": "gFurniture3",
+        "price": 895,
+        "lock_generation": 8,
+        "item_type": 5,
+        "short_description": "Pink Kids Bed",
+        "long_description": "A pink children's bed from Virtual Families 3, adapted for this furniture pack.",
+    },
+    {
+        "name": "BigPosterBarbies",
+        "item_id": 0x304,
+        "donor": 0x230,
+        "list": "gFurniture2",
+        "price": 225,
+        "lock_generation": 7,
+        "item_type": 5,
+        "short_description": "Big Barbie Poster",
+        "long_description": "A large Virtual Families 3 wall poster with a bright toy-inspired design.",
+    },
+    {
+        "name": "BigPosterCatsAndDogs",
+        "item_id": 0x305,
+        "donor": 0x230,
+        "list": "gFurniture2",
+        "price": 225,
+        "lock_generation": 7,
+        "item_type": 5,
+        "short_description": "Big Cats and Dogs Poster",
+        "long_description": "A large Virtual Families 3 poster celebrating cats and dogs.",
+    },
+    {
+        "name": "BigPosterDinosaurs",
+        "item_id": 0x306,
+        "donor": 0x230,
+        "list": "gFurniture2",
+        "price": 225,
+        "lock_generation": 7,
+        "item_type": 5,
+        "short_description": "Big Dinosaur Poster",
+        "long_description": "A large Virtual Families 3 dinosaur poster for a playful wall display.",
+    },
+    {
+        "name": "BigPosterFish",
+        "item_id": 0x307,
+        "donor": 0x230,
+        "list": "gFurniture2",
+        "price": 225,
+        "lock_generation": 7,
+        "item_type": 5,
+        "short_description": "Big Fish Poster",
+        "long_description": "A large Virtual Families 3 fish poster for a cheerful wall display.",
+    },
+    {
+        "name": "BigPosterHearts",
+        "item_id": 0x308,
+        "donor": 0x230,
+        "list": "gFurniture2",
+        "price": 225,
+        "lock_generation": 7,
+        "item_type": 5,
+        "short_description": "Big Hearts Poster",
+        "long_description": "A large Virtual Families 3 hearts poster with a sweet decorative look.",
+    },
+    {
+        "name": "BookCaseBirchStd",
+        "item_id": 0x309,
+        "donor": 0x256,
+        "list": "gFurniture4",
+        "price": 850,
+        "lock_generation": 11,
+        "item_type": 5,
+        "short_description": "Birch Bookcase",
+        "long_description": "A full birch bookcase from Virtual Families 3, adapted as decorative study furniture.",
+    },
+]
+
+VF3_CUSTOM_ITEMS = []
+
+VF3_LIVING_ROOM_BATCH_02_ITEMS = [
+    {
+        "name": "SofaPlaid",
+        "item_id": 0x2F6,
+        "donor": 0x1BE,
+        "list": "gFurniture2",
+        "price": 725,
+        "lock_generation": 12,
+        "item_type": 4,
+        "short_description": "Plaid Loveseat",
+        "long_description": "A cozy plaid loveseat from Virtual Families 3, imported for the living room.",
+    },
+    {
+        "name": "CouchPlaid",
+        "item_id": 0x2F7,
+        "donor": 0x1BE,
+        "list": "gFurniture2",
+        "price": 950,
+        "lock_generation": 13,
+        "item_type": 4,
+        "short_description": "Plaid Couch",
+        "long_description": "A comfortable plaid couch from Virtual Families 3.",
+    },
+    {
+        "name": "CouchFlowers",
+        "item_id": 0x2F8,
+        "donor": 0x1BF,
+        "list": "gFurniture2",
+        "price": 1250,
+        "lock_generation": 14,
+        "item_type": 4,
+        "short_description": "Flowered Couch",
+        "long_description": "A cheerful flowered couch from Virtual Families 3.",
+    },
+    {
+        "name": "CouchStriped",
+        "item_id": 0x2F9,
+        "donor": 0x1C3,
+        "list": "gFurniture2",
+        "price": 1050,
+        "lock_generation": 14,
+        "item_type": 4,
+        "short_description": "Striped Couch",
+        "long_description": "A striped couch from Virtual Families 3 with a relaxed living-room look.",
+    },
+    {
+        "name": "SofaStriped",
+        "item_id": 0x2FA,
+        "donor": 0x1C3,
+        "list": "gFurniture2",
+        "price": 725,
+        "lock_generation": 13,
+        "item_type": 4,
+        "short_description": "Striped Loveseat",
+        "long_description": "A striped loveseat from Virtual Families 3.",
+    },
+    {
+        "name": "FloweredLoveseat",
+        "item_id": 0x2FB,
+        "donor": 0x1C3,
+        "list": "gFurniture2",
+        "price": 825,
+        "lock_generation": 14,
+        "item_type": 4,
+        "short_description": "Flowered Loveseat",
+        "long_description": "A flowered loveseat from Virtual Families 3.",
+    },
+]
+
+INVISIBLE_OUTDOOR_ITEMS = [
+    {
+        "name": "InvisibleKiddiePool",
+        "item_id": 0x30A,
+        "donor": 0x1E4,
+        "list": "gFurniture5",
+        "price": 250,
+        "lock_generation": 12,
+        "item_type": 1,
+        "short_description": "Invisible Kiddie Pool",
+        "long_description": "An invisible kiddie pool for decorating purposes.",
+        "source_png": "PoolChildrensStd.png",
+        "base_png": "PoolChildrensStd.png",
+        "donor_fmap": "PoolChildrensStd.png.fmap",
+    },
+    {
+        "name": "InvisibleFullSizePool",
+        "item_id": 0x30B,
+        "donor": 0x1E5,
+        "list": "gFurniture5",
+        "price": 14150,
+        "lock_generation": 12,
+        "item_type": 1,
+        "short_description": "Invisible Full-Size Pool",
+        "long_description": "An invisible Olympic-sized pool for decorating purposes.",
+        "source_png": "PoolLargeStd.png",
+        "base_png": "PoolLargeStd.png",
+        "donor_fmap": "PoolLargeStd.png.fmap",
+    },
+    {
+        "name": "InvisibleHammock",
+        "item_id": 0x30C,
+        "donor": 0x1E1,
+        "list": "gFurniture5",
+        "price": 450,
+        "lock_generation": 12,
+        "item_type": 5,
+        "short_description": "Invisible Hammock",
+        "long_description": "An invisible hammock for decorating purposes.",
+        "source_png": "HammockStd1.png",
+        "base_png": "HammockStd.png",
+        "donor_fmap": "HammockStd.png.fmap",
+    },
+]
+
+INVISIBLE_TRANSPARENT_BASE_ITEMS = [
+    {
+        "name": "InvisibleThreeSeaterCouch",
+        "item_id": 0x30D,
+        "donor": 0x1C2,
+        "list": "gFurniture2",
+        "price": 45,
+        "short_description": "Invisible 3-Seater Couch",
+        "long_description": "An invisible 3-seater couch for decorating purposes.",
+        "source_png": "CouchTrashedBeigeStd.png",
+        "donor_fmap": "CouchTrashedBeigeStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 4,
+    },
+    {
+        "name": "InvisibleTwoSeaterLoveseat",
+        "item_id": 0x30E,
+        "donor": 0x1D6,
+        "list": "gFurniture2",
+        "price": 99,
+        "short_description": "Invisible 2-Seater Loveseat",
+        "long_description": "An invisible 2-seater loveseat for decorating purposes.",
+        "source_png": "SofaWornWhiteStd.png",
+        "donor_fmap": "SofaWornWhiteStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 4,
+    },
+    {
+        "name": "InvisibleSingleCouch",
+        "item_id": 0x30F,
+        "donor": 0x273,
+        "list": "gFurniture2",
+        "price": 1415,
+        "short_description": "Invisible Single Couch",
+        "long_description": "An invisible single couch for decorating purposes.",
+        "source_png": "SofaBlue.png",
+        "donor_fmap": "SofaBlue.png.fmap",
+        "item_type": 5,
+        "frame_count": 4,
+    },
+    {
+        "name": "InvisibleBeanbagChair",
+        "item_id": 0x310,
+        "donor": 0x1FA,
+        "list": "gFurniture2",
+        "price": 250,
+        "short_description": "Invisible Beanbag Chair",
+        "long_description": "An invisible beanbag chair for decorating purposes.",
+        "source_png": "ChairBeanbagBlueStd.png",
+        "donor_fmap": "ChairBeanbagBlueStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleLargeBookshelf",
+        "item_id": 0x311,
+        "donor": 0x1F8,
+        "list": "gFurniture2",
+        "price": 2450,
+        "short_description": "Invisible Large Bookshelf",
+        "long_description": "An invisible large bookshelf for decorating purposes.",
+        "source_png": "BookCaseBirchStd.png",
+        "donor_fmap": "BookCaseBirchStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleThinBookshelf",
+        "item_id": 0x312,
+        "donor": 0x1F7,
+        "list": "gFurniture2",
+        "price": 450,
+        "short_description": "Invisible Thin Bookshelf",
+        "long_description": "An invisible thin bookshelf for decorating purposes.",
+        "source_png": "BookCaseBirchSmStd.png",
+        "donor_fmap": "BookCaseBirchSmStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleSmallSquareBookshelf",
+        "item_id": 0x313,
+        "donor": 0x253,
+        "list": "gFurniture2",
+        "price": 1250,
+        "short_description": "Invisible Small Square Bookshelf",
+        "long_description": "An invisible small square bookshelf for decorating purposes.",
+        "source_png": "LowerBookshelf.png",
+        "donor_fmap": "LowerBookshelf.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleAdultDoubleBed",
+        "item_id": 0x314,
+        "donor": 0x1B7,
+        "list": "gFurniture4",
+        "price": 850,
+        "short_description": "Invisible Adult Double Bed",
+        "long_description": "An invisible adult double bed for decorating purposes.",
+        "source_png": "BedAdultBrownStd.png",
+        "donor_fmap": "BedAdultBrownStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleChildSingleBed",
+        "item_id": 0x315,
+        "donor": 0x1B5,
+        "list": "gFurniture4",
+        "price": 550,
+        "short_description": "Invisible Child Single Bed",
+        "long_description": "An invisible child single bed for decorating purposes.",
+        "source_png": "BedKidsBlueStd.png",
+        "donor_fmap": "BedKidsBlueStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleDoubleBed",
+        "item_id": 0x316,
+        "donor": 0x264,
+        "list": "gFurniture4",
+        "price": 3875,
+        "short_description": "Invisible Double Bed",
+        "long_description": "An invisible double bed for decorating purposes.",
+        "source_png": "DoubleBedCheckeredDuvetBlue.png",
+        "donor_fmap": "DoubleBedCheckeredDuvetBlue.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleSingleBed",
+        "item_id": 0x317,
+        "donor": 0x250,
+        "list": "gFurniture4",
+        "price": 2195,
+        "short_description": "Invisible Single Bed",
+        "long_description": "An invisible single bed for decorating purposes.",
+        "source_png": "Gothic_SingleBedBlue.png",
+        "donor_fmap": "Gothic_SingleBedBlue.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleMantleFireplace",
+        "item_id": 0x318,
+        "donor": 0x201,
+        "list": "gAccessories",
+        "price": 9150,
+        "short_description": "Invisible Mantle Fireplace",
+        "long_description": "Click the fireplace to turn the fire on or off.",
+        "source_png": "FirePlaceRusticStd.png",
+        "donor_fmap": "FirePlaceRusticStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleMP3Player",
+        "item_id": 0x319,
+        "donor": 0x207,
+        "list": "gAccessories",
+        "price": 350,
+        "short_description": "Invisible MP3 Player",
+        "long_description": "An invisible MP3 player for decorating purposes.",
+        "source_png": "IpodSpeakersStd.png",
+        "donor_fmap": "IpodSpeakersStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleSandbox",
+        "item_id": 0x31A,
+        "donor": 0x235,
+        "list": "gFurniture5",
+        "price": 695,
+        "short_description": "Invisible Sandbox",
+        "long_description": "An invisible sandbox for decorating purposes.",
+        "source_png": "Sandbox.png",
+        "donor_fmap": "Sandbox.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisiblePlayhouse",
+        "item_id": 0x31B,
+        "donor": 0x1E3,
+        "list": "gFurniture5",
+        "price": 18000,
+        "short_description": "Invisible Playhouse",
+        "long_description": "An invisible playhouse for decorating purposes.",
+        "source_png": "PlayStructureStd.png",
+        "donor_fmap": "PlayStructureStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleTrainTable",
+        "item_id": 0x31C,
+        "donor": 0x239,
+        "list": "gFurniture5",
+        "price": 950,
+        "short_description": "Invisible Train Table",
+        "long_description": "An invisible train table for decorating purposes.",
+        "source_png": "TrainTableForKids.png",
+        "donor_fmap": "TrainTableForKids.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleBathroomScale",
+        "item_id": 0x31D,
+        "donor": 0x1EA,
+        "list": "gAccessories",
+        "price": 130,
+        "short_description": "Invisible Bathroom Scale",
+        "long_description": "An invisible bathroom scale for decorating purposes.",
+        "source_png": "ScaleBathroomStd.png",
+        "donor_fmap": "ScaleBathroomStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleDryingRack",
+        "item_id": 0x31E,
+        "donor": 0x1CF,
+        "list": "gAccessories",
+        "price": 80,
+        "short_description": "Invisible Drying Rack",
+        "long_description": "An invisible drying rack for decorating purposes.",
+        "source_png": "LaundryDryingRackStd.png",
+        "donor_fmap": "LaundryDryingRackStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleGrandfatherClock",
+        "item_id": 0x31F,
+        "donor": 0x205,
+        "list": "gAccessories",
+        "price": 8500,
+        "short_description": "Invisible Grandfather Clock",
+        "long_description": "Click the clock to make it chime.",
+        "source_png": "GrandfatherClockStd.png",
+        "donor_fmap": "GrandfatherClockStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleDresser",
+        "item_id": 0x320,
+        "donor": 0x1CA,
+        "list": "gFurniture4",
+        "price": 250,
+        "short_description": "Invisible Dresser",
+        "long_description": "An invisible dresser for decorating purposes.",
+        "source_png": "DresserStd1.png",
+        "donor_fmap": "DresserStd1.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleKidsTableAndChairs",
+        "item_id": 0x321,
+        "donor": 0x1CE,
+        "list": "gFurniture3",
+        "price": 950,
+        "short_description": "Invisible Kids Table with Chairs",
+        "long_description": "An invisible kids table with chairs for decorating purposes.",
+        "source_png": "KidsTableAndChairsStd.png",
+        "donor_fmap": "KidsTableAndChairsStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleIroningBoard",
+        "item_id": 0x322,
+        "donor": 0x1CD,
+        "list": "gAccessories",
+        "price": 250,
+        "short_description": "Invisible Ironing Board",
+        "long_description": "An invisible ironing board for decorating purposes.",
+        "source_png": "IroningBoardStd.png",
+        "donor_fmap": "IroningBoardStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleTrampoline",
+        "item_id": 0x323,
+        "donor": 0x263,
+        "list": "gFurniture5",
+        "price": 2695,
+        "short_description": "Invisible Trampoline",
+        "long_description": "An invisible trampoline for decorating purposes.",
+        "source_png": "Trampoline.png",
+        "donor_fmap": "Trampoline.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+]
+
+# Appended after the established B19 catalog so existing item ids and saves
+# remain untouched.
+VF3_TV_ITEMS = [
+    {
+        "name": "VF3LargeFlatScreenTV",
+        "item_id": 0x324,
+        "donor": 0x1F3,
+        "list": "gAccessories",
+        "price": 6500,
+        "lock_generation": 12,
+        "item_type": 5,
+        "short_description": "Large Flat Screen TV",
+        "long_description": "A large flat screen TV from Virtual Families 3.",
+        "source_png": "FlatScreenLrg.png",
+    },
+    {
+        "name": "VF3SmallFlatScreenTV",
+        "item_id": 0x325,
+        "donor": 0x1F3,
+        "list": "gAccessories",
+        "price": 4250,
+        "lock_generation": 12,
+        "item_type": 5,
+        "short_description": "Small Flat Screen TV",
+        "long_description": "A small flat screen TV from Virtual Families 3.",
+        "source_png": "FlatScreenSmall.png",
+    },
+]
+
+COUCH_FMAP_DONORS = {
+    "CouchNeonPurpleStd.png.fmap": "CouchBeigeStd.png.fmap",
+    "CouchBrownColorfulStd.png.fmap": "CouchBrownStd.png.fmap",
+    "CouchGoldColorfulStd.png.fmap": "CouchGoldStd.png.fmap",
+    "CouchAquaStd.png.fmap": "CouchLightlyWornBeigeStd.png.fmap",
+    "CouchPinkColorfulStd.png.fmap": "CouchTrashedBeigeStd.png.fmap",
+    "CouchVioletStd.png.fmap": "CouchWornLandlordGreenStd.png.fmap",
+    "CouchLimeGreenStd.png.fmap": "CouchWornSteelBlueStd.png.fmap",
+    "SofaPlaid.png.fmap": "SofaWhiteStd.png.fmap",
+    "CouchPlaid.png.fmap": "CouchBrownStd.png.fmap",
+    "CouchFlowers.png.fmap": "CouchGoldStd.png.fmap",
+    "CouchStriped.png.fmap": "CouchLightlyWornBeigeStd.png.fmap",
+    "SofaStriped.png.fmap": "SofaWhiteStd.png.fmap",
+    "FloweredLoveseat.png.fmap": "SofaWhiteStd.png.fmap",
+}
+INVISIBLE_OUTDOOR_FMAP_DONORS = {
+    f"{item['name']}.png.fmap": item["donor_fmap"]
+    for item in INVISIBLE_OUTDOOR_ITEMS
+}
+INVISIBLE_TRANSPARENT_FMAP_DONORS = {
+    f"{item['name']}.png.fmap": item["donor_fmap"]
+    for item in INVISIBLE_TRANSPARENT_BASE_ITEMS
+}
+INVISIBLE_TRANSPARENT_GRAPHIC_OVERRIDES = {
+    "InvisibleMantleFireplace": Path(r"C:\Users\Owner\Downloads\Virtual Families 2 - Copy Official\Images\Furniture\FirePlaceRusticStd.png"),
+    "InvisibleGrandfatherClock": Path(r"C:\Users\Owner\Downloads\Virtual Families 2 - Copy Official\Images\Furniture\GrandfatherClockStd.png"),
+}
+VF3_TV_FMAP_DONORS = {
+    "VF3LargeFlatScreenTV.png.fmap": "TVFlatScreenStd.png.fmap",
+    "VF3SmallFlatScreenTV.png.fmap": "TVFlatScreenStd.png.fmap",
+}
+EXPLICIT_FRAME_COUNTS_BY_PATH = {
+    f"Furniture/{item['name']}.png": item["frame_count"]
+    for item in INVISIBLE_TRANSPARENT_BASE_ITEMS
+}
+
+VF3_FOUR_FRAME_FURNITURE = {
+    f"Furniture/{item['name']}.png"
+    for item in VF3_LIVING_ROOM_BATCH_02_ITEMS
+}
+VF3_SPRITE_STRIP_SOURCES = {
+    "Furniture/SofaPlaid.png": ("SofaPlaid.png", "SofaPlaid - back.png"),
+    "Furniture/CouchPlaid.png": ("CouchPlaid.png", "CouchPlaid - back.png"),
+    "Furniture/CouchFlowers.png": ("CouchFlowers.png", "CouchFlowers - back.png"),
+    "Furniture/CouchStriped.png": ("CouchStriped.png", "CouchStriped - back.png"),
+    "Furniture/SofaStriped.png": ("SofaStriped.png", "SofaStriped - back.png"),
+    "Furniture/FloweredLoveseat.png": ("SofaFlower.png", "SofaFlower - back.png"),
+}
+
+SAFE_EMPTY_FMAP_DONOR = 0x256
+EXPLICIT_SAFE_EMPTY_FMAP_PATHS = {
+    "Furniture/ChristmasTree1.png": "mobile Christmas tree object-grid markers are decorative and should not dispatch desktop behavior",
+    "Furniture/ChristmasTree2.png": "mobile Christmas tree object-grid markers are decorative and should not dispatch desktop behavior",
+    "Furniture/Chaise_blue.png": "mobile chaise object-grid markers are not mapped to a known desktop sitting behavior",
+    "Furniture/Chaise_brown.png": "mobile chaise object-grid markers are not mapped to a known desktop sitting behavior",
+    "Furniture/Chaise_green.png": "mobile chaise object-grid markers are not mapped to a known desktop sitting behavior",
+    "Furniture/Chaise_red.png": "mobile chaise object-grid markers are not mapped to a known desktop sitting behavior",
+    "Furniture/Patio_table.png": "mobile patio table object-grid markers are decorative and should not dispatch desktop behavior",
+    "Furniture/Patio_umbrella.png": "mobile patio umbrella uses object-grid markers unsupported by the desktop Palm donor",
+    "Furniture/Picnic_table.png": "mobile picnic table object-grid markers are decorative and should not dispatch desktop behavior",
+}
+
+
+def donor_for_row(row):
+    path = row["image_path"]
+    if path in DONOR_BY_PATH:
+        return DONOR_BY_PATH[path]
+    if row["section_name"] == "Accessory/Small Decor":
+        return 0x256
+    return 0x233
+
+
+def load_mobile_rows():
+    if not MOBILE_CSV.exists():
+        raise FileNotFoundError(f"Missing mobile furniture CSV: {MOBILE_CSV}")
+    with MOBILE_CSV.open(newline="", encoding="utf-8-sig") as f:
+        rows = [r for r in csv.DictReader(f) if r["source"] == "mobile_vf2_android"]
+    rows.sort(key=lambda r: int(r["section_position"]))
+    items = []
+    data_by_path = {}
+    for row in rows:
+        path = row["image_path"]
+        list_name = CATEGORY_BY_PATH.get(path, SECTION_LIST[row["section_name"]])
+        donor = donor_for_row(row)
+        data = {
+            "mobile_row": int(row["section_position"]),
+            "mobile_source_id": int(row["object_id"]),
+            "mobile_item_id": int(row["mobile_asset_id"], 16),
+            "price": int(row["price"]),
+            "lock_generation": int(row["generation_lock"]),
+            "item_type": int(row["item_type"]),
+            "mobile_short_id": int(row["short_text_id"], 16),
+            "mobile_long_id": int(row["long_text_id"], 16),
+            "short_symbol": row["short_text_key"],
+            "long_symbol": row["long_text_key"],
+            "short_description": row["short_description"],
+            "long_description": row["long_description"],
+            "section_name": row["section_name"],
+            "section_number": int(row["section_number"]),
+        }
+        data.update(DESCRIPTION_OVERRIDES_BY_PATH.get(path, {}))
+        items.append((row["short_description"], donor, list_name, path))
+        data_by_path[path] = data
+    for item in CUSTOM_ITEMS:
+        path = f"Furniture/{item['name']}.png"
+        data = {
+            "mobile_row": None,
+            "mobile_source_id": None,
+            "mobile_item_id": item["item_id"],
+            "price": item["price"],
+            "lock_generation": item["lock_generation"],
+            "item_type": item["item_type"],
+            "mobile_short_id": 0,
+            "mobile_long_id": 0,
+            "short_symbol": item["short_symbol"],
+            "long_symbol": item["long_symbol"],
+            "short_description": item["short_description"],
+            "long_description": item["long_description"],
+            "section_name": "Custom/Additive",
+            "section_number": -1,
+            "custom_pack": "LDW poster pack" if item["name"].startswith("LDW") else "Colorful couches",
+        }
+        items.append((item["short_description"], item["donor"], item["list"], path))
+        data_by_path[path] = data
+    for item in VF3_CUSTOM_ITEMS:
+        path = f"Furniture/{item['name']}.png"
+        data = {
+            "mobile_row": None,
+            "mobile_source_id": None,
+            "mobile_item_id": item["item_id"],
+            "price": item["price"],
+            "lock_generation": item["lock_generation"],
+            "item_type": item["item_type"],
+            "mobile_short_id": 0,
+            "mobile_long_id": 0,
+            "short_symbol": f"eString_VF3{item['name']}ShortDesc",
+            "long_symbol": f"eString_VF3{item['name']}LongDesc",
+            "short_description": item["short_description"],
+            "long_description": item["long_description"],
+            "section_name": "Accessory/Small Decor",
+            "section_number": -1,
+            "custom_pack": "VF3 furniture import batch 01",
+        }
+        items.append((item["short_description"], item["donor"], item["list"], path))
+        data_by_path[path] = data
+    for item in VF3_LIVING_ROOM_BATCH_02_ITEMS:
+        path = f"Furniture/{item['name']}.png"
+        data = {
+            "mobile_row": None,
+            "mobile_source_id": None,
+            "mobile_item_id": item["item_id"],
+            "price": item["price"],
+            "lock_generation": item["lock_generation"],
+            "item_type": item["item_type"],
+            "mobile_short_id": 0,
+            "mobile_long_id": 0,
+            "short_symbol": f"eString_VF3{item['name']}ShortDesc",
+            "long_symbol": f"eString_VF3{item['name']}LongDesc",
+            "short_description": item["short_description"],
+            "long_description": item["long_description"],
+            "section_name": "General Appliances",
+            "section_number": 5,
+            "custom_pack": "VF3 living room import batch 02",
+        }
+        items.append((item["short_description"], item["donor"], item["list"], path))
+        data_by_path[path] = data
+    for item in INVISIBLE_OUTDOOR_ITEMS:
+        path = f"Furniture/{item['name']}.png"
+        data = {
+            "mobile_row": None,
+            "mobile_source_id": None,
+            "mobile_item_id": item["item_id"],
+            "price": item["price"],
+            "lock_generation": item["lock_generation"],
+            "item_type": item["item_type"],
+            "mobile_short_id": 0,
+            "mobile_long_id": 0,
+            "short_symbol": f"eString_{item['name']}ShortDesc",
+            "long_symbol": f"eString_{item['name']}LongDesc",
+            "short_description": item["short_description"],
+            "long_description": item["long_description"],
+            "section_name": "Invisible Outdoors",
+            "section_number": -1,
+            "custom_pack": "Invisible outdoor decoration batch 01",
+        }
+        items.append((item["short_description"], item["donor"], item["list"], path))
+        data_by_path[path] = data
+    for item in INVISIBLE_TRANSPARENT_BASE_ITEMS:
+        path = f"Furniture/{item['name']}.png"
+        data = {
+            "mobile_row": None,
+            "mobile_source_id": None,
+            "mobile_item_id": item["item_id"],
+            "price": item["price"],
+            "lock_generation": 12,
+            "item_type": item["item_type"],
+            "mobile_short_id": 0,
+            "mobile_long_id": 0,
+            "short_symbol": f"eString_{item['name']}ShortDesc",
+            "long_symbol": f"eString_{item['name']}LongDesc",
+            "short_description": item["short_description"],
+            "long_description": item["long_description"],
+            "section_name": "Invisible Base Furniture",
+            "section_number": -1,
+            "custom_pack": "Invisible base-furniture decoration batch 02",
+        }
+        items.append((item["short_description"], item["donor"], item["list"], path))
+        data_by_path[path] = data
+    for item in VF3_TV_ITEMS:
+        path = f"Furniture/{item['name']}.png"
+        data = {
+            "mobile_row": None,
+            "mobile_source_id": None,
+            "mobile_item_id": item["item_id"],
+            "price": item["price"],
+            "lock_generation": item["lock_generation"],
+            "item_type": item["item_type"],
+            "mobile_short_id": 0,
+            "mobile_long_id": 0,
+            "short_symbol": f"eString_{item['name']}ShortDesc",
+            "long_symbol": f"eString_{item['name']}LongDesc",
+            "short_description": item["short_description"],
+            "long_description": item["long_description"],
+            "section_name": "General Appliances",
+            "section_number": 5,
+            "custom_pack": "VF3 television import batch 03",
+        }
+        items.append((item["short_description"], item["donor"], item["list"], path))
+        data_by_path[path] = data
+    return items, data_by_path
+
+
+ITEMS, MOBILE_DATA_BY_PATH = load_mobile_rows()
+
+
+def is_small_decor_safety_item(manifest_item):
+    mobile = manifest_item["mobile_data"]
+    return (
+        mobile.get("section_name") == "Accessory/Small Decor"
+        and int(manifest_item["donor_item"], 16) == SAFE_EMPTY_FMAP_DONOR
+    )
+
+
+def safety_fmap_reason(manifest_item):
+    path = manifest_item["path"]
+    if Path(path).name + ".fmap" in COUCH_FMAP_DONORS:
+        return None
+    if Path(path).name + ".fmap" in INVISIBLE_OUTDOOR_FMAP_DONORS:
+        return None
+    if Path(path).name + ".fmap" in INVISIBLE_TRANSPARENT_FMAP_DONORS:
+        return None
+    if Path(path).name + ".fmap" in VF3_TV_FMAP_DONORS:
+        return None
+    if path.startswith("Furniture/Couch"):
+        return None
+    if is_small_decor_safety_item(manifest_item):
+        return "mobile small-decor behavior grid unsupported by desktop donor 0x256"
+    return EXPLICIT_SAFE_EMPTY_FMAP_PATHS.get(path) or "added non-couch item is rendered-only to avoid unsupported desktop behavior dispatch"
+
+
+def apply_generation_lock_distribution():
+    generations = list(range(10, 31))
+    base = len(ITEMS) // len(generations)
+    remainder = len(ITEMS) % len(generations)
+    schedule = []
+    for pos, generation in enumerate(generations):
+        schedule.extend([generation] * (base + (1 if pos < remainder else 0)))
+    if len(schedule) != len(ITEMS):
+        raise RuntimeError("Generation lock schedule does not match item count")
+    for idx, (_name, _donor, _list_name, path) in enumerate(ITEMS):
+        pack = MOBILE_DATA_BY_PATH[path].get("custom_pack", "")
+        if pack.startswith("Invisible "):
+            generation = 0
+        else:
+            generation = schedule[idx]
+        MOBILE_DATA_BY_PATH[path]["lock_generation"] = generation
+        MOBILE_DATA_BY_PATH[path]["assigned_lock_generation"] = generation
+
+
+apply_generation_lock_distribution()
+
+LIST_SYMBOLS = {
+    "gFurniture2": ("?gFurniture2List@@3PAW4EInventoryItem@@A", "?gFurniture2ListSorted@@3PAW4EInventoryItem@@A", 88),
+    "gFurniture3": ("?gFurniture3List@@3PAW4EInventoryItem@@A", "?gFurniture3ListSorted@@3PAW4EInventoryItem@@A", 26),
+    "gFurniture4": ("?gFurniture4List@@3PAW4EInventoryItem@@A", "?gFurniture4ListSorted@@3PAW4EInventoryItem@@A", 74),
+    "gFurniture5": ("?gFurniture5List@@3PAW4EInventoryItem@@A", "?gFurniture5ListSorted@@3PAW4EInventoryItem@@A", 12),
+    "gAccessories": ("?gAccessoriesList@@3PAW4EInventoryItem@@A", "?gAccessoriesListSorted@@3PAW4EInventoryItem@@A", 47),
+    "gPet": ("?gPetList@@3PAW4EInventoryItem@@A", "?gPetListSorted@@3PAW4EInventoryItem@@A", 13),
+}
+
+COUNT_PATCHES = {
+    # old max-index compare, old push/sort count, new values patched at runtime below
+    "gFurniture2": (0x57, 0x58),
+    "gFurniture3": (0x19, 0x1A),
+    "gFurniture4": (0x49, 0x4A),
+    "gFurniture5": (0x0B, 0x0C),
+    "gAccessories": (0x2E, 0x2F),
+    "gPet": (0x0C, 0x0D),
+}
+
+PET_STORE_ADDITIONS = [
+    {
+        "name": "Turtle",
+        "item_id": 0x245,
+        "list": "gPet",
+        "source": "desktop-hidden/mobile pet",
+    },
+    {
+        "name": "Hamster",
+        "item_id": 0x247,
+        "list": "gPet",
+        "source": "desktop-hidden/mobile pet",
+    },
+]
+
+
+def copy_obj_tree():
+    if PATCHED.exists():
+        shutil.rmtree(PATCHED)
+    PATCHED.mkdir(parents=True)
+    for obj in SRC_OBJS.glob("*.obj"):
+        shutil.copy2(obj, PATCHED / obj.name)
+
+
+def raw_records_by_item():
+    data = json.loads((ANALYSIS / "furniture-records.json").read_text(encoding="utf-8"))
+    return {r["item_id"]: r for r in data["records"]}
+
+
+def image_records_by_id():
+    data = json.loads((ANALYSIS / "image-descriptors.json").read_text(encoding="utf-8"))
+    return {r["image_id"]: r for r in data["records"]}
+
+
+def patch_all(buf: bytearray, old: bytes, new: bytes) -> int:
+    n = 0
+    pos = 0
+    while True:
+        hit = buf.find(old, pos)
+        if hit < 0:
+            return n
+        buf[hit : hit + len(old)] = new
+        n += 1
+        pos = hit + len(new)
+
+
+def patch_all_in_sections(obj: CoffObject, section_names, old: bytes, new: bytes) -> int:
+    n = 0
+    for sec in obj.sections:
+        if sec.name not in section_names or not sec.raw_ptr or not sec.raw_size:
+            continue
+        start = sec.raw_ptr
+        end = sec.raw_ptr + sec.raw_size
+        pos = start
+        while True:
+            hit = obj.buf.find(old, pos, end)
+            if hit < 0:
+                break
+            obj.buf[hit : hit + len(old)] = new
+            n += 1
+            pos = hit + len(new)
+    return n
+
+
+def item_id_for(idx):
+    data = MOBILE_DATA_BY_PATH[ITEMS[idx][3]]
+    if "mobile_item_id" in data:
+        return data["mobile_item_id"]
+    return data["item_id"]
+
+
+def image_id_for(idx):
+    return ORIG_IMAGE_MAX + 1 + idx
+
+
+def lock_image_id_for(frame):
+    return ORIG_IMAGE_MAX + 1 + len(ITEMS) + frame
+
+
+def visible_special_upgrade_icon_id_for(item_id):
+    ordered = list(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
+    return ORIG_IMAGE_MAX + 1 + len(ITEMS) + LOCKED_GENERATION_FRAME_COUNT + ordered.index(item_id)
+
+
+def expected_furniture_frame_count(path):
+    name = Path(path).name
+    stem = Path(name).stem
+    if path in EXPLICIT_FRAME_COUNTS_BY_PATH:
+        return EXPLICIT_FRAME_COUNTS_BY_PATH[path]
+    if path in VF3_FOUR_FRAME_FURNITURE:
+        return 4
+    if stem.startswith("Couch"):
+        return 4
+    if "Chair" in stem and "Chaise" not in stem:
+        return 4
+    return 2
+
+
+def read_png_size(path):
+    try:
+        from PIL import Image
+
+        with Image.open(path) as image:
+            return image.size
+    except Exception:
+        return None
+
+
+def sync_vf3_living_room_sprite_strips(manifest):
+    copied = []
+    expanded = []
+    missing = []
+    issues = []
+    for item in manifest["items"]:
+        pair = VF3_SPRITE_STRIP_SOURCES.get(item["path"])
+        if not pair:
+            continue
+        front_name, back_name = pair
+        front_path = VF3_SPRITE_SOURCE_DIR / front_name
+        back_path = VF3_SPRITE_SOURCE_DIR / back_name
+        if not front_path.exists() or not back_path.exists():
+            missing.append({
+                "path": item["path"],
+                "name": item["name"],
+                "front": str(front_path),
+                "back": str(back_path),
+            })
+            continue
+        dst = OUT / "Images" / item["path"]
+        try:
+            from PIL import Image
+
+            with Image.open(front_path).convert("RGBA") as front, Image.open(back_path).convert("RGBA") as back:
+                cell_w = max(front.width, back.width)
+                cell_h = max(front.height, back.height)
+                strip = Image.new("RGBA", (cell_w * 4, cell_h), (0, 0, 0, 0))
+                strip.paste(front, (0, cell_h - front.height))
+                strip.paste(front.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (cell_w, cell_h - front.height))
+                strip.paste(back, (cell_w * 2, cell_h - back.height))
+                strip.paste(back.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (cell_w * 3, cell_h - back.height))
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                backup = dst.with_name(dst.name + ".pre-vf3-sprite-strip.bak")
+                if dst.exists() and not backup.exists():
+                    shutil.copy2(dst, backup)
+                strip.save(dst)
+            copied.append({
+                "path": item["path"],
+                "name": item["name"],
+                "front": str(front_path),
+                "back": str(back_path),
+                "new_size": [cell_w * 4, cell_h],
+                "frames": 4,
+                "backup": str(backup) if backup.exists() else None,
+            })
+        except Exception as exc:
+            issues.append({
+                "path": item["path"],
+                "name": item["name"],
+                "reason": str(exc),
+            })
+    expected_paths = sorted(VF3_FOUR_FRAME_FURNITURE)
+    copied_paths = {entry["path"] for entry in copied}
+    configured_paths = set(VF3_SPRITE_STRIP_SOURCES)
+    for path in expected_paths:
+        if path not in configured_paths:
+            dst = OUT / "Images" / path
+            try:
+                from PIL import Image
+
+                with Image.open(dst).convert("RGBA") as image:
+                    if image.width % 2 != 0:
+                        raise ValueError(f"existing two-frame fallback width is odd: {image.width}")
+                    cell_w = image.width // 2
+                    cell_h = image.height
+                    front = image.crop((0, 0, cell_w, cell_h))
+                    back = image.crop((cell_w, 0, cell_w * 2, cell_h))
+                    strip = Image.new("RGBA", (cell_w * 4, cell_h), (0, 0, 0, 0))
+                    strip.paste(front, (0, 0))
+                    strip.paste(front.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (cell_w, 0))
+                    strip.paste(back, (cell_w * 2, 0))
+                    strip.paste(back.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (cell_w * 3, 0))
+                    backup = dst.with_name(dst.name + ".pre-vf3-four-frame-expand.bak")
+                    if dst.exists() and not backup.exists():
+                        shutil.copy2(dst, backup)
+                    strip.save(dst)
+                expanded.append({
+                    "path": path,
+                    "reason": "expanded existing added two-frame sprite into four mirrored frames",
+                    "old_size": [cell_w * 2, cell_h],
+                    "new_size": [cell_w * 4, cell_h],
+                    "frames": 4,
+                    "backup": str(backup),
+                })
+            except Exception as exc:
+                missing.append({
+                    "path": path,
+                    "reason": "no Sprite folder front/back mapping configured",
+                    "fallback_error": str(exc),
+                })
+        elif path not in copied_paths and not any(entry.get("path") == path for entry in missing):
+            missing.append({
+                "path": path,
+                "reason": "configured Sprite folder pair was not copied",
+            })
+    manifest["vf3_sprite_strips"] = {
+        "source_dir": str(VF3_SPRITE_SOURCE_DIR),
+        "copied": copied,
+        "expanded_existing_two_frame": expanded,
+        "missing": missing,
+        "issues": issues,
+    }
+
+
+def sync_vf3_tv_sprite_strips(manifest):
+    """Create the two orientation cells expected by the desktop TV donor."""
+    copied = []
+    missing = []
+    try:
+        from PIL import Image
+
+        for item in VF3_TV_ITEMS:
+            source = VF3_SPRITE_SOURCE_DIR / item["source_png"]
+            target = OUT / "Images" / "Furniture" / f"{item['name']}.png"
+            if not source.exists():
+                missing.append(str(source))
+                continue
+            # TVFlatScreenStd is a two-cell 174x101 sheet. Its native click
+            # and effect logic uses that cell geometry, so preserve it and
+            # center the VF3 artwork at the donor's bottom anchor.
+            with Image.open(source).convert("RGBA") as image:
+                cell_w, cell_h = 87, 101
+                strip = Image.new("RGBA", (cell_w * 2, cell_h), (0, 0, 0, 0))
+                x = (cell_w - image.width) // 2
+                y = cell_h - image.height
+                strip.paste(image, (x, y))
+                strip.paste(image.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (cell_w + x, y))
+                target.parent.mkdir(parents=True, exist_ok=True)
+                strip.save(target)
+            copied.append({"item": item["short_description"], "source": str(source), "target": str(target), "size": [174, 101], "frames": 2})
+    except Exception as exc:
+        missing.append(str(exc))
+    manifest["vf3_tv_sprite_strips"] = {"copied": copied, "missing": missing, "donor_geometry": [174, 101]}
+
+
+def sync_vf3_tv_animation_sheets(manifest):
+    """Split supplied TV sheets and assemble bounded animation sheets."""
+    copied = []
+    missing = []
+    try:
+        from PIL import Image
+
+        specs = [
+            ("Large", "FlatScreenLrgAnim"),
+            ("LargeEast", "FlatScreenLrgAnimE"),
+            ("Small", "FlatScreenSmallAnim"),
+            ("SmallEast", "FlatScreenSmallAnimE"),
+        ]
+        destination = OUT / "Images" / "VF3TVAnimations"
+        destination.mkdir(parents=True, exist_ok=True)
+        # Match the two-cell furniture strip exactly: each animation cell is
+        # one 87x101 furniture cell, bottom-anchored just like the static TV.
+        cell_w, cell_h = 87, 101
+        for label, prefix in specs:
+            sheet = Image.new("RGBA", (cell_w * 6, cell_h * 3), (0, 0, 0, 0))
+            present = 0
+            supplied_sheet = LARGE_TV_ANIMATION_SHEETS.get(label)
+            frame_dir = destination / label
+            frame_dir.mkdir(parents=True, exist_ok=True)
+            if supplied_sheet:
+                if not supplied_sheet.exists():
+                    missing.append(str(supplied_sheet))
+                else:
+                    # Never overwrite the base TV's shared TVAnimBig resources.
+                    # These names are private to the added VF3 Large TV.
+                    runtime_name = "VF3LargeFlatScreenTVAnimEast.png" if label == "LargeEast" else "VF3LargeFlatScreenTVAnim.png"
+                    runtime_sheet = OUT / "Images" / runtime_name
+                    shutil.copy2(supplied_sheet, runtime_sheet)
+                    copied.append({"source_sheet": str(supplied_sheet), "target": str(runtime_sheet), "kind": "runtime_sheet"})
+                    # The supplied sheets are 6 columns by 3 rows. Crop each
+                    # cell independently, trim its transparent margin, then
+                    # bottom-anchor it in the TV's own 87x101 frame area.
+                    with Image.open(supplied_sheet).convert("RGBA") as source_sheet:
+                        for index in range(1, 19):
+                            column = (index - 1) % 6
+                            row = (index - 1) // 6
+                            left = source_sheet.width * column // 6
+                            right = source_sheet.width * (column + 1) // 6
+                            top = source_sheet.height * row // 3
+                            bottom = source_sheet.height * (row + 1) // 3
+                            cell = source_sheet.crop((left, top, right, bottom))
+                            bbox = cell.getchannel("A").getbbox()
+                            if not bbox:
+                                missing.append(f"{supplied_sheet}: blank frame {index}")
+                                continue
+                            frame = cell.crop(bbox)
+                            frame_path = frame_dir / f"Frame{index:02d}.png"
+                            frame.save(frame_path)
+                            x = column * cell_w + (cell_w - frame.width) // 2
+                            y = row * cell_h + (cell_h - frame.height)
+                            sheet.paste(frame, (x, y), frame)
+                            copied.append({
+                                "source_sheet": str(supplied_sheet),
+                                "frame": index,
+                                "target": str(frame_path),
+                                "size": list(frame.size),
+                            })
+                            present += 1
+            else:
+                for index in range(1, 19):
+                    source = VF3_SPRITE_SOURCE_DIR / f"{prefix}_{index:02d}.png"
+                    if not source.exists():
+                        missing.append(str(source))
+                        continue
+                    with Image.open(source).convert("RGBA") as frame:
+                        frame_path = frame_dir / f"Frame{index:02d}.png"
+                        frame.save(frame_path)
+                        x = ((index - 1) % 6) * cell_w + (cell_w - frame.width) // 2
+                        y = ((index - 1) // 6) * cell_h + (cell_h - frame.height)
+                        sheet.paste(frame, (x, y), frame)
+                        present += 1
+            target = destination / f"VF3TVAnim{label}.png"
+            sheet.save(target)
+            copied.append({"sheet": str(target), "frames": present, "grid": [6, 3], "cell": [cell_w, cell_h], "size": list(sheet.size)})
+    except Exception as exc:
+        missing.append(str(exc))
+    manifest["vf3_tv_animation_sheets"] = {"copied": copied, "missing": missing}
+
+
+def sync_invisible_outdoor_sprites(manifest):
+    copied = []
+    missing = []
+    for item in INVISIBLE_OUTDOOR_ITEMS:
+        transparent_src = INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR / item["source_png"]
+        base_src = OUT / "Images" / "Furniture" / item["base_png"]
+        dst = OUT / "Images" / "Furniture" / f"{item['name']}.png"
+        original_dst = dst.with_name(dst.name + "ORIGINAL")
+        if not transparent_src.exists() or not base_src.exists():
+            missing.append({
+                "name": item["short_description"],
+                "transparent_source": str(transparent_src),
+                "base_source": str(base_src),
+                "target": str(dst),
+            })
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(transparent_src, original_dst)
+        shutil.copy2(base_src, dst)
+        copied.append({
+            "name": item["short_description"],
+            "transparent_source": str(transparent_src),
+            "base_source": str(base_src),
+            "target": str(dst),
+            "original": str(original_dst),
+            "bytes": dst.stat().st_size,
+            "original_bytes": original_dst.stat().st_size,
+            "size": list(read_png_size(dst) or []),
+        })
+    manifest["invisible_outdoor_sprites"] = {
+        "source_dir": str(INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR),
+        "copied": copied,
+        "missing": missing,
+    }
+
+
+def sync_transparent_base_furniture_sprites(manifest):
+    generated = []
+    missing = []
+    issues = []
+    for item in INVISIBLE_TRANSPARENT_BASE_ITEMS:
+        src = OUT / "Images" / "Furniture" / item["source_png"]
+        dst = OUT / "Images" / "Furniture" / f"{item['name']}.png"
+        original_dst = dst.with_name(dst.name + "ORIGINAL")
+        if not src.exists():
+            missing.append({
+                "name": item["short_description"],
+                "source": str(src),
+                "target": str(dst),
+            })
+            continue
+        try:
+            from PIL import Image
+
+            with Image.open(src).convert("RGBA") as image:
+                override = INVISIBLE_TRANSPARENT_GRAPHIC_OVERRIDES.get(item["name"])
+                if override and override.exists():
+                    with Image.open(override).convert("RGBA") as supplied:
+                        transparent = supplied.copy()
+                else:
+                    transparent = Image.new("RGBA", image.size, (0, 0, 0, 0))
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                # The editable backup uses a custom suffix; specify PNG rather
+                # than relying on Pillow to infer a format from `.pngORIGINAL`.
+                transparent.save(original_dst, format="PNG")
+                shutil.copy2(src, dst)
+            generated.append({
+                "name": item["short_description"],
+                "source": str(src),
+                "target": str(dst),
+                "original": str(original_dst),
+                "size": list(read_png_size(dst) or []),
+                "frame_count": item["frame_count"],
+                "bytes": dst.stat().st_size,
+                "original_bytes": original_dst.stat().st_size,
+                "transparent_override": str(override) if override and override.exists() else None,
+            })
+        except Exception as exc:
+            issues.append({
+                "name": item["short_description"],
+                "source": str(src),
+                "target": str(dst),
+                "reason": str(exc),
+            })
+    manifest["transparent_base_furniture_sprites"] = {
+        "generated": generated,
+        "missing": missing,
+        "issues": issues,
+    }
+
+
+def sync_separated_villager_sheets(manifest):
+    """Export live sheets and a canonical per-body, per-frame hierarchy."""
+    export_root = OUT / "Images" / "VillagerSheets"
+    groups = {
+        export_root / "Heads": [
+            "female_heads00.png", "female_heads10.png",
+            "male_heads00.png", "male_heads10.png",
+            "bigheads00.png", "bigheads10.png",
+        ],
+        export_root / "Bodies": ["female_bodies00.png", "male_bodies00.png"],
+    }
+    copied = []
+    missing = []
+    for destination, filenames in groups.items():
+        destination.mkdir(parents=True, exist_ok=True)
+        for filename in filenames:
+            source = OUT / "Images" / filename
+            target = destination / filename
+            if source.exists():
+                shutil.copy2(source, target)
+                copied.append({"source": str(source), "target": str(target)})
+            else:
+                missing.append(str(source))
+
+    holiday_root = export_root / "Bodies" / "HolidayOutfits"
+    holiday_files = [str(path.relative_to(OUT)) for path in holiday_root.rglob("*.png")]
+
+    # The renderer consumes a 32-column image grid, but editing and validation
+    # should happen against unambiguous individual body frames. Export every
+    # stock and Holiday row into the requested gender folders. Holiday types
+    # are rows 50-53 and are therefore represented as Body051..Body054.
+    body_frames = []
+    try:
+        from PIL import Image
+
+        for gender, filename, folder_name in [
+            ("female", "female_bodies00.png", "Female Bodies"),
+            ("male", "male_bodies00.png", "Male Bodies"),
+        ]:
+            source = OUT / "Images" / filename
+            if not source.exists():
+                missing.append(str(source))
+                continue
+            destination = export_root / "Bodies" / folder_name
+            with Image.open(source).convert("RGBA") as sheet:
+                row_count = sheet.height // HOLIDAY_BODY_CELL_SIZE
+                for body_type in range(row_count):
+                    body_dir = destination / f"Body{body_type + 1:03d}"
+                    body_dir.mkdir(parents=True, exist_ok=True)
+                    for frame_index in range(HOLIDAY_BODY_FRAME_COUNT):
+                        box = (
+                            frame_index * HOLIDAY_BODY_CELL_SIZE,
+                            body_type * HOLIDAY_BODY_CELL_SIZE,
+                            (frame_index + 1) * HOLIDAY_BODY_CELL_SIZE,
+                            (body_type + 1) * HOLIDAY_BODY_CELL_SIZE,
+                        )
+                        target = body_dir / f"Frame{frame_index + 1:02d}.png"
+                        frame = sheet.crop(box)
+                        visible_bounds = frame.getchannel("A").getbbox()
+                        # The editable frame exports are deliberately tight to
+                        # the visible body artwork. The native runtime keeps
+                        # its grid separately, so these exports are not padded
+                        # back out to a synthetic 91x91 canvas.
+                        if visible_bounds:
+                            frame.crop(visible_bounds).save(target)
+                        else:
+                            frame.save(target)
+                    body_frames.append({
+                        "gender": gender,
+                        "body_type": body_type,
+                        "folder": str(body_dir.relative_to(OUT)),
+                        "holiday": body_type >= HOLIDAY_BODY_BASE_ROWS,
+                    })
+    except Exception as exc:
+        missing.append(f"body-frame export: {exc}")
+
+    manifest["villager_sheet_exports"] = {
+        "root": str(export_root),
+        "copied": copied,
+        "holiday_outfit_files": holiday_files,
+        "body_frame_folders": body_frames,
+        "missing": missing,
+        "runtime_note": "Female Bodies and Male Bodies contain alpha-cropped visible frame artwork. The desktop renderer independently uses its native 32-column grids; holiday body values are 50-53.",
+    }
+
+
+def sync_holiday_body_types(manifest):
+    """Append the supplied holiday sprites as four live body rows per gender."""
+    appended = []
+    missing = []
+    issues = []
+    export_root = OUT / "Images" / "VillagerSheets" / "Bodies" / "HolidayOutfits"
+    if not HOLIDAY_OUTFIT_ARCHIVE.exists():
+        manifest["holiday_body_types"] = {
+            "appended": appended,
+            "missing": [str(HOLIDAY_OUTFIT_ARCHIVE)],
+            "issues": issues,
+        }
+        return
+    try:
+        from PIL import Image
+
+        with ZipFile(HOLIDAY_OUTFIT_ARCHIVE) as archive:
+            for gender, sheet_name, archive_folder, prefix in [
+                ("female", "female_bodies00.png", "Female Outfits", "FemaleBodies_0"),
+                ("male", "male_bodies00.png", "Male Outfits", "MaleBodies_00"),
+            ]:
+                target = OUT / "Images" / sheet_name
+                if not target.exists():
+                    missing.append(str(target))
+                    continue
+                with Image.open(target).convert("RGBA") as existing:
+                    expected_size = (HOLIDAY_BODY_CELL_SIZE * 32, HOLIDAY_BODY_CELL_SIZE * HOLIDAY_BODY_BASE_ROWS)
+                    if existing.size != expected_size:
+                        issues.append({"sheet": str(target), "reason": f"expected {expected_size}, got {existing.size}"})
+                        continue
+                    backup = target.with_name(target.name + ".pre-holiday-bodies.bak")
+                    if not backup.exists():
+                        existing.save(backup, format="PNG")
+                    expanded = Image.new(
+                        "RGBA",
+                        (existing.width, existing.height + HOLIDAY_BODY_CELL_SIZE * len(HOLIDAY_BODY_SET_IDS)),
+                        (0, 0, 0, 0),
+                    )
+                    expanded.paste(existing, (0, 0))
+                    for row, set_id in enumerate(HOLIDAY_BODY_SET_IDS):
+                        frame_targets = []
+                        for frame_index in range(1, HOLIDAY_BODY_FRAME_COUNT + 1):
+                            archive_name = (
+                                f"Holiday Outfits/{archive_folder}/{prefix}{set_id:02d}_{frame_index:04d}.png"
+                            )
+                            if archive_name not in archive.namelist():
+                                missing.append(archive_name)
+                                continue
+                            raw = archive.read(archive_name)
+                            with Image.open(BytesIO(raw)).convert("RGBA") as mobile_frame:
+                                # Mobile's 215px canvas contains a desktop-scale
+                                # body centered in a huge transparent field. Keep
+                                # the artwork at native pixel size, not the whole
+                                # mobile canvas; the latter made every new body
+                                # about half-height in the desktop renderer.
+                                bbox = mobile_frame.getchannel("A").getbbox()
+                                if not bbox:
+                                    missing.append(f"{archive_name}: blank")
+                                    continue
+                                desktop_frame = mobile_frame.crop(bbox)
+                                x = (frame_index - 1) * HOLIDAY_BODY_CELL_SIZE + (HOLIDAY_BODY_CELL_SIZE - desktop_frame.width) // 2
+                                y = (HOLIDAY_BODY_BASE_ROWS + row) * HOLIDAY_BODY_CELL_SIZE + 15
+                                expanded.paste(desktop_frame, (x, y), desktop_frame)
+                                export_path = export_root / gender / f"Holiday{set_id:02d}" / f"Frame{frame_index:02d}.png"
+                                export_path.parent.mkdir(parents=True, exist_ok=True)
+                                desktop_frame.save(export_path)
+                                frame_targets.append(str(export_path.relative_to(OUT)))
+                        appended.append({
+                            "gender": gender,
+                            "body_type": HOLIDAY_BODY_BASE_ROWS + row,
+                            "source_set": set_id,
+                            "frames": len(frame_targets),
+                            "exported_frames": frame_targets,
+                        })
+                    expanded.save(target)
+
+        # The stock rare generator returns 44..49. Widen it to 44..53 so all
+        # four appended sets can be generated without replacing existing types.
+        villager = CoffObject(PATCHED / "Villager.obj")
+        rare = villager.symbol("?GenRareBodyType@CVillager@@SAHXZ")
+        data = villager.section_data(rare.section)
+        prologue = bytes(data[rare.value : rare.value + 3])
+        if prologue not in (b"\x6A\x06\xE8", b"\x6A\x0A\xE8"):
+            raise RuntimeError("unexpected GenRareBodyType prologue")
+        data[rare.value + 1] = 10
+        villager.write(PATCHED / "Villager.obj")
+        manifest["holiday_body_types"] = {
+            "archive": str(HOLIDAY_OUTFIT_ARCHIVE),
+            "appended": appended,
+            "missing": missing,
+            "issues": issues,
+            "body_type_range": [HOLIDAY_BODY_BASE_ROWS, HOLIDAY_BODY_BASE_ROWS + len(HOLIDAY_BODY_SET_IDS) - 1],
+            "rare_generator": "expanded from 44-49 to 44-53",
+        }
+    except Exception as exc:
+        issues.append({"reason": str(exc)})
+        manifest["holiday_body_types"] = {
+            "archive": str(HOLIDAY_OUTFIT_ARCHIVE),
+            "appended": appended,
+            "missing": missing,
+            "issues": issues,
+        }
+
+
+def patch_holiday_body_lookup(manifest):
+    """Allow the native animator to address the four additive outfit rows.
+
+    A villager's ``body`` value is an outfit ID.  The desktop animator uses
+    that ID as the row in the 32-frame body grid, but stock code clamps it to
+    0..49.  The holiday IDs are 50..53, so the old clamp silently displayed
+    row 49 for those poses.  Extend only that bound; base outfit rows and the
+    native frame ordering remain untouched.
+    """
+    obj = CoffObject(PATCHED / "AnimManager.obj")
+    functions = [
+        "?GetScaledLinkToNextPt@CAnimManager@@QAE?AUldwPoint@@W4EAnimFrame@@W4EAnimPart@@W4EAnimGender@@HMPAPAVldwImageGrid@@PAH@Z",
+        "?GetScaledLinkToNextPt@CAnimManager@@QAE?AUldwPoint@@W4EHeadDirection@@W4EAnimGender@@HMPAPAVldwImageGrid@@PAH@Z",
+        "?GetScaledLinkToPrevPt@CAnimManager@@QAE?AUldwPoint@@W4EAnimFrame@@W4EAnimPart@@W4EAnimGender@@HM@Z",
+        "?GetScaledLinkToPrevPt@CAnimManager@@QAE?AUldwPoint@@W4EHeadDirection@@W4EAnimGender@@HM@Z",
+    ]
+    patches = []
+    max_row = HOLIDAY_BODY_BASE_ROWS + len(HOLIDAY_BODY_SET_IDS) - 1
+    row_count = max_row + 1
+    for function_name in functions:
+        symbol = obj.symbol(function_name)
+        section = obj.section(symbol.section)
+        raw = section.raw_ptr + symbol.value
+        data = obj.buf
+        # Both NextPt overloads encode: cmp body, 0x32; cmovl row, body;
+        # default row 0x31.  PrevPt uses the same limit/default sequence in
+        # the opposite order.  Replace only the immediate values.
+        window = data[raw : raw + 0xB0]
+        cmp_at = window.find(b"\x83\x7D")
+        if cmp_at < 0 or window[cmp_at + 3] != HOLIDAY_BODY_BASE_ROWS:
+            raise RuntimeError(f"unexpected body-row clamp in {function_name}")
+        data[raw + cmp_at + 3] = row_count
+        default_at = window.find(b"\xB9\x31\x00\x00\x00")
+        if default_at < 0:
+            default_at = window.find(b"\xBA\x31\x00\x00\x00")
+        if default_at < 0:
+            raise RuntimeError(f"unexpected default body row in {function_name}")
+        data[raw + default_at + 1] = max_row
+        patches.append({
+            "function": function_name,
+            "old_valid_rows": [0, HOLIDAY_BODY_BASE_ROWS - 1],
+            "new_valid_rows": [0, max_row],
+        })
+    obj.write(PATCHED / "AnimManager.obj")
+    manifest["holiday_body_lookup"] = {
+        "status": "native body row clamp expanded for additive holiday outfit IDs",
+        "body_values": list(range(HOLIDAY_BODY_BASE_ROWS, max_row + 1)),
+        "patched_functions": patches,
+    }
+
+
+def patch_invisible_hammock_drop_action(manifest):
+    """Extend the stock hammock hotspot predicate to include the added item."""
+    obj = CoffObject(PATCHED / "HotSpot.obj")
+    symbol = obj.symbol("?Hammock@CHotSpot@@CA?B_NAAVCVillager@@@Z")
+    section = obj.section(symbol.section)
+    raw = section.raw_ptr + symbol.value
+    expected = b"\x68\xE1\x01\x00\x00\xB9"
+    if obj.buf[raw + 4 : raw + 10] != expected:
+        raise RuntimeError("unexpected stock hammock hotspot predicate")
+
+    # Reuse the stock call instruction/REL32 relocation at +0x0B.  It now
+    # calls a tiny helper that returns true when either base HammockStd or the
+    # additive InvisibleHammock is in the world.  The native action below it
+    # remains exactly the same eBehavior_LieInHammockNoLeadIn route.
+    obj.buf[raw + 4 : raw + 11] = b"\x90" * 7
+    helper = obj.append_undefined_symbol("_VF2EitherHammockInWorld")
+    obj.retarget_relocation(symbol.section, symbol.value + 0x0F, helper, 0x14)
+    obj.write(PATCHED / "HotSpot.obj")
+
+    helper_cpp = r'''enum EInventoryItem { eInventoryItemPlaceholder = 0 };
+
+class CFurnitureManager {
+public:
+    bool IsInWorld(EInventoryItem item);
+};
+
+extern CFurnitureManager FurnitureManager;
+
+extern "C" bool __cdecl VF2EitherHammockInWorld()
+{
+    return FurnitureManager.IsInWorld((EInventoryItem)0x1E1) ||
+           FurnitureManager.IsInWorld((EInventoryItem)0x30C);
+}
+'''
+    helper_path = PATCHED / "vf2_invisible_hammock.cpp"
+    helper_path.write_text(helper_cpp, encoding="ascii")
+    manifest["invisible_hammock_drop_action"] = {
+        "status": "added to the stock hammock hotspot predicate",
+        "base_item": "0x1E1",
+        "added_item": "0x30C",
+        "native_behavior": "eBehavior_LieInHammockNoLeadIn (0x24)",
+        "base_hammock_modified": False,
+    }
+
+
+def sync_invisible_furniture_reference_sets(manifest):
+    """Bundle the user's editable invisible-furniture variants without activating them."""
+    sources = {
+        "Invisible Furniture - Transparent": Path(r"C:\Users\Owner\Downloads\Invisible Furniture - Transparent"),
+        "Invisible Furniture - Base Graphics": Path(r"C:\Users\Owner\Downloads\Invisible Furniture - Base Graphics"),
+    }
+    copied = []
+    missing = []
+    root = OUT / "ReferenceAssets"
+    for name, source in sources.items():
+        target = root / name
+        if source.exists():
+            shutil.copytree(source, target, dirs_exist_ok=True)
+            source_note = str(source)
+        else:
+            # Build the editable pair from the active base image and its saved
+            # transparent original. This keeps both folders in every build.
+            target.mkdir(parents=True, exist_ok=True)
+            for image in (OUT / "Images" / "Furniture").glob("Invisible*.png"):
+                transparent = image.with_name(image.name + "ORIGINAL")
+                if name == "Invisible Furniture - Transparent" and transparent.exists():
+                    shutil.copy2(transparent, target / image.name)
+                elif name == "Invisible Furniture - Base Graphics":
+                    shutil.copy2(image, target / image.name)
+            source_note = "generated from active base sheets and .pngORIGINAL variants"
+        if name == "Invisible Furniture - Transparent":
+            for item_name, override in INVISIBLE_TRANSPARENT_GRAPHIC_OVERRIDES.items():
+                if override.exists():
+                    shutil.copy2(override, target / f"{item_name}.png")
+        copied.append({"name": name, "source": source_note, "target": str(target), "png_count": len(list(target.glob("*.png")))})
+    manifest["invisible_furniture_reference_sets"] = {"copied": copied, "missing": missing, "active_game_assets": "unchanged"}
+
+
+def item_string_ids(idx):
+    base = ORIG_STRING_ONE_PAST_MAX + idx * 2
+    return base, base + 1
+
+
+EVENT_KIND_SUFFIX = {
+    "Title": "Title",
+    "Desc": "Desc",
+    "ChoiceA": "ChoiceA",
+    "ChoiceB": "ChoiceB",
+    "ResultA": "ResultA",
+    "ResultB": "ResultB",
+}
+
+EVENT_KIND_ORDER = ["Title", "Desc", "ChoiceA", "ChoiceB", "ResultA", "ResultB"]
+
+EVENT_CHOICE_OVERRIDES = {
+    ("GroupOfKidsAtTheDoor", "ChoiceA"): "Take one",
+    ("GroupOfKidsAtTheDoor", "ChoiceB"): "No thanks",
+    ("HearStrangeSound", "ChoiceA"): "Open the door",
+    ("HearStrangeSound", "ChoiceB"): "Walk away",
+    ("MenInBlackAtDoor", "ChoiceA"): "Open the door",
+    ("MenInBlackAtDoor", "ChoiceB"): "Back away",
+    ("MetallicKnockingOnDoor", "ChoiceA"): "Open the door",
+    ("MetallicKnockingOnDoor", "ChoiceB"): "Back away",
+    ("Volunteer", "ChoiceA"): "Volunteer",
+    ("Volunteer", "ChoiceB"): "Sorry, no",
+}
+
+EMAIL_EVENT_NAMES = {
+    "EmailFromACME",
+    "EmailFromAntonioGuildenstern",
+    "EmailFromSchool",
+    "GreatUncleElmer",
+    "InterestingArticleAboutFossils",
+    "MarchingBandTripExpenses",
+    "RIPUncleAlpert",
+}
+
+
+def event_string_id_for(idx):
+    return ORIG_STRING_ONE_PAST_MAX + len(ITEMS) * 2 + idx
+
+
+def visible_special_upgrade_desc_id_for(index):
+    return ORIG_STRING_ONE_PAST_MAX + len(ITEMS) * 2 + mobile_island_event_string_count() + index
+
+
+def behavior_label_string_id_for(index):
+    return (
+        ORIG_STRING_ONE_PAST_MAX
+        + len(ITEMS) * 2
+        + mobile_island_event_string_count()
+        + SPECIAL_UPGRADE_DESCRIPTION_COUNT
+        + index
+    )
+
+
+def normalize_event_text(value):
+    text = value.replace("\r\n", "\n").replace("\r", "\n")
+    text = " ".join(part.strip() for part in text.split())
+    fixes = {
+        "electricaloutlet": "electrical outlet",
+        "open,ready": "open, ready",
+        "There's reward": "There's a reward",
+        "it's artificial intelligence": "its artificial intelligence",
+        "God love you": "God loves you",
+        "Ressurection": "Resurrection",
+    }
+    for old, new in fixes.items():
+        text = text.replace(old, new)
+    return text
+
+
+def load_mobile_island_events():
+    if not MOBILE_EVENT_TEXT_PACK.exists() or not MOBILE_EVENT_MAPPING_CSV.exists():
+        return []
+    event_text = {}
+    with MOBILE_EVENT_TEXT_PACK.open(newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            kind = row["kind"]
+            if kind not in EVENT_KIND_SUFFIX:
+                continue
+            event_name = row["event_class"].removeprefix("CEvent")
+            value = row["value"]
+            if not value:
+                continue
+            value = EVENT_CHOICE_OVERRIDES.get((event_name, kind), value)
+            event_text.setdefault(event_name, {})[kind] = normalize_event_text(value)
+
+    ordered_names = []
+    with MOBILE_EVENT_MAPPING_CSV.open(newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            event_name = row["mobile_event"]
+            if event_name in event_text and event_name not in ordered_names:
+                ordered_names.append(event_name)
+
+    events = []
+    flat_index = 0
+    for slot_index, event_name in enumerate(ordered_names):
+        strings = []
+        ids = {}
+        for kind in EVENT_KIND_ORDER:
+            text = event_text[event_name].get(kind)
+            if text is None:
+                ids[kind] = 0
+                continue
+            string_id = event_string_id_for(flat_index)
+            key = f"eEvent{event_name}{EVENT_KIND_SUFFIX[kind]}"
+            strings.append({
+                "kind": kind,
+                "string_id": string_id,
+                "key": key,
+                "text": text,
+            })
+            ids[kind] = string_id
+            flat_index += 1
+        has_choices = ids.get("ChoiceA", 0) != 0 and ids.get("ChoiceB", 0) != 0
+        is_email = event_name in EMAIL_EVENT_NAMES or event_text[event_name].get("Title", "").startswith("Subject:")
+        events.append({
+            "name": event_name,
+            "class": f"CEvent{event_name}",
+            "slot": 0x61 + slot_index,
+            "strings": strings,
+            "ids": ids,
+            "has_choices": has_choices,
+            "is_email_event": is_email,
+        })
+    return events
+
+
+def mobile_island_event_string_count():
+    return sum(len(event["strings"]) for event in load_mobile_island_events())
+
+
+def c_string(text):
+    return text.replace("\\", "\\\\").replace('"', '\\"')
+
+
+def max_item_offset():
+    return max(item_id_for(i) for i in range(len(ITEMS))) - 0x1AD
+
+
+def patch_furniture_manager(manifest):
+    obj = CoffObject(PATCHED / "FurnitureManager.obj")
+    records = raw_records_by_item()
+    item_sym = obj.symbol(ITEMINFO)
+    insert_off = item_sym.value + ORIG_FURNITURE_COUNT * RECORD_SIZE
+    payload = bytearray()
+    behavior_safety_overrides = []
+    for idx, (name, donor_id, _list_name, path) in enumerate(ITEMS):
+        vals = records[donor_id]["raw_u32"][:]
+        mobile = MOBILE_DATA_BY_PATH[path]
+        vals[0] = item_id_for(idx)
+        vals[1] = image_id_for(idx)
+        vals[2] = mobile["price"]
+        vals[3] = mobile["lock_generation"]
+        vals[4] = mobile["item_type"]
+        if mobile.get("section_name") == "Accessory/Small Decor" and donor_id == 0x256:
+            # Desktop has no behavior handlers for several mobile-only holiday
+            # food/decor interactions. Keep these on the inert desktop donor
+            # type so dropping a person onto them cannot dispatch into an
+            # unsupported mobile behavior path.
+            vals[4] = records[donor_id]["raw_u32"][4]
+            if vals[4] != mobile["item_type"]:
+                behavior_safety_overrides.append({
+                    "item": name,
+                    "item_id": hex(item_id_for(idx)),
+                    "path": path,
+                    "mobile_item_type": mobile["item_type"],
+                    "desktop_donor_item_type": vals[4],
+                    "donor_item": hex(donor_id),
+                })
+        vals[5], vals[6] = item_string_ids(idx)
+        vals[0x58 // 4] = 0
+        payload += struct.pack("<" + "I" * (RECORD_SIZE // 4), *vals)
+    obj.insert_section_bytes(item_sym.section, insert_off, bytes(payload))
+
+    new_max = max_item_offset()
+    range_patches = 0
+    for reg in [b"\x3D", b"\x81\xFE", b"\x81\xF9", b"\x81\xFA"]:
+        old = reg + struct.pack("<I", 0xFB)
+        new = reg + struct.pack("<I", new_max)
+        range_patches += patch_all(obj.buf, old, new)
+    end_patches = patch_all(obj.buf, struct.pack("<I", ORIG_FURNITURE_COUNT * RECORD_SIZE), struct.pack("<I", (ORIG_FURNITURE_COUNT + len(ITEMS)) * RECORD_SIZE))
+    fmap_refresh_patches = patch_all_in_sections(
+        obj,
+        {".text$mn"},
+        b"\x81\xFE" + struct.pack("<I", 0xFC),
+        b"\x81\xFE" + struct.pack("<I", new_max + 1),
+    )
+
+    lookup_sym = obj.symbol(ITEMLOOKUP)
+    lookup_sec = obj.section(lookup_sym.section)
+    obj.grow_bss_section(lookup_sym.section, lookup_sec.raw_size, (new_max - 0xFB) * 4)
+
+    obj.write(PATCHED / "FurnitureManager.obj")
+    manifest["FurnitureManager"] = {
+        "added_records": len(ITEMS),
+        "new_item_max_offset": hex(new_max),
+        "range_patches": range_patches,
+        "scan_end_patches": end_patches,
+        "fmap_refresh_patches": fmap_refresh_patches,
+        "behavior_safety_overrides": behavior_safety_overrides,
+    }
+
+
+def patch_inventory_manager(manifest):
+    obj = CoffObject(PATCHED / "InventoryManager.obj")
+    by_list = {}
+    for idx, item in enumerate(ITEMS):
+        by_list.setdefault(item[2], []).append(item_id_for(idx))
+    for pet in PET_STORE_ADDITIONS:
+        by_list.setdefault(pet["list"], []).append(pet["item_id"])
+
+    list_manifest = {}
+    # Insert from highest section offset to lowest to reduce offset surprises.
+    work = []
+    for list_name, ids in by_list.items():
+        list_sym_name, sorted_sym_name, old_count = LIST_SYMBOLS[list_name]
+        list_sym = obj.symbol(list_sym_name)
+        sorted_sym = obj.symbol(sorted_sym_name)
+        work.append((list_sym.section, list_sym.value + old_count * 4, list_name, ids, old_count, sorted_sym_name))
+    for _sec, _off, list_name, ids, old_count, sorted_sym_name in sorted(work, reverse=True):
+        list_sym_name, _sorted, _old = LIST_SYMBOLS[list_name]
+        list_sym = obj.symbol(list_sym_name)
+        obj.insert_section_bytes(list_sym.section, list_sym.value + old_count * 4, struct.pack("<" + "I" * len(ids), *ids))
+        sorted_sym = obj.symbol(sorted_sym_name)
+        obj.grow_bss_section(sorted_sym.section, sorted_sym.value + old_count * 4, len(ids) * 4)
+        list_manifest[list_name] = {"old_count": old_count, "new_count": old_count + len(ids), "added_ids": [hex(x) for x in ids]}
+
+    new_max = max_item_offset()
+    range_patches = 0
+    for reg in [b"\x3D", b"\x81\xFE", b"\x81\xF9", b"\x81\xFA"]:
+        range_patches += patch_all(obj.buf, reg + struct.pack("<I", 0xFB), reg + struct.pack("<I", new_max))
+
+    count_patches = {}
+    count_return_patches = {}
+    for list_name, info in list_manifest.items():
+        old_max, old_count = COUNT_PATCHES[list_name]
+        new_count = info["new_count"]
+        new_max_index = new_count - 1
+        n = 0
+        n += patch_all(obj.buf, b"\x83\xFE" + bytes([old_max]), b"\x83\xFE" + bytes([new_max_index]))
+        n += patch_all(obj.buf, b"\x6A" + bytes([old_count]), b"\x6A" + bytes([new_count]))
+        n += patch_all(obj.buf, b"\xC7\x45\x08" + struct.pack("<I", old_count), b"\xC7\x45\x08" + struct.pack("<I", new_count))
+        count_patches[list_name] = n
+        # CScrollingStoreScene asks GetCategoryItemCount() for the visible
+        # row count. If these return values stay at the desktop counts, newly
+        # sorted additive items appear to replace base items in the store.
+        count_return_patches[list_name] = patch_all(
+            obj.buf,
+            b"\xB8" + struct.pack("<I", old_count) + b"\x5E\x5D\xC2\x04\x00",
+            b"\xB8" + struct.pack("<I", new_count) + b"\x5E\x5D\xC2\x04\x00",
+        )
+
+    # SortGenLockItems only included locked items up to generation 9. Custom
+    # furniture uses higher official/mod locks, so raise the visible lock window.
+    generation_cap_patches = patch_all(obj.buf, b"\x83\xF8\x09", b"\x83\xF8\x1E")
+
+    # The desktop Outdoors category is the one category where additive counts
+    # can collide with another base category count. In B12, gFurniture5 grew
+    # from 12 to 26, then the later Bedroom patch (old count 26 -> 30) also
+    # rewrote the freshly-patched Outdoors immediates and exposed blank rows.
+    # Force the three gFurniture5 count sites after the broad replacements.
+    outdoor_exact_count_patch = {}
+    if "gFurniture5" in list_manifest:
+        outdoor_count = list_manifest["gFurniture5"]["new_count"]
+        outdoor_max_index = outdoor_count - 1
+        item_sym = obj.symbol(GET_CATEGORY_ITEM)
+        item_sec = obj.section(item_sym.section)
+        item_raw = item_sec.raw_ptr + item_sym.value
+        count_sym = obj.symbol(GET_CATEGORY_ITEM_COUNT)
+        count_sec = obj.section(count_sym.section)
+        count_raw = count_sec.raw_ptr + count_sym.value
+
+        sort_count_off = item_raw + 0x250
+        bounds_off = item_raw + 0x272
+        return_off = count_raw + 0x83
+        obj.buf[sort_count_off : sort_count_off + 2] = b"\x6A" + bytes([outdoor_count])
+        obj.buf[bounds_off : bounds_off + 3] = b"\x83\xFE" + bytes([outdoor_max_index])
+        obj.buf[return_off : return_off + 5] = b"\xB8" + struct.pack("<I", outdoor_count)
+        outdoor_exact_count_patch = {
+            "new_count": outdoor_count,
+            "new_max_index": outdoor_max_index,
+            "sort_count_offset": hex(0x250),
+            "bounds_offset": hex(0x272),
+            "count_return_offset": hex(0x83),
+        }
+
+    obj.write(PATCHED / "InventoryManager.obj")
+    manifest["InventoryManager"] = {
+        "lists": list_manifest,
+        "pet_store_additions": [
+            {"name": pet["name"], "item_id": hex(pet["item_id"]), "source": pet["source"]}
+            for pet in PET_STORE_ADDITIONS
+        ],
+        "range_patches": range_patches,
+        "count_patches": count_patches,
+        "count_return_patches": count_return_patches,
+        "outdoor_exact_count_patch": outdoor_exact_count_patch,
+        "generation_sort_cap": {"old": 9, "new": 30, "patches": generation_cap_patches},
+    }
+
+
+def patch_visible_special_upgrades(manifest):
+    obj = CoffObject(PATCHED / "InventoryManager.obj")
+
+    services_sym = obj.symbol(GSERVICESLIST)
+    services_sec = obj.section(services_sym.section)
+    services_raw = services_sec.raw_ptr + services_sym.value
+    original_visible_ids = list(struct.unpack_from("<6I", obj.buf, services_raw))
+    if original_visible_ids != [0x111, 0x112, 0x113, 0x115, 0x116, 0x114]:
+        raise RuntimeError(f"Unexpected visible Special Upgrades base list: {[hex(x) for x in original_visible_ids]}")
+
+    added_service_ids = [0x117, 0x118, 0x119, 0x11A]
+    insert_off = services_sym.value + len(original_visible_ids) * 4
+    existing_after = list(struct.unpack_from("<4I", obj.buf, services_sec.raw_ptr + insert_off))
+    inserted = False
+    if existing_after != added_service_ids:
+        obj.insert_section_bytes(services_sym.section, insert_off, struct.pack("<4I", *added_service_ids))
+        inserted = True
+
+    iteminfo_sym = obj.symbol(INVENTORY_ITEMINFO)
+    iteminfo_sec = obj.section(iteminfo_sym.section)
+    iteminfo_raw = iteminfo_sec.raw_ptr + iteminfo_sym.value
+    special_upgrade_records = {
+        0x117: [0x117, visible_special_upgrade_icon_id_for(0x117), 1, 10000, 0, 0x2C, visible_special_upgrade_desc_id_for(0), 0, 0],
+        0x118: [0x118, visible_special_upgrade_icon_id_for(0x118), 1, 10000, 0, 0x2D, visible_special_upgrade_desc_id_for(1), 0, 0],
+        0x119: [0x119, visible_special_upgrade_icon_id_for(0x119), 1, 10000, 0, 0x2E, visible_special_upgrade_desc_id_for(2), 0, 0],
+        0x11A: [0x11A, visible_special_upgrade_icon_id_for(0x11A), 1, 77777, 0, 0x2F, visible_special_upgrade_desc_id_for(3), 0, 0],
+    }
+    for item_id, vals in special_upgrade_records.items():
+        struct.pack_into("<9I", obj.buf, iteminfo_raw + item_id * 36, *vals)
+
+    count_sym = obj.symbol(GET_CATEGORY_ITEM_COUNT)
+    count_sec = obj.section(count_sym.section)
+    count_raw = count_sec.raw_ptr + count_sym.value + 0x19
+    if obj.buf[count_raw : count_raw + 5] != b"\xB8\x06\x00\x00\x00":
+        raise RuntimeError("Unexpected GetCategoryItemCount Special Upgrades return bytes")
+    obj.buf[count_raw : count_raw + 5] = b"\xB8\x0A\x00\x00\x00"
+
+    item_sym = obj.symbol(GET_CATEGORY_ITEM)
+    item_sec = obj.section(item_sym.section)
+    item_raw = item_sec.raw_ptr + item_sym.value + 0x1D
+    if obj.buf[item_raw : item_raw + 3] != b"\x83\xFE\x05":
+        raise RuntimeError("Unexpected GetCategoryItem Special Upgrades bounds bytes")
+    obj.buf[item_raw : item_raw + 3] = b"\x83\xFE\x09"
+
+    price_sym = obj.symbol("?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z")
+    price_insert = price_sym.value + 0x3
+    price_sec = obj.section(price_sym.section)
+    price_raw = price_sec.raw_ptr + price_insert
+    if obj.buf[price_raw : price_raw + 3] != b"\x8B\x4D\x08":
+        raise RuntimeError("Unexpected GetPrice prologue bytes")
+    price_helper_sym = obj.append_undefined_symbol("_VF2GetVisibleSpecialUpgradePrice")
+    price_payload = bytearray()
+    price_payload += b"\xFF\x75\x08"              # push [ebp+8] ; item id
+    price_payload += b"\xE8\x00\x00\x00\x00"      # call helper
+    price_payload += b"\x83\xC4\x04"              # add esp,4
+    price_payload += b"\x83\xF8\xFF"              # cmp eax,-1
+    price_payload += b"\x74\x04"                  # je original GetPrice body
+    price_payload += b"\x5D"                      # pop ebp
+    price_payload += b"\xC2\x04\x00"              # ret 4
+    if len(price_payload) != 0x14:
+        raise RuntimeError("Unexpected visible Special Upgrades price payload length")
+    obj.insert_section_bytes(price_sym.section, price_insert, bytes(price_payload))
+    obj.append_relocation(price_sym.section, price_insert + 4, price_helper_sym, IMAGE_REL_I386_REL32)
+
+    obj.write(PATCHED / "InventoryManager.obj")
+    manifest["VisibleSpecialUpgrades"] = {
+        "status": "visible Special Upgrades category extended additively",
+        "source_list": "gServicesList",
+        "old_count": 6,
+        "new_count": 10,
+        "inserted_list_entries": inserted,
+        "base_items_preserved": [hex(x) for x in original_visible_ids],
+        "added_items": [
+            {"item_id": "0x117", "name": "Brokerage Account", "price": 10000, "icon": hex(visible_special_upgrade_icon_id_for(0x117)), "icon_file": VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x117], "title_string": "0x2c", "description_string": hex(visible_special_upgrade_desc_id_for(0))},
+            {"item_id": "0x118", "name": "Food Club", "price": 10000, "icon": hex(visible_special_upgrade_icon_id_for(0x118)), "icon_file": VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x118], "title_string": "0x2d", "description_string": hex(visible_special_upgrade_desc_id_for(1))},
+            {"item_id": "0x119", "name": "Health Plan", "price": 10000, "icon": hex(visible_special_upgrade_icon_id_for(0x119)), "icon_file": VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x119], "title_string": "0x2e", "description_string": hex(visible_special_upgrade_desc_id_for(2))},
+            {"item_id": "0x11a", "name": "Lucky Rock", "price": 77777, "icon": hex(visible_special_upgrade_icon_id_for(0x11A)), "icon_file": VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x11A], "title_string": "0x2f", "description_string": hex(visible_special_upgrade_desc_id_for(3))},
+        ],
+        "active_reset_price": {
+            "status": "GetPrice hook returns 0 coins when one of the added Special Upgrades is already active",
+            "hook": "?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z + 0x3",
+            "helper": "_VF2GetVisibleSpecialUpgradePrice",
+        },
+    }
+
+
+def patch_scrolling_store_scene(manifest):
+    obj = CoffObject(PATCHED / "ScrollingStoreScene.obj")
+    new_furniture_end = max(item_id_for(i) for i in range(len(ITEMS))) + 1
+    patches = 0
+    for reg in [b"\x3D", b"\x81\xFB", b"\x81\xFE", b"\x81\xF9", b"\x81\xFA"]:
+        patches += patch_all_in_sections(
+            obj,
+            {".text$mn"},
+            reg + struct.pack("<I", 0x2A9),
+            reg + struct.pack("<I", new_furniture_end),
+        )
+    draw_sym = obj.symbol("?DrawVisibleStoreItem@CScrollingStoreScene@@AAEXHHH@Z")
+    lock_helper_sym = obj.append_undefined_symbol("_VF2DrawGenerationLock")
+    obj.retarget_relocation(draw_sym.section, draw_sym.value + 0x354, lock_helper_sym, IMAGE_REL_I386_REL32)
+
+    scene_draw_sym = obj.symbol("?DrawScene@CScrollingStoreScene@@MAEXXZ")
+    scrollbar_draw_helper = obj.append_undefined_symbol("_VF2DrawStoreScrollbar")
+    draw_insert = scene_draw_sym.value + 0x154
+    draw_payload = bytearray([
+        0x57,                         # push edi ; this
+        0xE8, 0, 0, 0, 0,             # call _VF2DrawStoreScrollbar
+        0x83, 0xC4, 0x04,             # add esp, 4
+    ])
+    obj.insert_section_bytes(scene_draw_sym.section, draw_insert, draw_payload)
+    obj.append_relocation(scene_draw_sym.section, draw_insert + 2, scrollbar_draw_helper, IMAGE_REL_I386_REL32)
+
+    mouse_sym = obj.symbol("?HandleMouse@CScrollingStoreScene@@UAE_NHUldwPoint@@@Z")
+    scrollbar_mouse_helper = obj.append_undefined_symbol("_VF2HandleStoreScrollbarMouse")
+    mouse_insert = mouse_sym.value + 0x30
+    mouse_payload = bytearray([
+        0xFF, 0x75, 0x10,             # push [ebp+10h] ; y
+        0xFF, 0x75, 0x0C,             # push [ebp+0Ch] ; x
+        0xFF, 0x75, 0x08,             # push [ebp+8]   ; message
+        0x57,                         # push edi       ; this
+        0xE8, 0, 0, 0, 0,             # call helper
+        0x83, 0xC4, 0x10,             # add esp, 10h
+    ])
+    obj.insert_section_bytes(mouse_sym.section, mouse_insert, mouse_payload)
+    obj.append_relocation(mouse_sym.section, mouse_insert + 11, scrollbar_mouse_helper, IMAGE_REL_I386_REL32)
+
+    purchase_sym = obj.symbol("?HandlePurchaseItem@CScrollingStoreScene@@AAEXXZ")
+    purchase_insert = purchase_sym.value + 0x1AD
+    purchase_sec = obj.section(purchase_sym.section)
+    purchase_raw = purchase_sec.raw_ptr + purchase_insert
+    expected_purchase_bytes = b"\x8B\x8E\x60\x01\x00\x00\x8B\xC1\x83\xF9\x04"
+    if obj.buf[purchase_raw:purchase_raw + len(expected_purchase_bytes)] != expected_purchase_bytes:
+        raise RuntimeError("Unexpected HandlePurchaseItem visible-special dispatch bytes")
+
+    special_upgrade_helper_sym = obj.append_undefined_symbol("_VF2ApplyVisibleSpecialUpgrade")
+    special_purchase_payload = bytearray()
+    special_purchase_payload += b"\x8B\x86\x60\x01\x00\x00"          # mov eax,[esi+160h]
+    special_purchase_payload += b"\x8B\xC8"                          # mov ecx,eax
+    special_purchase_payload += b"\x2D\x17\x01\x00\x00"              # sub eax,117h
+    special_purchase_payload += b"\x83\xF8\x03"                      # cmp eax,3
+    special_purchase_payload += b"\x77\x0E"                          # ja normal visible purchase
+    special_purchase_payload += b"\x51"                              # push ecx ; original item id
+    special_purchase_payload += b"\xE8\x00\x00\x00\x00"              # call _VF2ApplyVisibleSpecialUpgrade
+    special_purchase_payload += b"\x83\xC4\x04"                      # add esp,4
+    return_after_purchase = purchase_sym.value + 0x31C + 0x20
+    rel_to_return = (return_after_purchase - (purchase_insert + len(special_purchase_payload) + 5)) & 0xFFFFFFFF
+    special_purchase_payload += b"\xE9" + struct.pack("<I", rel_to_return)
+    if len(special_purchase_payload) != 0x20:
+        raise RuntimeError("Unexpected visible Special Upgrades purchase payload length")
+    obj.insert_section_bytes(purchase_sym.section, purchase_insert, bytes(special_purchase_payload))
+    obj.append_relocation(purchase_sym.section, purchase_insert + 20, special_upgrade_helper_sym, IMAGE_REL_I386_REL32)
+
+    obj.write(PATCHED / "ScrollingStoreScene.obj")
+    lock_base = lock_image_id_for(0)
+    (PATCHED / "vf2_generation_locks.cpp").write_text(
+        f"""
+enum EImage {{ eImageDummy = 0 }};
+
+class theGraphicsManager {{
+public:
+    void Draw(EImage image, int x, int y, float scale, int alpha);
+}};
+
+extern "C" void __cdecl VF2DrawGenerationLockImpl(theGraphicsManager* graphics, int frame, int x, int y, float scale, int alpha) {{
+    if (frame < 0) {{
+        frame = 0;
+    }} else if (frame >= {LOCKED_GENERATION_FRAME_COUNT}) {{
+        frame = {LOCKED_GENERATION_FRAME_COUNT - 1};
+    }}
+    graphics->Draw((EImage)({lock_base} + frame), x, y, scale, alpha);
+}}
+
+extern "C" void __cdecl VF2DrawVisibleSpecialUpgradeIcon(theGraphicsManager* graphics, int item, int x, int y) {{
+    if (!graphics) {{
+        return;
+    }}
+
+    int frame = item - 0x117;
+    if (frame < 0 || frame >= {len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)}) {{
+        return;
+    }}
+
+    graphics->Draw((EImage)({visible_special_upgrade_icon_id_for(0x117)} + frame), x, y, 1.0f, 100);
+}}
+
+extern "C" __declspec(naked) void VF2DrawGenerationLock() {{
+    __asm {{
+        push ebp
+        mov ebp, esp
+        push dword ptr [ebp+1Ch]
+        push dword ptr [ebp+18h]
+        push dword ptr [ebp+14h]
+        push dword ptr [ebp+10h]
+        push dword ptr [ebp+0Ch]
+        push ecx
+        call VF2DrawGenerationLockImpl
+        add esp, 18h
+        pop ebp
+        ret 18h
+    }}
+}}
+""".lstrip(),
+        encoding="ascii",
+    )
+    (PATCHED / "vf2_store_scrollbar.cpp").write_text(
+        r"""
+struct ldwRect {
+    int left;
+    int top;
+    int right;
+    int bottom;
+};
+
+struct ldwColor {
+    unsigned int value;
+};
+
+class ldwGameWindow {
+public:
+    static ldwGameWindow *Get();
+    void FillRect(ldwRect &rect, ldwColor color);
+};
+
+static int &field_i(void *scene, int offset) {
+    return *(int *)((char *)scene + offset);
+}
+
+static unsigned char &field_b(void *scene, int offset) {
+    return *(unsigned char *)((char *)scene + offset);
+}
+
+static int clamp_int(int value, int lo, int hi) {
+    if (value < lo) return lo;
+    if (value > hi) return hi;
+    return value;
+}
+
+static void sync_thumb_from_scroll(void *scene) {
+    int maxScroll = field_i(scene, 0x154);
+    if (maxScroll <= 0) {
+        return;
+    }
+    int railTop = field_i(scene, 0x0F8);
+    int railBottom = field_i(scene, 0x100);
+    int thumbHeight = field_i(scene, 0x110);
+    int travel = (railBottom - railTop) - thumbHeight;
+    if (travel <= 0) {
+        return;
+    }
+    int scroll = clamp_int(field_i(scene, 0x148), 0, maxScroll);
+    field_i(scene, 0x148) = scroll;
+    field_i(scene, 0x108) = railTop + (travel * scroll) / maxScroll;
+}
+
+extern "C" void __cdecl VF2DrawStoreScrollbar(void *scene) {
+    int maxScroll = field_i(scene, 0x154);
+    if (maxScroll <= 0) {
+        return;
+    }
+
+    sync_thumb_from_scroll(scene);
+
+    int left = field_i(scene, 0x0EC) + 8;
+    int right = left + 12;
+    int railTop = field_i(scene, 0x0E8) + 8;
+    int railBottom = field_i(scene, 0x0F0) - 42;
+    int thumbTop = clamp_int(field_i(scene, 0x108), railTop, railBottom - 22);
+    int thumbBottom = thumbTop + field_i(scene, 0x110);
+    if (thumbBottom > railBottom) {
+        thumbBottom = railBottom;
+    }
+
+    ldwGameWindow *window = ldwGameWindow::Get();
+    ldwRect rail = { left, railTop, right, railBottom };
+    ldwRect groove = { left + 3, railTop + 3, right - 3, railBottom - 3 };
+    ldwRect thumb = { left + 1, thumbTop, right - 1, thumbBottom };
+    ldwRect thumbHi = { left + 3, thumbTop + 3, right - 3, thumbTop + 8 };
+
+    ldwColor railColor = { 0xCC24466F };
+    ldwColor grooveColor = { 0xCC7FB3DC };
+    ldwColor thumbColor = { 0xEEB7E1FF };
+    ldwColor thumbHiColor = { 0xFFFFFFFF };
+
+    window->FillRect(rail, railColor);
+    window->FillRect(groove, grooveColor);
+    window->FillRect(thumb, thumbColor);
+    window->FillRect(thumbHi, thumbHiColor);
+}
+
+extern "C" void __cdecl VF2HandleStoreScrollbarMouse(void *scene, int message, int x, int y) {
+    int maxScroll = field_i(scene, 0x154);
+    if (maxScroll <= 0) {
+        return;
+    }
+
+    int left = field_i(scene, 0x0EC) + 4;
+    int right = left + 20;
+    int railTop = field_i(scene, 0x0E8) + 8;
+    int railBottom = field_i(scene, 0x0F0) - 42;
+    if (x < left || x > right || y < railTop || y > railBottom) {
+        return;
+    }
+
+    if (message != 2) {
+        return;
+    }
+
+    int thumbHeight = field_i(scene, 0x110);
+    int travel = (railBottom - railTop) - thumbHeight;
+    if (travel <= 0) {
+        return;
+    }
+
+    int newThumbTop = clamp_int(y - thumbHeight / 2, railTop, railTop + travel);
+    int scroll = ((newThumbTop - railTop) * maxScroll) / travel;
+    field_i(scene, 0x148) = clamp_int(scroll, 0, maxScroll);
+    field_i(scene, 0x108) = newThumbTop;
+    field_i(scene, 0x118) = y;
+    field_b(scene, 0x114) = 1;
+    field_b(scene, 0x121) = 0;
+    field_b(scene, 0x140) = 0;
+}
+""".lstrip(),
+        encoding="ascii",
+    )
+    (PATCHED / "vf2_special_upgrade_effects.cpp").write_text(
+        r"""
+class CFoodStore {
+public:
+    char pad0[0x7C];
+    unsigned char haveFoodClub;
+    char pad1[3];
+    unsigned int lastFoodClubDelivery;
+    unsigned char organicDelivery[4];
+
+    void JoinFoodClub();
+};
+
+class CMoney {
+public:
+    char pad0[8];
+    float bankingInterest;
+};
+
+class CCollectableItem {
+public:
+    char pad0[0x8A8];
+    unsigned char luckyRockActive;
+};
+
+class theGameState {
+public:
+    static theGameState *Get();
+    bool SaveCurrentGame();
+
+    char pad0[0x25B1D];
+    unsigned char healthPlanActive;
+};
+
+extern CFoodStore FoodStore;
+extern CMoney Money;
+extern CCollectableItem CollectableItem;
+
+extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
+    switch (itemId) {
+    case 0x117:
+        return Money.bankingInterest > 0.1001f ? 0 : -1;
+    case 0x118:
+        return FoodStore.haveFoodClub ? 0 : -1;
+    case 0x119:
+        return theGameState::Get()->healthPlanActive ? 0 : -1;
+    case 0x11A:
+        return CollectableItem.luckyRockActive ? 0 : -1;
+    default:
+        return -1;
+    }
+}
+
+extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
+    switch (itemId) {
+    case 0x117: {
+        if (Money.bankingInterest > 0.1001f) {
+            Money.bankingInterest = 0.01f;
+            break;
+        }
+        float next = Money.bankingInterest + 0.02f;
+        if (next > 0.11f) {
+            next = 0.11f;
+        }
+        Money.bankingInterest = next;
+        break;
+    }
+    case 0x118:
+        if (FoodStore.haveFoodClub) {
+            FoodStore.haveFoodClub = 0;
+            FoodStore.lastFoodClubDelivery = 0;
+            FoodStore.organicDelivery[0] = 0;
+            FoodStore.organicDelivery[1] = 0;
+            FoodStore.organicDelivery[2] = 0;
+            FoodStore.organicDelivery[3] = 0;
+            break;
+        }
+        FoodStore.JoinFoodClub();
+        break;
+    case 0x119:
+        if (theGameState::Get()->healthPlanActive) {
+            theGameState::Get()->healthPlanActive = 0;
+            break;
+        }
+        theGameState::Get()->healthPlanActive = 1;
+        break;
+    case 0x11A:
+        if (CollectableItem.luckyRockActive) {
+            CollectableItem.luckyRockActive = 0;
+            break;
+        }
+        CollectableItem.luckyRockActive = 1;
+        break;
+    default:
+        return;
+    }
+
+    theGameState::Get()->SaveCurrentGame();
+}
+""".lstrip(),
+        encoding="ascii",
+    )
+    manifest["ScrollingStoreScene"] = {
+        "new_furniture_one_past_end": hex(new_furniture_end),
+        "furniture_end_patches": patches,
+        "generation_lock_draw": {
+            "status": "DrawCell retargeted to standalone generation lock helper",
+            "patched_function": "?DrawVisibleStoreItem@CScrollingStoreScene@@AAEXHHH@Z",
+            "call_offset": "0x354",
+            "helper": "_VF2DrawGenerationLock",
+            "image_base": hex(lock_base),
+            "image_count": LOCKED_GENERATION_FRAME_COUNT,
+        },
+        "store_scrollbar": {
+            "draw_hook": "?DrawScene@CScrollingStoreScene@@MAEXXZ + 0x154",
+            "mouse_hook": "?HandleMouse@CScrollingStoreScene@@UAE_NHUldwPoint@@@Z + 0x30",
+            "helper": "_VF2DrawStoreScrollbar / _VF2HandleStoreScrollbarMouse",
+            "fields": {
+                "scroll_offset": "this+0x148",
+                "max_scroll": "this+0x154",
+                "rail_top": "this+0x0F8",
+                "rail_bottom": "this+0x100",
+                "thumb_top": "this+0x108",
+                "thumb_height": "this+0x110",
+                "thumb_dragging": "this+0x114",
+            },
+        },
+        "visible_special_upgrades": {
+            "status": "visible purchases call a direct effect helper after normal coin charge; hidden IAP UI/dialog path bypassed",
+            "visible_item_ids": ["0x117", "0x118", "0x119", "0x11a"],
+            "native_iap_rows": [7, 8, 9, 10],
+            "purchase_hook": "?HandlePurchaseItem@CScrollingStoreScene@@AAEXXZ + 0x1AD",
+            "effects": {
+                "0x117": "Brokerage Account helper increments banking interest; active reset sets interest to 1%",
+                "0x118": "Food Club helper calls JoinFoodClub",
+                "0x119": "Health Plan helper sets the health-plan discount flag",
+                "0x11a": "Lucky Rock helper sets the collectible boost flag",
+            },
+            "dialog": "disabled for stability; the native hidden-IAP message box path produced blank/crashing dialogs when called from visible Store rows",
+            "icons": {
+                "status": "disabled in this crash rollback build; standalone descriptors remain present for a safer future draw path",
+                "image_base": hex(visible_special_upgrade_icon_id_for(0x117)),
+            },
+        },
+    }
+
+
+def patch_purchase_dialog(manifest):
+    obj = CoffObject(PATCHED / "thePurchaseDialog.obj")
+    new_furniture_end = max(item_id_for(i) for i in range(len(ITEMS))) + 1
+    patches = 0
+    for reg in [b"\x3D", b"\x81\xFF", b"\x81\xFE", b"\x81\xFB", b"\x81\xF9", b"\x81\xFA"]:
+        patches += patch_all_in_sections(
+            obj,
+            {".text$mn"},
+            reg + struct.pack("<I", 0x2A9),
+            reg + struct.pack("<I", new_furniture_end),
+        )
+    obj.write(PATCHED / "thePurchaseDialog.obj")
+    manifest["thePurchaseDialog"] = {
+        "new_furniture_one_past_end": hex(new_furniture_end),
+        "furniture_preview_bound_patches": patches,
+    }
+
+
+def c_symbol_for_string(kind, idx, role):
+    return f"_vf2mobstr_{kind}_{idx}_{role}"
+
+
+def patch_string_manager(manifest):
+    obj = CoffObject(PATCHED / "theStringManager.obj")
+    table_sym = obj.symbol(STRINGTABLE)
+    insert_off = table_sym.value + ORIG_STRING_COUNT * STRING_RECORD_SIZE
+    new_rows = []
+    helper_lines = []
+    string_manifest = []
+
+    for idx, (_name, _donor_id, _list_name, path) in enumerate(ITEMS):
+        data = MOBILE_DATA_BY_PATH[path]
+        short_id, long_id = item_string_ids(idx)
+        for string_id, key, text, role in [
+            (short_id, data["short_symbol"], data["short_description"], "short"),
+            (long_id, data["long_symbol"], data["long_description"], "long"),
+        ]:
+            key_sym = c_symbol_for_string("key", idx, role)
+            text_sym = c_symbol_for_string("text", idx, role)
+            helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+            helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+            new_rows.append((string_id, key_sym, text_sym))
+            string_manifest.append({
+                "pc_string_id": hex(string_id),
+                "mobile_string_id": hex(data["mobile_short_id"] if role == "short" else data["mobile_long_id"]),
+                "mobile_item_id": hex(data["mobile_item_id"]) if "mobile_item_id" in data else hex(data["item_id"]),
+                "key": key,
+                "text": text,
+            })
+
+    if ENABLE_ISLAND_EVENTS:
+        for event in load_mobile_island_events():
+            for string_row in event["strings"]:
+                string_id = string_row["string_id"]
+                key_sym = f"_vf2eventstr_key_{string_id:X}"
+                text_sym = f"_vf2eventstr_text_{string_id:X}"
+                helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(string_row["key"])}";')
+                helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(string_row["text"])}";')
+                new_rows.append((string_id, key_sym, text_sym))
+                string_manifest.append({
+                    "pc_string_id": hex(string_id),
+                    "source": "mobile island event",
+                    "event": event["class"],
+                    "slot": hex(event["slot"]),
+                    "kind": string_row["kind"],
+                    "key": string_row["key"],
+                    "text": string_row["text"],
+                })
+
+    removable_note = " (This upgrade can be removed by purchasing it again)"
+    special_upgrade_descriptions = [
+        (
+            visible_special_upgrade_desc_id_for(0),
+            "eString_BrokerageAccountDescRemovable",
+            "Upgrade your broker. Provides a permanent 2% boost to your family's banking interest rate." + removable_note,
+        ),
+        (
+            visible_special_upgrade_desc_id_for(1),
+            "eString_FoodClubDescRemovable",
+            "Bags of organic, local groceries containing all 4 food groups, delivered each day (helps prevent accidental starvation). Plus a permanent 50% discount on all food!" + removable_note,
+        ),
+        (
+            visible_special_upgrade_desc_id_for(2),
+            "eString_HealthPlanDescRemovable",
+            "Provides a permanent 75% discount on all health care and medicines." + removable_note,
+        ),
+        (
+            visible_special_upgrade_desc_id_for(3),
+            "eString_LuckyRockDescRemovable",
+            "This lucky rock increases the rate and rarity of random collectibles that appear in the yard." + removable_note,
+        ),
+    ]
+    for string_id, key, text in special_upgrade_descriptions:
+        key_sym = f"_vf2specialstr_key_{string_id:X}"
+        text_sym = f"_vf2specialstr_text_{string_id:X}"
+        helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+        helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+        new_rows.append((string_id, key_sym, text_sym))
+        string_manifest.append({
+            "pc_string_id": hex(string_id),
+            "source": "visible special upgrade",
+            "key": key,
+            "text": text,
+        })
+
+    for index, (key, text) in enumerate(BEHAVIOR_LABELS):
+        string_id = behavior_label_string_id_for(index)
+        key_sym = f"_vf2behaviorstr_key_{string_id:X}"
+        text_sym = f"_vf2behaviorstr_text_{string_id:X}"
+        helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+        helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+        new_rows.append((string_id, key_sym, text_sym))
+        string_manifest.append({
+            "pc_string_id": hex(string_id),
+            "source": "behavior label",
+            "key": key,
+            "text": text,
+        })
+
+    # Retain the existing string id used by the pet behavior while replacing
+    # its text through the normal string-table lookup.
+    pet_candidates = (
+        b"{name} sees pet",
+        b"{name} sees their adorable pet",
+        b"{name} sees their adorable pet.",
+    )
+    pet_new = "{name} sees their adorable pet."
+    pet_symbol = None
+    for symbol in obj.symbols:
+        if symbol.section <= 0:
+            continue
+        section_data = bytes(obj.section_data(symbol.section))
+        if (
+            symbol.name.startswith("??_C@")
+            and any(
+                section_data[symbol.value : symbol.value + len(candidate)] == candidate
+                for candidate in pet_candidates
+            )
+        ):
+            pet_symbol = symbol
+            break
+    if pet_symbol is None:
+        raise RuntimeError("Could not locate the existing pet-behavior string")
+    pet_key_sym = "_vf2petstr_key"
+    pet_text_sym = "_vf2petstr_text"
+    helper_lines.append(f'const char {pet_key_sym[1:]}[] = "eString_SeesTheirAdorablePet";')
+    helper_lines.append(f'const char {pet_text_sym[1:]}[] = "{c_string(pet_new)}";')
+
+    payload = b"".join(struct.pack("<IIII", string_id, 0, 0, 0) for string_id, _key, _text in new_rows)
+    obj.insert_section_bytes(table_sym.section, insert_off, payload)
+    for row_idx, (_string_id, key_sym, text_sym) in enumerate(new_rows):
+        row_off = insert_off + row_idx * STRING_RECORD_SIZE
+        key_symidx = obj.append_undefined_symbol(key_sym)
+        text_symidx = obj.append_undefined_symbol(text_sym)
+        obj.append_relocation(table_sym.section, row_off + 4, key_symidx)
+        obj.append_relocation(table_sym.section, row_off + 8, text_symidx)
+
+    pet_text_symidx = obj.append_undefined_symbol(pet_text_sym)
+    pet_retargeted = []
+    table_section = obj.section(table_sym.section)
+    p = table_section.reloc_ptr
+    for _ in range(table_section.nreloc):
+        vaddr, symidx, _rtype = struct.unpack_from("<IIH", obj.buf, p)
+        if (
+            symidx == pet_symbol.index
+            and table_sym.value <= vaddr < insert_off
+            and (vaddr - table_sym.value) % STRING_RECORD_SIZE == 8
+        ):
+            obj.retarget_relocation(table_sym.section, vaddr, pet_text_symidx)
+            pet_retargeted.append(hex(vaddr))
+            break
+        p += 10
+    if not pet_retargeted:
+        raise RuntimeError("Could not retarget the pet behavior string-table entry")
+
+    new_count = ORIG_STRING_COUNT + len(new_rows)
+    new_one_past = ORIG_STRING_ONE_PAST_MAX + len(new_rows)
+    new_get_max_minus_one = new_one_past - 2
+    new_lookup_bytes = new_one_past * 4
+    count_patches = patch_all_in_sections(obj, {".text$mn"}, struct.pack("<I", ORIG_STRING_COUNT), struct.pack("<I", new_count))
+    max_patches = patch_all_in_sections(obj, {".text$mn"}, struct.pack("<I", ORIG_STRING_ONE_PAST_MAX), struct.pack("<I", new_one_past))
+    get_guard_patches = patch_all_in_sections(obj, {".text$mn"}, struct.pack("<I", ORIG_STRING_GET_MAX_MINUS_ONE), struct.pack("<I", new_get_max_minus_one))
+    lookup_patches = patch_all_in_sections(obj, {".text$mn"}, struct.pack("<I", ORIG_STRING_LOOKUP_BYTES), struct.pack("<I", new_lookup_bytes))
+
+    lookup_sym = obj.symbol(STRINGLOOKUP)
+    obj.grow_bss_section(lookup_sym.section, lookup_sym.value + ORIG_STRING_LOOKUP_BYTES, new_lookup_bytes - ORIG_STRING_LOOKUP_BYTES)
+    obj.write(PATCHED / "theStringManager.obj")
+    (PATCHED / "vf2_mobile_string_table.c").write_text("\n".join(helper_lines) + "\n", encoding="ascii")
+    manifest["theStringManager"] = {
+        "added_strings": len(new_rows),
+        "new_string_count": hex(new_count),
+        "new_one_past_max": hex(new_one_past),
+        "strings": string_manifest,
+        "patches": {
+            "string_count": count_patches,
+            "one_past_max": max_patches,
+            "get_guard": get_guard_patches,
+            "lookup_bytes": lookup_patches,
+        },
+        "updated_existing_strings": [{
+            "old": "{name} sees pet",
+            "new": pet_new,
+            "table_relocations": pet_retargeted,
+        }],
+    }
+
+
+def patch_special_upgrade_titles(manifest):
+    obj_path = PATCHED / "theStringManager.obj"
+    data = bytearray(obj_path.read_bytes())
+    replacements = {
+        b"Brokerage Account $0.99": b"Brokerage Account",
+        b"Food Club $0.99": b"Food Club",
+        b"Health Plan $0.99": b"Health Plan",
+        b"Lucky Rock $0.99": b"Lucky Rock",
+    }
+    patched = []
+    for old, new in replacements.items():
+        idx = data.find(old)
+        if idx < 0:
+            padded = new + b"\0" * (len(old) - len(new))
+            if data.find(padded) >= 0:
+                patched.append(new.decode("ascii"))
+                continue
+            raise RuntimeError(f"Could not find special upgrade title {old!r}")
+        if len(new) > len(old):
+            raise RuntimeError(f"Replacement too long for {old!r}")
+        data[idx : idx + len(old)] = new + b"\0" * (len(old) - len(new))
+        patched.append(new.decode("ascii"))
+    obj_path.write_bytes(data)
+    manifest["SpecialUpgrades"] = {
+        "mode": "native append-only rows",
+        "rows": "desktop SetStoreCategory already exposes 11 Special Upgrades rows",
+        "native_effects_preserved": [
+            "Roll the Dice",
+            "Time Warp",
+            "Adoption Service",
+            "On Call Maid Service",
+            "On Call Gardening Service",
+            "Lotto Ticket",
+            "Redeem Code/credit row",
+            "Brokerage Account",
+            "Food Club",
+            "Health Plan",
+            "Lucky Rock",
+        ],
+        "title_patches": patched,
+        "disabled_risky_hooks": [
+            "old dialog-result reroute",
+            "old precharge hook inside HandlePurchaseItem",
+        ],
+    }
+
+
+def patch_island_events(manifest):
+    mobile_events = load_mobile_island_events()
+    if not mobile_events:
+        manifest["IslandEvents"] = {"added": [], "status": "no mobile event rows found"}
+        return
+
+    obj = CoffObject(PATCHED / "IslandEvents.obj")
+    ctor_sym = obj.symbol("??0CIslandEvents@@AAE@XZ")
+    event_list_sym = obj.symbol("?mEventList@CIslandEvents@@0PAPAVCIslandEvent@@A")
+    event_has_fired_sym = obj.symbol("?mEventHasFired@CIslandEvents@@0PA_NA")
+    sec = obj.section(ctor_sym.section)
+    start = sec.raw_ptr + ctor_sym.value
+    if obj.buf[start + 0x15B8:start + 0x15BE] != b"\x8B\xC6\x5E\x8B\xE5\x5D":
+        raise ValueError("Unexpected CIslandEvents constructor epilogue")
+
+    new_bound = 0x61 + len(mobile_events)
+    if new_bound > 0xFF:
+        raise ValueError("Too many mobile island events for current one-byte bound patch")
+
+    first_added_slot = 0x61
+    first_slot_offset = first_added_slot * 4
+    new_table_end_offset = new_bound * 4
+    old_has_fired_offset = event_has_fired_sym.value - event_list_sym.value
+    event_table_growth = new_table_end_offset - old_has_fired_offset
+    if event_table_growth < 0:
+        raise ValueError("Unexpected CIslandEvents event-table layout")
+    if event_table_growth:
+        obj.grow_bss_section(event_has_fired_sym.section, event_has_fired_sym.value, event_table_growth)
+        event_list_sym = obj.symbol("?mEventList@CIslandEvents@@0PAPAVCIslandEvent@@A")
+        event_has_fired_sym = obj.symbol("?mEventHasFired@CIslandEvents@@0PA_NA")
+
+    insert_off = ctor_sym.value + 0x15B8
+    payload = bytearray([
+        0x68, first_slot_offset & 0xFF, (first_slot_offset >> 8) & 0xFF, 0x00, 0x00,  # push offset mEventList+184h
+        0xE8, 0x00, 0x00, 0x00, 0x00,       # call _VF2RegisterMobileIslandEvents
+        0x83, 0xC4, 0x04,                   # add esp,4
+    ])
+    obj.insert_section_bytes(ctor_sym.section, insert_off, payload)
+    helper_sym = obj.append_undefined_symbol("_VF2RegisterMobileIslandEvents")
+    obj.append_relocation(ctor_sym.section, insert_off + 1, event_list_sym.index)
+    obj.append_relocation(ctor_sym.section, insert_off + 6, helper_sym, IMAGE_REL_I386_REL32)
+
+    bound_patches = 0
+    bound_patches += patch_all_in_sections(obj, {".text$mn"}, b"\x83\xFE\x61", bytes([0x83, 0xFE, new_bound]))
+    bound_patches += patch_all_in_sections(obj, {".text$mn"}, b"\x83\xFF\x61", bytes([0x83, 0xFF, new_bound]))
+    bound_patches += patch_all_in_sections(obj, {".text$mn"}, b"\x6A\x61", bytes([0x6A, new_bound]))
+    bound_patches += patch_all_in_sections(obj, {".text$mn"}, b"\x83\xF8\x5F", bytes([0x83, 0xF8, new_bound - 2]))
+    destructor_bound_patches = patch_all_in_sections(
+        obj,
+        {".text$mn"},
+        b"\x81\xFE\x84\x01\x00\x00",
+        b"\x81\xFE" + struct.pack("<I", new_table_end_offset),
+    )
+
+    obj.write(PATCHED / "IslandEvents.obj")
+
+    registrations = []
+    for idx, event in enumerate(mobile_events):
+        ids = event["ids"]
+        registrations.append(
+            "    slots[{idx}] = (void *)new CMobileIslandEvent({title}, {desc}, {choice_a}, {choice_b}, {result_a}, {result_b}, {has_choices}, {is_email});".format(
+                idx=idx,
+                title=ids.get("Title", 0),
+                desc=ids.get("Desc", 0),
+                choice_a=ids.get("ChoiceA", 0),
+                choice_b=ids.get("ChoiceB", 0),
+                result_a=ids.get("ResultA", 0),
+                result_b=ids.get("ResultB", 0),
+                has_choices="true" if event["has_choices"] else "false",
+                is_email="true" if event["is_email_event"] else "false",
+            )
+        )
+
+    helper_cpp = f'''
+enum StringId {{ eStringDummy = 0 }};
+enum EBodyPosition {{ eBodyPosition_Standing = 0 }};
+
+class CVillager;
+class CVillagerManager {{
+public:
+    int const SelectRandomLivingVillager(bool includeBusy);
+    CVillager *GetVillagerPtr(int id);
+}};
+
+extern CVillagerManager VillagerManager;
+
+static CVillager *VF2PickMobileEventVillager()
+{{
+    int id = VillagerManager.SelectRandomLivingVillager(false);
+    if (id < 0) {{
+        id = VillagerManager.SelectRandomLivingVillager(true);
+    }}
+    return id >= 0 ? VillagerManager.GetVillagerPtr(id) : 0;
+}}
+
+// Vtable-compatible with CIslandEvent. Kept standalone so these grafted
+// objects do not depend on private desktop base-class symbols.
+class CMobileIslandEvent {{
+    int title_;
+    int desc_;
+    int choice_a_;
+    int choice_b_;
+    int result_a_;
+    int result_b_;
+    CVillager *target1_;
+    CVillager *target2_;
+    bool has_choices_;
+    bool is_email_;
+
+public:
+    CMobileIslandEvent(int title, int desc, int choice_a, int choice_b, int result_a, int result_b, bool has_choices, bool is_email)
+        : title_(title), desc_(desc), choice_a_(choice_a), choice_b_(choice_b), result_a_(result_a), result_b_(result_b),
+          target1_(VF2PickMobileEventVillager()), target2_(VF2PickMobileEventVillager()),
+          has_choices_(has_choices), is_email_(is_email) {{}}
+    virtual ~CMobileIslandEvent() {{}}
+    virtual bool CanFire() {{ return true; }}
+    virtual StringId GetTitle() {{ return (StringId)title_; }}
+    virtual StringId GetDescription() {{ return (StringId)desc_; }}
+    virtual bool HasChoices() {{ return has_choices_; }}
+    virtual bool IsEmailEvent() {{ return is_email_; }}
+    virtual StringId GetChoiceAText() {{ return (StringId)choice_a_; }}
+    virtual StringId GetChoiceBText() {{ return (StringId)choice_b_; }}
+    virtual CVillager *GetTargetVillager() {{ return target1_; }}
+    virtual CVillager *GetTargetVillager2() {{ return target2_ ? target2_ : target1_; }}
+    virtual EBodyPosition GetVillagerPose() {{ return eBodyPosition_Standing; }}
+    virtual StringId GetResultDescription(int choice) {{ return (StringId)(choice == 0 ? result_a_ : result_b_); }}
+    virtual void ImpactGame() {{}}
+    virtual void ImpactGame(int choice) {{ (void)choice; }}
+    virtual void CalcAward() {{}}
+    virtual void CalcAward(int choice) {{ (void)choice; }}
+    virtual int GetAwardAmount() {{ return 0; }}
+}};
+
+extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
+{{
+    if (!slots) {{
+        return;
+    }}
+{chr(10).join(registrations)}
+}}
+'''.strip() + "\n"
+    (PATCHED / "vf2_island_events.cpp").write_text(helper_cpp, encoding="ascii")
+    manifest["IslandEvents"] = {
+        "added": [
+            {
+                "class": event["class"],
+                "table_slot": hex(event["slot"]),
+                "slot_offset": f"mEventList+0x{event['slot'] * 4:X}",
+                "source": "mobile-only island event class/string names",
+                "is_email_event": event["is_email_event"],
+                "has_choices": event["has_choices"],
+                "strings": [hex(row["string_id"]) for row in event["strings"]],
+            }
+            for event in mobile_events
+        ],
+        "constructor_hook": {
+            "function": "??0CIslandEvents@@AAE@XZ",
+            "insert_offset": hex(insert_off),
+            "helper": "_VF2RegisterMobileIslandEvents",
+        },
+        "first_added_slot": hex(first_added_slot),
+        "base_desktop_slots_preserved": "0x01-0x60",
+        "new_event_scan_bound_exclusive": hex(new_bound),
+        "event_list_growth_bytes": event_table_growth,
+        "event_list_new_end_offset": hex(new_table_end_offset),
+        "mEventHasFired_new_offset": hex(event_has_fired_sym.value),
+        "event_bound_patches": bound_patches,
+        "destructor_bound_patches": destructor_bound_patches,
+    }
+
+
+def patch_graphics_manager(manifest):
+    obj = CoffObject(PATCHED / "theGraphicsManager.obj")
+    image_records = image_records_by_id()
+    furniture_records = raw_records_by_item()
+    img_sym = obj.symbol(IMAGELIST)
+    img_sec = obj.section(img_sym.section)
+    furniture_donor = image_records[74]["raw_u32"]
+
+    locked_record = image_records[LOCKED_IMAGE_ID]["raw_u32"][:]
+    locked_record[2] = LOCKED_GENERATION_FRAME_COUNT
+    locked_record[3] = 1
+    locked_desc_off = img_sym.value + LOCKED_IMAGE_ID * DESC_SIZE
+    obj.buf[img_sec.raw_ptr + locked_desc_off : img_sec.raw_ptr + locked_desc_off + DESC_SIZE] = struct.pack(
+        "<" + "I" * (DESC_SIZE // 4),
+        *locked_record,
+    )
+
+    character_sheet_manifest = []
+    for image_path, spec in CHARACTER_SHEET_SPECS.items():
+        image_id = spec["image_id"]
+        record = image_records[image_id]["raw_u32"][:]
+        probe_path = OUT / "Images" / spec["probe_file"]
+        size = read_png_size(probe_path)
+        old_grid = [record[2], record[3]]
+        new_grid = old_grid[:]
+        status = "image_missing"
+        if size:
+            cell_w, cell_h = spec["cell_size"]
+            inferred_cols = size[0] // cell_w if cell_w else record[2]
+            inferred_rows = size[1] // cell_h if cell_h else record[3]
+            if inferred_cols > record[2] or inferred_rows > record[3]:
+                record[2] = max(record[2], inferred_cols)
+                record[3] = max(record[3], inferred_rows)
+                desc_off = img_sym.value + image_id * DESC_SIZE
+                obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack(
+                    "<" + "I" * (DESC_SIZE // 4),
+                    *record,
+                )
+                new_grid = [record[2], record[3]]
+                status = "patched"
+            else:
+                status = "unchanged"
+        character_sheet_manifest.append({
+            "image_id": hex(image_id),
+            "image_path": image_path,
+            "probe_file": str(probe_path),
+            "probe_size": list(size) if size else None,
+            "cell_size": list(spec["cell_size"]),
+            "old_grid": old_grid,
+            "new_grid": new_grid,
+            "status": status,
+        })
+
+    append_count = len(ITEMS) + LOCKED_GENERATION_FRAME_COUNT + len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
+    if append_count:
+        obj.insert_section_bytes(img_sym.section, img_sym.value + ORIG_IMAGE_COUNT * DESC_SIZE, b"\0" * (append_count * DESC_SIZE))
+
+    helper_lines = []
+    desc_manifest = []
+    for idx, (name, donor_item, _list_name, path) in enumerate(ITEMS):
+        image_id = image_id_for(idx)
+        is_custom_couch = Path(path).name + ".fmap" in COUCH_FMAP_DONORS
+        if is_custom_couch:
+            donor_image_id = furniture_records[donor_item]["raw_u32"][1]
+            vals = image_records[donor_image_id]["raw_u32"][:]
+        else:
+            donor_image_id = 74
+            vals = furniture_donor[:]
+        vals[0] = image_id
+        vals[1] = 0
+        vals[2] = expected_furniture_frame_count(path)
+        vals[3] = 0
+        desc_off = img_sym.value + image_id * DESC_SIZE
+        img_sec = obj.section(img_sym.section)
+        obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
+        sym = "_vf2mob_" + path.split("/")[-1].replace(".", "_").replace("-", "_").replace("'", "").replace("&", "and")
+        helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+        symidx = obj.append_undefined_symbol(sym)
+        obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+        desc_manifest.append({
+            "name": name,
+            "image_id": hex(image_id),
+            "path": path,
+            "symbol": sym,
+            "donor_image_id": hex(donor_image_id),
+            "donor_frame_mode": vals[2],
+            "expected_frame_count": expected_furniture_frame_count(path),
+        })
+
+    plain_image_donor = image_records[0]["raw_u32"]
+    lock_desc_manifest = []
+    for frame in range(LOCKED_GENERATION_FRAME_COUNT):
+        image_id = lock_image_id_for(frame)
+        generation = frame + 2
+        path = f"GenerationLocks/lock_{generation:02d}.png"
+        vals = plain_image_donor[:]
+        vals[0] = image_id
+        vals[1] = 0
+        vals[2] = 0
+        vals[3] = 0
+        desc_off = img_sym.value + image_id * DESC_SIZE
+        img_sec = obj.section(img_sym.section)
+        obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
+        sym = f"_vf2genlock_{generation:02d}_png"
+        helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+        symidx = obj.append_undefined_symbol(sym)
+        obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+        lock_desc_manifest.append({
+            "generation": generation,
+            "frame": frame,
+            "image_id": hex(image_id),
+            "path": path,
+            "symbol": sym,
+        })
+
+    special_icon_desc_manifest = []
+    for item_id, filename in VISIBLE_SPECIAL_UPGRADE_ICON_FILES.items():
+        image_id = visible_special_upgrade_icon_id_for(item_id)
+        vals = plain_image_donor[:]
+        vals[0] = image_id
+        vals[1] = 0
+        vals[2] = 0
+        vals[3] = 0
+        desc_off = img_sym.value + image_id * DESC_SIZE
+        img_sec = obj.section(img_sym.section)
+        obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
+        sym = "_vf2specialicon_" + filename.replace(".", "_").replace("-", "_")
+        helper_lines.append(f'const char {sym[1:]}[] = "{filename}";')
+        symidx = obj.append_undefined_symbol(sym)
+        obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+        special_icon_desc_manifest.append({
+            "item_id": hex(item_id),
+            "image_id": hex(image_id),
+            "path": filename,
+            "symbol": sym,
+        })
+
+    new_image_max = ORIG_IMAGE_MAX + append_count
+    new_scan_end = ORIG_IMAGE_COUNT * DESC_SIZE + append_count * DESC_SIZE
+    new_cleanup_end = 0x7798 + append_count * DESC_SIZE
+    patches = {
+        "max_image_guard": patch_all_in_sections(obj, {".text$mn"}, struct.pack("<I", ORIG_IMAGE_MAX), struct.pack("<I", new_image_max)),
+        "image_scan_end": patch_all_in_sections(obj, {".text$mn"}, struct.pack("<I", ORIG_IMAGE_COUNT * DESC_SIZE), struct.pack("<I", new_scan_end)),
+        "cleanup_end": patch_all_in_sections(obj, {".text$mn"}, struct.pack("<I", 0x7798), struct.pack("<I", new_cleanup_end)),
+    }
+
+    index_sym = obj.symbol(IMAGEINDEX)
+    index_sec = obj.section(index_sym.section)
+    obj.grow_bss_section(index_sym.section, index_sec.raw_size, append_count * 4)
+    obj.write(PATCHED / "theGraphicsManager.obj")
+
+    (PATCHED / "vf2_mobile_furniture_strings.c").write_text("\n".join(helper_lines) + "\n", encoding="ascii")
+    manifest["theGraphicsManager"] = {
+        "generation_lock_art": {
+            "image_id": hex(LOCKED_IMAGE_ID),
+            "path": "locked.png",
+            "old_grid": image_records[LOCKED_IMAGE_ID]["raw_u32"][2:4],
+            "new_grid": [LOCKED_GENERATION_FRAME_COUNT, 1],
+            "standalone_image_base": hex(lock_image_id_for(0)),
+            "standalone_images": lock_desc_manifest,
+        },
+        "visible_special_upgrade_icons": special_icon_desc_manifest,
+        "character_sheet_art": character_sheet_manifest,
+        "descriptors": desc_manifest,
+        "append_count": append_count,
+        "new_image_max": hex(new_image_max),
+        "patches": patches,
+    }
+
+
+def sync_generation_lock_art(manifest):
+    dst = OUT / "Images" / "locked.png"
+    source_strip_width = LOCKED_GENERATION_FRAME_COUNT * LOCKED_GENERATION_CELL_WIDTH
+    icon_dir = OUT / "Images" / "GenerationLocks"
+    status = {
+        "source": str(LOCKED_PNG_SOURCE),
+        "destination": str(dst),
+        "expected_frames": LOCKED_GENERATION_FRAME_COUNT,
+        "strip_size": [source_strip_width, LOCKED_GENERATION_CELL_HEIGHT],
+        "standalone_icon_dir": str(icon_dir),
+    }
+    if LOCKED_PNG_SOURCE.exists():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        icon_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            from PIL import Image
+
+            image = Image.open(LOCKED_PNG_SOURCE).convert("RGBA")
+            source_size = list(image.size)
+            if image.size != (source_strip_width, LOCKED_GENERATION_CELL_HEIGHT):
+                image = image.resize((source_strip_width, LOCKED_GENERATION_CELL_HEIGHT), Image.Resampling.LANCZOS)
+                normalized_source = True
+            else:
+                normalized_source = False
+            image.save(dst)
+            icons = []
+            for frame in range(LOCKED_GENERATION_FRAME_COUNT):
+                generation = frame + 2
+                src_box = (
+                    frame * LOCKED_GENERATION_CELL_WIDTH,
+                    0,
+                    (frame + 1) * LOCKED_GENERATION_CELL_WIDTH,
+                    LOCKED_GENERATION_CELL_HEIGHT,
+                )
+                icon_path = icon_dir / f"lock_{generation:02d}.png"
+                image.crop(src_box).save(icon_path)
+                icons.append({"generation": generation, "path": str(icon_path), "bytes": icon_path.stat().st_size})
+            status.update({
+                "copied": True,
+                "normalized_source_strip": normalized_source,
+                "source_size": source_size,
+                "output_size": [source_strip_width, LOCKED_GENERATION_CELL_HEIGHT],
+                "standalone_icons": icons,
+                "bytes": dst.stat().st_size,
+            })
+        except Exception as exc:
+            shutil.copy2(LOCKED_PNG_SOURCE, dst)
+            status.update({
+                "copied": True,
+                "normalized": False,
+                "normalization_error": str(exc),
+                "bytes": dst.stat().st_size,
+            })
+    else:
+        status.update({"copied": False, "reason": "source_missing"})
+    manifest["generation_lock_art_asset"] = status
+
+
+def write_internal_workings_summary(manifest):
+    text = """Virtual Families 2 - Internal Furniture/Store Notes
+====================================================
+
+Core model
+----------
+Most store-placeable things are EInventoryItem values. Furniture, pets,
+decorations, rugs, and similar objects are backed by a central furniture/item
+record, then exposed to store tabs through CInventoryManager category lists.
+
+A valid item generally needs:
+
+1. A CFurnitureManager item record.
+2. A valid EImage descriptor/path.
+3. Store category/list membership.
+4. Valid short and long string IDs.
+5. A price and generation lock value.
+6. A compatible item type / behavior type.
+7. A matching .fmap asset when the item is placeable.
+
+Furniture records
+-----------------
+The furniture info table is:
+
+    ?itemInfo@@3PAUsFurnitureInfo@@A
+
+Each record is 0x6C bytes. The fields we rely on most are:
+
+    +0x00  EInventoryItem item id
+    +0x04  EImage image id
+    +0x08  store price
+    +0x0C  generation lock
+    +0x10  item type / behavior category
+    +0x14  short description string id
+    +0x18  long description string id
+    +0x58  extra/mobile field, zeroed for added furniture safety
+
+Images
+------
+Images are managed by theGraphicsManager through:
+
+    ?ImageList@@3PAUImageDescriptor@@A
+
+Important descriptor fields are:
+
+    +0x00  EImage id
+    +0x04  path string pointer
+    +0x08  columns / strip count
+    +0x0C  rows / grid rows
+
+Normal furniture uses paths such as:
+
+    Furniture/CouchBlue.png
+    Furniture/Chaise_red.png
+
+The game commonly calls:
+
+    theGraphicsManager::GetImageGrid(EImage)
+    theGraphicsManager::Draw(...)
+    theGraphicsManager::DrawCell(...)
+
+Store categories
+----------------
+Items do not appear in store tabs just because a furniture record exists. Their
+item IDs must also be inserted into CInventoryManager category arrays.
+
+Important lists include:
+
+    gFurniture2List      Living Room
+    gFurniture3List      Dining/Office style categories
+    gFurniture4List      Bedroom
+    gFurniture5List      Outdoors
+    gFurniture6List      Additional furniture category
+    gAccessoriesList     Accessories
+    gPetList             Pets
+
+When extending a list, both the array contents and the store/category count
+logic must be extended. If the counts are not patched, new items can appear to
+replace base-game entries.
+
+Store draw flow
+---------------
+The store render path is approximately:
+
+    CScrollingStoreScene::DrawVisibleStoreItem(...)
+      -> CInventoryManager::GetCategoryItem(category, index)
+      -> CInventoryManager::DrawItem(...)
+      -> CInventoryManager::IsLocked(item)
+      -> CInventoryManager::GetLockGenerationLevel(item)
+      -> draw generation-lock icon if locked
+      -> CInventoryManager::GetShortDesc(item)
+      -> CInventoryManager::GetLongDesc(item)
+      -> CalcPrice(item)
+      -> DrawMoney(...)
+
+Furniture previews eventually delegate into CFurnitureManager drawing paths for
+furniture-range items.
+
+Strings
+-------
+Names and descriptions come from theStringManager. Each furniture record points
+to a short and long string id. If either id has no valid string table row, the
+game displays:
+
+    Unknown String Id!!!!
+
+Generation locks
+----------------
+Generation lock is the integer at furniture record +0x0C.
+
+The desktop store originally only sorted/considered generation-locked items up
+to generation 9. The additive build raises that visible lock window to 30.
+
+The original desktop lock art was one small locked.png strip for generations
+2-9. For generations 2-30, this build generates standalone images:
+
+    Images/GenerationLocks/lock_02.png
+    ...
+    Images/GenerationLocks/lock_30.png
+
+The store's lock draw call is retargeted to _VF2DrawGenerationLock, which maps
+frame generation-2 to the corresponding standalone image. This avoids the old
+DrawCell strip wrapping/slicing behavior.
+
+Fmaps and behavior
+------------------
+Placeable furniture uses .fmap files in Assets. These appear to define collision
+and interaction regions/hotspots. If an added mobile item has an unsupported
+desktop behavior hotspot, dropping a villager on it can crash.
+
+For safety:
+
+    - Vibrant couches keep couch-compatible behavior and couch-style fmaps.
+    - Most non-couch mobile-only added decor has its behavior grid sanitized.
+    - Risky mobile item types are overridden to safer desktop donor types where
+      needed.
+
+Item type matters
+-----------------
+The item type field at record +0x10 affects how villagers and game systems treat
+the item. Matching base-game couch item type/behavior is what made custom
+couches sittable. Inert/decor types prevent unsupported interaction dispatch.
+
+Common failure symptoms
+-----------------------
+Missing store item:
+    Item is not in a category list, or category count/list capacity was not
+    patched.
+
+Replaces an existing item:
+    Category array/count extension is wrong.
+
+Unknown String Id!!!!:
+    Bad string IDs or missing string table rows.
+
+Wrong or missing sprite:
+    Bad image id, descriptor, path, or missing PNG.
+
+Crash when dropping a person:
+    Bad item type, unsafe .fmap behavior grid, or unsupported behavior callback.
+
+Wrong lock art:
+    Bad generation value or lock draw path.
+
+Wrong store section:
+    Item was inserted into the wrong CInventoryManager category list.
+"""
+    path = OUT / "VF2_INTERNAL_WORKINGS_SUMMARY.txt"
+    path.write_text(text, encoding="utf-8")
+    manifest["internal_workings_summary"] = {
+        "path": str(path),
+        "status": "written",
+    }
+
+
+def sync_behavior_assets(manifest):
+    assets = OUT / "Assets"
+    copied = []
+    invisible_outdoor_copied = []
+    invisible_transparent_copied = []
+    missing = []
+    sanitized = []
+    for target, donor in COUCH_FMAP_DONORS.items():
+        src = assets / donor
+        dst = assets / target
+        if src.exists():
+            shutil.copy2(src, dst)
+            copied.append({"target": target, "donor": donor, "bytes": dst.stat().st_size})
+        else:
+            missing.append({"target": target, "donor": donor})
+    for target, donor in INVISIBLE_OUTDOOR_FMAP_DONORS.items():
+        src = assets / donor
+        dst = assets / target
+        if src.exists():
+            shutil.copy2(src, dst)
+            invisible_outdoor_copied.append({"target": target, "donor": donor, "bytes": dst.stat().st_size})
+        else:
+            missing.append({"target": target, "donor": donor})
+    for target, donor in INVISIBLE_TRANSPARENT_FMAP_DONORS.items():
+        src = assets / donor
+        dst = assets / target
+        if src.exists():
+            shutil.copy2(src, dst)
+            invisible_transparent_copied.append({"target": target, "donor": donor, "bytes": dst.stat().st_size})
+        else:
+            missing.append({"target": target, "donor": donor})
+    for target, donor in VF3_TV_FMAP_DONORS.items():
+        src = assets / donor
+        dst = assets / target
+        if src.exists():
+            shutil.copy2(src, dst)
+            invisible_transparent_copied.append({"target": target, "donor": donor, "bytes": dst.stat().st_size})
+        else:
+            missing.append({"target": target, "donor": donor})
+    for item in manifest["items"]:
+        reason = safety_fmap_reason(item)
+        if not reason:
+            continue
+        target = Path(item["path"]).name + ".fmap"
+        dst = assets / target
+        if not dst.exists():
+            missing.append({"target": target, "reason": "small_decor_safety_fmap_missing"})
+            continue
+        data = bytearray(dst.read_bytes())
+        if len(data) < 0x30 or data[:4] != b"QAMF":
+            missing.append({"target": target, "reason": "small_decor_safety_fmap_unrecognized"})
+            continue
+        content_start = 0x20
+        content_end = len(data) - 0x10
+        if content_end <= content_start:
+            missing.append({"target": target, "reason": "small_decor_safety_fmap_has_no_grid"})
+            continue
+        before_cells = sum(
+            1
+            for offset in range(content_start, content_end, 4)
+            if data[offset:offset + 4] != b"\x00\x00\x00\x00"
+        )
+        for offset in range(content_start, content_end):
+            data[offset] = 0
+        dst.write_bytes(data)
+        sanitized.append({
+            "target": target,
+            "item_id": item["item_id"],
+            "name": item["name"],
+            "reason": reason,
+            "bytes": len(data),
+            "zeroed_range": [hex(content_start), hex(content_end)],
+            "nonzero_grid_cells_before": before_cells,
+        })
+    manifest["behavior_assets"] = {
+        "couch_fmap_donors": copied,
+        "invisible_outdoor_fmap_donors": invisible_outdoor_copied,
+        "invisible_transparent_fmap_donors": invisible_transparent_copied,
+        "small_decor_sanitized_fmaps": sanitized,
+        "missing": missing,
+    }
+
+
+def sync_vf3_tv_fmaps(manifest):
+    """Create separate native fmaps from each VF3 TV's rendered footprint."""
+    generated = []
+    issues = []
+    try:
+        from PIL import Image
+
+        for item in VF3_TV_ITEMS:
+            png = OUT / "Images" / "Furniture" / f"{item['name']}.png"
+            fmap = OUT / "Assets" / f"{item['name']}.png.fmap"
+            donor = OUT / "Assets" / "TVFlatScreenStd.png.fmap"
+            if not png.exists() or not donor.exists():
+                issues.append({"item": item["short_description"], "reason": "missing png or donor fmap"})
+                continue
+            data = bytearray(donor.read_bytes())
+            width, height = struct.unpack_from("<II", data, 24)
+            grid_start = 32
+            grid_end = grid_start + width * height * 4
+            if data[:4] != b"QAMF" or grid_end + 16 != len(data):
+                raise ValueError(f"unexpected TV fmap layout: {fmap}")
+            # Build the selection cells directly from the first directional
+            # sprite cell. Map coordinates are normalized to that cell, so
+            # this stays limited to the visible TV rather than the full map.
+            with Image.open(png).convert("RGBA") as image:
+                frame_w = image.width // 2
+                frame = image.crop((0, 0, frame_w, image.height))
+                alpha = frame.getchannel("A")
+                for y in range(height):
+                    top = y * frame.height // height
+                    bottom = (y + 1) * frame.height // height
+                    for x in range(width):
+                        left = x * frame.width // width
+                        right = (x + 1) * frame.width // width
+                        occupied = alpha.crop((left, top, right, bottom)).getbbox() is not None
+                        struct.pack_into("<I", data, grid_start + (y * width + x) * 4, 0x003C0001 if occupied else 0)
+            fmap.write_bytes(data)
+            generated.append({"item": item["short_description"], "path": str(fmap), "grid": [width, height], "source": "normalized alpha footprint of the VF3 TV sprite"})
+    except Exception as exc:
+        issues.append({"reason": str(exc)})
+    manifest["vf3_tv_fmaps"] = {"generated": generated, "issues": issues}
+
+
+def normalize_added_furniture_sheets(manifest):
+    normalized = []
+    issues = []
+    for item in manifest["items"]:
+        path = OUT / "Images" / item["path"]
+        frames = expected_furniture_frame_count(item["path"])
+        if frames <= 1 or not path.exists():
+            continue
+        size = read_png_size(path)
+        if not size:
+            issues.append({
+                "path": item["path"],
+                "name": item["name"],
+                "reason": "png_unreadable_or_missing",
+            })
+            continue
+        width, height = size
+        if item["path"] == "Furniture/FloweredLoveseat.png" and width < 160:
+            try:
+                from PIL import Image
+
+                with Image.open(path).convert("RGBA") as image:
+                    fixed = Image.new("RGBA", (width * frames, height), (0, 0, 0, 0))
+                    for frame in range(frames):
+                        fixed.paste(image, (frame * width, 0))
+                    backup = path.with_name(path.name + ".pre-frame-duplicate.bak")
+                    if not backup.exists():
+                        shutil.copy2(path, backup)
+                    fixed.save(path)
+                normalized.append({
+                    "path": item["path"],
+                    "name": item["name"],
+                    "frames": frames,
+                    "old_size": [width, height],
+                    "new_size": [width * frames, height],
+                    "backup": str(backup),
+                    "reason": "duplicated single VF3 loveseat sprite into a two-frame strip",
+                })
+                continue
+            except Exception as exc:
+                issues.append({
+                    "path": item["path"],
+                    "name": item["name"],
+                    "reason": str(exc),
+                })
+                continue
+        remainder = width % frames
+        if remainder == 0:
+            continue
+        try:
+            from PIL import Image
+
+            with Image.open(path).convert("RGBA") as image:
+                pad = frames - remainder
+                fixed = Image.new("RGBA", (width + pad, height), (0, 0, 0, 0))
+                fixed.paste(image, (0, 0))
+                backup = path.with_name(path.name + ".pre-frame-pad.bak")
+                if not backup.exists():
+                    shutil.copy2(path, backup)
+                fixed.save(path)
+            normalized.append({
+                "path": item["path"],
+                "name": item["name"],
+                "frames": frames,
+                "old_size": [width, height],
+                "new_size": [width + pad, height],
+                "backup": str(backup),
+            })
+        except Exception as exc:
+            issues.append({
+                "path": item["path"],
+                "name": item["name"],
+                "frames": frames,
+                "size": [width, height],
+                "reason": str(exc),
+            })
+    manifest["furniture_sheet_normalization"] = {
+        "normalized": normalized,
+        "issues": issues,
+        "note": "Pads added furniture sheets so descriptor frame counts divide evenly into the PNG width.",
+    }
+
+
+def patch_debug_features(manifest):
+    obj = CoffObject(PATCHED / "theMainScene.obj")
+    key_sym = obj.symbol("?HandleKeyDown@theMainScene@@IAE?B_NH@Z")
+    sec = obj.section(key_sym.section)
+    # Forward main-scene key-down events to a helper. The helper registers this
+    # scene as an IDebugger provider and then delegates to CDebugger::HandleKeyDown.
+    code = bytearray([
+        0x55,                         # push ebp
+        0x8B, 0xEC,                   # mov ebp, esp
+        0xFF, 0x75, 0x08,             # push dword ptr [ebp+8] ; key
+        0x51,                         # push ecx ; this
+        0xE8, 0, 0, 0, 0,             # call _VF2PatchedMainSceneHandleKeyDown
+        0x83, 0xC4, 0x08,             # add esp, 8
+        0x5D,                         # pop ebp
+        0xC2, 0x04, 0x00,             # ret 4
+    ])
+    if len(code) > sec.raw_size:
+        raise ValueError("Patched HandleKeyDown stub does not fit in original section")
+    code.extend(b"\x90" * (sec.raw_size - len(code)))
+    start = sec.raw_ptr + key_sym.value
+    obj.buf[start:start + len(code)] = code
+    helper_sym = obj.append_undefined_symbol("_VF2PatchedMainSceneHandleKeyDown")
+    obj.append_relocation(key_sym.section, key_sym.value + 8, helper_sym, IMAGE_REL_I386_REL32)
+
+    draw_sym = obj.symbol("?DrawScene@theMainScene@@MAEXXZ")
+    draw_helper_sym = obj.append_undefined_symbol("_VF2PatchedDrawOverlaysAndDebugger")
+    obj.retarget_relocation(draw_sym.section, draw_sym.value + 0x149, draw_helper_sym, IMAGE_REL_I386_REL32)
+    obj.write(PATCHED / "theMainScene.obj")
+
+    helper_cpp = r'''
+#include <stdio.h>
+#include <stdarg.h>
+
+class ldwLog {
+public:
+    static ldwLog *Get();
+    void WriteLine(char const *fmt, ...);
+};
+
+class IDebugger;
+
+class CDebugger {
+public:
+    bool const Register(IDebugger *debugger);
+    bool const HandleKeyDown(int key);
+    void Draw();
+};
+
+class CFloatingAnim {
+public:
+    void DrawOverlays() const;
+};
+
+extern CDebugger Debugger;
+extern CFloatingAnim FloatingAnim;
+
+static void VF2WriteDirectDebug(char const *fmt, ...)
+{
+    FILE *f = fopen("vf2_additive_debug.txt", "a");
+    if (!f) {
+        return;
+    }
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(f, fmt, args);
+    va_end(args);
+    fputc('\n', f);
+    fclose(f);
+}
+
+static int VF2TranslateDebugKey(int key)
+{
+    if (key == 0x74 || key == 0x4000003e) {
+        return 0x3FE;
+    }
+    if (key == 0x26 || key == 0x40000052) {
+        return 0x3EE;
+    }
+    if (key == 0x28 || key == 0x40000051) {
+        return 0x3EF;
+    }
+    return key;
+}
+
+static void VF2EnsureDebugLogging()
+{
+    static bool initialized = false;
+    if (!initialized) {
+        initialized = true;
+        VF2WriteDirectDebug("VF2 additive debug bootstrap active.");
+        ldwLog::Get()->WriteLine("VF2 additive build: ldwLog.txt and developer-key forwarding enabled.");
+    }
+}
+
+extern "C" bool __cdecl VF2PatchedMainSceneHandleKeyDown(void *mainScene, int key)
+{
+    static bool registered = false;
+    VF2EnsureDebugLogging();
+    VF2WriteDirectDebug("main scene keydown raw=%d translated=%d", key, VF2TranslateDebugKey(key));
+    if (!registered && mainScene) {
+        registered = true;
+        Debugger.Register(reinterpret_cast<IDebugger *>(static_cast<char *>(mainScene) + 8));
+        VF2WriteDirectDebug("registered main scene debugger provider.");
+    }
+    return Debugger.HandleKeyDown(VF2TranslateDebugKey(key));
+}
+
+extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
+{
+    static int draw_count = 0;
+    FloatingAnim.DrawOverlays();
+    Debugger.Draw();
+    if (draw_count < 3) {
+        VF2WriteDirectDebug("draw debugger hook fired %d.", draw_count + 1);
+    }
+    ++draw_count;
+}
+
+struct VF2DebugLogBootstrap {
+    VF2DebugLogBootstrap()
+    {
+        VF2EnsureDebugLogging();
+    }
+};
+
+static VF2DebugLogBootstrap gVF2DebugLogBootstrap;
+'''.strip() + "\n"
+    (PATCHED / "vf2_debug_features.cpp").write_text(helper_cpp, encoding="ascii")
+    manifest["debug_features"] = {
+        "ldw_log": {
+            "status": "enabled",
+            "filename": "ldwLog.txt",
+            "mechanism": "ldwLog::Get()->WriteLine during static init and first main-scene keydown",
+        },
+        "developer_keys": {
+            "status": "forwarded",
+            "patched_function": "?HandleKeyDown@theMainScene@@IAE?B_NH@Z",
+            "helper": "_VF2PatchedMainSceneHandleKeyDown",
+            "draw_hook": "?DrawScene@theMainScene@@MAEXXZ + 0x149",
+            "direct_debug_log": "vf2_additive_debug.txt",
+            "known_debugger_keys": {
+                "F5": "toggle CDebugger overlay",
+                "Up": "next debugger page",
+                "Down": "previous debugger page",
+            },
+        },
+    }
+
+
+def patch_plan_logging(manifest):
+    obj = CoffObject(PATCHED / "VillagerPlans.obj")
+    add_plan_sym = obj.symbol("?AddPlan@CVillagerPlans@@AAEXUSActionPlan@1@W4EPriority@@@Z")
+    sec = obj.section(add_plan_sym.section)
+    start = sec.raw_ptr + add_plan_sym.value
+    if obj.buf[start:start + 3] != b"\x55\x8B\xEC":
+        raise ValueError("Unexpected CVillagerPlans::AddPlan prologue")
+
+    # Insert after the normal function prologue so EBP-based argument offsets
+    # are stable. This logs every queued villager plan, then execution falls
+    # through into the original AddPlan body unchanged.
+    insert_off = add_plan_sym.value + 3
+    payload = bytearray([
+        0x51,                         # push ecx ; preserve this
+        0x8D, 0x45, 0x08,             # lea eax, [ebp+8] ; SActionPlan*
+        0xFF, 0x75, 0x4C,             # push dword ptr [ebp+4Ch] ; priority
+        0x50,                         # push eax ; plan
+        0x51,                         # push ecx ; CVillagerPlans*
+        0xE8, 0, 0, 0, 0,             # call _VF2LogAddPlan
+        0x83, 0xC4, 0x0C,             # add esp, 0Ch
+        0x59,                         # pop ecx
+    ])
+    obj.insert_section_bytes(add_plan_sym.section, insert_off, payload)
+    helper_sym = obj.append_undefined_symbol("_VF2LogAddPlan")
+    obj.append_relocation(add_plan_sym.section, insert_off + 10, helper_sym, IMAGE_REL_I386_REL32)
+    obj.write(PATCHED / "VillagerPlans.obj")
+
+    helper_cpp = r'''
+#include <stdio.h>
+#include <stdarg.h>
+
+class ldwLog {
+public:
+    static ldwLog *Get();
+    void WriteLine(char const *fmt, ...);
+};
+
+static void VF2WriteDirectPlanLog(char const *fmt, ...)
+{
+    FILE *f = fopen("vf2_plan_log.txt", "a");
+    if (!f) {
+        return;
+    }
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(f, fmt, args);
+    va_end(args);
+    fputc('\n', f);
+    fclose(f);
+}
+
+static unsigned int VF2ReadPlanWord(unsigned int const *plan, int index)
+{
+    __try {
+        return plan[index];
+    } __except (1) {
+        return 0xFFFFFFFFu;
+    }
+}
+
+extern "C" void __cdecl VF2LogAddPlan(void *plans, unsigned int const *plan, int priority)
+{
+    unsigned int w0 = VF2ReadPlanWord(plan, 0);
+    unsigned int w1 = VF2ReadPlanWord(plan, 1);
+    unsigned int w2 = VF2ReadPlanWord(plan, 2);
+    unsigned int w3 = VF2ReadPlanWord(plan, 3);
+    unsigned int w4 = VF2ReadPlanWord(plan, 4);
+    unsigned int w5 = VF2ReadPlanWord(plan, 5);
+    unsigned int w6 = VF2ReadPlanWord(plan, 6);
+    unsigned int w7 = VF2ReadPlanWord(plan, 7);
+    unsigned int w8 = VF2ReadPlanWord(plan, 8);
+    unsigned int w9 = VF2ReadPlanWord(plan, 9);
+    unsigned int w10 = VF2ReadPlanWord(plan, 10);
+    unsigned int w11 = VF2ReadPlanWord(plan, 11);
+    unsigned int w12 = VF2ReadPlanWord(plan, 12);
+    unsigned int w13 = VF2ReadPlanWord(plan, 13);
+    unsigned int w14 = VF2ReadPlanWord(plan, 14);
+    unsigned int w15 = VF2ReadPlanWord(plan, 15);
+    unsigned int w16 = VF2ReadPlanWord(plan, 16);
+
+    VF2WriteDirectPlanLog(
+        "AddPlan plans=%p priority=%d raw=%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X",
+        plans, priority,
+        w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13, w14, w15, w16);
+
+    ldwLog::Get()->WriteLine(
+        "AddPlan plans=%p priority=%d raw=%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X,%08X",
+        plans, priority,
+        w0, w1, w2, w3, w4, w5, w6, w7, w8, w9, w10, w11, w12, w13, w14, w15, w16);
+}
+'''.strip() + "\n"
+    (PATCHED / "vf2_plan_logger.cpp").write_text(helper_cpp, encoding="ascii")
+    manifest["plan_logging"] = {
+        "status": "instrumented",
+        "patched_function": "?AddPlan@CVillagerPlans@@AAEXUSActionPlan@1@W4EPriority@@@Z",
+        "insert_offset": hex(insert_off),
+        "helper": "_VF2LogAddPlan",
+        "ldw_log_message": "AddPlan plans=%p priority=%d raw=...",
+        "direct_debug_log": "vf2_plan_log.txt",
+        "note": "Logs every SActionPlan inserted into CVillagerPlans without replacing the original AddPlan implementation.",
+    }
+
+
+def patch_spontaneous_behaviors(manifest):
+    """Enable native object behaviors in VF2's actual AI candidate table."""
+    obj = CoffObject(PATCHED / "Villager.obj")
+    init_ai = obj.symbol("?InitAI@CVillager@@QAEXXZ")
+    sec = obj.section(init_ai.section)
+    epilogue = init_ai.value + 0x4513
+    raw_epilogue = sec.raw_ptr + epilogue
+    expected = b"\x5F\x5E\x5B\x8B\xE5\x5D\xC3"
+    if obj.buf[raw_epilogue:raw_epilogue + len(expected)] != expected:
+        raise ValueError("Unexpected CVillager::InitAI epilogue")
+
+    # InitAI has finished constructing and randomizing every stock candidate
+    # before this epilogue. The detour only enables the listed existing
+    # behavior IDs; it does not alter the Bored routine or replace any macro.
+    helper_off = sec.raw_size
+    helper = bytearray([
+        0xFF, 0x75, 0xFC,             # push dword ptr [ebp-4] ; CVillager*
+        0xE8, 0, 0, 0, 0,             # call _VF2EnableAutonomousCandidates
+        0x83, 0xC4, 0x04,             # add esp, 4
+        0x5F,                         # pop edi
+        0x5E,                         # pop esi
+        0x5B,                         # pop ebx
+        0x8B, 0xE5,                   # mov esp, ebp
+        0x5D,                         # pop ebp
+        0xC3,                         # ret
+    ])
+    obj.insert_section_bytes(sec.index, helper_off, bytes(helper))
+    helper_sym = obj.append_undefined_symbol("_VF2EnableAutonomousCandidates")
+    obj.append_relocation(sec.index, helper_off + 4, helper_sym, IMAGE_REL_I386_REL32)
+
+    # LoadAI initializes the same table, then restores saved selection weights.
+    # Run the same additive enabler after either stock LoadAI return path so an
+    # existing household receives the new choices on its next load.
+    load_ai = obj.symbol("?LoadAI@CVillager@@QAEXAAUSSaveState@1@@Z")
+    sec = obj.section(load_ai.section)
+    load_section_index = sec.index
+    load_epilogues = (load_ai.value + 0x53, load_ai.value + 0x94)
+    load_expected = b"\x5F\x5E\x5D\xC2\x04\x00"
+    for offset in load_epilogues:
+        raw = sec.raw_ptr + offset
+        if obj.buf[raw:raw + len(load_expected)] != load_expected:
+            raise ValueError("Unexpected CVillager::LoadAI epilogue")
+
+    load_helper_off = sec.raw_size
+    load_helper = bytearray([
+        0x57,                         # push edi ; CVillager*
+        0xE8, 0, 0, 0, 0,             # call _VF2EnableAutonomousCandidates
+        0x83, 0xC4, 0x04,             # add esp, 4
+        0x5F,                         # pop edi
+        0x5E,                         # pop esi
+        0x5D,                         # pop ebp
+        0xC2, 0x04, 0x00,             # ret 4
+    ])
+    obj.insert_section_bytes(sec.index, load_helper_off, bytes(load_helper))
+    obj.append_relocation(sec.index, load_helper_off + 2, helper_sym, IMAGE_REL_I386_REL32)
+
+    init_sec = obj.section(init_ai.section)
+    raw_epilogue = init_sec.raw_ptr + epilogue
+    rel = struct.pack("<i", helper_off - (epilogue + 5))
+    obj.buf[raw_epilogue:raw_epilogue + len(expected)] = b"\xE9" + rel + b"\x90\x90"
+    load_sec = obj.section(load_section_index)
+    for offset in load_epilogues:
+        raw = load_sec.raw_ptr + offset
+        rel = struct.pack("<i", load_helper_off - (offset + 5))
+        obj.buf[raw:raw + len(load_expected)] = b"\xE9" + rel + b"\x90"
+    obj.write(PATCHED / "Villager.obj")
+
+    # Candidate configuration happens at family load, but weather can change
+    # while the household is running.  Refresh the hammock candidate at the
+    # start of every native decision pass so it is only considered in neutral
+    # or sunny weather.
+    ai_obj = CoffObject(PATCHED / "VillagerAI.obj")
+    decide = ai_obj.symbol("?DecideWhatToDo@CVillagerAI@@AAEXAAVCVillager@@@Z")
+    ai_sec = ai_obj.section(decide.section)
+    refresh_insert = decide.value + 0x1E
+    raw_refresh = ai_sec.raw_ptr + refresh_insert
+    if ai_obj.buf[raw_refresh:raw_refresh + 5] != b"\xE8\x00\x00\x00\x00":
+        raise ValueError("Unexpected CVillagerAI::DecideWhatToDo refresh site")
+    refresh_helper = ai_obj.append_undefined_symbol("_VF2RefreshHammockEligibility")
+    refresh_payload = bytes([
+        0x56,                         # push esi ; CVillager*
+        0xE8, 0, 0, 0, 0,             # call _VF2RefreshHammockEligibility
+        0x83, 0xC4, 0x04,             # add esp, 4
+    ])
+    ai_obj.insert_section_bytes(ai_sec.index, refresh_insert, refresh_payload)
+    ai_obj.append_relocation(ai_sec.index, refresh_insert + 2, refresh_helper, IMAGE_REL_I386_REL32)
+    ai_obj.write(PATCHED / "VillagerAI.obj")
+
+    helper_cpp = r'''
+// CVillager::InitAI owns the real autonomous candidate table. Each candidate
+// is 0xD0 bytes; +0xCD is its enabled flag and +0x0C its random-choice weight.
+// These IDs are existing VF2 behavior macros, so their native object search,
+// walking, animation, sounds, and failure handling remain unchanged.
+static void EnableAutonomousCandidate(unsigned char *villager, unsigned int behavior)
+{
+    unsigned char *candidate = villager + 0x6BB8 + behavior * 0xD0;
+    candidate[0xCD] = 1;
+    *(unsigned int *)(candidate + 0x0C) = 3000;
+}
+
+static void EnableAllAgesAutonomousCandidate(unsigned char *villager, unsigned int behavior)
+{
+    unsigned char *candidate = villager + 0x6BB8 + behavior * 0xD0;
+    candidate[0xCD] = 1;
+    *(unsigned int *)(candidate + 0x0C) = 3000;
+    *(unsigned int *)(candidate + 0x48) = 0;
+    *(unsigned int *)(candidate + 0x4C) = 0;
+}
+
+class CWeather {
+public:
+    int currentType;
+};
+
+extern CWeather Weather;
+
+extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
+{
+    unsigned char *data = (unsigned char *)villager;
+    unsigned char *candidate = data + 0x6BB8 + 0x023 * 0xD0;
+    const int weatherAllowsHammock = Weather.currentType == 0 || Weather.currentType == 1;
+    candidate[0xCD] = (unsigned char)weatherAllowsHammock;
+    *(unsigned int *)(candidate + 0x0C) = weatherAllowsHammock ? 3000 : 0;
+    *(unsigned int *)(candidate + 0x48) = 0;
+    *(unsigned int *)(candidate + 0x4C) = 0;
+}
+
+class CVillager;
+extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &);
+class CBehavior {
+private:
+    static void __cdecl ReadMagazine(CVillager &);
+    static void __cdecl ReadingBook(CVillager &);
+    friend void __cdecl VF2RandomBookshelfReading(CVillager &);
+};
+
+class ldwGameState {
+public:
+    static int __cdecl GetRandom(int);
+};
+
+extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &villager)
+{
+    if (ldwGameState::GetRandom(2) == 0) {
+        CBehavior::ReadMagazine(villager);
+    } else {
+        CBehavior::ReadingBook(villager);
+    }
+}
+
+extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
+{
+    unsigned char *data = (unsigned char *)villager;
+    EnableAllAgesAutonomousCandidate(data, 0x095); // WatchingFirePlace
+    EnableAllAgesAutonomousCandidate(data, 0x0E8); // WarmingHands
+    EnableAllAgesAutonomousCandidate(data, 0x0DC); // PlayingPinballGames
+    EnableAllAgesAutonomousCandidate(data, 0x0DD); // PlayingPinball
+    EnableAllAgesAutonomousCandidate(data, 0x0DE); // PlayingSlots
+    EnableAllAgesAutonomousCandidate(data, 0x0DF); // PlayingPachinko
+    EnableAllAgesAutonomousCandidate(data, 0x099); // PlayingPooltable
+    EnableAllAgesAutonomousCandidate(data, 0x096); // PlayingFoosball
+    EnableAutonomousCandidate(data, 0x0ED); // DancingRadio
+    EnableAutonomousCandidate(data, 0x0F5); // ListenToRadio
+    EnableAutonomousCandidate(data, 0x118); // DrawingOnEasel
+    VF2RefreshHammockEligibility(data);
+}
+'''.strip() + "\n"
+    (PATCHED / "vf2_spontaneous_behaviors.cpp").write_text(helper_cpp, encoding="ascii")
+    manifest["spontaneous_behaviors"] = {
+        "status": "enabled through the autonomous AI candidate table",
+        "hooks": ["CVillager::InitAI", "CVillager::LoadAI", "CVillagerAI::DecideWhatToDo"],
+        "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
+        "actions": ["hammock (all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "listen to radio", "dance to radio", "drawing"],
+        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only in weather states 0 (neutral) and 1 (sunny).",
+    }
+
+
+def patch_bookshelf_reading_behavior(manifest):
+    """Randomize the stock bookshelf-drop route between the native readers."""
+    obj = CoffObject(PATCHED / "Behavior.obj")
+    ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+    sec = obj.section(ctor.section)
+    relocation_vaddr = ctor.value + 0x299
+    expected = b"\x68\x00\x00\x00\x00\x6A\x33"
+    raw = sec.raw_ptr + ctor.value + 0x298
+    if obj.buf[raw:raw + len(expected)] != expected:
+        raise ValueError("Unexpected ReadMagazine behavior macro entry")
+    random_reader = obj.append_undefined_symbol("_VF2RandomBookshelfReading")
+    obj.retarget_relocation(sec.index, relocation_vaddr, random_reader)
+    obj.write(PATCHED / "Behavior.obj")
+    manifest["bookshelf_drop_behavior"] = {
+        "status": "stock bookshelf dispatch calls a random native reader",
+        "old_behavior": "0x33 ReadMagazine",
+        "new_behavior": "random choice: ReadMagazine or ReadingBook",
+        "scope": "the native bookshelf drop route; no furniture records or fmaps changed",
+    }
+
+
+def patch_arcade_behavior_labels(manifest):
+    """Give pachinko and pinball their own labels without changing shared text."""
+    obj = CoffObject(PATCHED / "Behavior.obj")
+    patches = [
+        ("?PlayingPachinko@CBehavior@@CAXAAVCVillager@@@Z", behavior_label_string_id_for(0), "Playing pachinko"),
+        ("?PlayingPinball@CBehavior@@CAXAAVCVillager@@@Z", behavior_label_string_id_for(1), "Playing pinball"),
+    ]
+    changed = []
+    for symbol_name, string_id, text in patches:
+        symbol = obj.symbol(symbol_name)
+        sec = obj.section(symbol.section)
+        raw = sec.raw_ptr + symbol.value + 0x51
+        expected = b"\x68\x5D\x02\x00\x00"
+        if obj.buf[raw:raw + len(expected)] != expected:
+            raise ValueError(f"Unexpected shared Playing string in {symbol_name}")
+        obj.buf[raw + 1:raw + 5] = struct.pack("<I", string_id)
+        changed.append({"behavior": symbol_name, "string_id": hex(string_id), "text": text})
+    obj.write(PATCHED / "Behavior.obj")
+    manifest["arcade_behavior_labels"] = changed
+
+
+def restore_supplied_game_table_sprites(manifest):
+    """Use the user-supplied original-size pool and foosball sheets verbatim."""
+    source_root = Path(r"C:\Users\Owner\Downloads\Virtual Families 2 - Copy Official\Images\Furniture")
+    copied = []
+    missing = []
+    for filename in ("PoolTableStd.png", "FoosballTableStd.png"):
+        source = source_root / filename
+        target = OUT / "Images" / "Furniture" / filename
+        if source.exists():
+            shutil.copy2(source, target)
+            copied.append({"file": filename, "bytes": target.stat().st_size})
+        else:
+            missing.append(filename)
+    manifest["restored_game_table_sprites"] = {"copied": copied, "missing": missing}
+
+
+def patch_options_dialog(manifest):
+    obj = CoffObject(PATCHED / "theOptionsDialog.obj")
+    ctor_sym = obj.symbol("??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z")
+    sec = obj.section(ctor_sym.section)
+    start = sec.raw_ptr + ctor_sym.value
+
+    # Desktop already contains an Evict button and handler, but constructor
+    # branches skip the button creation for normal in-progress families.
+    # NOP both skip branches so the existing button/control id 4 is built.
+    expected_1 = bytes([0x0F, 0x85, 0x80, 0x00, 0x00, 0x00])
+    expected_2 = bytes([0x7D, 0x77])
+    if obj.buf[start + 0x2DA:start + 0x2E0] != expected_1:
+        raise ValueError("Unexpected Evict first skip branch bytes")
+    if obj.buf[start + 0x2E7:start + 0x2E9] != expected_2:
+        raise ValueError("Unexpected Evict second skip branch bytes")
+    obj.buf[start + 0x2DA:start + 0x2E0] = b"\x90" * 6
+    obj.buf[start + 0x2E7:start + 0x2E9] = b"\x90" * 2
+    obj.write(PATCHED / "theOptionsDialog.obj")
+
+    manifest["settings_menu"] = {
+        "evict": {
+            "status": "button skip branches disabled",
+            "button_control_id": 4,
+            "label_string_id": "0x10",
+            "confirmation_string_id": "0x11",
+            "handler": "?EvictFamily@theOptionsDialog@@AAEXXZ",
+            "family_tree_handler": "?EvictFamily@CFamilyTree@@QAEXXZ",
+        }
+    }
+
+
+def patch_added_furniture_click_aliases(manifest):
+    """Extend HandleMouseDown's native lookup table for appended furniture."""
+    obj = CoffObject(PATCHED / "FurnitureManager.obj")
+    sym = obj.symbol("?HandleMouseDown@CFurnitureManager@@QAE_NUldwPoint@@@Z")
+    sec = obj.section(sym.section)
+    guard_off = sym.value + 0xE3
+    raw_guard = sec.raw_ptr + guard_off
+    if obj.buf[raw_guard:raw_guard + 5] != b"\x3D\xC0\x00\x00\x00":
+        raise ValueError("Unexpected HandleMouseDown lookup bound")
+    table_sym = obj.symbol("$LN54")
+    if table_sym.section != sym.section or table_sym.value + 0xC1 != sec.raw_size:
+        raise ValueError("Unexpected HandleMouseDown native lookup-table layout")
+
+    max_offset = max(item_id_for(idx) - 0x1AD for idx in range(len(ITEMS)))
+    old_count = 0xC1
+    new_count = max_offset + 1
+    obj.insert_section_bytes(sec.index, sec.raw_size, b"\0" * (new_count - old_count))
+    sec = obj.section(sym.section)
+    table_raw = sec.raw_ptr + table_sym.value
+    aliases = []
+    aliases = []
+    for idx, (_name, donor_id, _list, _path) in enumerate(ITEMS):
+        added_id = item_id_for(idx)
+        added_offset = added_id - 0x1AD
+        donor_offset = donor_id - 0x1AD
+        obj.buf[table_raw + added_offset] = obj.buf[table_raw + donor_offset]
+        aliases.append({"item": _name, "item_id": hex(added_id), "donor_item": hex(donor_id)})
+    struct.pack_into("<I", obj.buf, sec.raw_ptr + guard_off + 1, max_offset)
+    obj.write(PATCHED / "FurnitureManager.obj")
+    manifest["clickable_added_furniture"] = {
+        "status": "native mouse-dispatch table extended with donor case bytes",
+        "route": "stock donor lookup case; no detour or generic replacement path",
+        "stock_furniture_dispatch": "unmodified",
+        "old_lookup_count": old_count,
+        "new_lookup_count": new_count,
+        "items": aliases,
+    }
+
+
+def main():
+    OUT.mkdir(parents=True, exist_ok=True)
+    copy_obj_tree()
+    manifest = {
+        "items": [
+            {
+                "name": name,
+                "item_id": hex(item_id_for(i)),
+                "image_id": hex(image_id_for(i)),
+                "donor_item": hex(donor),
+                "list": list_name,
+                "path": path,
+                "mobile_data": MOBILE_DATA_BY_PATH[path],
+            }
+            for i, (name, donor, list_name, path) in enumerate(ITEMS)
+        ]
+    }
+    patch_furniture_manager(manifest)
+    patch_added_furniture_click_aliases(manifest)
+    patch_inventory_manager(manifest)
+    patch_visible_special_upgrades(manifest)
+    patch_scrolling_store_scene(manifest)
+    patch_purchase_dialog(manifest)
+    patch_string_manager(manifest)
+    patch_special_upgrade_titles(manifest)
+    patch_spontaneous_behaviors(manifest)
+    patch_bookshelf_reading_behavior(manifest)
+    if ENABLE_ISLAND_EVENTS:
+        patch_island_events(manifest)
+    else:
+        # The legacy linker response contains the event helper object even
+        # while grafted mobile events are disabled for stability.
+        (PATCHED / "vf2_island_events.cpp").write_text(
+            'extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **) {}\n',
+            encoding="ascii",
+        )
+        manifest["IslandEvents"] = {
+            "added": [],
+            "status": "disabled because the additive event object graft crashes the game",
+        }
+    patch_graphics_manager(manifest)
+    sync_generation_lock_art(manifest)
+    sync_vf3_living_room_sprite_strips(manifest)
+    sync_vf3_tv_sprite_strips(manifest)
+    sync_vf3_tv_animation_sheets(manifest)
+    sync_invisible_outdoor_sprites(manifest)
+    sync_transparent_base_furniture_sprites(manifest)
+    sync_invisible_furniture_reference_sets(manifest)
+    sync_holiday_body_types(manifest)
+    patch_holiday_body_lookup(manifest)
+    sync_separated_villager_sheets(manifest)
+    sync_behavior_assets(manifest)
+    sync_vf3_tv_fmaps(manifest)
+    restore_supplied_game_table_sprites(manifest)
+    normalize_added_furniture_sheets(manifest)
+    write_internal_workings_summary(manifest)
+    (OUT / "patch-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    print(json.dumps(manifest, indent=2))
+
+
+if __name__ == "__main__":
+    main()

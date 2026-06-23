@@ -1,0 +1,23 @@
+Virtual Families 2 - Native Rebuild Prototype
+
+What this is:
+- A native Windows prototype source build for a playable life-sim prototype.
+- It includes a house view, selectable family members, needs, money, food, tasks, furniture interactions, time progression, daily income, and local saving.
+- It writes a native text save next to the EXE as vf2-native-save.txt.
+- It also writes Android-style save files under com.ldw.virtualfamilies2:
+  ldwlog.txt, wc.dat, virtual families 20.ldw, virtual families 21.ldw, and virtual families 221.ldw.
+- The EXE was rebuilt as a plain, unpacked .NET Framework binary with debug symbols and optimizations disabled.
+- Current EXE SHA-256:
+  175230E9ECFC824A9240A0E7399B18DA07CEAC56B42BAB71A1BDD899CC6CC084
+
+What this is not:
+- It is not a direct conversion of the Android APK native library.
+- It does not yet decode or render the original PVR texture atlas assets from the OBB.
+- It is not feature-complete with the commercial Android game.
+- The Android-style .ldw files are structural prototypes, not proven drop-in compatible saves for the Android game.
+
+Technical inspection:
+- The XAPK contains com.ldw.virtualfamilies2.apk plus main.43.com.ldw.virtualfamilies2.obb.
+- The APK includes Android native libraries such as libVirtualFamilies2.so.
+- The OBB contains audio, .fmap atlas records, and .pvr texture pages.
+- A faithful Windows port would need a PVR texture decoder, atlas importer, and a replacement implementation of the Android game runtime.

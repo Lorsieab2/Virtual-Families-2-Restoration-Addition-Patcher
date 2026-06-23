@@ -1,0 +1,1040 @@
+﻿Microsoft (R) COFF/PE Dumper Version 14.51.36247.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\desktop_obj_files\FamilyTree.obj
+
+File Type: COFF OBJECT
+
+??0CFamilyTree@@QAE@XZ (public: __thiscall CFamilyTree::CFamilyTree(void)):
+  00000000: 56                 push        esi
+  00000001: 8B F1              mov         esi,ecx
+  00000003: E8 00 00 00 00     call        ?Reset@CFamilyTree@@QAEXXZ
+  00000008: 8B C6              mov         eax,esi
+  0000000A: 5E                 pop         esi
+  0000000B: C3                 ret
+
+??_H@YGXPAXIIP6EPAX0@Z@Z (void __stdcall `vector constructor iterator'(void *,unsigned int,unsigned int,void * (__thiscall*)(void *))):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 56                 push        esi
+  00000004: 8B 75 10           mov         esi,dword ptr [ebp+10h]
+  00000007: 85 F6              test        esi,esi
+  00000009: 74 16              je          00000021
+  0000000B: 53                 push        ebx
+  0000000C: 8B 5D 14           mov         ebx,dword ptr [ebp+14h]
+  0000000F: 57                 push        edi
+  00000010: 8B 7D 08           mov         edi,dword ptr [ebp+8]
+  00000013: 8B CF              mov         ecx,edi
+  00000015: FF D3              call        ebx
+  00000017: 03 7D 0C           add         edi,dword ptr [ebp+0Ch]
+  0000001A: 83 EE 01           sub         esi,1
+  0000001D: 75 F4              jne         00000013
+  0000001F: 5F                 pop         edi
+  00000020: 5B                 pop         ebx
+  00000021: 5E                 pop         esi
+  00000022: 5D                 pop         ebp
+  00000023: C2 10 00           ret         10h
+
+??__EFamilyTree@@YAXXZ (void __cdecl `dynamic initializer for 'FamilyTree''(void)):
+  00000000: B9 00 00 00 00     mov         ecx,offset ?FamilyTree@@3VCFamilyTree@@A
+  00000005: E9 00 00 00 00     jmp         ??0CFamilyTree@@QAE@XZ
+
+?AddOffspring@CFamilyTree@@QAE_NABVCVillager@@@Z (public: bool __thiscall CFamilyTree::AddOffspring(class CVillager const &)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 53                 push        ebx
+  00000004: 8B D9              mov         ebx,ecx
+  00000006: 8B 43 04           mov         eax,dword ptr [ebx+4]
+  00000009: 85 C0              test        eax,eax
+  0000000B: 74 7C              je          00000089
+  0000000D: 69 C0 C8 06 00 00  imul        eax,eax,6C8h
+  00000013: 8B 94 18 F4 FA FF  mov         edx,dword ptr [eax+ebx-50Ch]
+            FF
+  0000001A: 8D 0C 18           lea         ecx,[eax+ebx]
+  0000001D: 83 FA 06           cmp         edx,6
+  00000020: 74 67              je          00000089
+  00000022: 56                 push        esi
+  00000023: 8B 75 08           mov         esi,dword ptr [ebp+8]
+  00000026: 69 C2 D8 00 00 00  imul        eax,edx,0D8h
+  0000002C: 57                 push        edi
+  0000002D: 8D B9 F8 FA FF FF  lea         edi,[ecx-508h]
+  00000033: 6A 19              push        19h
+  00000035: 03 F8              add         edi,eax
+  00000037: 8D 42 01           lea         eax,[edx+1]
+  0000003A: 89 81 F4 FA FF FF  mov         dword ptr [ecx-50Ch],eax
+  00000040: 8D 86 64 6A 00 00  lea         eax,[esi+6A64h]
+  00000046: 50                 push        eax
+  00000047: 57                 push        edi
+  00000048: E8 00 00 00 00     call        ?ldwStrCopy@@YAXPADPBDH@Z
+  0000004D: C6 47 1A 01        mov         byte ptr [edi+1Ah],1
+  00000051: 83 C4 0C           add         esp,0Ch
+  00000054: 8B 86 58 6A 00 00  mov         eax,dword ptr [esi+6A58h]
+  0000005A: 8B CB              mov         ecx,ebx
+  0000005C: 89 47 1C           mov         dword ptr [edi+1Ch],eax
+  0000005F: 8B 86 84 6A 00 00  mov         eax,dword ptr [esi+6A84h]
+  00000065: 89 47 24           mov         dword ptr [edi+24h],eax
+  00000068: 8B 86 80 6A 00 00  mov         eax,dword ptr [esi+6A80h]
+  0000006E: 89 47 20           mov         dword ptr [edi+20h],eax
+  00000071: 8B 86 48 BB 01 00  mov         eax,dword ptr [esi+1BB48h]
+  00000077: 57                 push        edi
+  00000078: 89 47 28           mov         dword ptr [edi+28h],eax
+  0000007B: E8 00 00 00 00     call        ?UpdatePeepRecord@CFamilyTree@@QAEXPAUSPeepRecord@1@@Z
+  00000080: 5F                 pop         edi
+  00000081: 5E                 pop         esi
+  00000082: B0 01              mov         al,1
+  00000084: 5B                 pop         ebx
+  00000085: 5D                 pop         ebp
+  00000086: C2 04 00           ret         4
+  00000089: 32 C0              xor         al,al
+  0000008B: 5B                 pop         ebx
+  0000008C: 5D                 pop         ebp
+  0000008D: C2 04 00           ret         4
+
+?CanMarry@CFamilyTree@@QAE_NXZ (public: bool __thiscall CFamilyTree::CanMarry(void)):
+  00000000: E8 00 00 00 00     call        ?GetCurrentFamily@CFamilyTree@@QAEPAUSFamilyRecord@1@XZ
+  00000005: 85 C0              test        eax,eax
+  00000007: 74 12              je          0000001B
+  00000009: 80 78 1E 00        cmp         byte ptr [eax+1Eh],0
+  0000000D: 74 0C              je          0000001B
+  0000000F: 80 B8 F6 00 00 00  cmp         byte ptr [eax+0F6h],0
+            00
+  00000016: 75 03              jne         0000001B
+  00000018: B0 01              mov         al,1
+  0000001A: C3                 ret
+  0000001B: 32 C0              xor         al,al
+  0000001D: C3                 ret
+
+?CanStartNextGeneration@CFamilyTree@@QAE_N_N@Z (public: bool __thiscall CFamilyTree::CanStartNextGeneration(bool)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: E8 00 00 00 00     call        ?GetCurrentFamily@CFamilyTree@@QAEPAUSFamilyRecord@1@XZ
+  00000008: 85 C0              test        eax,eax
+  0000000A: 74 0C              je          00000018
+  0000000C: 80 78 01 00        cmp         byte ptr [eax+1],0
+  00000010: 74 06              je          00000018
+  00000012: B0 01              mov         al,1
+  00000014: 5D                 pop         ebp
+  00000015: C2 04 00           ret         4
+  00000018: 80 7D 08 00        cmp         byte ptr [ebp+8],0
+  0000001C: 74 23              je          00000041
+  0000001E: 83 3D 04 00 00 00  cmp         dword ptr [?FamilyTree@@3VCFamilyTree@@A+4],1Eh
+            1E
+  00000025: 75 1A              jne         00000041
+  00000027: 6A 00              push        0
+  00000029: B9 00 00 00 00     mov         ecx,offset ?VillagerManager@@3VCVillagerManager@@A
+  0000002E: E8 00 00 00 00     call        ?SelectRandomLivingVillager@CVillagerManager@@QAE?BH_N@Z
+  00000033: 83 F8 FF           cmp         eax,0FFFFFFFFh
+  00000036: 75 09              jne         00000041
+  00000038: B8 01 00 00 00     mov         eax,1
+  0000003D: 5D                 pop         ebp
+  0000003E: C2 04 00           ret         4
+  00000041: 33 C0              xor         eax,eax
+  00000043: 5D                 pop         ebp
+  00000044: C2 04 00           ret         4
+
+?ChangeName@CFamilyTree@@QAEXAAVCVillager@@PBD@Z (public: void __thiscall CFamilyTree::ChangeName(class CVillager &,char const *)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 51                 push        ecx
+  00000004: 53                 push        ebx
+  00000005: 8B 5D 08           mov         ebx,dword ptr [ebp+8]
+  00000008: 56                 push        esi
+  00000009: 53                 push        ebx
+  0000000A: 8B F1              mov         esi,ecx
+  0000000C: E8 00 00 00 00     call        ?FindPeepRecord@CFamilyTree@@AAEPAUSPeepRecord@1@AAVCVillager@@@Z
+  00000011: 85 C0              test        eax,eax
+  00000013: 0F 84 9A 00 00 00  je          000000B3
+  00000019: 6A 19              push        19h
+  0000001B: FF 75 0C           push        dword ptr [ebp+0Ch]
+  0000001E: 50                 push        eax
+  0000001F: E8 00 00 00 00     call        ?ldwStrCopy@@YAXPADPBDH@Z
+  00000024: 8B 46 04           mov         eax,dword ptr [esi+4]
+  00000027: 83 C4 0C           add         esp,0Ch
+  0000002A: 83 F8 01           cmp         eax,1
+  0000002D: 0F 8E 80 00 00 00  jle         000000B3
+  00000033: 69 C0 C8 06 00 00  imul        eax,eax,6C8h
+  00000039: 57                 push        edi
+  0000003A: 33 FF              xor         edi,edi
+  0000003C: 8B 8C 30 2C F4 FF  mov         ecx,dword ptr [eax+esi-0BD4h]
+            FF
+  00000043: 89 4D 08           mov         dword ptr [ebp+8],ecx
+  00000046: 85 C9              test        ecx,ecx
+  00000048: 7E 68              jle         000000B2
+  0000004A: 8D 8B 64 6A 00 00  lea         ecx,[ebx+6A64h]
+  00000050: 81 C6 30 F4 FF FF  add         esi,0FFFFF430h
+  00000056: 8B 5D 08           mov         ebx,dword ptr [ebp+8]
+  00000059: 03 F0              add         esi,eax
+  0000005B: 89 4D FC           mov         dword ptr [ebp-4],ecx
+  0000005E: 66 90              nop
+  00000060: 8B C1              mov         eax,ecx
+  00000062: 8B CE              mov         ecx,esi
+  00000064: 8A 11              mov         dl,byte ptr [ecx]
+  00000066: 3A 10              cmp         dl,byte ptr [eax]
+  00000068: 75 1A              jne         00000084
+  0000006A: 84 D2              test        dl,dl
+  0000006C: 74 12              je          00000080
+  0000006E: 8A 51 01           mov         dl,byte ptr [ecx+1]
+  00000071: 3A 50 01           cmp         dl,byte ptr [eax+1]
+  00000074: 75 0E              jne         00000084
+  00000076: 83 C1 02           add         ecx,2
+  00000079: 83 C0 02           add         eax,2
+  0000007C: 84 D2              test        dl,dl
+  0000007E: 75 E4              jne         00000064
+  00000080: 33 C0              xor         eax,eax
+  00000082: EB 05              jmp         00000089
+  00000084: 1B C0              sbb         eax,eax
+  00000086: 83 C8 01           or          eax,1
+  00000089: 85 C0              test        eax,eax
+  0000008B: 74 17              je          000000A4
+  0000008D: 8B 4D FC           mov         ecx,dword ptr [ebp-4]
+  00000090: 47                 inc         edi
+  00000091: 81 C6 D8 00 00 00  add         esi,0D8h
+  00000097: 3B FB              cmp         edi,ebx
+  00000099: 7C C5              jl          00000060
+  0000009B: 5F                 pop         edi
+  0000009C: 5E                 pop         esi
+  0000009D: 5B                 pop         ebx
+  0000009E: 8B E5              mov         esp,ebp
+  000000A0: 5D                 pop         ebp
+  000000A1: C2 08 00           ret         8
+  000000A4: 6A 19              push        19h
+  000000A6: FF 75 0C           push        dword ptr [ebp+0Ch]
+  000000A9: 56                 push        esi
+  000000AA: E8 00 00 00 00     call        ?ldwStrCopy@@YAXPADPBDH@Z
+  000000AF: 83 C4 0C           add         esp,0Ch
+  000000B2: 5F                 pop         edi
+  000000B3: 5E                 pop         esi
+  000000B4: 5B                 pop         ebx
+  000000B5: 8B E5              mov         esp,ebp
+  000000B7: 5D                 pop         ebp
+  000000B8: C2 08 00           ret         8
+
+?CountSurvivingChildren@CFamilyTree@@QAEHXZ (public: int __thiscall CFamilyTree::CountSurvivingChildren(void)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 51                 push        ecx
+  00000004: 8B 41 04           mov         eax,dword ptr [ecx+4]
+  00000007: 56                 push        esi
+  00000008: 57                 push        edi
+  00000009: 85 C0              test        eax,eax
+  0000000B: 74 5F              je          0000006C
+  0000000D: 69 F8 C8 06 00 00  imul        edi,eax,6C8h
+  00000013: 33 F6              xor         esi,esi
+  00000015: 03 F9              add         edi,ecx
+  00000017: 80 BF 40 F9 FF FF  cmp         byte ptr [edi-6C0h],0
+            00
+  0000001E: 74 4C              je          0000006C
+  00000020: 53                 push        ebx
+  00000021: 33 DB              xor         ebx,ebx
+  00000023: 39 9F F4 FA FF FF  cmp         dword ptr [edi-50Ch],ebx
+  00000029: 7E 38              jle         00000063
+  0000002B: 8D 87 20 FB FF FF  lea         eax,[edi-4E0h]
+  00000031: 89 45 FC           mov         dword ptr [ebp-4],eax
+  00000034: FF 30              push        dword ptr [eax]
+  00000036: B9 00 00 00 00     mov         ecx,offset ?VillagerManager@@3VCVillagerManager@@A
+  0000003B: E8 00 00 00 00     call        ?GetVillager@CVillagerManager@@QAEAAVCVillager@@H@Z
+  00000040: 8D 4E 01           lea         ecx,[esi+1]
+  00000043: 80 B8 84 BB 01 00  cmp         byte ptr [eax+1BB84h],0
+            00
+  0000004A: 8B 45 FC           mov         eax,dword ptr [ebp-4]
+  0000004D: 0F 44 CE           cmove       ecx,esi
+  00000050: 43                 inc         ebx
+  00000051: 05 D8 00 00 00     add         eax,0D8h
+  00000056: 8B F1              mov         esi,ecx
+  00000058: 89 45 FC           mov         dword ptr [ebp-4],eax
+  0000005B: 3B 9F F4 FA FF FF  cmp         ebx,dword ptr [edi-50Ch]
+  00000061: 7C D1              jl          00000034
+  00000063: 5B                 pop         ebx
+  00000064: 5F                 pop         edi
+  00000065: 8B C6              mov         eax,esi
+  00000067: 5E                 pop         esi
+  00000068: 8B E5              mov         esp,ebp
+  0000006A: 5D                 pop         ebp
+  0000006B: C3                 ret
+  0000006C: 5F                 pop         edi
+  0000006D: 33 C0              xor         eax,eax
+  0000006F: 5E                 pop         esi
+  00000070: 8B E5              mov         esp,ebp
+  00000072: 5D                 pop         ebp
+  00000073: C3                 ret
+
+?EmptyOffspringSlots@CFamilyTree@@QAEHXZ (public: int __thiscall CFamilyTree::EmptyOffspringSlots(void)):
+  00000000: 8B D1              mov         edx,ecx
+  00000002: 8B 42 04           mov         eax,dword ptr [edx+4]
+  00000005: 85 C0              test        eax,eax
+  00000007: 75 06              jne         0000000F
+  00000009: B8 06 00 00 00     mov         eax,6
+  0000000E: C3                 ret
+  0000000F: 69 C8 C8 06 00 00  imul        ecx,eax,6C8h
+  00000015: B8 06 00 00 00     mov         eax,6
+  0000001A: 2B 84 11 F4 FA FF  sub         eax,dword ptr [ecx+edx+FFFFFAF4h]
+            FF
+  00000021: C3                 ret
+
+?EvictFamily@CFamilyTree@@QAEXXZ (public: void __thiscall CFamilyTree::EvictFamily(void)):
+  00000000: 56                 push        esi
+  00000001: 8B F1              mov         esi,ecx
+  00000003: E8 00 00 00 00     call        ?Reset@CFamilyTree@@QAEXXZ
+  00000008: C7 06 01 00 00 00  mov         dword ptr [esi],1
+  0000000E: 5E                 pop         esi
+  0000000F: C3                 ret
+
+?FindPeepRecord@CFamilyTree@@AAEPAUSPeepRecord@1@AAVCVillager@@@Z (private: struct CFamilyTree::SPeepRecord * __thiscall CFamilyTree::FindPeepRecord(class CVillager &)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 69 41 04 C8 06 00  imul        eax,dword ptr [ecx+4],6C8h
+            00
+  0000000A: 56                 push        esi
+  0000000B: 57                 push        edi
+  0000000C: 8B 7D 08           mov         edi,dword ptr [ebp+8]
+  0000000F: 03 C1              add         eax,ecx
+  00000011: 8B 97 48 BB 01 00  mov         edx,dword ptr [edi+0001BB48h]
+  00000017: 39 90 6C F9 FF FF  cmp         dword ptr [eax+FFFFF96Ch],edx
+  0000001D: 75 07              jne         00000026
+  0000001F: 05 44 F9 FF FF     add         eax,0FFFFF944h
+  00000024: EB 3F              jmp         00000065
+  00000026: 39 90 44 FA FF FF  cmp         dword ptr [eax+FFFFFA44h],edx
+  0000002C: 75 07              jne         00000035
+  0000002E: 05 1C FA FF FF     add         eax,0FFFFFA1Ch
+  00000033: EB 30              jmp         00000065
+  00000035: 8B B0 F4 FA FF FF  mov         esi,dword ptr [eax+FFFFFAF4h]
+  0000003B: 33 C9              xor         ecx,ecx
+  0000003D: 85 F6              test        esi,esi
+  0000003F: 7E 3E              jle         0000007F
+  00000041: 05 40 F9 FF FF     add         eax,0FFFFF940h
+  00000046: 39 90 E0 01 00 00  cmp         dword ptr [eax+000001E0h],edx
+  0000004C: 74 12              je          00000060
+  0000004E: 41                 inc         ecx
+  0000004F: 05 D8 00 00 00     add         eax,0D8h
+  00000054: 3B CE              cmp         ecx,esi
+  00000056: 7C EE              jl          00000046
+  00000058: 5F                 pop         edi
+  00000059: 33 C0              xor         eax,eax
+  0000005B: 5E                 pop         esi
+  0000005C: 5D                 pop         ebp
+  0000005D: C2 04 00           ret         4
+  00000060: 05 B8 01 00 00     add         eax,1B8h
+  00000065: 85 C0              test        eax,eax
+  00000067: 74 16              je          0000007F
+  00000069: 8B 48 1C           mov         ecx,dword ptr [eax+1Ch]
+  0000006C: 3B 8F 58 6A 00 00  cmp         ecx,dword ptr [edi+00006A58h]
+  00000072: 75 0B              jne         0000007F
+  00000074: 8B 48 20           mov         ecx,dword ptr [eax+20h]
+  00000077: 3B 8F 80 6A 00 00  cmp         ecx,dword ptr [edi+00006A80h]
+  0000007D: 74 02              je          00000081
+  0000007F: 33 C0              xor         eax,eax
+  00000081: 5F                 pop         edi
+  00000082: 5E                 pop         esi
+  00000083: 5D                 pop         ebp
+  00000084: C2 04 00           ret         4
+
+?GetCurrentFamily@CFamilyTree@@QAEPAUSFamilyRecord@1@XZ (public: struct CFamilyTree::SFamilyRecord * __thiscall CFamilyTree::GetCurrentFamily(void)):
+  00000000: 8B 41 04           mov         eax,dword ptr [ecx+4]
+  00000003: 85 C0              test        eax,eax
+  00000005: 74 12              je          00000019
+  00000007: 69 C0 C8 06 00 00  imul        eax,eax,6C8h
+  0000000D: 05 40 F9 FF FF     add         eax,0FFFFF940h
+  00000012: 03 C1              add         eax,ecx
+  00000014: 80 38 00           cmp         byte ptr [eax],0
+  00000017: 75 02              jne         0000001B
+  00000019: 33 C0              xor         eax,eax
+  0000001B: C3                 ret
+
+?GetFamilyRecord@CFamilyTree@@QAEPAUSFamilyRecord@1@H@Z (public: struct CFamilyTree::SFamilyRecord * __thiscall CFamilyTree::GetFamilyRecord(int)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 8B 45 08           mov         eax,dword ptr [ebp+8]
+  00000006: 85 C0              test        eax,eax
+  00000008: 78 15              js          0000001F
+  0000000A: 3B 41 04           cmp         eax,dword ptr [ecx+4]
+  0000000D: 7D 10              jge         0000001F
+  0000000F: 69 C0 C8 06 00 00  imul        eax,eax,6C8h
+  00000015: 83 C0 08           add         eax,8
+  00000018: 03 C1              add         eax,ecx
+  0000001A: 80 38 00           cmp         byte ptr [eax],0
+  0000001D: 75 02              jne         00000021
+  0000001F: 33 C0              xor         eax,eax
+  00000021: 5D                 pop         ebp
+  00000022: C2 04 00           ret         4
+
+?LoadState@CFamilyTree@@QAE?B_NABUSSaveState@1@@Z (public: bool const __thiscall CFamilyTree::LoadState(struct CFamilyTree::SSaveState const &)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 51                 push        ecx
+  00000004: 53                 push        ebx
+  00000005: 56                 push        esi
+  00000006: 57                 push        edi
+  00000007: 8B D9              mov         ebx,ecx
+  00000009: E8 00 00 00 00     call        ?Reset@CFamilyTree@@QAEXXZ
+  0000000E: 8B 45 08           mov         eax,dword ptr [ebp+8]
+  00000011: 8D 7B 08           lea         edi,[ebx+8]
+  00000014: 33 D2              xor         edx,edx
+  00000016: 89 7D FC           mov         dword ptr [ebp-4],edi
+  00000019: 83 C0 04           add         eax,4
+  0000001C: 0F 1F 40 00        nop         dword ptr [eax]
+  00000020: 80 38 00           cmp         byte ptr [eax],0
+  00000023: 74 23              je          00000048
+  00000025: 8B F0              mov         esi,eax
+  00000027: B9 B2 01 00 00     mov         ecx,1B2h
+  0000002C: F3 A5              rep movs    dword ptr es:[edi],dword ptr [esi]
+  0000002E: 8B 7D FC           mov         edi,dword ptr [ebp-4]
+  00000031: 42                 inc         edx
+  00000032: FF 43 04           inc         dword ptr [ebx+4]
+  00000035: 81 C7 C8 06 00 00  add         edi,6C8h
+  0000003B: 05 C8 06 00 00     add         eax,6C8h
+  00000040: 89 7D FC           mov         dword ptr [ebp-4],edi
+  00000043: 83 FA 1E           cmp         edx,1Eh
+  00000046: 7C D8              jl          00000020
+  00000048: 8B 45 08           mov         eax,dword ptr [ebp+8]
+  0000004B: 5F                 pop         edi
+  0000004C: 5E                 pop         esi
+  0000004D: 8B 00              mov         eax,dword ptr [eax]
+  0000004F: 89 03              mov         dword ptr [ebx],eax
+  00000051: B0 01              mov         al,1
+  00000053: 5B                 pop         ebx
+  00000054: 8B E5              mov         esp,ebp
+  00000056: 5D                 pop         ebp
+  00000057: C2 04 00           ret         4
+
+?MakeRoomInTree@CFamilyTree@@QAEXXZ (public: void __thiscall CFamilyTree::MakeRoomInTree(void)):
+  00000000: 8B D1              mov         edx,ecx
+  00000002: B9 2A 31 00 00     mov         ecx,312Ah
+  00000007: 56                 push        esi
+  00000008: 57                 push        edi
+  00000009: 68 C8 06 00 00     push        6C8h
+  0000000E: 8D 7A 08           lea         edi,[edx+8]
+  00000011: 8D B2 D0 06 00 00  lea         esi,[edx+6D0h]
+  00000017: F3 A5              rep movs    dword ptr es:[edi],dword ptr [esi]
+  00000019: FF 4A 04           dec         dword ptr [edx+4]
+  0000001C: 69 42 04 C8 06 00  imul        eax,dword ptr [edx+4],6C8h
+            00
+  00000023: C7 42 38 FF FF FF  mov         dword ptr [edx+38h],0FFFFFFFFh
+            FF
+  0000002A: C7 82 10 01 00 00  mov         dword ptr [edx+110h],0FFFFFFFFh
+            FF FF FF FF
+  00000034: 83 C2 08           add         edx,8
+  00000037: 6A 00              push        0
+  00000039: 03 C2              add         eax,edx
+  0000003B: 50                 push        eax
+  0000003C: E8 00 00 00 00     call        _memset
+  00000041: 83 C4 0C           add         esp,0Ch
+  00000044: 5F                 pop         edi
+  00000045: 5E                 pop         esi
+  00000046: C3                 ret
+
+?NeedNextGenerationNotify@CFamilyTree@@QAE_NXZ (public: bool __thiscall CFamilyTree::NeedNextGenerationNotify(void)):
+  00000000: E8 00 00 00 00     call        ?GetCurrentFamily@CFamilyTree@@QAEPAUSFamilyRecord@1@XZ
+  00000005: 85 C0              test        eax,eax
+  00000007: 74 04              je          0000000D
+  00000009: 8A 40 02           mov         al,byte ptr [eax+2]
+  0000000C: C3                 ret
+  0000000D: 32 C0              xor         al,al
+  0000000F: C3                 ret
+
+?NumGenerations@CFamilyTree@@QAEHXZ (public: int __thiscall CFamilyTree::NumGenerations(void)):
+  00000000: 8B 41 04           mov         eax,dword ptr [ecx+4]
+  00000003: 85 C0              test        eax,eax
+  00000005: 7E 17              jle         0000001E
+  00000007: 69 D0 C8 06 00 00  imul        edx,eax,6C8h
+  0000000D: 56                 push        esi
+  0000000E: 8D 70 FF           lea         esi,[eax-1]
+  00000011: 80 BC 0A 40 F9 FF  cmp         byte ptr [edx+ecx+FFFFF940h],0
+            FF 00
+  00000019: 0F 44 C6           cmove       eax,esi
+  0000001C: 5E                 pop         esi
+  0000001D: C3                 ret
+  0000001E: 33 C0              xor         eax,eax
+  00000020: C3                 ret
+
+?ReportDeath@CFamilyTree@@QAEXAAVCVillager@@@Z (public: void __thiscall CFamilyTree::ReportDeath(class CVillager &)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 56                 push        esi
+  00000004: 8B F1              mov         esi,ecx
+  00000006: 8B 46 04           mov         eax,dword ptr [esi+4]
+  00000009: 85 C0              test        eax,eax
+  0000000B: 0F 84 53 01 00 00  je          00000164
+  00000011: 53                 push        ebx
+  00000012: 69 D8 C8 06 00 00  imul        ebx,eax,6C8h
+  00000018: 8B 45 08           mov         eax,dword ptr [ebp+8]
+  0000001B: 03 DE              add         ebx,esi
+  0000001D: 8B 90 48 BB 01 00  mov         edx,dword ptr [eax+1BB48h]
+  00000023: 8B 8B F4 FA FF FF  mov         ecx,dword ptr [ebx-50Ch]
+  00000029: 39 93 6C F9 FF FF  cmp         dword ptr [ebx-694h],edx
+  0000002F: 75 7B              jne         000000AC
+  00000031: 85 C9              test        ecx,ecx
+  00000033: 75 54              jne         00000089
+  00000035: 38 8B 36 FA FF FF  cmp         byte ptr [ebx-5CAh],cl
+  0000003B: 74 1C              je          00000059
+  0000003D: 57                 push        edi
+  0000003E: 8D B3 1C FA FF FF  lea         esi,[ebx-5E4h]
+  00000044: B9 36 00 00 00     mov         ecx,36h
+  00000049: 8D BB 44 F9 FF FF  lea         edi,[ebx-6BCh]
+  0000004F: F3 A5              rep movs    dword ptr es:[edi],dword ptr [esi]
+  00000051: C6 83 36 FA FF FF  mov         byte ptr [ebx-5CAh],0
+            00
+  00000058: 5F                 pop         edi
+  00000059: 83 3D 04 00 00 00  cmp         dword ptr [?FamilyTree@@3VCFamilyTree@@A+4],1Eh
+            1E
+  00000060: 0F 85 F5 00 00 00  jne         0000015B
+  00000066: 6A 00              push        0
+  00000068: B9 00 00 00 00     mov         ecx,offset ?VillagerManager@@3VCVillagerManager@@A
+  0000006D: E8 00 00 00 00     call        ?SelectRandomLivingVillager@CVillagerManager@@QAE?BH_N@Z
+  00000072: 83 F8 FF           cmp         eax,0FFFFFFFFh
+  00000075: 0F 85 E0 00 00 00  jne         0000015B
+  0000007B: B0 01              mov         al,1
+  0000007D: 88 83 42 F9 FF FF  mov         byte ptr [ebx-6BEh],al
+  00000083: 5B                 pop         ebx
+  00000084: 5E                 pop         esi
+  00000085: 5D                 pop         ebp
+  00000086: C2 04 00           ret         4
+  00000089: 80 BB 41 F9 FF FF  cmp         byte ptr [ebx-6BFh],0
+            00
+  00000090: C7 83 6C F9 FF FF  mov         dword ptr [ebx-694h],0FFFFFFFFh
+            FF FF FF FF
+  0000009A: 75 4E              jne         000000EA
+  0000009C: C6 83 42 F9 FF FF  mov         byte ptr [ebx-6BEh],1
+            01
+  000000A3: C6 83 41 F9 FF FF  mov         byte ptr [ebx-6BFh],1
+            01
+  000000AA: EB 77              jmp         00000123
+  000000AC: 39 93 44 FA FF FF  cmp         dword ptr [ebx-5BCh],edx
+  000000B2: 75 3F              jne         000000F3
+  000000B4: 85 C9              test        ecx,ecx
+  000000B6: 75 18              jne         000000D0
+  000000B8: 38 8B 5E F9 FF FF  cmp         byte ptr [ebx-6A2h],cl
+  000000BE: 0F 84 9F 00 00 00  je          00000163
+  000000C4: 88 8B 36 FA FF FF  mov         byte ptr [ebx-5CAh],cl
+  000000CA: 5B                 pop         ebx
+  000000CB: 5E                 pop         esi
+  000000CC: 5D                 pop         ebp
+  000000CD: C2 04 00           ret         4
+  000000D0: 80 BB 41 F9 FF FF  cmp         byte ptr [ebx-6BFh],0
+            00
+  000000D7: C7 83 44 FA FF FF  mov         dword ptr [ebx-5BCh],0FFFFFFFFh
+            FF FF FF FF
+  000000E1: 75 07              jne         000000EA
+  000000E3: C6 83 42 F9 FF FF  mov         byte ptr [ebx-6BEh],1
+            01
+  000000EA: C6 83 41 F9 FF FF  mov         byte ptr [ebx-6BFh],1
+            01
+  000000F1: EB 30              jmp         00000123
+  000000F3: 33 C0              xor         eax,eax
+  000000F5: 85 C9              test        ecx,ecx
+  000000F7: 7E 2A              jle         00000123
+  000000F9: 33 C9              xor         ecx,ecx
+  000000FB: 0F 1F 44 00 00     nop         dword ptr [eax+eax]
+  00000100: 39 94 19 20 FB FF  cmp         dword ptr [ecx+ebx-4E0h],edx
+            FF
+  00000107: 75 0B              jne         00000114
+  00000109: C7 84 19 20 FB FF  mov         dword ptr [ecx+ebx-4E0h],0FFFFFFFFh
+            FF FF FF FF FF
+  00000114: 40                 inc         eax
+  00000115: 81 C1 D8 00 00 00  add         ecx,0D8h
+  0000011B: 3B 83 F4 FA FF FF  cmp         eax,dword ptr [ebx-50Ch]
+  00000121: 7C DD              jl          00000100
+  00000123: 8B CE              mov         ecx,esi
+  00000125: E8 00 00 00 00     call        ?CountSurvivingChildren@CFamilyTree@@QAEHXZ
+  0000012A: 85 C0              test        eax,eax
+  0000012C: 75 35              jne         00000163
+  0000012E: 88 83 41 F9 FF FF  mov         byte ptr [ebx-6BFh],al
+  00000134: 83 3D 04 00 00 00  cmp         dword ptr [?FamilyTree@@3VCFamilyTree@@A+4],1Eh
+            1E
+  0000013B: 75 1E              jne         0000015B
+  0000013D: 50                 push        eax
+  0000013E: B9 00 00 00 00     mov         ecx,offset ?VillagerManager@@3VCVillagerManager@@A
+  00000143: E8 00 00 00 00     call        ?SelectRandomLivingVillager@CVillagerManager@@QAE?BH_N@Z
+  00000148: 83 F8 FF           cmp         eax,0FFFFFFFFh
+  0000014B: 75 0E              jne         0000015B
+  0000014D: B0 01              mov         al,1
+  0000014F: 88 83 42 F9 FF FF  mov         byte ptr [ebx-6BEh],al
+  00000155: 5B                 pop         ebx
+  00000156: 5E                 pop         esi
+  00000157: 5D                 pop         ebp
+  00000158: C2 04 00           ret         4
+  0000015B: 32 C0              xor         al,al
+  0000015D: 88 83 42 F9 FF FF  mov         byte ptr [ebx-6BEh],al
+  00000163: 5B                 pop         ebx
+  00000164: 5E                 pop         esi
+  00000165: 5D                 pop         ebp
+  00000166: C2 04 00           ret         4
+
+?Reset@CFamilyTree@@QAEXXZ (public: void __thiscall CFamilyTree::Reset(void)):
+  00000000: 56                 push        esi
+  00000001: 8B F1              mov         esi,ecx
+  00000003: 68 70 CB 00 00     push        0CB70h
+  00000008: 6A 00              push        0
+  0000000A: 8D 46 08           lea         eax,[esi+8]
+  0000000D: 50                 push        eax
+  0000000E: E8 00 00 00 00     call        _memset
+  00000013: 83 C4 0C           add         esp,0Ch
+  00000016: C7 46 04 00 00 00  mov         dword ptr [esi+4],0
+            00
+  0000001D: C7 06 00 00 00 00  mov         dword ptr [esi],0
+  00000023: 5E                 pop         esi
+  00000024: C3                 ret
+
+?ResetNextGenerationNotify@CFamilyTree@@QAEXXZ (public: void __thiscall CFamilyTree::ResetNextGenerationNotify(void)):
+  00000000: E8 00 00 00 00     call        ?GetCurrentFamily@CFamilyTree@@QAEPAUSFamilyRecord@1@XZ
+  00000005: 85 C0              test        eax,eax
+  00000007: 74 04              je          0000000D
+  00000009: C6 40 02 00        mov         byte ptr [eax+2],0
+  0000000D: C3                 ret
+
+?SaveState@CFamilyTree@@QAE?B_NAAUSSaveState@1@@Z (public: bool const __thiscall CFamilyTree::SaveState(struct CFamilyTree::SSaveState &)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 51                 push        ecx
+  00000004: 53                 push        ebx
+  00000005: 56                 push        esi
+  00000006: 8B D9              mov         ebx,ecx
+  00000008: 57                 push        edi
+  00000009: 89 5D FC           mov         dword ptr [ebp-4],ebx
+  0000000C: E8 00 00 00 00     call        ?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ
+  00000011: 8B 45 08           mov         eax,dword ptr [ebp+8]
+  00000014: 8D 53 08           lea         edx,[ebx+8]
+  00000017: 83 C0 04           add         eax,4
+  0000001A: BB 1E 00 00 00     mov         ebx,1Eh
+  0000001F: 90                 nop
+  00000020: 8B F2              mov         esi,edx
+  00000022: 8B F8              mov         edi,eax
+  00000024: B9 B2 01 00 00     mov         ecx,1B2h
+  00000029: 81 C2 C8 06 00 00  add         edx,6C8h
+  0000002F: 05 C8 06 00 00     add         eax,6C8h
+  00000034: F3 A5              rep movs    dword ptr es:[edi],dword ptr [esi]
+  00000036: 83 EB 01           sub         ebx,1
+  00000039: 75 E5              jne         00000020
+  0000003B: 8B 45 FC           mov         eax,dword ptr [ebp-4]
+  0000003E: 8B 4D 08           mov         ecx,dword ptr [ebp+8]
+  00000041: 5F                 pop         edi
+  00000042: 5E                 pop         esi
+  00000043: 8B 00              mov         eax,dword ptr [eax]
+  00000045: 89 01              mov         dword ptr [ecx],eax
+  00000047: B0 01              mov         al,1
+  00000049: 5B                 pop         ebx
+  0000004A: 8B E5              mov         esp,ebp
+  0000004C: 5D                 pop         ebp
+  0000004D: C2 04 00           ret         4
+
+?StartFamilyTree@CFamilyTree@@QAE_NAAVCVillager@@@Z (public: bool __thiscall CFamilyTree::StartFamilyTree(class CVillager &)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 6A FF              push        0FFFFFFFFh
+  00000005: FF 75 08           push        dword ptr [ebp+8]
+  00000008: E8 00 00 00 00     call        ?StartNextGeneration@CFamilyTree@@QAE_NAAVCVillager@@H@Z
+  0000000D: 5D                 pop         ebp
+  0000000E: C2 04 00           ret         4
+
+?StartNextGeneration@CFamilyTree@@QAE_NAAVCVillager@@H@Z (public: bool __thiscall CFamilyTree::StartNextGeneration(class CVillager &,int)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 83 EC 08           sub         esp,8
+  00000006: 53                 push        ebx
+  00000007: 8B D9              mov         ebx,ecx
+  00000009: 89 5D F8           mov         dword ptr [ebp-8],ebx
+  0000000C: 8B 43 04           mov         eax,dword ptr [ebx+4]
+  0000000F: 83 F8 1E           cmp         eax,1Eh
+  00000012: 75 08              jne         0000001C
+  00000014: E8 00 00 00 00     call        ?MakeRoomInTree@CFamilyTree@@QAEXXZ
+  00000019: 8B 43 04           mov         eax,dword ptr [ebx+4]
+  0000001C: 83 F8 1D           cmp         eax,1Dh
+  0000001F: 0F 87 BB 00 00 00  ja          000000E0
+  00000025: 56                 push        esi
+  00000026: 57                 push        edi
+  00000027: 8B CB              mov         ecx,ebx
+  00000029: E8 00 00 00 00     call        ?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ
+  0000002E: 8B 55 0C           mov         edx,dword ptr [ebp+0Ch]
+  00000031: C7 45 FC FF FF FF  mov         dword ptr [ebp-4],0FFFFFFFFh
+            FF
+  00000038: 83 FA FF           cmp         edx,0FFFFFFFFh
+  0000003B: 74 34              je          00000071
+  0000003D: 69 43 04 C8 06 00  imul        eax,dword ptr [ebx+4],6C8h
+            00
+  00000044: 33 C9              xor         ecx,ecx
+  00000046: 8B B4 18 F4 FA FF  mov         esi,dword ptr [eax+ebx-50Ch]
+            FF
+  0000004D: 85 F6              test        esi,esi
+  0000004F: 7E 20              jle         00000071
+  00000051: 05 20 FB FF FF     add         eax,0FFFFFB20h
+  00000056: 03 C3              add         eax,ebx
+  00000058: 80 78 F2 00        cmp         byte ptr [eax-0Eh],0
+  0000005C: 74 04              je          00000062
+  0000005E: 39 10              cmp         dword ptr [eax],edx
+  00000060: 74 0C              je          0000006E
+  00000062: 41                 inc         ecx
+  00000063: 05 D8 00 00 00     add         eax,0D8h
+  00000068: 3B CE              cmp         ecx,esi
+  0000006A: 7C EC              jl          00000058
+  0000006C: EB 03              jmp         00000071
+  0000006E: 89 4D FC           mov         dword ptr [ebp-4],ecx
+  00000071: FF 43 04           inc         dword ptr [ebx+4]
+  00000074: 69 43 04 C8 06 00  imul        eax,dword ptr [ebx+4],6C8h
+            00
+  0000007B: 81 C3 40 F9 FF FF  add         ebx,0FFFFF940h
+  00000081: 8B 75 08           mov         esi,dword ptr [ebp+8]
+  00000084: 6A 19              push        19h
+  00000086: 03 D8              add         ebx,eax
+  00000088: 8D 86 64 6A 00 00  lea         eax,[esi+6A64h]
+  0000008E: 50                 push        eax
+  0000008F: 8D 7B 04           lea         edi,[ebx+4]
+  00000092: 57                 push        edi
+  00000093: E8 00 00 00 00     call        ?ldwStrCopy@@YAXPADPBDH@Z
+  00000098: 8B 4D F8           mov         ecx,dword ptr [ebp-8]
+  0000009B: 83 C4 0C           add         esp,0Ch
+  0000009E: C6 43 1E 01        mov         byte ptr [ebx+1Eh],1
+  000000A2: 8B 86 58 6A 00 00  mov         eax,dword ptr [esi+6A58h]
+  000000A8: 89 43 20           mov         dword ptr [ebx+20h],eax
+  000000AB: 8B 86 84 6A 00 00  mov         eax,dword ptr [esi+6A84h]
+  000000B1: 89 43 28           mov         dword ptr [ebx+28h],eax
+  000000B4: 8B 86 80 6A 00 00  mov         eax,dword ptr [esi+6A80h]
+  000000BA: 89 43 24           mov         dword ptr [ebx+24h],eax
+  000000BD: 8B 86 48 BB 01 00  mov         eax,dword ptr [esi+1BB48h]
+  000000C3: 89 43 2C           mov         dword ptr [ebx+2Ch],eax
+  000000C6: 8B 45 FC           mov         eax,dword ptr [ebp-4]
+  000000C9: 57                 push        edi
+  000000CA: 89 43 30           mov         dword ptr [ebx+30h],eax
+  000000CD: C6 03 01           mov         byte ptr [ebx],1
+  000000D0: E8 00 00 00 00     call        ?UpdatePeepRecord@CFamilyTree@@QAEXPAUSPeepRecord@1@@Z
+  000000D5: 5F                 pop         edi
+  000000D6: 5E                 pop         esi
+  000000D7: B0 01              mov         al,1
+  000000D9: 5B                 pop         ebx
+  000000DA: 8B E5              mov         esp,ebp
+  000000DC: 5D                 pop         ebp
+  000000DD: C2 08 00           ret         8
+  000000E0: 32 C0              xor         al,al
+  000000E2: 5B                 pop         ebx
+  000000E3: 8B E5              mov         esp,ebp
+  000000E5: 5D                 pop         ebp
+  000000E6: C2 08 00           ret         8
+
+?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ (public: void __thiscall CFamilyTree::UpdateCurrentFamilyRecord(void)):
+  00000000: 53                 push        ebx
+  00000001: 56                 push        esi
+  00000002: 8B D9              mov         ebx,ecx
+  00000004: E8 00 00 00 00     call        ?GetCurrentFamily@CFamilyTree@@QAEPAUSFamilyRecord@1@XZ
+  00000009: 8B F0              mov         esi,eax
+  0000000B: 85 F6              test        esi,esi
+  0000000D: 74 39              je          00000048
+  0000000F: 57                 push        edi
+  00000010: 8D 56 04           lea         edx,[esi+4]
+  00000013: 8B CB              mov         ecx,ebx
+  00000015: 52                 push        edx
+  00000016: E8 00 00 00 00     call        ?UpdatePeepRecord@CFamilyTree@@QAEXPAUSPeepRecord@1@@Z
+  0000001B: 8D 8E DC 00 00 00  lea         ecx,[esi+0DCh]
+  00000021: 51                 push        ecx
+  00000022: 8B CB              mov         ecx,ebx
+  00000024: E8 00 00 00 00     call        ?UpdatePeepRecord@CFamilyTree@@QAEXPAUSPeepRecord@1@@Z
+  00000029: 81 C6 B8 01 00 00  add         esi,1B8h
+  0000002F: BF 06 00 00 00     mov         edi,6
+  00000034: 56                 push        esi
+  00000035: 8B CB              mov         ecx,ebx
+  00000037: E8 00 00 00 00     call        ?UpdatePeepRecord@CFamilyTree@@QAEXPAUSPeepRecord@1@@Z
+  0000003C: 81 C6 D8 00 00 00  add         esi,0D8h
+  00000042: 83 EF 01           sub         edi,1
+  00000045: 75 ED              jne         00000034
+  00000047: 5F                 pop         edi
+  00000048: 5E                 pop         esi
+  00000049: 5B                 pop         ebx
+  0000004A: C3                 ret
+
+?UpdateParents@CFamilyTree@@QAE_NAAVCVillager@@0@Z (public: bool __thiscall CFamilyTree::UpdateParents(class CVillager &,class CVillager &)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 53                 push        ebx
+  00000004: 8B D9              mov         ebx,ecx
+  00000006: 56                 push        esi
+  00000007: 57                 push        edi
+  00000008: 8B 73 04           mov         esi,dword ptr [ebx+4]
+  0000000B: 85 F6              test        esi,esi
+  0000000D: 75 0C              jne         0000001B
+  0000000F: C7 43 04 01 00 00  mov         dword ptr [ebx+4],1
+            00
+  00000016: BE 01 00 00 00     mov         esi,1
+  0000001B: 8B 7D 08           mov         edi,dword ptr [ebp+8]
+  0000001E: 57                 push        edi
+  0000001F: E8 00 00 00 00     call        ?FindPeepRecord@CFamilyTree@@AAEPAUSPeepRecord@1@AAVCVillager@@@Z
+  00000024: 85 C0              test        eax,eax
+  00000026: 6A 19              push        19h
+  00000028: 0F 45 7D 0C        cmovne      edi,dword ptr [ebp+0Ch]
+  0000002C: 69 C6 C8 06 00 00  imul        eax,esi,6C8h
+  00000032: 8D B3 40 F9 FF FF  lea         esi,[ebx-6C0h]
+  00000038: 8D 8F 64 6A 00 00  lea         ecx,[edi+6A64h]
+  0000003E: 51                 push        ecx
+  0000003F: 03 F0              add         esi,eax
+  00000041: 80 7E 1E 00        cmp         byte ptr [esi+1Eh],0
+  00000045: 75 3D              jne         00000084
+  00000047: 8D 46 04           lea         eax,[esi+4]
+  0000004A: 50                 push        eax
+  0000004B: 89 45 08           mov         dword ptr [ebp+8],eax
+  0000004E: E8 00 00 00 00     call        ?ldwStrCopy@@YAXPADPBDH@Z
+  00000053: C6 46 1E 01        mov         byte ptr [esi+1Eh],1
+  00000057: 8B 87 58 6A 00 00  mov         eax,dword ptr [edi+6A58h]
+  0000005D: 89 46 20           mov         dword ptr [esi+20h],eax
+  00000060: 8B 87 84 6A 00 00  mov         eax,dword ptr [edi+6A84h]
+  00000066: 89 46 28           mov         dword ptr [esi+28h],eax
+  00000069: 8B 87 80 6A 00 00  mov         eax,dword ptr [edi+6A80h]
+  0000006F: 89 46 24           mov         dword ptr [esi+24h],eax
+  00000072: 8B 87 48 BB 01 00  mov         eax,dword ptr [edi+1BB48h]
+  00000078: 89 46 2C           mov         dword ptr [esi+2Ch],eax
+  0000007B: C7 46 30 FF FF FF  mov         dword ptr [esi+30h],0FFFFFFFFh
+            FF
+  00000082: EB 50              jmp         000000D4
+  00000084: 8D 86 DC 00 00 00  lea         eax,[esi+0DCh]
+  0000008A: 50                 push        eax
+  0000008B: 89 45 08           mov         dword ptr [ebp+8],eax
+  0000008E: E8 00 00 00 00     call        ?ldwStrCopy@@YAXPADPBDH@Z
+  00000093: C6 86 F6 00 00 00  mov         byte ptr [esi+0F6h],1
+            01
+  0000009A: 8B 87 58 6A 00 00  mov         eax,dword ptr [edi+6A58h]
+  000000A0: 89 86 F8 00 00 00  mov         dword ptr [esi+0F8h],eax
+  000000A6: 8B 87 84 6A 00 00  mov         eax,dword ptr [edi+6A84h]
+  000000AC: 89 86 00 01 00 00  mov         dword ptr [esi+100h],eax
+  000000B2: 8B 87 80 6A 00 00  mov         eax,dword ptr [edi+6A80h]
+  000000B8: 89 86 FC 00 00 00  mov         dword ptr [esi+0FCh],eax
+  000000BE: 8B 87 48 BB 01 00  mov         eax,dword ptr [edi+1BB48h]
+  000000C4: 89 86 04 01 00 00  mov         dword ptr [esi+104h],eax
+  000000CA: C7 86 08 01 00 00  mov         dword ptr [esi+108h],0FFFFFFFFh
+            FF FF FF FF
+  000000D4: 83 C4 0C           add         esp,0Ch
+  000000D7: 8B CB              mov         ecx,ebx
+  000000D9: FF 75 08           push        dword ptr [ebp+8]
+  000000DC: E8 00 00 00 00     call        ?UpdatePeepRecord@CFamilyTree@@QAEXPAUSPeepRecord@1@@Z
+  000000E1: 5F                 pop         edi
+  000000E2: C6 06 01           mov         byte ptr [esi],1
+  000000E5: B0 01              mov         al,1
+  000000E7: 5E                 pop         esi
+  000000E8: 5B                 pop         ebx
+  000000E9: 5D                 pop         ebp
+  000000EA: C2 08 00           ret         8
+
+?UpdatePeepRecord@CFamilyTree@@QAEXPAUSPeepRecord@1@@Z (public: void __thiscall CFamilyTree::UpdatePeepRecord(struct CFamilyTree::SPeepRecord *)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 57                 push        edi
+  00000004: 8B 7D 08           mov         edi,dword ptr [ebp+8]
+  00000007: 80 7F 1A 00        cmp         byte ptr [edi+1Ah],0
+  0000000B: 74 61              je          0000006E
+  0000000D: 6A 00              push        0
+  0000000F: FF 77 28           push        dword ptr [edi+28h]
+  00000012: B9 00 00 00 00     mov         ecx,offset ?VillagerManager@@3VCVillagerManager@@A
+  00000017: E8 00 00 00 00     call        ?VillagerExists@CVillagerManager@@QAE_NH_N@Z
+  0000001C: 84 C0              test        al,al
+  0000001E: 74 4E              je          0000006E
+  00000020: 56                 push        esi
+  00000021: FF 77 28           push        dword ptr [edi+28h]
+  00000024: B9 00 00 00 00     mov         ecx,offset ?VillagerManager@@3VCVillagerManager@@A
+  00000029: E8 00 00 00 00     call        ?GetVillager@CVillagerManager@@QAEAAVCVillager@@H@Z
+  0000002E: 8B F0              mov         esi,eax
+  00000030: 6A 28              push        28h
+  00000032: 8B 8E 8C 6B 00 00  mov         ecx,dword ptr [esi+6B8Ch]
+  00000038: 89 4F 30           mov         dword ptr [edi+30h],ecx
+  0000003B: 8D 8E 34 BC 01 00  lea         ecx,[esi+1BC34h]
+  00000041: E8 00 00 00 00     call        ?GetListAsString@CLikeList@@QBEPBDXZ
+  00000046: 50                 push        eax
+  00000047: 8D 4F 34           lea         ecx,[edi+34h]
+  0000004A: 51                 push        ecx
+  0000004B: E8 00 00 00 00     call        ?ldwStrCopy@@YAXPADPBDH@Z
+  00000050: 83 C4 0C           add         esp,0Ch
+  00000053: 8D 8E 40 BC 01 00  lea         ecx,[esi+1BC40h]
+  00000059: 6A 28              push        28h
+  0000005B: E8 00 00 00 00     call        ?GetListAsString@CDislikeList@@QBEPBDXZ
+  00000060: 50                 push        eax
+  00000061: 8D 47 5D           lea         eax,[edi+5Dh]
+  00000064: 50                 push        eax
+  00000065: E8 00 00 00 00     call        ?ldwStrCopy@@YAXPADPBDH@Z
+  0000006A: 83 C4 0C           add         esp,0Ch
+  0000006D: 5E                 pop         esi
+  0000006E: 5F                 pop         edi
+  0000006F: 5D                 pop         ebp
+  00000070: C2 04 00           ret         4
+
+COFF SYMBOL TABLE
+000 0105673C ABS    notype       Static       | @comp.id
+001 80000191 ABS    notype       Static       | @feat.00
+002 00000000 SECT1  notype       Static       | .drectve
+    Section length   62, #relocs    0, #linenums    0, checksum        0
+004 00000000 SECT2  notype       Static       | .debug$S
+    Section length 4D68, #relocs   28, #linenums    0, checksum        0
+006 00000000 SECT3  notype       Static       | .debug$T
+    Section length   7C, #relocs    0, #linenums    0, checksum        0
+008 00000000 SECT4  notype       Static       | .text$mn
+    Section length    C, #relocs    1, #linenums    0, checksum 70C9B17B, selection    1 (pick no duplicates)
+00A 00000000 SECT5  notype       Static       | .debug$S
+    Section length  13C, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x4)
+00C 00000000 SECT6  notype       Static       | .text$mn
+    Section length   26, #relocs    0, #linenums    0, checksum BF89B839, selection    2 (pick any)
+00E 00000000 SECT7  notype       Static       | .debug$S
+    Section length  228, #relocs   13, #linenums    0, checksum        0, selection    5 (pick associative Section 0x6)
+010 00000000 SECT8  notype       Static       | .text$di
+    Section length    A, #relocs    2, #linenums    0, checksum 5727055D, selection    2 (pick any)
+012 00000000 SECT9  notype       Static       | .debug$S
+    Section length   DC, #relocs    5, #linenums    0, checksum        0, selection    5 (pick associative Section 0x8)
+014 00000000 SECTA  notype       Static       | .text$mn
+    Section length   90, #relocs    2, #linenums    0, checksum 34429572, selection    1 (pick no duplicates)
+016 00000000 SECTB  notype       Static       | .debug$S
+    Section length  294, #relocs    F, #linenums    0, checksum        0, selection    5 (pick associative Section 0xA)
+018 00000000 SECTC  notype       Static       | .text$mn
+    Section length   1E, #relocs    1, #linenums    0, checksum 294A665B, selection    1 (pick no duplicates)
+01A 00000000 SECTD  notype       Static       | .debug$S
+    Section length  148, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0xC)
+01C 00000000 SECTE  notype       Static       | .text$mn
+    Section length   47, #relocs    4, #linenums    0, checksum D42262D2, selection    1 (pick no duplicates)
+01E 00000000 SECTF  notype       Static       | .debug$S
+    Section length  1F4, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0xE)
+020 00000000 SECT10 notype       Static       | .text$mn
+    Section length   BB, #relocs    3, #linenums    0, checksum 6B9C6AF5, selection    1 (pick no duplicates)
+022 00000000 SECT11 notype       Static       | .debug$S
+    Section length  2E8, #relocs   19, #linenums    0, checksum        0, selection    5 (pick associative Section 0x10)
+024 00000000 SECT12 notype       Static       | .text$mn
+    Section length   74, #relocs    2, #linenums    0, checksum BF95507E, selection    1 (pick no duplicates)
+026 00000000 SECT13 notype       Static       | .debug$S
+    Section length  28C, #relocs   17, #linenums    0, checksum        0, selection    5 (pick associative Section 0x12)
+028 00000000 SECT14 notype       Static       | .text$mn
+    Section length   22, #relocs    0, #linenums    0, checksum AAE7F8D6, selection    1 (pick no duplicates)
+02A 00000000 SECT15 notype       Static       | .debug$S
+    Section length  138, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x14)
+02C 00000000 SECT16 notype       Static       | .text$mn
+    Section length   10, #relocs    1, #linenums    0, checksum F5882D51, selection    1 (pick no duplicates)
+02E 00000000 SECT17 notype       Static       | .debug$S
+    Section length  144, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x16)
+030 00000000 SECT18 notype       Static       | .text$mn
+    Section length   87, #relocs    0, #linenums    0, checksum F48871E1, selection    1 (pick no duplicates)
+032 00000000 SECT19 notype       Static       | .debug$S
+    Section length  2F4, #relocs   17, #linenums    0, checksum        0, selection    5 (pick associative Section 0x18)
+034 00000000 SECT1A notype       Static       | .text$mn
+    Section length   1C, #relocs    0, #linenums    0, checksum 468D07F9, selection    1 (pick no duplicates)
+036 00000000 SECT1B notype       Static       | .debug$S
+    Section length  110, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x1A)
+038 00000000 SECT1C notype       Static       | .text$mn
+    Section length   25, #relocs    0, #linenums    0, checksum 66160408, selection    1 (pick no duplicates)
+03A 00000000 SECT1D notype       Static       | .debug$S
+    Section length  164, #relocs    B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x1C)
+03C 00000000 SECT1E notype       Static       | .text$mn
+    Section length   5A, #relocs    1, #linenums    0, checksum CF1E3876, selection    1 (pick no duplicates)
+03E 00000000 SECT1F notype       Static       | .debug$S
+    Section length  224, #relocs    F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x1E)
+040 00000000 SECT20 notype       Static       | .text$mn
+    Section length   47, #relocs    1, #linenums    0, checksum 60438B23, selection    1 (pick no duplicates)
+042 00000000 SECT21 notype       Static       | .debug$S
+    Section length  15C, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x20)
+044 00000000 SECT22 notype       Static       | .text$mn
+    Section length   10, #relocs    1, #linenums    0, checksum 92DD2C81, selection    1 (pick no duplicates)
+046 00000000 SECT23 notype       Static       | .debug$S
+    Section length  160, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x22)
+048 00000000 SECT24 notype       Static       | .text$mn
+    Section length   21, #relocs    0, #linenums    0, checksum E9A3620D, selection    1 (pick no duplicates)
+04A 00000000 SECT25 notype       Static       | .debug$S
+    Section length  13C, #relocs    7, #linenums    0, checksum        0, selection    5 (pick associative Section 0x24)
+04C 00000000 SECT26 notype       Static       | .text$mn
+    Section length  169, #relocs    7, #linenums    0, checksum 74D51537, selection    1 (pick no duplicates)
+04E 00000000 SECT27 notype       Static       | .debug$S
+    Section length  3C8, #relocs   17, #linenums    0, checksum        0, selection    5 (pick associative Section 0x26)
+050 00000000 SECT28 notype       Static       | .text$mn
+    Section length   25, #relocs    1, #linenums    0, checksum D53D991F, selection    1 (pick no duplicates)
+052 00000000 SECT29 notype       Static       | .debug$S
+    Section length  13C, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x28)
+054 00000000 SECT2A notype       Static       | .text$mn
+    Section length    E, #relocs    1, #linenums    0, checksum 158DC8C6, selection    1 (pick no duplicates)
+056 00000000 SECT2B notype       Static       | .debug$S
+    Section length  14C, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x2A)
+058 00000000 SECT2C notype       Static       | .text$mn
+    Section length   50, #relocs    1, #linenums    0, checksum A7D13B71, selection    1 (pick no duplicates)
+05A 00000000 SECT2D notype       Static       | .debug$S
+    Section length  21C, #relocs   13, #linenums    0, checksum        0, selection    5 (pick associative Section 0x2C)
+05C 00000000 SECT2E notype       Static       | .text$mn
+    Section length   11, #relocs    1, #linenums    0, checksum 76A2AF62, selection    1 (pick no duplicates)
+05E 00000000 SECT2F notype       Static       | .debug$S
+    Section length  154, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x2E)
+060 00000000 SECT30 notype       Static       | .text$mn
+    Section length   E9, #relocs    4, #linenums    0, checksum FAD53955, selection    1 (pick no duplicates)
+062 00000000 SECT31 notype       Static       | .debug$S
+    Section length  3CC, #relocs   1D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x30)
+064 00000000 SECT32 notype       Static       | .text$mn
+    Section length   4B, #relocs    4, #linenums    0, checksum D71B838A, selection    1 (pick no duplicates)
+066 00000000 SECT33 notype       Static       | .debug$S
+    Section length  1E8, #relocs    D, #linenums    0, checksum        0, selection    5 (pick associative Section 0x32)
+068 00000000 SECT34 notype       Static       | .text$mn
+    Section length   ED, #relocs    4, #linenums    0, checksum 848406BA, selection    1 (pick no duplicates)
+06A 00000000 SECT35 notype       Static       | .debug$S
+    Section length  334, #relocs   15, #linenums    0, checksum        0, selection    5 (pick associative Section 0x34)
+06C 00000000 SECT36 notype       Static       | .text$mn
+    Section length   73, #relocs    8, #linenums    0, checksum 95B18B41, selection    1 (pick no duplicates)
+06E 00000000 SECT37 notype       Static       | .debug$S
+    Section length  260, #relocs    F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x36)
+070 00000000 SECT6  notype ()    External     | ??_H@YGXPAXIIP6EPAX0@Z@Z (void __stdcall `vector constructor iterator'(void *,unsigned int,unsigned int,void * (__thiscall*)(void *)))
+071 00000000 UNDEF  notype ()    External     | ?GetListAsString@CLikeList@@QBEPBDXZ (public: char const * __thiscall CLikeList::GetListAsString(void)const )
+072 00000000 UNDEF  notype ()    External     | ?GetListAsString@CDislikeList@@QBEPBDXZ (public: char const * __thiscall CDislikeList::GetListAsString(void)const )
+073 00000000 SECT4  notype ()    External     | ??0CFamilyTree@@QAE@XZ (public: __thiscall CFamilyTree::CFamilyTree(void))
+074 00000000 SECT28 notype ()    External     | ?Reset@CFamilyTree@@QAEXXZ (public: void __thiscall CFamilyTree::Reset(void))
+075 00000000 SECT1E notype ()    External     | ?LoadState@CFamilyTree@@QAE?B_NABUSSaveState@1@@Z (public: bool const __thiscall CFamilyTree::LoadState(struct CFamilyTree::SSaveState const &))
+076 00000000 SECT2C notype ()    External     | ?SaveState@CFamilyTree@@QAE?B_NAAUSSaveState@1@@Z (public: bool const __thiscall CFamilyTree::SaveState(struct CFamilyTree::SSaveState &))
+077 00000000 SECT2E notype ()    External     | ?StartFamilyTree@CFamilyTree@@QAE_NAAVCVillager@@@Z (public: bool __thiscall CFamilyTree::StartFamilyTree(class CVillager &))
+078 00000000 SECT34 notype ()    External     | ?UpdateParents@CFamilyTree@@QAE_NAAVCVillager@@0@Z (public: bool __thiscall CFamilyTree::UpdateParents(class CVillager &,class CVillager &))
+079 00000000 SECTA  notype ()    External     | ?AddOffspring@CFamilyTree@@QAE_NABVCVillager@@@Z (public: bool __thiscall CFamilyTree::AddOffspring(class CVillager const &))
+07A 00000000 SECT30 notype ()    External     | ?StartNextGeneration@CFamilyTree@@QAE_NAAVCVillager@@H@Z (public: bool __thiscall CFamilyTree::StartNextGeneration(class CVillager &,int))
+07B 00000000 SECT24 notype ()    External     | ?NumGenerations@CFamilyTree@@QAEHXZ (public: int __thiscall CFamilyTree::NumGenerations(void))
+07C 00000000 SECT14 notype ()    External     | ?EmptyOffspringSlots@CFamilyTree@@QAEHXZ (public: int __thiscall CFamilyTree::EmptyOffspringSlots(void))
+07D 00000000 SECTC  notype ()    External     | ?CanMarry@CFamilyTree@@QAE_NXZ (public: bool __thiscall CFamilyTree::CanMarry(void))
+07E 00000000 SECT16 notype ()    External     | ?EvictFamily@CFamilyTree@@QAEXXZ (public: void __thiscall CFamilyTree::EvictFamily(void))
+07F 00000000 SECT1C notype ()    External     | ?GetFamilyRecord@CFamilyTree@@QAEPAUSFamilyRecord@1@H@Z (public: struct CFamilyTree::SFamilyRecord * __thiscall CFamilyTree::GetFamilyRecord(int))
+080 00000000 SECT1A notype ()    External     | ?GetCurrentFamily@CFamilyTree@@QAEPAUSFamilyRecord@1@XZ (public: struct CFamilyTree::SFamilyRecord * __thiscall CFamilyTree::GetCurrentFamily(void))
+081 00000000 SECT10 notype ()    External     | ?ChangeName@CFamilyTree@@QAEXAAVCVillager@@PBD@Z (public: void __thiscall CFamilyTree::ChangeName(class CVillager &,char const *))
+082 00000000 SECT26 notype ()    External     | ?ReportDeath@CFamilyTree@@QAEXAAVCVillager@@@Z (public: void __thiscall CFamilyTree::ReportDeath(class CVillager &))
+083 00000000 SECTE  notype ()    External     | ?CanStartNextGeneration@CFamilyTree@@QAE_N_N@Z (public: bool __thiscall CFamilyTree::CanStartNextGeneration(bool))
+084 00000000 SECT22 notype ()    External     | ?NeedNextGenerationNotify@CFamilyTree@@QAE_NXZ (public: bool __thiscall CFamilyTree::NeedNextGenerationNotify(void))
+085 00000000 SECT2A notype ()    External     | ?ResetNextGenerationNotify@CFamilyTree@@QAEXXZ (public: void __thiscall CFamilyTree::ResetNextGenerationNotify(void))
+086 00000000 SECT12 notype ()    External     | ?CountSurvivingChildren@CFamilyTree@@QAEHXZ (public: int __thiscall CFamilyTree::CountSurvivingChildren(void))
+087 00000000 SECT36 notype ()    External     | ?UpdatePeepRecord@CFamilyTree@@QAEXPAUSPeepRecord@1@@Z (public: void __thiscall CFamilyTree::UpdatePeepRecord(struct CFamilyTree::SPeepRecord *))
+088 00000000 SECT20 notype ()    External     | ?MakeRoomInTree@CFamilyTree@@QAEXXZ (public: void __thiscall CFamilyTree::MakeRoomInTree(void))
+089 00000000 SECT32 notype ()    External     | ?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ (public: void __thiscall CFamilyTree::UpdateCurrentFamilyRecord(void))
+08A 00000000 SECT18 notype ()    External     | ?FindPeepRecord@CFamilyTree@@AAEPAUSPeepRecord@1@AAVCVillager@@@Z (private: struct CFamilyTree::SPeepRecord * __thiscall CFamilyTree::FindPeepRecord(class CVillager &))
+08B 00000000 UNDEF  notype ()    External     | ?SelectRandomLivingVillager@CVillagerManager@@QAE?BH_N@Z (public: int const __thiscall CVillagerManager::SelectRandomLivingVillager(bool))
+08C 00000000 UNDEF  notype ()    External     | ?GetVillager@CVillagerManager@@QAEAAVCVillager@@H@Z (public: class CVillager & __thiscall CVillagerManager::GetVillager(int))
+08D 00000000 UNDEF  notype ()    External     | ?VillagerExists@CVillagerManager@@QAE_NH_N@Z (public: bool __thiscall CVillagerManager::VillagerExists(int,bool))
+08E 00000000 UNDEF  notype ()    External     | ?ldwStrCopy@@YAXPADPBDH@Z (void __cdecl ldwStrCopy(char *,char const *,int))
+08F 00000000 SECT8  notype ()    Static       | ??__EFamilyTree@@YAXXZ (void __cdecl `dynamic initializer for 'FamilyTree''(void))
+090 00000000 UNDEF  notype ()    External     | _memset
+091 00000000 SECT38 notype       Static       | .bss
+    Section length CB80, #relocs    0, #linenums    0, checksum        0
+093 00000000 SECT38 notype       Static       | ?cLdwNoColor@@3UldwColor@@B (struct ldwColor const cLdwNoColor)
+094 00000000 SECT39 notype       Static       | .data
+    Section length   50, #relocs    0, #linenums    0, checksum 43CB382E
+096 00000000 SECT39 notype       Static       | ?cLdwBlack@@3UldwColor@@B (struct ldwColor const cLdwBlack)
+097 00000004 SECT39 notype       Static       | ?cLdwWhite@@3UldwColor@@B (struct ldwColor const cLdwWhite)
+098 00000008 SECT39 notype       Static       | ?cLdwLightGrey@@3UldwColor@@B (struct ldwColor const cLdwLightGrey)
+099 0000000C SECT39 notype       Static       | ?cLdwDarkGrey@@3UldwColor@@B (struct ldwColor const cLdwDarkGrey)
+09A 00000010 SECT39 notype       Static       | ?cLdwRed@@3UldwColor@@B (struct ldwColor const cLdwRed)
+09B 00000014 SECT39 notype       Static       | ?cLdwGreen@@3UldwColor@@B (struct ldwColor const cLdwGreen)
+09C 00000018 SECT39 notype       Static       | ?cLdwBlue@@3UldwColor@@B (struct ldwColor const cLdwBlue)
+09D 0000001C SECT39 notype       Static       | ?UI_ButtonUpColor@@3UldwColor@@B (struct ldwColor const UI_ButtonUpColor)
+09E 00000020 SECT39 notype       Static       | ?UI_ButtonOverColor@@3UldwColor@@B (struct ldwColor const UI_ButtonOverColor)
+09F 00000024 SECT39 notype       Static       | ?UI_ButtonDownColor@@3UldwColor@@B (struct ldwColor const UI_ButtonDownColor)
+0A0 00000028 SECT39 notype       Static       | ?UI_LabelColor@@3UldwColor@@B (struct ldwColor const UI_LabelColor)
+0A1 0000002C SECT39 notype       Static       | ?UI_DiplomaColor@@3UldwColor@@B (struct ldwColor const UI_DiplomaColor)
+0A2 00000030 SECT39 notype       Static       | ?UI_HandCursorHotSpot@@3UldwPoint@@B (struct ldwPoint const UI_HandCursorHotSpot)
+0A3 00000038 SECT39 notype       Static       | ?ContentMap_c_sSnapToCenter@@3UldwPoint@@B (struct ldwPoint const ContentMap_c_sSnapToCenter)
+0A4 00000040 SECT39 notype       Static       | ?Environment_c_sAlchemyLabPos@@3UldwPoint@@B (struct ldwPoint const Environment_c_sAlchemyLabPos)
+0A5 00000048 SECT39 notype       Static       | ?Environment_c_sScienceLabPos@@3UldwPoint@@B (struct ldwPoint const Environment_c_sScienceLabPos)
+0A6 00000008 SECT38 notype       External     | ?FamilyTree@@3VCFamilyTree@@A (class CFamilyTree FamilyTree)
+0A7 00000000 UNDEF  notype       External     | ?VillagerManager@@3VCVillagerManager@@A (class CVillagerManager VillagerManager)
+0A8 00000000 SECT3A notype       Static       | .CRT$XCU
+    Section length    4, #relocs    1, #linenums    0, checksum        0
+0AA 00000000 SECT3A notype       Static       | ?FamilyTree$initializer$@@3P6AXXZA (void (__cdecl* FamilyTree$initializer$)(void))
+0AB 00000000 SECT3B notype       Static       | .chks64
+    Section length  1D8, #relocs    0, #linenums    0, checksum        0
+
+String Table Size = 0x80C bytes
+
+  Summary
+
+           4 .CRT$XCU
+        CB80 .bss
+         1D8 .chks64
+          50 .data
+        7FF4 .debug$S
+          7C .debug$T
+          62 .drectve
+           A .text$di
+         8B3 .text$mn
