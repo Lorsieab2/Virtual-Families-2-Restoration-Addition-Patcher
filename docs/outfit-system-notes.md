@@ -143,3 +143,16 @@ total and does not change the stock head lookup or source sheets.
 `VillagerBodies` and `VillagerHeads` folders into a completed build under
 `Assets`. These are reference/editing exports only: they do not replace the
 stock `Images` sheets or participate in the runtime sprite lookup.
+
+## Holiday outfit organization milestone
+
+`work/organize_holiday_outfits.py` copies the existing holiday source frames
+into the generated body tree by gender and intended runtime body value. The
+four additive types are organized as `Body_51` through `Body_54` for both
+Female and Male, with 61 frames per body type. The output filenames begin with
+gender and body value, for example
+`Female_Body_51_Holiday_Frame_0001.png`.
+
+The raw `Images/HolidayOutfits` inputs are deliberately retained. This step is
+asset organization only: it neither expands the stock 0--49 runtime body range
+nor changes the animator lookup.
