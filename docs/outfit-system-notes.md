@@ -136,3 +136,10 @@ Each extracted head frame is 28 x 56 and carries gender, age bank, zero-based
 head value, and zero-based frame index in its filename. The emitted manifest
 records the exact original source rectangle. This produces 4,800 frames in
 total and does not change the stock head lookup or source sheets.
+
+## Build export packaging
+
+`work/package_villager_sprite_exports.py` copies the generated
+`VillagerBodies` and `VillagerHeads` folders into a completed build under
+`Assets`. These are reference/editing exports only: they do not replace the
+stock `Images` sheets or participate in the runtime sprite lookup.
