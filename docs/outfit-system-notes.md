@@ -104,3 +104,19 @@ fallback decisions. No stock sheet should be overwritten or removed.
 ## Files changed by this milestone
 
 - `docs/outfit-system-notes.md`: records the Phase 1 findings only.
+
+## Phase 2 extraction milestone
+
+`work/extract_villager_bodies.py` now performs a non-destructive extraction of
+the six stock sheets. Given an `Images` directory, it writes one 91 x 91 PNG
+per grid cell under `generated/VillagerBodies`:
+
+- `VillagerBodies/Female/Body_00` through `Body_49`
+- `VillagerBodies/Male/Body_00` through `Body_49`
+
+Every filename includes gender, zero-based body value, role (`bodies`,
+`actions`, or `sit`), and zero-based frame number. The accompanying
+`manifest.json` records the exact original source rectangle for every frame.
+For the stock sheets this produces 5,600 frames: 2 genders x 50 body values x
+(32 body + 15 action + 9 sit frames). The generated output is intentionally
+ignored by Git; only the reproducible extractor is tracked.

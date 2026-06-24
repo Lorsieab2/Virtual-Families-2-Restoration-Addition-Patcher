@@ -1,6 +1,7 @@
 # Generated game packages belong in GitHub Releases, not Git history.
 /outputs/
 /release-artifacts/
+/generated/
 /build/
 /dist/
 /cache/
