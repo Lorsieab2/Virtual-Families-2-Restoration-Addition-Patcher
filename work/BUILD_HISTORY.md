@@ -16,3 +16,12 @@
 - Keeps the experimental helper functions in source for later investigation,
   but they are opt-in through `VF2_ENABLE_HOLIDAY_BODY_TYPES=1` and are not
   part of the normal build path.
+
+## B55 - Additive Mobile Island Event Table
+
+- Appends mobile-only event objects after the stock desktop event slots.
+- Preserves slots `0x01` through `0x60` and expands the stock list consumers'
+  exclusive upper bound for the appended entries.
+- Uses a `CIslandEvent`-compatible object prefix and selects target villagers
+  in `CanFire`, matching the stock event lifetime rather than selecting them
+  while the global event table is constructed.

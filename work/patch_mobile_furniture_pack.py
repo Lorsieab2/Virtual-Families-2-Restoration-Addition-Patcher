@@ -2168,10 +2168,17 @@ def load_mobile_island_events():
             ids[kind] = string_id
             flat_index += 1
         has_choices = ids.get("ChoiceA", 0) != 0 and ids.get("ChoiceB", 0) != 0
-        is_email = event_name in EMAIL_EVENT_NAMES or event_text[event_name].get("Title", "").startswith("Subject:")
+        event_class = f"CEvent{event_name}"
+        # Mobile classes named CEventEmail* use the stock email-event path.
+        # Keep the known non-prefixed email shells and Subject:-style entries too.
+        is_email = (
+            event_class.startswith("CEventEmail")
+            or event_name in EMAIL_EVENT_NAMES
+            or event_text[event_name].get("Title", "").startswith("Subject:")
+        )
         events.append({
             "name": event_name,
-            "class": f"CEvent{event_name}",
+            "class": event_class,
             "slot": 0x61 + slot_index,
             "strings": strings,
             "ids": ids,
@@ -3155,48 +3162,54 @@ def patch_island_events(manifest):
         )
 
     helper_cpp = f'''
+#include <stddef.h>
+
 enum StringId {{ eStringDummy = 0 }};
 enum EBodyPosition {{ eBodyPosition_Standing = 0 }};
+enum EAgeSelecter {{ eAgeSelecterAny = 2 }};
+enum EGender {{ eGenderAny = -1 }};
 
 class CVillager;
 class CVillagerManager {{
 public:
-    int const SelectRandomLivingVillager(bool includeBusy);
-    CVillager *GetVillagerPtr(int id);
+    CVillager *GetRandomVillager(EAgeSelecter age_selector, EGender gender, int *out_id);
 }};
 
 extern CVillagerManager VillagerManager;
 
 static CVillager *VF2PickMobileEventVillager()
 {{
-    int id = VillagerManager.SelectRandomLivingVillager(false);
-    if (id < 0) {{
-        id = VillagerManager.SelectRandomLivingVillager(true);
-    }}
-    return id >= 0 ? VillagerManager.GetVillagerPtr(id) : 0;
+    // Mirrors CEventBoring::CanFire: choose a villager only when the event is
+    // considered for firing, never while CIslandEvents is being constructed.
+    return VillagerManager.GetRandomVillager(eAgeSelecterAny, eGenderAny, 0);
 }}
 
-// Vtable-compatible with CIslandEvent. Kept standalone so these grafted
-// objects do not depend on private desktop base-class symbols.
-class CMobileIslandEvent {{
+// Vtable- and layout-compatible with CIslandEvent.  The first 0x10 bytes are
+// the stock base object: vptr, target villager, second target villager, award.
+// Keeping that prefix prevents dialog/scheduler code from interpreting title
+// and description IDs as pointers.
+struct CMobileIslandEvent {{
+    CVillager *target1_;
+    CVillager *target2_;
+    int award_;
     int title_;
     int desc_;
     int choice_a_;
     int choice_b_;
     int result_a_;
     int result_b_;
-    CVillager *target1_;
-    CVillager *target2_;
     bool has_choices_;
     bool is_email_;
 
-public:
     CMobileIslandEvent(int title, int desc, int choice_a, int choice_b, int result_a, int result_b, bool has_choices, bool is_email)
-        : title_(title), desc_(desc), choice_a_(choice_a), choice_b_(choice_b), result_a_(result_a), result_b_(result_b),
-          target1_(VF2PickMobileEventVillager()), target2_(VF2PickMobileEventVillager()),
+        : target1_(0), target2_(0), award_(0), title_(title), desc_(desc), choice_a_(choice_a), choice_b_(choice_b), result_a_(result_a), result_b_(result_b),
           has_choices_(has_choices), is_email_(is_email) {{}}
     virtual ~CMobileIslandEvent() {{}}
-    virtual bool CanFire() {{ return true; }}
+    virtual bool CanFire() {{
+        target1_ = VF2PickMobileEventVillager();
+        target2_ = target1_;
+        return target1_ != 0;
+    }}
     virtual StringId GetTitle() {{ return (StringId)title_; }}
     virtual StringId GetDescription() {{ return (StringId)desc_; }}
     virtual bool HasChoices() {{ return has_choices_; }}
@@ -3211,8 +3224,12 @@ public:
     virtual void ImpactGame(int choice) {{ (void)choice; }}
     virtual void CalcAward() {{}}
     virtual void CalcAward(int choice) {{ (void)choice; }}
-    virtual int GetAwardAmount() {{ return 0; }}
+    virtual int GetAwardAmount() {{ return award_; }}
 }};
+
+static_assert(offsetof(CMobileIslandEvent, target1_) == 4, "CIslandEvent target1 layout");
+static_assert(offsetof(CMobileIslandEvent, target2_) == 8, "CIslandEvent target2 layout");
+static_assert(offsetof(CMobileIslandEvent, award_) == 12, "CIslandEvent award layout");
 
 extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
 {{
