@@ -16,6 +16,9 @@ SRC_OBJS = ROOT / "work" / "desktop_obj_files"
 PATCHED = ROOT / "work" / "patched_mobile_furniture_pack_objs"
 OUT = Path(os.environ.get("VF2_PATCH_OUT", ROOT / "outputs" / "VF2-Mobile-Additive-Furniture-Pack"))
 ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "0") == "1"
+# Keep the experimental holiday body-row extension opt-in.  Stock VF2 uses
+# rows 0..49, and the regular build path must preserve that exact behavior.
+ENABLE_HOLIDAY_BODY_TYPES = os.environ.get("VF2_ENABLE_HOLIDAY_BODY_TYPES", "0") == "1"
 ANALYSIS = ROOT / "outputs" / "VF2-Desktop-Object-Analysis"
 if not (ANALYSIS / "furniture-records.json").exists():
     ANALYSIS = ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis"
@@ -4465,9 +4468,18 @@ def main():
     sync_invisible_outdoor_sprites(manifest)
     sync_transparent_base_furniture_sprites(manifest)
     sync_invisible_furniture_reference_sets(manifest)
-    sync_holiday_body_types(manifest)
-    patch_holiday_body_lookup(manifest)
-    sync_separated_villager_sheets(manifest)
+    if ENABLE_HOLIDAY_BODY_TYPES:
+        sync_holiday_body_types(manifest)
+        patch_holiday_body_lookup(manifest)
+        sync_separated_villager_sheets(manifest)
+    else:
+        manifest["holiday_body_types"] = {
+            "status": "disabled; stock body rows 0-49 retained",
+            "reason": "B54 restores base-game villager body behavior",
+        }
+        manifest["holiday_body_lookup"] = {
+            "status": "not patched; stock animator body-row clamp retained",
+        }
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)
