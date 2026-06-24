@@ -120,3 +120,19 @@ Every filename includes gender, zero-based body value, role (`bodies`,
 For the stock sheets this produces 5,600 frames: 2 genders x 50 body values x
 (32 body + 15 action + 9 sit frames). The generated output is intentionally
 ignored by Git; only the reproducible extractor is tracked.
+
+## Head extraction milestone
+
+`work/extract_villager_heads.py` performs the equivalent non-destructive
+extraction for the four stock head sheets. It writes 24 frames for each of the
+50 zero-based head rows under `generated/VillagerHeads`:
+
+- `VillagerHeads/Female/Adult` from `female_heads00.png`
+- `VillagerHeads/Female/Elderly` from `female_heads10.png`
+- `VillagerHeads/Male/Adult` from `male_heads00.png`
+- `VillagerHeads/Male/Elderly` from `male_heads10.png`
+
+Each extracted head frame is 28 x 56 and carries gender, age bank, zero-based
+head value, and zero-based frame index in its filename. The emitted manifest
+records the exact original source rectangle. This produces 4,800 frames in
+total and does not change the stock head lookup or source sheets.
