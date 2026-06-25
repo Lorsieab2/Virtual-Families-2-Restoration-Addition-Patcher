@@ -156,3 +156,21 @@ value, for example `Female_Body_50_Holiday_Frame_0001.png`.
 The raw `Images/HolidayOutfits` inputs are deliberately retained. This step is
 asset organization only: it neither expands the stock 0--49 runtime body range
 nor changes the animator lookup.
+
+## Holiday compatibility frame milestone
+
+`work/organize_holiday_outfits.py` also emits normalized 91 x 91 compatibility
+frames for each additive holiday body. The raw mobile outfit sources have 61
+frames per outfit on larger transparent canvases; the compatibility subset maps
+them into the same role counts used by the stock desktop sheets:
+
+- source frames 1--32 -> `bodies` frames 0--31
+- source frames 33--47 -> `actions` frames 0--14
+- source frames 48--56 -> `sit` frames 0--8
+
+Frames are resized and positioned against the stock `Body_49` frame geometry
+for the matching gender, role, and frame index. This gives a future runtime
+resolver complete per-frame PNGs for body values 50--53 while leaving the
+original 0--49 spritesheets as the fallback path. Source frames 57--61 are
+preserved as raw holiday copies but are not mapped into the first compatibility
+resolver pass.
