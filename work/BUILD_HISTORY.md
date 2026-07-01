@@ -25,3 +25,14 @@
 - Uses a `CIslandEvent`-compatible object prefix and selects target villagers
   in `CanFire`, matching the stock event lifetime rather than selecting them
   while the global event table is constructed.
+
+## B57 - Folder-Backed Holiday Body Renderer
+
+- Stops using the B56 expanded villager body/action/sit spritesheets for holiday
+  outfits.
+- Registers each holiday body frame as its own one-cell graphics descriptor and
+  writes runtime frames under `Images/VillagerBodies`.
+- Redirects only the two native villager body draw calls through a folder-backed
+  helper. Stock body values `0-49` fall back to the original draw path.
+- Keeps the original villager spritesheets as fallback assets and leaves head
+  rendering untouched.

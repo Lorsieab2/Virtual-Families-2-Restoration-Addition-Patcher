@@ -49,10 +49,45 @@ LOCKED_PNG_SOURCE = Path(r"C:\Users\Owner\Downloads\locked.png")
 VF3_SPRITE_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\Sprite")
 INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\Virtual Families 2 - Copy Official\Images\Furniture")
 HOLIDAY_OUTFIT_ARCHIVE = Path(r"C:\Users\Owner\Downloads\VF2_Holiday_Content\Holiday Outfits.zip")
+GENERATED_VILLAGER_BODIES = ROOT / "generated" / "VillagerBodies"
+FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B56-Holiday-Body-Lookup-Test"
 HOLIDAY_BODY_SET_IDS = (51, 52, 53, 54)
-HOLIDAY_BODY_FRAME_COUNT = 32
+HOLIDAY_BODY_VALUES = tuple(range(50, 50 + len(HOLIDAY_BODY_SET_IDS)))
 HOLIDAY_BODY_CELL_SIZE = 91
 HOLIDAY_BODY_BASE_ROWS = 50
+HOLIDAY_BODY_ROLE_SPECS = [
+    {
+        "role": "bodies",
+        "source_range": (1, 32),
+        "columns": 32,
+        "sheets": {
+            "female": ("female_bodies00.png", "Female Outfits", "FemaleBodies_0"),
+            "male": ("male_bodies00.png", "Male Outfits", "MaleBodies_00"),
+        },
+    },
+    {
+        "role": "actions",
+        "source_range": (33, 47),
+        "columns": 15,
+        "sheets": {
+            "female": ("female_actions00.png", "Female Outfits", "FemaleBodies_0"),
+            "male": ("male_actions00.png", "Male Outfits", "MaleBodies_00"),
+        },
+    },
+    {
+        "role": "sit",
+        "source_range": (48, 56),
+        "columns": 9,
+        "sheets": {
+            "female": ("female_sit00.png", "Female Outfits", "FemaleBodies_0"),
+            "male": ("male_sit00.png", "Male Outfits", "MaleBodies_00"),
+        },
+    },
+]
+HOLIDAY_BODY_ROLE_OFFSETS = {"bodies": 0, "actions": 32, "sit": 47}
+HOLIDAY_BODY_ROLE_FRAME_COUNTS = {"bodies": 32, "actions": 15, "sit": 9}
+HOLIDAY_BODY_FRAMES_PER_VALUE = sum(HOLIDAY_BODY_ROLE_FRAME_COUNTS.values())
+HOLIDAY_BODY_IMAGE_COUNT = 2 * len(HOLIDAY_BODY_VALUES) * HOLIDAY_BODY_FRAMES_PER_VALUE
 LARGE_TV_ANIMATION_SHEETS = {
     "Large": Path(r"C:\Users\Owner\Downloads\TVAnimBig.png"),
     "LargeEast": Path(r"C:\Users\Owner\Downloads\TVAnimBigE.png"),
@@ -1396,6 +1431,25 @@ def visible_special_upgrade_icon_id_for(item_id):
     return ORIG_IMAGE_MAX + 1 + len(ITEMS) + LOCKED_GENERATION_FRAME_COUNT + ordered.index(item_id)
 
 
+def villager_body_image_base():
+    return ORIG_IMAGE_MAX + 1 + len(ITEMS) + LOCKED_GENERATION_FRAME_COUNT + len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
+
+
+def villager_body_image_index(gender, body_value, role, frame):
+    gender_index = {"female": 0, "male": 1}[gender]
+    body_index = HOLIDAY_BODY_VALUES.index(body_value)
+    return (
+        gender_index * len(HOLIDAY_BODY_VALUES) * HOLIDAY_BODY_FRAMES_PER_VALUE
+        + body_index * HOLIDAY_BODY_FRAMES_PER_VALUE
+        + HOLIDAY_BODY_ROLE_OFFSETS[role]
+        + frame
+    )
+
+
+def villager_body_image_id(gender, body_value, role, frame):
+    return villager_body_image_base() + villager_body_image_index(gender, body_value, role, frame)
+
+
 def expected_furniture_frame_count(path):
     name = Path(path).name
     stem = Path(name).stem
@@ -1780,7 +1834,7 @@ def sync_separated_villager_sheets(manifest):
                 for body_type in range(row_count):
                     body_dir = destination / f"Body{body_type + 1:03d}"
                     body_dir.mkdir(parents=True, exist_ok=True)
-                    for frame_index in range(HOLIDAY_BODY_FRAME_COUNT):
+                    for frame_index in range(32):
                         box = (
                             frame_index * HOLIDAY_BODY_CELL_SIZE,
                             body_type * HOLIDAY_BODY_CELL_SIZE,
@@ -1817,81 +1871,128 @@ def sync_separated_villager_sheets(manifest):
     }
 
 
+def _alpha_bbox(image):
+    return image.convert("RGBA").getchannel("A").getbbox()
+
+
+def _normalize_holiday_body_frame(source_image, target_template):
+    from PIL import Image
+
+    source_bbox = _alpha_bbox(source_image)
+    target_bbox = _alpha_bbox(target_template)
+    output = Image.new("RGBA", (HOLIDAY_BODY_CELL_SIZE, HOLIDAY_BODY_CELL_SIZE), (0, 0, 0, 0))
+    if not source_bbox or not target_bbox:
+        return output
+    target_width = target_bbox[2] - target_bbox[0]
+    target_height = target_bbox[3] - target_bbox[1]
+    cropped = source_image.crop(source_bbox)
+    resized = cropped.resize((target_width, target_height), Image.Resampling.LANCZOS)
+    output.alpha_composite(resized, (target_bbox[0], target_bbox[1]))
+    return output
+
+
 def sync_holiday_body_types(manifest):
-    """Append the supplied holiday sprites as four live body rows per gender."""
+    """Append complete action/body/sit rows for four additive holiday bodies."""
     appended = []
     missing = []
     issues = []
     export_root = OUT / "Images" / "VillagerSheets" / "Bodies" / "HolidayOutfits"
-    if not HOLIDAY_OUTFIT_ARCHIVE.exists():
-        manifest["holiday_body_types"] = {
-            "appended": appended,
-            "missing": [str(HOLIDAY_OUTFIT_ARCHIVE)],
-            "issues": issues,
-        }
-        return
     try:
         from PIL import Image
 
-        with ZipFile(HOLIDAY_OUTFIT_ARCHIVE) as archive:
-            for gender, sheet_name, archive_folder, prefix in [
-                ("female", "female_bodies00.png", "Female Outfits", "FemaleBodies_0"),
-                ("male", "male_bodies00.png", "Male Outfits", "MaleBodies_00"),
-            ]:
-                target = OUT / "Images" / sheet_name
-                if not target.exists():
-                    missing.append(str(target))
-                    continue
-                with Image.open(target).convert("RGBA") as existing:
-                    expected_size = (HOLIDAY_BODY_CELL_SIZE * 32, HOLIDAY_BODY_CELL_SIZE * HOLIDAY_BODY_BASE_ROWS)
-                    if existing.size != expected_size:
-                        issues.append({"sheet": str(target), "reason": f"expected {expected_size}, got {existing.size}"})
+        archive = ZipFile(HOLIDAY_OUTFIT_ARCHIVE) if HOLIDAY_OUTFIT_ARCHIVE.exists() else None
+        archive_names = set(archive.namelist()) if archive else set()
+        try:
+            for role_spec in HOLIDAY_BODY_ROLE_SPECS:
+                role = role_spec["role"]
+                first_frame, last_frame = role_spec["source_range"]
+                frame_count = last_frame - first_frame + 1
+                for gender, (sheet_name, archive_folder, prefix) in role_spec["sheets"].items():
+                    target = OUT / "Images" / sheet_name
+                    if not target.exists():
+                        missing.append(str(target))
                         continue
-                    backup = target.with_name(target.name + ".pre-holiday-bodies.bak")
-                    if not backup.exists():
-                        existing.save(backup, format="PNG")
-                    expanded = Image.new(
-                        "RGBA",
-                        (existing.width, existing.height + HOLIDAY_BODY_CELL_SIZE * len(HOLIDAY_BODY_SET_IDS)),
-                        (0, 0, 0, 0),
-                    )
-                    expanded.paste(existing, (0, 0))
-                    for row, set_id in enumerate(HOLIDAY_BODY_SET_IDS):
-                        frame_targets = []
-                        for frame_index in range(1, HOLIDAY_BODY_FRAME_COUNT + 1):
-                            archive_name = (
-                                f"Holiday Outfits/{archive_folder}/{prefix}{set_id:02d}_{frame_index:04d}.png"
-                            )
-                            if archive_name not in archive.namelist():
-                                missing.append(archive_name)
-                                continue
-                            raw = archive.read(archive_name)
-                            with Image.open(BytesIO(raw)).convert("RGBA") as mobile_frame:
-                                # Mobile's 215px canvas contains a desktop-scale
-                                # body centered in a huge transparent field. Keep
-                                # the artwork at native pixel size, not the whole
-                                # mobile canvas; the latter made every new body
-                                # about half-height in the desktop renderer.
-                                bbox = mobile_frame.getchannel("A").getbbox()
-                                if not bbox:
-                                    missing.append(f"{archive_name}: blank")
+                    with Image.open(target).convert("RGBA") as existing:
+                        expected_size = (
+                            HOLIDAY_BODY_CELL_SIZE * role_spec["columns"],
+                            HOLIDAY_BODY_CELL_SIZE * HOLIDAY_BODY_BASE_ROWS,
+                        )
+                        if existing.size != expected_size:
+                            issues.append({"sheet": str(target), "reason": f"expected {expected_size}, got {existing.size}"})
+                            continue
+                        backup = target.with_name(target.name + ".pre-holiday-bodies.bak")
+                        if not backup.exists():
+                            existing.save(backup, format="PNG")
+                        expanded = Image.new(
+                            "RGBA",
+                            (existing.width, existing.height + HOLIDAY_BODY_CELL_SIZE * len(HOLIDAY_BODY_SET_IDS)),
+                            (0, 0, 0, 0),
+                        )
+                        expanded.paste(existing, (0, 0))
+                        gender_title = gender.title()
+                        for row, set_id in enumerate(HOLIDAY_BODY_SET_IDS):
+                            body_value = HOLIDAY_BODY_BASE_ROWS + row
+                            frame_targets = []
+                            for frame_number in range(first_frame, last_frame + 1):
+                                role_frame = frame_number - first_frame
+                                generated_frame = (
+                                    GENERATED_VILLAGER_BODIES
+                                    / gender_title
+                                    / f"Body_{body_value:02d}"
+                                    / f"{gender_title}_Body_{body_value:02d}_{role}_Frame_{role_frame:02d}.png"
+                                )
+                                normalized = None
+                                source_kind = None
+                                if generated_frame.exists():
+                                    normalized = Image.open(generated_frame).convert("RGBA")
+                                    source_kind = "generated"
+                                elif archive:
+                                    archive_name = (
+                                        f"Holiday Outfits/{archive_folder}/{prefix}{set_id:02d}_{frame_number:04d}.png"
+                                    )
+                                    if archive_name in archive_names:
+                                        raw = archive.read(archive_name)
+                                        with Image.open(BytesIO(raw)).convert("RGBA") as mobile_frame:
+                                            template_box = (
+                                                role_frame * HOLIDAY_BODY_CELL_SIZE,
+                                                (HOLIDAY_BODY_BASE_ROWS - 1) * HOLIDAY_BODY_CELL_SIZE,
+                                                (role_frame + 1) * HOLIDAY_BODY_CELL_SIZE,
+                                                HOLIDAY_BODY_BASE_ROWS * HOLIDAY_BODY_CELL_SIZE,
+                                            )
+                                            template = existing.crop(template_box)
+                                            normalized = _normalize_holiday_body_frame(mobile_frame, template)
+                                            source_kind = "archive"
+                                if normalized is None:
+                                    missing.append(str(generated_frame))
                                     continue
-                                desktop_frame = mobile_frame.crop(bbox)
-                                x = (frame_index - 1) * HOLIDAY_BODY_CELL_SIZE + (HOLIDAY_BODY_CELL_SIZE - desktop_frame.width) // 2
-                                y = (HOLIDAY_BODY_BASE_ROWS + row) * HOLIDAY_BODY_CELL_SIZE + 15
-                                expanded.paste(desktop_frame, (x, y), desktop_frame)
-                                export_path = export_root / gender / f"Holiday{set_id:02d}" / f"Frame{frame_index:02d}.png"
+                                if normalized.size != (HOLIDAY_BODY_CELL_SIZE, HOLIDAY_BODY_CELL_SIZE):
+                                    issues.append({
+                                        "frame": str(generated_frame),
+                                        "reason": f"expected 91x91, got {normalized.size}",
+                                    })
+                                    continue
+                                x = role_frame * HOLIDAY_BODY_CELL_SIZE
+                                y = body_value * HOLIDAY_BODY_CELL_SIZE
+                                expanded.paste(normalized, (x, y), normalized)
+                                export_path = export_root / gender / f"Body_{body_value:02d}" / role / f"Frame{role_frame:02d}.png"
                                 export_path.parent.mkdir(parents=True, exist_ok=True)
-                                desktop_frame.save(export_path)
+                                normalized.save(export_path)
                                 frame_targets.append(str(export_path.relative_to(OUT)))
-                        appended.append({
-                            "gender": gender,
-                            "body_type": HOLIDAY_BODY_BASE_ROWS + row,
-                            "source_set": set_id,
-                            "frames": len(frame_targets),
-                            "exported_frames": frame_targets,
-                        })
-                    expanded.save(target)
+                                normalized.close()
+                            appended.append({
+                                "gender": gender,
+                                "role": role,
+                                "body_type": body_value,
+                                "source_set": set_id,
+                                "frames": len(frame_targets),
+                                "expected_frames": frame_count,
+                                "source": source_kind or "missing",
+                                "exported_frames": frame_targets,
+                            })
+                        expanded.save(target)
+        finally:
+            if archive:
+                archive.close()
 
         # The stock rare generator returns 44..49. Widen it to 44..53 so all
         # four appended sets can be generated without replacing existing types.
@@ -1910,6 +2011,7 @@ def sync_holiday_body_types(manifest):
             "issues": issues,
             "body_type_range": [HOLIDAY_BODY_BASE_ROWS, HOLIDAY_BODY_BASE_ROWS + len(HOLIDAY_BODY_SET_IDS) - 1],
             "rare_generator": "expanded from 44-49 to 44-53",
+            "runtime_sheet_rows": "expanded all female/male bodies, actions, and sit sheets from 50 to 54 rows",
         }
     except Exception as exc:
         issues.append({"reason": str(exc)})
@@ -1919,6 +2021,113 @@ def sync_holiday_body_types(manifest):
             "missing": missing,
             "issues": issues,
         }
+
+
+def sync_holiday_body_runtime_frames(manifest):
+    """Generate cropped, individually addressable holiday body frames.
+
+    These files are runtime assets for the B57 folder-backed body renderer.
+    Stock spritesheets remain untouched; the helper applies the saved crop
+    offsets when drawing each one-cell image.
+    """
+    output_root = OUT / "Images" / "VillagerBodies"
+    frames = []
+    missing = []
+    issues = []
+    try:
+        from PIL import Image
+
+        output_root.mkdir(parents=True, exist_ok=True)
+        archive = ZipFile(HOLIDAY_OUTFIT_ARCHIVE) if HOLIDAY_OUTFIT_ARCHIVE.exists() else None
+        archive_names = set(archive.namelist()) if archive else set()
+        fallback_sheet_root = FALLBACK_HOLIDAY_BODY_BUILD / "Images"
+        try:
+            for role_spec in HOLIDAY_BODY_ROLE_SPECS:
+                role = role_spec["role"]
+                first_frame, last_frame = role_spec["source_range"]
+                for gender, (sheet_name, archive_folder, prefix) in role_spec["sheets"].items():
+                    template_sheet = OUT / "Images" / sheet_name
+                    if not template_sheet.exists():
+                        missing.append(str(template_sheet))
+                        continue
+                    with Image.open(template_sheet).convert("RGBA") as existing:
+                        for body_value, source_set in zip(HOLIDAY_BODY_VALUES, HOLIDAY_BODY_SET_IDS):
+                            gender_title = gender.title()
+                            for frame_number in range(first_frame, last_frame + 1):
+                                role_frame = frame_number - first_frame
+                                template_box = (
+                                    role_frame * HOLIDAY_BODY_CELL_SIZE,
+                                    (HOLIDAY_BODY_BASE_ROWS - 1) * HOLIDAY_BODY_CELL_SIZE,
+                                    (role_frame + 1) * HOLIDAY_BODY_CELL_SIZE,
+                                    HOLIDAY_BODY_BASE_ROWS * HOLIDAY_BODY_CELL_SIZE,
+                                )
+                                template = existing.crop(template_box)
+                                normalized = None
+                                source_kind = None
+                                archive_name = f"Holiday Outfits/{archive_folder}/{prefix}{source_set:02d}_{frame_number:04d}.png"
+                                if archive and archive_name in archive_names:
+                                    with Image.open(BytesIO(archive.read(archive_name))).convert("RGBA") as mobile_frame:
+                                        normalized = _normalize_holiday_body_frame(mobile_frame, template)
+                                    source_kind = "holiday_archive"
+                                else:
+                                    fallback_sheet = fallback_sheet_root / sheet_name
+                                    if fallback_sheet.exists():
+                                        with Image.open(fallback_sheet).convert("RGBA") as fallback:
+                                            if fallback.height >= (body_value + 1) * HOLIDAY_BODY_CELL_SIZE:
+                                                box = (
+                                                    role_frame * HOLIDAY_BODY_CELL_SIZE,
+                                                    body_value * HOLIDAY_BODY_CELL_SIZE,
+                                                    (role_frame + 1) * HOLIDAY_BODY_CELL_SIZE,
+                                                    (body_value + 1) * HOLIDAY_BODY_CELL_SIZE,
+                                                )
+                                                normalized = fallback.crop(box)
+                                                source_kind = "fallback_b56_expanded_sheet"
+                                if normalized is None:
+                                    missing.append(archive_name)
+                                    continue
+                                bbox = _alpha_bbox(normalized)
+                                if bbox:
+                                    cropped = normalized.crop(bbox)
+                                    offset_x, offset_y = bbox[0], bbox[1]
+                                else:
+                                    cropped = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
+                                    offset_x, offset_y = 0, 0
+                                dst = (
+                                    output_root
+                                    / gender_title
+                                    / f"Body_{body_value:02d}"
+                                    / role
+                                    / f"Frame{role_frame:02d}.png"
+                                )
+                                dst.parent.mkdir(parents=True, exist_ok=True)
+                                cropped.save(dst)
+                                frames.append({
+                                    "gender": gender,
+                                    "body_value": body_value,
+                                    "source_set": source_set,
+                                    "role": role,
+                                    "frame": role_frame,
+                                    "image_id": hex(villager_body_image_id(gender, body_value, role, role_frame)),
+                                    "path": str(dst.relative_to(OUT / "Images")).replace("\\", "/"),
+                                    "offset": [offset_x, offset_y],
+                                    "size": list(cropped.size),
+                                    "source": source_kind,
+                                })
+        finally:
+            if archive:
+                archive.close()
+    except Exception as exc:
+        issues.append({"reason": str(exc)})
+    manifest["holiday_body_runtime_frames"] = {
+        "status": "generated individual folder-backed body frames" if frames else "failed_or_missing",
+        "root": str(output_root),
+        "body_values": list(HOLIDAY_BODY_VALUES),
+        "source_sets": list(HOLIDAY_BODY_SET_IDS),
+        "frames": frames,
+        "missing": missing,
+        "issues": issues,
+        "runtime_note": "The original sheets stay as fallback; body values 50-53 draw from these individual images.",
+    }
 
 
 def patch_holiday_body_lookup(manifest):
@@ -1932,25 +2141,32 @@ def patch_holiday_body_lookup(manifest):
     """
     obj = CoffObject(PATCHED / "AnimManager.obj")
     functions = [
-        "?GetScaledLinkToNextPt@CAnimManager@@QAE?AUldwPoint@@W4EAnimFrame@@W4EAnimPart@@W4EAnimGender@@HMPAPAVldwImageGrid@@PAH@Z",
-        "?GetScaledLinkToNextPt@CAnimManager@@QAE?AUldwPoint@@W4EHeadDirection@@W4EAnimGender@@HMPAPAVldwImageGrid@@PAH@Z",
-        "?GetScaledLinkToPrevPt@CAnimManager@@QAE?AUldwPoint@@W4EAnimFrame@@W4EAnimPart@@W4EAnimGender@@HM@Z",
-        "?GetScaledLinkToPrevPt@CAnimManager@@QAE?AUldwPoint@@W4EHeadDirection@@W4EAnimGender@@HM@Z",
+        {
+            "name": "?GetScaledLinkToNextPt@CAnimManager@@QAE?AUldwPoint@@W4EAnimFrame@@W4EAnimPart@@W4EAnimGender@@HMPAPAVldwImageGrid@@PAH@Z",
+            "body_arg_offset": 0x18,
+        },
+        {
+            "name": "?GetScaledLinkToPrevPt@CAnimManager@@QAE?AUldwPoint@@W4EAnimFrame@@W4EAnimPart@@W4EAnimGender@@HM@Z",
+            "body_arg_offset": 0x18,
+        },
     ]
     patches = []
     max_row = HOLIDAY_BODY_BASE_ROWS + len(HOLIDAY_BODY_SET_IDS) - 1
     row_count = max_row + 1
-    for function_name in functions:
+    for function in functions:
+        function_name = function["name"]
+        body_arg_offset = function["body_arg_offset"]
         symbol = obj.symbol(function_name)
         section = obj.section(symbol.section)
         raw = section.raw_ptr + symbol.value
         data = obj.buf
-        # Both NextPt overloads encode: cmp body, 0x32; cmovl row, body;
-        # default row 0x31.  PrevPt uses the same limit/default sequence in
-        # the opposite order.  Replace only the immediate values.
+        # The body NextPt/PrevPt overloads encode: cmp body, 0x32;
+        # cmovl row, body; default row 0x31.  Replace only those body-row
+        # immediates.  Head overloads deliberately stay stock 0..49.
         window = data[raw : raw + 0xB0]
-        cmp_at = window.find(b"\x83\x7D")
-        if cmp_at < 0 or window[cmp_at + 3] != HOLIDAY_BODY_BASE_ROWS:
+        cmp_pattern = bytes([0x83, 0x7D, body_arg_offset, HOLIDAY_BODY_BASE_ROWS])
+        cmp_at = window.find(cmp_pattern)
+        if cmp_at < 0:
             raise RuntimeError(f"unexpected body-row clamp in {function_name}")
         data[raw + cmp_at + 3] = row_count
         default_at = window.find(b"\xB9\x31\x00\x00\x00")
@@ -1969,6 +2185,151 @@ def patch_holiday_body_lookup(manifest):
         "status": "native body row clamp expanded for additive holiday outfit IDs",
         "body_values": list(range(HOLIDAY_BODY_BASE_ROWS, max_row + 1)),
         "patched_functions": patches,
+    }
+
+
+def write_holiday_body_draw_helper(manifest):
+    frame_entries = {
+        (entry["gender"], entry["body_value"], entry["role"], entry["frame"]): entry
+        for entry in manifest.get("holiday_body_runtime_frames", {}).get("frames", [])
+    }
+    image_ids = []
+    offset_x = []
+    offset_y = []
+    for gender in ("female", "male"):
+        for body_value in HOLIDAY_BODY_VALUES:
+            for role in ("bodies", "actions", "sit"):
+                for frame in range(HOLIDAY_BODY_ROLE_FRAME_COUNTS[role]):
+                    entry = frame_entries.get((gender, body_value, role, frame), {})
+                    image_ids.append(villager_body_image_id(gender, body_value, role, frame))
+                    offset = entry.get("offset") or [0, 0]
+                    offset_x.append(int(offset[0]))
+                    offset_y.append(int(offset[1]))
+
+    def c_array(values):
+        chunks = []
+        for i in range(0, len(values), 16):
+            chunks.append("    " + ", ".join(str(v) for v in values[i : i + 16]))
+        return ",\n".join(chunks)
+
+    helper = f'''// Generated by patch_mobile_furniture_pack.py.
+// Folder-backed renderer for additive villager body values {HOLIDAY_BODY_VALUES[0]}-{HOLIDAY_BODY_VALUES[-1]}.
+class ldwImageGrid;
+enum EImage {{ eImageDummy = 0 }};
+
+class ldwGameWindow {{
+public:
+    void DrawScaled(ldwImageGrid* grid, int x, int y, int row, int col, int scale, bool mirror);
+}};
+
+class theGraphicsManager {{
+public:
+    static theGraphicsManager* Get();
+    ldwImageGrid* GetImageGrid(EImage image);
+}};
+
+static const int kHolidayBodyFirst = {HOLIDAY_BODY_VALUES[0]};
+static const int kHolidayBodyCount = {len(HOLIDAY_BODY_VALUES)};
+static const int kFramesPerHolidayBody = {HOLIDAY_BODY_FRAMES_PER_VALUE};
+static const int kFrameImageCount = {len(image_ids)};
+static const int kRoleOffsets[3] = {{{HOLIDAY_BODY_ROLE_OFFSETS["bodies"]}, {HOLIDAY_BODY_ROLE_OFFSETS["actions"]}, {HOLIDAY_BODY_ROLE_OFFSETS["sit"]}}};
+static const int kRoleFrameCounts[3] = {{{HOLIDAY_BODY_ROLE_FRAME_COUNTS["bodies"]}, {HOLIDAY_BODY_ROLE_FRAME_COUNTS["actions"]}, {HOLIDAY_BODY_ROLE_FRAME_COUNTS["sit"]}}};
+static const int kImageIds[kFrameImageCount] = {{
+{c_array(image_ids)}
+}};
+static const int kOffsetX[kFrameImageCount] = {{
+{c_array(offset_x)}
+}};
+static const int kOffsetY[kFrameImageCount] = {{
+{c_array(offset_y)}
+}};
+
+static int VF2ResolveBodyRole(theGraphicsManager* graphics, ldwImageGrid* stockGrid) {{
+    if (!graphics || !stockGrid) return -1;
+    const int imageIds[6] = {{577, 578, 579, 581, 582, 583}};
+    for (int i = 0; i < 6; ++i) {{
+        if (stockGrid == graphics->GetImageGrid((EImage)imageIds[i])) return i;
+    }}
+    return -1;
+}}
+
+extern "C" void __cdecl VF2DrawVillagerBodyFrameImpl(
+    ldwGameWindow* window,
+    ldwImageGrid* stockGrid,
+    int x,
+    int y,
+    int body,
+    int frame,
+    int scale,
+    int mirror
+) {{
+    theGraphicsManager* graphics = theGraphicsManager::Get();
+    int roleSlot = VF2ResolveBodyRole(graphics, stockGrid);
+    if (window && graphics && roleSlot >= 0 && body >= kHolidayBodyFirst && body < kHolidayBodyFirst + kHolidayBodyCount) {{
+        int role = roleSlot % 3;
+        if (frame >= 0 && frame < kRoleFrameCounts[role]) {{
+            int gender = roleSlot / 3;
+            int bodyIndex = body - kHolidayBodyFirst;
+            int index = gender * kHolidayBodyCount * kFramesPerHolidayBody
+                + bodyIndex * kFramesPerHolidayBody
+                + kRoleOffsets[role]
+                + frame;
+            if (index >= 0 && index < kFrameImageCount) {{
+                ldwImageGrid* frameGrid = graphics->GetImageGrid((EImage)kImageIds[index]);
+                if (frameGrid) {{
+                    window->DrawScaled(frameGrid, x + kOffsetX[index], y + kOffsetY[index], 0, 0, scale, mirror != 0);
+                    return;
+                }}
+            }}
+        }}
+    }}
+    if (window) window->DrawScaled(stockGrid, x, y, body, frame, scale, mirror != 0);
+}}
+
+extern "C" __declspec(naked) void VF2DrawVillagerBodyFrame() {{
+    __asm {{
+        mov eax, esp
+        push dword ptr [eax+1Ch]
+        push dword ptr [eax+18h]
+        push dword ptr [eax+14h]
+        push dword ptr [eax+10h]
+        push dword ptr [eax+0Ch]
+        push dword ptr [eax+08h]
+        push dword ptr [eax+04h]
+        push ecx
+        call VF2DrawVillagerBodyFrameImpl
+        add esp, 20h
+        ret 1Ch
+    }}
+}}
+'''
+    (PATCHED / "vf2_villager_body_frames.cpp").write_text(helper, encoding="ascii")
+    manifest["holiday_body_draw_helper"] = {
+        "source": str(PATCHED / "vf2_villager_body_frames.cpp"),
+        "image_ids": len(image_ids),
+        "body_values": list(HOLIDAY_BODY_VALUES),
+        "stock_fallback": True,
+    }
+
+
+def patch_holiday_body_draw_redirect(manifest):
+    obj = CoffObject(PATCHED / "Villager.obj")
+    helper_sym = obj.append_undefined_symbol("_VF2DrawVillagerBodyFrame")
+    targets = [
+        ("?DrawDetailVillager@CVillager@@QAEXUldwPoint@@_N@Z", 0x124),
+        ("?DrawEventVillager@CVillager@@QAEXHHW4EBodyPosition@@M_N@Z", 0x18E),
+    ]
+    patched = []
+    for symbol_name, reloc_delta in targets:
+        sym = obj.symbol(symbol_name)
+        obj.retarget_relocation(sym.section, sym.value + reloc_delta, helper_sym, IMAGE_REL_I386_REL32)
+        patched.append({"function": symbol_name, "relocation": hex(sym.value + reloc_delta)})
+    obj.write(PATCHED / "Villager.obj")
+    manifest["holiday_body_draw_redirect"] = {
+        "status": "body draw calls redirected through folder-backed holiday renderer",
+        "patched": patched,
+        "stock_body_values": "0-49 fall back to the native DrawScaled call",
+        "holiday_body_values": list(HOLIDAY_BODY_VALUES),
     }
 
 
@@ -3322,7 +3683,13 @@ def patch_graphics_manager(manifest):
             "status": status,
         })
 
-    append_count = len(ITEMS) + LOCKED_GENERATION_FRAME_COUNT + len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
+    holiday_body_descriptor_count = HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0
+    append_count = (
+        len(ITEMS)
+        + LOCKED_GENERATION_FRAME_COUNT
+        + len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
+        + holiday_body_descriptor_count
+    )
     if append_count:
         obj.insert_section_bytes(img_sym.section, img_sym.value + ORIG_IMAGE_COUNT * DESC_SIZE, b"\0" * (append_count * DESC_SIZE))
 
@@ -3406,6 +3773,48 @@ def patch_graphics_manager(manifest):
             "symbol": sym,
         })
 
+    holiday_body_desc_manifest = []
+    if ENABLE_HOLIDAY_BODY_TYPES:
+        frame_entries = {
+            (entry["gender"], entry["body_value"], entry["role"], entry["frame"]): entry
+            for entry in manifest.get("holiday_body_runtime_frames", {}).get("frames", [])
+        }
+        for gender in ("female", "male"):
+            gender_title = gender.title()
+            for body_value in HOLIDAY_BODY_VALUES:
+                for role in ("bodies", "actions", "sit"):
+                    for frame in range(HOLIDAY_BODY_ROLE_FRAME_COUNTS[role]):
+                        image_id = villager_body_image_id(gender, body_value, role, frame)
+                        entry = frame_entries.get((gender, body_value, role, frame))
+                        path = (
+                            entry["path"]
+                            if entry
+                            else f"VillagerBodies/{gender_title}/Body_{body_value:02d}/{role}/Frame{frame:02d}.png"
+                        )
+                        vals = plain_image_donor[:]
+                        vals[0] = image_id
+                        vals[1] = 0
+                        vals[2] = 1
+                        vals[3] = 1
+                        desc_off = img_sym.value + image_id * DESC_SIZE
+                        img_sec = obj.section(img_sym.section)
+                        obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
+                        sym = f"_vf2body_{gender}_{body_value:02d}_{role}_{frame:02d}_png"
+                        helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+                        symidx = obj.append_undefined_symbol(sym)
+                        obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+                        holiday_body_desc_manifest.append({
+                            "gender": gender,
+                            "body_value": body_value,
+                            "role": role,
+                            "frame": frame,
+                            "image_id": hex(image_id),
+                            "path": path,
+                            "symbol": sym,
+                            "offset": entry.get("offset") if entry else None,
+                            "size": entry.get("size") if entry else None,
+                        })
+
     new_image_max = ORIG_IMAGE_MAX + append_count
     new_scan_end = ORIG_IMAGE_COUNT * DESC_SIZE + append_count * DESC_SIZE
     new_cleanup_end = 0x7798 + append_count * DESC_SIZE
@@ -3431,6 +3840,12 @@ def patch_graphics_manager(manifest):
             "standalone_images": lock_desc_manifest,
         },
         "visible_special_upgrade_icons": special_icon_desc_manifest,
+        "holiday_body_frame_images": {
+            "enabled": ENABLE_HOLIDAY_BODY_TYPES,
+            "image_base": hex(villager_body_image_base()) if ENABLE_HOLIDAY_BODY_TYPES else None,
+            "image_count": holiday_body_descriptor_count,
+            "descriptors": holiday_body_desc_manifest,
+        },
         "character_sheet_art": character_sheet_manifest,
         "descriptors": desc_manifest,
         "append_count": append_count,
@@ -4477,7 +4892,12 @@ def main():
             "added": [],
             "status": "disabled because the additive event object graft crashes the game",
         }
+    if ENABLE_HOLIDAY_BODY_TYPES:
+        sync_holiday_body_runtime_frames(manifest)
     patch_graphics_manager(manifest)
+    if ENABLE_HOLIDAY_BODY_TYPES:
+        write_holiday_body_draw_helper(manifest)
+        patch_holiday_body_draw_redirect(manifest)
     sync_generation_lock_art(manifest)
     sync_vf3_living_room_sprite_strips(manifest)
     sync_vf3_tv_sprite_strips(manifest)
@@ -4486,9 +4906,16 @@ def main():
     sync_transparent_base_furniture_sprites(manifest)
     sync_invisible_furniture_reference_sets(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
-        sync_holiday_body_types(manifest)
-        patch_holiday_body_lookup(manifest)
         sync_separated_villager_sheets(manifest)
+        manifest["holiday_body_types"] = {
+            "status": "folder-backed runtime renderer enabled",
+            "body_values": list(HOLIDAY_BODY_VALUES),
+            "source_sets": list(HOLIDAY_BODY_SET_IDS),
+            "spritesheets": "not expanded; original sheets remain fallback",
+        }
+        manifest["holiday_body_lookup"] = {
+            "status": "not patched; native animator stays stock and the body draw hook handles values 50-53",
+        }
     else:
         manifest["holiday_body_types"] = {
             "status": "disabled; stock body rows 0-49 retained",
