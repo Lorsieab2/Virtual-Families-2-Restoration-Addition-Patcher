@@ -50,3 +50,7 @@
 - Documents the rule that new furniture, events, strings, graphics, and behavior
   routes are appended with widened bounds, while base desktop entries remain
   untouched.
+- Adds a source audit helper showing the current patcher coverage:
+  110 additive furniture/store records, Turtle and Hamster pet additions,
+  mobile Island events enabled by default, and holiday body values `50-53`
+  remaining opt-in until the folder-backed renderer is stable.

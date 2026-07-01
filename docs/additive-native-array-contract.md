@@ -15,6 +15,11 @@ Store category lists are native arrays such as `gFurniture2List`,
 a category requires widening both the array/list contents and the category count
 logic used by `CInventoryManager::GetCategoryItemCount`.
 
+Pet-store additions follow the same rule. Hidden/mobile pet IDs are appended to
+`gPetList` and `gPetListSorted`, and the pet category count is widened by the
+same number of entries. The current source adds Turtle and Hamster as
+desktop-hidden/mobile pets.
+
 ## Graphics and Strings
 
 New graphics are appended to `?ImageList@@3PAUImageDescriptor@@A`; the image
@@ -47,3 +52,11 @@ for appended items. Stock clickable furniture cases must remain unchanged.
 Spontaneous behaviors should be enabled by adding or widening native candidate
 table eligibility, not by replacing unrelated actions such as `Bored`.
 Drop-action behavior and spontaneous AI eligibility are separate concerns.
+
+## Holiday Outfits
+
+Holiday body values are still opt-in through `VF2_ENABLE_HOLIDAY_BODY_TYPES=1`.
+The stable default keeps stock body values `0-49` and stock spritesheet lookup
+untouched. When enabled, holiday body/action/sit frames must be registered
+together for matching body values and must fall back to stock rendering if an
+extracted frame is missing.

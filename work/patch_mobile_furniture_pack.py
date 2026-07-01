@@ -166,7 +166,25 @@ def build_native_array_contract():
                     "leave stock ordering and IDs untouched",
                 ],
             }
-            for name, spec in CATEGORY_LISTS.items()
+            for name, spec in LIST_SYMBOLS.items()
+        },
+        "pets": {
+            "store_category": "gPet",
+            "stock_count": 13,
+            "append_source": "PET_STORE_ADDITIONS",
+            "added": [
+                {
+                    "name": pet["name"],
+                    "item_id": hex(pet["item_id"]),
+                    "source": pet["source"],
+                }
+                for pet in PET_STORE_ADDITIONS
+            ],
+            "requirements": [
+                "append hidden/mobile pet item IDs to gPet",
+                "patch pet category count logic by the same number of appended entries",
+                "preserve stock pet list entries and ordering",
+            ],
         },
         "graphics": {
             "descriptor_table": IMAGELIST,
@@ -215,6 +233,17 @@ def build_native_array_contract():
                 "enable existing native candidates additively",
                 "do not route through the Bored action as a replacement",
                 "keep drop-action behavior separate from spontaneous eligibility",
+            ],
+        },
+        "holiday_outfits": {
+            "enabled": ENABLE_HOLIDAY_BODY_TYPES,
+            "body_values": list(HOLIDAY_BODY_VALUES),
+            "source_sets": list(HOLIDAY_BODY_SET_IDS),
+            "status": "opt-in until folder-backed body rendering is stable",
+            "requirements": [
+                "keep stock body values 0-49 unchanged",
+                "register body/action/sit frames for new values together",
+                "fall back to stock spritesheet rendering for missing extracted frames",
             ],
         },
     }
