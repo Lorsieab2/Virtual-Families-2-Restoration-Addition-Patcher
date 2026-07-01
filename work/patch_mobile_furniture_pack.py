@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC_OBJS = ROOT / "work" / "desktop_obj_files"
 PATCHED = ROOT / "work" / "patched_mobile_furniture_pack_objs"
 OUT = Path(os.environ.get("VF2_PATCH_OUT", ROOT / "outputs" / "VF2-Mobile-Additive-Furniture-Pack"))
-ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "0") == "1"
+ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "1") == "1"
 # Keep the experimental holiday body-row extension opt-in.  Stock VF2 uses
 # rows 0..49, and the regular build path must preserve that exact behavior.
 ENABLE_HOLIDAY_BODY_TYPES = os.environ.get("VF2_ENABLE_HOLIDAY_BODY_TYPES", "0") == "1"
@@ -139,6 +139,85 @@ BEHAVIOR_LABELS = [
     ("eString_PlayingPachinko", "Playing pachinko"),
     ("eString_PlayingPinball", "Playing pinball"),
 ]
+
+
+def build_native_array_contract():
+    """Describe every native array/list that additive builds intentionally grow."""
+    return {
+        "furniture": {
+            "record_table": ITEMINFO,
+            "lookup_table": ITEMLOOKUP,
+            "base_count": ORIG_FURNITURE_COUNT,
+            "append_source": "ITEMS",
+            "requirements": [
+                "append new sFurnitureInfo records after the stock table",
+                "extend itemInfoLookup so new EInventoryItem values resolve to records",
+                "preserve every stock record and stock lookup entry",
+            ],
+        },
+        "store_categories": {
+            name: {
+                "list_symbol": spec[0],
+                "sorted_list_symbol": spec[1],
+                "stock_count": spec[2],
+                "requirements": [
+                    "append only the new item IDs assigned to this category",
+                    "patch GetCategoryItem/GetCategoryItemCount consumers to use the grown count",
+                    "leave stock ordering and IDs untouched",
+                ],
+            }
+            for name, spec in CATEGORY_LISTS.items()
+        },
+        "graphics": {
+            "descriptor_table": IMAGELIST,
+            "index_table": IMAGEINDEX,
+            "base_count": ORIG_IMAGE_COUNT,
+            "requirements": [
+                "append descriptors for new furniture, TV animation, icons, and optional body frames",
+                "grow ImageIndex by the same descriptor count",
+                "keep stock image IDs stable as fallback",
+            ],
+        },
+        "strings": {
+            "string_table": STRINGTABLE,
+            "lookup_table": STRINGLOOKUP,
+            "base_count": ORIG_STRING_COUNT,
+            "requirements": [
+                "append text rows for new store names/descriptions, behavior labels, and event text",
+                "patch string table scan/count bounds",
+                "never reuse or overwrite stock string IDs",
+            ],
+        },
+        "island_events": {
+            "event_table": "?mEventList@CIslandEvents@@0PAPAVCIslandEvent@@A",
+            "has_fired_table": "?mEventHasFired@CIslandEvents@@0PA_NA",
+            "stock_slots": "0x01-0x60",
+            "append_start_slot": "0x61",
+            "enabled": ENABLE_ISLAND_EVENTS,
+            "requirements": [
+                "append mobile-only events as CIslandEvent-compatible objects",
+                "move mEventHasFired after the grown pointer table",
+                "patch constructor/destructor/ForceEvent scan bounds to the new exclusive end",
+                "treat rows whose source starts with CEventEmail as email events",
+            ],
+        },
+        "click_dispatch": {
+            "function": "?HandleMouseDown@CFurnitureManager@@QAE_NUldwPoint@@@Z",
+            "requirements": [
+                "extend the native lookup table instead of replacing stock cases",
+                "copy donor case bytes for added furniture that inherits clickable behavior",
+                "preserve all stock clickable furniture behavior",
+            ],
+        },
+        "villager_behaviors": {
+            "source": "CVillager::InitAI autonomous candidate table",
+            "requirements": [
+                "enable existing native candidates additively",
+                "do not route through the Bored action as a replacement",
+                "keep drop-action behavior separate from spontaneous eligibility",
+            ],
+        },
+    }
 
 MOBILE_CSV = Path(
     r"C:\Users\Owner\Documents\Codex\2026-06-01\virtual-families-2-has-a-lot\outputs\mobile-port-analysis\vf2_desktop_base_and_mobile_furniture_sections.csv"
@@ -4856,6 +4935,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     copy_obj_tree()
     manifest = {
+        "native_array_contract": build_native_array_contract(),
         "items": [
             {
                 "name": name,
