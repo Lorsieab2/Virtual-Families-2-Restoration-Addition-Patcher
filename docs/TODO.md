@@ -1,5 +1,18 @@
 # TODO
 
+## Highest Priority
+
+- Build a vanilla-to-modded VF2 PC patcher that takes a clean/vanilla PC build,
+  verifies the expected input version, applies the project patches and added
+  data, and produces a reproducible modded build without requiring distribution
+  of stale prepatched executables when avoidable.
+- Make antivirus false-positive reduction the top packaging priority. Prefer
+  transparent patching and reproducible build artifacts over packed/obfuscated
+  executables, preserve normal PE metadata where possible, sign the patcher and
+  produced executable with a valid code-signing certificate, publish hashes, and
+  maintain a McAfee/SmartScreen/AV vendor false-positive submission process for
+  release builds.
+
 ## Research Leads
 
 - Implement the mobile VF2 Holiday Ornaments collectible set in the PC build:
