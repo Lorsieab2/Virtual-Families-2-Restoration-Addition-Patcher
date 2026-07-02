@@ -16,9 +16,9 @@ SRC_OBJS = ROOT / "work" / "desktop_obj_files"
 PATCHED = ROOT / "work" / "patched_mobile_furniture_pack_objs"
 OUT = Path(os.environ.get("VF2_PATCH_OUT", ROOT / "outputs" / "VF2-Mobile-Additive-Furniture-Pack"))
 ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "1") == "1"
-# Keep the experimental holiday body-row extension opt-in.  Stock VF2 uses
-# rows 0..49, and the regular build path must preserve that exact behavior.
-ENABLE_HOLIDAY_BODY_TYPES = os.environ.get("VF2_ENABLE_HOLIDAY_BODY_TYPES", "0") == "1"
+# Holiday body rows are now part of the normal additive build.  Set the env var
+# to 0 only when intentionally making a stock-body diagnostic build.
+ENABLE_HOLIDAY_BODY_TYPES = os.environ.get("VF2_ENABLE_HOLIDAY_BODY_TYPES", "1") != "0"
 ANALYSIS = ROOT / "outputs" / "VF2-Desktop-Object-Analysis"
 if not (ANALYSIS / "furniture-records.json").exists():
     ANALYSIS = ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis"
@@ -31,6 +31,7 @@ STRINGTABLE = "?stringTable@@3PAUStringItem@@A"
 STRINGLOOKUP = "?lookupTable@@3PAPAUStringItem@@A"
 INVENTORY_ITEMINFO = "?itemInfo@@3PAUsInventoryItemInfo@@A"
 GSERVICESLIST = "?gServicesList@@3PAW4EInventoryItem@@A"
+GCLOTHINGLIST = "?gClothingList@@3PAW4EInventoryItem@@A"
 GET_CATEGORY_ITEM = "?GetCategoryItem@CInventoryManager@@QAE?AW4EInventoryItem@@W4EInventoryCategory@@H@Z"
 GET_CATEGORY_ITEM_COUNT = "?GetCategoryItemCount@CInventoryManager@@QAEHW4EInventoryCategory@@@Z"
 IMAGE_REL_I386_REL32 = 0x0014
@@ -52,9 +53,14 @@ HOLIDAY_OUTFIT_ARCHIVE = Path(r"C:\Users\Owner\Downloads\VF2_Holiday_Content\Hol
 GENERATED_VILLAGER_BODIES = ROOT / "generated" / "VillagerBodies"
 FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B56-Holiday-Body-Lookup-Test"
 HOLIDAY_BODY_SET_IDS = (51, 52, 53, 54)
-HOLIDAY_BODY_VALUES = tuple(range(50, 50 + len(HOLIDAY_BODY_SET_IDS)))
-HOLIDAY_BODY_CELL_SIZE = 91
 HOLIDAY_BODY_BASE_ROWS = 50
+HOLIDAY_BODY_VALUES = tuple(range(50, 50 + len(HOLIDAY_BODY_SET_IDS)))
+OUTFIT_STORE_ITEM_BASE = 0x400
+OUTFIT_BASE_BODY_VALUES = tuple(range(0, HOLIDAY_BODY_BASE_ROWS))
+OUTFIT_STORE_BODY_VALUES = OUTFIT_BASE_BODY_VALUES + HOLIDAY_BODY_VALUES
+OUTFIT_STORE_PRICE = 75
+OUTFIT_STORE_HOLIDAY_PRICE = 500
+HOLIDAY_BODY_CELL_SIZE = 91
 HOLIDAY_BODY_ROLE_SPECS = [
     {
         "role": "bodies",
@@ -239,7 +245,7 @@ def build_native_array_contract():
             "enabled": ENABLE_HOLIDAY_BODY_TYPES,
             "body_values": list(HOLIDAY_BODY_VALUES),
             "source_sets": list(HOLIDAY_BODY_SET_IDS),
-            "status": "opt-in until folder-backed body rendering is stable",
+            "status": "default-on additive body rows",
             "requirements": [
                 "keep stock body values 0-49 unchanged",
                 "register body/action/sit frames for new values together",
@@ -1526,6 +1532,32 @@ def item_id_for(idx):
     return data["item_id"]
 
 
+def outfit_item_id_for_body(body_value):
+    return OUTFIT_STORE_ITEM_BASE + body_value
+
+
+def outfit_body_for_item(item_id):
+    body_value = item_id - OUTFIT_STORE_ITEM_BASE
+    if body_value in OUTFIT_STORE_BODY_VALUES:
+        return body_value
+    return None
+
+
+def outfit_store_entries():
+    entries = []
+    for body_value in OUTFIT_STORE_BODY_VALUES:
+        is_holiday = body_value in HOLIDAY_BODY_VALUES
+        entries.append({
+            "item_id": outfit_item_id_for_body(body_value),
+            "body_value": body_value,
+            "name": f"{'Holiday ' if is_holiday else ''}Outfit Body {body_value:02d}",
+            "price": OUTFIT_STORE_HOLIDAY_PRICE if is_holiday else OUTFIT_STORE_PRICE,
+            "lock_generation": 0,
+            "source": "holiday body row" if is_holiday else "base body row",
+        })
+    return entries
+
+
 def image_id_for(idx):
     return ORIG_IMAGE_MAX + 1 + idx
 
@@ -2567,12 +2599,24 @@ def visible_special_upgrade_desc_id_for(index):
     return ORIG_STRING_ONE_PAST_MAX + len(ITEMS) * 2 + mobile_island_event_string_count() + index
 
 
+def outfit_string_ids_for_body(body_value):
+    base = (
+        ORIG_STRING_ONE_PAST_MAX
+        + len(ITEMS) * 2
+        + mobile_island_event_string_count()
+        + SPECIAL_UPGRADE_DESCRIPTION_COUNT
+        + body_value * 2
+    )
+    return base, base + 1
+
+
 def behavior_label_string_id_for(index):
     return (
         ORIG_STRING_ONE_PAST_MAX
         + len(ITEMS) * 2
         + mobile_island_event_string_count()
         + SPECIAL_UPGRADE_DESCRIPTION_COUNT
+        + len(OUTFIT_STORE_BODY_VALUES) * 2
         + index
     )
 
@@ -2740,6 +2784,8 @@ def patch_inventory_manager(manifest):
         by_list.setdefault(item[2], []).append(item_id_for(idx))
     for pet in PET_STORE_ADDITIONS:
         by_list.setdefault(pet["list"], []).append(pet["item_id"])
+    outfit_entries = outfit_store_entries()
+    outfit_ids = [entry["item_id"] for entry in outfit_entries]
 
     list_manifest = {}
     # Insert from highest section offset to lowest to reduce offset surprises.
@@ -2757,6 +2803,20 @@ def patch_inventory_manager(manifest):
         obj.grow_bss_section(sorted_sym.section, sorted_sym.value + old_count * 4, len(ids) * 4)
         list_manifest[list_name] = {"old_count": old_count, "new_count": old_count + len(ids), "added_ids": [hex(x) for x in ids]}
 
+    clothing_sym = obj.symbol(GCLOTHINGLIST)
+    clothing_old_count = 6
+    clothing_new_count = clothing_old_count + len(outfit_ids)
+    obj.insert_section_bytes(
+        clothing_sym.section,
+        clothing_sym.value + clothing_old_count * 4,
+        struct.pack("<" + "I" * len(outfit_ids), *outfit_ids),
+    )
+    list_manifest["gClothingList"] = {
+        "old_count": clothing_old_count,
+        "new_count": clothing_new_count,
+        "added_ids": [hex(x) for x in outfit_ids],
+    }
+
     new_max = max_item_offset()
     range_patches = 0
     for reg in [b"\x3D", b"\x81\xFE", b"\x81\xF9", b"\x81\xFA"]:
@@ -2765,6 +2825,8 @@ def patch_inventory_manager(manifest):
     count_patches = {}
     count_return_patches = {}
     for list_name, info in list_manifest.items():
+        if list_name not in COUNT_PATCHES:
+            continue
         old_max, old_count = COUNT_PATCHES[list_name]
         new_count = info["new_count"]
         new_max_index = new_count - 1
@@ -2781,6 +2843,60 @@ def patch_inventory_manager(manifest):
             b"\xB8" + struct.pack("<I", old_count) + b"\x5E\x5D\xC2\x04\x00",
             b"\xB8" + struct.pack("<I", new_count) + b"\x5E\x5D\xC2\x04\x00",
         )
+
+    item_sym = obj.symbol(GET_CATEGORY_ITEM)
+    item_sec = obj.section(item_sym.section)
+    clothing_bounds_off = item_sym.value + 0x313
+    clothing_bounds_raw = item_sec.raw_ptr + clothing_bounds_off
+    if obj.buf[clothing_bounds_raw : clothing_bounds_raw + 3] != b"\x83\xFE\x05":
+        raise RuntimeError("Unexpected GetCategoryItem clothing bounds bytes")
+    obj.buf[clothing_bounds_raw : clothing_bounds_raw + 3] = b"\x83\xFE" + bytes([clothing_new_count - 1])
+
+    count_sym = obj.symbol(GET_CATEGORY_ITEM_COUNT)
+    count_sec = obj.section(count_sym.section)
+    clothing_count_off = count_sym.value + 0xA8
+    clothing_count_raw = count_sec.raw_ptr + clothing_count_off
+    if obj.buf[clothing_count_raw : clothing_count_raw + 5] != b"\xB8\x06\x00\x00\x00":
+        raise RuntimeError("Unexpected GetCategoryItemCount clothing return bytes")
+    obj.buf[clothing_count_raw : clothing_count_raw + 5] = b"\xB8" + struct.pack("<I", clothing_new_count)
+
+    def insert_inventory_getter_hook(function_name, helper_name, returns_stdcall=True):
+        symbol = obj.symbol(function_name)
+        section = obj.section(symbol.section)
+        insert_off = symbol.value + 3
+        raw = section.raw_ptr + insert_off
+        if obj.buf[raw - 3 : raw] != b"\x55\x8B\xEC":
+            raise RuntimeError(f"Unexpected prologue in {function_name}")
+        helper_sym = obj.append_undefined_symbol(helper_name)
+        if returns_stdcall:
+            payload = bytearray()
+            payload += b"\xFF\x75\x08"          # push [ebp+8]
+            payload += b"\xE8\x00\x00\x00\x00"  # call helper
+            payload += b"\x83\xC4\x04"          # add esp,4
+            payload += b"\x83\xF8\xFF"          # cmp eax,-1
+            payload += b"\x74\x04"              # je original body
+            payload += b"\x5D"                  # pop ebp
+            payload += b"\xC2\x04\x00"          # ret 4
+        else:
+            payload = bytearray()
+            payload += b"\xFF\x75\x08"
+            payload += b"\xE8\x00\x00\x00\x00"
+            payload += b"\x83\xC4\x04"
+            payload += b"\x83\xF8\xFF"
+            payload += b"\x74\x02"
+            payload += b"\x5D"
+            payload += b"\xC3"
+        obj.insert_section_bytes(symbol.section, insert_off, bytes(payload))
+        obj.append_relocation(symbol.section, insert_off + 4, helper_sym, IMAGE_REL_I386_REL32)
+        return {"function": function_name, "helper": helper_name, "insert_offset": hex(insert_off)}
+
+    outfit_getter_hooks = [
+        insert_inventory_getter_hook("?GetOutfit@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreBodyValue"),
+        insert_inventory_getter_hook("?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStorePrice"),
+        insert_inventory_getter_hook("?GetLockGenerationLevel@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreLockGeneration"),
+        insert_inventory_getter_hook("?GetShortDesc@CInventoryManager@@SA?AW4StringId@@W4EInventoryItem@@@Z", "_VF2GetOutfitStoreShortDesc", returns_stdcall=False),
+        insert_inventory_getter_hook("?GetLongDesc@CInventoryManager@@SA?AW4StringId@@W4EInventoryItem@@@Z", "_VF2GetOutfitStoreLongDesc", returns_stdcall=False),
+    ]
 
     # SortGenLockItems only included locked items up to generation 9. Custom
     # furniture uses higher official/mod locks, so raise the visible lock window.
@@ -2827,6 +2943,23 @@ def patch_inventory_manager(manifest):
         "count_patches": count_patches,
         "count_return_patches": count_return_patches,
         "outdoor_exact_count_patch": outdoor_exact_count_patch,
+        "outfit_store_additions": {
+            "status": "gClothingList extended additively",
+            "base_count": clothing_old_count,
+            "new_count": clothing_new_count,
+            "body_values": list(OUTFIT_STORE_BODY_VALUES),
+            "items": [
+                {
+                    "item_id": hex(entry["item_id"]),
+                    "body_value": entry["body_value"],
+                    "name": entry["name"],
+                    "price": entry["price"],
+                    "source": entry["source"],
+                }
+                for entry in outfit_entries
+            ],
+            "getter_hooks": outfit_getter_hooks,
+        },
         "generation_sort_cap": {"old": 9, "new": 30, "patches": generation_cap_patches},
     }
 
@@ -2914,6 +3047,65 @@ def patch_visible_special_upgrades(manifest):
             "hook": "?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z + 0x3",
             "helper": "_VF2GetVisibleSpecialUpgradePrice",
         },
+    }
+
+
+def write_outfit_store_helpers(manifest):
+    helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
+    if not helper_path.exists():
+        raise RuntimeError("Expected vf2_special_upgrade_effects.cpp before adding outfit helpers")
+    first_short, _first_long = outfit_string_ids_for_body(0)
+    helper_path.write_text(
+        helper_path.read_text(encoding="ascii")
+        + f"""
+
+static const int kVF2OutfitStoreItemBase = {OUTFIT_STORE_ITEM_BASE};
+static const int kVF2OutfitStoreBodyCount = {len(OUTFIT_STORE_BODY_VALUES)};
+static const int kVF2OutfitStoreHolidayFirst = {HOLIDAY_BODY_VALUES[0]};
+static const int kVF2OutfitStoreShortStringBase = {first_short};
+
+static int VF2OutfitBodyForItem(int itemId) {{
+    int body = itemId - kVF2OutfitStoreItemBase;
+    if (body < 0 || body >= kVF2OutfitStoreBodyCount) {{
+        return -1;
+    }}
+    return body;
+}}
+
+extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
+    return VF2OutfitBodyForItem(itemId);
+}}
+
+extern "C" int __cdecl VF2GetOutfitStorePrice(int itemId) {{
+    int body = VF2OutfitBodyForItem(itemId);
+    if (body < 0) {{
+        return -1;
+    }}
+    return body >= kVF2OutfitStoreHolidayFirst ? {OUTFIT_STORE_HOLIDAY_PRICE} : {OUTFIT_STORE_PRICE};
+}}
+
+extern "C" int __cdecl VF2GetOutfitStoreLockGeneration(int itemId) {{
+    return VF2OutfitBodyForItem(itemId) < 0 ? -1 : 0;
+}}
+
+extern "C" int __cdecl VF2GetOutfitStoreShortDesc(int itemId) {{
+    int body = VF2OutfitBodyForItem(itemId);
+    return body < 0 ? -1 : kVF2OutfitStoreShortStringBase + body * 2;
+}}
+
+extern "C" int __cdecl VF2GetOutfitStoreLongDesc(int itemId) {{
+    int body = VF2OutfitBodyForItem(itemId);
+    return body < 0 ? -1 : kVF2OutfitStoreShortStringBase + body * 2 + 1;
+}}
+""",
+        encoding="ascii",
+    )
+    manifest["outfit_store_helpers"] = {
+        "source": str(helper_path),
+        "item_base": hex(OUTFIT_STORE_ITEM_BASE),
+        "body_values": list(OUTFIT_STORE_BODY_VALUES),
+        "holiday_body_values": list(HOLIDAY_BODY_VALUES),
+        "short_string_base": hex(first_short),
     }
 
 
@@ -3407,6 +3599,38 @@ def patch_string_manager(manifest):
             "key": key,
             "text": text,
         })
+
+    for entry in outfit_store_entries():
+        short_id, long_id = outfit_string_ids_for_body(entry["body_value"])
+        rows = [
+            (
+                short_id,
+                f"eString_OutfitBody{entry['body_value']:02d}ShortDesc",
+                entry["name"],
+                "short",
+            ),
+            (
+                long_id,
+                f"eString_OutfitBody{entry['body_value']:02d}LongDesc",
+                f"Adds villager body value {entry['body_value']} to the Outfits store. This body value uses the matching male or female graphics for the selected villager.",
+                "long",
+            ),
+        ]
+        for string_id, key, text, role in rows:
+            key_sym = f"_vf2outfitstr_key_{string_id:X}"
+            text_sym = f"_vf2outfitstr_text_{string_id:X}"
+            helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+            helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+            new_rows.append((string_id, key_sym, text_sym))
+            string_manifest.append({
+                "pc_string_id": hex(string_id),
+                "source": "outfit store entry",
+                "item_id": hex(entry["item_id"]),
+                "body_value": entry["body_value"],
+                "role": role,
+                "key": key,
+                "text": text,
+            })
 
     for index, (key, text) in enumerate(BEHAVIOR_LABELS):
         string_id = behavior_label_string_id_for(index)
@@ -4405,6 +4629,31 @@ def normalize_added_furniture_sheets(manifest):
 
 def patch_debug_features(manifest):
     obj = CoffObject(PATCHED / "theMainScene.obj")
+
+    def insert_debug_input_hook(function_name, helper_name, arg_bytes, ret_bytes):
+        symbol = obj.symbol(function_name)
+        section = obj.section(symbol.section)
+        raw = section.raw_ptr + symbol.value
+        if obj.buf[raw:raw + 3] != b"\x55\x8B\xEC":
+            raise RuntimeError(f"Unexpected prologue in {function_name}")
+        insert_off = symbol.value + 3
+        helper_sym = obj.append_undefined_symbol(helper_name)
+        payload = bytearray()
+        payload += b"\x51"  # push ecx ; preserve this
+        for offset in reversed(arg_bytes):
+            payload += b"\xFF\x75" + bytes([offset])
+        payload += b"\xE8\x00\x00\x00\x00"
+        payload += b"\x83\xC4" + bytes([len(arg_bytes) * 4])
+        payload += b"\x59"  # pop ecx
+        payload += b"\x84\xC0"  # test al,al
+        payload += b"\x74\x04"  # je original body
+        payload += b"\xB0\x01"  # mov al,1
+        payload += b"\x5D"  # pop ebp
+        payload += b"\xC2" + struct.pack("<H", ret_bytes)
+        obj.insert_section_bytes(symbol.section, insert_off, bytes(payload))
+        obj.append_relocation(symbol.section, insert_off + 2 + len(arg_bytes) * 3, helper_sym, IMAGE_REL_I386_REL32)
+        return {"function": function_name, "helper": helper_name, "insert_offset": hex(insert_off)}
+
     key_sym = obj.symbol("?HandleKeyDown@theMainScene@@IAE?B_NH@Z")
     sec = obj.section(key_sym.section)
     # Forward main-scene key-down events to a helper. The helper registers this
@@ -4430,6 +4679,12 @@ def patch_debug_features(manifest):
     draw_sym = obj.symbol("?DrawScene@theMainScene@@MAEXXZ")
     draw_helper_sym = obj.append_undefined_symbol("_VF2PatchedDrawOverlaysAndDebugger")
     obj.retarget_relocation(draw_sym.section, draw_sym.value + 0x149, draw_helper_sym, IMAGE_REL_I386_REL32)
+    input_hooks = [
+        insert_debug_input_hook("?HandleKeyCharacter@theMainScene@@IAE?B_ND@Z", "_VF2PatchedDebuggerKeyCharacter", [0x08], 4),
+        insert_debug_input_hook("?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseDown", [0x08, 0x0C], 8),
+        insert_debug_input_hook("?HandleMouseMove@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseMove", [0x08, 0x0C], 8),
+        insert_debug_input_hook("?HandleMouseUp@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseUp", [0x08, 0x0C], 8),
+    ]
     obj.write(PATCHED / "theMainScene.obj")
 
     helper_cpp = r'''
@@ -4444,6 +4699,11 @@ public:
 
 class IDebugger;
 
+struct ldwPoint {
+    int x;
+    int y;
+};
+
 class CDebugger {
 public:
     bool const Register(IDebugger *debugger);
@@ -4451,13 +4711,43 @@ public:
     void Draw();
 };
 
+class IEditor {
+public:
+    virtual void Draw();
+    virtual void Reset();
+    virtual void Activate(bool active);
+    virtual bool const HandleKeyCharacter(char key);
+    virtual bool const HandleKeyDown(int key);
+    virtual bool const HandleKeyUp(int key);
+    virtual bool const HandleMouseDown(ldwPoint point);
+    virtual bool const HandleMouseMove(ldwPoint point);
+    virtual bool const HandleMouseUp(ldwPoint point);
+};
+
+class CWaypointEditor : public IEditor {};
+class CLightSourceEditor : public IEditor {};
+
 class CFloatingAnim {
 public:
     void DrawOverlays() const;
 };
 
 extern CDebugger Debugger;
+extern CWaypointEditor WaypointEditor;
+extern CLightSourceEditor LightSourceEditor;
 extern CFloatingAnim FloatingAnim;
+
+struct VF2DebuggerLayout {
+    unsigned char visible;
+    unsigned char pad0[3];
+    IDebugger *providers[8];
+    int providerCount;
+    int selectedProvider;
+    int drawX;
+    int drawY;
+};
+
+static IDebugger *gVF2MainSceneDebuggerProvider = 0;
 
 static void VF2WriteDirectDebug(char const *fmt, ...)
 {
@@ -4497,17 +4787,102 @@ static void VF2EnsureDebugLogging()
     }
 }
 
-extern "C" bool __cdecl VF2PatchedMainSceneHandleKeyDown(void *mainScene, int key)
+static IEditor *VF2ActiveDebugEditor()
+{
+    VF2DebuggerLayout *state = reinterpret_cast<VF2DebuggerLayout *>(&Debugger);
+    if (!state->visible || state->providerCount <= 0) {
+        return 0;
+    }
+    int selected = state->selectedProvider;
+    if (selected < 0 || selected >= state->providerCount || selected >= 8) {
+        return 0;
+    }
+    IDebugger *provider = state->providers[selected];
+    if (!provider || provider == gVF2MainSceneDebuggerProvider) {
+        return 0;
+    }
+    return reinterpret_cast<IEditor *>(provider);
+}
+
+static void VF2RegisterDebuggerProvider(IDebugger *provider, char const *label)
+{
+    VF2DebuggerLayout *state = reinterpret_cast<VF2DebuggerLayout *>(&Debugger);
+    for (int i = 0; i < state->providerCount && i < 8; ++i) {
+        if (state->providers[i] == provider) {
+            return;
+        }
+    }
+    if (Debugger.Register(provider)) {
+        VF2WriteDirectDebug("registered debugger provider: %s", label);
+    } else {
+        VF2WriteDirectDebug("failed to register debugger provider: %s", label);
+    }
+}
+
+static void VF2EnsureEditorDebuggers(void *mainScene)
 {
     static bool registered = false;
-    VF2EnsureDebugLogging();
-    VF2WriteDirectDebug("main scene keydown raw=%d translated=%d", key, VF2TranslateDebugKey(key));
     if (!registered && mainScene) {
         registered = true;
-        Debugger.Register(reinterpret_cast<IDebugger *>(static_cast<char *>(mainScene) + 8));
-        VF2WriteDirectDebug("registered main scene debugger provider.");
+        gVF2MainSceneDebuggerProvider = reinterpret_cast<IDebugger *>(static_cast<char *>(mainScene) + 8);
+        VF2RegisterDebuggerProvider(gVF2MainSceneDebuggerProvider, "main scene");
+        WaypointEditor.Activate(true);
+        LightSourceEditor.Activate(true);
+        VF2RegisterDebuggerProvider(reinterpret_cast<IDebugger *>(&WaypointEditor), "waypoint editor");
+        VF2RegisterDebuggerProvider(reinterpret_cast<IDebugger *>(&LightSourceEditor), "light source editor");
     }
-    return Debugger.HandleKeyDown(VF2TranslateDebugKey(key));
+}
+
+extern "C" bool __cdecl VF2PatchedMainSceneHandleKeyDown(void *mainScene, int key)
+{
+    VF2EnsureDebugLogging();
+    VF2EnsureEditorDebuggers(mainScene);
+    VF2WriteDirectDebug("main scene keydown raw=%d translated=%d", key, VF2TranslateDebugKey(key));
+    bool handledBySelector = Debugger.HandleKeyDown(VF2TranslateDebugKey(key));
+    if (handledBySelector) {
+        return true;
+    }
+    IEditor *editor = VF2ActiveDebugEditor();
+    if (editor) {
+        return editor->HandleKeyDown(key);
+    }
+    return false;
+}
+
+extern "C" bool __cdecl VF2PatchedDebuggerKeyCharacter(int key)
+{
+    VF2EnsureDebugLogging();
+    IEditor *editor = VF2ActiveDebugEditor();
+    return editor ? editor->HandleKeyCharacter(static_cast<char>(key)) : false;
+}
+
+extern "C" bool __cdecl VF2PatchedDebuggerKeyUp(int key)
+{
+    VF2EnsureDebugLogging();
+    IEditor *editor = VF2ActiveDebugEditor();
+    return editor ? editor->HandleKeyUp(key) : false;
+}
+
+extern "C" bool __cdecl VF2PatchedDebuggerMouseDown(int x, int y)
+{
+    VF2EnsureDebugLogging();
+    IEditor *editor = VF2ActiveDebugEditor();
+    ldwPoint point = {x, y};
+    return editor ? editor->HandleMouseDown(point) : false;
+}
+
+extern "C" bool __cdecl VF2PatchedDebuggerMouseMove(int x, int y)
+{
+    IEditor *editor = VF2ActiveDebugEditor();
+    ldwPoint point = {x, y};
+    return editor ? editor->HandleMouseMove(point) : false;
+}
+
+extern "C" bool __cdecl VF2PatchedDebuggerMouseUp(int x, int y)
+{
+    IEditor *editor = VF2ActiveDebugEditor();
+    ldwPoint point = {x, y};
+    return editor ? editor->HandleMouseUp(point) : false;
 }
 
 extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
@@ -4542,12 +4917,30 @@ static VF2DebugLogBootstrap gVF2DebugLogBootstrap;
             "patched_function": "?HandleKeyDown@theMainScene@@IAE?B_NH@Z",
             "helper": "_VF2PatchedMainSceneHandleKeyDown",
             "draw_hook": "?DrawScene@theMainScene@@MAEXXZ + 0x149",
+            "input_hooks": input_hooks,
             "direct_debug_log": "vf2_additive_debug.txt",
             "known_debugger_keys": {
                 "F5": "toggle CDebugger overlay",
                 "Up": "next debugger page",
                 "Down": "previous debugger page",
+                "F4": "handled by selected editor when supported",
             },
+            "skipped_hooks": [
+                {
+                    "function": "?HandleKeyUp@theMainScene@@IAE?B_NH@Z",
+                    "reason": "stock function is a tiny return-false stub without a patchable prologue",
+                }
+            ],
+            "registered_providers": [
+                "main scene debugger",
+                "CWaypointEditor global",
+                "CLightSourceEditor global",
+            ],
+            "unavailable_in_this_object_set": [
+                "BehaviorEditor.obj has no exported behavior editor class/object methods",
+                "ContentMapEditor.obj has no exported content-map editor class/object methods",
+                "Editor.obj has no exported editor class/object methods",
+            ],
         },
     }
 
@@ -4980,14 +5373,16 @@ def main():
     }
     patch_furniture_manager(manifest)
     patch_added_furniture_click_aliases(manifest)
-    patch_inventory_manager(manifest)
     patch_visible_special_upgrades(manifest)
+    patch_inventory_manager(manifest)
     patch_scrolling_store_scene(manifest)
     patch_purchase_dialog(manifest)
+    write_outfit_store_helpers(manifest)
     patch_string_manager(manifest)
     patch_special_upgrade_titles(manifest)
     patch_spontaneous_behaviors(manifest)
     patch_bookshelf_reading_behavior(manifest)
+    patch_debug_features(manifest)
     if ENABLE_ISLAND_EVENTS:
         patch_island_events(manifest)
     else:
