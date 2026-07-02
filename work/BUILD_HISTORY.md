@@ -84,6 +84,19 @@
   mouse-move hook region, not to General Appliances count widening.
 - Keeps the B60 targeted appliance-count widening and the VF3 TV data intact.
 
+## B62 - F5-Gated Debugger Input
+
+- Keeps normal gameplay on the stock input path by inserting fall-through
+  debugger hooks instead of replacing `theMainScene::HandleKeyDown`.
+- Debugger input is inert until F5 enables it for the session; normal mouse
+  down/move/up and key-character events return false immediately and continue
+  into the original handlers.
+- Wraps `Debugger` and selected `IEditor` calls with guarded access so a
+  debugger/editor fault disables debugger input and falls back to stock input
+  instead of crashing the game.
+- Removes the normal-startup debug log bootstrap. Debug logging begins only
+  after F5 activates debugger input.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

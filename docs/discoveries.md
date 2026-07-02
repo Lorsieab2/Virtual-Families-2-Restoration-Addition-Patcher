@@ -29,6 +29,15 @@
   `theMainScene::HandleMouseMove -> CFurnitureManager::HandleMouseMove ->
   CToolTray::HandleMouseMove` flow. Mouse down/up/key debug hooks remain
   available for editor entry points.
+- B61 still crashes on mouse click after loading a save, which points to the
+  remaining main-scene mouse down/up debugger hooks touching debugger/editor
+  state during vanilla play.
+- B62 changes the debugger input hooks to fall through to stock handlers unless
+  F5 has enabled debugger input for the session, and wraps `Debugger`/`IEditor`
+  calls with guarded access that disables debugger input after an access fault.
+- The local B62 signing attempt reached `signtool` but failed because the
+  configured certificate thumbprint was not present in the current user's
+  certificate store.
 
 ## 2026-07-02 - General Appliances Count Collision
 

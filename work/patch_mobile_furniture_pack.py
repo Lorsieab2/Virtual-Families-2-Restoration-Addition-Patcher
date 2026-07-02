@@ -4774,34 +4774,40 @@ def patch_debug_features(manifest):
         obj.append_relocation(symbol.section, insert_off + 2 + len(arg_bytes) * 3, helper_sym, IMAGE_REL_I386_REL32)
         return {"function": function_name, "helper": helper_name, "insert_offset": hex(insert_off)}
 
-    key_sym = obj.symbol("?HandleKeyDown@theMainScene@@IAE?B_NH@Z")
-    sec = obj.section(key_sym.section)
-    # Forward main-scene key-down events to a helper. The helper registers this
-    # scene as an IDebugger provider and then delegates to CDebugger::HandleKeyDown.
-    code = bytearray([
-        0x55,                         # push ebp
-        0x8B, 0xEC,                   # mov ebp, esp
-        0xFF, 0x75, 0x08,             # push dword ptr [ebp+8] ; key
-        0x51,                         # push ecx ; this
-        0xE8, 0, 0, 0, 0,             # call _VF2PatchedMainSceneHandleKeyDown
-        0x83, 0xC4, 0x08,             # add esp, 8
-        0x5D,                         # pop ebp
-        0xC2, 0x04, 0x00,             # ret 4
-    ])
-    if len(code) > sec.raw_size:
-        raise ValueError("Patched HandleKeyDown stub does not fit in original section")
-    code.extend(b"\x90" * (sec.raw_size - len(code)))
-    start = sec.raw_ptr + key_sym.value
-    obj.buf[start:start + len(code)] = code
-    helper_sym = obj.append_undefined_symbol("_VF2PatchedMainSceneHandleKeyDown")
-    obj.append_relocation(key_sym.section, key_sym.value + 8, helper_sym, IMAGE_REL_I386_REL32)
+    def insert_main_scene_keydown_hook():
+        function_name = "?HandleKeyDown@theMainScene@@IAE?B_NH@Z"
+        symbol = obj.symbol(function_name)
+        section = obj.section(symbol.section)
+        raw = section.raw_ptr + symbol.value
+        if obj.buf[raw:raw + 3] != b"\x55\x8B\xEC":
+            raise RuntimeError(f"Unexpected prologue in {function_name}")
+        insert_off = symbol.value + 3
+        helper_sym = obj.append_undefined_symbol("_VF2PatchedMainSceneHandleKeyDown")
+        payload = bytearray([
+            0x51,                         # push ecx ; preserve this
+            0xFF, 0x75, 0x08,             # push dword ptr [ebp+8] ; key
+            0x51,                         # push ecx ; this for helper
+            0xE8, 0, 0, 0, 0,             # call _VF2PatchedMainSceneHandleKeyDown
+            0x83, 0xC4, 0x08,             # add esp, 8
+            0x59,                         # pop ecx
+            0x84, 0xC0,                   # test al,al
+            0x74, 0x04,                   # je original body
+            0xB0, 0x01,                   # mov al,1
+            0x5D,                         # pop ebp
+            0xC2, 0x04, 0x00,             # ret 4
+        ])
+        obj.insert_section_bytes(symbol.section, insert_off, bytes(payload))
+        obj.append_relocation(symbol.section, insert_off + 6, helper_sym, IMAGE_REL_I386_REL32)
+        return {"function": function_name, "helper": "_VF2PatchedMainSceneHandleKeyDown", "insert_offset": hex(insert_off)}
 
     draw_sym = obj.symbol("?DrawScene@theMainScene@@MAEXXZ")
     draw_helper_sym = obj.append_undefined_symbol("_VF2PatchedDrawOverlaysAndDebugger")
     obj.retarget_relocation(draw_sym.section, draw_sym.value + 0x149, draw_helper_sym, IMAGE_REL_I386_REL32)
     input_hooks = [
+        insert_main_scene_keydown_hook(),
         insert_debug_input_hook("?HandleKeyCharacter@theMainScene@@IAE?B_ND@Z", "_VF2PatchedDebuggerKeyCharacter", [0x08], 4),
         insert_debug_input_hook("?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseDown", [0x08, 0x0C], 8),
+        insert_debug_input_hook("?HandleMouseMove@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseMove", [0x08, 0x0C], 8),
         insert_debug_input_hook("?HandleMouseUp@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseUp", [0x08, 0x0C], 8),
     ]
     obj.write(PATCHED / "theMainScene.obj")
@@ -4809,6 +4815,7 @@ def patch_debug_features(manifest):
     helper_cpp = r'''
 #include <stdio.h>
 #include <stdarg.h>
+#include <excpt.h>
 
 class ldwLog {
 public:
@@ -4866,6 +4873,8 @@ struct VF2DebuggerLayout {
     int drawY;
 };
 
+static bool gVF2DebuggerInputEnabled = false;
+static bool gVF2DebuggerFaulted = false;
 static IDebugger *gVF2MainSceneDebuggerProvider = 0;
 
 static void VF2WriteDirectDebug(char const *fmt, ...)
@@ -4882,9 +4891,19 @@ static void VF2WriteDirectDebug(char const *fmt, ...)
     fclose(f);
 }
 
+static bool VF2CanUseDebugger()
+{
+    return gVF2DebuggerInputEnabled && !gVF2DebuggerFaulted;
+}
+
+static bool VF2IsDebuggerActivationKey(int key)
+{
+    return key == 0x74 || key == 0x4000003e;
+}
+
 static int VF2TranslateDebugKey(int key)
 {
-    if (key == 0x74 || key == 0x4000003e) {
+    if (VF2IsDebuggerActivationKey(key)) {
         return 0x3FE;
     }
     if (key == 0x26 || key == 0x40000052) {
@@ -4896,31 +4915,53 @@ static int VF2TranslateDebugKey(int key)
     return key;
 }
 
+static void VF2DisableDebuggerAfterFault(char const *context)
+{
+    gVF2DebuggerFaulted = true;
+    gVF2DebuggerInputEnabled = false;
+    VF2WriteDirectDebug("debugger disabled after guarded exception in %s", context);
+}
+
 static void VF2EnsureDebugLogging()
 {
     static bool initialized = false;
-    if (!initialized) {
-        initialized = true;
-        VF2WriteDirectDebug("VF2 additive debug bootstrap active.");
-        ldwLog::Get()->WriteLine("VF2 additive build: ldwLog.txt and developer-key forwarding enabled.");
+    if (initialized) {
+        return;
+    }
+    initialized = true;
+    VF2WriteDirectDebug("VF2 debugger input enabled by F5.");
+    __try {
+        ldwLog::Get()->WriteLine("VF2 additive build: debugger input enabled by F5.");
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        VF2WriteDirectDebug("ldwLog unavailable while enabling debugger input.");
     }
 }
 
 static IEditor *VF2ActiveDebugEditor()
 {
-    VF2DebuggerLayout *state = reinterpret_cast<VF2DebuggerLayout *>(&Debugger);
-    if (!state->visible || state->providerCount <= 0) {
+    if (!VF2CanUseDebugger()) {
         return 0;
     }
-    int selected = state->selectedProvider;
-    if (selected < 0 || selected >= state->providerCount || selected >= 8) {
+    IEditor *editor = 0;
+    __try {
+        VF2DebuggerLayout *state = reinterpret_cast<VF2DebuggerLayout *>(&Debugger);
+        if (!state->visible || state->providerCount <= 0) {
+            return 0;
+        }
+        int selected = state->selectedProvider;
+        if (selected < 0 || selected >= state->providerCount || selected >= 8) {
+            return 0;
+        }
+        IDebugger *provider = state->providers[selected];
+        if (!provider || provider == gVF2MainSceneDebuggerProvider) {
+            return 0;
+        }
+        editor = reinterpret_cast<IEditor *>(provider);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        VF2DisableDebuggerAfterFault("VF2ActiveDebugEditor");
         return 0;
     }
-    IDebugger *provider = state->providers[selected];
-    if (!provider || provider == gVF2MainSceneDebuggerProvider) {
-        return 0;
-    }
-    return reinterpret_cast<IEditor *>(provider);
+    return editor;
 }
 
 static void VF2RegisterDebuggerProvider(IDebugger *provider, char const *label)
@@ -4941,105 +4982,216 @@ static void VF2RegisterDebuggerProvider(IDebugger *provider, char const *label)
 static void VF2EnsureEditorDebuggers(void *mainScene)
 {
     static bool registered = false;
-    if (!registered && mainScene) {
-        registered = true;
+    if (!VF2CanUseDebugger() || registered || !mainScene) {
+        return;
+    }
+    __try {
         gVF2MainSceneDebuggerProvider = reinterpret_cast<IDebugger *>(static_cast<char *>(mainScene) + 8);
         VF2RegisterDebuggerProvider(gVF2MainSceneDebuggerProvider, "main scene");
         WaypointEditor.Activate(true);
         LightSourceEditor.Activate(true);
         VF2RegisterDebuggerProvider(reinterpret_cast<IDebugger *>(&WaypointEditor), "waypoint editor");
         VF2RegisterDebuggerProvider(reinterpret_cast<IDebugger *>(&LightSourceEditor), "light source editor");
+        registered = true;
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        VF2DisableDebuggerAfterFault("VF2EnsureEditorDebuggers");
     }
+}
+
+static bool VF2SafeDebuggerHandleKeyDown(int key)
+{
+    bool handled = false;
+    __try {
+        handled = Debugger.HandleKeyDown(key);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        VF2DisableDebuggerAfterFault("Debugger.HandleKeyDown");
+        handled = false;
+    }
+    return handled;
+}
+
+static void VF2SafeDebuggerDraw()
+{
+    __try {
+        Debugger.Draw();
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        VF2DisableDebuggerAfterFault("Debugger.Draw");
+    }
+}
+
+static bool VF2SafeEditorKeyCharacter(IEditor *editor, int key)
+{
+    bool handled = false;
+    __try {
+        handled = editor->HandleKeyCharacter(static_cast<char>(key));
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        VF2DisableDebuggerAfterFault("IEditor.HandleKeyCharacter");
+        handled = false;
+    }
+    return handled;
+}
+
+static bool VF2SafeEditorKeyDown(IEditor *editor, int key)
+{
+    bool handled = false;
+    __try {
+        handled = editor->HandleKeyDown(key);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        VF2DisableDebuggerAfterFault("IEditor.HandleKeyDown");
+        handled = false;
+    }
+    return handled;
+}
+
+static bool VF2SafeEditorKeyUp(IEditor *editor, int key)
+{
+    bool handled = false;
+    __try {
+        handled = editor->HandleKeyUp(key);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        VF2DisableDebuggerAfterFault("IEditor.HandleKeyUp");
+        handled = false;
+    }
+    return handled;
+}
+
+static bool VF2SafeEditorMouseDown(IEditor *editor, ldwPoint point)
+{
+    bool handled = false;
+    __try {
+        handled = editor->HandleMouseDown(point);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        VF2DisableDebuggerAfterFault("IEditor.HandleMouseDown");
+        handled = false;
+    }
+    return handled;
+}
+
+static bool VF2SafeEditorMouseMove(IEditor *editor, ldwPoint point)
+{
+    bool handled = false;
+    __try {
+        handled = editor->HandleMouseMove(point);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        VF2DisableDebuggerAfterFault("IEditor.HandleMouseMove");
+        handled = false;
+    }
+    return handled;
+}
+
+static bool VF2SafeEditorMouseUp(IEditor *editor, ldwPoint point)
+{
+    bool handled = false;
+    __try {
+        handled = editor->HandleMouseUp(point);
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        VF2DisableDebuggerAfterFault("IEditor.HandleMouseUp");
+        handled = false;
+    }
+    return handled;
 }
 
 extern "C" bool __cdecl VF2PatchedMainSceneHandleKeyDown(void *mainScene, int key)
 {
+    bool activating = VF2IsDebuggerActivationKey(key);
+    if (!gVF2DebuggerInputEnabled && !activating) {
+        return false;
+    }
+    if (gVF2DebuggerFaulted) {
+        return false;
+    }
+    if (activating) {
+        gVF2DebuggerInputEnabled = true;
+    }
     VF2EnsureDebugLogging();
     VF2EnsureEditorDebuggers(mainScene);
-    VF2WriteDirectDebug("main scene keydown raw=%d translated=%d", key, VF2TranslateDebugKey(key));
-    bool handledBySelector = Debugger.HandleKeyDown(VF2TranslateDebugKey(key));
-    if (handledBySelector) {
+    if (!VF2CanUseDebugger()) {
+        return false;
+    }
+    int translated = VF2TranslateDebugKey(key);
+    VF2WriteDirectDebug("main scene keydown raw=%d translated=%d", key, translated);
+    if (VF2SafeDebuggerHandleKeyDown(translated)) {
         return true;
     }
     IEditor *editor = VF2ActiveDebugEditor();
-    if (editor) {
-        return editor->HandleKeyDown(key);
-    }
-    return false;
+    return editor ? VF2SafeEditorKeyDown(editor, key) : false;
 }
 
 extern "C" bool __cdecl VF2PatchedDebuggerKeyCharacter(int key)
 {
-    VF2EnsureDebugLogging();
+    if (!VF2CanUseDebugger()) {
+        return false;
+    }
     IEditor *editor = VF2ActiveDebugEditor();
-    return editor ? editor->HandleKeyCharacter(static_cast<char>(key)) : false;
+    return editor ? VF2SafeEditorKeyCharacter(editor, key) : false;
 }
 
 extern "C" bool __cdecl VF2PatchedDebuggerKeyUp(int key)
 {
-    VF2EnsureDebugLogging();
+    if (!VF2CanUseDebugger()) {
+        return false;
+    }
     IEditor *editor = VF2ActiveDebugEditor();
-    return editor ? editor->HandleKeyUp(key) : false;
+    return editor ? VF2SafeEditorKeyUp(editor, key) : false;
 }
 
 extern "C" bool __cdecl VF2PatchedDebuggerMouseDown(int x, int y)
 {
-    VF2EnsureDebugLogging();
+    if (!VF2CanUseDebugger()) {
+        return false;
+    }
     IEditor *editor = VF2ActiveDebugEditor();
     ldwPoint point = {x, y};
-    return editor ? editor->HandleMouseDown(point) : false;
+    return editor ? VF2SafeEditorMouseDown(editor, point) : false;
 }
 
 extern "C" bool __cdecl VF2PatchedDebuggerMouseMove(int x, int y)
 {
+    if (!VF2CanUseDebugger()) {
+        return false;
+    }
     IEditor *editor = VF2ActiveDebugEditor();
     ldwPoint point = {x, y};
-    return editor ? editor->HandleMouseMove(point) : false;
+    return editor ? VF2SafeEditorMouseMove(editor, point) : false;
 }
 
 extern "C" bool __cdecl VF2PatchedDebuggerMouseUp(int x, int y)
 {
+    if (!VF2CanUseDebugger()) {
+        return false;
+    }
     IEditor *editor = VF2ActiveDebugEditor();
     ldwPoint point = {x, y};
-    return editor ? editor->HandleMouseUp(point) : false;
+    return editor ? VF2SafeEditorMouseUp(editor, point) : false;
 }
 
 extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
 {
-    static int draw_count = 0;
     FloatingAnim.DrawOverlays();
-    Debugger.Draw();
-    if (draw_count < 3) {
-        VF2WriteDirectDebug("draw debugger hook fired %d.", draw_count + 1);
+    if (VF2CanUseDebugger()) {
+        VF2SafeDebuggerDraw();
     }
-    ++draw_count;
 }
-
-struct VF2DebugLogBootstrap {
-    VF2DebugLogBootstrap()
-    {
-        VF2EnsureDebugLogging();
-    }
-};
-
-static VF2DebugLogBootstrap gVF2DebugLogBootstrap;
 '''.strip() + "\n"
     (PATCHED / "vf2_debug_features.cpp").write_text(helper_cpp, encoding="ascii")
     manifest["debug_features"] = {
         "ldw_log": {
-            "status": "enabled",
+            "status": "enabled after debugger activation",
             "filename": "ldwLog.txt",
-            "mechanism": "ldwLog::Get()->WriteLine during static init and first main-scene keydown",
+            "mechanism": "ldwLog::Get()->WriteLine when F5 enables debugger input",
         },
         "developer_keys": {
-            "status": "forwarded",
+            "status": "F5-gated with guarded debugger/editor calls",
             "patched_function": "?HandleKeyDown@theMainScene@@IAE?B_NH@Z",
             "helper": "_VF2PatchedMainSceneHandleKeyDown",
+            "activation_key": "F5",
+            "vanilla_play": "helpers return false without touching Debugger/editor globals until F5 is pressed, then the original handler falls through when unhandled",
             "draw_hook": "?DrawScene@theMainScene@@MAEXXZ + 0x149",
             "input_hooks": input_hooks,
             "direct_debug_log": "vf2_additive_debug.txt",
+            "fault_guard": "SEH guards disable debugger input and fall through to stock input after a debugger/editor access violation",
             "known_debugger_keys": {
-                "F5": "toggle CDebugger overlay",
+                "F5": "enable debugger input and toggle CDebugger overlay",
                 "Up": "next debugger page",
                 "Down": "previous debugger page",
                 "F4": "handled by selected editor when supported",

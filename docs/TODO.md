@@ -41,14 +41,11 @@
   mobile renovation variants.
 - Make all house renovations and upgrades removable and purchasable again after
   removal.
-- Confirm B61 in-game after the save-load crash fix: load the affected save,
-  open General Appliances,
-  place the VF3 TVs, and verify base TV behavior is unchanged.
-- Gate debugger selection functions behind a Function-key activation path:
-  normal play should ignore debugger selection unless the chosen Function key
-  has enabled debugger mode for that session.
-- Decide whether the debug editor needs a safer mouse-move forwarding strategy
-  that cannot early-return from `theMainScene::HandleMouseMove`.
+- Confirm B62 in-game after the F5-gated debugger input fix: load the affected
+  save, click normal gameplay/furniture UI, press F5 to enable debugger input,
+  and verify debugger selection does not crash.
+- Verify the F5-gated debugger mouse move/down/up forwarding is behaviorally
+  vanilla before F5 and fault-tolerant after F5.
 - Audit other category list count patches for small/common desktop counts before
   adding more furniture entries.
 - Verify the three VF3 TV appliances are visible in General Appliances and keep
