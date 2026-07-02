@@ -14,6 +14,9 @@
 - Confirm B61 in-game after the save-load crash fix: load the affected save,
   open General Appliances,
   place the VF3 TVs, and verify base TV behavior is unchanged.
+- Gate debugger selection functions behind a Function-key activation path:
+  normal play should ignore debugger selection unless the chosen Function key
+  has enabled debugger mode for that session.
 - Decide whether the debug editor needs a safer mouse-move forwarding strategy
   that cannot early-return from `theMainScene::HandleMouseMove`.
 - Audit other category list count patches for small/common desktop counts before
