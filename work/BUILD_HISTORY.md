@@ -40,6 +40,17 @@
   `C:\Users\Owner\OneDrive\Desktop\LDW Desktop Games!! And Other Stuff\Virtual Families 2 Codex Test Builds`.
   Use `work/sync_build_outputs.py` after a successful build.
 
+## B58 - VF3 TV Appliances And Playhouse
+
+- Adds the VF3 Large Flat Screen TV, VF3 Small Flat Screen TV, and Father's
+  Favorite TV as new General Appliances entries.
+- Confirms General Appliances is the native `gAppliancesList`; category number
+  5 by itself is not the store list authority.
+- Gives each added VF3 TV its own sprite-sized fmap and its own base-TV-shaped
+  animation sheets so the base desktop TV resources remain untouched.
+- Enables the Playhouse spontaneous behavior candidate for all ages, including
+  children.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

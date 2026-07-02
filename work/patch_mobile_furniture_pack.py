@@ -98,6 +98,22 @@ LARGE_TV_ANIMATION_SHEETS = {
     "Large": Path(r"C:\Users\Owner\Downloads\TVAnimBig.png"),
     "LargeEast": Path(r"C:\Users\Owner\Downloads\TVAnimBigE.png"),
 }
+VF3_TV_ANIMATION_FRAME_PREFIXES = {
+    "Large": "TVAnimBig",
+    "LargeEast": "TVAnimBigE",
+    "Small": "FlatScreenSmallAnim",
+    "SmallEast": "FlatScreenSmallAnimE",
+    "FathersFavorite": "TVAnimBig",
+    "FathersFavoriteEast": "TVAnimBigE",
+}
+VF3_TV_RUNTIME_ANIMATION_NAMES = {
+    "Large": "VF3LargeFlatScreenTVAnim.png",
+    "LargeEast": "VF3LargeFlatScreenTVAnimEast.png",
+    "Small": "VF3SmallFlatScreenTVAnim.png",
+    "SmallEast": "VF3SmallFlatScreenTVAnimEast.png",
+    "FathersFavorite": "FathersFavoriteTVAnim.png",
+    "FathersFavoriteEast": "FathersFavoriteTVAnimEast.png",
+}
 VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x117: "BrokerUpgrade_icon.png",
     0x118: "FoodClub_icon.png",
@@ -1139,25 +1155,40 @@ VF3_TV_ITEMS = [
         "name": "VF3LargeFlatScreenTV",
         "item_id": 0x324,
         "donor": 0x1F3,
-        "list": "gAccessories",
+        "list": "gAppliances",
         "price": 6500,
         "lock_generation": 12,
         "item_type": 5,
         "short_description": "Large Flat Screen TV",
         "long_description": "A large flat screen TV from Virtual Families 3.",
         "source_png": "FlatScreenLrg.png",
+        "animation_labels": ("Large", "LargeEast"),
     },
     {
         "name": "VF3SmallFlatScreenTV",
         "item_id": 0x325,
         "donor": 0x1F3,
-        "list": "gAccessories",
+        "list": "gAppliances",
         "price": 4250,
         "lock_generation": 12,
         "item_type": 5,
         "short_description": "Small Flat Screen TV",
         "long_description": "A small flat screen TV from Virtual Families 3.",
         "source_png": "FlatScreenSmall.png",
+        "animation_labels": ("Small", "SmallEast"),
+    },
+    {
+        "name": "FathersFavoriteTV",
+        "item_id": 0x326,
+        "donor": 0x1F3,
+        "list": "gAppliances",
+        "price": 5250,
+        "lock_generation": 12,
+        "item_type": 5,
+        "short_description": "Father's Favorite TV",
+        "long_description": "A fiery flat screen TV from Virtual Families 3.",
+        "source_png": "FathersFavoriteTV.png",
+        "animation_labels": ("FathersFavorite", "FathersFavoriteEast"),
     },
 ]
 
@@ -1191,6 +1222,7 @@ INVISIBLE_TRANSPARENT_GRAPHIC_OVERRIDES = {
 VF3_TV_FMAP_DONORS = {
     "VF3LargeFlatScreenTV.png.fmap": "TVFlatScreenStd.png.fmap",
     "VF3SmallFlatScreenTV.png.fmap": "TVFlatScreenStd.png.fmap",
+    "FathersFavoriteTV.png.fmap": "TVFlatScreenStd.png.fmap",
 }
 EXPLICIT_FRAME_COUNTS_BY_PATH = {
     f"Furniture/{item['name']}.png": item["frame_count"]
@@ -1443,6 +1475,7 @@ def apply_generation_lock_distribution():
 apply_generation_lock_distribution()
 
 LIST_SYMBOLS = {
+    "gAppliances": ("?gAppliancesList@@3PAW4EInventoryItem@@A", "?gAppliancesListSorted@@3PAW4EInventoryItem@@A", 15),
     "gFurniture2": ("?gFurniture2List@@3PAW4EInventoryItem@@A", "?gFurniture2ListSorted@@3PAW4EInventoryItem@@A", 88),
     "gFurniture3": ("?gFurniture3List@@3PAW4EInventoryItem@@A", "?gFurniture3ListSorted@@3PAW4EInventoryItem@@A", 26),
     "gFurniture4": ("?gFurniture4List@@3PAW4EInventoryItem@@A", "?gFurniture4ListSorted@@3PAW4EInventoryItem@@A", 74),
@@ -1453,6 +1486,7 @@ LIST_SYMBOLS = {
 
 COUNT_PATCHES = {
     # old max-index compare, old push/sort count, new values patched at runtime below
+    "gAppliances": (0x0E, 0x0F),
     "gFurniture2": (0x57, 0x58),
     "gFurniture3": (0x19, 0x1A),
     "gFurniture4": (0x49, 0x4A),
@@ -1720,7 +1754,7 @@ def sync_vf3_living_room_sprite_strips(manifest):
 
 
 def sync_vf3_tv_sprite_strips(manifest):
-    """Create the two orientation cells expected by the desktop TV donor."""
+    """Create two orientation cells while preserving each VF3 TV's footprint."""
     copied = []
     missing = []
     try:
@@ -1730,24 +1764,27 @@ def sync_vf3_tv_sprite_strips(manifest):
             source = VF3_SPRITE_SOURCE_DIR / item["source_png"]
             target = OUT / "Images" / "Furniture" / f"{item['name']}.png"
             if not source.exists():
-                missing.append(str(source))
+                if target.exists():
+                    copied.append({
+                        "item": item["short_description"],
+                        "source": str(source),
+                        "target": str(target),
+                        "status": "kept_existing_target_missing_source",
+                    })
+                else:
+                    missing.append(str(source))
                 continue
-            # TVFlatScreenStd is a two-cell 174x101 sheet. Its native click
-            # and effect logic uses that cell geometry, so preserve it and
-            # center the VF3 artwork at the donor's bottom anchor.
             with Image.open(source).convert("RGBA") as image:
-                cell_w, cell_h = 87, 101
+                cell_w, cell_h = image.size
                 strip = Image.new("RGBA", (cell_w * 2, cell_h), (0, 0, 0, 0))
-                x = (cell_w - image.width) // 2
-                y = cell_h - image.height
-                strip.paste(image, (x, y))
-                strip.paste(image.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (cell_w + x, y))
+                strip.paste(image, (0, 0), image)
+                strip.paste(image.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (cell_w, 0), image.transpose(Image.Transpose.FLIP_LEFT_RIGHT))
                 target.parent.mkdir(parents=True, exist_ok=True)
                 strip.save(target)
-            copied.append({"item": item["short_description"], "source": str(source), "target": str(target), "size": [174, 101], "frames": 2})
+            copied.append({"item": item["short_description"], "source": str(source), "target": str(target), "size": [cell_w * 2, cell_h], "frames": 2})
     except Exception as exc:
         missing.append(str(exc))
-    manifest["vf3_tv_sprite_strips"] = {"copied": copied, "missing": missing, "donor_geometry": [174, 101]}
+    manifest["vf3_tv_sprite_strips"] = {"copied": copied, "missing": missing}
 
 
 def sync_vf3_tv_animation_sheets(manifest):
@@ -1757,26 +1794,32 @@ def sync_vf3_tv_animation_sheets(manifest):
     try:
         from PIL import Image
 
-        specs = [
-            ("Large", "FlatScreenLrgAnim"),
-            ("LargeEast", "FlatScreenLrgAnimE"),
-            ("Small", "FlatScreenSmallAnim"),
-            ("SmallEast", "FlatScreenSmallAnimE"),
-        ]
+        specs = []
+        for item in VF3_TV_ITEMS:
+            for label in item.get("animation_labels", ()):
+                specs.append((label, item["name"]))
         destination = OUT / "Images" / "VF3TVAnimations"
         destination.mkdir(parents=True, exist_ok=True)
-        # Match the two-cell furniture strip exactly: each animation cell is
-        # one 87x101 furniture cell, bottom-anchored just like the static TV.
-        cell_w, cell_h = 87, 101
-        for label, prefix in specs:
+        for label, furniture_name in specs:
+            furniture_path = OUT / "Images" / "Furniture" / f"{furniture_name}.png"
+            if furniture_path.exists():
+                with Image.open(furniture_path).convert("RGBA") as furniture:
+                    cell_w, cell_h = furniture.width // 2, furniture.height
+            else:
+                cell_w, cell_h = 87, 101
+                missing.append(f"{furniture_path}: missing, used fallback cell geometry")
             sheet = Image.new("RGBA", (cell_w * 6, cell_h * 3), (0, 0, 0, 0))
             present = 0
             supplied_sheet = LARGE_TV_ANIMATION_SHEETS.get(label)
+            frame_prefix = VF3_TV_ANIMATION_FRAME_PREFIXES[label]
             frame_dir = destination / label
             frame_dir.mkdir(parents=True, exist_ok=True)
             if supplied_sheet:
                 if not supplied_sheet.exists():
-                    missing.append(str(supplied_sheet))
+                    copied.append({
+                        "source_sheet": str(supplied_sheet),
+                        "status": "not_present_using_individual_frames",
+                    })
                 else:
                     # Never overwrite the base TV's shared TVAnimBig resources.
                     # These names are private to the added VF3 Large TV.
@@ -1813,22 +1856,40 @@ def sync_vf3_tv_animation_sheets(manifest):
                                 "size": list(frame.size),
                             })
                             present += 1
-            else:
+            if not supplied_sheet or not supplied_sheet.exists():
                 for index in range(1, 19):
-                    source = VF3_SPRITE_SOURCE_DIR / f"{prefix}_{index:02d}.png"
+                    source = VF3_SPRITE_SOURCE_DIR / f"{frame_prefix}_{index:02d}.png"
+                    if not source.exists() and frame_prefix.startswith("FlatScreenSmallAnim"):
+                        fallback_prefix = "TVAnimBigE" if label.endswith("East") else "TVAnimBig"
+                        source = VF3_SPRITE_SOURCE_DIR / f"{fallback_prefix}_{index:02d}.png"
                     if not source.exists():
                         missing.append(str(source))
                         continue
                     with Image.open(source).convert("RGBA") as frame:
                         frame_path = frame_dir / f"Frame{index:02d}.png"
                         frame.save(frame_path)
+                        # Keep the visible TV program anchored to the upper
+                        # screen area of the VF3 television art instead of the
+                        # donor TV's much larger animation canvas.
                         x = ((index - 1) % 6) * cell_w + (cell_w - frame.width) // 2
-                        y = ((index - 1) // 6) * cell_h + (cell_h - frame.height)
+                        y = ((index - 1) // 6) * cell_h + max(0, (cell_h - frame.height) // 3)
                         sheet.paste(frame, (x, y), frame)
                         present += 1
             target = destination / f"VF3TVAnim{label}.png"
             sheet.save(target)
             copied.append({"sheet": str(target), "frames": present, "grid": [6, 3], "cell": [cell_w, cell_h], "size": list(sheet.size)})
+            runtime_name = VF3_TV_RUNTIME_ANIMATION_NAMES.get(label)
+            if runtime_name:
+                runtime_target = OUT / "Images" / runtime_name
+                sheet.save(runtime_target)
+                copied.append({
+                    "sheet": str(runtime_target),
+                    "frames": present,
+                    "grid": [6, 3],
+                    "cell": [cell_w, cell_h],
+                    "size": list(sheet.size),
+                    "kind": "private_runtime_alias",
+                })
     except Exception as exc:
         missing.append(str(exc))
     manifest["vf3_tv_animation_sheets"] = {"copied": copied, "missing": missing}
@@ -5209,6 +5270,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAllAgesAutonomousCandidate(data, 0x0DF); // PlayingPachinko
     EnableAllAgesAutonomousCandidate(data, 0x099); // PlayingPooltable
     EnableAllAgesAutonomousCandidate(data, 0x096); // PlayingFoosball
+    EnableAllAgesAutonomousCandidate(data, 0x11E); // PlayOnPlayStructure / Playhouse!
     EnableAutonomousCandidate(data, 0x0ED); // DancingRadio
     EnableAutonomousCandidate(data, 0x0F5); // ListenToRadio
     EnableAutonomousCandidate(data, 0x118); // DrawingOnEasel
@@ -5220,7 +5282,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
         "status": "enabled through the autonomous AI candidate table",
         "hooks": ["CVillager::InitAI", "CVillager::LoadAI", "CVillagerAI::DecideWhatToDo"],
         "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
-        "actions": ["hammock (all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "listen to radio", "dance to radio", "drawing"],
+        "actions": ["hammock (all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "playhouse (all ages; enables children)", "listen to radio", "dance to radio", "drawing"],
         "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only in weather states 0 (neutral) and 1 (sunny).",
     }
 

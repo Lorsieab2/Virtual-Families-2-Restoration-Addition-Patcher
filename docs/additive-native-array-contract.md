@@ -10,10 +10,11 @@ New furniture must be appended to `?itemInfo@@3PAUsFurnitureInfo@@A` and exposed
 through `?itemInfoLookup@@3PAPAUsFurnitureInfo@@A`. Each appended item also
 needs a matching image descriptor, string rows, and store category membership.
 
-Store category lists are native arrays such as `gFurniture2List`,
-`gFurniture4List`, `gFurniture5List`, and `gAccessoriesList`. Adding an item to
-a category requires widening both the array/list contents and the category count
-logic used by `CInventoryManager::GetCategoryItemCount`.
+Store category lists are native arrays such as `gAppliancesList`,
+`gFurniture2List`, `gFurniture4List`, `gFurniture5List`, and
+`gAccessoriesList`. Adding an item to a category requires widening both the
+array/list contents and the category count logic used by
+`CInventoryManager::GetCategoryItemCount`.
 
 Pet-store additions follow the same rule. Hidden/mobile pet IDs are appended to
 `gPetList` and `gPetListSorted`, and the pet category count is widened by the
@@ -55,8 +56,8 @@ Drop-action behavior and spontaneous AI eligibility are separate concerns.
 
 ## Holiday Outfits
 
-Holiday body values are still opt-in through `VF2_ENABLE_HOLIDAY_BODY_TYPES=1`.
-The stable default keeps stock body values `0-49` and stock spritesheet lookup
-untouched. When enabled, holiday body/action/sit frames must be registered
+Holiday body values are enabled by default and can be disabled only for
+stock-body diagnostics with `VF2_ENABLE_HOLIDAY_BODY_TYPES=0`. Stock body values
+`0-49` stay unchanged. Holiday body/action/sit frames must be registered
 together for matching body values and must fall back to stock rendering if an
 extracted frame is missing.
