@@ -1,5 +1,18 @@
 # Discoveries
 
+## 2026-07-02 - Save-Load Crash In Debug Mouse-Move Hook
+
+- B58, B59, and B60 WER reports share exception `0xc0000005` at module offset
+  `0x0009ff8b`.
+- In B60 bytes, RVA `0x9ff70` is the patched
+  `theMainScene::HandleMouseMove(ldwPoint)` prologue. Offset `0x9ff8b` lands
+  inside the injected `_VF2PatchedDebuggerMouseMove` early-return sequence
+  (`pop ebp; ret 8`), not in General Appliances count logic.
+- B61 removes the mouse-move debug-editor hook so loaded saves keep the stock
+  `theMainScene::HandleMouseMove -> CFurnitureManager::HandleMouseMove ->
+  CToolTray::HandleMouseMove` flow. Mouse down/up/key debug hooks remain
+  available for editor entry points.
+
 ## 2026-07-02 - General Appliances Count Collision
 
 - `gAppliancesList` stock count is `15` (`0x0F`), with max index `14`

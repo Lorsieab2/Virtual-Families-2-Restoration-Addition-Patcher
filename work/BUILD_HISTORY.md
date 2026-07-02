@@ -76,6 +76,14 @@
 - Keeps the previous Accessories expansion approach intact for distinctive
   category counts.
 
+## B61 - Save-Load Mouse Hook Fix
+
+- Removes the injected `_VF2PatchedDebuggerMouseMove` early-return hook from
+  `theMainScene::HandleMouseMove`.
+- Maps the B58/B59/B60 save-load crash offset `0x0009ff8b` to that injected
+  mouse-move hook region, not to General Appliances count widening.
+- Keeps the B60 targeted appliance-count widening and the VF3 TV data intact.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

@@ -4802,7 +4802,6 @@ def patch_debug_features(manifest):
     input_hooks = [
         insert_debug_input_hook("?HandleKeyCharacter@theMainScene@@IAE?B_ND@Z", "_VF2PatchedDebuggerKeyCharacter", [0x08], 4),
         insert_debug_input_hook("?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseDown", [0x08, 0x0C], 8),
-        insert_debug_input_hook("?HandleMouseMove@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseMove", [0x08, 0x0C], 8),
         insert_debug_input_hook("?HandleMouseUp@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseUp", [0x08, 0x0C], 8),
     ]
     obj.write(PATCHED / "theMainScene.obj")
