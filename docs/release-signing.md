@@ -15,7 +15,7 @@ associated reputation would be required for that.
 
 ## Current Prerequisite Check
 
-On 2026-07-02, signing B62 failed with `SignTool Error: No certificates were
-found that met all the given criteria.` Treat the thumbprint in
+On 2026-07-02, signing B62 and B63 failed with `SignTool Error: No certificates
+were found that met all the given criteria.` Treat the thumbprint in
 `work\sign_release_build.bat` as an environment prerequisite, not a guaranteed
 local capability.

@@ -38,6 +38,13 @@
 - The local B62 signing attempt reached `signtool` but failed because the
   configured certificate thumbprint was not present in the current user's
   certificate store.
+- B62 still crashes while opening the affected save, so B63 disables debugger
+  hooks by default and leaves all `theMainScene` save-load/draw/input handlers
+  stock in normal builds. Debugger work should move to isolated opt-in research
+  builds.
+- B63's generated `work/patched_mobile_furniture_pack_objs/theMainScene.obj`
+  matches `work/desktop_obj_files/theMainScene.obj` byte-for-byte by SHA-256,
+  confirming the normal build no longer patches `theMainScene`.
 
 ## 2026-07-02 - General Appliances Count Collision
 

@@ -97,6 +97,19 @@
 - Removes the normal-startup debug log bootstrap. Debug logging begins only
   after F5 activates debugger input.
 
+## B63 - Base Mouse And Save-Load Restore
+
+- Disables debugger/editor hooks by default after B62 still crashed while
+  opening the affected save.
+- Leaves `theMainScene::HandleKeyDown`, `DrawScene`, `HandleKeyCharacter`,
+  `HandleMouseDown`, `HandleMouseMove`, and `HandleMouseUp` stock in normal
+  builds.
+- Keeps `vf2_debug_features.cpp` as an empty helper object so existing compile
+  and link response files keep working without introducing runtime behavior.
+- Adds `VF2_ENABLE_DEBUGGER_FEATURES=1` as a dev-only opt-in for isolated
+  debugger research. Even that opt-in path no longer patches main-scene mouse
+  handlers.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

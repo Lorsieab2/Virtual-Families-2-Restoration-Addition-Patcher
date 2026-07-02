@@ -16,6 +16,9 @@ SRC_OBJS = ROOT / "work" / "desktop_obj_files"
 PATCHED = ROOT / "work" / "patched_mobile_furniture_pack_objs"
 OUT = Path(os.environ.get("VF2_PATCH_OUT", ROOT / "outputs" / "VF2-Mobile-Additive-Furniture-Pack"))
 ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "1") == "1"
+# Debugger/editor hooks have repeatedly crashed during save-load and mouse
+# input. Keep normal builds stock; use this only for isolated debugger research.
+ENABLE_DEBUGGER_FEATURES = os.environ.get("VF2_ENABLE_DEBUGGER_FEATURES", "0") == "1"
 # Holiday body rows are now part of the normal additive build.  Set the env var
 # to 0 only when intentionally making a stock-body diagnostic build.
 ENABLE_HOLIDAY_BODY_TYPES = os.environ.get("VF2_ENABLE_HOLIDAY_BODY_TYPES", "1") != "0"
@@ -4805,10 +4808,6 @@ def patch_debug_features(manifest):
     obj.retarget_relocation(draw_sym.section, draw_sym.value + 0x149, draw_helper_sym, IMAGE_REL_I386_REL32)
     input_hooks = [
         insert_main_scene_keydown_hook(),
-        insert_debug_input_hook("?HandleKeyCharacter@theMainScene@@IAE?B_ND@Z", "_VF2PatchedDebuggerKeyCharacter", [0x08], 4),
-        insert_debug_input_hook("?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseDown", [0x08, 0x0C], 8),
-        insert_debug_input_hook("?HandleMouseMove@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseMove", [0x08, 0x0C], 8),
-        insert_debug_input_hook("?HandleMouseUp@theMainScene@@IAE?B_NUldwPoint@@@Z", "_VF2PatchedDebuggerMouseUp", [0x08, 0x0C], 8),
     ]
     obj.write(PATCHED / "theMainScene.obj")
 
@@ -5200,6 +5199,22 @@ extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
                 {
                     "function": "?HandleKeyUp@theMainScene@@IAE?B_NH@Z",
                     "reason": "stock function is a tiny return-false stub without a patchable prologue",
+                },
+                {
+                    "function": "?HandleKeyCharacter@theMainScene@@IAE?B_ND@Z",
+                    "reason": "left stock to reduce debugger surface area in opt-in builds",
+                },
+                {
+                    "function": "?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z",
+                    "reason": "left stock after B61/B62 mouse-path crashes",
+                },
+                {
+                    "function": "?HandleMouseMove@theMainScene@@IAE?B_NUldwPoint@@@Z",
+                    "reason": "left stock after B58-B62 save-load and mouse-path crashes",
+                },
+                {
+                    "function": "?HandleMouseUp@theMainScene@@IAE?B_NUldwPoint@@@Z",
+                    "reason": "left stock after B61/B62 mouse-path crashes",
                 }
             ],
             "registered_providers": [
@@ -5213,6 +5228,19 @@ extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
                 "Editor.obj has no exported editor class/object methods",
             ],
         },
+    }
+
+
+def write_disabled_debug_features(manifest):
+    (PATCHED / "vf2_debug_features.cpp").write_text(
+        "/* Debugger hooks are disabled for normal builds. */\n",
+        encoding="ascii",
+    )
+    manifest["debug_features"] = {
+        "status": "disabled",
+        "reason": "B61/B62 debugger hooks crashed during save-load and mouse input testing.",
+        "normal_gameplay": "theMainScene key, draw, mouse down, mouse move, and mouse up handlers remain stock.",
+        "opt_in": "Set VF2_ENABLE_DEBUGGER_FEATURES=1 only for isolated debugger research builds.",
     }
 
 
@@ -5654,7 +5682,10 @@ def main():
     patch_special_upgrade_titles(manifest)
     patch_spontaneous_behaviors(manifest)
     patch_bookshelf_reading_behavior(manifest)
-    patch_debug_features(manifest)
+    if ENABLE_DEBUGGER_FEATURES:
+        patch_debug_features(manifest)
+    else:
+        write_disabled_debug_features(manifest)
     if ENABLE_ISLAND_EVENTS:
         patch_island_events(manifest)
     else:
