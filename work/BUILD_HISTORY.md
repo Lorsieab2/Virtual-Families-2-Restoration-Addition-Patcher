@@ -109,6 +109,8 @@
 - Adds `VF2_ENABLE_DEBUGGER_FEATURES=1` as a dev-only opt-in for isolated
   debugger research. Even that opt-in path no longer patches main-scene mouse
   handlers.
+- User testing confirmed B63 opens the affected save without the B61/B62
+  debugger crash.
 
 ## Next Build Contract - Additive Native Arrays
 

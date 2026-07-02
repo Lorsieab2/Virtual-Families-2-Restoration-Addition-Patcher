@@ -45,6 +45,9 @@
 - B63's generated `work/patched_mobile_furniture_pack_objs/theMainScene.obj`
   matches `work/desktop_obj_files/theMainScene.obj` byte-for-byte by SHA-256,
   confirming the normal build no longer patches `theMainScene`.
+- User testing confirmed B63 opens the affected save without the B61/B62
+  debugger crash. Treat default-build `theMainScene` input/draw hooks as
+  off-limits until debugger support has an isolated proof path.
 
 ## 2026-07-02 - General Appliances Count Collision
 

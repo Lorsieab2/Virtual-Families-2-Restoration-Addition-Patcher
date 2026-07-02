@@ -41,9 +41,9 @@
   mobile renovation variants.
 - Make all house renovations and upgrades removable and purchasable again after
   removal.
-- Confirm B63 in-game after disabling default debugger hooks: load the affected
-  save, click normal gameplay/furniture UI, open General Appliances, place the
-  VF3 TVs, and verify base TV behavior is unchanged.
+- Continue B63 in-game validation after the confirmed save-load crash fix:
+  click normal gameplay/furniture UI, open General Appliances, place the VF3
+  TVs, and verify base TV behavior is unchanged.
 - Rebuild debugger support as an isolated opt-in/dev-only path. Do not patch
   main-scene mouse handlers in normal builds; first prove a key/display-only
   debugger path can load saves and run without crashes.
