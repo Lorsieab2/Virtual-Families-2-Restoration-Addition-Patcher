@@ -1,5 +1,16 @@
 # Discoveries
 
+## 2026-07-02 - Offline Patcher Foundation
+
+- `work/offline_vf2_patcher.py` is the source-only patcher scaffold for the
+  no-modified-EXE release path.
+- Patch manifests are JSON and currently support length-preserving byte records
+  with `file_path`, `offset`, `expected_original_bytes`, `replacement_bytes`,
+  and `note`.
+- The patcher verifies target-file metadata and expected bytes before writing,
+  creates a backup manifest, writes patch/restore logs, and restores from its
+  own backup folder.
+
 ## 2026-07-02 - Save-Load Crash In Debug Mouse-Move Hook
 
 - B58, B59, and B60 WER reports share exception `0xc0000005` at module offset
