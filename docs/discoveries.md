@@ -10,6 +10,9 @@
 - Manifests can declare toggleable settings such as `holiday_furniture`,
   `holiday_outfits`, and `mobile_furniture`; byte patches and target-file checks
   can require those settings before becoming active.
+- `work/offline_vf2_patcher_gui.py` is a Tkinter front end that generates
+  checkboxes directly from manifest settings and calls the same apply/restore
+  functions as the CLI.
 - The patcher verifies target-file metadata and expected bytes before writing,
   creates a backup manifest, writes patch/restore logs, and restores from its
   own backup folder.

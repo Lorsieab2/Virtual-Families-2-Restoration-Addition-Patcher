@@ -40,6 +40,22 @@ List the settings exposed by a manifest:
   --manifest patches\vf2-b62.json
 ```
 
+## GUI
+
+The patcher also has a source-only Tkinter GUI:
+
+```powershell
+& "C:\Path\To\Python\python.exe" work\offline_vf2_patcher_gui.py
+```
+
+The GUI is a wrapper around the same patcher functions used by the CLI. It lets
+the user choose the vanilla game folder, choose a JSON manifest, review
+manifest-declared settings as checkboxes, run a dry run, apply the selected
+patch set, and restore from a patcher backup. Checkboxes are generated from the
+manifest, so new optional components such as Holiday furniture, Holiday outfits,
+mobile-exclusive furniture, or future feature groups do not require GUI code
+changes.
+
 ## Restore
 
 ```powershell
