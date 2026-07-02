@@ -1495,6 +1495,14 @@ COUNT_PATCHES = {
     "gPet": (0x0C, 0x0D),
 }
 
+# Some store categories share the same desktop item count. Broadly replacing a
+# GetCategoryItemCount return value can widen an unrelated stock category and
+# make the store walk past the end of its original list. Keep known ambiguous
+# categories surgical.
+COUNT_RETURN_OFFSETS = {
+    "gAppliances": 0x37,
+}
+
 PET_STORE_ADDITIONS = [
     {
         "name": "Turtle",
@@ -2899,11 +2907,25 @@ def patch_inventory_manager(manifest):
         # CScrollingStoreScene asks GetCategoryItemCount() for the visible
         # row count. If these return values stay at the desktop counts, newly
         # sorted additive items appear to replace base items in the store.
-        count_return_patches[list_name] = patch_all(
-            obj.buf,
-            b"\xB8" + struct.pack("<I", old_count) + b"\x5E\x5D\xC2\x04\x00",
-            b"\xB8" + struct.pack("<I", new_count) + b"\x5E\x5D\xC2\x04\x00",
-        )
+        targeted_return_off = COUNT_RETURN_OFFSETS.get(list_name)
+        if targeted_return_off is not None:
+            count_sym = obj.symbol(GET_CATEGORY_ITEM_COUNT)
+            count_sec = obj.section(count_sym.section)
+            count_raw = count_sec.raw_ptr + count_sym.value + targeted_return_off
+            expected = b"\xB8" + struct.pack("<I", old_count) + b"\x5E\x5D\xC2\x04\x00"
+            if obj.buf[count_raw : count_raw + len(expected)] != expected:
+                raise RuntimeError(f"Unexpected targeted GetCategoryItemCount return for {list_name}")
+            obj.buf[count_raw : count_raw + 5] = b"\xB8" + struct.pack("<I", new_count)
+            count_return_patches[list_name] = {"mode": "targeted", "offset": hex(targeted_return_off), "patches": 1}
+        else:
+            count_return_patches[list_name] = {
+                "mode": "pattern",
+                "patches": patch_all(
+                    obj.buf,
+                    b"\xB8" + struct.pack("<I", old_count) + b"\x5E\x5D\xC2\x04\x00",
+                    b"\xB8" + struct.pack("<I", new_count) + b"\x5E\x5D\xC2\x04\x00",
+                ),
+            }
 
     item_sym = obj.symbol(GET_CATEGORY_ITEM)
     item_sec = obj.section(item_sym.section)
@@ -5270,7 +5292,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAllAgesAutonomousCandidate(data, 0x0DF); // PlayingPachinko
     EnableAllAgesAutonomousCandidate(data, 0x099); // PlayingPooltable
     EnableAllAgesAutonomousCandidate(data, 0x096); // PlayingFoosball
-    EnableAllAgesAutonomousCandidate(data, 0x11E); // PlayOnPlayStructure / Playhouse!
+    EnableAutonomousCandidate(data, 0x11E); // PlayOnPlayStructure / Playhouse!; preserve stock age gates
     EnableAutonomousCandidate(data, 0x0ED); // DancingRadio
     EnableAutonomousCandidate(data, 0x0F5); // ListenToRadio
     EnableAutonomousCandidate(data, 0x118); // DrawingOnEasel
@@ -5282,7 +5304,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
         "status": "enabled through the autonomous AI candidate table",
         "hooks": ["CVillager::InitAI", "CVillager::LoadAI", "CVillagerAI::DecideWhatToDo"],
         "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
-        "actions": ["hammock (all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "playhouse (all ages; enables children)", "listen to radio", "dance to radio", "drawing"],
+        "actions": ["hammock (all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "playhouse (children only; stock age gates preserved)", "listen to radio", "dance to radio", "drawing"],
         "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only in weather states 0 (neutral) and 1 (sunny).",
     }
 

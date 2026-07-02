@@ -51,6 +51,19 @@
 - Enables the Playhouse spontaneous behavior candidate for all ages, including
   children.
 
+## B59 - Crash Fix And Child-Only Playhouse
+
+- Rebuilt from the B57 folder-backed holiday-body baseline, then reapplied the
+  current additive furniture/events patch.
+- Fixes the General Appliances count widening to patch only the native
+  `GetCategoryItemCount` return for `gAppliancesList`. B58 used a broad pattern
+  replacement, which could also widen another stock category that happened to
+  return the same desktop count.
+- Keeps the added VF3 TVs on their private furniture sprites, fmaps, and
+  animation sheet names; base desktop TV assets are not overwritten.
+- Changes the Playhouse spontaneous behavior hook to preserve the stock native
+  age gates, so it is no longer enabled for all ages.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.
