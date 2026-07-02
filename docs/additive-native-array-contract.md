@@ -16,6 +16,13 @@ Store category lists are native arrays such as `gAppliancesList`,
 array/list contents and the category count logic used by
 `CInventoryManager::GetCategoryItemCount`.
 
+Count widening must be symbol-relative when a stock count is ambiguous. General
+Appliances starts at `15`, which collides with the additive pet list after
+Turtle/Hamster are enabled. The safe appliance sites are
+`CInventoryManager::GetCategoryItem` push-count offset `0x73`, max-index compare
+offset `0x95`, and `CInventoryManager::GetCategoryItemCount` return offset
+`0x37`; broad `6A 0F` or `83 FE 0E` replacement can corrupt unrelated lists.
+
 Pet-store additions follow the same rule. Hidden/mobile pet IDs are appended to
 `gPetList` and `gPetListSorted`, and the pet category count is widened by the
 same number of entries. The current source adds Turtle and Hamster as

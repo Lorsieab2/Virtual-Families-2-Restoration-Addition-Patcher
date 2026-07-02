@@ -1503,6 +1503,17 @@ COUNT_RETURN_OFFSETS = {
     "gAppliances": 0x37,
 }
 
+# General Appliances has the same desktop visible count (15) as other lists
+# after additive pet expansion, so broad byte-pattern widening can corrupt the
+# pet category. Patch the appliance case at verified symbol-relative sites.
+COUNT_PATCH_TARGETS = {
+    "gAppliances": {
+        "function": GET_CATEGORY_ITEM,
+        "sort_count_push": 0x73,
+        "max_index_cmp": 0x95,
+    },
+}
+
 PET_STORE_ADDITIONS = [
     {
         "name": "Turtle",
@@ -1565,6 +1576,36 @@ def patch_all_in_sections(obj: CoffObject, section_names, old: bytes, new: bytes
             n += 1
             pos = hit + len(new)
     return n
+
+
+def patch_count_sites(obj, list_name, old_max, old_count, new_max_index, new_count):
+    target = COUNT_PATCH_TARGETS.get(list_name)
+    if target is None:
+        n = 0
+        n += patch_all(obj.buf, b"\x83\xFE" + bytes([old_max]), b"\x83\xFE" + bytes([new_max_index]))
+        n += patch_all(obj.buf, b"\x6A" + bytes([old_count]), b"\x6A" + bytes([new_count]))
+        n += patch_all(obj.buf, b"\xC7\x45\x08" + struct.pack("<I", old_count), b"\xC7\x45\x08" + struct.pack("<I", new_count))
+        return {"mode": "pattern", "patches": n}
+
+    sym = obj.symbol(target["function"])
+    sec = obj.section(sym.section)
+    patches = []
+
+    push_raw = sec.raw_ptr + sym.value + target["sort_count_push"]
+    expected_push = b"\x6A" + bytes([old_count])
+    if obj.buf[push_raw : push_raw + len(expected_push)] != expected_push:
+        raise RuntimeError(f"Unexpected {list_name} sort-count push bytes")
+    obj.buf[push_raw : push_raw + len(expected_push)] = b"\x6A" + bytes([new_count])
+    patches.append({"site": "sort_count_push", "offset": hex(target["sort_count_push"])})
+
+    cmp_raw = sec.raw_ptr + sym.value + target["max_index_cmp"]
+    expected_cmp = b"\x83\xFE" + bytes([old_max])
+    if obj.buf[cmp_raw : cmp_raw + len(expected_cmp)] != expected_cmp:
+        raise RuntimeError(f"Unexpected {list_name} max-index compare bytes")
+    obj.buf[cmp_raw : cmp_raw + len(expected_cmp)] = b"\x83\xFE" + bytes([new_max_index])
+    patches.append({"site": "max_index_cmp", "offset": hex(target["max_index_cmp"])})
+
+    return {"mode": "targeted", "function": target["function"], "patches": patches}
 
 
 def item_id_for(idx):
@@ -2899,11 +2940,7 @@ def patch_inventory_manager(manifest):
         old_max, old_count = COUNT_PATCHES[list_name]
         new_count = info["new_count"]
         new_max_index = new_count - 1
-        n = 0
-        n += patch_all(obj.buf, b"\x83\xFE" + bytes([old_max]), b"\x83\xFE" + bytes([new_max_index]))
-        n += patch_all(obj.buf, b"\x6A" + bytes([old_count]), b"\x6A" + bytes([new_count]))
-        n += patch_all(obj.buf, b"\xC7\x45\x08" + struct.pack("<I", old_count), b"\xC7\x45\x08" + struct.pack("<I", new_count))
-        count_patches[list_name] = n
+        count_patches[list_name] = patch_count_sites(obj, list_name, old_max, old_count, new_max_index, new_count)
         # CScrollingStoreScene asks GetCategoryItemCount() for the visible
         # row count. If these return values stay at the desktop counts, newly
         # sorted additive items appear to replace base items in the store.

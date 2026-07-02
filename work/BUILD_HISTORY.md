@@ -64,6 +64,18 @@
 - Changes the Playhouse spontaneous behavior hook to preserve the stock native
   age gates, so it is no longer enabled for all ages.
 
+## B60 - Targeted Appliance Count Widening
+
+- Fixes the remaining B59 startup-crash risk by making General Appliances count
+  widening fully symbol-relative instead of partially pattern-based.
+- Patches `CInventoryManager::GetCategoryItem` appliance offsets `0x73` and
+  `0x95`, and keeps the `CInventoryManager::GetCategoryItemCount` return patch
+  targeted at offset `0x37`.
+- Prevents the VF3 TV appliance count increase from also widening `gPetList`,
+  whose additive count is also `15` after Turtle/Hamster support.
+- Keeps the previous Accessories expansion approach intact for distinctive
+  category counts.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.
