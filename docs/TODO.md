@@ -2,10 +2,18 @@
 
 ## Highest Priority
 
-- Build a vanilla-to-modded VF2 PC patcher that takes a clean/vanilla PC build,
-  verifies the expected input version, applies the project patches and added
-  data, and produces a reproducible modded build without requiring distribution
-  of stale prepatched executables when avoidable.
+- Refactor the mod so releases stop distributing modified executables. Build an
+  offline vanilla-to-modded VF2 PC patcher that takes a user-provided original
+  VF2 executable, verifies the original EXE hash/version before patching,
+  creates a backup, applies clean patch records from a JSON patch manifest, and
+  writes a patch log.
+- Define the JSON patch manifest contract: each patch record must include file
+  path, offset, expected original bytes, replacement bytes, and note. The
+  patcher must refuse to patch when expected bytes do not match, and it must
+  provide a restore option that can put the backed-up original files back.
+- Keep the offline patcher simple and trust-friendly: avoid runtime injection,
+  process memory editing, obfuscation, packers, and admin requirements. Prefer
+  data, asset, and table patches over executable patches whenever possible.
 - Make antivirus false-positive reduction the top packaging priority. Prefer
   transparent patching and reproducible build artifacts over packed/obfuscated
   executables, preserve normal PE metadata where possible, sign the patcher and
