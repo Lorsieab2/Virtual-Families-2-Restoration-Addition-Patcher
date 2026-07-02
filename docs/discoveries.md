@@ -7,6 +7,9 @@
 - Patch manifests are JSON and currently support length-preserving byte records
   with `file_path`, `offset`, `expected_original_bytes`, `replacement_bytes`,
   and `note`.
+- Manifests can declare toggleable settings such as `holiday_furniture`,
+  `holiday_outfits`, and `mobile_furniture`; byte patches and target-file checks
+  can require those settings before becoming active.
 - The patcher verifies target-file metadata and expected bytes before writing,
   creates a backup manifest, writes patch/restore logs, and restores from its
   own backup folder.

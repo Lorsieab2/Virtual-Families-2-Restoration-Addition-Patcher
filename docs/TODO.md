@@ -7,8 +7,9 @@
   VF2 executable, verifies the original EXE hash/version before patching,
   creates a backup, applies clean patch records from a JSON patch manifest, and
   writes a patch log. Initial byte-patch/restore scaffold exists in
-  `work/offline_vf2_patcher.py`; next step is converting current VF2 build
-  changes into release manifests and asset/table patch records.
+  `work/offline_vf2_patcher.py`, including manifest-declared toggleable
+  settings; next step is converting current VF2 build changes into release
+  manifests and asset/table patch records.
 - Define the JSON patch manifest contract: each patch record must include file
   path, offset, expected original bytes, replacement bytes, and note. The
   patcher must refuse to patch when expected bytes do not match, and it must

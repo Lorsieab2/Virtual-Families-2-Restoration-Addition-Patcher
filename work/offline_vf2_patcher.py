@@ -39,6 +39,15 @@ class BytePatch:
     expected: bytes
     replacement: bytes
     note: str
+    requires: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PatchSetting:
+    id: str
+    label: str
+    description: str
+    default: bool
 
 
 def utc_now() -> str:
@@ -102,6 +111,25 @@ def parse_int(value: Any, field: str) -> int:
             raise PatchError(f"{field} must be non-negative.")
         return parsed
     raise PatchError(f"{field} must be an integer or 0x-prefixed string.")
+
+
+def normalize_setting_id(value: Any, field: str = "setting id") -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise PatchError(f"{field} must be a non-empty string.")
+    setting_id = value.strip()
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", setting_id):
+        raise PatchError(f"{field} contains unsupported characters: {value!r}")
+    return setting_id
+
+
+def split_cli_ids(values: list[str] | None, field: str) -> list[str]:
+    ids: list[str] = []
+    for value in values or []:
+        for part in value.split(","):
+            part = part.strip()
+            if part:
+                ids.append(normalize_setting_id(part, field))
+    return ids
 
 
 def normalize_rel_path(value: Any, field: str = "file path") -> str:
@@ -190,7 +218,114 @@ def windows_file_versions(path: Path) -> dict[str, str]:
         return {}
 
 
-def manifest_patches(manifest: dict[str, Any]) -> list[BytePatch]:
+def manifest_settings(manifest: dict[str, Any]) -> dict[str, PatchSetting]:
+    raw_settings = manifest.get("settings", [])
+    settings: dict[str, PatchSetting] = {}
+    rows: list[dict[str, Any]]
+    if isinstance(raw_settings, dict):
+        rows = []
+        for setting_id, raw in raw_settings.items():
+            if raw is None:
+                raw = {}
+            if not isinstance(raw, dict):
+                raise PatchError(f"Setting {setting_id!r} must be an object.")
+            rows.append({"id": setting_id, **raw})
+    elif isinstance(raw_settings, list):
+        rows = raw_settings
+    else:
+        raise PatchError("Manifest 'settings' must be an object or array when present.")
+
+    for index, raw in enumerate(rows):
+        if not isinstance(raw, dict):
+            raise PatchError(f"Setting #{index} must be an object.")
+        setting_id = normalize_setting_id(raw.get("id"), f"setting #{index} id")
+        if setting_id in settings:
+            raise PatchError(f"Duplicate setting id: {setting_id}")
+        settings[setting_id] = PatchSetting(
+            id=setting_id,
+            label=str(raw.get("label", setting_id)).strip() or setting_id,
+            description=str(raw.get("description", "")).strip(),
+            default=bool(raw.get("default", False)),
+        )
+    return settings
+
+
+def record_requires(raw: dict[str, Any], field: str) -> tuple[str, ...]:
+    values: list[Any] = []
+    for key in ("requires", "settings"):
+        value = raw.get(key)
+        if isinstance(value, list):
+            values.extend(value)
+        elif isinstance(value, str):
+            values.extend(part.strip() for part in value.split(",") if part.strip())
+        elif value is not None:
+            raise PatchError(f"{field} {key!r} must be a string or array.")
+    for key in ("setting", "feature"):
+        value = raw.get(key)
+        if value is not None:
+            values.append(value)
+    normalized: list[str] = []
+    for index, value in enumerate(values):
+        setting_id = normalize_setting_id(value, f"{field} setting #{index}")
+        if setting_id not in normalized:
+            normalized.append(setting_id)
+    return tuple(normalized)
+
+
+def ensure_known_settings(requires: tuple[str, ...], settings: dict[str, PatchSetting], field: str) -> None:
+    unknown = [setting_id for setting_id in requires if setting_id not in settings]
+    if unknown:
+        raise PatchError(f"{field} references unknown setting(s): {', '.join(unknown)}")
+
+
+def record_is_active(requires: tuple[str, ...], enabled_settings: set[str]) -> bool:
+    return set(requires).issubset(enabled_settings)
+
+
+def resolve_enabled_settings(manifest: dict[str, Any], args: argparse.Namespace) -> tuple[dict[str, PatchSetting], set[str]]:
+    settings = manifest_settings(manifest)
+    if args.enable_all and args.disable_all:
+        raise PatchError("--enable-all and --disable-all cannot be used together.")
+
+    if args.enable_all:
+        enabled = set(settings)
+    elif args.disable_all:
+        enabled = set()
+    else:
+        enabled = {setting_id for setting_id, setting in settings.items() if setting.default}
+
+    enable_ids = split_cli_ids(args.enable, "--enable")
+    disable_ids = split_cli_ids(args.disable, "--disable")
+    for setting_id in enable_ids + disable_ids:
+        if setting_id not in settings:
+            raise PatchError(f"Unknown setting: {setting_id}")
+    enabled.update(enable_ids)
+    enabled.difference_update(disable_ids)
+    return settings, enabled
+
+
+def settings_log(settings: dict[str, PatchSetting], enabled: set[str]) -> dict[str, Any]:
+    return {
+        "enabled": sorted(enabled),
+        "disabled": sorted(set(settings) - enabled),
+        "available": [
+            {
+                "id": setting.id,
+                "label": setting.label,
+                "description": setting.description,
+                "default": setting.default,
+                "enabled": setting.id in enabled,
+            }
+            for setting in settings.values()
+        ],
+    }
+
+
+def manifest_patches(
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+    enabled_settings: set[str],
+) -> list[BytePatch]:
     raw_patches = manifest.get("patches")
     if not isinstance(raw_patches, list):
         raise PatchError("Manifest must contain a 'patches' array.")
@@ -202,6 +337,10 @@ def manifest_patches(manifest: dict[str, Any]) -> list[BytePatch]:
         expected_value = raw.get("expected_original_bytes", raw.get("expected", raw.get("original")))
         replacement_value = raw.get("replacement_bytes", raw.get("replacement", raw.get("new")))
         file_path = normalize_rel_path(file_value, f"patch #{index} file path")
+        requires = record_requires(raw, f"patch #{index}")
+        ensure_known_settings(requires, settings, f"Patch #{index}")
+        if not record_is_active(requires, enabled_settings):
+            continue
         expected = parse_hex_bytes(expected_value, f"patch #{index} expected bytes")
         replacement = parse_hex_bytes(replacement_value, f"patch #{index} replacement bytes")
         if not expected:
@@ -219,8 +358,11 @@ def manifest_patches(manifest: dict[str, Any]) -> list[BytePatch]:
                 expected=expected,
                 replacement=replacement,
                 note=str(raw.get("note", "")).strip(),
+                requires=requires,
             )
         )
+    if not patches:
+        raise PatchError("No active patches remain after applying setting selections.")
     return patches
 
 
@@ -235,7 +377,12 @@ def manifest_target_files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
-def verify_target_files(game_dir: Path, manifest: dict[str, Any]) -> list[dict[str, Any]]:
+def verify_target_files(
+    game_dir: Path,
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+    enabled_settings: set[str],
+) -> list[dict[str, Any]]:
     target_files = manifest_target_files(manifest)
     if not target_files:
         raise PatchError("Manifest must contain target_files with at least the original EXE SHA-256.")
@@ -245,6 +392,10 @@ def verify_target_files(game_dir: Path, manifest: dict[str, Any]) -> list[dict[s
     for index, raw in enumerate(target_files):
         if not isinstance(raw, dict):
             raise PatchError(f"Target file #{index} must be an object.")
+        requires = record_requires(raw, f"target file #{index}")
+        ensure_known_settings(requires, settings, f"Target file #{index}")
+        if not record_is_active(requires, enabled_settings):
+            continue
         rel_path = normalize_rel_path(raw.get("file_path", raw.get("file", raw.get("path"))), f"target file #{index}")
         path = resolve_under_game_dir(game_dir, rel_path)
         if not path.is_file():
@@ -289,6 +440,7 @@ def verify_target_files(game_dir: Path, manifest: dict[str, Any]) -> list[dict[s
                 "sha256": actual_sha,
                 "size": actual_size,
                 "pe_timestamp": None if actual_timestamp is None else f"0x{actual_timestamp:08x}",
+                "requires": list(requires),
                 **version_info,
             }
         )
@@ -398,6 +550,7 @@ def patch_summary(grouped: dict[str, list[BytePatch]]) -> list[dict[str, Any]]:
                     "length": len(patch.expected),
                     "expected_original_bytes": patch.expected.hex(" "),
                     "replacement_bytes": patch.replacement.hex(" "),
+                    "requires": list(patch.requires),
                     "note": patch.note,
                 }
             )
@@ -410,9 +563,10 @@ def apply_manifest(args: argparse.Namespace) -> int:
     if not game_dir.is_dir():
         raise PatchError(f"Game directory does not exist: {game_dir}")
     manifest = read_json(manifest_path)
-    patches = manifest_patches(manifest)
+    settings, enabled_settings = resolve_enabled_settings(manifest, args)
+    patches = manifest_patches(manifest, settings, enabled_settings)
     grouped = group_patches(patches)
-    target_checks = verify_target_files(game_dir, manifest)
+    target_checks = verify_target_files(game_dir, manifest, settings, enabled_settings)
     file_data = verify_patch_bytes(game_dir, grouped)
 
     backup_dir = None
@@ -446,6 +600,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
         "game_dir": str(game_dir),
         "manifest": str(manifest_path),
         "manifest_name": manifest.get("name"),
+        "settings": settings_log(settings, enabled_settings),
         "target_checks": target_checks,
         "backup_dir": None if backup_dir is None else str(backup_dir),
         "backup_manifest": backup_manifest,
@@ -455,12 +610,34 @@ def apply_manifest(args: argparse.Namespace) -> int:
     log_path = Path(args.log).resolve() if args.log else (backup_dir / "patch_log.json" if backup_dir else game_dir / "patch_dry_run_log.json")
     write_json(log_path, log)
 
-    print(f"Validated {len(patches)} patch record(s) across {len(grouped)} file(s).")
+    if settings:
+        print("Enabled settings: " + (", ".join(sorted(enabled_settings)) if enabled_settings else "(none)"))
+    print(f"Validated {len(patches)} active patch record(s) across {len(grouped)} file(s).")
     if args.dry_run:
         print(f"Dry run complete. Log: {log_path}")
     else:
         print(f"Patched files successfully. Backup: {backup_dir}")
         print(f"Patch log: {log_path}")
+    return 0
+
+
+def list_manifest_settings(args: argparse.Namespace) -> int:
+    manifest_path = Path(args.manifest).resolve()
+    manifest = read_json(manifest_path)
+    settings = manifest_settings(manifest)
+    if args.json:
+        write_json(Path(args.json), {"manifest": str(manifest_path), "settings": settings_log(settings, {s for s, row in settings.items() if row.default})})
+        print(f"Settings JSON written: {Path(args.json).resolve()}")
+        return 0
+    if not settings:
+        print("This manifest does not declare toggleable settings.")
+        return 0
+    for setting in settings.values():
+        state = "default on" if setting.default else "default off"
+        line = f"{setting.id} [{state}] - {setting.label}"
+        if setting.description:
+            line += f": {setting.description}"
+        print(line)
     return 0
 
 
@@ -513,7 +690,16 @@ def build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--backup-dir", help="Backup output directory. Defaults under the game directory.")
     apply_cmd.add_argument("--log", help="Patch log JSON path. Defaults inside the backup directory.")
     apply_cmd.add_argument("--dry-run", action="store_true", help="Validate only; do not back up or modify files.")
+    apply_cmd.add_argument("--enable", action="append", help="Enable a manifest setting. Repeat or comma-separate IDs.")
+    apply_cmd.add_argument("--disable", action="append", help="Disable a manifest setting. Repeat or comma-separate IDs.")
+    apply_cmd.add_argument("--enable-all", action="store_true", help="Enable all manifest-declared settings before patching.")
+    apply_cmd.add_argument("--disable-all", action="store_true", help="Disable all manifest-declared settings before patching.")
     apply_cmd.set_defaults(func=apply_manifest)
+
+    settings_cmd = sub.add_parser("settings", help="List toggleable settings declared by a manifest.")
+    settings_cmd.add_argument("--manifest", required=True, help="Path to the JSON patch manifest.")
+    settings_cmd.add_argument("--json", help="Optional path to write settings metadata as JSON.")
+    settings_cmd.set_defaults(func=list_manifest_settings)
 
     restore_cmd = sub.add_parser("restore", help="Restore files from a patcher backup directory.")
     restore_cmd.add_argument("--backup-dir", required=True, help="Backup directory created by apply.")

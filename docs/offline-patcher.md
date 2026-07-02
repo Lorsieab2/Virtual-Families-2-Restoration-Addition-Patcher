@@ -23,12 +23,22 @@ patches from JSON manifests and can restore files from its own backups.
 ```powershell
 & "C:\Path\To\Python\python.exe" work\offline_vf2_patcher.py apply `
   --game-dir "C:\Games\Virtual Families 2" `
-  --manifest patches\vf2-b62.json
+  --manifest patches\vf2-b62.json `
+  --enable holiday_furniture `
+  --disable holiday_outfits
 ```
 
 Use `--dry-run` to validate hashes and expected bytes without writing files.
 Use `--backup-dir` and `--log` to control where the backup and patch log are
-written.
+written. Use `--enable`, `--disable`, `--enable-all`, and `--disable-all` to
+choose manifest-declared feature settings before patching.
+
+List the settings exposed by a manifest:
+
+```powershell
+& "C:\Path\To\Python\python.exe" work\offline_vf2_patcher.py settings `
+  --manifest patches\vf2-b62.json
+```
 
 ## Restore
 
@@ -46,6 +56,26 @@ folder and copies the original files back.
 {
   "manifest_version": 1,
   "name": "VF2 example patch",
+  "settings": [
+    {
+      "id": "holiday_furniture",
+      "label": "Add Holiday furniture",
+      "description": "Adds mobile holiday furniture to the PC build.",
+      "default": false
+    },
+    {
+      "id": "holiday_outfits",
+      "label": "Add Holiday outfits",
+      "description": "Enables folder-backed holiday outfit rows.",
+      "default": false
+    },
+    {
+      "id": "mobile_furniture",
+      "label": "Add additional mobile-exclusive furniture",
+      "description": "Adds non-holiday mobile-exclusive furniture.",
+      "default": true
+    }
+  ],
   "target_files": [
     {
       "path": "Virtual Families 2.exe",
@@ -61,6 +91,7 @@ folder and copies the original files back.
       "offset": "0x1234",
       "expected_original_bytes": "AA BB CC DD",
       "replacement_bytes": "11 22 33 44",
+      "requires": ["holiday_furniture"],
       "note": "Explain why this patch exists."
     }
   ]
@@ -76,6 +107,33 @@ the executable hash.
 Each byte patch must be length-preserving. Length-changing edits should be
 represented as asset/table replacement work or by adding a future manifest
 record type with its own safety rules. Overlapping byte patches are refused.
+
+## Toggleable Settings
+
+Settings let a release manifest expose optional components before patching, such
+as:
+
+- `holiday_furniture` - Add Holiday furniture.
+- `holiday_outfits` - Add Holiday outfits.
+- `mobile_furniture` - Add additional mobile-exclusive furniture.
+
+Patch records and target-file checks can include `requires`, `settings`, or
+`setting`. A record is active only when all required settings are enabled. If a
+record has no setting requirement, it is always active.
+
+Settings default to off unless the manifest sets `"default": true`. Command-line
+flags can override those defaults:
+
+```powershell
+--enable holiday_furniture
+--disable holiday_outfits
+--enable holiday_furniture,mobile_furniture
+--enable-all
+--disable-all
+```
+
+Patch logs include the available, enabled, and disabled settings used for the
+run.
 
 ## Release Notes
 
