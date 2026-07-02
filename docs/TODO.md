@@ -11,6 +11,12 @@
   villager behavior routes for those furniture items.
 - Implement the correct outcomes for added mobile-exclusive Island Events.
   Current added events can fire but do not yet perform their mobile outcomes.
+- Allow the second bathroom to have water leaks like the first bathroom; the
+  current first-bathroom-only leak behavior is an inconsistency.
+- Allow the Kitchen, Workshop, and Office to be renovated with their exclusive
+  mobile renovation variants.
+- Make all house renovations and upgrades removable and purchasable again after
+  removal.
 - Confirm B61 in-game after the save-load crash fix: load the affected save,
   open General Appliances,
   place the VF3 TVs, and verify base TV behavior is unchanged.
