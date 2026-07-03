@@ -380,3 +380,15 @@
   added VF3 TV private enum assignments at those offsets; base
   `TVAnimBig*.png` / `TVAnimSmall*.png`, click behavior, furniture behavior,
   and villager behavior remain untouched.
+
+## 2026-07-03 - VF3 TV Patcher Contract Guard
+
+- `work/patch_mobile_furniture_pack.py` now calls
+  `validate_vf3_tv_animation_contract()` before writing `patch-manifest.json`.
+  The guard verifies generated `FurnitureManager.vf3_tv_animation_records`
+  map frame `0` to the non-East private strip and frame `1` to the East
+  private strip for the Large, Small, and Father's Favorite VF3 TVs.
+- The same guard checks the private `CFloatingAnim` entries, generated graphics
+  descriptors, runtime animation names, and missing-asset list. A future build
+  that reintroduces the swapped B77 frame enum order fails during patcher
+  generation instead of producing a bad build or offline-patcher bundle source.

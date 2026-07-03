@@ -7118,6 +7118,98 @@ def patch_added_furniture_click_aliases(manifest):
     }
 
 
+def validate_vf3_tv_animation_contract(manifest, *, check_files=True):
+    """Fail fast if added VF3 TVs drift back to a bad animation orientation."""
+    errors = []
+    records = {
+        row.get("item"): row
+        for row in manifest.get("FurnitureManager", {}).get("vf3_tv_animation_records", [])
+        if isinstance(row, dict)
+    }
+    graphic_descs = {
+        row.get("label"): row
+        for row in manifest.get("theGraphicsManager", {})
+        .get("vf3_tv_floating_animation_images", {})
+        .get("descriptors", [])
+        if isinstance(row, dict)
+    }
+    floating_entries = {
+        row.get("label"): row
+        for row in manifest.get("FloatingAnim", {}).get("private_vf3_tv_entries", [])
+        if isinstance(row, dict)
+    }
+
+    for item in VF3_TV_ITEMS:
+        frame0_label, frame1_label = item["animation_labels"]
+        row = records.get(item["short_description"])
+        if row is None:
+            errors.append(f"missing VF3 TV animation record for {item['short_description']}")
+            continue
+        expected = {
+            "item_id": hex(item["item_id"]),
+            "frame0_label": frame0_label,
+            "frame1_label": frame1_label,
+            "frame0_enum": hex(VF3_TV_FLOATING_ANIMS[frame0_label]["enum"]),
+            "frame1_enum": hex(VF3_TV_FLOATING_ANIMS[frame1_label]["enum"]),
+        }
+        for key, value in expected.items():
+            if row.get(key) != value:
+                errors.append(f"{item['short_description']} {key} expected {value}, got {row.get(key)}")
+
+    for label, info in VF3_TV_FLOATING_ANIMS.items():
+        expected_enum = hex(info["enum"])
+        expected_runtime = VF3_TV_RUNTIME_ANIMATION_NAMES[label]
+        graphic = graphic_descs.get(label)
+        floating = floating_entries.get(label)
+        if graphic is None:
+            errors.append(f"missing graphics descriptor for VF3 TV animation {label}")
+        else:
+            if graphic.get("floating_anim_enum") != expected_enum:
+                errors.append(
+                    f"{label} graphics descriptor enum expected {expected_enum}, got {graphic.get('floating_anim_enum')}"
+                )
+            if graphic.get("path") != expected_runtime:
+                errors.append(f"{label} graphics descriptor path expected {expected_runtime}, got {graphic.get('path')}")
+            if graphic.get("grid") != [6, 3]:
+                errors.append(f"{label} graphics descriptor grid expected [6, 3], got {graphic.get('grid')}")
+        if floating is None:
+            errors.append(f"missing floating-animation table entry for VF3 TV animation {label}")
+        else:
+            if floating.get("enum") != expected_enum:
+                errors.append(f"{label} floating-animation enum expected {expected_enum}, got {floating.get('enum')}")
+            if floating.get("runtime_name") != expected_runtime:
+                errors.append(
+                    f"{label} floating-animation runtime expected {expected_runtime}, got {floating.get('runtime_name')}"
+                )
+            if floating.get("frames") != 18:
+                errors.append(f"{label} floating-animation frame count expected 18, got {floating.get('frames')}")
+        if check_files:
+            runtime_path = OUT / "Images" / expected_runtime
+            if not runtime_path.is_file():
+                errors.append(f"missing generated VF3 TV runtime animation asset: {runtime_path}")
+
+    missing_assets = manifest.get("vf3_tv_animation_sheets", {}).get("missing", [])
+    if missing_assets:
+        errors.append(f"missing VF3 TV animation source/output assets: {missing_assets}")
+    if errors:
+        raise RuntimeError("VF3 TV animation contract failed:\n- " + "\n- ".join(errors))
+
+    manifest["vf3_tv_animation_contract"] = {
+        "status": "validated",
+        "frame_order": "generated furniture frame 0 uses the non-East private strip; frame 1 uses the East private strip",
+        "items": [
+            {
+                "item": item["short_description"],
+                "item_id": hex(item["item_id"]),
+                "frame0_label": item["animation_labels"][0],
+                "frame1_label": item["animation_labels"][1],
+            }
+            for item in VF3_TV_ITEMS
+        ],
+        "runtime_assets": list(VF3_TV_RUNTIME_ANIMATION_NAMES.values()),
+    }
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     copy_obj_tree()
@@ -7213,6 +7305,7 @@ def main():
     restore_supplied_game_table_sprites(manifest)
     normalize_added_furniture_sheets(manifest)
     write_internal_workings_summary(manifest)
+    validate_vf3_tv_animation_contract(manifest)
     (OUT / "patch-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(json.dumps(manifest, indent=2))
 

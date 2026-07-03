@@ -28,6 +28,10 @@
   Holiday Ornaments collection art/native table/achievement records, the B77
   Playhouse child-only autonomous candidate max-age gate, and the B78 VF3 TV
   frame enum-order swap without distributing a premodified EXE.
+- When exporting offline patcher manifests, feed the generated build manifest
+  through `validate_vf3_tv_animation_contract()` or an equivalent release
+  validation step so malformed VF3 TV east/west frame enum assignments are
+  rejected before publication.
 - Make antivirus false-positive reduction the top packaging priority. Prefer
   transparent patching and reproducible build artifacts over packed/obfuscated
   executables, preserve normal PE metadata where possible, sign the patcher and
