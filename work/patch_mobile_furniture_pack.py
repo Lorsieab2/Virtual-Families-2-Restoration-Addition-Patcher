@@ -147,6 +147,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x119: "HealthPlan_icon.png",
     0x11A: "LuckyRock_icon.png",
 }
+VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHARACTER_SHEET_SPECS = {
     "female_heads": {
         "image_id": 576,
@@ -2585,6 +2586,50 @@ def sync_outfit_store_icon_art(manifest):
     }
 
 
+def sync_visible_special_upgrade_icon_art(manifest):
+    output_root = OUT / "Images"
+    output_root.mkdir(parents=True, exist_ok=True)
+    entries = []
+    missing = []
+
+    for item_id, filename in VISIBLE_SPECIAL_UPGRADE_ICON_FILES.items():
+        target = output_root / filename
+        source = None
+        status = "existing"
+        if not target.exists():
+            for root in _outfit_icon_source_roots():
+                candidate = root / filename
+                if candidate.exists() and candidate.resolve() != target.resolve():
+                    source = candidate
+                    break
+            if source:
+                shutil.copy2(source, target)
+                status = "copied"
+            else:
+                missing.append(filename)
+                status = "missing"
+        else:
+            source = target
+
+        entries.append({
+            "item_id": hex(item_id),
+            "image_id": hex(visible_special_upgrade_icon_id_for(item_id)),
+            "path": filename,
+            "source": str(source) if source else None,
+            "status": status,
+            "size": list(read_png_size(target) or []),
+        })
+
+    manifest["visible_special_upgrade_icon_art"] = {
+        "status": "available" if not missing else "partial_or_missing",
+        "root": str(output_root),
+        "image_base": hex(visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))),
+        "expected_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
+        "entries": entries,
+        "missing": missing,
+    }
+
+
 def patch_holiday_body_lookup(manifest):
     """Allow the native animator to address the four additive outfit rows.
 
@@ -3470,6 +3515,11 @@ def patch_visible_special_upgrades(manifest):
             "hook": "?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z + 0x3",
             "helper": "_VF2GetVisibleSpecialUpgradePrice",
         },
+        "icon_draw_route": {
+            "status": "shared added-item DrawItem hook draws these standalone icon descriptors",
+            "image_base": hex(visible_special_upgrade_icon_id_for(0x117)),
+            "image_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
+        },
     }
 
 
@@ -3496,6 +3546,10 @@ static const int kVF2OutfitStoreHolidayFirst = {HOLIDAY_BODY_VALUES[0]};
 static const int kVF2OutfitStoreShortStringBase = {first_short};
 static const int kVF2OutfitStoreIconImageBase = {outfit_icon_image_base(HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)};
 static const int kVF2OutfitStoreIconCellSize = {HOLIDAY_BODY_CELL_SIZE};
+static const int kVF2VisibleSpecialUpgradeFirstItem = {min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)};
+static const int kVF2VisibleSpecialUpgradeCount = {len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)};
+static const int kVF2VisibleSpecialUpgradeIconImageBase = {visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))};
+static const int kVF2VisibleSpecialUpgradeIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
 
 static int VF2OutfitStoreEntryIndex(int itemId) {{
     int femaleBody = itemId - kVF2OutfitStoreFemaleItemBase;
@@ -3541,11 +3595,29 @@ extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
     return index < 0 ? -1 : kVF2OutfitStoreIconImageBase + index;
 }}
 
-extern "C" bool __cdecl VF2DrawOutfitStoreIconPoint(int x, int y, int itemId, int state, int position, int selected) {{
+static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
+    int index = itemId - kVF2VisibleSpecialUpgradeFirstItem;
+    return index < 0 || index >= kVF2VisibleSpecialUpgradeCount ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
+}}
+
+static int VF2GetAddedStoreIconImage(int itemId) {{
     int image = VF2GetOutfitStoreIconImage(itemId);
+    if (image >= 0) return image;
+    return VF2GetVisibleSpecialUpgradeIconImage(itemId);
+}}
+
+static int VF2GetAddedStoreIconCellSize(int itemId) {{
+    return VF2GetVisibleSpecialUpgradeIconImage(itemId) >= 0
+        ? kVF2VisibleSpecialUpgradeIconCellSize
+        : kVF2OutfitStoreIconCellSize;
+}}
+
+extern "C" bool __cdecl VF2DrawOutfitStoreIconPoint(int x, int y, int itemId, int state, int position, int selected) {{
+    int image = VF2GetAddedStoreIconImage(itemId);
     if (image < 0) return false;
+    int cellSize = VF2GetAddedStoreIconCellSize(itemId);
     theGraphicsManager* graphics = theGraphicsManager::Get();
-    if (graphics) graphics->Draw((EImage)image, x - kVF2OutfitStoreIconCellSize / 2, y - kVF2OutfitStoreIconCellSize / 2, 1.0f, 100);
+    if (graphics) graphics->Draw((EImage)image, x - cellSize / 2, y - cellSize / 2, 1.0f, 100);
     return true;
 }}
 
@@ -3559,12 +3631,13 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
     int position,
     int selected
 ) {{
-    int image = VF2GetOutfitStoreIconImage(itemId);
+    int image = VF2GetAddedStoreIconImage(itemId);
     if (image < 0) return false;
+    int cellSize = VF2GetAddedStoreIconCellSize(itemId);
     theGraphicsManager* graphics = theGraphicsManager::Get();
     if (graphics) {{
-        int x = left + ((right - left) - kVF2OutfitStoreIconCellSize) / 2;
-        int y = top + ((bottom - top) - kVF2OutfitStoreIconCellSize) / 2;
+        int x = left + ((right - left) - cellSize) / 2;
+        int y = top + ((bottom - top) - cellSize) / 2;
         graphics->Draw((EImage)image, x, y, 1.0f, 100);
     }}
     return true;
@@ -3581,6 +3654,9 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
         "short_string_base": hex(first_short),
         "icon_image_base": hex(outfit_icon_image_base(HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)),
         "icon_count": OUTFIT_STORE_ENTRY_COUNT,
+        "visible_special_upgrade_icon_base": hex(visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))),
+        "visible_special_upgrade_icon_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
+        "draw_route": "shared DrawItem hook resolves outfit icons and added visible Special Upgrade icons",
     }
 
 
@@ -3963,8 +4039,9 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
             },
             "dialog": "disabled for stability; the native hidden-IAP message box path produced blank/crashing dialogs when called from visible Store rows",
             "icons": {
-                "status": "disabled in this crash rollback build; standalone descriptors remain present for a safer future draw path",
+                "status": "drawn by the shared CInventoryManager::DrawItem added-item hook",
                 "image_base": hex(visible_special_upgrade_icon_id_for(0x117)),
+                "image_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
             },
         },
     }
@@ -6162,6 +6239,7 @@ def main():
     if ENABLE_HOLIDAY_BODY_TYPES:
         sync_holiday_body_runtime_frames(manifest)
     sync_outfit_store_icon_art(manifest)
+    sync_visible_special_upgrade_icon_art(manifest)
     patch_graphics_manager(manifest)
     patch_floating_anim_table(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:

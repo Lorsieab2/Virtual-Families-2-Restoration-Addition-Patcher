@@ -172,3 +172,18 @@
   targeted `DrawItem` prologue hooks that draw those descriptors through
   `theGraphicsManager::Draw`. Villager behavior/furniture behavior paths are
   untouched by this icon fix.
+
+## 2026-07-03 - Visible Special Upgrade Icons
+
+- The added visible Special Upgrade rows (`0x117-0x11A`) also used standalone
+  image descriptors but did not have a reachable store-icon draw path, leaving
+  Brokerage Account, Food Club, Health Plan, and Lucky Rock blank in the
+  Special Upgrades list.
+- B67 reuses the B66 `CInventoryManager::DrawItem(ldwPoint, ...)` and
+  `DrawItem(ldwRect, ...)` prologue hooks. The shared helper now resolves
+  either an outfit icon or a visible Special Upgrade icon, then draws through
+  `theGraphicsManager::Draw`.
+- Visible Special Upgrade icon descriptors remain `0x309-0x30C` and the
+  patcher now emits/copies the four required PNG payloads into the additive
+  output: `BrokerUpgrade_icon.png`, `FoodClub_icon.png`,
+  `HealthPlan_icon.png`, and `LuckyRock_icon.png`.

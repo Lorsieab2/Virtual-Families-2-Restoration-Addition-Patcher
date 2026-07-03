@@ -151,6 +151,17 @@
 - Leaves villager behavior, furniture behavior, TV behavior, debugger features,
   and stock `theMainScene.obj` unchanged.
 
+## B67 - Visible Special Upgrade Icons
+
+- Fixes blank visible Special Upgrade rows for Brokerage Account, Food Club,
+  Health Plan, and Lucky Rock by routing item IDs `0x117-0x11A` through the
+  shared added-item `CInventoryManager::DrawItem` helper.
+- Keeps their existing standalone image descriptors `0x309-0x30C` and ensures
+  the four icon PNG payloads are emitted into the additive output.
+- Leaves Special Upgrade purchase/apply behavior, hidden-IAP dialog bypass,
+  villager behavior, furniture behavior, debugger features, and stock
+  `theMainScene.obj` unchanged.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.
