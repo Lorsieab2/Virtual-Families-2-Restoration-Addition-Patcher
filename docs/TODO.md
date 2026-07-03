@@ -26,11 +26,13 @@
   normalization patches, the six copied stock villager sprite sheets under
   `Images/`, visible Special Upgrade icon descriptors/payloads, and the B76
   Holiday Ornaments collection art/native table/achievement records, the B77
-  Playhouse child-only autonomous candidate max-age gate, and the B78 VF3 TV
-  frame enum-order swap without distributing a premodified EXE.
+  Playhouse child-only autonomous candidate max-age gate, the B78 VF3 TV
+  frame enum-order swap, and the B81 VF3 TV fmap/LoadFmap recognition fix
+  without distributing a premodified EXE.
 - When exporting offline patcher manifests, feed the generated build manifest
-  through `validate_vf3_tv_animation_contract()` or an equivalent release
-  validation step so malformed VF3 TV east/west frame enum assignments are
+  through `validate_vf3_tv_animation_contract()` and
+  `validate_vf3_tv_behavior_contract()` or equivalent release validation steps
+  so malformed VF3 TV east/west frame enum assignments and missing TV fmaps are
   rejected before publication.
 - Make antivirus false-positive reduction the top packaging priority. Prefer
   transparent patching and reproducible build artifacts over packed/obfuscated
@@ -77,6 +79,11 @@
   east/west orientations for the Large, Small, and Father's Favorite TV
   overlays are parallel to their screen faces, fill those faces, and leave
   base TV click/animation behavior untouched.
+- In-game test B81 VF3 TV recognition: drop villagers on the Large, Small, and
+  Father's Favorite VF3 TVs and verify they start the normal TV behavior
+  instead of saying "There's no TV"; also verify base TVs still behave
+  normally and the release folder contains `Assets/TVFlatScreenStd.png.fmap`
+  plus the three generated VF3 TV fmaps.
 - In-game test B75 Clothing/outfit behavior: verify opening the Clothing
   section no longer crashes, all generated outfit rows display their
   last-action-frame icons, female rows apply only to female villagers, male rows

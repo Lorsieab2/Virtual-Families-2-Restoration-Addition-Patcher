@@ -52,6 +52,43 @@ def valid_vf3_tv_manifest():
     }
 
 
+def valid_vf3_tv_behavior_manifest():
+    return {
+        "FurnitureManager": {
+            "new_item_max_offset": hex(patcher.max_item_offset()),
+            "load_fmap_range_patch": {
+                "function": "CFurnitureManager::LoadFmap",
+                "old_max_offset": hex(0xFB),
+                "new_max_offset": hex(patcher.max_item_offset()),
+                "offset": hex(0x1E),
+            },
+            "vf3_tv_behavior_contracts": [
+                {
+                    "item": item["short_description"],
+                    "item_id": hex(item["item_id"]),
+                    "donor_item": hex(item["donor"]),
+                    "donor_behavior": "base flat-screen TV",
+                    "item_type": 5,
+                    "verified": "all non-identity, non-store, non-animation fields match donor 0x1F3",
+                }
+                for item in patcher.VF3_TV_ITEMS
+            ],
+        },
+        "vf3_tv_fmaps": {
+            "generated": [
+                {
+                    "item": item["short_description"],
+                    "path": f"Assets/{item['name']}.png.fmap",
+                    "grid": [13, 14],
+                    "cell_values": [hex(0x003C0001)],
+                }
+                for item in patcher.VF3_TV_ITEMS
+            ],
+            "issues": [],
+        },
+    }
+
+
 class VF3TVAnimationContractTests(unittest.TestCase):
     def test_accepts_b78_frame_enum_order(self):
         manifest = valid_vf3_tv_manifest()
@@ -79,6 +116,34 @@ class VF3TVAnimationContractTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "missing graphics descriptor.*SmallEast"):
             patcher.validate_vf3_tv_animation_contract(manifest, check_files=False)
+
+
+class VF3TVBehaviorContractTests(unittest.TestCase):
+    def test_fmap_cell_value_preserves_stock_tv_object_payloads(self):
+        self.assertEqual(patcher.vf3_tv_fmap_cell_value(0x003C6800, 0x003C0001, True), 0x003C6800)
+        self.assertEqual(patcher.vf3_tv_fmap_cell_value(0, 0x003C0001, True), 0x003C0001)
+        self.assertEqual(patcher.vf3_tv_fmap_cell_value(0x003C6800, 0x003C0001, False), 0)
+
+    def test_accepts_vf3_tv_behavior_manifest(self):
+        manifest = valid_vf3_tv_behavior_manifest()
+
+        patcher.validate_vf3_tv_behavior_contract(manifest)
+
+        self.assertEqual(manifest["vf3_tv_behavior_contract"]["status"], "validated")
+
+    def test_rejects_missing_vf3_tv_fmap(self):
+        manifest = valid_vf3_tv_behavior_manifest()
+        manifest["vf3_tv_fmaps"]["generated"].pop()
+
+        with self.assertRaisesRegex(RuntimeError, "missing generated TV fmap"):
+            patcher.validate_vf3_tv_behavior_contract(manifest)
+
+    def test_rejects_load_fmap_guard_drift(self):
+        manifest = valid_vf3_tv_behavior_manifest()
+        manifest["FurnitureManager"]["load_fmap_range_patch"]["new_max_offset"] = hex(0x134)
+
+        with self.assertRaisesRegex(RuntimeError, "LoadFmap max offset"):
+            patcher.validate_vf3_tv_behavior_contract(manifest)
 
 
 class OutfitStoreMappingTests(unittest.TestCase):

@@ -68,6 +68,9 @@ DESKTOP_RUNTIME_DLL_SOURCE_DIRS = (
     ROOT / "work" / "desktop_runtime_dlls",
     ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis",
 )
+FMAP_SOURCE_DIRS = (
+    ROOT / "work" / "vf2_obb" / "assets",
+)
 HOLIDAY_BODY_SET_IDS = (51, 52, 53, 54)
 HOLIDAY_BODY_BASE_ROWS = 50
 HOLIDAY_BODY_VALUES = tuple(range(50, 50 + len(HOLIDAY_BODY_SET_IDS)))
@@ -3450,6 +3453,27 @@ def patch_furniture_manager(manifest):
     obj.insert_section_bytes(item_sym.section, insert_off, bytes(payload))
 
     new_max = max_item_offset()
+    load_fmap_sym = obj.symbol("?LoadFmap@CFurnitureManager@@AAEXW4EInventoryItem@@_N@Z")
+    load_fmap_sec = obj.section(load_fmap_sym.section)
+    load_fmap_raw = load_fmap_sec.raw_ptr + load_fmap_sym.value
+    load_fmap_pattern = b"\x8D\x86\x53\xFE\xFF\xFF\x3D"
+    load_fmap_at = obj.buf.find(load_fmap_pattern, load_fmap_raw, load_fmap_raw + 0x40)
+    if load_fmap_at < 0:
+        raise RuntimeError("Could not find CFurnitureManager::LoadFmap furniture max-offset guard")
+    load_fmap_value_at = load_fmap_at + len(load_fmap_pattern)
+    old_load_fmap_max = struct.unpack_from("<I", obj.buf, load_fmap_value_at)[0]
+    if old_load_fmap_max not in {0xFB, new_max}:
+        raise RuntimeError(
+            f"Unexpected CFurnitureManager::LoadFmap max-offset guard {old_load_fmap_max:#x}"
+        )
+    struct.pack_into("<I", obj.buf, load_fmap_value_at, new_max)
+    load_fmap_range_patch = {
+        "function": "CFurnitureManager::LoadFmap",
+        "old_max_offset": hex(old_load_fmap_max),
+        "new_max_offset": hex(new_max),
+        "offset": hex(load_fmap_at - load_fmap_raw),
+    }
+
     range_patches = 0
     for reg in [b"\x3D", b"\x81\xFE", b"\x81\xF9", b"\x81\xFA"]:
         old = reg + struct.pack("<I", 0xFB)
@@ -3474,6 +3498,7 @@ def patch_furniture_manager(manifest):
         "range_patches": range_patches,
         "scan_end_patches": end_patches,
         "fmap_refresh_patches": fmap_refresh_patches,
+        "load_fmap_range_patch": load_fmap_range_patch,
         "behavior_safety_overrides": behavior_safety_overrides,
         "vf3_tv_animation_records": vf3_tv_animation_records,
         "vf3_tv_behavior_contracts": vf3_tv_behavior_contracts,
@@ -6014,43 +6039,49 @@ Wrong store section:
 
 def sync_behavior_assets(manifest):
     assets = OUT / "Assets"
+    assets.mkdir(parents=True, exist_ok=True)
     copied = []
     invisible_outdoor_copied = []
     invisible_transparent_copied = []
+    vf3_tv_copied = []
     missing = []
     sanitized = []
+
+    def find_fmap_source(filename):
+        local = assets / filename
+        if local.exists():
+            return local
+        for source_dir in FMAP_SOURCE_DIRS:
+            candidate = source_dir / filename
+            if candidate.exists():
+                return candidate
+        return None
+
+    def copy_donor_fmap(target, donor, bucket):
+        src = find_fmap_source(donor)
+        if src is None:
+            missing.append({"target": target, "donor": donor})
+            return
+        donor_dst = assets / donor
+        if src.resolve() != donor_dst.resolve():
+            shutil.copy2(src, donor_dst)
+        dst = assets / target
+        shutil.copy2(src, dst)
+        bucket.append({
+            "target": target,
+            "donor": donor,
+            "source": str(src),
+            "bytes": dst.stat().st_size,
+        })
+
     for target, donor in COUCH_FMAP_DONORS.items():
-        src = assets / donor
-        dst = assets / target
-        if src.exists():
-            shutil.copy2(src, dst)
-            copied.append({"target": target, "donor": donor, "bytes": dst.stat().st_size})
-        else:
-            missing.append({"target": target, "donor": donor})
+        copy_donor_fmap(target, donor, copied)
     for target, donor in INVISIBLE_OUTDOOR_FMAP_DONORS.items():
-        src = assets / donor
-        dst = assets / target
-        if src.exists():
-            shutil.copy2(src, dst)
-            invisible_outdoor_copied.append({"target": target, "donor": donor, "bytes": dst.stat().st_size})
-        else:
-            missing.append({"target": target, "donor": donor})
+        copy_donor_fmap(target, donor, invisible_outdoor_copied)
     for target, donor in INVISIBLE_TRANSPARENT_FMAP_DONORS.items():
-        src = assets / donor
-        dst = assets / target
-        if src.exists():
-            shutil.copy2(src, dst)
-            invisible_transparent_copied.append({"target": target, "donor": donor, "bytes": dst.stat().st_size})
-        else:
-            missing.append({"target": target, "donor": donor})
+        copy_donor_fmap(target, donor, invisible_transparent_copied)
     for target, donor in VF3_TV_FMAP_DONORS.items():
-        src = assets / donor
-        dst = assets / target
-        if src.exists():
-            shutil.copy2(src, dst)
-            invisible_transparent_copied.append({"target": target, "donor": donor, "bytes": dst.stat().st_size})
-        else:
-            missing.append({"target": target, "donor": donor})
+        copy_donor_fmap(target, donor, vf3_tv_copied)
     for item in manifest["items"]:
         reason = safety_fmap_reason(item)
         if not reason:
@@ -6090,9 +6121,16 @@ def sync_behavior_assets(manifest):
         "couch_fmap_donors": copied,
         "invisible_outdoor_fmap_donors": invisible_outdoor_copied,
         "invisible_transparent_fmap_donors": invisible_transparent_copied,
+        "vf3_tv_fmap_donors": vf3_tv_copied,
         "small_decor_sanitized_fmaps": sanitized,
         "missing": missing,
     }
+
+
+def vf3_tv_fmap_cell_value(donor_value, fallback_value, occupied):
+    if not occupied:
+        return 0
+    return donor_value or fallback_value
 
 
 def sync_vf3_tv_fmaps(manifest):
@@ -6115,6 +6153,11 @@ def sync_vf3_tv_fmaps(manifest):
             grid_end = grid_start + width * height * 4
             if data[:4] != b"QAMF" or grid_end + 16 != len(data):
                 raise ValueError(f"unexpected TV fmap layout: {fmap}")
+            donor_values = [
+                struct.unpack_from("<I", data, grid_start + index * 4)[0]
+                for index in range(width * height)
+            ]
+            fallback_value = next((value for value in donor_values if value), 0x003C0001)
             # Build the selection cells directly from the first directional
             # sprite cell. Map coordinates are normalized to that cell, so
             # this stays limited to the visible TV rather than the full map.
@@ -6129,9 +6172,21 @@ def sync_vf3_tv_fmaps(manifest):
                         left = x * frame.width // width
                         right = (x + 1) * frame.width // width
                         occupied = alpha.crop((left, top, right, bottom)).getbbox() is not None
-                        struct.pack_into("<I", data, grid_start + (y * width + x) * 4, 0x003C0001 if occupied else 0)
+                        donor_value = donor_values[y * width + x]
+                        cell_value = vf3_tv_fmap_cell_value(donor_value, fallback_value, occupied)
+                        struct.pack_into("<I", data, grid_start + (y * width + x) * 4, cell_value)
             fmap.write_bytes(data)
-            generated.append({"item": item["short_description"], "path": str(fmap), "grid": [width, height], "source": "normalized alpha footprint of the VF3 TV sprite"})
+            cell_values = sorted({
+                struct.unpack_from("<I", data, grid_start + index * 4)[0]
+                for index in range(width * height)
+            } - {0})
+            generated.append({
+                "item": item["short_description"],
+                "path": str(fmap),
+                "grid": [width, height],
+                "source": "normalized alpha footprint using stock TV fmap cell payloads",
+                "cell_values": [hex(value) for value in cell_values],
+            })
     except Exception as exc:
         issues.append({"reason": str(exc)})
     manifest["vf3_tv_fmaps"] = {"generated": generated, "issues": issues}
@@ -7250,6 +7305,63 @@ def validate_vf3_tv_animation_contract(manifest, *, check_files=True):
     }
 
 
+def validate_vf3_tv_behavior_contract(manifest):
+    """Fail fast if added VF3 TVs cannot be discovered by stock TV behavior."""
+    errors = []
+    furniture = manifest.get("FurnitureManager", {})
+    load_fmap_patch = furniture.get("load_fmap_range_patch", {})
+    if load_fmap_patch.get("new_max_offset") != furniture.get("new_item_max_offset"):
+        errors.append(
+            "CFurnitureManager::LoadFmap max offset does not match the expanded furniture max offset"
+        )
+    behavior_rows = {
+        row.get("item"): row
+        for row in furniture.get("vf3_tv_behavior_contracts", [])
+        if isinstance(row, dict)
+    }
+    fmap_rows = {
+        row.get("item"): row
+        for row in manifest.get("vf3_tv_fmaps", {}).get("generated", [])
+        if isinstance(row, dict)
+    }
+    fmap_issues = manifest.get("vf3_tv_fmaps", {}).get("issues", [])
+    if fmap_issues:
+        errors.append(f"VF3 TV fmap generation issues: {fmap_issues}")
+    for item in VF3_TV_ITEMS:
+        name = item["short_description"]
+        behavior = behavior_rows.get(name)
+        if behavior is None:
+            errors.append(f"missing VF3 TV behavior contract for {name}")
+        else:
+            if behavior.get("item_id") != hex(item["item_id"]):
+                errors.append(f"{name} behavior contract item id expected {hex(item['item_id'])}, got {behavior.get('item_id')}")
+            if behavior.get("donor_item") != hex(item["donor"]):
+                errors.append(f"{name} behavior contract donor expected {hex(item['donor'])}, got {behavior.get('donor_item')}")
+            if behavior.get("item_type") != 5:
+                errors.append(f"{name} item_type expected base TV type 5, got {behavior.get('item_type')}")
+        fmap = fmap_rows.get(name)
+        if fmap is None:
+            errors.append(f"missing generated TV fmap for {name}")
+        elif not fmap.get("cell_values"):
+            errors.append(f"{name} generated TV fmap has no nonzero object cells")
+    if errors:
+        raise RuntimeError("VF3 TV behavior contract failed:\n- " + "\n- ".join(errors))
+    manifest["vf3_tv_behavior_contract"] = {
+        "status": "validated",
+        "recognition_path": "CBehavior::WatchTVDispatch -> CFurnitureManager::FindFurniture(object 0x0D) -> FurnitureHasObject",
+        "load_fmap_patch": load_fmap_patch,
+        "items": [
+            {
+                "item": item["short_description"],
+                "item_id": hex(item["item_id"]),
+                "donor_item": hex(item["donor"]),
+                "fmap": f"{item['name']}.png.fmap",
+            }
+            for item in VF3_TV_ITEMS
+        ],
+    }
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     copy_obj_tree()
@@ -7345,6 +7457,7 @@ def main():
     normalize_added_furniture_sheets(manifest)
     write_internal_workings_summary(manifest)
     validate_vf3_tv_animation_contract(manifest)
+    validate_vf3_tv_behavior_contract(manifest)
     (OUT / "patch-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(json.dumps(manifest, indent=2))
 

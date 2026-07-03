@@ -330,6 +330,21 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B80-Holiday-Outfit-Body-Values`.
 
+## B81 - VF3 TV Behavior Fmaps
+
+- Patches the separate `CFurnitureManager::LoadFmap` furniture-offset guard
+  from stock max `0xFB` to the additive furniture max so appended VF3 TV item
+  IDs `0x324-0x326` can load their content maps.
+- Ensures empty output folders still receive `Assets/` fmaps by seeding donor
+  fmaps from `work/vf2_obb/assets`, then regenerates the three VF3 TV fmaps
+  from their sprite footprints while preserving stock TV object-cell payloads.
+- Adds `validate_vf3_tv_behavior_contract()` so future builds fail if the new
+  TVs lose the LoadFmap patch, donor behavior contract, or generated fmaps.
+- Keeps villager behavior, base TV behavior, base TV sprites, and base TV
+  animation assets untouched.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B81-VF3-TV-Behavior-Fmaps`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

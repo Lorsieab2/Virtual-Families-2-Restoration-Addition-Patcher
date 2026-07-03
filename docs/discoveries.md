@@ -416,3 +416,24 @@
   native `DrawScaled` fallback: negative body IDs use row `0`, stock rows
   `0-49` pass through, and values `>=50` fall back to row `49` unless they are
   successfully handled by the folder-backed Holiday renderer.
+
+## 2026-07-03 - VF3 TV Furniture Recognition
+
+- `CBehavior::WatchTVDispatch` uses the stock TV route:
+  `CFurnitureManager::FindFurniture(object 0x0D, FeetPos, ...)`, then says
+  the `0x837` "no TV" string if the returned furniture object is not `0x0D`.
+  The new VF3 TV furniture records can match donor `0x1F3` and still fail this
+  lookup if their `.fmap` content block is not loaded or lacks TV object cells.
+- `CFurnitureManager::FurnitureHasObject` reads the content map pointer from
+  `sFurnitureInfo + 0x58` and delegates to `CContentMap::HasObject`.
+  Therefore added TVs must have valid `Assets/<sprite>.png.fmap` files loaded
+  through `CFurnitureManager::LoadFmap`; behavior fields alone are not enough.
+- `CFurnitureManager::LoadFmap` has a separate max-offset guard at function
+  offset `0x1E`: `lea eax,[esi-0x1AD] ; cmp eax,0xFB ; ja skip`.
+  B81 patches that immediate to the expanded furniture max offset so appended
+  TV IDs `0x324-0x326` can load fmaps.
+- B81 also seeds `OUT/Assets` from `work/vf2_obb/assets` when the output
+  folder starts empty, copies `TVFlatScreenStd.png.fmap`, and regenerates the
+  three VF3 TV fmaps from the VF3 sprite alpha footprint while preserving the
+  stock TV fmap's nonzero cell payload values. This keeps base TV behavior and
+  base TV assets untouched.
