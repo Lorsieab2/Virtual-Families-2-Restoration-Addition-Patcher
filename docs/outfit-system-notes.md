@@ -274,3 +274,21 @@ This regenerates 448 runtime frame PNGs:
 through the folder-backed renderer. If an individual Holiday frame image is
 unavailable, the fallback draw call clamps that recognized body-grid row to
 stock row `49` instead of passing `50--53` to the vanilla sheet renderer.
+
+## Holiday body value lookup milestone
+
+B80 re-enables the native body-link lookup patch for Holiday outfits. The
+generated store IDs are still additive inventory rows, but they decode to real
+body values before application:
+
+- female Holiday outfit items: `0x432--0x435` -> body values `50--53`
+- male Holiday outfit items: `0x472--0x475` -> body values `50--53`
+
+`patch_holiday_body_lookup()` widens only the body overloads of
+`CAnimManager::GetScaledLinkToNextPt()` and
+`CAnimManager::GetScaledLinkToPrevPt()` from rows `0--49` to rows `0--53`.
+The default invalid-row fallback remains stock row `49`.
+
+`VF2SafeFallbackBody()` protects the folder-backed draw helper fallback:
+negative body IDs become row `0`, stock IDs `0--49` pass through, and values
+`>=50` fall back to row `49` unless the Holiday frame renderer resolves them.

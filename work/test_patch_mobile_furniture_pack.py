@@ -81,5 +81,29 @@ class VF3TVAnimationContractTests(unittest.TestCase):
             patcher.validate_vf3_tv_animation_contract(manifest, check_files=False)
 
 
+class OutfitStoreMappingTests(unittest.TestCase):
+    def test_holiday_outfit_item_ids_decode_to_body_values_50_53(self):
+        for gender in patcher.OUTFIT_STORE_GENDERS:
+            for body_value in patcher.HOLIDAY_BODY_VALUES:
+                with self.subTest(gender=gender, body_value=body_value):
+                    item_id = patcher.outfit_item_id_for_body(gender, body_value)
+
+                    self.assertEqual(patcher.outfit_body_for_item(item_id), (gender, body_value))
+
+    def test_outfit_entry_index_preserves_holiday_body_rows(self):
+        body_count = len(patcher.OUTFIT_STORE_BODY_VALUES)
+
+        for body_value in patcher.HOLIDAY_BODY_VALUES:
+            with self.subTest(body_value=body_value):
+                self.assertEqual(
+                    patcher.outfit_store_entry_index("female", body_value),
+                    patcher.OUTFIT_STORE_BODY_VALUES.index(body_value),
+                )
+                self.assertEqual(
+                    patcher.outfit_store_entry_index("male", body_value),
+                    body_count + patcher.OUTFIT_STORE_BODY_VALUES.index(body_value),
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

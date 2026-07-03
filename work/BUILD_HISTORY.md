@@ -318,6 +318,18 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B79-Complete-Runtime-Package`.
 
+## B80 - Holiday Outfit Body Values
+
+- Re-enables the native `CAnimManager` body-link lookup widening for Holiday
+  outfit rows `50-53`.
+- Keeps invalid body values on a stock-safe fallback: link lookups still fall
+  back to row `49`, and the folder-backed draw helper clamps unsupported rows
+  before calling the vanilla `DrawScaled` path.
+- Adds regression tests proving generated Holiday outfit IDs decode to body
+  values `50-53` for both female and male rows.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B80-Holiday-Outfit-Body-Values`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

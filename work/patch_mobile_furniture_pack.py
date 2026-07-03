@@ -2940,8 +2940,8 @@ def patch_holiday_body_lookup(manifest):
         raw = section.raw_ptr + symbol.value
         data = obj.buf
         # The body NextPt/PrevPt overloads encode: cmp body, 0x32;
-        # cmovl row, body; default row 0x31.  Replace only those body-row
-        # immediates.  Head overloads deliberately stay stock 0..49.
+        # cmovl row, body; default row 0x31.  Extend only the valid-row bound.
+        # The stock row-49 fallback is intentionally retained for invalid IDs.
         window = data[raw : raw + 0xB0]
         cmp_pattern = bytes([0x83, 0x7D, body_arg_offset, HOLIDAY_BODY_BASE_ROWS])
         cmp_at = window.find(cmp_pattern)
@@ -2953,11 +2953,11 @@ def patch_holiday_body_lookup(manifest):
             default_at = window.find(b"\xBA\x31\x00\x00\x00")
         if default_at < 0:
             raise RuntimeError(f"unexpected default body row in {function_name}")
-        data[raw + default_at + 1] = max_row
         patches.append({
             "function": function_name,
             "old_valid_rows": [0, HOLIDAY_BODY_BASE_ROWS - 1],
             "new_valid_rows": [0, max_row],
+            "invalid_body_fallback_row": HOLIDAY_BODY_BASE_ROWS - 1,
         })
     obj.write(PATCHED / "AnimManager.obj")
     manifest["holiday_body_lookup"] = {
@@ -3032,6 +3032,12 @@ static int VF2ResolveBodyRole(theGraphicsManager* graphics, ldwImageGrid* stockG
     return -1;
 }}
 
+static int VF2SafeFallbackBody(int body) {{
+    if (body < 0) return 0;
+    if (body < kHolidayBodyFirst) return body;
+    return kHolidayBodyFirst - 1;
+}}
+
 extern "C" void __cdecl VF2DrawVillagerBodyFrameImpl(
     ldwGameWindow* window,
     ldwImageGrid* stockGrid,
@@ -3062,10 +3068,7 @@ extern "C" void __cdecl VF2DrawVillagerBodyFrameImpl(
             }}
         }}
     }}
-    int fallbackBody = body;
-    if (roleSlot >= 0 && body >= kHolidayBodyFirst && body < kHolidayBodyFirst + kHolidayBodyCount) {{
-        fallbackBody = kHolidayBodyFirst - 1;
-    }}
+    int fallbackBody = VF2SafeFallbackBody(body);
     if (window) window->DrawScaled(stockGrid, x, y, fallbackBody, frame, scale, mirror != 0);
 }}
 
@@ -3091,7 +3094,7 @@ extern "C" __declspec(naked) void VF2DrawVillagerBodyFrame() {{
         "source": str(PATCHED / "vf2_villager_body_frames.cpp"),
         "image_ids": len(image_ids),
         "body_values": list(HOLIDAY_BODY_VALUES),
-        "stock_fallback": "recognized holiday body grids clamp to row 49 if an individual frame image is unavailable",
+        "stock_fallback": "recognized holiday body grids and invalid body values clamp to stock-safe rows before DrawScaled",
     }
 
 
@@ -7312,6 +7315,7 @@ def main():
     if ENABLE_HOLIDAY_BODY_TYPES:
         write_holiday_body_draw_helper(manifest)
         patch_holiday_body_draw_redirect(manifest)
+        patch_holiday_body_lookup(manifest)
     sync_generation_lock_art(manifest)
     sync_vf3_living_room_sprite_strips(manifest)
     sync_vf3_tv_sprite_strips(manifest)
@@ -7326,9 +7330,6 @@ def main():
             "body_values": list(HOLIDAY_BODY_VALUES),
             "source_sets": list(HOLIDAY_BODY_SET_IDS),
             "spritesheets": "not expanded; original sheets remain fallback",
-        }
-        manifest["holiday_body_lookup"] = {
-            "status": "not patched; native animator stays stock and the body draw hook handles values 50-53",
         }
     else:
         manifest["holiday_body_types"] = {

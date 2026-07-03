@@ -402,3 +402,17 @@
   root beside `Virtual Families 2 - Additive Mobile Furniture Pack.exe`.
   Missing DLLs now fail the patcher run instead of producing a release folder
   that cannot launch after extraction.
+
+## 2026-07-03 - Holiday Outfit Body Value Lookup
+
+- The generated outfit store IDs already map Holiday rows to body values
+  `50-53`: female `0x432-0x435`, male `0x472-0x475`. The remaining clamp was
+  in the runtime body/link lookup path, not the store row table.
+- `patch_holiday_body_lookup()` widens the two `CAnimManager`
+  `GetScaledLinkToNextPt` / `GetScaledLinkToPrevPt` body overloads from valid
+  rows `0-49` to `0-53`. The stock invalid-row fallback remains row `49`, so
+  bad body values do not try to index arbitrary additive rows.
+- `vf2_villager_body_frames.cpp` now applies `VF2SafeFallbackBody()` before any
+  native `DrawScaled` fallback: negative body IDs use row `0`, stock rows
+  `0-49` pass through, and values `>=50` fall back to row `49` unless they are
+  successfully handled by the folder-backed Holiday renderer.

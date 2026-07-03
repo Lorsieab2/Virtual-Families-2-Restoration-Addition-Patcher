@@ -83,6 +83,10 @@
   apply only to male villagers, buying multiple generated outfits keeps each
   toolbar item independent, and body values `50-53` apply without
   save-load/detail/house-view crashes.
+- In-game test B80 Holiday outfit body-value fix: verify Holiday outfit store
+  items `0x432-0x435` and `0x472-0x475` apply villager body values `50-53`
+  instead of `49`, and verify a deliberately invalid saved body value falls
+  back safely instead of crashing.
 - In-game test B74 Settings Evict button: in generation 1 and a later
   generation, open Settings, press Evict, verify the existing
   confirmation/removal flow removes all current family members, returns to the
