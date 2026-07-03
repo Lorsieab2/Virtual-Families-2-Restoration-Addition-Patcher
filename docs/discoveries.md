@@ -350,6 +350,12 @@
   (`Ornamentologist`, target `12`), widens visible/order bounds from `0x5F` to
   `0x60`, appends the ID to `achievementOrder`, and bumps the Goal Collector
   target from `12` to `13`.
+- B84 disables this native-table graft in normal builds behind
+  `VF2_ENABLE_HOLIDAY_ORNAMENTS=1`. The experimental page made the Collections
+  screen crash and made the game report `60` collectibles; stock release builds
+  now leave the base four collection pages and `48` total collectibles active.
+  Re-enable the flag only for isolated research builds until the page/object
+  size assumptions are proven in-game.
 
 ## 2026-07-03 - Playhouse Child-Only Autonomous Gate
 

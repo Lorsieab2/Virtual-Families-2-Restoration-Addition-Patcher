@@ -374,6 +374,19 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B83-Full-Runtime-Payload`.
 
+## B84 - Disable Unstable Holiday Ornaments Collection
+
+- Disables the experimental Holiday Ornaments collection/page/achievement
+  native hooks in normal builds behind `VF2_ENABLE_HOLIDAY_ORNAMENTS=1`.
+- Keeps stock Collections behavior active so the UI should remain on the base
+  four pages and `48` total collectibles instead of crashing while reporting
+  `60`.
+- Leaves the research code and generated-art path available for isolated
+  Holiday Ornament work, but marks the offline patcher setting experimental and
+  default-off.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B84-Disable-Holiday-Ornaments`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

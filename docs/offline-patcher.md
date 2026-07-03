@@ -108,9 +108,9 @@ when the original target did not exist.
     },
     {
       "id": "holiday_ornaments_collection",
-      "label": "Add Holiday Ornaments collection",
-      "description": "Adds mobile Holiday Ornament yard collectibles, collection art, and goals.",
-      "default": true
+      "label": "Add Holiday Ornaments collection (experimental)",
+      "description": "Adds mobile Holiday Ornament yard collectibles, collection art, and goals. Disabled until the native collection page no longer crashes.",
+      "default": false
     }
   ],
   "target_files": [
@@ -214,8 +214,9 @@ as:
 - `mobile_furniture` - Add additional mobile-exclusive furniture.
 - `vf3_tv_animation_graphics` - Fix VF3 TV animation graphics.
 - `settings_evict_button` - Re-enable the Settings menu Evict button.
-- `holiday_ornaments_collection` - Add mobile Holiday Ornament yard
-  collectibles, collection screen art, and Goals entries.
+- `holiday_ornaments_collection` - Experimental mobile Holiday Ornament yard
+  collectibles, collection screen art, and Goals entries. Keep this disabled in
+  release manifests until the B84 collection-page crash is fixed.
 
 Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings
@@ -227,7 +228,8 @@ flags can override those defaults:
 ```powershell
 --enable holiday_furniture
 --disable holiday_outfits
---enable holiday_furniture,mobile_furniture,vf3_tv_animation_graphics,settings_evict_button,holiday_ornaments_collection
+--enable holiday_furniture,mobile_furniture,vf3_tv_animation_graphics,settings_evict_button
+--enable holiday_ornaments_collection
 --enable-all
 --disable-all
 ```

@@ -25,10 +25,11 @@
   descriptors/payloads, the B75 independent synthetic outfit ToolTray
   normalization patches, the six copied stock villager sprite sheets under
   `Images/`, visible Special Upgrade icon descriptors/payloads, and the B76
-  Holiday Ornaments collection art/native table/achievement records, the B77
-  Playhouse child-only autonomous candidate max-age gate, the B78 VF3 TV
-  frame enum-order swap, and the B81 VF3 TV fmap/LoadFmap recognition fix
-  without distributing a premodified EXE.
+  Holiday Ornaments collection art/native table/achievement records only after
+  the B84 opt-in collection-page crash is fixed, the B77 Playhouse child-only
+  autonomous candidate max-age gate, the B78 VF3 TV frame enum-order swap, and
+  the B81 VF3 TV fmap/LoadFmap recognition fix without distributing a
+  premodified EXE.
 - When exporting offline patcher manifests, feed the generated build manifest
   through `validate_vf3_tv_animation_contract()` and
   `validate_vf3_tv_behavior_contract()` or equivalent release validation steps
@@ -44,6 +45,10 @@
   produced executable with a valid code-signing certificate, publish hashes, and
   maintain a McAfee/SmartScreen/AV vendor false-positive submission process for
   release builds.
+- Install or renew a real Authenticode Code Signing certificate before the next
+  signed release. On 2026-07-03, the local private-key certs were either
+  Server Authentication only or rejected by signtool, so B83/B84 could not be
+  signed locally.
 - Before each release ZIP upload, verify the archive contains the EXE, the full
   seeded vanilla `Images/` and `Sounds/` payloads plus additive overlays,
   `ldw.ini`, `wc.dat`, `icon.bmp`, the six required top-level runtime DLLs
@@ -53,12 +58,12 @@
 
 ## Research Leads
 
-- In-game test B76 Holiday Ornaments Collection: verify yard spawns for all 12
-  ornaments at stock collectible cadence, verify Lucky Rock affects frequency
-  and rarity through the stock spawn path, verify the Collections page
-  background/icons/count/scrolling, verify `Ornamentologist` appears and
-  completes after 12 unique ornaments, verify Goal Collector includes the new
-  goal, and verify save/load persistence.
+- Rework the Holiday Ornaments Collection before reenabling it in normal
+  builds. B84 disables the experimental page by default because opening
+  Collections crashed and the game reported `60` collectibles. Research should
+  prove the `CCollectionScene` table append, page count, object-field reads,
+  achievement row, yard spawns, Lucky Rock odds, save/load persistence, and
+  stock `48` collectible total when the feature is disabled.
 - In-game test B77 Playhouse spontaneous behavior: verify children can still
   spontaneously use the Playhouse, adults do not select Playhouse
   spontaneously, and manual furniture/drop behavior remains unchanged.

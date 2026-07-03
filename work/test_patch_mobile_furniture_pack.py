@@ -172,6 +172,17 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 )
 
 
+class HolidayOrnamentGateTests(unittest.TestCase):
+    def test_holiday_ornaments_are_disabled_by_default(self):
+        self.assertFalse(patcher.ENABLE_HOLIDAY_ORNAMENTS)
+
+    def test_native_contract_reports_stock_collections_for_normal_builds(self):
+        contract = patcher.build_native_array_contract()
+
+        self.assertFalse(contract["holiday_ornaments"]["enabled"])
+        self.assertIn("48 collectibles", contract["holiday_ornaments"]["status"])
+
+
 class RuntimePayloadContractTests(unittest.TestCase):
     def with_temp_runtime(self, callback):
         old_out = patcher.OUT

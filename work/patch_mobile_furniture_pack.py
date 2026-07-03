@@ -22,6 +22,9 @@ ENABLE_DEBUGGER_FEATURES = os.environ.get("VF2_ENABLE_DEBUGGER_FEATURES", "0") =
 # Holiday body rows are now part of the normal additive build.  Set the env var
 # to 0 only when intentionally making a stock-body diagnostic build.
 ENABLE_HOLIDAY_BODY_TYPES = os.environ.get("VF2_ENABLE_HOLIDAY_BODY_TYPES", "1") != "0"
+# The Holiday Ornaments collection page is still an experimental native-table
+# graft. Keep normal builds on the stock Collections UI until it is proven safe.
+ENABLE_HOLIDAY_ORNAMENTS = os.environ.get("VF2_ENABLE_HOLIDAY_ORNAMENTS", "0") == "1"
 ANALYSIS = ROOT / "outputs" / "VF2-Desktop-Object-Analysis"
 if not (ANALYSIS / "furniture-records.json").exists():
     ANALYSIS = ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis"
@@ -405,9 +408,15 @@ def build_native_array_contract():
             ],
         },
         "holiday_ornaments": {
+            "enabled": ENABLE_HOLIDAY_ORNAMENTS,
             "collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
             "collection_page": HOLIDAY_ORNAMENT_COLLECTION_PAGE,
             "achievement": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
+            "status": (
+                "research opt-in"
+                if ENABLE_HOLIDAY_ORNAMENTS
+                else "disabled in normal builds; stock Collections UI remains 48 collectibles"
+            ),
             "requirements": [
                 "reuse CCollectableItem::Update/Add so spawn timing and Lucky Rock odds remain stock",
                 "register base carrying value 0x9E as another 12-item spawn collection",
@@ -4899,45 +4908,46 @@ def patch_string_manager(manifest):
             "text": text,
         })
 
-    ornament_title_id = holiday_ornament_collection_title_string_id()
-    ornament_key = "eString_CollectionHolidayOrnaments"
-    ornament_text = "Holiday Ornaments"
-    ornament_key_sym = f"_vf2ornamentstr_key_{ornament_title_id:X}"
-    ornament_text_sym = f"_vf2ornamentstr_text_{ornament_title_id:X}"
-    helper_lines.append(f'const char {ornament_key_sym[1:]}[] = "{c_string(ornament_key)}";')
-    helper_lines.append(f'const char {ornament_text_sym[1:]}[] = "{c_string(ornament_text)}";')
-    new_rows.append((ornament_title_id, ornament_key_sym, ornament_text_sym))
-    string_manifest.append({
-        "pc_string_id": hex(ornament_title_id),
-        "source": "holiday ornament collection page",
-        "key": ornament_key,
-        "text": ornament_text,
-    })
-
-    ornament_goal_strings = [
-        (
-            holiday_ornament_achievement_title_string_id(),
-            "eString_AchievementOrnamentsTitle",
-            "Ornamentologist",
-        ),
-        (
-            holiday_ornament_achievement_desc_string_id(),
-            "eString_AchievementOrnamentsDesc",
-            "You completed the collection of holiday ornaments.",
-        ),
-    ]
-    for string_id, key, text in ornament_goal_strings:
-        key_sym = f"_vf2ornamentachievement_key_{string_id:X}"
-        text_sym = f"_vf2ornamentachievement_text_{string_id:X}"
-        helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
-        helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
-        new_rows.append((string_id, key_sym, text_sym))
+    if ENABLE_HOLIDAY_ORNAMENTS:
+        ornament_title_id = holiday_ornament_collection_title_string_id()
+        ornament_key = "eString_CollectionHolidayOrnaments"
+        ornament_text = "Holiday Ornaments"
+        ornament_key_sym = f"_vf2ornamentstr_key_{ornament_title_id:X}"
+        ornament_text_sym = f"_vf2ornamentstr_text_{ornament_title_id:X}"
+        helper_lines.append(f'const char {ornament_key_sym[1:]}[] = "{c_string(ornament_key)}";')
+        helper_lines.append(f'const char {ornament_text_sym[1:]}[] = "{c_string(ornament_text)}";')
+        new_rows.append((ornament_title_id, ornament_key_sym, ornament_text_sym))
         string_manifest.append({
-            "pc_string_id": hex(string_id),
-            "source": "mobile holiday ornament achievement",
-            "key": key,
-            "text": text,
+            "pc_string_id": hex(ornament_title_id),
+            "source": "holiday ornament collection page",
+            "key": ornament_key,
+            "text": ornament_text,
         })
+
+        ornament_goal_strings = [
+            (
+                holiday_ornament_achievement_title_string_id(),
+                "eString_AchievementOrnamentsTitle",
+                "Ornamentologist",
+            ),
+            (
+                holiday_ornament_achievement_desc_string_id(),
+                "eString_AchievementOrnamentsDesc",
+                "You completed the collection of holiday ornaments.",
+            ),
+        ]
+        for string_id, key, text in ornament_goal_strings:
+            key_sym = f"_vf2ornamentachievement_key_{string_id:X}"
+            text_sym = f"_vf2ornamentachievement_text_{string_id:X}"
+            helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+            helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+            new_rows.append((string_id, key_sym, text_sym))
+            string_manifest.append({
+                "pc_string_id": hex(string_id),
+                "source": "mobile holiday ornament achievement",
+                "key": key,
+                "text": text,
+            })
 
     # Retain the existing string id used by the pet behavior while replacing
     # its text through the normal string-table lookup.
@@ -5316,7 +5326,7 @@ def patch_graphics_manager(manifest):
         + holiday_body_descriptor_count
         + len(VF3_TV_FLOATING_ANIMS)
         + OUTFIT_STORE_ENTRY_COUNT
-        + HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT
+        + (HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT if ENABLE_HOLIDAY_ORNAMENTS else 0)
     )
     if append_count:
         obj.insert_section_bytes(img_sym.section, img_sym.value + ORIG_IMAGE_COUNT * DESC_SIZE, b"\0" * (append_count * DESC_SIZE))
@@ -5496,47 +5506,48 @@ def patch_graphics_manager(manifest):
         })
 
     ornament_desc_manifest = []
-    for index, (filename, _x, _y, _w, _h) in enumerate(HOLIDAY_ORNAMENT_ATLAS_RECORDS):
-        image_id = holiday_ornament_collection_item_image_id(index, holiday_body_descriptor_count)
-        path = f"CollectionOrnaments/{filename}"
+    if ENABLE_HOLIDAY_ORNAMENTS:
+        for index, (filename, _x, _y, _w, _h) in enumerate(HOLIDAY_ORNAMENT_ATLAS_RECORDS):
+            image_id = holiday_ornament_collection_item_image_id(index, holiday_body_descriptor_count)
+            path = f"CollectionOrnaments/{filename}"
+            vals = plain_image_donor[:]
+            vals[0] = image_id
+            vals[1] = 0
+            vals[2] = 0
+            vals[3] = 0
+            desc_off = img_sym.value + image_id * DESC_SIZE
+            img_sec = obj.section(img_sym.section)
+            obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
+            sym = "_vf2ornament_" + filename.replace(".", "_").replace("-", "_")
+            helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+            symidx = obj.append_undefined_symbol(sym)
+            obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+            ornament_desc_manifest.append({
+                "collectable": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START + index),
+                "image_id": hex(image_id),
+                "path": path,
+                "symbol": sym,
+            })
+
+        ornament_background_image_id = holiday_ornament_collection_background_image_id(holiday_body_descriptor_count)
         vals = plain_image_donor[:]
-        vals[0] = image_id
+        vals[0] = ornament_background_image_id
         vals[1] = 0
         vals[2] = 0
         vals[3] = 0
-        desc_off = img_sym.value + image_id * DESC_SIZE
+        desc_off = img_sym.value + ornament_background_image_id * DESC_SIZE
         img_sec = obj.section(img_sym.section)
         obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
-        sym = "_vf2ornament_" + filename.replace(".", "_").replace("-", "_")
-        helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
-        symidx = obj.append_undefined_symbol(sym)
+        ornament_bg_sym = "_vf2ornament_collection_background_png"
+        helper_lines.append(f'const char {ornament_bg_sym[1:]}[] = "{HOLIDAY_ORNAMENT_BACKGROUND_FILENAME}";')
+        symidx = obj.append_undefined_symbol(ornament_bg_sym)
         obj.append_relocation(img_sym.section, desc_off + 4, symidx)
         ornament_desc_manifest.append({
-            "collectable": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START + index),
-            "image_id": hex(image_id),
-            "path": path,
-            "symbol": sym,
+            "role": "background",
+            "image_id": hex(ornament_background_image_id),
+            "path": HOLIDAY_ORNAMENT_BACKGROUND_FILENAME,
+            "symbol": ornament_bg_sym,
         })
-
-    ornament_background_image_id = holiday_ornament_collection_background_image_id(holiday_body_descriptor_count)
-    vals = plain_image_donor[:]
-    vals[0] = ornament_background_image_id
-    vals[1] = 0
-    vals[2] = 0
-    vals[3] = 0
-    desc_off = img_sym.value + ornament_background_image_id * DESC_SIZE
-    img_sec = obj.section(img_sym.section)
-    obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
-    ornament_bg_sym = "_vf2ornament_collection_background_png"
-    helper_lines.append(f'const char {ornament_bg_sym[1:]}[] = "{HOLIDAY_ORNAMENT_BACKGROUND_FILENAME}";')
-    symidx = obj.append_undefined_symbol(ornament_bg_sym)
-    obj.append_relocation(img_sym.section, desc_off + 4, symidx)
-    ornament_desc_manifest.append({
-        "role": "background",
-        "image_id": hex(ornament_background_image_id),
-        "path": HOLIDAY_ORNAMENT_BACKGROUND_FILENAME,
-        "symbol": ornament_bg_sym,
-    })
 
     new_image_max = ORIG_IMAGE_MAX + append_count
     new_scan_end = ORIG_IMAGE_COUNT * DESC_SIZE + append_count * DESC_SIZE
@@ -5580,9 +5591,11 @@ def patch_graphics_manager(manifest):
             "descriptors": outfit_icon_desc_manifest,
         },
         "holiday_ornament_collection_images": {
-            "image_base": hex(holiday_ornament_collection_image_base(holiday_body_descriptor_count)),
-            "image_count": HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT,
+            "enabled": ENABLE_HOLIDAY_ORNAMENTS,
+            "image_base": hex(holiday_ornament_collection_image_base(holiday_body_descriptor_count)) if ENABLE_HOLIDAY_ORNAMENTS else None,
+            "image_count": HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT if ENABLE_HOLIDAY_ORNAMENTS else 0,
             "descriptors": ornament_desc_manifest,
+            "status": "patched" if ENABLE_HOLIDAY_ORNAMENTS else "disabled in normal builds",
         },
         "character_sheet_art": character_sheet_manifest,
         "descriptors": desc_manifest,
@@ -7628,9 +7641,19 @@ def main():
     patch_tool_tray_outfit_normalization(manifest)
     patch_string_manager(manifest)
     patch_special_upgrade_titles(manifest)
-    patch_achievement_holiday_ornaments(manifest)
-    patch_collectable_item_holiday_ornaments(manifest)
-    patch_collection_scene_holiday_ornaments(manifest)
+    if ENABLE_HOLIDAY_ORNAMENTS:
+        patch_achievement_holiday_ornaments(manifest)
+        patch_collectable_item_holiday_ornaments(manifest)
+        patch_collection_scene_holiday_ornaments(manifest)
+    else:
+        manifest["HolidayOrnamentsCollection"] = {
+            "enabled": False,
+            "status": "disabled in normal builds",
+            "reason": "The experimental fifth collection page made the Collections screen crash and report 60 collectibles.",
+            "stock_collection_total": 48,
+            "experimental_collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
+            "opt_in": "Set VF2_ENABLE_HOLIDAY_ORNAMENTS=1 only for isolated ornament research builds.",
+        }
     patch_spontaneous_behaviors(manifest)
     patch_bookshelf_reading_behavior(manifest)
     if ENABLE_DEBUGGER_FEATURES:
@@ -7659,7 +7682,14 @@ def main():
     sync_vc90_crt_private_assembly(manifest)
     sync_outfit_store_icon_art(manifest)
     sync_visible_special_upgrade_icon_art(manifest)
-    sync_holiday_ornament_collection_art(manifest)
+    if ENABLE_HOLIDAY_ORNAMENTS:
+        sync_holiday_ornament_collection_art(manifest)
+    else:
+        manifest["holiday_ornament_collection_art"] = {
+            "enabled": False,
+            "status": "not generated in normal builds",
+            "reason": "No image descriptors reference Holiday Ornament collection art while the collection page is disabled.",
+        }
     patch_graphics_manager(manifest)
     patch_floating_anim_table(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
