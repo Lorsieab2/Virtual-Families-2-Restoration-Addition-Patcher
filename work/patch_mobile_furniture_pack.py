@@ -117,6 +117,15 @@ VF3_TV_RUNTIME_ANIMATION_NAMES = {
     "FathersFavorite": "FathersFavoriteTVAnim.png",
     "FathersFavoriteEast": "FathersFavoriteTVAnimEast.png",
 }
+VF3_TV_ANIMATION_SCREEN_BOXES = {
+    # x, y, width, height inside one furniture-cell canvas.
+    "Large": (4, 5, 65, 60),
+    "LargeEast": (4, 5, 65, 60),
+    "Small": (2, 3, 48, 43),
+    "SmallEast": (2, 3, 48, 43),
+    "FathersFavorite": (5, 5, 96, 78),
+    "FathersFavoriteEast": (5, 5, 96, 78),
+}
 VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x117: "BrokerUpgrade_icon.png",
     0x118: "FoodClub_icon.png",
@@ -1839,6 +1848,25 @@ def sync_vf3_tv_sprite_strips(manifest):
     manifest["vf3_tv_sprite_strips"] = {"copied": copied, "missing": missing}
 
 
+def paste_scaled_tv_anim_frame(sheet, frame, label, column, row, cell_w, cell_h):
+    from PIL import Image
+
+    bbox = frame.getchannel("A").getbbox()
+    if not bbox:
+        return None
+    x, y, width, height = VF3_TV_ANIMATION_SCREEN_BOXES[label]
+    x = max(0, min(x, cell_w - 1))
+    y = max(0, min(y, cell_h - 1))
+    width = max(1, min(width, cell_w - x))
+    height = max(1, min(height, cell_h - y))
+    resampling = getattr(Image, "Resampling", Image).LANCZOS
+    scaled = frame.crop(bbox).resize((width, height), resampling)
+    composed = Image.new("RGBA", (cell_w, cell_h), (0, 0, 0, 0))
+    composed.paste(scaled, (x, y), scaled)
+    sheet.paste(composed, (column * cell_w, row * cell_h), composed)
+    return composed, [x, y, width, height]
+
+
 def sync_vf3_tv_animation_sheets(manifest):
     """Split supplied TV sheets and assemble bounded animation sheets."""
     copied = []
@@ -1873,15 +1901,6 @@ def sync_vf3_tv_animation_sheets(manifest):
                         "status": "not_present_using_individual_frames",
                     })
                 else:
-                    # Never overwrite the base TV's shared TVAnimBig resources.
-                    # These names are private to the added VF3 Large TV.
-                    runtime_name = "VF3LargeFlatScreenTVAnimEast.png" if label == "LargeEast" else "VF3LargeFlatScreenTVAnim.png"
-                    runtime_sheet = OUT / "Images" / runtime_name
-                    shutil.copy2(supplied_sheet, runtime_sheet)
-                    copied.append({"source_sheet": str(supplied_sheet), "target": str(runtime_sheet), "kind": "runtime_sheet"})
-                    # The supplied sheets are 6 columns by 3 rows. Crop each
-                    # cell independently, trim its transparent margin, then
-                    # bottom-anchor it in the TV's own 87x101 frame area.
                     with Image.open(supplied_sheet).convert("RGBA") as source_sheet:
                         for index in range(1, 19):
                             column = (index - 1) % 6
@@ -1896,16 +1915,18 @@ def sync_vf3_tv_animation_sheets(manifest):
                                 missing.append(f"{supplied_sheet}: blank frame {index}")
                                 continue
                             frame = cell.crop(bbox)
+                            composed = paste_scaled_tv_anim_frame(sheet, frame, label, column, row, cell_w, cell_h)
+                            if not composed:
+                                missing.append(f"{supplied_sheet}: blank trimmed frame {index}")
+                                continue
                             frame_path = frame_dir / f"Frame{index:02d}.png"
-                            frame.save(frame_path)
-                            x = column * cell_w + (cell_w - frame.width) // 2
-                            y = row * cell_h + (cell_h - frame.height)
-                            sheet.paste(frame, (x, y), frame)
+                            composed[0].save(frame_path)
                             copied.append({
                                 "source_sheet": str(supplied_sheet),
                                 "frame": index,
                                 "target": str(frame_path),
-                                "size": list(frame.size),
+                                "source_trimmed_size": list(frame.size),
+                                "screen_box": composed[1],
                             })
                             present += 1
             if not supplied_sheet or not supplied_sheet.exists():
@@ -1918,14 +1939,21 @@ def sync_vf3_tv_animation_sheets(manifest):
                         missing.append(str(source))
                         continue
                     with Image.open(source).convert("RGBA") as frame:
+                        column = (index - 1) % 6
+                        row = (index - 1) // 6
+                        composed = paste_scaled_tv_anim_frame(sheet, frame, label, column, row, cell_w, cell_h)
+                        if not composed:
+                            missing.append(f"{source}: blank frame")
+                            continue
                         frame_path = frame_dir / f"Frame{index:02d}.png"
-                        frame.save(frame_path)
-                        # Keep the visible TV program anchored to the upper
-                        # screen area of the VF3 television art instead of the
-                        # donor TV's much larger animation canvas.
-                        x = ((index - 1) % 6) * cell_w + (cell_w - frame.width) // 2
-                        y = ((index - 1) // 6) * cell_h + max(0, (cell_h - frame.height) // 3)
-                        sheet.paste(frame, (x, y), frame)
+                        composed[0].save(frame_path)
+                        copied.append({
+                            "source_frame": str(source),
+                            "frame": index,
+                            "target": str(frame_path),
+                            "source_size": list(frame.size),
+                            "screen_box": composed[1],
+                        })
                         present += 1
             target = destination / f"VF3TVAnim{label}.png"
             sheet.save(target)

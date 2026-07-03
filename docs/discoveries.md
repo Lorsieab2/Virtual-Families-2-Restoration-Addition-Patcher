@@ -61,3 +61,21 @@
 - Accessories worked with the earlier pattern approach because its stock count
   `47` was distinctive in the patched object, but that should not be treated as
   safe for small/common category counts.
+
+## 2026-07-03 - VF3 TV Animation Strip Scaling
+
+- B64 keeps the VF3 TV fix asset-only: no villager behavior, furniture behavior,
+  mouse input, or base TV resource patches changed.
+- `work/patch_mobile_furniture_pack.py` now scales each generated private VF3
+  TV animation frame into an explicit per-cell screen box before writing the
+  runtime strips:
+  `Large/LargeEast=(4,5,65,60)`, `Small/SmallEast=(2,3,48,43)`, and
+  `FathersFavorite/FathersFavoriteEast=(5,5,96,78)`.
+- The affected generated runtime files are
+  `Images/VF3LargeFlatScreenTVAnim*.png`,
+  `Images/VF3SmallFlatScreenTVAnim*.png`, and
+  `Images/FathersFavoriteTVAnim*.png`. Stock `TVAnimBig*.png` and
+  `TVAnimSmall*.png` remain untouched.
+- If in-game B64 still shows the old alignment, the next research point is the
+  furniture-to-animation-sheet lookup path; binary strings still primarily show
+  the stock TV animation descriptor names.

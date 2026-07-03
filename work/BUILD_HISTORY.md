@@ -112,6 +112,17 @@
 - User testing confirmed B63 opens the affected save without the B61/B62
   debugger crash.
 
+## B64 - VF3 TV Animation Strip Scaling
+
+- Regenerates only the private VF3 TV animation strip graphics used by the
+  added Large, Small, and Father's Favorite TV assets.
+- Scales each donor TV frame into an explicit per-cell screen box:
+  `Large/LargeEast=(4,5,65,60)`, `Small/SmallEast=(2,3,48,43)`, and
+  `FathersFavorite/FathersFavoriteEast=(5,5,96,78)`.
+- Leaves base TV strips (`TVAnimBig*.png`, `TVAnimSmall*.png`), villager
+  behavior, furniture behavior, debugger/input hooks, and `theMainScene`
+  unchanged.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

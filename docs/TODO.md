@@ -49,5 +49,8 @@
   debugger path can load saves and run without crashes.
 - Audit other category list count patches for small/common desktop counts before
   adding more furniture entries.
-- Verify the three VF3 TV appliances are visible in General Appliances and keep
-  base TV click/animation behavior untouched.
+- In-game test B64 VF3 TV animation strips: verify the Large, Small, and
+  Father's Favorite TV overlays now scale to their screens while base TV
+  click/animation behavior remains untouched. If the game still displays the
+  previous misalignment, inspect only the furniture-to-animation-sheet lookup
+  path next.
