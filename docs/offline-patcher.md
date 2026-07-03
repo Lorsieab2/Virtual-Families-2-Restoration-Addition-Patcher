@@ -89,6 +89,12 @@ when the original target did not exist.
       "default": false
     },
     {
+      "id": "outfit_store_expansion",
+      "label": "Add expanded Outfit store",
+      "description": "Adds generated outfit rows, copied stock sprite sheets, icons, and independent outfit tray items.",
+      "default": true
+    },
+    {
       "id": "mobile_furniture",
       "label": "Add additional mobile-exclusive furniture",
       "description": "Adds non-holiday mobile-exclusive furniture.",
@@ -155,6 +161,12 @@ payload, when `expected_target_sha256` matches, or when
 `Images/FathersFavoriteTVAnim*.png` patchable without touching stock
 `TVAnimBig*.png` or `TVAnimSmall*.png`.
 
+Outfit-store sprite payloads should follow the same rule: include the six
+villager sheets as manifest-relative `asset_patches` that copy into the target
+game's `Images/` folder. The patched game must read the copied
+`Images/female_*00.png` and `Images/male_*00.png` files, never an absolute
+external `originalimages` source folder.
+
 ## Toggleable Settings
 
 Settings let a release manifest expose optional components before patching, such
@@ -162,6 +174,8 @@ as:
 
 - `holiday_furniture` - Add Holiday furniture.
 - `holiday_outfits` - Add Holiday outfits.
+- `outfit_store_expansion` - Add generated outfit rows, copied villager sprite
+  sheets, icons, and independent outfit tray items.
 - `mobile_furniture` - Add additional mobile-exclusive furniture.
 - `vf3_tv_animation_graphics` - Fix VF3 TV animation graphics.
 - `settings_evict_button` - Re-enable the Settings menu Evict button.

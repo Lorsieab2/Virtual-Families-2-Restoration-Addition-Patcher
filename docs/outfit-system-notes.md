@@ -192,9 +192,12 @@ action sheet:
 - source cell: row = body value, column = last 91 px frame column (`14` in the
   current desktop/mobile-compatible sheets)
 
-Base body values `0--49` come from the stock 50-row action sheets. Holiday body
-values `50--53` fall back to the expanded B56 action sheets when the current
-output folder only contains stock rows.
+Base body values `0--49` come from the six stock sheets copied once into the
+modified build's local `OUT/Images` folder. The game reads those copied
+`Images/*.png` files at runtime; it does not reference the external
+`originalimages` source folder. Holiday body values `50--53` fall back to the
+expanded B56 action sheets when the current output folder only contains stock
+rows.
 
 `theGraphicsManager` receives 108 appended 1 x 1 image descriptors for those
 icons. `CInventoryManager::DrawItem(ldwPoint, ...)` and
@@ -204,14 +207,14 @@ non-outfit inventory drawing falls through to stock code.
 
 ## Clothing store purchase milestone
 
-The synthetic store row IDs are only store-facing identifiers. Native outfit
-application expects stock tray item `0x49` for female outfits and `0x4A` for
-male outfits, with the selected body value stored in `CInventoryManager`:
+Native outfit application expects stock tray item `0x49` for male outfits and
+`0x4A` for female outfits, with the stock selected body value stored in
+`CInventoryManager`:
 
-- `InventoryManager+0x468`: female outfit body value
-- `InventoryManager+0x46C`: male outfit body value
+- `InventoryManager+0x468`: male outfit body value
+- `InventoryManager+0x46C`: female outfit body value
 
-B69 adds `_VF2PurchaseOutfitStoreItem` and a narrow
+B69 originally added `_VF2PurchaseOutfitStoreItem` and a narrow
 `CScrollingStoreScene::HandlePurchaseItem + 0x1AD` hook. After the normal coin
 charge, recognized generated outfit IDs set the matching body field, add tray
 item `0x49` or `0x4A`, save the game, and skip the native high-ID no-op path.
@@ -229,6 +232,26 @@ falling through to stock code for base rows, so they must preserve `ECX`, the
 native `CInventoryManager this` pointer, across the helper call. The patched
 member getters now `push ecx` before the helper call and `pop ecx` before
 falling through when the helper returns `-1`.
+
+B75 changes generated outfit purchases to store the synthetic outfit item ID in
+the `CToolTray` slot instead of reusing one stock tray item per gender. The
+synthetic ranges are still:
+
+- Female generated outfit items: `0x400` through `0x435`
+- Male generated outfit items: `0x440` through `0x475`
+
+`ToolTray.obj` now patches `CToolTray::GetToolInHand()` and
+`CToolTray::GetToolInUse()` so those synthetic IDs normalize to stock female
+item `0x4A` or stock male item `0x49` only while vanilla main-scene outfit
+checks are running.
+`CInventoryManager::GetOutfit()` then resolves the body value from the selected
+synthetic ID. This keeps each tray slot independent: buying body `03` and body
+`52` no longer mutates both tray icons/items through one shared
+`InventoryManager+0x468/+0x46C` field.
+
+The stock tray behavior remains valid for native outfit items `0x49` and
+`0x4A`; when no generated outfit item is selected, the helper falls through to
+the original `CInventoryManager` body fields.
 
 ## Holiday runtime frame regeneration milestone
 

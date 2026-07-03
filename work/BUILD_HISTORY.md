@@ -252,6 +252,26 @@
 - Leaves Clothing, furniture, villager, debugger, TV, and store-category
   behavior unchanged.
 
+## B75 - Independent Outfit Tray Items
+
+- Copies the six supplied stock villager sheets into the completed build's
+  `Images` folder before outfit icon and frame export generation:
+  `female/male_bodies00.png`, `female/male_actions00.png`, and
+  `female/male_sit00.png`.
+- Exports build-local separated outfit frames under
+  `Images/VillagerBodies/<Gender>/Body_##/{bodies,actions,sit}/Frame##.png`
+  while keeping runtime stock body rows on the normal sheet renderer.
+- Fixes generated outfit purchases so `ToolTray` stores the independent
+  synthetic outfit item ID (`0x400-0x435` female, `0x440-0x475` male) instead
+  of reusing one stock outfit item per gender and mutating the shared
+  `InventoryManager` outfit body field.
+- Patches `CToolTray::GetToolInHand()` and `CToolTray::GetToolInUse()` to
+  normalize a selected synthetic outfit to stock `0x4A` female or `0x49` male
+  only for vanilla main-scene application checks. `GetOutfit()` then decodes
+  the body value from the selected synthetic item.
+- Leaves stock outfit items, furniture behavior, villager behavior, debugger,
+  TV behavior, and base save/load paths otherwise unchanged.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

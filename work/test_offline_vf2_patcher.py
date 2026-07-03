@@ -243,6 +243,84 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             )
             self.assertIn("No active patches remain", result.stderr)
 
+    def test_outfit_sprite_sheet_asset_patches_copy_into_game_images(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            sheet_names = [
+                "female_bodies00.png",
+                "female_actions00.png",
+                "female_sit00.png",
+                "male_bodies00.png",
+                "male_actions00.png",
+                "male_sit00.png",
+            ]
+            payload_dir = tmp_path / "payload" / "Images"
+            payload_dir.mkdir(parents=True)
+            asset_patches = []
+            for index, name in enumerate(sheet_names):
+                source_data = f"copied stock villager sheet {index}".encode("ascii")
+                (payload_dir / name).write_bytes(source_data)
+                asset_patches.append(
+                    {
+                        "file_path": str(Path("Images") / name),
+                        "source_path": str(Path("payload") / "Images" / name),
+                        "source_sha256": sha256_bytes(source_data),
+                        "source_size": len(source_data),
+                        "requires": ["outfit_store_expansion"],
+                        "note": f"Copy stock villager sprite sheet into the game Images folder: {name}",
+                    }
+                )
+            manifest = tmp_path / "outfit_sheets_asset_patch.json"
+            backup = tmp_path / "backup"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "outfit sheet asset unit test",
+                        "settings": [
+                            {
+                                "id": "outfit_store_expansion",
+                                "label": "Add expanded Outfit store",
+                                "default": True,
+                            }
+                        ],
+                        "target_files": [
+                            {
+                                "path": game_file.name,
+                                "sha256": sha256_bytes(original),
+                                "size": len(original),
+                            }
+                        ],
+                        "asset_patches": asset_patches,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                "--backup-dir",
+                str(backup),
+            )
+            self.assertIn("6 active asset patch record", result.stdout)
+            for index, name in enumerate(sheet_names):
+                expected = f"copied stock villager sheet {index}".encode("ascii")
+                self.assertEqual((game_dir / "Images" / name).read_bytes(), expected)
+
+            self.run_patcher("restore", "--backup-dir", str(backup))
+            for name in sheet_names:
+                self.assertFalse((game_dir / "Images" / name).exists())
+
     def test_asset_patch_replaces_expected_file_and_restore_recovers_it(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

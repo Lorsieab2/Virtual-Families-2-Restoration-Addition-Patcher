@@ -53,6 +53,7 @@ LOCKED_PNG_SOURCE = Path(r"C:\Users\Owner\Downloads\locked.png")
 VF3_SPRITE_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\Sprite")
 INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\Virtual Families 2 - Copy Official\Images\Furniture")
 HOLIDAY_OUTFIT_ARCHIVE = Path(r"C:\Users\Owner\Downloads\VF2_Holiday_Content\Holiday Outfits.zip")
+ORIGINAL_VF2_SPRITE_COPY_SOURCE_DIR = Path(r"C:\Users\Owner\OneDrive\Desktop\LDW Desktop Games!! And Other Stuff\Virtual Families 2 - Copy Official\originalimages")
 GENERATED_VILLAGER_BODIES = ROOT / "generated" / "VillagerBodies"
 FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B56-Holiday-Body-Lookup-Test"
 HOLIDAY_BODY_SET_IDS = (51, 52, 53, 54)
@@ -108,6 +109,14 @@ OUTFIT_STORE_ICON_SOURCE_SHEETS = {
     "female": "female_actions00.png",
     "male": "male_actions00.png",
 }
+VILLAGER_SPRITE_SHEET_FILES = (
+    "female_bodies00.png",
+    "female_actions00.png",
+    "female_sit00.png",
+    "male_bodies00.png",
+    "male_actions00.png",
+    "male_sit00.png",
+)
 LARGE_TV_ANIMATION_SHEETS = {
     "Large": Path(r"C:\Users\Owner\Downloads\TVAnimBigE.png"),
     "LargeEast": Path(r"C:\Users\Owner\Downloads\TVAnimBig.png"),
@@ -1766,6 +1775,49 @@ def read_png_size(path):
         return None
 
 
+def sync_original_villager_sprite_sheets(manifest):
+    """Copy user-supplied stock villager sheets into the build-local Images folder."""
+    copied = []
+    missing = []
+    issues = []
+    target_root = OUT / "Images"
+    target_root.mkdir(parents=True, exist_ok=True)
+
+    for filename in VILLAGER_SPRITE_SHEET_FILES:
+        source = ORIGINAL_VF2_SPRITE_COPY_SOURCE_DIR / filename
+        target = target_root / filename
+        if not source.exists():
+            missing.append(filename)
+            continue
+        try:
+            backup = target.with_name(target.name + ".pre-user-sprite-copy.bak")
+            if backup.exists():
+                backup.unlink()
+            shutil.copy2(source, target)
+            copied.append({
+                "filename": filename,
+                "runtime_path": str(Path("Images") / filename),
+                "size": list(read_png_size(target) or []),
+                "bytes": target.stat().st_size,
+            })
+        except Exception as exc:
+            issues.append({
+                "filename": filename,
+                "runtime_path": str(Path("Images") / filename),
+                "reason": str(exc),
+            })
+
+    manifest["villager_sprite_sheet_copy"] = {
+        "status": "copied to build-local Images folder" if copied and not missing and not issues else "partial_or_failed",
+        "copy_source": "external build input only; not serialized as a runtime image source",
+        "runtime_images_dir": "Images",
+        "runtime_note": "The game uses the copied Images/*.png files in the modified build folder; it does not reference the originalimages source folder.",
+        "copied": copied,
+        "missing": missing,
+        "issues": issues,
+    }
+
+
 def sync_vf3_living_room_sprite_strips(manifest):
     copied = []
     expanded = []
@@ -2132,7 +2184,7 @@ def sync_separated_villager_sheets(manifest):
             "male_heads00.png", "male_heads10.png",
             "bigheads00.png", "bigheads10.png",
         ],
-        export_root / "Bodies": ["female_bodies00.png", "male_bodies00.png"],
+        export_root / "Bodies": list(VILLAGER_SPRITE_SHEET_FILES),
     }
     copied = []
     missing = []
@@ -2150,52 +2202,47 @@ def sync_separated_villager_sheets(manifest):
     holiday_root = export_root / "Bodies" / "HolidayOutfits"
     holiday_files = [str(path.relative_to(OUT)) for path in holiday_root.rglob("*.png")]
 
-    # The renderer consumes a 32-column image grid, but editing and validation
-    # should happen against unambiguous individual body frames. Export every
-    # stock and Holiday row into the requested gender folders. Holiday types
-    # are rows 50-53 and are therefore represented as Body051..Body054.
+    # The renderer consumes 91x91 grids, but editing and validation should
+    # happen against unambiguous individual frames for each role.
     body_frames = []
     try:
         from PIL import Image
 
-        for gender, filename, folder_name in [
-            ("female", "female_bodies00.png", "Female Bodies"),
-            ("male", "male_bodies00.png", "Male Bodies"),
-        ]:
-            source = OUT / "Images" / filename
-            if not source.exists():
-                missing.append(str(source))
-                continue
-            destination = export_root / "Bodies" / folder_name
-            with Image.open(source).convert("RGBA") as sheet:
-                row_count = sheet.height // HOLIDAY_BODY_CELL_SIZE
-                for body_type in range(row_count):
-                    body_dir = destination / f"Body{body_type + 1:03d}"
-                    body_dir.mkdir(parents=True, exist_ok=True)
-                    for frame_index in range(32):
-                        box = (
-                            frame_index * HOLIDAY_BODY_CELL_SIZE,
-                            body_type * HOLIDAY_BODY_CELL_SIZE,
-                            (frame_index + 1) * HOLIDAY_BODY_CELL_SIZE,
-                            (body_type + 1) * HOLIDAY_BODY_CELL_SIZE,
-                        )
-                        target = body_dir / f"Frame{frame_index + 1:02d}.png"
-                        frame = sheet.crop(box)
-                        visible_bounds = frame.getchannel("A").getbbox()
-                        # The editable frame exports are deliberately tight to
-                        # the visible body artwork. The native runtime keeps
-                        # its grid separately, so these exports are not padded
-                        # back out to a synthetic 91x91 canvas.
-                        if visible_bounds:
-                            frame.crop(visible_bounds).save(target)
-                        else:
-                            frame.save(target)
-                    body_frames.append({
-                        "gender": gender,
-                        "body_type": body_type,
-                        "folder": str(body_dir.relative_to(OUT)),
-                        "holiday": body_type >= HOLIDAY_BODY_BASE_ROWS,
-                    })
+        role_specs = [
+            ("bodies", 32),
+            ("actions", 15),
+            ("sit", 9),
+        ]
+        for gender in OUTFIT_STORE_GENDERS:
+            gender_title = gender.title()
+            for role, frame_count in role_specs:
+                source = OUT / "Images" / f"{gender}_{role}00.png"
+                if not source.exists():
+                    missing.append(str(source))
+                    continue
+                with Image.open(source).convert("RGBA") as sheet:
+                    row_count = sheet.height // HOLIDAY_BODY_CELL_SIZE
+                    column_count = min(frame_count, sheet.width // HOLIDAY_BODY_CELL_SIZE)
+                    for body_type in range(row_count):
+                        body_dir = OUT / "Images" / "VillagerBodies" / gender_title / f"Body_{body_type:02d}" / role
+                        body_dir.mkdir(parents=True, exist_ok=True)
+                        for frame_index in range(column_count):
+                            box = (
+                                frame_index * HOLIDAY_BODY_CELL_SIZE,
+                                body_type * HOLIDAY_BODY_CELL_SIZE,
+                                (frame_index + 1) * HOLIDAY_BODY_CELL_SIZE,
+                                (body_type + 1) * HOLIDAY_BODY_CELL_SIZE,
+                            )
+                            target = body_dir / f"Frame{frame_index:02d}.png"
+                            sheet.crop(box).save(target)
+                        body_frames.append({
+                            "gender": gender,
+                            "body_type": body_type,
+                            "role": role,
+                            "frames": column_count,
+                            "folder": str(body_dir.relative_to(OUT)),
+                            "holiday": body_type >= HOLIDAY_BODY_BASE_ROWS,
+                        })
     except Exception as exc:
         missing.append(f"body-frame export: {exc}")
 
@@ -2205,7 +2252,7 @@ def sync_separated_villager_sheets(manifest):
         "holiday_outfit_files": holiday_files,
         "body_frame_folders": body_frames,
         "missing": missing,
-        "runtime_note": "Female Bodies and Male Bodies contain alpha-cropped visible frame artwork. The desktop renderer independently uses its native 32-column grids; holiday body values are 50-53.",
+        "runtime_note": "VillagerBodies contains 91x91 body/action/sit frame exports. The desktop renderer still uses build-local Images sheets for stock rows; holiday body values are 50-53.",
     }
 
 
@@ -3588,8 +3635,8 @@ public:
 class CInventoryManager {{
 public:
     char pad0[0x468];
-    int femaleOutfitBody;
     int maleOutfitBody;
+    int femaleOutfitBody;
 }};
 
 extern CToolTray ToolTray;
@@ -3599,8 +3646,8 @@ static const int kVF2OutfitStoreFemaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES
 static const int kVF2OutfitStoreMaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["male"]};
 static const int kVF2OutfitStoreBodyCount = {len(OUTFIT_STORE_BODY_VALUES)};
 static const int kVF2OutfitStoreHolidayFirst = {HOLIDAY_BODY_VALUES[0]};
-static const int kVF2FemaleOutfitTrayItem = 0x49;
-static const int kVF2MaleOutfitTrayItem = 0x4A;
+static const int kVF2MaleOutfitTrayItem = 0x49;
+static const int kVF2FemaleOutfitTrayItem = 0x4A;
 static const int kVF2OutfitStoreShortStringBase = {first_short};
 static const int kVF2OutfitStoreIconImageBase = {outfit_icon_image_base(HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)};
 static const int kVF2OutfitStoreIconCellSize = {HOLIDAY_BODY_CELL_SIZE};
@@ -3608,6 +3655,7 @@ static const int kVF2VisibleSpecialUpgradeFirstItem = {min(VISIBLE_SPECIAL_UPGRA
 static const int kVF2VisibleSpecialUpgradeCount = {len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)};
 static const int kVF2VisibleSpecialUpgradeIconImageBase = {visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))};
 static const int kVF2VisibleSpecialUpgradeIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
+static int gVF2SyntheticOutfitToolInHand = 0;
 
 static int VF2OutfitStoreEntryIndex(int itemId) {{
     int femaleBody = itemId - kVF2OutfitStoreFemaleItemBase;
@@ -3630,7 +3678,7 @@ static int VF2OutfitGenderForItem(int itemId) {{
     return index >= kVF2OutfitStoreBodyCount ? 1 : 0;
 }}
 
-static int VF2OutfitTrayItemForItem(int itemId) {{
+static int VF2OutfitStockTrayItemForItem(int itemId) {{
     int gender = VF2OutfitGenderForItem(itemId);
     if (gender < 0) {{
         return -1;
@@ -3639,28 +3687,55 @@ static int VF2OutfitTrayItemForItem(int itemId) {{
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
-    return VF2OutfitBodyForItem(itemId);
+    int body = VF2OutfitBodyForItem(itemId);
+    if (body >= 0) {{
+        return body;
+    }}
+
+    int selected = gVF2SyntheticOutfitToolInHand;
+    if (selected && VF2OutfitStockTrayItemForItem(selected) == itemId) {{
+        return VF2OutfitBodyForItem(selected);
+    }}
+    return -1;
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
-    return VF2OutfitTrayItemForItem(itemId) < 0 ? -1 : 1;
+    return VF2OutfitBodyForItem(itemId) < 0 ? -1 : 1;
 }}
 
 extern "C" bool __cdecl VF2PurchaseOutfitStoreItem(int itemId) {{
     int body = VF2OutfitBodyForItem(itemId);
-    int trayItem = VF2OutfitTrayItemForItem(itemId);
-    if (body < 0 || trayItem < 0) {{
+    if (body < 0) {{
         return false;
     }}
 
-    if (trayItem == kVF2FemaleOutfitTrayItem) {{
-        InventoryManager.femaleOutfitBody = body;
-    }} else {{
-        InventoryManager.maleOutfitBody = body;
-    }}
-    ToolTray.AddItem((EInventoryItem)trayItem, 1);
+    ToolTray.AddItem((EInventoryItem)itemId, 1);
     theGameState::Get()->SaveCurrentGame();
     return true;
+}}
+
+extern "C" int __cdecl VF2NormalizeOutfitToolInHand(void* tray, int activeFlagOffset) {{
+    unsigned char* base = (unsigned char*)tray;
+    if (!base || !base[activeFlagOffset]) {{
+        gVF2SyntheticOutfitToolInHand = 0;
+        return 0;
+    }}
+
+    int slot = *(int*)(base + 0xA0);
+    if (slot < 0 || slot >= 9) {{
+        gVF2SyntheticOutfitToolInHand = 0;
+        return 0;
+    }}
+
+    int itemId = *(int*)(base + slot * 8);
+    int stockItem = VF2OutfitStockTrayItemForItem(itemId);
+    if (stockItem >= 0) {{
+        gVF2SyntheticOutfitToolInHand = itemId;
+        return stockItem;
+    }}
+
+    gVF2SyntheticOutfitToolInHand = 0;
+    return itemId;
 }}
 
 extern "C" int __cdecl VF2GetOutfitStorePrice(int itemId) {{
@@ -3753,12 +3828,65 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
         "visible_special_upgrade_icon_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
         "draw_route": "shared DrawItem hook resolves outfit icons and added visible Special Upgrade icons",
         "purchase_route": {
-            "female_tray_item": "0x49",
-            "male_tray_item": "0x4a",
-            "female_body_field": "InventoryManager+0x468",
-            "male_body_field": "InventoryManager+0x46C",
+            "male_stock_tray_item": "0x49",
+            "female_stock_tray_item": "0x4a",
+            "independent_tray_storage": "generated outfit item IDs are stored directly in ToolTray slots",
+            "body_value_source": "decoded from synthetic item ID during outfit application",
             "helper": "_VF2PurchaseOutfitStoreItem",
         },
+    }
+
+
+def patch_tool_tray_outfit_normalization(manifest):
+    obj = CoffObject(PATCHED / "ToolTray.obj")
+    helper_sym = obj.append_undefined_symbol("_VF2NormalizeOutfitToolInHand")
+
+    def patch_getter(function_name, active_flag_offset):
+        sym = obj.symbol(function_name)
+        sec = obj.section(sym.section)
+        raw = sec.raw_ptr + sym.value
+        expected = (
+            b"\x80\xB9" + struct.pack("<I", active_flag_offset) + b"\x00"
+            b"\x74\x0A"
+            b"\x8B\x81\xA0\x00\x00\x00"
+            b"\x8B\x04\xC1"
+            b"\xC3"
+            b"\x33\xC0"
+            b"\xC3"
+        )
+        if obj.buf[raw : raw + len(expected)] != expected:
+            raise RuntimeError(f"Unexpected {function_name} body bytes")
+        payload = (
+            b"\x68" + struct.pack("<I", active_flag_offset)  # push active flag offset
+            + b"\x51"                                      # push this
+            + b"\xE8\x00\x00\x00\x00"                      # call helper
+            + b"\x83\xC4\x08"                              # add esp,8
+            + b"\xC3"                                      # ret
+        )
+        payload += b"\x90" * (len(expected) - len(payload))
+        obj.buf[raw : raw + len(expected)] = payload
+        obj.append_relocation(sym.section, sym.value + 7, helper_sym, IMAGE_REL_I386_REL32)
+        return {
+            "function": function_name,
+            "active_flag_offset": hex(active_flag_offset),
+            "helper": "_VF2NormalizeOutfitToolInHand",
+            "overwritten_bytes": len(expected),
+        }
+
+    patches = [
+        patch_getter("?GetToolInHand@CToolTray@@QAE?AW4EInventoryItem@@XZ", 0xA4),
+        patch_getter("?GetToolInUse@CToolTray@@QAE?AW4EInventoryItem@@XZ", 0xA5),
+    ]
+    obj.write(PATCHED / "ToolTray.obj")
+    manifest["outfit_tooltray_normalization"] = {
+        "status": "synthetic outfit tray IDs normalize to stock IDs only for vanilla application checks",
+        "synthetic_ranges": {gender: hex(base) for gender, base in OUTFIT_STORE_GENDER_ITEM_BASES.items()},
+        "stock_mapping": {
+            "male": "0x49",
+            "female": "0x4a",
+        },
+        "patches": patches,
+        "note": "ToolTray storage, save data, and icon drawing keep the independent synthetic item ID.",
     }
 
 
@@ -4147,14 +4275,17 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
             },
         },
         "outfit_store_purchase": {
-            "status": "generated Clothing rows call a direct purchase helper after normal coin charge",
+            "status": "generated Clothing rows add their synthetic item ID to ToolTray after normal coin charge",
             "purchase_hook": "?HandlePurchaseItem@CScrollingStoreScene@@AAEXXZ + 0x1AD",
             "helper": "_VF2PurchaseOutfitStoreItem",
             "item_bases": {gender: hex(base) for gender, base in OUTFIT_STORE_GENDER_ITEM_BASES.items()},
-            "tray_items": {"female": "0x49", "male": "0x4a"},
-            "inventory_fields": {
-                "female_body_value": "InventoryManager+0x468",
-                "male_body_value": "InventoryManager+0x46C",
+            "synthetic_tray_items": {
+                "female": f"{hex(OUTFIT_STORE_GENDER_ITEM_BASES['female'])}-{hex(OUTFIT_STORE_GENDER_ITEM_BASES['female'] + len(OUTFIT_STORE_BODY_VALUES) - 1)}",
+                "male": f"{hex(OUTFIT_STORE_GENDER_ITEM_BASES['male'])}-{hex(OUTFIT_STORE_GENDER_ITEM_BASES['male'] + len(OUTFIT_STORE_BODY_VALUES) - 1)}",
+            },
+            "stock_normalized_tray_items": {
+                "female": "0x4a",
+                "male": "0x49",
             },
         },
         "visible_special_upgrades": {
@@ -6373,6 +6504,7 @@ def main():
     patch_purchase_dialog(manifest)
     patch_options_dialog(manifest)
     write_outfit_store_helpers(manifest)
+    patch_tool_tray_outfit_normalization(manifest)
     patch_string_manager(manifest)
     patch_special_upgrade_titles(manifest)
     patch_spontaneous_behaviors(manifest)
@@ -6395,7 +6527,10 @@ def main():
             "status": "disabled because the additive event object graft crashes the game",
         }
     if ENABLE_HOLIDAY_BODY_TYPES:
+        sync_original_villager_sprite_sheets(manifest)
         sync_holiday_body_runtime_frames(manifest)
+    else:
+        sync_original_villager_sprite_sheets(manifest)
     sync_outfit_store_icon_art(manifest)
     sync_visible_special_upgrade_icon_art(manifest)
     patch_graphics_manager(manifest)

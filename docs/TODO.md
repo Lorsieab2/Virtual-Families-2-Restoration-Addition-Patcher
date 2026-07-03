@@ -22,7 +22,9 @@
   animation strips as `asset_patches`, then add the verified native byte records
   required to append the VF3 furniture, private floating-animation table
   entries, gendered outfit icon descriptors, Holiday outfit runtime-frame
-  descriptors/payloads, and visible Special Upgrade icon descriptors/payloads
+  descriptors/payloads, the B75 independent synthetic outfit ToolTray
+  normalization patches, the six copied stock villager sprite sheets under
+  `Images/`, and visible Special Upgrade icon descriptors/payloads
   without distributing a premodified EXE.
 - Make antivirus false-positive reduction the top packaging priority. Prefer
   transparent patching and reproducible build artifacts over packed/obfuscated
@@ -60,11 +62,12 @@
   Small, and Father's Favorite TV overlays now use the correct isometric angle,
   fill their screen faces, and leave base TV click/animation behavior
   untouched.
-- In-game test B73 Clothing store stability: verify opening the Clothing
+- In-game test B75 Clothing/outfit behavior: verify opening the Clothing
   section no longer crashes, all generated outfit rows display their
-  last-action-frame icons, purchases add the expected outfit item to the tool
-  tray, and body values `50-53` apply without save-load/detail/house-view
-  crashes.
+  last-action-frame icons, female rows apply only to female villagers, male rows
+  apply only to male villagers, buying multiple generated outfits keeps each
+  toolbar item independent, and body values `50-53` apply without
+  save-load/detail/house-view crashes.
 - In-game test B74 Settings Evict button: in generation 1 and a later
   generation, open Settings, press Evict, verify the existing
   confirmation/removal flow removes all current family members, returns to the

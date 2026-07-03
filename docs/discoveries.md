@@ -215,9 +215,9 @@
   rows at `0x400-0x435` and `0x440-0x475` skipped all native purchase branches
   after the coin charge.
 - Stock outfit purchases convert clothing rows into tray item `0x49` for
-  female outfits and `0x4A` for male outfits, with body values stored at
-  `InventoryManager+0x468` and `InventoryManager+0x46C`. B69 mirrors that
-  route through `_VF2PurchaseOutfitStoreItem` and hooks
+  male outfits and `0x4A` for female outfits, with body values stored at
+  `InventoryManager+0x468` and `InventoryManager+0x46C`. B69 originally
+  mirrored that route through `_VF2PurchaseOutfitStoreItem` and hooks
   `CScrollingStoreScene::HandlePurchaseItem + 0x1AD` only for recognized
   generated outfit IDs.
 - Store icons now come from the matching row's last action-sheet frame:
@@ -303,3 +303,26 @@
   `jge` to `jle` and the compare immediate at `ctor+0x2E6` from `2` to `0`.
   This keeps the click path limited to active families while allowing every
   active generation to use the existing eviction handler.
+
+## 2026-07-03 - Independent Generated Outfit Tray Items
+
+- Stock clothing item evidence and `theMainScene::HandleMouseDown` show
+  `0x49` is the male outfit tray item and `0x4A` is the female outfit tray
+  item. Stock `CInventoryManager::GetOutfit(0x49)` reads
+  `InventoryManager+0x468`; `GetOutfit(0x4A)` reads
+  `InventoryManager+0x46C`.
+- B69-B74 generated outfit purchases reused those stock tray IDs and changed
+  the shared `InventoryManager` body field. That explains the observed bug:
+  buying another generated outfit of the same gender changed every existing
+  outfit item in the toolbar.
+- B75 stores generated outfit IDs directly in `CToolTray` slots:
+  female rows `0x400-0x435`, male rows `0x440-0x475`. `ToolTray.obj` patches
+  `CToolTray::GetToolInHand()` and `CToolTray::GetToolInUse()` to normalize a
+  selected synthetic ID to stock `0x4A`/`0x49` only for vanilla main-scene
+  checks, while `CInventoryManager::GetOutfit()` decodes the body from the
+  selected synthetic ID.
+- The build also copies the six supplied stock sprite sheets into the modified
+  build's `OUT/Images` folder before generating outfit icons and separated
+  `Images/VillagerBodies/<Gender>/Body_##/{bodies,actions,sit}/Frame##.png`
+  frames. The game uses build-local `Images/*.png`; it does not point to the
+  source `originalimages` folder at runtime.
