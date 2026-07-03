@@ -3356,12 +3356,14 @@ def patch_furniture_manager(manifest):
         vf3_tv = vf3_tv_by_name.get(name)
         if vf3_tv:
             west_label, east_label = vf3_tv["animation_labels"]
-            # The stock TV record points at shared TVAnimBig/Small enums with
-            # stock top-left offsets. The added VF3 TVs use private animation
-            # cells already padded to their furniture canvas, so their floating
-            # animation origin should be the furniture cell origin.
-            vals[0x24 // 4] = VF3_TV_FLOATING_ANIMS[east_label]["enum"]
-            vals[0x28 // 4] = VF3_TV_FLOATING_ANIMS[west_label]["enum"]
+            # The generated VF3 TV furniture strip stores the source sprite as
+            # frame 0 and its horizontal mirror as frame 1. That frame order is
+            # opposite the stock donor's animation order, so assign the private
+            # animation enums by the generated frame slant, not by donor order.
+            # The private animation cells are already padded to their furniture
+            # canvas, so their floating animation origin is the cell origin.
+            vals[0x24 // 4] = VF3_TV_FLOATING_ANIMS[west_label]["enum"]
+            vals[0x28 // 4] = VF3_TV_FLOATING_ANIMS[east_label]["enum"]
             vals[0x2C // 4] = 0
             vals[0x30 // 4] = 0
             vals[0x34 // 4] = 0
@@ -3377,8 +3379,8 @@ def patch_furniture_manager(manifest):
                 "item_id": hex(vals[0]),
                 "frame0_enum": hex(vals[0x24 // 4]),
                 "frame1_enum": hex(vals[0x28 // 4]),
-                "frame0_label": east_label,
-                "frame1_label": west_label,
+                "frame0_label": west_label,
+                "frame1_label": east_label,
                 "offsets": {"x": [0, 0, 0, 0], "y": [0, 0, 0, 0]},
             })
         vals[5], vals[6] = item_string_ids(idx)

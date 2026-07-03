@@ -293,6 +293,17 @@
 - Leaves furniture drop/click behavior, villager behavior functions, debugger,
   TV behavior, Clothing, and Holiday Ornaments unchanged.
 
+## B78 - VF3 TV Frame Enum Orientation
+
+- Swaps the added VF3 TV `FurnitureInfo` frame `0`/frame `1` private
+  floating-animation enum assignments so the overlay slant follows the
+  generated furniture frame orientation.
+- Leaves the generated private animation strips, base TV assets, click
+  behavior, furniture behavior, villager behavior, debugger, Clothing, Holiday
+  Ornaments, and Playhouse changes otherwise unchanged.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B78-TV-Frame-Enum-Orientation`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

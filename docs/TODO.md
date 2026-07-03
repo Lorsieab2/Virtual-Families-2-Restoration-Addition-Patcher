@@ -25,9 +25,9 @@
   descriptors/payloads, the B75 independent synthetic outfit ToolTray
   normalization patches, the six copied stock villager sprite sheets under
   `Images/`, visible Special Upgrade icon descriptors/payloads, and the B76
-  Holiday Ornaments collection art/native table/achievement records, plus the
-  B77 Playhouse child-only autonomous candidate max-age gate without
-  distributing a premodified EXE.
+  Holiday Ornaments collection art/native table/achievement records, the B77
+  Playhouse child-only autonomous candidate max-age gate, and the B78 VF3 TV
+  frame enum-order swap without distributing a premodified EXE.
 - Make antivirus false-positive reduction the top packaging priority. Prefer
   transparent patching and reproducible build artifacts over packed/obfuscated
   executables, preserve normal PE metadata where possible, sign the patcher and
@@ -65,10 +65,10 @@
   debugger path can load saves and run without crashes.
 - Audit other category list count patches for small/common desktop counts before
   adding more furniture entries.
-- In-game test B70 VF3 TV private floating-animation entries: verify the Large,
-  Small, and Father's Favorite TV overlays now use the correct isometric angle,
-  fill their screen faces, and leave base TV click/animation behavior
-  untouched.
+- In-game test B78 VF3 TV private floating-animation entries: verify both
+  east/west orientations for the Large, Small, and Father's Favorite TV
+  overlays are parallel to their screen faces, fill those faces, and leave
+  base TV click/animation behavior untouched.
 - In-game test B75 Clothing/outfit behavior: verify opening the Clothing
   section no longer crashes, all generated outfit rows display their
   last-action-frame icons, female rows apply only to female villagers, male rows

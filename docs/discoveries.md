@@ -364,3 +364,19 @@
   `CBehavior::PlayOnPlayStructure`) from a generic enabled candidate to an
   explicit child-only candidate with max age `0x117`. This affects only
   autonomous candidate selection; drop/click behavior dispatch is untouched.
+
+## 2026-07-03 - VF3 TV Generated Frame Enum Order
+
+- B70 made the private VF3 TV animation strips mirror-correct, but B77
+  screenshots still showed one generated furniture orientation using the
+  opposite slant.
+- A contact sheet from B77 generated assets showed VF3 TV furniture frame `0`
+  is the generated source sprite and matches the private non-East animation
+  label, while frame `1` is the horizontal mirror and matches the private East
+  animation label. This frame order is opposite the stock TV donor's enum
+  order.
+- `FurnitureInfo` offsets `+0x24` and `+0x28` are the frame `0` and frame `1`
+  floating-animation enum slots for these TV records. B78 swaps only the
+  added VF3 TV private enum assignments at those offsets; base
+  `TVAnimBig*.png` / `TVAnimSmall*.png`, click behavior, furniture behavior,
+  and villager behavior remain untouched.
