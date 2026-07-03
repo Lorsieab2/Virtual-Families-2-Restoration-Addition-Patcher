@@ -162,6 +162,23 @@
   villager behavior, furniture behavior, debugger features, and stock
   `theMainScene.obj` unchanged.
 
+## B68 - Holiday Outfit Runtime Frame Restore
+
+- Fixes the B66/B67 regression where Holiday outfit store icons could render
+  while `holiday_body_runtime_frames.frames` stayed at `0`, leaving runtime
+  body-frame descriptors without offsets.
+- `sync_holiday_body_runtime_frames()` now searches complete image roots:
+  current output, prior completed `VF2-Mobile-Furniture-With-Island-Events-B*`
+  folders, then the B56 expanded Holiday body fallback.
+- Regenerates all 448 folder-backed Holiday body frames for female/male body
+  values `50-53` across `bodies`, `actions`, and `sit`, with all 448 graphics
+  descriptors carrying non-null offsets.
+- Adds a defensive `vf2_villager_body_frames.cpp` fallback clamp: recognized
+  Holiday body grids draw stock row `49` if an individual frame image is
+  unavailable instead of passing row `50-53` to the vanilla sheet renderer.
+- Keeps the native `CAnimManager` body lookup unpatched, debugger features
+  disabled, and villager/furniture behavior routes unchanged.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

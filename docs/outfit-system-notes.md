@@ -195,3 +195,25 @@ icons. `CInventoryManager::DrawItem(ldwPoint, ...)` and
 `CInventoryManager::DrawItem(ldwRect, ...)` have narrow prologue hooks that
 only intercept these high outfit item IDs and draw the matching preview icon;
 non-outfit inventory drawing falls through to stock code.
+
+## Holiday runtime frame regeneration milestone
+
+B68 fixes a crash-prone split between store preview art and runtime villager
+body art. The Clothing store can show Holiday outfit icons from fallback
+expanded sheets, but gameplay needs folder-backed runtime frames plus offsets
+for body values `50--53`.
+
+`sync_holiday_body_runtime_frames()` now searches complete image roots instead
+of only the current additive output folder: current `OUT/Images`, prior
+completed `outputs/VF2-Mobile-Furniture-With-Island-Events-B*` build folders,
+then `outputs/VF2-Mobile-Furniture-With-Island-Events-B56-Holiday-Body-Lookup-Test`.
+This regenerates 448 runtime frame PNGs:
+
+- 2 genders
+- 4 Holiday body values (`50--53`)
+- 56 mapped frames per value (`32 bodies + 15 actions + 9 sit`)
+
+`vf2_villager_body_frames.cpp` still routes only recognized villager body grids
+through the folder-backed renderer. If an individual Holiday frame image is
+unavailable, the fallback draw call clamps that recognized body-grid row to
+stock row `49` instead of passing `50--53` to the vanilla sheet renderer.

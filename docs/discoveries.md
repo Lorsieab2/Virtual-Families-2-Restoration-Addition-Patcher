@@ -187,3 +187,22 @@
   patcher now emits/copies the four required PNG payloads into the additive
   output: `BrokerUpgrade_icon.png`, `FoodClub_icon.png`,
   `HealthPlan_icon.png`, and `LuckyRock_icon.png`.
+
+## 2026-07-03 - Holiday Outfit Runtime Frames
+
+- The Holiday Outfit store previews can render correctly even when the
+  runtime villager body-frame records are missing. B66/B67 generated
+  `Images/OutfitIcons/` from fallback body sheets, but
+  `holiday_body_runtime_frames.frames` regressed to `0` because
+  `sync_holiday_body_runtime_frames()` only searched the current additive
+  `OUT/Images` folder for stock body/action/sit sheets.
+- B68 makes runtime frame generation use the same complete image-root search
+  model as the outfit icon generator: current output, prior completed
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B*` builds, then the B56
+  expanded Holiday body fallback. With no local Holiday archive present, it
+  regenerates all 448 cropped frame PNGs under
+  `Images/VillagerBodies/{Female,Male}/Body_50..Body_53/{bodies,actions,sit}`.
+- The generated `vf2_villager_body_frames.cpp` fallback now clamps recognized
+  Holiday body grids to stock row `49` if a per-frame image cannot be loaded,
+  avoiding a vanilla `DrawScaled(... row=50..53 ...)` path. The native
+  `CAnimManager` body lookup remains unpatched in normal builds.

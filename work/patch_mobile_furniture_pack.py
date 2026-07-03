@@ -2224,6 +2224,43 @@ def _normalize_holiday_body_frame(source_image, target_template):
     return output
 
 
+def _image_source_roots():
+    roots = [OUT / "Images"]
+    outputs = ROOT / "outputs"
+    if outputs.exists():
+        roots.extend(
+            build / "Images"
+            for build in sorted(
+                outputs.glob("VF2-Mobile-Furniture-With-Island-Events-B*"),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True,
+            )
+        )
+    roots.append(FALLBACK_HOLIDAY_BODY_BUILD / "Images")
+
+    unique = []
+    seen = set()
+    for root in roots:
+        key = str(root).lower()
+        if key not in seen and root.exists():
+            unique.append(root)
+            seen.add(key)
+    return unique
+
+
+def _find_source_image(sheet_name, min_width=0, min_height=0):
+    short = []
+    for root in _image_source_roots():
+        candidate = root / sheet_name
+        if not candidate.exists():
+            continue
+        size = read_png_size(candidate)
+        if size and size[0] >= min_width and size[1] >= min_height:
+            return candidate, short
+        short.append(f"{candidate}: size {size}, required {min_width}x{min_height}")
+    return None, short
+
+
 def sync_holiday_body_types(manifest):
     """Append complete action/body/sit rows for four additive holiday bodies."""
     appended = []
@@ -2367,25 +2404,37 @@ def sync_holiday_body_runtime_frames(manifest):
     frames = []
     missing = []
     issues = []
+    source_roots = []
     try:
         from PIL import Image
 
         output_root.mkdir(parents=True, exist_ok=True)
         archive = ZipFile(HOLIDAY_OUTFIT_ARCHIVE) if HOLIDAY_OUTFIT_ARCHIVE.exists() else None
         archive_names = set(archive.namelist()) if archive else set()
-        fallback_sheet_root = FALLBACK_HOLIDAY_BODY_BUILD / "Images"
+        sheet_cache = {}
+        source_roots = [str(root) for root in _image_source_roots()]
         try:
             for role_spec in HOLIDAY_BODY_ROLE_SPECS:
                 role = role_spec["role"]
                 first_frame, last_frame = role_spec["source_range"]
                 for gender, (sheet_name, archive_folder, prefix) in role_spec["sheets"].items():
-                    template_sheet = OUT / "Images" / sheet_name
-                    if not template_sheet.exists():
-                        missing.append(str(template_sheet))
+                    template_sheet, template_skips = _find_source_image(
+                        sheet_name,
+                        min_width=HOLIDAY_BODY_CELL_SIZE * role_spec["columns"],
+                        min_height=HOLIDAY_BODY_CELL_SIZE * HOLIDAY_BODY_BASE_ROWS,
+                    )
+                    if not template_sheet:
+                        missing.append(sheet_name)
+                        missing.extend(template_skips)
                         continue
                     with Image.open(template_sheet).convert("RGBA") as existing:
                         for body_value, source_set in zip(HOLIDAY_BODY_VALUES, HOLIDAY_BODY_SET_IDS):
                             gender_title = gender.title()
+                            fallback_sheet, fallback_skips = _find_source_image(
+                                sheet_name,
+                                min_width=HOLIDAY_BODY_CELL_SIZE * role_spec["columns"],
+                                min_height=(body_value + 1) * HOLIDAY_BODY_CELL_SIZE,
+                            )
                             for frame_number in range(first_frame, last_frame + 1):
                                 role_frame = frame_number - first_frame
                                 template_box = (
@@ -2403,20 +2452,21 @@ def sync_holiday_body_runtime_frames(manifest):
                                         normalized = _normalize_holiday_body_frame(mobile_frame, template)
                                     source_kind = "holiday_archive"
                                 else:
-                                    fallback_sheet = fallback_sheet_root / sheet_name
-                                    if fallback_sheet.exists():
-                                        with Image.open(fallback_sheet).convert("RGBA") as fallback:
-                                            if fallback.height >= (body_value + 1) * HOLIDAY_BODY_CELL_SIZE:
-                                                box = (
-                                                    role_frame * HOLIDAY_BODY_CELL_SIZE,
-                                                    body_value * HOLIDAY_BODY_CELL_SIZE,
-                                                    (role_frame + 1) * HOLIDAY_BODY_CELL_SIZE,
-                                                    (body_value + 1) * HOLIDAY_BODY_CELL_SIZE,
-                                                )
-                                                normalized = fallback.crop(box)
-                                                source_kind = "fallback_b56_expanded_sheet"
+                                    if fallback_sheet:
+                                        if fallback_sheet not in sheet_cache:
+                                            sheet_cache[fallback_sheet] = Image.open(fallback_sheet).convert("RGBA")
+                                        fallback = sheet_cache[fallback_sheet]
+                                        box = (
+                                            role_frame * HOLIDAY_BODY_CELL_SIZE,
+                                            body_value * HOLIDAY_BODY_CELL_SIZE,
+                                            (role_frame + 1) * HOLIDAY_BODY_CELL_SIZE,
+                                            (body_value + 1) * HOLIDAY_BODY_CELL_SIZE,
+                                        )
+                                        normalized = fallback.crop(box)
+                                        source_kind = f"expanded_sheet:{fallback_sheet}"
                                 if normalized is None:
                                     missing.append(archive_name)
+                                    missing.extend(fallback_skips)
                                     continue
                                 bbox = _alpha_bbox(normalized)
                                 if bbox:
@@ -2447,6 +2497,8 @@ def sync_holiday_body_runtime_frames(manifest):
                                     "source": source_kind,
                                 })
         finally:
+            for image in sheet_cache.values():
+                image.close()
             if archive:
                 archive.close()
     except Exception as exc:
@@ -2459,32 +2511,13 @@ def sync_holiday_body_runtime_frames(manifest):
         "frames": frames,
         "missing": missing,
         "issues": issues,
+        "source_roots": source_roots,
         "runtime_note": "The original sheets stay as fallback; body values 50-53 draw from these individual images.",
     }
 
 
 def _outfit_icon_source_roots():
-    roots = [OUT / "Images"]
-    outputs = ROOT / "outputs"
-    if outputs.exists():
-        roots.extend(
-            build / "Images"
-            for build in sorted(
-                outputs.glob("VF2-Mobile-Furniture-With-Island-Events-B*"),
-                key=lambda path: path.stat().st_mtime,
-                reverse=True,
-            )
-        )
-    roots.append(FALLBACK_HOLIDAY_BODY_BUILD / "Images")
-
-    unique = []
-    seen = set()
-    for root in roots:
-        key = str(root).lower()
-        if key not in seen and root.exists():
-            unique.append(root)
-            seen.add(key)
-    return unique
+    return _image_source_roots()
 
 
 def sync_outfit_store_icon_art(manifest):
@@ -2783,7 +2816,11 @@ extern "C" void __cdecl VF2DrawVillagerBodyFrameImpl(
             }}
         }}
     }}
-    if (window) window->DrawScaled(stockGrid, x, y, body, frame, scale, mirror != 0);
+    int fallbackBody = body;
+    if (roleSlot >= 0 && body >= kHolidayBodyFirst && body < kHolidayBodyFirst + kHolidayBodyCount) {{
+        fallbackBody = kHolidayBodyFirst - 1;
+    }}
+    if (window) window->DrawScaled(stockGrid, x, y, fallbackBody, frame, scale, mirror != 0);
 }}
 
 extern "C" __declspec(naked) void VF2DrawVillagerBodyFrame() {{
@@ -2808,7 +2845,7 @@ extern "C" __declspec(naked) void VF2DrawVillagerBodyFrame() {{
         "source": str(PATCHED / "vf2_villager_body_frames.cpp"),
         "image_ids": len(image_ids),
         "body_values": list(HOLIDAY_BODY_VALUES),
-        "stock_fallback": True,
+        "stock_fallback": "recognized holiday body grids clamp to row 49 if an individual frame image is unavailable",
     }
 
 
