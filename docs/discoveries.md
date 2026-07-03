@@ -446,3 +446,23 @@
   three VF3 TV fmaps from the VF3 sprite alpha footprint while preserving the
   stock TV fmap's nonzero cell payload values. This keeps base TV behavior and
   base TV assets untouched.
+
+## 2026-07-03 - Full Runtime Payload Packaging
+
+- B79-B82 had the runtime DLLs but B82's `Images/` folder contained only
+  generated/changed additive art. Launch probes showed B82 exits with code `3`
+  when using the partial B82 `Images/` tree, but the same B82 EXE stays running
+  when paired with a complete vanilla `Images/` payload plus the generated
+  additive overlay.
+- `work/patch_mobile_furniture_pack.py` now calls
+  `sync_vanilla_runtime_payload()` before additive image generation. The source
+  is the official local VF2 copy or `VF2_VANILLA_RUNTIME_DIR`; required runtime
+  files are `ldw.ini`, `wc.dat`, `icon.bmp`, `Images/`, and `Sounds/`.
+- `validate_runtime_payload_contract()` fails future builds if key base images
+  (`loading.jpg`, `MapX0Y0.jpg`, `female_heads00.png`, `TVAnimBig*.png`,
+  `TVAnimSmall*.png`, etc.), the full sound payload, SDL DLLs, or the VC90
+  private assembly are missing. B83's validated output has 8134 image files and
+  317 sound files, and a launch smoke test stayed running.
+- `work/offline_vf2_patcher.py` supports manifest `runtime_requirements` so the
+  offline patcher can refuse to patch an incomplete copied game folder before
+  applying byte or asset records.

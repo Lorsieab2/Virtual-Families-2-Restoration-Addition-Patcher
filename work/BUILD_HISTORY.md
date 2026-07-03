@@ -357,6 +357,23 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B82-VC90-Runtime-Package`.
 
+## B83 - Full Runtime Payload
+
+- Fixes the B79-B82 launch regression where release folders contained the SDL
+  DLLs but only a partial generated `Images/` tree. Probes showed the B82 EXE
+  stayed running with the complete vanilla image payload and exited with code
+  `3` with the partial B82 image payload.
+- Adds `sync_vanilla_runtime_payload()` to seed every output with the official
+  vanilla `Images/`, `Sounds/`, `ldw.ini`, `wc.dat`, and `icon.bmp` before
+  overlaying additive art.
+- Adds `validate_runtime_payload_contract()` and offline patcher
+  `runtime_requirements` support so future builds and patch bundles can reject
+  incomplete runtime folders before release or patching.
+- Keeps gameplay, furniture behavior, villager behavior, and TV behavior code
+  unchanged from B82.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B83-Full-Runtime-Payload`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

@@ -358,6 +358,95 @@ def settings_log(settings: dict[str, PatchSetting], enabled: set[str]) -> dict[s
     }
 
 
+def count_files(root: Path) -> int:
+    if not root.is_dir():
+        return 0
+    return sum(1 for path in root.rglob("*") if path.is_file())
+
+
+def manifest_runtime_requirements(
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+    enabled_settings: set[str],
+) -> list[dict[str, Any]]:
+    raw = manifest.get("runtime_requirements", manifest.get("required_runtime"))
+    if raw is None:
+        return []
+    if not isinstance(raw, dict):
+        raise PatchError("Manifest 'runtime_requirements' must be an object when present.")
+
+    requirements: list[dict[str, Any]] = []
+    for key in ("files", "required_files"):
+        rows = raw.get(key, [])
+        if not isinstance(rows, list):
+            raise PatchError(f"runtime_requirements.{key} must be an array.")
+        for index, row in enumerate(rows):
+            if isinstance(row, str):
+                requirements.append({"kind": "file", "path": normalize_rel_path(row, f"{key} #{index}")})
+                continue
+            if not isinstance(row, dict):
+                raise PatchError(f"runtime_requirements.{key} #{index} must be a string or object.")
+            requires = record_requires(row, f"runtime requirement {key} #{index}")
+            ensure_known_settings(requires, settings, f"Runtime requirement {key} #{index}")
+            if not record_is_active(requires, enabled_settings):
+                continue
+            requirements.append({
+                "kind": "file",
+                "path": normalize_rel_path(row.get("path", row.get("file_path", row.get("file"))), f"{key} #{index} path"),
+                "note": str(row.get("note", "")).strip(),
+            })
+
+    for key in ("directories", "required_dirs"):
+        rows = raw.get(key, [])
+        if not isinstance(rows, list):
+            raise PatchError(f"runtime_requirements.{key} must be an array.")
+        for index, row in enumerate(rows):
+            if isinstance(row, str):
+                requirements.append({"kind": "directory", "path": normalize_rel_path(row, f"{key} #{index}")})
+                continue
+            if not isinstance(row, dict):
+                raise PatchError(f"runtime_requirements.{key} #{index} must be a string or object.")
+            requires = record_requires(row, f"runtime requirement {key} #{index}")
+            ensure_known_settings(requires, settings, f"Runtime requirement {key} #{index}")
+            if not record_is_active(requires, enabled_settings):
+                continue
+            min_files = row.get("min_files")
+            requirements.append({
+                "kind": "directory",
+                "path": normalize_rel_path(row.get("path", row.get("dir", row.get("directory"))), f"{key} #{index} path"),
+                "min_files": None if min_files is None else parse_int(min_files, f"{key} #{index} min_files"),
+                "note": str(row.get("note", "")).strip(),
+            })
+
+    return requirements
+
+
+def verify_runtime_requirements(
+    game_dir: Path,
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+    enabled_settings: set[str],
+) -> list[dict[str, Any]]:
+    checks = []
+    for requirement in manifest_runtime_requirements(manifest, settings, enabled_settings):
+        rel_path = str(requirement["path"])
+        path = resolve_under_game_dir(game_dir, rel_path)
+        if requirement["kind"] == "file":
+            if not path.is_file():
+                raise PatchError(f"Required runtime file is missing: {rel_path}")
+            checks.append({"kind": "file", "path": rel_path, "size": path.stat().st_size})
+            continue
+
+        if not path.is_dir():
+            raise PatchError(f"Required runtime directory is missing: {rel_path}")
+        file_count = count_files(path)
+        min_files = requirement.get("min_files")
+        if min_files is not None and file_count < min_files:
+            raise PatchError(f"Required runtime directory is incomplete: {rel_path} has {file_count} file(s), expected at least {min_files}.")
+        checks.append({"kind": "directory", "path": rel_path, "files": file_count, "min_files": min_files})
+    return checks
+
+
 def manifest_patches(
     manifest: dict[str, Any],
     settings: dict[str, PatchSetting],
@@ -772,6 +861,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
         raise PatchError("No active patches remain after applying setting selections.")
     grouped = group_patches(patches)
     target_checks = verify_target_files(game_dir, manifest, settings, enabled_settings)
+    runtime_checks = verify_runtime_requirements(game_dir, manifest, settings, enabled_settings)
     file_data = verify_patch_bytes(game_dir, grouped)
     asset_checks = verify_asset_patches(game_dir, manifest_path.parent, assets)
 
@@ -809,6 +899,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
         "manifest_name": manifest.get("name"),
         "settings": settings_log(settings, enabled_settings),
         "target_checks": target_checks,
+        "runtime_checks": runtime_checks,
         "backup_dir": None if backup_dir is None else str(backup_dir),
         "backup_manifest": backup_manifest,
         "patches": patch_summary(grouped),

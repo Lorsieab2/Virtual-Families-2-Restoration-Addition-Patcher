@@ -83,6 +83,68 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(game_file.read_bytes(), original)
             self.assertTrue((backup / "restore_log.json").is_file())
 
+    def test_runtime_requirements_validate_game_payload_before_apply(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            (game_dir / "Images").mkdir()
+            (game_dir / "Images" / "loading.jpg").write_bytes(b"image")
+            (game_dir / "Sounds").mkdir()
+            (game_dir / "Sounds" / "sound00.wav").write_bytes(b"sound")
+            (game_dir / "ldw.ini").write_text("ok", encoding="ascii")
+            manifest = tmp_path / "runtime_patch.json"
+            backup = tmp_path / "backup"
+            self.write_manifest(manifest, game_file, original)
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            data["runtime_requirements"] = {
+                "required_files": ["ldw.ini", "Images/loading.jpg"],
+                "required_dirs": [{"path": "Images", "min_files": 1}, {"path": "Sounds", "min_files": 1}],
+            }
+            manifest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                "--backup-dir",
+                str(backup),
+            )
+            log = json.loads((backup / "patch_log.json").read_text(encoding="utf-8"))
+            self.assertEqual(len(log["runtime_checks"]), 4)
+
+    def test_runtime_requirements_refuse_partial_images_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            manifest = tmp_path / "runtime_patch.json"
+            self.write_manifest(manifest, game_file, original)
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            data["runtime_requirements"] = {
+                "required_files": ["Images/loading.jpg"],
+            }
+            manifest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                expect=2,
+            )
+            self.assertIn("Required runtime file is missing: Images", result.stderr)
+            self.assertEqual(game_file.read_bytes(), original)
+
     def test_asset_patch_creates_private_tv_strip_and_restore_removes_it(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

@@ -56,6 +56,36 @@ HOLIDAY_OUTFIT_ARCHIVE = Path(r"C:\Users\Owner\Downloads\VF2_Holiday_Content\Hol
 ORIGINAL_VF2_SPRITE_COPY_SOURCE_DIR = Path(r"C:\Users\Owner\OneDrive\Desktop\LDW Desktop Games!! And Other Stuff\Virtual Families 2 - Copy Official\originalimages")
 GENERATED_VILLAGER_BODIES = ROOT / "generated" / "VillagerBodies"
 FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B56-Holiday-Body-Lookup-Test"
+VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS = (
+    Path(r"C:\Users\Owner\OneDrive\Desktop\LDW Desktop Games!! And Other Stuff\Virtual Families 2 - Copy Official"),
+    ROOT / "work" / "vanilla_runtime_payload",
+    Path(r"C:\Users\Owner\Downloads\VF2-Mobile-Furniture-With-Island-Events-B78-TV-Frame-Enum-Orientation"),
+)
+VANILLA_RUNTIME_REQUIRED_FILES = (
+    "ldw.ini",
+    "wc.dat",
+    "icon.bmp",
+)
+VANILLA_RUNTIME_REQUIRED_DIRS = (
+    "Images",
+    "Sounds",
+)
+VANILLA_RUNTIME_OPTIONAL_FILES = (
+    "Readme.txt",
+)
+RUNTIME_REQUIRED_IMAGE_FILES = (
+    "loading.jpg",
+    "MapX0Y0.jpg",
+    "MenuStoreClothing1.png",
+    "female_heads00.png",
+    "male_heads00.png",
+    "TVAnimBig.png",
+    "TVAnimBigE.png",
+    "TVAnimSmall.png",
+    "TVAnimSmallE.png",
+)
+RUNTIME_MIN_IMAGE_FILE_COUNT = 1000
+RUNTIME_MIN_SOUND_FILE_COUNT = 300
 DESKTOP_RUNTIME_DLL_NAMES = (
     "SDL2.dll",
     "SDL2_image.dll",
@@ -1654,6 +1684,86 @@ def copy_obj_tree():
     PATCHED.mkdir(parents=True)
     for obj in SRC_OBJS.glob("*.obj"):
         shutil.copy2(obj, PATCHED / obj.name)
+
+
+def count_files(root):
+    if not root.is_dir():
+        return 0
+    return sum(1 for path in root.rglob("*") if path.is_file())
+
+
+def vanilla_runtime_payload_source_dirs():
+    env_source = os.environ.get("VF2_VANILLA_RUNTIME_DIR")
+    roots = []
+    if env_source:
+        roots.append(Path(env_source))
+    roots.extend(VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS)
+
+    unique = []
+    seen = set()
+    for root in roots:
+        key = str(root).lower()
+        if key in seen:
+            continue
+        unique.append(root)
+        seen.add(key)
+    return unique
+
+
+def find_vanilla_runtime_payload_source():
+    for root in vanilla_runtime_payload_source_dirs():
+        if not root.is_dir():
+            continue
+        if all((root / filename).is_file() for filename in VANILLA_RUNTIME_REQUIRED_FILES) and all(
+            (root / dirname).is_dir() for dirname in VANILLA_RUNTIME_REQUIRED_DIRS
+        ):
+            return root
+    return None
+
+
+def sync_vanilla_runtime_payload(manifest):
+    source = find_vanilla_runtime_payload_source()
+    if source is None:
+        raise RuntimeError(
+            "Missing vanilla VF2 runtime payload source. Set VF2_VANILLA_RUNTIME_DIR "
+            "or restore the official VF2 copy with Images, Sounds, ldw.ini, wc.dat, and icon.bmp."
+        )
+
+    copied_files = []
+    copied_dirs = []
+    for dirname in VANILLA_RUNTIME_REQUIRED_DIRS:
+        src = source / dirname
+        dst = OUT / dirname
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        copied_dirs.append({
+            "name": dirname,
+            "source": str(src),
+            "target": str(dst),
+            "files": count_files(dst),
+        })
+
+    for filename in VANILLA_RUNTIME_REQUIRED_FILES + VANILLA_RUNTIME_OPTIONAL_FILES:
+        src = source / filename
+        if not src.is_file():
+            continue
+        dst = OUT / filename
+        shutil.copy2(src, dst)
+        copied_files.append({
+            "name": filename,
+            "source": str(src),
+            "target": str(dst),
+            "bytes": dst.stat().st_size,
+        })
+
+    manifest["base_runtime_payload"] = {
+        "status": "seeded from vanilla runtime folder",
+        "source": str(source),
+        "required_files": list(VANILLA_RUNTIME_REQUIRED_FILES),
+        "required_dirs": list(VANILLA_RUNTIME_REQUIRED_DIRS),
+        "copied_files": copied_files,
+        "copied_dirs": copied_dirs,
+        "runtime_note": "Every release folder must keep the full vanilla Images and Sounds payload beside the patched EXE; additive art is overlaid after this seed step.",
+    }
 
 
 def raw_records_by_item():
@@ -7440,6 +7550,54 @@ def validate_vf3_tv_behavior_contract(manifest):
     }
 
 
+def validate_runtime_payload_contract(manifest):
+    errors = []
+    for filename in VANILLA_RUNTIME_REQUIRED_FILES:
+        if not (OUT / filename).is_file():
+            errors.append(f"missing required runtime file: {filename}")
+    for dirname in VANILLA_RUNTIME_REQUIRED_DIRS:
+        if not (OUT / dirname).is_dir():
+            errors.append(f"missing required runtime directory: {dirname}")
+
+    images_dir = OUT / "Images"
+    sounds_dir = OUT / "Sounds"
+    image_count = count_files(images_dir)
+    sound_count = count_files(sounds_dir)
+    if image_count < RUNTIME_MIN_IMAGE_FILE_COUNT:
+        errors.append(f"Images payload is incomplete: {image_count} files, expected at least {RUNTIME_MIN_IMAGE_FILE_COUNT}")
+    if sound_count < RUNTIME_MIN_SOUND_FILE_COUNT:
+        errors.append(f"Sounds payload is incomplete: {sound_count} files, expected at least {RUNTIME_MIN_SOUND_FILE_COUNT}")
+
+    for filename in RUNTIME_REQUIRED_IMAGE_FILES:
+        if not (images_dir / filename).is_file():
+            errors.append(f"missing required base image: Images/{filename}")
+    for filename in DESKTOP_RUNTIME_DLL_NAMES:
+        if not (OUT / filename).is_file():
+            errors.append(f"missing required desktop runtime DLL: {filename}")
+
+    vc90_dir = OUT / VC90_CRT_ASSEMBLY_NAME
+    vc90_manifest = vc90_dir / f"{VC90_CRT_ASSEMBLY_NAME}.manifest"
+    if not vc90_manifest.is_file():
+        errors.append(f"missing VC90 private assembly manifest: {VC90_CRT_ASSEMBLY_NAME}/{vc90_manifest.name}")
+    for filename in VC90_CRT_DLL_NAMES:
+        if not (vc90_dir / filename).is_file():
+            errors.append(f"missing VC90 private assembly DLL: {VC90_CRT_ASSEMBLY_NAME}/{filename}")
+
+    if errors:
+        raise RuntimeError("Runtime payload contract failed:\n- " + "\n- ".join(errors))
+
+    manifest["runtime_payload_contract"] = {
+        "status": "validated",
+        "images_file_count": image_count,
+        "sounds_file_count": sound_count,
+        "required_root_files": list(VANILLA_RUNTIME_REQUIRED_FILES),
+        "required_images": list(RUNTIME_REQUIRED_IMAGE_FILES),
+        "required_dlls": list(DESKTOP_RUNTIME_DLL_NAMES),
+        "vc90_private_assembly": VC90_CRT_ASSEMBLY_NAME,
+        "release_note": "B79-B82 could produce a partial Images folder; this gate prevents publishing a folder or ZIP that cannot launch after extraction.",
+    }
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     copy_obj_tree()
@@ -7458,6 +7616,7 @@ def main():
             for i, (name, donor, list_name, path) in enumerate(ITEMS)
         ]
     }
+    sync_vanilla_runtime_payload(manifest)
     patch_furniture_manager(manifest)
     patch_added_furniture_click_aliases(manifest)
     patch_visible_special_upgrades(manifest)
@@ -7537,6 +7696,7 @@ def main():
     write_internal_workings_summary(manifest)
     validate_vf3_tv_animation_contract(manifest)
     validate_vf3_tv_behavior_contract(manifest)
+    validate_runtime_payload_contract(manifest)
     (OUT / "patch-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(json.dumps(manifest, indent=2))
 

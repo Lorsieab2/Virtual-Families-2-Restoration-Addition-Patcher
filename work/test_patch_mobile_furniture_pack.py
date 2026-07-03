@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import copy
+import tempfile
 import unittest
+from pathlib import Path
 
 import patch_mobile_furniture_pack as patcher
 
@@ -168,6 +170,61 @@ class OutfitStoreMappingTests(unittest.TestCase):
                     patcher.outfit_store_entry_index("male", body_value),
                     body_count + patcher.OUTFIT_STORE_BODY_VALUES.index(body_value),
                 )
+
+
+class RuntimePayloadContractTests(unittest.TestCase):
+    def with_temp_runtime(self, callback):
+        old_out = patcher.OUT
+        old_min_images = patcher.RUNTIME_MIN_IMAGE_FILE_COUNT
+        old_min_sounds = patcher.RUNTIME_MIN_SOUND_FILE_COUNT
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.OUT = Path(tmp)
+                patcher.RUNTIME_MIN_IMAGE_FILE_COUNT = len(patcher.RUNTIME_REQUIRED_IMAGE_FILES)
+                patcher.RUNTIME_MIN_SOUND_FILE_COUNT = 1
+                callback(Path(tmp))
+        finally:
+            patcher.OUT = old_out
+            patcher.RUNTIME_MIN_IMAGE_FILE_COUNT = old_min_images
+            patcher.RUNTIME_MIN_SOUND_FILE_COUNT = old_min_sounds
+
+    def write_minimal_runtime_payload(self, root):
+        (root / "Images").mkdir(parents=True)
+        (root / "Sounds").mkdir(parents=True)
+        for filename in patcher.VANILLA_RUNTIME_REQUIRED_FILES:
+            (root / filename).write_bytes(b"x")
+        for filename in patcher.RUNTIME_REQUIRED_IMAGE_FILES:
+            (root / "Images" / filename).write_bytes(b"x")
+        (root / "Sounds" / "sound00.wav").write_bytes(b"x")
+        for filename in patcher.DESKTOP_RUNTIME_DLL_NAMES:
+            (root / filename).write_bytes(b"x")
+        vc90 = root / patcher.VC90_CRT_ASSEMBLY_NAME
+        vc90.mkdir()
+        (vc90 / f"{patcher.VC90_CRT_ASSEMBLY_NAME}.manifest").write_text("<assembly/>", encoding="ascii")
+        for filename in patcher.VC90_CRT_DLL_NAMES:
+            (vc90 / filename).write_bytes(b"x")
+
+    def test_accepts_complete_runtime_payload(self):
+        def run(root):
+            manifest = {}
+            self.write_minimal_runtime_payload(root)
+
+            patcher.validate_runtime_payload_contract(manifest)
+
+            self.assertEqual(manifest["runtime_payload_contract"]["status"], "validated")
+
+        self.with_temp_runtime(run)
+
+    def test_rejects_partial_images_payload(self):
+        def run(root):
+            manifest = {}
+            self.write_minimal_runtime_payload(root)
+            (root / "Images" / "loading.jpg").unlink()
+
+            with self.assertRaisesRegex(RuntimeError, "missing required base image: Images/loading.jpg"):
+                patcher.validate_runtime_payload_contract(manifest)
+
+        self.with_temp_runtime(run)
 
 
 if __name__ == "__main__":

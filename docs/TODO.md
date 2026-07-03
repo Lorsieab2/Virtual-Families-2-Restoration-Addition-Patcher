@@ -34,17 +34,22 @@
   `validate_vf3_tv_behavior_contract()` or equivalent release validation steps
   so malformed VF3 TV east/west frame enum assignments and missing TV fmaps are
   rejected before publication.
+- Include `runtime_requirements` in current-build offline patch manifests so
+  the patcher verifies the user selected a complete vanilla VF2 folder with
+  `Images/`, `Sounds/`, `ldw.ini`, `wc.dat`, and key base art before applying
+  byte or asset patches.
 - Make antivirus false-positive reduction the top packaging priority. Prefer
   transparent patching and reproducible build artifacts over packed/obfuscated
   executables, preserve normal PE metadata where possible, sign the patcher and
   produced executable with a valid code-signing certificate, publish hashes, and
   maintain a McAfee/SmartScreen/AV vendor false-positive submission process for
   release builds.
-- Before each release ZIP upload, verify the archive contains the EXE, `Images`
-  payloads, the six required top-level runtime DLLs (`SDL2.dll`,
-  `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`, `zlib1.dll`,
-  `fmod.dll`), and the `Microsoft.VC90.CRT/` private assembly folder required
-  by the packaged `SDL2_image.dll`.
+- Before each release ZIP upload, verify the archive contains the EXE, the full
+  seeded vanilla `Images/` and `Sounds/` payloads plus additive overlays,
+  `ldw.ini`, `wc.dat`, `icon.bmp`, the six required top-level runtime DLLs
+  (`SDL2.dll`, `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`,
+  `zlib1.dll`, `fmod.dll`), and the `Microsoft.VC90.CRT/` private assembly
+  folder required by the packaged `SDL2_image.dll`.
 
 ## Research Leads
 

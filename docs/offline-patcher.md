@@ -151,6 +151,35 @@ patch is written. `size`, `file_version`, `product_version`, and `pe_timestamp`
 are validated when present; version and PE timestamp checks are supplemental to
 the executable hash.
 
+`runtime_requirements` is optional but should be included by VF2 release
+manifests. It lets the patcher verify that the selected game directory is a
+complete vanilla runtime folder before any byte or asset patches are written:
+
+```json
+{
+  "runtime_requirements": {
+    "required_files": [
+      "ldw.ini",
+      "wc.dat",
+      "Images/loading.jpg",
+      "Images/TVAnimBig.png",
+      "Images/TVAnimBigE.png",
+      "Images/TVAnimSmall.png",
+      "Images/TVAnimSmallE.png"
+    ],
+    "required_dirs": [
+      { "path": "Images", "min_files": 1000 },
+      { "path": "Sounds", "min_files": 300 }
+    ]
+  }
+}
+```
+
+Directory and file requirement rows can also include `requires`/`settings` like
+patch records. Use this to prevent applying the mod to an EXE-only folder or a
+partial copied build that would later fail with missing-image or missing-DLL
+launch errors.
+
 Each byte patch must be length-preserving. Length-changing edits should be
 represented as asset/table replacement work or by adding a future manifest
 record type with its own safety rules. Overlapping byte patches are refused.
