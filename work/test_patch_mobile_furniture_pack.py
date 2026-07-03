@@ -199,6 +199,18 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         self.assertFalse(contract["holiday_ornaments"]["enabled"])
         self.assertIn("48 collectibles", contract["holiday_ornaments"]["status"])
 
+    def test_supplied_collection_art_maps_to_twelve_collectibles(self):
+        self.assertEqual(
+            len(patcher.HOLIDAY_ORNAMENT_COLLECTION_FILES),
+            patcher.HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT,
+        )
+        runtime_names = [entry[0] for entry in patcher.HOLIDAY_ORNAMENT_COLLECTION_FILES]
+        source_names = [entry[1] for entry in patcher.HOLIDAY_ORNAMENT_COLLECTION_FILES]
+
+        self.assertEqual(len(runtime_names), len(set(runtime_names)))
+        self.assertEqual(len(source_names), len(set(source_names)))
+        self.assertFalse(any("CandyCane" in name for name in source_names))
+
 
 class RuntimePayloadContractTests(unittest.TestCase):
     def with_temp_runtime(self, callback):

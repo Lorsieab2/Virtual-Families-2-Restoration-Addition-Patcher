@@ -218,8 +218,10 @@ as:
   collectibles, collection screen art, and Goals entries. Current manifest
   conversion must include the B86 `CCollectableItem::Find()` and
   `WasItemSpawned()` family-range patches for request `0x9E` and active
-  variants `0x9E-0xA9`. Keep this disabled in release manifests until the B84
-  collection-page crash is fixed.
+  variants `0x9E-0xA9`, plus the B87 supplied `Images/CollectionOrnaments/*`
+  payloads, baked-placeholder frame background, and replacement
+  `Images/collectables_small.png`. Keep this disabled in release manifests
+  until the B84 collection-page crash is fixed.
 
 Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings

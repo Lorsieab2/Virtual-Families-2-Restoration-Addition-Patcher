@@ -412,6 +412,22 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B86-Holiday-Ornament-Pickup-Fix`.
 
+## B87 - Holiday Ornament Collection Art
+
+- Ornament-enabled research build using the supplied
+  `C:\Users\Owner\Downloads\Holiday Collectibles` collection-screen art and
+  `C:\Users\Owner\Downloads\collectables_small.png`.
+- Bakes the supplied `*-Placeholder.png` ornament silhouettes into the
+  `Collection_ChristmasOrnament_Frame.png` background so uncollected slots show
+  the expected placeholders without changing `CCollectionScene::DrawScene()`.
+- Copies the 12 collected ornament images into `Images/CollectionOrnaments/`
+  and preserves `Collection_ChristmasOrnament_CandyCane.png` as decorative
+  source art, not a 13th collectible.
+- Replaces the build-local `Images/collectables_small.png` with the supplied
+  sheet so the small collection icon atlas includes the Holiday Ornament row.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B87-Holiday-Ornament-Collection-Art`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

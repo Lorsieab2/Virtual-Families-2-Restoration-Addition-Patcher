@@ -64,8 +64,8 @@
   prove the `CCollectionScene` table append, page count, object-field reads,
   achievement row, yard spawns, Lucky Rock odds, pickup/removal/count
   incrementing after the B86 `Find()`/`WasItemSpawned()` family-range patch,
-  save/load persistence, and stock `48` collectible total when the feature is
-  disabled.
+  the B87 supplied Collection screen art and small-icon sheet, save/load
+  persistence, and stock `48` collectible total when the feature is disabled.
 - In-game test B77 Playhouse spontaneous behavior: verify children can still
   spontaneously use the Playhouse, adults do not select Playhouse
   spontaneously, and manual furniture/drop behavior remains unchanged.

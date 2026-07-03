@@ -363,6 +363,13 @@
   `0x9E` with spawned variants `0x9E-0xA9`, so B86 adds explicit `0x9E`
   family handling to both functions. Without this, the spawn gate does not see
   an active variant and villager pickup searches can miss spawned ornaments.
+- The supplied `Holiday Collectibles` folder contains a real
+  `Collection_ChristmasOrnament_Frame.png` (`940x732`), 12 collected ornament
+  images, 12 matching `*-Placeholder.png` images, and a decorative
+  `Collection_ChristmasOrnament_CandyCane.png` with no placeholder pair. B87
+  keeps the collectable range at exactly 12 IDs, bakes the placeholders into
+  the frame background, copies the 12 collected images as draw overlays, and
+  replaces `Images/collectables_small.png` with the supplied `240x640` sheet.
 
 ## 2026-07-03 - Playhouse Child-Only Autonomous Gate
 

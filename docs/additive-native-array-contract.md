@@ -91,8 +91,13 @@ the game can keep spawning ornaments and fail to route villagers to pick them
 up.
 
 Collections page `5` is appended to the native `CCollectionScene` tables rather
-than replacing an existing page. The page uses generated build-local art under
-`Images/CollectionOrnaments/` plus `Images/collection-ornaments_background.png`.
-The matching Goals entry is achievement `0x5F`; visible achievement/order bounds
-must widen to `0x60`, while the existing achievement save block remains large
-enough for this row.
+than replacing an existing page. The page uses supplied collection-screen art
+from `C:\Users\Owner\Downloads\Holiday Collectibles`: the 12 placeholder
+images are baked into the frame background, while the 12 collected ornament
+images are copied under `Images/CollectionOrnaments/` and drawn by the stock
+`Count(item) > 0` overlay path. `Collection_ChristmasOrnament_CandyCane.png`
+is decorative source art, not a 13th collectible. The build also copies the
+supplied `collectables_small.png` over the runtime sheet so the small collection
+atlas contains the Holiday Ornament row. The matching Goals entry is
+achievement `0x5F`; visible achievement/order bounds must widen to `0x60`,
+while the existing achievement save block remains large enough for this row.

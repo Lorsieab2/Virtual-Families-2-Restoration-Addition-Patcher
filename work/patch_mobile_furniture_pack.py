@@ -230,6 +230,9 @@ ACHIEVEMENT_ROW_SIZE = 0x1C
 HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT = ROOT / "work" / "vf2_obb" / "assets" / "tp225.dat"
 HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR = ROOT / "work" / "vf2_obb" / "assets" / "tp225.pvr"
 HOLIDAY_ORNAMENT_BACKGROUND_FILENAME = "collection-ornaments_background.png"
+HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR = Path(r"C:\Users\Owner\Downloads\Holiday Collectibles")
+HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE = Path(r"C:\Users\Owner\Downloads\collectables_small.png")
+HOLIDAY_ORNAMENT_FRAME_SOURCE = "Collection_ChristmasOrnament_Frame.png"
 HOLIDAY_ORNAMENT_IMAGE_SCALE = 1024.0 / 800.0
 HOLIDAY_ORNAMENT_ATLAS_RECORDS = [
     ("collection_christmasornament_blueball.png", 903, 334, 93, 115),
@@ -244,6 +247,20 @@ HOLIDAY_ORNAMENT_ATLAS_RECORDS = [
     ("collection_christmasornament_threebells.png", 896, 571, 85, 119),
     ("collection_christmasornament_twirl.png", 922, 113, 96, 103),
     ("collection_christmasornament_twisty.png", 804, 121, 108, 102),
+]
+HOLIDAY_ORNAMENT_COLLECTION_FILES = [
+    ("collection_christmasornament_blueball.png", "Collection_ChristmasOrnament_BlueBall.png", "Collection_ChristmasOrnament_BlueBall-Placeholder.png"),
+    ("collection_christmasornament_crosses.png", "Collection_ChristmasOrnament_Crosses.png", "Collection_ChristmasOrnament_Crosses-Placeholder.png"),
+    ("collection_christmasornament_disco.png", "Collection_ChristmasOrnament_Disco.png", "Collection_ChristmasOrnament_Disco-Placeholder.png"),
+    ("collection_christmasornament_golddealio.png", "Collection_ChristmasOrnament_GoldDealio.png", "Collection_ChristmasOrnament_GoldDealio-Placeholder.png"),
+    ("collection_christmasornament_heart.png", "Collection_ChristmasOrnament_Heart.png", "Collection_ChristmasOrnament_Heart-Placeholder.png"),
+    ("collection_christmasornament_hotairballoon.png", "Collection_ChristmasOrnament_HotAirBalloon.png", "Collection_ChristmasOrnament_HotAirBalloon-Placeholder.png"),
+    ("collection_christmasornament_redgoldornament.png", "Collection_ChristmasOrnament_RedGoldOrnament.png", "Collection_ChristmasOrnament_RedGoldOrnament-Placeholder.png"),
+    ("collection_christmasornament_silverbell.png", "Collection_ChristmasOrnament_Silverbell.png", "Collection_ChristmasOrnament_Silverbell-Placeholder.png"),
+    ("collection_christmasornament_star.png", "Collection_ChristmasOrnament_Star.png", "Collection_ChristmasOrnament_Star-Placeholder.png"),
+    ("collection_christmasornament_threebells.png", "Collection_ChristmasOrnament_Threebells.png", "Collection_ChristmasOrnament_Threebells-Placeholder.png"),
+    ("collection_christmasornament_twirl.png", "Collection_ChristmasOrnament_Twirl.png", "Collection_ChristmasOrnament_Twirl-Placeholder.png"),
+    ("collection_christmasornament_twisty.png", "Collection_ChristmasOrnament_Twisty.png", "Collection_ChristmasOrnament_Twisty-Placeholder.png"),
 ]
 HOLIDAY_ORNAMENT_COLLECTION_SLOT_POSITIONS = [
     (0x0B4, 0x1DC),
@@ -422,7 +439,7 @@ def build_native_array_contract():
                 "register base carrying value 0x9E as another 12-item spawn collection",
                 "append one Collections scene page without changing CCollectionScene object size",
                 "append one Goals screen achievement row without changing the save-state size",
-                "use generated Images/CollectionOrnaments payloads copied into the modified build folder",
+                "use supplied Holiday Collectibles page art and collectables_small.png copied into the modified build folder",
             ],
         },
     }
@@ -3062,14 +3079,88 @@ def sync_holiday_ornament_collection_art(manifest):
     output_root.mkdir(parents=True, exist_ok=True)
     background_target = OUT / "Images" / HOLIDAY_ORNAMENT_BACKGROUND_FILENAME
     status = {
-        "source_dat": str(HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT),
-        "source_pvr": str(HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR),
+        "preferred_source_dir": str(HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR),
+        "fallback_source_dat": str(HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT),
+        "fallback_source_pvr": str(HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR),
         "image_base": hex(image_base),
         "background_image_id": hex(holiday_ornament_collection_background_image_id(HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)),
         "entries": [],
     }
+    supplied_files = [HOLIDAY_ORNAMENT_FRAME_SOURCE]
+    for _runtime_name, source_name, placeholder_name in HOLIDAY_ORNAMENT_COLLECTION_FILES:
+        supplied_files.append(source_name)
+        supplied_files.append(placeholder_name)
+    missing_supplied = [
+        name for name in supplied_files
+        if not (HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / name).exists()
+    ]
+    if HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR.exists() and not missing_supplied:
+        frame_source = HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / HOLIDAY_ORNAMENT_FRAME_SOURCE
+        background = Image.open(frame_source).convert("RGBA")
+        placeholder_entries = []
+        for index, (_runtime_name, _source_name, placeholder_name) in enumerate(HOLIDAY_ORNAMENT_COLLECTION_FILES):
+            placeholder_source = HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / placeholder_name
+            placeholder = Image.open(placeholder_source).convert("RGBA")
+            x, y = HOLIDAY_ORNAMENT_COLLECTION_SLOT_POSITIONS[index]
+            background.alpha_composite(placeholder, (x, y))
+            placeholder_entries.append({
+                "collectable": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START + index),
+                "source": str(placeholder_source),
+                "position": [x, y],
+                "size": list(placeholder.size),
+            })
+        background_target.parent.mkdir(parents=True, exist_ok=True)
+        background.save(background_target)
+        status["background"] = {
+            "path": str(background_target),
+            "source_frame": str(frame_source),
+            "output_size": list(background.size),
+            "placeholders_baked_into_background": placeholder_entries,
+        }
+
+        for index, (runtime_name, source_name, placeholder_name) in enumerate(HOLIDAY_ORNAMENT_COLLECTION_FILES):
+            source = HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / source_name
+            target = output_root / runtime_name
+            icon = Image.open(source).convert("RGBA")
+            icon.save(target)
+            status["entries"].append({
+                "collectable": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START + index),
+                "image_id": hex(holiday_ornament_collection_item_image_id(index, HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)),
+                "path": str(target.relative_to(OUT / "Images")).replace("\\", "/"),
+                "source": str(source),
+                "placeholder_source": str(HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / placeholder_name),
+                "output_size": list(icon.size),
+            })
+
+        if HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE.exists():
+            small_target = OUT / "Images" / "collectables_small.png"
+            small_target.parent.mkdir(parents=True, exist_ok=True)
+            small_image = Image.open(HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE).convert("RGBA")
+            small_image.save(small_target)
+            status["collectables_small"] = {
+                "source": str(HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE),
+                "path": str(small_target),
+                "output_size": list(small_image.size),
+            }
+        else:
+            status["collectables_small"] = {
+                "status": "missing_supplied_sheet",
+                "source": str(HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE),
+            }
+
+        manifest["holiday_ornament_collection_art"] = {
+            **status,
+            "status": "generated_from_supplied_assets",
+            "output_root": str(output_root),
+            "decorative_source_not_a_collectable": "Collection_ChristmasOrnament_CandyCane.png",
+        }
+        return
+
     if not HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT.exists() or not HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR.exists():
-        status.update({"status": "missing_mobile_atlas"})
+        status.update({
+            "status": "missing_supplied_assets_and_mobile_atlas",
+            "missing_supplied_assets": missing_supplied,
+        })
         manifest["holiday_ornament_collection_art"] = status
         return
 
@@ -3104,7 +3195,8 @@ def sync_holiday_ornament_collection_art(manifest):
 
     manifest["holiday_ornament_collection_art"] = {
         **status,
-        "status": "generated" if len(status["entries"]) == HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT else "partial",
+        "status": "generated_from_fallback_mobile_atlas" if len(status["entries"]) == HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT else "partial",
+        "missing_supplied_assets": missing_supplied,
         "output_root": str(output_root),
     }
 
@@ -5507,7 +5599,7 @@ def patch_graphics_manager(manifest):
 
     ornament_desc_manifest = []
     if ENABLE_HOLIDAY_ORNAMENTS:
-        for index, (filename, _x, _y, _w, _h) in enumerate(HOLIDAY_ORNAMENT_ATLAS_RECORDS):
+        for index, (filename, _source_name, _placeholder_name) in enumerate(HOLIDAY_ORNAMENT_COLLECTION_FILES):
             image_id = holiday_ornament_collection_item_image_id(index, holiday_body_descriptor_count)
             path = f"CollectionOrnaments/{filename}"
             vals = plain_image_donor[:]
