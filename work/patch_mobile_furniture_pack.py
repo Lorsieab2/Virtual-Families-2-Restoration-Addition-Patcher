@@ -5901,6 +5901,67 @@ def patch_collectable_item_holiday_ornaments(manifest):
         "specific_goal_row": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
     })
 
+    def rel32(from_off, instr_len, target_off):
+        return struct.pack("<i", target_off - (from_off + instr_len))
+
+    find_sym = obj.symbol("?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z")
+    find_insert = find_sym.value + 0x86
+    find_sec = obj.section(find_sym.section)
+    expected_find = b"\x83\xFF\x7D\x75\x39\x83\xC0\x83"
+    if obj.buf[find_sec.raw_ptr + find_insert : find_sec.raw_ptr + find_insert + len(expected_find)] != expected_find:
+        raise RuntimeError("Unexpected CCollectableItem::Find ornament range insertion site")
+    find_payload_len = 28
+    find_continue = find_insert + find_payload_len
+    find_accept = find_sym.value + 0x93 + find_payload_len
+    find_skip = find_sym.value + 0xC4 + find_payload_len
+    find_payload = bytearray()
+    find_payload += b"\x83\xFF" + bytes([HOLIDAY_ORNAMENT_COLLECTABLE_START])
+    find_payload += b"\x0F\x85" + rel32(find_insert + len(find_payload), 6, find_continue)
+    find_payload += b"\x2D" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+    find_payload += b"\x83\xF8" + bytes([HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT - 1])
+    find_payload += b"\x0F\x86" + rel32(find_insert + len(find_payload), 6, find_accept)
+    find_payload += b"\xE9" + rel32(find_insert + len(find_payload), 5, find_skip)
+    if len(find_payload) != find_payload_len:
+        raise RuntimeError("Unexpected CCollectableItem::Find ornament range payload length")
+    obj.insert_section_bytes(find_sym.section, find_insert, bytes(find_payload))
+    patches.append({
+        "function": "?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z",
+        "insert_offset": "0x86",
+        "request_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
+        "active_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
+        "note": "Lets villager searches for base ornament request 0x9E match any spawned ornament variant.",
+    })
+
+    spawned_sym = obj.symbol("?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z")
+    spawned_insert = spawned_sym.value + 0x1A
+    spawned_sec = obj.section(spawned_sym.section)
+    expected_spawned = b"\x42\x83\xC0\x1C\x83\xFA\x02"
+    if obj.buf[spawned_sec.raw_ptr + spawned_insert : spawned_sec.raw_ptr + spawned_insert + len(expected_spawned)] != expected_spawned:
+        raise RuntimeError("Unexpected CCollectableItem::WasItemSpawned ornament range insertion site")
+    spawned_payload_len = 32
+    spawned_continue = spawned_insert + spawned_payload_len
+    spawned_true = spawned_sym.value + 0x29 + spawned_payload_len
+    spawned_payload = bytearray()
+    spawned_payload += b"\x83\xF9" + bytes([HOLIDAY_ORNAMENT_COLLECTABLE_START])
+    spawned_payload += b"\x0F\x85" + rel32(spawned_insert + len(spawned_payload), 6, spawned_continue)
+    spawned_payload += b"\x50"
+    spawned_payload += b"\x8B\x00"
+    spawned_payload += b"\x2D" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+    spawned_payload += b"\x83\xF8" + bytes([HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT - 1])
+    spawned_payload += b"\x58"
+    spawned_payload += b"\x0F\x86" + rel32(spawned_insert + len(spawned_payload), 6, spawned_true)
+    spawned_payload += b"\xE9" + rel32(spawned_insert + len(spawned_payload), 5, spawned_continue)
+    if len(spawned_payload) != spawned_payload_len:
+        raise RuntimeError("Unexpected CCollectableItem::WasItemSpawned ornament range payload length")
+    obj.insert_section_bytes(spawned_sym.section, spawned_insert, bytes(spawned_payload))
+    patches.append({
+        "function": "?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
+        "insert_offset": "0x1a",
+        "request_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
+        "active_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
+        "note": "Prevents repeated base-spawn attempts when any ornament variant is already active.",
+    })
+
     obj.write(PATCHED / "CollectableItem.obj")
     manifest["CollectableItemHolidayOrnaments"] = {
         "status": "patched",

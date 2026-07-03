@@ -356,6 +356,13 @@
   now leave the base four collection pages and `48` total collectibles active.
   Re-enable the flag only for isolated research builds until the page/object
   size assumptions are proven in-game.
+- `CCollectableItem::WasItemSpawned(ECarrying)` is exact-ID only, while
+  `CCollectableItem::Find(CVillager&, ECarrying, ldwPoint&)` contains manual
+  hard-coded family ranges for base collectible requests such as `0x73`,
+  `0x79`, `0x7D`, `0x81`, and `0x83`. Holiday Ornaments use base request
+  `0x9E` with spawned variants `0x9E-0xA9`, so B86 adds explicit `0x9E`
+  family handling to both functions. Without this, the spawn gate does not see
+  an active variant and villager pickup searches can miss spawned ornaments.
 
 ## 2026-07-03 - Playhouse Child-Only Autonomous Gate
 

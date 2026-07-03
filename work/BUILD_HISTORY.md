@@ -398,6 +398,20 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B85-TV-Animation-Inset`.
 
+## B86 - Holiday Ornament Pickup Recognition
+
+- Ornament-enabled research build. Keeps the B84 default source guard
+  (`VF2_ENABLE_HOLIDAY_ORNAMENTS=1` required), but generates this build with
+  that flag enabled so Holiday Ornament pickup can be tested in-game.
+- Adds `0x9E` family-range recognition to
+  `CCollectableItem::Find(CVillager&, ECarrying, ldwPoint&)`, matching spawned
+  variants `0x9E-0xA9` when villagers search for the base ornament request.
+- Adds the same family recognition to
+  `CCollectableItem::WasItemSpawned(ECarrying)` so the spawn gate sees an
+  already-active ornament variant and does not repeatedly spawn new ornaments.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B86-Holiday-Ornament-Pickup-Fix`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

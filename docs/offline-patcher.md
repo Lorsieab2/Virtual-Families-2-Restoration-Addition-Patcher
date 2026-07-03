@@ -215,8 +215,11 @@ as:
 - `vf3_tv_animation_graphics` - Fix VF3 TV animation graphics.
 - `settings_evict_button` - Re-enable the Settings menu Evict button.
 - `holiday_ornaments_collection` - Experimental mobile Holiday Ornament yard
-  collectibles, collection screen art, and Goals entries. Keep this disabled in
-  release manifests until the B84 collection-page crash is fixed.
+  collectibles, collection screen art, and Goals entries. Current manifest
+  conversion must include the B86 `CCollectableItem::Find()` and
+  `WasItemSpawned()` family-range patches for request `0x9E` and active
+  variants `0x9E-0xA9`. Keep this disabled in release manifests until the B84
+  collection-page crash is fixed.
 
 Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings

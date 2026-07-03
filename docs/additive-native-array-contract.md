@@ -82,6 +82,14 @@ spawn collection through `CCollectableItem::AddSpawnArea`, then lets the stock
 `CCollectableItem::Update/Add` path control normal spawn odds and Lucky Rock
 odds.
 
+The base value must also be taught to every hard-coded collectible family
+recognizer. `CCollectableItem::WasItemSpawned(ECarrying)` checks exact IDs, and
+`CCollectableItem::Find(CVillager&, ECarrying, ldwPoint&)` only recognizes the
+stock family ranges unless patched. Holiday Ornaments therefore add `0x9E`
+request handling for active variants `0x9E-0xA9` in both routines; otherwise
+the game can keep spawning ornaments and fail to route villagers to pick them
+up.
+
 Collections page `5` is appended to the native `CCollectionScene` tables rather
 than replacing an existing page. The page uses generated build-local art under
 `Images/CollectionOrnaments/` plus `Images/collection-ornaments_background.png`.

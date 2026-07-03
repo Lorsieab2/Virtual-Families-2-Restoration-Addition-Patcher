@@ -62,8 +62,10 @@
   builds. B84 disables the experimental page by default because opening
   Collections crashed and the game reported `60` collectibles. Research should
   prove the `CCollectionScene` table append, page count, object-field reads,
-  achievement row, yard spawns, Lucky Rock odds, save/load persistence, and
-  stock `48` collectible total when the feature is disabled.
+  achievement row, yard spawns, Lucky Rock odds, pickup/removal/count
+  incrementing after the B86 `Find()`/`WasItemSpawned()` family-range patch,
+  save/load persistence, and stock `48` collectible total when the feature is
+  disabled.
 - In-game test B77 Playhouse spontaneous behavior: verify children can still
   spontaneously use the Playhouse, adults do not select Playhouse
   spontaneously, and manual furniture/drop behavior remains unchanged.
