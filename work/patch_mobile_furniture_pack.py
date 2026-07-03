@@ -3201,14 +3201,31 @@ def sync_holiday_ornament_collection_art(manifest):
     }
 
 
-def patch_holiday_body_lookup(manifest):
-    """Allow the native animator to address the four additive outfit rows.
+def holiday_body_link_lookup_policy(checked_functions=None):
+    return {
+        "status": "stock body-link fallback retained for folder-backed holiday bodies",
+        "body_values": list(HOLIDAY_BODY_VALUES),
+        "stock_valid_rows": [0, HOLIDAY_BODY_BASE_ROWS - 1],
+        "holiday_link_fallback_row": HOLIDAY_BODY_BASE_ROWS - 1,
+        "holiday_draw_path": "folder-backed one-cell body frame descriptors",
+        "reason": (
+            "normal additive builds do not expand the stock body/action/sit sheets, "
+            "so CAnimManager link-point lookup must keep clamping body values 50-53 "
+            "to the stock row-49 geometry used by the normalized Holiday frames"
+        ),
+        "checked_functions": checked_functions or [],
+    }
 
-    A villager's ``body`` value is an outfit ID.  The desktop animator uses
-    that ID as the row in the 32-frame body grid, but stock code clamps it to
-    0..49.  The holiday IDs are 50..53, so the old clamp silently displayed
-    row 49 for those poses.  Extend only that bound; base outfit rows and the
-    native frame ordering remain untouched.
+
+def preserve_holiday_body_link_lookup_fallback(manifest):
+    """Keep stock head/body link geometry while folder-backed art draws rows 50-53.
+
+    The Holiday renderer draws body values 50-53 through individual one-cell
+    image descriptors, but the stock link lookup still reads geometry from the
+    original 50-row desktop sheets.  Those sheets are not expanded in normal
+    builds, so widening the native CAnimManager clamp makes head/torso links
+    read invalid row data.  Keep the stock row-49 fallback and only verify that
+    the expected clamp is still present in the fresh object.
     """
     obj = CoffObject(PATCHED / "AnimManager.obj")
     functions = [
@@ -3221,9 +3238,7 @@ def patch_holiday_body_lookup(manifest):
             "body_arg_offset": 0x18,
         },
     ]
-    patches = []
-    max_row = HOLIDAY_BODY_BASE_ROWS + len(HOLIDAY_BODY_SET_IDS) - 1
-    row_count = max_row + 1
+    checked = []
     for function in functions:
         function_name = function["name"]
         body_arg_offset = function["body_arg_offset"]
@@ -3232,31 +3247,24 @@ def patch_holiday_body_lookup(manifest):
         raw = section.raw_ptr + symbol.value
         data = obj.buf
         # The body NextPt/PrevPt overloads encode: cmp body, 0x32;
-        # cmovl row, body; default row 0x31.  Extend only the valid-row bound.
-        # The stock row-49 fallback is intentionally retained for invalid IDs.
+        # cmovl row, body; default row 0x31.  Keep both values unchanged so
+        # Holiday rows use the stock row-49 link geometry.
         window = data[raw : raw + 0xB0]
         cmp_pattern = bytes([0x83, 0x7D, body_arg_offset, HOLIDAY_BODY_BASE_ROWS])
         cmp_at = window.find(cmp_pattern)
         if cmp_at < 0:
             raise RuntimeError(f"unexpected body-row clamp in {function_name}")
-        data[raw + cmp_at + 3] = row_count
         default_at = window.find(b"\xB9\x31\x00\x00\x00")
         if default_at < 0:
             default_at = window.find(b"\xBA\x31\x00\x00\x00")
         if default_at < 0:
             raise RuntimeError(f"unexpected default body row in {function_name}")
-        patches.append({
+        checked.append({
             "function": function_name,
-            "old_valid_rows": [0, HOLIDAY_BODY_BASE_ROWS - 1],
-            "new_valid_rows": [0, max_row],
-            "invalid_body_fallback_row": HOLIDAY_BODY_BASE_ROWS - 1,
+            "cmp_valid_row_count": HOLIDAY_BODY_BASE_ROWS,
+            "holiday_body_fallback_row": HOLIDAY_BODY_BASE_ROWS - 1,
         })
-    obj.write(PATCHED / "AnimManager.obj")
-    manifest["holiday_body_lookup"] = {
-        "status": "native body row clamp expanded for additive holiday outfit IDs",
-        "body_values": list(range(HOLIDAY_BODY_BASE_ROWS, max_row + 1)),
-        "patched_functions": patches,
-    }
+    manifest["holiday_body_lookup"] = holiday_body_link_lookup_policy(checked)
 
 
 def write_holiday_body_draw_helper(manifest):
@@ -7848,7 +7856,7 @@ def main():
     if ENABLE_HOLIDAY_BODY_TYPES:
         write_holiday_body_draw_helper(manifest)
         patch_holiday_body_draw_redirect(manifest)
-        patch_holiday_body_lookup(manifest)
+        preserve_holiday_body_link_lookup_fallback(manifest)
     sync_generation_lock_art(manifest)
     sync_vf3_living_room_sprite_strips(manifest)
     sync_vf3_tv_sprite_strips(manifest)

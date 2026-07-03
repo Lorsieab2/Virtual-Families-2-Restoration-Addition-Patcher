@@ -292,3 +292,10 @@ The default invalid-row fallback remains stock row `49`.
 `VF2SafeFallbackBody()` protects the folder-backed draw helper fallback:
 negative body IDs become row `0`, stock IDs `0--49` pass through, and values
 `>=50` fall back to row `49` unless the Holiday frame renderer resolves them.
+
+B89 reverses the native link widening for the current folder-backed renderer.
+Normal additive builds do not expand the stock body/action/sit sheets, so
+`CAnimManager` must keep clamping body values `50--53` to row `49` for
+head/body link points. The one-cell Holiday renderer still draws the visual
+body frames; only the link geometry falls back to the stock row-49 template
+used during frame normalization.

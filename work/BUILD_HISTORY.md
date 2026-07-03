@@ -440,6 +440,18 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B88-TV-Animation-Box-Revert`.
 
+## B89 - Holiday Body Link Fallback
+
+- Fixes the broken Holiday body/head alignment caused by widening native
+  `CAnimManager` link lookups to rows `50-53` while normal builds still ship
+  50-row stock villager sheets.
+- Keeps the folder-backed Holiday body renderer active for visual body frames,
+  but preserves the stock row-49 link fallback for head/body attachment points.
+- Adds a regression test and manifest policy entry proving Holiday body values
+  `50-53` draw through folder-backed art while link geometry remains stock-safe.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B89-Holiday-Body-Link-Fallback`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

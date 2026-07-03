@@ -114,6 +114,10 @@
   items `0x432-0x435` and `0x472-0x475` apply villager body values `50-53`
   instead of `49`, and verify a deliberately invalid saved body value falls
   back safely instead of crashing.
+- In-game test B89 Holiday body link fallback: apply each Holiday outfit to
+  male and female adults, then check house view, detail screen, action poses,
+  and sitting poses for head/body attachment; this specifically verifies the
+  stock row-49 link fallback after removing the B80 link-row widening.
 - In-game test B74 Settings Evict button: in generation 1 and a later
   generation, open Settings, press Evict, verify the existing
   confirmation/removal flow removes all current family members, returns to the

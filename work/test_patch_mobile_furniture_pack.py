@@ -188,6 +188,15 @@ class OutfitStoreMappingTests(unittest.TestCase):
                     body_count + patcher.OUTFIT_STORE_BODY_VALUES.index(body_value),
                 )
 
+    def test_folder_backed_holiday_bodies_keep_stock_link_fallback(self):
+        policy = patcher.holiday_body_link_lookup_policy()
+
+        self.assertEqual(policy["stock_valid_rows"], [0, 49])
+        self.assertEqual(policy["holiday_link_fallback_row"], 49)
+        self.assertEqual(list(patcher.HOLIDAY_BODY_VALUES), [50, 51, 52, 53])
+        self.assertLess(policy["holiday_link_fallback_row"], min(patcher.HOLIDAY_BODY_VALUES))
+        self.assertIn("do not expand the stock body/action/sit sheets", policy["reason"])
+
 
 class HolidayOrnamentGateTests(unittest.TestCase):
     def test_holiday_ornaments_are_disabled_by_default(self):

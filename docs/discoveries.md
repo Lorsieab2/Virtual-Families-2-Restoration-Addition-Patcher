@@ -454,6 +454,12 @@
   native `DrawScaled` fallback: negative body IDs use row `0`, stock rows
   `0-49` pass through, and values `>=50` fall back to row `49` unless they are
   successfully handled by the folder-backed Holiday renderer.
+- B89 supersedes the link-widening part of B80 for normal folder-backed
+  builds. Because the stock `female/male_{bodies,actions,sit}00.png` sheets
+  remain 50 rows, `CAnimManager` link lookup must keep its stock row-49
+  fallback for Holiday body values `50-53`. The folder-backed renderer still
+  draws the Holiday body art, but head/body attachment points use the same
+  row-49 geometry that `_normalize_holiday_body_frame()` used as its template.
 
 ## 2026-07-03 - VF3 TV Furniture Recognition
 
