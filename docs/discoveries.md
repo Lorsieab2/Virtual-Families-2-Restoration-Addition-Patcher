@@ -326,3 +326,27 @@
   `Images/VillagerBodies/<Gender>/Body_##/{bodies,actions,sit}/Frame##.png`
   frames. The game uses build-local `Images/*.png`; it does not point to the
   source `originalimages` folder at runtime.
+
+## 2026-07-03 - Holiday Ornaments Collection
+
+- The mobile Holiday Ornaments collection art is in `work/vf2_obb/assets/tp225`.
+  `tp225.pvr` is old RGBA4444 PVR data; the reliable image payload size is
+  header word `5`, not word `3`. Atlas coordinates are bottom-origin.
+- The desktop collectible counter and save-state ranges already cover dormant
+  carrying values `0x9E-0xA9`, and `CAchievement` save/load/reset already
+  serialize `0x125` 12-byte records. B76 therefore adds visible tables and
+  hooks without increasing either save-state block.
+- `patch_collectable_item_holiday_ornaments()` registers base carrying value
+  `0x9E` with the same full-yard `CCollectableItem::AddSpawnArea` rectangles
+  used by stock full-yard collections. Stock `CCollectableItem::Update/Add`
+  still owns the spawn gate, including normal odds and the Lucky Rock odds
+  change.
+- `patch_collection_scene_holiday_ornaments()` appends Collections page `5`,
+  item IDs `0x9E-0xA9`, generated `Images/CollectionOrnaments/*.png` icons,
+  and `Images/collection-ornaments_background.png`. `VF2CollectionPageCount()`
+  avoids changing `CCollectionScene` object size by asking
+  `CCollectableItem::CollectionCount()` for the active page base.
+- `patch_achievement_holiday_ornaments()` appends goal row `0x5F`
+  (`Ornamentologist`, target `12`), widens visible/order bounds from `0x5F` to
+  `0x60`, appends the ID to `achievementOrder`, and bumps the Goal Collector
+  target from `12` to `13`.

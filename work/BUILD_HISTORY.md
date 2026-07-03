@@ -272,6 +272,18 @@
 - Leaves stock outfit items, furniture behavior, villager behavior, debugger,
   TV behavior, and base save/load paths otherwise unchanged.
 
+## B76 - Holiday Ornaments Collection
+
+- Adds the mobile Holiday Ornaments collectible range `0x9E-0xA9` as a sixth
+  Collections page with generated build-local art from `tp225.pvr`.
+- Registers base ornament carrying value `0x9E` through the stock full-yard
+  collectible spawn system, so normal spawn cadence and Lucky Rock odds remain
+  owned by the existing `CCollectableItem::Update/Add` path.
+- Adds the `Ornamentologist` Goals entry at achievement row `0x5F`, target
+  `12`, and bumps the Goal Collector target to include the new collection goal.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B76-Holiday-Ornaments-Collection`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

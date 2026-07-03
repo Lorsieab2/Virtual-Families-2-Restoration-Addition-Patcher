@@ -162,6 +162,47 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x11A: "LuckyRock_icon.png",
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
+HOLIDAY_ORNAMENT_COLLECTABLE_START = 0x9E
+HOLIDAY_ORNAMENT_COLLECTABLE_END = 0xA9
+HOLIDAY_ORNAMENT_COLLECTION_PAGE = 5
+HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT = 12
+HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT = HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT + 1
+HOLIDAY_ORNAMENT_ACHIEVEMENT_ID = 0x5F
+HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET = 12
+HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT = 0x60
+ACHIEVEMENT_ROW_SIZE = 0x1C
+HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT = ROOT / "work" / "vf2_obb" / "assets" / "tp225.dat"
+HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR = ROOT / "work" / "vf2_obb" / "assets" / "tp225.pvr"
+HOLIDAY_ORNAMENT_BACKGROUND_FILENAME = "collection-ornaments_background.png"
+HOLIDAY_ORNAMENT_IMAGE_SCALE = 1024.0 / 800.0
+HOLIDAY_ORNAMENT_ATLAS_RECORDS = [
+    ("collection_christmasornament_blueball.png", 903, 334, 93, 115),
+    ("collection_christmasornament_crosses.png", 804, 345, 92, 114),
+    ("collection_christmasornament_disco.png", 804, 227, 95, 114),
+    ("collection_christmasornament_golddealio.png", 804, 0, 114, 117),
+    ("collection_christmasornament_heart.png", 804, 463, 88, 106),
+    ("collection_christmasornament_hotairballoon.png", 922, 0, 100, 109),
+    ("collection_christmasornament_redgoldornament.png", 900, 453, 89, 114),
+    ("collection_christmasornament_silverbell.png", 804, 573, 64, 113),
+    ("collection_christmasornament_star.png", 916, 220, 105, 110),
+    ("collection_christmasornament_threebells.png", 896, 571, 85, 119),
+    ("collection_christmasornament_twirl.png", 922, 113, 96, 103),
+    ("collection_christmasornament_twisty.png", 804, 121, 108, 102),
+]
+HOLIDAY_ORNAMENT_COLLECTION_SLOT_POSITIONS = [
+    (0x0B4, 0x1DC),
+    (0x161, 0x1DC),
+    (0x213, 0x1DC),
+    (0x2C4, 0x1DC),
+    (0x0C1, 0x12E),
+    (0x213, 0x12E),
+    (0x161, 0x12E),
+    (0x2C4, 0x12E),
+    (0x0B4, 0x07E),
+    (0x161, 0x07E),
+    (0x213, 0x07E),
+    (0x2C4, 0x07E),
+]
 CHARACTER_SHEET_SPECS = {
     "female_heads": {
         "image_id": 576,
@@ -308,6 +349,18 @@ def build_native_array_contract():
                 "keep stock body values 0-49 unchanged",
                 "register body/action/sit frames for new values together",
                 "fall back to stock spritesheet rendering for missing extracted frames",
+            ],
+        },
+        "holiday_ornaments": {
+            "collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
+            "collection_page": HOLIDAY_ORNAMENT_COLLECTION_PAGE,
+            "achievement": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
+            "requirements": [
+                "reuse CCollectableItem::Update/Add so spawn timing and Lucky Rock odds remain stock",
+                "register base carrying value 0x9E as another 12-item spawn collection",
+                "append one Collections scene page without changing CCollectionScene object size",
+                "append one Goals screen achievement row without changing the save-state size",
+                "use generated Images/CollectionOrnaments payloads copied into the modified build folder",
             ],
         },
     }
@@ -1732,6 +1785,37 @@ def outfit_icon_path(gender, body_value):
     return f"OutfitIcons/{gender.title()}_Body_{body_value:02d}.png"
 
 
+def holiday_ornament_collection_image_base(holiday_body_descriptor_count=0):
+    return outfit_icon_image_base(holiday_body_descriptor_count) + OUTFIT_STORE_ENTRY_COUNT
+
+
+def holiday_ornament_collection_item_image_id(index, holiday_body_descriptor_count=0):
+    return holiday_ornament_collection_image_base(holiday_body_descriptor_count) + index
+
+
+def holiday_ornament_collection_background_image_id(holiday_body_descriptor_count=0):
+    return holiday_ornament_collection_image_base(holiday_body_descriptor_count) + HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT
+
+
+def holiday_ornament_collection_title_string_id():
+    return (
+        ORIG_STRING_ONE_PAST_MAX
+        + len(ITEMS) * 2
+        + mobile_island_event_string_count()
+        + SPECIAL_UPGRADE_DESCRIPTION_COUNT
+        + OUTFIT_STORE_ENTRY_COUNT * 2
+        + len(BEHAVIOR_LABELS)
+    )
+
+
+def holiday_ornament_achievement_title_string_id():
+    return holiday_ornament_collection_title_string_id() + 1
+
+
+def holiday_ornament_achievement_desc_string_id():
+    return holiday_ornament_collection_title_string_id() + 2
+
+
 def villager_body_image_base():
     return ORIG_IMAGE_MAX + 1 + len(ITEMS) + LOCKED_GENERATION_FRAME_COUNT + len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
 
@@ -2701,6 +2785,90 @@ def sync_visible_special_upgrade_icon_art(manifest):
         "expected_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
         "entries": entries,
         "missing": missing,
+    }
+
+
+def decode_rgba4444_pvr(path):
+    from PIL import Image
+
+    raw = path.read_bytes()
+    header = struct.unpack_from("<13I", raw, 0)
+    header_size = header[0]
+    height = header[1]
+    width = header[2]
+    data_size = header[5]
+    bit_count = header[6]
+    red_mask, green_mask, blue_mask, alpha_mask = header[7:11]
+    if header_size != 0x34 or bit_count != 16:
+        raise RuntimeError(f"Unsupported PVR header in {path}")
+    if (red_mask, green_mask, blue_mask, alpha_mask) != (0xF000, 0x0F00, 0x00F0, 0x000F):
+        raise RuntimeError(f"Unsupported PVR channel masks in {path}")
+
+    pixels = raw[header_size : header_size + data_size]
+    rgba = bytearray(width * height * 4)
+    out = 0
+    for i in range(0, len(pixels), 2):
+        value = pixels[i] | (pixels[i + 1] << 8)
+        rgba[out + 0] = ((value & 0xF000) >> 12) * 17
+        rgba[out + 1] = ((value & 0x0F00) >> 8) * 17
+        rgba[out + 2] = ((value & 0x00F0) >> 4) * 17
+        rgba[out + 3] = (value & 0x000F) * 17
+        out += 4
+    return Image.frombytes("RGBA", (width, height), bytes(rgba))
+
+
+def sync_holiday_ornament_collection_art(manifest):
+    from PIL import Image
+
+    image_base = holiday_ornament_collection_image_base(HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)
+    output_root = OUT / "Images" / "CollectionOrnaments"
+    output_root.mkdir(parents=True, exist_ok=True)
+    background_target = OUT / "Images" / HOLIDAY_ORNAMENT_BACKGROUND_FILENAME
+    status = {
+        "source_dat": str(HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT),
+        "source_pvr": str(HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR),
+        "image_base": hex(image_base),
+        "background_image_id": hex(holiday_ornament_collection_background_image_id(HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)),
+        "entries": [],
+    }
+    if not HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT.exists() or not HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR.exists():
+        status.update({"status": "missing_mobile_atlas"})
+        manifest["holiday_ornament_collection_art"] = status
+        return
+
+    atlas = decode_rgba4444_pvr(HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR)
+    tex_w, tex_h = atlas.size
+    resample = Image.Resampling.LANCZOS
+    background_crop = atlas.crop((0, tex_h - 600, 800, tex_h))
+    background_crop.resize((1024, 768), Image.Resampling.BILINEAR).save(background_target)
+    status["background"] = {
+        "path": str(background_target),
+        "source_box_bottom_origin": [0, 0, 800, 600],
+        "output_size": [1024, 768],
+    }
+
+    for index, (filename, x, y, width, height) in enumerate(HOLIDAY_ORNAMENT_ATLAS_RECORDS):
+        target = output_root / filename
+        crop_y = tex_h - y - height
+        icon = atlas.crop((x, crop_y, x + width, crop_y + height))
+        scaled_size = (
+            max(1, round(width * HOLIDAY_ORNAMENT_IMAGE_SCALE)),
+            max(1, round(height * HOLIDAY_ORNAMENT_IMAGE_SCALE)),
+        )
+        icon = icon.resize(scaled_size, resample)
+        icon.save(target)
+        status["entries"].append({
+            "collectable": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START + index),
+            "image_id": hex(holiday_ornament_collection_item_image_id(index, HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)),
+            "path": str(target.relative_to(OUT / "Images")).replace("\\", "/"),
+            "source_box_bottom_origin": [x, y, width, height],
+            "output_size": list(icon.size),
+        })
+
+    manifest["holiday_ornament_collection_art"] = {
+        **status,
+        "status": "generated" if len(status["entries"]) == HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT else "partial",
+        "output_root": str(output_root),
     }
 
 
@@ -4166,8 +4334,14 @@ public:
     float bankingInterest;
 };
 
+enum ECarrying {
+    eCarryingDummy = 0
+};
+
 class CCollectableItem {
 public:
+    int const CollectionCount(ECarrying item, bool common, bool uncommon, bool rare) const;
+
     char pad0[0x8A8];
     unsigned char luckyRockActive;
 };
@@ -4184,6 +4358,14 @@ public:
 extern CFoodStore FoodStore;
 extern CMoney Money;
 extern CCollectableItem CollectableItem;
+
+extern "C" int __cdecl VF2CollectionPageCount(int page) {
+    static const int starts[6] = {0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E};
+    if (page < 0 || page >= 6) {
+        return 0;
+    }
+    return CollectableItem.CollectionCount((ECarrying)starts[page], true, true, true);
+}
 
 extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
     switch (itemId) {
@@ -4458,6 +4640,46 @@ def patch_string_manager(manifest):
         string_manifest.append({
             "pc_string_id": hex(string_id),
             "source": "behavior label",
+            "key": key,
+            "text": text,
+        })
+
+    ornament_title_id = holiday_ornament_collection_title_string_id()
+    ornament_key = "eString_CollectionHolidayOrnaments"
+    ornament_text = "Holiday Ornaments"
+    ornament_key_sym = f"_vf2ornamentstr_key_{ornament_title_id:X}"
+    ornament_text_sym = f"_vf2ornamentstr_text_{ornament_title_id:X}"
+    helper_lines.append(f'const char {ornament_key_sym[1:]}[] = "{c_string(ornament_key)}";')
+    helper_lines.append(f'const char {ornament_text_sym[1:]}[] = "{c_string(ornament_text)}";')
+    new_rows.append((ornament_title_id, ornament_key_sym, ornament_text_sym))
+    string_manifest.append({
+        "pc_string_id": hex(ornament_title_id),
+        "source": "holiday ornament collection page",
+        "key": ornament_key,
+        "text": ornament_text,
+    })
+
+    ornament_goal_strings = [
+        (
+            holiday_ornament_achievement_title_string_id(),
+            "eString_AchievementOrnamentsTitle",
+            "Ornamentologist",
+        ),
+        (
+            holiday_ornament_achievement_desc_string_id(),
+            "eString_AchievementOrnamentsDesc",
+            "You completed the collection of holiday ornaments.",
+        ),
+    ]
+    for string_id, key, text in ornament_goal_strings:
+        key_sym = f"_vf2ornamentachievement_key_{string_id:X}"
+        text_sym = f"_vf2ornamentachievement_text_{string_id:X}"
+        helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+        helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+        new_rows.append((string_id, key_sym, text_sym))
+        string_manifest.append({
+            "pc_string_id": hex(string_id),
+            "source": "mobile holiday ornament achievement",
             "key": key,
             "text": text,
         })
@@ -4839,6 +5061,7 @@ def patch_graphics_manager(manifest):
         + holiday_body_descriptor_count
         + len(VF3_TV_FLOATING_ANIMS)
         + OUTFIT_STORE_ENTRY_COUNT
+        + HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT
     )
     if append_count:
         obj.insert_section_bytes(img_sym.section, img_sym.value + ORIG_IMAGE_COUNT * DESC_SIZE, b"\0" * (append_count * DESC_SIZE))
@@ -5017,6 +5240,49 @@ def patch_graphics_manager(manifest):
             "grid": [1, 1],
         })
 
+    ornament_desc_manifest = []
+    for index, (filename, _x, _y, _w, _h) in enumerate(HOLIDAY_ORNAMENT_ATLAS_RECORDS):
+        image_id = holiday_ornament_collection_item_image_id(index, holiday_body_descriptor_count)
+        path = f"CollectionOrnaments/{filename}"
+        vals = plain_image_donor[:]
+        vals[0] = image_id
+        vals[1] = 0
+        vals[2] = 0
+        vals[3] = 0
+        desc_off = img_sym.value + image_id * DESC_SIZE
+        img_sec = obj.section(img_sym.section)
+        obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
+        sym = "_vf2ornament_" + filename.replace(".", "_").replace("-", "_")
+        helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+        symidx = obj.append_undefined_symbol(sym)
+        obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+        ornament_desc_manifest.append({
+            "collectable": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START + index),
+            "image_id": hex(image_id),
+            "path": path,
+            "symbol": sym,
+        })
+
+    ornament_background_image_id = holiday_ornament_collection_background_image_id(holiday_body_descriptor_count)
+    vals = plain_image_donor[:]
+    vals[0] = ornament_background_image_id
+    vals[1] = 0
+    vals[2] = 0
+    vals[3] = 0
+    desc_off = img_sym.value + ornament_background_image_id * DESC_SIZE
+    img_sec = obj.section(img_sym.section)
+    obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
+    ornament_bg_sym = "_vf2ornament_collection_background_png"
+    helper_lines.append(f'const char {ornament_bg_sym[1:]}[] = "{HOLIDAY_ORNAMENT_BACKGROUND_FILENAME}";')
+    symidx = obj.append_undefined_symbol(ornament_bg_sym)
+    obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+    ornament_desc_manifest.append({
+        "role": "background",
+        "image_id": hex(ornament_background_image_id),
+        "path": HOLIDAY_ORNAMENT_BACKGROUND_FILENAME,
+        "symbol": ornament_bg_sym,
+    })
+
     new_image_max = ORIG_IMAGE_MAX + append_count
     new_scan_end = ORIG_IMAGE_COUNT * DESC_SIZE + append_count * DESC_SIZE
     new_cleanup_end = 0x7798 + append_count * DESC_SIZE
@@ -5057,6 +5323,11 @@ def patch_graphics_manager(manifest):
             "image_base": hex(outfit_icon_image_base(holiday_body_descriptor_count)),
             "image_count": OUTFIT_STORE_ENTRY_COUNT,
             "descriptors": outfit_icon_desc_manifest,
+        },
+        "holiday_ornament_collection_images": {
+            "image_base": hex(holiday_ornament_collection_image_base(holiday_body_descriptor_count)),
+            "image_count": HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT,
+            "descriptors": ornament_desc_manifest,
         },
         "character_sheet_art": character_sheet_manifest,
         "descriptors": desc_manifest,
@@ -5105,6 +5376,364 @@ def patch_floating_anim_table(manifest):
         "old_table_size": hex(old_table_size),
         "new_table_size": hex(old_table_size + len(payload)),
         "load_assets_bound_patch_offset": hex(hit - load_start),
+    }
+
+
+def patch_achievement_holiday_ornaments(manifest):
+    achievement_obj = CoffObject(PATCHED / "Achievement.obj")
+    list_sym = achievement_obj.symbol("?achievementList@@3PAUsAchievementListEntry@@A")
+    list_sec = achievement_obj.section(list_sym.section)
+    row_insert = list_sym.value + 0x5F * ACHIEVEMENT_ROW_SIZE
+    if row_insert != list_sec.raw_size:
+        raise RuntimeError("Unexpected achievementList append site")
+    ornament_row = struct.pack(
+        "<7I",
+        HOLIDAY_ORNAMENT_ACHIEVEMENT_ID,
+        HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET,
+        0x1ED,
+        0,
+        holiday_ornament_achievement_title_string_id(),
+        holiday_ornament_achievement_desc_string_id(),
+        0,
+    )
+    achievement_obj.insert_section_bytes(list_sym.section, row_insert, ornament_row)
+
+    goal_collector_target_off = list_sym.value + 0x54 * ACHIEVEMENT_ROW_SIZE + 4
+    if struct.unpack_from("<I", achievement_obj.buf, list_sec.raw_ptr + goal_collector_target_off)[0] != 12:
+        raise RuntimeError("Unexpected Goal collector target count")
+    struct.pack_into("<I", achievement_obj.buf, list_sec.raw_ptr + goal_collector_target_off, 13)
+
+    complete_sym = achievement_obj.symbol("?AchievementsComplete@CAchievement@@QAEHXZ")
+    complete_sec = achievement_obj.section(complete_sym.section)
+    complete_cmp = complete_sym.value + 0x23
+    if achievement_obj.buf[complete_sec.raw_ptr + complete_cmp : complete_sec.raw_ptr + complete_cmp + 3] != b"\x83\xFE\x5F":
+        raise RuntimeError("Unexpected AchievementsComplete bound")
+    achievement_obj.buf[complete_sec.raw_ptr + complete_cmp + 2] = HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT
+
+    draw_achievement_sym = achievement_obj.symbol("?DrawAchievement@CAchievement@@QAEXHHH_NM@Z")
+    draw_sec = achievement_obj.section(draw_achievement_sym.section)
+    draw_raw = draw_sec.raw_ptr + draw_achievement_sym.value
+    for bound_off in (0xD8, 0x191):
+        if achievement_obj.buf[draw_raw + bound_off : draw_raw + bound_off + 3] != b"\x83\xFF\x5F":
+            raise RuntimeError(f"Unexpected DrawAchievement bound at {bound_off:#x}")
+        achievement_obj.buf[draw_raw + bound_off + 2] = HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT
+
+    set_complete_sym = achievement_obj.symbol("?SetComplete@CAchievement@@QAEXW4EAchievement@@@Z")
+    set_complete_sec = achievement_obj.section(set_complete_sym.section)
+    set_complete_insert = set_complete_sym.value + 0x95
+    expected_epilogue = b"\x5F\x5E\x5B\x5D\xC2\x04\x00"
+    if achievement_obj.buf[set_complete_sec.raw_ptr + set_complete_insert : set_complete_sec.raw_ptr + set_complete_insert + len(expected_epilogue)] != expected_epilogue:
+        raise RuntimeError("Unexpected SetComplete epilogue")
+    increment_sym = achievement_obj.symbol("?IncrementProgress@CAchievement@@QAEXW4EAchievement@@H@Z").index
+    collection_meta_payload = (
+        b"\x83\xFE" + bytes([HOLIDAY_ORNAMENT_ACHIEVEMENT_ID])
+        + b"\x75\x0B"
+        + b"\x6A\x01"
+        + b"\x6A\x54"
+        + b"\x8B\xCF"
+        + b"\xE8\x00\x00\x00\x00"
+    )
+    achievement_obj.insert_section_bytes(set_complete_sym.section, set_complete_insert, collection_meta_payload)
+    achievement_obj.append_relocation(
+        set_complete_sym.section,
+        set_complete_insert + len(collection_meta_payload) - 4,
+        increment_sym,
+        IMAGE_REL_I386_REL32,
+    )
+    achievement_obj.write(PATCHED / "Achievement.obj")
+
+    scene_obj = CoffObject(PATCHED / "AchievementsScene.obj")
+    order_sym = scene_obj.symbol("?achievementOrder@@3QBHB")
+    order_sec = scene_obj.section(order_sym.section)
+    order_insert = order_sym.value + 0x5F * 4
+    if order_insert != order_sec.raw_size:
+        raise RuntimeError("Unexpected achievementOrder append site")
+    scene_obj.insert_section_bytes(order_sym.section, order_insert, struct.pack("<I", HOLIDAY_ORNAMENT_ACHIEVEMENT_ID))
+
+    ctor_sym = scene_obj.symbol("??0CAchievementsScene@@AAE@XZ")
+    ctor_sec = scene_obj.section(ctor_sym.section)
+    ctor_start = ctor_sec.raw_ptr + ctor_sym.value
+    ctor_data = scene_obj.buf[ctor_start : ctor_start + ctor_sec.raw_size - ctor_sym.value]
+    old_content_height = struct.pack("<I", 0x189A)
+    new_content_height = struct.pack("<I", 0x18DC)
+    patched_heights = 0
+    search_from = 0
+    while True:
+        hit = ctor_data.find(old_content_height, search_from)
+        if hit < 0:
+            break
+        scene_obj.buf[ctor_start + hit : ctor_start + hit + 4] = new_content_height
+        patched_heights += 1
+        search_from = hit + 4
+    if patched_heights != 2:
+        raise RuntimeError("Unexpected CAchievementsScene content height patches")
+
+    draw_sym = scene_obj.symbol("?DrawScene@CAchievementsScene@@MAEXXZ")
+    draw_sec = scene_obj.section(draw_sym.section)
+    draw_raw = draw_sec.raw_ptr + draw_sym.value
+    if scene_obj.buf[draw_raw + 0xAD : draw_raw + 0xAD + 6] != b"\x81\xF9\x7E\x18\x00\x00":
+        raise RuntimeError("Unexpected CAchievementsScene draw threshold")
+    struct.pack_into("<I", scene_obj.buf, draw_raw + 0xAF, 0x18C0)
+    if scene_obj.buf[draw_raw + 0xF5 : draw_raw + 0xF5 + 6] != b"\x81\xFE\x7C\x01\x00\x00":
+        raise RuntimeError("Unexpected CAchievementsScene order bound")
+    struct.pack_into("<I", scene_obj.buf, draw_raw + 0xF7, 0x180)
+    scene_obj.write(PATCHED / "AchievementsScene.obj")
+
+    manifest["HolidayOrnamentAchievement"] = {
+        "status": "patched",
+        "achievement_id": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
+        "target": HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET,
+        "title": "Ornamentologist",
+        "description": "You completed the collection of holiday ornaments.",
+        "title_string": hex(holiday_ornament_achievement_title_string_id()),
+        "description_string": hex(holiday_ornament_achievement_desc_string_id()),
+        "goal_collector_target": 13,
+        "save_state_note": "CAchievement already serializes 0x125 12-byte records; no save-state size change was needed for achievement 0x5F.",
+    }
+
+
+def patch_collectable_item_holiday_ornaments(manifest):
+    obj = CoffObject(PATCHED / "CollectableItem.obj")
+    patches = []
+
+    reset_sym = obj.symbol("?Reset@CCollectableItem@@QAEXXZ")
+    reset_insert = reset_sym.value + 0x1ED
+    reset_sec = obj.section(reset_sym.section)
+    expected_reset = b"\xC7\x83\xAC\x08\x00\x00\x00\x00\x00\x00"
+    if obj.buf[reset_sec.raw_ptr + reset_insert : reset_sec.raw_ptr + reset_insert + len(expected_reset)] != expected_reset:
+        raise RuntimeError("Unexpected CCollectableItem::Reset insertion site")
+
+    add_spawn_sym = obj.symbol("?AddSpawnArea@CCollectableItem@@QAEXUldwRect@@W4ECarrying@@@Z").index
+    rect_symbols = [
+        "__xmm@0000030200000764000000b400000634",
+        "__xmm@000001bd000002fa000000c400000112",
+        "__xmm@0000026f0000019d0000017800000098",
+        "__xmm@0000075000000137000005680000008d",
+    ]
+    reset_payload = bytearray()
+    reset_relocs = []
+    for rect_symbol in rect_symbols:
+        start = len(reset_payload)
+        reset_payload += b"\x0F\x28\x05\x00\x00\x00\x00"  # movaps xmm0,[rect]
+        reset_payload += b"\x8B\xCB"                      # mov ecx,ebx
+        reset_payload += b"\x68" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+        reset_payload += b"\x83\xEC\x10"                  # sub esp,10h
+        reset_payload += b"\x8B\xC4"                      # mov eax,esp
+        reset_payload += b"\x0F\x11\x00"                  # movups [eax],xmm0
+        reset_payload += b"\xE8\x00\x00\x00\x00"          # call AddSpawnArea
+        reset_relocs.append((start + 3, obj.symbol(rect_symbol).index, None))
+        reset_relocs.append((start + len(reset_payload[start:]) - 4, add_spawn_sym, IMAGE_REL_I386_REL32))
+    obj.insert_section_bytes(reset_sym.section, reset_insert, bytes(reset_payload))
+    for local_off, symidx, rtype in reset_relocs:
+        if rtype is None:
+            obj.append_relocation(reset_sym.section, reset_insert + local_off, symidx)
+        else:
+            obj.append_relocation(reset_sym.section, reset_insert + local_off, symidx, rtype)
+    patches.append({
+        "function": "?Reset@CCollectableItem@@QAEXXZ",
+        "insert_offset": "0x1ed",
+        "spawn_area_count": len(rect_symbols),
+        "base_collectable": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
+    })
+
+    def insert_range_true(function_name, start_item, end_item):
+        sym = obj.symbol(function_name)
+        insert_off = sym.value + 0x06
+        sec = obj.section(sym.section)
+        expected = b"\x83\xF8"
+        if obj.buf[sec.raw_ptr + insert_off : sec.raw_ptr + insert_off + len(expected)] != expected:
+            raise RuntimeError(f"Unexpected {function_name} range insertion site")
+        payload = bytearray()
+        payload += b"\x3D" + struct.pack("<I", start_item)
+        payload += b"\x7C\x0D"
+        payload += b"\x3D" + struct.pack("<I", end_item)
+        payload += b"\x7F\x06"
+        payload += b"\xB0\x01"
+        payload += b"\x5D"
+        payload += b"\xC2\x04\x00"
+        obj.insert_section_bytes(sym.section, insert_off, bytes(payload))
+        return {
+            "function": function_name,
+            "insert_offset": "0x6",
+            "range": f"{hex(start_item)}-{hex(end_item)}",
+        }
+
+    patches.append(insert_range_true(
+        "?IsCommonCollectable@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
+        HOLIDAY_ORNAMENT_COLLECTABLE_START,
+        HOLIDAY_ORNAMENT_COLLECTABLE_START + 3,
+    ))
+    patches.append(insert_range_true(
+        "?IsUncommonCollectable@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
+        HOLIDAY_ORNAMENT_COLLECTABLE_START + 4,
+        HOLIDAY_ORNAMENT_COLLECTABLE_START + 7,
+    ))
+    patches.append(insert_range_true(
+        "?IsRareCollectable@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
+        HOLIDAY_ORNAMENT_COLLECTABLE_START + 8,
+        HOLIDAY_ORNAMENT_COLLECTABLE_END,
+    ))
+
+    count_sym = obj.symbol("?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z")
+    count_insert = count_sym.value + 0x0B
+    count_sec = obj.section(count_sym.section)
+    expected_count = b"\x8D\x42\x99"
+    if obj.buf[count_sec.raw_ptr + count_insert : count_sec.raw_ptr + count_insert + len(expected_count)] != expected_count:
+        raise RuntimeError("Unexpected CCollectableItem::CollectionCount insertion site")
+    count_payload_len = 34
+    count_continue = count_insert + count_payload_len
+    count_target = count_sym.value + 0x5A + count_payload_len
+    count_payload = bytearray()
+    count_payload += b"\x81\xFA" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+    count_payload += b"\x0F\x8C" + struct.pack("<i", count_continue - (count_insert + len(count_payload) + 6))
+    count_payload += b"\x81\xFA" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_END)
+    count_payload += b"\x0F\x8F" + struct.pack("<i", count_continue - (count_insert + len(count_payload) + 6))
+    count_payload += b"\xBE" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+    count_payload += b"\xE9" + struct.pack("<i", count_target - (count_insert + len(count_payload) + 5))
+    if len(count_payload) != count_payload_len:
+        raise RuntimeError("Unexpected CollectionCount payload length")
+    obj.insert_section_bytes(count_sym.section, count_insert, bytes(count_payload))
+    patches.append({
+        "function": "?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z",
+        "insert_offset": "0xb",
+        "range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
+        "collection_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
+    })
+
+    drop_sym = obj.symbol("?Drop@CCollectableItem@@UAEXAAVCVillager@@W4ECarrying@@@Z")
+    drop_insert = drop_sym.value + 0x1D4
+    drop_sec = obj.section(drop_sym.section)
+    expected_drop = b"\x5F\x5E\x8B\xE5"
+    if obj.buf[drop_sec.raw_ptr + drop_insert : drop_sec.raw_ptr + drop_insert + len(expected_drop)] != expected_drop:
+        raise RuntimeError("Unexpected CCollectableItem::Drop insertion site")
+    achievement_sym = obj.symbol("?Achievement@@3VCAchievement@@A").index
+    increment_sym = obj.symbol("?IncrementProgress@CAchievement@@QAEXW4EAchievement@@H@Z").index
+    drop_payload = bytearray()
+    drop_payload += b"\x8D\x87" + struct.pack("<i", -HOLIDAY_ORNAMENT_COLLECTABLE_START)
+    drop_payload += b"\x83\xF8\x0B"
+    drop_payload += b"\x77\x00"
+    drop_skip_rel_off = len(drop_payload) - 1
+    drop_payload += b"\x6A\x01"
+    drop_payload += b"\x6A" + bytes([HOLIDAY_ORNAMENT_ACHIEVEMENT_ID])
+    drop_payload += b"\xB9\x00\x00\x00\x00"
+    achievement_reloc_off = len(drop_payload) - 4
+    drop_payload += b"\xE8\x00\x00\x00\x00"
+    increment_reloc_off = len(drop_payload) - 4
+    drop_payload += b"\x68" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+    drop_payload += b"\xE9" + struct.pack("<i", (drop_sym.value + 0x168) - (drop_insert + len(drop_payload) + 5))
+    drop_payload[drop_skip_rel_off] = len(drop_payload) - (drop_skip_rel_off + 1)
+    obj.insert_section_bytes(drop_sym.section, drop_insert, bytes(drop_payload))
+    obj.append_relocation(drop_sym.section, drop_insert + achievement_reloc_off, achievement_sym)
+    obj.append_relocation(drop_sym.section, drop_insert + increment_reloc_off, increment_sym, IMAGE_REL_I386_REL32)
+    patches.append({
+        "function": "?Drop@CCollectableItem@@UAEXAAVCVillager@@W4ECarrying@@@Z",
+        "insert_offset": "0x1d4",
+        "first_copy_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
+        "complete_check_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
+        "specific_goal_row": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
+    })
+
+    obj.write(PATCHED / "CollectableItem.obj")
+    manifest["CollectableItemHolidayOrnaments"] = {
+        "status": "patched",
+        "collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
+        "spawn_model": "registered as an additional AddSpawnArea collection; CCollectableItem::Update/Add and Lucky Rock odds remain stock",
+        "patches": patches,
+    }
+
+
+def patch_collection_scene_holiday_ornaments(manifest):
+    obj = CoffObject(PATCHED / "CollectionScene.obj")
+    holiday_body_descriptor_count = HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0
+    page_entries = [
+        (
+            holiday_ornament_collection_item_image_id(index, holiday_body_descriptor_count),
+            x,
+            y,
+        )
+        for index, (x, y) in enumerate(HOLIDAY_ORNAMENT_COLLECTION_SLOT_POSITIONS)
+    ]
+
+    sm_sym_name = "?sm_sCollectable@CCollectionScene@@0PAUSCollectable@1@A"
+    frame_sym_name = "?gCollectionFrame@@3PAUSCollectable@CCollectionScene@@A"
+    label_sym_name = "?gCollectionLabel@@3PAUSCollectable@CCollectionScene@@A"
+    label_info_sym_name = "?gLabelInfo@@3PAUsCollectionLabelInfo@@A"
+    collectable_sym_name = "?gCollectable@@3PAW4ECarrying@@A"
+
+    sm_sym = obj.symbol(sm_sym_name)
+    obj.insert_section_bytes(
+        sm_sym.section,
+        sm_sym.value + 5 * HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT * 12,
+        b"".join(struct.pack("<III", *entry) for entry in page_entries),
+    )
+
+    frame_sym = obj.symbol(frame_sym_name)
+    obj.insert_section_bytes(
+        frame_sym.section,
+        frame_sym.value + 5 * 12,
+        struct.pack("<III", holiday_ornament_collection_background_image_id(holiday_body_descriptor_count), 0, 0),
+    )
+
+    label_sym = obj.symbol(label_sym_name)
+    obj.insert_section_bytes(
+        label_sym.section,
+        label_sym.value + 5 * 12,
+        struct.pack("<III", 0x198, 0x154, 0x5F),
+    )
+
+    label_info_sym = obj.symbol(label_info_sym_name)
+    obj.insert_section_bytes(
+        label_info_sym.section,
+        label_info_sym.value + 5 * 20,
+        struct.pack("<IIIII", holiday_ornament_collection_title_string_id(), 0xC3, 0x0C, 0xCE, 0x0C),
+    )
+
+    collectable_sym = obj.symbol(collectable_sym_name)
+    obj.insert_section_bytes(
+        collectable_sym.section,
+        collectable_sym.value + 5 * HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT * 4,
+        struct.pack("<" + "I" * HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT, *range(HOLIDAY_ORNAMENT_COLLECTABLE_START, HOLIDAY_ORNAMENT_COLLECTABLE_END + 1)),
+    )
+
+    mouse_sym = obj.symbol("?HandleMouse@CCollectionScene@@UAE_NHUldwPoint@@@Z")
+    mouse_sec = obj.section(mouse_sym.section)
+    mouse_raw = mouse_sec.raw_ptr + mouse_sym.value
+    if obj.buf[mouse_raw + 0x4B : mouse_raw + 0x52] != b"\xC7\x43\x14\x04\x00\x00\x00":
+        raise RuntimeError("Unexpected CCollectionScene::HandleMouse decrement wrap bytes")
+    obj.buf[mouse_raw + 0x4E : mouse_raw + 0x52] = struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTION_PAGE)
+    if obj.buf[mouse_raw + 0x79 : mouse_raw + 0x7C] != b"\x83\xF8\x05":
+        raise RuntimeError("Unexpected CCollectionScene::HandleMouse increment wrap bytes")
+    obj.buf[mouse_raw + 0x7B] = HOLIDAY_ORNAMENT_COLLECTION_PAGE + 1
+
+    draw_sym = obj.symbol("?DrawScene@CCollectionScene@@MAEXXZ")
+    draw_sec = obj.section(draw_sym.section)
+    draw_count_off = draw_sym.value + 0x17D
+    if obj.buf[draw_sec.raw_ptr + draw_count_off : draw_sec.raw_ptr + draw_count_off + 7] != b"\x8B\x47\x14\xFF\x74\x87\x18":
+        raise RuntimeError("Unexpected CCollectionScene::DrawScene count bytes")
+    obj.insert_section_bytes(draw_sym.section, draw_sym.value + 0x184, b"\x90\x90")
+    draw_sec = obj.section(draw_sym.section)
+    draw_payload = b"\xFF\x77\x14\xE8\x00\x00\x00\x00\x50"
+    obj.buf[draw_sec.raw_ptr + draw_count_off : draw_sec.raw_ptr + draw_count_off + len(draw_payload)] = draw_payload
+    helper_sym = obj.append_undefined_symbol("_VF2CollectionPageCount")
+    obj.append_relocation(draw_sym.section, draw_sym.value + 0x181, helper_sym, IMAGE_REL_I386_REL32)
+
+    obj.write(PATCHED / "CollectionScene.obj")
+    manifest["CollectionSceneHolidayOrnaments"] = {
+        "status": "patched",
+        "page": HOLIDAY_ORNAMENT_COLLECTION_PAGE,
+        "collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
+        "title_string": hex(holiday_ornament_collection_title_string_id()),
+        "background_image_id": hex(holiday_ornament_collection_background_image_id(holiday_body_descriptor_count)),
+        "item_images": [
+            {
+                "collectable": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START + index),
+                "image_id": hex(image_id),
+                "position": [x, y],
+            }
+            for index, (image_id, x, y) in enumerate(page_entries)
+        ],
+        "page_count_helper": "_VF2CollectionPageCount",
+        "object_size_note": "CCollectionScene stays 0x30 bytes; DrawScene asks helper for page counts instead of adding a sixth cached field.",
     }
 
 
@@ -6507,6 +7136,9 @@ def main():
     patch_tool_tray_outfit_normalization(manifest)
     patch_string_manager(manifest)
     patch_special_upgrade_titles(manifest)
+    patch_achievement_holiday_ornaments(manifest)
+    patch_collectable_item_holiday_ornaments(manifest)
+    patch_collection_scene_holiday_ornaments(manifest)
     patch_spontaneous_behaviors(manifest)
     patch_bookshelf_reading_behavior(manifest)
     if ENABLE_DEBUGGER_FEATURES:
@@ -6533,6 +7165,7 @@ def main():
         sync_original_villager_sprite_sheets(manifest)
     sync_outfit_store_icon_art(manifest)
     sync_visible_special_upgrade_icon_art(manifest)
+    sync_holiday_ornament_collection_art(manifest)
     patch_graphics_manager(manifest)
     patch_floating_anim_table(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:

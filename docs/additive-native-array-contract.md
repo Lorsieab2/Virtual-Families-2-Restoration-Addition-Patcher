@@ -68,3 +68,18 @@ stock-body diagnostics with `VF2_ENABLE_HOLIDAY_BODY_TYPES=0`. Stock body values
 `0-49` stay unchanged. Holiday body/action/sit frames must be registered
 together for matching body values and must fall back to stock rendering if an
 extracted frame is missing.
+
+## Holiday Ornaments
+
+The mobile Holiday Ornaments collection uses dormant collectible carrying values
+`0x9E-0xA9`. The PC patch registers base value `0x9E` as another full-yard
+spawn collection through `CCollectableItem::AddSpawnArea`, then lets the stock
+`CCollectableItem::Update/Add` path control normal spawn odds and Lucky Rock
+odds.
+
+Collections page `5` is appended to the native `CCollectionScene` tables rather
+than replacing an existing page. The page uses generated build-local art under
+`Images/CollectionOrnaments/` plus `Images/collection-ornaments_background.png`.
+The matching Goals entry is achievement `0x5F`; visible achievement/order bounds
+must widen to `0x60`, while the existing achievement save block remains large
+enough for this row.

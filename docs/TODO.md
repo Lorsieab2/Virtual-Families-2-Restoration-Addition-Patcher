@@ -24,7 +24,8 @@
   entries, gendered outfit icon descriptors, Holiday outfit runtime-frame
   descriptors/payloads, the B75 independent synthetic outfit ToolTray
   normalization patches, the six copied stock villager sprite sheets under
-  `Images/`, and visible Special Upgrade icon descriptors/payloads
+  `Images/`, visible Special Upgrade icon descriptors/payloads, and the B76
+  Holiday Ornaments collection art/native table/achievement records
   without distributing a premodified EXE.
 - Make antivirus false-positive reduction the top packaging priority. Prefer
   transparent patching and reproducible build artifacts over packed/obfuscated
@@ -35,10 +36,12 @@
 
 ## Research Leads
 
-- Implement the mobile VF2 Holiday Ornaments collectible set in the PC build:
-  add a dedicated Collections screen page, add associated Goals screen entries,
-  wire goal-completion triggers, and port the correct ornament spawning logic
-  with mobile-version data parity.
+- In-game test B76 Holiday Ornaments Collection: verify yard spawns for all 12
+  ornaments at stock collectible cadence, verify Lucky Rock affects frequency
+  and rarity through the stock spawn path, verify the Collections page
+  background/icons/count/scrolling, verify `Ornamentologist` appears and
+  completes after 12 unique ornaments, verify Goal Collector includes the new
+  goal, and verify save/load persistence.
 - Add an optional setting for mobile-exclusive furniture behavior support on
   added mobile-exclusive furniture in the PC build, then implement the correct
   villager behavior routes for those furniture items.
