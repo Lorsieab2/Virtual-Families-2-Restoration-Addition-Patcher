@@ -245,3 +245,15 @@
   `FathersFavoriteTVAnimEast.png=E74071EFECE65336B028A472A7668D5C05ADB31B4CD9FD3FCAAA11801E38906E`.
 - No furniture behavior, villager behavior, base TV animation files, or stock
   floating-animation enums are changed by this correction.
+
+## 2026-07-03 - Clothing Category Crash Guard
+
+- B69 added `CInventoryManager::GetNumAvailable` and `GetUseCount` hooks for
+  synthetic outfit IDs. User testing found that clicking the Clothing store
+  section could crash before an outfit purchase was attempted.
+- B71 keeps the `GetNumAvailable` hook but makes it side-effect-free: generated
+  outfit IDs return `1`, stock IDs return `-1`, and the helper no longer calls
+  `CToolTray::IsSlotAvailable` while the store is opening/drawing rows.
+- B71 removes the generated-outfit `GetUseCount` hook entirely. The direct
+  purchase hook still sets `InventoryManager+0x468/+0x46C`, adds native tray
+  item `0x49/0x4A`, and saves only when an outfit row is actually bought.

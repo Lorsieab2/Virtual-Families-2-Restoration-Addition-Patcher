@@ -3349,7 +3349,6 @@ def patch_inventory_manager(manifest):
 
     outfit_getter_hooks = [
         insert_inventory_getter_hook("?GetNumAvailable@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreNumAvailable"),
-        insert_inventory_getter_hook("?GetUseCount@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreUseCount"),
         insert_inventory_getter_hook("?GetOutfit@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreBodyValue"),
         insert_inventory_getter_hook("?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStorePrice"),
         insert_inventory_getter_hook("?GetLockGenerationLevel@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreLockGeneration"),
@@ -3575,7 +3574,6 @@ public:
 enum EInventoryItem {{ eInventoryItemDummy = 0 }};
 class CToolTray {{
 public:
-    bool IsSlotAvailable();
     bool AddItem(EInventoryItem item, int useCount);
 }};
 
@@ -3637,10 +3635,6 @@ extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
-    return VF2OutfitTrayItemForItem(itemId) < 0 ? -1 : (ToolTray.IsSlotAvailable() ? 1 : 0);
-}}
-
-extern "C" int __cdecl VF2GetOutfitStoreUseCount(int itemId) {{
     return VF2OutfitTrayItemForItem(itemId) < 0 ? -1 : 1;
 }}
 

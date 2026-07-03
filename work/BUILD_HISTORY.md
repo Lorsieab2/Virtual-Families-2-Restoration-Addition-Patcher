@@ -206,6 +206,17 @@
   villager behavior, and click behavior untouched; only the private VF3
   animation strips are regenerated.
 
+## B71 - Clothing Category Crash Guard
+
+- Removes the B69 generated-outfit `CInventoryManager::GetUseCount` hook.
+- Changes `_VF2GetOutfitStoreNumAvailable` into a side-effect-free synthetic
+  ID guard: generated outfit rows return available, stock rows fall through to
+  native code, and the helper no longer calls `CToolTray::IsSlotAvailable`
+  while the Clothing category is opening/drawing.
+- Keeps the direct generated-outfit purchase hook that sets
+  `InventoryManager+0x468/+0x46C`, adds tray item `0x49/0x4A`, and saves only
+  after a generated outfit row is actually purchased.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

@@ -60,11 +60,11 @@
   Small, and Father's Favorite TV overlays now use the correct isometric angle,
   fill their screen faces, and leave base TV click/animation behavior
   untouched.
-- In-game test B69 generated outfit purchases: verify all added female and male
-  Clothing rows display the matching last-action-frame icon, add the expected
-  outfit item to the tool tray when bought, and apply the correct body value.
-  Re-test Holiday body values `50-53` for save-load, detail view, normal house
-  view, and event/sitting/action frames.
+- In-game test B71 Clothing store stability: verify opening the Clothing
+  section no longer crashes, all generated outfit rows display their
+  last-action-frame icons, purchases add the expected outfit item to the tool
+  tray, and body values `50-53` apply without save-load/detail/house-view
+  crashes.
 - In-game test B67 visible Special Upgrade icons: verify Brokerage Account,
   Food Club, Health Plan, and Lucky Rock draw their icon graphics in the
   Special Upgrades list while purchase/apply behavior remains unchanged.

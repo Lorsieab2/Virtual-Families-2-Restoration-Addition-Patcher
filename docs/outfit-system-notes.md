@@ -215,9 +215,13 @@ B69 adds `_VF2PurchaseOutfitStoreItem` and a narrow
 `CScrollingStoreScene::HandlePurchaseItem + 0x1AD` hook. After the normal coin
 charge, recognized generated outfit IDs set the matching body field, add tray
 item `0x49` or `0x4A`, save the game, and skip the native high-ID no-op path.
-`CInventoryManager::GetNumAvailable` and `GetUseCount` are also hooked for the
-generated IDs so the click/purchase dialog path sees them as valid one-use
-items.
+
+B71 removes the risky `CInventoryManager::GetUseCount` hook and stops calling
+`CToolTray::IsSlotAvailable` from `GetNumAvailable`. The remaining
+`GetNumAvailable` hook is now only a pure synthetic-ID guard that returns `1`
+for generated outfit rows and `-1` for all stock rows, so entering the Clothing
+category no longer reaches ToolTray state through a generic store availability
+query.
 
 ## Holiday runtime frame regeneration milestone
 
