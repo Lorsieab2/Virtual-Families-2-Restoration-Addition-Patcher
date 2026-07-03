@@ -223,6 +223,13 @@ for generated outfit rows and `-1` for all stock rows, so entering the Clothing
 category no longer reaches ToolTray state through a generic store availability
 query.
 
+B73 fixes the remaining Clothing-entry crash hypothesis in the generated
+outfit getter hooks. The member-function hooks call helper functions before
+falling through to stock code for base rows, so they must preserve `ECX`, the
+native `CInventoryManager this` pointer, across the helper call. The patched
+member getters now `push ecx` before the helper call and `pop ecx` before
+falling through when the helper returns `-1`.
+
 ## Holiday runtime frame regeneration milestone
 
 B68 fixes a crash-prone split between store preview art and runtime villager

@@ -60,7 +60,7 @@
   Small, and Father's Favorite TV overlays now use the correct isometric angle,
   fill their screen faces, and leave base TV click/animation behavior
   untouched.
-- In-game test B71 Clothing store stability: verify opening the Clothing
+- In-game test B73 Clothing store stability: verify opening the Clothing
   section no longer crashes, all generated outfit rows display their
   last-action-frame icons, purchases add the expected outfit item to the tool
   tray, and body values `50-53` apply without save-load/detail/house-view

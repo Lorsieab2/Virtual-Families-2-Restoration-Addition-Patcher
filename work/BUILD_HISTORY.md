@@ -228,6 +228,17 @@
   `CFamilyTree::EvictFamily()` path instead of adding new family-state clearing
   code.
 
+## B73 - Clothing Getter ECX Guard
+
+- Fixes the likely remaining Clothing category crash in the generated-outfit
+  getter hooks.
+- Preserves `ECX` across member-function outfit helper calls so stock Clothing
+  rows can safely fall through to native `CInventoryManager` code with the
+  original `this` pointer intact.
+- Leaves the generated Clothing rows, outfit icon graphics, direct outfit
+  purchase helper, Evict button, TV behavior, furniture behavior, and villager
+  behavior unchanged.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

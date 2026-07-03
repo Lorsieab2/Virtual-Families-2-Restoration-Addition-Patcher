@@ -3327,9 +3327,11 @@ def patch_inventory_manager(manifest):
         helper_sym = obj.append_undefined_symbol(helper_name)
         if returns_stdcall:
             payload = bytearray()
+            payload += b"\x51"                  # preserve this/ecx for stock fallthrough
             payload += b"\xFF\x75\x08"          # push [ebp+8]
             payload += b"\xE8\x00\x00\x00\x00"  # call helper
             payload += b"\x83\xC4\x04"          # add esp,4
+            payload += b"\x59"                  # restore this/ecx before any fallthrough
             payload += b"\x83\xF8\xFF"          # cmp eax,-1
             payload += b"\x74\x04"              # je original body
             payload += b"\x5D"                  # pop ebp
@@ -3344,8 +3346,14 @@ def patch_inventory_manager(manifest):
             payload += b"\x5D"
             payload += b"\xC3"
         obj.insert_section_bytes(symbol.section, insert_off, bytes(payload))
-        obj.append_relocation(symbol.section, insert_off + 4, helper_sym, IMAGE_REL_I386_REL32)
-        return {"function": function_name, "helper": helper_name, "insert_offset": hex(insert_off)}
+        call_reloc_offset = insert_off + (5 if returns_stdcall else 4)
+        obj.append_relocation(symbol.section, call_reloc_offset, helper_sym, IMAGE_REL_I386_REL32)
+        return {
+            "function": function_name,
+            "helper": helper_name,
+            "insert_offset": hex(insert_off),
+            "preserves_ecx_for_stock_fallthrough": bool(returns_stdcall),
+        }
 
     outfit_getter_hooks = [
         insert_inventory_getter_hook("?GetNumAvailable@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreNumAvailable"),

@@ -272,3 +272,16 @@
   confirmation string ID `0x11`, then the existing family-tree eviction
   handler. No new save-state clearing code, villager behavior, or furniture
   behavior is introduced by this patch.
+
+## 2026-07-03 - Clothing Getter ECX Guard
+
+- User testing showed B71/B72 still crashed when entering the Clothing store
+  category. The remaining generated-outfit getter hooks call `__cdecl` helper
+  functions before stock fallback, but the member methods still need `ECX` as
+  the `CInventoryManager this` pointer when the helper returns `-1` for stock
+  Clothing rows.
+- B73 updates the member-function getter hook payloads
+  (`GetNumAvailable`, `GetOutfit`, `GetPrice`, and
+  `GetLockGenerationLevel`) to `push ecx` before the helper call and `pop ecx`
+  before the stock-fallback compare. Static string getter hooks remain cdecl
+  fallthroughs and do not have a `this` pointer to preserve.
