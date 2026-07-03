@@ -1,13 +1,18 @@
 from pathlib import Path
+import argparse
 import collections
 import json
 import re
+import shutil
 import struct
+import zipfile
+from io import BytesIO
 
 ROOT = Path(__file__).resolve().parents[1]
 APK_NATIVE = ROOT / "work" / "apk_native"
 ASSETS = ROOT / "work" / "vf2_obb" / "assets"
 OUT = ROOT / "outputs" / "VF2-Mobile-Cpp-Reconstruction"
+DEFAULT_XAPK = Path(r"C:\Users\Owner\Downloads\Virtual+Families+2_1.7.16_APKPure.xapk")
 
 
 def ascii_strings(data: bytes, minimum: int = 4):
@@ -30,6 +35,42 @@ def split_itanium_nested(name: str):
         parts.append(name[i : i + n])
         i += n
     return parts if parts else None
+
+
+def collect_port_targets(class_methods):
+    target_classes = [
+        "GameFS",
+        "CPVR",
+        "ldwImage",
+        "ldwGameState",
+        "theGameState",
+        "CContentMap",
+        "CFurnitureManager",
+        "CInventoryManager",
+        "CVillager",
+        "CVillagerManager",
+        "CVillagerPlans",
+        "CBehavior",
+    ]
+    targets = []
+    for class_name in target_classes:
+        methods = sorted(class_methods.get(class_name, {}))
+        if not methods:
+            continue
+        focus = [
+            method
+            for method in methods
+            if re.search(r"Load|Read|Write|Save|Fmap|Content|Image|Texture|PVR|Storage|Furniture|Plan|State|Path|File|Zip", method, re.I)
+        ]
+        targets.append(
+            {
+                "class": class_name,
+                "method_count": len(methods),
+                "focused_methods": focus[:80],
+                "all_methods": methods[:200],
+            }
+        )
+    return targets
 
 
 def pvr_info(path: Path):
@@ -67,7 +108,53 @@ def fmap_info(path: Path):
     }
 
 
+def extract_xapk_inputs(xapk_path: Path, refresh: bool = False):
+    if APK_NATIVE.exists() and ASSETS.exists() and not refresh:
+        return
+    if not xapk_path.exists():
+        raise FileNotFoundError(f"Mobile inputs are missing and XAPK was not found: {xapk_path}")
+
+    if refresh:
+        shutil.rmtree(APK_NATIVE, ignore_errors=True)
+        shutil.rmtree(ASSETS.parent, ignore_errors=True)
+
+    APK_NATIVE.mkdir(parents=True, exist_ok=True)
+    ASSETS.mkdir(parents=True, exist_ok=True)
+
+    with zipfile.ZipFile(xapk_path) as xapk:
+        apk_name = next(name for name in xapk.namelist() if name.lower().endswith(".apk"))
+        apk_bytes = xapk.read(apk_name)
+        obb_name = next(name for name in xapk.namelist() if name.lower().endswith(".obb"))
+        obb_bytes = xapk.read(obb_name)
+
+    with zipfile.ZipFile(BytesIO(apk_bytes)) as apk:
+        for info in apk.infolist():
+            if info.is_dir() or not info.filename.startswith("lib/") or not info.filename.endswith(".so"):
+                continue
+            parts = Path(info.filename).parts
+            if len(parts) < 3:
+                continue
+            abi = parts[1]
+            lib_name = parts[-1]
+            target = APK_NATIVE / f"lib_{abi}_{lib_name}"
+            target.write_bytes(apk.read(info))
+
+    with zipfile.ZipFile(BytesIO(obb_bytes)) as obb:
+        for info in obb.infolist():
+            if info.is_dir() or not info.filename.startswith("assets/"):
+                continue
+            target = ASSETS.parent / info.filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(obb.read(info))
+
+
 def main():
+    parser = argparse.ArgumentParser(description="Build a VF2 mobile C++ reconstruction report from the XAPK native code and OBB assets.")
+    parser.add_argument("--xapk", default=str(DEFAULT_XAPK))
+    parser.add_argument("--refresh-inputs", action="store_true", help="Re-extract APK native libraries and OBB assets from the XAPK.")
+    args = parser.parse_args()
+
+    extract_xapk_inputs(Path(args.xapk), args.refresh_inputs)
     OUT.mkdir(parents=True, exist_ok=True)
 
     native_report = {}
@@ -100,6 +187,7 @@ def main():
     fmap_bad = [x for x in fmap_samples if x.get("magic") != "QAMF" or x.get("declared_size") != x.get("size")]
 
     inventory = {
+        "source_xapk": str(Path(args.xapk)),
         "asset_extension_counts": dict(collections.Counter(p.suffix.lower() or "<none>" for p in ASSETS.iterdir() if p.is_file())),
         "native_libraries": native_report,
         "jni_symbol_count": len(set(jni_symbols)),
@@ -109,6 +197,7 @@ def main():
             {"class": cls, "method_count": len(methods), "sample_methods": sorted(methods)[:40]}
             for cls, methods in sorted(class_methods.items(), key=lambda kv: (-len(kv[1]), kv[0]))[:80]
         ],
+        "port_targets": collect_port_targets(class_methods),
         "path_string_hits": sorted(set(path_hits))[:500],
         "pvr_samples": pvr_samples,
         "fmap_samples": fmap_samples,
@@ -129,11 +218,23 @@ def main():
     lines.append("")
     lines.append("## Recovered Engine Shape")
     lines.append("")
+    lines.append(f"- Native gameplay libraries inventoried: {len(native_report)}.")
+    lines.append(f"- Asset files available under `work/vf2_obb/assets`: {sum(inventory['asset_extension_counts'].values())}.")
+    lines.append("")
     lines.append("The native library preserves C++ symbol names. The reconstruction should mirror these classes first:")
     lines.append("")
     for item in inventory["top_classes"][:25]:
         lines.append(f"- `{item['class']}`: {item['method_count']} recovered method names; samples: " + ", ".join(f"`{m}`" for m in item["sample_methods"][:10]))
     lines.append("")
+    lines.append("## First IDA/Ghidra Port Targets")
+    lines.append("")
+    for target in inventory["port_targets"]:
+        if not target["focused_methods"]:
+            continue
+        lines.append(f"### {target['class']}")
+        for method in target["focused_methods"][:24]:
+            lines.append(f"- `{target['class']}::{method}`")
+        lines.append("")
     lines.append("## Asset Format Notes")
     lines.append("")
     lines.append("- `.fmap` files begin with magic `QAMF` and have a declared size matching the file length in the samples checked.")

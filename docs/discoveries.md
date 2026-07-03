@@ -1,5 +1,27 @@
 # Discoveries
 
+## 2026-07-03 - Mobile Native Reconstruction Bootstrap
+
+- `work/make_mobile_reconstruction_report.py` now bootstraps its own evidence
+  from `C:\Users\Owner\Downloads\Virtual+Families+2_1.7.16_APKPure.xapk` when
+  `work/apk_native` or `work/vf2_obb/assets` is missing. Use
+  `--refresh-inputs` to force a clean APK/OBB re-extraction.
+- The refreshed reconstruction inventory found 4 gameplay
+  `libVirtualFamilies2.so` variants, 1,092 OBB asset files, 333 recovered C++
+  classes, and no size/magic mismatches in the sampled `.fmap` files.
+- The next IDA/Ghidra pass should start from the generated
+  `outputs/VF2-Mobile-Cpp-Reconstruction/mobile-native-inventory.json`
+  `port_targets` list. The highest-value methods are `CPVR::Load`,
+  `CPVR::ConvertPVRTC`, `CContentMap::LoadFmap`, `CContentMap::Read`,
+  `CFurnitureManager::LoadFmap`, `CFurnitureManager::ApplyFmapContent`,
+  `CFurnitureManager::GetFmapName`, `CFurnitureManager::GetImageGrid`,
+  `GameFS::AddZipOrFolder`, `GameFS::Fopen`, `GameFS::Fread`,
+  `ldwGameState::Load64`, and `theGameState::LoadCurrentGame`.
+- Treat those methods as the bridge from APK-native reverse engineering to a
+  functioning Windows runtime: first reconstruct asset/file loading, then
+  `.fmap` content blocks, then furniture storage/world placement, and only then
+  save/load and villager behavior.
+
 ## 2026-07-02 - Offline Patcher Foundation
 
 - `work/offline_vf2_patcher.py` is the source-only patcher scaffold for the
