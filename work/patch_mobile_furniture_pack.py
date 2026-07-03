@@ -58,9 +58,15 @@ FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Isla
 HOLIDAY_BODY_SET_IDS = (51, 52, 53, 54)
 HOLIDAY_BODY_BASE_ROWS = 50
 HOLIDAY_BODY_VALUES = tuple(range(50, 50 + len(HOLIDAY_BODY_SET_IDS)))
-OUTFIT_STORE_ITEM_BASE = 0x400
+OUTFIT_STORE_GENDERS = ("female", "male")
+OUTFIT_STORE_GENDER_ITEM_BASES = {
+    "female": 0x400,
+    "male": 0x440,
+}
+OUTFIT_STORE_ITEM_BASE = OUTFIT_STORE_GENDER_ITEM_BASES["female"]
 OUTFIT_BASE_BODY_VALUES = tuple(range(0, HOLIDAY_BODY_BASE_ROWS))
 OUTFIT_STORE_BODY_VALUES = OUTFIT_BASE_BODY_VALUES + HOLIDAY_BODY_VALUES
+OUTFIT_STORE_ENTRY_COUNT = len(OUTFIT_STORE_GENDERS) * len(OUTFIT_STORE_BODY_VALUES)
 OUTFIT_STORE_PRICE = 75
 OUTFIT_STORE_HOLIDAY_PRICE = 500
 HOLIDAY_BODY_CELL_SIZE = 91
@@ -1636,29 +1642,38 @@ def item_id_for(idx):
     return data["item_id"]
 
 
-def outfit_item_id_for_body(body_value):
-    return OUTFIT_STORE_ITEM_BASE + body_value
+def outfit_item_id_for_body(gender, body_value):
+    return OUTFIT_STORE_GENDER_ITEM_BASES[gender] + body_value
 
 
 def outfit_body_for_item(item_id):
-    body_value = item_id - OUTFIT_STORE_ITEM_BASE
-    if body_value in OUTFIT_STORE_BODY_VALUES:
-        return body_value
+    for gender, base in OUTFIT_STORE_GENDER_ITEM_BASES.items():
+        body_value = item_id - base
+        if body_value in OUTFIT_STORE_BODY_VALUES:
+            return gender, body_value
     return None
+
+
+def outfit_store_entry_index(gender, body_value):
+    return OUTFIT_STORE_GENDERS.index(gender) * len(OUTFIT_STORE_BODY_VALUES) + OUTFIT_STORE_BODY_VALUES.index(body_value)
 
 
 def outfit_store_entries():
     entries = []
-    for body_value in OUTFIT_STORE_BODY_VALUES:
-        is_holiday = body_value in HOLIDAY_BODY_VALUES
-        entries.append({
-            "item_id": outfit_item_id_for_body(body_value),
-            "body_value": body_value,
-            "name": f"{'Holiday ' if is_holiday else ''}Outfit Body {body_value:02d}",
-            "price": OUTFIT_STORE_HOLIDAY_PRICE if is_holiday else OUTFIT_STORE_PRICE,
-            "lock_generation": 0,
-            "source": "holiday body row" if is_holiday else "base body row",
-        })
+    for gender in OUTFIT_STORE_GENDERS:
+        gender_title = gender.title()
+        for body_value in OUTFIT_STORE_BODY_VALUES:
+            is_holiday = body_value in HOLIDAY_BODY_VALUES
+            entries.append({
+                "entry_index": outfit_store_entry_index(gender, body_value),
+                "item_id": outfit_item_id_for_body(gender, body_value),
+                "gender": gender,
+                "body_value": body_value,
+                "name": f"{gender_title} {'Holiday ' if is_holiday else ''}Outfit Body {body_value:02d}",
+                "price": OUTFIT_STORE_HOLIDAY_PRICE if is_holiday else OUTFIT_STORE_PRICE,
+                "lock_generation": 0,
+                "source": "holiday body row" if is_holiday else "base body row",
+            })
     return entries
 
 
@@ -1688,6 +1703,18 @@ def vf3_tv_anim_image_base(holiday_body_descriptor_count=0):
 
 def vf3_tv_anim_image_id(label, holiday_body_descriptor_count=0):
     return vf3_tv_anim_image_base(holiday_body_descriptor_count) + list(VF3_TV_FLOATING_ANIMS).index(label)
+
+
+def outfit_icon_image_base(holiday_body_descriptor_count=0):
+    return vf3_tv_anim_image_base(holiday_body_descriptor_count) + len(VF3_TV_FLOATING_ANIMS)
+
+
+def outfit_icon_image_id(gender, body_value, holiday_body_descriptor_count=0):
+    return outfit_icon_image_base(holiday_body_descriptor_count) + outfit_store_entry_index(gender, body_value)
+
+
+def outfit_icon_path(gender, body_value):
+    return f"OutfitIcons/{gender.title()}_Body_{body_value:02d}.png"
 
 
 def villager_body_image_base():
@@ -2435,6 +2462,129 @@ def sync_holiday_body_runtime_frames(manifest):
     }
 
 
+def _outfit_icon_source_roots():
+    roots = [OUT / "Images"]
+    outputs = ROOT / "outputs"
+    if outputs.exists():
+        roots.extend(
+            build / "Images"
+            for build in sorted(
+                outputs.glob("VF2-Mobile-Furniture-With-Island-Events-B*"),
+                key=lambda path: path.stat().st_mtime,
+                reverse=True,
+            )
+        )
+    roots.append(FALLBACK_HOLIDAY_BODY_BUILD / "Images")
+
+    unique = []
+    seen = set()
+    for root in roots:
+        key = str(root).lower()
+        if key not in seen and root.exists():
+            unique.append(root)
+            seen.add(key)
+    return unique
+
+
+def sync_outfit_store_icon_art(manifest):
+    """Generate one store-preview icon per added male/female outfit row."""
+    from PIL import Image
+
+    output_root = OUT / "Images" / "OutfitIcons"
+    output_root.mkdir(parents=True, exist_ok=True)
+    entries = []
+    missing = []
+    issues = []
+    holiday_frame_entries = {
+        (entry["gender"], entry["body_value"], entry["role"], entry["frame"]): entry
+        for entry in manifest.get("holiday_body_runtime_frames", {}).get("frames", [])
+    }
+    sheet_names = {
+        "female": "female_bodies00.png",
+        "male": "male_bodies00.png",
+    }
+    sheet_cache = {}
+
+    try:
+        for entry in outfit_store_entries():
+            gender = entry["gender"]
+            body_value = entry["body_value"]
+            target = output_root / f"{gender.title()}_Body_{body_value:02d}.png"
+            icon = None
+            source = None
+            source_kind = None
+
+            if body_value in HOLIDAY_BODY_VALUES:
+                frame = holiday_frame_entries.get((gender, body_value, "bodies", 0))
+                if frame:
+                    frame_path = OUT / "Images" / frame["path"]
+                    if frame_path.exists():
+                        icon = Image.new("RGBA", (HOLIDAY_BODY_CELL_SIZE, HOLIDAY_BODY_CELL_SIZE), (0, 0, 0, 0))
+                        with Image.open(frame_path).convert("RGBA") as cropped:
+                            offset = frame.get("offset") or [0, 0]
+                            icon.alpha_composite(cropped, (int(offset[0]), int(offset[1])))
+                        source = frame_path
+                        source_kind = "holiday_runtime_frame"
+
+            if icon is None:
+                sheet_name = sheet_names[gender]
+                required_height = (body_value + 1) * HOLIDAY_BODY_CELL_SIZE
+                sheet_path = None
+                short_sheets = []
+                for root in _outfit_icon_source_roots():
+                    candidate = root / sheet_name
+                    if not candidate.exists():
+                        continue
+                    size = read_png_size(candidate)
+                    if size and size[1] >= required_height:
+                        sheet_path = candidate
+                        break
+                    short_sheets.append(f"{candidate}: row {body_value}")
+                if not sheet_path:
+                    missing.append(sheet_name)
+                    missing.extend(short_sheets)
+                    continue
+                if sheet_path not in sheet_cache:
+                    sheet_cache[sheet_path] = Image.open(sheet_path).convert("RGBA")
+                sheet = sheet_cache[sheet_path]
+                icon = sheet.crop((
+                    0,
+                    body_value * HOLIDAY_BODY_CELL_SIZE,
+                    HOLIDAY_BODY_CELL_SIZE,
+                    (body_value + 1) * HOLIDAY_BODY_CELL_SIZE,
+                ))
+                source = sheet_path
+                source_kind = "body_sheet_row"
+
+            icon.save(target)
+            entries.append({
+                "item_id": hex(entry["item_id"]),
+                "gender": gender,
+                "body_value": body_value,
+                "image_id": hex(outfit_icon_image_id(gender, body_value, HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)),
+                "path": str(target.relative_to(OUT / "Images")).replace("\\", "/"),
+                "source": str(source),
+                "source_kind": source_kind,
+                "size": list(icon.size),
+            })
+    except Exception as exc:
+        issues.append({"reason": str(exc)})
+    finally:
+        for image in sheet_cache.values():
+            image.close()
+
+    manifest["outfit_store_icons"] = {
+        "status": "generated" if len(entries) == OUTFIT_STORE_ENTRY_COUNT else "partial_or_failed",
+        "root": str(output_root),
+        "image_base": hex(outfit_icon_image_base(HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)),
+        "expected_count": OUTFIT_STORE_ENTRY_COUNT,
+        "generated_count": len(entries),
+        "entries": entries,
+        "missing": missing,
+        "issues": issues,
+    }
+
+
 def patch_holiday_body_lookup(manifest):
     """Allow the native animator to address the four additive outfit rows.
 
@@ -2764,13 +2914,13 @@ def visible_special_upgrade_desc_id_for(index):
     return ORIG_STRING_ONE_PAST_MAX + len(ITEMS) * 2 + mobile_island_event_string_count() + index
 
 
-def outfit_string_ids_for_body(body_value):
+def outfit_string_ids_for_entry(entry_index):
     base = (
         ORIG_STRING_ONE_PAST_MAX
         + len(ITEMS) * 2
         + mobile_island_event_string_count()
         + SPECIAL_UPGRADE_DESCRIPTION_COUNT
-        + body_value * 2
+        + entry_index * 2
     )
     return base, base + 1
 
@@ -2781,7 +2931,7 @@ def behavior_label_string_id_for(index):
         + len(ITEMS) * 2
         + mobile_island_event_string_count()
         + SPECIAL_UPGRADE_DESCRIPTION_COUNT
-        + len(OUTFIT_STORE_BODY_VALUES) * 2
+        + OUTFIT_STORE_ENTRY_COUNT * 2
         + index
     )
 
@@ -3026,6 +3176,7 @@ def patch_inventory_manager(manifest):
     clothing_sym = obj.symbol(GCLOTHINGLIST)
     clothing_old_count = 6
     clothing_new_count = clothing_old_count + len(outfit_ids)
+    holiday_body_descriptor_count = HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0
     obj.insert_section_bytes(
         clothing_sym.section,
         clothing_sym.value + clothing_old_count * 4,
@@ -3128,6 +3279,44 @@ def patch_inventory_manager(manifest):
         insert_inventory_getter_hook("?GetLongDesc@CInventoryManager@@SA?AW4StringId@@W4EInventoryItem@@@Z", "_VF2GetOutfitStoreLongDesc", returns_stdcall=False),
     ]
 
+    def insert_draw_item_hook(function_name, helper_name, ret_bytes, arg_offsets):
+        symbol = obj.symbol(function_name)
+        section = obj.section(symbol.section)
+        insert_off = symbol.value + 3
+        raw = section.raw_ptr + insert_off
+        if obj.buf[raw - 3 : raw] != b"\x55\x8B\xEC":
+            raise RuntimeError(f"Unexpected prologue in {function_name}")
+        helper_sym = obj.append_undefined_symbol(helper_name)
+        payload = bytearray()
+        payload += b"\x51"  # preserve this/ecx for fallthrough
+        for offset in reversed(arg_offsets):
+            payload += b"\xFF\x75" + bytes([offset])
+        payload += b"\xE8\x00\x00\x00\x00"
+        payload += b"\x83\xC4" + bytes([len(arg_offsets) * 4])
+        payload += b"\x59"
+        payload += b"\x84\xC0"
+        payload += b"\x74\x04"
+        payload += b"\x5D"
+        payload += ret_bytes
+        obj.insert_section_bytes(symbol.section, insert_off, bytes(payload))
+        obj.append_relocation(symbol.section, insert_off + 2 + len(arg_offsets) * 3, helper_sym, IMAGE_REL_I386_REL32)
+        return {"function": function_name, "helper": helper_name, "insert_offset": hex(insert_off)}
+
+    outfit_draw_hooks = [
+        insert_draw_item_hook(
+            "?DrawItem@CInventoryManager@@QAEXUldwPoint@@W4EInventoryItem@@W4EInventoryItemState@@W4EInventoryItemPosition@@_N@Z",
+            "_VF2DrawOutfitStoreIconPoint",
+            b"\xC2\x18\x00",
+            (0x08, 0x0C, 0x10, 0x14, 0x18, 0x1C),
+        ),
+        insert_draw_item_hook(
+            "?DrawItem@CInventoryManager@@QAEXUldwRect@@W4EInventoryItem@@W4EInventoryItemState@@W4EInventoryItemPosition@@_N@Z",
+            "_VF2DrawOutfitStoreIconRect",
+            b"\xC2\x20\x00",
+            (0x08, 0x0C, 0x10, 0x14, 0x18, 0x1C, 0x20, 0x24),
+        ),
+    ]
+
     # SortGenLockItems only included locked items up to generation 9. Custom
     # furniture uses higher official/mod locks, so raise the visible lock window.
     generation_cap_patches = patch_all(obj.buf, b"\x83\xF8\x09", b"\x83\xF8\x1E")
@@ -3178,17 +3367,21 @@ def patch_inventory_manager(manifest):
             "base_count": clothing_old_count,
             "new_count": clothing_new_count,
             "body_values": list(OUTFIT_STORE_BODY_VALUES),
+            "genders": list(OUTFIT_STORE_GENDERS),
             "items": [
                 {
                     "item_id": hex(entry["item_id"]),
+                    "gender": entry["gender"],
                     "body_value": entry["body_value"],
                     "name": entry["name"],
                     "price": entry["price"],
                     "source": entry["source"],
+                    "icon_image_id": hex(outfit_icon_image_id(entry["gender"], entry["body_value"], holiday_body_descriptor_count)),
                 }
                 for entry in outfit_entries
             ],
             "getter_hooks": outfit_getter_hooks,
+            "draw_hooks": outfit_draw_hooks,
         },
         "generation_sort_cap": {"old": 9, "new": 30, "patches": generation_cap_patches},
     }
@@ -3284,22 +3477,37 @@ def write_outfit_store_helpers(manifest):
     helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
     if not helper_path.exists():
         raise RuntimeError("Expected vf2_special_upgrade_effects.cpp before adding outfit helpers")
-    first_short, _first_long = outfit_string_ids_for_body(0)
+    first_short, _first_long = outfit_string_ids_for_entry(0)
     helper_path.write_text(
         helper_path.read_text(encoding="ascii")
         + f"""
 
-static const int kVF2OutfitStoreItemBase = {OUTFIT_STORE_ITEM_BASE};
+enum EImage {{ eImageDummy = 0 }};
+class theGraphicsManager {{
+public:
+    static theGraphicsManager* Get();
+    void Draw(EImage image, int x, int y, float scale, int alpha);
+}};
+
+static const int kVF2OutfitStoreFemaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["female"]};
+static const int kVF2OutfitStoreMaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["male"]};
 static const int kVF2OutfitStoreBodyCount = {len(OUTFIT_STORE_BODY_VALUES)};
 static const int kVF2OutfitStoreHolidayFirst = {HOLIDAY_BODY_VALUES[0]};
 static const int kVF2OutfitStoreShortStringBase = {first_short};
+static const int kVF2OutfitStoreIconImageBase = {outfit_icon_image_base(HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)};
+static const int kVF2OutfitStoreIconCellSize = {HOLIDAY_BODY_CELL_SIZE};
+
+static int VF2OutfitStoreEntryIndex(int itemId) {{
+    int femaleBody = itemId - kVF2OutfitStoreFemaleItemBase;
+    if (femaleBody >= 0 && femaleBody < kVF2OutfitStoreBodyCount) return femaleBody;
+    int maleBody = itemId - kVF2OutfitStoreMaleItemBase;
+    if (maleBody >= 0 && maleBody < kVF2OutfitStoreBodyCount) return kVF2OutfitStoreBodyCount + maleBody;
+    return -1;
+}}
 
 static int VF2OutfitBodyForItem(int itemId) {{
-    int body = itemId - kVF2OutfitStoreItemBase;
-    if (body < 0 || body >= kVF2OutfitStoreBodyCount) {{
-        return -1;
-    }}
-    return body;
+    int index = VF2OutfitStoreEntryIndex(itemId);
+    return index < 0 ? -1 : index % kVF2OutfitStoreBodyCount;
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
@@ -3319,23 +3527,60 @@ extern "C" int __cdecl VF2GetOutfitStoreLockGeneration(int itemId) {{
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreShortDesc(int itemId) {{
-    int body = VF2OutfitBodyForItem(itemId);
-    return body < 0 ? -1 : kVF2OutfitStoreShortStringBase + body * 2;
+    int index = VF2OutfitStoreEntryIndex(itemId);
+    return index < 0 ? -1 : kVF2OutfitStoreShortStringBase + index * 2;
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreLongDesc(int itemId) {{
-    int body = VF2OutfitBodyForItem(itemId);
-    return body < 0 ? -1 : kVF2OutfitStoreShortStringBase + body * 2 + 1;
+    int index = VF2OutfitStoreEntryIndex(itemId);
+    return index < 0 ? -1 : kVF2OutfitStoreShortStringBase + index * 2 + 1;
+}}
+
+extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
+    int index = VF2OutfitStoreEntryIndex(itemId);
+    return index < 0 ? -1 : kVF2OutfitStoreIconImageBase + index;
+}}
+
+extern "C" bool __cdecl VF2DrawOutfitStoreIconPoint(int x, int y, int itemId, int state, int position, int selected) {{
+    int image = VF2GetOutfitStoreIconImage(itemId);
+    if (image < 0) return false;
+    theGraphicsManager* graphics = theGraphicsManager::Get();
+    if (graphics) graphics->Draw((EImage)image, x - kVF2OutfitStoreIconCellSize / 2, y - kVF2OutfitStoreIconCellSize / 2, 1.0f, 100);
+    return true;
+}}
+
+extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
+    int left,
+    int top,
+    int right,
+    int bottom,
+    int itemId,
+    int state,
+    int position,
+    int selected
+) {{
+    int image = VF2GetOutfitStoreIconImage(itemId);
+    if (image < 0) return false;
+    theGraphicsManager* graphics = theGraphicsManager::Get();
+    if (graphics) {{
+        int x = left + ((right - left) - kVF2OutfitStoreIconCellSize) / 2;
+        int y = top + ((bottom - top) - kVF2OutfitStoreIconCellSize) / 2;
+        graphics->Draw((EImage)image, x, y, 1.0f, 100);
+    }}
+    return true;
 }}
 """,
         encoding="ascii",
     )
     manifest["outfit_store_helpers"] = {
         "source": str(helper_path),
-        "item_base": hex(OUTFIT_STORE_ITEM_BASE),
+        "item_bases": {gender: hex(base) for gender, base in OUTFIT_STORE_GENDER_ITEM_BASES.items()},
         "body_values": list(OUTFIT_STORE_BODY_VALUES),
+        "genders": list(OUTFIT_STORE_GENDERS),
         "holiday_body_values": list(HOLIDAY_BODY_VALUES),
         "short_string_base": hex(first_short),
+        "icon_image_base": hex(outfit_icon_image_base(HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)),
+        "icon_count": OUTFIT_STORE_ENTRY_COUNT,
     }
 
 
@@ -3831,18 +4076,19 @@ def patch_string_manager(manifest):
         })
 
     for entry in outfit_store_entries():
-        short_id, long_id = outfit_string_ids_for_body(entry["body_value"])
+        short_id, long_id = outfit_string_ids_for_entry(entry["entry_index"])
+        gender_title = entry["gender"].title()
         rows = [
             (
                 short_id,
-                f"eString_OutfitBody{entry['body_value']:02d}ShortDesc",
+                f"eString_{gender_title}OutfitBody{entry['body_value']:02d}ShortDesc",
                 entry["name"],
                 "short",
             ),
             (
                 long_id,
-                f"eString_OutfitBody{entry['body_value']:02d}LongDesc",
-                f"Adds villager body value {entry['body_value']} to the Outfits store. This body value uses the matching male or female graphics for the selected villager.",
+                f"eString_{gender_title}OutfitBody{entry['body_value']:02d}LongDesc",
+                f"Adds {entry['gender']} villager body value {entry['body_value']} to the Outfits store.",
                 "long",
             ),
         ]
@@ -3856,6 +4102,7 @@ def patch_string_manager(manifest):
                 "pc_string_id": hex(string_id),
                 "source": "outfit store entry",
                 "item_id": hex(entry["item_id"]),
+                "gender": entry["gender"],
                 "body_value": entry["body_value"],
                 "role": role,
                 "key": key,
@@ -4252,6 +4499,7 @@ def patch_graphics_manager(manifest):
         + len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
         + holiday_body_descriptor_count
         + len(VF3_TV_FLOATING_ANIMS)
+        + OUTFIT_STORE_ENTRY_COUNT
     )
     if append_count:
         obj.insert_section_bytes(img_sym.section, img_sym.value + ORIG_IMAGE_COUNT * DESC_SIZE, b"\0" * (append_count * DESC_SIZE))
@@ -4404,6 +4652,32 @@ def patch_graphics_manager(manifest):
             "grid": [6, 3],
         })
 
+    outfit_icon_desc_manifest = []
+    for entry in outfit_store_entries():
+        image_id = outfit_icon_image_id(entry["gender"], entry["body_value"], holiday_body_descriptor_count)
+        path = outfit_icon_path(entry["gender"], entry["body_value"])
+        vals = plain_image_donor[:]
+        vals[0] = image_id
+        vals[1] = 0
+        vals[2] = 1
+        vals[3] = 1
+        desc_off = img_sym.value + image_id * DESC_SIZE
+        img_sec = obj.section(img_sym.section)
+        obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
+        sym = f"_vf2outfiticon_{entry['gender']}_{entry['body_value']:02d}_png"
+        helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+        symidx = obj.append_undefined_symbol(sym)
+        obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+        outfit_icon_desc_manifest.append({
+            "item_id": hex(entry["item_id"]),
+            "gender": entry["gender"],
+            "body_value": entry["body_value"],
+            "image_id": hex(image_id),
+            "path": path,
+            "symbol": sym,
+            "grid": [1, 1],
+        })
+
     new_image_max = ORIG_IMAGE_MAX + append_count
     new_scan_end = ORIG_IMAGE_COUNT * DESC_SIZE + append_count * DESC_SIZE
     new_cleanup_end = 0x7798 + append_count * DESC_SIZE
@@ -4439,6 +4713,11 @@ def patch_graphics_manager(manifest):
             "image_base": hex(vf3_tv_anim_image_base(holiday_body_descriptor_count)),
             "image_count": len(VF3_TV_FLOATING_ANIMS),
             "descriptors": vf3_tv_anim_desc_manifest,
+        },
+        "outfit_store_icons": {
+            "image_base": hex(outfit_icon_image_base(holiday_body_descriptor_count)),
+            "image_count": OUTFIT_STORE_ENTRY_COUNT,
+            "descriptors": outfit_icon_desc_manifest,
         },
         "character_sheet_art": character_sheet_manifest,
         "descriptors": desc_manifest,
@@ -5882,6 +6161,7 @@ def main():
         }
     if ENABLE_HOLIDAY_BODY_TYPES:
         sync_holiday_body_runtime_frames(manifest)
+    sync_outfit_store_icon_art(manifest)
     patch_graphics_manager(manifest)
     patch_floating_anim_table(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:

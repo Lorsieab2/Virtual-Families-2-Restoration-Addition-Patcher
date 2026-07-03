@@ -174,3 +174,24 @@ resolver complete per-frame PNGs for body values 50--53 while leaving the
 original 0--49 spritesheets as the fallback path. Source frames 57--61 are
 preserved as raw holiday copies but are not mapped into the first compatibility
 resolver pass.
+
+## Clothing store preview icon milestone
+
+B66 adds explicit store preview art for the generated outfit rows. The added
+rows are gender-specific:
+
+- Female outfit item IDs: `0x400` through `0x435`
+- Male outfit item IDs: `0x440` through `0x475`
+
+The patcher writes one 91 x 91 PNG per row under `Images/OutfitIcons/` using
+the matching villager body cell. Base body values `0--49` come from the
+matching `female_bodies00.png` or `male_bodies00.png` source sheet. Holiday
+body values `50--53` prefer generated folder-backed body frame `0` and can
+fall back to an expanded prior build sheet when the current additive folder has
+only stock rows.
+
+`theGraphicsManager` receives 108 appended 1 x 1 image descriptors for those
+icons. `CInventoryManager::DrawItem(ldwPoint, ...)` and
+`CInventoryManager::DrawItem(ldwRect, ...)` have narrow prologue hooks that
+only intercept these high outfit item IDs and draw the matching preview icon;
+non-outfit inventory drawing falls through to stock code.

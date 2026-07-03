@@ -155,3 +155,20 @@
   TV strip assets as a group. The remaining offline-patcher work is converting
   B65's native descriptor/table/furniture-record changes into verified byte
   records against a vanilla executable.
+
+## 2026-07-03 - Outfit Store Icon Rows
+
+- The added Clothing-store outfit rows were blank because their item IDs live
+  at `0x400+`, outside the stock item ranges that
+  `CInventoryManager::DrawItem(ldwPoint, ...)` and
+  `CInventoryManager::DrawItem(ldwRect, ...)` know how to render. The text,
+  price, and outfit helper hooks worked, but the icon path had no valid image
+  descriptor/draw route.
+- B66 splits the added outfit entries by gender: female rows use item IDs
+  `0x400-0x435`, male rows use `0x440-0x475`, for 108 added rows plus the six
+  stock Clothing rows (`new_count=114`).
+- `work/patch_mobile_furniture_pack.py` now generates 108 preview icons under
+  `Images/OutfitIcons/`, registers image descriptors `0x4D3-0x53E`, and adds
+  targeted `DrawItem` prologue hooks that draw those descriptors through
+  `theGraphicsManager::Draw`. Villager behavior/furniture behavior paths are
+  untouched by this icon fix.

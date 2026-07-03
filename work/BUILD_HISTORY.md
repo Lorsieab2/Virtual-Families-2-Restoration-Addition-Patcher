@@ -139,6 +139,18 @@
 - Keeps debugger features disabled and preserves the stock `theMainScene.obj`
   hash `BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB`.
 
+## B66 - Gendered Outfit Store Icons
+
+- Fixes blank Clothing-store rows for added outfit entries by generating one
+  91 x 91 preview icon per outfit row under `Images/OutfitIcons/`.
+- Splits added outfit rows into female item IDs `0x400-0x435` and male item
+  IDs `0x440-0x475`; total Clothing row count is now 114 including the six
+  stock rows.
+- Appends outfit icon image descriptors `0x4D3-0x53E` and routes only those
+  high outfit item IDs through targeted `CInventoryManager::DrawItem` hooks.
+- Leaves villager behavior, furniture behavior, TV behavior, debugger features,
+  and stock `theMainScene.obj` unchanged.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.
