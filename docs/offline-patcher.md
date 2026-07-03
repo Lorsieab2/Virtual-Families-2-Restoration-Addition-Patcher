@@ -5,7 +5,8 @@ distributing modified executables, releases should distribute patch data and a
 simple patcher that edits a user-provided vanilla VF2 PC install on disk.
 
 The first implementation is `work/offline_vf2_patcher.py`. It applies byte
-patches from JSON manifests and can restore files from its own backups.
+patches and file/asset patch records from JSON manifests, then can restore
+files from its own backups.
 
 ## Goals
 
@@ -28,10 +29,11 @@ patches from JSON manifests and can restore files from its own backups.
   --disable holiday_outfits
 ```
 
-Use `--dry-run` to validate hashes and expected bytes without writing files.
-Use `--backup-dir` and `--log` to control where the backup and patch log are
-written. Use `--enable`, `--disable`, `--enable-all`, and `--disable-all` to
-choose manifest-declared feature settings before patching.
+Use `--dry-run` to validate target hashes, expected bytes, and asset payload
+hashes without writing files. Use `--backup-dir` and `--log` to control where
+the backup and patch log are written. Use `--enable`, `--disable`,
+`--enable-all`, and `--disable-all` to choose manifest-declared feature
+settings before patching.
 
 List the settings exposed by a manifest:
 
@@ -64,7 +66,8 @@ changes.
 ```
 
 The restore command reads `vf2_patch_backup_manifest.json` from the backup
-folder and copies the original files back.
+folder, copies original files back, and removes files that the patcher created
+when the original target did not exist.
 
 ## Manifest Contract
 
@@ -110,6 +113,16 @@ folder and copies the original files back.
       "requires": ["holiday_furniture"],
       "note": "Explain why this patch exists."
     }
+  ],
+  "asset_patches": [
+    {
+      "file_path": "Images/VF3LargeFlatScreenTVAnim.png",
+      "source_path": "payload/Images/VF3LargeFlatScreenTVAnim.png",
+      "source_sha256": "expected lowercase sha256 of the payload file",
+      "source_size": 12345,
+      "requires": ["mobile_furniture"],
+      "note": "B64 scaled private VF3 Large TV animation strip."
+    }
   ]
 }
 ```
@@ -124,6 +137,18 @@ Each byte patch must be length-preserving. Length-changing edits should be
 represented as asset/table replacement work or by adding a future manifest
 record type with its own safety rules. Overlapping byte patches are refused.
 
+`asset_patches` copy files from a patch bundle into the user-provided game
+folder after verifying the payload file's `source_sha256`. `source_path` is
+relative to the manifest folder; `file_path` is relative to the game folder.
+Asset records can create new files, which restore later removes. If an asset
+target already exists, the patcher allows it only when it already matches the
+payload, when `expected_target_sha256` matches, or when
+`overwrite_existing=true` is explicit. This keeps private files such as
+`Images/VF3LargeFlatScreenTVAnim*.png`,
+`Images/VF3SmallFlatScreenTVAnim*.png`, and
+`Images/FathersFavoriteTVAnim*.png` patchable without touching stock
+`TVAnimBig*.png` or `TVAnimSmall*.png`.
+
 ## Toggleable Settings
 
 Settings let a release manifest expose optional components before patching, such
@@ -133,9 +158,9 @@ as:
 - `holiday_outfits` - Add Holiday outfits.
 - `mobile_furniture` - Add additional mobile-exclusive furniture.
 
-Patch records and target-file checks can include `requires`, `settings`, or
-`setting`. A record is active only when all required settings are enabled. If a
-record has no setting requirement, it is always active.
+Patch records, asset records, and target-file checks can include `requires`,
+`settings`, or `setting`. A record is active only when all required settings
+are enabled. If a record has no setting requirement, it is always active.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:

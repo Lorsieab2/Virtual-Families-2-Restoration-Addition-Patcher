@@ -79,3 +79,24 @@
 - If in-game B64 still shows the old alignment, the next research point is the
   furniture-to-animation-sheet lookup path; binary strings still primarily show
   the stock TV animation descriptor names.
+
+## 2026-07-03 - Offline Patcher Asset Records
+
+- `work/offline_vf2_patcher.py` now supports `asset_patches` in addition to
+  length-preserving byte `patches`.
+- Asset records use `source_path` relative to the manifest folder,
+  destination `file_path` relative to the game folder, required
+  `source_sha256`, optional `source_size`, optional
+  `expected_target_sha256`, and the same `requires`/`setting` feature gates as
+  byte records.
+- Restore tracks whether an asset target existed before patching. Existing
+  targets are backed up and restored; newly created files are removed on
+  restore.
+- B64 VF3 TV strip payload hashes for future offline manifests:
+  `VF3LargeFlatScreenTVAnim.png=BA59E973F2EC01AB4D25FDE96C65BB9BCF10E6345A153E7FEA5588FF60DDC028`,
+  `VF3LargeFlatScreenTVAnimEast.png=BD4E2674B4674D460EFBE475DAC2861A324B7729E40ACEE3016537689F2B995E`,
+  `VF3SmallFlatScreenTVAnim.png=18B99084E0F532A0EA9608670F955C631AE0CBEFBEB0B12C207C3FD26F63C791`,
+  `VF3SmallFlatScreenTVAnimEast.png=E0D4504D422DA5998035F6F7B30BD8DF0FEBDF643F95541D0F79BFC99D6032D7`,
+  `FathersFavoriteTVAnim.png=97E2A88D68808E3013F3D93106612B1FCFD588B0D635F3DED6218E4FDA6B87B1`,
+  and
+  `FathersFavoriteTVAnimEast.png=1B1C904DAAD7F04DB4690A0D2DF8E2B3EF16F0F1EAE64AB2410EC53E64FBBC27`.

@@ -6,10 +6,11 @@
   offline vanilla-to-modded VF2 PC patcher that takes a user-provided original
   VF2 executable, verifies the original EXE hash/version before patching,
   creates a backup, applies clean patch records from a JSON patch manifest, and
-  writes a patch log. Initial byte-patch/restore scaffold exists in
-  `work/offline_vf2_patcher.py`, including manifest-declared toggleable
-  settings and a Tkinter GUI wrapper; next step is converting current VF2 build
-  changes into release manifests and asset/table patch records.
+  writes a patch log. Initial byte-patch and asset-patch restore scaffolds exist
+  in `work/offline_vf2_patcher.py`, including manifest-declared toggleable
+  settings and a Tkinter GUI wrapper; next step is converting the current VF2
+  build's native byte changes and generated payload assets into release
+  manifests.
 - Define the JSON patch manifest contract: each patch record must include file
   path, offset, expected original bytes, replacement bytes, and note. The
   patcher must refuse to patch when expected bytes do not match, and it must
@@ -17,6 +18,9 @@
 - Keep the offline patcher simple and trust-friendly: avoid runtime injection,
   process memory editing, obfuscation, packers, and admin requirements. Prefer
   data, asset, and table patches over executable patches whenever possible.
+- Build the first full B64 offline patch bundle: include the scaled VF3 TV
+  animation strips as `asset_patches`, then add the verified native byte records
+  required to append the VF3 furniture without distributing a premodified EXE.
 - Make antivirus false-positive reduction the top packaging priority. Prefer
   transparent patching and reproducible build artifacts over packed/obfuscated
   executables, preserve normal PE metadata where possible, sign the patcher and

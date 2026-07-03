@@ -43,6 +43,20 @@ class BytePatch:
 
 
 @dataclass(frozen=True)
+class AssetPatch:
+    index: int
+    file_path: str
+    source_path: str
+    source_sha256: str
+    source_size: int | None
+    expected_target_sha256: str | None
+    expected_target_size: int | None
+    overwrite_existing: bool
+    note: str
+    requires: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class PatchSetting:
     id: str
     label: str
@@ -75,6 +89,21 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def normalize_sha256(value: Any, field: str, *, required: bool = False) -> str | None:
+    if value is None:
+        if required:
+            raise PatchError(f"{field} is required.")
+        return None
+    if not isinstance(value, str):
+        raise PatchError(f"{field} must be a SHA-256 hex string.")
+    text = value.strip().lower()
+    if text.startswith("sha256:"):
+        text = text[7:]
+    if not re.fullmatch(r"[0-9a-f]{64}", text):
+        raise PatchError(f"{field} must be a 64-character SHA-256 hex string.")
+    return text
 
 
 def parse_hex_bytes(value: Any, field: str) -> bytes:
@@ -150,6 +179,14 @@ def resolve_under_game_dir(game_dir: Path, rel_path: str) -> Path:
     resolved = (root / rel_path).resolve()
     if resolved != root and root not in resolved.parents:
         raise PatchError(f"Path escapes game directory: {rel_path}")
+    return resolved
+
+
+def resolve_under_manifest_dir(manifest_dir: Path, rel_path: str) -> Path:
+    root = manifest_dir.resolve()
+    resolved = (root / rel_path).resolve()
+    if resolved != root and root not in resolved.parents:
+        raise PatchError(f"Path escapes manifest directory: {rel_path}")
     return resolved
 
 
@@ -326,9 +363,9 @@ def manifest_patches(
     settings: dict[str, PatchSetting],
     enabled_settings: set[str],
 ) -> list[BytePatch]:
-    raw_patches = manifest.get("patches")
+    raw_patches = manifest.get("patches", [])
     if not isinstance(raw_patches, list):
-        raise PatchError("Manifest must contain a 'patches' array.")
+        raise PatchError("Manifest 'patches' must be an array when present.")
     patches: list[BytePatch] = []
     for index, raw in enumerate(raw_patches):
         if not isinstance(raw, dict):
@@ -361,9 +398,67 @@ def manifest_patches(
                 requires=requires,
             )
         )
-    if not patches:
-        raise PatchError("No active patches remain after applying setting selections.")
     return patches
+
+
+def manifest_asset_patches(
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+    enabled_settings: set[str],
+) -> list[AssetPatch]:
+    raw_assets = manifest.get("asset_patches", manifest.get("assets", []))
+    if not isinstance(raw_assets, list):
+        raise PatchError("Manifest 'asset_patches' must be an array when present.")
+    assets: list[AssetPatch] = []
+    for index, raw in enumerate(raw_assets):
+        if not isinstance(raw, dict):
+            raise PatchError(f"Asset patch #{index} must be an object.")
+        target_value = raw.get("file_path", raw.get("target_path", raw.get("target", raw.get("path"))))
+        source_value = raw.get("source_path", raw.get("source_file", raw.get("source")))
+        file_path = normalize_rel_path(target_value, f"asset patch #{index} target path")
+        source_path = normalize_rel_path(source_value, f"asset patch #{index} source path")
+        requires = record_requires(raw, f"asset patch #{index}")
+        ensure_known_settings(requires, settings, f"Asset patch #{index}")
+        if not record_is_active(requires, enabled_settings):
+            continue
+        source_sha = normalize_sha256(
+            raw.get("source_sha256", raw.get("sha256")),
+            f"asset patch #{index} source_sha256",
+            required=True,
+        )
+        expected_target_sha = normalize_sha256(
+            raw.get(
+                "expected_target_sha256",
+                raw.get("expected_existing_sha256", raw.get("expected_original_sha256")),
+            ),
+            f"asset patch #{index} expected_target_sha256",
+        )
+        source_size = None
+        if raw.get("source_size", raw.get("size")) is not None:
+            source_size = parse_int(raw.get("source_size", raw.get("size")), f"asset patch #{index} source_size")
+        expected_target_size = None
+        if raw.get("expected_target_size", raw.get("expected_existing_size")) is not None:
+            expected_target_size = parse_int(
+                raw.get("expected_target_size", raw.get("expected_existing_size")),
+                f"asset patch #{index} expected_target_size",
+            )
+        assets.append(
+            AssetPatch(
+                index=index,
+                file_path=file_path,
+                source_path=source_path,
+                source_sha256=source_sha or "",
+                source_size=source_size,
+                expected_target_sha256=expected_target_sha,
+                expected_target_size=expected_target_size,
+                overwrite_existing=bool(
+                    raw.get("overwrite_existing", raw.get("replace_existing", raw.get("overwrite", False)))
+                ),
+                note=str(raw.get("note", "")).strip(),
+                requires=requires,
+            )
+        )
+    return assets
 
 
 def manifest_target_files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -486,6 +581,82 @@ def verify_patch_bytes(game_dir: Path, grouped: dict[str, list[BytePatch]]) -> d
     return file_data
 
 
+def verify_asset_patches(game_dir: Path, manifest_dir: Path, assets: list[AssetPatch]) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    for asset in assets:
+        source = resolve_under_manifest_dir(manifest_dir, asset.source_path)
+        if not source.is_file():
+            raise PatchError(f"Asset source file does not exist: {asset.source_path}")
+        source_sha = sha256_file(source)
+        source_size = source.stat().st_size
+        if source_sha != asset.source_sha256:
+            raise PatchError(
+                f"SHA-256 mismatch for asset source {asset.source_path}: "
+                f"expected {asset.source_sha256}, got {source_sha}"
+            )
+        if asset.source_size is not None and source_size != asset.source_size:
+            raise PatchError(
+                f"Size mismatch for asset source {asset.source_path}: "
+                f"expected {asset.source_size}, got {source_size}"
+            )
+
+        target = resolve_under_game_dir(game_dir, asset.file_path)
+        target_exists = target.is_file()
+        target_sha = sha256_file(target) if target_exists else None
+        target_size = target.stat().st_size if target_exists else None
+        action = "create"
+        if target_exists:
+            action = "replace"
+            if asset.expected_target_sha256 and target_sha != asset.expected_target_sha256:
+                raise PatchError(
+                    f"SHA-256 mismatch for existing asset target {asset.file_path}: "
+                    f"expected {asset.expected_target_sha256}, got {target_sha}"
+                )
+            if asset.expected_target_size is not None and target_size != asset.expected_target_size:
+                raise PatchError(
+                    f"Size mismatch for existing asset target {asset.file_path}: "
+                    f"expected {asset.expected_target_size}, got {target_size}"
+                )
+            if target_sha == source_sha:
+                action = "up_to_date"
+            elif not asset.expected_target_sha256 and not asset.overwrite_existing:
+                raise PatchError(
+                    f"Asset target already exists without an expected_target_sha256 or overwrite_existing=true: "
+                    f"{asset.file_path}"
+                )
+        elif asset.expected_target_sha256 or asset.expected_target_size is not None:
+            raise PatchError(f"Expected existing asset target is missing: {asset.file_path}")
+
+        checks.append(
+            {
+                "index": asset.index,
+                "file_path": asset.file_path,
+                "source_path": asset.source_path,
+                "source_sha256": source_sha,
+                "source_size": source_size,
+                "target_existed": target_exists,
+                "target_sha256": target_sha,
+                "target_size": target_size,
+                "action": action,
+                "requires": list(asset.requires),
+                "note": asset.note,
+            }
+        )
+    return checks
+
+
+def apply_asset_patches(game_dir: Path, manifest_dir: Path, asset_checks: list[dict[str, Any]]) -> None:
+    for check in asset_checks:
+        if check["action"] == "up_to_date":
+            continue
+        source = resolve_under_manifest_dir(manifest_dir, str(check["source_path"]))
+        target = resolve_under_game_dir(game_dir, str(check["file_path"]))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temp = target.with_name(target.name + ".vf2patch.tmp")
+        shutil.copy2(source, temp)
+        temp.replace(target)
+
+
 def backup_slug(manifest_path: Path) -> str:
     stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", manifest_path.stem).strip("._")
     if not stem:
@@ -497,24 +668,36 @@ def create_backup(
     game_dir: Path,
     backup_dir: Path,
     grouped: dict[str, list[BytePatch]],
+    asset_checks: list[dict[str, Any]],
     manifest_path: Path,
 ) -> dict[str, Any]:
     backup_dir.mkdir(parents=True, exist_ok=False)
+    backup_targets: dict[str, bool] = {rel_path: True for rel_path in grouped}
+    for check in asset_checks:
+        if check["action"] == "up_to_date":
+            continue
+        backup_targets.setdefault(str(check["file_path"]), bool(check["target_existed"]))
+
     files = []
-    for rel_path in sorted(grouped):
+    for rel_path in sorted(backup_targets):
         source = resolve_under_game_dir(game_dir, rel_path)
-        backup_rel = Path("files") / rel_path
-        destination = backup_dir / backup_rel
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
-        files.append(
-            {
-                "file_path": rel_path,
-                "backup_path": str(backup_rel).replace("\\", "/"),
-                "sha256": sha256_file(source),
-                "size": source.stat().st_size,
-            }
-        )
+        existed = backup_targets[rel_path]
+        row: dict[str, Any] = {"file_path": rel_path, "existed": existed}
+        if existed:
+            if not source.is_file():
+                raise PatchError(f"Backup target file does not exist: {rel_path}")
+            backup_rel = Path("files") / rel_path
+            destination = backup_dir / backup_rel
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, destination)
+            row.update(
+                {
+                    "backup_path": str(backup_rel).replace("\\", "/"),
+                    "sha256": sha256_file(source),
+                    "size": source.stat().st_size,
+                }
+            )
+        files.append(row)
     manifest = {
         "backup_created_utc": utc_now(),
         "game_dir": str(game_dir.resolve()),
@@ -557,6 +740,25 @@ def patch_summary(grouped: dict[str, list[BytePatch]]) -> list[dict[str, Any]]:
     return rows
 
 
+def asset_summary(asset_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "index": check["index"],
+            "file_path": check["file_path"],
+            "source_path": check["source_path"],
+            "source_sha256": check["source_sha256"],
+            "source_size": check["source_size"],
+            "target_existed": check["target_existed"],
+            "target_sha256": check["target_sha256"],
+            "target_size": check["target_size"],
+            "action": check["action"],
+            "requires": check["requires"],
+            "note": check["note"],
+        }
+        for check in asset_checks
+    ]
+
+
 def apply_manifest(args: argparse.Namespace) -> int:
     game_dir = Path(args.game_dir).resolve()
     manifest_path = Path(args.manifest).resolve()
@@ -565,9 +767,13 @@ def apply_manifest(args: argparse.Namespace) -> int:
     manifest = read_json(manifest_path)
     settings, enabled_settings = resolve_enabled_settings(manifest, args)
     patches = manifest_patches(manifest, settings, enabled_settings)
+    assets = manifest_asset_patches(manifest, settings, enabled_settings)
+    if not patches and not assets:
+        raise PatchError("No active patches remain after applying setting selections.")
     grouped = group_patches(patches)
     target_checks = verify_target_files(game_dir, manifest, settings, enabled_settings)
     file_data = verify_patch_bytes(game_dir, grouped)
+    asset_checks = verify_asset_patches(game_dir, manifest_path.parent, assets)
 
     backup_dir = None
     backup_manifest = None
@@ -576,10 +782,11 @@ def apply_manifest(args: argparse.Namespace) -> int:
             backup_dir = Path(args.backup_dir).resolve()
         else:
             backup_dir = game_dir / DEFAULT_BACKUP_ROOT / backup_slug(manifest_path)
-        backup_manifest = create_backup(game_dir, backup_dir, grouped, manifest_path)
+        backup_manifest = create_backup(game_dir, backup_dir, grouped, asset_checks, manifest_path)
         for rel_path, patches_for_file in grouped.items():
             target = resolve_under_game_dir(game_dir, rel_path)
             atomic_write(target, apply_patches_to_data(file_data[rel_path], patches_for_file))
+        apply_asset_patches(game_dir, manifest_path.parent, asset_checks)
 
     patched_files = []
     for rel_path in sorted(grouped):
@@ -605,14 +812,27 @@ def apply_manifest(args: argparse.Namespace) -> int:
         "backup_dir": None if backup_dir is None else str(backup_dir),
         "backup_manifest": backup_manifest,
         "patches": patch_summary(grouped),
+        "asset_patches": asset_summary(asset_checks),
         "patched_files": patched_files,
+        "asset_files": [
+            {
+                "file_path": check["file_path"],
+                "action": check["action"],
+                "sha256": check["source_sha256"] if not args.dry_run else None,
+                "size": check["source_size"],
+            }
+            for check in asset_checks
+        ],
     }
     log_path = Path(args.log).resolve() if args.log else (backup_dir / "patch_log.json" if backup_dir else game_dir / "patch_dry_run_log.json")
     write_json(log_path, log)
 
     if settings:
         print("Enabled settings: " + (", ".join(sorted(enabled_settings)) if enabled_settings else "(none)"))
-    print(f"Validated {len(patches)} active patch record(s) across {len(grouped)} file(s).")
+    print(
+        f"Validated {len(patches)} active byte patch record(s) across {len(grouped)} file(s) "
+        f"and {len(assets)} active asset patch record(s)."
+    )
     if args.dry_run:
         print(f"Dry run complete. Log: {log_path}")
     else:
@@ -656,14 +876,23 @@ def restore_backup(args: argparse.Namespace) -> int:
         if not isinstance(raw, dict):
             raise PatchError("Backup manifest contains an invalid file row.")
         rel_path = normalize_rel_path(raw.get("file_path"), "backup file path")
-        backup_rel = normalize_rel_path(raw.get("backup_path"), "backup path")
-        source = (backup_dir / backup_rel).resolve()
         target = resolve_under_game_dir(game_dir, rel_path)
-        if not source.is_file():
-            raise PatchError(f"Backed-up file is missing: {source}")
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
-        restored.append({"file_path": rel_path, "sha256": sha256_file(target), "size": target.stat().st_size})
+        if raw.get("existed", True):
+            backup_rel = normalize_rel_path(raw.get("backup_path"), "backup path")
+            source = (backup_dir / backup_rel).resolve()
+            if not source.is_file():
+                raise PatchError(f"Backed-up file is missing: {source}")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            restored.append({"file_path": rel_path, "sha256": sha256_file(target), "size": target.stat().st_size})
+        else:
+            removed = False
+            if target.exists():
+                if not target.is_file():
+                    raise PatchError(f"Restore target is not a regular file: {rel_path}")
+                target.unlink()
+                removed = True
+            restored.append({"file_path": rel_path, "removed": removed, "existed": False})
 
     log = {
         "action": "restore",

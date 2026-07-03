@@ -83,6 +83,182 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(game_file.read_bytes(), original)
             self.assertTrue((backup / "restore_log.json").is_file())
 
+    def test_asset_patch_creates_private_tv_strip_and_restore_removes_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            source = tmp_path / "payload" / "Images" / "VF3LargeFlatScreenTVAnim.png"
+            source.parent.mkdir(parents=True)
+            source_data = b"scaled private vf3 tv strip"
+            source.write_bytes(source_data)
+            target = game_dir / "Images" / "VF3LargeFlatScreenTVAnim.png"
+            manifest = tmp_path / "asset_patch.json"
+            backup = tmp_path / "backup"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "asset patch unit test",
+                        "settings": [
+                            {
+                                "id": "mobile_furniture",
+                                "label": "Add additional mobile-exclusive furniture",
+                                "default": True,
+                            }
+                        ],
+                        "target_files": [
+                            {
+                                "path": game_file.name,
+                                "sha256": sha256_bytes(original),
+                                "size": len(original),
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Images/VF3LargeFlatScreenTVAnim.png",
+                                "source_path": "payload/Images/VF3LargeFlatScreenTVAnim.png",
+                                "source_sha256": sha256_bytes(source_data),
+                                "source_size": len(source_data),
+                                "requires": ["mobile_furniture"],
+                                "note": "B64 private VF3 TV animation strip",
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                "--backup-dir",
+                str(backup),
+            )
+            self.assertIn("1 active asset patch record", result.stdout)
+            self.assertEqual(target.read_bytes(), source_data)
+            backup_manifest = json.loads((backup / "vf2_patch_backup_manifest.json").read_text(encoding="utf-8"))
+            self.assertIn(
+                {"file_path": str(Path("Images") / "VF3LargeFlatScreenTVAnim.png"), "existed": False},
+                backup_manifest["files"],
+            )
+
+            self.run_patcher("restore", "--backup-dir", str(backup))
+            self.assertFalse(target.exists())
+
+    def test_asset_patch_replaces_expected_file_and_restore_recovers_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            source = tmp_path / "payload" / "Images" / "FathersFavoriteTVAnim.png"
+            source.parent.mkdir(parents=True)
+            source_data = b"new scaled father favorite strip"
+            source.write_bytes(source_data)
+            target = game_dir / "Images" / "FathersFavoriteTVAnim.png"
+            target.parent.mkdir(parents=True)
+            old_target_data = b"old misaligned strip"
+            target.write_bytes(old_target_data)
+            manifest = tmp_path / "asset_patch.json"
+            backup = tmp_path / "backup"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "asset replace unit test",
+                        "target_files": [
+                            {
+                                "path": game_file.name,
+                                "sha256": sha256_bytes(original),
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Images/FathersFavoriteTVAnim.png",
+                                "source_path": "payload/Images/FathersFavoriteTVAnim.png",
+                                "source_sha256": sha256_bytes(source_data),
+                                "expected_target_sha256": sha256_bytes(old_target_data),
+                                "note": "Replace an expected private strip with the scaled B64 strip.",
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                "--backup-dir",
+                str(backup),
+            )
+            self.assertEqual(target.read_bytes(), source_data)
+
+            self.run_patcher("restore", "--backup-dir", str(backup))
+            self.assertEqual(target.read_bytes(), old_target_data)
+
+    def test_asset_patch_refuses_source_hash_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            source = tmp_path / "payload" / "Images" / "VF3SmallFlatScreenTVAnim.png"
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"actual strip data")
+            manifest = tmp_path / "asset_patch.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "asset hash mismatch unit test",
+                        "target_files": [
+                            {
+                                "path": game_file.name,
+                                "sha256": sha256_bytes(original),
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Images/VF3SmallFlatScreenTVAnim.png",
+                                "source_path": "payload/Images/VF3SmallFlatScreenTVAnim.png",
+                                "source_sha256": sha256_bytes(b"different data"),
+                                "note": "Refuse corrupted patch payload.",
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                expect=2,
+            )
+            self.assertIn("SHA-256 mismatch for asset source", result.stderr)
+            self.assertFalse((game_dir / "Images" / "VF3SmallFlatScreenTVAnim.png").exists())
+
     def test_refuses_expected_byte_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
