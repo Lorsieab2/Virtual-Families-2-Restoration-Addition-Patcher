@@ -56,6 +56,18 @@ HOLIDAY_OUTFIT_ARCHIVE = Path(r"C:\Users\Owner\Downloads\VF2_Holiday_Content\Hol
 ORIGINAL_VF2_SPRITE_COPY_SOURCE_DIR = Path(r"C:\Users\Owner\OneDrive\Desktop\LDW Desktop Games!! And Other Stuff\Virtual Families 2 - Copy Official\originalimages")
 GENERATED_VILLAGER_BODIES = ROOT / "generated" / "VillagerBodies"
 FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B56-Holiday-Body-Lookup-Test"
+DESKTOP_RUNTIME_DLL_NAMES = (
+    "SDL2.dll",
+    "SDL2_image.dll",
+    "libpng16-16.dll",
+    "libjpeg-9.dll",
+    "zlib1.dll",
+    "fmod.dll",
+)
+DESKTOP_RUNTIME_DLL_SOURCE_DIRS = (
+    ROOT / "work" / "desktop_runtime_dlls",
+    ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis",
+)
 HOLIDAY_BODY_SET_IDS = (51, 52, 53, 54)
 HOLIDAY_BODY_BASE_ROWS = 50
 HOLIDAY_BODY_VALUES = tuple(range(50, 50 + len(HOLIDAY_BODY_SET_IDS)))
@@ -1899,6 +1911,31 @@ def sync_original_villager_sprite_sheets(manifest):
         "copied": copied,
         "missing": missing,
         "issues": issues,
+    }
+
+
+def sync_desktop_runtime_dlls(manifest):
+    copied = []
+    missing = []
+    for filename in DESKTOP_RUNTIME_DLL_NAMES:
+        source = next((root / filename for root in DESKTOP_RUNTIME_DLL_SOURCE_DIRS if (root / filename).is_file()), None)
+        if source is None:
+            missing.append({"file": filename, "searched": [str(root) for root in DESKTOP_RUNTIME_DLL_SOURCE_DIRS]})
+            continue
+        target = OUT / filename
+        shutil.copy2(source, target)
+        copied.append({
+            "file": filename,
+            "source": str(source),
+            "target": str(target),
+            "bytes": target.stat().st_size,
+        })
+    if missing:
+        raise RuntimeError(f"Missing desktop runtime DLLs: {missing}")
+    manifest["desktop_runtime_dlls"] = {
+        "status": "copied to build root",
+        "runtime_note": "The release folder must keep these DLLs beside the EXE so the game can launch after extraction.",
+        "copied": copied,
     }
 
 
@@ -7266,6 +7303,7 @@ def main():
         sync_holiday_body_runtime_frames(manifest)
     else:
         sync_original_villager_sprite_sheets(manifest)
+    sync_desktop_runtime_dlls(manifest)
     sync_outfit_store_icon_art(manifest)
     sync_visible_special_upgrade_icon_art(manifest)
     sync_holiday_ornament_collection_art(manifest)

@@ -392,3 +392,13 @@
   descriptors, runtime animation names, and missing-asset list. A future build
   that reintroduces the swapped B77 frame enum order fails during patcher
   generation instead of producing a bad build or offline-patcher bundle source.
+
+## 2026-07-03 - Desktop Runtime DLL Packaging
+
+- The rebuilt EXE links through local import libs for `SDL2.dll`,
+  `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`, and `zlib1.dll`, and
+  `work/vf2_fmod_thunks.cpp` loads `fmod.dll` at runtime.
+- B79 adds `sync_desktop_runtime_dlls()` to copy those six DLLs into the build
+  root beside `Virtual Families 2 - Additive Mobile Furniture Pack.exe`.
+  Missing DLLs now fail the patcher run instead of producing a release folder
+  that cannot launch after extraction.

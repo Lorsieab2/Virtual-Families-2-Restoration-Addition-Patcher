@@ -304,6 +304,20 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B78-TV-Frame-Enum-Orientation`.
 
+## B79 - Complete Runtime Package
+
+- Copies the required desktop runtime DLLs into the completed build root:
+  `SDL2.dll`, `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`,
+  `zlib1.dll`, and `fmod.dll`.
+- Records the copied DLLs in `patch-manifest.json` under
+  `desktop_runtime_dlls` and fails the patcher run if any required DLL is
+  missing from the known runtime source folders.
+- Leaves gameplay, furniture data, VF3 TV orientation, Playhouse, Clothing,
+  Holiday Ornaments, and executable code behavior otherwise unchanged from
+  B78.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B79-Complete-Runtime-Package`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

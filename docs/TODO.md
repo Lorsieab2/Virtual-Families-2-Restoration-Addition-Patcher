@@ -38,6 +38,10 @@
   produced executable with a valid code-signing certificate, publish hashes, and
   maintain a McAfee/SmartScreen/AV vendor false-positive submission process for
   release builds.
+- Before each release ZIP upload, verify the archive contains the EXE, `Images`
+  payloads, and the six required top-level runtime DLLs: `SDL2.dll`,
+  `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`, `zlib1.dll`, and
+  `fmod.dll`.
 
 ## Research Leads
 
