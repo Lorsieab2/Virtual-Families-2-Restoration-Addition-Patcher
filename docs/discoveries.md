@@ -490,9 +490,10 @@
   when paired with a complete vanilla `Images/` payload plus the generated
   additive overlay.
 - `work/patch_mobile_furniture_pack.py` now calls
-  `sync_vanilla_runtime_payload()` before additive image generation. The source
-  is the official local VF2 copy or `VF2_VANILLA_RUNTIME_DIR`; required runtime
-  files are `ldw.ini`, `wc.dat`, `icon.bmp`, `Images/`, and `Sounds/`.
+  `sync_vanilla_runtime_payload()` before additive image generation. Normal
+  builds use workspace-local runtime inputs or an explicit
+  `VF2_VANILLA_RUNTIME_DIR`; required runtime files are `ldw.ini`, `wc.dat`,
+  `icon.bmp`, `Images/`, and `Sounds/`.
 - `validate_runtime_payload_contract()` fails future builds if key base images
   (`loading.jpg`, `MapX0Y0.jpg`, `female_heads00.png`, `TVAnimBig*.png`,
   `TVAnimSmall*.png`, etc.), the full sound payload, SDL DLLs, or the VC90
@@ -501,3 +502,20 @@
 - `work/offline_vf2_patcher.py` supports manifest `runtime_requirements` so the
   offline patcher can refuse to patch an incomplete copied game folder before
   applying byte or asset records.
+
+## 2026-07-03 - Stock Collections and Runtime Geometry Payload
+
+- B89 was generated with the experimental Holiday Ornament collection hook
+  enabled, so opening Collections could enter the unfinished fifth-page native
+  path and crash while the game reported `60` collectibles. Normal builds must
+  leave `VF2_ENABLE_HOLIDAY_ORNAMENTS` unset so the stock four-page
+  Collections UI and `48` collectible total remain active.
+- The movement/spawn regression points at incomplete runtime `Assets` payloads,
+  not villager behavior code. The files `Assets/cmap.dat`, `wpts.dat`,
+  `animpts.dat`, `anims.dat`, and `lsmap.dat` are now treated as required
+  runtime geometry/pathing assets beside stock `.fmap` files.
+- `sync_runtime_assets_payload()` seeds `OUT/Assets` from the workspace runtime
+  asset cache (`work/vf2_obb/assets` by default, or explicit
+  `VF2_RUNTIME_ASSETS_DIR`) before additive `.fmap` generation. The runtime
+  validator now requires at least 700 asset files and the geometry/TV fmap
+  sentinels before a build manifest can be written.

@@ -226,25 +226,31 @@ class RuntimePayloadContractTests(unittest.TestCase):
         old_out = patcher.OUT
         old_min_images = patcher.RUNTIME_MIN_IMAGE_FILE_COUNT
         old_min_sounds = patcher.RUNTIME_MIN_SOUND_FILE_COUNT
+        old_min_assets = patcher.RUNTIME_MIN_ASSET_FILE_COUNT
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 patcher.OUT = Path(tmp)
                 patcher.RUNTIME_MIN_IMAGE_FILE_COUNT = len(patcher.RUNTIME_REQUIRED_IMAGE_FILES)
                 patcher.RUNTIME_MIN_SOUND_FILE_COUNT = 1
+                patcher.RUNTIME_MIN_ASSET_FILE_COUNT = len(patcher.RUNTIME_REQUIRED_ASSET_FILES)
                 callback(Path(tmp))
         finally:
             patcher.OUT = old_out
             patcher.RUNTIME_MIN_IMAGE_FILE_COUNT = old_min_images
             patcher.RUNTIME_MIN_SOUND_FILE_COUNT = old_min_sounds
+            patcher.RUNTIME_MIN_ASSET_FILE_COUNT = old_min_assets
 
     def write_minimal_runtime_payload(self, root):
         (root / "Images").mkdir(parents=True)
         (root / "Sounds").mkdir(parents=True)
+        (root / "Assets").mkdir(parents=True)
         for filename in patcher.VANILLA_RUNTIME_REQUIRED_FILES:
             (root / filename).write_bytes(b"x")
         for filename in patcher.RUNTIME_REQUIRED_IMAGE_FILES:
             (root / "Images" / filename).write_bytes(b"x")
         (root / "Sounds" / "sound00.wav").write_bytes(b"x")
+        for filename in patcher.RUNTIME_REQUIRED_ASSET_FILES:
+            (root / "Assets" / filename).write_bytes(b"x")
         for filename in patcher.DESKTOP_RUNTIME_DLL_NAMES:
             (root / filename).write_bytes(b"x")
         vc90 = root / patcher.VC90_CRT_ASSEMBLY_NAME
@@ -261,6 +267,17 @@ class RuntimePayloadContractTests(unittest.TestCase):
             patcher.validate_runtime_payload_contract(manifest)
 
             self.assertEqual(manifest["runtime_payload_contract"]["status"], "validated")
+
+        self.with_temp_runtime(run)
+
+    def test_rejects_missing_runtime_assets_payload(self):
+        def run(root):
+            manifest = {}
+            self.write_minimal_runtime_payload(root)
+            (root / "Assets" / "cmap.dat").unlink()
+
+            with self.assertRaisesRegex(RuntimeError, "missing required runtime asset: Assets/cmap.dat"):
+                patcher.validate_runtime_payload_contract(manifest)
 
         self.with_temp_runtime(run)
 

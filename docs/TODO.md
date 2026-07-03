@@ -37,8 +37,9 @@
   rejected before publication.
 - Include `runtime_requirements` in current-build offline patch manifests so
   the patcher verifies the user selected a complete vanilla VF2 folder with
-  `Images/`, `Sounds/`, `ldw.ini`, `wc.dat`, and key base art before applying
-  byte or asset patches.
+  `Images/`, `Sounds/`, `Assets/`, `ldw.ini`, `wc.dat`, key base art, and
+  geometry/pathing assets (`cmap.dat`, `wpts.dat`, `animpts.dat`, `anims.dat`,
+  `lsmap.dat`) before applying byte or asset patches.
 - Make antivirus false-positive reduction the top packaging priority. Prefer
   transparent patching and reproducible build artifacts over packed/obfuscated
   executables, preserve normal PE metadata where possible, sign the patcher and
@@ -50,9 +51,9 @@
   Server Authentication only or rejected by signtool, so B83/B84 could not be
   signed locally.
 - Before each release ZIP upload, verify the archive contains the EXE, the full
-  seeded vanilla `Images/` and `Sounds/` payloads plus additive overlays,
-  `ldw.ini`, `wc.dat`, `icon.bmp`, the six required top-level runtime DLLs
-  (`SDL2.dll`, `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`,
+  seeded vanilla `Images/`, `Sounds/`, and `Assets/` payloads plus additive
+  overlays, `ldw.ini`, `wc.dat`, `icon.bmp`, the six required top-level runtime
+  DLLs (`SDL2.dll`, `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`,
   `zlib1.dll`, `fmod.dll`), and the `Microsoft.VC90.CRT/` private assembly
   folder required by the packaged `SDL2_image.dll`.
 

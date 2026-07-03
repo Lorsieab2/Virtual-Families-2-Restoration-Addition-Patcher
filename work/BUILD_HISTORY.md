@@ -452,6 +452,22 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B89-Holiday-Body-Link-Fallback`.
 
+## B90 - Stock Collections Runtime Assets
+
+- Restores normal build generation to the stock Collections path by leaving the
+  experimental Holiday Ornament collection native hook disabled unless
+  `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` is explicitly set for research builds.
+- Seeds and validates the full runtime `Assets/` payload from the workspace
+  asset cache before overlaying additive `.fmap` files. Required sentinels now
+  include `cmap.dat`, `wpts.dat`, `animpts.dat`, `anims.dat`, `lsmap.dat`, and
+  `TVFlatScreenStd.png.fmap`.
+- Tightens direct-build and offline-patcher runtime checks so folders missing
+  map/path geometry assets fail before release or patch application.
+- Does not alter villager behavior, furniture behavior, or stock collection
+  screen code.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B90-Stock-Collections-Runtime-Assets`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.
