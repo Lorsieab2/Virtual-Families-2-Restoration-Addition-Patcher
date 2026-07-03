@@ -217,6 +217,17 @@
   `InventoryManager+0x468/+0x46C`, adds tray item `0x49/0x4A`, and saves only
   after a generated outfit row is actually purchased.
 
+## B72 - Settings Evict Button
+
+- Calls the existing `patch_options_dialog()` step during the additive patch
+  pipeline.
+- Enables the dormant Settings Evict control ID `4` by NOPing the two
+  `theOptionsDialog` constructor branches that skip Evict button creation for
+  normal in-progress families.
+- Reuses the existing `theOptionsDialog::EvictFamily()` to
+  `CFamilyTree::EvictFamily()` path instead of adding new family-state clearing
+  code.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

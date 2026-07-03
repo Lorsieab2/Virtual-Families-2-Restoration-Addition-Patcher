@@ -257,3 +257,18 @@
 - B71 removes the generated-outfit `GetUseCount` hook entirely. The direct
   purchase hook still sets `InventoryManager+0x468/+0x46C`, adds native tray
   item `0x49/0x4A`, and saves only when an outfit row is actually bought.
+
+## 2026-07-03 - Settings Evict Button
+
+- Desktop `theOptionsDialog.obj` already contains the mobile-style Evict
+  implementation. The relevant handlers are
+  `theOptionsDialog::EvictFamily()` (`?EvictFamily@theOptionsDialog@@AAEXXZ`)
+  and `CFamilyTree::EvictFamily()` (`?EvictFamily@CFamilyTree@@QAEXXZ`).
+- The `theOptionsDialog` constructor also contains the Evict control setup, but
+  two branches skip that setup for normal in-progress families. B72 NOPs the
+  constructor skip branches at `ctor+0x2DA` (`0F 85 80 00 00 00`) and
+  `ctor+0x2E7` (`7D 77`) so existing control ID `4` is created in Settings.
+- The button reuses existing strings/control flow: label string ID `0x10`,
+  confirmation string ID `0x11`, then the existing family-tree eviction
+  handler. No new save-state clearing code, villager behavior, or furniture
+  behavior is introduced by this patch.

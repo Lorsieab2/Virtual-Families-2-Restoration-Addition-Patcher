@@ -6270,6 +6270,20 @@ def patch_options_dialog(manifest):
             "confirmation_string_id": "0x11",
             "handler": "?EvictFamily@theOptionsDialog@@AAEXXZ",
             "family_tree_handler": "?EvictFamily@CFamilyTree@@QAEXXZ",
+            "constructor_patches": [
+                {
+                    "offset": "0x2DA",
+                    "expected_original_bytes": expected_1.hex(),
+                    "replacement_bytes": ("90" * 6),
+                    "note": "disable first Evict button creation skip branch",
+                },
+                {
+                    "offset": "0x2E7",
+                    "expected_original_bytes": expected_2.hex(),
+                    "replacement_bytes": ("90" * 2),
+                    "note": "disable second Evict button creation skip branch",
+                },
+            ],
         }
     }
 
@@ -6337,6 +6351,7 @@ def main():
     patch_inventory_manager(manifest)
     patch_scrolling_store_scene(manifest)
     patch_purchase_dialog(manifest)
+    patch_options_dialog(manifest)
     write_outfit_store_helpers(manifest)
     patch_string_manager(manifest)
     patch_special_upgrade_titles(manifest)

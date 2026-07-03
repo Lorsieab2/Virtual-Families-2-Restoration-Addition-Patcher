@@ -164,6 +164,7 @@ as:
 - `holiday_outfits` - Add Holiday outfits.
 - `mobile_furniture` - Add additional mobile-exclusive furniture.
 - `vf3_tv_animation_graphics` - Fix VF3 TV animation graphics.
+- `settings_evict_button` - Re-enable the Settings menu Evict button.
 
 Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings
@@ -175,7 +176,7 @@ flags can override those defaults:
 ```powershell
 --enable holiday_furniture
 --disable holiday_outfits
---enable holiday_furniture,mobile_furniture,vf3_tv_animation_graphics
+--enable holiday_furniture,mobile_furniture,vf3_tv_animation_graphics,settings_evict_button
 --enable-all
 --disable-all
 ```
