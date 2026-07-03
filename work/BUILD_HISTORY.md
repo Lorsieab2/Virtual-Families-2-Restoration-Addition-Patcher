@@ -284,6 +284,15 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B76-Holiday-Ornaments-Collection`.
 
+## B77 - Child-Only Playhouse Spontaneous
+
+- Fixes the Playhouse spontaneous candidate so adults no longer select
+  `PlayOnPlayStructure` autonomously.
+- Sets candidate `0x11E` max age to `0x117`, matching the stock child/adult
+  boundary (`CVillager+0x6A54 < 0x118`).
+- Leaves furniture drop/click behavior, villager behavior functions, debugger,
+  TV behavior, Clothing, and Holiday Ornaments unchanged.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

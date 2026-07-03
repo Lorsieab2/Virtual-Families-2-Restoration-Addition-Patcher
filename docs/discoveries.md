@@ -350,3 +350,17 @@
   (`Ornamentologist`, target `12`), widens visible/order bounds from `0x5F` to
   `0x60`, appends the ID to `achievementOrder`, and bumps the Goal Collector
   target from `12` to `13`.
+
+## 2026-07-03 - Playhouse Child-Only Autonomous Gate
+
+- `CVillager + 0x6A54` is the age counter used by stock age selectors.
+  `CVillagerManager::SelectRandomLivingChild()` accepts villagers with age
+  `< 0x118`; `AdultPopulation()` accepts villagers with age `>= 0x118`.
+- `CVillagerAI::DecideWhatToDo()` evaluates autonomous candidate age gates from
+  each `0xD0`-byte candidate: max age at candidate offset `+0x48`, min age at
+  `+0x4C`. It rejects a candidate when villager age is greater than max or less
+  than min.
+- B77 changes the Playhouse spontaneous candidate (`0x11E`,
+  `CBehavior::PlayOnPlayStructure`) from a generic enabled candidate to an
+  explicit child-only candidate with max age `0x117`. This affects only
+  autonomous candidate selection; drop/click behavior dispatch is untouched.

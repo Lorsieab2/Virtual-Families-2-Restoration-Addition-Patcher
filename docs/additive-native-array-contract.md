@@ -61,6 +61,11 @@ Spontaneous behaviors should be enabled by adding or widening native candidate
 table eligibility, not by replacing unrelated actions such as `Bored`.
 Drop-action behavior and spontaneous AI eligibility are separate concerns.
 
+Autonomous candidate records are `0xD0` bytes. The enabled flag is at `+0xCD`,
+the weighted random-choice value is at `+0x0C`, max age is at `+0x48`, and min
+age is at `+0x4C`. Child-only spontaneous behaviors should cap max age at
+`0x117`; the stock child/adult boundary is `CVillager+0x6A54 < 0x118`.
+
 ## Holiday Outfits
 
 Holiday body values are enabled by default and can be disabled only for

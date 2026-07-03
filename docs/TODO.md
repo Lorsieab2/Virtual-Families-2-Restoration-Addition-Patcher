@@ -25,8 +25,9 @@
   descriptors/payloads, the B75 independent synthetic outfit ToolTray
   normalization patches, the six copied stock villager sprite sheets under
   `Images/`, visible Special Upgrade icon descriptors/payloads, and the B76
-  Holiday Ornaments collection art/native table/achievement records
-  without distributing a premodified EXE.
+  Holiday Ornaments collection art/native table/achievement records, plus the
+  B77 Playhouse child-only autonomous candidate max-age gate without
+  distributing a premodified EXE.
 - Make antivirus false-positive reduction the top packaging priority. Prefer
   transparent patching and reproducible build artifacts over packed/obfuscated
   executables, preserve normal PE metadata where possible, sign the patcher and
@@ -42,6 +43,9 @@
   background/icons/count/scrolling, verify `Ornamentologist` appears and
   completes after 12 unique ornaments, verify Goal Collector includes the new
   goal, and verify save/load persistence.
+- In-game test B77 Playhouse spontaneous behavior: verify children can still
+  spontaneously use the Playhouse, adults do not select Playhouse
+  spontaneously, and manual furniture/drop behavior remains unchanged.
 - Add an optional setting for mobile-exclusive furniture behavior support on
   added mobile-exclusive furniture in the PC build, then implement the correct
   villager behavior routes for those furniture items.
