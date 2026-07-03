@@ -387,6 +387,17 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B84-Disable-Holiday-Ornaments`.
 
+## B85 - VF3 TV Animation Inset
+
+- Refines only the private VF3 TV animation strip screen boxes to reduce minor
+  bezel bleed seen in B84 screenshots.
+- New boxes: Large `5,6,63,77`, Small `3,3,46,57`, and Father's Favorite
+  `8,10,90,96`; East and West variants keep matching box dimensions.
+- Leaves base TV assets, VF3 furniture behavior, click handling, fmaps,
+  villager behavior, and floating-animation enum order unchanged.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B85-TV-Animation-Inset`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

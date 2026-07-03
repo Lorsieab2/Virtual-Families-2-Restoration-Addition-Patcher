@@ -398,6 +398,10 @@
   descriptors, runtime animation names, and missing-asset list. A future build
   that reintroduces the swapped B77 frame enum order fails during patcher
   generation instead of producing a bad build or offline-patcher bundle source.
+- B85 keeps the private VF3 TV strip approach but insets the generated screen
+  boxes to reduce minor bezel bleed: Large `5,6,63,77`, Small `3,3,46,57`,
+  and Father's Favorite `8,10,90,96`. East/west variants use matching boxes so
+  behavior and orientation remain unchanged.
 
 ## 2026-07-03 - Desktop Runtime DLL Packaging
 
