@@ -80,6 +80,34 @@
   furniture-to-animation-sheet lookup path; binary strings still primarily show
   the stock TV animation descriptor names.
 
+## 2026-07-03 - VF3 TV Private Floating Animation Entries
+
+- B64 generated private VF3 TV animation strips, but those strips were dead
+  data: the linked EXE and `theGraphicsManager.obj` still referenced stock
+  `TVAnimBig.png`, `TVAnimBigE.png`, `TVAnimSmall.png`, and
+  `TVAnimSmallE.png`, not the VF3 private strip filenames.
+- `CFurnitureManager::SetOnState` / `RestoreAnims` read floating animation
+  enum fields from `FurnitureInfo` offsets `+0x24 + frame*4`, x offsets from
+  `+0x34 + frame*4`, y offsets from `+0x44 + frame*4`, and speed from `+0x54`.
+  Stock flat-screen item `0x1F3` uses enum `0x2A`/`0x19` with offsets
+  x=`0x13`/`0x0C`, y=`0x0C`/`0x0D`.
+- `CFloatingAnim::m_sAnim` is a 64-entry, 16-byte-per-entry table. Stock enum
+  `0x19` maps to image `0x1FB` (`TVAnimBig.png`), `0x1A` to `0x1FC`
+  (`TVAnimSmall.png`), `0x29` to `0x20D` (`TVAnimSmallE.png`), and `0x2A` to
+  `0x20E` (`TVAnimBigE.png`). `CFloatingAnim::LoadAssets` scanned only the
+  original `0x400` bytes until patched.
+- B65 appends private floating-animation enum slots `0x40-0x45`, private image
+  descriptors `0x4CD-0x4D2`, and extends the `LoadAssets` bound to `0x460`.
+  Only the three added VF3 TV `FurnitureInfo` records point to these private
+  enums, with zeroed animation offsets because the generated strip cells are
+  already padded to the furniture canvas. Base TV assets and behavior remain
+  untouched.
+- The B65 generator records a `vf3_tv_behavior_contracts` manifest section and
+  raises if any non-identity, non-store, non-animation `FurnitureInfo` field
+  drifts from donor item `0x1F3`. `clickable_added_furniture` also maps all
+  three VF3 TVs to donor `0x1F3`, so villager/drop/click behavior stays aligned
+  with the base flat-screen TV while the private animation graphics differ.
+
 ## 2026-07-03 - Offline Patcher Asset Records
 
 - `work/offline_vf2_patcher.py` now supports `asset_patches` in addition to
@@ -92,7 +120,7 @@
 - Restore tracks whether an asset target existed before patching. Existing
   targets are backed up and restored; newly created files are removed on
   restore.
-- B64 VF3 TV strip payload hashes for future offline manifests:
+- B65 VF3 TV strip payload hashes for future offline manifests:
   `VF3LargeFlatScreenTVAnim.png=BA59E973F2EC01AB4D25FDE96C65BB9BCF10E6345A153E7FEA5588FF60DDC028`,
   `VF3LargeFlatScreenTVAnimEast.png=BD4E2674B4674D460EFBE475DAC2861A324B7729E40ACEE3016537689F2B995E`,
   `VF3SmallFlatScreenTVAnim.png=18B99084E0F532A0EA9608670F955C631AE0CBEFBEB0B12C207C3FD26F63C791`,
@@ -100,3 +128,8 @@
   `FathersFavoriteTVAnim.png=97E2A88D68808E3013F3D93106612B1FCFD588B0D635F3DED6218E4FDA6B87B1`,
   and
   `FathersFavoriteTVAnimEast.png=1B1C904DAAD7F04DB4690A0D2DF8E2B3EF16F0F1EAE64AB2410EC53E64FBBC27`.
+- The offline patcher regression suite now covers a
+  `vf3_tv_animation_graphics` toggle that applies/restores all six private VF3
+  TV strip assets as a group. The remaining offline-patcher work is converting
+  B65's native descriptor/table/furniture-record changes into verified byte
+  records against a vanilla executable.

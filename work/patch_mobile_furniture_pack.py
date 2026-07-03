@@ -117,6 +117,15 @@ VF3_TV_RUNTIME_ANIMATION_NAMES = {
     "FathersFavorite": "FathersFavoriteTVAnim.png",
     "FathersFavoriteEast": "FathersFavoriteTVAnimEast.png",
 }
+VF3_TV_FLOATING_ANIM_BASE = 0x40
+VF3_TV_FLOATING_ANIMS = {
+    "Large": {"enum": VF3_TV_FLOATING_ANIM_BASE + 0, "donor_image_id": 0x1FB},
+    "LargeEast": {"enum": VF3_TV_FLOATING_ANIM_BASE + 1, "donor_image_id": 0x20E},
+    "Small": {"enum": VF3_TV_FLOATING_ANIM_BASE + 2, "donor_image_id": 0x1FC},
+    "SmallEast": {"enum": VF3_TV_FLOATING_ANIM_BASE + 3, "donor_image_id": 0x20D},
+    "FathersFavorite": {"enum": VF3_TV_FLOATING_ANIM_BASE + 4, "donor_image_id": 0x1FB},
+    "FathersFavoriteEast": {"enum": VF3_TV_FLOATING_ANIM_BASE + 5, "donor_image_id": 0x20E},
+}
 VF3_TV_ANIMATION_SCREEN_BOXES = {
     # x, y, width, height inside one furniture-cell canvas.
     "Large": (4, 5, 65, 60),
@@ -1666,6 +1675,21 @@ def visible_special_upgrade_icon_id_for(item_id):
     return ORIG_IMAGE_MAX + 1 + len(ITEMS) + LOCKED_GENERATION_FRAME_COUNT + ordered.index(item_id)
 
 
+def vf3_tv_anim_image_base(holiday_body_descriptor_count=0):
+    return (
+        ORIG_IMAGE_MAX
+        + 1
+        + len(ITEMS)
+        + LOCKED_GENERATION_FRAME_COUNT
+        + len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
+        + holiday_body_descriptor_count
+    )
+
+
+def vf3_tv_anim_image_id(label, holiday_body_descriptor_count=0):
+    return vf3_tv_anim_image_base(holiday_body_descriptor_count) + list(VF3_TV_FLOATING_ANIMS).index(label)
+
+
 def villager_body_image_base():
     return ORIG_IMAGE_MAX + 1 + len(ITEMS) + LOCKED_GENERATION_FRAME_COUNT + len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
 
@@ -2861,8 +2885,12 @@ def patch_furniture_manager(manifest):
     insert_off = item_sym.value + ORIG_FURNITURE_COUNT * RECORD_SIZE
     payload = bytearray()
     behavior_safety_overrides = []
+    vf3_tv_animation_records = []
+    vf3_tv_behavior_contracts = []
+    vf3_tv_by_name = {item["short_description"]: item for item in VF3_TV_ITEMS}
     for idx, (name, donor_id, _list_name, path) in enumerate(ITEMS):
-        vals = records[donor_id]["raw_u32"][:]
+        donor_vals = records[donor_id]["raw_u32"]
+        vals = donor_vals[:]
         mobile = MOBILE_DATA_BY_PATH[path]
         vals[0] = item_id_for(idx)
         vals[1] = image_id_for(idx)
@@ -2884,8 +2912,57 @@ def patch_furniture_manager(manifest):
                     "desktop_donor_item_type": vals[4],
                     "donor_item": hex(donor_id),
                 })
+        vf3_tv = vf3_tv_by_name.get(name)
+        if vf3_tv:
+            west_label, east_label = vf3_tv["animation_labels"]
+            # The stock TV record points at shared TVAnimBig/Small enums with
+            # stock top-left offsets. The added VF3 TVs use private animation
+            # cells already padded to their furniture canvas, so their floating
+            # animation origin should be the furniture cell origin.
+            vals[0x24 // 4] = VF3_TV_FLOATING_ANIMS[east_label]["enum"]
+            vals[0x28 // 4] = VF3_TV_FLOATING_ANIMS[west_label]["enum"]
+            vals[0x2C // 4] = 0
+            vals[0x30 // 4] = 0
+            vals[0x34 // 4] = 0
+            vals[0x38 // 4] = 0
+            vals[0x3C // 4] = 0
+            vals[0x40 // 4] = 0
+            vals[0x44 // 4] = 0
+            vals[0x48 // 4] = 0
+            vals[0x4C // 4] = 0
+            vals[0x50 // 4] = 0
+            vf3_tv_animation_records.append({
+                "item": name,
+                "item_id": hex(vals[0]),
+                "frame0_enum": hex(vals[0x24 // 4]),
+                "frame1_enum": hex(vals[0x28 // 4]),
+                "frame0_label": east_label,
+                "frame1_label": west_label,
+                "offsets": {"x": [0, 0, 0, 0], "y": [0, 0, 0, 0]},
+            })
         vals[5], vals[6] = item_string_ids(idx)
         vals[0x58 // 4] = 0
+        if vf3_tv:
+            allowed = {0, 1, 2, 3, 5, 6, *range(0x24 // 4, 0x50 // 4 + 1)}
+            drift = [
+                {
+                    "offset": hex(i * 4),
+                    "donor": hex(donor_vals[i]),
+                    "added": hex(vals[i]),
+                }
+                for i in range(len(vals))
+                if i not in allowed and vals[i] != donor_vals[i]
+            ]
+            if drift:
+                raise RuntimeError(f"VF3 TV behavior fields drifted from base TV donor for {name}: {drift}")
+            vf3_tv_behavior_contracts.append({
+                "item": name,
+                "item_id": hex(vals[0]),
+                "donor_item": hex(donor_id),
+                "donor_behavior": "base flat-screen TV",
+                "item_type": vals[4],
+                "verified": "all non-identity, non-store, non-animation fields match donor 0x1F3",
+            })
         payload += struct.pack("<" + "I" * (RECORD_SIZE // 4), *vals)
     obj.insert_section_bytes(item_sym.section, insert_off, bytes(payload))
 
@@ -2915,6 +2992,8 @@ def patch_furniture_manager(manifest):
         "scan_end_patches": end_patches,
         "fmap_refresh_patches": fmap_refresh_patches,
         "behavior_safety_overrides": behavior_safety_overrides,
+        "vf3_tv_animation_records": vf3_tv_animation_records,
+        "vf3_tv_behavior_contracts": vf3_tv_behavior_contracts,
     }
 
 
@@ -4172,6 +4251,7 @@ def patch_graphics_manager(manifest):
         + LOCKED_GENERATION_FRAME_COUNT
         + len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
         + holiday_body_descriptor_count
+        + len(VF3_TV_FLOATING_ANIMS)
     )
     if append_count:
         obj.insert_section_bytes(img_sym.section, img_sym.value + ORIG_IMAGE_COUNT * DESC_SIZE, b"\0" * (append_count * DESC_SIZE))
@@ -4298,6 +4378,32 @@ def patch_graphics_manager(manifest):
                             "size": entry.get("size") if entry else None,
                         })
 
+    vf3_tv_anim_desc_manifest = []
+    for label, info in VF3_TV_FLOATING_ANIMS.items():
+        image_id = vf3_tv_anim_image_id(label, holiday_body_descriptor_count)
+        vals = image_records[info["donor_image_id"]]["raw_u32"][:]
+        vals[0] = image_id
+        vals[1] = 0
+        vals[2] = 6
+        vals[3] = 3
+        desc_off = img_sym.value + image_id * DESC_SIZE
+        img_sec = obj.section(img_sym.section)
+        obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
+        runtime_name = VF3_TV_RUNTIME_ANIMATION_NAMES[label]
+        sym = "_vf3tv_anim_" + runtime_name.replace(".", "_").replace("-", "_")
+        helper_lines.append(f'const char {sym[1:]}[] = "{runtime_name}";')
+        symidx = obj.append_undefined_symbol(sym)
+        obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+        vf3_tv_anim_desc_manifest.append({
+            "label": label,
+            "floating_anim_enum": hex(info["enum"]),
+            "image_id": hex(image_id),
+            "path": runtime_name,
+            "symbol": sym,
+            "donor_image_id": hex(info["donor_image_id"]),
+            "grid": [6, 3],
+        })
+
     new_image_max = ORIG_IMAGE_MAX + append_count
     new_scan_end = ORIG_IMAGE_COUNT * DESC_SIZE + append_count * DESC_SIZE
     new_cleanup_end = 0x7798 + append_count * DESC_SIZE
@@ -4329,11 +4435,58 @@ def patch_graphics_manager(manifest):
             "image_count": holiday_body_descriptor_count,
             "descriptors": holiday_body_desc_manifest,
         },
+        "vf3_tv_floating_animation_images": {
+            "image_base": hex(vf3_tv_anim_image_base(holiday_body_descriptor_count)),
+            "image_count": len(VF3_TV_FLOATING_ANIMS),
+            "descriptors": vf3_tv_anim_desc_manifest,
+        },
         "character_sheet_art": character_sheet_manifest,
         "descriptors": desc_manifest,
         "append_count": append_count,
         "new_image_max": hex(new_image_max),
         "patches": patches,
+    }
+
+
+def patch_floating_anim_table(manifest):
+    obj = CoffObject(PATCHED / "FloatingAnim.obj")
+    anim_sym = obj.symbol("?m_sAnim@CFloatingAnim@@0PAUSAnim@1@A")
+    holiday_body_descriptor_count = HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0
+    old_table_size = 0x400
+    new_entries = []
+    for label, info in VF3_TV_FLOATING_ANIMS.items():
+        new_entries.append(struct.pack("<IIII", vf3_tv_anim_image_id(label, holiday_body_descriptor_count), 18, 1, 0))
+    payload = b"".join(new_entries)
+
+    obj.insert_section_bytes(anim_sym.section, anim_sym.value + old_table_size, payload)
+
+    load_sym = obj.symbol("?LoadAssets@CFloatingAnim@@QAEXXZ")
+    load_sec = obj.section(load_sym.section)
+    old_bound = b"\x81\xFE" + struct.pack("<I", old_table_size)
+    new_bound = b"\x81\xFE" + struct.pack("<I", old_table_size + len(payload))
+    load_start = load_sec.raw_ptr + load_sym.value
+    load_end = load_start + load_sec.raw_size
+    hit = obj.buf.find(old_bound, load_start, load_end)
+    if hit < 0:
+        raise RuntimeError("Could not find CFloatingAnim::LoadAssets table bound")
+    obj.buf[hit : hit + len(old_bound)] = new_bound
+
+    obj.write(PATCHED / "FloatingAnim.obj")
+    manifest["FloatingAnim"] = {
+        "private_vf3_tv_entries": [
+            {
+                "label": label,
+                "enum": hex(info["enum"]),
+                "image_id": hex(vf3_tv_anim_image_id(label, holiday_body_descriptor_count)),
+                "runtime_name": VF3_TV_RUNTIME_ANIMATION_NAMES[label],
+                "frames": 18,
+                "random_start_frame": True,
+            }
+            for label, info in VF3_TV_FLOATING_ANIMS.items()
+        ],
+        "old_table_size": hex(old_table_size),
+        "new_table_size": hex(old_table_size + len(payload)),
+        "load_assets_bound_patch_offset": hex(hit - load_start),
     }
 
 
@@ -5730,6 +5883,7 @@ def main():
     if ENABLE_HOLIDAY_BODY_TYPES:
         sync_holiday_body_runtime_frames(manifest)
     patch_graphics_manager(manifest)
+    patch_floating_anim_table(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
         write_holiday_body_draw_helper(manifest)
         patch_holiday_body_draw_redirect(manifest)

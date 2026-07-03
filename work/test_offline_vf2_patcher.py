@@ -153,6 +153,96 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.run_patcher("restore", "--backup-dir", str(backup))
             self.assertFalse(target.exists())
 
+    def test_vf3_tv_animation_setting_controls_all_private_strips(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            strip_names = [
+                "VF3LargeFlatScreenTVAnim.png",
+                "VF3LargeFlatScreenTVAnimEast.png",
+                "VF3SmallFlatScreenTVAnim.png",
+                "VF3SmallFlatScreenTVAnimEast.png",
+                "FathersFavoriteTVAnim.png",
+                "FathersFavoriteTVAnimEast.png",
+            ]
+            payload_dir = tmp_path / "payload" / "Images"
+            payload_dir.mkdir(parents=True)
+            asset_patches = []
+            for index, name in enumerate(strip_names):
+                source_data = f"scaled private strip {index}".encode("ascii")
+                source = payload_dir / name
+                source.write_bytes(source_data)
+                asset_patches.append(
+                    {
+                        "file_path": str(Path("Images") / name),
+                        "source_path": str(Path("payload") / "Images" / name),
+                        "source_sha256": sha256_bytes(source_data),
+                        "source_size": len(source_data),
+                        "requires": ["vf3_tv_animation_graphics"],
+                        "note": f"B65 private VF3 TV animation strip: {name}",
+                    }
+                )
+            manifest = tmp_path / "vf3_tv_asset_patch.json"
+            backup = tmp_path / "backup"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "vf3 tv animation asset unit test",
+                        "settings": [
+                            {
+                                "id": "vf3_tv_animation_graphics",
+                                "label": "Fix VF3 TV animation graphics",
+                                "default": True,
+                            }
+                        ],
+                        "target_files": [
+                            {
+                                "path": game_file.name,
+                                "sha256": sha256_bytes(original),
+                                "size": len(original),
+                            }
+                        ],
+                        "asset_patches": asset_patches,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                "--backup-dir",
+                str(backup),
+            )
+            self.assertIn("6 active asset patch record", result.stdout)
+            for index, name in enumerate(strip_names):
+                self.assertEqual((game_dir / "Images" / name).read_bytes(), f"scaled private strip {index}".encode("ascii"))
+
+            self.run_patcher("restore", "--backup-dir", str(backup))
+            for name in strip_names:
+                self.assertFalse((game_dir / "Images" / name).exists())
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                "--disable",
+                "vf3_tv_animation_graphics",
+                expect=2,
+            )
+            self.assertIn("No active patches remain", result.stderr)
+
     def test_asset_patch_replaces_expected_file_and_restore_recovers_it(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

@@ -93,6 +93,12 @@ when the original target did not exist.
       "label": "Add additional mobile-exclusive furniture",
       "description": "Adds non-holiday mobile-exclusive furniture.",
       "default": true
+    },
+    {
+      "id": "vf3_tv_animation_graphics",
+      "label": "Fix VF3 TV animation graphics",
+      "description": "Adds private VF3 TV animation strips and native table wiring.",
+      "default": true
     }
   ],
   "target_files": [
@@ -120,8 +126,8 @@ when the original target did not exist.
       "source_path": "payload/Images/VF3LargeFlatScreenTVAnim.png",
       "source_sha256": "expected lowercase sha256 of the payload file",
       "source_size": 12345,
-      "requires": ["mobile_furniture"],
-      "note": "B64 scaled private VF3 Large TV animation strip."
+      "requires": ["vf3_tv_animation_graphics"],
+      "note": "B65 scaled private VF3 Large TV animation strip."
     }
   ]
 }
@@ -157,6 +163,7 @@ as:
 - `holiday_furniture` - Add Holiday furniture.
 - `holiday_outfits` - Add Holiday outfits.
 - `mobile_furniture` - Add additional mobile-exclusive furniture.
+- `vf3_tv_animation_graphics` - Fix VF3 TV animation graphics.
 
 Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings
@@ -168,7 +175,7 @@ flags can override those defaults:
 ```powershell
 --enable holiday_furniture
 --disable holiday_outfits
---enable holiday_furniture,mobile_furniture
+--enable holiday_furniture,mobile_furniture,vf3_tv_animation_graphics
 --enable-all
 --disable-all
 ```

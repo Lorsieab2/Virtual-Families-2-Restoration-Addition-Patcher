@@ -18,9 +18,10 @@
 - Keep the offline patcher simple and trust-friendly: avoid runtime injection,
   process memory editing, obfuscation, packers, and admin requirements. Prefer
   data, asset, and table patches over executable patches whenever possible.
-- Build the first full B64 offline patch bundle: include the scaled VF3 TV
+- Build the first full B65 offline patch bundle: include the scaled VF3 TV
   animation strips as `asset_patches`, then add the verified native byte records
-  required to append the VF3 furniture without distributing a premodified EXE.
+  required to append the VF3 furniture and private floating-animation table
+  entries without distributing a premodified EXE.
 - Make antivirus false-positive reduction the top packaging priority. Prefer
   transparent patching and reproducible build artifacts over packed/obfuscated
   executables, preserve normal PE metadata where possible, sign the patcher and
@@ -53,8 +54,6 @@
   debugger path can load saves and run without crashes.
 - Audit other category list count patches for small/common desktop counts before
   adding more furniture entries.
-- In-game test B64 VF3 TV animation strips: verify the Large, Small, and
-  Father's Favorite TV overlays now scale to their screens while base TV
-  click/animation behavior remains untouched. If the game still displays the
-  previous misalignment, inspect only the furniture-to-animation-sheet lookup
-  path next.
+- In-game test B65 VF3 TV private floating-animation entries: verify the Large,
+  Small, and Father's Favorite TV overlays now scale to their screens while
+  base TV click/animation behavior remains untouched.

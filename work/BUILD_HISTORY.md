@@ -123,6 +123,22 @@
   behavior, furniture behavior, debugger/input hooks, and `theMainScene`
   unchanged.
 
+## B65 - VF3 TV Private Floating Animations
+
+- Wires the private VF3 TV animation strips into the runtime instead of leaving
+  them as unreferenced assets.
+- Appends private `CFloatingAnim::m_sAnim` entries `0x40-0x45`, image
+  descriptors `0x4CD-0x4D2`, and extends `CFloatingAnim::LoadAssets` from
+  `0x400` to `0x460` table bytes.
+- Sets only the added VF3 TV `FurnitureInfo` records to the new private enums
+  with zeroed x/y animation offsets; base TV animation enums and stock
+  `TVAnimBig*.png`/`TVAnimSmall*.png` assets remain untouched.
+- Verifies all non-identity, non-store, non-animation `FurnitureInfo` fields
+  still match donor `0x1F3`, and the click-dispatch table aliases each added
+  VF3 TV to the same base flat-screen TV donor.
+- Keeps debugger features disabled and preserves the stock `theMainScene.obj`
+  hash `BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.
