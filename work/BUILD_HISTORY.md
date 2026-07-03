@@ -428,6 +428,18 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B87-Holiday-Ornament-Collection-Art`.
 
+## B88 - VF3 TV Animation Box Revert
+
+- Reverts the B85 private VF3 TV animation inset boxes after in-game testing
+  showed worse overlay alignment.
+- Restores the B84 private strip geometry: Large `4,5,65,80`, Small
+  `2,2,48,60`, and Father's Favorite `5,8,96,104`; East and West variants
+  keep matching dimensions.
+- Leaves VF3 TV fmaps, furniture behavior, villager behavior, base TV assets,
+  Holiday Ornament research hooks, and runtime packaging unchanged from B87.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B88-TV-Animation-Box-Revert`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

@@ -119,10 +119,10 @@ class VF3TVAnimationContractTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "missing graphics descriptor.*SmallEast"):
             patcher.validate_vf3_tv_animation_contract(manifest, check_files=False)
 
-    def test_private_tv_screen_boxes_are_inset_from_bezels(self):
-        self.assertEqual(patcher.VF3_TV_ANIMATION_SCREEN_BOXES["Large"], (5, 6, 63, 77))
-        self.assertEqual(patcher.VF3_TV_ANIMATION_SCREEN_BOXES["Small"], (3, 3, 46, 57))
-        self.assertEqual(patcher.VF3_TV_ANIMATION_SCREEN_BOXES["FathersFavorite"], (8, 10, 90, 96))
+    def test_private_tv_screen_boxes_match_b84_geometry(self):
+        self.assertEqual(patcher.VF3_TV_ANIMATION_SCREEN_BOXES["Large"], (4, 5, 65, 80))
+        self.assertEqual(patcher.VF3_TV_ANIMATION_SCREEN_BOXES["Small"], (2, 2, 48, 60))
+        self.assertEqual(patcher.VF3_TV_ANIMATION_SCREEN_BOXES["FathersFavorite"], (5, 8, 96, 104))
         self.assertEqual(
             patcher.VF3_TV_ANIMATION_SCREEN_BOXES["Large"],
             patcher.VF3_TV_ANIMATION_SCREEN_BOXES["LargeEast"],

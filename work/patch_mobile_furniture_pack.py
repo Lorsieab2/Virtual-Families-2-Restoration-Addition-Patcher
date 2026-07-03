@@ -204,12 +204,12 @@ VF3_TV_FLOATING_ANIMS = {
 }
 VF3_TV_ANIMATION_SCREEN_BOXES = {
     # x, y, width, height inside one furniture-cell canvas.
-    "Large": (5, 6, 63, 77),
-    "LargeEast": (5, 6, 63, 77),
-    "Small": (3, 3, 46, 57),
-    "SmallEast": (3, 3, 46, 57),
-    "FathersFavorite": (8, 10, 90, 96),
-    "FathersFavoriteEast": (8, 10, 90, 96),
+    "Large": (4, 5, 65, 80),
+    "LargeEast": (4, 5, 65, 80),
+    "Small": (2, 2, 48, 60),
+    "SmallEast": (2, 2, 48, 60),
+    "FathersFavorite": (5, 8, 96, 104),
+    "FathersFavoriteEast": (5, 8, 96, 104),
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x117: "BrokerUpgrade_icon.png",

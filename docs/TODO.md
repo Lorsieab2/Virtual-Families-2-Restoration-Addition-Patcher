@@ -92,9 +92,10 @@
   east/west orientations for the Large, Small, and Father's Favorite TV
   overlays are parallel to their screen faces, fill those faces, and leave
   base TV click/animation behavior untouched.
-- In-game test B85 VF3 TV animation inset: verify Large, Small, and Father's
-  Favorite overlays no longer bleed into the bezel after the private strip
-  boxes were reduced, while still filling enough of each screen.
+- In-game test B88 VF3 TV animation box revert: verify Large, Small, and
+  Father's Favorite overlays are back to the B84-sized private strip boxes and
+  are less misaligned than B85/B87, then decide whether the remaining minor
+  alignment needs source-art edits instead of another box inset.
 - In-game test B81 VF3 TV recognition: drop villagers on the Large, Small, and
   Father's Favorite VF3 TVs and verify they start the normal TV behavior
   instead of saying "There's no TV"; also verify base TVs still behave

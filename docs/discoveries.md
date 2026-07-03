@@ -416,6 +416,11 @@
   boxes to reduce minor bezel bleed: Large `5,6,63,77`, Small `3,3,46,57`,
   and Father's Favorite `8,10,90,96`. East/west variants use matching boxes so
   behavior and orientation remain unchanged.
+- B88 reverts those B85 inset boxes after in-game screenshots showed the
+  overlays became more misaligned. The private VF3 TV animation source boxes
+  are back to the B84 values: Large `4,5,65,80`, Small `2,2,48,60`, and
+  Father's Favorite `5,8,96,104`; no TV behavior, fmap, stock animation, or
+  villager behavior path changes are part of this revert.
 
 ## 2026-07-03 - Desktop Runtime DLL Packaging
 
