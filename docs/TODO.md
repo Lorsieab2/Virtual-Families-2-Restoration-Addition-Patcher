@@ -56,9 +56,10 @@
   debugger path can load saves and run without crashes.
 - Audit other category list count patches for small/common desktop counts before
   adding more furniture entries.
-- In-game test B65/B66 VF3 TV private floating-animation entries: verify the Large,
-  Small, and Father's Favorite TV overlays now scale to their screens while
-  base TV click/animation behavior remains untouched.
+- In-game test B70 VF3 TV private floating-animation entries: verify the Large,
+  Small, and Father's Favorite TV overlays now use the correct isometric angle,
+  fill their screen faces, and leave base TV click/animation behavior
+  untouched.
 - In-game test B69 generated outfit purchases: verify all added female and male
   Clothing rows display the matching last-action-frame icon, add the expected
   outfit item to the tool tray when bought, and apply the correct body value.

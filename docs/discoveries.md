@@ -224,3 +224,24 @@
   `female_actions00.png` or `male_actions00.png`, 91 px cell column `14`.
   Base rows use the stock 50-row action sheets; Holiday rows use the expanded
   B56 fallback sheet rows `50-53` when the current output only has stock rows.
+
+## 2026-07-03 - VF3 TV Animation Orientation Correction
+
+- The raw TV animation source frames are already isometric. `TVAnimBig_01.png`
+  slopes opposite the added VF3 west-facing screen, while
+  `TVAnimBigE_01.png` matches it. The added VF3 TV labels therefore need the
+  source prefixes swapped: non-East labels use `TVAnimBigE*`, and East labels
+  use `TVAnimBig*`.
+- B70 keeps the fix asset-only by regenerating the private VF3 TV strips. The
+  screen boxes now cover the full slanted face bounding area:
+  `Large/LargeEast=(4,5,65,80)`, `Small/SmallEast=(2,2,48,60)`, and
+  `FathersFavorite/FathersFavoriteEast=(5,8,96,104)`.
+- B70 private strip payload hashes:
+  `VF3LargeFlatScreenTVAnim.png=DD4A1B6715FFE7EC810AEE964BF5C0F7ABEA83018CFB79C9745014B86827F1C7`,
+  `VF3LargeFlatScreenTVAnimEast.png=73738462932FCDF6CAE2BA575C091B466AA0416D98416B1893CF2EB7C8746F0F`,
+  `VF3SmallFlatScreenTVAnim.png=50C3714B47C62BEE6A6A3F0D00EFA01CCD5E3EDDC68C76DEDD848EB00F3903F8`,
+  `VF3SmallFlatScreenTVAnimEast.png=A1AF88A771020141D4B298F4307140FF16C2FAD6F10D2644924E82BFCCE3AD3B`,
+  `FathersFavoriteTVAnim.png=C12530E3CCEEAE61FDAAC564737311F18A4A6F41734EA4B8CA12BA70ED07CCC7`, and
+  `FathersFavoriteTVAnimEast.png=E74071EFECE65336B028A472A7668D5C05ADB31B4CD9FD3FCAAA11801E38906E`.
+- No furniture behavior, villager behavior, base TV animation files, or stock
+  floating-animation enums are changed by this correction.

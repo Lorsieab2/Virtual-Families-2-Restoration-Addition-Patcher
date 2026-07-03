@@ -109,16 +109,16 @@ OUTFIT_STORE_ICON_SOURCE_SHEETS = {
     "male": "male_actions00.png",
 }
 LARGE_TV_ANIMATION_SHEETS = {
-    "Large": Path(r"C:\Users\Owner\Downloads\TVAnimBig.png"),
-    "LargeEast": Path(r"C:\Users\Owner\Downloads\TVAnimBigE.png"),
+    "Large": Path(r"C:\Users\Owner\Downloads\TVAnimBigE.png"),
+    "LargeEast": Path(r"C:\Users\Owner\Downloads\TVAnimBig.png"),
 }
 VF3_TV_ANIMATION_FRAME_PREFIXES = {
-    "Large": "TVAnimBig",
-    "LargeEast": "TVAnimBigE",
-    "Small": "FlatScreenSmallAnim",
-    "SmallEast": "FlatScreenSmallAnimE",
-    "FathersFavorite": "TVAnimBig",
-    "FathersFavoriteEast": "TVAnimBigE",
+    "Large": "TVAnimBigE",
+    "LargeEast": "TVAnimBig",
+    "Small": "FlatScreenSmallAnimE",
+    "SmallEast": "FlatScreenSmallAnim",
+    "FathersFavorite": "TVAnimBigE",
+    "FathersFavoriteEast": "TVAnimBig",
 }
 VF3_TV_RUNTIME_ANIMATION_NAMES = {
     "Large": "VF3LargeFlatScreenTVAnim.png",
@@ -139,12 +139,12 @@ VF3_TV_FLOATING_ANIMS = {
 }
 VF3_TV_ANIMATION_SCREEN_BOXES = {
     # x, y, width, height inside one furniture-cell canvas.
-    "Large": (4, 5, 65, 60),
-    "LargeEast": (4, 5, 65, 60),
-    "Small": (2, 3, 48, 43),
-    "SmallEast": (2, 3, 48, 43),
-    "FathersFavorite": (5, 5, 96, 78),
-    "FathersFavoriteEast": (5, 5, 96, 78),
+    "Large": (4, 5, 65, 80),
+    "LargeEast": (4, 5, 65, 80),
+    "Small": (2, 2, 48, 60),
+    "SmallEast": (2, 2, 48, 60),
+    "FathersFavorite": (5, 8, 96, 104),
+    "FathersFavoriteEast": (5, 8, 96, 104),
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x117: "BrokerUpgrade_icon.png",
@@ -1990,7 +1990,7 @@ def sync_vf3_tv_animation_sheets(manifest):
                 for index in range(1, 19):
                     source = VF3_SPRITE_SOURCE_DIR / f"{frame_prefix}_{index:02d}.png"
                     if not source.exists() and frame_prefix.startswith("FlatScreenSmallAnim"):
-                        fallback_prefix = "TVAnimBigE" if label.endswith("East") else "TVAnimBig"
+                        fallback_prefix = "TVAnimBig" if label.endswith("East") else "TVAnimBigE"
                         source = VF3_SPRITE_SOURCE_DIR / f"{fallback_prefix}_{index:02d}.png"
                     if not source.exists():
                         missing.append(str(source))

@@ -195,6 +195,17 @@
   generated outfit IDs so the store click path treats them as valid one-use
   outfit rows.
 
+## B70 - VF3 TV Animation Orientation
+
+- Swaps the private VF3 TV animation source orientation: non-East added TV
+  labels now use `TVAnimBigE*` frames, and East labels use `TVAnimBig*` frames.
+- Retunes the private animation screen boxes to the full slanted face bounds:
+  `Large/LargeEast=(4,5,65,80)`, `Small/SmallEast=(2,2,48,60)`, and
+  `FathersFavorite/FathersFavoriteEast=(5,8,96,104)`.
+- Leaves base `TVAnimBig*.png` / `TVAnimSmall*.png`, furniture behavior,
+  villager behavior, and click behavior untouched; only the private VF3
+  animation strips are regenerated.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.
