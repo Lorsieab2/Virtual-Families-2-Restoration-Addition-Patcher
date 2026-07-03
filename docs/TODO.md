@@ -65,9 +65,10 @@
   last-action-frame icons, purchases add the expected outfit item to the tool
   tray, and body values `50-53` apply without save-load/detail/house-view
   crashes.
-- In-game test B72 Settings Evict button: open Settings, press Evict, verify
-  the existing confirmation/removal flow removes all current family members,
-  returns to the adoption/new-person path, and remains stable across save-load.
+- In-game test B74 Settings Evict button: in generation 1 and a later
+  generation, open Settings, press Evict, verify the existing
+  confirmation/removal flow removes all current family members, returns to the
+  adoption/new-person path, and remains stable across save-load.
 - In-game test B67 visible Special Upgrade icons: verify Brokerage Account,
   Food Club, Health Plan, and Lucky Rock draw their icon graphics in the
   Special Upgrades list while purchase/apply behavior remains unchanged.

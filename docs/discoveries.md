@@ -285,3 +285,21 @@
   `GetLockGenerationLevel`) to `push ecx` before the helper call and `pop ecx`
   before the stock-fallback compare. Static string getter hooks remain cdecl
   fallthroughs and do not have a `this` pointer to preserve.
+
+## 2026-07-03 - Any-Generation Settings Evict
+
+- The stock `theOptionsDialog` Evict button constructor gate is:
+  `cmp FamilyTree+0, 0; jne skip; cmp FamilyTree+4, 2; jge skip`.
+  `FamilyTree+4` is the active generation count/index used by
+  `CFamilyTree::StartNextGeneration`; generation 1 stores `1`, generation 2
+  stores `2`, and so on.
+- `CFamilyTree::EvictFamily()` is generation-agnostic. It calls
+  `CFamilyTree::Reset()`, then writes `1` to `FamilyTree+0`. The Options
+  handler then resets `CVillagerManager`, switches the adoption scene state to
+  `2`, copies the current game-state scene slot, sets scene `6`, and ends the
+  dialog.
+- B74 keeps the Evict button hidden when `FamilyTree+4 <= 0`, but removes the
+  generation-1 limit by changing the constructor branch at `ctor+0x2E7` from
+  `jge` to `jle` and the compare immediate at `ctor+0x2E6` from `2` to `0`.
+  This keeps the click path limited to active families while allowing every
+  active generation to use the existing eviction handler.

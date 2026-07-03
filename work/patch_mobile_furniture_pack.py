@@ -6258,38 +6258,50 @@ def patch_options_dialog(manifest):
     start = sec.raw_ptr + ctor_sym.value
 
     # Desktop already contains an Evict button and handler, but constructor
-    # branches skip the button creation for normal in-progress families.
-    # NOP both skip branches so the existing button/control id 4 is built.
+    # branches only build the button before generation 2. Keep the button
+    # available for every active generation, while still hiding it when the
+    # family tree has already been cleared.
     expected_1 = bytes([0x0F, 0x85, 0x80, 0x00, 0x00, 0x00])
+    expected_generation_cmp = bytes([0x83, 0x3D, 0x04, 0x00, 0x00, 0x00, 0x02])
     expected_2 = bytes([0x7D, 0x77])
     if obj.buf[start + 0x2DA:start + 0x2E0] != expected_1:
         raise ValueError("Unexpected Evict first skip branch bytes")
+    if obj.buf[start + 0x2E0:start + 0x2E7] != expected_generation_cmp:
+        raise ValueError("Unexpected Evict generation compare bytes")
     if obj.buf[start + 0x2E7:start + 0x2E9] != expected_2:
         raise ValueError("Unexpected Evict second skip branch bytes")
     obj.buf[start + 0x2DA:start + 0x2E0] = b"\x90" * 6
-    obj.buf[start + 0x2E7:start + 0x2E9] = b"\x90" * 2
+    obj.buf[start + 0x2E6] = 0
+    obj.buf[start + 0x2E7:start + 0x2E9] = b"\x7E\x77"
     obj.write(PATCHED / "theOptionsDialog.obj")
 
     manifest["settings_menu"] = {
         "evict": {
-            "status": "button skip branches disabled",
+            "status": "available for every active family generation",
             "button_control_id": 4,
             "label_string_id": "0x10",
             "confirmation_string_id": "0x11",
             "handler": "?EvictFamily@theOptionsDialog@@AAEXXZ",
             "family_tree_handler": "?EvictFamily@CFamilyTree@@QAEXXZ",
+            "click_safety": "CFamilyTree::EvictFamily is generation-agnostic: Reset(), then mark tree evicted; constructor guard hides the button when generation count is 0.",
             "constructor_patches": [
                 {
                     "offset": "0x2DA",
                     "expected_original_bytes": expected_1.hex(),
                     "replacement_bytes": ("90" * 6),
-                    "note": "disable first Evict button creation skip branch",
+                    "note": "ignore the evicted-flag branch so active later generations can reach the generation-count guard",
+                },
+                {
+                    "offset": "0x2E0",
+                    "expected_original_bytes": expected_generation_cmp.hex(),
+                    "replacement_bytes": "833d0400000000",
+                    "note": "change generation compare from < 2 to active-family count > 0",
                 },
                 {
                     "offset": "0x2E7",
                     "expected_original_bytes": expected_2.hex(),
-                    "replacement_bytes": ("90" * 2),
-                    "note": "disable second Evict button creation skip branch",
+                    "replacement_bytes": "7e77",
+                    "note": "skip Evict only when generation count is <= 0",
                 },
             ],
         }

@@ -239,6 +239,19 @@
   purchase helper, Evict button, TV behavior, furniture behavior, and villager
   behavior unchanged.
 
+## B74 - Any-Generation Settings Evict
+
+- Changes the Settings Evict constructor gate from "generation count < 2" to
+  "generation count > 0", so the button is available for every active family
+  generation.
+- Keeps the existing confirmation and
+  `theOptionsDialog::EvictFamily()` -> `CFamilyTree::EvictFamily()` click path.
+  `CFamilyTree::EvictFamily()` is generation-agnostic: it resets the family
+  tree and marks it evicted, while the Options handler resets villagers and
+  routes to the adoption scene.
+- Leaves Clothing, furniture, villager, debugger, TV, and store-category
+  behavior unchanged.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.
