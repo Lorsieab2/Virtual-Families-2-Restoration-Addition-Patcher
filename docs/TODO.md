@@ -41,9 +41,10 @@
   maintain a McAfee/SmartScreen/AV vendor false-positive submission process for
   release builds.
 - Before each release ZIP upload, verify the archive contains the EXE, `Images`
-  payloads, and the six required top-level runtime DLLs: `SDL2.dll`,
-  `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`, `zlib1.dll`, and
-  `fmod.dll`.
+  payloads, the six required top-level runtime DLLs (`SDL2.dll`,
+  `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`, `zlib1.dll`,
+  `fmod.dll`), and the `Microsoft.VC90.CRT/` private assembly folder required
+  by the packaged `SDL2_image.dll`.
 
 ## Research Leads
 
@@ -84,6 +85,9 @@
   instead of saying "There's no TV"; also verify base TVs still behave
   normally and the release folder contains `Assets/TVFlatScreenStd.png.fmap`
   plus the three generated VF3 TV fmaps.
+- Launch-test B82 runtime package: verify the extracted release starts from a
+  clean folder with only bundled files, including the `Microsoft.VC90.CRT/`
+  private assembly; then re-run the B81 VF3 TV recognition checks.
 - In-game test B75 Clothing/outfit behavior: verify opening the Clothing
   section no longer crashes, all generated outfit rows display their
   last-action-frame icons, female rows apply only to female villagers, male rows

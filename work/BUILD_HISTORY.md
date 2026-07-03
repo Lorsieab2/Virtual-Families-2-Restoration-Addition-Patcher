@@ -345,6 +345,18 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B81-VF3-TV-Behavior-Fmaps`.
 
+## B82 - VC90 Runtime Package
+
+- Fixes the B79-B81 launch regression caused by packaging `SDL2_image.dll`
+  without its VC90 side-by-side CRT dependency.
+- Adds `sync_vc90_crt_private_assembly()` to copy the local x86 VC90 CRT files
+  into `Microsoft.VC90.CRT/` and write `Microsoft.VC90.CRT.manifest` matching
+  the `SDL2_image.dll` embedded dependency on version `9.0.21022.8`.
+- Keeps the B81 VF3 TV behavior/fmap fix intact and does not change gameplay,
+  furniture behavior, villager behavior, or TV behavior code.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B82-VC90-Runtime-Package`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

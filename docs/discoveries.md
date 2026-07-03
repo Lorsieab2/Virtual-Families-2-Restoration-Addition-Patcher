@@ -402,6 +402,15 @@
   root beside `Virtual Families 2 - Additive Mobile Furniture Pack.exe`.
   Missing DLLs now fail the patcher run instead of producing a release folder
   that cannot launch after extraction.
+- B79-B81 still failed before the game window on machines lacking the VC90
+  side-by-side runtime requested by the packaged `SDL2_image.dll`. The DLL
+  embeds a `Microsoft.VC90.CRT` dependency for x86 version `9.0.21022.8` and
+  imports `MSVCR90.dll`.
+- B82 adds a private `Microsoft.VC90.CRT/` assembly folder beside the EXE with
+  `msvcr90.dll`, `msvcp90.dll`, `msvcm90.dll`, and
+  `Microsoft.VC90.CRT.manifest`. The manifest identity matches the
+  `SDL2_image.dll` request while the files come from the latest local x86 VC90
+  CRT WinSxS directory.
 
 ## 2026-07-03 - Holiday Outfit Body Value Lookup
 

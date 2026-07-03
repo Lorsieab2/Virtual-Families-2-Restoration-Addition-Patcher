@@ -71,6 +71,14 @@ DESKTOP_RUNTIME_DLL_SOURCE_DIRS = (
 FMAP_SOURCE_DIRS = (
     ROOT / "work" / "vf2_obb" / "assets",
 )
+VC90_CRT_ASSEMBLY_NAME = "Microsoft.VC90.CRT"
+VC90_CRT_REQUESTED_VERSION = "9.0.21022.8"
+VC90_CRT_PUBLIC_KEY_TOKEN = "1fc8b3b9a1e18e3b"
+VC90_CRT_DLL_NAMES = (
+    "msvcr90.dll",
+    "msvcp90.dll",
+    "msvcm90.dll",
+)
 HOLIDAY_BODY_SET_IDS = (51, 52, 53, 54)
 HOLIDAY_BODY_BASE_ROWS = 50
 HOLIDAY_BODY_VALUES = tuple(range(50, 50 + len(HOLIDAY_BODY_SET_IDS)))
@@ -1938,6 +1946,76 @@ def sync_desktop_runtime_dlls(manifest):
     manifest["desktop_runtime_dlls"] = {
         "status": "copied to build root",
         "runtime_note": "The release folder must keep these DLLs beside the EXE so the game can launch after extraction.",
+        "copied": copied,
+    }
+
+
+def vc90_crt_source_dirs():
+    winsxs = Path(os.environ.get("WINDIR", r"C:\Windows")) / "WinSxS"
+    if not winsxs.is_dir():
+        return []
+    return sorted(
+        (
+            path
+            for path in winsxs.glob("x86_microsoft.vc90.crt_1fc8b3b9a1e18e3b_9.0.*")
+            if path.is_dir()
+        ),
+        reverse=True,
+    )
+
+
+def write_vc90_crt_manifest(path):
+    files = "\n".join(f'    <file name="{filename}"></file>' for filename in VC90_CRT_DLL_NAMES)
+    text = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <noInheritable></noInheritable>
+  <assemblyIdentity
+    type="win32"
+    name="{VC90_CRT_ASSEMBLY_NAME}"
+    version="{VC90_CRT_REQUESTED_VERSION}"
+    processorArchitecture="x86"
+    publicKeyToken="{VC90_CRT_PUBLIC_KEY_TOKEN}"></assemblyIdentity>
+{files}
+</assembly>
+"""
+    path.write_text(text, encoding="utf-8")
+
+
+def sync_vc90_crt_private_assembly(manifest):
+    source_dir = next(
+        (
+            candidate
+            for candidate in vc90_crt_source_dirs()
+            if all((candidate / filename).is_file() for filename in VC90_CRT_DLL_NAMES)
+        ),
+        None,
+    )
+    if source_dir is None:
+        raise RuntimeError(
+            "Missing x86 Microsoft.VC90.CRT runtime files required by SDL2_image.dll"
+        )
+    target_dir = OUT / VC90_CRT_ASSEMBLY_NAME
+    target_dir.mkdir(parents=True, exist_ok=True)
+    copied = []
+    for filename in VC90_CRT_DLL_NAMES:
+        source = source_dir / filename
+        target = target_dir / filename
+        shutil.copy2(source, target)
+        copied.append({
+            "file": filename,
+            "source": str(source),
+            "target": str(target),
+            "bytes": target.stat().st_size,
+        })
+    manifest_path = target_dir / f"{VC90_CRT_ASSEMBLY_NAME}.manifest"
+    write_vc90_crt_manifest(manifest_path)
+    manifest["vc90_crt_private_assembly"] = {
+        "status": "copied to build root private assembly folder",
+        "reason": "SDL2_image.dll embeds a Microsoft.VC90.CRT side-by-side dependency; without this folder B79-B81 can fail before the game window opens.",
+        "requested_version": VC90_CRT_REQUESTED_VERSION,
+        "source_dir": str(source_dir),
+        "target_dir": str(target_dir),
+        "manifest": str(manifest_path),
         "copied": copied,
     }
 
@@ -7419,6 +7497,7 @@ def main():
     else:
         sync_original_villager_sprite_sheets(manifest)
     sync_desktop_runtime_dlls(manifest)
+    sync_vc90_crt_private_assembly(manifest)
     sync_outfit_store_icon_art(manifest)
     sync_visible_special_upgrade_icon_art(manifest)
     sync_holiday_ornament_collection_art(manifest)
