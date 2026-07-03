@@ -165,18 +165,11 @@ complete vanilla runtime folder before any byte or asset patches are written:
       "Images/TVAnimBig.png",
       "Images/TVAnimBigE.png",
       "Images/TVAnimSmall.png",
-      "Images/TVAnimSmallE.png",
-      "Assets/cmap.dat",
-      "Assets/wpts.dat",
-      "Assets/animpts.dat",
-      "Assets/anims.dat",
-      "Assets/lsmap.dat",
-      "Assets/TVFlatScreenStd.png.fmap"
+      "Images/TVAnimSmallE.png"
     ],
     "required_dirs": [
       { "path": "Images", "min_files": 1000 },
-      { "path": "Sounds", "min_files": 300 },
-      { "path": "Assets", "min_files": 700 }
+      { "path": "Sounds", "min_files": 300 }
     ]
   }
 }
@@ -184,8 +177,8 @@ complete vanilla runtime folder before any byte or asset patches are written:
 
 Directory and file requirement rows can also include `requires`/`settings` like
 patch records. Use this to prevent applying the mod to an EXE-only folder or a
-partial copied build that would later fail with missing-image, missing-DLL,
-missing-geometry, or upper-left spawn/pathing errors.
+partial copied build that would later fail with missing-image or missing-DLL
+launch errors.
 
 Each byte patch must be length-preserving. Length-changing edits should be
 represented as asset/table replacement work or by adding a future manifest

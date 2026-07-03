@@ -468,6 +468,22 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B90-Stock-Collections-Runtime-Assets`.
 
+## B91 - Revert Full Assets Payload
+
+- Reverts the B90 full runtime `Assets/` payload seeding and validation after
+  in-game testing showed the copied asset payload broke the modded runtime.
+- Removes the build path that copied map/path geometry files such as
+  `cmap.dat`, `wpts.dat`, `animpts.dat`, `anims.dat`, and `lsmap.dat` into the
+  release folder.
+- Keeps the stock Collections default from B84/B90: Holiday Ornaments native
+  collection hooks remain disabled unless `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` is
+  explicitly set for isolated research.
+- Removes the old hidden fallback to a `Copy Official` furniture sprite folder;
+  normal builds must use build-local/runtime-local art or explicit workspace
+  inputs.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B91-Revert-Full-Assets-Payload`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

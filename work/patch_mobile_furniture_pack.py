@@ -54,7 +54,7 @@ LOCKED_GENERATION_CELL_WIDTH = 30
 LOCKED_GENERATION_CELL_HEIGHT = 46
 LOCKED_PNG_SOURCE = Path(r"C:\Users\Owner\Downloads\locked.png")
 VF3_SPRITE_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\Sprite")
-INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\Virtual Families 2 - Copy Official\Images\Furniture")
+INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR = ROOT / "work" / "invisible_outdoor_furniture_sprites"
 HOLIDAY_OUTFIT_ARCHIVE = Path(r"C:\Users\Owner\Downloads\VF2_Holiday_Content\Holiday Outfits.zip")
 GENERATED_VILLAGER_BODIES = ROOT / "generated" / "VillagerBodies"
 FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B56-Holiday-Body-Lookup-Test"
@@ -88,18 +88,6 @@ RUNTIME_REQUIRED_IMAGE_FILES = (
 )
 RUNTIME_MIN_IMAGE_FILE_COUNT = 1000
 RUNTIME_MIN_SOUND_FILE_COUNT = 300
-RUNTIME_MIN_ASSET_FILE_COUNT = 700
-RUNTIME_REQUIRED_ASSET_FILES = (
-    "cmap.dat",
-    "wpts.dat",
-    "animpts.dat",
-    "anims.dat",
-    "lsmap.dat",
-    "TVFlatScreenStd.png.fmap",
-)
-RUNTIME_ASSET_PAYLOAD_SOURCE_DIRS = (
-    ROOT / "work" / "vf2_obb" / "assets",
-)
 VILLAGER_SPRITE_COPY_SOURCE_DIRS = (
     ROOT / "work" / "villager_sprite_sheets",
 )
@@ -1403,10 +1391,7 @@ INVISIBLE_TRANSPARENT_FMAP_DONORS = {
     f"{item['name']}.png.fmap": item["donor_fmap"]
     for item in INVISIBLE_TRANSPARENT_BASE_ITEMS
 }
-INVISIBLE_TRANSPARENT_GRAPHIC_OVERRIDES = {
-    "InvisibleMantleFireplace": Path(r"C:\Users\Owner\Downloads\Virtual Families 2 - Copy Official\Images\Furniture\FirePlaceRusticStd.png"),
-    "InvisibleGrandfatherClock": Path(r"C:\Users\Owner\Downloads\Virtual Families 2 - Copy Official\Images\Furniture\GrandfatherClockStd.png"),
-}
+INVISIBLE_TRANSPARENT_GRAPHIC_OVERRIDES = {}
 VF3_TV_FMAP_DONORS = {
     "VF3LargeFlatScreenTV.png.fmap": "TVFlatScreenStd.png.fmap",
     "VF3SmallFlatScreenTV.png.fmap": "TVFlatScreenStd.png.fmap",
@@ -1750,24 +1735,6 @@ def vanilla_runtime_payload_source_dirs():
     return unique
 
 
-def runtime_asset_payload_source_dirs():
-    env_source = os.environ.get("VF2_RUNTIME_ASSETS_DIR")
-    roots = []
-    if env_source:
-        roots.append(Path(env_source))
-    roots.extend(RUNTIME_ASSET_PAYLOAD_SOURCE_DIRS)
-
-    unique = []
-    seen = set()
-    for root in roots:
-        key = str(root).lower()
-        if key in seen:
-            continue
-        unique.append(root)
-        seen.add(key)
-    return unique
-
-
 def villager_sprite_copy_source_dirs():
     env_source = os.environ.get("VF2_VILLAGER_SPRITE_SOURCE_DIR")
     roots = []
@@ -1793,15 +1760,6 @@ def find_vanilla_runtime_payload_source():
         if all((root / filename).is_file() for filename in VANILLA_RUNTIME_REQUIRED_FILES) and all(
             (root / dirname).is_dir() for dirname in VANILLA_RUNTIME_REQUIRED_DIRS
         ):
-            return root
-    return None
-
-
-def find_runtime_asset_payload_source():
-    for root in runtime_asset_payload_source_dirs():
-        if not root.is_dir():
-            continue
-        if all((root / filename).is_file() for filename in RUNTIME_REQUIRED_ASSET_FILES):
             return root
     return None
 
@@ -1847,46 +1805,7 @@ def sync_vanilla_runtime_payload(manifest):
         "required_dirs": list(VANILLA_RUNTIME_REQUIRED_DIRS),
         "copied_files": copied_files,
         "copied_dirs": copied_dirs,
-        "runtime_note": "Every release folder must keep the full vanilla Images and Sounds payload beside the patched EXE; additive art is overlaid after this seed step.",
-    }
-
-
-def sync_runtime_assets_payload(manifest):
-    source = find_runtime_asset_payload_source()
-    if source is None:
-        raise RuntimeError(
-            "Missing VF2 runtime Assets payload source. Set VF2_RUNTIME_ASSETS_DIR "
-            "or restore work/vf2_obb/assets with cmap.dat, wpts.dat, animpts.dat, anims.dat, lsmap.dat, and stock .fmap files."
-        )
-
-    assets = OUT / "Assets"
-    assets.mkdir(parents=True, exist_ok=True)
-    copied = []
-    skipped = []
-    for src in sorted(source.iterdir(), key=lambda path: path.name.lower()):
-        if not src.is_file():
-            skipped.append({"name": src.name, "reason": "not a file"})
-            continue
-        if src.name.startswith("."):
-            skipped.append({"name": src.name, "reason": "dotfile"})
-            continue
-        dst = assets / src.name
-        shutil.copy2(src, dst)
-        copied.append({
-            "name": src.name,
-            "source": str(src),
-            "target": str(dst),
-            "bytes": dst.stat().st_size,
-        })
-
-    manifest["base_runtime_assets"] = {
-        "status": "seeded from workspace runtime asset cache",
-        "source": str(source),
-        "required_files": list(RUNTIME_REQUIRED_ASSET_FILES),
-        "copied_file_count": len(copied),
-        "copied_files_sample": copied[:12],
-        "skipped": skipped,
-        "runtime_note": "The Assets payload carries map/path geometry and stock .fmap behavior data; generated additive fmaps are overlaid after this seed step.",
+        "runtime_note": "Every release folder must keep the full vanilla Images and Sounds payload beside the patched EXE; additive art is overlaid after this seed step. Do not seed a full external Assets payload in normal builds.",
     }
 
 
@@ -7580,16 +7499,15 @@ def patch_arcade_behavior_labels(manifest):
 
 
 def restore_supplied_game_table_sprites(manifest):
-    """Use the user-supplied original-size pool and foosball sheets verbatim."""
-    source_root = Path(r"C:\Users\Owner\Downloads\Virtual Families 2 - Copy Official\Images\Furniture")
+    """Keep the seeded runtime pool and foosball sheets verbatim."""
+    source_root = OUT / "Images" / "Furniture"
     copied = []
     missing = []
     for filename in ("PoolTableStd.png", "FoosballTableStd.png"):
         source = source_root / filename
         target = OUT / "Images" / "Furniture" / filename
         if source.exists():
-            shutil.copy2(source, target)
-            copied.append({"file": filename, "bytes": target.stat().st_size})
+            copied.append({"file": filename, "bytes": target.stat().st_size, "source": "build-local runtime image"})
         else:
             missing.append(filename)
     manifest["restored_game_table_sprites"] = {"copied": copied, "missing": missing}
@@ -7851,23 +7769,16 @@ def validate_runtime_payload_contract(manifest):
 
     images_dir = OUT / "Images"
     sounds_dir = OUT / "Sounds"
-    assets_dir = OUT / "Assets"
     image_count = count_files(images_dir)
     sound_count = count_files(sounds_dir)
-    asset_count = count_files(assets_dir)
     if image_count < RUNTIME_MIN_IMAGE_FILE_COUNT:
         errors.append(f"Images payload is incomplete: {image_count} files, expected at least {RUNTIME_MIN_IMAGE_FILE_COUNT}")
     if sound_count < RUNTIME_MIN_SOUND_FILE_COUNT:
         errors.append(f"Sounds payload is incomplete: {sound_count} files, expected at least {RUNTIME_MIN_SOUND_FILE_COUNT}")
-    if asset_count < RUNTIME_MIN_ASSET_FILE_COUNT:
-        errors.append(f"Assets payload is incomplete: {asset_count} files, expected at least {RUNTIME_MIN_ASSET_FILE_COUNT}")
 
     for filename in RUNTIME_REQUIRED_IMAGE_FILES:
         if not (images_dir / filename).is_file():
             errors.append(f"missing required base image: Images/{filename}")
-    for filename in RUNTIME_REQUIRED_ASSET_FILES:
-        if not (assets_dir / filename).is_file():
-            errors.append(f"missing required runtime asset: Assets/{filename}")
     for filename in DESKTOP_RUNTIME_DLL_NAMES:
         if not (OUT / filename).is_file():
             errors.append(f"missing required desktop runtime DLL: {filename}")
@@ -7887,13 +7798,11 @@ def validate_runtime_payload_contract(manifest):
         "status": "validated",
         "images_file_count": image_count,
         "sounds_file_count": sound_count,
-        "assets_file_count": asset_count,
         "required_root_files": list(VANILLA_RUNTIME_REQUIRED_FILES),
         "required_images": list(RUNTIME_REQUIRED_IMAGE_FILES),
-        "required_assets": list(RUNTIME_REQUIRED_ASSET_FILES),
         "required_dlls": list(DESKTOP_RUNTIME_DLL_NAMES),
         "vc90_private_assembly": VC90_CRT_ASSEMBLY_NAME,
-        "release_note": "B79-B82 could produce partial runtime folders; this gate prevents publishing a folder or ZIP without Images, Sounds, Assets, DLLs, or VC90 files needed by extracted builds.",
+        "release_note": "B79-B82 could produce partial runtime folders; this gate prevents publishing a folder or ZIP without Images, Sounds, DLLs, or VC90 files needed by extracted builds.",
     }
 
 
@@ -7916,7 +7825,6 @@ def main():
         ]
     }
     sync_vanilla_runtime_payload(manifest)
-    sync_runtime_assets_payload(manifest)
     patch_furniture_manager(manifest)
     patch_added_furniture_click_aliases(manifest)
     patch_visible_special_upgrades(manifest)
