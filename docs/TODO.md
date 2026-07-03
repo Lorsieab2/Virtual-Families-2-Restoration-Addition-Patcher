@@ -18,7 +18,7 @@
 - Keep the offline patcher simple and trust-friendly: avoid runtime injection,
   process memory editing, obfuscation, packers, and admin requirements. Prefer
   data, asset, and table patches over executable patches whenever possible.
-- Build the first full B68 offline patch bundle: include the scaled VF3 TV
+- Build the first full current-build offline patch bundle: include the scaled VF3 TV
   animation strips as `asset_patches`, then add the verified native byte records
   required to append the VF3 furniture, private floating-animation table
   entries, gendered outfit icon descriptors, Holiday outfit runtime-frame
@@ -59,10 +59,11 @@
 - In-game test B65/B66 VF3 TV private floating-animation entries: verify the Large,
   Small, and Father's Favorite TV overlays now scale to their screens while
   base TV click/animation behavior remains untouched.
-- In-game test B68 Holiday Outfit application: verify female and male Holiday
-  outfit rows still display their matching body previews, then apply body values
-  `50-53` to villagers and confirm save-load, detail view, normal house view,
-  and event/sitting/action frames do not crash.
+- In-game test B69 generated outfit purchases: verify all added female and male
+  Clothing rows display the matching last-action-frame icon, add the expected
+  outfit item to the tool tray when bought, and apply the correct body value.
+  Re-test Holiday body values `50-53` for save-load, detail view, normal house
+  view, and event/sitting/action frames.
 - In-game test B67 visible Special Upgrade icons: verify Brokerage Account,
   Food Club, Health Plan, and Lucky Rock draw their icon graphics in the
   Special Upgrades list while purchase/apply behavior remains unchanged.

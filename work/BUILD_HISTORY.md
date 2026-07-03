@@ -179,6 +179,22 @@
 - Keeps the native `CAnimManager` body lookup unpatched, debugger features
   disabled, and villager/furniture behavior routes unchanged.
 
+## B69 - Outfit Purchase And Action Icons
+
+- Changes all generated Clothing-row preview icons to use the matching row's
+  last action-sheet frame: `female_actions00.png` / `male_actions00.png`
+  column `14`.
+- Uses stock action sheets for body values `0-49` and the expanded B56 action
+  sheets for Holiday body values `50-53` when the current output has only
+  stock rows.
+- Adds generated-outfit purchase handling at
+  `CScrollingStoreScene::HandlePurchaseItem + 0x1AD`: recognized synthetic
+  store IDs set `InventoryManager+0x468` or `+0x46C`, add stock tray item
+  `0x49` or `0x4A`, save, and skip the native high-ID no-op path.
+- Hooks `CInventoryManager::GetNumAvailable` and `GetUseCount` for the
+  generated outfit IDs so the store click path treats them as valid one-use
+  outfit rows.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

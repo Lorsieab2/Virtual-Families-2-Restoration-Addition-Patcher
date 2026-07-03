@@ -183,18 +183,41 @@ rows are gender-specific:
 - Female outfit item IDs: `0x400` through `0x435`
 - Male outfit item IDs: `0x440` through `0x475`
 
-The patcher writes one 91 x 91 PNG per row under `Images/OutfitIcons/` using
-the matching villager body cell. Base body values `0--49` come from the
-matching `female_bodies00.png` or `male_bodies00.png` source sheet. Holiday
-body values `50--53` prefer generated folder-backed body frame `0` and can
-fall back to an expanded prior build sheet when the current additive folder has
-only stock rows.
+B69 updates the icon source rule. The patcher writes one 91 x 91 PNG per row
+under `Images/OutfitIcons/` using the last frame column from the matching
+action sheet:
+
+- female rows: `female_actions00.png`
+- male rows: `male_actions00.png`
+- source cell: row = body value, column = last 91 px frame column (`14` in the
+  current desktop/mobile-compatible sheets)
+
+Base body values `0--49` come from the stock 50-row action sheets. Holiday body
+values `50--53` fall back to the expanded B56 action sheets when the current
+output folder only contains stock rows.
 
 `theGraphicsManager` receives 108 appended 1 x 1 image descriptors for those
 icons. `CInventoryManager::DrawItem(ldwPoint, ...)` and
 `CInventoryManager::DrawItem(ldwRect, ...)` have narrow prologue hooks that
 only intercept these high outfit item IDs and draw the matching preview icon;
 non-outfit inventory drawing falls through to stock code.
+
+## Clothing store purchase milestone
+
+The synthetic store row IDs are only store-facing identifiers. Native outfit
+application expects stock tray item `0x49` for female outfits and `0x4A` for
+male outfits, with the selected body value stored in `CInventoryManager`:
+
+- `InventoryManager+0x468`: female outfit body value
+- `InventoryManager+0x46C`: male outfit body value
+
+B69 adds `_VF2PurchaseOutfitStoreItem` and a narrow
+`CScrollingStoreScene::HandlePurchaseItem + 0x1AD` hook. After the normal coin
+charge, recognized generated outfit IDs set the matching body field, add tray
+item `0x49` or `0x4A`, save the game, and skip the native high-ID no-op path.
+`CInventoryManager::GetNumAvailable` and `GetUseCount` are also hooked for the
+generated IDs so the click/purchase dialog path sees them as valid one-use
+items.
 
 ## Holiday runtime frame regeneration milestone
 

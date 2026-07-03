@@ -103,6 +103,11 @@ HOLIDAY_BODY_ROLE_OFFSETS = {"bodies": 0, "actions": 32, "sit": 47}
 HOLIDAY_BODY_ROLE_FRAME_COUNTS = {"bodies": 32, "actions": 15, "sit": 9}
 HOLIDAY_BODY_FRAMES_PER_VALUE = sum(HOLIDAY_BODY_ROLE_FRAME_COUNTS.values())
 HOLIDAY_BODY_IMAGE_COUNT = 2 * len(HOLIDAY_BODY_VALUES) * HOLIDAY_BODY_FRAMES_PER_VALUE
+OUTFIT_STORE_ICON_ROLE = "actions"
+OUTFIT_STORE_ICON_SOURCE_SHEETS = {
+    "female": "female_actions00.png",
+    "male": "male_actions00.png",
+}
 LARGE_TV_ANIMATION_SHEETS = {
     "Large": Path(r"C:\Users\Owner\Downloads\TVAnimBig.png"),
     "LargeEast": Path(r"C:\Users\Owner\Downloads\TVAnimBigE.png"),
@@ -2520,6 +2525,28 @@ def _outfit_icon_source_roots():
     return _image_source_roots()
 
 
+def _find_outfit_icon_action_frame(gender, body_value):
+    sheet_name = OUTFIT_STORE_ICON_SOURCE_SHEETS[gender]
+    required_height = (body_value + 1) * HOLIDAY_BODY_CELL_SIZE
+    missing = []
+    for root in _outfit_icon_source_roots():
+        candidate = root / sheet_name
+        if not candidate.exists():
+            continue
+        size = read_png_size(candidate)
+        if not size:
+            missing.append(f"{candidate}: unreadable PNG size")
+            continue
+        column_count = size[0] // HOLIDAY_BODY_CELL_SIZE
+        if column_count > 0 and size[1] >= required_height:
+            return candidate, column_count - 1, missing
+        missing.append(
+            f"{candidate}: size {size}, required at least "
+            f"{HOLIDAY_BODY_CELL_SIZE}x{required_height}"
+        )
+    return None, None, missing
+
+
 def sync_outfit_store_icon_art(manifest):
     """Generate one store-preview icon per added male/female outfit row."""
     from PIL import Image
@@ -2529,14 +2556,6 @@ def sync_outfit_store_icon_art(manifest):
     entries = []
     missing = []
     issues = []
-    holiday_frame_entries = {
-        (entry["gender"], entry["body_value"], entry["role"], entry["frame"]): entry
-        for entry in manifest.get("holiday_body_runtime_frames", {}).get("frames", [])
-    }
-    sheet_names = {
-        "female": "female_bodies00.png",
-        "male": "male_bodies00.png",
-    }
     sheet_cache = {}
 
     try:
@@ -2544,51 +2563,20 @@ def sync_outfit_store_icon_art(manifest):
             gender = entry["gender"]
             body_value = entry["body_value"]
             target = output_root / f"{gender.title()}_Body_{body_value:02d}.png"
-            icon = None
-            source = None
-            source_kind = None
-
-            if body_value in HOLIDAY_BODY_VALUES:
-                frame = holiday_frame_entries.get((gender, body_value, "bodies", 0))
-                if frame:
-                    frame_path = OUT / "Images" / frame["path"]
-                    if frame_path.exists():
-                        icon = Image.new("RGBA", (HOLIDAY_BODY_CELL_SIZE, HOLIDAY_BODY_CELL_SIZE), (0, 0, 0, 0))
-                        with Image.open(frame_path).convert("RGBA") as cropped:
-                            offset = frame.get("offset") or [0, 0]
-                            icon.alpha_composite(cropped, (int(offset[0]), int(offset[1])))
-                        source = frame_path
-                        source_kind = "holiday_runtime_frame"
-
-            if icon is None:
-                sheet_name = sheet_names[gender]
-                required_height = (body_value + 1) * HOLIDAY_BODY_CELL_SIZE
-                sheet_path = None
-                short_sheets = []
-                for root in _outfit_icon_source_roots():
-                    candidate = root / sheet_name
-                    if not candidate.exists():
-                        continue
-                    size = read_png_size(candidate)
-                    if size and size[1] >= required_height:
-                        sheet_path = candidate
-                        break
-                    short_sheets.append(f"{candidate}: row {body_value}")
-                if not sheet_path:
-                    missing.append(sheet_name)
-                    missing.extend(short_sheets)
-                    continue
-                if sheet_path not in sheet_cache:
-                    sheet_cache[sheet_path] = Image.open(sheet_path).convert("RGBA")
-                sheet = sheet_cache[sheet_path]
-                icon = sheet.crop((
-                    0,
-                    body_value * HOLIDAY_BODY_CELL_SIZE,
-                    HOLIDAY_BODY_CELL_SIZE,
-                    (body_value + 1) * HOLIDAY_BODY_CELL_SIZE,
-                ))
-                source = sheet_path
-                source_kind = "body_sheet_row"
+            source, action_frame, skipped = _find_outfit_icon_action_frame(gender, body_value)
+            if not source:
+                missing.append(OUTFIT_STORE_ICON_SOURCE_SHEETS[gender])
+                missing.extend(skipped)
+                continue
+            if source not in sheet_cache:
+                sheet_cache[source] = Image.open(source).convert("RGBA")
+            sheet = sheet_cache[source]
+            icon = sheet.crop((
+                action_frame * HOLIDAY_BODY_CELL_SIZE,
+                body_value * HOLIDAY_BODY_CELL_SIZE,
+                (action_frame + 1) * HOLIDAY_BODY_CELL_SIZE,
+                (body_value + 1) * HOLIDAY_BODY_CELL_SIZE,
+            ))
 
             icon.save(target)
             entries.append({
@@ -2598,7 +2586,8 @@ def sync_outfit_store_icon_art(manifest):
                 "image_id": hex(outfit_icon_image_id(gender, body_value, HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)),
                 "path": str(target.relative_to(OUT / "Images")).replace("\\", "/"),
                 "source": str(source),
-                "source_kind": source_kind,
+                "source_kind": f"{OUTFIT_STORE_ICON_ROLE}_sheet_last_frame",
+                "source_frame": action_frame,
                 "size": list(icon.size),
             })
     except Exception as exc:
@@ -2611,6 +2600,11 @@ def sync_outfit_store_icon_art(manifest):
         "status": "generated" if len(entries) == OUTFIT_STORE_ENTRY_COUNT else "partial_or_failed",
         "root": str(output_root),
         "image_base": hex(outfit_icon_image_base(HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)),
+        "source_rule": {
+            "role": OUTFIT_STORE_ICON_ROLE,
+            "sheets": OUTFIT_STORE_ICON_SOURCE_SHEETS,
+            "frame": "last 91px frame column",
+        },
         "expected_count": OUTFIT_STORE_ENTRY_COUNT,
         "generated_count": len(entries),
         "entries": entries,
@@ -3354,6 +3348,8 @@ def patch_inventory_manager(manifest):
         return {"function": function_name, "helper": helper_name, "insert_offset": hex(insert_off)}
 
     outfit_getter_hooks = [
+        insert_inventory_getter_hook("?GetNumAvailable@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreNumAvailable"),
+        insert_inventory_getter_hook("?GetUseCount@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreUseCount"),
         insert_inventory_getter_hook("?GetOutfit@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreBodyValue"),
         insert_inventory_getter_hook("?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStorePrice"),
         insert_inventory_getter_hook("?GetLockGenerationLevel@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreLockGeneration"),
@@ -3576,10 +3572,29 @@ public:
     void Draw(EImage image, int x, int y, float scale, int alpha);
 }};
 
+enum EInventoryItem {{ eInventoryItemDummy = 0 }};
+class CToolTray {{
+public:
+    bool IsSlotAvailable();
+    bool AddItem(EInventoryItem item, int useCount);
+}};
+
+class CInventoryManager {{
+public:
+    char pad0[0x468];
+    int femaleOutfitBody;
+    int maleOutfitBody;
+}};
+
+extern CToolTray ToolTray;
+extern CInventoryManager InventoryManager;
+
 static const int kVF2OutfitStoreFemaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["female"]};
 static const int kVF2OutfitStoreMaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["male"]};
 static const int kVF2OutfitStoreBodyCount = {len(OUTFIT_STORE_BODY_VALUES)};
 static const int kVF2OutfitStoreHolidayFirst = {HOLIDAY_BODY_VALUES[0]};
+static const int kVF2FemaleOutfitTrayItem = 0x49;
+static const int kVF2MaleOutfitTrayItem = 0x4A;
 static const int kVF2OutfitStoreShortStringBase = {first_short};
 static const int kVF2OutfitStoreIconImageBase = {outfit_icon_image_base(HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0)};
 static const int kVF2OutfitStoreIconCellSize = {HOLIDAY_BODY_CELL_SIZE};
@@ -3601,8 +3616,49 @@ static int VF2OutfitBodyForItem(int itemId) {{
     return index < 0 ? -1 : index % kVF2OutfitStoreBodyCount;
 }}
 
+static int VF2OutfitGenderForItem(int itemId) {{
+    int index = VF2OutfitStoreEntryIndex(itemId);
+    if (index < 0) {{
+        return -1;
+    }}
+    return index >= kVF2OutfitStoreBodyCount ? 1 : 0;
+}}
+
+static int VF2OutfitTrayItemForItem(int itemId) {{
+    int gender = VF2OutfitGenderForItem(itemId);
+    if (gender < 0) {{
+        return -1;
+    }}
+    return gender == 0 ? kVF2FemaleOutfitTrayItem : kVF2MaleOutfitTrayItem;
+}}
+
 extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
     return VF2OutfitBodyForItem(itemId);
+}}
+
+extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
+    return VF2OutfitTrayItemForItem(itemId) < 0 ? -1 : (ToolTray.IsSlotAvailable() ? 1 : 0);
+}}
+
+extern "C" int __cdecl VF2GetOutfitStoreUseCount(int itemId) {{
+    return VF2OutfitTrayItemForItem(itemId) < 0 ? -1 : 1;
+}}
+
+extern "C" bool __cdecl VF2PurchaseOutfitStoreItem(int itemId) {{
+    int body = VF2OutfitBodyForItem(itemId);
+    int trayItem = VF2OutfitTrayItemForItem(itemId);
+    if (body < 0 || trayItem < 0) {{
+        return false;
+    }}
+
+    if (trayItem == kVF2FemaleOutfitTrayItem) {{
+        InventoryManager.femaleOutfitBody = body;
+    }} else {{
+        InventoryManager.maleOutfitBody = body;
+    }}
+    ToolTray.AddItem((EInventoryItem)trayItem, 1);
+    theGameState::Get()->SaveCurrentGame();
+    return true;
 }}
 
 extern "C" int __cdecl VF2GetOutfitStorePrice(int itemId) {{
@@ -3694,6 +3750,13 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
         "visible_special_upgrade_icon_base": hex(visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))),
         "visible_special_upgrade_icon_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
         "draw_route": "shared DrawItem hook resolves outfit icons and added visible Special Upgrade icons",
+        "purchase_route": {
+            "female_tray_item": "0x49",
+            "male_tray_item": "0x4a",
+            "female_body_field": "InventoryManager+0x468",
+            "male_body_field": "InventoryManager+0x46C",
+            "helper": "_VF2PurchaseOutfitStoreItem",
+        },
     }
 
 
@@ -3745,23 +3808,41 @@ def patch_scrolling_store_scene(manifest):
     if obj.buf[purchase_raw:purchase_raw + len(expected_purchase_bytes)] != expected_purchase_bytes:
         raise RuntimeError("Unexpected HandlePurchaseItem visible-special dispatch bytes")
 
+    outfit_purchase_helper_sym = obj.append_undefined_symbol("_VF2PurchaseOutfitStoreItem")
     special_upgrade_helper_sym = obj.append_undefined_symbol("_VF2ApplyVisibleSpecialUpgrade")
-    special_purchase_payload = bytearray()
-    special_purchase_payload += b"\x8B\x86\x60\x01\x00\x00"          # mov eax,[esi+160h]
-    special_purchase_payload += b"\x8B\xC8"                          # mov ecx,eax
-    special_purchase_payload += b"\x2D\x17\x01\x00\x00"              # sub eax,117h
-    special_purchase_payload += b"\x83\xF8\x03"                      # cmp eax,3
-    special_purchase_payload += b"\x77\x0E"                          # ja normal visible purchase
-    special_purchase_payload += b"\x51"                              # push ecx ; original item id
-    special_purchase_payload += b"\xE8\x00\x00\x00\x00"              # call _VF2ApplyVisibleSpecialUpgrade
-    special_purchase_payload += b"\x83\xC4\x04"                      # add esp,4
-    return_after_purchase = purchase_sym.value + 0x31C + 0x20
-    rel_to_return = (return_after_purchase - (purchase_insert + len(special_purchase_payload) + 5)) & 0xFFFFFFFF
-    special_purchase_payload += b"\xE9" + struct.pack("<I", rel_to_return)
-    if len(special_purchase_payload) != 0x20:
+    purchase_payload = bytearray()
+    purchase_payload += b"\x8B\x86\x60\x01\x00\x00"                  # mov eax,[esi+160h]
+    purchase_payload += b"\x50"                                      # push eax ; original item id
+    purchase_payload += b"\xE8\x00\x00\x00\x00"                      # call _VF2PurchaseOutfitStoreItem
+    purchase_payload += b"\x83\xC4\x04"                              # add esp,4
+    purchase_payload += b"\x84\xC0"                                  # test al,al
+    purchase_payload += b"\x74\x05"                                  # jz visible special purchase test
+    outfit_return_jmp_off = len(purchase_payload)
+    purchase_payload += b"\xE9\x00\x00\x00\x00"                      # jmp post-save cleanup; helper saved
+    if len(purchase_payload) != 0x18:
+        raise RuntimeError("Unexpected outfit purchase payload length")
+
+    special_payload_start = len(purchase_payload)
+    purchase_payload += b"\x8B\x86\x60\x01\x00\x00"                  # mov eax,[esi+160h]
+    purchase_payload += b"\x8B\xC8"                                  # mov ecx,eax
+    purchase_payload += b"\x2D\x17\x01\x00\x00"                      # sub eax,117h
+    purchase_payload += b"\x83\xF8\x03"                              # cmp eax,3
+    purchase_payload += b"\x77\x0E"                                  # ja normal visible purchase
+    purchase_payload += b"\x51"                                      # push ecx ; original item id
+    purchase_payload += b"\xE8\x00\x00\x00\x00"                      # call _VF2ApplyVisibleSpecialUpgrade
+    purchase_payload += b"\x83\xC4\x04"                              # add esp,4
+    special_return_jmp_off = len(purchase_payload)
+    purchase_payload += b"\xE9\x00\x00\x00\x00"                      # jmp post-save cleanup; helper saved
+    if len(purchase_payload) - special_payload_start != 0x20:
         raise RuntimeError("Unexpected visible Special Upgrades purchase payload length")
-    obj.insert_section_bytes(purchase_sym.section, purchase_insert, bytes(special_purchase_payload))
-    obj.append_relocation(purchase_sym.section, purchase_insert + 20, special_upgrade_helper_sym, IMAGE_REL_I386_REL32)
+    return_after_purchase = purchase_sym.value + 0x31C + len(purchase_payload)
+    for jmp_off in (outfit_return_jmp_off, special_return_jmp_off):
+        rel_to_return = (return_after_purchase - (purchase_insert + jmp_off + 5)) & 0xFFFFFFFF
+        purchase_payload[jmp_off + 1 : jmp_off + 5] = struct.pack("<I", rel_to_return)
+
+    obj.insert_section_bytes(purchase_sym.section, purchase_insert, bytes(purchase_payload))
+    obj.append_relocation(purchase_sym.section, purchase_insert + 8, outfit_purchase_helper_sym, IMAGE_REL_I386_REL32)
+    obj.append_relocation(purchase_sym.section, purchase_insert + special_payload_start + 20, special_upgrade_helper_sym, IMAGE_REL_I386_REL32)
 
     obj.write(PATCHED / "ScrollingStoreScene.obj")
     lock_base = lock_image_id_for(0)
@@ -4061,6 +4142,17 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
                 "thumb_top": "this+0x108",
                 "thumb_height": "this+0x110",
                 "thumb_dragging": "this+0x114",
+            },
+        },
+        "outfit_store_purchase": {
+            "status": "generated Clothing rows call a direct purchase helper after normal coin charge",
+            "purchase_hook": "?HandlePurchaseItem@CScrollingStoreScene@@AAEXXZ + 0x1AD",
+            "helper": "_VF2PurchaseOutfitStoreItem",
+            "item_bases": {gender: hex(base) for gender, base in OUTFIT_STORE_GENDER_ITEM_BASES.items()},
+            "tray_items": {"female": "0x49", "male": "0x4a"},
+            "inventory_fields": {
+                "female_body_value": "InventoryManager+0x468",
+                "male_body_value": "InventoryManager+0x46C",
             },
         },
         "visible_special_upgrades": {

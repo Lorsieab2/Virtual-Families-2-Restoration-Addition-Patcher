@@ -206,3 +206,21 @@
   Holiday body grids to stock row `49` if a per-frame image cannot be loaded,
   avoiding a vanilla `DrawScaled(... row=50..53 ...)` path. The native
   `CAnimManager` body lookup remains unpatched in normal builds.
+
+## 2026-07-03 - Outfit Store Purchase And Action Icons
+
+- The generated Clothing rows were visible but did not enter the tool tray
+  because `CScrollingStoreScene::HandlePurchaseItem` only calls the native
+  inventory/tray path for stock item IDs below `0xE1`. The synthetic outfit
+  rows at `0x400-0x435` and `0x440-0x475` skipped all native purchase branches
+  after the coin charge.
+- Stock outfit purchases convert clothing rows into tray item `0x49` for
+  female outfits and `0x4A` for male outfits, with body values stored at
+  `InventoryManager+0x468` and `InventoryManager+0x46C`. B69 mirrors that
+  route through `_VF2PurchaseOutfitStoreItem` and hooks
+  `CScrollingStoreScene::HandlePurchaseItem + 0x1AD` only for recognized
+  generated outfit IDs.
+- Store icons now come from the matching row's last action-sheet frame:
+  `female_actions00.png` or `male_actions00.png`, 91 px cell column `14`.
+  Base rows use the stock 50-row action sheets; Holiday rows use the expanded
+  B56 fallback sheet rows `50-53` when the current output only has stock rows.
