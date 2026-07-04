@@ -523,6 +523,14 @@
   `VF2_VANILLA_RUNTIME_DIR` and `work/vanilla_runtime_payload`. Older modded
   output folders are no longer automatic fallback sources; they require the
   explicit diagnostic opt-in `VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK=1`.
+- The fixed official B93 GitHub release asset is
+  `VF2-Mobile-Furniture-With-Island-Events-B93-Holiday-Outfit-Body-Apply.FIXED.zip`
+  on tag `B93`, size `339,363,043`, SHA-256
+  `017f8223038e666939d8b9ccaf7c6a4986b5f920dcda8444db5fac6c4acd3abc`.
+  Its release-root folders are `Assets/`, `Images/`, `OptionalVisualMods/`,
+  `Original Virtual Families 2 Assets/`, and `Sounds/`. Future builds should
+  preserve this package shape; `ReferenceAssets/` and `Microsoft.VC90.CRT/`
+  are legacy package folders and should not be reintroduced into release roots.
 
 ## 2026-07-03 - Stock Collections and Runtime Geometry Payload Rollback
 

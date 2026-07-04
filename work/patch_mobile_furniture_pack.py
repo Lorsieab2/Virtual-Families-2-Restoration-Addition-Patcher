@@ -77,6 +77,22 @@ VANILLA_RUNTIME_REQUIRED_DIRS = (
     "Images",
     "Sounds",
 )
+VANILLA_RUNTIME_SEED_DIRS = VANILLA_RUNTIME_REQUIRED_DIRS
+OFFICIAL_B93_RELEASE_REQUIRED_DIRS = (
+    "Assets",
+    "Images",
+    "OptionalVisualMods",
+    "Original Virtual Families 2 Assets",
+    "Sounds",
+)
+OFFICIAL_B93_RELEASE_TAG = "B93"
+OFFICIAL_B93_RELEASE_ASSET = "VF2-Mobile-Furniture-With-Island-Events-B93-Holiday-Outfit-Body-Apply.FIXED.zip"
+OFFICIAL_B93_RELEASE_SHA256 = "017f8223038e666939d8b9ccaf7c6a4986b5f920dcda8444db5fac6c4acd3abc"
+OFFICIAL_B93_RELEASE_SIZE = 339363043
+REMOVED_LEGACY_PACKAGE_DIRS = (
+    "ReferenceAssets",
+    "Microsoft.VC90.CRT",
+)
 VANILLA_RUNTIME_OPTIONAL_FILES = (
     "Readme.txt",
 )
@@ -1874,7 +1890,7 @@ def sync_vanilla_runtime_payload(manifest):
     copied_files = []
     copied_dirs = []
     missing_root_files = []
-    for dirname in VANILLA_RUNTIME_REQUIRED_DIRS:
+    for dirname in VANILLA_RUNTIME_SEED_DIRS:
         src = source / dirname
         dst = OUT / dirname
         shutil.copytree(src, dst, dirs_exist_ok=True)
@@ -1904,7 +1920,7 @@ def sync_vanilla_runtime_payload(manifest):
         "status": "seeded from vanilla asset payload",
         "source": str(source),
         "required_files": list(VANILLA_RUNTIME_REQUIRED_FILES),
-        "required_dirs": list(VANILLA_RUNTIME_REQUIRED_DIRS),
+        "required_dirs": list(VANILLA_RUNTIME_SEED_DIRS),
         "copied_files": copied_files,
         "copied_dirs": copied_dirs,
         "missing_root_files": missing_root_files,
@@ -2291,6 +2307,27 @@ def sync_vc90_crt_private_assembly(manifest):
         "target_dir": str(target_dir),
         "manifest": str(manifest_path),
         "copied": copied,
+    }
+
+
+def remove_legacy_package_dirs(manifest):
+    removed = []
+    for dirname in REMOVED_LEGACY_PACKAGE_DIRS:
+        target = OUT / dirname
+        if target.is_dir():
+            file_count = count_files(target)
+            shutil.rmtree(target)
+            removed.append({"path": str(target), "files": file_count})
+    manifest["official_b93_package_shape"] = {
+        "status": "validated after legacy cleanup",
+        "release_tag": OFFICIAL_B93_RELEASE_TAG,
+        "release_asset": OFFICIAL_B93_RELEASE_ASSET,
+        "release_sha256": OFFICIAL_B93_RELEASE_SHA256,
+        "release_size": OFFICIAL_B93_RELEASE_SIZE,
+        "required_top_level_dirs": list(OFFICIAL_B93_RELEASE_REQUIRED_DIRS),
+        "removed_legacy_dirs": list(REMOVED_LEGACY_PACKAGE_DIRS),
+        "removed": removed,
+        "note": "Future builds preserve the fixed official B93 release folder shape. Reference-only invisible furniture folders were moved out of release packages; editable dumps belong in Downloads, not build roots.",
     }
 
 
@@ -7929,7 +7966,7 @@ def validate_runtime_payload_contract(manifest):
     for filename in VANILLA_RUNTIME_REQUIRED_FILES:
         if not (OUT / filename).is_file():
             errors.append(f"missing required runtime file: {filename}")
-    for dirname in VANILLA_RUNTIME_REQUIRED_DIRS:
+    for dirname in OFFICIAL_B93_RELEASE_REQUIRED_DIRS:
         if not (OUT / dirname).is_dir():
             errors.append(f"missing required runtime directory: {dirname}")
 
@@ -7949,13 +7986,9 @@ def validate_runtime_payload_contract(manifest):
         if not (OUT / filename).is_file():
             errors.append(f"missing required desktop runtime DLL: {filename}")
 
-    vc90_dir = OUT / VC90_CRT_ASSEMBLY_NAME
-    vc90_manifest = vc90_dir / f"{VC90_CRT_ASSEMBLY_NAME}.manifest"
-    if not vc90_manifest.is_file():
-        errors.append(f"missing VC90 private assembly manifest: {VC90_CRT_ASSEMBLY_NAME}/{vc90_manifest.name}")
-    for filename in VC90_CRT_DLL_NAMES:
-        if not (vc90_dir / filename).is_file():
-            errors.append(f"missing VC90 private assembly DLL: {VC90_CRT_ASSEMBLY_NAME}/{filename}")
+    for dirname in REMOVED_LEGACY_PACKAGE_DIRS:
+        if (OUT / dirname).exists():
+            errors.append(f"legacy package directory should not be present in official B93-shaped builds: {dirname}")
 
     if errors:
         raise RuntimeError("Runtime payload contract failed:\n- " + "\n- ".join(errors))
@@ -7965,10 +7998,13 @@ def validate_runtime_payload_contract(manifest):
         "images_file_count": image_count,
         "sounds_file_count": sound_count,
         "required_root_files": list(VANILLA_RUNTIME_REQUIRED_FILES),
+        "required_root_dirs": list(OFFICIAL_B93_RELEASE_REQUIRED_DIRS),
         "required_images": list(RUNTIME_REQUIRED_IMAGE_FILES),
         "required_dlls": list(DESKTOP_RUNTIME_DLL_NAMES),
-        "vc90_private_assembly": VC90_CRT_ASSEMBLY_NAME,
-        "release_note": "B79-B82 could produce partial runtime folders; this gate prevents publishing a folder or ZIP without Images, Sounds, DLLs, or VC90 files needed by extracted builds.",
+        "official_b93_release_asset": OFFICIAL_B93_RELEASE_ASSET,
+        "official_b93_release_sha256": OFFICIAL_B93_RELEASE_SHA256,
+        "removed_legacy_dirs": list(REMOVED_LEGACY_PACKAGE_DIRS),
+        "release_note": "The fixed official B93 ZIP is the package baseline. Future builds must preserve its runtime/support folder shape and must not reintroduce legacy ReferenceAssets or Microsoft.VC90.CRT folders.",
     }
 
 
@@ -8043,7 +8079,6 @@ def main():
     else:
         sync_original_villager_sprite_sheets(manifest)
     sync_desktop_runtime_dlls(manifest)
-    sync_vc90_crt_private_assembly(manifest)
     sync_outfit_store_icon_art(manifest)
     sync_visible_special_upgrade_icon_art(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:
@@ -8066,7 +8101,6 @@ def main():
     sync_vf3_tv_animation_sheets(manifest)
     sync_invisible_outdoor_sprites(manifest)
     sync_transparent_base_furniture_sprites(manifest)
-    sync_invisible_furniture_reference_sets(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
         sync_separated_villager_sheets(manifest)
         manifest["holiday_body_types"] = {
@@ -8090,6 +8124,7 @@ def main():
     write_internal_workings_summary(manifest)
     validate_vf3_tv_animation_contract(manifest)
     validate_vf3_tv_behavior_contract(manifest)
+    remove_legacy_package_dirs(manifest)
     validate_runtime_payload_contract(manifest)
     (OUT / "patch-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     print(json.dumps(manifest, indent=2))

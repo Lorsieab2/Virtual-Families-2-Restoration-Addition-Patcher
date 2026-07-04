@@ -481,8 +481,8 @@ class RuntimePayloadContractTests(unittest.TestCase):
             patcher.RUNTIME_MIN_SOUND_FILE_COUNT = old_min_sounds
 
     def write_minimal_runtime_payload(self, root):
-        (root / "Images").mkdir(parents=True)
-        (root / "Sounds").mkdir(parents=True)
+        for dirname in patcher.OFFICIAL_B93_RELEASE_REQUIRED_DIRS:
+            (root / dirname).mkdir(parents=True)
         for filename in patcher.VANILLA_RUNTIME_REQUIRED_FILES:
             (root / filename).write_bytes(b"x")
         for filename in patcher.RUNTIME_REQUIRED_IMAGE_FILES:
@@ -490,11 +490,6 @@ class RuntimePayloadContractTests(unittest.TestCase):
         (root / "Sounds" / "sound00.wav").write_bytes(b"x")
         for filename in patcher.DESKTOP_RUNTIME_DLL_NAMES:
             (root / filename).write_bytes(b"x")
-        vc90 = root / patcher.VC90_CRT_ASSEMBLY_NAME
-        vc90.mkdir()
-        (vc90 / f"{patcher.VC90_CRT_ASSEMBLY_NAME}.manifest").write_text("<assembly/>", encoding="ascii")
-        for filename in patcher.VC90_CRT_DLL_NAMES:
-            (vc90 / filename).write_bytes(b"x")
 
     def test_sync_accepts_clean_asset_payload_without_root_launcher_files(self):
         old_out = patcher.OUT

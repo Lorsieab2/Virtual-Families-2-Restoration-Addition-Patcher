@@ -526,6 +526,14 @@
 - This preserves runtime packaging fixes and carried-forward additive assets
   while still refreshing base-game `Images` and `Sounds` from the clean
   workspace payload.
+- As of the fixed official B93 release, future package roots must preserve the
+  B93 ZIP shape exactly: top-level `Assets/`, `Images/`,
+  `OptionalVisualMods/`, `Original Virtual Families 2 Assets/`, `Sounds/`, the
+  required root launcher/config/DLL files, and no legacy `ReferenceAssets/` or
+  `Microsoft.VC90.CRT/` folders. The official release asset is
+  `VF2-Mobile-Furniture-With-Island-Events-B93-Holiday-Outfit-Body-Apply.FIXED.zip`
+  on tag `B93`, SHA-256
+  `017f8223038e666939d8b9ccaf7c6a4986b5f920dcda8444db5fac6c4acd3abc`.
 
 ## Next Build Contract - Offline Patch Bundle Export
 

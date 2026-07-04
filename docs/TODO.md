@@ -55,18 +55,17 @@
   Server Authentication only or rejected by signtool, so B83/B84/B92 could not be
   signed locally.
 - Before each release ZIP upload, verify the archive contains the EXE, the full
-  seeded vanilla `Images/` and `Sounds/` payloads plus additive overlays,
+  official B93 top-level folder shape: `Assets/`, `Images/`,
+  `OptionalVisualMods/`, `Original Virtual Families 2 Assets/`, `Sounds/`,
   `ldw.ini`, `wc.dat`, `icon.bmp`, the six required top-level runtime DLLs
   (`SDL2.dll`, `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`,
-  `zlib1.dll`, `fmod.dll`), and the `Microsoft.VC90.CRT/` private assembly
-  folder required by the packaged `SDL2_image.dll`.
+  `zlib1.dll`, `fmod.dll`), and no legacy `ReferenceAssets/` or
+  `Microsoft.VC90.CRT/` folders.
 - Keep using `work/vanilla_runtime_payload` as the canonical clean base asset
-  seed for future builds. Before the next packaged release, add or configure
-  the separate launcher/runtime files that the supplied clean asset folder does
-  not contain: `ldw.ini`, `wc.dat`, `icon.bmp`, desktop DLLs, and the VC90
-  private assembly. New builds should seed from the most recent previous
-  completed B-build first, then overlay this clean asset payload and the
-  regenerated additive changes.
+  seed for future builds, but package shape comes from the fixed official B93
+  release ZIP. New builds should seed from the most recent previous completed
+  B-build first, then overlay this clean asset payload and regenerated
+  additive changes.
 
 ## Research Leads
 
@@ -137,9 +136,9 @@
   instead of saying "There's no TV"; also verify base TVs still behave
   normally and the release folder contains `Assets/TVFlatScreenStd.png.fmap`
   plus the three generated VF3 TV fmaps.
-- Launch-test B82 runtime package: verify the extracted release starts from a
-  clean folder with only bundled files, including the `Microsoft.VC90.CRT/`
-  private assembly; then re-run the B81 VF3 TV recognition checks.
+- Launch-test post-B93 runtime packages: verify the extracted release starts
+  from a clean folder with the fixed B93 top-level folder/file shape; then
+  re-run the B81 VF3 TV recognition checks.
 - In-game test B93 Clothing/outfit behavior: verify opening the Clothing
   section no longer crashes, all generated outfit rows display their
   last-action-frame icons, female rows apply only to female villagers, male rows
