@@ -600,3 +600,21 @@
 - Mobile visible purchases should be modeled as direct upgrade/effect helpers:
   Brokerage Account, Food Club, Health Plan, and Lucky Rock use normal store
   rows/icons plus explicit helper state rather than IAP UI in the PC port.
+
+## 2026-07-04 - Clean Base Asset Payload Source
+
+- `work/vanilla_runtime_payload` has been populated from the user-supplied
+  clean base-game asset folder
+  `C:\Users\Owner\Downloads\Originnal Virtual Families 2 Assets`. Its
+  `originalimages` and `originalsounds` folders are
+  normalized to build-local `Images` and `Sounds`; the supplied `Assets` folder
+  is kept in the workspace for reference but normal builds still seed only
+  `Images` and `Sounds`.
+- `work/patch_mobile_furniture_pack.py` now accepts a clean asset payload as
+  the canonical seed source even when launcher root files (`ldw.ini`, `wc.dat`,
+  `icon.bmp`) are not present. Final release validation still requires those
+  files, the desktop DLLs, and the VC90 private assembly before a package can
+  be considered runnable.
+- Future builds should use this workspace-local clean payload, not external
+  "official copy" folders or old modded output folders, for base-game art and
+  sound seeding.

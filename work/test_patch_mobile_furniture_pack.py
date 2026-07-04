@@ -439,6 +439,34 @@ class RuntimePayloadContractTests(unittest.TestCase):
         for filename in patcher.VC90_CRT_DLL_NAMES:
             (vc90 / filename).write_bytes(b"x")
 
+    def test_sync_accepts_clean_asset_payload_without_root_launcher_files(self):
+        old_out = patcher.OUT
+        old_sources = patcher.VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp = Path(tmp)
+                source = tmp / "source"
+                out = tmp / "out"
+                patcher.OUT = out
+                patcher.VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS = (source,)
+                (source / "Images").mkdir(parents=True)
+                (source / "Sounds").mkdir(parents=True)
+                (source / "Images" / "loading.jpg").write_bytes(b"image")
+                (source / "Sounds" / "button_click_switch.ogg").write_bytes(b"sound")
+
+                manifest = {}
+                patcher.sync_vanilla_runtime_payload(manifest)
+
+                self.assertTrue((out / "Images" / "loading.jpg").is_file())
+                self.assertTrue((out / "Sounds" / "button_click_switch.ogg").is_file())
+                self.assertEqual(
+                    manifest["base_runtime_payload"]["missing_root_files"],
+                    list(patcher.VANILLA_RUNTIME_REQUIRED_FILES),
+                )
+        finally:
+            patcher.OUT = old_out
+            patcher.VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS = old_sources
+
     def test_accepts_complete_runtime_payload(self):
         def run(root):
             manifest = {}

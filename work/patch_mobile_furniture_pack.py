@@ -1776,9 +1776,7 @@ def find_vanilla_runtime_payload_source():
     for root in vanilla_runtime_payload_source_dirs():
         if not root.is_dir():
             continue
-        if all((root / filename).is_file() for filename in VANILLA_RUNTIME_REQUIRED_FILES) and all(
-            (root / dirname).is_dir() for dirname in VANILLA_RUNTIME_REQUIRED_DIRS
-        ):
+        if all((root / dirname).is_dir() for dirname in VANILLA_RUNTIME_REQUIRED_DIRS):
             return root
     return None
 
@@ -1787,12 +1785,14 @@ def sync_vanilla_runtime_payload(manifest):
     source = find_vanilla_runtime_payload_source()
     if source is None:
         raise RuntimeError(
-            "Missing vanilla VF2 runtime payload source. Set VF2_VANILLA_RUNTIME_DIR "
-            "to a complete runtime folder containing Images, Sounds, ldw.ini, wc.dat, and icon.bmp."
+            "Missing vanilla VF2 asset payload source. Set VF2_VANILLA_RUNTIME_DIR "
+            "to a clean folder containing Images and Sounds, or populate "
+            "work/vanilla_runtime_payload from the original base-game assets."
         )
 
     copied_files = []
     copied_dirs = []
+    missing_root_files = []
     for dirname in VANILLA_RUNTIME_REQUIRED_DIRS:
         src = source / dirname
         dst = OUT / dirname
@@ -1807,6 +1807,8 @@ def sync_vanilla_runtime_payload(manifest):
     for filename in VANILLA_RUNTIME_REQUIRED_FILES + VANILLA_RUNTIME_OPTIONAL_FILES:
         src = source / filename
         if not src.is_file():
+            if filename in VANILLA_RUNTIME_REQUIRED_FILES:
+                missing_root_files.append(filename)
             continue
         dst = OUT / filename
         shutil.copy2(src, dst)
@@ -1818,13 +1820,14 @@ def sync_vanilla_runtime_payload(manifest):
         })
 
     manifest["base_runtime_payload"] = {
-        "status": "seeded from vanilla runtime folder",
+        "status": "seeded from vanilla asset payload",
         "source": str(source),
         "required_files": list(VANILLA_RUNTIME_REQUIRED_FILES),
         "required_dirs": list(VANILLA_RUNTIME_REQUIRED_DIRS),
         "copied_files": copied_files,
         "copied_dirs": copied_dirs,
-        "runtime_note": "Every release folder must keep the full vanilla Images and Sounds payload beside the patched EXE; additive art is overlaid after this seed step. Do not seed a full external Assets payload in normal builds.",
+        "missing_root_files": missing_root_files,
+        "runtime_note": "Every release folder must keep the full clean vanilla Images and Sounds payload beside the patched EXE; additive art is overlaid after this seed step. Root launcher files are copied when present and are still required by final release validation.",
     }
 
 

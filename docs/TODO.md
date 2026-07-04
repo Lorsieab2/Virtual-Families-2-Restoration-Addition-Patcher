@@ -55,11 +55,13 @@
   (`SDL2.dll`, `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`,
   `zlib1.dll`, `fmod.dll`), and the `Microsoft.VC90.CRT/` private assembly
   folder required by the packaged `SDL2_image.dll`.
-- Populate `work/vanilla_runtime_payload` from a clean base-game VF2 runtime
-  before the next packaged release, or set `VF2_VANILLA_RUNTIME_DIR` to that
-  clean runtime folder. Normal builds no longer auto-seed from older modded
-  output folders; `VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK=1` is only for
-  explicit diagnostics.
+- Keep using `work/vanilla_runtime_payload` as the canonical clean base asset
+  seed for future builds. Before the next packaged release, add or configure
+  the separate launcher/runtime files that the supplied clean asset folder does
+  not contain: `ldw.ini`, `wc.dat`, `icon.bmp`, desktop DLLs, and the VC90
+  private assembly. Normal builds no longer auto-seed from older modded output
+  folders; `VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK=1` is only for explicit
+  diagnostics.
 
 ## Research Leads
 
