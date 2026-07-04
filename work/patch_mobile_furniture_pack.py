@@ -2,6 +2,7 @@ from pathlib import Path
 import csv
 import json
 import os
+import re
 import shutil
 import struct
 import sys
@@ -15,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC_OBJS = ROOT / "work" / "desktop_obj_files"
 PATCHED = ROOT / "work" / "patched_mobile_furniture_pack_objs"
 OUT = Path(os.environ.get("VF2_PATCH_OUT", ROOT / "outputs" / "VF2-Mobile-Additive-Furniture-Pack"))
+PREVIOUS_BUILD_ENV = "VF2_PREVIOUS_BUILD_DIR"
 ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "1") == "1"
 # Debugger/editor hooks have repeatedly crashed during save-load and mouse
 # input. Keep normal builds stock; use this only for isolated debugger research.
@@ -61,6 +63,7 @@ FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Isla
 VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS = (
     ROOT / "work" / "vanilla_runtime_payload",
 )
+PREVIOUS_BUILD_OUTPUT_GLOB = "VF2-Mobile-Furniture-With-Island-Events-B*"
 LEGACY_OUTPUT_RUNTIME_PAYLOAD_SOURCE_DIRS = (
     ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B89-Holiday-Body-Link-Fallback",
     ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B83-Full-Runtime-Payload",
@@ -1732,6 +1735,84 @@ def count_files(root):
     if not root.is_dir():
         return 0
     return sum(1 for path in root.rglob("*") if path.is_file())
+
+
+def build_number_from_name(path):
+    match = re.search(r"-B(\d+)(?:-|$)", path.name)
+    return int(match.group(1)) if match else None
+
+
+def previous_build_source_dirs():
+    env_source = os.environ.get(PREVIOUS_BUILD_ENV)
+    roots = []
+    if env_source:
+        roots.append(Path(env_source))
+
+    outputs = ROOT / "outputs"
+    out_resolved = OUT.resolve()
+    out_build_number = build_number_from_name(OUT)
+    if outputs.is_dir():
+        candidates = []
+        for path in outputs.glob(PREVIOUS_BUILD_OUTPUT_GLOB):
+            if not path.is_dir():
+                continue
+            try:
+                if path.resolve() == out_resolved:
+                    continue
+            except OSError:
+                continue
+            build_number = build_number_from_name(path)
+            if build_number is None:
+                continue
+            if out_build_number is not None and build_number >= out_build_number:
+                continue
+            candidates.append((build_number, path.stat().st_mtime, path))
+        roots.extend(path for _build_number, _mtime, path in sorted(candidates, reverse=True))
+
+    unique = []
+    seen = set()
+    for root in roots:
+        key = str(root).lower()
+        if key in seen:
+            continue
+        unique.append(root)
+        seen.add(key)
+    return unique
+
+
+def find_previous_build_source():
+    for root in previous_build_source_dirs():
+        if root.is_dir() and (root / "Images").is_dir() and (root / "Sounds").is_dir():
+            return root
+    return None
+
+
+def seed_from_previous_build(manifest):
+    source = find_previous_build_source()
+    if source is None:
+        manifest["previous_build_seed"] = {
+            "status": "not found",
+            "searched": [str(root) for root in previous_build_source_dirs()],
+            "runtime_note": "No previous build folder was available; the build will seed from clean base assets instead.",
+        }
+        return
+
+    copied = []
+    for entry in source.iterdir():
+        target = OUT / entry.name
+        if entry.is_dir():
+            shutil.copytree(entry, target, dirs_exist_ok=True)
+            copied.append({"name": entry.name, "kind": "dir", "files": count_files(target)})
+        else:
+            shutil.copy2(entry, target)
+            copied.append({"name": entry.name, "kind": "file", "bytes": target.stat().st_size})
+
+    manifest["previous_build_seed"] = {
+        "status": "seeded from previous build",
+        "source": str(source),
+        "copied": copied,
+        "runtime_note": "Newest builds start from the most recent previous B-build, then overlay clean base assets and regenerated additive changes.",
+    }
 
 
 def vanilla_runtime_payload_source_dirs():
@@ -7909,6 +7990,7 @@ def main():
             for i, (name, donor, list_name, path) in enumerate(ITEMS)
         ]
     }
+    seed_from_previous_build(manifest)
     sync_vanilla_runtime_payload(manifest)
     patch_furniture_manager(manifest)
     patch_added_furniture_click_aliases(manifest)

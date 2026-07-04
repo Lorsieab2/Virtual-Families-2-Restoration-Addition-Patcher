@@ -618,3 +618,18 @@
 - Future builds should use this workspace-local clean payload, not external
   "official copy" folders or old modded output folders, for base-game art and
   sound seeding.
+
+## 2026-07-04 - Previous Build Baseline Rule
+
+- Future B-builds should start by copying the most recent previous completed
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B*` folder into the new
+  output folder, then overlay the workspace clean base asset payload and the
+  regenerated additive/native changes.
+- `work/patch_mobile_furniture_pack.py` now implements this with
+  `seed_from_previous_build()`. If `VF2_PATCH_OUT` names a B-build, the source
+  selector chooses the highest lower B-number; otherwise it chooses the highest
+  available B-build. `VF2_PREVIOUS_BUILD_DIR` can override the source when a
+  specific previous folder should be used.
+- This rule preserves runtime packaging fixes, DLLs, launcher files, and
+  additive assets from the last known build while still refreshing clean
+  base-game `Images` and `Sounds` from `work/vanilla_runtime_payload`.

@@ -514,3 +514,15 @@
   110 additive furniture/store records, Turtle and Hamster pet additions,
   mobile Island events enabled by default, and holiday body values `50-53`
   remaining opt-in until the folder-backed renderer is stable.
+
+## Next Build Contract - Previous Build Baseline
+
+- New B-build folders must seed from the most recent previous completed
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B*` build before applying
+  clean base assets and regenerated additive changes.
+- `work/patch_mobile_furniture_pack.py` chooses the highest lower B-number when
+  `VF2_PATCH_OUT` names a B-build, or the highest available B-build otherwise.
+  `VF2_PREVIOUS_BUILD_DIR` can override the source for explicit rebuilds.
+- This preserves runtime packaging fixes and carried-forward additive assets
+  while still refreshing base-game `Images` and `Sounds` from the clean
+  workspace payload.

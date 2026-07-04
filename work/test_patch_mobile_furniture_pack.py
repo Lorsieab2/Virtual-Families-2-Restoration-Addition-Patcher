@@ -384,6 +384,63 @@ class HolidayOrnamentGateTests(unittest.TestCase):
 
 
 class RuntimePayloadContractTests(unittest.TestCase):
+    def test_previous_build_source_prefers_highest_lower_b_number(self):
+        old_root = patcher.ROOT
+        old_out = patcher.OUT
+        old_env = patcher.os.environ.pop(patcher.PREVIOUS_BUILD_ENV, None)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp = Path(tmp)
+                patcher.ROOT = tmp
+                outputs = tmp / "outputs"
+                outputs.mkdir()
+                for name in (
+                    "VF2-Mobile-Furniture-With-Island-Events-B92-Older",
+                    "VF2-Mobile-Furniture-With-Island-Events-B93-Previous",
+                    "VF2-Mobile-Furniture-With-Island-Events-B94-Current",
+                ):
+                    (outputs / name).mkdir()
+                patcher.OUT = outputs / "VF2-Mobile-Furniture-With-Island-Events-B94-Current"
+
+                roots = patcher.previous_build_source_dirs()
+
+                self.assertEqual(roots[0].name, "VF2-Mobile-Furniture-With-Island-Events-B93-Previous")
+        finally:
+            patcher.ROOT = old_root
+            patcher.OUT = old_out
+            if old_env is not None:
+                patcher.os.environ[patcher.PREVIOUS_BUILD_ENV] = old_env
+
+    def test_seed_from_previous_build_copies_runtime_folder(self):
+        old_root = patcher.ROOT
+        old_out = patcher.OUT
+        old_env = patcher.os.environ.pop(patcher.PREVIOUS_BUILD_ENV, None)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp = Path(tmp)
+                patcher.ROOT = tmp
+                outputs = tmp / "outputs"
+                previous = outputs / "VF2-Mobile-Furniture-With-Island-Events-B93-Previous"
+                out = outputs / "VF2-Mobile-Furniture-With-Island-Events-B94-Current"
+                (previous / "Images").mkdir(parents=True)
+                (previous / "Sounds").mkdir()
+                (previous / "Images" / "previous.png").write_bytes(b"image")
+                (previous / "Sounds" / "previous.ogg").write_bytes(b"sound")
+                (previous / "patch-manifest.json").write_text("{}", encoding="ascii")
+                patcher.OUT = out
+
+                manifest = {}
+                patcher.seed_from_previous_build(manifest)
+
+                self.assertTrue((out / "Images" / "previous.png").is_file())
+                self.assertTrue((out / "Sounds" / "previous.ogg").is_file())
+                self.assertEqual(manifest["previous_build_seed"]["source"], str(previous))
+        finally:
+            patcher.ROOT = old_root
+            patcher.OUT = old_out
+            if old_env is not None:
+                patcher.os.environ[patcher.PREVIOUS_BUILD_ENV] = old_env
+
     def test_vanilla_runtime_sources_do_not_use_modded_outputs_by_default(self):
         old_env = patcher.os.environ.pop("VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK", None)
         try:

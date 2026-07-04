@@ -59,9 +59,9 @@
   seed for future builds. Before the next packaged release, add or configure
   the separate launcher/runtime files that the supplied clean asset folder does
   not contain: `ldw.ini`, `wc.dat`, `icon.bmp`, desktop DLLs, and the VC90
-  private assembly. Normal builds no longer auto-seed from older modded output
-  folders; `VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK=1` is only for explicit
-  diagnostics.
+  private assembly. New builds should seed from the most recent previous
+  completed B-build first, then overlay this clean asset payload and the
+  regenerated additive changes.
 
 ## Research Leads
 
