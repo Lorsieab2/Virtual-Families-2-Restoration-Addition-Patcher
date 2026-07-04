@@ -304,6 +304,30 @@
   This keeps the click path limited to active families while allowing every
   active generation to use the existing eviction handler.
 
+## 2026-07-04 - Mobile Settings Evict Parity
+
+- Mobile VF2 1.7.16 keeps native symbols for the same eviction path:
+  `_ZN16theOptionsDialog11EvictFamilyEv` at `0x1087D0`,
+  `_ZN11CFamilyTree11EvictFamilyEv` at `0x1C3B10`,
+  `_ZN11CFamilyTree5ResetEv` at `0x1C3150`, and
+  `_Z14ShowMessageBoxP8ldwScene8StringIdib` at `0x121070` in
+  `work/apk_native/lib_x86_libVirtualFamilies2.so`.
+- The mobile Settings constructor
+  `_ZN16theOptionsDialogC1EPc15DialogColorEnum` (`0x1074A0`) contains the
+  first-generation gate before creating the Evict button. The key bytes at
+  `0x10784B` are `83 38 00; 0F 85 CE 00 00 00; 83 78 04 01;
+  0F 8F C4 00 00 00`, which skip setup unless the family-tree state is active
+  and the generation field at `+4` is `<= 1`.
+- Mobile `theOptionsDialog::EvictFamily()` calls the family-tree evict/reset
+  path, resets the villager manager, sets `CAdoptionScene+0x1C` to `2`, and
+  writes scene `6` into the game-state scene field. This matches the desktop
+  code shape already present in `theOptionsDialog.obj`; the mobile difference
+  is visibility policy, not a separate eviction routine.
+- For PC patches, keep the click handler native. The safe mod point is the
+  Settings constructor gate: vanilla/mobile parity is first-generation-only,
+  while the B74 any-generation mod should only alter the gate and leave
+  `theOptionsDialog::EvictFamily()` / `CFamilyTree::EvictFamily()` untouched.
+
 ## 2026-07-03 - Independent Generated Outfit Tray Items
 
 - Stock clothing item evidence and `theMainScene::HandleMouseDown` show

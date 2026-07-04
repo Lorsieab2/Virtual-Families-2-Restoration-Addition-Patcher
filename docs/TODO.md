@@ -191,6 +191,10 @@
   generation, open Settings, press Evict, verify the existing
   confirmation/removal flow removes all current family members, returns to the
   adoption/new-person path, and remains stable across save-load.
+- Settings Evict research follow-up: fully resolve the mobile PLT/control-ID
+  mapping for `theOptionsDialog::HandleMessage` so the first-generation mobile
+  confirmation click can be documented down to the exact button ID as well as
+  the already-confirmed native `EvictFamily` handler path.
 - In-game test B67 visible Special Upgrade icons: verify Brokerage Account,
   Food Club, Health Plan, and Lucky Rock draw their icon graphics in the
   Special Upgrades list while purchase/apply behavior remains unchanged.

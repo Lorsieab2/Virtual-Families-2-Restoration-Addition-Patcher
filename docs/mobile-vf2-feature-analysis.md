@@ -504,6 +504,30 @@ Store implementation:
 - The old hidden-IAP dialog route is bypassed because calling it from visible
   desktop store rows caused blank/crashing dialogs.
 
+## Settings Evict Button
+
+Mobile VF2 implements Evict as a normal Settings-dialog control, gated by
+family generation:
+
+- Constructor symbol:
+  `_ZN16theOptionsDialogC1EPc15DialogColorEnum` at `0x1074A0` in
+  `work/apk_native/lib_x86_libVirtualFamilies2.so`
+- Button action symbol:
+  `_ZN16theOptionsDialog11EvictFamilyEv` at `0x1087D0`
+- Family-tree action symbol:
+  `_ZN11CFamilyTree11EvictFamilyEv` at `0x1C3B10`
+
+The constructor branch near `0x10784B` checks the family-tree state and the
+field at `+4`; it skips Evict setup unless the family is active and that field
+is `<= 1`. This is the mobile first-generation-only behavior.
+
+The click path should not be reimplemented for PC. Mobile calls the native
+Options handler, which delegates to `CFamilyTree::EvictFamily()`, clears the
+villager manager, sets `CAdoptionScene+0x1C` to `2`, switches the game state to
+scene `6`, and closes the dialog. The PC binary already contains the same
+desktop-mangled functions, so porting the mobile feature means exposing the
+existing control and preserving the stock handler.
+
 ## Patch/Porting Rules From This Analysis
 
 1. Append native tables and widen their bounds together; do not overwrite stock
