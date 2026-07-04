@@ -63,7 +63,10 @@ FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Isla
 VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS = (
     ROOT / "work" / "vanilla_runtime_payload",
 )
-PREVIOUS_BUILD_OUTPUT_GLOB = "VF2-Mobile-Furniture-With-Island-Events-B*"
+PREVIOUS_BUILD_OUTPUT_GLOBS = (
+    "VF2-B*-Release",
+    "VF2-Mobile-Furniture-With-Island-Events-B*",
+)
 LEGACY_OUTPUT_RUNTIME_PAYLOAD_SOURCE_DIRS = (
     ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B89-Holiday-Body-Link-Fallback",
     ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B83-Full-Runtime-Payload",
@@ -85,10 +88,10 @@ OFFICIAL_B93_RELEASE_REQUIRED_DIRS = (
     "Original Virtual Families 2 Assets",
     "Sounds",
 )
-OFFICIAL_B93_RELEASE_TAG = "B93"
-OFFICIAL_B93_RELEASE_ASSET = "VF2-Mobile-Furniture-With-Island-Events-B93-Holiday-Outfit-Body-Apply.FIXED.zip"
-OFFICIAL_B93_RELEASE_SHA256 = "017f8223038e666939d8b9ccaf7c6a4986b5f920dcda8444db5fac6c4acd3abc"
-OFFICIAL_B93_RELEASE_SIZE = 339363043
+OFFICIAL_B93_RELEASE_TAG = "B98-current-vf2-modded-build"
+OFFICIAL_B93_RELEASE_ASSET = "Current VF2 Modded Build! B98.zip"
+OFFICIAL_B93_RELEASE_SHA256 = "9124980ec334de2baa9c6da76ea614f64c38bf24233c68f1a7978ecde3d04f4a"
+OFFICIAL_B93_RELEASE_SIZE = 340111685
 REMOVED_LEGACY_PACKAGE_DIRS = (
     "ReferenceAssets",
     "Microsoft.VC90.CRT",
@@ -1769,20 +1772,21 @@ def previous_build_source_dirs():
     out_build_number = build_number_from_name(OUT)
     if outputs.is_dir():
         candidates = []
-        for path in outputs.glob(PREVIOUS_BUILD_OUTPUT_GLOB):
-            if not path.is_dir():
-                continue
-            try:
-                if path.resolve() == out_resolved:
+        for glob_pattern in PREVIOUS_BUILD_OUTPUT_GLOBS:
+            for path in outputs.glob(glob_pattern):
+                if not path.is_dir():
                     continue
-            except OSError:
-                continue
-            build_number = build_number_from_name(path)
-            if build_number is None:
-                continue
-            if out_build_number is not None and build_number >= out_build_number:
-                continue
-            candidates.append((build_number, path.stat().st_mtime, path))
+                try:
+                    if path.resolve() == out_resolved:
+                        continue
+                except OSError:
+                    continue
+                build_number = build_number_from_name(path)
+                if build_number is None:
+                    continue
+                if out_build_number is not None and build_number >= out_build_number:
+                    continue
+                candidates.append((build_number, path.stat().st_mtime, path))
         roots.extend(path for _build_number, _mtime, path in sorted(candidates, reverse=True))
 
     unique = []
@@ -2327,7 +2331,7 @@ def remove_legacy_package_dirs(manifest):
         "required_top_level_dirs": list(OFFICIAL_B93_RELEASE_REQUIRED_DIRS),
         "removed_legacy_dirs": list(REMOVED_LEGACY_PACKAGE_DIRS),
         "removed": removed,
-        "note": "Future builds preserve the fixed official B93 release folder shape. Reference-only invisible furniture folders were moved out of release packages; editable dumps belong in Downloads, not build roots.",
+        "note": "Future releases preserve the standalone B98-current release folder shape. Release folders are renamed shortly, and only the packaged EXE is replaced by the newest build EXE.",
     }
 
 
@@ -8201,7 +8205,7 @@ def validate_runtime_payload_contract(manifest):
         "official_b93_release_asset": OFFICIAL_B93_RELEASE_ASSET,
         "official_b93_release_sha256": OFFICIAL_B93_RELEASE_SHA256,
         "removed_legacy_dirs": list(REMOVED_LEGACY_PACKAGE_DIRS),
-        "release_note": "The fixed official B93 ZIP is the package baseline. Future builds must preserve its runtime/support folder shape and must not reintroduce legacy ReferenceAssets or Microsoft.VC90.CRT folders.",
+        "release_note": "The standalone B98-current ZIP is the package baseline. Future release folders must preserve its runtime/support folder shape, use a short VF2-B##-Release name, and replace only the packaged EXE with the newest build EXE.",
     }
 
 

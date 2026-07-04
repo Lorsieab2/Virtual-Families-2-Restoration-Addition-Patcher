@@ -526,14 +526,14 @@
 - This preserves runtime packaging fixes and carried-forward additive assets
   while still refreshing base-game `Images` and `Sounds` from the clean
   workspace payload.
-- As of the fixed official B93 release, future package roots must preserve the
-  B93 ZIP shape exactly: top-level `Assets/`, `Images/`,
+- As of the standalone B98-current release, future package roots must preserve
+  the B98 ZIP shape exactly: top-level `Assets/`, `Images/`,
   `OptionalVisualMods/`, `Original Virtual Families 2 Assets/`, `Sounds/`, the
   required root launcher/config/DLL files, and no legacy `ReferenceAssets/` or
-  `Microsoft.VC90.CRT/` folders. The official release asset is
-  `VF2-Mobile-Furniture-With-Island-Events-B93-Holiday-Outfit-Body-Apply.FIXED.zip`
-  on tag `B93`, SHA-256
-  `017f8223038e666939d8b9ccaf7c6a4986b5f920dcda8444db5fac6c4acd3abc`.
+  `Microsoft.VC90.CRT/` folders. The current release baseline asset is
+  `Current VF2 Modded Build! B98.zip` on tag
+  `B98-current-vf2-modded-build`, SHA-256
+  `9124980ec334de2baa9c6da76ea614f64c38bf24233c68f1a7978ecde3d04f4a`.
 
 ## Next Build Contract - Offline Patch Bundle Export
 
@@ -558,7 +558,7 @@
 
 ## B94 - Stability, Outfit Apply, Ornament Opt-In
 
-- Seeds from the fixed official B93 release package folder and preserves its
+- Seeds from the current standalone B98 release package folder and preserves its
   top-level package shape.
 - Disables Holiday Ornament native collection/spawn/pickup hooks in normal
   builds; `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` remains the isolated research opt-in

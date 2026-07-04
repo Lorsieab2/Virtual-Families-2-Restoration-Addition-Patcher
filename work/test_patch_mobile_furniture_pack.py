@@ -446,7 +446,7 @@ class RuntimePayloadContractTests(unittest.TestCase):
                 outputs.mkdir()
                 for name in (
                     "VF2-Mobile-Furniture-With-Island-Events-B92-Older",
-                    "VF2-Mobile-Furniture-With-Island-Events-B93-Previous",
+                    "VF2-B93-Release",
                     "VF2-Mobile-Furniture-With-Island-Events-B94-Current",
                 ):
                     (outputs / name).mkdir()
@@ -454,7 +454,7 @@ class RuntimePayloadContractTests(unittest.TestCase):
 
                 roots = patcher.previous_build_source_dirs()
 
-                self.assertEqual(roots[0].name, "VF2-Mobile-Furniture-With-Island-Events-B93-Previous")
+                self.assertEqual(roots[0].name, "VF2-B93-Release")
         finally:
             patcher.ROOT = old_root
             patcher.OUT = old_out
@@ -501,6 +501,15 @@ class RuntimePayloadContractTests(unittest.TestCase):
         finally:
             if old_env is not None:
                 patcher.os.environ["VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK"] = old_env
+
+    def test_release_baseline_tracks_standalone_b98_current_zip(self):
+        self.assertEqual(patcher.OFFICIAL_B93_RELEASE_TAG, "B98-current-vf2-modded-build")
+        self.assertEqual(patcher.OFFICIAL_B93_RELEASE_ASSET, "Current VF2 Modded Build! B98.zip")
+        self.assertEqual(
+            patcher.OFFICIAL_B93_RELEASE_SHA256,
+            "9124980ec334de2baa9c6da76ea614f64c38bf24233c68f1a7978ecde3d04f4a",
+        )
+        self.assertIn("VF2-B*-Release", patcher.PREVIOUS_BUILD_OUTPUT_GLOBS)
 
     def test_legacy_output_runtime_sources_are_explicit_opt_in(self):
         old_env = patcher.os.environ.get("VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK")

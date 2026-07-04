@@ -56,17 +56,17 @@
   Server Authentication only or rejected by signtool, so B83/B84/B92 could not be
   signed locally.
 - Before each release ZIP upload, verify the archive contains the EXE, the full
-  official B93 top-level folder shape: `Assets/`, `Images/`,
+  current B98 top-level folder shape: `Assets/`, `Images/`,
   `OptionalVisualMods/`, `Original Virtual Families 2 Assets/`, `Sounds/`,
   `ldw.ini`, `wc.dat`, `icon.bmp`, the six required top-level runtime DLLs
   (`SDL2.dll`, `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`,
   `zlib1.dll`, `fmod.dll`), and no legacy `ReferenceAssets/` or
   `Microsoft.VC90.CRT/` folders.
 - Keep using `work/vanilla_runtime_payload` as the canonical clean base asset
-  seed for future builds, but package shape comes from the fixed official B93
-  release ZIP. New builds should seed from the most recent previous completed
-  B-build first, then overlay this clean asset payload and regenerated
-  additive changes.
+  seed for future builds, but release package shape comes from the standalone
+  `B98-current-vf2-modded-build` ZIP. New releases should use the exact B98
+  folder structure, rename the folder shortly, and replace only the packaged
+  EXE with the newest build EXE.
 
 ## Research Leads
 
