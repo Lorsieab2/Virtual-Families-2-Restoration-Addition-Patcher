@@ -742,3 +742,18 @@
   live-world Holiday body draw redirect remains
   `CVillagerManager::DrawVillager + 0x454`, matching B96's shipped renderer
   coverage.
+
+## 2026-07-04 - B98 String Lookup Bound Fix
+
+- In-game B97 testing showed male generated Outfit rows displayed icons but
+  male body `04` and later showed `Unknown String Id!!!!`. Male body `03`
+  used string IDs `0xC23/0xC24`; male body `04` starts at `0xC25/0xC26`.
+- The generator incorrectly computed `theStringManager`'s lookup/guard max as
+  `ORIG_STRING_ONE_PAST_MAX + len(new_rows)`, producing `new_one_past_max =
+  0xC25`. Stock desktop has a gap between string table row count `0xA5D` and
+  one-past StringId `0xA69`, so row count and maximum StringId cannot be
+  advanced by the same delta.
+- B98 now computes lookup/guard one-past from the highest actual generated
+  StringId (`max(new_rows.string_id) + 1`). The normal B98 manifest reports
+  `new_one_past_max = 0xC8B`, covering the last male Holiday outfit string
+  `0xC88` and behavior labels `0xC89-0xC8A`.

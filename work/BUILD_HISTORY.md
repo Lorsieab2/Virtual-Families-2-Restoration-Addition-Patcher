@@ -615,3 +615,14 @@
   gendered last-synthetic cache or vanilla outfit fields.
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B97-Outfit-Apply-Stability`.
+
+## B98 - Male Outfit Strings
+
+- Fixes the `theStringManager` lookup/guard bound used for generated strings.
+  The previous row-count based bound stopped at StringId `0xC25`, which made
+  male generated Outfit body `04` and later display `Unknown String Id!!!!`.
+- Computes the string lookup one-past value from the highest actual generated
+  StringId. Normal B98 generation reports `new_one_past_max = 0xC8B`, covering
+  all generated Outfit rows plus the added behavior labels.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B98-Male-Outfit-Strings`.

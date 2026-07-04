@@ -95,6 +95,19 @@ checks the requested stock item, then reads the selected synthetic item from
 drop/apply control flow while still letting generated outfit items resolve to
 their intended body rows.
 
+## B98 generated outfit string note
+
+Generated Outfit rows use `CInventoryManager::GetShortDesc` and
+`GetLongDesc`, which return StringIds produced by
+`outfit_string_ids_for_entry(entry_index)`. The string table insert row count
+is not the same as the runtime maximum valid StringId: stock desktop has
+`ORIG_STRING_COUNT = 0xA5D` but `ORIG_STRING_ONE_PAST_MAX = 0xA69`.
+
+B98 therefore sizes `theStringManager` lookup/guard bounds with
+`max(generated_string_ids) + 1`. This keeps male rows after body `03` visible
+instead of falling past the runtime StringId guard and displaying
+`Unknown String Id!!!!`.
+
 B53 intentionally restored the six supplied base sheets, which are all 50
 rows high. Its executable was inherited from B52 and may still contain the
 temporary 0--53 animator guard. Therefore IDs 50--53 must be treated as

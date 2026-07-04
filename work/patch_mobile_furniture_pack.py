@@ -5257,6 +5257,12 @@ def c_symbol_for_string(kind, idx, role):
     return f"_vf2mobstr_{kind}_{idx}_{role}"
 
 
+def string_lookup_one_past_for_rows(rows):
+    if not rows:
+        return ORIG_STRING_ONE_PAST_MAX
+    return max(string_id for string_id, _key, _text in rows) + 1
+
+
 def patch_string_manager(manifest):
     obj = CoffObject(PATCHED / "theStringManager.obj")
     table_sym = obj.symbol(STRINGTABLE)
@@ -5486,7 +5492,7 @@ def patch_string_manager(manifest):
         raise RuntimeError("Could not retarget the pet behavior string-table entry")
 
     new_count = ORIG_STRING_COUNT + len(new_rows)
-    new_one_past = ORIG_STRING_ONE_PAST_MAX + len(new_rows)
+    new_one_past = string_lookup_one_past_for_rows(new_rows)
     new_get_max_minus_one = new_one_past - 2
     new_lookup_bytes = new_one_past * 4
     count_patches = patch_all_in_sections(obj, {".text$mn"}, struct.pack("<I", ORIG_STRING_COUNT), struct.pack("<I", new_count))

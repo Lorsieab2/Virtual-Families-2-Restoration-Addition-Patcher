@@ -191,6 +191,24 @@ class OutfitStoreMappingTests(unittest.TestCase):
                     body_count + patcher.OUTFIT_STORE_BODY_VALUES.index(body_value),
                 )
 
+    def test_string_lookup_bound_covers_all_male_outfit_rows(self):
+        rows = []
+        for entry in patcher.outfit_store_entries():
+            short_id, long_id = patcher.outfit_string_ids_for_entry(entry["entry_index"])
+            rows.extend([
+                (short_id, "short", "text"),
+                (long_id, "long", "text"),
+            ])
+
+        male_body_04 = patcher.outfit_store_entry_index("male", 4)
+        _male_04_short, male_04_long = patcher.outfit_string_ids_for_entry(male_body_04)
+        last_male = patcher.outfit_store_entry_index("male", patcher.OUTFIT_STORE_BODY_VALUES[-1])
+        _last_short, last_long = patcher.outfit_string_ids_for_entry(last_male)
+        one_past = patcher.string_lookup_one_past_for_rows(rows)
+
+        self.assertGreaterEqual(one_past, male_04_long + 1)
+        self.assertGreaterEqual(one_past, last_long + 1)
+
     def test_folder_backed_holiday_bodies_keep_stock_link_fallback(self):
         policy = patcher.holiday_body_link_lookup_policy()
 

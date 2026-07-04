@@ -171,6 +171,10 @@
   Outfit-section items for both genders, including Holiday rows `50-53`, and
   confirm the stock drop/apply path no longer crashes while the selected item
   still controls `CVillager+0x6A84` instead of collapsing to body `49`.
+- In-game test B98 generated outfit strings: scroll the male generated Outfit
+  rows past body `03` and verify every base and Holiday male row has its title
+  and description instead of `Unknown String Id!!!!`; spot-check female rows
+  remain unchanged.
 - Continue Holiday Ornament implementation under the isolated
   `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` path: compare the mobile collection table,
   page routing, pickup observer registration, `CollectionCount`, save fields,
