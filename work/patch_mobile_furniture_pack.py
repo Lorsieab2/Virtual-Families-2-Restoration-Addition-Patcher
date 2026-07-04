@@ -2886,8 +2886,17 @@ def sync_holiday_body_runtime_frames(manifest):
                                 template = existing.crop(template_box)
                                 normalized = None
                                 source_kind = None
+                                generated_frame = (
+                                    GENERATED_VILLAGER_BODIES
+                                    / gender_title
+                                    / f"Body_{body_value:02d}"
+                                    / f"{gender_title}_Body_{body_value:02d}_{role}_Frame_{role_frame:02d}.png"
+                                )
                                 archive_name = f"Holiday Outfits/{archive_folder}/{prefix}{source_set:02d}_{frame_number:04d}.png"
-                                if archive and archive_name in archive_names:
+                                if generated_frame.exists():
+                                    normalized = Image.open(generated_frame).convert("RGBA")
+                                    source_kind = "generated_frame"
+                                elif archive and archive_name in archive_names:
                                     with Image.open(BytesIO(archive.read(archive_name))).convert("RGBA") as mobile_frame:
                                         normalized = _normalize_holiday_body_frame(mobile_frame, template)
                                     source_kind = "holiday_archive"
@@ -2905,6 +2914,7 @@ def sync_holiday_body_runtime_frames(manifest):
                                         normalized = fallback.crop(box)
                                         source_kind = f"expanded_sheet:{fallback_sheet}"
                                 if normalized is None:
+                                    missing.append(str(generated_frame))
                                     missing.append(archive_name)
                                     missing.extend(fallback_skips)
                                     continue
@@ -4238,6 +4248,7 @@ static const int kVF2VisibleSpecialUpgradeCount = {len(VISIBLE_SPECIAL_UPGRADE_I
 static const int kVF2VisibleSpecialUpgradeIconImageBase = {visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))};
 static const int kVF2VisibleSpecialUpgradeIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
 static int gVF2SyntheticOutfitToolInHand = 0;
+static int gVF2SyntheticOutfitToolInUse = 0;
 
 static int VF2OutfitStoreEntryIndex(int itemId) {{
     int femaleBody = itemId - kVF2OutfitStoreFemaleItemBase;
@@ -4274,9 +4285,12 @@ extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
         return body;
     }}
 
-    int selected = gVF2SyntheticOutfitToolInHand;
-    if (selected && VF2OutfitStockTrayItemForItem(selected) == itemId) {{
-        return VF2OutfitBodyForItem(selected);
+    int selectedItems[2] = {{gVF2SyntheticOutfitToolInUse, gVF2SyntheticOutfitToolInHand}};
+    for (int i = 0; i < 2; ++i) {{
+        int selected = selectedItems[i];
+        if (selected && VF2OutfitStockTrayItemForItem(selected) == itemId) {{
+            return VF2OutfitBodyForItem(selected);
+        }}
     }}
     return -1;
 }}
@@ -4296,27 +4310,34 @@ extern "C" bool __cdecl VF2PurchaseOutfitStoreItem(int itemId) {{
     return true;
 }}
 
+static int* VF2SyntheticOutfitSlotForActiveFlag(int activeFlagOffset) {{
+    if (activeFlagOffset == 0xA4) return &gVF2SyntheticOutfitToolInHand;
+    if (activeFlagOffset == 0xA5) return &gVF2SyntheticOutfitToolInUse;
+    return 0;
+}}
+
 extern "C" int __cdecl VF2NormalizeOutfitToolInHand(void* tray, int activeFlagOffset) {{
     unsigned char* base = (unsigned char*)tray;
+    int* selectedSlot = VF2SyntheticOutfitSlotForActiveFlag(activeFlagOffset);
     if (!base || !base[activeFlagOffset]) {{
-        gVF2SyntheticOutfitToolInHand = 0;
+        if (selectedSlot) *selectedSlot = 0;
         return 0;
     }}
 
     int slot = *(int*)(base + 0xA0);
     if (slot < 0 || slot >= 9) {{
-        gVF2SyntheticOutfitToolInHand = 0;
+        if (selectedSlot) *selectedSlot = 0;
         return 0;
     }}
 
     int itemId = *(int*)(base + slot * 8);
     int stockItem = VF2OutfitStockTrayItemForItem(itemId);
     if (stockItem >= 0) {{
-        gVF2SyntheticOutfitToolInHand = itemId;
+        if (selectedSlot) *selectedSlot = itemId;
         return stockItem;
     }}
 
-    gVF2SyntheticOutfitToolInHand = 0;
+    if (selectedSlot) *selectedSlot = 0;
     return itemId;
 }}
 

@@ -192,12 +192,12 @@ action sheet:
 - source cell: row = body value, column = last 91 px frame column (`14` in the
   current desktop/mobile-compatible sheets)
 
-Base body values `0--49` come from the six stock sheets copied once into the
-modified build's local `OUT/Images` folder. The game reads those copied
-`Images/*.png` files at runtime; it does not reference the external
-`originalimages` source folder. Holiday body values `50--53` fall back to the
-expanded B56 action sheets when the current output folder only contains stock
-rows.
+Base body values `0--49` come from the clean base-game runtime sheets copied
+into the modified build's local `OUT/Images` folder. The game reads those
+build-local `Images/*.png` files at runtime; it must not reference an external
+`originalimages` source folder. Holiday body values `50--53` use the
+repo-local split `generated/VillagerBodies` frames first, the Holiday archive
+second if present, and expanded sheet rows only as a migration fallback.
 
 `theGraphicsManager` receives 108 appended 1 x 1 image descriptors for those
 icons. `CInventoryManager::DrawItem(ldwPoint, ...)` and
@@ -253,6 +253,14 @@ The stock tray behavior remains valid for native outfit items `0x49` and
 `0x4A`; when no generated outfit item is selected, the helper falls through to
 the original `CInventoryManager` body fields.
 
+B93 splits the selected synthetic outfit state by tray query. `GetToolInHand`
+uses `gVF2SyntheticOutfitToolInHand` (`activeFlagOffset == 0xA4`) and
+`GetToolInUse` uses `gVF2SyntheticOutfitToolInUse` (`activeFlagOffset ==
+0xA5`). `_VF2GetOutfitStoreBodyValue` checks the in-use synthetic ID first and
+then the in-hand synthetic ID before falling through to vanilla. This prevents a
+stock-ID query from clearing the synthetic item before `GetOutfit(0x49/0x4A)`
+can decode Holiday body values `50--53`.
+
 ## Holiday runtime frame regeneration milestone
 
 B68 fixes a crash-prone split between store preview art and runtime villager
@@ -264,6 +272,9 @@ for body values `50--53`.
 of only the current additive output folder: current `OUT/Images`, prior
 completed `outputs/VF2-Mobile-Furniture-With-Island-Events-B*` build folders,
 then `outputs/VF2-Mobile-Furniture-With-Island-Events-B56-Holiday-Body-Lookup-Test`.
+B93 changed the Holiday art priority inside that search: split
+`generated/VillagerBodies/<Gender>/Body_50..53` frames are preferred over
+Holiday archive frames, and expanded sheet rows are only a last fallback.
 This regenerates 448 runtime frame PNGs:
 
 - 2 genders

@@ -27,8 +27,9 @@
   `Images/`, visible Special Upgrade icon descriptors/payloads, and the B76
   Holiday Ornaments collection art/native table/observer/achievement records,
   the B77 Playhouse child-only autonomous candidate max-age gate, the B78 VF3
-  TV frame enum-order swap, and the B81 VF3 TV fmap/LoadFmap recognition fix
-  without distributing a premodified EXE.
+  TV frame enum-order swap, the B81 VF3 TV fmap/LoadFmap recognition fix, and
+  the B93 split ToolTray hand/use synthetic outfit state plus generated-frame
+  Holiday body source priority without distributing a premodified EXE.
 - When exporting offline patcher manifests, feed the generated build manifest
   through `validate_vf3_tv_animation_contract()` and
   `validate_vf3_tv_behavior_contract()` or equivalent release validation steps
@@ -102,15 +103,17 @@
 - Launch-test B82 runtime package: verify the extracted release starts from a
   clean folder with only bundled files, including the `Microsoft.VC90.CRT/`
   private assembly; then re-run the B81 VF3 TV recognition checks.
-- In-game test B75 Clothing/outfit behavior: verify opening the Clothing
+- In-game test B93 Clothing/outfit behavior: verify opening the Clothing
   section no longer crashes, all generated outfit rows display their
   last-action-frame icons, female rows apply only to female villagers, male rows
   apply only to male villagers, buying multiple generated outfits keeps each
   toolbar item independent, and body values `50-53` apply without
   save-load/detail/house-view crashes.
-- In-game test B80 Holiday outfit body-value fix: verify Holiday outfit store
+- In-game test B93 Holiday outfit body-value fix: verify Holiday outfit store
   items `0x432-0x435` and `0x472-0x475` apply villager body values `50-53`
-  instead of `49`, and verify a deliberately invalid saved body value falls
+  instead of `49`; test both drop/apply paths so `GetToolInHand` and
+  `GetToolInUse` keep their selected synthetic IDs until `GetOutfit(0x49/0x4A)`
+  resolves the body. Also verify a deliberately invalid saved body value falls
   back safely instead of crashing.
 - In-game test B89 Holiday body link fallback: apply each Holiday outfit to
   male and female adults, then check house view, detail screen, action poses,

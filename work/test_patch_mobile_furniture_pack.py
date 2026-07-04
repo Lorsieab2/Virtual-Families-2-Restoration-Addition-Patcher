@@ -200,6 +200,81 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertLess(policy["holiday_link_fallback_row"], min(patcher.HOLIDAY_BODY_VALUES))
         self.assertIn("do not expand the stock body/action/sit sheets", policy["reason"])
 
+    def test_outfit_helper_tracks_hand_and_use_synthetic_items_separately(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                helper = patcher.PATCHED / "vf2_special_upgrade_effects.cpp"
+                helper.write_text("", encoding="ascii")
+
+                patcher.write_outfit_store_helpers({})
+                source = helper.read_text(encoding="ascii")
+
+                self.assertIn("gVF2SyntheticOutfitToolInHand", source)
+                self.assertIn("gVF2SyntheticOutfitToolInUse", source)
+                self.assertIn("VF2SyntheticOutfitSlotForActiveFlag", source)
+                self.assertIn("activeFlagOffset == 0xA4", source)
+                self.assertIn("activeFlagOffset == 0xA5", source)
+                self.assertIn("selectedItems[2] = {gVF2SyntheticOutfitToolInUse, gVF2SyntheticOutfitToolInHand}", source)
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_holiday_runtime_frames_prefer_generated_body_assets(self):
+        try:
+            from PIL import Image
+        except ImportError:
+            self.skipTest("Pillow is required for Holiday body frame generation")
+
+        if not (
+            patcher.GENERATED_VILLAGER_BODIES
+            / "Female"
+            / "Body_50"
+            / "Female_Body_50_actions_Frame_00.png"
+        ).exists():
+            self.skipTest("generated Holiday body frames are not available")
+
+        old_out = patcher.OUT
+        old_values = patcher.HOLIDAY_BODY_VALUES
+        old_sets = patcher.HOLIDAY_BODY_SET_IDS
+        old_specs = patcher.HOLIDAY_BODY_ROLE_SPECS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.OUT = Path(tmp)
+                patcher.HOLIDAY_BODY_VALUES = (50,)
+                patcher.HOLIDAY_BODY_SET_IDS = (51,)
+                patcher.HOLIDAY_BODY_ROLE_SPECS = [
+                    {
+                        "role": "actions",
+                        "source_range": (33, 33),
+                        "columns": 15,
+                        "sheets": {
+                            "female": ("female_actions00.png", "Female Outfits", "FemaleBodies_0"),
+                        },
+                    }
+                ]
+                images = patcher.OUT / "Images"
+                images.mkdir(parents=True)
+                template = Image.new(
+                    "RGBA",
+                    (patcher.HOLIDAY_BODY_CELL_SIZE * 15, patcher.HOLIDAY_BODY_CELL_SIZE * 50),
+                    (0, 0, 0, 0),
+                )
+                template.save(images / "female_actions00.png")
+
+                manifest = {}
+                patcher.sync_holiday_body_runtime_frames(manifest)
+
+                frames = manifest["holiday_body_runtime_frames"]["frames"]
+                self.assertEqual(len(frames), 1)
+                self.assertEqual(frames[0]["source"], "generated_frame")
+                self.assertFalse(manifest["holiday_body_runtime_frames"]["issues"])
+        finally:
+            patcher.OUT = old_out
+            patcher.HOLIDAY_BODY_VALUES = old_values
+            patcher.HOLIDAY_BODY_SET_IDS = old_sets
+            patcher.HOLIDAY_BODY_ROLE_SPECS = old_specs
+
 
 class HolidayOrnamentGateTests(unittest.TestCase):
     def with_temp_patched_objs(self, filenames, callback):

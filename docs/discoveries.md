@@ -321,11 +321,28 @@
   selected synthetic ID to stock `0x4A`/`0x49` only for vanilla main-scene
   checks, while `CInventoryManager::GetOutfit()` decodes the body from the
   selected synthetic ID.
-- The build also copies the six supplied stock sprite sheets into the modified
-  build's `OUT/Images` folder before generating outfit icons and separated
+- The build also uses the six clean base-game runtime sprite sheets in the
+  modified build's `OUT/Images` folder before generating outfit icons and separated
   `Images/VillagerBodies/<Gender>/Body_##/{bodies,actions,sit}/Frame##.png`
   frames. The game uses build-local `Images/*.png`; it does not point to the
   source `originalimages` folder at runtime.
+
+## 2026-07-03 - Holiday Outfit Body Apply State
+
+- The generated outfit store's visible rows decode correctly:
+  female `0x432-0x435` and male `0x472-0x475` are body values `50-53`.
+  The remaining body-49 fallback happened during placement, after the ToolTray
+  helper normalized a synthetic item to stock `0x4A`/`0x49`.
+- `_VF2NormalizeOutfitToolInHand(void* tray, int activeFlagOffset)` now keeps
+  separate selected synthetic IDs for `GetToolInHand` (`0xA4`) and
+  `GetToolInUse` (`0xA5`). `_VF2GetOutfitStoreBodyValue(int itemId)` checks the
+  in-use synthetic ID first, then the in-hand synthetic ID, so a stock-ID query
+  cannot clear the Holiday synthetic ID before `CInventoryManager::GetOutfit`
+  decodes body `50-53`.
+- `sync_holiday_body_runtime_frames()` now prefers repo-local
+  `generated/VillagerBodies/<Gender>/Body_50..53/...` frames before any Holiday
+  archive or expanded-sheet fallback. The expanded sheet path is now a last
+  resort, not the primary source for Holiday art.
 
 ## 2026-07-03 - Holiday Ornaments Collection
 
