@@ -576,3 +576,27 @@
   Mobile Goal Collector row `0x54` has target `13`. The shared third row field
   is platform-wide (`0x23E` in mobile, `0x1ED` in PC), so additive PC rows
   should keep the PC value while mirroring the mobile row IDs and targets.
+
+## 2026-07-04 - Consolidated Mobile Feature Analysis
+
+- `docs/mobile-vf2-feature-analysis.md` now consolidates the mobile VF2
+  implementation evidence for Holiday outfits/furniture, non-PC furniture,
+  Holiday Ornaments, Island Events, mobile furniture behavior routes, and
+  visible mobile purchases.
+- Mobile Holiday Ornaments are native collectible IDs `0x9E-0xA9`, collection
+  page `5`, achievement row `0x5F`, and Goal Collector row `0x54`. The pickup
+  path requires both `CCollectionScene` table growth and `CCollectable`
+  observer registrations so `Carry/Drop/ProcessNearbyCollectables` reach
+  `CCollectableItem`.
+- Mobile holiday and furniture behavior names are directly recoverable from
+  native symbols (`CBehavior::AdmiringXmasTree`,
+  `KidsCheckXmasStockings`, `AdultsSaveSantasCookies`,
+  `LieInHammock`, `PlayingFoosball`, `ListenToRadio`, etc.), but exact
+  action-step timing and effects still require per-method disassembly.
+- Added Island Events are split between registered PC event shells and native
+  outcomes. Only a few outcomes have experimental PC mappings; the remaining
+  mobile `CEvent*::ImpactGame` methods need low-level mapping before they can
+  be treated as implemented.
+- Mobile visible purchases should be modeled as direct upgrade/effect helpers:
+  Brokerage Account, Food Club, Health Plan, and Lucky Rock use normal store
+  rows/icons plus explicit helper state rather than IAP UI in the PC port.

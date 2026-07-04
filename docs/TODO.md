@@ -63,6 +63,28 @@
 
 ## Research Leads
 
+- Use `docs/mobile-vf2-feature-analysis.md` as the current coding-level map for
+  mobile-only features. Fill remaining low-level gaps from mobile disassembly
+  instead of inferring behavior from PC store rows or screenshots alone.
+- Disassemble mobile Holiday behavior methods:
+  `CBehavior::AdmiringXmasTree`, `AdultWaterXMasTree`,
+  `InteractHouseXmasDecor`, `KidsCheckXmasStockings`,
+  `EachPeepCelebrateXMasTree`, `AdmiringXmasKnickKnacks`,
+  `AdultsSaveSantasCookies`, and `KidStealsSantasCookies`. Record object IDs,
+  required `CHotSpot` routes, carried items, animation IDs, sounds, and
+  achievement/goal hooks.
+- Disassemble all added mobile `CEvent*::ImpactGame` methods and map exact
+  outcomes before marking exclusive Island Events complete. The current PC
+  event shell list preserves firing/dialog structure, but most mobile reward,
+  penalty, spawn, pet, and villager-state effects are still unmapped.
+- Confirm mobile special-upgrade save fields and effect math for Brokerage
+  Account, Food Club, Health Plan, and Lucky Rock. Lucky Rock especially needs
+  exact `CCollectableItem::Update/Add` odds arithmetic before the new Holiday
+  Ornament collection can be considered parity-complete.
+- Extend offline patcher feature toggles around the report's feature groups:
+  Holiday outfits, Holiday furniture, mobile furniture/behavior routes, Holiday
+  Ornaments, Island Events/outcomes, visible mobile purchases, and VF3 TV
+  assets/recognition.
 - In-game test B92 Holiday Ornaments: open Collections, verify six pages/72
   collectibles with the Ornaments page last, confirm yard ornaments can be
   picked up and removed, confirm collection counts and the Ornamentologist goal
