@@ -826,3 +826,28 @@
 - `sync_behavior_assets()` already copies `InvisibleHammock.png.fmap` from
   `HammockStd.png.fmap`, preserving the base hammock object/collision geometry
   instead of inventing a separate invisible-hammock behavior grid.
+
+## 2026-07-04 - B99 Offline Patcher Full-Payload Test
+
+- `work/offline_vf2_patcher.py apply` now accepts `--exe
+  "...\Virtual Families 2.exe"` as an alternative to `--game-dir`. The game
+  directory is inferred from the EXE's parent folder, and the name must be the
+  canonical `Virtual Families 2.exe`.
+- `work/export_offline_patch_bundle.py` supports `--asset-mode full`,
+  `--include-exe-replacement`, and `--include-patcher-scripts`. Full mode emits
+  every generated build file except patcher/build metadata such as
+  `patch-manifest.json`; EXE replacement writes a `core_executable` asset
+  record with `expected_target_sha256` for the vanilla EXE and a payload copy of
+  the modded EXE named `payload/Virtual Families 2.exe`.
+- The B99 test bundle was exported to `outputs/VF2-B99-Offline-Patcher-Full`
+  and copied to `C:\Users\Owner\Downloads\VF2-B99-Offline-Patcher`. It contains
+  `manifest.json`, `offline_vf2_patcher.py`, `offline_vf2_patcher_gui.py`,
+  `Apply_B99_Patcher.bat`, `Launch_GUI.bat`, and the full `payload/` tree.
+- Smoke test: starting from a folder containing only workspace-local vanilla
+  `Virtual Families 2.exe` SHA-256
+  `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4`, the
+  patcher created `.vf2_patch_backups/...`, recreated the B99 support folder
+  shape (`Assets/`, `Images/`, `OptionalVisualMods/`,
+  `Original Virtual Families 2 Assets/`, `Sounds/`, root DLLs), and replaced
+  the EXE with SHA-256
+  `9a713d38e830dcfb2fe1f4f054c36f1340d772c9e28c2abb96501137ee164ea1`.

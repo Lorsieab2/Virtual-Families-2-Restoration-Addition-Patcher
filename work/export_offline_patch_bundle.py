@@ -24,9 +24,19 @@ PATCHED_EXE_NAMES = (
     "Virtual Families 2.exe",
 )
 BYTE_PATCH_CHUNK_SIZE = 256
-ASSET_MODES = ("additive", "all")
+ASSET_MODES = ("additive", "all", "full")
+EXCLUDED_FULL_PAYLOAD_FILES = {
+    "patch-manifest.json",
+    "VF2_INTERNAL_WORKINGS_SUMMARY.txt",
+}
 
 SETTINGS = [
+    {
+        "id": "core_executable",
+        "label": "Patch game executable",
+        "description": "Replaces a verified vanilla Virtual Families 2.exe with the current modded EXE.",
+        "default": True,
+    },
     {
         "id": "holiday_furniture",
         "label": "Add Holiday furniture",
@@ -406,6 +416,21 @@ def setting_for_asset(rel_path: Path) -> str:
 
 
 def iter_candidate_assets(build_dir: Path, manifest_data: dict[str, Any], asset_mode: str) -> list[Path]:
+    if asset_mode == "full":
+        paths: list[Path] = []
+        patched_exe_candidates = {name.lower() for name in PATCHED_EXE_NAMES}
+        for path in build_dir.rglob("*"):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(build_dir)
+            rel_text = relative_posix(rel)
+            if rel_text in EXCLUDED_FULL_PAYLOAD_FILES:
+                continue
+            if len(rel.parts) == 1 and rel.name.lower() in patched_exe_candidates:
+                continue
+            paths.append(path)
+        return sorted(paths)
+
     roots = [build_dir / "Images", build_dir / "Assets"]
     allowed_paths: set[Path] | None = None
     if asset_mode == "additive":
@@ -441,7 +466,7 @@ def export_asset_payloads(
         base = base_payload / rel
         source_sha = sha256_file(source)
         source_size = source.stat().st_size
-        if base.is_file() and sha256_file(base) == source_sha:
+        if asset_mode != "full" and base.is_file() and sha256_file(base) == source_sha:
             continue
 
         payload_target = payload_root / rel
@@ -456,7 +481,10 @@ def export_asset_payloads(
             "requires": [setting_for_asset(rel)],
             "note": f"Generated asset payload for {relative_posix(rel)}.",
         }
-        if base.is_file():
+        if asset_mode == "full":
+            record["overwrite_existing"] = True
+            record["note"] = f"Full B99 beta folder payload for {relative_posix(rel)}."
+        elif base.is_file():
             record["expected_target_sha256"] = sha256_file(base)
             record["expected_target_size"] = base.stat().st_size
             record["overwrite_existing"] = True
@@ -464,8 +492,32 @@ def export_asset_payloads(
     return asset_patches
 
 
-def default_settings(include_byte_patches: bool) -> list[dict[str, Any]]:
-    settings = list(SETTINGS)
+def export_exe_replacement_payload(
+    *,
+    bundle_dir: Path,
+    patched_exe: Path,
+    vanilla_exe: Path,
+    target_exe_name: str,
+) -> dict[str, Any]:
+    payload_rel = Path("payload") / target_exe_name
+    payload_target = bundle_dir / payload_rel
+    payload_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(patched_exe, payload_target)
+    return {
+        "file_path": target_exe_name,
+        "source_path": relative_posix(payload_rel),
+        "source_sha256": sha256_file(payload_target),
+        "source_size": payload_target.stat().st_size,
+        "expected_target_sha256": sha256_file(vanilla_exe),
+        "expected_target_size": vanilla_exe.stat().st_size,
+        "overwrite_existing": True,
+        "requires": ["core_executable"],
+        "note": "Replace verified vanilla Virtual Families 2.exe with the current modded B99 executable.",
+    }
+
+
+def default_settings(include_byte_patches: bool, include_exe_replacement: bool) -> list[dict[str, Any]]:
+    settings = [row for row in SETTINGS if include_exe_replacement or row["id"] != "core_executable"]
     if include_byte_patches:
         settings.insert(
             0,
@@ -487,6 +539,65 @@ def default_settings(include_byte_patches: bool) -> list[dict[str, Any]]:
     return settings
 
 
+def write_bundle_runner_files(bundle_dir: Path) -> None:
+    shutil.copy2(ROOT / "work" / "offline_vf2_patcher.py", bundle_dir / "offline_vf2_patcher.py")
+    shutil.copy2(ROOT / "work" / "offline_vf2_patcher_gui.py", bundle_dir / "offline_vf2_patcher_gui.py")
+    (bundle_dir / "Apply_B99_Patcher.bat").write_text(
+        r'''@echo off
+setlocal
+set "SCRIPT_DIR=%~dp0"
+echo.
+echo VF2 B99 Offline Patcher
+echo Enter or drag the original "Virtual Families 2.exe" here.
+set /p VF2_EXE=EXE path: 
+set "VF2_EXE=%VF2_EXE:"=%"
+if not exist "%VF2_EXE%" (
+  echo File not found: "%VF2_EXE%"
+  pause
+  exit /b 1
+)
+where py >nul 2>nul
+if %ERRORLEVEL%==0 (
+  py -3 "%SCRIPT_DIR%offline_vf2_patcher.py" apply --exe "%VF2_EXE%" --manifest "%SCRIPT_DIR%manifest.json"
+) else (
+  python "%SCRIPT_DIR%offline_vf2_patcher.py" apply --exe "%VF2_EXE%" --manifest "%SCRIPT_DIR%manifest.json"
+)
+echo.
+pause
+''',
+        encoding="ascii",
+        newline="\r\n",
+    )
+    (bundle_dir / "Launch_GUI.bat").write_text(
+        r'''@echo off
+setlocal
+set "SCRIPT_DIR=%~dp0"
+where py >nul 2>nul
+if %ERRORLEVEL%==0 (
+  py -3 "%SCRIPT_DIR%offline_vf2_patcher_gui.py"
+) else (
+  python "%SCRIPT_DIR%offline_vf2_patcher_gui.py"
+)
+''',
+        encoding="ascii",
+        newline="\r\n",
+    )
+    (bundle_dir / "README-B99-PATCHER.txt").write_text(
+        """VF2 B99 Offline Patcher
+
+Use Apply_B99_Patcher.bat and enter or drag the original Virtual Families 2.exe.
+The patcher validates the original EXE hash, creates a backup under the same
+game folder in .vf2_patch_backups, recreates the B99 beta support folder
+structure, and replaces Virtual Families 2.exe with the modded B99 EXE.
+
+You can also run the GUI with Launch_GUI.bat, select the game folder, load
+manifest.json, and apply the default settings.
+""",
+        encoding="ascii",
+        newline="\r\n",
+    )
+
+
 def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     build_dir = Path(args.build_dir).resolve()
     bundle_dir = Path(args.out_dir).resolve()
@@ -496,6 +607,8 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     patched_exe = find_patched_exe(build_dir, args.patched_exe)
     vanilla_exe = Path(args.vanilla_exe).resolve() if args.vanilla_exe else None
     target_exe_name = args.target_exe_name or DEFAULT_EXE_NAME
+    if args.include_exe_replacement and vanilla_exe is None:
+        raise ValueError("--include-exe-replacement requires --vanilla-exe so the patcher can verify the original EXE.")
 
     if bundle_dir.exists() and any(bundle_dir.iterdir()) and not args.force:
         raise FileExistsError(f"Output bundle directory is not empty: {bundle_dir}")
@@ -546,6 +659,15 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     asset_patches = export_asset_payloads(build_dir, base_payload, bundle_dir, build_manifest_data, args.asset_mode)
+    exe_replacement_record = None
+    if args.include_exe_replacement and vanilla_exe is not None:
+        exe_replacement_record = export_exe_replacement_payload(
+            bundle_dir=bundle_dir,
+            patched_exe=patched_exe,
+            vanilla_exe=vanilla_exe,
+            target_exe_name=target_exe_name,
+        )
+        asset_patches.insert(0, exe_replacement_record)
     native_patch_sources = collect_native_patch_sources(build_manifest_data)
 
     asset_counts_by_setting: dict[str, int] = {}
@@ -563,12 +685,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "patched_exe": str(patched_exe),
             "build_manifest_keys": sorted(build_manifest_data) if build_manifest_data else [],
         },
-        "settings": default_settings(bool(byte_patches)),
+        "settings": default_settings(bool(byte_patches), bool(exe_replacement_record)),
         "target_files": target_files,
         "runtime_requirements": {
             "required_files": RUNTIME_REQUIRED_FILES,
             "required_dirs": RUNTIME_REQUIRED_DIRS,
-        },
+        } if args.asset_mode != "full" else {"required_files": [], "required_dirs": []},
         "patches": byte_patches,
         "native_patch_sources": native_patch_sources,
         "asset_patches": asset_patches,
@@ -581,10 +703,20 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "payload_file_count": count_files(bundle_dir / "payload"),
             "base_payload": str(base_payload),
             "asset_mode": args.asset_mode,
+            "exe_replacement": exe_replacement_record is not None,
             "target_exe_name": target_exe_name,
             "requires_vanilla_exe_for_apply": not bool(target_files),
         },
     }
+    if args.include_patcher_scripts:
+        write_bundle_runner_files(bundle_dir)
+        manifest["export_summary"]["runner_files"] = [
+            "offline_vf2_patcher.py",
+            "offline_vf2_patcher_gui.py",
+            "Apply_B99_Patcher.bat",
+            "Launch_GUI.bat",
+            "README-B99-PATCHER.txt",
+        ]
     return manifest
 
 
@@ -600,6 +732,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--name", help="Manifest display name.")
     parser.add_argument("--asset-mode", choices=ASSET_MODES, default="additive", help="Asset export mode. 'additive' exports manifest-referenced assets; 'all' exports every Images/Assets diff.")
     parser.add_argument("--include-byte-patches", action="store_true", help="Diff vanilla EXE against patched EXE into byte patch records.")
+    parser.add_argument("--include-exe-replacement", action="store_true", help="Copy the patched EXE into payload and replace a verified vanilla target EXE during apply.")
+    parser.add_argument("--include-patcher-scripts", action="store_true", help="Copy the CLI/GUI patcher scripts plus convenience batch files into the bundle.")
     parser.add_argument("--strict-byte-patches", action="store_true", help="Fail if --include-byte-patches cannot produce byte records.")
     parser.add_argument("--force", action="store_true", help="Allow writing into a non-empty output directory.")
     return parser.parse_args()

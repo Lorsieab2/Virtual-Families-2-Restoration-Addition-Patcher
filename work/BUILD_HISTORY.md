@@ -645,3 +645,21 @@
   `HammockStd.png.fmap`.
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B99-Evict-Hammock-Parity`.
+
+## B99 Offline Patcher - Full-Payload Smoke Bundle
+
+- Adds direct `--exe` input to `work/offline_vf2_patcher.py`, allowing the
+  patcher to infer the game folder from `Virtual Families 2.exe`, validate the
+  vanilla EXE hash, create a backup under `.vf2_patch_backups`, and write the
+  patched EXE back to the same path.
+- Extends `work/export_offline_patch_bundle.py` with `--asset-mode full`,
+  `--include-exe-replacement`, and `--include-patcher-scripts`.
+- Exports a B99 full-payload patcher bundle to
+  `outputs/VF2-B99-Offline-Patcher-Full` and copies it to
+  `C:\Users\Owner\Downloads\VF2-B99-Offline-Patcher` for testing.
+- Smoke-tested from an EXE-only folder:
+  `Virtual Families 2.exe` vanilla SHA-256
+  `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4` became
+  B99 SHA-256
+  `9a713d38e830dcfb2fe1f4f054c36f1340d772c9e28c2abb96501137ee164ea1`, with the
+  B99 runtime folder structure recreated beside it.

@@ -29,6 +29,17 @@ files from its own backups.
   --disable holiday_outfits
 ```
 
+The apply command can also take the original executable directly. In that mode
+the game directory is inferred from the EXE's parent folder, and the manifest
+still writes the patched output back to `Virtual Families 2.exe` in that same
+folder:
+
+```powershell
+& "C:\Path\To\Python\python.exe" work\offline_vf2_patcher.py apply `
+  --exe "C:\Games\Virtual Families 2\Virtual Families 2.exe" `
+  --manifest patches\vf2-b99-full-payload\manifest.json
+```
+
 Use `--dry-run` to validate target hashes, expected bytes, and asset payload
 hashes without writing files. Use `--backup-dir` and `--log` to control where
 the backup and patch log are written. Use `--enable`, `--disable`,
@@ -122,6 +133,28 @@ The pruned B93 asset preview produced 713 asset records:
 
 That preview is a schema-valid starting point, not a release-ready patch
 bundle: it still needs vanilla EXE target metadata and native byte records.
+
+For beta-folder smoke testing, the exporter also supports a full-payload mode:
+
+```powershell
+& "C:\Path\To\Python\python.exe" work\export_offline_patch_bundle.py `
+  --build-dir outputs\VF2-Mobile-Furniture-With-Island-Events-B99-Evict-Hammock-Parity `
+  --out-dir outputs\VF2-B99-Offline-Patcher-Full `
+  --vanilla-exe "Unneeded crap\Virtual Families 2.exe" `
+  --asset-mode full `
+  --include-exe-replacement `
+  --include-patcher-scripts `
+  --force
+```
+
+`--asset-mode full` exports every non-excluded file in the generated build
+folder, including root DLLs and support directories. `--include-exe-replacement`
+adds a `core_executable` asset record that verifies the vanilla
+`Virtual Families 2.exe` hash and then replaces it with the current modded EXE.
+This is useful for testing the patcher's backup/apply/restore mechanics from an
+EXE-only folder, but it is not the final trust-friendly release shape. The
+final patcher should replace that full EXE payload with clean byte/table patch
+records wherever possible.
 
 A second preview with `--vanilla-exe "Unneeded crap\Virtual Families 2.exe"
 --include-byte-patches` writes the target metadata above and keeps the same 713

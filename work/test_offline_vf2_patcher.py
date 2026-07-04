@@ -83,6 +83,94 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(game_file.read_bytes(), original)
             self.assertTrue((backup / "restore_log.json").is_file())
 
+    def test_apply_with_exe_path_replaces_verified_original_and_restores(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = b"vanilla executable"
+            patched = b"patched executable"
+            game_file.write_bytes(original)
+            payload = tmp_path / "payload" / "Virtual Families 2.exe"
+            payload.parent.mkdir()
+            payload.write_bytes(patched)
+            manifest = tmp_path / "exe_replacement.json"
+            backup = tmp_path / "backup"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "exe replacement unit test",
+                        "settings": [
+                            {
+                                "id": "core_executable",
+                                "label": "Patch game executable",
+                                "default": True,
+                            }
+                        ],
+                        "target_files": [
+                            {
+                                "path": game_file.name,
+                                "sha256": sha256_bytes(original),
+                                "size": len(original),
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": game_file.name,
+                                "source_path": "payload/Virtual Families 2.exe",
+                                "source_sha256": sha256_bytes(patched),
+                                "source_size": len(patched),
+                                "expected_target_sha256": sha256_bytes(original),
+                                "expected_target_size": len(original),
+                                "overwrite_existing": True,
+                                "requires": ["core_executable"],
+                                "note": "replace verified vanilla exe",
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_patcher(
+                "apply",
+                "--exe",
+                str(game_file),
+                "--manifest",
+                str(manifest),
+                "--backup-dir",
+                str(backup),
+            )
+            self.assertEqual(game_file.read_bytes(), patched)
+            backup_manifest = json.loads((backup / "vf2_patch_backup_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(backup_manifest["files"][0]["file_path"], game_file.name)
+            self.assertEqual(backup_manifest["files"][0]["sha256"], sha256_bytes(original))
+
+            self.run_patcher("restore", "--backup-dir", str(backup))
+            self.assertEqual(game_file.read_bytes(), original)
+
+    def test_apply_with_exe_path_requires_canonical_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_file = tmp_path / "VF2.exe"
+            game_file.write_bytes(b"vanilla")
+            manifest = tmp_path / "patch.json"
+            self.write_manifest(manifest, game_file, b"vanilla", expected="76", replacement="70")
+
+            result = self.run_patcher(
+                "apply",
+                "--exe",
+                str(game_file),
+                "--manifest",
+                str(manifest),
+                expect=2,
+            )
+
+            self.assertIn("--exe must point to 'Virtual Families 2.exe'", result.stderr)
+
     def test_runtime_requirements_validate_game_payload_before_apply(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

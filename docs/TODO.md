@@ -8,9 +8,12 @@
   creates a backup, applies clean patch records from a JSON patch manifest, and
   writes a patch log. Initial byte-patch and asset-patch restore scaffolds exist
   in `work/offline_vf2_patcher.py`, including manifest-declared toggleable
-  settings and a Tkinter GUI wrapper; next step is converting the current VF2
-  build's native byte changes and generated payload assets into release
-  manifests.
+  settings, `--exe` input, full-payload beta-folder export, and a Tkinter GUI
+  wrapper. B99 has a full-payload test bundle that validates and backs up a
+  vanilla `Virtual Families 2.exe`, then replaces it and recreates the B99
+  support folder shape. Next step is converting the current VF2 build's native
+  byte changes into clean release byte/table records so the patch bundle no
+  longer needs a prebuilt modded EXE payload.
 - Define the JSON patch manifest contract: each patch record must include file
   path, offset, expected original bytes, replacement bytes, and note. The
   patcher must refuse to patch when expected bytes do not match, and it must
@@ -18,19 +21,13 @@
 - Keep the offline patcher simple and trust-friendly: avoid runtime injection,
   process memory editing, obfuscation, packers, and admin requirements. Prefer
   data, asset, and table patches over executable patches whenever possible.
-- Build the first full current-build offline patch bundle: include the scaled VF3 TV
-  animation strips as `asset_patches`, then add the verified native byte records
-  required to append the VF3 furniture, private floating-animation table
-  entries, gendered outfit icon descriptors, Holiday outfit runtime-frame
-  descriptors/payloads, the B75 independent synthetic outfit ToolTray
-  normalization patches, the six copied stock villager sprite sheets under
-  `Images/`, visible Special Upgrade icon descriptors/payloads, and the B76
-  Holiday Ornaments collection art/native table/observer/achievement records,
-  the B77 Playhouse child-only autonomous candidate max-age gate, the B78 VF3
-  TV frame enum-order swap, the B81 VF3 TV fmap/LoadFmap recognition fix, the
-  B93 split ToolTray hand/use synthetic outfit state, generated-frame Holiday
-  body source priority, and the B96 final outfit apply resolver without
-  distributing a premodified EXE.
+- Convert the B99 full-payload test bundle into the final no-modified-EXE
+  patcher: keep the scaled VF3 TV strips and generated assets as
+  `asset_patches`, then add verified native byte/table records required to
+  append furniture, Outfit rows/icons, visible Special Upgrades, Settings
+  Evict, Invisible Hammock parity, ToolTray synthetic outfit handling, Holiday
+  body runtime rendering, and other implemented fixes without distributing a
+  premodified EXE.
 - Use the final cleaned `B98-current-vf2-modded-build` release ZIP as the
   source of truth for future package baselines. It supersedes the older local
   B98 extraction that contained only 29 of the generator's 111 additive

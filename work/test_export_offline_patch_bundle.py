@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import hashlib
 import subprocess
 import sys
 import tempfile
@@ -165,6 +166,54 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             status = manifest["export_summary"]["native_patch_status"]
             self.assertEqual(status["status"], "byte_diff_skipped")
             self.assertIn("sizes differ", status["reason"])
+
+    def test_exports_full_bundle_with_exe_replacement_and_runners(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            vanilla = tmp_path / "Virtual Families 2.exe"
+            vanilla.write_bytes(b"vanilla executable")
+            patched_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
+            patched_exe.write_bytes(b"patched executable")
+            (build / "Images" / "Furniture").mkdir(parents=True)
+            (build / "Images" / "Furniture" / "InvisibleHammock.png").write_bytes(b"hammock")
+            (build / "Sounds").mkdir()
+            (build / "Sounds" / "sound00.wav").write_bytes(b"sound")
+            (build / "SDL2.dll").write_bytes(b"dll")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--vanilla-exe",
+                str(vanilla),
+                "--asset-mode",
+                "full",
+                "--include-exe-replacement",
+                "--include-patcher-scripts",
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
+            self.assertEqual(asset_by_path["Virtual Families 2.exe"]["requires"], ["core_executable"])
+            self.assertEqual(asset_by_path["Virtual Families 2.exe"]["expected_target_sha256"], hashlib.sha256(b"vanilla executable").hexdigest())
+            self.assertEqual(asset_by_path["Images/Furniture/InvisibleHammock.png"]["overwrite_existing"], True)
+            self.assertEqual(asset_by_path["Sounds/sound00.wav"]["overwrite_existing"], True)
+            self.assertEqual(asset_by_path["SDL2.dll"]["overwrite_existing"], True)
+            self.assertNotIn("patch-manifest.json", asset_by_path)
+            self.assertEqual(manifest["runtime_requirements"], {"required_files": [], "required_dirs": []})
+            self.assertTrue((out / "payload" / "Virtual Families 2.exe").is_file())
+            self.assertTrue((out / "Apply_B99_Patcher.bat").is_file())
+            self.assertTrue((out / "offline_vf2_patcher.py").is_file())
+            self.assertTrue(manifest["export_summary"]["exe_replacement"])
 
     def test_exports_object_relative_native_patch_sources_as_metadata_only(self):
         with tempfile.TemporaryDirectory() as tmp:

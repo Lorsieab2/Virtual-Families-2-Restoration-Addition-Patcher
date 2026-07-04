@@ -25,6 +25,7 @@ from typing import Any
 
 BACKUP_MANIFEST = "vf2_patch_backup_manifest.json"
 DEFAULT_BACKUP_ROOT = ".vf2_patch_backups"
+DEFAULT_EXE_NAME = "Virtual Families 2.exe"
 
 
 class PatchError(RuntimeError):
@@ -849,7 +850,16 @@ def asset_summary(asset_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def apply_manifest(args: argparse.Namespace) -> int:
-    game_dir = Path(args.game_dir).resolve()
+    exe_path = Path(args.exe).resolve() if getattr(args, "exe", None) else None
+    game_dir = Path(args.game_dir).resolve() if args.game_dir else None
+    if exe_path is not None:
+        if exe_path.name.lower() != DEFAULT_EXE_NAME.lower():
+            raise PatchError(f"--exe must point to {DEFAULT_EXE_NAME!r}, got {exe_path.name!r}.")
+        if game_dir is not None and game_dir != exe_path.parent.resolve():
+            raise PatchError("--game-dir and --exe disagree; use the EXE's parent folder or omit --game-dir.")
+        game_dir = exe_path.parent.resolve()
+    if game_dir is None:
+        raise PatchError("Either --game-dir or --exe is required.")
     manifest_path = Path(args.manifest).resolve()
     if not game_dir.is_dir():
         raise PatchError(f"Game directory does not exist: {game_dir}")
@@ -1005,7 +1015,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     apply_cmd = sub.add_parser("apply", help="Validate and apply a JSON patch manifest.")
-    apply_cmd.add_argument("--game-dir", required=True, help="Path to the user-provided vanilla VF2 game directory.")
+    apply_cmd.add_argument("--game-dir", help="Path to the user-provided vanilla VF2 game directory.")
+    apply_cmd.add_argument("--exe", help=f"Path to {DEFAULT_EXE_NAME}; the game directory is inferred from its parent.")
     apply_cmd.add_argument("--manifest", required=True, help="Path to the JSON patch manifest.")
     apply_cmd.add_argument("--backup-dir", help="Backup output directory. Defaults under the game directory.")
     apply_cmd.add_argument("--log", help="Patch log JSON path. Defaults inside the backup directory.")
