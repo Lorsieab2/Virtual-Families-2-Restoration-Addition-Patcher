@@ -22,9 +22,9 @@ ENABLE_DEBUGGER_FEATURES = os.environ.get("VF2_ENABLE_DEBUGGER_FEATURES", "0") =
 # Holiday body rows are now part of the normal additive build.  Set the env var
 # to 0 only when intentionally making a stock-body diagnostic build.
 ENABLE_HOLIDAY_BODY_TYPES = os.environ.get("VF2_ENABLE_HOLIDAY_BODY_TYPES", "1") != "0"
-# The Holiday Ornaments collection page is still an experimental native-table
-# graft. Keep normal builds on the stock Collections UI until it is proven safe.
-ENABLE_HOLIDAY_ORNAMENTS = os.environ.get("VF2_ENABLE_HOLIDAY_ORNAMENTS", "0") == "1"
+# Holiday Ornaments are part of the mobile collection table. Set the env var to
+# 0 only when intentionally making a stock-collections diagnostic build.
+ENABLE_HOLIDAY_ORNAMENTS = os.environ.get("VF2_ENABLE_HOLIDAY_ORNAMENTS", "1") != "0"
 ANALYSIS = ROOT / "outputs" / "VF2-Desktop-Object-Analysis"
 if not (ANALYSIS / "furniture-records.json").exists():
     ANALYSIS = ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis"
@@ -432,13 +432,14 @@ def build_native_array_contract():
             "collection_page": HOLIDAY_ORNAMENT_COLLECTION_PAGE,
             "achievement": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
             "status": (
-                "research opt-in"
+                "default-on mobile six-page collection"
                 if ENABLE_HOLIDAY_ORNAMENTS
-                else "disabled in normal builds; stock Collections UI remains 48 collectibles"
+                else "disabled for diagnostics; stock PC Collections UI remains 60 collectibles"
             ),
             "requirements": [
                 "reuse CCollectableItem::Update/Add so spawn timing and Lucky Rock odds remain stock",
                 "register base carrying value 0x9E as another 12-item spawn collection",
+                "register carrying values 0x9E-0xA9 with CCollectable so pickup/drop/count events reach CCollectableItem",
                 "append one Collections scene page without changing CCollectionScene object size",
                 "append one Goals screen achievement row without changing the save-state size",
                 "use supplied Holiday Collectibles page art and collectables_small.png copied into the modified build folder",
@@ -6106,6 +6107,49 @@ def patch_collectable_item_holiday_ornaments(manifest):
     }
 
 
+def patch_collectable_holiday_ornament_observers(manifest):
+    obj = CoffObject(PATCHED / "Collectable.obj")
+
+    ctor_sym = obj.symbol("??0CCollectable@@QAE@XZ")
+    ctor_sec = obj.section(ctor_sym.section)
+    insert_off = ctor_sym.value + 0x4C8
+    expected_tail = b"\x8B\xC6\x5E\xC3"
+    if obj.buf[ctor_sec.raw_ptr + insert_off : ctor_sec.raw_ptr + insert_off + len(expected_tail)] != expected_tail:
+        raise RuntimeError("Unexpected CCollectable constructor ornament observer insertion site")
+
+    collectable_item_sym = obj.symbol("?CollectableItem@@3VCCollectableItem@@A").index
+    register_observer_sym = obj.symbol("?RegisterObserver@CCollectable@@QAEXW4ECarrying@@PAVICollectable@@@Z").index
+    payload = bytearray()
+    relocs = []
+    for carrying in range(HOLIDAY_ORNAMENT_COLLECTABLE_START, HOLIDAY_ORNAMENT_COLLECTABLE_END + 1):
+        start = len(payload)
+        payload += b"\x68\x00\x00\x00\x00"              # push offset CollectableItem
+        payload += b"\x68" + struct.pack("<I", carrying)
+        payload += b"\x8B\xCE"                          # mov ecx,esi
+        payload += b"\xE8\x00\x00\x00\x00"              # call RegisterObserver
+        relocs.append((start + 1, collectable_item_sym, None))
+        relocs.append((start + 13, register_observer_sym, IMAGE_REL_I386_REL32))
+
+    obj.insert_section_bytes(ctor_sym.section, insert_off, bytes(payload))
+    for local_off, symidx, rtype in relocs:
+        if rtype is None:
+            obj.append_relocation(ctor_sym.section, insert_off + local_off, symidx)
+        else:
+            obj.append_relocation(ctor_sym.section, insert_off + local_off, symidx, rtype)
+
+    obj.write(PATCHED / "Collectable.obj")
+    manifest["CollectableHolidayOrnamentObservers"] = {
+        "status": "patched",
+        "function": "??0CCollectable@@QAE@XZ",
+        "insert_offset": hex(insert_off),
+        "registered_collectables": [
+            hex(item)
+            for item in range(HOLIDAY_ORNAMENT_COLLECTABLE_START, HOLIDAY_ORNAMENT_COLLECTABLE_END + 1)
+        ],
+        "note": "Registers Holiday Ornaments with CCollectable so villager carry/drop calls reach CCollectableItem.",
+    }
+
+
 def patch_collection_scene_holiday_ornaments(manifest):
     obj = CoffObject(PATCHED / "CollectionScene.obj")
     holiday_body_descriptor_count = HOLIDAY_BODY_IMAGE_COUNT if ENABLE_HOLIDAY_BODY_TYPES else 0
@@ -7839,15 +7883,17 @@ def main():
     if ENABLE_HOLIDAY_ORNAMENTS:
         patch_achievement_holiday_ornaments(manifest)
         patch_collectable_item_holiday_ornaments(manifest)
+        patch_collectable_holiday_ornament_observers(manifest)
         patch_collection_scene_holiday_ornaments(manifest)
     else:
         manifest["HolidayOrnamentsCollection"] = {
             "enabled": False,
-            "status": "disabled in normal builds",
-            "reason": "The experimental fifth collection page made the Collections screen crash and report 60 collectibles.",
-            "stock_collection_total": 48,
+            "status": "disabled for diagnostic builds",
+            "reason": "VF2_ENABLE_HOLIDAY_ORNAMENTS=0 requested a stock PC collection table.",
+            "stock_collection_total": 60,
+            "mobile_collection_total": 72,
             "experimental_collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
-            "opt_in": "Set VF2_ENABLE_HOLIDAY_ORNAMENTS=1 only for isolated ornament research builds.",
+            "opt_out": "Set VF2_ENABLE_HOLIDAY_ORNAMENTS=0 only for isolated stock-collection diagnostics.",
         }
     patch_spontaneous_behaviors(manifest)
     patch_bookshelf_reading_behavior(manifest)

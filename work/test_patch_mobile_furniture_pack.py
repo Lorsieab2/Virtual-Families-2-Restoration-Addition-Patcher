@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 import copy
+import shutil
+import struct
 import tempfile
 import unittest
 from pathlib import Path
 
 import patch_mobile_furniture_pack as patcher
+from coff_patch import CoffObject
 
 
 def valid_vf3_tv_manifest():
@@ -199,14 +202,64 @@ class OutfitStoreMappingTests(unittest.TestCase):
 
 
 class HolidayOrnamentGateTests(unittest.TestCase):
-    def test_holiday_ornaments_are_disabled_by_default(self):
-        self.assertFalse(patcher.ENABLE_HOLIDAY_ORNAMENTS)
+    def with_temp_patched_objs(self, filenames, callback):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                patcher.PATCHED = temp_root
+                for filename in filenames:
+                    shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+                callback(temp_root)
+        finally:
+            patcher.PATCHED = old_patched
 
-    def test_native_contract_reports_stock_collections_for_normal_builds(self):
+    def test_holiday_ornaments_are_enabled_by_default(self):
+        self.assertTrue(patcher.ENABLE_HOLIDAY_ORNAMENTS)
+
+    def test_native_contract_reports_mobile_collection_table_for_normal_builds(self):
         contract = patcher.build_native_array_contract()
 
-        self.assertFalse(contract["holiday_ornaments"]["enabled"])
-        self.assertIn("48 collectibles", contract["holiday_ornaments"]["status"])
+        self.assertTrue(contract["holiday_ornaments"]["enabled"])
+        self.assertIn("six-page collection", contract["holiday_ornaments"]["status"])
+
+    def test_collection_scene_table_extends_to_mobile_ornament_page(self):
+        def run(temp_root):
+            manifest = {}
+
+            patcher.patch_collection_scene_holiday_ornaments(manifest)
+            obj = CoffObject(temp_root / "CollectionScene.obj")
+            sym = obj.symbol("?gCollectable@@3PAW4ECarrying@@A")
+            sec = obj.section(sym.section)
+            raw = obj.buf[sec.raw_ptr + sym.value : sec.raw_ptr + sym.value + 72 * 4]
+            values = list(struct.unpack("<72I", raw))
+
+            expected = (
+                list(range(0x4F, 0x73))
+                + list(range(0x86, 0x9E))
+                + list(range(patcher.HOLIDAY_ORNAMENT_COLLECTABLE_START, patcher.HOLIDAY_ORNAMENT_COLLECTABLE_END + 1))
+            )
+            self.assertEqual(values, expected)
+            self.assertEqual(manifest["CollectionSceneHolidayOrnaments"]["page"], 5)
+
+        self.with_temp_patched_objs(["CollectionScene.obj"], run)
+
+    def test_collectable_observers_register_all_mobile_ornaments(self):
+        def run(temp_root):
+            manifest = {}
+
+            patcher.patch_collectable_holiday_ornament_observers(manifest)
+            data = (temp_root / "Collectable.obj").read_bytes()
+
+            for carrying in range(patcher.HOLIDAY_ORNAMENT_COLLECTABLE_START, patcher.HOLIDAY_ORNAMENT_COLLECTABLE_END + 1):
+                with self.subTest(carrying=hex(carrying)):
+                    self.assertIn(b"\x68" + struct.pack("<I", carrying), data)
+            self.assertEqual(
+                manifest["CollectableHolidayOrnamentObservers"]["registered_collectables"],
+                [hex(item) for item in range(0x9E, 0xAA)],
+            )
+
+        self.with_temp_patched_objs(["Collectable.obj"], run)
 
     def test_supplied_collection_art_maps_to_twelve_collectibles(self):
         self.assertEqual(

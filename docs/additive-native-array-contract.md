@@ -90,13 +90,20 @@ request handling for active variants `0x9E-0xA9` in both routines; otherwise
 the game can keep spawning ornaments and fail to route villagers to pick them
 up.
 
-Collections page `5` is appended to the native `CCollectionScene` tables rather
-than replacing an existing page. The page uses supplied collection-screen art
-from `C:\Users\Owner\Downloads\Holiday Collectibles`: the 12 placeholder
-images are baked into the frame background, while the 12 collected ornament
-images are copied under `Images/CollectionOrnaments/` and drawn by the stock
-`Count(item) > 0` overlay path. `Collection_ChristmasOrnament_CandyCane.png`
-is decorative source art, not a 13th collectible. The build also copies the
+`CCollectable` also has its own carrying-value observer table. Stock PC
+registers `CCollectableItem` for collectible values through `0x9D`; B92 adds
+constructor registrations for `0x9E-0xA9` so villager `Carry`/`Drop` calls reach
+`CCollectableItem` and increment collection counts.
+
+Stock PC `CCollectionScene::gCollectable` is a five-page table with 60 dwords:
+`0x4F-0x72`, `0x86-0x91`, and `0x92-0x9D`. Mobile 1.7.16 expands the same
+table to six pages/72 dwords by appending `0x9E-0xA9`; B92 mirrors that shape
+instead of replacing page `4`. The page uses supplied collection-screen art from
+`C:\Users\Owner\Downloads\Holiday Collectibles`: the 12 placeholder images are
+baked into the frame background, while the 12 collected ornament images are
+copied under `Images/CollectionOrnaments/` and drawn by the stock
+`Count(item) > 0` overlay path. `Collection_ChristmasOrnament_CandyCane.png` is
+decorative source art, not a 13th collectible. The build also copies the
 supplied `collectables_small.png` over the runtime sheet so the small collection
 atlas contains the Holiday Ornament row. The matching Goals entry is
 achievement `0x5F`; visible achievement/order bounds must widen to `0x60`,

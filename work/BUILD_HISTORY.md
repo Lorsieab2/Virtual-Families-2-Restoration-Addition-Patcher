@@ -484,6 +484,22 @@
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B91-Revert-Full-Assets-Payload`.
 
+## B92 - Holiday Ornaments Collectible Array
+
+- Enables Holiday Ornaments by default after verifying the mobile 1.7.16 native
+  collection table shape: stock PC has five pages/60 entries, while mobile adds
+  page `5` and appends carrying values `0x9E-0xA9` for 72 total entries.
+- Keeps the B86 `CCollectableItem` family-range patches for spawn recognition,
+  pickup search, `WasItemSpawned`, `CollectionCount`, and first-copy
+  achievement progress.
+- Adds `CCollectable` constructor observer registrations for `0x9E-0xA9` so
+  villager carry/drop dispatch reaches `CCollectableItem` and ornaments can be
+  removed and counted after pickup.
+- Adds regression tests for the patched 72-entry `gCollectable` table and the
+  new ornament observer registrations.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B92-Holiday-Ornaments-Collectable-Array`.
+
 ## Next Build Contract - Additive Native Arrays
 
 - Enables the additive mobile Island event table by default in the patcher.

@@ -23,5 +23,5 @@ local capability.
 On 2026-07-03, the available private-key certificates were not valid
 Authenticode code-signing choices: `CN=localhost` only had Server
 Authentication EKU, and the private-key Root certificates were rejected by
-signtool. B83 and B84 executables were therefore unsigned unless a valid
+signtool. B83, B84, and B92 executables were therefore unsigned unless a valid
 Code Signing certificate is installed before packaging.

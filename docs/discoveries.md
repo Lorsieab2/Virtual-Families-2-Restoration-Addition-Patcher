@@ -505,11 +505,15 @@
 
 ## 2026-07-03 - Stock Collections and Runtime Geometry Payload Rollback
 
-- B89 was generated with the experimental Holiday Ornament collection hook
-  enabled, so opening Collections could enter the unfinished fifth-page native
-  path and crash while the game reported `60` collectibles. Normal builds must
-  leave `VF2_ENABLE_HOLIDAY_ORNAMENTS` unset so the stock four-page
-  Collections UI and `48` collectible total remain active.
+- Stock PC `CCollectionScene::gCollectable` already has five pages/60
+  collectibles: `0x4F-0x72`, `0x86-0x91`, and `0x92-0x9D`. Earlier notes that
+  described stock as four pages/48 were wrong.
+- Mobile VF2 1.7.16 extends `CCollectionScene::sm_sCollectable` to
+  `6 * 12 * 12 = 864` bytes and has a 72-dword `gCollectable` sequence that
+  appends Holiday Ornament carrying values `0x9E-0xA9`.
+- B89 was generated with an incomplete Holiday Ornament collection hook, so
+  opening Collections could enter unfinished native-table paths while the game
+  still reported the stock PC `60` collectibles.
 - B90 tried to seed a full runtime `Assets/` payload and require geometry
   sentinels (`cmap.dat`, `wpts.dat`, `animpts.dat`, `anims.dat`, `lsmap.dat`),
   but that diverged the modded runtime too far and broke in-game behavior.
@@ -517,3 +521,21 @@
   `Assets/` validator requirements. Normal builds should go back to only the
   generated/additive `.fmap` files needed by the mobile furniture additions
   until the map/pathing asset format is understood and explicitly approved.
+
+## 2026-07-03 - Holiday Ornament Collectible Array and Pickup Path
+
+- B92 enables Holiday Ornaments by default and leaves
+  `VF2_ENABLE_HOLIDAY_ORNAMENTS=0` as a stock-collections diagnostic switch.
+- `patch_collection_scene_holiday_ornaments()` appends the mobile sixth page to
+  `CCollectionScene` tables: `sm_sCollectable`, `gCollectionFrame`,
+  `gCollectionLabel`, `gLabelInfo`, and `gCollectable`. A unit test now asserts
+  the patched `gCollectable` values equal the mobile 72-entry sequence.
+- `CCollectable` owns a separate observer dispatch table used by
+  `CCollectable::Carry`, `Drop`, and `ProcessNearbyCollectables`. Stock PC
+  constructor registrations stop at `0x9D`; B92 inserts registrations for
+  `0x9E-0xA9` so spawned ornaments can be carried, dropped, removed, and counted
+  through `CCollectableItem`.
+- `CCollectableItem::Drop()` already stores counts in the saved collection-count
+  array for the `0x9E-0xA9` range after the B86 family patches; the missing
+  observer registration explained why visible ornaments could behave like
+  non-pickup objects.
