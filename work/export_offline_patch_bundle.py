@@ -330,6 +330,12 @@ def build_byte_patches(vanilla_exe: Path, patched_exe: Path, target_exe_name: st
     return patches
 
 
+def native_patch_status(status: str, **extra: Any) -> dict[str, Any]:
+    data = {"status": status}
+    data.update(extra)
+    return data
+
+
 def setting_for_asset(rel_path: Path) -> str:
     text = relative_posix(rel_path)
     stem = rel_path.stem
@@ -459,11 +465,41 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             manifest_path.unlink()
 
     byte_patches: list[dict[str, Any]] = []
+    native_status: dict[str, Any]
     target_files: list[dict[str, Any]] = []
     if vanilla_exe:
         target_files.append(target_file_record(vanilla_exe, target_exe_name))
         if args.include_byte_patches:
-            byte_patches = build_byte_patches(vanilla_exe, patched_exe, target_exe_name)
+            try:
+                byte_patches = build_byte_patches(vanilla_exe, patched_exe, target_exe_name)
+                native_status = native_patch_status(
+                    "byte_diff_exported",
+                    byte_patch_count=len(byte_patches),
+                    vanilla_size=vanilla_exe.stat().st_size,
+                    patched_size=patched_exe.stat().st_size,
+                )
+            except ValueError as exc:
+                if args.strict_byte_patches:
+                    raise
+                native_status = native_patch_status(
+                    "byte_diff_skipped",
+                    reason=str(exc),
+                    next_step="Extract native patch records from object/linker patch data instead of full EXE diff.",
+                    vanilla_size=vanilla_exe.stat().st_size,
+                    patched_size=patched_exe.stat().st_size,
+                )
+        else:
+            native_status = native_patch_status(
+                "not_requested",
+                reason="Vanilla EXE metadata was exported, but --include-byte-patches was not set.",
+                vanilla_size=vanilla_exe.stat().st_size,
+                patched_size=patched_exe.stat().st_size,
+            )
+    else:
+        native_status = native_patch_status(
+            "missing_vanilla_exe",
+            reason="No --vanilla-exe was supplied, so target EXE metadata and byte patches were not exported.",
+        )
 
     asset_patches = export_asset_payloads(build_dir, base_payload, bundle_dir, build_manifest_data, args.asset_mode)
 
@@ -492,6 +528,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         "asset_patches": asset_patches,
         "export_summary": {
             "byte_patch_count": len(byte_patches),
+            "native_patch_status": native_status,
             "asset_patch_count": len(asset_patches),
             "asset_counts_by_setting": dict(sorted(asset_counts_by_setting.items())),
             "payload_file_count": count_files(bundle_dir / "payload"),
@@ -516,6 +553,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--name", help="Manifest display name.")
     parser.add_argument("--asset-mode", choices=ASSET_MODES, default="additive", help="Asset export mode. 'additive' exports manifest-referenced assets; 'all' exports every Images/Assets diff.")
     parser.add_argument("--include-byte-patches", action="store_true", help="Diff vanilla EXE against patched EXE into byte patch records.")
+    parser.add_argument("--strict-byte-patches", action="store_true", help="Fail if --include-byte-patches cannot produce byte records.")
     parser.add_argument("--force", action="store_true", help="Allow writing into a non-empty output directory.")
     return parser.parse_args()
 

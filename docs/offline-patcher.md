@@ -92,9 +92,23 @@ hash metadata and length-preserving byte diff records:
 ```
 
 The byte-diff mode refuses to export if the vanilla and patched EXEs have
-different sizes. This keeps the first exporter limited to the patcher's current
-offset/expected-bytes contract instead of pretending a relinked executable can
-always be represented safely as simple byte patches.
+different sizes when `--strict-byte-patches` is used. Without strict mode, it
+still writes vanilla EXE target metadata and records a
+`native_patch_status=byte_diff_skipped` summary so the bundle can keep asset
+payloads and hash validation while native patch records are developed from
+object/linker patch data.
+
+The current workspace-local vanilla EXE candidate is
+`Unneeded crap\Virtual Families 2.exe`:
+
+| Field | Value |
+| --- | --- |
+| Size | `1,881,088` |
+| SHA-256 | `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4` |
+
+The B93 patched EXE is `1,677,824` bytes, so full EXE byte-diff export is not
+valid for that build. Its native patch records must be exported from the
+patcher/linker/object metadata instead.
 
 The pruned B93 asset preview produced 713 asset records:
 
@@ -108,6 +122,11 @@ The pruned B93 asset preview produced 713 asset records:
 
 That preview is a schema-valid starting point, not a release-ready patch
 bundle: it still needs vanilla EXE target metadata and native byte records.
+
+A second preview with `--vanilla-exe "Unneeded crap\Virtual Families 2.exe"
+--include-byte-patches` writes the target metadata above and keeps the same 713
+asset records, but has zero byte records and
+`native_patch_status=byte_diff_skipped` because the EXE sizes differ.
 
 ## Restore
 

@@ -537,3 +537,9 @@
   producing 713 manifest-referenced asset records instead of exporting inherited
   previous-build payloads. It still needs vanilla EXE target metadata and
   native byte records before publication.
+- The workspace-local vanilla EXE candidate
+  `Unneeded crap\Virtual Families 2.exe` exports target metadata successfully
+  (SHA-256 `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4`,
+  size `1,881,088`), but B93's patched EXE size is `1,677,824`, so native
+  records must be derived from linker/object patch metadata rather than a full
+  executable byte diff.

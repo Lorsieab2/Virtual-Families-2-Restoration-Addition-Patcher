@@ -30,10 +30,11 @@
   TV frame enum-order swap, the B81 VF3 TV fmap/LoadFmap recognition fix, and
   the B93 split ToolTray hand/use synthetic outfit state plus generated-frame
   Holiday body source priority without distributing a premodified EXE.
-- Supply a verified vanilla VF2 PC executable to
-  `work/export_offline_patch_bundle.py` and test `--include-byte-patches`. If
-  the vanilla and patched EXE sizes differ, extract native patch records from
-  object/linker patch data instead of a full binary diff.
+- Extract native patch records from object/linker patch data for the offline
+  bundle. The workspace-local vanilla EXE candidate has SHA-256
+  `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4` and size
+  `1,881,088`, while B93's patched EXE is `1,677,824` bytes; full binary diff
+  export is therefore invalid for B93.
 - When exporting offline patcher manifests, feed the generated build manifest
   through `validate_vf3_tv_animation_contract()` and
   `validate_vf3_tv_behavior_contract()` or equivalent release validation steps

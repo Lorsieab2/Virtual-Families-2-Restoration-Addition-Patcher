@@ -652,3 +652,9 @@
   Ornament collection records, 11 outfit-store records, and 12 VF3 TV
   asset/recognition records. This is schema-readable by the patcher but still
   needs vanilla EXE target metadata and native byte records before release use.
+- `Unneeded crap\Virtual Families 2.exe` is the current workspace-local vanilla
+  EXE candidate for offline patch metadata: size `1,881,088`, SHA-256
+  `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4`.
+  B93's patched EXE is `1,677,824` bytes, so full-EXE byte diff export is
+  invalid; the exporter records `native_patch_status=byte_diff_skipped` and the
+  native records need to come from object/linker patch metadata.

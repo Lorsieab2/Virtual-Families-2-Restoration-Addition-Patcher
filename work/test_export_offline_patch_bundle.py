@@ -24,6 +24,20 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.fail(f"exporter failed\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
         return result
 
+    def run_exporter_expect(self, *args, expect=0):
+        result = subprocess.run(
+            [sys.executable, str(EXPORTER), *args],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode != expect:
+            self.fail(
+                f"Expected exporter exit {expect}, got {result.returncode}\n"
+                f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+            )
+        return result
+
     def run_patcher(self, *args, expect=0):
         result = subprocess.run(
             [sys.executable, str(PATCHER), *args],
@@ -116,6 +130,65 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             settings = {row["id"] for row in manifest["settings"]}
             self.assertIn("core_native_patch", settings)
             self.assertIn("core_assets", settings)
+            self.assertEqual(manifest["export_summary"]["native_patch_status"]["status"], "byte_diff_exported")
+
+    def test_size_mismatch_records_native_patch_skip_status(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            vanilla = tmp_path / "vanilla.exe"
+            vanilla.write_bytes(bytes([1, 2, 3, 4, 5, 6]))
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(bytes([1, 2, 3]))
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--vanilla-exe",
+                str(vanilla),
+                "--include-byte-patches",
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["target_files"][0]["size"], len(vanilla.read_bytes()))
+            self.assertEqual(manifest["patches"], [])
+            status = manifest["export_summary"]["native_patch_status"]
+            self.assertEqual(status["status"], "byte_diff_skipped")
+            self.assertIn("sizes differ", status["reason"])
+
+    def test_strict_byte_patches_fail_on_size_mismatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            vanilla = tmp_path / "vanilla.exe"
+            vanilla.write_bytes(bytes([1, 2, 3, 4, 5, 6]))
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(bytes([1, 2, 3]))
+
+            result = self.run_exporter_expect(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--vanilla-exe",
+                str(vanilla),
+                "--include-byte-patches",
+                "--strict-byte-patches",
+                expect=1,
+            )
+            self.assertIn("sizes differ", result.stderr)
 
     def test_all_asset_mode_exports_unreferenced_diffs(self):
         with tempfile.TemporaryDirectory() as tmp:
