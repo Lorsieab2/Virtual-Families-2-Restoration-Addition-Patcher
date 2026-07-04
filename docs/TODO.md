@@ -156,6 +156,10 @@
   mobile Island Events and Holiday Ornaments disabled by default; then verify
   Holiday outfit items `50-53` still apply as those body values instead of
   falling back to `49`.
+- In-game test B95 Holiday outfit field sync: buy at least two generated
+  outfits of the same gender, then apply an older toolbar item and a Holiday
+  toolbar item. Verify the selected item controls the villager body value and
+  Holiday rows `50-53` no longer collapse to `49`.
 - Continue Holiday Ornament implementation under the isolated
   `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` path: compare the mobile collection table,
   page routing, pickup observer registration, `CollectionCount`, save fields,

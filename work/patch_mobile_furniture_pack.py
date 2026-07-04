@@ -4405,6 +4405,20 @@ static int VF2OutfitStockTrayItemForItem(int itemId) {{
     return gender == 0 ? kVF2FemaleOutfitTrayItem : kVF2MaleOutfitTrayItem;
 }}
 
+static void VF2SetStockOutfitBodyForSyntheticItem(int itemId) {{
+    int body = VF2OutfitBodyForItem(itemId);
+    int gender = VF2OutfitGenderForItem(itemId);
+    if (body < 0 || gender < 0) {{
+        return;
+    }}
+    if (gender == 0) {{
+        InventoryManager.femaleOutfitBody = body;
+    }} else {{
+        InventoryManager.maleOutfitBody = body;
+    }}
+    gVF2LastSyntheticOutfitByGender[gender] = itemId;
+}}
+
 extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
     int body = VF2OutfitBodyForItem(itemId);
     if (body >= 0) {{
@@ -4438,6 +4452,7 @@ extern "C" bool __cdecl VF2PurchaseOutfitStoreItem(int itemId) {{
         return false;
     }}
 
+    VF2SetStockOutfitBodyForSyntheticItem(itemId);
     ToolTray.AddItem((EInventoryItem)itemId, 1);
     theGameState::Get()->SaveCurrentGame();
     return true;
@@ -4467,8 +4482,7 @@ extern "C" int __cdecl VF2NormalizeOutfitToolInHand(void* tray, int activeFlagOf
     int stockItem = VF2OutfitStockTrayItemForItem(itemId);
     if (stockItem >= 0) {{
         if (selectedSlot) *selectedSlot = itemId;
-        int gender = VF2OutfitGenderForItem(itemId);
-        if (gender >= 0) gVF2LastSyntheticOutfitByGender[gender] = itemId;
+        VF2SetStockOutfitBodyForSyntheticItem(itemId);
         return stockItem;
     }}
 
@@ -7895,7 +7909,11 @@ def validate_vf3_tv_animation_contract(manifest, *, check_files=True):
                 errors.append(f"missing generated VF3 TV runtime animation asset: {runtime_path}")
 
     missing_assets = manifest.get("vf3_tv_animation_sheets", {}).get("missing", [])
-    if missing_assets:
+    runtime_assets_available = all(
+        (OUT / "Images" / runtime_name).is_file()
+        for runtime_name in VF3_TV_RUNTIME_ANIMATION_NAMES.values()
+    )
+    if missing_assets and not runtime_assets_available:
         errors.append(f"missing VF3 TV animation source/output assets: {missing_assets}")
     if errors:
         raise RuntimeError("VF3 TV animation contract failed:\n- " + "\n- ".join(errors))
@@ -7913,6 +7931,9 @@ def validate_vf3_tv_animation_contract(manifest, *, check_files=True):
             for item in VF3_TV_ITEMS
         ],
         "runtime_assets": list(VF3_TV_RUNTIME_ANIMATION_NAMES.values()),
+        "source_frame_status": "external source frames missing; validated from build-local runtime animation strips"
+        if missing_assets
+        else "source and runtime animation assets validated",
     }
 
 

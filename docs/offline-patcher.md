@@ -169,7 +169,7 @@ when the original target did not exist.
     {
       "id": "outfit_store_expansion",
       "label": "Add expanded Outfit store",
-      "description": "Adds generated outfit rows, copied stock sprite sheets, icons, and independent outfit tray items.",
+      "description": "Adds generated outfit rows, copied stock sprite sheets, icons, independent outfit tray items, and stock outfit body field sync.",
       "default": true
     },
     {

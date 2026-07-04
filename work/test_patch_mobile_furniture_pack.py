@@ -218,7 +218,9 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 self.assertIn("activeFlagOffset == 0xA4", source)
                 self.assertIn("activeFlagOffset == 0xA5", source)
                 self.assertIn("selectedItems[2] = {gVF2SyntheticOutfitToolInUse, gVF2SyntheticOutfitToolInHand}", source)
-                self.assertIn("gVF2LastSyntheticOutfitByGender[gender] = itemId", source)
+                self.assertIn("VF2SetStockOutfitBodyForSyntheticItem", source)
+                self.assertIn("InventoryManager.femaleOutfitBody = body", source)
+                self.assertIn("InventoryManager.maleOutfitBody = body", source)
                 self.assertIn("itemId == kVF2FemaleOutfitTrayItem", source)
         finally:
             patcher.PATCHED = old_patched

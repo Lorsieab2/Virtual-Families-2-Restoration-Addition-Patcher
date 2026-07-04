@@ -42,7 +42,7 @@ SETTINGS = [
     {
         "id": "outfit_store_expansion",
         "label": "Add expanded Outfit store",
-        "description": "Adds generated outfit store rows, icons, and independent tray item support.",
+        "description": "Adds generated outfit store rows, icons, independent tray item support, and stock outfit body field sync.",
         "default": True,
     },
     {
@@ -60,8 +60,8 @@ SETTINGS = [
     {
         "id": "holiday_ornaments_collection",
         "label": "Add Holiday Ornaments collection",
-        "description": "Adds mobile Holiday Ornament yard collectibles, collection art, and goals.",
-        "default": True,
+        "description": "Adds mobile Holiday Ornament yard collectibles, collection art, and goals. Experimental until pickup/count/spawn parity is proven.",
+        "default": False,
     },
     {
         "id": "mobile_purchases",
@@ -84,8 +84,8 @@ SETTINGS = [
     {
         "id": "island_events",
         "label": "Add mobile Island Events",
-        "description": "Adds mobile-exclusive Island Event shell records and implemented outcomes.",
-        "default": True,
+        "description": "Adds mobile-exclusive Island Event shell records and implemented outcomes. Experimental until timed event outcomes are crash-free.",
+        "default": False,
     },
 ]
 

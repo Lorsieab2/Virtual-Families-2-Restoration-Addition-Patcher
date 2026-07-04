@@ -688,3 +688,16 @@
 - Normal B94 builds intentionally keep the stock PC collection table at 60
   entries until the mobile Holiday Ornament page, pickup observers, collection
   count, and Lucky Rock odds are all verified together.
+
+## 2026-07-04 - Holiday Outfit Apply Field Sync
+
+- The outfit apply path can still observe the vanilla `CInventoryManager`
+  male/female outfit body fields after a synthetic tray item has normalized to
+  stock item `0x49` or `0x4A`. B95 updates those stock fields whenever a
+  generated outfit is purchased or selected through
+  `_VF2NormalizeOutfitToolInHand`, so Holiday body rows `50-53` are available
+  even if the later apply step falls through to the stock body lookup.
+- VF3 TV animation validation should not require loose source frames from
+  `Downloads\Sprite` when a build has already inherited the generated runtime
+  animation strips from the previous build. B95 treats build-local
+  `Images/*TV*Anim*.png` strips as sufficient for validation.

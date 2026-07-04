@@ -572,3 +572,15 @@
   falling back to body `49`.
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B94-Stability-Outfit-Ornament-OptIn`.
+
+## B95 - Holiday Outfit Apply Field Sync
+
+- Seeds from B94 and keeps Holiday Ornaments plus mobile Island Events disabled
+  by default for stability.
+- Updates the stock `CInventoryManager` male/female outfit body fields whenever
+  a generated outfit item is purchased or selected through the tray
+  normalization helper. This gives the vanilla apply path body values `50-53`
+  for Holiday outfit rows even after the synthetic tray ID is normalized to
+  stock item `0x49/0x4A`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B95-Holiday-Outfit-Apply-Field-Sync`.

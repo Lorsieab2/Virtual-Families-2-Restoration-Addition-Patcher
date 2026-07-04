@@ -97,6 +97,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             settings = self.run_patcher("settings", "--manifest", str(out / "manifest.json"))
             self.assertIn("holiday_furniture [default on]", settings.stdout)
             self.assertIn("vf3_tv_assets_recognition [default on]", settings.stdout)
+            self.assertIn("holiday_ornaments_collection [default off]", settings.stdout)
+            self.assertIn("island_events [default off]", settings.stdout)
+            self.assertIn("stock outfit body field sync", settings.stdout)
 
     def test_exports_byte_patches_when_vanilla_exe_is_supplied(self):
         with tempfile.TemporaryDirectory() as tmp:
