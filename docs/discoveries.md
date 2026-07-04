@@ -539,3 +539,19 @@
   array for the `0x9E-0xA9` range after the B86 family patches; the missing
   observer registration explained why visible ornaments could behave like
   non-pickup objects.
+
+## 2026-07-03 - Mobile Holiday Ornament Goals and Spawn Mechanics
+
+- Mobile VF2 1.7.16 `CCollectableItem::Reset()` inlines spawn-area registration
+  instead of calling exported `AddSpawnArea`, but the resulting records match
+  the PC patcher contract: four full-yard rectangles with carrying base `0x9E`.
+- The four mobile ornament spawn rectangles are `(0x634,0x0B4,0x764,0x302)`,
+  `(0x112,0x0C4,0x2FA,0x1BD)`, `(0x098,0x178,0x19D,0x26F)`, and
+  `(0x08D,0x568,0x137,0x750)`.
+- Mobile `CCollectableItem::CollectionCount()` has an explicit sixth-family
+  fallback for `0x9E`; the rarity helpers split ornaments into common
+  `0x9E-0xA1`, uncommon `0xA2-0xA5`, and rare `0xA6-0xA9`.
+- Mobile `achievementList` row `0x5F` is Ornamentologist with target `12`.
+  Mobile Goal Collector row `0x54` has target `13`. The shared third row field
+  is platform-wide (`0x23E` in mobile, `0x1ED` in PC), so additive PC rows
+  should keep the PC value while mirroring the mobile row IDs and targets.

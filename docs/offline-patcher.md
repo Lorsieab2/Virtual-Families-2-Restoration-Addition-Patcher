@@ -219,7 +219,9 @@ as:
   include the B86 `CCollectableItem::Find()` and `WasItemSpawned()`
   family-range patches for request `0x9E` and active variants `0x9E-0xA9`, the
   B92 `CCollectionScene` six-page table append, the B92 `CCollectable`
-  observer registrations for `0x9E-0xA9`, the B87 supplied
+  observer registrations for `0x9E-0xA9`, the mobile-matched four full-yard
+  `0x9E` spawn rectangles, the mobile-matched Ornamentologist row `0x5F`
+  target `12` and Goal Collector row `0x54` target `13`, the B87 supplied
   `Images/CollectionOrnaments/*` payloads, baked-placeholder frame background,
   and replacement `Images/collectables_small.png`.
 

@@ -222,6 +222,20 @@ class HolidayOrnamentGateTests(unittest.TestCase):
 
         self.assertTrue(contract["holiday_ornaments"]["enabled"])
         self.assertIn("six-page collection", contract["holiday_ornaments"]["status"])
+        self.assertEqual(contract["holiday_ornaments"]["achievement"], "0x5f")
+        self.assertEqual(contract["holiday_ornaments"]["achievement_target"], 12)
+        self.assertEqual(contract["holiday_ornaments"]["goal_collector_target"], 13)
+
+    def test_mobile_spawn_rect_contract_matches_ornament_reset_records(self):
+        self.assertEqual(
+            [rect for _symbol, rect in patcher.HOLIDAY_ORNAMENT_SPAWN_RECTS],
+            [
+                (0x634, 0x0B4, 0x764, 0x302),
+                (0x112, 0x0C4, 0x2FA, 0x1BD),
+                (0x098, 0x178, 0x19D, 0x26F),
+                (0x08D, 0x568, 0x137, 0x750),
+            ],
+        )
 
     def test_collection_scene_table_extends_to_mobile_ornament_page(self):
         def run(temp_root):
@@ -260,6 +274,26 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             )
 
         self.with_temp_patched_objs(["Collectable.obj"], run)
+
+    def test_collectable_item_registers_mobile_ornament_spawn_areas(self):
+        def run(temp_root):
+            manifest = {}
+
+            patcher.patch_collectable_item_holiday_ornaments(manifest)
+            item_patch = next(
+                item
+                for item in manifest["CollectableItemHolidayOrnaments"]["patches"]
+                if item["function"] == "?Reset@CCollectableItem@@QAEXXZ"
+            )
+
+            self.assertEqual(item_patch["spawn_area_count"], 4)
+            self.assertEqual(item_patch["base_collectable"], "0x9e")
+            self.assertEqual(
+                item_patch["mobile_spawn_rects"],
+                [[hex(value) for value in rect] for _symbol, rect in patcher.HOLIDAY_ORNAMENT_SPAWN_RECTS],
+            )
+
+        self.with_temp_patched_objs(["CollectableItem.obj"], run)
 
     def test_supplied_collection_art_maps_to_twelve_collectibles(self):
         self.assertEqual(

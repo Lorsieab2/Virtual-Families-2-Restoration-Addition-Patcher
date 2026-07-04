@@ -62,6 +62,8 @@
   picked up and removed, confirm collection counts and the Ornamentologist goal
   advance, verify Lucky Rock odds still affect the new collection through the
   stock `CCollectableItem::Update/Add` path, and verify save/load persistence.
+  Static mobile comparison now confirms row `0x5F` target `12`, Goal Collector
+  target `13`, rarity ranges, and the four full-yard `0x9E` spawn rectangles.
 - In-game test B77 Playhouse spontaneous behavior: verify children can still
   spontaneously use the Playhouse, adults do not select Playhouse
   spontaneously, and manual furniture/drop behavior remains unchanged.

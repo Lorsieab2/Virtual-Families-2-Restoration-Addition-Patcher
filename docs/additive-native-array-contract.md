@@ -80,7 +80,16 @@ The mobile Holiday Ornaments collection uses dormant collectible carrying values
 `0x9E-0xA9`. The PC patch registers base value `0x9E` as another full-yard
 spawn collection through `CCollectableItem::AddSpawnArea`, then lets the stock
 `CCollectableItem::Update/Add` path control normal spawn odds and Lucky Rock
-odds.
+odds. Mobile VF2 1.7.16 registers the ornament base with these same four
+full-yard spawn rectangles:
+
+- `(0x634, 0x0B4, 0x764, 0x302)`
+- `(0x112, 0x0C4, 0x2FA, 0x1BD)`
+- `(0x098, 0x178, 0x19D, 0x26F)`
+- `(0x08D, 0x568, 0x137, 0x750)`
+
+The mobile rarity helpers classify `0x9E-0xA1` as common ornaments,
+`0xA2-0xA5` as uncommon ornaments, and `0xA6-0xA9` as rare ornaments.
 
 The base value must also be taught to every hard-coded collectible family
 recognizer. `CCollectableItem::WasItemSpawned(ECarrying)` checks exact IDs, and
@@ -108,3 +117,7 @@ supplied `collectables_small.png` over the runtime sheet so the small collection
 atlas contains the Holiday Ornament row. The matching Goals entry is
 achievement `0x5F`; visible achievement/order bounds must widen to `0x60`,
 while the existing achievement save block remains large enough for this row.
+Mobile row `0x5F` has target `12`, and mobile Goal Collector row `0x54` has
+target `13`. The third achievement-list field is platform-global rather than
+ornament-specific (`0x23E` on mobile, `0x1ED` on PC), so the PC additive row
+keeps the PC-native `0x1ED`.

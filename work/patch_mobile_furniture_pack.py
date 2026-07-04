@@ -228,7 +228,15 @@ HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT = HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT
 HOLIDAY_ORNAMENT_ACHIEVEMENT_ID = 0x5F
 HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET = 12
 HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT = 0x60
+HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID = 0x54
+HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 ACHIEVEMENT_ROW_SIZE = 0x1C
+HOLIDAY_ORNAMENT_SPAWN_RECTS = [
+    ("__xmm@0000030200000764000000b400000634", (0x634, 0x0B4, 0x764, 0x302)),
+    ("__xmm@000001bd000002fa000000c400000112", (0x112, 0x0C4, 0x2FA, 0x1BD)),
+    ("__xmm@0000026f0000019d0000017800000098", (0x098, 0x178, 0x19D, 0x26F)),
+    ("__xmm@0000075000000137000005680000008d", (0x08D, 0x568, 0x137, 0x750)),
+]
 HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT = ROOT / "work" / "vf2_obb" / "assets" / "tp225.dat"
 HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR = ROOT / "work" / "vf2_obb" / "assets" / "tp225.pvr"
 HOLIDAY_ORNAMENT_BACKGROUND_FILENAME = "collection-ornaments_background.png"
@@ -431,6 +439,12 @@ def build_native_array_contract():
             "collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
             "collection_page": HOLIDAY_ORNAMENT_COLLECTION_PAGE,
             "achievement": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
+            "achievement_target": HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET,
+            "goal_collector_target": HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET,
+            "spawn_rects": [
+                [hex(value) for value in rect]
+                for _symbol, rect in HOLIDAY_ORNAMENT_SPAWN_RECTS
+            ],
             "status": (
                 "default-on mobile six-page collection"
                 if ENABLE_HOLIDAY_ORNAMENTS
@@ -5802,10 +5816,10 @@ def patch_achievement_holiday_ornaments(manifest):
     )
     achievement_obj.insert_section_bytes(list_sym.section, row_insert, ornament_row)
 
-    goal_collector_target_off = list_sym.value + 0x54 * ACHIEVEMENT_ROW_SIZE + 4
+    goal_collector_target_off = list_sym.value + HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID * ACHIEVEMENT_ROW_SIZE + 4
     if struct.unpack_from("<I", achievement_obj.buf, list_sec.raw_ptr + goal_collector_target_off)[0] != 12:
         raise RuntimeError("Unexpected Goal collector target count")
-    struct.pack_into("<I", achievement_obj.buf, list_sec.raw_ptr + goal_collector_target_off, 13)
+    struct.pack_into("<I", achievement_obj.buf, list_sec.raw_ptr + goal_collector_target_off, HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET)
 
     complete_sym = achievement_obj.symbol("?AchievementsComplete@CAchievement@@QAEHXZ")
     complete_sec = achievement_obj.section(complete_sym.section)
@@ -5891,7 +5905,8 @@ def patch_achievement_holiday_ornaments(manifest):
         "description": "You completed the collection of holiday ornaments.",
         "title_string": hex(holiday_ornament_achievement_title_string_id()),
         "description_string": hex(holiday_ornament_achievement_desc_string_id()),
-        "goal_collector_target": 13,
+        "goal_collector_id": hex(HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID),
+        "goal_collector_target": HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET,
         "save_state_note": "CAchievement already serializes 0x125 12-byte records; no save-state size change was needed for achievement 0x5F.",
     }
 
@@ -5908,15 +5923,9 @@ def patch_collectable_item_holiday_ornaments(manifest):
         raise RuntimeError("Unexpected CCollectableItem::Reset insertion site")
 
     add_spawn_sym = obj.symbol("?AddSpawnArea@CCollectableItem@@QAEXUldwRect@@W4ECarrying@@@Z").index
-    rect_symbols = [
-        "__xmm@0000030200000764000000b400000634",
-        "__xmm@000001bd000002fa000000c400000112",
-        "__xmm@0000026f0000019d0000017800000098",
-        "__xmm@0000075000000137000005680000008d",
-    ]
     reset_payload = bytearray()
     reset_relocs = []
-    for rect_symbol in rect_symbols:
+    for rect_symbol, _rect in HOLIDAY_ORNAMENT_SPAWN_RECTS:
         start = len(reset_payload)
         reset_payload += b"\x0F\x28\x05\x00\x00\x00\x00"  # movaps xmm0,[rect]
         reset_payload += b"\x8B\xCB"                      # mov ecx,ebx
@@ -5936,8 +5945,12 @@ def patch_collectable_item_holiday_ornaments(manifest):
     patches.append({
         "function": "?Reset@CCollectableItem@@QAEXXZ",
         "insert_offset": "0x1ed",
-        "spawn_area_count": len(rect_symbols),
+        "spawn_area_count": len(HOLIDAY_ORNAMENT_SPAWN_RECTS),
         "base_collectable": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
+        "mobile_spawn_rects": [
+            [hex(value) for value in rect]
+            for _symbol, rect in HOLIDAY_ORNAMENT_SPAWN_RECTS
+        ],
     })
 
     def insert_range_true(function_name, start_item, end_item):
