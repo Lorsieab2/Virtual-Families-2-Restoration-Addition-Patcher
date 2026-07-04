@@ -27,9 +27,10 @@
   `Images/`, visible Special Upgrade icon descriptors/payloads, and the B76
   Holiday Ornaments collection art/native table/observer/achievement records,
   the B77 Playhouse child-only autonomous candidate max-age gate, the B78 VF3
-  TV frame enum-order swap, the B81 VF3 TV fmap/LoadFmap recognition fix, and
-  the B93 split ToolTray hand/use synthetic outfit state plus generated-frame
-  Holiday body source priority without distributing a premodified EXE.
+  TV frame enum-order swap, the B81 VF3 TV fmap/LoadFmap recognition fix, the
+  B93 split ToolTray hand/use synthetic outfit state, generated-frame Holiday
+  body source priority, and the B96 final outfit apply resolver without
+  distributing a premodified EXE.
 - Extract native patch records from object/linker patch data for the offline
   bundle. The workspace-local vanilla EXE candidate has SHA-256
   `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4` and size
@@ -160,6 +161,12 @@
   outfits of the same gender, then apply an older toolbar item and a Holiday
   toolbar item. Verify the selected item controls the villager body value and
   Holiday rows `50-53` no longer collapse to `49`.
+- In-game test B96 Holiday outfit final apply resolver: buy Holiday outfit
+  bodies `50-53` for both genders, verify the correct synthetic outfit appears
+  in the tray, drop it on a matching villager, and confirm
+  `CVillager+0x6A84` becomes the selected body value rather than `49`.
+  Also re-test at least one base male and female outfit to confirm vanilla
+  outfit application remains unchanged.
 - Continue Holiday Ornament implementation under the isolated
   `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` path: compare the mobile collection table,
   page routing, pickup observer registration, `CollectionCount`, save fields,

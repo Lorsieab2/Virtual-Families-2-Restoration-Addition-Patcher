@@ -701,3 +701,27 @@
   `Downloads\Sprite` when a build has already inherited the generated runtime
   animation strips from the previous build. B95 treats build-local
   `Images/*TV*Anim*.png` strips as sufficient for validation.
+
+## 2026-07-04 - Holiday Outfit Final Apply Resolver
+
+- In-game B95 evidence showed the store and tool tray can both be correct while
+  applying a Holiday outfit still writes body `49`. The final body write is in
+  `theMainScene::HandleMouseDown`, not only `CInventoryManager::TakeOne` or
+  `CInventoryManager::GetOutfit`.
+- The stock male branch at `HandleMouseDown + 0xCE3` applies tray item `0x49`;
+  the stock female branch at `+0xD83` applies tray item `0x4A`. Each branch
+  calls `CInventoryManager::GetOutfit()` and stores the returned body at
+  `CVillager+0x6A84`.
+- B96 redirects those two callsites to
+  `_VF2ResolveOutfitBodyForApply(stockItem, villagerGender)`. The helper reads
+  the selected synthetic outfit from `ToolTray` slot storage before using the
+  gendered last-synthetic fallback or vanilla `InventoryManager` body fields.
+  This is the current modification point for Holiday body values `50-53`
+  falling back to `49` during drop/apply.
+- Applying true body values `50-53` also exposed the live house-view renderer
+  as a separate crash path. `CVillagerManager::DrawVillager` draws the live body
+  through `CSceneManager::DrawScaled` and was not covered by the earlier
+  `CVillager::DrawDetailVillager` / `DrawEventVillager` redirect. B96 now
+  retargets `DrawVillager + 0x454` to `_VF2DrawSceneVillagerBodyFrame`, using
+  the folder-backed Holiday frame table before any stock sheet row can receive
+  `50-53`.

@@ -3480,10 +3480,19 @@ def write_holiday_body_draw_helper(manifest):
 // Folder-backed renderer for additive villager body values {HOLIDAY_BODY_VALUES[0]}-{HOLIDAY_BODY_VALUES[-1]}.
 class ldwImageGrid;
 enum EImage {{ eImageDummy = 0 }};
+struct ldwPoint {{
+    int x;
+    int y;
+}};
 
 class ldwGameWindow {{
 public:
     void DrawScaled(ldwImageGrid* grid, int x, int y, int row, int col, int scale, bool mirror);
+}};
+
+class CSceneManager {{
+public:
+    void DrawScaled(ldwImageGrid* grid, ldwPoint point, int row, int col, float scaleX, float scaleY) const;
 }};
 
 class theGraphicsManager {{
@@ -3557,6 +3566,43 @@ extern "C" void __cdecl VF2DrawVillagerBodyFrameImpl(
     if (window) window->DrawScaled(stockGrid, x, y, fallbackBody, frame, scale, mirror != 0);
 }}
 
+extern "C" void __cdecl VF2DrawSceneVillagerBodyFrameImpl(
+    const CSceneManager* scene,
+    ldwImageGrid* stockGrid,
+    int x,
+    int y,
+    int body,
+    int frame,
+    float scaleX,
+    float scaleY
+) {{
+    theGraphicsManager* graphics = theGraphicsManager::Get();
+    int roleSlot = VF2ResolveBodyRole(graphics, stockGrid);
+    ldwPoint point = {{x, y}};
+    if (scene && graphics && roleSlot >= 0 && body >= kHolidayBodyFirst && body < kHolidayBodyFirst + kHolidayBodyCount) {{
+        int role = roleSlot % 3;
+        if (frame >= 0 && frame < kRoleFrameCounts[role]) {{
+            int gender = roleSlot / 3;
+            int bodyIndex = body - kHolidayBodyFirst;
+            int index = gender * kHolidayBodyCount * kFramesPerHolidayBody
+                + bodyIndex * kFramesPerHolidayBody
+                + kRoleOffsets[role]
+                + frame;
+            if (index >= 0 && index < kFrameImageCount) {{
+                ldwImageGrid* frameGrid = graphics->GetImageGrid((EImage)kImageIds[index]);
+                if (frameGrid) {{
+                    point.x += kOffsetX[index];
+                    point.y += kOffsetY[index];
+                    scene->DrawScaled(frameGrid, point, 0, 0, scaleX, scaleY);
+                    return;
+                }}
+            }}
+        }}
+    }}
+    int fallbackBody = VF2SafeFallbackBody(body);
+    if (scene) scene->DrawScaled(stockGrid, point, fallbackBody, frame, scaleX, scaleY);
+}}
+
 extern "C" __declspec(naked) void VF2DrawVillagerBodyFrame() {{
     __asm {{
         mov eax, esp
@@ -3569,6 +3615,23 @@ extern "C" __declspec(naked) void VF2DrawVillagerBodyFrame() {{
         push dword ptr [eax+04h]
         push ecx
         call VF2DrawVillagerBodyFrameImpl
+        add esp, 20h
+        ret 1Ch
+    }}
+}}
+
+extern "C" __declspec(naked) void VF2DrawSceneVillagerBodyFrame() {{
+    __asm {{
+        mov eax, esp
+        push dword ptr [eax+1Ch]
+        push dword ptr [eax+18h]
+        push dword ptr [eax+14h]
+        push dword ptr [eax+10h]
+        push dword ptr [eax+0Ch]
+        push dword ptr [eax+08h]
+        push dword ptr [eax+04h]
+        push ecx
+        call VF2DrawSceneVillagerBodyFrameImpl
         add esp, 20h
         ret 1Ch
     }}
@@ -3601,6 +3664,17 @@ def patch_holiday_body_draw_redirect(manifest):
         "patched": patched,
         "stock_body_values": "0-49 fall back to the native DrawScaled call",
         "holiday_body_values": list(HOLIDAY_BODY_VALUES),
+    }
+    manager_obj = CoffObject(PATCHED / "VillagerManager.obj")
+    scene_helper_sym = manager_obj.append_undefined_symbol("_VF2DrawSceneVillagerBodyFrame")
+    draw_villager = manager_obj.symbol("?DrawVillager@CVillagerManager@@QAEXHM@Z")
+    manager_obj.retarget_relocation(draw_villager.section, draw_villager.value + 0x454, scene_helper_sym, IMAGE_REL_I386_REL32)
+    manager_obj.write(PATCHED / "VillagerManager.obj")
+    manifest["holiday_body_draw_redirect"]["live_world_patched"] = {
+        "function": "?DrawVillager@CVillagerManager@@QAEXHM@Z",
+        "relocation": hex(draw_villager.value + 0x454),
+        "helper": "_VF2DrawSceneVillagerBodyFrame",
+        "note": "Intercepts live house-view body drawing before CSceneManager::DrawScaled receives Holiday body rows 50-53.",
     }
 
 
@@ -4492,6 +4566,39 @@ extern "C" int __cdecl VF2NormalizeOutfitToolInHand(void* tray, int activeFlagOf
     return itemId;
 }}
 
+static int VF2SelectedSyntheticOutfitFromToolTray() {{
+    unsigned char* base = (unsigned char*)&ToolTray;
+    int slot = *(int*)(base + 0xA0);
+    if (slot >= 0 && slot < 9 && (base[0xA4] || base[0xA5])) {{
+        int itemId = *(int*)(base + slot * 8);
+        if (VF2OutfitBodyForItem(itemId) >= 0) {{
+            return itemId;
+        }}
+    }}
+    return 0;
+}}
+
+extern "C" int __cdecl VF2ResolveOutfitBodyForApply(int stockItem, int villagerGender) {{
+    int stockGender = stockItem == kVF2FemaleOutfitTrayItem ? 0 : (stockItem == kVF2MaleOutfitTrayItem ? 1 : -1);
+    int selected = VF2SelectedSyntheticOutfitFromToolTray();
+    if (selected && VF2OutfitStockTrayItemForItem(selected) == stockItem) {{
+        return VF2OutfitBodyForItem(selected);
+    }}
+    if (stockGender >= 0) {{
+        selected = gVF2LastSyntheticOutfitByGender[stockGender];
+        if (selected && VF2OutfitStockTrayItemForItem(selected) == stockItem) {{
+            return VF2OutfitBodyForItem(selected);
+        }}
+    }}
+    if (stockItem == kVF2FemaleOutfitTrayItem) {{
+        return InventoryManager.femaleOutfitBody;
+    }}
+    if (stockItem == kVF2MaleOutfitTrayItem) {{
+        return InventoryManager.maleOutfitBody;
+    }}
+    return villagerGender == 0 ? InventoryManager.maleOutfitBody : InventoryManager.femaleOutfitBody;
+}}
+
 extern "C" int __cdecl VF2GetOutfitStorePrice(int itemId) {{
     int body = VF2OutfitBodyForItem(itemId);
     if (body < 0) {{
@@ -4641,6 +4748,50 @@ def patch_tool_tray_outfit_normalization(manifest):
         },
         "patches": patches,
         "note": "ToolTray storage, save data, and icon drawing keep the independent synthetic item ID.",
+    }
+
+
+def patch_main_scene_outfit_body_apply(manifest):
+    obj = CoffObject(PATCHED / "theMainScene.obj")
+    helper_sym = obj.append_undefined_symbol("_VF2ResolveOutfitBodyForApply")
+    sym = obj.symbol("?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z")
+    sec = obj.section(sym.section)
+
+    def patch_stock_getoutfit(offset, stock_item, gender_value):
+        raw = sec.raw_ptr + sym.value + offset
+        expected = (
+            b"\x6A" + bytes([stock_item])
+            + b"\xB9\x00\x00\x00\x00"
+            + b"\xE8\x00\x00\x00\x00"
+        )
+        if obj.buf[raw : raw + len(expected)] != expected:
+            raise RuntimeError(f"Unexpected outfit apply bytes at {hex(offset)}")
+        payload = (
+            b"\x6A" + bytes([gender_value])
+            + b"\x6A" + bytes([stock_item])
+            + b"\xE8\x00\x00\x00\x00"
+            + b"\x83\xC4\x08"
+        )
+        payload += b"\x90" * (len(expected) - len(payload))
+        obj.buf[raw : raw + len(expected)] = payload
+        obj.append_relocation(sym.section, sym.value + offset + 5, helper_sym, IMAGE_REL_I386_REL32)
+        return {
+            "offset": hex(offset),
+            "stock_item": hex(stock_item),
+            "gender_value": gender_value,
+            "helper": "_VF2ResolveOutfitBodyForApply",
+        }
+
+    patches = [
+        patch_stock_getoutfit(0xCE3, 0x49, 0),
+        patch_stock_getoutfit(0xD83, 0x4A, 1),
+    ]
+    obj.write(PATCHED / "theMainScene.obj")
+    manifest["outfit_apply_body_resolver"] = {
+        "status": "theMainScene outfit apply resolves selected synthetic tray item before writing villager body",
+        "villager_body_offset": "0x6a84",
+        "patches": patches,
+        "note": "Stock outfit tools still fall back to InventoryManager male/female outfit body fields.",
     }
 
 
@@ -8070,6 +8221,7 @@ def main():
     patch_options_dialog(manifest)
     write_outfit_store_helpers(manifest)
     patch_tool_tray_outfit_normalization(manifest)
+    patch_main_scene_outfit_body_apply(manifest)
     patch_string_manager(manifest)
     patch_special_upgrade_titles(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:

@@ -310,3 +310,35 @@ Normal additive builds do not expand the stock body/action/sit sheets, so
 head/body link points. The one-cell Holiday renderer still draws the visual
 body frames; only the link geometry falls back to the stock row-49 template
 used during frame normalization.
+
+## Holiday outfit apply resolver milestone
+
+B95 proved that syncing `InventoryManager+0x468/+0x46C` is not sufficient when
+the selected toolbar item displays correctly but the final drop still applies
+body `49`. The decisive write happens inside
+`theMainScene::HandleMouseDown`, where the stock male and female outfit apply
+branches call `CInventoryManager::GetOutfit(0x49/0x4A)` and then store the
+returned body at `CVillager+0x6A84`.
+
+B96 patches only those two apply callsites:
+
+- `theMainScene::HandleMouseDown + 0xCE3`: stock male outfit item `0x49`,
+  stock gender `0`
+- `theMainScene::HandleMouseDown + 0xD83`: stock female outfit item `0x4A`,
+  stock gender `1`
+
+Both callsites now invoke `_VF2ResolveOutfitBodyForApply(stockItem, gender)`.
+The resolver first reads the currently selected synthetic outfit directly from
+`ToolTray` slot state, falls back to the last synthetic outfit by gender, and
+only then falls back to the vanilla `InventoryManager` body fields. This keeps
+base outfit behavior intact while allowing Holiday body values `50--53` to
+survive the final apply write.
+
+The first B96 resolver build exposed a second unsafe path: live house-view
+drawing uses `CVillagerManager::DrawVillager`, not the two older
+`CVillager::*Draw*` paths. That function passes the live body row to
+`CSceneManager::DrawScaled(ldwImageGrid*, ldwPoint, row, col, scaleX, scaleY)`.
+B96 now also redirects the body draw relocation at
+`CVillagerManager::DrawVillager + 0x454` to
+`_VF2DrawSceneVillagerBodyFrame`, which uses the same folder-backed Holiday
+frame table and clamps fallback stock draws to row `49`.

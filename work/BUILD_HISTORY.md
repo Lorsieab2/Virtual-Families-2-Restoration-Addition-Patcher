@@ -584,3 +584,21 @@
   stock item `0x49/0x4A`.
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B95-Holiday-Outfit-Apply-Field-Sync`.
+
+## B96 - Holiday Outfit Apply Resolver
+
+- Keeps the B95 purchase/tray fixes but patches the final
+  `theMainScene::HandleMouseDown` drop-on-villager apply callsites for stock
+  outfit items `0x49` and `0x4A`.
+- Redirects those two callsites to `_VF2ResolveOutfitBodyForApply`, which reads
+  the selected synthetic outfit from `ToolTray` before falling back to the
+  gendered last-synthetic value or vanilla `InventoryManager` body fields.
+- Targets the actual villager body write at `CVillager+0x6A84`, fixing the
+  failure mode where Holiday outfit items display correctly in the tool tray
+  but still apply body `49`.
+- Adds the matching live house-view draw redirect at
+  `CVillagerManager::DrawVillager + 0x454`, so body values `50-53` render
+  through the folder-backed Holiday frame table instead of crashing
+  `CSceneManager::DrawScaled` with an out-of-range stock sheet row.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B96-Holiday-Outfit-Apply-Resolver`.

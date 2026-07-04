@@ -225,6 +225,30 @@ class OutfitStoreMappingTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
+    def test_main_scene_outfit_apply_resolver_manifest_contract(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            obj_path = Path(tmp) / "theMainScene.obj"
+            shutil.copy2(patcher.SRC_OBJS / "theMainScene.obj", obj_path)
+
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = Path(tmp)
+                manifest = {}
+
+                patcher.patch_main_scene_outfit_body_apply(manifest)
+
+                resolver = manifest["outfit_apply_body_resolver"]
+                self.assertEqual(resolver["villager_body_offset"], hex(0x6A84))
+                self.assertEqual(
+                    [(row["offset"], row["stock_item"], row["gender_value"], row["helper"]) for row in resolver["patches"]],
+                    [
+                        (hex(0xCE3), hex(0x49), 0, "_VF2ResolveOutfitBodyForApply"),
+                        (hex(0xD83), hex(0x4A), 1, "_VF2ResolveOutfitBodyForApply"),
+                    ],
+                )
+            finally:
+                patcher.PATCHED = old_patched
+
     def test_holiday_runtime_frames_prefer_generated_body_assets(self):
         try:
             from PIL import Image
