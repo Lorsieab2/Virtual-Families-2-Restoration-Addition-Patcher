@@ -151,6 +151,19 @@
   `GetToolInUse` keep their selected synthetic IDs until `GetOutfit(0x49/0x4A)`
   resolves the body. Also verify a deliberately invalid saved body value falls
   back safely instead of crashing.
+- In-game test B94 stability/outfit gates: load an existing save and leave the
+  game running for several minutes to confirm the delayed crash is gone with
+  mobile Island Events and Holiday Ornaments disabled by default; then verify
+  Holiday outfit items `50-53` still apply as those body values instead of
+  falling back to `49`.
+- Continue Holiday Ornament implementation under the isolated
+  `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` path: compare the mobile collection table,
+  page routing, pickup observer registration, `CollectionCount`, save fields,
+  ornament goals, and Lucky Rock rarity math before enabling the collection in
+  normal builds again.
+- Continue Island Event outcome work under the isolated
+  `VF2_ENABLE_ISLAND_EVENTS=1` path: map each mobile `ImpactGame` side effect
+  before restoring event table grafts in normal builds.
 - In-game test B89 Holiday body link fallback: apply each Holiday outfit to
   male and female adults, then check house view, detail screen, action poses,
   and sitting poses for head/body attachment; this specifically verifies the

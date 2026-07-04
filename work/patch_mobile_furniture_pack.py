@@ -17,16 +17,16 @@ SRC_OBJS = ROOT / "work" / "desktop_obj_files"
 PATCHED = ROOT / "work" / "patched_mobile_furniture_pack_objs"
 OUT = Path(os.environ.get("VF2_PATCH_OUT", ROOT / "outputs" / "VF2-Mobile-Additive-Furniture-Pack"))
 PREVIOUS_BUILD_ENV = "VF2_PREVIOUS_BUILD_DIR"
-ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "1") == "1"
+ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "0") == "1"
 # Debugger/editor hooks have repeatedly crashed during save-load and mouse
 # input. Keep normal builds stock; use this only for isolated debugger research.
 ENABLE_DEBUGGER_FEATURES = os.environ.get("VF2_ENABLE_DEBUGGER_FEATURES", "0") == "1"
 # Holiday body rows are now part of the normal additive build.  Set the env var
 # to 0 only when intentionally making a stock-body diagnostic build.
 ENABLE_HOLIDAY_BODY_TYPES = os.environ.get("VF2_ENABLE_HOLIDAY_BODY_TYPES", "1") != "0"
-# Holiday Ornaments are part of the mobile collection table. Set the env var to
-# 0 only when intentionally making a stock-collections diagnostic build.
-ENABLE_HOLIDAY_ORNAMENTS = os.environ.get("VF2_ENABLE_HOLIDAY_ORNAMENTS", "1") != "0"
+# Holiday Ornaments still need native parity proof. Keep normal builds on the
+# stock PC collection table; opt into the mobile collection for isolated tests.
+ENABLE_HOLIDAY_ORNAMENTS = os.environ.get("VF2_ENABLE_HOLIDAY_ORNAMENTS", "0") == "1"
 ANALYSIS = ROOT / "outputs" / "VF2-Desktop-Object-Analysis"
 if not (ANALYSIS / "furniture-records.json").exists():
     ANALYSIS = ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis"
@@ -4374,6 +4374,7 @@ static const int kVF2VisibleSpecialUpgradeIconImageBase = {visible_special_upgra
 static const int kVF2VisibleSpecialUpgradeIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
 static int gVF2SyntheticOutfitToolInHand = 0;
 static int gVF2SyntheticOutfitToolInUse = 0;
+static int gVF2LastSyntheticOutfitByGender[2] = {{0, 0}};
 
 static int VF2OutfitStoreEntryIndex(int itemId) {{
     int femaleBody = itemId - kVF2OutfitStoreFemaleItemBase;
@@ -4413,6 +4414,13 @@ extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
     int selectedItems[2] = {{gVF2SyntheticOutfitToolInUse, gVF2SyntheticOutfitToolInHand}};
     for (int i = 0; i < 2; ++i) {{
         int selected = selectedItems[i];
+        if (selected && VF2OutfitStockTrayItemForItem(selected) == itemId) {{
+            return VF2OutfitBodyForItem(selected);
+        }}
+    }}
+    int stockGender = itemId == kVF2FemaleOutfitTrayItem ? 0 : (itemId == kVF2MaleOutfitTrayItem ? 1 : -1);
+    if (stockGender >= 0) {{
+        int selected = gVF2LastSyntheticOutfitByGender[stockGender];
         if (selected && VF2OutfitStockTrayItemForItem(selected) == itemId) {{
             return VF2OutfitBodyForItem(selected);
         }}
@@ -4459,9 +4467,13 @@ extern "C" int __cdecl VF2NormalizeOutfitToolInHand(void* tray, int activeFlagOf
     int stockItem = VF2OutfitStockTrayItemForItem(itemId);
     if (stockItem >= 0) {{
         if (selectedSlot) *selectedSlot = itemId;
+        int gender = VF2OutfitGenderForItem(itemId);
+        if (gender >= 0) gVF2LastSyntheticOutfitByGender[gender] = itemId;
         return stockItem;
     }}
 
+    if (itemId == kVF2FemaleOutfitTrayItem) gVF2LastSyntheticOutfitByGender[0] = 0;
+    if (itemId == kVF2MaleOutfitTrayItem) gVF2LastSyntheticOutfitByGender[1] = 0;
     if (selectedSlot) *selectedSlot = 0;
     return itemId;
 }}
@@ -8047,12 +8059,12 @@ def main():
     else:
         manifest["HolidayOrnamentsCollection"] = {
             "enabled": False,
-            "status": "disabled for diagnostic builds",
-            "reason": "VF2_ENABLE_HOLIDAY_ORNAMENTS=0 requested a stock PC collection table.",
+            "status": "disabled for normal-build stability",
+            "reason": "The timed Holiday Ornament spawn/pickup hooks are still isolated research until the mobile implementation is proven crash-free.",
             "stock_collection_total": 60,
             "mobile_collection_total": 72,
             "experimental_collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
-            "opt_out": "Set VF2_ENABLE_HOLIDAY_ORNAMENTS=0 only for isolated stock-collection diagnostics.",
+            "opt_in": "Set VF2_ENABLE_HOLIDAY_ORNAMENTS=1 only for isolated mobile Holiday Ornament collection tests.",
         }
     patch_spontaneous_behaviors(manifest)
     patch_bookshelf_reading_behavior(manifest)

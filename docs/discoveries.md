@@ -672,3 +672,19 @@
   relative offsets; the exporter now preserves these under
   `native_patch_sources` with `scope=object_relative` and
   `apply_status=not_file_offset` instead of placing them in `patches[]`.
+
+## 2026-07-04 - B94 Timed Hook Stability Gates
+
+- The delayed runtime crash is most likely tied to timed mobile subsystems that
+  were enabled before their PC parity paths were proven. B94 leaves Holiday
+  Ornament collection/spawn/pickup hooks and mobile Island Event table grafts
+  disabled in normal builds, with `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` and
+  `VF2_ENABLE_ISLAND_EVENTS=1` reserved for isolated tests.
+- Holiday outfit tool-tray normalization converts generated outfit item IDs back
+  to the stock male/female outfit items (`0x49/0x4A`) before the vanilla apply
+  path sees them. The helper now stores the last generated outfit by gender in
+  `gVF2LastSyntheticOutfitByGender[2]`, letting `VF2GetOutfitStoreBodyValue`
+  recover body values `50-53` instead of falling through to body `49`.
+- Normal B94 builds intentionally keep the stock PC collection table at 60
+  entries until the mobile Holiday Ornament page, pickup observers, collection
+  count, and Lucky Rock odds are all verified together.

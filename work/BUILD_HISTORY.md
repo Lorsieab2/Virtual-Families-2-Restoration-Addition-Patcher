@@ -555,3 +555,20 @@
   `native_patch_sources` only. B93 currently exports the three Settings Evict
   constructor records this way; they must be translated to final vanilla EXE
   file offsets before the offline patcher is allowed to apply them.
+
+## B94 - Stability, Outfit Apply, Ornament Opt-In
+
+- Seeds from the fixed official B93 release package folder and preserves its
+  top-level package shape.
+- Disables Holiday Ornament native collection/spawn/pickup hooks in normal
+  builds; `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` remains the isolated research opt-in
+  for mobile parity work.
+- Disables the mobile Island Event table graft in normal builds;
+  `VF2_ENABLE_ISLAND_EVENTS=1` remains research-only until outcomes are mapped
+  and crash-free.
+- Fixes Holiday outfit placement by keeping a gendered last-synthetic-outfit
+  fallback while stock tray normalization maps generated outfit items to stock
+  `0x49/0x4A`, so body values `50-53` can survive the apply path instead of
+  falling back to body `49`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B94-Stability-Outfit-Ornament-OptIn`.

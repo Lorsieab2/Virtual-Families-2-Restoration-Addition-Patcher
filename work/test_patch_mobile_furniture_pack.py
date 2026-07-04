@@ -213,10 +213,13 @@ class OutfitStoreMappingTests(unittest.TestCase):
 
                 self.assertIn("gVF2SyntheticOutfitToolInHand", source)
                 self.assertIn("gVF2SyntheticOutfitToolInUse", source)
+                self.assertIn("gVF2LastSyntheticOutfitByGender[2]", source)
                 self.assertIn("VF2SyntheticOutfitSlotForActiveFlag", source)
                 self.assertIn("activeFlagOffset == 0xA4", source)
                 self.assertIn("activeFlagOffset == 0xA5", source)
                 self.assertIn("selectedItems[2] = {gVF2SyntheticOutfitToolInUse, gVF2SyntheticOutfitToolInHand}", source)
+                self.assertIn("gVF2LastSyntheticOutfitByGender[gender] = itemId", source)
+                self.assertIn("itemId == kVF2FemaleOutfitTrayItem", source)
         finally:
             patcher.PATCHED = old_patched
 
@@ -289,14 +292,17 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
-    def test_holiday_ornaments_are_enabled_by_default(self):
-        self.assertTrue(patcher.ENABLE_HOLIDAY_ORNAMENTS)
+    def test_holiday_ornaments_are_opt_in_for_normal_build_stability(self):
+        self.assertFalse(patcher.ENABLE_HOLIDAY_ORNAMENTS)
+
+    def test_mobile_island_events_are_opt_in_for_normal_build_stability(self):
+        self.assertFalse(patcher.ENABLE_ISLAND_EVENTS)
 
     def test_native_contract_reports_mobile_collection_table_for_normal_builds(self):
         contract = patcher.build_native_array_contract()
 
-        self.assertTrue(contract["holiday_ornaments"]["enabled"])
-        self.assertIn("six-page collection", contract["holiday_ornaments"]["status"])
+        self.assertFalse(contract["holiday_ornaments"]["enabled"])
+        self.assertIn("disabled", contract["holiday_ornaments"]["status"])
         self.assertEqual(contract["holiday_ornaments"]["achievement"], "0x5f")
         self.assertEqual(contract["holiday_ornaments"]["achievement_target"], 12)
         self.assertEqual(contract["holiday_ornaments"]["goal_collector_target"], 13)
