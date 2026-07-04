@@ -58,6 +58,55 @@ manifest, so new optional components such as Holiday furniture, Holiday outfits,
 mobile-exclusive furniture, or future feature groups do not require GUI code
 changes.
 
+## Bundle Exporter
+
+`work/export_offline_patch_bundle.py` exports a generated build folder into the
+offline patcher bundle shape:
+
+```powershell
+& "C:\Path\To\Python\python.exe" work\export_offline_patch_bundle.py `
+  --build-dir outputs\VF2-Mobile-Furniture-With-Island-Events-B93-Holiday-Outfit-Body-Apply `
+  --out-dir outputs\Offline-Patch-Bundles\B93-asset-preview `
+  --force
+```
+
+The exporter writes `manifest.json` and a manifest-relative `payload/` folder.
+It compares build assets against `work/vanilla_runtime_payload`, skips
+vanilla-identical files, assigns each asset patch to a feature setting, records
+payload SHA-256/size, and includes runtime requirements for `Images`, `Sounds`,
+`ldw.ini`, `wc.dat`, and key base art.
+
+When a vanilla executable is available, the exporter can also add target EXE
+hash metadata and length-preserving byte diff records:
+
+```powershell
+& "C:\Path\To\Python\python.exe" work\export_offline_patch_bundle.py `
+  --build-dir outputs\VF2-Mobile-Furniture-With-Island-Events-B93-Holiday-Outfit-Body-Apply `
+  --out-dir outputs\Offline-Patch-Bundles\B93-byte-preview `
+  --vanilla-exe "C:\Games\Virtual Families 2\Virtual Families 2.exe" `
+  --include-byte-patches
+```
+
+The byte-diff mode refuses to export if the vanilla and patched EXEs have
+different sizes. This keeps the first exporter limited to the patcher's current
+offset/expected-bytes contract instead of pretending a relinked executable can
+always be represented safely as simple byte patches.
+
+The first B93 asset preview produced 7,710 asset records:
+
+| Setting | Asset records |
+| --- | ---: |
+| `holiday_outfits` | 6,048 |
+| `mobile_furniture` | 1,626 |
+| `holiday_ornaments_collection` | 13 |
+| `outfit_store_expansion` | 11 |
+| `vf3_tv_assets_recognition` | 12 |
+
+That preview is a schema-valid starting point, not a release-ready patch
+bundle: it still needs vanilla EXE target metadata/native byte records and a
+payload-pruning pass so inherited previous-build assets are classified and
+trimmed deliberately.
+
 ## Restore
 
 ```powershell

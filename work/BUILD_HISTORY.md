@@ -526,3 +526,13 @@
 - This preserves runtime packaging fixes and carried-forward additive assets
   while still refreshing base-game `Images` and `Sounds` from the clean
   workspace payload.
+
+## Next Build Contract - Offline Patch Bundle Export
+
+- `work/export_offline_patch_bundle.py` exports generated build folders into
+  `offline_vf2_patcher.py` manifest/payload bundles with toggleable settings,
+  runtime requirements, asset SHA-256 records, and optional vanilla-vs-patched
+  EXE byte diffs.
+- The first B93 asset preview is schema-readable but not release-ready: it
+  needs vanilla EXE target metadata, native byte records, and a pruning pass for
+  inherited previous-build assets before publication.

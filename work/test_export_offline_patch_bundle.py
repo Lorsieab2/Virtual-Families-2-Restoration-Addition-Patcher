@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+EXPORTER = ROOT / "work" / "export_offline_patch_bundle.py"
+PATCHER = ROOT / "work" / "offline_vf2_patcher.py"
+
+
+class ExportOfflinePatchBundleTests(unittest.TestCase):
+    def run_exporter(self, *args):
+        result = subprocess.run(
+            [sys.executable, str(EXPORTER), *args],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            self.fail(f"exporter failed\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}")
+        return result
+
+    def run_patcher(self, *args, expect=0):
+        result = subprocess.run(
+            [sys.executable, str(PATCHER), *args],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+        )
+        if result.returncode != expect:
+            self.fail(
+                f"Expected patcher exit {expect}, got {result.returncode}\n"
+                f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+            )
+        return result
+
+    def test_exports_changed_assets_with_feature_settings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            (base / "Images" / "Furniture").mkdir(parents=True)
+            (base / "Images" / "Furniture" / "Unchanged.png").write_bytes(b"same")
+            (build / "Images" / "Furniture").mkdir(parents=True)
+            (build / "Images" / "Furniture" / "Unchanged.png").write_bytes(b"same")
+            (build / "Images" / "Furniture" / "CandyCane.png").write_bytes(b"holiday")
+            (build / "Images" / "VF3LargeFlatScreenTVAnim.png").write_bytes(b"tv")
+            (build / "Assets").mkdir()
+            (build / "Assets" / "VF3LargeFlatScreenTV.png.fmap").write_bytes(b"fmap")
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+
+            self.run_exporter("--build-dir", str(build), "--base-payload", str(base), "--out-dir", str(out))
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
+            self.assertNotIn("Images/Furniture/Unchanged.png", asset_by_path)
+            self.assertEqual(asset_by_path["Images/Furniture/CandyCane.png"]["requires"], ["holiday_furniture"])
+            self.assertEqual(asset_by_path["Images/VF3LargeFlatScreenTVAnim.png"]["requires"], ["vf3_tv_assets_recognition"])
+            self.assertEqual(asset_by_path["Assets/VF3LargeFlatScreenTV.png.fmap"]["requires"], ["vf3_tv_assets_recognition"])
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_furniture"], 1)
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["vf3_tv_assets_recognition"], 2)
+            self.assertTrue((out / "payload" / "Images" / "Furniture" / "CandyCane.png").is_file())
+            self.assertIn({"path": "Images", "min_files": 1000}, manifest["runtime_requirements"]["required_dirs"])
+
+            settings = self.run_patcher("settings", "--manifest", str(out / "manifest.json"))
+            self.assertIn("holiday_furniture [default on]", settings.stdout)
+            self.assertIn("vf3_tv_assets_recognition [default on]", settings.stdout)
+
+    def test_exports_byte_patches_when_vanilla_exe_is_supplied(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            vanilla = tmp_path / "vanilla.exe"
+            vanilla.write_bytes(bytes([1, 2, 3, 4, 5, 6]))
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(bytes([1, 2, 0xAA, 0xBB, 5, 6]))
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--vanilla-exe",
+                str(vanilla),
+                "--include-byte-patches",
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["target_files"][0]["sha256"], __import__("hashlib").sha256(vanilla.read_bytes()).hexdigest())
+            self.assertEqual(len(manifest["patches"]), 1)
+            self.assertEqual(manifest["patches"][0]["offset"], "0x2")
+            self.assertEqual(manifest["patches"][0]["requires"], ["core_native_patch"])
+            settings = {row["id"] for row in manifest["settings"]}
+            self.assertIn("core_native_patch", settings)
+            self.assertIn("core_assets", settings)
+
+
+if __name__ == "__main__":
+    unittest.main()

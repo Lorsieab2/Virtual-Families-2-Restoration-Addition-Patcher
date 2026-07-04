@@ -633,3 +633,21 @@
 - This rule preserves runtime packaging fixes, DLLs, launcher files, and
   additive assets from the last known build while still refreshing clean
   base-game `Images` and `Sounds` from `work/vanilla_runtime_payload`.
+
+## 2026-07-04 - Offline Patch Bundle Exporter
+
+- `work/export_offline_patch_bundle.py` can now export a generated build folder
+  into the `offline_vf2_patcher.py` manifest/payload shape. It writes
+  `manifest.json`, copies changed asset payloads under `payload/`, records
+  SHA-256 and size for each asset, assigns feature-toggle requirements, and
+  emits runtime requirements for complete vanilla game folders.
+- The exporter can optionally diff a supplied vanilla EXE against the patched
+  build EXE into length-preserving byte patch records. It refuses byte export
+  when executable sizes differ, keeping the current JSON patch contract honest.
+- A B93 asset-only preview at
+  `outputs/Offline-Patch-Bundles/B93-asset-preview` generated 7,710 asset
+  records: 6,048 Holiday outfit records, 1,626 mobile furniture records, 13
+  Holiday Ornament collection records, 11 outfit-store records, and 12 VF3 TV
+  asset/recognition records. This is schema-readable by the patcher but still
+  needs vanilla EXE target metadata, native byte records, and payload pruning
+  before release use.
