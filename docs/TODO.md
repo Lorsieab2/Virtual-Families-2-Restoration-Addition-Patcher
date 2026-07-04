@@ -192,10 +192,16 @@
   male and female adults, then check house view, detail screen, action poses,
   and sitting poses for head/body attachment; this specifically verifies the
   stock row-49 link fallback after removing the B80 link-row widening.
-- In-game test B74 Settings Evict button: in generation 1 and a later
-  generation, open Settings, press Evict, verify the existing
+- In-game test B99 Settings Evict button: in generation 1 and a later
+  generation, open Settings, press Evict, verify the existing mobile-style
   confirmation/removal flow removes all current family members, returns to the
-  adoption/new-person path, and remains stable across save-load.
+  adoption/new-person path, and remains stable across save-load. Confirm the
+  button is not shown after the family tree has already been cleared.
+- In-game test B99 Invisible Hammock parity: buy/place the base Hammock and
+  Invisible Hammock separately, drop villagers on each, and verify both use the
+  same lie-in-hammock action, orientation, sounds/animation, click/target
+  behavior, and spontaneous hammock eligibility while base Hammock behavior
+  remains unchanged.
 - Settings Evict research follow-up: fully resolve the mobile PLT/control-ID
   mapping for `theOptionsDialog::HandleMessage` so the first-generation mobile
   confirmation click can be documented down to the exact button ID as well as

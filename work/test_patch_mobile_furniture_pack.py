@@ -94,6 +94,41 @@ def valid_vf3_tv_behavior_manifest():
     }
 
 
+def valid_invisible_hammock_manifest():
+    return {
+        "FurnitureManager": {
+            "invisible_hammock_behavior_contracts": [
+                {
+                    "item": "Invisible Hammock",
+                    "item_id": "0x30c",
+                    "donor_item": "0x1e1",
+                    "donor_behavior": "base HammockStd",
+                    "item_type": 5,
+                    "verified": "all non-identity, non-store, non-string fields match donor 0x1E1",
+                }
+            ],
+        },
+        "invisible_hammock_drop_action": {
+            "status": "added to the stock hammock hotspot predicate",
+            "base_item": "0x1E1",
+            "added_item": "0x30C",
+            "native_behavior": "eBehavior_LieInHammockNoLeadIn (0x24)",
+            "base_hammock_modified": False,
+        },
+        "behavior_assets": {
+            "invisible_outdoor_fmap_donors": [
+                {
+                    "target": "InvisibleHammock.png.fmap",
+                    "donor": "HammockStd.png.fmap",
+                    "source": "Assets/HammockStd.png.fmap",
+                    "bytes": 1,
+                }
+            ],
+            "missing": [],
+        },
+    }
+
+
 class VF3TVAnimationContractTests(unittest.TestCase):
     def test_accepts_b78_frame_enum_order(self):
         manifest = valid_vf3_tv_manifest()
@@ -166,6 +201,70 @@ class VF3TVBehaviorContractTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "LoadFmap max offset"):
             patcher.validate_vf3_tv_behavior_contract(manifest)
+
+
+class InvisibleHammockBehaviorContractTests(unittest.TestCase):
+    def test_accepts_base_hammock_inheritance_manifest(self):
+        manifest = valid_invisible_hammock_manifest()
+
+        patcher.validate_invisible_hammock_behavior_contract(manifest)
+
+        self.assertEqual(manifest["invisible_hammock_behavior_contract"]["status"], "validated")
+
+    def test_rejects_missing_hammock_fmap_donor(self):
+        manifest = valid_invisible_hammock_manifest()
+        manifest["behavior_assets"]["invisible_outdoor_fmap_donors"] = []
+
+        with self.assertRaisesRegex(RuntimeError, "missing InvisibleHammock.png.fmap"):
+            patcher.validate_invisible_hammock_behavior_contract(manifest)
+
+    def test_drop_action_patch_extends_stock_hotspot_predicate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            shutil.copy2(patcher.SRC_OBJS / "HotSpot.obj", temp_root / "HotSpot.obj")
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = temp_root
+                manifest = {}
+
+                patcher.patch_invisible_hammock_drop_action(manifest)
+
+                obj = CoffObject(temp_root / "HotSpot.obj")
+                symbol = obj.symbol("?Hammock@CHotSpot@@CA?B_NAAVCVillager@@@Z")
+                section = obj.section(symbol.section)
+                raw = section.raw_ptr + symbol.value
+                self.assertEqual(obj.buf[raw + 4 : raw + 11], b"\x90" * 7)
+                helper = (temp_root / "vf2_invisible_hammock.cpp").read_text(encoding="ascii")
+                self.assertIn("(EInventoryItem)0x1E1", helper)
+                self.assertIn("(EInventoryItem)0x30C", helper)
+                self.assertEqual(manifest["invisible_hammock_drop_action"]["base_item"], "0x1E1")
+                self.assertEqual(manifest["invisible_hammock_drop_action"]["added_item"], "0x30C")
+            finally:
+                patcher.PATCHED = old_patched
+
+
+class SettingsEvictBehaviorTests(unittest.TestCase):
+    def test_any_generation_evict_preserves_mobile_state_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            shutil.copy2(patcher.SRC_OBJS / "theOptionsDialog.obj", temp_root / "theOptionsDialog.obj")
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = temp_root
+                manifest = {}
+
+                patcher.patch_options_dialog(manifest)
+
+                obj = CoffObject(temp_root / "theOptionsDialog.obj")
+                symbol = obj.symbol("??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z")
+                section = obj.section(symbol.section)
+                start = section.raw_ptr + symbol.value
+                self.assertEqual(obj.buf[start + 0x2DA : start + 0x2E0], b"\x0F\x85\x80\x00\x00\x00")
+                self.assertEqual(obj.buf[start + 0x2E0 : start + 0x2E7], b"\x83\x3D\x04\x00\x00\x00\x00")
+                self.assertEqual(obj.buf[start + 0x2E7 : start + 0x2E9], b"\x7E\x77")
+                self.assertIn("mobile state guard preserved", manifest["settings_menu"]["evict"]["status"])
+            finally:
+                patcher.PATCHED = old_patched
 
 
 class OutfitStoreMappingTests(unittest.TestCase):

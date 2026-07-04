@@ -805,3 +805,24 @@
   `Current VF2 Modded Build! B98.zip` on tag `B98-current-vf2-modded-build`,
   size `353,946,169`, SHA-256
   `63ad60cfb963008bed7cc6706f05146ed7ed6a8f40aa785204c9ccefa36dbf55`.
+
+## 2026-07-04 - B99 Evict and Invisible Hammock Parity
+
+- B99 keeps the stock/mobile `theOptionsDialog` Evict state guard at constructor
+  offset `+0x2DA` (`0F 85 80 00 00 00`) and only relaxes the generation gate:
+  compare byte at `+0x2E6` changes `2 -> 0`, and the branch at `+0x2E7`
+  changes `jge` (`7D 77`) to `jle` (`7E 77`). The existing
+  `theOptionsDialog::EvictFamily()` -> `CFamilyTree::EvictFamily()` handler is
+  untouched.
+- Invisible Hammock is additive furniture item `0x30C` with donor `0x1E1`
+  (`HammockStd`). Its `CFurnitureManager::itemInfo` row now has a contract that
+  all non-identity, non-store, non-string fields match donor `0x1E1`; item type
+  remains `5`.
+- `CHotSpot::Hammock(CVillager&)` is the stock drop/spontaneous eligibility
+  predicate for the native hammock behavior. B99 retargets the existing stock
+  `FurnitureManager.IsInWorld` call to `_VF2EitherHammockInWorld`, which returns
+  true when either base `0x1E1` or invisible `0x30C` is present, then continues
+  through the original `eBehavior_LieInHammockNoLeadIn (0x24)` route.
+- `sync_behavior_assets()` already copies `InvisibleHammock.png.fmap` from
+  `HammockStd.png.fmap`, preserving the base hammock object/collision geometry
+  instead of inventing a separate invisible-hammock behavior grid.

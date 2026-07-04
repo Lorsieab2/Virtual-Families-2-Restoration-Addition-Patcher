@@ -626,3 +626,22 @@
   all generated Outfit rows plus the added behavior labels.
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B98-Male-Outfit-Strings`.
+
+## B99 - Evict and Invisible Hammock Parity
+
+- Keeps the stock/mobile Settings Evict handler path intact and preserves the
+  `theOptionsDialog` constructor state guard at `+0x2DA`, while relaxing only
+  the generation threshold so the button is available in every active family
+  generation.
+- Treats Invisible Hammock item `0x30C` as a base HammockStd donor clone for
+  behavior fields. The generated furniture row must match donor `0x1E1` for
+  every non-identity/store/string field.
+- Wires `CHotSpot::Hammock` through `_VF2EitherHammockInWorld`, allowing the
+  stock hammock hotspot/drop predicate to accept either base `0x1E1` or
+  Invisible Hammock `0x30C` before continuing through the native
+  `eBehavior_LieInHammockNoLeadIn (0x24)` action.
+- Adds `vf2_invisible_hammock.cpp` to the helper compile and link response
+  files and validates `InvisibleHammock.png.fmap` is copied from
+  `HammockStd.png.fmap`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B99-Evict-Hammock-Parity`.

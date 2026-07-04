@@ -3931,12 +3931,14 @@ def patch_furniture_manager(manifest):
     behavior_safety_overrides = []
     vf3_tv_animation_records = []
     vf3_tv_behavior_contracts = []
+    invisible_hammock_behavior_contracts = []
     vf3_tv_by_name = {item["short_description"]: item for item in VF3_TV_ITEMS}
     for idx, (name, donor_id, _list_name, path) in enumerate(ITEMS):
         donor_vals = records[donor_id]["raw_u32"]
         vals = donor_vals[:]
+        new_item_id = item_id_for(idx)
         mobile = MOBILE_DATA_BY_PATH[path]
-        vals[0] = item_id_for(idx)
+        vals[0] = new_item_id
         vals[1] = image_id_for(idx)
         vals[2] = mobile["price"]
         vals[3] = mobile["lock_generation"]
@@ -3988,6 +3990,27 @@ def patch_furniture_manager(manifest):
             })
         vals[5], vals[6] = item_string_ids(idx)
         vals[0x58 // 4] = 0
+        if new_item_id == 0x30C and donor_id == 0x1E1:
+            allowed = {0, 1, 2, 3, 5, 6}
+            drift = [
+                {
+                    "offset": hex(i * 4),
+                    "donor": hex(donor_vals[i]),
+                    "added": hex(vals[i]),
+                }
+                for i in range(len(vals))
+                if i not in allowed and vals[i] != donor_vals[i]
+            ]
+            if drift:
+                raise RuntimeError(f"Invisible Hammock behavior fields drifted from base hammock donor: {drift}")
+            invisible_hammock_behavior_contracts.append({
+                "item": name,
+                "item_id": hex(vals[0]),
+                "donor_item": hex(donor_id),
+                "donor_behavior": "base HammockStd",
+                "item_type": vals[4],
+                "verified": "all non-identity, non-store, non-string fields match donor 0x1E1",
+            })
         if vf3_tv:
             allowed = {0, 1, 2, 3, 5, 6, *range(0x24 // 4, 0x50 // 4 + 1)}
             drift = [
@@ -4062,6 +4085,7 @@ def patch_furniture_manager(manifest):
         "behavior_safety_overrides": behavior_safety_overrides,
         "vf3_tv_animation_records": vf3_tv_animation_records,
         "vf3_tv_behavior_contracts": vf3_tv_behavior_contracts,
+        "invisible_hammock_behavior_contracts": invisible_hammock_behavior_contracts,
     }
 
 
@@ -7916,10 +7940,10 @@ def patch_options_dialog(manifest):
     sec = obj.section(ctor_sym.section)
     start = sec.raw_ptr + ctor_sym.value
 
-    # Desktop already contains an Evict button and handler, but constructor
-    # branches only build the button before generation 2. Keep the button
-    # available for every active generation, while still hiding it when the
-    # family tree has already been cleared.
+    # Desktop already contains the same Evict button/handler shape as mobile.
+    # Keep the mobile state guard (`FamilyTree+0 == 0`) and only relax the
+    # generation limit so every active PC generation can reach the native
+    # confirmation -> EvictFamily path.
     expected_1 = bytes([0x0F, 0x85, 0x80, 0x00, 0x00, 0x00])
     expected_generation_cmp = bytes([0x83, 0x3D, 0x04, 0x00, 0x00, 0x00, 0x02])
     expected_2 = bytes([0x7D, 0x77])
@@ -7929,38 +7953,37 @@ def patch_options_dialog(manifest):
         raise ValueError("Unexpected Evict generation compare bytes")
     if obj.buf[start + 0x2E7:start + 0x2E9] != expected_2:
         raise ValueError("Unexpected Evict second skip branch bytes")
-    obj.buf[start + 0x2DA:start + 0x2E0] = b"\x90" * 6
     obj.buf[start + 0x2E6] = 0
     obj.buf[start + 0x2E7:start + 0x2E9] = b"\x7E\x77"
     obj.write(PATCHED / "theOptionsDialog.obj")
 
     manifest["settings_menu"] = {
         "evict": {
-            "status": "available for every active family generation",
+            "status": "available for every active family generation with mobile state guard preserved",
             "button_control_id": 4,
             "label_string_id": "0x10",
             "confirmation_string_id": "0x11",
             "handler": "?EvictFamily@theOptionsDialog@@AAEXXZ",
             "family_tree_handler": "?EvictFamily@CFamilyTree@@QAEXXZ",
-            "click_safety": "CFamilyTree::EvictFamily is generation-agnostic: Reset(), then mark tree evicted; constructor guard hides the button when generation count is 0.",
+            "click_safety": "The native mobile/desktop handler path is untouched: confirmation dialog, CFamilyTree::EvictFamily Reset()+evicted mark, villager-manager reset, adoption scene state 2, scene 6.",
             "constructor_patches": [
                 {
                     "offset": "0x2DA",
                     "expected_original_bytes": expected_1.hex(),
-                    "replacement_bytes": ("90" * 6),
-                    "note": "ignore the evicted-flag branch so active later generations can reach the generation-count guard",
+                    "replacement_bytes": expected_1.hex(),
+                    "note": "preserve mobile/stock state guard: skip Evict setup when FamilyTree+0 is nonzero",
                 },
                 {
                     "offset": "0x2E0",
                     "expected_original_bytes": expected_generation_cmp.hex(),
                     "replacement_bytes": "833d0400000000",
-                    "note": "change generation compare from < 2 to active-family count > 0",
+                    "note": "change generation compare threshold from 2 to 0",
                 },
                 {
                     "offset": "0x2E7",
                     "expected_original_bytes": expected_2.hex(),
                     "replacement_bytes": "7e77",
-                    "note": "skip Evict only when generation count is <= 0",
+                    "note": "skip Evict when generation count is <= 0; generations 1+ are visible",
                 },
             ],
         }
@@ -8162,6 +8185,58 @@ def validate_vf3_tv_behavior_contract(manifest):
     }
 
 
+def validate_invisible_hammock_behavior_contract(manifest):
+    """Fail fast if Invisible Hammock stops inheriting the stock hammock path."""
+    errors = []
+    furniture = manifest.get("FurnitureManager", {})
+    rows = {
+        row.get("item_id"): row
+        for row in furniture.get("invisible_hammock_behavior_contracts", [])
+        if isinstance(row, dict)
+    }
+    row = rows.get("0x30c")
+    if row is None:
+        errors.append("missing Invisible Hammock furniture behavior contract")
+    else:
+        if row.get("donor_item") != "0x1e1":
+            errors.append(f"Invisible Hammock donor expected 0x1e1, got {row.get('donor_item')}")
+        if row.get("item_type") != 5:
+            errors.append(f"Invisible Hammock item_type expected 5, got {row.get('item_type')}")
+
+    drop = manifest.get("invisible_hammock_drop_action", {})
+    if drop.get("base_item") != "0x1E1" or drop.get("added_item") != "0x30C":
+        errors.append("Invisible Hammock hotspot predicate does not include base 0x1E1 and added 0x30C")
+    if drop.get("native_behavior") != "eBehavior_LieInHammockNoLeadIn (0x24)":
+        errors.append(f"Invisible Hammock native behavior drifted: {drop.get('native_behavior')}")
+
+    behavior_assets = manifest.get("behavior_assets", {})
+    fmap_rows = {
+        row.get("target"): row
+        for row in behavior_assets.get("invisible_outdoor_fmap_donors", [])
+        if isinstance(row, dict)
+    }
+    fmap = fmap_rows.get("InvisibleHammock.png.fmap")
+    if fmap is None:
+        errors.append("missing InvisibleHammock.png.fmap donor copy")
+    elif fmap.get("donor") != "HammockStd.png.fmap":
+        errors.append(f"Invisible Hammock fmap donor expected HammockStd.png.fmap, got {fmap.get('donor')}")
+    for missing in behavior_assets.get("missing", []):
+        if isinstance(missing, dict) and missing.get("target") == "InvisibleHammock.png.fmap":
+            errors.append(f"Invisible Hammock fmap was reported missing: {missing}")
+
+    if errors:
+        raise RuntimeError("Invisible Hammock behavior contract failed:\n- " + "\n- ".join(errors))
+    manifest["invisible_hammock_behavior_contract"] = {
+        "status": "validated",
+        "item_id": "0x30c",
+        "donor_item": "0x1e1",
+        "record_contract": row,
+        "hotspot": drop,
+        "fmap": fmap,
+        "recognition_path": "CHotSpot::Hammock stock predicate accepts base HammockStd or InvisibleHammock, then dispatches the existing hammock behavior.",
+    }
+
+
 def validate_runtime_payload_contract(manifest):
     errors = []
     for filename in VANILLA_RUNTIME_REQUIRED_FILES:
@@ -8231,6 +8306,7 @@ def main():
     sync_vanilla_runtime_payload(manifest)
     patch_furniture_manager(manifest)
     patch_added_furniture_click_aliases(manifest)
+    patch_invisible_hammock_drop_action(manifest)
     patch_visible_special_upgrades(manifest)
     patch_inventory_manager(manifest)
     patch_scrolling_store_scene(manifest)
@@ -8330,6 +8406,7 @@ def main():
     write_internal_workings_summary(manifest)
     validate_vf3_tv_animation_contract(manifest)
     validate_vf3_tv_behavior_contract(manifest)
+    validate_invisible_hammock_behavior_contract(manifest)
     remove_legacy_package_dirs(manifest)
     validate_runtime_payload_contract(manifest)
     (OUT / "patch-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
