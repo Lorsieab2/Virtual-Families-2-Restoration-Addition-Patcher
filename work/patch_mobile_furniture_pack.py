@@ -4493,10 +4493,17 @@ static void VF2SetStockOutfitBodyForSyntheticItem(int itemId) {{
     gVF2LastSyntheticOutfitByGender[gender] = itemId;
 }}
 
+static int VF2SelectedSyntheticOutfitFromToolTray();
+
 extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
     int body = VF2OutfitBodyForItem(itemId);
     if (body >= 0) {{
         return body;
+    }}
+
+    int liveSelected = VF2SelectedSyntheticOutfitFromToolTray();
+    if (liveSelected && VF2OutfitStockTrayItemForItem(liveSelected) == itemId) {{
+        return VF2OutfitBodyForItem(liveSelected);
     }}
 
     int selectedItems[2] = {{gVF2SyntheticOutfitToolInUse, gVF2SyntheticOutfitToolInHand}};
@@ -8221,7 +8228,11 @@ def main():
     patch_options_dialog(manifest)
     write_outfit_store_helpers(manifest)
     patch_tool_tray_outfit_normalization(manifest)
-    patch_main_scene_outfit_body_apply(manifest)
+    manifest["outfit_apply_body_resolver"] = {
+        "status": "disabled for B97 stability; stock theMainScene GetOutfit callsites retained",
+        "replacement": "CInventoryManager::GetOutfit hook now reads the selected synthetic ToolTray item directly",
+        "reason": "B96 final-apply callsite replacement made generated Outfit-section items crash on apply.",
+    }
     patch_string_manager(manifest)
     patch_special_upgrade_titles(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:

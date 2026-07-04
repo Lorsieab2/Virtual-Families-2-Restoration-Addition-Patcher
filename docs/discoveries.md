@@ -725,3 +725,20 @@
   retargets `DrawVillager + 0x454` to `_VF2DrawSceneVillagerBodyFrame`, using
   the folder-backed Holiday frame table before any stock sheet row can receive
   `50-53`.
+
+## 2026-07-04 - B97 Outfit Apply Stability Revert
+
+- B96 proved body values `50-53` can reach the renderer, but in-game testing
+  showed generated Outfit-section items now crash when dropped on villagers.
+  The likely risky point is the direct `theMainScene::HandleMouseDown`
+  callsite replacement at `+0xCE3` / `+0xD83`, not the store or tray icon path.
+- B97 leaves the stock `theMainScene` `CInventoryManager::GetOutfit(0x49/0x4A)`
+  calls intact and instead strengthens the existing
+  `_VF2GetOutfitStoreBodyValue` hook. When the stock item ID is requested, the
+  hook now inspects `ToolTray::GetToolInUse()` and `ToolTray::GetToolInHand()`
+  directly via `VF2SelectedSyntheticOutfitFromToolTray()` to recover the
+  selected generated outfit body value.
+- The abandoned paired head-draw experiment was not carried forward. The only
+  live-world Holiday body draw redirect remains
+  `CVillagerManager::DrawVillager + 0x454`, matching B96's shipped renderer
+  coverage.

@@ -167,6 +167,10 @@
   `CVillager+0x6A84` becomes the selected body value rather than `49`.
   Also re-test at least one base male and female outfit to confirm vanilla
   outfit application remains unchanged.
+- In-game test B97 outfit apply stability: buy and apply several generated
+  Outfit-section items for both genders, including Holiday rows `50-53`, and
+  confirm the stock drop/apply path no longer crashes while the selected item
+  still controls `CVillager+0x6A84` instead of collapsing to body `49`.
 - Continue Holiday Ornament implementation under the isolated
   `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` path: compare the mobile collection table,
   page routing, pickup observer registration, `CollectionCount`, save fields,

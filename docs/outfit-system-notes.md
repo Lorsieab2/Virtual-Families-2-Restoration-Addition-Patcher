@@ -78,6 +78,23 @@ rows.
 
 ## B53 compatibility warning
 
+## B97 apply stability note
+
+B96 patched the final outfit apply callsites in
+`theMainScene::HandleMouseDown` so stock tray items `0x49` and `0x4A` called
+`_VF2ResolveOutfitBodyForApply(stockItem, gender)` directly. In-game testing
+then showed generated Outfit-section drops could crash even though the Holiday
+body value reached rendering.
+
+B97 disables that direct callsite replacement and keeps the vanilla
+`theMainScene` path intact. The safer modification point is now
+`CInventoryManager::GetOutfit`: `_VF2GetOutfitStoreBodyValue(itemId)` first
+checks the requested stock item, then reads the selected synthetic item from
+`ToolTray::GetToolInUse()` / `ToolTray::GetToolInHand()` through
+`VF2SelectedSyntheticOutfitFromToolTray()`. This preserves the game's native
+drop/apply control flow while still letting generated outfit items resolve to
+their intended body rows.
+
 B53 intentionally restored the six supplied base sheets, which are all 50
 rows high. Its executable was inherited from B52 and may still contain the
 temporary 0--53 animator guard. Therefore IDs 50--53 must be treated as

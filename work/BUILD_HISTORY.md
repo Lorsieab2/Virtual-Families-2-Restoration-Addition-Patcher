@@ -602,3 +602,16 @@
   `CSceneManager::DrawScaled` with an out-of-range stock sheet row.
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B96-Holiday-Outfit-Apply-Resolver`.
+
+## B97 - Outfit Apply Stability
+
+- Keeps the B96 live house-view Holiday body renderer redirect, but disables
+  the direct `theMainScene::HandleMouseDown` stock outfit callsite replacement
+  after in-game testing showed generated Outfit-section items could crash on
+  drop/apply.
+- Moves selected generated outfit body recovery back into the existing
+  `CInventoryManager::GetOutfit` hook path. `_VF2GetOutfitStoreBodyValue` now
+  reads the current synthetic ToolTray item before falling back to the
+  gendered last-synthetic cache or vanilla outfit fields.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B97-Outfit-Apply-Stability`.
