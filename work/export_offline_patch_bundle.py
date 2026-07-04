@@ -24,6 +24,7 @@ PATCHED_EXE_NAMES = (
     "Virtual Families 2.exe",
 )
 BYTE_PATCH_CHUNK_SIZE = 256
+ASSET_MODES = ("additive", "all")
 
 SETTINGS = [
     {
@@ -211,6 +212,55 @@ def write_json(path: Path, data: dict[str, Any]) -> None:
         handle.write("\n")
 
 
+def candidate_manifest_rel_paths(value: str) -> list[Path]:
+    text = value.replace("\\", "/").strip()
+    if not text:
+        return []
+    try:
+        path = Path(text)
+    except ValueError:
+        return []
+
+    candidates: list[str] = []
+    if path.is_absolute():
+        parts = path.parts
+        lowered = [part.lower() for part in parts]
+        for root_name in ("images", "assets"):
+            if root_name not in lowered:
+                continue
+            index = lowered.index(root_name)
+            candidates.append("/".join(parts[index:]))
+    else:
+        if text.startswith(("Images/", "Assets/")):
+            candidates.append(text)
+        elif text.startswith(("Furniture/", "VillagerBodies/", "HolidayOutfits/", "CollectionOrnaments/")):
+            candidates.append("Images/" + text)
+        elif "/" not in text and text.lower().endswith((".png", ".jpg", ".bmp")):
+            candidates.append("Images/" + text)
+        elif "/" not in text and text.lower().endswith(".fmap"):
+            candidates.append("Assets/" + text)
+
+    result = []
+    for candidate in candidates:
+        rel = Path(candidate)
+        if rel.parts and rel.parts[0] in {"Images", "Assets"}:
+            result.append(rel)
+    return result
+
+
+def collect_manifest_asset_paths(data: Any) -> set[Path]:
+    paths: set[Path] = set()
+    if isinstance(data, dict):
+        for value in data.values():
+            paths.update(collect_manifest_asset_paths(value))
+    elif isinstance(data, list):
+        for value in data:
+            paths.update(collect_manifest_asset_paths(value))
+    elif isinstance(data, str):
+        paths.update(candidate_manifest_rel_paths(data))
+    return paths
+
+
 def find_patched_exe(build_dir: Path, explicit: str | None) -> Path:
     if explicit:
         path = build_dir / explicit
@@ -305,19 +355,38 @@ def setting_for_asset(rel_path: Path) -> str:
     return "core_assets"
 
 
-def iter_candidate_assets(build_dir: Path) -> list[Path]:
+def iter_candidate_assets(build_dir: Path, manifest_data: dict[str, Any], asset_mode: str) -> list[Path]:
     roots = [build_dir / "Images", build_dir / "Assets"]
+    allowed_paths: set[Path] | None = None
+    if asset_mode == "additive":
+        allowed_paths = {
+            rel
+            for rel in collect_manifest_asset_paths(manifest_data)
+            if (build_dir / rel).is_file()
+        }
+
     paths: list[Path] = []
     for root in roots:
         if root.is_dir():
-            paths.extend(path for path in root.rglob("*") if path.is_file())
+            for path in root.rglob("*"):
+                if not path.is_file():
+                    continue
+                if allowed_paths is not None and path.relative_to(build_dir) not in allowed_paths:
+                    continue
+                paths.append(path)
     return sorted(paths)
 
 
-def export_asset_payloads(build_dir: Path, base_payload: Path, bundle_dir: Path) -> list[dict[str, Any]]:
+def export_asset_payloads(
+    build_dir: Path,
+    base_payload: Path,
+    bundle_dir: Path,
+    manifest_data: dict[str, Any],
+    asset_mode: str,
+) -> list[dict[str, Any]]:
     payload_root = bundle_dir / "payload"
     asset_patches: list[dict[str, Any]] = []
-    for source in iter_candidate_assets(build_dir):
+    for source in iter_candidate_assets(build_dir, manifest_data, asset_mode):
         rel = source.relative_to(build_dir)
         base = base_payload / rel
         source_sha = sha256_file(source)
@@ -381,6 +450,13 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     if bundle_dir.exists() and any(bundle_dir.iterdir()) and not args.force:
         raise FileExistsError(f"Output bundle directory is not empty: {bundle_dir}")
     bundle_dir.mkdir(parents=True, exist_ok=True)
+    if args.force:
+        payload_dir = bundle_dir / "payload"
+        if payload_dir.exists():
+            shutil.rmtree(payload_dir)
+        manifest_path = bundle_dir / "manifest.json"
+        if manifest_path.exists():
+            manifest_path.unlink()
 
     byte_patches: list[dict[str, Any]] = []
     target_files: list[dict[str, Any]] = []
@@ -389,7 +465,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         if args.include_byte_patches:
             byte_patches = build_byte_patches(vanilla_exe, patched_exe, target_exe_name)
 
-    asset_patches = export_asset_payloads(build_dir, base_payload, bundle_dir)
+    asset_patches = export_asset_payloads(build_dir, base_payload, bundle_dir, build_manifest_data, args.asset_mode)
 
     asset_counts_by_setting: dict[str, int] = {}
     for row in asset_patches:
@@ -420,6 +496,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "asset_counts_by_setting": dict(sorted(asset_counts_by_setting.items())),
             "payload_file_count": count_files(bundle_dir / "payload"),
             "base_payload": str(base_payload),
+            "asset_mode": args.asset_mode,
             "target_exe_name": target_exe_name,
             "requires_vanilla_exe_for_apply": not bool(target_files),
         },
@@ -437,6 +514,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--patched-exe", help="Patched EXE filename inside build dir. Auto-detected by default.")
     parser.add_argument("--target-exe-name", default=DEFAULT_EXE_NAME, help="Relative EXE path expected in the user's game folder.")
     parser.add_argument("--name", help="Manifest display name.")
+    parser.add_argument("--asset-mode", choices=ASSET_MODES, default="additive", help="Asset export mode. 'additive' exports manifest-referenced assets; 'all' exports every Images/Assets diff.")
     parser.add_argument("--include-byte-patches", action="store_true", help="Diff vanilla EXE against patched EXE into byte patch records.")
     parser.add_argument("--force", action="store_true", help="Allow writing into a non-empty output directory.")
     return parser.parse_args()

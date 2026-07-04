@@ -533,6 +533,7 @@
   `offline_vf2_patcher.py` manifest/payload bundles with toggleable settings,
   runtime requirements, asset SHA-256 records, and optional vanilla-vs-patched
   EXE byte diffs.
-- The first B93 asset preview is schema-readable but not release-ready: it
-  needs vanilla EXE target metadata, native byte records, and a pruning pass for
-  inherited previous-build assets before publication.
+- The B93 asset preview is now pruned by default with `--asset-mode additive`,
+  producing 713 manifest-referenced asset records instead of exporting inherited
+  previous-build payloads. It still needs vanilla EXE target metadata and
+  native byte records before publication.

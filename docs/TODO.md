@@ -30,11 +30,6 @@
   TV frame enum-order swap, the B81 VF3 TV fmap/LoadFmap recognition fix, and
   the B93 split ToolTray hand/use synthetic outfit state plus generated-frame
   Holiday body source priority without distributing a premodified EXE.
-- Prune and classify the generated B93 offline patch bundle preview. The first
-  `work/export_offline_patch_bundle.py` run produced 7,710 asset records because
-  it includes inherited previous-build runtime assets; decide which records are
-  truly required for a vanilla install and which should be derived from the
-  clean base payload or feature-specific generators instead.
 - Supply a verified vanilla VF2 PC executable to
   `work/export_offline_patch_bundle.py` and test `--include-byte-patches`. If
   the vanilla and patched EXE sizes differ, extract native patch records from

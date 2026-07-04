@@ -76,6 +76,10 @@ vanilla-identical files, assigns each asset patch to a feature setting, records
 payload SHA-256/size, and includes runtime requirements for `Images`, `Sounds`,
 `ldw.ini`, `wc.dat`, and key base art.
 
+By default the exporter uses `--asset-mode additive`, which exports only assets
+referenced by the generated build manifest. Use `--asset-mode all` only for
+diagnostic full-folder diffs.
+
 When a vanilla executable is available, the exporter can also add target EXE
 hash metadata and length-preserving byte diff records:
 
@@ -92,20 +96,18 @@ different sizes. This keeps the first exporter limited to the patcher's current
 offset/expected-bytes contract instead of pretending a relinked executable can
 always be represented safely as simple byte patches.
 
-The first B93 asset preview produced 7,710 asset records:
+The pruned B93 asset preview produced 713 asset records:
 
 | Setting | Asset records |
 | --- | ---: |
-| `holiday_outfits` | 6,048 |
-| `mobile_furniture` | 1,626 |
+| `holiday_outfits` | 448 |
+| `mobile_furniture` | 229 |
 | `holiday_ornaments_collection` | 13 |
 | `outfit_store_expansion` | 11 |
 | `vf3_tv_assets_recognition` | 12 |
 
 That preview is a schema-valid starting point, not a release-ready patch
-bundle: it still needs vanilla EXE target metadata/native byte records and a
-payload-pruning pass so inherited previous-build assets are classified and
-trimmed deliberately.
+bundle: it still needs vanilla EXE target metadata and native byte records.
 
 ## Restore
 

@@ -644,10 +644,11 @@
 - The exporter can optionally diff a supplied vanilla EXE against the patched
   build EXE into length-preserving byte patch records. It refuses byte export
   when executable sizes differ, keeping the current JSON patch contract honest.
-- A B93 asset-only preview at
-  `outputs/Offline-Patch-Bundles/B93-asset-preview` generated 7,710 asset
-  records: 6,048 Holiday outfit records, 1,626 mobile furniture records, 13
-  Holiday Ornament collection records, 11 outfit-store records, and 12 VF3 TV
+- `--asset-mode additive` now exports only assets referenced by the generated
+  build manifest; `--asset-mode all` remains available for diagnostic
+  full-folder diffs. The pruned B93 asset-only preview at
+  `outputs/Offline-Patch-Bundles/B93-asset-preview` generated 713 asset
+  records: 448 Holiday outfit records, 229 mobile furniture records, 13 Holiday
+  Ornament collection records, 11 outfit-store records, and 12 VF3 TV
   asset/recognition records. This is schema-readable by the patcher but still
-  needs vanilla EXE target metadata, native byte records, and payload pruning
-  before release use.
+  needs vanilla EXE target metadata and native byte records before release use.

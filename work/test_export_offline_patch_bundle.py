@@ -53,7 +53,19 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             (build / "Assets").mkdir()
             (build / "Assets" / "VF3LargeFlatScreenTV.png.fmap").write_bytes(b"fmap")
             (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
-            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            (build / "patch-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "generated_assets": [
+                            {"path": "Furniture/CandyCane.png"},
+                            {"runtime_name": "VF3LargeFlatScreenTVAnim.png"},
+                            {"fmap": "VF3LargeFlatScreenTV.png.fmap"},
+                        ]
+                    },
+                    indent=2,
+                ),
+                encoding="ascii",
+            )
 
             self.run_exporter("--build-dir", str(build), "--base-payload", str(base), "--out-dir", str(out))
 
@@ -104,6 +116,63 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             settings = {row["id"] for row in manifest["settings"]}
             self.assertIn("core_native_patch", settings)
             self.assertIn("core_assets", settings)
+
+    def test_all_asset_mode_exports_unreferenced_diffs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            (base / "Images").mkdir(parents=True)
+            (build / "Images").mkdir(parents=True)
+            (build / "Images" / "UnreferencedGenerated.png").write_bytes(b"generated")
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--asset-mode",
+                "all",
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
+            self.assertIn("Images/UnreferencedGenerated.png", asset_by_path)
+            self.assertEqual(manifest["export_summary"]["asset_mode"], "all")
+
+    def test_force_clears_stale_payload_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            stale = out / "payload" / "Images" / "stale.png"
+            stale.parent.mkdir(parents=True)
+            stale.write_bytes(b"stale")
+            (out / "manifest.json").write_text("{}", encoding="ascii")
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--force",
+            )
+
+            self.assertFalse(stale.exists())
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["export_summary"]["payload_file_count"], 0)
 
 
 if __name__ == "__main__":
