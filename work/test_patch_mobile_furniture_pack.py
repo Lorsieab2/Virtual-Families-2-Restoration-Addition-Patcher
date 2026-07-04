@@ -384,6 +384,30 @@ class HolidayOrnamentGateTests(unittest.TestCase):
 
 
 class RuntimePayloadContractTests(unittest.TestCase):
+    def test_vanilla_runtime_sources_do_not_use_modded_outputs_by_default(self):
+        old_env = patcher.os.environ.pop("VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK", None)
+        try:
+            roots = patcher.vanilla_runtime_payload_source_dirs()
+
+            self.assertIn(patcher.ROOT / "work" / "vanilla_runtime_payload", roots)
+            self.assertFalse(any("outputs" in root.parts for root in roots))
+        finally:
+            if old_env is not None:
+                patcher.os.environ["VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK"] = old_env
+
+    def test_legacy_output_runtime_sources_are_explicit_opt_in(self):
+        old_env = patcher.os.environ.get("VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK")
+        try:
+            patcher.os.environ["VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK"] = "1"
+            roots = patcher.vanilla_runtime_payload_source_dirs()
+
+            self.assertTrue(any("outputs" in root.parts for root in roots))
+        finally:
+            if old_env is None:
+                patcher.os.environ.pop("VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK", None)
+            else:
+                patcher.os.environ["VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK"] = old_env
+
     def with_temp_runtime(self, callback):
         old_out = patcher.OUT
         old_min_images = patcher.RUNTIME_MIN_IMAGE_FILE_COUNT

@@ -60,6 +60,8 @@ GENERATED_VILLAGER_BODIES = ROOT / "generated" / "VillagerBodies"
 FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B56-Holiday-Body-Lookup-Test"
 VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS = (
     ROOT / "work" / "vanilla_runtime_payload",
+)
+LEGACY_OUTPUT_RUNTIME_PAYLOAD_SOURCE_DIRS = (
     ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B89-Holiday-Body-Link-Fallback",
     ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B83-Full-Runtime-Payload",
 )
@@ -1738,6 +1740,8 @@ def vanilla_runtime_payload_source_dirs():
     if env_source:
         roots.append(Path(env_source))
     roots.extend(VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS)
+    if os.environ.get("VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK", "0") == "1":
+        roots.extend(LEGACY_OUTPUT_RUNTIME_PAYLOAD_SOURCE_DIRS)
 
     unique = []
     seen = set()

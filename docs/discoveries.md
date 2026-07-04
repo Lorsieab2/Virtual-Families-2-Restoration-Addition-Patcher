@@ -519,6 +519,10 @@
 - `work/offline_vf2_patcher.py` supports manifest `runtime_requirements` so the
   offline patcher can refuse to patch an incomplete copied game folder before
   applying byte or asset records.
+- B93 follow-up hardens runtime seeding: normal builds now search only
+  `VF2_VANILLA_RUNTIME_DIR` and `work/vanilla_runtime_payload`. Older modded
+  output folders are no longer automatic fallback sources; they require the
+  explicit diagnostic opt-in `VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK=1`.
 
 ## 2026-07-03 - Stock Collections and Runtime Geometry Payload Rollback
 

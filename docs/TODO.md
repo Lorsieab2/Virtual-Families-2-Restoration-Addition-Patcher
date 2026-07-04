@@ -55,6 +55,11 @@
   (`SDL2.dll`, `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`,
   `zlib1.dll`, `fmod.dll`), and the `Microsoft.VC90.CRT/` private assembly
   folder required by the packaged `SDL2_image.dll`.
+- Populate `work/vanilla_runtime_payload` from a clean base-game VF2 runtime
+  before the next packaged release, or set `VF2_VANILLA_RUNTIME_DIR` to that
+  clean runtime folder. Normal builds no longer auto-seed from older modded
+  output folders; `VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK=1` is only for
+  explicit diagnostics.
 
 ## Research Leads
 
