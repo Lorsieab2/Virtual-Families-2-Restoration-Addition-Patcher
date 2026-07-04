@@ -31,6 +31,10 @@
   B93 split ToolTray hand/use synthetic outfit state, generated-frame Holiday
   body source priority, and the B96 final outfit apply resolver without
   distributing a premodified EXE.
+- Use the final cleaned `B98-current-vf2-modded-build` release ZIP as the
+  source of truth for future package baselines. It supersedes the older local
+  B98 extraction that contained only 29 of the generator's 111 additive
+  `Images/Furniture` sprite paths.
 - Extract native patch records from object/linker patch data for the offline
   bundle. The workspace-local vanilla EXE candidate has SHA-256
   `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4` and size
@@ -63,8 +67,9 @@
   `zlib1.dll`, `fmod.dll`), and no legacy `ReferenceAssets/` or
   `Microsoft.VC90.CRT/` folders.
 - Keep using `work/vanilla_runtime_payload` as the canonical clean base asset
-  seed for future builds, but release package shape comes from the standalone
-  `B98-current-vf2-modded-build` ZIP. New releases should use the exact B98
+  seed for source-side generation, but release package shape and final runtime
+  payload come from the final cleaned standalone
+  `B98-current-vf2-modded-build` ZIP. New releases should use that exact B98
   folder structure, rename the folder shortly, and replace only the packaged
   EXE with the newest build EXE.
 

@@ -507,7 +507,7 @@ class RuntimePayloadContractTests(unittest.TestCase):
         self.assertEqual(patcher.OFFICIAL_B93_RELEASE_ASSET, "Current VF2 Modded Build! B98.zip")
         self.assertEqual(
             patcher.OFFICIAL_B93_RELEASE_SHA256,
-            "9124980ec334de2baa9c6da76ea614f64c38bf24233c68f1a7978ecde3d04f4a",
+            "63ad60cfb963008bed7cc6706f05146ed7ed6a8f40aa785204c9ccefa36dbf55",
         )
         self.assertIn("VF2-B*-Release", patcher.PREVIOUS_BUILD_OUTPUT_GLOBS)
 

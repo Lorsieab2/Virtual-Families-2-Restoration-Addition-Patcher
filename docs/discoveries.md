@@ -549,8 +549,8 @@
   explicit diagnostic opt-in `VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK=1`.
 - The current correct package-structure baseline is the user-provided GitHub
   release asset `Current VF2 Modded Build! B98.zip` on tag
-  `B98-current-vf2-modded-build`, size `340,111,685`, SHA-256
-  `9124980ec334de2baa9c6da76ea614f64c38bf24233c68f1a7978ecde3d04f4a`.
+  `B98-current-vf2-modded-build`, size `353,946,169`, SHA-256
+  `63ad60cfb963008bed7cc6706f05146ed7ed6a8f40aa785204c9ccefa36dbf55`.
   Its release-root folders are `Assets/`, `Images/`, `OptionalVisualMods/`,
   `Original Virtual Families 2 Assets/`, and `Sounds/`. Future release
   packages should use a short folder name such as `VF2-B##-Release`, preserve
@@ -783,3 +783,25 @@
   StringId (`max(new_rows.string_id) + 1`). The normal B98 manifest reports
   `new_one_past_max = 0xC8B`, covering the last male Holiday outfit string
   `0xC88` and behavior labels `0xC89-0xC8A`.
+
+## 2026-07-04 - Superseded Local B98 Sprite Regression
+
+- The current generator exposes 111 additive/mobile furniture sprite paths in
+  `patch_mobile_furniture_pack.ITEMS`. An older local B98 extraction only
+  contained 29 of those additive paths under `Images/Furniture`; 82 were absent
+  from that local copy even though their rows still exist in the generator.
+- Those missing sprites were recoverable from older complete local builds,
+  especially `outputs/VF2-Mobile-Furniture-With-Island-Events-B74-Any-Generation-Evict`.
+  They include Holiday/Thanksgiving/Birthday decor, LDW posters, mobile
+  recolor furniture, and the VF3 living-room couch/loveseat strips.
+- A recovery dump was generated at
+  `outputs/VF2-Mobile-Exclusive-Furniture-Sprites-Dump` and copied to
+  `C:\Users\Owner\Downloads\VF2-Mobile-Exclusive-Furniture-Sprites-Dump`.
+  The dump preserves hashes and source-build evidence in `manifest.json`,
+  with 29 sprites under `Present_In_B98` and 82 under
+  `Recovered_Missing_From_B98`.
+- The user-provided final cleaned B98 ZIP supersedes the incomplete local copy
+  and is now the GitHub source of truth for future builds. Its release asset is
+  `Current VF2 Modded Build! B98.zip` on tag `B98-current-vf2-modded-build`,
+  size `353,946,169`, SHA-256
+  `63ad60cfb963008bed7cc6706f05146ed7ed6a8f40aa785204c9ccefa36dbf55`.

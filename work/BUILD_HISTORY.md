@@ -532,8 +532,8 @@
   required root launcher/config/DLL files, and no legacy `ReferenceAssets/` or
   `Microsoft.VC90.CRT/` folders. The current release baseline asset is
   `Current VF2 Modded Build! B98.zip` on tag
-  `B98-current-vf2-modded-build`, SHA-256
-  `9124980ec334de2baa9c6da76ea614f64c38bf24233c68f1a7978ecde3d04f4a`.
+  `B98-current-vf2-modded-build`, size `353,946,169`, SHA-256
+  `63ad60cfb963008bed7cc6706f05146ed7ed6a8f40aa785204c9ccefa36dbf55`.
 
 ## Next Build Contract - Offline Patch Bundle Export
 
