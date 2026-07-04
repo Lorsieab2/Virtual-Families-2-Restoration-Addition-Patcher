@@ -163,6 +163,50 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(status["status"], "byte_diff_skipped")
             self.assertIn("sizes differ", status["reason"])
 
+    def test_exports_object_relative_native_patch_sources_as_metadata_only(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "settings_menu": {
+                            "evict": {
+                                "constructor_patches": [
+                                    {
+                                        "offset": "0x2DA",
+                                        "expected_original_bytes": "0f8580000000",
+                                        "replacement_bytes": "909090909090",
+                                        "note": "evict branch",
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    indent=2,
+                ),
+                encoding="ascii",
+            )
+
+            self.run_exporter("--build-dir", str(build), "--base-payload", str(base), "--out-dir", str(out))
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["patches"], [])
+            self.assertEqual(manifest["export_summary"]["native_patch_source_count"], 1)
+            source = manifest["native_patch_sources"][0]
+            self.assertEqual(source["source_path"], "settings_menu/evict/constructor_patches/0")
+            self.assertEqual(source["requires"], ["settings_evict_button"])
+            self.assertEqual(source["scope"], "object_relative")
+            self.assertEqual(source["apply_status"], "not_file_offset")
+            self.assertEqual(source["offset"], "0x2DA")
+            self.assertEqual(source["expected_original_bytes"], "0f8580000000")
+            self.assertEqual(source["replacement_bytes"], "909090909090")
+
     def test_strict_byte_patches_fail_on_size_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

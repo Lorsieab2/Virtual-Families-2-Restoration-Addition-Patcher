@@ -128,6 +128,14 @@ A second preview with `--vanilla-exe "Unneeded crap\Virtual Families 2.exe"
 asset records, but has zero byte records and
 `native_patch_status=byte_diff_skipped` because the EXE sizes differ.
 
+The exporter also preserves explicit native patch byte triples found in build
+metadata under `native_patch_sources`. These are source records only, not
+applyable patch records, unless they have been translated to final file offsets
+and moved into `patches[]`. B93 currently exposes three Settings Evict
+constructor records from `settings_menu.evict.constructor_patches`; their
+offsets are object/function-relative, so their `scope` is `object_relative` and
+their `apply_status` is `not_file_offset`.
+
 ## Restore
 
 ```powershell
@@ -200,6 +208,19 @@ when the original target did not exist.
       "replacement_bytes": "11 22 33 44",
       "requires": ["holiday_furniture"],
       "note": "Explain why this patch exists."
+    }
+  ],
+  "native_patch_sources": [
+    {
+      "source_path": "settings_menu/evict/constructor_patches/0",
+      "offset": "0x2DA",
+      "expected_original_bytes": "0f8580000000",
+      "replacement_bytes": "909090909090",
+      "requires": ["settings_evict_button"],
+      "scope": "object_relative",
+      "apply_status": "not_file_offset",
+      "next_step": "Translate object/function-relative offset to final EXE file offset before moving into patches[].",
+      "note": "Original build-manifest note."
     }
   ],
   "asset_patches": [

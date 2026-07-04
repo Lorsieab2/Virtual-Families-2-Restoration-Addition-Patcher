@@ -543,3 +543,7 @@
   size `1,881,088`), but B93's patched EXE size is `1,677,824`, so native
   records must be derived from linker/object patch metadata rather than a full
   executable byte diff.
+- Object-relative native byte triples from build manifests are preserved under
+  `native_patch_sources` only. B93 currently exports the three Settings Evict
+  constructor records this way; they must be translated to final vanilla EXE
+  file offsets before the offline patcher is allowed to apply them.

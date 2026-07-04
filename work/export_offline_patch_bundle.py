@@ -336,6 +336,50 @@ def native_patch_status(status: str, **extra: Any) -> dict[str, Any]:
     return data
 
 
+def setting_for_native_source(path_parts: list[str]) -> str:
+    path_text = "/".join(path_parts)
+    if "settings_menu/evict" in path_text:
+        return "settings_evict_button"
+    if "HolidayOrnament" in path_text or "holiday_ornament" in path_text:
+        return "holiday_ornaments_collection"
+    if "IslandEvents" in path_text:
+        return "island_events"
+    if "vf3_tv" in path_text or "VF3" in path_text:
+        return "vf3_tv_assets_recognition"
+    return "core_native_patch"
+
+
+def collect_native_patch_sources(data: Any, path_parts: list[str] | None = None) -> list[dict[str, Any]]:
+    if path_parts is None:
+        path_parts = []
+    records: list[dict[str, Any]] = []
+    if isinstance(data, dict):
+        has_explicit_bytes = all(
+            key in data
+            for key in ("offset", "expected_original_bytes", "replacement_bytes")
+        )
+        if has_explicit_bytes:
+            records.append(
+                {
+                    "source_path": "/".join(path_parts),
+                    "offset": str(data["offset"]),
+                    "expected_original_bytes": str(data["expected_original_bytes"]),
+                    "replacement_bytes": str(data["replacement_bytes"]),
+                    "requires": [setting_for_native_source(path_parts)],
+                    "note": str(data.get("note", "")).strip(),
+                    "scope": "object_relative",
+                    "apply_status": "not_file_offset",
+                    "next_step": "Translate object/function-relative offset to final EXE file offset before moving into patches[].",
+                }
+            )
+        for key, value in data.items():
+            records.extend(collect_native_patch_sources(value, [*path_parts, str(key)]))
+    elif isinstance(data, list):
+        for index, value in enumerate(data):
+            records.extend(collect_native_patch_sources(value, [*path_parts, str(index)]))
+    return records
+
+
 def setting_for_asset(rel_path: Path) -> str:
     text = relative_posix(rel_path)
     stem = rel_path.stem
@@ -502,6 +546,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         )
 
     asset_patches = export_asset_payloads(build_dir, base_payload, bundle_dir, build_manifest_data, args.asset_mode)
+    native_patch_sources = collect_native_patch_sources(build_manifest_data)
 
     asset_counts_by_setting: dict[str, int] = {}
     for row in asset_patches:
@@ -525,10 +570,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "required_dirs": RUNTIME_REQUIRED_DIRS,
         },
         "patches": byte_patches,
+        "native_patch_sources": native_patch_sources,
         "asset_patches": asset_patches,
         "export_summary": {
             "byte_patch_count": len(byte_patches),
             "native_patch_status": native_status,
+            "native_patch_source_count": len(native_patch_sources),
             "asset_patch_count": len(asset_patches),
             "asset_counts_by_setting": dict(sorted(asset_counts_by_setting.items())),
             "payload_file_count": count_files(bundle_dir / "payload"),

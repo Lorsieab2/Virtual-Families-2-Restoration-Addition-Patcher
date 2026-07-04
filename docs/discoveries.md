@@ -658,3 +658,9 @@
   B93's patched EXE is `1,677,824` bytes, so full-EXE byte diff export is
   invalid; the exporter records `native_patch_status=byte_diff_skipped` and the
   native records need to come from object/linker patch metadata.
+- Build manifests can also contain explicit native byte triples that are not
+  final EXE offsets. The B93 Settings Evict constructor has three
+  `settings_menu.evict.constructor_patches` records with object/function-
+  relative offsets; the exporter now preserves these under
+  `native_patch_sources` with `scope=object_relative` and
+  `apply_status=not_file_offset` instead of placing them in `patches[]`.
