@@ -851,3 +851,57 @@
   `Original Virtual Families 2 Assets/`, `Sounds/`, root DLLs), and replaced
   the EXE with SHA-256
   `9a713d38e830dcfb2fe1f4f054c36f1340d772c9e28c2abb96501137ee164ea1`.
+
+## 2026-07-04 - B99 Offline Patcher PE-Structure Matching
+
+- The user-provided vanilla EXE at
+  `C:\Users\Owner\Downloads\Virtual Families 2\Virtual Families 2.exe` is size
+  `1,511,424`, whole-file SHA-256
+  `1582d9e84e1c32f51475be17335c5137c592cebf809748d401ccef99a32b73c3`, PE32
+  with five sections. The `.text` raw section SHA-256 is
+  `88c37a9989b2ad51429aca3a8e9aa9383914c9312fac2995dc4551a49ec4dc5e`.
+- `work/offline_vf2_patcher.py` now computes a `pe32-section-raw-v1`
+  fingerprint from the PE header and section table. Target EXE validation
+  passes when either the exact whole-file SHA-256 matches or the PE section
+  structure and raw section hashes match; overlay/certificate bytes are ignored
+  by the structure match.
+- `work/export_offline_patch_bundle.py` writes `target_files[].pe_structure`
+  and EXE-replacement `asset_patches[].expected_target_pe_structure` when a
+  vanilla EXE is supplied. A smoke test appended overlay bytes to a copied
+  vanilla EXE, changing its whole-file SHA, and the patcher still applied via
+  `matched_by=pe_structure` before replacing it with B99 EXE SHA-256
+  `9a713d38e830dcfb2fe1f4f054c36f1340d772c9e28c2abb96501137ee164ea1`.
+
+## 2026-07-04 - B100 Invisible Hammock Drop Crash Attempt
+
+- B99's `patch_invisible_hammock_drop_action()` retargeted
+  `CHotSpot::Hammock(CVillager&)` to call `_VF2EitherHammockInWorld`, but it
+  only NOPed seven bytes of the original ten-byte
+  `push 0x1E1; mov ecx, FurnitureManager` setup. That left three `00` bytes
+  in the instruction stream before the helper call, which can fault when the
+  drop/hotspot path executes.
+- B100 attempted to replace the full ten-byte span at
+  `HotSpot.obj!?Hammock@CHotSpot@@CA?B_NAAVCVillager@@@Z + 0x04` with NOPs
+  and leave the original call opcode at `+0x0E` retargeted to the helper.
+  In the linked EXE, the original DIR32 relocation for
+  `FurnitureManager` still wrote address bytes into the NOP span. Result:
+  this detour remained unsafe and was abandoned.
+- Lesson: the invisible hammock should not patch `CHotSpot::Hammock` this way.
+  Either remove/retarget every affected relocation, or use the same safer donor
+  alias/fmap inheritance route that already works for invisible fireplaces.
+
+## 2026-07-04 - B101 Invisible Hammock Fireplace-Style Alias
+
+- B101 preserves stock `HotSpot.obj` byte-for-byte for the hammock path. Static
+  verification compares `work/desktop_obj_files/HotSpot.obj` to the patched
+  object and confirms identical SHA-256
+  `91a0681a70822b46251dd1b51dfa8f677fcff608d8f09ae5570ec8e18f17d66a`.
+- Invisible Hammock now follows the invisible fireplace strategy:
+  donor-cloned `CFurnitureManager::itemInfo` fields from `HammockStd` (`0x1E1`),
+  a `HandleMouseDown` donor lookup-table alias from item `0x30C` to donor
+  `0x1E1`, and `InvisibleHammock.png.fmap` copied from `HammockStd.png.fmap`.
+  No `_VF2EitherHammockInWorld` helper or `CHotSpot::Hammock` detour remains.
+- The B101 test EXE was copied to
+  `C:\Users\Owner\Downloads\VF2-B101-Invisible-Hammock-Fireplace-Style.exe`,
+  size `1,650,176`, SHA-256
+  `a2fa2382d1e8015446d8bd7fb8df3532b17b731c00e368e889fa5ba164affde7`.

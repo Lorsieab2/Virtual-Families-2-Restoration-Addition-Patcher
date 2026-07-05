@@ -650,8 +650,8 @@
 
 - Adds direct `--exe` input to `work/offline_vf2_patcher.py`, allowing the
   patcher to infer the game folder from `Virtual Families 2.exe`, validate the
-  vanilla EXE hash, create a backup under `.vf2_patch_backups`, and write the
-  patched EXE back to the same path.
+  vanilla EXE by exact SHA-256 or by PE32 section structure, create a backup
+  under `.vf2_patch_backups`, and write the patched EXE back to the same path.
 - Extends `work/export_offline_patch_bundle.py` with `--asset-mode full`,
   `--include-exe-replacement`, and `--include-patcher-scripts`.
 - Exports a B99 full-payload patcher bundle to
@@ -663,3 +663,23 @@
   B99 SHA-256
   `9a713d38e830dcfb2fe1f4f054c36f1340d772c9e28c2abb96501137ee164ea1`, with the
   B99 runtime folder structure recreated beside it.
+- Re-exported the B99 full-payload patcher bundle against the user-provided
+  vanilla EXE at `C:\Users\Owner\Downloads\Virtual Families 2\Virtual Families
+  2.exe`: size `1,511,424`, SHA-256
+  `1582d9e84e1c32f51475be17335c5137c592cebf809748d401ccef99a32b73c3`, five
+  PE sections. A structure smoke test appended overlay bytes to the copied EXE,
+  changed its whole-file SHA, and still patched successfully with
+  `matched_by=pe_structure`.
+
+## B101 - Invisible Hammock Fireplace-Style Alias
+
+- Supersedes the B99/B100 `CHotSpot::Hammock` detour attempt. `HotSpot.obj`
+  now remains byte-identical to the stock desktop object for the hammock path.
+- Keeps Invisible Hammock item `0x30C` as a donor clone of base HammockStd
+  `0x1E1`: `CFurnitureManager::itemInfo` behavior fields match the donor,
+  `HandleMouseDown` uses the donor lookup-table case, and
+  `InvisibleHammock.png.fmap` is copied from `HammockStd.png.fmap`.
+- Adds a regression test proving `patch_invisible_hammock_drop_action()` writes
+  only the compile-response stub and does not modify `HotSpot.obj`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B101-Invisible-Hammock-Fireplace-Style`.

@@ -13,6 +13,39 @@ EXPORTER = ROOT / "work" / "export_offline_patch_bundle.py"
 PATCHER = ROOT / "work" / "offline_vf2_patcher.py"
 
 
+def minimal_pe_bytes():
+    data = bytearray(0x400)
+    data[:2] = b"MZ"
+    data[0x3C:0x40] = (0x80).to_bytes(4, "little")
+    pe = 0x80
+    data[pe:pe + 4] = b"PE\0\0"
+    coff = pe + 4
+    data[coff:coff + 20] = (
+        (0x14C).to_bytes(2, "little")
+        + (1).to_bytes(2, "little")
+        + (0x12345678).to_bytes(4, "little")
+        + (0).to_bytes(4, "little")
+        + (0).to_bytes(4, "little")
+        + (0xE0).to_bytes(2, "little")
+        + (0x103).to_bytes(2, "little")
+    )
+    opt = coff + 20
+    data[opt:opt + 2] = (0x10B).to_bytes(2, "little")
+    data[opt + 16:opt + 20] = (0x1000).to_bytes(4, "little")
+    data[opt + 28:opt + 32] = (0x400000).to_bytes(4, "little")
+    data[opt + 32:opt + 36] = (0x1000).to_bytes(4, "little")
+    data[opt + 36:opt + 40] = (0x200).to_bytes(4, "little")
+    data[opt + 56:opt + 60] = (0x2000).to_bytes(4, "little")
+    data[opt + 68:opt + 70] = (2).to_bytes(2, "little")
+    sect = opt + 0xE0
+    data[sect:sect + 8] = b".text\0\0\0"
+    data[sect + 8:sect + 16] = (0x200).to_bytes(4, "little") + (0x1000).to_bytes(4, "little")
+    data[sect + 16:sect + 24] = (0x200).to_bytes(4, "little") + (0x200).to_bytes(4, "little")
+    data[sect + 36:sect + 40] = (0x60000020).to_bytes(4, "little")
+    data[0x200:0x400] = bytes((index % 251 for index in range(0x200)))
+    return bytes(data)
+
+
 class ExportOfflinePatchBundleTests(unittest.TestCase):
     def run_exporter(self, *args):
         result = subprocess.run(
@@ -176,7 +209,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             base.mkdir()
             build.mkdir()
             vanilla = tmp_path / "Virtual Families 2.exe"
-            vanilla.write_bytes(b"vanilla executable")
+            vanilla_data = minimal_pe_bytes()
+            vanilla.write_bytes(vanilla_data)
             patched_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
             patched_exe.write_bytes(b"patched executable")
             (build / "Images" / "Furniture").mkdir(parents=True)
@@ -204,7 +238,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
             self.assertEqual(asset_by_path["Virtual Families 2.exe"]["requires"], ["core_executable"])
-            self.assertEqual(asset_by_path["Virtual Families 2.exe"]["expected_target_sha256"], hashlib.sha256(b"vanilla executable").hexdigest())
+            self.assertEqual(asset_by_path["Virtual Families 2.exe"]["expected_target_sha256"], hashlib.sha256(vanilla_data).hexdigest())
+            self.assertIsInstance(asset_by_path["Virtual Families 2.exe"]["expected_target_pe_structure"], dict)
+            self.assertIsInstance(manifest["target_files"][0]["pe_structure"], dict)
             self.assertEqual(asset_by_path["Images/Furniture/InvisibleHammock.png"]["overwrite_existing"], True)
             self.assertEqual(asset_by_path["Sounds/sound00.wav"]["overwrite_existing"], True)
             self.assertEqual(asset_by_path["SDL2.dll"]["overwrite_existing"], True)

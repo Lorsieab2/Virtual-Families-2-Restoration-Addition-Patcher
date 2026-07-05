@@ -10,10 +10,11 @@
   in `work/offline_vf2_patcher.py`, including manifest-declared toggleable
   settings, `--exe` input, full-payload beta-folder export, and a Tkinter GUI
   wrapper. B99 has a full-payload test bundle that validates and backs up a
-  vanilla `Virtual Families 2.exe`, then replaces it and recreates the B99
-  support folder shape. Next step is converting the current VF2 build's native
-  byte changes into clean release byte/table records so the patch bundle no
-  longer needs a prebuilt modded EXE payload.
+  vanilla `Virtual Families 2.exe` by exact SHA-256 or matching PE section
+  structure, then replaces it and recreates the B99 support folder shape. Next
+  step is converting the current VF2 build's native byte changes into clean
+  release byte/table records so the patch bundle no longer needs a prebuilt
+  modded EXE payload.
 - Define the JSON patch manifest contract: each patch record must include file
   path, offset, expected original bytes, replacement bytes, and note. The
   patcher must refuse to patch when expected bytes do not match, and it must
@@ -33,10 +34,15 @@
   B98 extraction that contained only 29 of the generator's 111 additive
   `Images/Furniture` sprite paths.
 - Extract native patch records from object/linker patch data for the offline
-  bundle. The workspace-local vanilla EXE candidate has SHA-256
+  bundle. The active B99 vanilla EXE candidate is the user-provided
+  `C:\Users\Owner\Downloads\Virtual Families 2\Virtual Families 2.exe`, size
+  `1,511,424`, SHA-256
+  `1582d9e84e1c32f51475be17335c5137c592cebf809748d401ccef99a32b73c3`, with a
+  five-section PE32 structure fingerprint. The older workspace-local vanilla
+  EXE candidate has SHA-256
   `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4` and size
-  `1,881,088`, while B93's patched EXE is `1,677,824` bytes; full binary diff
-  export is therefore invalid for B93.
+  `1,881,088`; full binary diff export is invalid across mismatched EXE
+  structures.
 - When exporting offline patcher manifests, feed the generated build manifest
   through `validate_vf3_tv_animation_contract()` and
   `validate_vf3_tv_behavior_contract()` or equivalent release validation steps
@@ -194,11 +200,11 @@
   confirmation/removal flow removes all current family members, returns to the
   adoption/new-person path, and remains stable across save-load. Confirm the
   button is not shown after the family tree has already been cleared.
-- In-game test B99 Invisible Hammock parity: buy/place the base Hammock and
-  Invisible Hammock separately, drop villagers on each, and verify both use the
-  same lie-in-hammock action, orientation, sounds/animation, click/target
-  behavior, and spontaneous hammock eligibility while base Hammock behavior
-  remains unchanged.
+- In-game test B101 Invisible Hammock parity: buy/place the base Hammock and
+  Invisible Hammock separately, drop villagers on each, and verify the
+  fireplace-style donor alias/fmap route no longer crashes. Confirm base
+  Hammock behavior remains unchanged and stock `CHotSpot::Hammock` stays
+  unmodified.
 - Settings Evict research follow-up: fully resolve the mobile PLT/control-ID
   mapping for `theOptionsDialog::HandleMessage` so the first-generation mobile
   confirmation click can be documented down to the exact button ID as well as

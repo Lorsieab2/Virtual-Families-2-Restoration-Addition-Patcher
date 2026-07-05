@@ -51,6 +51,7 @@ class AssetPatch:
     source_sha256: str
     source_size: int | None
     expected_target_sha256: str | None
+    expected_target_pe_structure: dict[str, Any] | None
     expected_target_size: int | None
     overwrite_existing: bool
     note: str
@@ -205,6 +206,78 @@ def pe_timestamp(path: Path) -> int | None:
             return struct.unpack_from("<I", pe, 8)[0]
     except OSError:
         return None
+
+
+def pe_structure_fingerprint(path: Path) -> dict[str, Any] | None:
+    try:
+        data = path.read_bytes()
+        if len(data) < 0x40 or data[:2] != b"MZ":
+            return None
+        pe_off = struct.unpack_from("<I", data, 0x3C)[0]
+        if pe_off + 0x18 > len(data) or data[pe_off:pe_off + 4] != b"PE\0\0":
+            return None
+        coff = pe_off + 4
+        machine, section_count, timestamp, _symptr, _nsyms, opt_size, characteristics = struct.unpack_from(
+            "<HHIIIHH",
+            data,
+            coff,
+        )
+        opt = coff + 20
+        section_table = opt + opt_size
+        if section_table + section_count * 40 > len(data):
+            return None
+        magic = struct.unpack_from("<H", data, opt)[0]
+        if magic != 0x10B:
+            return None
+
+        sections = []
+        for index in range(section_count):
+            off = section_table + index * 40
+            name = data[off:off + 8].split(b"\0", 1)[0].decode("ascii", "replace")
+            virtual_size, virtual_address, raw_size, raw_ptr, _reloc_ptr, _line_ptr, _reloc_count, _line_count, flags = struct.unpack_from(
+                "<IIIIIIHHI",
+                data,
+                off + 8,
+            )
+            if raw_ptr + raw_size > len(data):
+                return None
+            raw = data[raw_ptr:raw_ptr + raw_size]
+            sections.append({
+                "name": name,
+                "virtual_address": f"0x{virtual_address:x}",
+                "virtual_size": f"0x{virtual_size:x}",
+                "raw_data_pointer": f"0x{raw_ptr:x}",
+                "raw_data_size": f"0x{raw_size:x}",
+                "characteristics": f"0x{flags:x}",
+                "sha256": hashlib.sha256(raw).hexdigest(),
+            })
+
+        return {
+            "format": "pe32-section-raw-v1",
+            "pe_offset": f"0x{pe_off:x}",
+            "machine": f"0x{machine:x}",
+            "number_of_sections": section_count,
+            "time_date_stamp": f"0x{timestamp:x}",
+            "characteristics": f"0x{characteristics:x}",
+            "optional_header_size": opt_size,
+            "optional_magic": f"0x{magic:x}",
+            "address_of_entry_point": f"0x{struct.unpack_from('<I', data, opt + 16)[0]:x}",
+            "image_base": f"0x{struct.unpack_from('<I', data, opt + 28)[0]:x}",
+            "section_alignment": f"0x{struct.unpack_from('<I', data, opt + 32)[0]:x}",
+            "file_alignment": f"0x{struct.unpack_from('<I', data, opt + 36)[0]:x}",
+            "size_of_image": f"0x{struct.unpack_from('<I', data, opt + 56)[0]:x}",
+            "subsystem": f"0x{struct.unpack_from('<H', data, opt + 68)[0]:x}",
+            "sections": sections,
+        }
+    except (OSError, struct.error):
+        return None
+
+
+def pe_structure_matches(path: Path, expected: Any) -> bool:
+    if not isinstance(expected, dict):
+        return False
+    actual = pe_structure_fingerprint(path)
+    return actual == expected
 
 
 def windows_file_versions(path: Path) -> dict[str, str]:
@@ -523,6 +596,12 @@ def manifest_asset_patches(
             ),
             f"asset patch #{index} expected_target_sha256",
         )
+        expected_target_pe_structure = raw.get(
+            "expected_target_pe_structure",
+            raw.get("expected_target_structure", raw.get("expected_original_pe_structure")),
+        )
+        if expected_target_pe_structure is not None and not isinstance(expected_target_pe_structure, dict):
+            raise PatchError(f"asset patch #{index} expected_target_pe_structure must be an object.")
         source_size = None
         if raw.get("source_size", raw.get("size")) is not None:
             source_size = parse_int(raw.get("source_size", raw.get("size")), f"asset patch #{index} source_size")
@@ -540,6 +619,7 @@ def manifest_asset_patches(
                 source_sha256=source_sha or "",
                 source_size=source_size,
                 expected_target_sha256=expected_target_sha,
+                expected_target_pe_structure=expected_target_pe_structure,
                 expected_target_size=expected_target_size,
                 overwrite_existing=bool(
                     raw.get("overwrite_existing", raw.get("replace_existing", raw.get("overwrite", False)))
@@ -591,13 +671,33 @@ def verify_target_files(
         version_info = windows_file_versions(path)
 
         expected_sha = raw.get("sha256", raw.get("hash"))
-        if expected_sha and actual_sha.lower() != str(expected_sha).lower():
+        expected_pe_structure = raw.get("pe_structure", raw.get("binary_structure", raw.get("structure")))
+        if expected_pe_structure is not None and not isinstance(expected_pe_structure, dict):
+            raise PatchError(f"target file #{index} pe_structure must be an object.")
+        matched_by = None
+        if expected_sha and actual_sha.lower() == str(expected_sha).lower():
+            matched_by = "sha256"
+        elif expected_pe_structure is not None and pe_structure_matches(path, expected_pe_structure):
+            matched_by = "pe_structure"
+        elif expected_sha:
+            if expected_pe_structure is not None:
+                raise PatchError(
+                    f"Target identity mismatch for {rel_path}: SHA-256 expected {expected_sha}, got {actual_sha}; "
+                    "PE structure did not match the accepted binary structure."
+                )
             raise PatchError(f"SHA-256 mismatch for {rel_path}: expected {expected_sha}, got {actual_sha}")
-        if path.suffix.lower() == ".exe" and expected_sha:
+        elif expected_pe_structure is not None:
+            raise PatchError(f"PE structure mismatch for {rel_path}; this is not a recognized VF2 executable build.")
+
+        if path.suffix.lower() == ".exe" and (expected_sha or expected_pe_structure is not None):
             saw_exe_sha = True
 
         expected_size = raw.get("size")
-        if expected_size is not None and actual_size != parse_int(expected_size, f"target file #{index} size"):
+        if (
+            expected_size is not None
+            and matched_by != "pe_structure"
+            and actual_size != parse_int(expected_size, f"target file #{index} size")
+        ):
             raise PatchError(f"Size mismatch for {rel_path}: expected {expected_size}, got {actual_size}")
 
         expected_timestamp = raw.get("pe_timestamp")
@@ -626,11 +726,12 @@ def verify_target_files(
                 "size": actual_size,
                 "pe_timestamp": None if actual_timestamp is None else f"0x{actual_timestamp:08x}",
                 "requires": list(requires),
+                "matched_by": matched_by,
                 **version_info,
             }
         )
     if not saw_exe_sha:
-        raise PatchError("Manifest must verify the original VF2 executable with a SHA-256 target_files entry.")
+        raise PatchError("Manifest must verify the original VF2 executable with a SHA-256 or PE-structure target_files entry.")
     return checks
 
 
@@ -697,12 +798,23 @@ def verify_asset_patches(game_dir: Path, manifest_dir: Path, assets: list[AssetP
         action = "create"
         if target_exists:
             action = "replace"
-            if asset.expected_target_sha256 and target_sha != asset.expected_target_sha256:
+            expected_structure_matches = (
+                asset.expected_target_pe_structure is not None
+                and pe_structure_matches(target, asset.expected_target_pe_structure)
+            )
+            if asset.expected_target_sha256 and target_sha != asset.expected_target_sha256 and not expected_structure_matches:
                 raise PatchError(
                     f"SHA-256 mismatch for existing asset target {asset.file_path}: "
-                    f"expected {asset.expected_target_sha256}, got {target_sha}"
+                    f"expected {asset.expected_target_sha256}, got {target_sha}; "
+                    "PE structure did not match the accepted binary structure."
                 )
-            if asset.expected_target_size is not None and target_size != asset.expected_target_size:
+            if asset.expected_target_pe_structure is not None and not expected_structure_matches and not asset.expected_target_sha256:
+                raise PatchError(f"PE structure mismatch for existing asset target {asset.file_path}.")
+            if (
+                asset.expected_target_size is not None
+                and not expected_structure_matches
+                and target_size != asset.expected_target_size
+            ):
                 raise PatchError(
                     f"Size mismatch for existing asset target {asset.file_path}: "
                     f"expected {asset.expected_target_size}, got {target_size}"
@@ -722,14 +834,19 @@ def verify_asset_patches(game_dir: Path, manifest_dir: Path, assets: list[AssetP
                 "index": asset.index,
                 "file_path": asset.file_path,
                 "source_path": asset.source_path,
-                "source_sha256": source_sha,
-                "source_size": source_size,
-                "target_existed": target_exists,
-                "target_sha256": target_sha,
-                "target_size": target_size,
-                "action": action,
-                "requires": list(asset.requires),
-                "note": asset.note,
+            "source_sha256": source_sha,
+            "source_size": source_size,
+            "target_existed": target_exists,
+            "target_sha256": target_sha,
+            "target_size": target_size,
+            "target_structure_matched": bool(
+                target_exists
+                and asset.expected_target_pe_structure is not None
+                and pe_structure_matches(target, asset.expected_target_pe_structure)
+            ),
+            "action": action,
+            "requires": list(asset.requires),
+            "note": asset.note,
             }
         )
     return checks
@@ -841,6 +958,7 @@ def asset_summary(asset_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "target_existed": check["target_existed"],
             "target_sha256": check["target_sha256"],
             "target_size": check["target_size"],
+            "target_structure_matched": check.get("target_structure_matched", False),
             "action": check["action"],
             "requires": check["requires"],
             "note": check["note"],

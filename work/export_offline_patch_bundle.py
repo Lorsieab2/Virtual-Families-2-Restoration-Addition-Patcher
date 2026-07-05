@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import shutil
+import struct
 from pathlib import Path
 from typing import Any
 
@@ -193,6 +194,69 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 
+def pe_structure_fingerprint(path: Path) -> dict[str, Any] | None:
+    try:
+        data = path.read_bytes()
+        if len(data) < 0x40 or data[:2] != b"MZ":
+            return None
+        pe_off = struct.unpack_from("<I", data, 0x3C)[0]
+        if pe_off + 0x18 > len(data) or data[pe_off:pe_off + 4] != b"PE\0\0":
+            return None
+        coff = pe_off + 4
+        machine, section_count, timestamp, _symptr, _nsyms, opt_size, characteristics = struct.unpack_from(
+            "<HHIIIHH",
+            data,
+            coff,
+        )
+        opt = coff + 20
+        section_table = opt + opt_size
+        if section_table + section_count * 40 > len(data):
+            return None
+        magic = struct.unpack_from("<H", data, opt)[0]
+        if magic != 0x10B:
+            return None
+        sections = []
+        for index in range(section_count):
+            off = section_table + index * 40
+            name = data[off:off + 8].split(b"\0", 1)[0].decode("ascii", "replace")
+            virtual_size, virtual_address, raw_size, raw_ptr, _reloc_ptr, _line_ptr, _reloc_count, _line_count, flags = struct.unpack_from(
+                "<IIIIIIHHI",
+                data,
+                off + 8,
+            )
+            if raw_ptr + raw_size > len(data):
+                return None
+            raw = data[raw_ptr:raw_ptr + raw_size]
+            sections.append({
+                "name": name,
+                "virtual_address": f"0x{virtual_address:x}",
+                "virtual_size": f"0x{virtual_size:x}",
+                "raw_data_pointer": f"0x{raw_ptr:x}",
+                "raw_data_size": f"0x{raw_size:x}",
+                "characteristics": f"0x{flags:x}",
+                "sha256": hashlib.sha256(raw).hexdigest(),
+            })
+        return {
+            "format": "pe32-section-raw-v1",
+            "pe_offset": f"0x{pe_off:x}",
+            "machine": f"0x{machine:x}",
+            "number_of_sections": section_count,
+            "time_date_stamp": f"0x{timestamp:x}",
+            "characteristics": f"0x{characteristics:x}",
+            "optional_header_size": opt_size,
+            "optional_magic": f"0x{magic:x}",
+            "address_of_entry_point": f"0x{struct.unpack_from('<I', data, opt + 16)[0]:x}",
+            "image_base": f"0x{struct.unpack_from('<I', data, opt + 28)[0]:x}",
+            "section_alignment": f"0x{struct.unpack_from('<I', data, opt + 32)[0]:x}",
+            "file_alignment": f"0x{struct.unpack_from('<I', data, opt + 36)[0]:x}",
+            "size_of_image": f"0x{struct.unpack_from('<I', data, opt + 56)[0]:x}",
+            "subsystem": f"0x{struct.unpack_from('<H', data, opt + 68)[0]:x}",
+            "sections": sections,
+        }
+    except (OSError, struct.error):
+        return None
+
+
 def relative_posix(path: Path) -> str:
     return path.as_posix()
 
@@ -291,6 +355,9 @@ def target_file_record(vanilla_exe: Path, target_exe_name: str) -> dict[str, Any
         "size": vanilla_exe.stat().st_size,
         "note": "Verified vanilla VF2 PC executable.",
     }
+    pe_structure = pe_structure_fingerprint(vanilla_exe)
+    if pe_structure is not None:
+        record["pe_structure"] = pe_structure
     return record
 
 
@@ -509,7 +576,7 @@ def export_exe_replacement_payload(
         "source_sha256": sha256_file(payload_target),
         "source_size": payload_target.stat().st_size,
         "expected_target_sha256": sha256_file(vanilla_exe),
-        "expected_target_size": vanilla_exe.stat().st_size,
+        "expected_target_pe_structure": pe_structure_fingerprint(vanilla_exe),
         "overwrite_existing": True,
         "requires": ["core_executable"],
         "note": "Replace verified vanilla Virtual Families 2.exe with the current modded B99 executable.",

@@ -109,13 +109,19 @@ still writes vanilla EXE target metadata and records a
 payloads and hash validation while native patch records are developed from
 object/linker patch data.
 
-The current workspace-local vanilla EXE candidate is
-`Unneeded crap\Virtual Families 2.exe`:
+The current user-provided vanilla EXE candidate for B99 testing is
+`C:\Users\Owner\Downloads\Virtual Families 2\Virtual Families 2.exe`:
 
 | Field | Value |
 | --- | --- |
-| Size | `1,881,088` |
-| SHA-256 | `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4` |
+| Size | `1,511,424` |
+| SHA-256 | `1582d9e84e1c32f51475be17335c5137c592cebf809748d401ccef99a32b73c3` |
+| PE sections | `5` |
+| `.text` raw SHA-256 | `88c37a9989b2ad51429aca3a8e9aa9383914c9312fac2995dc4551a49ec4dc5e` |
+
+An older workspace-local vanilla EXE candidate also exists at
+`Unneeded crap\Virtual Families 2.exe`, size `1,881,088`, SHA-256
+`67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4`.
 
 The B93 patched EXE is `1,677,824` bytes, so full EXE byte-diff export is not
 valid for that build. Its native patch records must be exported from the
@@ -140,7 +146,7 @@ For beta-folder smoke testing, the exporter also supports a full-payload mode:
 & "C:\Path\To\Python\python.exe" work\export_offline_patch_bundle.py `
   --build-dir outputs\VF2-Mobile-Furniture-With-Island-Events-B99-Evict-Hammock-Parity `
   --out-dir outputs\VF2-B99-Offline-Patcher-Full `
-  --vanilla-exe "Unneeded crap\Virtual Families 2.exe" `
+  --vanilla-exe "C:\Users\Owner\Downloads\Virtual Families 2\Virtual Families 2.exe" `
   --asset-mode full `
   --include-exe-replacement `
   --include-patcher-scripts `
@@ -150,11 +156,12 @@ For beta-folder smoke testing, the exporter also supports a full-payload mode:
 `--asset-mode full` exports every non-excluded file in the generated build
 folder, including root DLLs and support directories. `--include-exe-replacement`
 adds a `core_executable` asset record that verifies the vanilla
-`Virtual Families 2.exe` hash and then replaces it with the current modded EXE.
-This is useful for testing the patcher's backup/apply/restore mechanics from an
-EXE-only folder, but it is not the final trust-friendly release shape. The
-final patcher should replace that full EXE payload with clean byte/table patch
-records wherever possible.
+`Virtual Families 2.exe` by whole-file SHA-256 or by the recorded PE32 section
+structure, then replaces it with the current modded EXE. This is useful for
+testing the patcher's backup/apply/restore mechanics from an EXE-only folder,
+but it is not the final trust-friendly release shape. The final patcher should
+replace that full EXE payload with clean byte/table patch records wherever
+possible.
 
 A second preview with `--vanilla-exe "Unneeded crap\Virtual Families 2.exe"
 --include-byte-patches` writes the target metadata above and keeps the same 713
@@ -230,7 +237,21 @@ when the original target did not exist.
       "sha256": "expected lowercase sha256",
       "size": 123456,
       "file_version": "0.0.0.0",
-      "pe_timestamp": "0x12345678"
+      "pe_timestamp": "0x12345678",
+      "pe_structure": {
+        "format": "pe32-section-raw-v1",
+        "number_of_sections": 5,
+        "sections": [
+          {
+            "name": ".text",
+            "virtual_address": 4096,
+            "virtual_size": 904777,
+            "raw_data_pointer": 4096,
+            "raw_data_size": 905216,
+            "sha256": "section raw-data sha256"
+          }
+        ]
+      }
     }
   ],
   "patches": [
@@ -262,6 +283,7 @@ when the original target did not exist.
       "source_path": "payload/Images/VF3LargeFlatScreenTVAnim.png",
       "source_sha256": "expected lowercase sha256 of the payload file",
       "source_size": 12345,
+      "expected_target_pe_structure": null,
       "requires": ["vf3_tv_animation_graphics"],
       "note": "B65 scaled private VF3 Large TV animation strip."
     }
@@ -269,11 +291,15 @@ when the original target did not exist.
 }
 ```
 
-`target_files` is required, and at least one `.exe` target must include a
-`sha256` value so the user-provided vanilla executable is verified before any
-patch is written. `size`, `file_version`, `product_version`, and `pe_timestamp`
-are validated when present; version and PE timestamp checks are supplemental to
-the executable hash.
+`target_files` is required, and at least one `.exe` target must include either
+`sha256` or `pe_structure` so the user-provided vanilla executable is verified
+before any patch is written. `size`, `file_version`, `product_version`, and
+`pe_timestamp` are validated when present; version and PE timestamp checks are
+supplemental. `pe_structure` uses the patcher's `pe32-section-raw-v1`
+fingerprint: the PE header layout plus each section's raw file offset, raw
+size, virtual address/size, characteristics, and raw-data SHA-256. This ignores
+overlay/certificate bytes, so an otherwise identical VF2 EXE can still be
+accepted even when its whole-file SHA-256 differs.
 
 `runtime_requirements` is optional but should be included by VF2 release
 manifests. It lets the patcher verify that the selected game directory is a
@@ -313,7 +339,8 @@ folder after verifying the payload file's `source_sha256`. `source_path` is
 relative to the manifest folder; `file_path` is relative to the game folder.
 Asset records can create new files, which restore later removes. If an asset
 target already exists, the patcher allows it only when it already matches the
-payload, when `expected_target_sha256` matches, or when
+payload, when `expected_target_sha256` matches, when
+`expected_target_pe_structure` matches for a PE target, or when
 `overwrite_existing=true` is explicit. This keeps private files such as
 `Images/VF3LargeFlatScreenTVAnim*.png`,
 `Images/VF3SmallFlatScreenTVAnim*.png`, and

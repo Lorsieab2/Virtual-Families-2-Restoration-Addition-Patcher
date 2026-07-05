@@ -465,9 +465,10 @@ Enabled B93 spontaneous candidates:
 Drop-action behavior and spontaneous eligibility are separate. Invisible or
 mobile furniture should inherit stock clickable/drop behavior by extending
 native lookup tables or donor predicates, not by modifying base furniture
-cases. Example: the invisible hammock extends the stock hammock hotspot
-predicate to include the additive item while leaving the native
-`eBehavior_LieInHammockNoLeadIn` route unchanged.
+cases. Example: after the B99/B100 detour crashes, Invisible Hammock now follows
+the same safer route as invisible fireplaces: donor-cloned furniture fields,
+the donor `HandleMouseDown` lookup-table case, and a donor `.fmap` copy, while
+stock `CHotSpot::Hammock` remains unmodified.
 
 ## Mobile-Exclusive Purchases
 

@@ -109,11 +109,22 @@ def valid_invisible_hammock_manifest():
             ],
         },
         "invisible_hammock_drop_action": {
-            "status": "added to the stock hammock hotspot predicate",
+            "status": "stock hotspot preserved; donor alias/fmap route only",
             "base_item": "0x1E1",
             "added_item": "0x30C",
-            "native_behavior": "eBehavior_LieInHammockNoLeadIn (0x24)",
+            "native_behavior": "stock donor behavior via FurnitureManager click alias and HammockStd fmap",
             "base_hammock_modified": False,
+            "hotspot_modified": False,
+            "matches_invisible_fireplace_strategy": True,
+        },
+        "clickable_added_furniture": {
+            "items": [
+                {
+                    "item": "InvisibleHammock",
+                    "item_id": "0x30c",
+                    "donor_item": "0x1e1",
+                }
+            ]
         },
         "behavior_assets": {
             "invisible_outdoor_fmap_donors": [
@@ -218,10 +229,12 @@ class InvisibleHammockBehaviorContractTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "missing InvisibleHammock.png.fmap"):
             patcher.validate_invisible_hammock_behavior_contract(manifest)
 
-    def test_drop_action_patch_extends_stock_hotspot_predicate(self):
+    def test_drop_action_uses_fireplace_style_alias_without_hotspot_patch(self):
         with tempfile.TemporaryDirectory() as tmp:
             temp_root = Path(tmp)
-            shutil.copy2(patcher.SRC_OBJS / "HotSpot.obj", temp_root / "HotSpot.obj")
+            source_hotspot = patcher.SRC_OBJS / "HotSpot.obj"
+            shutil.copy2(source_hotspot, temp_root / "HotSpot.obj")
+            before = (temp_root / "HotSpot.obj").read_bytes()
             old_patched = patcher.PATCHED
             try:
                 patcher.PATCHED = temp_root
@@ -229,16 +242,13 @@ class InvisibleHammockBehaviorContractTests(unittest.TestCase):
 
                 patcher.patch_invisible_hammock_drop_action(manifest)
 
-                obj = CoffObject(temp_root / "HotSpot.obj")
-                symbol = obj.symbol("?Hammock@CHotSpot@@CA?B_NAAVCVillager@@@Z")
-                section = obj.section(symbol.section)
-                raw = section.raw_ptr + symbol.value
-                self.assertEqual(obj.buf[raw + 4 : raw + 11], b"\x90" * 7)
+                self.assertEqual((temp_root / "HotSpot.obj").read_bytes(), before)
                 helper = (temp_root / "vf2_invisible_hammock.cpp").read_text(encoding="ascii")
-                self.assertIn("(EInventoryItem)0x1E1", helper)
-                self.assertIn("(EInventoryItem)0x30C", helper)
+                self.assertNotIn("VF2EitherHammockInWorld", helper)
                 self.assertEqual(manifest["invisible_hammock_drop_action"]["base_item"], "0x1E1")
                 self.assertEqual(manifest["invisible_hammock_drop_action"]["added_item"], "0x30C")
+                self.assertFalse(manifest["invisible_hammock_drop_action"]["hotspot_modified"])
+                self.assertTrue(manifest["invisible_hammock_drop_action"]["matches_invisible_fireplace_strategy"])
             finally:
                 patcher.PATCHED = old_patched
 
