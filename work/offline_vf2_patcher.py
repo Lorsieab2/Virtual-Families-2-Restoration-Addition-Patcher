@@ -71,6 +71,7 @@ class PatchSetting:
     label: str
     description: str
     default: bool
+    category: str = "main"
 
 
 ProgressCallback = Callable[[str], None]
@@ -441,6 +442,7 @@ def manifest_settings(manifest: dict[str, Any]) -> dict[str, PatchSetting]:
             label=str(raw.get("label", setting_id)).strip() or setting_id,
             description=str(raw.get("description", "")).strip(),
             default=bool(raw.get("default", False)),
+            category=str(raw.get("category", "main")).strip().lower() or "main",
         )
     return settings
 
@@ -510,6 +512,7 @@ def settings_log(settings: dict[str, PatchSetting], enabled: set[str]) -> dict[s
                 "description": setting.description,
                 "default": setting.default,
                 "enabled": setting.id in enabled,
+                "category": setting.category,
             }
             for setting in settings.values()
         ],

@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-import math
 import re
 import subprocess
 import threading
@@ -20,6 +19,14 @@ from tkinter import filedialog, messagebox, ttk
 import offline_vf2_patcher as patcher
 
 APP_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
+PATCHER_ICON_PNG = "patcher_icon.png"
+PATCHER_ICON_ICO = "patcher_icon.ico"
+SETTING_CATEGORIES = [
+    ("main", "Main Patches", "#00802b"),
+    ("optional", "Optional Patches", "#000000"),
+    ("experimental", "Experimental/Not Working Patches", "#b00020"),
+]
+SETTING_CATEGORY_LOOKUP = {key: (label, color) for key, label, color in SETTING_CATEGORIES}
 
 
 def clean_path_text(value: str | None) -> str:
@@ -51,6 +58,26 @@ def markup_segments(text: str) -> list[tuple[str, bool]]:
     if pos < len(text):
         spans.append((text[pos:], bold))
     return spans
+
+
+def categorized_settings(
+    settings: dict[str, patcher.PatchSetting],
+) -> list[tuple[str, str, str, list[patcher.PatchSetting]]]:
+    grouped: dict[str, list[patcher.PatchSetting]] = {key: [] for key, _label, _color in SETTING_CATEGORIES}
+    grouped["other"] = []
+    for setting in settings.values():
+        category = (setting.category or "main").lower()
+        if category not in grouped:
+            category = "other"
+        grouped[category].append(setting)
+
+    rows: list[tuple[str, str, str, list[patcher.PatchSetting]]] = []
+    for key, label, color in SETTING_CATEGORIES:
+        if grouped[key]:
+            rows.append((key, label, color, grouped[key]))
+    if grouped["other"]:
+        rows.append(("other", "Other Patches", "#000000", grouped["other"]))
+    return rows
 
 
 def build_apply_namespace(
@@ -114,9 +141,42 @@ class VF2PatcherGUI:
         self.loaded_manifest_data: dict[str, object] | None = None
         self.last_auto_output_dir = ""
         self.busy_controls: list[tk.Widget] = []
+        self.window_icon_image: tk.PhotoImage | None = None
+        self.title_icon_image: tk.PhotoImage | None = None
 
+        self._load_icons()
         self._build_styles()
         self._build_layout()
+
+    def _asset_path_candidates(self, name: str) -> list[Path]:
+        script_dir = Path(__file__).resolve().parent
+        cwd = Path.cwd()
+        return [
+            script_dir / name,
+            script_dir / "assets" / name,
+            cwd / name,
+            cwd / "work" / "assets" / name,
+        ]
+
+    def _load_icons(self) -> None:
+        for path in self._asset_path_candidates(PATCHER_ICON_ICO):
+            if path.is_file():
+                try:
+                    self.root.iconbitmap(str(path))
+                    break
+                except tk.TclError:
+                    pass
+
+        for path in self._asset_path_candidates(PATCHER_ICON_PNG):
+            if path.is_file():
+                try:
+                    self.window_icon_image = tk.PhotoImage(file=str(path))
+                    self.root.iconphoto(True, self.window_icon_image)
+                    factor = max(1, (max(self.window_icon_image.width(), self.window_icon_image.height()) + 55) // 56)
+                    self.title_icon_image = self.window_icon_image.subsample(factor, factor)
+                    break
+                except tk.TclError:
+                    pass
 
     def _build_styles(self) -> None:
         style = ttk.Style()
@@ -129,21 +189,26 @@ class VF2PatcherGUI:
         root_frame = ttk.Frame(self.root, padding=12)
         root_frame.grid(row=0, column=0, sticky="nsew")
         root_frame.columnconfigure(0, weight=1)
-        root_frame.rowconfigure(4, weight=1)
+        root_frame.rowconfigure(3, weight=1)
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
 
-        ttk.Label(root_frame, text=APP_DISPLAY_NAME, style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        header = ttk.Frame(root_frame)
+        header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
+        header.columnconfigure(1, weight=1)
+        if self.title_icon_image is not None:
+            ttk.Label(header, image=self.title_icon_image).grid(row=0, column=0, rowspan=2, sticky="w", padx=(0, 10))
+        ttk.Label(header, text=APP_DISPLAY_NAME, style="Title.TLabel").grid(row=0, column=1, sticky="w")
         ttk.Label(
-            root_frame,
+            header,
             text="Created with Codex AI. Applies transparent JSON patch manifests to a user-provided vanilla VF2 PC install.",
             style="Muted.TLabel",
-        ).grid(row=1, column=0, sticky="w", pady=(2, 10))
+        ).grid(row=1, column=1, sticky="w", pady=(2, 0))
 
-        self._build_file_section(root_frame).grid(row=2, column=0, sticky="ew")
-        self._build_settings_section(root_frame).grid(row=3, column=0, sticky="nsew", pady=(10, 0))
-        self._build_log_section(root_frame).grid(row=4, column=0, sticky="nsew", pady=(10, 0))
-        self._build_action_section(root_frame).grid(row=5, column=0, sticky="ew", pady=(10, 0))
+        self._build_file_section(root_frame).grid(row=1, column=0, sticky="ew")
+        self._build_settings_section(root_frame).grid(row=2, column=0, sticky="nsew", pady=(10, 0))
+        self._build_log_section(root_frame).grid(row=3, column=0, sticky="nsew", pady=(10, 0))
+        self._build_action_section(root_frame).grid(row=4, column=0, sticky="ew", pady=(10, 0))
 
     def _build_file_section(self, parent: tk.Widget) -> ttk.LabelFrame:
         frame = ttk.LabelFrame(parent, text="Patch Input", style="Section.TLabelframe", padding=10)
@@ -211,7 +276,7 @@ class VF2PatcherGUI:
         self._apply_button(frame, "Apply Patches", lambda: self.start_apply(dry_run=False)).grid(row=0, column=1, padx=(0, 8))
         ttk.Label(
             frame,
-            text="Dry Run is a pretend patch: it checks everything first and changes nothing.",
+            text="Dry Run validates that the patcher's working. It does not actually change or write files.",
             style="Muted.TLabel",
         ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(6, 0))
 
@@ -261,6 +326,18 @@ class VF2PatcherGUI:
         if path:
             self.game_dir_var.set(path)
             self._auto_populate_output_dir()
+
+    def prompt_for_game_dir_on_startup(self) -> None:
+        if clean_path_text(self.game_dir_var.get()):
+            return
+        path = filedialog.askdirectory(
+            title="Select your vanilla Virtual Families 2 install folder",
+            mustexist=True,
+        )
+        if path:
+            self.game_dir_var.set(path)
+            self._auto_populate_output_dir()
+            self.status_var.set("Vanilla VF2 folder selected. Review settings, then run Dry Run or Apply Patches.")
 
     def _browse_manifest(self) -> None:
         path = filedialog.askopenfilename(
@@ -324,28 +401,30 @@ class VF2PatcherGUI:
         if not settings:
             self._render_settings_placeholder("This manifest does not declare toggleable settings.")
         else:
-            for row, setting in enumerate(settings.values()):
-                var = tk.BooleanVar(value=setting.default)
-                self.setting_vars[setting.id] = var
-                item = ttk.Frame(self.settings_inner, padding=(0, 4))
-                item.grid(row=row, column=0, sticky="ew")
-                item.columnconfigure(0, weight=1)
-                ttk.Checkbutton(item, text=setting.label, variable=var).grid(row=0, column=0, sticky="w")
-                state = "default on" if setting.default else "default off"
-                details = f"{setting.id} - {state}"
-                if setting.description:
-                    details += f" - {setting.description}"
-                self._markup_label(item, details).grid(row=1, column=0, sticky="ew", padx=(22, 0))
+            row = 0
+            for _key, label, color, category_settings in categorized_settings(settings):
+                self._category_header(self.settings_inner, label, color).grid(row=row, column=0, sticky="ew", pady=(8 if row else 0, 4))
+                row += 1
+                for setting in category_settings:
+                    var = tk.BooleanVar(value=setting.default)
+                    self.setting_vars[setting.id] = var
+                    item = ttk.Frame(self.settings_inner, padding=(0, 4))
+                    item.grid(row=row, column=0, sticky="ew")
+                    item.columnconfigure(0, weight=1)
+                    ttk.Checkbutton(item, text=setting.label, variable=var).grid(row=0, column=0, sticky="w")
+                    state = "default on" if setting.default else "default off"
+                    details = f"{setting.id} - {state} - {setting.description}" if setting.description else f"{setting.id} - {state}"
+                    self._markup_label(item, details).grid(row=1, column=0, sticky="ew", padx=(22, 0))
+                    row += 1
         self.status_var.set(f"Loaded {len(settings)} setting(s) from {manifest_path.name}.")
         self._append_log(f"Loaded manifest settings: {manifest_path}\n")
         self._auto_populate_output_dir()
         return True
 
     def _markup_label(self, parent: tk.Widget, text: str) -> tk.Text:
-        height = max(1, min(4, math.ceil(max(len(text), 1) / 115)))
         widget = tk.Text(
             parent,
-            height=height,
+            height=1,
             wrap="word",
             borderwidth=0,
             highlightthickness=0,
@@ -354,15 +433,38 @@ class VF2PatcherGUI:
             background=self.root.cget("background"),
             foreground="#555555",
         )
-        normal_font = tkfont.Font(font=widget.cget("font"))
-        bold_font = tkfont.Font(font=widget.cget("font"))
+        normal_font = tkfont.nametofont("TkDefaultFont").copy()
+        bold_font = normal_font.copy()
         bold_font.configure(weight="bold")
         widget.tag_configure("normal", font=normal_font, foreground="#555555")
         widget.tag_configure("bold", font=bold_font, foreground="#555555")
         for segment, bold in markup_segments(text):
             widget.insert("end", segment, "bold" if bold else "normal")
         widget.configure(state="disabled", cursor="arrow")
+        widget.bind("<Configure>", lambda _event, text_widget=widget: self._resize_markup_label(text_widget))
+        self.root.after_idle(lambda text_widget=widget: self._resize_markup_label(text_widget))
         return widget
+
+    def _category_header(self, parent: tk.Widget, text: str, color: str) -> tk.Label:
+        return tk.Label(
+            parent,
+            text=text,
+            fg=color,
+            font=("", 10, "bold"),
+            anchor="w",
+            background=self.root.cget("background"),
+        )
+
+    def _resize_markup_label(self, widget: tk.Text) -> None:
+        try:
+            count = widget.count("1.0", "end-1c", "displaylines")
+            display_lines = int(count[0]) if count else 1
+        except tk.TclError:
+            display_lines = max(1, int(widget.index("end-1c").split(".", 1)[0]))
+        height = max(1, display_lines)
+        if int(widget.cget("height")) != height:
+            widget.configure(height=height)
+            self.settings_canvas.configure(scrollregion=self.settings_canvas.bbox("all"))
 
     def _render_settings_placeholder(self, text: str) -> None:
         for child in self.settings_inner.winfo_children():
@@ -630,7 +732,11 @@ def main(argv: list[str] | None = None) -> int:
     app = VF2PatcherGUI(root)
     if argv:
         app.manifest_var.set(argv[0])
-        root.after(100, app.load_manifest_settings)
+        def startup_load() -> None:
+            app.load_manifest_settings()
+            root.after(150, app.prompt_for_game_dir_on_startup)
+
+        root.after(100, startup_load)
     root.mainloop()
     return 0
 

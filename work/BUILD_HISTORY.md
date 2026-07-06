@@ -742,6 +742,15 @@
   `**bold**` description rendering, `Dry Run (Validate Only)` wording,
   clickable blue path labels, and a completion popup where only the
   modified-file log scrolls.
+- Groups patch settings as green Main Patches, black Optional Patches, and red
+  Experimental/Not Working Patches; setting descriptions now auto-size so the
+  full description remains visible in the scrollable settings panel.
+- Adds `patcher_icon.png` and `patcher_icon.ico` to the bundle. The GUI shows
+  the literal family picture beside the bold title, and the generated Windows
+  launcher embeds the ICO when a local C# compiler is available.
+- The generated launcher still auto-loads adjacent `manifest.json`, then the
+  GUI prompts the user to select their own vanilla VF2 installation folder
+  instead of looking for a hardcoded install path.
 - Adds the default-off `Add Custom Couches and LDW Posters` setting for
   Colorful Couches and LDW Poster/Painting image/fmap payloads. Native
   store-row gating for that feature still needs future per-feature byte/table

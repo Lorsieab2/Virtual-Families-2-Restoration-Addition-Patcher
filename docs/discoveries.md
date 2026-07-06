@@ -989,6 +989,22 @@
   descriptions, shows a green bold Apply Patches button, labels Dry Run as
   `Dry Run (Validate Only)`, and puts modified-file rows in the only scrollable
   area of the completion popup.
+- `PatchSetting.category` drives GUI grouping without hardcoding setting IDs in
+  the UI. Generated manifests use `main` (green) for core/mobile/Holiday
+  patches, `optional` (black) for visual/invisible/custom additions, and
+  `experimental` (red) for Settings Evict, Island Events, Holiday Ornaments,
+  and other not-yet-proven work. Tk `Text.count(..., "displaylines")` is used
+  to auto-size description blocks so long setting descriptions are fully
+  visible.
+- Patcher bundle icon assets are source-controlled under `work/assets/` as
+  `patcher_icon.png` and `patcher_icon.ico`. The GUI loads the PNG from the
+  bundle folder or source `work/assets`, displays it beside the bold title, and
+  uses the ICO/PNG for the window icon; the generated C# launcher embeds the
+  ICO when `csc.exe` is available.
+- `offline_vf2_patcher_gui.main()` now uses the generated launcher's adjacent
+  `manifest.json` argument only to preload settings; after that it calls
+  `prompt_for_game_dir_on_startup()` so the user chooses their own vanilla VF2
+  installation folder. No hardcoded install folder lookup is used.
 - `Add Custom Couches and LDW Posters` is a separate default-off setting for
   the Colorful Couches and LDW Poster/Painting image/fmap payloads. Remaining
   native store-row gating still depends on future per-feature byte/table
