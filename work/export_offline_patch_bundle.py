@@ -19,8 +19,9 @@ from pathlib import Path
 from typing import Any
 
 
-ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_BASE_PAYLOAD = ROOT / "work" / "vanilla_runtime_payload"
+SOURCE_DIR = Path(__file__).resolve().parent
+ROOT = SOURCE_DIR.parent
+DEFAULT_BASE_PAYLOAD = SOURCE_DIR / "vanilla_runtime_payload"
 DEFAULT_EXE_NAME = "Virtual Families 2.exe"
 PATCHED_EXE_NAMES = (
     "Virtual Families 2 - Additive Mobile Furniture Pack.exe",
@@ -32,6 +33,15 @@ EXCLUDED_FULL_PAYLOAD_FILES = {
     "patch-manifest.json",
     "VF2_INTERNAL_WORKINGS_SUMMARY.txt",
 }
+FULL_PAYLOAD_IMAGE_EXTENSIONS = {".bmp", ".jpg", ".jpeg", ".png"}
+FULL_PAYLOAD_ALWAYS_INCLUDE_DIRS = {
+    "OptionalVisualMods",
+    "Original Virtual Families 2 Assets",
+    "OptionalSongMods",
+}
+SOURCE_ONLY_PAYLOAD_DIRS = FULL_PAYLOAD_ALWAYS_INCLUDE_DIRS
+OPTIONAL_SONG_SOURCE_DIR = Path("OptionalSongMods")
+OPTIONAL_SONG_TARGET_DIR = Path("Sounds")
 
 SETTINGS = [
     {
@@ -66,6 +76,13 @@ SETTINGS = [
         "id": "mobile_furniture",
         "label": "Add additional mobile-exclusive furniture",
         "description": "Adds non-Holiday mobile furniture and supporting assets. Invisible furniture graphics are controlled by the separate Invisible Furniture settings.",
+        "default": True,
+        "category": "main",
+    },
+    {
+        "id": "unused_pets",
+        "label": "Add unused pets",
+        "description": "Adds the unused Turtle and Hamster pets to the game.",
         "default": True,
         "category": "main",
     },
@@ -160,6 +177,20 @@ SETTINGS = [
         "default": False,
         "category": "optional",
     },
+    {
+        "id": "optional_visual_mod_graphics",
+        "label": "Add loose optional visual mod graphics",
+        "description": "Adds loose OptionalVisualMods image files. Furniture graphics go in Images/Furniture; future Workshop, Kitchen, and Office upgrade graphics go in Images/Upgrades; animation strips and other images go in Images.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "optional_song_mods",
+        "label": "Add optional song mods",
+        "description": "Adds both Virtual Families 1 and 2 songs to the game. When unchecked, click Enable/Disable Patches again to rebuild the modded folder with the original vanilla songs.",
+        "default": False,
+        "category": "optional",
+    },
 ]
 
 OPTIONAL_VISUAL_SWAP_SPECS = [
@@ -193,7 +224,9 @@ INVISIBLE_TRANSPARENT_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Furni
 PATCHER_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
 MODDED_EXE_OUTPUT_TEMPLATE = "Virtual Families 2 - Modded {build_label}.exe"
 MODDED_OUTPUT_FOLDER_TEMPLATE = "VF2-{build_label}-Modded"
-PATCHER_LAUNCHER_NAME = "Virtual Families 2 Restoration-Addition Patcher.exe"
+PATCHER_SHORTCUT_NAME = "Launch GUI.lnk"
+PATCHER_SHORTCUT_STATUS_NAME = "launch_gui_shortcut.json"
+STALE_PATCHER_LAUNCHER_NAME = "Virtual Families 2 Restoration-Addition Patcher.exe"
 TRANSPARENCY_LOG_NAME = "Transparency Log.txt"
 PATCHER_ICON_PNG = "patcher_icon.png"
 PATCHER_ICON_ICO = "patcher_icon.ico"
@@ -555,6 +588,8 @@ def native_patch_status(status: str, **extra: Any) -> dict[str, Any]:
 
 def setting_for_native_source(path_parts: list[str]) -> str:
     path_text = "/".join(path_parts)
+    if "pet_store" in path_text or "/pets/" in path_text or "gPet" in path_text:
+        return "unused_pets"
     if "settings_menu/evict" in path_text:
         return "settings_evict_button"
     if "HolidayOrnament" in path_text or "holiday_ornament" in path_text:
@@ -617,6 +652,8 @@ def setting_for_asset(rel_path: Path) -> str:
         return "invisible_furniture_transparent_graphics"
     if text.startswith("OptionalVisualMods/Invisible Furniture Backups/"):
         return "invisible_furniture_transparent_graphics"
+    if text.startswith("OptionalSongMods/"):
+        return "optional_song_mods"
     if text.startswith("Images/VillagerBodies/") or text.startswith("Images/HolidayOutfits/"):
         return "holiday_outfits"
     if stem in VF3_TV_FILES:
@@ -657,6 +694,25 @@ def is_invisible_runtime_asset(rel_path: Path) -> bool:
     return len(parts) >= 2 and parts[0] == "Assets" and stem.startswith("Invisible")
 
 
+def is_full_payload_candidate(rel_path: Path) -> bool:
+    if not rel_path.parts:
+        return False
+    top = rel_path.parts[0]
+    if "__MACOSX" in rel_path.parts or rel_path.name == ".DS_Store" or rel_path.name.startswith("._"):
+        return False
+    if top == "OptionalVisualMods":
+        return rel_path.suffix.lower() in FULL_PAYLOAD_IMAGE_EXTENSIONS
+    if top == "OptionalSongMods":
+        return rel_path.suffix.lower() == ".ogg"
+    if top == "Original Virtual Families 2 Assets":
+        return True
+    if top == "Images" and rel_path.suffix.lower() in FULL_PAYLOAD_IMAGE_EXTENSIONS:
+        return True
+    if top == "Assets" and rel_path.suffix.lower() == ".fmap":
+        return True
+    return False
+
+
 def iter_candidate_assets(build_dir: Path, manifest_data: dict[str, Any], asset_mode: str) -> list[Path]:
     if asset_mode == "full":
         paths: list[Path] = []
@@ -669,6 +725,8 @@ def iter_candidate_assets(build_dir: Path, manifest_data: dict[str, Any], asset_
             if rel_text in EXCLUDED_FULL_PAYLOAD_FILES:
                 continue
             if len(rel.parts) == 1 and rel.name.lower() in patched_exe_candidates:
+                continue
+            if not is_full_payload_candidate(rel):
                 continue
             paths.append(path)
         return sorted(paths)
@@ -709,12 +767,14 @@ def export_asset_payloads(
         base = base_payload / rel
         source_sha = sha256_file(source)
         source_size = source.stat().st_size
-        if asset_mode != "full" and base.is_file() and sha256_file(base) == source_sha:
+        if base.is_file() and sha256_file(base) == source_sha:
             continue
 
         payload_target = payload_root / rel
         payload_target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, payload_target)
+        if rel.parts and rel.parts[0] in SOURCE_ONLY_PAYLOAD_DIRS:
+            continue
 
         record = {
             "file_path": relative_posix(rel),
@@ -748,6 +808,64 @@ def export_asset_payloads(
             record["overwrite_existing"] = True
         asset_patches.append(record)
     return asset_patches
+
+
+def optional_song_asset_patches(
+    bundle_dir: Path,
+    base_payload: Path,
+    source_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    payload_root = bundle_dir / "payload"
+    payload_song_dir = payload_root / OPTIONAL_SONG_SOURCE_DIR
+    if source_dir is not None:
+        if not source_dir.is_dir():
+            raise ValueError(f"Optional song mods directory does not exist: {source_dir}")
+        payload_song_dir.mkdir(parents=True, exist_ok=True)
+        for source in sorted(source_dir.glob("*.ogg")):
+            if source.is_file():
+                shutil.copy2(source, payload_song_dir / source.name)
+
+    records: list[dict[str, Any]] = []
+    if not payload_song_dir.is_dir():
+        return records
+
+    for source in sorted(payload_song_dir.glob("*.ogg")):
+        target_rel = OPTIONAL_SONG_TARGET_DIR / source.name
+        source_rel = source.relative_to(bundle_dir)
+        record: dict[str, Any] = {
+            "file_path": relative_posix(target_rel),
+            "source_path": relative_posix(source_rel),
+            "source_sha256": sha256_file(source),
+            "source_size": source.stat().st_size,
+            "overwrite_existing": True,
+            "requires": ["optional_song_mods"],
+            "note": (
+                "Optional song mod swap. Enable this setting to copy the song into Sounds; "
+                "uncheck it and click Enable/Disable Patches to rebuild the modded folder with vanilla songs."
+            ),
+        }
+        base_target = base_payload / target_rel
+        if base_target.is_file():
+            record["expected_target_sha256"] = sha256_file(base_target)
+            record["expected_target_size"] = base_target.stat().st_size
+        restore_source = payload_root / "Original Virtual Families 2 Assets" / "originalsounds" / source.name
+        if restore_source.is_file():
+            record["restore_source_path"] = relative_posix(restore_source.relative_to(bundle_dir))
+            record["restore_source_sha256"] = sha256_file(restore_source)
+            record["restore_source_size"] = restore_source.stat().st_size
+        records.append(record)
+    return records
+
+
+def loose_optional_visual_target(source: Path) -> Path:
+    name = source.name
+    stem_lower = source.stem.lower()
+    path_text = relative_posix(source).lower()
+    if any(key in path_text for key in ("workshop", "kitchen", "office", "upgrade")):
+        return Path("Images") / "Upgrades" / name
+    if stem_lower.endswith("std") or "furniture" in path_text:
+        return Path("Images") / "Furniture" / name
+    return Path("Images") / name
 
 
 def optional_visual_asset_patches(bundle_dir: Path) -> list[dict[str, Any]]:
@@ -787,6 +905,25 @@ def optional_visual_asset_patches(bundle_dir: Path) -> list[dict[str, Any]]:
                     "note": str(spec["note"]),
                 }
             )
+    optional_root = payload_root / "OptionalVisualMods"
+    for source in sorted(optional_root.glob("*")):
+        if not source.is_file() or source.suffix.lower() not in FULL_PAYLOAD_IMAGE_EXTENSIONS:
+            continue
+        target_rel = loose_optional_visual_target(source.relative_to(optional_root))
+        records.append(
+            {
+                "file_path": relative_posix(target_rel),
+                "source_path": relative_posix(source.relative_to(bundle_dir)),
+                "source_sha256": sha256_file(source),
+                "source_size": source.stat().st_size,
+                "overwrite_existing": True,
+                "requires": ["optional_visual_mod_graphics"],
+                "note": (
+                    "Loose OptionalVisualMods image swap. Furniture graphics target Images/Furniture; "
+                    "future room-upgrade graphics target Images/Upgrades; other images target Images."
+                ),
+            }
+        )
     for source in sorted((payload_root / INVISIBLE_TRANSPARENT_SOURCE_DIR).glob("Invisible*.png")):
         if not source.is_file():
             continue
@@ -862,7 +999,7 @@ def default_settings(include_byte_patches: bool, include_exe_replacement: bool) 
         {
             "id": "core_assets",
             "label": "Copy required support files and uncategorized generated assets",
-            "description": "Copies required support files, DLLs, sounds, optional-mod source folders, and any generated assets that are not tied to a narrower feature toggle.",
+            "description": "Copies generated Images/Assets payloads that are not tied to a narrower feature toggle. Source-only payload folders are read-only/copy-only and are not copied wholesale into the game.",
             "default": True,
             "category": "main",
         }
@@ -878,89 +1015,9 @@ def infer_build_label(bundle_dir: Path, manifest_name: str | None = None) -> str
     return "Current"
 
 
-def find_csc() -> Path | None:
-    candidates = [
-        Path(r"C:\Windows\Microsoft.NET\Framework\v4.0.30319\csc.exe"),
-        Path(r"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe"),
-        Path(r"C:\Program Files\dotnet\sdk\10.0.301\Roslyn\bincore\csc.exe"),
-    ]
-    for candidate in candidates:
-        if candidate.is_file():
-            return candidate
-    return None
-
-
-def write_launcher_source(bundle_dir: Path, build_label: str) -> Path:
-    source = bundle_dir / "vf2_patcher_launcher.cs"
-    source.write_text(
-        f'''using System;
-using System.Diagnostics;
-using System.IO;
-using System.Windows.Forms;
-
-internal static class VF2PatcherLauncher
-{{
-    private static string Quote(string value)
-    {{
-        return "\\"" + value.Replace("\\"", "\\\\\\"") + "\\"";
-    }}
-
-    private static bool TryStart(string exe, string args, string workDir)
-    {{
-        try
-        {{
-            ProcessStartInfo info = new ProcessStartInfo();
-            info.FileName = exe;
-            info.Arguments = args;
-            info.WorkingDirectory = workDir;
-            info.UseShellExecute = false;
-            Process.Start(info);
-            return true;
-        }}
-        catch
-        {{
-            return false;
-        }}
-    }}
-
-    [STAThread]
-    private static int Main()
-    {{
-        string dir = AppDomain.CurrentDomain.BaseDirectory;
-        string manifest = Path.Combine(dir, "manifest.json");
-        string gui = Path.Combine(dir, "offline_vf2_patcher_gui.py");
-        if (!File.Exists(manifest))
-        {{
-            MessageBox.Show("manifest.json was not found next to the patcher EXE.", "{PATCHER_DISPLAY_NAME}");
-            return 2;
-        }}
-        if (!File.Exists(gui))
-        {{
-            MessageBox.Show("offline_vf2_patcher_gui.py was not found next to the patcher EXE.", "{PATCHER_DISPLAY_NAME}");
-            return 2;
-        }}
-        string args = "-3 " + Quote(gui) + " " + Quote(manifest);
-        if (TryStart("pyw", args, dir) || TryStart("py", args, dir))
-            return 0;
-        args = Quote(gui) + " " + Quote(manifest);
-        if (TryStart("pythonw", args, dir) || TryStart("python", args, dir))
-            return 0;
-        MessageBox.Show(
-            "Python 3 was not found. Install Python 3 or run Launch_GUI.bat from this folder.",
-            "{PATCHER_DISPLAY_NAME}");
-        return 1;
-    }}
-}}
-''',
-        encoding="ascii",
-        newline="\r\n",
-    )
-    return source
-
-
 def copy_patcher_icon_assets(bundle_dir: Path) -> list[str]:
     copied = []
-    source_dir = ROOT / "work" / "assets"
+    source_dir = SOURCE_DIR / "assets"
     for name in (PATCHER_ICON_PNG, PATCHER_ICON_ICO):
         source = source_dir / name
         if source.is_file():
@@ -969,57 +1026,51 @@ def copy_patcher_icon_assets(bundle_dir: Path) -> list[str]:
     return copied
 
 
-def build_launcher_exe(bundle_dir: Path, build_label: str) -> dict[str, Any]:
-    source = write_launcher_source(bundle_dir, build_label)
-    output = bundle_dir / PATCHER_LAUNCHER_NAME
-    csc = find_csc()
-    if csc is None:
+def write_iconed_launch_shortcut(bundle_dir: Path) -> dict[str, Any]:
+    shortcut = bundle_dir / PATCHER_SHORTCUT_NAME
+    icon = bundle_dir / PATCHER_ICON_ICO
+    powershell = shutil.which("powershell") or shutil.which("powershell.exe")
+    if powershell is None:
         return {
             "status": "not_built",
-            "reason": "No local C# compiler was found.",
-            "source": source.name,
-            "output": PATCHER_LAUNCHER_NAME,
+            "reason": "PowerShell was not found.",
+            "output": PATCHER_SHORTCUT_NAME,
         }
-    command = [
-            str(csc),
-            "/nologo",
-            "/target:winexe",
-            "/reference:System.Windows.Forms.dll",
-    ]
-    icon_path = bundle_dir / PATCHER_ICON_ICO
-    if icon_path.is_file():
-        command.append(f"/win32icon:{icon_path}")
-    command.extend([f"/out:{output}", str(source)])
+    icon_location = str(icon) if icon.is_file() else str(bundle_dir / "Launch_GUI.bat")
+    script = "\n".join(
+        [
+            "$ErrorActionPreference = 'Stop'",
+            "$shell = New-Object -ComObject WScript.Shell",
+            f"$shortcut = $shell.CreateShortcut({json.dumps(str(shortcut))})",
+            "$shortcut.TargetPath = 'Launch_GUI.bat'",
+            "$shortcut.WorkingDirectory = ''",
+            f"$shortcut.IconLocation = {json.dumps(icon_location)}",
+            f"$shortcut.Description = {json.dumps(PATCHER_DISPLAY_NAME)}",
+            "$shortcut.Save()",
+        ]
+    )
     result = subprocess.run(
-        command,
+        [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
         cwd=bundle_dir,
         text=True,
         capture_output=True,
     )
     status: dict[str, Any] = {
-        "source": source.name,
-        "output": PATCHER_LAUNCHER_NAME,
-        "compiler": str(csc),
+        "status": "built" if result.returncode == 0 and shortcut.is_file() else "failed",
+        "output": PATCHER_SHORTCUT_NAME,
         "returncode": result.returncode,
         "stdout": result.stdout.strip(),
         "stderr": result.stderr.strip(),
     }
-    if result.returncode != 0 or not output.is_file():
-        status["status"] = "failed"
-        return status
-    status.update({
-        "status": "built",
-        "sha256": sha256_file(output),
-        "size": output.stat().st_size,
-    })
+    if shortcut.is_file():
+        status.update({"sha256": sha256_file(shortcut), "size": shortcut.stat().st_size})
     return status
 
 
 def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
     icon_files = copy_patcher_icon_assets(bundle_dir)
-    shutil.copy2(ROOT / "work" / "offline_vf2_patcher.py", bundle_dir / "offline_vf2_patcher.py")
-    shutil.copy2(ROOT / "work" / "offline_vf2_patcher_gui.py", bundle_dir / "offline_vf2_patcher_gui.py")
-    launcher_status = build_launcher_exe(bundle_dir, build_label)
+    shutil.copy2(SOURCE_DIR / "offline_vf2_patcher.py", bundle_dir / "offline_vf2_patcher.py")
+    shutil.copy2(SOURCE_DIR / "offline_vf2_patcher_gui.py", bundle_dir / "offline_vf2_patcher_gui.py")
     apply_name = f"Apply_{build_label}_Patcher.bat"
     readme_name = f"README-{build_label}-PATCHER.txt"
     (bundle_dir / apply_name).write_text(
@@ -1068,19 +1119,20 @@ if %ERRORLEVEL%==0 (
 
 {CREATOR_DISCLOSURE}
 
-Use {apply_name} and enter or drag the original Virtual Families 2.exe, or use
-the GUI launcher below. The patcher validates that the selected folder is an
-official Virtual Families 2 install before it creates backups or writes any
-modded output. It then creates a clearly labeled modded game folder next to the
-vanilla folder, writes a backup under the modded folder in .vf2_patch_backups,
-recreates the {build_label} beta support folder structure, and writes a clearly
-named modded EXE.
+Use {apply_name} and enter or drag the original Virtual Families 2.exe, or run
+Launch_GUI.bat for the GUI. If this package includes Launch GUI.lnk, that
+shortcut opens the same GUI batch file with the patcher icon.
 
-You can run {PATCHER_LAUNCHER_NAME} to auto-load manifest.json in the GUI, then
-choose your vanilla Virtual Families 2 installation folder manually. The patcher
-does not look for or assume a hardcoded install path. You can also run
-Launch_GUI.bat, select the game folder, load manifest.json, and apply the
-default settings.
+The patcher validates that the selected folder is an official Virtual Families
+2 install before it creates backups or writes any modded output. It then
+refreshes or creates a clearly labeled modded game folder next to the vanilla
+folder, writes a backup under the modded folder in .vf2_patch_backups, and
+recreates the {build_label} beta support folder structure using only enabled
+patch records.
+
+Click Enable/Disable Patches after changing checkboxes. Unchecked patches are
+restored by rebuilding the modded folder from the vanilla install and applying
+only the checked patches. Payload files are read-only/copy-only during apply.
 
 Dry Run / Validate Only validates that the patcher's working. It checks whether
 the selected VF2 folder looks right, whether the EXE is the expected official
@@ -1106,10 +1158,9 @@ changes anything.
 2. Unzip this patcher package anywhere you like.
 
 3. Run:
-   {PATCHER_LAUNCHER_NAME}
-
-   If that does not open, run:
    Launch_GUI.bat
+
+   If Launch GUI.lnk is present, you can use that iconed shortcut instead.
 
 4. The patcher should auto-load manifest.json.
 
@@ -1123,10 +1174,13 @@ changes anything.
    Dry Run validates that the patcher's working. It does not actually
    change/write files.
 
-8. Click Apply Patches.
+8. Click Enable/Disable Patches. If you uncheck a patch later, click this
+   button again to rebuild the modded folder from vanilla with that patch
+   disabled.
 
-9. The patcher creates a separate modded folder next to your vanilla game
-   folder. Your original game folder and original saves are left alone.
+9. The patcher creates or refreshes a separate modded folder next to your
+   vanilla game folder. Your original game folder and original saves are left
+   alone.
 
 10. Run the clearly named modded EXE inside the new modded folder.
 
@@ -1154,12 +1208,11 @@ Have fun! -Lorsieab2 :)
         readme_name,
         "How to Use.txt",
     ]
-    if (bundle_dir / "vf2_patcher_launcher.cs").is_file():
-        files.append("vf2_patcher_launcher.cs")
-    if launcher_status.get("status") == "built":
-        files.append(PATCHER_LAUNCHER_NAME)
-    (bundle_dir / "patcher_launcher_build.json").write_text(json.dumps(launcher_status, indent=2), encoding="utf-8")
-    files.append("patcher_launcher_build.json")
+    shortcut_status = write_iconed_launch_shortcut(bundle_dir)
+    (bundle_dir / PATCHER_SHORTCUT_STATUS_NAME).write_text(json.dumps(shortcut_status, indent=2), encoding="utf-8")
+    files.append(PATCHER_SHORTCUT_STATUS_NAME)
+    if shortcut_status.get("status") == "built":
+        files.append(PATCHER_SHORTCUT_NAME)
     return files
 
 
@@ -1169,7 +1222,9 @@ def clear_generated_runner_files(bundle_dir: Path) -> None:
         "README-*-PATCHER.txt",
         "How to Use.txt",
         "Launch_GUI.bat",
-        PATCHER_LAUNCHER_NAME,
+        PATCHER_SHORTCUT_NAME,
+        PATCHER_SHORTCUT_STATUS_NAME,
+        STALE_PATCHER_LAUNCHER_NAME,
         PATCHER_ICON_PNG,
         PATCHER_ICON_ICO,
         "vf2_patcher_launcher.cs",
@@ -1216,10 +1271,12 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Applies active patch records from manifest.json only when their required settings are enabled.",
         "- Writes per-record validation/apply progress to the GUI/console and to the JSON patch log.",
         "- Creates a separate clearly labeled modded output folder by default.",
+        "- Rebuilds or refreshes recognized modded output folders from the vanilla install before applying checked records, so unchecked patches are removed on the next Enable/Disable Patches run.",
         "- Creates backups before writing changed files in the modded output folder.",
         "- Writes machine-readable success/failure logs.",
         "- Dry Run / Validate Only validates that the patcher's working: it checks the install, EXE, patch records, and payload hashes, then stops before creating backups, creating the modded output folder, or changing/writing files. Default dry-run and pre-write failure logs are written next to manifest.json, not into the vanilla game folder.",
-        "- When the generated patcher EXE starts the GUI, it auto-loads adjacent manifest.json. The user then selects their own vanilla Virtual Families 2 installation folder manually.",
+        "- Launch_GUI.bat starts the GUI with adjacent manifest.json. If Launch GUI.lnk is present, it opens the same batch file with the patcher icon.",
+        "- Payload files are read-only/copy-only during apply. The patcher reads payload sources and copies selected files into the separate modded output folder; it never writes back into payload/ during patching.",
         "- Provides a restore command for backups created by this patcher.",
         "",
         "What this patcher does not do",
@@ -1234,9 +1291,11 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- payload/ is the patch bundle's local stash of files that may be copied into the separate modded output folder.",
         "- The patcher does not apply payload/ blindly. Each copied file must be referenced by an active asset_patches record in manifest.json.",
         "- Before copying a payload file, the patcher verifies the file against that record's source_sha256 and source_size metadata.",
-        "- Payload paths usually mirror game-folder paths such as Assets/, Images/, Sounds/, OptionalVisualMods/, root DLLs, ldw.ini, wc.dat, and icon.bmp.",
-        "- The current full bundle also stores the modded EXE payload here while native byte/table records are still being extracted.",
-        "- Feature-specific payloads for optional visual mods and Invisible Furniture are tied to their default-off settings, so unchecked settings leave those files unused and omitted from fresh modded output folders.",
+        "- This bundle keeps payload lean: changed Images files, .fmap files, OptionalVisualMods/, Original Virtual Families 2 Assets/, and OptionalSongMods/.",
+        "- OptionalVisualMods/, Original Virtual Families 2 Assets/, and OptionalSongMods/ are source-only payload folders. They are not copied wholesale into the game.",
+        "- Optional song mod records copy payload/OptionalSongMods/*.ogg to Sounds/*.ogg only when enabled; unchecking then clicking Enable/Disable Patches rebuilds the modded output with vanilla Sounds/*.ogg.",
+        "- Optional visual records copy source graphics to runtime folders: furniture graphics to Images/Furniture, future Workshop/Kitchen/Office upgrade graphics to Images/Upgrades, and animation strips or other images to Images.",
+        "- Feature-specific payloads for optional visual mods and Invisible Furniture are tied to their default-off settings, so unchecked settings leave those files unused and omitted from refreshed modded output folders.",
         "- Custom Couches and LDW Posters/Paintings payload files are tied to their own default-off setting. Current native store-row support still comes from the full modded EXE payload until those native table edits are split into per-feature patch records.",
         f"- Payload file count in this bundle: {len(payload_files)}",
         "",
@@ -1279,6 +1338,13 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         description = str(row.get("description", "")).strip()
         if description:
             lines.append(f"  {description}")
+    limitation = (
+        "This bundle uses a verified full modded EXE payload for native/game-code changes. "
+        "Asset and file patches are gated by settings, but complete native per-feature off/on behavior requires translating future native changes into separate byte/table patch records with their own setting requirements."
+        if summary.get("exe_replacement")
+        else
+        "This trust-friendly bundle omits a modded EXE payload. Native/game-code changes require future byte/table patch records before they can be applied by this no-EXE patcher shape."
+    )
     lines.extend(
         [
             "",
@@ -1306,20 +1372,20 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "------------------",
             "- offline_vf2_patcher.py: validates manifests, target files, byte patch records, asset payload records, backups, restore, progress, and logs.",
             "- offline_vf2_patcher_gui.py: Tkinter GUI wrapper that renders manifest settings, streams patch progress, and shows a completion popup.",
-            "- export_offline_patch_bundle.py: source-side exporter that builds manifest.json, payload/, runner scripts, the launcher EXE, and this transparency log.",
-            "- vf2_patcher_launcher.cs: small generated .NET launcher. It finds manifest.json beside itself and launches the GUI with that manifest preloaded.",
+            "- export_offline_patch_bundle.py: source-side exporter that builds manifest.json, payload/, runner scripts, the optional iconed shortcut, and this transparency log.",
+            "- Launch_GUI.bat: readable batch launcher for the GUI. No compiled patcher launcher EXE is shipped in this bundle.",
             "",
-            "Launcher build",
-            "--------------",
+            "GUI launcher",
+            "------------",
         ]
     )
-    launcher = summary.get("launcher", {})
-    if isinstance(launcher, dict):
-        for key in ("status", "compiler", "output", "sha256", "size", "reason"):
-            if launcher.get(key) is not None:
-                lines.append(f"- {key}: {launcher.get(key)}")
+    shortcut = summary.get("launch_gui_shortcut", {})
+    if isinstance(shortcut, dict):
+        for key in ("status", "output", "sha256", "size", "reason"):
+            if shortcut.get(key) is not None:
+                lines.append(f"- {key}: {shortcut.get(key)}")
     else:
-        lines.append("- Launcher metadata unavailable.")
+        lines.append("- Shortcut metadata unavailable.")
     lines.extend(
         [
             "",
@@ -1330,7 +1396,10 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B103 patcher refresh: Adds separate modded output folder support and clearly named modded EXE output.",
             "- B103 patcher refresh: Adds default-off optional visual patches for custom map images, transparent menu/store bars, transparent Decor tab, visible invisible furniture, and transparent invisible furniture swaps.",
             "- B103 patcher refresh: Adds a GUI completion popup with enabled patches, altered files, output folder, save folder, and save-copy guidance.",
-            "- B103 patcher refresh: Adds a generated Windows launcher EXE that auto-loads manifest.json from the bundle folder.",
+            "- B104 patcher refresh: Removes the compiled patcher launcher EXE; ships readable BAT launchers and an optional iconed GUI shortcut instead.",
+            "- B104 patcher refresh: Adds default-on unused Turtle/Hamster pet setting metadata.",
+            "- B104 patcher refresh: Adds default-off OptionalSongMods support targeting Sounds/*.ogg.",
+            "- B104 patcher refresh: Refreshes the modded output folder from vanilla on Enable/Disable Patches so unchecked patches are removed.",
             "",
             "Experimental patch warning",
             "--------------------------",
@@ -1338,7 +1407,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "",
             "Known transparency limitation",
             "-----------------------------",
-            "This full beta-folder bundle still uses a verified full modded EXE payload for native/game-code changes. Asset and file patches are fully gated by settings. Complete native per-feature off/on behavior requires translating future native changes into separate byte/table patch records with their own setting requirements.",
+            limitation,
             "",
             "Have fun! -Lorsieab2 :)",
         ]
@@ -1418,6 +1487,8 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         args.asset_mode,
         build_label,
     )
+    optional_song_source = Path(args.optional_song_mods_dir).resolve() if args.optional_song_mods_dir else None
+    asset_patches.extend(optional_song_asset_patches(bundle_dir, base_payload, optional_song_source))
     asset_patches.extend(optional_visual_asset_patches(bundle_dir))
     exe_replacement_record = None
     if args.include_exe_replacement and vanilla_exe is not None:
@@ -1481,9 +1552,9 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     }
     if args.include_patcher_scripts:
         manifest["export_summary"]["runner_files"] = write_bundle_runner_files(bundle_dir, build_label)
-        launcher_status_path = bundle_dir / "patcher_launcher_build.json"
-        if launcher_status_path.is_file():
-            manifest["export_summary"]["launcher"] = load_json(launcher_status_path)
+        shortcut_status_path = bundle_dir / PATCHER_SHORTCUT_STATUS_NAME
+        if shortcut_status_path.is_file():
+            manifest["export_summary"]["launch_gui_shortcut"] = load_json(shortcut_status_path)
     manifest["export_summary"]["transparency_log"] = write_transparency_log(bundle_dir, manifest)
     return manifest
 
@@ -1499,6 +1570,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--target-exe-name", default=DEFAULT_EXE_NAME, help="Relative EXE path expected in the user's game folder.")
     parser.add_argument("--name", help="Manifest display name.")
     parser.add_argument("--asset-mode", choices=ASSET_MODES, default="additive", help="Asset export mode. 'additive' exports manifest-referenced assets; 'all' exports every Images/Assets diff.")
+    parser.add_argument("--optional-song-mods-dir", help="Folder containing optional song .ogg files to place in payload/OptionalSongMods and target to Sounds/.")
     parser.add_argument("--include-byte-patches", action="store_true", help="Diff vanilla EXE against patched EXE into byte patch records.")
     parser.add_argument("--include-exe-replacement", action="store_true", help="Copy the patched EXE into payload and replace a verified vanilla target EXE during apply.")
     parser.add_argument("--include-patcher-scripts", action="store_true", help="Copy the CLI/GUI patcher scripts plus convenience batch files into the bundle.")

@@ -1011,3 +1011,30 @@
   native store-row gating still depends on future per-feature byte/table
   records because the current full bundle uses a verified full modded EXE
   payload.
+
+## 2026-07-06 - Patcher B104 Toggle Rebuild Model
+
+- `prepare_output_dir()` now treats recognized sibling `VF2-*-Modded` folders
+  as rebuildable outputs. On a non-dry run it clears the modded folder except
+  `.vf2_patch_backups`, copies the vanilla install again, and then applies only
+  currently enabled records. This makes unchecking a patch and clicking
+  Enable/Disable Patches remove prior optional files/behavior from the modded
+  folder without touching the vanilla install.
+- `asset_patches` remain copy-only during apply. Source-only payload folders
+  (`OptionalVisualMods`, `Original Virtual Families 2 Assets`, and
+  `OptionalSongMods`) are copied into `payload/` by
+  `export_offline_patch_bundle.py` but are not copied wholesale into the game.
+- Optional song mods are exported from `payload/OptionalSongMods/*.ogg` to
+  runtime `Sounds/*.ogg` records behind `optional_song_mods` (default off).
+  Vanilla song restoration is achieved by refreshing the modded output from the
+  user-selected vanilla install; B104 records also carry restore-source metadata
+  when `Original Virtual Families 2 Assets/originalsounds/*.ogg` exists.
+- Loose optional visual mod images are exported behind
+  `optional_visual_mod_graphics` (default off). The folder rule is:
+  furniture-like images target `Images/Furniture`, future
+  Workshop/Kitchen/Office upgrade images target `Images/Upgrades`, and loose
+  animation strips/UI/other images target `Images`.
+- Patcher bundles no longer build or ship the generated
+  `Virtual Families 2 Restoration-Addition Patcher.exe`. `Launch_GUI.bat`
+  starts the GUI, and `Launch GUI.lnk` is generated as an optional iconed
+  shortcut when Windows COM shortcut creation succeeds.

@@ -222,6 +222,13 @@
   the fresh modded output folder does not contain those optional payloads or
   replacements. Then enable each option individually and confirm only the
   expected files appear/change.
+- Patcher file-layout test B104 reversible toggles: run the generated patcher,
+  enable OptionalSongMods and loose OptionalVisualMods, then uncheck them and
+  click Enable/Disable Patches again. Confirm the existing `VF2-B104-Modded`
+  folder is refreshed from vanilla, `Sounds/menu.ogg` and `song1-4.ogg` return
+  to vanilla, source-only payload folders are not copied wholesale into the
+  game, and the JSON log lists enabled/disabled settings with `status:
+  success`.
 - Patcher follow-up: split remaining native store-table rows for Custom Couches
   and LDW Posters/Paintings into setting-gated byte/table patch records. The
   current `custom_couches_ldw_posters` setting gates image/fmap payload files,

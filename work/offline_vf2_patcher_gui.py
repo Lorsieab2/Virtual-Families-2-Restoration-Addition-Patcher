@@ -313,7 +313,7 @@ class VF2PatcherGUI:
         frame = ttk.Frame(parent)
         frame.columnconfigure(3, weight=1)
         self._button(frame, "Dry Run (Validate Only)", lambda: self.start_apply(dry_run=True)).grid(row=0, column=0, padx=(0, 8))
-        self._apply_button(frame, "Apply Patches", lambda: self.start_apply(dry_run=False)).grid(row=0, column=1, padx=(0, 8))
+        self._apply_button(frame, "Enable/Disable Patches", lambda: self.start_apply(dry_run=False)).grid(row=0, column=1, padx=(0, 8))
         ttk.Label(
             frame,
             text="Dry Run validates that the patcher's working. It does not actually change or write files.",
@@ -569,12 +569,12 @@ class VF2PatcherGUI:
         )
 
         if not dry_run and not messagebox.askyesno(
-            f"Apply {APP_DISPLAY_NAME}",
-            "This will validate the vanilla game folder, then create a separate modded game folder and backup before writing patched files. Continue?",
+            f"Enable/Disable {APP_DISPLAY_NAME}",
+            "This will validate the vanilla game folder, then refresh the separate modded game folder and apply only the checked patches. Continue?",
         ):
             return
 
-        label = "Dry run" if dry_run else "Apply patches"
+        label = "Dry run" if dry_run else "Enable/Disable patches"
         self._run_worker(label, lambda: patcher.apply_manifest(args), args=args, dry_run=dry_run)
 
     def start_restore(self) -> None:
@@ -695,6 +695,11 @@ class VF2PatcherGUI:
             for row in settings.get("available", []):
                 if isinstance(row, dict) and row.get("enabled"):
                     enabled_labels.append(str(row.get("label") or row.get("id")))
+        disabled_labels = []
+        if isinstance(settings, dict):
+            for row in settings.get("available", []):
+                if isinstance(row, dict) and not row.get("enabled"):
+                    disabled_labels.append(str(row.get("label") or row.get("id")))
         altered_files = []
         for key in ("patched_files", "asset_files"):
             rows = summary.get(key, [])
@@ -725,22 +730,24 @@ class VF2PatcherGUI:
         body = ttk.Frame(win, padding=14)
         body.grid(row=0, column=0, sticky="nsew")
         body.columnconfigure(0, weight=1)
-        body.rowconfigure(5, weight=1)
+        body.rowconfigure(7, weight=1)
 
-        ttk.Label(body, text="Patch complete!", style="Title.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(body, text="Patches added successfully:", style="Section.TLabelframe.Label").grid(row=1, column=0, sticky="w", pady=(10, 0))
+        ttk.Label(body, text="Enable/Disable complete!", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(body, text="Patches enabled successfully:", style="Section.TLabelframe.Label").grid(row=1, column=0, sticky="w", pady=(10, 0))
         ttk.Label(body, text=compact(enabled_labels, limit=10), wraplength=720, justify="left").grid(row=2, column=0, sticky="ew")
+        ttk.Label(body, text="Patches disabled/restored to vanilla:", style="Section.TLabelframe.Label").grid(row=3, column=0, sticky="w", pady=(10, 0))
+        ttk.Label(body, text=compact(disabled_labels, limit=10), wraplength=720, justify="left").grid(row=4, column=0, sticky="ew")
 
         paths = ttk.Frame(body)
-        paths.grid(row=3, column=0, sticky="ew", pady=(12, 0))
+        paths.grid(row=5, column=0, sticky="ew", pady=(12, 0))
         paths.columnconfigure(1, weight=1)
         self._path_link_row(paths, 0, "Vanilla Game Folder Path", vanilla_dir)
         self._path_link_row(paths, 1, "Modified Game Folder Path", output_dir)
         self._path_link_row(paths, 2, "Modified Game Saves Folder Path", save_dir)
 
-        ttk.Label(body, text="Modified file log:", style="Section.TLabelframe.Label").grid(row=4, column=0, sticky="w", pady=(12, 0))
+        ttk.Label(body, text="Modified file log:", style="Section.TLabelframe.Label").grid(row=6, column=0, sticky="w", pady=(12, 0))
         log_frame = ttk.Frame(body)
-        log_frame.grid(row=5, column=0, sticky="nsew")
+        log_frame.grid(row=7, column=0, sticky="nsew")
         log_frame.columnconfigure(0, weight=1)
         log_frame.rowconfigure(0, weight=1)
         file_text = tk.Text(log_frame, height=14, wrap="none")
@@ -763,8 +770,8 @@ class VF2PatcherGUI:
             "Existing game saves are unaltered in the original game folder.\n\n"
             "Have fun! -Lorsieab2 :)"
         )
-        ttk.Label(body, text=footer_text, wraplength=720, justify="left").grid(row=6, column=0, sticky="ew", pady=(12, 0))
-        ttk.Button(body, text="Close", command=win.destroy).grid(row=7, column=0, sticky="e", pady=(12, 0))
+        ttk.Label(body, text=footer_text, wraplength=720, justify="left").grid(row=8, column=0, sticky="ew", pady=(12, 0))
+        ttk.Button(body, text="Close", command=win.destroy).grid(row=9, column=0, sticky="e", pady=(12, 0))
 
     def _path_link_row(self, parent: tk.Widget, row: int, label: str, path: str) -> None:
         ttk.Label(parent, text=f"{label}:").grid(row=row, column=0, sticky="w", padx=(0, 8), pady=2)

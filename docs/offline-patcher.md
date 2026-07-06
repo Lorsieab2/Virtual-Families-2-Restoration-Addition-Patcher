@@ -5,9 +5,9 @@ distributing modified executables, releases should distribute patch data and a
 simple patcher that edits a user-provided vanilla VF2 PC install on disk.
 
 The current display name is `Virtual Families 2 Restoration/Addition Patcher`.
-The filesystem-safe launcher name is
-`Virtual Families 2 Restoration-Addition Patcher.exe`. The patcher was created
-with Codex AI in collaboration with Lorsieab2.
+The GUI launcher is `Launch_GUI.bat`; exported bundles may also include
+`Launch GUI.lnk` as an iconed shortcut. The patcher was created with Codex AI
+in collaboration with Lorsieab2.
 
 The first implementation is `work/offline_vf2_patcher.py`. It applies byte
 patches and file/asset patch records from JSON manifests, then can restore
@@ -89,25 +89,24 @@ manifest, so new optional components such as Holiday furniture, Holiday outfits,
 mobile-exclusive furniture, or future feature groups do not require GUI code
 changes.
 
-Bundle exports can include `Virtual Families 2 Restoration-Addition
-Patcher.exe`, a tiny generated Windows launcher. It looks for `manifest.json`
-next to itself and starts the GUI with that manifest preloaded. The launcher is
-not an injector and does not touch the game directly; it only starts the Python
-GUI.
+Bundle exports now ship readable batch launchers instead of a compiled patcher
+EXE. `Launch_GUI.bat` starts the GUI with adjacent `manifest.json`; when
+Windows shortcut creation succeeds, `Launch GUI.lnk` points at the same batch
+file and uses `patcher_icon.ico`.
 
-When the generated patcher EXE starts the GUI with adjacent `manifest.json`, the
-GUI auto-loads the manifest settings but does not open the vanilla-folder picker
-automatically. The user selects their own vanilla Virtual Families 2
+The GUI auto-loads adjacent `manifest.json` but does not open the vanilla-folder
+picker automatically. The user selects their own vanilla Virtual Families 2
 installation folder manually, and the patcher does not look for or assume a
 hardcoded local install path.
 
 The GUI auto-populates the modded output folder from the selected vanilla game
-folder and manifest `output.default_folder_name`. The Apply Patches button uses
-green bold text, manifest descriptions support `**bold**` markup, and
-description blocks resize to keep their full text visible. The completion popup
-keeps path/save guidance fixed while the modified-file log is the only
-scrollable area. The Vanilla Game Folder Path, Modified Game Folder Path, and
-Modified Game Saves Folder Path are shown as bold blue clickable paths.
+folder and manifest `output.default_folder_name`. The Enable/Disable Patches
+button uses green bold text, manifest descriptions support `**bold**` markup,
+and description blocks resize to keep their full text visible. The completion
+popup separates enabled patches from disabled/restored patches and keeps
+path/save guidance fixed while the modified-file log is the only scrollable
+area. The Vanilla Game Folder Path, Modified Game Folder Path, and Modified
+Game Saves Folder Path are shown as bold blue clickable paths.
 
 The GUI groups manifest settings by `category` and provides buttons to enable
 all Main, Optional, or Experimental settings without changing unrelated
@@ -121,12 +120,13 @@ checkboxes:
 
 Bundles can include `patcher_icon.png` and `patcher_icon.ico`. The GUI uses the
 PNG as the literal picture beside the bold title and uses the ICO/PNG for the
-window icon when Tk can load them. The generated Windows launcher also embeds
-`patcher_icon.ico` when a local C# compiler is available.
+window icon when Tk can load them. The optional `Launch GUI.lnk` shortcut uses
+`patcher_icon.ico`; no compiled launcher EXE is shipped in B104 bundles.
 
 After a successful GUI apply, the patcher shows a completion popup listing the
-enabled patch settings, altered files, modded game folder, and expected modded
-save folder. The save folder is derived from the modded EXE name:
+enabled patch settings, disabled/restored patch settings, altered files, modded
+game folder, and expected modded save folder. The save folder is derived from
+the modded EXE name:
 `Documents/LDW/(name of modded Virtual Families 2 exe)`. Existing vanilla saves
 stay in the original save folder unless the user manually copies them.
 
@@ -245,9 +245,12 @@ For beta-folder smoke testing, the exporter also supports a full-payload mode:
   --force
 ```
 
-`--asset-mode full` exports every non-excluded file in the generated build
-folder, including root DLLs and support directories. `--include-exe-replacement`
-adds a `core_executable` asset record that verifies the vanilla
+`--asset-mode full` now exports the cleaned mod-required payload shape: changed
+runtime Images, `.fmap` files, and source-only `OptionalVisualMods/`,
+`Original Virtual Families 2 Assets/`, and `OptionalSongMods/` folders. It does
+not copy root DLLs, `Sounds/`, or arbitrary support files into payload. Passing
+`--include-exe-replacement` adds a `core_executable` asset record that verifies
+the vanilla
 `Virtual Families 2.exe` by whole-file SHA-256 or by the recorded PE32 section
 structure, then writes a clearly named modded EXE in the separate output
 folder. Runner batch/readme names are inferred from the bundle label, for
@@ -259,7 +262,7 @@ wherever possible.
 
 Full bundle exports also write `Transparency Log.txt`. That file documents how
 the bundle was built, what the patcher does and does not do, setting defaults,
-patch counts, implementation files, launcher build metadata, known limitations,
+patch counts, implementation files, GUI shortcut metadata, known limitations,
 and the save-folder guidance shown in the GUI completion popup.
 
 Full bundle exports also write `How to Use.txt`, a short player-facing setup
@@ -452,9 +455,10 @@ relative to the manifest folder; `file_path` is relative to the game folder.
 An asset record can also include `output_file_path`; in that case `file_path`
 is the validation target inside the selected vanilla game folder, while
 `output_file_path` is where the replacement is written in the modded output
-folder. B103 uses this for `Virtual Families 2.exe` so the vanilla EXE is
-verified but the patched file is created as
-`Virtual Families 2 - Modded B103.exe`.
+folder. Older B103 full-EXE test bundles used this for `Virtual Families 2.exe`
+so the vanilla EXE was verified but the patched file was created as
+`Virtual Families 2 - Modded B103.exe`; the B104 trust-friendly patcher ZIP does
+not ship a compiled patcher launcher EXE.
 
 Asset records can create new files, which restore later removes. If an asset
 target already exists, the patcher allows it only when it already matches the
@@ -482,6 +486,8 @@ as:
 - `outfit_store_expansion` - Add generated outfit rows, copied villager sprite
   sheets, icons, and independent outfit tray items.
 - `mobile_furniture` - Add additional mobile-exclusive furniture.
+- `unused_pets` - Add the unused Turtle and Hamster pet store entries. Default
+  on.
 - `invisible_furniture_visible_graphics` - Add Invisible Furniture with visible
   base-game-style placement graphics. Default off. Enable this first so the
   furniture can be placed in game.
@@ -509,6 +515,12 @@ as:
   Default off. Credit to Corylea on LDWForums.
 - `transparent_decor_tab` - Optional transparent purple Decor tab visual swap.
   Default off. Credit to swedane on LDWForums.
+- `optional_visual_mod_graphics` - Optional loose `OptionalVisualMods` image
+  swaps. Furniture graphics target `Images/Furniture`; future Workshop,
+  Kitchen, and Office upgrade graphics target `Images/Upgrades`; other loose
+  images target `Images`. Default off.
+- `optional_song_mods` - Optional song swap that copies
+  `payload/OptionalSongMods/*.ogg` into `Sounds/*.ogg`. Default off.
 
 Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings
@@ -518,11 +530,21 @@ Unchecked settings must not leave their feature files in the fresh modded output
 folder. The exporter therefore assigns optional visual source folders,
 Invisible Furniture visible graphics, Invisible Furniture transparent graphics,
 and active replacement records to the same feature gates. Re-running the
-patcher into a new output folder with a setting unchecked reverts that setting
-by omission: its records are not copied, replaced, or created. Native/game-code
-features still bundled through the monolithic `core_executable` payload cannot
-be fully unbundled by checkbox until their native changes are converted into
-separate byte/table patch records.
+patcher with Enable/Disable Patches refreshes a recognized `VF2-*-Modded`
+output folder from the vanilla install, then applies only checked records.
+Unchecked settings are therefore removed from the refreshed modded folder by
+omission. Native/game-code features still bundled through the monolithic
+`core_executable` payload cannot be fully unbundled by checkbox until their
+native changes are converted into separate byte/table patch records.
+
+Source-only payload folders are read-only/copy-only during apply:
+`OptionalVisualMods/`, `Original Virtual Families 2 Assets/`, and
+`OptionalSongMods/` stay in `payload/` and are not copied wholesale into the
+game. Optional song records copy `payload/OptionalSongMods/*.ogg` into
+`Sounds/*.ogg` only when `optional_song_mods` is enabled. Optional visual
+records copy source graphics into runtime folders: furniture graphics to
+`Images/Furniture`, future Workshop/Kitchen/Office upgrade graphics to
+`Images/Upgrades`, and animation strips or other loose images to `Images`.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:

@@ -758,3 +758,25 @@
   store-row gating for that feature still needs future per-feature byte/table
   records because current full bundles use a verified full modded EXE payload.
 - Ships the patcher as a ZIP bundle for testing instead of a loose folder only.
+
+## B104 - Restoration/Addition Patcher BAT Refresh
+
+- Increments the patcher release to B104 and removes the compiled patcher
+  launcher EXE from generated bundles. B104 ships `Launch_GUI.bat` plus an
+  optional `Launch GUI.lnk` shortcut that uses `patcher_icon.ico` when Windows
+  shortcut creation succeeds.
+- Adds the default-on `Add unused pets` setting for the existing Turtle/Hamster
+  pet-store native metadata (`gPet` / `pet_store_additions`).
+- Adds the default-off `Add optional song mods` setting. Optional songs stay in
+  `payload/OptionalSongMods` and write to runtime `Sounds/*.ogg` only when the
+  setting is enabled.
+- Adds default-off loose `OptionalVisualMods` image support. Loose furniture
+  images target `Images/Furniture`; future Workshop/Kitchen/Office upgrade
+  images target `Images/Upgrades`; other loose images target `Images`.
+- Makes recognized `VF2-*-Modded` output folders refresh from the vanilla
+  install before checked patch records are applied. Unchecking a patch and
+  clicking Enable/Disable Patches now removes that patch from the regenerated
+  modded folder.
+- Keeps `OptionalVisualMods`, `Original Virtual Families 2 Assets`, and
+  `OptionalSongMods` as read-only/copy-only payload source folders during
+  apply; they are not copied wholesale into the playable game folder.

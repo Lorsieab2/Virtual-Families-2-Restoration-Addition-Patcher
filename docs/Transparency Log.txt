@@ -3,17 +3,18 @@ Virtual Families 2 Restoration/Addition Patcher Transparency Log
 
 Purpose
 -------
-This document describes the offline VF2 patcher design used by the B103 patcher
+This document describes the offline VF2 patcher design used by the B104 patcher
 refresh. Each exported patcher bundle also generates its own Transparency
-Log.txt with exact manifest counts, launcher metadata, paths, and changelog
+Log.txt with exact manifest counts, shortcut metadata, paths, and changelog
 details for that bundle.
 
 Creation disclosure
 -------------------
 This offline patcher was created with Codex AI in collaboration with Lorsieab2.
 The display name is Virtual Families 2 Restoration/Addition Patcher. The
-Windows-safe launcher filename is Virtual Families 2 Restoration-Addition
-Patcher.exe.
+GUI starts from Launch_GUI.bat. When Windows shortcut creation succeeds, the
+bundle also includes Launch GUI.lnk with the patcher icon. No compiled patcher
+launcher EXE is shipped in B104 bundles.
 
 What the patcher does
 ---------------------
@@ -27,6 +28,9 @@ What the patcher does
 - Writes machine-readable success/failure logs.
 - Streams per-record validation/apply progress to the CLI and GUI.
 - Creates a separate, clearly labeled modded output folder by default.
+- Refreshes recognized VF2-*-Modded output folders from vanilla before applying
+  currently checked records, so unchecking a patch and clicking
+  Enable/Disable Patches removes the prior optional change.
 - Names the modded executable clearly so it is not confused with vanilla.
 - Supports Dry Run / Validate Only, which validates that the patcher's working
   and does not actually change or write files.
@@ -84,28 +88,41 @@ The payload/ folder is the patch bundle's local stash of files that may be
 copied into the separate modded output folder. It is not applied blindly. Each
 file must be referenced by an asset_patches record in manifest.json, and the
 patcher verifies the payload file's source_sha256 before copying it.
+During apply, payload/ is read-only/copy-only. The patcher reads payload
+sources and copies enabled records into the generated modded output folder; it
+does not write back into payload/.
 
-Payload contents usually mirror game-folder paths:
-- payload/Virtual Families 2 - Modded B###.exe: the current full modded EXE
-  payload while native byte/table records are still being extracted.
-- payload/Assets/: furniture fmap files and other runtime asset metadata.
-- payload/Images/: generated sprites, copied runtime images, Outfit icons,
+Payload contents are intentionally lean:
+- payload/Assets/: changed .fmap files and other required runtime asset
+  metadata.
+- payload/Images/: changed generated sprites, runtime images, Outfit icons,
   villager sheets, TV animation strips, furniture art, and UI art.
-- payload/Sounds/: runtime sound files when exporting a full beta-folder
-  patcher.
-- payload/OptionalVisualMods/: optional visual-mod source files such as custom
+- payload/OptionalVisualMods/: source-only optional visual-mod files such as
+  custom
   map images, transparent UI bars/tabs, and Invisible Furniture visible or
   transparent graphics.
-- payload/Original Virtual Families 2 Assets/: preserved reference/source
-  assets needed to reproduce the cleaned beta-folder structure.
-- payload/*.dll, ldw.ini, wc.dat, icon.bmp, and similar root files: runtime
-  support files included by full-folder smoke-test bundles.
+- payload/Original Virtual Families 2 Assets/: source-only preserved vanilla
+  reference/assets used for transparency and restore metadata.
+- payload/OptionalSongMods/: source-only optional VF1/VF2 song .ogg files.
 
 Unchecked patch settings should leave their payload files unused and, for
-feature-specific payloads, absent from a fresh modded output folder. Optional
-visual source folders and Invisible Furniture visible/transparent graphics are
-assigned to their own default-off settings so unchecking those settings omits
-their records.
+feature-specific payloads, absent from a refreshed modded output folder.
+Optional visual source folders, OptionalSongMods, and Invisible Furniture
+visible/transparent graphics are assigned to their own default-off settings so
+unchecking those settings omits their records on the next Enable/Disable
+Patches run.
+
+Optional visual output rules:
+- Furniture graphics write to Images/Furniture.
+- Future Workshop, Kitchen, and Office upgrade graphics write to
+  Images/Upgrades.
+- Animation strips, UI graphics, and other loose images write to Images.
+
+Optional song output rules:
+- Enabled OptionalSongMods records copy payload/OptionalSongMods/*.ogg to
+  Sounds/*.ogg.
+- Disabling OptionalSongMods and clicking Enable/Disable Patches refreshes the
+  modded output from vanilla so the original Sounds/*.ogg files return.
 
 Custom Couches and LDW Posters/Paintings now have a separate default-off
 setting. Asset payload routing covers the Colorful Couches, LDW Modern
@@ -121,19 +138,23 @@ Important files
   toggling settings, applying patches, restoring backups, and showing the
   completion summary.
 - work/export_offline_patch_bundle.py: source-side exporter that creates
-  manifest.json, payload files, runner scripts, launcher metadata, and generated
-  Transparency Log.txt.
+  manifest.json, payload files, runner scripts, optional shortcut metadata, and
+  generated Transparency Log.txt.
 - How to Use.txt: player-facing instructions bundled with exported patcher ZIPs.
 - work/patch_mobile_furniture_pack.py: current build generator that produces
   the modded beta folder used as patcher payload input while native byte/table
   records are still being extracted.
 
-Current B103 behavior
+Current B104 behavior
 ---------------------
-- The manifest declares a separate output folder named VF2-B103-Modded.
-- The core executable record validates Virtual Families 2.exe but writes the
-  patched file as Virtual Families 2 - Modded B103.exe.
+- The manifest declares a separate output folder named VF2-B104-Modded for the
+  B104 patcher bundle.
+- The B104 patcher bundle does not ship a compiled patcher launcher EXE.
+  Launch_GUI.bat starts the GUI, and Launch GUI.lnk is a convenience shortcut
+  when generated successfully.
 - Optional visual settings default off.
+- OptionalSongMods defaults off and targets Sounds/*.ogg when enabled.
+- Add unused pets defaults on for the Turtle/Hamster pet-store metadata.
 - Invisible Furniture visible graphics and transparent graphics are separate
   default-off settings.
 - Add Custom Couches and LDW Posters is a separate default-off setting.
@@ -142,14 +163,13 @@ Current B103 behavior
 - Patch settings are grouped in the GUI as Main Patches (green), Optional
   Patches (black), and Experimental/Not Working Patches (red).
 - patcher_icon.png is shown beside the bold GUI title, and patcher_icon.ico is
-  used by the generated launcher/window icon when available.
-- The GUI completion popup lists enabled patches, altered files, the modded game
-  folder, and the modded save folder.
-- When launched through the generated patcher EXE, the GUI auto-loads the
-  adjacent manifest.json but does not open the vanilla-folder picker
-  automatically. The user selects their own vanilla Virtual Families 2
-  installation folder manually. It does not look for or assume a hardcoded
-  install path.
+  used by the GUI window/shortcut icon when available.
+- The GUI completion popup lists enabled patches, disabled/restored patches,
+  altered files, the modded game folder, and the modded save folder.
+- Launch_GUI.bat passes adjacent manifest.json to the GUI, but the GUI does not
+  open the vanilla-folder picker automatically. The user selects their own
+  vanilla Virtual Families 2 installation folder manually. It does not look for
+  or assume a hardcoded install path.
 - Modded saves are expected under Documents/LDW/(name of modded Virtual
   Families 2 exe).
 - Existing vanilla saves can be copied manually into the modded save folder.
@@ -157,18 +177,18 @@ Current B103 behavior
 
 Unchecking patches
 ------------------
-Unchecked asset and file settings are reverted by omission when the patcher is
-run into a fresh modded output folder. Their records are not copied, replaced,
-or created. This applies to optional visual source folders, active transparent
-UI swaps, custom map images, Invisible Furniture visible graphics, and
-transparent Invisible Furniture swaps.
+Unchecked asset and file settings are reverted by omission when the patcher
+refreshes a recognized VF2-*-Modded output folder from vanilla. Their records
+are not copied, replaced, or created on the next Enable/Disable Patches run.
+This applies to OptionalSongMods, optional visual source folders, active
+transparent UI swaps, custom map images, Invisible Furniture visible graphics,
+and transparent Invisible Furniture swaps.
 
 Known limitation
 ----------------
-The current full beta-folder bundle still uses a verified full modded EXE
-payload for native/game-code changes. Those native changes cannot be completely
-split by checkbox until they are converted into separate byte/table patch
-records with their own setting requirements. This is the next transparency and
+The B104 trust-friendly patcher bundle omits a modded EXE payload. Native and
+game-code changes require future byte/table patch records before they can be
+applied by the no-EXE patcher shape. This is the next transparency and
 antivirus-trust milestone.
 
 Changelog
@@ -195,5 +215,16 @@ Changelog
   description rendering, and the family icon beside the GUI title/launcher icon.
 - B103 patcher refresh: Added buttons to enable all Main, Optional, or
   Experimental settings and removed startup prompting for the vanilla folder.
+- B104 patcher refresh: Removed the compiled patcher launcher EXE and ships
+  readable BAT launchers plus optional Launch GUI.lnk shortcut.
+- B104 patcher refresh: Renamed the green action button to Enable/Disable
+  Patches and made recognized VF2-*-Modded folders refresh from vanilla before
+  applying enabled records.
+- B104 patcher refresh: Added default-on Add unused pets metadata for Turtle and
+  Hamster.
+- B104 patcher refresh: Added default-off OptionalSongMods support that writes
+  .ogg files to Sounds only when enabled.
+- B104 patcher refresh: Keeps OptionalVisualMods, Original Virtual Families 2
+  Assets, and OptionalSongMods as read-only/copy-only payload source folders.
 
 Have fun! -Lorsieab2 :)
