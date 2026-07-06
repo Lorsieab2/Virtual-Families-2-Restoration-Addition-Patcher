@@ -1,0 +1,187 @@
+Virtual Families 2 Restoration/Addition Patcher Transparency Log
+================================================================
+
+Purpose
+-------
+This document describes the offline VF2 patcher design used by the B103 patcher
+refresh. Each exported patcher bundle also generates its own Transparency
+Log.txt with exact manifest counts, launcher metadata, paths, and changelog
+details for that bundle.
+
+Creation disclosure
+-------------------
+This offline patcher was created with Codex AI in collaboration with Lorsieab2.
+The display name is Virtual Families 2 Restoration/Addition Patcher. The
+Windows-safe launcher filename is Virtual Families 2 Restoration-Addition
+Patcher.exe.
+
+What the patcher does
+---------------------
+- Verifies the user-selected vanilla Virtual Families 2 executable before
+  applying patches.
+- Verifies the selected folder has the official LDW website install shape
+  before creating a modded output folder, backup, or changed file.
+- Reads patch records and asset records from manifest.json.
+- Applies only records whose required settings are enabled.
+- Creates backups before writing changed files.
+- Writes machine-readable success/failure logs.
+- Streams per-record validation/apply progress to the CLI and GUI.
+- Creates a separate, clearly labeled modded output folder by default.
+- Names the modded executable clearly so it is not confused with vanilla.
+- Supports Dry Run / Validate Only, which is a pretend patch run that checks
+  everything first and changes nothing.
+- Provides restore support for backups created by the patcher.
+
+What the patcher does not do
+----------------------------
+- Does not inject code into a running game.
+- Does not edit process memory.
+- Does not use obfuscation or packers.
+- Does not require admin-only install locations.
+- Does not alter original saves unless the user manually copies saves.
+
+Official install validation
+---------------------------
+The patcher refuses to apply patches unless the selected vanilla folder has
+these exact top-level entries:
+- Assets
+- fmod.dll
+- icon.bmp
+- Images
+- ldw.ini
+- libjpeg-9.dll
+- libpng16-16.dll
+- Readme.txt
+- SDL2.dll
+- SDL2_image.dll
+- Sounds
+- uninst.exe
+- Virtual Families 2.exe
+- Virtual Families 2.url
+- zlib1.dll
+
+If validation fails, the user-facing popup says:
+
+No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?
+
+Links:
+LDW.Com
+VirtualFamilies.com
+
+Dry Run / Validate Only
+-----------------------
+ELI5: Dry Run is a pretend patch. It checks that the selected Virtual Families
+2 folder looks official, checks that the EXE is the expected one, checks that
+the patch instructions and payload files match their hashes, then stops. It
+does not make a modded game folder, does not make backups, and does not change
+any game files. Use it when you want to ask, "Would this patch work?" before
+actually applying it. If no custom log path is selected, dry-run and pre-write
+failure logs are written beside manifest.json so the vanilla game folder stays
+untouched.
+
+Payload folder
+--------------
+The payload/ folder is the patch bundle's local stash of files that may be
+copied into the separate modded output folder. It is not applied blindly. Each
+file must be referenced by an asset_patches record in manifest.json, and the
+patcher verifies the payload file's source_sha256 before copying it.
+
+Payload contents usually mirror game-folder paths:
+- payload/Virtual Families 2 - Modded B###.exe: the current full modded EXE
+  payload while native byte/table records are still being extracted.
+- payload/Assets/: furniture fmap files and other runtime asset metadata.
+- payload/Images/: generated sprites, copied runtime images, Outfit icons,
+  villager sheets, TV animation strips, furniture art, and UI art.
+- payload/Sounds/: runtime sound files when exporting a full beta-folder
+  patcher.
+- payload/OptionalVisualMods/: optional visual-mod source files such as custom
+  map images, transparent UI bars/tabs, and Invisible Furniture visible or
+  transparent graphics.
+- payload/Original Virtual Families 2 Assets/: preserved reference/source
+  assets needed to reproduce the cleaned beta-folder structure.
+- payload/*.dll, ldw.ini, wc.dat, icon.bmp, and similar root files: runtime
+  support files included by full-folder smoke-test bundles.
+
+Unchecked patch settings should leave their payload files unused and, for
+feature-specific payloads, absent from a fresh modded output folder. Optional
+visual source folders and Invisible Furniture visible/transparent graphics are
+assigned to their own default-off settings so unchecking those settings omits
+their records.
+
+Custom Couches and LDW Posters/Paintings now have a separate default-off
+setting. Asset payload routing covers the Colorful Couches, LDW Modern
+Paintings, and LDW Poster/Painting files. Current native store-row support for
+those items still comes from the full modded EXE payload until those native
+table edits are split into individual setting-gated patch records.
+
+Important files
+---------------
+- work/offline_vf2_patcher.py: CLI patcher, manifest validation, backups,
+  restore, per-record progress, and JSON patch logs.
+- work/offline_vf2_patcher_gui.py: Tkinter GUI for choosing the vanilla game,
+  toggling settings, applying patches, restoring backups, and showing the
+  completion summary.
+- work/export_offline_patch_bundle.py: source-side exporter that creates
+  manifest.json, payload files, runner scripts, launcher metadata, and generated
+  Transparency Log.txt.
+- How to Use.txt: player-facing instructions bundled with exported patcher ZIPs.
+- work/patch_mobile_furniture_pack.py: current build generator that produces
+  the modded beta folder used as patcher payload input while native byte/table
+  records are still being extracted.
+
+Current B103 behavior
+---------------------
+- The manifest declares a separate output folder named VF2-B103-Modded.
+- The core executable record validates Virtual Families 2.exe but writes the
+  patched file as Virtual Families 2 - Modded B103.exe.
+- Optional visual settings default off.
+- Invisible Furniture visible graphics and transparent graphics are separate
+  default-off settings.
+- Add Custom Couches and LDW Posters is a separate default-off setting.
+- Settings Evict, mobile furniture behaviors, Holiday Ornaments, and Island
+  Events remain default off experimental settings.
+- The GUI completion popup lists enabled patches, altered files, the modded game
+  folder, and the modded save folder.
+- Modded saves are expected under Documents/LDW/(name of modded Virtual
+  Families 2 exe).
+- Existing vanilla saves can be copied manually into the modded save folder.
+  Original saves remain untouched.
+
+Unchecking patches
+------------------
+Unchecked asset and file settings are reverted by omission when the patcher is
+run into a fresh modded output folder. Their records are not copied, replaced,
+or created. This applies to optional visual source folders, active transparent
+UI swaps, custom map images, Invisible Furniture visible graphics, and
+transparent Invisible Furniture swaps.
+
+Known limitation
+----------------
+The current full beta-folder bundle still uses a verified full modded EXE
+payload for native/game-code changes. Those native changes cannot be completely
+split by checkbox until they are converted into separate byte/table patch
+records with their own setting requirements. This is the next transparency and
+antivirus-trust milestone.
+
+Changelog
+---------
+- B103: Added a separate Invisible Heart-Shaped Bed item cloned from the base
+  Heart-Shaped Bed donor.
+- B103 patcher refresh: Added separate modded output folder support.
+- B103 patcher refresh: Added output_file_path support for records that validate
+  one vanilla path but write a different modded output path.
+- B103 patcher refresh: Added per-record progress and process_log entries.
+- B103 patcher refresh: Added optional visual settings for custom map images,
+  transparent menu bar, transparent store bar, and transparent Decor tab.
+- B103 patcher refresh: Split Invisible Furniture visible and transparent
+  graphics into default-off settings.
+- B103 patcher refresh: Added generated bundle Transparency Log.txt.
+- B103 patcher refresh: Added generated Windows launcher metadata and optional
+  Virtual Families 2 Restoration-Addition Patcher.exe launcher.
+- B103 patcher refresh: Added Codex AI creation disclosure, official-install
+  folder validation, GUI markdown-style bold descriptions, green Apply Patches
+  button, clickable blue path links, and a scrollable modified-file log.
+- B103 patcher refresh: Added bundled How to Use.txt with player-facing setup,
+  Dry Run, and save-copy instructions.
+
+Have fun! -Lorsieab2 :)

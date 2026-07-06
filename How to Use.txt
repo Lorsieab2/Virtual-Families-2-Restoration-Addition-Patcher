@@ -1,0 +1,48 @@
+Virtual Families 2 Restoration/Addition Patcher - How to Use
+============================================================
+
+ELI5 version:
+This patcher makes a separate modded copy of your official Virtual Families 2
+folder. It checks that your original game folder looks correct before it
+changes anything.
+
+1. Download and install the official Virtual Families 2 PC version.
+
+2. Unzip this patcher package anywhere you like.
+
+3. Run:
+   Virtual Families 2 Restoration-Addition Patcher.exe
+
+   If that does not open, run:
+   Launch_GUI.bat
+
+4. The patcher should auto-load manifest.json.
+
+5. Select your vanilla Virtual Families 2 install folder. It should be the
+   folder that contains Virtual Families 2.exe, Images, Sounds, Assets, and the
+   required DLL files.
+
+6. Review the optional patch checkboxes.
+
+7. Optional but recommended: click Dry Run (Validate Only).
+   Dry Run is a pretend patch. It checks whether the patch will work and
+   changes nothing.
+
+8. Click Apply Patches.
+
+9. The patcher creates a separate modded folder next to your vanilla game
+   folder. Your original game folder and original saves are left alone.
+
+10. Run the clearly named modded EXE inside the new modded folder.
+
+Existing saves:
+The modded game uses its own save folder under Documents/LDW using the modded
+EXE name. To play existing saves in the modded game, copy the contents of your
+original Documents/LDW/Virtual Families 2 save folder into the modded save
+folder shown after patching.
+
+If no valid install is detected:
+Make sure you selected the official Virtual Families 2 install folder, not a
+partial folder or the patcher folder itself.
+
+Have fun! -Lorsieab2 :)
