@@ -1001,10 +1001,11 @@
   bundle folder or source `work/assets`, displays it beside the bold title, and
   uses the ICO/PNG for the window icon; the generated C# launcher embeds the
   ICO when `csc.exe` is available.
-- `offline_vf2_patcher_gui.main()` now uses the generated launcher's adjacent
-  `manifest.json` argument only to preload settings; after that it calls
-  `prompt_for_game_dir_on_startup()` so the user chooses their own vanilla VF2
-  installation folder. No hardcoded install folder lookup is used.
+- `offline_vf2_patcher_gui.main()` uses the generated launcher's adjacent
+  `manifest.json` argument only to preload settings. It does not open the
+  vanilla-folder picker automatically, and no hardcoded install folder lookup is
+  used; the user chooses the vanilla VF2 installation manually in the Patch
+  Input section.
 - `Add Custom Couches and LDW Posters` is a separate default-off setting for
   the Colorful Couches and LDW Poster/Painting image/fmap payloads. Remaining
   native store-row gating still depends on future per-feature byte/table

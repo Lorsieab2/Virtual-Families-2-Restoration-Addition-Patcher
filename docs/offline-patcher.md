@@ -96,8 +96,10 @@ not an injector and does not touch the game directly; it only starts the Python
 GUI.
 
 When the generated patcher EXE starts the GUI with adjacent `manifest.json`, the
-GUI prompts the user to select their own vanilla Virtual Families 2 installation
-folder. The patcher does not look for or assume a hardcoded local install path.
+GUI auto-loads the manifest settings but does not open the vanilla-folder picker
+automatically. The user selects their own vanilla Virtual Families 2
+installation folder manually, and the patcher does not look for or assume a
+hardcoded local install path.
 
 The GUI auto-populates the modded output folder from the selected vanilla game
 folder and manifest `output.default_folder_name`. The Apply Patches button uses
@@ -107,7 +109,9 @@ keeps path/save guidance fixed while the modified-file log is the only
 scrollable area. The Vanilla Game Folder Path, Modified Game Folder Path, and
 Modified Game Saves Folder Path are shown as bold blue clickable paths.
 
-The GUI groups manifest settings by `category`:
+The GUI groups manifest settings by `category` and provides buttons to enable
+all Main, Optional, or Experimental settings without changing unrelated
+checkboxes:
 
 | Category | GUI color | Intended settings |
 | --- | --- | --- |

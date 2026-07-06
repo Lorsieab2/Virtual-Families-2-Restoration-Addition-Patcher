@@ -1076,11 +1076,11 @@ vanilla folder, writes a backup under the modded folder in .vf2_patch_backups,
 recreates the {build_label} beta support folder structure, and writes a clearly
 named modded EXE.
 
-You can run {PATCHER_LAUNCHER_NAME} to auto-load manifest.json in the GUI. The
-GUI then prompts you to choose your own vanilla Virtual Families 2 installation
-folder. The patcher does not look for or assume a hardcoded install path. You
-can also run Launch_GUI.bat, select the game folder, load manifest.json, and
-apply the default settings.
+You can run {PATCHER_LAUNCHER_NAME} to auto-load manifest.json in the GUI, then
+choose your vanilla Virtual Families 2 installation folder manually. The patcher
+does not look for or assume a hardcoded install path. You can also run
+Launch_GUI.bat, select the game folder, load manifest.json, and apply the
+default settings.
 
 Dry Run / Validate Only validates that the patcher's working. It checks whether
 the selected VF2 folder looks right, whether the EXE is the expected official
@@ -1111,8 +1111,7 @@ changes anything.
    If that does not open, run:
    Launch_GUI.bat
 
-4. The patcher should auto-load manifest.json and then ask you to select your
-   own vanilla Virtual Families 2 installation folder.
+4. The patcher should auto-load manifest.json.
 
 5. Select your vanilla Virtual Families 2 install folder. It should be the
    folder that contains Virtual Families 2.exe, Images, Sounds, Assets, and the
@@ -1220,7 +1219,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Creates backups before writing changed files in the modded output folder.",
         "- Writes machine-readable success/failure logs.",
         "- Dry Run / Validate Only validates that the patcher's working: it checks the install, EXE, patch records, and payload hashes, then stops before creating backups, creating the modded output folder, or changing/writing files. Default dry-run and pre-write failure logs are written next to manifest.json, not into the vanilla game folder.",
-        "- When the generated patcher EXE starts the GUI, it auto-loads adjacent manifest.json and prompts the user to choose their own vanilla Virtual Families 2 installation folder.",
+        "- When the generated patcher EXE starts the GUI, it auto-loads adjacent manifest.json. The user then selects their own vanilla Virtual Families 2 installation folder manually.",
         "- Provides a restore command for backups created by this patcher.",
         "",
         "What this patcher does not do",

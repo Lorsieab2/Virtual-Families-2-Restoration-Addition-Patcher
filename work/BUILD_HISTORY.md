@@ -748,9 +748,11 @@
 - Adds `patcher_icon.png` and `patcher_icon.ico` to the bundle. The GUI shows
   the literal family picture beside the bold title, and the generated Windows
   launcher embeds the ICO when a local C# compiler is available.
-- The generated launcher still auto-loads adjacent `manifest.json`, then the
-  GUI prompts the user to select their own vanilla VF2 installation folder
-  instead of looking for a hardcoded install path.
+- The generated launcher still auto-loads adjacent `manifest.json`, but the GUI
+  no longer opens the vanilla-folder picker automatically. The user selects the
+  vanilla VF2 installation manually, and no hardcoded install path is used.
+- Adds buttons to enable all Main Patches, all Optional Content, or all
+  Experimental Patches without changing unrelated categories.
 - Adds the default-off `Add Custom Couches and LDW Posters` setting for
   Colorful Couches and LDW Poster/Painting image/fmap payloads. Native
   store-row gating for that feature still needs future per-feature byte/table

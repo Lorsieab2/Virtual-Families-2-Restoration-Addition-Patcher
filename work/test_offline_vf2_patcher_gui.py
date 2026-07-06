@@ -51,6 +51,36 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
         self.assertEqual([setting.id for setting in rows[1][3]], ["custom_map"])
         self.assertEqual([setting.id for setting in rows[2][3]], ["settings_evict_button"])
 
+    def test_setting_ids_for_category_handles_defaults(self):
+        settings = {
+            "core_executable": patcher.PatchSetting(
+                id="core_executable",
+                label="Patch game executable",
+                description="",
+                default=True,
+            ),
+            "custom_map": patcher.PatchSetting(
+                id="custom_map",
+                label="Custom map",
+                description="",
+                default=False,
+                category="optional",
+            ),
+        }
+
+        self.assertEqual(gui.setting_ids_for_category(settings, "main"), ["core_executable"])
+        self.assertEqual(gui.setting_ids_for_category(settings, "optional"), ["custom_map"])
+        self.assertEqual(gui.setting_ids_for_category(settings, "experimental"), [])
+
+    def test_estimate_wrapped_lines_expands_long_descriptions(self):
+        measure = len
+
+        self.assertEqual(gui.estimate_wrapped_lines("short text", 20, measure), 1)
+        self.assertGreaterEqual(
+            gui.estimate_wrapped_lines("this description should wrap onto another visible line", 18, measure),
+            3,
+        )
+
     def test_build_apply_namespace_uses_exact_checkbox_selection(self):
         settings = {
             "holiday_furniture": patcher.PatchSetting(
