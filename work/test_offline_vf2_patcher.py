@@ -397,8 +397,47 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 str(manifest),
                 expect=2,
             )
-            self.assertIn("Required runtime file is missing: Images", result.stderr)
+            self.assertIn("No valid Virtual Families 2 Installation detected!", result.stderr)
+            self.assertIn("required runtime file is missing: Images", result.stderr)
+            self.assertIn("loading.jpg", result.stderr)
             self.assertEqual(game_file.read_bytes(), original)
+
+    def test_exact_install_validation_refuses_unexpected_top_level_entries_before_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            (game_dir / "Images").mkdir()
+            (game_dir / "unexpected.tmp").write_text("not official", encoding="ascii")
+            manifest = tmp_path / "runtime_patch.json"
+            output_dir = tmp_path / "modded"
+            self.write_manifest(manifest, game_file, original)
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+            data["runtime_requirements"] = {
+                "exact_top_level_entries": ["Images", "Virtual Families 2.exe"],
+                "invalid_install_message": "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\nLinks:\nLDW.Com\nVirtualFamilies.com",
+            }
+            manifest.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                "--output-dir",
+                str(output_dir),
+                expect=2,
+            )
+
+            self.assertIn("No valid Virtual Families 2 Installation detected!", result.stderr)
+            self.assertIn("unexpected top-level entries: unexpected.tmp", result.stderr)
+            self.assertFalse(output_dir.exists())
+            self.assertFalse((game_dir / "patch_error_log.json").exists())
+            self.assertTrue((manifest.parent / "patch_error_log.json").is_file())
 
     def test_asset_patch_creates_private_tv_strip_and_restore_removes_it(self):
         with tempfile.TemporaryDirectory() as tmp:

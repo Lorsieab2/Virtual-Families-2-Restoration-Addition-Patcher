@@ -65,6 +65,12 @@ SETTINGS = [
         "default": True,
     },
     {
+        "id": "custom_couches_ldw_posters",
+        "label": "Add Custom Couches and LDW Posters",
+        "description": "Adds Colorful Couches and LDW Posters/Paintings mods to the game. Credit to Lorsieab2 on LDWForums.",
+        "default": False,
+    },
+    {
         "id": "invisible_furniture_visible_graphics",
         "label": "Add Invisible Furniture - Visible Graphics",
         "description": "Adds invisible furniture for decoration and gameplay purposes. Graphics use the visible base-game furniture versions. **Enable this first so you can place them in-game!**",
@@ -72,7 +78,7 @@ SETTINGS = [
     },
     {
         "id": "invisible_furniture_transparent_graphics",
-        "label": "Swap Invisible Furniture with Transparent Graphics",
+        "label": "Swap Invisible Furniture Graphics with Transparent Graphics",
         "description": "Once you have placed the invisible furniture how you like, enable this to make the invisible furniture fully invisible.",
         "default": False,
     },
@@ -166,10 +172,18 @@ OPTIONAL_VISUAL_SWAP_SPECS = [
 OPTIONAL_MAP_SOURCE_DIR = Path("OptionalVisualMods") / "Custom Lorsieab2 Map Images"
 INVISIBLE_BASE_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Furniture - Base Graphics"
 INVISIBLE_TRANSPARENT_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Furniture - Transparent"
+PATCHER_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
 MODDED_EXE_OUTPUT_TEMPLATE = "Virtual Families 2 - Modded {build_label}.exe"
 MODDED_OUTPUT_FOLDER_TEMPLATE = "VF2-{build_label}-Modded"
-PATCHER_LAUNCHER_NAME = "VF2 Offline Patcher.exe"
+PATCHER_LAUNCHER_NAME = "Virtual Families 2 Restoration-Addition Patcher.exe"
 TRANSPARENCY_LOG_NAME = "Transparency Log.txt"
+CREATOR_DISCLOSURE = "This offline patcher was created with Codex AI in collaboration with Lorsieab2."
+INVALID_INSTALL_MESSAGE = (
+    "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\n"
+    "Links:\n"
+    "LDW.Com\n"
+    "VirtualFamilies.com"
+)
 
 HOLIDAY_FURNITURE_FILES = {
     "CandleOnHolder",
@@ -218,6 +232,22 @@ HOLIDAY_FURNITURE_FILES = {
     "Wreath2",
 }
 
+CUSTOM_COUCH_LDW_POSTER_FILES = {
+    "LDWModernPainting4",
+    "LDWModernPainting5",
+    "LDWPoster1Std",
+    "LDWPoster2Std",
+    "LDWPoster3Std",
+    "LDWPoster4Std",
+    "CouchNeonPurpleStd",
+    "CouchBrownColorfulStd",
+    "CouchGoldColorfulStd",
+    "CouchAquaStd",
+    "CouchPinkColorfulStd",
+    "CouchVioletStd",
+    "CouchLimeGreenStd",
+}
+
 VF3_TV_FILES = {
     "VF3LargeFlatScreenTV",
     "VF3SmallFlatScreenTV",
@@ -237,23 +267,42 @@ MOBILE_PURCHASE_ICON_FILES = {
     "LuckyRock_icon",
 }
 
-RUNTIME_REQUIRED_FILES = [
+OFFICIAL_INSTALL_TOP_LEVEL_ENTRIES = [
+    "Assets",
+    "fmod.dll",
+    "icon.bmp",
+    "Images",
     "ldw.ini",
-    "wc.dat",
-    "Images/loading.jpg",
-    "Images/MapX0Y0.jpg",
-    "Images/MenuStoreClothing1.png",
-    "Images/female_heads00.png",
-    "Images/male_heads00.png",
-    "Images/TVAnimBig.png",
-    "Images/TVAnimBigE.png",
-    "Images/TVAnimSmall.png",
-    "Images/TVAnimSmallE.png",
+    "libjpeg-9.dll",
+    "libpng16-16.dll",
+    "Readme.txt",
+    "SDL2.dll",
+    "SDL2_image.dll",
+    "Sounds",
+    "uninst.exe",
+    "Virtual Families 2.exe",
+    "Virtual Families 2.url",
+    "zlib1.dll",
+]
+
+RUNTIME_REQUIRED_FILES = [
+    "fmod.dll",
+    "icon.bmp",
+    "ldw.ini",
+    "libjpeg-9.dll",
+    "libpng16-16.dll",
+    "Readme.txt",
+    "SDL2.dll",
+    "SDL2_image.dll",
+    "uninst.exe",
+    "Virtual Families 2.url",
+    "zlib1.dll",
 ]
 
 RUNTIME_REQUIRED_DIRS = [
-    {"path": "Images", "min_files": 1000},
+    {"path": "Images", "min_files": 600},
     {"path": "Sounds", "min_files": 300},
+    {"path": "Assets", "min_files": 200},
 ]
 
 
@@ -558,6 +607,10 @@ def setting_for_asset(rel_path: Path) -> str:
         return "holiday_furniture"
     if len(parts) >= 2 and parts[0] == "Assets" and stem in HOLIDAY_FURNITURE_FILES:
         return "holiday_furniture"
+    if len(parts) >= 3 and parts[0] == "Images" and parts[1] == "Furniture" and stem in CUSTOM_COUCH_LDW_POSTER_FILES:
+        return "custom_couches_ldw_posters"
+    if len(parts) >= 2 and parts[0] == "Assets" and stem in CUSTOM_COUCH_LDW_POSTER_FILES:
+        return "custom_couches_ldw_posters"
     if is_invisible_runtime_asset(rel_path):
         return "invisible_furniture_visible_graphics"
     if stem in MOBILE_PURCHASE_ICON_FILES:
@@ -856,12 +909,12 @@ internal static class VF2PatcherLauncher
         string gui = Path.Combine(dir, "offline_vf2_patcher_gui.py");
         if (!File.Exists(manifest))
         {{
-            MessageBox.Show("manifest.json was not found next to the patcher EXE.", "VF2 {build_label} Offline Patcher");
+            MessageBox.Show("manifest.json was not found next to the patcher EXE.", "{PATCHER_DISPLAY_NAME}");
             return 2;
         }}
         if (!File.Exists(gui))
         {{
-            MessageBox.Show("offline_vf2_patcher_gui.py was not found next to the patcher EXE.", "VF2 {build_label} Offline Patcher");
+            MessageBox.Show("offline_vf2_patcher_gui.py was not found next to the patcher EXE.", "{PATCHER_DISPLAY_NAME}");
             return 2;
         }}
         string args = "-3 " + Quote(gui) + " " + Quote(manifest);
@@ -872,7 +925,7 @@ internal static class VF2PatcherLauncher
             return 0;
         MessageBox.Show(
             "Python 3 was not found. Install Python 3 or run Launch_GUI.bat from this folder.",
-            "VF2 {build_label} Offline Patcher");
+            "{PATCHER_DISPLAY_NAME}");
         return 1;
     }}
 }}
@@ -937,7 +990,7 @@ def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
 setlocal
 set "SCRIPT_DIR=%~dp0"
 echo.
-echo VF2 {build_label} Offline Patcher
+echo {PATCHER_DISPLAY_NAME} - {build_label}
 echo This creates a separate modded game folder next to the vanilla folder.
 echo Enter or drag the original "Virtual Families 2.exe" here.
 set /p VF2_EXE=EXE path: 
@@ -974,17 +1027,82 @@ if %ERRORLEVEL%==0 (
         newline="\r\n",
     )
     (bundle_dir / readme_name).write_text(
-        f"""VF2 {build_label} Offline Patcher
+        f"""{PATCHER_DISPLAY_NAME} - {build_label}
 
-Use {apply_name} and enter or drag the original Virtual Families 2.exe.
-The patcher validates the original EXE hash, creates a clearly labeled modded
-game folder next to the vanilla folder, writes a backup under the modded folder
-in .vf2_patch_backups, recreates the {build_label} beta support folder
-structure, and writes a clearly named modded EXE.
+{CREATOR_DISCLOSURE}
+
+Use {apply_name} and enter or drag the original Virtual Families 2.exe, or use
+the GUI launcher below. The patcher validates that the selected folder is an
+official Virtual Families 2 install before it creates backups or writes any
+modded output. It then creates a clearly labeled modded game folder next to the
+vanilla folder, writes a backup under the modded folder in .vf2_patch_backups,
+recreates the {build_label} beta support folder structure, and writes a clearly
+named modded EXE.
 
 You can run {PATCHER_LAUNCHER_NAME} to auto-load manifest.json in the GUI, or
 run Launch_GUI.bat, select the game folder, load manifest.json, and apply the
 default settings.
+
+Dry Run / Validate Only is a pretend patch run. It checks whether the selected
+VF2 folder looks right, whether the EXE is the expected official one, whether
+all patch data matches, and whether the needed payload files are intact. It
+does not create the modded output folder, make backups, or change any game
+files. If you do not choose a custom log path, dry-run and pre-write failure
+logs are written next to manifest.json so the vanilla game folder stays
+untouched.
+""",
+        encoding="ascii",
+        newline="\r\n",
+    )
+    (bundle_dir / "How to Use.txt").write_text(
+        f"""{PATCHER_DISPLAY_NAME} - How to Use
+{'=' * (len(PATCHER_DISPLAY_NAME) + len(' - How to Use'))}
+
+ELI5 version:
+This patcher makes a separate modded copy of your official Virtual Families 2
+folder. It checks that your original game folder looks correct before it
+changes anything.
+
+1. Download and install the official Virtual Families 2 PC version.
+
+2. Unzip this patcher package anywhere you like.
+
+3. Run:
+   {PATCHER_LAUNCHER_NAME}
+
+   If that does not open, run:
+   Launch_GUI.bat
+
+4. The patcher should auto-load manifest.json.
+
+5. Select your vanilla Virtual Families 2 install folder. It should be the
+   folder that contains Virtual Families 2.exe, Images, Sounds, Assets, and the
+   required DLL files.
+
+6. Review the optional patch checkboxes.
+
+7. Optional but recommended: click Dry Run (Validate Only).
+   Dry Run is a pretend patch. It checks whether the patch will work and
+   changes nothing.
+
+8. Click Apply Patches.
+
+9. The patcher creates a separate modded folder next to your vanilla game
+   folder. Your original game folder and original saves are left alone.
+
+10. Run the clearly named modded EXE inside the new modded folder.
+
+Existing saves:
+The modded game uses its own save folder under Documents/LDW using the modded
+EXE name. To play existing saves in the modded game, copy the contents of your
+original Documents/LDW/Virtual Families 2 save folder into the modded save
+folder shown after patching.
+
+If no valid install is detected:
+Make sure you selected the official Virtual Families 2 install folder, not a
+partial folder or the patcher folder itself.
+
+Have fun! -Lorsieab2 :)
 """,
         encoding="ascii",
         newline="\r\n",
@@ -995,6 +1113,7 @@ default settings.
         apply_name,
         "Launch_GUI.bat",
         readme_name,
+        "How to Use.txt",
     ]
     if (bundle_dir / "vf2_patcher_launcher.cs").is_file():
         files.append("vf2_patcher_launcher.cs")
@@ -1009,10 +1128,13 @@ def clear_generated_runner_files(bundle_dir: Path) -> None:
     for pattern in (
         "Apply_*_Patcher.bat",
         "README-*-PATCHER.txt",
+        "How to Use.txt",
         "Launch_GUI.bat",
         PATCHER_LAUNCHER_NAME,
         "vf2_patcher_launcher.cs",
         "patcher_launcher_build.json",
+        "patch_dry_run_log.json",
+        "patch_error_log.json",
         TRANSPARENCY_LOG_NAME,
         "offline_vf2_patcher.py",
         "offline_vf2_patcher_gui.py",
@@ -1034,14 +1156,18 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         key = rel.parts[0] if len(rel.parts) > 1 else "(root files)"
         payload_top_counts[key] = payload_top_counts.get(key, 0) + 1
     lines = [
-        "VF2 Offline Patcher Transparency Log",
-        "====================================",
+        f"{PATCHER_DISPLAY_NAME} Transparency Log",
+        "=" * (len(PATCHER_DISPLAY_NAME) + len(" Transparency Log")),
         "",
         f"Manifest name: {manifest.get('name')}",
         f"Generated bundle folder: {bundle_dir}",
         f"Source build folder: {source_build.get('build_dir')}",
         f"Source build manifest: {source_build.get('build_manifest')}",
         f"Patched EXE source: {source_build.get('patched_exe')}",
+        "",
+        "Creation disclosure",
+        "-------------------",
+        CREATOR_DISCLOSURE,
         "",
         "What this patcher does",
         "----------------------",
@@ -1051,6 +1177,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Creates a separate clearly labeled modded output folder by default.",
         "- Creates backups before writing changed files in the modded output folder.",
         "- Writes machine-readable success/failure logs.",
+        "- Dry Run / Validate Only is a pretend patch run: it checks the install, EXE, patch records, and payload hashes, then stops before creating backups, creating the modded output folder, or changing files. Default dry-run and pre-write failure logs are written next to manifest.json, not into the vanilla game folder.",
         "- Provides a restore command for backups created by this patcher.",
         "",
         "What this patcher does not do",
@@ -1068,7 +1195,14 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Payload paths usually mirror game-folder paths such as Assets/, Images/, Sounds/, OptionalVisualMods/, root DLLs, ldw.ini, wc.dat, and icon.bmp.",
         "- The current full bundle also stores the modded EXE payload here while native byte/table records are still being extracted.",
         "- Feature-specific payloads for optional visual mods and Invisible Furniture are tied to their default-off settings, so unchecked settings leave those files unused and omitted from fresh modded output folders.",
+        "- Custom Couches and LDW Posters/Paintings payload files are tied to their own default-off setting. Current native store-row support still comes from the full modded EXE payload until those native table edits are split into per-feature patch records.",
         f"- Payload file count in this bundle: {len(payload_files)}",
+        "",
+        "Official install validation",
+        "---------------------------",
+        "- Before patching, the patcher validates the selected vanilla folder has the official LDW website install shape.",
+        "- Required top-level entries: " + ", ".join(OFFICIAL_INSTALL_TOP_LEVEL_ENTRIES),
+        f"- Invalid-install popup text: {INVALID_INSTALL_MESSAGE.replace(chr(10), ' / ')}",
         "",
         "Payload files by top-level folder",
         "---------------------------------",
@@ -1261,6 +1395,8 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         "manifest_version": 1,
         "name": args.name or f"VF2 offline patch bundle from {build_dir.name}",
         "description": "Generated offline patch bundle for user-provided vanilla VF2 PC installs.",
+        "created_with": "Codex AI",
+        "creator_disclosure": CREATOR_DISCLOSURE,
         "output": {
             "default_folder_name": modded_output_folder_name(build_label),
             "description": "The patcher writes a separate clearly labeled modded game folder next to the user's vanilla folder by default.",
@@ -1274,9 +1410,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         "settings": default_settings(bool(byte_patches), bool(exe_replacement_record)),
         "target_files": target_files,
         "runtime_requirements": {
+            "invalid_install_message": INVALID_INSTALL_MESSAGE,
+            "exact_top_level_entries": OFFICIAL_INSTALL_TOP_LEVEL_ENTRIES,
             "required_files": RUNTIME_REQUIRED_FILES,
             "required_dirs": RUNTIME_REQUIRED_DIRS,
-        } if args.asset_mode != "full" else {"required_files": [], "required_dirs": []},
+        },
         "patches": byte_patches,
         "native_patch_sources": native_patch_sources,
         "asset_patches": asset_patches,

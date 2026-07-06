@@ -4,6 +4,11 @@ The offline patcher is the new release direction for VF2 mod builds. Instead of
 distributing modified executables, releases should distribute patch data and a
 simple patcher that edits a user-provided vanilla VF2 PC install on disk.
 
+The current display name is `Virtual Families 2 Restoration/Addition Patcher`.
+The filesystem-safe launcher name is
+`Virtual Families 2 Restoration-Addition Patcher.exe`. The patcher was created
+with Codex AI in collaboration with Lorsieab2.
+
 The first implementation is `work/offline_vf2_patcher.py`. It applies byte
 patches and file/asset patch records from JSON manifests, then can restore
 files from its own backups.
@@ -11,6 +16,8 @@ files from its own backups.
 ## Goals
 
 - Verify the original VF2 files before patching.
+- Verify the selected folder is an official LDW website-style Virtual Families
+  2 install before creating an output folder, backup, or changed file.
 - Refuse to patch if the target bytes do not match the manifest.
 - Create a backup before writing any patched file.
 - Write machine-readable patch and restore logs.
@@ -51,6 +58,15 @@ the backup and patch log are written. Use `--enable`, `--disable`,
 `--enable-all`, and `--disable-all` to choose manifest-declared feature
 settings before patching.
 
+ELI5: Dry Run is a pretend patch. It checks that the selected Virtual Families
+2 folder looks official, checks that the EXE is the expected one, checks that
+the patch instructions and payload files match their hashes, then stops. It
+does not make a modded game folder, does not make backups, and does not change
+any game files. Use it when you want to ask, "Would this patch work?" before
+actually applying it. If no custom `--log` path is selected, dry-run and
+pre-write failure logs are written beside `manifest.json` so the vanilla game
+folder stays untouched.
+
 List the settings exposed by a manifest:
 
 ```powershell
@@ -74,10 +90,19 @@ manifest, so new optional components such as Holiday furniture, Holiday outfits,
 mobile-exclusive furniture, or future feature groups do not require GUI code
 changes.
 
-Bundle exports can include `VF2 Offline Patcher.exe`, a tiny generated Windows
-launcher that looks for `manifest.json` next to itself and starts the GUI with
-that manifest preloaded. The launcher is not an injector and does not touch the
-game directly; it only starts the Python GUI.
+Bundle exports can include `Virtual Families 2 Restoration-Addition
+Patcher.exe`, a tiny generated Windows launcher. It looks for `manifest.json`
+next to itself and starts the GUI with that manifest preloaded. The launcher is
+not an injector and does not touch the game directly; it only starts the Python
+GUI.
+
+The GUI auto-populates the modded output folder from the selected vanilla game
+folder and manifest `output.default_folder_name`. The Apply Patches button uses
+green bold text, manifest descriptions support `**bold**` markup, and the
+completion popup keeps path/save guidance fixed while the modified-file log is
+the only scrollable area. The Vanilla Game Folder Path, Modified Game Folder
+Path, and Modified Game Saves Folder Path are shown as bold blue clickable
+paths.
 
 After a successful GUI apply, the patcher shows a completion popup listing the
 enabled patch settings, altered files, modded game folder, and expected modded
@@ -100,8 +125,38 @@ offline patcher bundle shape:
 The exporter writes `manifest.json` and a manifest-relative `payload/` folder.
 It compares build assets against `work/vanilla_runtime_payload`, skips
 vanilla-identical files, assigns each asset patch to a feature setting, records
-payload SHA-256/size, and includes runtime requirements for `Images`, `Sounds`,
-`ldw.ini`, `wc.dat`, and key base art.
+payload SHA-256/size, and includes official-install runtime requirements.
+
+Current generated manifests require the selected vanilla folder to have exactly
+these top-level entries before any output folder, backup, or patch write occurs:
+
+```text
+Assets
+fmod.dll
+icon.bmp
+Images
+ldw.ini
+libjpeg-9.dll
+libpng16-16.dll
+Readme.txt
+SDL2.dll
+SDL2_image.dll
+Sounds
+uninst.exe
+Virtual Families 2.exe
+Virtual Families 2.url
+zlib1.dll
+```
+
+If validation fails, the GUI/CLI reports:
+
+```text
+No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?
+
+Links:
+LDW.Com
+VirtualFamilies.com
+```
 
 By default the exporter uses `--asset-mode additive`, which exports only assets
 referenced by the generated build manifest. Use `--asset-mode all` only for
@@ -186,6 +241,18 @@ Full bundle exports also write `Transparency Log.txt`. That file documents how
 the bundle was built, what the patcher does and does not do, setting defaults,
 patch counts, implementation files, launcher build metadata, known limitations,
 and the save-folder guidance shown in the GUI completion popup.
+
+Full bundle exports also write `How to Use.txt`, a short player-facing setup
+guide with the ELI5 dry-run explanation, launcher instructions, vanilla-folder
+selection guidance, and save-copy guidance.
+
+The `Add Custom Couches and LDW Posters` setting is default off. Its asset
+routing covers `CouchNeonPurpleStd`, `CouchBrownColorfulStd`,
+`CouchGoldColorfulStd`, `CouchAquaStd`, `CouchPinkColorfulStd`,
+`CouchVioletStd`, `CouchLimeGreenStd`, `LDWModernPainting4`,
+`LDWModernPainting5`, and `LDWPoster1Std` through `LDWPoster4Std` image/fmap
+payloads. Current full-bundle native store rows still come from the full modded
+EXE payload until those edits are split into per-feature byte/table records.
 
 A second preview with `--vanilla-exe "Unneeded crap\Virtual Families 2.exe"
 --include-byte-patches` writes the target metadata above and keeps the same 713
@@ -342,7 +409,7 @@ complete vanilla runtime folder before any byte or asset patches are written:
       "Images/TVAnimSmallE.png"
     ],
     "required_dirs": [
-      { "path": "Images", "min_files": 1000 },
+      { "path": "Images", "min_files": 600 },
       { "path": "Sounds", "min_files": 300 }
     ]
   }

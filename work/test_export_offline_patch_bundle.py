@@ -97,17 +97,21 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             (build / "Images" / "Furniture").mkdir(parents=True)
             (build / "Images" / "Furniture" / "Unchanged.png").write_bytes(b"same")
             (build / "Images" / "Furniture" / "CandyCane.png").write_bytes(b"holiday")
+            (build / "Images" / "Furniture" / "CouchNeonPurpleStd.png").write_bytes(b"custom couch")
             (build / "Images" / "VF3LargeFlatScreenTVAnim.png").write_bytes(b"tv")
             (build / "Assets").mkdir()
             (build / "Assets" / "VF3LargeFlatScreenTV.png.fmap").write_bytes(b"fmap")
+            (build / "Assets" / "LDWPoster1Std.fmap").write_bytes(b"poster fmap")
             (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
             (build / "patch-manifest.json").write_text(
                 json.dumps(
                     {
                         "generated_assets": [
                             {"path": "Furniture/CandyCane.png"},
+                            {"path": "Furniture/CouchNeonPurpleStd.png"},
                             {"runtime_name": "VF3LargeFlatScreenTVAnim.png"},
                             {"fmap": "VF3LargeFlatScreenTV.png.fmap"},
+                            {"fmap": "LDWPoster1Std.fmap"},
                         ]
                     },
                     indent=2,
@@ -121,16 +125,21 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
             self.assertNotIn("Images/Furniture/Unchanged.png", asset_by_path)
             self.assertEqual(asset_by_path["Images/Furniture/CandyCane.png"]["requires"], ["holiday_furniture"])
+            self.assertEqual(asset_by_path["Images/Furniture/CouchNeonPurpleStd.png"]["requires"], ["custom_couches_ldw_posters"])
             self.assertEqual(asset_by_path["Images/VF3LargeFlatScreenTVAnim.png"]["requires"], ["vf3_tv_assets_recognition"])
             self.assertEqual(asset_by_path["Assets/VF3LargeFlatScreenTV.png.fmap"]["requires"], ["vf3_tv_assets_recognition"])
+            self.assertEqual(asset_by_path["Assets/LDWPoster1Std.fmap"]["requires"], ["custom_couches_ldw_posters"])
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_furniture"], 1)
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["custom_couches_ldw_posters"], 2)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["vf3_tv_assets_recognition"], 2)
             self.assertTrue((out / "payload" / "Images" / "Furniture" / "CandyCane.png").is_file())
-            self.assertIn({"path": "Images", "min_files": 1000}, manifest["runtime_requirements"]["required_dirs"])
+            self.assertIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
+            self.assertIn({"path": "Images", "min_files": 600}, manifest["runtime_requirements"]["required_dirs"])
 
             settings = self.run_patcher("settings", "--manifest", str(out / "manifest.json"))
             self.assertIn("holiday_furniture [default on]", settings.stdout)
             self.assertIn("vf3_tv_assets_recognition [default on]", settings.stdout)
+            self.assertIn("custom_couches_ldw_posters [default off]", settings.stdout)
             self.assertIn("holiday_ornaments_collection [default off]", settings.stdout)
             self.assertIn("settings_evict_button [default off]", settings.stdout)
             self.assertIn("transparent_store_bar [default off]", settings.stdout)
@@ -265,13 +274,19 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(asset_by_path["Sounds/sound00.wav"]["overwrite_existing"], True)
             self.assertEqual(asset_by_path["SDL2.dll"]["overwrite_existing"], True)
             self.assertNotIn("patch-manifest.json", asset_by_path)
-            self.assertEqual(manifest["runtime_requirements"], {"required_files": [], "required_dirs": []})
+            self.assertEqual(manifest["created_with"], "Codex AI")
+            self.assertIn("Codex AI", manifest["creator_disclosure"])
+            self.assertIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
+            self.assertIn({"path": "Assets", "min_files": 200}, manifest["runtime_requirements"]["required_dirs"])
             self.assertEqual(manifest["output"]["default_folder_name"], "VF2-B103-Modded")
             self.assertTrue((out / "payload" / "Virtual Families 2 - Modded B103.exe").is_file())
             self.assertTrue((out / "Apply_B103_Patcher.bat").is_file())
             self.assertTrue((out / "README-B103-PATCHER.txt").is_file())
             self.assertTrue((out / "Transparency Log.txt").is_file())
             self.assertTrue((out / "offline_vf2_patcher.py").is_file())
+            self.assertTrue((out / "Virtual Families 2 Restoration-Addition Patcher.exe").is_file() or (out / "vf2_patcher_launcher.cs").is_file())
+            self.assertIn("Codex AI", (out / "README-B103-PATCHER.txt").read_text(encoding="ascii"))
+            self.assertIn("Official install validation", (out / "Transparency Log.txt").read_text(encoding="utf-8"))
             self.assertNotIn("Apply_B99_Patcher.bat", manifest["export_summary"]["runner_files"])
             self.assertIn("transparency_log", manifest["export_summary"])
             self.assertIn("launcher", manifest["export_summary"])

@@ -963,7 +963,34 @@
   patch logs and streamed to the CLI/GUI progress view. The GUI completion
   popup summarizes enabled patches, altered files, the modded game folder, the
   modded save folder, and save-copy guidance.
-- Full bundle exports now include `Transparency Log.txt` and can compile
-  `VF2 Offline Patcher.exe`, a small launcher that auto-loads adjacent
-  `manifest.json` in the Tkinter GUI. It does not inject into or touch a
-  running game.
+- Full bundle exports now include `Transparency Log.txt` and can compile a
+  small launcher that auto-loads adjacent `manifest.json` in the Tkinter GUI.
+  It does not inject into or touch a running game.
+
+## 2026-07-06 - Restoration/Addition Patcher Install Validation
+
+- The offline patcher now treats the official LDW website installation shape as
+  a pre-write gate. `verify_runtime_requirements()` checks
+  `runtime_requirements.exact_top_level_entries` before `prepare_output_dir()`,
+  `create_backup()`, or any asset/byte writes.
+- The generated manifest requires these top-level entries: `Assets`,
+  `fmod.dll`, `icon.bmp`, `Images`, `ldw.ini`, `libjpeg-9.dll`,
+  `libpng16-16.dll`, `Readme.txt`, `SDL2.dll`, `SDL2_image.dll`, `Sounds`,
+  `uninst.exe`, `Virtual Families 2.exe`, `Virtual Families 2.url`, and
+  `zlib1.dll`.
+- `verify_target_files()` now wraps target EXE missing/hash/PE/size/version
+  failures with the same invalid-install message, so a wrong EXE or partial
+  folder reports the official-download guidance instead of only raw technical
+  hash text.
+- The GUI display name is `Virtual Families 2 Restoration/Addition Patcher`;
+  the Windows-safe launcher filename is
+  `Virtual Families 2 Restoration-Addition Patcher.exe`. The GUI now
+  auto-populates the modded output path, renders `**bold**` manifest
+  descriptions, shows a green bold Apply Patches button, labels Dry Run as
+  `Dry Run (Validate Only)`, and puts modified-file rows in the only scrollable
+  area of the completion popup.
+- `Add Custom Couches and LDW Posters` is a separate default-off setting for
+  the Colorful Couches and LDW Poster/Painting image/fmap payloads. Remaining
+  native store-row gating still depends on future per-feature byte/table
+  records because the current full bundle uses a verified full modded EXE
+  payload.

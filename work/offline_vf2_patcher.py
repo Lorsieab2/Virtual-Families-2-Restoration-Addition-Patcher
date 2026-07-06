@@ -26,6 +26,12 @@ from typing import Any, Callable
 BACKUP_MANIFEST = "vf2_patch_backup_manifest.json"
 DEFAULT_BACKUP_ROOT = ".vf2_patch_backups"
 DEFAULT_EXE_NAME = "Virtual Families 2.exe"
+INVALID_INSTALL_MESSAGE = (
+    "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\n"
+    "Links:\n"
+    "LDW.Com\n"
+    "VirtualFamilies.com"
+)
 
 
 class PatchError(RuntimeError):
@@ -80,6 +86,22 @@ def read_json(path: Path) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise PatchError("Manifest root must be a JSON object.")
     return data
+
+
+def invalid_install_message(manifest: dict[str, Any]) -> str:
+    raw = manifest.get("invalid_install_message")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    runtime = manifest.get("runtime_requirements")
+    if isinstance(runtime, dict):
+        raw = runtime.get("invalid_install_message")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return INVALID_INSTALL_MESSAGE
+
+
+def install_validation_error(manifest: dict[str, Any], detail: str) -> PatchError:
+    return PatchError(f"{invalid_install_message(manifest)}\n\nDetails: {detail}")
 
 
 def write_json(path: Path, data: dict[str, Any]) -> None:
@@ -634,21 +656,42 @@ def verify_runtime_requirements(
     enabled_settings: set[str],
 ) -> list[dict[str, Any]]:
     checks = []
+    raw_runtime = manifest.get("runtime_requirements", manifest.get("required_runtime"))
+    if isinstance(raw_runtime, dict):
+        exact_entries = raw_runtime.get("exact_top_level_entries", raw_runtime.get("top_level_entries"))
+        if exact_entries is not None:
+            if not isinstance(exact_entries, list) or not all(isinstance(row, str) and row.strip() for row in exact_entries):
+                raise PatchError("runtime_requirements.exact_top_level_entries must be an array of non-empty strings.")
+            expected = {row.strip() for row in exact_entries}
+            actual = {path.name for path in game_dir.iterdir()}
+            missing = sorted(expected - actual)
+            extra = sorted(actual - expected)
+            if missing or extra:
+                details = []
+                if missing:
+                    details.append("missing top-level entries: " + ", ".join(missing))
+                if extra:
+                    details.append("unexpected top-level entries: " + ", ".join(extra))
+                raise install_validation_error(manifest, "; ".join(details))
+            checks.append({"kind": "exact_top_level_entries", "count": len(expected)})
     for requirement in manifest_runtime_requirements(manifest, settings, enabled_settings):
         rel_path = str(requirement["path"])
         path = resolve_under_game_dir(game_dir, rel_path)
         if requirement["kind"] == "file":
             if not path.is_file():
-                raise PatchError(f"Required runtime file is missing: {rel_path}")
+                raise install_validation_error(manifest, f"required runtime file is missing: {rel_path}")
             checks.append({"kind": "file", "path": rel_path, "size": path.stat().st_size})
             continue
 
         if not path.is_dir():
-            raise PatchError(f"Required runtime directory is missing: {rel_path}")
+            raise install_validation_error(manifest, f"required runtime directory is missing: {rel_path}")
         file_count = count_files(path)
         min_files = requirement.get("min_files")
         if min_files is not None and file_count < min_files:
-            raise PatchError(f"Required runtime directory is incomplete: {rel_path} has {file_count} file(s), expected at least {min_files}.")
+            raise install_validation_error(
+                manifest,
+                f"required runtime directory is incomplete: {rel_path} has {file_count} file(s), expected at least {min_files}.",
+            )
         checks.append({"kind": "directory", "path": rel_path, "files": file_count, "min_files": min_files})
     return checks
 
@@ -801,7 +844,7 @@ def verify_target_files(
         rel_path = normalize_rel_path(raw.get("file_path", raw.get("file", raw.get("path"))), f"target file #{index}")
         path = resolve_under_game_dir(game_dir, rel_path)
         if not path.is_file():
-            raise PatchError(f"Target file does not exist: {rel_path}")
+            raise install_validation_error(manifest, f"target file does not exist: {rel_path}")
         actual_sha = sha256_file(path)
         actual_size = path.stat().st_size
         actual_timestamp = pe_timestamp(path)
@@ -818,13 +861,20 @@ def verify_target_files(
             matched_by = "pe_structure"
         elif expected_sha:
             if expected_pe_structure is not None:
-                raise PatchError(
+                raise install_validation_error(
+                    manifest,
                     f"Target identity mismatch for {rel_path}: SHA-256 expected {expected_sha}, got {actual_sha}; "
-                    "PE structure did not match the accepted binary structure."
+                    "PE structure did not match the accepted binary structure.",
                 )
-            raise PatchError(f"SHA-256 mismatch for {rel_path}: expected {expected_sha}, got {actual_sha}")
+            raise install_validation_error(
+                manifest,
+                f"SHA-256 mismatch for {rel_path}: expected {expected_sha}, got {actual_sha}",
+            )
         elif expected_pe_structure is not None:
-            raise PatchError(f"PE structure mismatch for {rel_path}; this is not a recognized VF2 executable build.")
+            raise install_validation_error(
+                manifest,
+                f"PE structure mismatch for {rel_path}; this is not a recognized VF2 executable build.",
+            )
 
         if path.suffix.lower() == ".exe" and (expected_sha or expected_pe_structure is not None):
             saw_exe_sha = True
@@ -835,15 +885,16 @@ def verify_target_files(
             and matched_by != "pe_structure"
             and actual_size != parse_int(expected_size, f"target file #{index} size")
         ):
-            raise PatchError(f"Size mismatch for {rel_path}: expected {expected_size}, got {actual_size}")
+            raise install_validation_error(manifest, f"Size mismatch for {rel_path}: expected {expected_size}, got {actual_size}")
 
         expected_timestamp = raw.get("pe_timestamp")
         if expected_timestamp is not None:
             parsed = parse_int(expected_timestamp, f"target file #{index} pe_timestamp")
             if actual_timestamp != parsed:
-                raise PatchError(
+                raise install_validation_error(
+                    manifest,
                     f"PE timestamp mismatch for {rel_path}: expected 0x{parsed:08x}, got "
-                    f"{'none' if actual_timestamp is None else hex(actual_timestamp)}"
+                    f"{'none' if actual_timestamp is None else hex(actual_timestamp)}",
                 )
 
         for key in ("file_version", "product_version", "version"):
@@ -852,9 +903,12 @@ def verify_target_files(
             compare_key = "file_version" if key == "version" else key
             actual_version = version_info.get(compare_key)
             if actual_version is None:
-                raise PatchError(f"Could not read {compare_key} for {rel_path}.")
+                raise install_validation_error(manifest, f"Could not read {compare_key} for {rel_path}.")
             if actual_version != str(raw[key]):
-                raise PatchError(f"{compare_key} mismatch for {rel_path}: expected {raw[key]}, got {actual_version}")
+                raise install_validation_error(
+                    manifest,
+                    f"{compare_key} mismatch for {rel_path}: expected {raw[key]}, got {actual_version}",
+                )
 
         checks.append(
             {
@@ -1380,8 +1434,8 @@ def apply_manifest(args: argparse.Namespace) -> int:
             raise PatchError("No active patches remain after applying setting selections.")
         grouped = group_patches(patches)
         emit_progress(args, "Verifying target files...")
-        target_checks = verify_target_files(game_dir, manifest, settings, enabled_settings)
         runtime_checks = verify_runtime_requirements(game_dir, manifest, settings, enabled_settings)
+        target_checks = verify_target_files(game_dir, manifest, settings, enabled_settings)
         file_data = verify_patch_bytes(game_dir, grouped, args, process_log)
         asset_checks = verify_asset_patches(game_dir, output_dir, manifest_path.parent, assets, args, process_log)
 
@@ -1498,9 +1552,12 @@ def apply_manifest(args: argparse.Namespace) -> int:
             "asset_files": asset_files,
             "process_log": process_log,
         }
-        log_path = Path(args.log).resolve() if args.log else (
-            backup_dir / "patch_log.json" if backup_dir else game_dir / "patch_dry_run_log.json"
-        )
+        if args.log:
+            log_path = Path(args.log).resolve()
+        elif backup_dir:
+            log_path = backup_dir / "patch_log.json"
+        else:
+            log_path = manifest_path.with_name("patch_dry_run_log.json")
         write_json(log_path, log)
         setattr(args, "last_apply_log_path", str(log_path))
         setattr(
@@ -1508,6 +1565,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
             "last_apply_summary",
             {
                 "log_path": str(log_path),
+                "game_dir": str(game_dir),
                 "output_dir": str(output_dir),
                 "modded_exe_name": modded_exe_name,
                 "modded_save_dir": str(save_dir),
@@ -1533,9 +1591,12 @@ def apply_manifest(args: argparse.Namespace) -> int:
             print(f"Patch log: {log_path}")
         return 0
     except PatchError as exc:
-        failure_log_path = Path(args.log).resolve() if args.log else (
-            backup_dir / "patch_error_log.json" if backup_dir else game_dir / "patch_error_log.json"
-        )
+        if args.log:
+            failure_log_path = Path(args.log).resolve()
+        elif backup_dir:
+            failure_log_path = backup_dir / "patch_error_log.json"
+        else:
+            failure_log_path = manifest_path.with_name("patch_error_log.json")
         failure_log = {
             "action": "apply",
             "dry_run": bool(args.dry_run),

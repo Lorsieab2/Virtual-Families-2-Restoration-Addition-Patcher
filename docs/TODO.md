@@ -222,6 +222,14 @@
   the fresh modded output folder does not contain those optional payloads or
   replacements. Then enable each option individually and confirm only the
   expected files appear/change.
+- Patcher follow-up: split remaining native store-table rows for Custom Couches
+  and LDW Posters/Paintings into setting-gated byte/table patch records. The
+  current `custom_couches_ldw_posters` setting gates image/fmap payload files,
+  but full-bundle native store support still comes from the verified modded EXE
+  payload.
+- Standalone patcher repo follow-up: publish the patcher-only source, manifest
+  schema docs, and release ZIP to a separate GitHub repository once GitHub
+  authentication permits repository creation from this machine.
 - Settings Evict research follow-up: fully resolve the mobile PLT/control-ID
   mapping for `theOptionsDialog::HandleMessage` so the first-generation mobile
   confirmation click can be documented down to the exact button ID as well as

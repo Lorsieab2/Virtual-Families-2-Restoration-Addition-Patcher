@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
 import unittest
+import sys
+from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "work"))
 import offline_vf2_patcher as patcher
 import offline_vf2_patcher_gui as gui
 
 
 class OfflineVF2PatcherGUITests(unittest.TestCase):
+    def test_markup_segments_supports_bold_spans(self):
+        self.assertEqual(
+            gui.markup_segments("Adds **visible graphics** first."),
+            [("Adds ", False), ("visible graphics", True), (" first.", False)],
+        )
+
     def test_build_apply_namespace_uses_exact_checkbox_selection(self):
         settings = {
             "holiday_furniture": patcher.PatchSetting(

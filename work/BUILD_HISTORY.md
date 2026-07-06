@@ -720,9 +720,30 @@
   `Virtual Families 2 - Modded B103.exe` instead of replacing the user-selected
   vanilla EXE in place.
 - Adds per-record patcher progress/process-log entries, a GUI completion popup,
-  `Transparency Log.txt`, and an optional generated `VF2 Offline Patcher.exe`
-  launcher that auto-loads the adjacent `manifest.json`.
+  `Transparency Log.txt`, and an optional generated patcher launcher that
+  auto-loads the adjacent `manifest.json`.
 - Splits optional visual and Invisible Furniture support files behind
   default-off settings so unchecked options are omitted from fresh modded output
   folders. Native/game-code toggles still need future per-feature byte/table
   records before they can revert independently of the full EXE payload.
+
+## B103 Restoration/Addition Patcher ZIP Refresh
+
+- Renames the patcher UI to `Virtual Families 2 Restoration/Addition Patcher`
+  and the generated Windows launcher to
+  `Virtual Families 2 Restoration-Addition Patcher.exe`.
+- Adds a Codex AI creation disclosure to generated README, manifest metadata,
+  and `Transparency Log.txt`.
+- Adds a pre-write official-install validation gate requiring the exact LDW
+  website top-level entries: `Assets`, `Images`, `Sounds`, `Virtual Families
+  2.exe`, root DLLs, `Readme.txt`, `ldw.ini`, `icon.bmp`, `uninst.exe`, and
+  `Virtual Families 2.url`.
+- Updates the GUI with auto-populated paths, green bold Apply Patches text,
+  `**bold**` description rendering, `Dry Run (Validate Only)` wording,
+  clickable blue path labels, and a completion popup where only the
+  modified-file log scrolls.
+- Adds the default-off `Add Custom Couches and LDW Posters` setting for
+  Colorful Couches and LDW Poster/Painting image/fmap payloads. Native
+  store-row gating for that feature still needs future per-feature byte/table
+  records because current full bundles use a verified full modded EXE payload.
+- Ships the patcher as a ZIP bundle for testing instead of a loose folder only.
