@@ -142,17 +142,17 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("custom_couches_ldw_posters [default off]", settings.stdout)
             self.assertIn("holiday_ornaments_collection [default off]", settings.stdout)
             self.assertIn("settings_evict_button [default off]", settings.stdout)
-            self.assertIn("transparent_store_bar [default off]", settings.stdout)
             self.assertIn("unused_pets [default on]", settings.stdout)
-            self.assertIn("optional_song_mods [default off]", settings.stdout)
             self.assertIn("island_events [default off]", settings.stdout)
             self.assertIn("body field sync", settings.stdout)
+            self.assertNotIn("transparent_store_bar [default off]", settings.stdout)
+            self.assertNotIn("optional_song_mods [default off]", settings.stdout)
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
             self.assertEqual(settings_by_id["holiday_furniture"]["category"], "main")
             self.assertEqual(settings_by_id["unused_pets"]["category"], "main")
             self.assertEqual(settings_by_id["custom_couches_ldw_posters"]["category"], "optional")
-            self.assertEqual(settings_by_id["optional_song_mods"]["category"], "optional")
             self.assertEqual(settings_by_id["settings_evict_button"]["category"], "experimental")
+            self.assertNotIn("optional_song_mods", settings_by_id)
 
     def test_exports_byte_patches_when_vanilla_exe_is_supplied(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -239,6 +239,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             (build / "OptionalVisualMods" / "Invisible Furniture Backups").mkdir(parents=True)
             (build / "OptionalVisualMods" / "Invisible Furniture Backups" / "InvisibleHammock.png").write_bytes(b"transparent backup")
             (build / "OptionalVisualMods" / "PoolTableStd.png").write_bytes(b"pool table visual")
+            (build / "OptionalVisualMods" / "bird.png").write_bytes(b"white bird")
+            (build / "OptionalVisualMods" / "bird_shadow.png").write_bytes(b"white bird shadow")
             (build / "Sounds").mkdir()
             (build / "Sounds" / "sound00.wav").write_bytes(b"sound")
             (build / "SDL2.dll").write_bytes(b"dll")
@@ -284,6 +286,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 asset_by_path["Images/Furniture/PoolTableStd.png"]["source_path"],
                 "payload/OptionalVisualMods/PoolTableStd.png",
             )
+            self.assertEqual(asset_by_path["Images/bird.png"]["requires"], ["white_birds"])
+            self.assertEqual(asset_by_path["Images/bird_shadow.png"]["requires"], ["white_birds"])
             self.assertNotIn("OptionalVisualMods/Invisible Furniture Backups/InvisibleHammock.png", asset_by_path)
             self.assertNotIn("Sounds/sound00.wav", asset_by_path)
             self.assertNotIn("SDL2.dll", asset_by_path)
@@ -300,6 +304,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertTrue((out / "offline_vf2_patcher.py").is_file())
             self.assertTrue((out / "patcher_icon.png").is_file())
             self.assertTrue((out / "patcher_icon.ico").is_file())
+            settings_by_id = {row["id"]: row for row in manifest["settings"]}
+            self.assertEqual(settings_by_id["white_birds"]["category"], "optional")
+            self.assertNotIn("optional_song_mods", settings_by_id)
             self.assertFalse((out / "Virtual Families 2 Restoration-Addition Patcher.exe").exists())
             self.assertFalse((out / "vf2_patcher_launcher.cs").exists())
             self.assertFalse((out / "patcher_launcher_build.json").exists())
@@ -456,6 +463,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(song["expected_target_size"], len(b"vanilla menu"))
             self.assertTrue((out / "payload" / "OptionalSongMods" / "menu.ogg").is_file())
             self.assertFalse((out / "payload" / "Sounds" / "menu.ogg").exists())
+            settings_by_id = {row["id"]: row for row in manifest["settings"]}
+            self.assertEqual(settings_by_id["optional_song_mods"]["category"], "optional")
 
     def test_disable_all_refreshes_existing_modded_output_to_vanilla(self):
         with tempfile.TemporaryDirectory() as tmp:
