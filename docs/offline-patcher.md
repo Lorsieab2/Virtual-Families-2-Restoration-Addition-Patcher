@@ -5,9 +5,10 @@ distributing modified executables, releases should distribute patch data and a
 simple patcher that edits a user-provided vanilla VF2 PC install on disk.
 
 The current display name is `Virtual Families 2 Restoration/Addition Patcher`.
-The GUI launcher is `Launch_GUI.bat`; exported bundles may also include
-`Launch GUI.lnk` as an iconed shortcut. The patcher was created with Codex AI
-in collaboration with Lorsieab2.
+The GUI launcher is `Launch_GUI.bat`. Exported bundles intentionally do not
+include a prebuilt `Launch GUI.lnk` shortcut because Windows shortcut targets
+are path-specific and can break after ZIP extraction. The patcher was created
+with Codex AI in collaboration with Lorsieab2.
 
 The first implementation is `work/offline_vf2_patcher.py`. It applies byte
 patches and file/asset patch records from JSON manifests, then can restore
@@ -48,9 +49,10 @@ folder to a separate modded sibling folder and writes changed files there:
 ```
 
 Use `--output-dir` to override the manifest's default modded output folder. For
-B103 full bundles, the default output folder is `VF2-B103-Modded`, and the
-modded executable is named `Virtual Families 2 - Modded B103.exe` so it is
-obvious that it is not a vanilla executable.
+B105 bundles, the default output folder is `VF2-B105-Modded`, and the modded
+executable is named `Virtual Families 2 - Modded B105.exe` so it is obvious
+that it is not a vanilla executable. The modded save folder follows that
+executable name under `Documents/LDW/Virtual Families 2 - Modded B105`.
 
 Use `--dry-run` to validate target hashes, expected bytes, and asset payload
 hashes without writing files. Use `--backup-dir` and `--log` to control where
@@ -90,9 +92,9 @@ mobile-exclusive furniture, or future feature groups do not require GUI code
 changes.
 
 Bundle exports now ship readable batch launchers instead of a compiled patcher
-EXE. `Launch_GUI.bat` starts the GUI with adjacent `manifest.json`; when
-Windows shortcut creation succeeds, `Launch GUI.lnk` points at the same batch
-file and uses `patcher_icon.ico`.
+EXE. `Launch_GUI.bat` starts the GUI with adjacent `manifest.json`. Prebuilt
+`.lnk` shortcuts are not shipped because they can point to the wrong path after
+the ZIP is moved or extracted.
 
 The GUI auto-loads adjacent `manifest.json` but does not open the vanilla-folder
 picker automatically. The user selects their own vanilla Virtual Families 2
@@ -120,8 +122,8 @@ checkboxes:
 
 Bundles can include `patcher_icon.png` and `patcher_icon.ico`. The GUI uses the
 PNG as the literal picture beside the bold title and uses the ICO/PNG for the
-window icon when Tk can load them. The optional `Launch GUI.lnk` shortcut uses
-`patcher_icon.ico`; no compiled launcher EXE is shipped in B104 bundles.
+window icon when Tk can load them. No compiled launcher EXE or prebuilt `.lnk`
+shortcut is shipped in B105 bundles.
 
 After a successful GUI apply, the patcher shows a completion popup listing the
 enabled patch settings, disabled/restored patch settings, altered files, modded
@@ -129,6 +131,14 @@ game folder, and expected modded save folder. The save folder is derived from
 the modded EXE name:
 `Documents/LDW/(name of modded Virtual Families 2 exe)`. Existing vanilla saves
 stay in the original save folder unless the user manually copies them.
+
+B105 bundles prefer native byte/table patch records over a full modded EXE
+payload. That keeps the distributed ZIP from containing a ready-made modified
+game executable while still letting the patcher create a clearly named modded
+EXE after validating the user's vanilla install. If a future feature cannot be
+represented safely as byte/table records, the exporter can still create a
+verified `core_executable` payload for testing, but that is not the preferred
+release shape.
 
 ## Bundle Exporter
 
@@ -260,10 +270,15 @@ folder, but it is not the final trust-friendly release shape. The final patcher
 should replace that full EXE payload with clean byte/table patch records
 wherever possible.
 
+B105 release exports should pass `--include-byte-patches` and omit
+`--include-exe-replacement` unless a deliberate diagnostic build needs the
+full-EXE fallback. This gives code/table features a way to apply while keeping
+the ZIP free of a prebuilt modified game executable.
+
 Full bundle exports also write `Transparency Log.txt`. That file documents how
 the bundle was built, what the patcher does and does not do, setting defaults,
-patch counts, implementation files, GUI shortcut metadata, known limitations,
-and the save-folder guidance shown in the GUI completion popup.
+patch counts, implementation files, launcher notes, known limitations, and the
+save-folder guidance shown in the GUI completion popup.
 
 Full bundle exports also write `How to Use.txt`, a short player-facing setup
 guide with the validation-only Dry Run explanation, launcher instructions,
@@ -455,10 +470,10 @@ relative to the manifest folder; `file_path` is relative to the game folder.
 An asset record can also include `output_file_path`; in that case `file_path`
 is the validation target inside the selected vanilla game folder, while
 `output_file_path` is where the replacement is written in the modded output
-folder. Older B103 full-EXE test bundles used this for `Virtual Families 2.exe`
-so the vanilla EXE was verified but the patched file was created as
-`Virtual Families 2 - Modded B103.exe`; the B104 trust-friendly patcher ZIP does
-not ship a compiled patcher launcher EXE.
+folder. Older full-EXE test bundles used this for `Virtual Families 2.exe` so
+the vanilla EXE was verified but the patched file was created as a clearly
+renamed modded EXE. B105 release bundles should normally use byte patch records
+instead of shipping a full modded EXE payload.
 
 Asset records can create new files, which restore later removes. If an asset
 target already exists, the patcher allows it only when it already matches the

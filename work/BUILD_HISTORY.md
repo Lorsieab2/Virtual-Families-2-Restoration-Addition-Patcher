@@ -780,3 +780,18 @@
 - Keeps `OptionalVisualMods`, `Original Virtual Families 2 Assets`, and
   `OptionalSongMods` as read-only/copy-only payload source folders during
   apply; they are not copied wholesale into the playable game folder.
+
+## B105 - Restoration/Addition Patcher Launcher and Byte Patch Refresh
+
+- Removes generated `Launch GUI.lnk` from patcher ZIPs because Windows
+  shortcuts are path-specific and can break after extraction. `Launch_GUI.bat`
+  is the supported GUI launcher and stale shortcut/status files are cleared on
+  forced exports.
+- Adds manifest `output.default_exe_name` and patcher-side output enforcement
+  so byte-patched builds are renamed from `Virtual Families 2.exe` to
+  `Virtual Families 2 - Modded B105.exe`, with the save folder derived from the
+  same EXE stem.
+- B105 release packaging should use `--include-byte-patches` and avoid
+  `--include-exe-replacement` for normal releases. This keeps native/code/table
+  features working while avoiding a ZIP that contains a ready-made modified game
+  executable payload.

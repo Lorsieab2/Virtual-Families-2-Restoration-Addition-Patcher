@@ -14,7 +14,6 @@ import json
 import re
 import shutil
 import struct
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -224,9 +223,9 @@ INVISIBLE_TRANSPARENT_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Furni
 PATCHER_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
 MODDED_EXE_OUTPUT_TEMPLATE = "Virtual Families 2 - Modded {build_label}.exe"
 MODDED_OUTPUT_FOLDER_TEMPLATE = "VF2-{build_label}-Modded"
-PATCHER_SHORTCUT_NAME = "Launch GUI.lnk"
-PATCHER_SHORTCUT_STATUS_NAME = "launch_gui_shortcut.json"
 STALE_PATCHER_LAUNCHER_NAME = "Virtual Families 2 Restoration-Addition Patcher.exe"
+STALE_PATCHER_SHORTCUT_NAME = "Launch GUI.lnk"
+STALE_PATCHER_SHORTCUT_STATUS_NAME = "launch_gui_shortcut.json"
 TRANSPARENCY_LOG_NAME = "Transparency Log.txt"
 PATCHER_ICON_PNG = "patcher_icon.png"
 PATCHER_ICON_ICO = "patcher_icon.ico"
@@ -1026,47 +1025,6 @@ def copy_patcher_icon_assets(bundle_dir: Path) -> list[str]:
     return copied
 
 
-def write_iconed_launch_shortcut(bundle_dir: Path) -> dict[str, Any]:
-    shortcut = bundle_dir / PATCHER_SHORTCUT_NAME
-    icon = bundle_dir / PATCHER_ICON_ICO
-    powershell = shutil.which("powershell") or shutil.which("powershell.exe")
-    if powershell is None:
-        return {
-            "status": "not_built",
-            "reason": "PowerShell was not found.",
-            "output": PATCHER_SHORTCUT_NAME,
-        }
-    icon_location = str(icon) if icon.is_file() else str(bundle_dir / "Launch_GUI.bat")
-    script = "\n".join(
-        [
-            "$ErrorActionPreference = 'Stop'",
-            "$shell = New-Object -ComObject WScript.Shell",
-            f"$shortcut = $shell.CreateShortcut({json.dumps(str(shortcut))})",
-            "$shortcut.TargetPath = 'Launch_GUI.bat'",
-            "$shortcut.WorkingDirectory = ''",
-            f"$shortcut.IconLocation = {json.dumps(icon_location)}",
-            f"$shortcut.Description = {json.dumps(PATCHER_DISPLAY_NAME)}",
-            "$shortcut.Save()",
-        ]
-    )
-    result = subprocess.run(
-        [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
-        cwd=bundle_dir,
-        text=True,
-        capture_output=True,
-    )
-    status: dict[str, Any] = {
-        "status": "built" if result.returncode == 0 and shortcut.is_file() else "failed",
-        "output": PATCHER_SHORTCUT_NAME,
-        "returncode": result.returncode,
-        "stdout": result.stdout.strip(),
-        "stderr": result.stderr.strip(),
-    }
-    if shortcut.is_file():
-        status.update({"sha256": sha256_file(shortcut), "size": shortcut.stat().st_size})
-    return status
-
-
 def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
     icon_files = copy_patcher_icon_assets(bundle_dir)
     shutil.copy2(SOURCE_DIR / "offline_vf2_patcher.py", bundle_dir / "offline_vf2_patcher.py")
@@ -1120,8 +1078,9 @@ if %ERRORLEVEL%==0 (
 {CREATOR_DISCLOSURE}
 
 Use {apply_name} and enter or drag the original Virtual Families 2.exe, or run
-Launch_GUI.bat for the GUI. If this package includes Launch GUI.lnk, that
-shortcut opens the same GUI batch file with the patcher icon.
+Launch_GUI.bat for the GUI. This package does not ship a prebuilt Windows
+shortcut because .lnk targets are path-specific and can break after ZIP
+extraction.
 
 The patcher validates that the selected folder is an official Virtual Families
 2 install before it creates backups or writes any modded output. It then
@@ -1160,7 +1119,8 @@ changes anything.
 3. Run:
    Launch_GUI.bat
 
-   If Launch GUI.lnk is present, you can use that iconed shortcut instead.
+   The BAT file is the supported launcher. It resolves files relative to the
+   folder where you extracted this ZIP.
 
 4. The patcher should auto-load manifest.json.
 
@@ -1208,11 +1168,6 @@ Have fun! -Lorsieab2 :)
         readme_name,
         "How to Use.txt",
     ]
-    shortcut_status = write_iconed_launch_shortcut(bundle_dir)
-    (bundle_dir / PATCHER_SHORTCUT_STATUS_NAME).write_text(json.dumps(shortcut_status, indent=2), encoding="utf-8")
-    files.append(PATCHER_SHORTCUT_STATUS_NAME)
-    if shortcut_status.get("status") == "built":
-        files.append(PATCHER_SHORTCUT_NAME)
     return files
 
 
@@ -1222,8 +1177,8 @@ def clear_generated_runner_files(bundle_dir: Path) -> None:
         "README-*-PATCHER.txt",
         "How to Use.txt",
         "Launch_GUI.bat",
-        PATCHER_SHORTCUT_NAME,
-        PATCHER_SHORTCUT_STATUS_NAME,
+        STALE_PATCHER_SHORTCUT_NAME,
+        STALE_PATCHER_SHORTCUT_STATUS_NAME,
         STALE_PATCHER_LAUNCHER_NAME,
         PATCHER_ICON_PNG,
         PATCHER_ICON_ICO,
@@ -1275,7 +1230,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Creates backups before writing changed files in the modded output folder.",
         "- Writes machine-readable success/failure logs.",
         "- Dry Run / Validate Only validates that the patcher's working: it checks the install, EXE, patch records, and payload hashes, then stops before creating backups, creating the modded output folder, or changing/writing files. Default dry-run and pre-write failure logs are written next to manifest.json, not into the vanilla game folder.",
-        "- Launch_GUI.bat starts the GUI with adjacent manifest.json. If Launch GUI.lnk is present, it opens the same batch file with the patcher icon.",
+        "- Launch_GUI.bat starts the GUI with adjacent manifest.json. Prebuilt .lnk shortcuts are not shipped because they are path-specific and can break after ZIP extraction.",
         "- Payload files are read-only/copy-only during apply. The patcher reads payload sources and copies selected files into the separate modded output folder; it never writes back into payload/ during patching.",
         "- Provides a restore command for backups created by this patcher.",
         "",
@@ -1338,13 +1293,21 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         description = str(row.get("description", "")).strip()
         if description:
             lines.append(f"  {description}")
-    limitation = (
-        "This bundle uses a verified full modded EXE payload for native/game-code changes. "
-        "Asset and file patches are gated by settings, but complete native per-feature off/on behavior requires translating future native changes into separate byte/table patch records with their own setting requirements."
-        if summary.get("exe_replacement")
-        else
-        "This trust-friendly bundle omits a modded EXE payload. Native/game-code changes require future byte/table patch records before they can be applied by this no-EXE patcher shape."
-    )
+    if summary.get("byte_patch_count"):
+        limitation = (
+            "This bundle avoids a prebuilt modified game EXE payload by representing native/game-code changes as byte patch records. "
+            "Complete per-feature native on/off behavior still requires splitting future native changes into narrower setting-gated byte/table records."
+        )
+    elif summary.get("exe_replacement"):
+        limitation = (
+            "This bundle uses a verified full modded EXE payload for native/game-code changes. "
+            "Asset and file patches are gated by settings, but complete native per-feature off/on behavior requires translating future native changes into separate byte/table patch records with their own setting requirements."
+        )
+    else:
+        limitation = (
+            "This bundle omits both a modded EXE payload and native byte patch records. "
+            "Native/game-code changes require byte/table patch records before they can be applied by this no-EXE patcher shape."
+        )
     lines.extend(
         [
             "",
@@ -1372,20 +1335,15 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "------------------",
             "- offline_vf2_patcher.py: validates manifests, target files, byte patch records, asset payload records, backups, restore, progress, and logs.",
             "- offline_vf2_patcher_gui.py: Tkinter GUI wrapper that renders manifest settings, streams patch progress, and shows a completion popup.",
-            "- export_offline_patch_bundle.py: source-side exporter that builds manifest.json, payload/, runner scripts, the optional iconed shortcut, and this transparency log.",
+            "- export_offline_patch_bundle.py: source-side exporter that builds manifest.json, payload/, runner scripts, and this transparency log.",
             "- Launch_GUI.bat: readable batch launcher for the GUI. No compiled patcher launcher EXE is shipped in this bundle.",
             "",
             "GUI launcher",
             "------------",
+            "- Launch_GUI.bat is the supported GUI launcher.",
+            "- Prebuilt Launch GUI.lnk is intentionally omitted because Windows shortcuts are path-specific inside ZIP distributions.",
         ]
     )
-    shortcut = summary.get("launch_gui_shortcut", {})
-    if isinstance(shortcut, dict):
-        for key in ("status", "output", "sha256", "size", "reason"):
-            if shortcut.get(key) is not None:
-                lines.append(f"- {key}: {shortcut.get(key)}")
-    else:
-        lines.append("- Shortcut metadata unavailable.")
     lines.extend(
         [
             "",
@@ -1397,6 +1355,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B103 patcher refresh: Adds default-off optional visual patches for custom map images, transparent menu/store bars, transparent Decor tab, visible invisible furniture, and transparent invisible furniture swaps.",
             "- B103 patcher refresh: Adds a GUI completion popup with enabled patches, altered files, output folder, save folder, and save-copy guidance.",
             "- B104 patcher refresh: Removes the compiled patcher launcher EXE; ships readable BAT launchers and an optional iconed GUI shortcut instead.",
+            "- B105 patcher refresh: Removes the prebuilt Launch GUI.lnk shortcut because zipped shortcuts can point at a stale path after extraction.",
+            "- B105 patcher refresh: Prefer native byte/table patch records over a full modded EXE payload so the ZIP does not contain a ready-made modified game executable.",
             "- B104 patcher refresh: Adds default-on unused Turtle/Hamster pet setting metadata.",
             "- B104 patcher refresh: Adds default-off OptionalSongMods support targeting Sounds/*.ogg.",
             "- B104 patcher refresh: Refreshes the modded output folder from vanilla on Enable/Disable Patches so unchecked patches are removed.",
@@ -1515,6 +1475,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         "creator_disclosure": CREATOR_DISCLOSURE,
         "output": {
             "default_folder_name": modded_output_folder_name(build_label),
+            "default_exe_name": modded_exe_output_name(build_label),
             "description": "The patcher writes a separate clearly labeled modded game folder next to the user's vanilla folder by default.",
         },
         "source_build": {
@@ -1546,15 +1507,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "exe_replacement": exe_replacement_record is not None,
             "target_exe_name": target_exe_name,
             "modded_output_folder_name": modded_output_folder_name(build_label),
-            "modded_exe_output_name": modded_exe_output_name(build_label) if exe_replacement_record is not None else None,
+            "modded_exe_output_name": modded_exe_output_name(build_label),
             "requires_vanilla_exe_for_apply": not bool(target_files),
         },
     }
     if args.include_patcher_scripts:
         manifest["export_summary"]["runner_files"] = write_bundle_runner_files(bundle_dir, build_label)
-        shortcut_status_path = bundle_dir / PATCHER_SHORTCUT_STATUS_NAME
-        if shortcut_status_path.is_file():
-            manifest["export_summary"]["launch_gui_shortcut"] = load_json(shortcut_status_path)
     manifest["export_summary"]["transparency_log"] = write_transparency_log(bundle_dir, manifest)
     return manifest
 

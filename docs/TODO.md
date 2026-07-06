@@ -229,6 +229,12 @@
   to vanilla, source-only payload folders are not copied wholesale into the
   game, and the JSON log lists enabled/disabled settings with `status:
   success`.
+- Patcher release test B105 native/launcher parity: export with
+  `--include-byte-patches`, confirm the ZIP contains `Launch_GUI.bat` but no
+  `Launch GUI.lnk`, no `launch_gui_shortcut.json`, and no prebuilt modded game
+  EXE payload; dry-run/apply against an official install copy, then verify the
+  output folder contains `Virtual Families 2 - Modded B105.exe` only and the
+  patch log save folder is `Documents/LDW/Virtual Families 2 - Modded B105`.
 - Patcher follow-up: split remaining native store-table rows for Custom Couches
   and LDW Posters/Paintings into setting-gated byte/table patch records. The
   current `custom_couches_ldw_posters` setting gates image/fmap payload files,

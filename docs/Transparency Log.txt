@@ -3,18 +3,18 @@ Virtual Families 2 Restoration/Addition Patcher Transparency Log
 
 Purpose
 -------
-This document describes the offline VF2 patcher design used by the B104 patcher
+This document describes the offline VF2 patcher design used by the B105 patcher
 refresh. Each exported patcher bundle also generates its own Transparency
-Log.txt with exact manifest counts, shortcut metadata, paths, and changelog
+Log.txt with exact manifest counts, paths, and changelog
 details for that bundle.
 
 Creation disclosure
 -------------------
 This offline patcher was created with Codex AI in collaboration with Lorsieab2.
 The display name is Virtual Families 2 Restoration/Addition Patcher. The
-GUI starts from Launch_GUI.bat. When Windows shortcut creation succeeds, the
-bundle also includes Launch GUI.lnk with the patcher icon. No compiled patcher
-launcher EXE is shipped in B104 bundles.
+GUI starts from Launch_GUI.bat. Prebuilt Launch GUI.lnk shortcuts are not
+shipped because Windows shortcut targets are path-specific and can break after
+ZIP extraction. No compiled patcher launcher EXE is shipped in B105 bundles.
 
 What the patcher does
 ---------------------
@@ -138,20 +138,23 @@ Important files
   toggling settings, applying patches, restoring backups, and showing the
   completion summary.
 - work/export_offline_patch_bundle.py: source-side exporter that creates
-  manifest.json, payload files, runner scripts, optional shortcut metadata, and
-  generated Transparency Log.txt.
+  manifest.json, payload files, runner scripts, and generated Transparency
+  Log.txt.
 - How to Use.txt: player-facing instructions bundled with exported patcher ZIPs.
 - work/patch_mobile_furniture_pack.py: current build generator that produces
   the modded beta folder used as patcher payload input while native byte/table
   records are still being extracted.
 
-Current B104 behavior
+Current B105 behavior
 ---------------------
-- The manifest declares a separate output folder named VF2-B104-Modded for the
-  B104 patcher bundle.
-- The B104 patcher bundle does not ship a compiled patcher launcher EXE.
-  Launch_GUI.bat starts the GUI, and Launch GUI.lnk is a convenience shortcut
-  when generated successfully.
+- The manifest declares a separate output folder named VF2-B105-Modded for the
+  B105 patcher bundle.
+- The B105 patcher bundle does not ship a compiled patcher launcher EXE.
+  Launch_GUI.bat starts the GUI. Launch GUI.lnk is intentionally omitted.
+- The B105 patcher bundle should use native byte/table patch records for
+  code/table changes, then write the result as a clearly renamed modded EXE so
+  the modded folder does not leave an ambiguous Virtual Families 2.exe beside
+  it.
 - Optional visual settings default off.
 - OptionalSongMods defaults off and targets Sounds/*.ogg when enabled.
 - Add unused pets defaults on for the Turtle/Hamster pet-store metadata.
@@ -186,10 +189,11 @@ and transparent Invisible Furniture swaps.
 
 Known limitation
 ----------------
-The B104 trust-friendly patcher bundle omits a modded EXE payload. Native and
-game-code changes require future byte/table patch records before they can be
-applied by the no-EXE patcher shape. This is the next transparency and
-antivirus-trust milestone.
+The B105 release direction is to avoid distributing a prebuilt modified game
+EXE. Native/code/table changes should be represented as explicit byte/table
+patch records where possible, applied locally after validating the user's
+vanilla EXE. Full modded EXE payloads remain a diagnostic fallback only when a
+change cannot yet be represented safely as records.
 
 Changelog
 ---------
@@ -217,6 +221,11 @@ Changelog
   Experimental settings and removed startup prompting for the vanilla folder.
 - B104 patcher refresh: Removed the compiled patcher launcher EXE and ships
   readable BAT launchers plus optional Launch GUI.lnk shortcut.
+- B105 patcher refresh: Removed the prebuilt Launch GUI.lnk shortcut because it
+  can point at a stale path after ZIP extraction.
+- B105 patcher refresh: Uses native byte/table patch records for code/table
+  changes where possible so new furniture and injected behavior changes are
+  present without bundling a ready-made modified game EXE.
 - B104 patcher refresh: Renamed the green action button to Enable/Disable
   Patches and made recognized VF2-*-Modded folders refresh from vanilla before
   applying enabled records.

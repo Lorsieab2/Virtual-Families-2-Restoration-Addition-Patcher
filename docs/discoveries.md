@@ -1038,3 +1038,19 @@
   `Virtual Families 2 Restoration-Addition Patcher.exe`. `Launch_GUI.bat`
   starts the GUI, and `Launch GUI.lnk` is generated as an optional iconed
   shortcut when Windows COM shortcut creation succeeds.
+
+## 2026-07-06 - Patcher B105 Launcher and Native Patch Shape
+
+- Prebuilt Windows `.lnk` files are not portable inside release ZIPs because
+  their targets are path-specific after extraction. B105 removes generated
+  `Launch GUI.lnk` and stale `launch_gui_shortcut.json`; `Launch_GUI.bat`
+  remains the supported launcher and resolves scripts with `%~dp0`.
+- `manifest.output.default_exe_name` declares the final modded EXE filename.
+  `offline_vf2_patcher.py::enforce_modded_exe_name()` renames byte-patched
+  `Virtual Families 2.exe` outputs, or removes the ambiguous vanilla-named EXE
+  when a renamed asset payload already created the modded executable.
+- Asset-only patcher bundles cannot implement native/code/table features such
+  as injected behavior hooks or new furniture records. B105 release exports
+  should prefer `--include-byte-patches` over `--include-exe-replacement` so
+  native changes are applied locally after vanilla EXE validation without
+  distributing a ready-made modified game EXE.
