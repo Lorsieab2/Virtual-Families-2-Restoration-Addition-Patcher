@@ -145,6 +145,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("transparent_store_bar [default off]", settings.stdout)
             self.assertIn("island_events [default off]", settings.stdout)
             self.assertIn("body field sync", settings.stdout)
+            settings_by_id = {row["id"]: row for row in manifest["settings"]}
+            self.assertEqual(settings_by_id["holiday_furniture"]["category"], "main")
+            self.assertEqual(settings_by_id["custom_couches_ldw_posters"]["category"], "optional")
+            self.assertEqual(settings_by_id["settings_evict_button"]["category"], "experimental")
 
     def test_exports_byte_patches_when_vanilla_exe_is_supplied(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -284,10 +288,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertTrue((out / "README-B103-PATCHER.txt").is_file())
             self.assertTrue((out / "Transparency Log.txt").is_file())
             self.assertTrue((out / "offline_vf2_patcher.py").is_file())
+            self.assertTrue((out / "patcher_icon.png").is_file())
+            self.assertTrue((out / "patcher_icon.ico").is_file())
             self.assertTrue((out / "Virtual Families 2 Restoration-Addition Patcher.exe").is_file() or (out / "vf2_patcher_launcher.cs").is_file())
             self.assertIn("Codex AI", (out / "README-B103-PATCHER.txt").read_text(encoding="ascii"))
             self.assertIn("Official install validation", (out / "Transparency Log.txt").read_text(encoding="utf-8"))
+            self.assertIn("Main Patches (green)", (out / "Transparency Log.txt").read_text(encoding="utf-8"))
             self.assertNotIn("Apply_B99_Patcher.bat", manifest["export_summary"]["runner_files"])
+            self.assertIn("patcher_icon.png", manifest["export_summary"]["runner_files"])
+            self.assertIn("patcher_icon.ico", manifest["export_summary"]["runner_files"])
             self.assertIn("transparency_log", manifest["export_summary"])
             self.assertIn("launcher", manifest["export_summary"])
             self.assertTrue((out / "vf2_patcher_launcher.cs").is_file())

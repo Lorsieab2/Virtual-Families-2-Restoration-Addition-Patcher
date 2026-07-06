@@ -16,6 +16,41 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
             [("Adds ", False), ("visible graphics", True), (" first.", False)],
         )
 
+    def test_categorized_settings_groups_by_manifest_category(self):
+        settings = {
+            "core_executable": patcher.PatchSetting(
+                id="core_executable",
+                label="Patch game executable",
+                description="",
+                default=True,
+                category="main",
+            ),
+            "custom_map": patcher.PatchSetting(
+                id="custom_map",
+                label="Custom map",
+                description="",
+                default=False,
+                category="optional",
+            ),
+            "settings_evict_button": patcher.PatchSetting(
+                id="settings_evict_button",
+                label="Settings Evict",
+                description="",
+                default=False,
+                category="experimental",
+            ),
+        }
+
+        rows = gui.categorized_settings(settings)
+
+        self.assertEqual([row[0] for row in rows], ["main", "optional", "experimental"])
+        self.assertEqual(rows[0][1:3], ("Main Patches", "#00802b"))
+        self.assertEqual(rows[1][1:3], ("Optional Patches", "#000000"))
+        self.assertEqual(rows[2][1:3], ("Experimental/Not Working Patches", "#b00020"))
+        self.assertEqual([setting.id for setting in rows[0][3]], ["core_executable"])
+        self.assertEqual([setting.id for setting in rows[1][3]], ["custom_map"])
+        self.assertEqual([setting.id for setting in rows[2][3]], ["settings_evict_button"])
+
     def test_build_apply_namespace_uses_exact_checkbox_selection(self):
         settings = {
             "holiday_furniture": patcher.PatchSetting(

@@ -15,9 +15,9 @@ Created with Codex AI in collaboration with Lorsieab2.
 
 ## Dry Run, ELI5
 
-Dry Run is a pretend patch. It checks that the selected VF2 folder looks official, checks that the EXE and payload files match the manifest, and then stops.
+Dry Run validates that the patcher's working. It checks that the selected VF2 folder looks official, checks that the EXE and payload files match the manifest, and then stops.
 
-It does not make a modded game folder, does not make backups, and does not change any game files.
+It does not actually change or write files.
 
 ## Release Artifact
 
@@ -30,6 +30,7 @@ The full B103 patcher ZIP is intentionally not committed to source because it co
 - `src/offline_vf2_patcher.py` - CLI patcher, validation, backups, apply/restore logic.
 - `src/offline_vf2_patcher_gui.py` - Tkinter GUI wrapper.
 - `src/export_offline_patch_bundle.py` - bundle/manifest/payload exporter.
+- `src/assets/patcher_icon.png` and `src/assets/patcher_icon.ico` - GUI title picture and launcher/window icon assets.
 - `src/vf2_patcher_launcher.cs` - generated launcher source example.
 - `tests/` - unit tests for the patcher, GUI helpers, and exporter.
 - `docs/offline-patcher.md` - technical patcher documentation.

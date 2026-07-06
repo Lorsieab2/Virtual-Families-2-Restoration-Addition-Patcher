@@ -58,14 +58,13 @@ the backup and patch log are written. Use `--enable`, `--disable`,
 `--enable-all`, and `--disable-all` to choose manifest-declared feature
 settings before patching.
 
-ELI5: Dry Run is a pretend patch. It checks that the selected Virtual Families
-2 folder looks official, checks that the EXE is the expected one, checks that
-the patch instructions and payload files match their hashes, then stops. It
-does not make a modded game folder, does not make backups, and does not change
-any game files. Use it when you want to ask, "Would this patch work?" before
-actually applying it. If no custom `--log` path is selected, dry-run and
-pre-write failure logs are written beside `manifest.json` so the vanilla game
-folder stays untouched.
+ELI5: Dry Run validates that the patcher's working. It checks that the selected
+Virtual Families 2 folder looks official, checks that the EXE is the expected
+one, checks that the patch instructions and payload files match their hashes,
+then stops. It does not actually change or write files. Use it when you want to
+ask, "Would this patch work?" before actually applying it. If no custom `--log`
+path is selected, dry-run and pre-write failure logs are written beside
+`manifest.json` so the vanilla game folder stays untouched.
 
 List the settings exposed by a manifest:
 
@@ -96,13 +95,30 @@ next to itself and starts the GUI with that manifest preloaded. The launcher is
 not an injector and does not touch the game directly; it only starts the Python
 GUI.
 
+When the generated patcher EXE starts the GUI with adjacent `manifest.json`, the
+GUI prompts the user to select their own vanilla Virtual Families 2 installation
+folder. The patcher does not look for or assume a hardcoded local install path.
+
 The GUI auto-populates the modded output folder from the selected vanilla game
 folder and manifest `output.default_folder_name`. The Apply Patches button uses
-green bold text, manifest descriptions support `**bold**` markup, and the
-completion popup keeps path/save guidance fixed while the modified-file log is
-the only scrollable area. The Vanilla Game Folder Path, Modified Game Folder
-Path, and Modified Game Saves Folder Path are shown as bold blue clickable
-paths.
+green bold text, manifest descriptions support `**bold**` markup, and
+description blocks resize to keep their full text visible. The completion popup
+keeps path/save guidance fixed while the modified-file log is the only
+scrollable area. The Vanilla Game Folder Path, Modified Game Folder Path, and
+Modified Game Saves Folder Path are shown as bold blue clickable paths.
+
+The GUI groups manifest settings by `category`:
+
+| Category | GUI color | Intended settings |
+| --- | --- | --- |
+| `main` | Green | Core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits. |
+| `optional` | Black | Invisible Furniture graphics modes, optional visual swaps, custom maps, LDW Posters/Paintings, and Colorful Couches. |
+| `experimental` | Red | Settings Evict, Island Events, and anything not 100% confirmed working and crash-free. |
+
+Bundles can include `patcher_icon.png` and `patcher_icon.ico`. The GUI uses the
+PNG as the literal picture beside the bold title and uses the ICO/PNG for the
+window icon when Tk can load them. The generated Windows launcher also embeds
+`patcher_icon.ico` when a local C# compiler is available.
 
 After a successful GUI apply, the patcher shows a completion popup listing the
 enabled patch settings, altered files, modded game folder, and expected modded
@@ -243,8 +259,8 @@ patch counts, implementation files, launcher build metadata, known limitations,
 and the save-folder guidance shown in the GUI completion popup.
 
 Full bundle exports also write `How to Use.txt`, a short player-facing setup
-guide with the ELI5 dry-run explanation, launcher instructions, vanilla-folder
-selection guidance, and save-copy guidance.
+guide with the validation-only Dry Run explanation, launcher instructions,
+vanilla-folder selection guidance, and save-copy guidance.
 
 The `Add Custom Couches and LDW Posters` setting is default off. Its asset
 routing covers `CouchNeonPurpleStd`, `CouchBrownColorfulStd`,
@@ -289,7 +305,8 @@ when the original target did not exist.
       "id": "holiday_furniture",
       "label": "Add Holiday furniture",
       "description": "Adds mobile holiday furniture to the PC build.",
-      "default": false
+      "default": false,
+      "category": "main"
     },
     {
       "id": "holiday_outfits",

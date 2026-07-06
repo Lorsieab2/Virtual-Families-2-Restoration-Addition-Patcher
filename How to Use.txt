@@ -16,7 +16,8 @@ changes anything.
    If that does not open, run:
    Launch_GUI.bat
 
-4. The patcher should auto-load manifest.json.
+4. The patcher should auto-load manifest.json and then ask you to select your
+   own vanilla Virtual Families 2 installation folder.
 
 5. Select your vanilla Virtual Families 2 install folder. It should be the
    folder that contains Virtual Families 2.exe, Images, Sounds, Assets, and the
@@ -25,8 +26,8 @@ changes anything.
 6. Review the optional patch checkboxes.
 
 7. Optional but recommended: click Dry Run (Validate Only).
-   Dry Run is a pretend patch. It checks whether the patch will work and
-   changes nothing.
+   Dry Run validates that the patcher's working. It does not actually
+   change/write files.
 
 8. Click Apply Patches.
 

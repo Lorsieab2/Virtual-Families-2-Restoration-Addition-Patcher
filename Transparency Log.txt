@@ -28,8 +28,8 @@ What the patcher does
 - Streams per-record validation/apply progress to the CLI and GUI.
 - Creates a separate, clearly labeled modded output folder by default.
 - Names the modded executable clearly so it is not confused with vanilla.
-- Supports Dry Run / Validate Only, which is a pretend patch run that checks
-  everything first and changes nothing.
+- Supports Dry Run / Validate Only, which validates that the patcher's working
+  and does not actually change or write files.
 - Provides restore support for backups created by the patcher.
 
 What the patcher does not do
@@ -70,14 +70,13 @@ VirtualFamilies.com
 
 Dry Run / Validate Only
 -----------------------
-ELI5: Dry Run is a pretend patch. It checks that the selected Virtual Families
-2 folder looks official, checks that the EXE is the expected one, checks that
-the patch instructions and payload files match their hashes, then stops. It
-does not make a modded game folder, does not make backups, and does not change
-any game files. Use it when you want to ask, "Would this patch work?" before
-actually applying it. If no custom log path is selected, dry-run and pre-write
-failure logs are written beside manifest.json so the vanilla game folder stays
-untouched.
+ELI5: Dry Run validates that the patcher's working. It checks that the selected
+Virtual Families 2 folder looks official, checks that the EXE is the expected
+one, checks that the patch instructions and payload files match their hashes,
+then stops. It does not actually change or write files. Use it when you want to
+ask, "Would this patch work?" before actually applying it. If no custom log
+path is selected, dry-run and pre-write failure logs are written beside
+manifest.json so the vanilla game folder stays untouched.
 
 Payload folder
 --------------
@@ -140,8 +139,16 @@ Current B103 behavior
 - Add Custom Couches and LDW Posters is a separate default-off setting.
 - Settings Evict, mobile furniture behaviors, Holiday Ornaments, and Island
   Events remain default off experimental settings.
+- Patch settings are grouped in the GUI as Main Patches (green), Optional
+  Patches (black), and Experimental/Not Working Patches (red).
+- patcher_icon.png is shown beside the bold GUI title, and patcher_icon.ico is
+  used by the generated launcher/window icon when available.
 - The GUI completion popup lists enabled patches, altered files, the modded game
   folder, and the modded save folder.
+- When launched through the generated patcher EXE, the GUI auto-loads the
+  adjacent manifest.json and prompts the user to select their own vanilla
+  Virtual Families 2 installation folder. It does not look for or assume a
+  hardcoded install path.
 - Modded saves are expected under Documents/LDW/(name of modded Virtual
   Families 2 exe).
 - Existing vanilla saves can be copied manually into the modded save folder.
@@ -183,5 +190,9 @@ Changelog
   button, clickable blue path links, and a scrollable modified-file log.
 - B103 patcher refresh: Added bundled How to Use.txt with player-facing setup,
   Dry Run, and save-copy instructions.
+- B103 patcher refresh: Added category-colored settings groups, full-height
+  description rendering, and the family icon beside the GUI title/launcher icon.
+- B103 patcher refresh: Added startup prompting for the user's vanilla VF2
+  install folder when the generated patcher EXE launches the GUI.
 
 Have fun! -Lorsieab2 :)

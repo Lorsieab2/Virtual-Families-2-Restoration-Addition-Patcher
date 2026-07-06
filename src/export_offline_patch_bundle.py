@@ -44,108 +44,126 @@ SETTINGS = [
         "label": "Patch game executable",
         "description": "Verifies a vanilla Virtual Families 2.exe and creates a clearly labeled modded EXE in a separate modded build folder.",
         "default": True,
+        "category": "main",
     },
     {
         "id": "holiday_furniture",
         "label": "Add mobile Holiday furniture",
         "description": "Adds mobile Holiday furniture records and generated assets. These are decorative-only for now.",
         "default": True,
+        "category": "main",
     },
     {
         "id": "holiday_outfits",
         "label": "Add Holiday outfits",
         "description": "Adds folder-backed Holiday outfit body values and runtime frames. Enable this for Holiday Outfit rows to appear in the expanded Outfit store.",
         "default": True,
+        "category": "main",
     },
     {
         "id": "outfit_store_expansion",
         "label": "Add expanded Outfit store",
         "description": "Adds generated Outfit store rows for body values 0-49, icons, independent tray item support, and body field sync. Holiday Outfit rows require Add Holiday outfits too.",
         "default": True,
+        "category": "main",
     },
     {
         "id": "mobile_furniture",
         "label": "Add additional mobile-exclusive furniture",
         "description": "Adds non-Holiday mobile furniture and supporting assets. Invisible furniture graphics are controlled by the separate Invisible Furniture settings.",
         "default": True,
+        "category": "main",
     },
     {
         "id": "custom_couches_ldw_posters",
         "label": "Add Custom Couches and LDW Posters",
         "description": "Adds Colorful Couches and LDW Posters/Paintings mods to the game. Credit to Lorsieab2 on LDWForums.",
         "default": False,
+        "category": "optional",
     },
     {
         "id": "invisible_furniture_visible_graphics",
         "label": "Add Invisible Furniture - Visible Graphics",
         "description": "Adds invisible furniture for decoration and gameplay purposes. Graphics use the visible base-game furniture versions. **Enable this first so you can place them in-game!**",
         "default": False,
+        "category": "optional",
     },
     {
         "id": "invisible_furniture_transparent_graphics",
         "label": "Swap Invisible Furniture Graphics with Transparent Graphics",
         "description": "Once you have placed the invisible furniture how you like, enable this to make the invisible furniture fully invisible.",
         "default": False,
+        "category": "optional",
     },
     {
         "id": "vf3_tv_assets_recognition",
         "label": "Add VF3 TV assets and recognition",
         "description": "Adds VF3 TV furniture, private animation strips, and TV fmap recognition assets.",
         "default": True,
+        "category": "main",
     },
     {
         "id": "holiday_ornaments_collection",
         "label": "Add Holiday Ornaments collection",
         "description": "Experimental patch: adds mobile Holiday Ornament yard collectibles, collection art, and goals. May not work and might cause instability or game crashes.",
         "default": False,
+        "category": "experimental",
     },
     {
         "id": "mobile_purchases",
         "label": "Add visible mobile version purchases",
         "description": "Adds visible Brokerage Account, Food Club, Health Plan, and Lucky Rock store support under Special Upgrades.",
         "default": True,
+        "category": "main",
     },
     {
         "id": "settings_evict_button",
         "label": "Add Settings Evict button",
         "description": "Experimental patch: enables the mobile-style Settings Evict button. This does not work yet and may cause instability or game crashes.",
         "default": False,
+        "category": "experimental",
     },
     {
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
         "description": "Experimental patch: enables added villager behavior routes for mobile furniture where implemented. May not work and might cause instability or game crashes.",
         "default": False,
+        "category": "experimental",
     },
     {
         "id": "island_events",
         "label": "Add mobile-exclusive Island Events",
         "description": "Experimental patch: adds mobile-exclusive Island Event shell records. They appear but do not alter anything in the game yet, and may cause instability or game crashes.",
         "default": False,
+        "category": "experimental",
     },
     {
         "id": "custom_lorsieab2_map_images",
         "label": "Lorsieab2's Custom Map Images",
         "description": "Visual only. Replaces Images/MapX*Y*.jpg with OptionalVisualMods/Custom Lorsieab2 Map Images.",
         "default": False,
+        "category": "optional",
     },
     {
         "id": "transparent_menu_bar",
         "label": "Transparent Menu Bar",
         "description": "Makes the bottom menu bars transparent. Credit to swedane on LDWForums.",
         "default": False,
+        "category": "optional",
     },
     {
         "id": "transparent_store_bar",
         "label": "Transparent Store Bar",
         "description": "Makes the bottom store bar transparent. Credit to Corylea on LDWForums.",
         "default": False,
+        "category": "optional",
     },
     {
         "id": "transparent_decor_tab",
         "label": "Transparent Decor Tab",
         "description": "Makes the purple Decor tab transparent. Credit to swedane on LDWForums.",
         "default": False,
+        "category": "optional",
     },
 ]
 
@@ -182,6 +200,8 @@ MODDED_EXE_OUTPUT_TEMPLATE = "Virtual Families 2 - Modded {build_label}.exe"
 MODDED_OUTPUT_FOLDER_TEMPLATE = "VF2-{build_label}-Modded"
 PATCHER_LAUNCHER_NAME = "Virtual Families 2 Restoration-Addition Patcher.exe"
 TRANSPARENCY_LOG_NAME = "Transparency Log.txt"
+PATCHER_ICON_PNG = "patcher_icon.png"
+PATCHER_ICON_ICO = "patcher_icon.ico"
 CREATOR_DISCLOSURE = "This offline patcher was created with Codex AI in collaboration with Lorsieab2."
 INVALID_INSTALL_MESSAGE = (
     "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\n"
@@ -840,6 +860,7 @@ def default_settings(include_byte_patches: bool, include_exe_replacement: bool) 
                 "label": "Apply core native code/table patches",
                 "description": "Applies byte records generated by diffing the vanilla EXE against the patched build EXE.",
                 "default": True,
+                "category": "main",
             },
         )
     settings.append(
@@ -848,6 +869,7 @@ def default_settings(include_byte_patches: bool, include_exe_replacement: bool) 
             "label": "Copy required support files and uncategorized generated assets",
             "description": "Copies required support files, DLLs, sounds, optional-mod source folders, and any generated assets that are not tied to a narrower feature toggle.",
             "default": True,
+            "category": "main",
         }
     )
     return settings
@@ -941,6 +963,17 @@ internal static class VF2PatcherLauncher
     return source
 
 
+def copy_patcher_icon_assets(bundle_dir: Path) -> list[str]:
+    copied = []
+    source_dir = SOURCE_DIR / "assets"
+    for name in (PATCHER_ICON_PNG, PATCHER_ICON_ICO):
+        source = source_dir / name
+        if source.is_file():
+            shutil.copy2(source, bundle_dir / name)
+            copied.append(name)
+    return copied
+
+
 def build_launcher_exe(bundle_dir: Path, build_label: str) -> dict[str, Any]:
     source = write_launcher_source(bundle_dir, build_label)
     output = bundle_dir / PATCHER_LAUNCHER_NAME
@@ -952,15 +985,18 @@ def build_launcher_exe(bundle_dir: Path, build_label: str) -> dict[str, Any]:
             "source": source.name,
             "output": PATCHER_LAUNCHER_NAME,
         }
-    result = subprocess.run(
-        [
+    command = [
             str(csc),
             "/nologo",
             "/target:winexe",
             "/reference:System.Windows.Forms.dll",
-            f"/out:{output}",
-            str(source),
-        ],
+    ]
+    icon_path = bundle_dir / PATCHER_ICON_ICO
+    if icon_path.is_file():
+        command.append(f"/win32icon:{icon_path}")
+    command.extend([f"/out:{output}", str(source)])
+    result = subprocess.run(
+        command,
         cwd=bundle_dir,
         text=True,
         capture_output=True,
@@ -985,6 +1021,7 @@ def build_launcher_exe(bundle_dir: Path, build_label: str) -> dict[str, Any]:
 
 
 def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
+    icon_files = copy_patcher_icon_assets(bundle_dir)
     shutil.copy2(SOURCE_DIR / "offline_vf2_patcher.py", bundle_dir / "offline_vf2_patcher.py")
     shutil.copy2(SOURCE_DIR / "offline_vf2_patcher_gui.py", bundle_dir / "offline_vf2_patcher_gui.py")
     launcher_status = build_launcher_exe(bundle_dir, build_label)
@@ -1044,17 +1081,18 @@ vanilla folder, writes a backup under the modded folder in .vf2_patch_backups,
 recreates the {build_label} beta support folder structure, and writes a clearly
 named modded EXE.
 
-You can run {PATCHER_LAUNCHER_NAME} to auto-load manifest.json in the GUI, or
-run Launch_GUI.bat, select the game folder, load manifest.json, and apply the
-default settings.
+You can run {PATCHER_LAUNCHER_NAME} to auto-load manifest.json in the GUI. The
+GUI then prompts you to choose your own vanilla Virtual Families 2 installation
+folder. The patcher does not look for or assume a hardcoded install path. You
+can also run Launch_GUI.bat, select the game folder, load manifest.json, and
+apply the default settings.
 
-Dry Run / Validate Only is a pretend patch run. It checks whether the selected
-VF2 folder looks right, whether the EXE is the expected official one, whether
-all patch data matches, and whether the needed payload files are intact. It
-does not create the modded output folder, make backups, or change any game
-files. If you do not choose a custom log path, dry-run and pre-write failure
-logs are written next to manifest.json so the vanilla game folder stays
-untouched.
+Dry Run / Validate Only validates that the patcher's working. It checks whether
+the selected VF2 folder looks right, whether the EXE is the expected official
+one, whether all patch data matches, and whether the needed payload files are
+intact. It does not actually change or write files. If you do not choose a
+custom log path, dry-run and pre-write failure logs are written next to
+manifest.json so the vanilla game folder stays untouched.
 """,
         encoding="ascii",
         newline="\r\n",
@@ -1078,7 +1116,8 @@ changes anything.
    If that does not open, run:
    Launch_GUI.bat
 
-4. The patcher should auto-load manifest.json.
+4. The patcher should auto-load manifest.json and then ask you to select your
+   own vanilla Virtual Families 2 installation folder.
 
 5. Select your vanilla Virtual Families 2 install folder. It should be the
    folder that contains Virtual Families 2.exe, Images, Sounds, Assets, and the
@@ -1087,8 +1126,8 @@ changes anything.
 6. Review the optional patch checkboxes.
 
 7. Optional but recommended: click Dry Run (Validate Only).
-   Dry Run is a pretend patch. It checks whether the patch will work and
-   changes nothing.
+   Dry Run validates that the patcher's working. It does not actually
+   change/write files.
 
 8. Click Apply Patches.
 
@@ -1115,6 +1154,7 @@ Have fun! -Lorsieab2 :)
     files = [
         "offline_vf2_patcher.py",
         "offline_vf2_patcher_gui.py",
+        *icon_files,
         apply_name,
         "Launch_GUI.bat",
         readme_name,
@@ -1136,6 +1176,8 @@ def clear_generated_runner_files(bundle_dir: Path) -> None:
         "How to Use.txt",
         "Launch_GUI.bat",
         PATCHER_LAUNCHER_NAME,
+        PATCHER_ICON_PNG,
+        PATCHER_ICON_ICO,
         "vf2_patcher_launcher.cs",
         "patcher_launcher_build.json",
         "patch_dry_run_log.json",
@@ -1182,7 +1224,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Creates a separate clearly labeled modded output folder by default.",
         "- Creates backups before writing changed files in the modded output folder.",
         "- Writes machine-readable success/failure logs.",
-        "- Dry Run / Validate Only is a pretend patch run: it checks the install, EXE, patch records, and payload hashes, then stops before creating backups, creating the modded output folder, or changing files. Default dry-run and pre-write failure logs are written next to manifest.json, not into the vanilla game folder.",
+        "- Dry Run / Validate Only validates that the patcher's working: it checks the install, EXE, patch records, and payload hashes, then stops before creating backups, creating the modded output folder, or changing/writing files. Default dry-run and pre-write failure logs are written next to manifest.json, not into the vanilla game folder.",
+        "- When the generated patcher EXE starts the GUI, it auto-loads adjacent manifest.json and prompts the user to choose their own vanilla Virtual Families 2 installation folder.",
         "- Provides a restore command for backups created by this patcher.",
         "",
         "What this patcher does not do",
@@ -1229,6 +1272,9 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "",
         "Settings and defaults",
         "---------------------",
+        "- Main Patches (green): core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits.",
+        "- Optional Patches (black): optional visual swaps, Invisible Furniture graphics modes, custom maps, LDW Posters/Paintings, and Colorful Couches.",
+        "- Experimental/Not Working Patches (red): Settings Evict, Island Events, and anything not 100% confirmed working and crash-free.",
     ]
     )
     for row in settings:
