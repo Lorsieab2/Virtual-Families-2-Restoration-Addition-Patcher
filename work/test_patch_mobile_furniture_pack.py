@@ -140,6 +140,26 @@ def valid_invisible_hammock_manifest():
     }
 
 
+class GenerationLockTests(unittest.TestCase):
+    def test_mobile_generation_locks_are_preserved(self):
+        self.assertEqual(
+            patcher.MOBILE_DATA_BY_PATH["Furniture/CouchNeonPurpleStd.png"]["lock_generation"],
+            19,
+        )
+        self.assertEqual(
+            patcher.MOBILE_DATA_BY_PATH["Furniture/SofaPlaid.png"]["lock_generation"],
+            12,
+        )
+        self.assertEqual(
+            patcher.MOBILE_DATA_BY_PATH["Furniture/VF3LargeFlatScreenTV.png"]["lock_generation"],
+            12,
+        )
+        self.assertEqual(
+            patcher.MOBILE_DATA_BY_PATH["Furniture/InvisibleHammock.png"]["lock_generation"],
+            0,
+        )
+
+
 class VF3TVAnimationContractTests(unittest.TestCase):
     def test_accepts_b78_frame_enum_order(self):
         manifest = valid_vf3_tv_manifest()

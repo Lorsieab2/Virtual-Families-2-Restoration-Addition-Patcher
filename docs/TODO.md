@@ -235,6 +235,17 @@
   EXE payload; dry-run/apply against an official install copy, then verify the
   output folder contains `Virtual Families 2 - Modded B105.exe` only and the
   patch log save folder is `Documents/LDW/Virtual Families 2 - Modded B105`.
+- Patcher file-layout test B106 optional payloads: verify the generated ZIP is
+  self-contained; `white_birds` applies bundled `bird.png`/`bird_shadow.png`,
+  transparent Invisible Furniture applies bundled `InvisibleMantleFireplace.png`
+  and `InvisibleGrandfatherClock.png`, and `optional_song_mods` is absent unless
+  real `payload/OptionalSongMods/*.ogg` files are bundled.
+- Convert the Store Scroll Bar native `CScrollingStoreScene` draw/mouse hooks
+  into setting-gated byte/table records before exposing it as a reversible
+  optional patch.
+- In-game test B106 generation locks: with a fresh save before later
+  generations, verify added furniture respects the preserved mobile
+  `lock_generation` values rather than appearing fully unlocked by default.
 - Patcher follow-up: split remaining native store-table rows for Custom Couches
   and LDW Posters/Paintings into setting-gated byte/table patch records. The
   current `custom_couches_ldw_posters` setting gates image/fmap payload files,

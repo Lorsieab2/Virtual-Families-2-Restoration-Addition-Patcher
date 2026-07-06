@@ -41,6 +41,16 @@ FULL_PAYLOAD_ALWAYS_INCLUDE_DIRS = {
 SOURCE_ONLY_PAYLOAD_DIRS = FULL_PAYLOAD_ALWAYS_INCLUDE_DIRS
 OPTIONAL_SONG_SOURCE_DIR = Path("OptionalSongMods")
 OPTIONAL_SONG_TARGET_DIR = Path("Sounds")
+SOURCE_BACKED_OPTIONAL_SETTINGS = {
+    "optional_song_mods",
+    "white_birds",
+    "transparent_menu_bar",
+    "transparent_store_bar",
+    "store_scroll_bar",
+    "transparent_decor_tab",
+    "custom_lorsieab2_map_images",
+    "optional_visual_mod_graphics",
+}
 
 SETTINGS = [
     {
@@ -166,6 +176,20 @@ SETTINGS = [
         "id": "transparent_store_bar",
         "label": "Transparent Store Bar",
         "description": "Makes the bottom store bar transparent. Credit to Corylea on LDWForums.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "white_birds",
+        "label": "White Birds",
+        "description": "Alters the yard parrots to be white birds instead.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "store_scroll_bar",
+        "label": "Store Scroll Bar",
+        "description": "Adds a scroll bar to the store screen.",
         "default": False,
         "category": "optional",
     },
@@ -643,6 +667,8 @@ def setting_for_asset(rel_path: Path) -> str:
         return "transparent_menu_bar"
     if text.startswith("OptionalVisualMods/Transparent-Store-Bar/"):
         return "transparent_store_bar"
+    if text in {"OptionalVisualMods/bird.png", "OptionalVisualMods/bird_shadow.png"}:
+        return "white_birds"
     if text.startswith("OptionalVisualMods/Purple-Decor-Tab/"):
         return "transparent_decor_tab"
     if text.startswith("OptionalVisualMods/Invisible Furniture - Base Graphics/"):
@@ -651,6 +677,8 @@ def setting_for_asset(rel_path: Path) -> str:
         return "invisible_furniture_transparent_graphics"
     if text.startswith("OptionalVisualMods/Invisible Furniture Backups/"):
         return "invisible_furniture_transparent_graphics"
+    if text.startswith("OptionalVisualMods/"):
+        return "optional_visual_mod_graphics"
     if text.startswith("OptionalSongMods/"):
         return "optional_song_mods"
     if text.startswith("Images/VillagerBodies/") or text.startswith("Images/HolidayOutfits/"):
@@ -659,6 +687,14 @@ def setting_for_asset(rel_path: Path) -> str:
         return "vf3_tv_assets_recognition"
     if text.startswith("Images/CollectionOrnaments/") or "CollectionOrnament" in stem or stem == "collectables_small":
         return "holiday_ornaments_collection"
+    if text in {
+        "Images/familytree_scrollknob_btm.png",
+        "Images/familytree_scrollknob_mid.png",
+        "Images/familytree_scrollknob_top.png",
+        "Images/getMoreCoinsScrollShadow.png",
+        "Images/ScrollingStoreItemBox.png",
+    }:
+        return "store_scroll_bar"
     if len(parts) >= 3 and parts[0] == "Images" and parts[1] == "Furniture" and stem in HOLIDAY_FURNITURE_FILES:
         return "holiday_furniture"
     if len(parts) >= 2 and parts[0] == "Assets" and stem in HOLIDAY_FURNITURE_FILES:
@@ -909,6 +945,7 @@ def optional_visual_asset_patches(bundle_dir: Path) -> list[dict[str, Any]]:
         if not source.is_file() or source.suffix.lower() not in FULL_PAYLOAD_IMAGE_EXTENSIONS:
             continue
         target_rel = loose_optional_visual_target(source.relative_to(optional_root))
+        setting = setting_for_asset(source.relative_to(payload_root))
         records.append(
             {
                 "file_path": relative_posix(target_rel),
@@ -916,10 +953,14 @@ def optional_visual_asset_patches(bundle_dir: Path) -> list[dict[str, Any]]:
                 "source_sha256": sha256_file(source),
                 "source_size": source.stat().st_size,
                 "overwrite_existing": True,
-                "requires": ["optional_visual_mod_graphics"],
+                "requires": [setting],
                 "note": (
-                    "Loose OptionalVisualMods image swap. Furniture graphics target Images/Furniture; "
-                    "future room-upgrade graphics target Images/Upgrades; other images target Images."
+                    "Named optional visual swap."
+                    if setting != "optional_visual_mod_graphics"
+                    else (
+                        "Loose OptionalVisualMods image swap. Furniture graphics target Images/Furniture; "
+                        "future room-upgrade graphics target Images/Upgrades; other images target Images."
+                    )
                 ),
             }
         )
@@ -981,8 +1022,18 @@ def export_exe_replacement_payload(
     }
 
 
-def default_settings(include_byte_patches: bool, include_exe_replacement: bool) -> list[dict[str, Any]]:
+def default_settings(
+    include_byte_patches: bool,
+    include_exe_replacement: bool,
+    available_settings: set[str] | None = None,
+) -> list[dict[str, Any]]:
     settings = [row for row in SETTINGS if include_exe_replacement or row["id"] != "core_executable"]
+    if available_settings is not None:
+        settings = [
+            row
+            for row in settings
+            if row["id"] not in SOURCE_BACKED_OPTIONAL_SETTINGS or row["id"] in available_settings
+        ]
     if include_byte_patches:
         settings.insert(
             0,
@@ -1484,7 +1535,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "patched_exe": str(patched_exe),
             "build_manifest_keys": sorted(build_manifest_data) if build_manifest_data else [],
         },
-        "settings": default_settings(bool(byte_patches), bool(exe_replacement_record)),
+        "settings": default_settings(
+            bool(byte_patches),
+            bool(exe_replacement_record),
+            set(asset_counts_by_setting),
+        ),
         "target_files": target_files,
         "runtime_requirements": {
             "invalid_install_message": INVALID_INSTALL_MESSAGE,

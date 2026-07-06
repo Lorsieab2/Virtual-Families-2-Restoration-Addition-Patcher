@@ -1444,7 +1444,10 @@ INVISIBLE_TRANSPARENT_FMAP_DONORS = {
     f"{item['name']}.png.fmap": item["donor_fmap"]
     for item in INVISIBLE_TRANSPARENT_BASE_ITEMS
 }
-INVISIBLE_TRANSPARENT_GRAPHIC_OVERRIDES = {}
+INVISIBLE_TRANSPARENT_GRAPHIC_OVERRIDES = {
+    "InvisibleMantleFireplace": ROOT / "work" / "assets" / "invisible_transparent_overrides" / "InvisibleMantleFireplace.png",
+    "InvisibleGrandfatherClock": ROOT / "work" / "assets" / "invisible_transparent_overrides" / "InvisibleGrandfatherClock.png",
+}
 VF3_TV_FMAP_DONORS = {
     "VF3LargeFlatScreenTV.png.fmap": "TVFlatScreenStd.png.fmap",
     "VF3SmallFlatScreenTV.png.fmap": "TVFlatScreenStd.png.fmap",
@@ -1680,22 +1683,15 @@ def safety_fmap_reason(manifest_item):
 
 
 def apply_generation_lock_distribution():
-    generations = list(range(10, 31))
-    base = len(ITEMS) // len(generations)
-    remainder = len(ITEMS) % len(generations)
-    schedule = []
-    for pos, generation in enumerate(generations):
-        schedule.extend([generation] * (base + (1 if pos < remainder else 0)))
-    if len(schedule) != len(ITEMS):
-        raise RuntimeError("Generation lock schedule does not match item count")
     for idx, (_name, _donor, _list_name, path) in enumerate(ITEMS):
+        data = MOBILE_DATA_BY_PATH[path]
         pack = MOBILE_DATA_BY_PATH[path].get("custom_pack", "")
         if pack.startswith("Invisible "):
             generation = 0
         else:
-            generation = schedule[idx]
-        MOBILE_DATA_BY_PATH[path]["lock_generation"] = generation
-        MOBILE_DATA_BY_PATH[path]["assigned_lock_generation"] = generation
+            generation = int(data.get("lock_generation", 0))
+        data["lock_generation"] = generation
+        data["assigned_lock_generation"] = generation
 
 
 apply_generation_lock_distribution()

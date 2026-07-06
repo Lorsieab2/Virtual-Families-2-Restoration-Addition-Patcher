@@ -1054,3 +1054,30 @@
   should prefer `--include-byte-patches` over `--include-exe-replacement` so
   native changes are applied locally after vanilla EXE validation without
   distributing a ready-made modified game EXE.
+
+## 2026-07-06 - B106 Generation Locks and Self-Contained Optional Payloads
+
+- `work/patch_mobile_furniture_pack.py::apply_generation_lock_distribution()`
+  no longer redistributes added furniture across synthetic generations 10-30.
+  It preserves each mobile/custom `lock_generation` value from
+  `MOBILE_DATA_BY_PATH`; only custom packs whose `custom_pack` starts with
+  `Invisible ` are forced to generation `0` for placement/test access.
+- The synthetic redistribution was overriding confirmed mobile values such as
+  `Furniture/CouchNeonPurpleStd.png -> 19`,
+  `Furniture/SofaPlaid.png -> 12`, and
+  `Furniture/VF3LargeFlatScreenTV.png -> 12`, which made the store lock
+  metadata unreliable.
+- Invisible Furniture transparent graphic overrides are now workspace-backed
+  assets in `work/assets/invisible_transparent_overrides/`. The generator
+  packages `InvisibleMantleFireplace.png` and `InvisibleGrandfatherClock.png`
+  from there into `OptionalVisualMods/Invisible Furniture - Transparent`, so
+  patcher ZIPs remain self-contained after export.
+- `work/export_offline_patch_bundle.py` now emits `white_birds` setting
+  metadata for `OptionalVisualMods/bird.png` and `bird_shadow.png`. Optional
+  source-backed settings are hidden when their payload files are not present,
+  preventing dead checkboxes such as `optional_song_mods` without bundled
+  `.ogg` records.
+- Store Scroll Bar is a native `CScrollingStoreScene` draw/mouse hook, not an
+  asset-only swap. It should remain hidden as a patcher setting until the
+  native hook is split into setting-gated byte/table records or an equivalent
+  reversible implementation.

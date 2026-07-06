@@ -528,6 +528,12 @@ as:
   Default off. Credit to swedane on LDWForums.
 - `transparent_store_bar` - Optional transparent bottom store bar visual swap.
   Default off. Credit to Corylea on LDWForums.
+- `white_birds` - Optional visual swap that copies bundled white-bird
+  `bird.png` and `bird_shadow.png` assets to `Images/`. Default off.
+- `store_scroll_bar` - Planned optional store-screen scroll bar setting. This
+  is native-code work (`CScrollingStoreScene` draw/mouse hooks), so the setting
+  should not be shown in release manifests until byte/table records or an
+  equivalent setting-gated implementation can enable and disable it cleanly.
 - `transparent_decor_tab` - Optional transparent purple Decor tab visual swap.
   Default off. Credit to swedane on LDWForums.
 - `optional_visual_mod_graphics` - Optional loose `OptionalVisualMods` image
@@ -560,6 +566,10 @@ game. Optional song records copy `payload/OptionalSongMods/*.ogg` into
 records copy source graphics into runtime folders: furniture graphics to
 `Images/Furniture`, future Workshop/Kitchen/Office upgrade graphics to
 `Images/Upgrades`, and animation strips or other loose images to `Images`.
+Generated patcher ZIPs must be self-contained: after export, no setting may
+depend on creator-local folders such as Downloads. Source-backed optional
+settings are omitted from the manifest if their corresponding payload files are
+not bundled.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
