@@ -142,7 +142,10 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                     {
                         "manifest_version": 1,
                         "name": "separate output folder unit test",
-                        "output": {"default_folder_name": "VF2-BTest-Modded"},
+                        "output": {
+                            "default_folder_name": "VF2-BTest-Modded",
+                            "default_exe_name": "Virtual Families 2 - Modded BTest.exe",
+                        },
                         "settings": [
                             {
                                 "id": "core_executable",
@@ -192,6 +195,59 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(Path(log["output_dir"]), output_dir.resolve())
             self.assertEqual(log["modded_exe_name"], "Virtual Families 2 - Modded BTest.exe")
             self.assertTrue(log["modded_save_dir"].endswith(str(Path("LDW") / "Virtual Families 2 - Modded BTest")))
+
+    def test_byte_patch_output_folder_renames_modded_exe_for_save_folder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "Virtual Families 2"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            manifest = tmp_path / "byte_patch_output.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "byte patch renamed output unit test",
+                        "output": {
+                            "default_folder_name": "VF2-BByte-Modded",
+                            "default_exe_name": "Virtual Families 2 - Modded BByte.exe",
+                        },
+                        "target_files": [
+                            {
+                                "path": game_file.name,
+                                "sha256": sha256_bytes(original),
+                                "size": len(original),
+                            }
+                        ],
+                        "patches": [
+                            {
+                                "file_path": game_file.name,
+                                "offset": "0x2",
+                                "expected_original_bytes": "03 04",
+                                "replacement_bytes": "AA BB",
+                                "note": "unit test byte swap",
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_patcher("apply", "--exe", str(game_file), "--manifest", str(manifest))
+
+            output_dir = tmp_path / "VF2-BByte-Modded"
+            modded_exe = output_dir / "Virtual Families 2 - Modded BByte.exe"
+            self.assertEqual(game_file.read_bytes(), original)
+            self.assertFalse((output_dir / game_file.name).exists())
+            self.assertEqual(modded_exe.read_bytes(), bytes([1, 2, 0xAA, 0xBB, 5, 6]))
+            log_path = next((output_dir / ".vf2_patch_backups").glob("*/patch_log.json"))
+            log = json.loads(log_path.read_text(encoding="utf-8"))
+            self.assertEqual(log["modded_exe_name"], "Virtual Families 2 - Modded BByte.exe")
+            self.assertTrue(log["modded_save_dir"].endswith(str(Path("LDW") / "Virtual Families 2 - Modded BByte")))
+            self.assertEqual(log["patched_files"][0]["output_file_path"], "Virtual Families 2 - Modded BByte.exe")
 
     def test_apply_with_exe_path_replaces_verified_original_and_restores(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -595,9 +651,9 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 str(manifest),
                 "--disable",
                 "vf3_tv_animation_graphics",
+                expect=2,
             )
-            self.assertIn("0 active asset patch record", result.stdout)
-            self.assertIn("Disabled settings: vf3_tv_animation_graphics", result.stdout)
+            self.assertIn("No active patches remain", result.stderr)
 
     def test_outfit_sprite_sheet_asset_patches_copy_into_game_images(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -981,9 +1037,9 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 "--manifest",
                 str(manifest),
                 "--disable-all",
+                expect=2,
             )
-            self.assertIn("Validated 0 active byte patch record", result.stdout)
-            self.assertIn("Disabled settings: holiday_outfits", result.stdout)
+            self.assertIn("No active patches", result.stderr)
             self.assertEqual(game_file.read_bytes(), original)
 
             self.run_patcher(

@@ -21,9 +21,9 @@ It does not actually change or write files.
 
 ## Release Artifact
 
-The full B104 patcher ZIP is intentionally not committed to source because it contains the patch payload. It should be attached to a GitHub Release:
+The full B105 patcher ZIP is intentionally not committed to source because it contains the patch payload. It should be attached to a GitHub Release:
 
-`Virtual-Families-2-Restoration-Addition-Patcher-B104.zip`
+`Virtual-Families-2-Restoration-Addition-Patcher-B105.zip`
 
 ## Source Layout
 
@@ -44,6 +44,6 @@ python -m unittest discover -s tests
 
 ## Use The Patcher
 
-For normal users, download the release ZIP, unzip it, run `Launch_GUI.bat` or the optional `Launch GUI.lnk` shortcut, select the vanilla VF2 install folder, optionally run `Dry Run (Validate Only)`, then click `Enable/Disable Patches`.
+For normal users, download the release ZIP, unzip it, run `Launch_GUI.bat`, select the vanilla VF2 install folder, optionally run `Dry Run (Validate Only)`, then click `Enable/Disable Patches`. Prebuilt `Launch GUI.lnk` shortcuts are not shipped because Windows shortcuts can point at stale paths after ZIP extraction.
 
 Have fun! -Lorsieab2 :)

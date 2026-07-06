@@ -13,7 +13,8 @@ changes anything.
 3. Run:
    Launch_GUI.bat
 
-   If Launch GUI.lnk is present, you can use that iconed shortcut instead.
+   The BAT file is the supported launcher. It resolves files relative to the
+   folder where you extracted this ZIP.
 
 4. The patcher should auto-load manifest.json.
 

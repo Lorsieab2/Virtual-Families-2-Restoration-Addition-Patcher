@@ -543,6 +543,22 @@ def manifest_output_folder_name(manifest: dict[str, Any]) -> str | None:
     return rel
 
 
+def manifest_output_exe_name(manifest: dict[str, Any]) -> str | None:
+    raw = manifest.get("output", manifest.get("output_folder"))
+    if not isinstance(raw, dict):
+        return None
+    name = str(raw.get("default_exe_name", raw.get("exe_name", ""))).strip()
+    if not name:
+        return None
+    rel = normalize_rel_path(name, "manifest output EXE name")
+    path = Path(rel)
+    if len(path.parts) != 1 or path.suffix.lower() != ".exe":
+        raise PatchError("Manifest output EXE name must be a single .exe filename.")
+    if path.name.lower() == DEFAULT_EXE_NAME.lower():
+        raise PatchError("Manifest output EXE name must not be the vanilla Virtual Families 2.exe name.")
+    return path.name
+
+
 def resolve_apply_output_dir(
     args: argparse.Namespace,
     game_dir: Path,
@@ -606,6 +622,46 @@ def prepare_output_dir(
         elif source.is_file():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
+
+
+def enforce_modded_exe_name(
+    game_dir: Path,
+    output_dir: Path,
+    manifest: dict[str, Any],
+    process_log: list[dict[str, Any]],
+) -> str | None:
+    desired_name = manifest_output_exe_name(manifest)
+    if not desired_name:
+        return None
+    if output_dir.resolve() == game_dir.resolve():
+        return desired_name
+    vanilla_exe = output_dir / DEFAULT_EXE_NAME
+    modded_exe = output_dir / desired_name
+    if modded_exe.exists():
+        if vanilla_exe.exists() and vanilla_exe.resolve() != modded_exe.resolve():
+            vanilla_exe.unlink()
+            log_process_event(
+                process_log,
+                phase="apply",
+                kind="output_exe_name",
+                status="success",
+                file_path=DEFAULT_EXE_NAME,
+                output_file_path=desired_name,
+                action="removed_ambiguous_vanilla_named_exe",
+            )
+        return desired_name
+    if vanilla_exe.exists():
+        vanilla_exe.replace(modded_exe)
+        log_process_event(
+            process_log,
+            phase="apply",
+            kind="output_exe_name",
+            status="success",
+            file_path=DEFAULT_EXE_NAME,
+            output_file_path=desired_name,
+            action="renamed_modded_exe",
+        )
+    return desired_name
 
 
 def count_files(root: Path) -> int:
@@ -1455,6 +1511,8 @@ def apply_manifest(args: argparse.Namespace) -> int:
         patches = manifest_patches(manifest, settings, enabled_settings)
         assets = manifest_asset_patches(manifest, settings, enabled_settings)
         grouped = group_patches(patches)
+        if not grouped and not assets and output_dir.resolve() == game_dir.resolve():
+            raise PatchError("No active patches remain enabled.")
         emit_progress(args, "Verifying target files...")
         runtime_checks = verify_runtime_requirements(game_dir, manifest, settings, enabled_settings)
         target_checks = verify_target_files(game_dir, manifest, settings, enabled_settings)
@@ -1517,15 +1575,24 @@ def apply_manifest(args: argparse.Namespace) -> int:
                         index=patch.index,
                     )
             apply_asset_patches(output_dir, manifest_path.parent, asset_checks, args, process_log)
+            enforced_exe_name = enforce_modded_exe_name(game_dir, output_dir, manifest, process_log)
+        else:
+            enforced_exe_name = manifest_output_exe_name(manifest)
 
         patched_files = []
         for rel_path in sorted(grouped):
-            target = resolve_under_game_dir(game_dir if args.dry_run else output_dir, rel_path)
+            output_rel_path = (
+                enforced_exe_name
+                if enforced_exe_name and Path(rel_path).name.lower() == DEFAULT_EXE_NAME.lower()
+                else rel_path
+            )
+            target = resolve_under_game_dir(game_dir if args.dry_run else output_dir, output_rel_path)
             patched_files.append(
                 {
                     "file_path": rel_path,
+                    "output_file_path": output_rel_path,
                     "sha256": sha256_file(target) if not args.dry_run else None,
-                    "size": target.stat().st_size,
+                    "size": target.stat().st_size if not args.dry_run else len(file_data[rel_path]),
                 }
             )
 
@@ -1549,7 +1616,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 for row in asset_files
                 if Path(str(row["output_file_path"])).suffix.lower() == ".exe"
             ),
-            DEFAULT_EXE_NAME,
+            enforced_exe_name or DEFAULT_EXE_NAME,
         )
         save_dir = Path.home() / "Documents" / "LDW" / Path(modded_exe_name).stem
         log = {
