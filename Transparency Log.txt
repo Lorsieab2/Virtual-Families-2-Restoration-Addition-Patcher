@@ -146,9 +146,10 @@ Current B103 behavior
 - The GUI completion popup lists enabled patches, altered files, the modded game
   folder, and the modded save folder.
 - When launched through the generated patcher EXE, the GUI auto-loads the
-  adjacent manifest.json and prompts the user to select their own vanilla
-  Virtual Families 2 installation folder. It does not look for or assume a
-  hardcoded install path.
+  adjacent manifest.json but does not open the vanilla-folder picker
+  automatically. The user selects their own vanilla Virtual Families 2
+  installation folder manually. It does not look for or assume a hardcoded
+  install path.
 - Modded saves are expected under Documents/LDW/(name of modded Virtual
   Families 2 exe).
 - Existing vanilla saves can be copied manually into the modded save folder.
@@ -192,7 +193,7 @@ Changelog
   Dry Run, and save-copy instructions.
 - B103 patcher refresh: Added category-colored settings groups, full-height
   description rendering, and the family icon beside the GUI title/launcher icon.
-- B103 patcher refresh: Added startup prompting for the user's vanilla VF2
-  install folder when the generated patcher EXE launches the GUI.
+- B103 patcher refresh: Added buttons to enable all Main, Optional, or
+  Experimental settings and removed startup prompting for the vanilla folder.
 
 Have fun! -Lorsieab2 :)

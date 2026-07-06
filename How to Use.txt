@@ -16,8 +16,7 @@ changes anything.
    If that does not open, run:
    Launch_GUI.bat
 
-4. The patcher should auto-load manifest.json and then ask you to select your
-   own vanilla Virtual Families 2 installation folder.
+4. The patcher should auto-load manifest.json.
 
 5. Select your vanilla Virtual Families 2 install folder. It should be the
    folder that contains Virtual Families 2.exe, Images, Sounds, Assets, and the

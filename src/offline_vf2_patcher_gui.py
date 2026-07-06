@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import math
 import re
 import subprocess
 import threading
@@ -80,6 +81,43 @@ def categorized_settings(
     return rows
 
 
+def setting_ids_for_category(settings: dict[str, patcher.PatchSetting], category: str) -> list[str]:
+    normalized = category.lower()
+    return [
+        setting.id
+        for setting in settings.values()
+        if (setting.category or "main").lower() == normalized
+    ]
+
+
+def estimate_wrapped_lines(text: str, pixel_width: int, measure_text: object) -> int:
+    width = max(1, int(pixel_width))
+    lines = 0
+    for paragraph in text.splitlines() or [""]:
+        if not paragraph:
+            lines += 1
+            continue
+        line_width = 0
+        tokens = re.findall(r"\S+\s*", paragraph)
+        if not tokens:
+            lines += 1
+            continue
+        for token in tokens:
+            token_width = max(1, int(measure_text(token)))
+            stripped_width = max(1, int(measure_text(token.strip() or token)))
+            if line_width and line_width + token_width > width:
+                lines += 1
+                line_width = stripped_width
+            else:
+                line_width += token_width
+            if line_width > width:
+                extra_lines = max(0, math.ceil(line_width / width) - 1)
+                lines += extra_lines
+                line_width = line_width - (extra_lines * width)
+        lines += 1
+    return max(1, lines)
+
+
 def build_apply_namespace(
     *,
     game_dir: str,
@@ -137,6 +175,7 @@ class VF2PatcherGUI:
 
         self.settings: dict[str, patcher.PatchSetting] = {}
         self.setting_vars: dict[str, tk.BooleanVar] = {}
+        self.description_widgets: list[tk.Text] = []
         self.loaded_manifest_path: str | None = None
         self.loaded_manifest_data: dict[str, object] | None = None
         self.last_auto_output_dir = ""
@@ -233,6 +272,9 @@ class VF2PatcherGUI:
         self._button(controls, "Defaults", self.select_default_settings).grid(row=0, column=1, padx=(0, 6))
         self._button(controls, "Enable All", self.select_all_settings).grid(row=0, column=2, padx=(0, 6))
         self._button(controls, "Disable All", self.clear_all_settings).grid(row=0, column=3, padx=(0, 6))
+        self._button(controls, "Enable All Main Patches", lambda: self.select_category_settings("main")).grid(row=1, column=0, padx=(0, 6), pady=(6, 0))
+        self._button(controls, "Enable all Optional Content", lambda: self.select_category_settings("optional")).grid(row=1, column=1, padx=(0, 6), pady=(6, 0))
+        self._button(controls, "Enable all Experimental Patches", lambda: self.select_category_settings("experimental")).grid(row=1, column=2, padx=(0, 6), pady=(6, 0))
 
         outer = ttk.Frame(frame)
         outer.grid(row=1, column=0, sticky="nsew")
@@ -246,15 +288,13 @@ class VF2PatcherGUI:
         scrollbar.grid(row=0, column=1, sticky="ns")
 
         self.settings_inner = ttk.Frame(self.settings_canvas)
+        self.settings_inner.columnconfigure(0, weight=1)
         self.settings_window = self.settings_canvas.create_window((0, 0), window=self.settings_inner, anchor="nw")
         self.settings_inner.bind(
             "<Configure>",
             lambda event: self.settings_canvas.configure(scrollregion=self.settings_canvas.bbox("all")),
         )
-        self.settings_canvas.bind(
-            "<Configure>",
-            lambda event: self.settings_canvas.itemconfigure(self.settings_window, width=event.width),
-        )
+        self.settings_canvas.bind("<Configure>", self._on_settings_canvas_configure)
         self._render_settings_placeholder("Load a manifest to see toggleable patch settings.")
         return frame
 
@@ -327,18 +367,6 @@ class VF2PatcherGUI:
             self.game_dir_var.set(path)
             self._auto_populate_output_dir()
 
-    def prompt_for_game_dir_on_startup(self) -> None:
-        if clean_path_text(self.game_dir_var.get()):
-            return
-        path = filedialog.askdirectory(
-            title="Select your vanilla Virtual Families 2 install folder",
-            mustexist=True,
-        )
-        if path:
-            self.game_dir_var.set(path)
-            self._auto_populate_output_dir()
-            self.status_var.set("Vanilla VF2 folder selected. Review settings, then run Dry Run or Apply Patches.")
-
     def _browse_manifest(self) -> None:
         path = filedialog.askopenfilename(
             title="Select a VF2 patch manifest",
@@ -395,6 +423,7 @@ class VF2PatcherGUI:
         self.loaded_manifest_path = str(manifest_path)
         self.loaded_manifest_data = manifest if isinstance(manifest, dict) else None
         self.setting_vars = {}
+        self.description_widgets = []
         for child in self.settings_inner.winfo_children():
             child.destroy()
 
@@ -421,6 +450,10 @@ class VF2PatcherGUI:
         self._auto_populate_output_dir()
         return True
 
+    def _on_settings_canvas_configure(self, event: tk.Event) -> None:
+        self.settings_canvas.itemconfigure(self.settings_window, width=event.width)
+        self.root.after_idle(self._resize_all_markup_labels)
+
     def _markup_label(self, parent: tk.Widget, text: str) -> tk.Text:
         widget = tk.Text(
             parent,
@@ -440,8 +473,12 @@ class VF2PatcherGUI:
         widget.tag_configure("bold", font=bold_font, foreground="#555555")
         for segment, bold in markup_segments(text):
             widget.insert("end", segment, "bold" if bold else "normal")
+        widget._vf2_description_text = text  # type: ignore[attr-defined]
+        widget._vf2_normal_font = normal_font  # type: ignore[attr-defined]
         widget.configure(state="disabled", cursor="arrow")
         widget.bind("<Configure>", lambda _event, text_widget=widget: self._resize_markup_label(text_widget))
+        widget.bind("<MouseWheel>", self._scroll_settings_canvas)
+        self.description_widgets.append(widget)
         self.root.after_idle(lambda text_widget=widget: self._resize_markup_label(text_widget))
         return widget
 
@@ -456,15 +493,33 @@ class VF2PatcherGUI:
         )
 
     def _resize_markup_label(self, widget: tk.Text) -> None:
+        text = getattr(widget, "_vf2_description_text", "")
+        normal_font = getattr(widget, "_vf2_normal_font", tkfont.nametofont("TkDefaultFont"))
+        width = widget.winfo_width() - 4
+        if width < 80:
+            width = max(80, self.settings_canvas.winfo_width() - 60)
+        display_lines = estimate_wrapped_lines(text, width, normal_font.measure)
         try:
             count = widget.count("1.0", "end-1c", "displaylines")
-            display_lines = int(count[0]) if count else 1
+            display_lines = max(display_lines, int(count[0]) if count else 1)
         except tk.TclError:
-            display_lines = max(1, int(widget.index("end-1c").split(".", 1)[0]))
+            display_lines = max(display_lines, int(widget.index("end-1c").split(".", 1)[0]))
         height = max(1, display_lines)
         if int(widget.cget("height")) != height:
             widget.configure(height=height)
             self.settings_canvas.configure(scrollregion=self.settings_canvas.bbox("all"))
+
+    def _resize_all_markup_labels(self) -> None:
+        for widget in list(self.description_widgets):
+            if widget.winfo_exists():
+                self._resize_markup_label(widget)
+
+    def _scroll_settings_canvas(self, event: tk.Event) -> str:
+        delta = getattr(event, "delta", 0)
+        units = -1 * int(delta / 120) if delta else 0
+        if units:
+            self.settings_canvas.yview_scroll(units, "units")
+        return "break"
 
     def _render_settings_placeholder(self, text: str) -> None:
         for child in self.settings_inner.winfo_children():
@@ -482,6 +537,12 @@ class VF2PatcherGUI:
     def clear_all_settings(self) -> None:
         for var in self.setting_vars.values():
             var.set(False)
+
+    def select_category_settings(self, category: str) -> None:
+        for setting_id in setting_ids_for_category(self.settings, category):
+            var = self.setting_vars.get(setting_id)
+            if var is not None:
+                var.set(True)
 
     def start_apply(self, *, dry_run: bool) -> None:
         if not self._ensure_manifest_settings_loaded():
@@ -732,11 +793,7 @@ def main(argv: list[str] | None = None) -> int:
     app = VF2PatcherGUI(root)
     if argv:
         app.manifest_var.set(argv[0])
-        def startup_load() -> None:
-            app.load_manifest_settings()
-            root.after(150, app.prompt_for_game_dir_on_startup)
-
-        root.after(100, startup_load)
+        root.after(100, app.load_manifest_settings)
     root.mainloop()
     return 0
 
