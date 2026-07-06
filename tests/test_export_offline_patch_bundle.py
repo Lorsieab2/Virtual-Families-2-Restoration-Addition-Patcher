@@ -143,11 +143,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("holiday_ornaments_collection [default off]", settings.stdout)
             self.assertIn("settings_evict_button [default off]", settings.stdout)
             self.assertIn("transparent_store_bar [default off]", settings.stdout)
+            self.assertIn("unused_pets [default on]", settings.stdout)
+            self.assertIn("optional_song_mods [default off]", settings.stdout)
             self.assertIn("island_events [default off]", settings.stdout)
             self.assertIn("body field sync", settings.stdout)
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
             self.assertEqual(settings_by_id["holiday_furniture"]["category"], "main")
+            self.assertEqual(settings_by_id["unused_pets"]["category"], "main")
             self.assertEqual(settings_by_id["custom_couches_ldw_posters"]["category"], "optional")
+            self.assertEqual(settings_by_id["optional_song_mods"]["category"], "optional")
             self.assertEqual(settings_by_id["settings_evict_button"]["category"], "experimental")
 
     def test_exports_byte_patches_when_vanilla_exe_is_supplied(self):
@@ -234,6 +238,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             (build / "OptionalVisualMods" / "Invisible Furniture - Base Graphics" / "InvisibleHammock.png").write_bytes(b"visible hammock")
             (build / "OptionalVisualMods" / "Invisible Furniture Backups").mkdir(parents=True)
             (build / "OptionalVisualMods" / "Invisible Furniture Backups" / "InvisibleHammock.png").write_bytes(b"transparent backup")
+            (build / "OptionalVisualMods" / "PoolTableStd.png").write_bytes(b"pool table visual")
             (build / "Sounds").mkdir()
             (build / "Sounds" / "sound00.wav").write_bytes(b"sound")
             (build / "SDL2.dll").write_bytes(b"dll")
@@ -272,11 +277,16 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(asset_by_path["Images/Furniture/InvisibleHammock.png"]["overwrite_existing"], True)
             self.assertIn("Full B103 beta folder", asset_by_path["Images/Furniture/InvisibleHammock.png"]["note"])
             self.assertEqual(
-                asset_by_path["OptionalVisualMods/Invisible Furniture Backups/InvisibleHammock.png"]["requires"],
-                ["invisible_furniture_transparent_graphics"],
+                asset_by_path["Images/Furniture/PoolTableStd.png"]["requires"],
+                ["optional_visual_mod_graphics"],
             )
-            self.assertEqual(asset_by_path["Sounds/sound00.wav"]["overwrite_existing"], True)
-            self.assertEqual(asset_by_path["SDL2.dll"]["overwrite_existing"], True)
+            self.assertEqual(
+                asset_by_path["Images/Furniture/PoolTableStd.png"]["source_path"],
+                "payload/OptionalVisualMods/PoolTableStd.png",
+            )
+            self.assertNotIn("OptionalVisualMods/Invisible Furniture Backups/InvisibleHammock.png", asset_by_path)
+            self.assertNotIn("Sounds/sound00.wav", asset_by_path)
+            self.assertNotIn("SDL2.dll", asset_by_path)
             self.assertNotIn("patch-manifest.json", asset_by_path)
             self.assertEqual(manifest["created_with"], "Codex AI")
             self.assertIn("Codex AI", manifest["creator_disclosure"])
@@ -290,7 +300,12 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertTrue((out / "offline_vf2_patcher.py").is_file())
             self.assertTrue((out / "patcher_icon.png").is_file())
             self.assertTrue((out / "patcher_icon.ico").is_file())
-            self.assertTrue((out / "Virtual Families 2 Restoration-Addition Patcher.exe").is_file() or (out / "vf2_patcher_launcher.cs").is_file())
+            self.assertFalse((out / "Virtual Families 2 Restoration-Addition Patcher.exe").exists())
+            self.assertFalse((out / "vf2_patcher_launcher.cs").exists())
+            self.assertFalse((out / "patcher_launcher_build.json").exists())
+            self.assertTrue((out / "launch_gui_shortcut.json").is_file())
+            self.assertFalse((out / "payload" / "SDL2.dll").exists())
+            self.assertFalse((out / "payload" / "Sounds" / "sound00.wav").exists())
             self.assertIn("Codex AI", (out / "README-B103-PATCHER.txt").read_text(encoding="ascii"))
             self.assertIn("Official install validation", (out / "Transparency Log.txt").read_text(encoding="utf-8"))
             self.assertIn("Main Patches (green)", (out / "Transparency Log.txt").read_text(encoding="utf-8"))
@@ -298,8 +313,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("patcher_icon.png", manifest["export_summary"]["runner_files"])
             self.assertIn("patcher_icon.ico", manifest["export_summary"]["runner_files"])
             self.assertIn("transparency_log", manifest["export_summary"])
-            self.assertIn("launcher", manifest["export_summary"])
-            self.assertTrue((out / "vf2_patcher_launcher.cs").is_file())
+            self.assertIn("launch_gui_shortcut", manifest["export_summary"])
+            self.assertNotIn("launcher", manifest["export_summary"])
             self.assertTrue(manifest["export_summary"]["exe_replacement"])
 
     def test_exports_object_relative_native_patch_sources_as_metadata_only(self):
@@ -400,6 +415,102 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
             self.assertIn("Images/UnreferencedGenerated.png", asset_by_path)
             self.assertEqual(manifest["export_summary"]["asset_mode"], "all")
+
+    def test_optional_song_mods_target_sounds_from_source_only_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            songs = tmp_path / "songs"
+            (base / "Sounds").mkdir(parents=True)
+            (base / "Sounds" / "menu.ogg").write_bytes(b"vanilla menu")
+            build.mkdir()
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            songs.mkdir()
+            (songs / "menu.ogg").write_bytes(b"optional menu")
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--optional-song-mods-dir",
+                str(songs),
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
+            song = asset_by_path["Sounds/menu.ogg"]
+            self.assertEqual(song["requires"], ["optional_song_mods"])
+            self.assertEqual(song["source_path"], "payload/OptionalSongMods/menu.ogg")
+            self.assertEqual(song["expected_target_size"], len(b"vanilla menu"))
+            self.assertTrue((out / "payload" / "OptionalSongMods" / "menu.ogg").is_file())
+            self.assertFalse((out / "payload" / "Sounds" / "menu.ogg").exists())
+
+    def test_disable_all_refreshes_existing_modded_output_to_vanilla(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game = tmp_path / "Virtual Families 2"
+            manifest_path = tmp_path / "manifest.json"
+            output = tmp_path / "VF2-B104-Modded"
+            (game / "Images").mkdir(parents=True)
+            (game / "Images" / "main_BG.png").write_bytes(b"vanilla")
+            vanilla_exe = minimal_pe_bytes()
+            (game / "Virtual Families 2.exe").write_bytes(vanilla_exe)
+            (output / "Images").mkdir(parents=True)
+            (output / "Images" / "main_BG.png").write_bytes(b"modded")
+            (output / ".vf2_patch_backups").mkdir()
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "settings": [
+                            {"id": "transparent_menu_bar", "default": True},
+                        ],
+                        "target_files": [
+                            {
+                                "path": "Virtual Families 2.exe",
+                                "sha256": hashlib.sha256(vanilla_exe).hexdigest(),
+                                "size": len(vanilla_exe),
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Images/main_BG.png",
+                                "source_path": "payload/main_BG.png",
+                                "source_sha256": hashlib.sha256(b"modded").hexdigest(),
+                                "source_size": len(b"modded"),
+                                "overwrite_existing": True,
+                                "requires": ["transparent_menu_bar"],
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            (tmp_path / "payload").mkdir()
+            (tmp_path / "payload" / "main_BG.png").write_bytes(b"modded")
+
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game),
+                "--manifest",
+                str(manifest_path),
+                "--output-dir",
+                str(output),
+                "--disable-all",
+            )
+
+            self.assertEqual((output / "Images" / "main_BG.png").read_bytes(), b"vanilla")
+            log_path = next((output / ".vf2_patch_backups").glob("*/patch_log.json"))
+            log = json.loads(log_path.read_text(encoding="utf-8"))
+            self.assertEqual(log["status"], "success")
+            self.assertEqual(log["settings"]["enabled"], [])
+            self.assertEqual(log["settings"]["disabled"], ["transparent_menu_bar"])
 
     def test_force_clears_stale_payload_files(self):
         with tempfile.TemporaryDirectory() as tmp:

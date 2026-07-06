@@ -570,9 +570,28 @@ def prepare_output_dir(
     if output_root in source_root.parents or source_root in output_root.parents:
         raise PatchError("Output directory must be a sibling or separate folder, not inside the vanilla game folder.")
     if output_root.exists() and any(output_root.iterdir()):
-        raise PatchError(f"Output directory already exists and is not empty: {output_root}")
+        can_refresh = (
+            (output_root / DEFAULT_BACKUP_ROOT).is_dir()
+            or (output_root.name.startswith("VF2-") and output_root.name.endswith("-Modded"))
+        )
+        if not can_refresh:
+            raise PatchError(
+                "Output directory already exists and is not recognized as a VF2 modded output folder: "
+                f"{output_root}"
+            )
+        emit_progress(args, f"Refreshing modded output folder from vanilla install: {output_root}")
+        for child in output_root.iterdir():
+            if child.name == DEFAULT_BACKUP_ROOT:
+                continue
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+    elif output_root.exists():
+        emit_progress(args, f"Refreshing empty modded output folder from vanilla install: {output_root}")
+    else:
+        emit_progress(args, f"Creating modded output folder: {output_root}")
 
-    emit_progress(args, f"Creating modded output folder: {output_root}")
     output_root.mkdir(parents=True, exist_ok=True)
     normalized_skips = {str(Path(path)) for path in skip_rel_paths}
     for source in source_root.rglob("*"):
@@ -1426,6 +1445,8 @@ def apply_manifest(args: argparse.Namespace) -> int:
     process_log: list[dict[str, Any]] = []
     backup_dir = None
     backup_manifest = None
+    settings: dict[str, PatchSetting] = {}
+    enabled_settings: set[str] = set()
     try:
         emit_progress(args, f"Loading manifest: {manifest_path}")
         manifest = read_json(manifest_path)
@@ -1433,8 +1454,6 @@ def apply_manifest(args: argparse.Namespace) -> int:
         settings, enabled_settings = resolve_enabled_settings(manifest, args)
         patches = manifest_patches(manifest, settings, enabled_settings)
         assets = manifest_asset_patches(manifest, settings, enabled_settings)
-        if not patches and not assets:
-            raise PatchError("No active patches remain after applying setting selections.")
         grouped = group_patches(patches)
         emit_progress(args, "Verifying target files...")
         runtime_checks = verify_runtime_requirements(game_dir, manifest, settings, enabled_settings)
@@ -1582,6 +1601,8 @@ def apply_manifest(args: argparse.Namespace) -> int:
 
         if settings:
             print("Enabled settings: " + (", ".join(sorted(enabled_settings)) if enabled_settings else "(none)"))
+            disabled_settings = sorted(set(settings) - enabled_settings)
+            print("Disabled settings: " + (", ".join(disabled_settings) if disabled_settings else "(none)"))
         print(
             f"Validated {len(patches)} active byte patch record(s) across {len(grouped)} file(s) "
             f"and {len(assets)} active asset patch record(s)."
@@ -1608,11 +1629,16 @@ def apply_manifest(args: argparse.Namespace) -> int:
             "game_dir": str(game_dir),
             "manifest": str(manifest_path),
             "backup_dir": None if backup_dir is None else str(backup_dir),
+            "settings": settings_log(settings, enabled_settings) if settings else None,
             "error": str(exc),
             "process_log": process_log,
         }
         write_json(failure_log_path, failure_log)
         emit_progress(args, f"Patch failed. Failure log: {failure_log_path}")
+        if settings:
+            disabled_settings = sorted(set(settings) - enabled_settings)
+            emit_progress(args, "Enabled settings: " + (", ".join(sorted(enabled_settings)) if enabled_settings else "(none)"))
+            emit_progress(args, "Disabled settings: " + (", ".join(disabled_settings) if disabled_settings else "(none)"))
         raise
 
 

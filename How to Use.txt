@@ -11,10 +11,9 @@ changes anything.
 2. Unzip this patcher package anywhere you like.
 
 3. Run:
-   Virtual Families 2 Restoration-Addition Patcher.exe
-
-   If that does not open, run:
    Launch_GUI.bat
+
+   If Launch GUI.lnk is present, you can use that iconed shortcut instead.
 
 4. The patcher should auto-load manifest.json.
 
@@ -28,10 +27,13 @@ changes anything.
    Dry Run validates that the patcher's working. It does not actually
    change/write files.
 
-8. Click Apply Patches.
+8. Click Enable/Disable Patches. If you uncheck a patch later, click this
+   button again to rebuild the modded folder from vanilla with that patch
+   disabled.
 
-9. The patcher creates a separate modded folder next to your vanilla game
-   folder. Your original game folder and original saves are left alone.
+9. The patcher creates or refreshes a separate modded folder next to your
+   vanilla game folder. Your original game folder and original saves are left
+   alone.
 
 10. Run the clearly named modded EXE inside the new modded folder.
 

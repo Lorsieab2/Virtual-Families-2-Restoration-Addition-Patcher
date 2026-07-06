@@ -595,9 +595,9 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 str(manifest),
                 "--disable",
                 "vf3_tv_animation_graphics",
-                expect=2,
             )
-            self.assertIn("No active patches remain", result.stderr)
+            self.assertIn("0 active asset patch record", result.stdout)
+            self.assertIn("Disabled settings: vf3_tv_animation_graphics", result.stdout)
 
     def test_outfit_sprite_sheet_asset_patches_copy_into_game_images(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -981,9 +981,9 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 "--manifest",
                 str(manifest),
                 "--disable-all",
-                expect=2,
             )
-            self.assertIn("No active patches", result.stderr)
+            self.assertIn("Validated 0 active byte patch record", result.stdout)
+            self.assertIn("Disabled settings: holiday_outfits", result.stdout)
             self.assertEqual(game_file.read_bytes(), original)
 
             self.run_patcher(

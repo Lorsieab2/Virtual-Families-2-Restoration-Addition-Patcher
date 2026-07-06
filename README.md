@@ -21,17 +21,16 @@ It does not actually change or write files.
 
 ## Release Artifact
 
-The full B103 patcher ZIP is intentionally not committed to source because it contains the full patch payload. It should be attached to a GitHub Release:
+The full B104 patcher ZIP is intentionally not committed to source because it contains the patch payload. It should be attached to a GitHub Release:
 
-`Virtual-Families-2-Restoration-Addition-Patcher-B103.zip`
+`Virtual-Families-2-Restoration-Addition-Patcher-B104.zip`
 
 ## Source Layout
 
 - `src/offline_vf2_patcher.py` - CLI patcher, validation, backups, apply/restore logic.
 - `src/offline_vf2_patcher_gui.py` - Tkinter GUI wrapper.
 - `src/export_offline_patch_bundle.py` - bundle/manifest/payload exporter.
-- `src/assets/patcher_icon.png` and `src/assets/patcher_icon.ico` - GUI title picture and launcher/window icon assets.
-- `src/vf2_patcher_launcher.cs` - generated launcher source example.
+- `src/assets/patcher_icon.png` and `src/assets/patcher_icon.ico` - GUI title picture and shortcut/window icon assets.
 - `tests/` - unit tests for the patcher, GUI helpers, and exporter.
 - `docs/offline-patcher.md` - technical patcher documentation.
 - `Transparency Log.txt` - transparency notes for users.
@@ -45,6 +44,6 @@ python -m unittest discover -s tests
 
 ## Use The Patcher
 
-For normal users, download the release ZIP, unzip it, run `Virtual Families 2 Restoration-Addition Patcher.exe`, select the vanilla VF2 install folder, optionally run `Dry Run (Validate Only)`, then apply patches.
+For normal users, download the release ZIP, unzip it, run `Launch_GUI.bat` or the optional `Launch GUI.lnk` shortcut, select the vanilla VF2 install folder, optionally run `Dry Run (Validate Only)`, then click `Enable/Disable Patches`.
 
 Have fun! -Lorsieab2 :)
