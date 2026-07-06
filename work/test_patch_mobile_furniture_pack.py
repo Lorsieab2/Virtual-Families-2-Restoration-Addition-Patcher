@@ -159,6 +159,32 @@ class GenerationLockTests(unittest.TestCase):
             0,
         )
 
+    def test_stock_furniture_records_keep_base_generation_locks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            shutil.copy2(patcher.SRC_OBJS / "FurnitureManager.obj", temp_root / "FurnitureManager.obj")
+            old_patched = patcher.PATCHED
+            patcher.PATCHED = temp_root
+            try:
+                before_obj = CoffObject(temp_root / "FurnitureManager.obj")
+                before_sym = before_obj.symbol(patcher.ITEMINFO)
+                before_sec = before_obj.section(before_sym.section)
+                stock_len = patcher.ORIG_FURNITURE_COUNT * patcher.RECORD_SIZE
+                before_raw = before_sec.raw_ptr + before_sym.value
+                before_stock_records = bytes(before_obj.buf[before_raw : before_raw + stock_len])
+
+                patcher.patch_furniture_manager({})
+
+                after_obj = CoffObject(temp_root / "FurnitureManager.obj")
+                after_sym = after_obj.symbol(patcher.ITEMINFO)
+                after_sec = after_obj.section(after_sym.section)
+                after_raw = after_sec.raw_ptr + after_sym.value
+                after_stock_records = bytes(after_obj.buf[after_raw : after_raw + stock_len])
+
+                self.assertEqual(after_stock_records, before_stock_records)
+            finally:
+                patcher.PATCHED = old_patched
+
 
 class VF3TVAnimationContractTests(unittest.TestCase):
     def test_accepts_b78_frame_enum_order(self):

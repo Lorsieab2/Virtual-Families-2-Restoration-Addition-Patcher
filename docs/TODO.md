@@ -240,12 +240,20 @@
   transparent Invisible Furniture applies bundled `InvisibleMantleFireplace.png`
   and `InvisibleGrandfatherClock.png`, and `optional_song_mods` is absent unless
   real `payload/OptionalSongMods/*.ogg` files are bundled.
+- Patcher file-layout test B107 optional songs: verify the generated ZIP
+  includes `payload/OptionalSongMods/menu.ogg` and `song1-4.ogg`, enabling the
+  option copies those files to `Sounds/`, and unchecking it plus clicking
+  Enable/Disable Patches refreshes the modded folder back to vanilla songs.
 - Convert the Store Scroll Bar native `CScrollingStoreScene` draw/mouse hooks
   into setting-gated byte/table records before exposing it as a reversible
   optional patch.
 - In-game test B106 generation locks: with a fresh save before later
   generations, verify added furniture respects the preserved mobile
   `lock_generation` values rather than appearing fully unlocked by default.
+- In-game test B107 base generation locks: on a fresh generation-1 save, confirm
+  stock PC furniture that normally unlocks in later generations remains locked,
+  proving the appended mobile/custom records did not alter base `itemInfo`
+  generation fields.
 - Patcher follow-up: split remaining native store-table rows for Custom Couches
   and LDW Posters/Paintings into setting-gated byte/table patch records. The
   current `custom_couches_ldw_posters` setting gates image/fmap payload files,

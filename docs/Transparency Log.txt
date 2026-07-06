@@ -235,5 +235,10 @@ Changelog
   .ogg files to Sounds only when enabled.
 - B104 patcher refresh: Keeps OptionalVisualMods, Original Virtual Families 2
   Assets, and OptionalSongMods as read-only/copy-only payload source folders.
+- B107 patcher refresh: Restored the bundled OptionalSongMods source files from
+  the last known working B104 payload so the ZIP is self-contained again.
+- B107 game build: Added a regression check that preserves the stock PC
+  furniture itemInfo table bytes when appending mobile/custom records, keeping
+  base-game generation locks intact.
 
 Have fun! -Lorsieab2 :)

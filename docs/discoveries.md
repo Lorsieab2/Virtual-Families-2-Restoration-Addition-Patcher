@@ -1081,3 +1081,19 @@
   asset-only swap. It should remain hidden as a patcher setting until the
   native hook is split into setting-gated byte/table records or an equivalent
   reversible implementation.
+
+## 2026-07-06 - B107 Base Lock Parity and Optional Songs
+
+- `work/patch_mobile_furniture_pack.py::patch_furniture_manager()` appends new
+  furniture records after `ORIG_FURNITURE_COUNT * RECORD_SIZE` and preserves the
+  original stock `itemInfo` table bytes. A regression now snapshots the stock
+  table before and after patching so base-game generation locks cannot be
+  flattened by the append path.
+- The stock PC table contains 211 records with nonzero lock-generation fields
+  (`raw_u32[3]`), so base furniture/unlocks must continue to flow through the
+  vanilla lock handling. The outfit-store lock helper returns `-1` for
+  non-outfit item IDs so those records fall through to the stock function body.
+- B107 restores the optional song payload to the self-contained patcher ZIP by
+  exporting `payload/OptionalSongMods/menu.ogg` and `song1-4.ogg` from the last
+  known working B104 payload. The generated manifest exposes
+  `optional_song_mods` only when those five bundled files exist.
