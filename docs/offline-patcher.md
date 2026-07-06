@@ -30,15 +30,20 @@ files from its own backups.
 ```
 
 The apply command can also take the original executable directly. In that mode
-the game directory is inferred from the EXE's parent folder, and the manifest
-still writes the patched output back to `Virtual Families 2.exe` in that same
-folder:
+the game directory is inferred from the EXE's parent folder. Current full
+bundle manifests declare an output folder, so the patcher copies the vanilla
+folder to a separate modded sibling folder and writes changed files there:
 
 ```powershell
 & "C:\Path\To\Python\python.exe" work\offline_vf2_patcher.py apply `
   --exe "C:\Games\Virtual Families 2\Virtual Families 2.exe" `
-  --manifest patches\vf2-b99-full-payload\manifest.json
+  --manifest patches\vf2-b103-full-payload\manifest.json
 ```
+
+Use `--output-dir` to override the manifest's default modded output folder. For
+B103 full bundles, the default output folder is `VF2-B103-Modded`, and the
+modded executable is named `Virtual Families 2 - Modded B103.exe` so it is
+obvious that it is not a vanilla executable.
 
 Use `--dry-run` to validate target hashes, expected bytes, and asset payload
 hashes without writing files. Use `--backup-dir` and `--log` to control where
@@ -68,6 +73,17 @@ patch set, and restore from a patcher backup. Checkboxes are generated from the
 manifest, so new optional components such as Holiday furniture, Holiday outfits,
 mobile-exclusive furniture, or future feature groups do not require GUI code
 changes.
+
+Bundle exports can include `VF2 Offline Patcher.exe`, a tiny generated Windows
+launcher that looks for `manifest.json` next to itself and starts the GUI with
+that manifest preloaded. The launcher is not an injector and does not touch the
+game directly; it only starts the Python GUI.
+
+After a successful GUI apply, the patcher shows a completion popup listing the
+enabled patch settings, altered files, modded game folder, and expected modded
+save folder. The save folder is derived from the modded EXE name:
+`Documents/LDW/(name of modded Virtual Families 2 exe)`. Existing vanilla saves
+stay in the original save folder unless the user manually copies them.
 
 ## Bundle Exporter
 
@@ -109,7 +125,8 @@ still writes vanilla EXE target metadata and records a
 payloads and hash validation while native patch records are developed from
 object/linker patch data.
 
-The current user-provided vanilla EXE candidate for B99 testing is
+The B103 full-payload manifest targets the vanilla EXE fingerprint originally
+captured from the user-provided
 `C:\Users\Owner\Downloads\Virtual Families 2\Virtual Families 2.exe`:
 
 | Field | Value |
@@ -144,9 +161,9 @@ For beta-folder smoke testing, the exporter also supports a full-payload mode:
 
 ```powershell
 & "C:\Path\To\Python\python.exe" work\export_offline_patch_bundle.py `
-  --build-dir outputs\VF2-Mobile-Furniture-With-Island-Events-B99-Evict-Hammock-Parity `
-  --out-dir outputs\VF2-B99-Offline-Patcher-Full `
-  --vanilla-exe "C:\Users\Owner\Downloads\Virtual Families 2\Virtual Families 2.exe" `
+  --build-dir outputs\VF2-Mobile-Furniture-With-Island-Events-B103-Invisible-Heart-Bed `
+  --out-dir outputs\VF2-B103-Offline-Patcher-Full `
+  --vanilla-exe "C:\Path\To\Vanilla\Virtual Families 2.exe" `
   --asset-mode full `
   --include-exe-replacement `
   --include-patcher-scripts `
@@ -157,11 +174,18 @@ For beta-folder smoke testing, the exporter also supports a full-payload mode:
 folder, including root DLLs and support directories. `--include-exe-replacement`
 adds a `core_executable` asset record that verifies the vanilla
 `Virtual Families 2.exe` by whole-file SHA-256 or by the recorded PE32 section
-structure, then replaces it with the current modded EXE. This is useful for
-testing the patcher's backup/apply/restore mechanics from an EXE-only folder,
-but it is not the final trust-friendly release shape. The final patcher should
-replace that full EXE payload with clean byte/table patch records wherever
-possible.
+structure, then writes a clearly named modded EXE in the separate output
+folder. Runner batch/readme names are inferred from the bundle label, for
+example `Apply_B103_Patcher.bat` and `README-B103-PATCHER.txt`. This is useful
+for testing the patcher's backup/apply/restore mechanics from an EXE-only
+folder, but it is not the final trust-friendly release shape. The final patcher
+should replace that full EXE payload with clean byte/table patch records
+wherever possible.
+
+Full bundle exports also write `Transparency Log.txt`. That file documents how
+the bundle was built, what the patcher does and does not do, setting defaults,
+patch counts, implementation files, launcher build metadata, known limitations,
+and the save-folder guidance shown in the GUI completion popup.
 
 A second preview with `--vanilla-exe "Unneeded crap\Virtual Families 2.exe"
 --include-byte-patches` writes the target metadata above and keeps the same 713
@@ -337,6 +361,13 @@ record type with its own safety rules. Overlapping byte patches are refused.
 `asset_patches` copy files from a patch bundle into the user-provided game
 folder after verifying the payload file's `source_sha256`. `source_path` is
 relative to the manifest folder; `file_path` is relative to the game folder.
+An asset record can also include `output_file_path`; in that case `file_path`
+is the validation target inside the selected vanilla game folder, while
+`output_file_path` is where the replacement is written in the modded output
+folder. B103 uses this for `Virtual Families 2.exe` so the vanilla EXE is
+verified but the patched file is created as
+`Virtual Families 2 - Modded B103.exe`.
+
 Asset records can create new files, which restore later removes. If an asset
 target already exists, the patcher allows it only when it already matches the
 payload, when `expected_target_sha256` matches, when
@@ -363,8 +394,15 @@ as:
 - `outfit_store_expansion` - Add generated outfit rows, copied villager sprite
   sheets, icons, and independent outfit tray items.
 - `mobile_furniture` - Add additional mobile-exclusive furniture.
+- `invisible_furniture_visible_graphics` - Add Invisible Furniture with visible
+  base-game-style placement graphics. Default off. Enable this first so the
+  furniture can be placed in game.
+- `invisible_furniture_transparent_graphics` - Swap placed Invisible Furniture
+  graphics to transparent versions. Default off, and requires the visible
+  invisible-furniture setting for active replacements.
 - `vf3_tv_animation_graphics` - Fix VF3 TV animation graphics.
-- `settings_evict_button` - Re-enable the Settings menu Evict button.
+- `settings_evict_button` - Re-enable the Settings menu Evict button. Default
+  off until the in-game implementation is stable.
 - `holiday_ornaments_collection` - Mobile Holiday Ornament yard collectibles,
   collection screen art, and Goals entries. Current manifest conversion must
   include the B86 `CCollectableItem::Find()` and `WasItemSpawned()`
@@ -375,10 +413,28 @@ as:
   target `12` and Goal Collector row `0x54` target `13`, the B87 supplied
   `Images/CollectionOrnaments/*` payloads, baked-placeholder frame background,
   and replacement `Images/collectables_small.png`.
+- `custom_lorsieab2_map_images` - Optional visual-only map image swap from
+  `OptionalVisualMods/Custom Lorsieab2 Map Images`. Default off.
+- `transparent_menu_bar` - Optional transparent bottom menu bar visual swap.
+  Default off. Credit to swedane on LDWForums.
+- `transparent_store_bar` - Optional transparent bottom store bar visual swap.
+  Default off. Credit to Corylea on LDWForums.
+- `transparent_decor_tab` - Optional transparent purple Decor tab visual swap.
+  Default off. Credit to swedane on LDWForums.
 
 Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings
 are enabled. If a record has no setting requirement, it is always active.
+
+Unchecked settings must not leave their feature files in the fresh modded output
+folder. The exporter therefore assigns optional visual source folders,
+Invisible Furniture visible graphics, Invisible Furniture transparent graphics,
+and active replacement records to the same feature gates. Re-running the
+patcher into a new output folder with a setting unchecked reverts that setting
+by omission: its records are not copied, replaced, or created. Native/game-code
+features still bundled through the monolithic `core_executable` payload cannot
+be fully unbundled by checkbox until their native changes are converted into
+separate byte/table patch records.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:

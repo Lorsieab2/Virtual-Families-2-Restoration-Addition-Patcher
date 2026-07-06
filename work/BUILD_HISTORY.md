@@ -697,3 +697,32 @@
   `eBehavior_LieInHammockNoLeadIn (0x24)`.
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B102-Invisible-Hammock-Drop-Parity`.
+
+## B103 - Invisible Heart-Shaped Bed and Patcher Refresh
+
+- Adds `InvisibleHeartShapedBed` as a new item `0x327` in `gFurniture4`,
+  donor-cloned from the base Heart-Shaped Bed `0x252`. The existing
+  `InvisibleAdultDoubleBed` remains unchanged as item `0x314` with Brown Adult
+  Bed donor `0x1B7`.
+- Copies `InvisibleHeartShapedBed.png.fmap` from `HeartShapedBed.png.fmap` and
+  generates the usual base/transparent sprite pair from `HeartShapedBed.png`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B103-Invisible-Heart-Bed`.
+  Linked EXE SHA-256:
+  `66343cac83b0f835fa6decb7c9abeb8249c04be269d85e85e989e16a528957eb`.
+- Refreshes the full-payload offline patcher bundle at
+  `outputs/VF2-B103-Offline-Patcher-Full` with B103-labeled runner files and
+  the B103 EXE payload. Smoke apply from a copied vanilla EXE produced the B103
+  hash and recreated `Assets/`, `Images/`, `OptionalVisualMods/`,
+  `Original Virtual Families 2 Assets/`, and `Sounds/`.
+- Adds a separate manifest-declared modded output folder
+  (`VF2-B103-Modded`) and writes the patched EXE as
+  `Virtual Families 2 - Modded B103.exe` instead of replacing the user-selected
+  vanilla EXE in place.
+- Adds per-record patcher progress/process-log entries, a GUI completion popup,
+  `Transparency Log.txt`, and an optional generated `VF2 Offline Patcher.exe`
+  launcher that auto-loads the adjacent `manifest.json`.
+- Splits optional visual and Invisible Furniture support files behind
+  default-off settings so unchecked options are omitted from fresh modded output
+  folders. Native/game-code toggles still need future per-feature byte/table
+  records before they can revert independently of the full EXE payload.

@@ -9,12 +9,13 @@
   writes a patch log. Initial byte-patch and asset-patch restore scaffolds exist
   in `work/offline_vf2_patcher.py`, including manifest-declared toggleable
   settings, `--exe` input, full-payload beta-folder export, and a Tkinter GUI
-  wrapper. B99 has a full-payload test bundle that validates and backs up a
+  wrapper. B103 has a full-payload test bundle that validates and backs up a
   vanilla `Virtual Families 2.exe` by exact SHA-256 or matching PE section
-  structure, then replaces it and recreates the B99 support folder shape. Next
-  step is converting the current VF2 build's native byte changes into clean
-  release byte/table records so the patch bundle no longer needs a prebuilt
-  modded EXE payload.
+  structure, then creates a separate `VF2-B103-Modded` output folder with a
+  clearly named modded EXE and recreated B103 support folder shape. Next step
+  is converting the current VF2 build's native byte changes into clean release
+  byte/table records so the patch bundle no longer needs a prebuilt modded EXE
+  payload.
 - Define the JSON patch manifest contract: each patch record must include file
   path, offset, expected original bytes, replacement bytes, and note. The
   patcher must refuse to patch when expected bytes do not match, and it must
@@ -22,21 +23,26 @@
 - Keep the offline patcher simple and trust-friendly: avoid runtime injection,
   process memory editing, obfuscation, packers, and admin requirements. Prefer
   data, asset, and table patches over executable patches whenever possible.
-- Convert the B99 full-payload test bundle into the final no-modified-EXE
+- Convert the B103 full-payload test bundle into the final no-modified-EXE
   patcher: keep the scaled VF3 TV strips and generated assets as
   `asset_patches`, then add verified native byte/table records required to
   append furniture, Outfit rows/icons, visible Special Upgrades, Settings
   Evict, Invisible Hammock parity, ToolTray synthetic outfit handling, Holiday
   body runtime rendering, and other implemented fixes without distributing a
   premodified EXE.
+- Split the current full `core_executable` payload into per-feature native
+  patch records so unchecked native settings revert completely too. The B103
+  patcher now gates optional assets and visual swaps cleanly, but native
+  gameplay/code changes remain bundled together until their object/linker
+  patches are translated into separate vanilla EXE byte/table records.
 - Use the final cleaned `B98-current-vf2-modded-build` release ZIP as the
   source of truth for future package baselines. It supersedes the older local
   B98 extraction that contained only 29 of the generator's 111 additive
   `Images/Furniture` sprite paths.
 - Extract native patch records from object/linker patch data for the offline
-  bundle. The active B99 vanilla EXE candidate is the user-provided
-  `C:\Users\Owner\Downloads\Virtual Families 2\Virtual Families 2.exe`, size
-  `1,511,424`, SHA-256
+  bundle. The active B103 manifest targets the vanilla EXE fingerprint
+  originally captured from the user-provided VF2 executable: size `1,511,424`,
+  SHA-256
   `1582d9e84e1c32f51475be17335c5137c592cebf809748d401ccef99a32b73c3`, with a
   five-section PE32 structure fingerprint. The older workspace-local vanilla
   EXE candidate has SHA-256
@@ -205,6 +211,17 @@
   same native hammock drop behavior without crashes. Confirm the widened
   `CHotSpot::Hammock` in-world gate accepts item `0x30C` while the downstream
   base behavior remains `eBehavior_LieInHammockNoLeadIn (0x24)`.
+- In-game test B103 Invisible Heart-Shaped Bed: buy/place item `0x327`, verify
+  it appears as an invisible Bedroom item, and confirm villager drop/click
+  behavior matches the base Heart-Shaped Bed donor `0x252`. Also verify
+  `InvisibleAdultDoubleBed` still behaves like the Brown Adult Bed donor
+  `0x1B7`.
+- Patcher in-game/file-layout test B103 optional gates: run the generated
+  patcher with Invisible Furniture visible graphics off, transparent invisible
+  furniture off, custom map images off, and all transparent UI swaps off; verify
+  the fresh modded output folder does not contain those optional payloads or
+  replacements. Then enable each option individually and confirm only the
+  expected files appear/change.
 - Settings Evict research follow-up: fully resolve the mobile PLT/control-ID
   mapping for `theOptionsDialog::HandleMessage` so the first-generation mobile
   confirmation click can be documented down to the exact button ID as well as

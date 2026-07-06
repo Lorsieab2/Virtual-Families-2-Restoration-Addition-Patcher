@@ -38,6 +38,7 @@ def build_apply_namespace(
     manifest: str,
     backup_dir: str | None = None,
     log: str | None = None,
+    output_dir: str | None = None,
     dry_run: bool = False,
     settings: dict[str, patcher.PatchSetting] | None = None,
     selected_settings: set[str] | None = None,
@@ -50,6 +51,7 @@ def build_apply_namespace(
     return Namespace(
         game_dir=required_path(game_dir, "Game directory"),
         manifest=required_path(manifest, "Patch manifest"),
+        output_dir=optional_path(output_dir),
         backup_dir=optional_path(backup_dir),
         log=optional_path(log),
         dry_run=bool(dry_run),
@@ -57,6 +59,7 @@ def build_apply_namespace(
         disable=None,
         enable_all=False,
         disable_all=bool(settings),
+        progress_callback=None,
     )
 
 
@@ -78,6 +81,7 @@ class VF2PatcherGUI:
         self.game_dir_var = tk.StringVar()
         self.manifest_var = tk.StringVar()
         self.backup_dir_var = tk.StringVar()
+        self.output_dir_var = tk.StringVar()
         self.log_path_var = tk.StringVar()
         self.restore_backup_var = tk.StringVar()
         self.restore_log_var = tk.StringVar()
@@ -124,8 +128,9 @@ class VF2PatcherGUI:
 
         self._path_row(frame, 0, "Vanilla game folder", self.game_dir_var, self._browse_game_dir)
         self._path_row(frame, 1, "Patch manifest", self.manifest_var, self._browse_manifest)
-        self._path_row(frame, 2, "Backup folder", self.backup_dir_var, self._browse_backup_dir, optional=True)
-        self._path_row(frame, 3, "Patch log", self.log_path_var, self._browse_log_path, optional=True)
+        self._path_row(frame, 2, "Modded output folder", self.output_dir_var, self._browse_output_dir, optional=True)
+        self._path_row(frame, 3, "Backup folder", self.backup_dir_var, self._browse_backup_dir, optional=True)
+        self._path_row(frame, 4, "Patch log", self.log_path_var, self._browse_log_path, optional=True)
         return frame
 
     def _build_settings_section(self, parent: tk.Widget) -> ttk.LabelFrame:
@@ -237,6 +242,11 @@ class VF2PatcherGUI:
         if path:
             self.backup_dir_var.set(path)
 
+    def _browse_output_dir(self) -> None:
+        path = filedialog.askdirectory(title="Select the modded output folder")
+        if path:
+            self.output_dir_var.set(path)
+
     def _browse_log_path(self) -> None:
         path = filedialog.asksaveasfilename(
             title="Choose patch log path",
@@ -319,6 +329,7 @@ class VF2PatcherGUI:
             args = build_apply_namespace(
                 game_dir=self.game_dir_var.get(),
                 manifest=self.manifest_var.get(),
+                output_dir=self.output_dir_var.get(),
                 backup_dir=self.backup_dir_var.get(),
                 log=self.log_path_var.get(),
                 dry_run=dry_run,
@@ -328,6 +339,10 @@ class VF2PatcherGUI:
         except patcher.PatchError as exc:
             self._set_error(str(exc))
             return
+        args.progress_callback = lambda message: self.root.after(
+            0,
+            lambda text=message: self._append_log(text + "\n"),
+        )
 
         if not dry_run and not messagebox.askyesno(
             "Apply VF2 patch",
@@ -336,7 +351,7 @@ class VF2PatcherGUI:
             return
 
         label = "Dry run" if dry_run else "Apply patch"
-        self._run_worker(label, lambda: patcher.apply_manifest(args))
+        self._run_worker(label, lambda: patcher.apply_manifest(args), args=args, dry_run=dry_run)
 
     def start_restore(self) -> None:
         try:
@@ -362,7 +377,7 @@ class VF2PatcherGUI:
             return self.load_manifest_settings()
         return True
 
-    def _run_worker(self, label: str, func: object) -> None:
+    def _run_worker(self, label: str, func: object, *, args: object | None = None, dry_run: bool = False) -> None:
         self._set_busy(True)
         self.status_var.set(f"{label} running...")
         self._append_log(f"\n== {label} ==\n")
@@ -383,11 +398,21 @@ class VF2PatcherGUI:
                     message = traceback.format_exc()
             output = stdout.getvalue()
             err_output = stderr.getvalue()
-            self.root.after(0, lambda: self._finish_worker(label, success, message, output, err_output))
+            summary = getattr(args, "last_apply_summary", None) if args is not None else None
+            self.root.after(0, lambda: self._finish_worker(label, success, message, output, err_output, summary, dry_run))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _finish_worker(self, label: str, success: bool, message: str, stdout: str, stderr: str) -> None:
+    def _finish_worker(
+        self,
+        label: str,
+        success: bool,
+        message: str,
+        stdout: str,
+        stderr: str,
+        summary: dict[str, object] | None = None,
+        dry_run: bool = False,
+    ) -> None:
         if stdout:
             self._append_log(stdout)
         if stderr:
@@ -397,6 +422,8 @@ class VF2PatcherGUI:
         self._set_busy(False)
         if success:
             self.status_var.set(f"{label} complete.")
+            if summary and not dry_run:
+                self._show_apply_success(summary)
         else:
             self.status_var.set(f"{label} failed.")
 
@@ -414,6 +441,45 @@ class VF2PatcherGUI:
         self.log_text.insert("end", text)
         self.log_text.see("end")
         self.log_text.configure(state="disabled")
+
+    def _show_apply_success(self, summary: dict[str, object]) -> None:
+        settings = summary.get("settings", {})
+        enabled_labels = []
+        if isinstance(settings, dict):
+            for row in settings.get("available", []):
+                if isinstance(row, dict) and row.get("enabled"):
+                    enabled_labels.append(str(row.get("label") or row.get("id")))
+        altered_files = []
+        for key in ("patched_files", "asset_files"):
+            rows = summary.get(key, [])
+            if isinstance(rows, list):
+                for row in rows:
+                    if isinstance(row, dict):
+                        altered_files.append(str(row.get("output_file_path") or row.get("file_path")))
+
+        def compact(values: list[str], limit: int = 18) -> str:
+            if not values:
+                return "(none)"
+            shown = values[:limit]
+            suffix = "" if len(values) <= limit else f"\n...and {len(values) - limit} more."
+            return "\n".join(f"- {value}" for value in shown) + suffix
+
+        output_dir = str(summary.get("output_dir", ""))
+        save_dir = str(summary.get("modded_save_dir", ""))
+        message = (
+            "Patch complete!\n\n"
+            "Patches added successfully:\n"
+            f"{compact(enabled_labels)}\n\n"
+            "Files altered/copied in the modded build:\n"
+            f"{compact(sorted(set(altered_files)))}\n\n"
+            f"Modded game folder:\n{output_dir}\n\n"
+            f"Modded game's saves folder:\n{save_dir}\n\n"
+            "To play existing Virtual Families 2 saves, copy the contents of your original "
+            "Documents/LDW/Virtual Families 2 save folder into the modded save folder above. "
+            "Existing game saves are unaltered in the original game folder.\n\n"
+            "Have fun! -Lorsieab2 :)"
+        )
+        messagebox.showinfo("VF2 patch complete", message)
 
 
 def main(argv: list[str] | None = None) -> int:

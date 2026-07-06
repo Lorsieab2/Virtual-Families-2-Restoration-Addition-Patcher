@@ -24,6 +24,7 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
         args = gui.build_apply_namespace(
             game_dir="C:\\Games\\VF2",
             manifest="patches\\vf2.json",
+            output_dir="",
             backup_dir="",
             log=None,
             dry_run=True,
@@ -33,6 +34,7 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
 
         self.assertEqual(args.game_dir, "C:\\Games\\VF2")
         self.assertEqual(args.manifest, "patches\\vf2.json")
+        self.assertIsNone(args.output_dir)
         self.assertIsNone(args.backup_dir)
         self.assertIsNone(args.log)
         self.assertTrue(args.dry_run)

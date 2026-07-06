@@ -102,7 +102,7 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             backup = tmp_path / "backup"
             self.write_manifest(manifest, game_file, original)
 
-            self.run_patcher(
+            result = self.run_patcher(
                 "apply",
                 "--game-dir",
                 str(game_dir),
@@ -111,13 +111,87 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 "--backup-dir",
                 str(backup),
             )
+            self.assertIn("Validating byte patch 1/1", result.stdout)
+            self.assertIn("Applying byte patch 1/1", result.stdout)
             self.assertEqual(game_file.read_bytes(), bytes([1, 2, 0xAA, 0xBB, 5, 6]))
             self.assertTrue((backup / "vf2_patch_backup_manifest.json").is_file())
             self.assertTrue((backup / "patch_log.json").is_file())
+            log = json.loads((backup / "patch_log.json").read_text(encoding="utf-8"))
+            self.assertTrue(any(row["phase"] == "validate" and row["status"] == "success" for row in log["process_log"]))
+            self.assertTrue(any(row["phase"] == "apply" and row["status"] == "success" for row in log["process_log"]))
 
             self.run_patcher("restore", "--backup-dir", str(backup))
             self.assertEqual(game_file.read_bytes(), original)
             self.assertTrue((backup / "restore_log.json").is_file())
+
+    def test_manifest_output_folder_creates_modded_sibling_and_preserves_vanilla(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "Virtual Families 2"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = b"vanilla executable"
+            patched = b"patched executable"
+            game_file.write_bytes(original)
+            payload = tmp_path / "payload" / "Virtual Families 2 - Modded BTest.exe"
+            payload.parent.mkdir()
+            payload.write_bytes(patched)
+            manifest = tmp_path / "exe_replacement.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "separate output folder unit test",
+                        "output": {"default_folder_name": "VF2-BTest-Modded"},
+                        "settings": [
+                            {
+                                "id": "core_executable",
+                                "label": "Patch game executable",
+                                "default": True,
+                            }
+                        ],
+                        "target_files": [
+                            {
+                                "path": game_file.name,
+                                "sha256": sha256_bytes(original),
+                                "size": len(original),
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": game_file.name,
+                                "output_file_path": "Virtual Families 2 - Modded BTest.exe",
+                                "source_path": "payload/Virtual Families 2 - Modded BTest.exe",
+                                "source_sha256": sha256_bytes(patched),
+                                "source_size": len(patched),
+                                "expected_target_sha256": sha256_bytes(original),
+                                "expected_target_size": len(original),
+                                "overwrite_existing": True,
+                                "requires": ["core_executable"],
+                                "note": "create verified modded exe in separate folder",
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_patcher("apply", "--exe", str(game_file), "--manifest", str(manifest))
+
+            output_dir = tmp_path / "VF2-BTest-Modded"
+            self.assertEqual(game_file.read_bytes(), original)
+            self.assertFalse((output_dir / game_file.name).exists())
+            self.assertEqual((output_dir / "Virtual Families 2 - Modded BTest.exe").read_bytes(), patched)
+            backups = list((output_dir / ".vf2_patch_backups").glob("*/vf2_patch_backup_manifest.json"))
+            self.assertEqual(len(backups), 1)
+            backup_manifest = json.loads(backups[0].read_text(encoding="utf-8"))
+            self.assertEqual(Path(backup_manifest["game_dir"]), output_dir.resolve())
+            self.assertEqual(Path(backup_manifest["source_game_dir"]), game_dir.resolve())
+            log = json.loads((backups[0].parent / "patch_log.json").read_text(encoding="utf-8"))
+            self.assertEqual(Path(log["output_dir"]), output_dir.resolve())
+            self.assertEqual(log["modded_exe_name"], "Virtual Families 2 - Modded BTest.exe")
+            self.assertTrue(log["modded_save_dir"].endswith(str(Path("LDW") / "Virtual Families 2 - Modded BTest")))
 
     def test_apply_with_exe_path_replaces_verified_original_and_restores(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -680,6 +754,7 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             game_file.write_bytes(original)
             manifest = tmp_path / "patch.json"
             backup = tmp_path / "backup"
+            failure_log = tmp_path / "failure.json"
             self.write_manifest(manifest, game_file, original, expected="99 99")
 
             result = self.run_patcher(
@@ -690,11 +765,17 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 str(manifest),
                 "--backup-dir",
                 str(backup),
+                "--log",
+                str(failure_log),
                 expect=2,
             )
             self.assertIn("expected bytes do not match", result.stderr)
             self.assertEqual(game_file.read_bytes(), original)
             self.assertFalse(backup.exists())
+            self.assertTrue(failure_log.is_file())
+            log = json.loads(failure_log.read_text(encoding="utf-8"))
+            self.assertEqual(log["status"], "failure")
+            self.assertTrue(any(row["status"] == "error" and row["kind"] == "byte_patch" for row in log["process_log"]))
 
     def test_refuses_hash_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:

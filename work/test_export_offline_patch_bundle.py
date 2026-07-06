@@ -132,8 +132,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("holiday_furniture [default on]", settings.stdout)
             self.assertIn("vf3_tv_assets_recognition [default on]", settings.stdout)
             self.assertIn("holiday_ornaments_collection [default off]", settings.stdout)
+            self.assertIn("settings_evict_button [default off]", settings.stdout)
+            self.assertIn("transparent_store_bar [default off]", settings.stdout)
             self.assertIn("island_events [default off]", settings.stdout)
-            self.assertIn("stock outfit body field sync", settings.stdout)
+            self.assertIn("body field sync", settings.stdout)
 
     def test_exports_byte_patches_when_vanilla_exe_is_supplied(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -215,6 +217,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             patched_exe.write_bytes(b"patched executable")
             (build / "Images" / "Furniture").mkdir(parents=True)
             (build / "Images" / "Furniture" / "InvisibleHammock.png").write_bytes(b"hammock")
+            (build / "OptionalVisualMods" / "Invisible Furniture - Base Graphics").mkdir(parents=True)
+            (build / "OptionalVisualMods" / "Invisible Furniture - Base Graphics" / "InvisibleHammock.png").write_bytes(b"visible hammock")
+            (build / "OptionalVisualMods" / "Invisible Furniture Backups").mkdir(parents=True)
+            (build / "OptionalVisualMods" / "Invisible Furniture Backups" / "InvisibleHammock.png").write_bytes(b"transparent backup")
             (build / "Sounds").mkdir()
             (build / "Sounds" / "sound00.wav").write_bytes(b"sound")
             (build / "SDL2.dll").write_bytes(b"dll")
@@ -233,22 +239,43 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 "full",
                 "--include-exe-replacement",
                 "--include-patcher-scripts",
+                "--name",
+                "VF2 B103 Test Bundle",
             )
 
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
             self.assertEqual(asset_by_path["Virtual Families 2.exe"]["requires"], ["core_executable"])
+            self.assertEqual(asset_by_path["Virtual Families 2.exe"]["output_file_path"], "Virtual Families 2 - Modded B103.exe")
+            self.assertIn("modded B103 executable", asset_by_path["Virtual Families 2.exe"]["note"])
             self.assertEqual(asset_by_path["Virtual Families 2.exe"]["expected_target_sha256"], hashlib.sha256(vanilla_data).hexdigest())
             self.assertIsInstance(asset_by_path["Virtual Families 2.exe"]["expected_target_pe_structure"], dict)
             self.assertIsInstance(manifest["target_files"][0]["pe_structure"], dict)
+            self.assertEqual(asset_by_path["Images/Furniture/InvisibleHammock.png"]["requires"], ["invisible_furniture_visible_graphics"])
+            self.assertEqual(
+                asset_by_path["Images/Furniture/InvisibleHammock.png"]["source_path"],
+                "payload/OptionalVisualMods/Invisible Furniture - Base Graphics/InvisibleHammock.png",
+            )
             self.assertEqual(asset_by_path["Images/Furniture/InvisibleHammock.png"]["overwrite_existing"], True)
+            self.assertIn("Full B103 beta folder", asset_by_path["Images/Furniture/InvisibleHammock.png"]["note"])
+            self.assertEqual(
+                asset_by_path["OptionalVisualMods/Invisible Furniture Backups/InvisibleHammock.png"]["requires"],
+                ["invisible_furniture_transparent_graphics"],
+            )
             self.assertEqual(asset_by_path["Sounds/sound00.wav"]["overwrite_existing"], True)
             self.assertEqual(asset_by_path["SDL2.dll"]["overwrite_existing"], True)
             self.assertNotIn("patch-manifest.json", asset_by_path)
             self.assertEqual(manifest["runtime_requirements"], {"required_files": [], "required_dirs": []})
-            self.assertTrue((out / "payload" / "Virtual Families 2.exe").is_file())
-            self.assertTrue((out / "Apply_B99_Patcher.bat").is_file())
+            self.assertEqual(manifest["output"]["default_folder_name"], "VF2-B103-Modded")
+            self.assertTrue((out / "payload" / "Virtual Families 2 - Modded B103.exe").is_file())
+            self.assertTrue((out / "Apply_B103_Patcher.bat").is_file())
+            self.assertTrue((out / "README-B103-PATCHER.txt").is_file())
+            self.assertTrue((out / "Transparency Log.txt").is_file())
             self.assertTrue((out / "offline_vf2_patcher.py").is_file())
+            self.assertNotIn("Apply_B99_Patcher.bat", manifest["export_summary"]["runner_files"])
+            self.assertIn("transparency_log", manifest["export_summary"])
+            self.assertIn("launcher", manifest["export_summary"])
+            self.assertTrue((out / "vf2_patcher_launcher.cs").is_file())
             self.assertTrue(manifest["export_summary"]["exe_replacement"])
 
     def test_exports_object_relative_native_patch_sources_as_metadata_only(self):
@@ -363,6 +390,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             stale = out / "payload" / "Images" / "stale.png"
             stale.parent.mkdir(parents=True)
             stale.write_bytes(b"stale")
+            stale_runner = out / "Apply_B99_Patcher.bat"
+            stale_runner.write_text("stale", encoding="ascii")
             (out / "manifest.json").write_text("{}", encoding="ascii")
 
             self.run_exporter(
@@ -376,6 +405,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             )
 
             self.assertFalse(stale.exists())
+            self.assertFalse(stale_runner.exists())
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["export_summary"]["payload_file_count"], 0)
 

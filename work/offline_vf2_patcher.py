@@ -20,7 +20,7 @@ import struct
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 BACKUP_MANIFEST = "vf2_patch_backup_manifest.json"
@@ -47,6 +47,7 @@ class BytePatch:
 class AssetPatch:
     index: int
     file_path: str
+    output_file_path: str | None
     source_path: str
     source_sha256: str
     source_size: int | None
@@ -66,6 +67,9 @@ class PatchSetting:
     default: bool
 
 
+ProgressCallback = Callable[[str], None]
+
+
 def utc_now() -> str:
     return _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
 
@@ -83,6 +87,64 @@ def write_json(path: Path, data: dict[str, Any]) -> None:
     with path.open("w", encoding="utf-8", newline="\n") as handle:
         json.dump(data, handle, indent=2, sort_keys=True)
         handle.write("\n")
+
+
+def emit_progress(args: argparse.Namespace, message: str) -> None:
+    callback = getattr(args, "progress_callback", None)
+    if callback is not None:
+        callback(message)
+    else:
+        print(message)
+
+
+def should_report_progress(current: int, total: int) -> bool:
+    return total <= 20 or current in {1, total} or current % 100 == 0
+
+
+def report_record_progress(
+    args: argparse.Namespace,
+    *,
+    phase: str,
+    kind: str,
+    current: int,
+    total: int,
+    file_path: str,
+    index: int,
+    status: str = "ok",
+) -> None:
+    if not should_report_progress(current, total) and status == "ok":
+        return
+    emit_progress(args, f"{phase} {kind} {current}/{total}: #{index} {file_path} [{status}]")
+
+
+def log_process_event(
+    process_log: list[dict[str, Any]],
+    *,
+    phase: str,
+    kind: str,
+    status: str,
+    index: int | None = None,
+    file_path: str | None = None,
+    note: str = "",
+    error: str | None = None,
+    **extra: Any,
+) -> None:
+    row: dict[str, Any] = {
+        "timestamp_utc": utc_now(),
+        "phase": phase,
+        "kind": kind,
+        "status": status,
+    }
+    if index is not None:
+        row["index"] = index
+    if file_path is not None:
+        row["file_path"] = file_path
+    if note:
+        row["note"] = note
+    if error:
+        row["error"] = error
+    row.update(extra)
+    process_log.append(row)
 
 
 def sha256_file(path: Path) -> str:
@@ -432,6 +494,76 @@ def settings_log(settings: dict[str, PatchSetting], enabled: set[str]) -> dict[s
     }
 
 
+def manifest_output_folder_name(manifest: dict[str, Any]) -> str | None:
+    raw = manifest.get("output", manifest.get("output_folder"))
+    if raw is None:
+        return None
+    if isinstance(raw, str):
+        name = raw
+    elif isinstance(raw, dict):
+        name = str(
+            raw.get(
+                "default_folder_name",
+                raw.get("folder_name", raw.get("name", "")),
+            )
+        )
+    else:
+        raise PatchError("Manifest output must be a string or object.")
+    name = name.strip()
+    if not name:
+        return None
+    rel = normalize_rel_path(name, "manifest output folder name")
+    if len(Path(rel).parts) != 1:
+        raise PatchError("Manifest output folder name must be a single folder name.")
+    return rel
+
+
+def resolve_apply_output_dir(
+    args: argparse.Namespace,
+    game_dir: Path,
+    manifest: dict[str, Any],
+) -> Path:
+    explicit = getattr(args, "output_dir", None)
+    if explicit:
+        return Path(explicit).resolve()
+    folder_name = manifest_output_folder_name(manifest)
+    if folder_name:
+        return (game_dir.parent / folder_name).resolve()
+    return game_dir
+
+
+def prepare_output_dir(
+    game_dir: Path,
+    output_dir: Path,
+    skip_rel_paths: set[str],
+    args: argparse.Namespace,
+) -> None:
+    source_root = game_dir.resolve()
+    output_root = output_dir.resolve()
+    if output_root == source_root:
+        return
+    if output_root in source_root.parents or source_root in output_root.parents:
+        raise PatchError("Output directory must be a sibling or separate folder, not inside the vanilla game folder.")
+    if output_root.exists() and any(output_root.iterdir()):
+        raise PatchError(f"Output directory already exists and is not empty: {output_root}")
+
+    emit_progress(args, f"Creating modded output folder: {output_root}")
+    output_root.mkdir(parents=True, exist_ok=True)
+    normalized_skips = {str(Path(path)) for path in skip_rel_paths}
+    for source in source_root.rglob("*"):
+        rel = source.relative_to(source_root)
+        if rel.parts and rel.parts[0] == DEFAULT_BACKUP_ROOT:
+            continue
+        if str(rel) in normalized_skips:
+            continue
+        target = output_root / rel
+        if source.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+        elif source.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+
+
 def count_files(root: Path) -> int:
     if not root.is_dir():
         return 0
@@ -577,8 +709,12 @@ def manifest_asset_patches(
         if not isinstance(raw, dict):
             raise PatchError(f"Asset patch #{index} must be an object.")
         target_value = raw.get("file_path", raw.get("target_path", raw.get("target", raw.get("path"))))
+        output_value = raw.get("output_file_path", raw.get("output_path", raw.get("write_path")))
         source_value = raw.get("source_path", raw.get("source_file", raw.get("source")))
         file_path = normalize_rel_path(target_value, f"asset patch #{index} target path")
+        output_file_path = None
+        if output_value is not None:
+            output_file_path = normalize_rel_path(output_value, f"asset patch #{index} output path")
         source_path = normalize_rel_path(source_value, f"asset patch #{index} source path")
         requires = record_requires(raw, f"asset patch #{index}")
         ensure_known_settings(requires, settings, f"Asset patch #{index}")
@@ -615,6 +751,7 @@ def manifest_asset_patches(
             AssetPatch(
                 index=index,
                 file_path=file_path,
+                output_file_path=output_file_path,
                 source_path=source_path,
                 source_sha256=source_sha or "",
                 source_size=source_size,
@@ -751,117 +888,355 @@ def group_patches(patches: list[BytePatch]) -> dict[str, list[BytePatch]]:
     return grouped
 
 
-def verify_patch_bytes(game_dir: Path, grouped: dict[str, list[BytePatch]]) -> dict[str, bytes]:
+def verify_patch_bytes(
+    game_dir: Path,
+    grouped: dict[str, list[BytePatch]],
+    args: argparse.Namespace,
+    process_log: list[dict[str, Any]],
+) -> dict[str, bytes]:
     file_data: dict[str, bytes] = {}
+    total = sum(len(patches) for patches in grouped.values())
+    current = 0
     for rel_path, patches in grouped.items():
         path = resolve_under_game_dir(game_dir, rel_path)
         if not path.is_file():
+            for patch in patches:
+                log_process_event(
+                    process_log,
+                    phase="validate",
+                    kind="byte_patch",
+                    status="error",
+                    index=patch.index,
+                    file_path=patch.file_path,
+                    note=patch.note,
+                    error=f"Patch target file does not exist: {rel_path}",
+                )
             raise PatchError(f"Patch target file does not exist: {rel_path}")
         data = path.read_bytes()
         for patch in patches:
+            current += 1
             end = patch.offset + len(patch.expected)
             if end > len(data):
-                raise PatchError(f"Patch #{patch.index} runs past end of {rel_path}.")
+                message = f"Patch #{patch.index} runs past end of {rel_path}."
+                log_process_event(
+                    process_log,
+                    phase="validate",
+                    kind="byte_patch",
+                    status="error",
+                    index=patch.index,
+                    file_path=patch.file_path,
+                    note=patch.note,
+                    offset=f"0x{patch.offset:x}",
+                    error=message,
+                )
+                report_record_progress(
+                    args,
+                    phase="Validating",
+                    kind="byte patch",
+                    current=current,
+                    total=total,
+                    file_path=patch.file_path,
+                    index=patch.index,
+                    status="error",
+                )
+                raise PatchError(message)
             actual = data[patch.offset:end]
             if actual != patch.expected:
-                raise PatchError(
+                message = (
                     f"Patch #{patch.index} expected bytes do not match {rel_path} at 0x{patch.offset:x}: "
                     f"expected {patch.expected.hex(' ')}, got {actual.hex(' ')}"
                 )
+                log_process_event(
+                    process_log,
+                    phase="validate",
+                    kind="byte_patch",
+                    status="error",
+                    index=patch.index,
+                    file_path=patch.file_path,
+                    note=patch.note,
+                    offset=f"0x{patch.offset:x}",
+                    expected=patch.expected.hex(),
+                    actual=actual.hex(),
+                    error=message,
+                )
+                report_record_progress(
+                    args,
+                    phase="Validating",
+                    kind="byte patch",
+                    current=current,
+                    total=total,
+                    file_path=patch.file_path,
+                    index=patch.index,
+                    status="error",
+                )
+                raise PatchError(message)
+            log_process_event(
+                process_log,
+                phase="validate",
+                kind="byte_patch",
+                status="success",
+                index=patch.index,
+                file_path=patch.file_path,
+                note=patch.note,
+                offset=f"0x{patch.offset:x}",
+                expected=patch.expected.hex(),
+                replacement=patch.replacement.hex(),
+            )
+            report_record_progress(
+                args,
+                phase="Validating",
+                kind="byte patch",
+                current=current,
+                total=total,
+                file_path=patch.file_path,
+                index=patch.index,
+            )
         file_data[rel_path] = data
     return file_data
 
 
-def verify_asset_patches(game_dir: Path, manifest_dir: Path, assets: list[AssetPatch]) -> list[dict[str, Any]]:
+def verify_asset_patches(
+    game_dir: Path,
+    output_dir: Path,
+    manifest_dir: Path,
+    assets: list[AssetPatch],
+    args: argparse.Namespace,
+    process_log: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     checks: list[dict[str, Any]] = []
-    for asset in assets:
-        source = resolve_under_manifest_dir(manifest_dir, asset.source_path)
-        if not source.is_file():
-            raise PatchError(f"Asset source file does not exist: {asset.source_path}")
-        source_sha = sha256_file(source)
-        source_size = source.stat().st_size
-        if source_sha != asset.source_sha256:
-            raise PatchError(
-                f"SHA-256 mismatch for asset source {asset.source_path}: "
-                f"expected {asset.source_sha256}, got {source_sha}"
-            )
-        if asset.source_size is not None and source_size != asset.source_size:
-            raise PatchError(
-                f"Size mismatch for asset source {asset.source_path}: "
-                f"expected {asset.source_size}, got {source_size}"
-            )
+    total = len(assets)
+    for current, asset in enumerate(assets, start=1):
+        try:
+            source = resolve_under_manifest_dir(manifest_dir, asset.source_path)
+            if not source.is_file():
+                raise PatchError(f"Asset source file does not exist: {asset.source_path}")
+            source_sha = sha256_file(source)
+            source_size = source.stat().st_size
+            if source_sha != asset.source_sha256:
+                raise PatchError(
+                    f"SHA-256 mismatch for asset source {asset.source_path}: "
+                    f"expected {asset.source_sha256}, got {source_sha}"
+                )
+            if asset.source_size is not None and source_size != asset.source_size:
+                raise PatchError(
+                    f"Size mismatch for asset source {asset.source_path}: "
+                    f"expected {asset.source_size}, got {source_size}"
+                )
 
-        target = resolve_under_game_dir(game_dir, asset.file_path)
-        target_exists = target.is_file()
-        target_sha = sha256_file(target) if target_exists else None
-        target_size = target.stat().st_size if target_exists else None
-        action = "create"
-        if target_exists:
-            action = "replace"
+            target = resolve_under_game_dir(game_dir, asset.file_path)
+            target_exists = target.is_file()
+            target_sha = sha256_file(target) if target_exists else None
+            target_size = target.stat().st_size if target_exists else None
+            output_file_path = asset.output_file_path or asset.file_path
+            output_target = resolve_under_game_dir(output_dir, output_file_path)
+            output_is_validation_target = output_file_path == asset.file_path
+            if output_dir.resolve() == game_dir.resolve() and output_is_validation_target:
+                output_exists = target_exists
+                output_sha = target_sha
+                output_size = target_size
+            else:
+                output_exists = output_target.is_file()
+                output_sha = sha256_file(output_target) if output_exists else None
+                output_size = output_target.stat().st_size if output_exists else None
             expected_structure_matches = (
-                asset.expected_target_pe_structure is not None
+                target_exists
+                and asset.expected_target_pe_structure is not None
                 and pe_structure_matches(target, asset.expected_target_pe_structure)
             )
-            if asset.expected_target_sha256 and target_sha != asset.expected_target_sha256 and not expected_structure_matches:
-                raise PatchError(
-                    f"SHA-256 mismatch for existing asset target {asset.file_path}: "
-                    f"expected {asset.expected_target_sha256}, got {target_sha}; "
-                    "PE structure did not match the accepted binary structure."
-                )
-            if asset.expected_target_pe_structure is not None and not expected_structure_matches and not asset.expected_target_sha256:
-                raise PatchError(f"PE structure mismatch for existing asset target {asset.file_path}.")
-            if (
-                asset.expected_target_size is not None
-                and not expected_structure_matches
-                and target_size != asset.expected_target_size
-            ):
-                raise PatchError(
-                    f"Size mismatch for existing asset target {asset.file_path}: "
-                    f"expected {asset.expected_target_size}, got {target_size}"
-                )
-            if target_sha == source_sha:
-                action = "up_to_date"
-            elif not asset.expected_target_sha256 and not asset.overwrite_existing:
-                raise PatchError(
-                    f"Asset target already exists without an expected_target_sha256 or overwrite_existing=true: "
-                    f"{asset.file_path}"
-                )
-        elif asset.expected_target_sha256 or asset.expected_target_size is not None:
-            raise PatchError(f"Expected existing asset target is missing: {asset.file_path}")
+            action = "create"
+            if target_exists:
+                action = "replace"
+                if asset.expected_target_sha256 and target_sha != asset.expected_target_sha256 and not expected_structure_matches:
+                    raise PatchError(
+                        f"SHA-256 mismatch for existing asset target {asset.file_path}: "
+                        f"expected {asset.expected_target_sha256}, got {target_sha}; "
+                        "PE structure did not match the accepted binary structure."
+                    )
+                if asset.expected_target_pe_structure is not None and not expected_structure_matches and not asset.expected_target_sha256:
+                    raise PatchError(f"PE structure mismatch for existing asset target {asset.file_path}.")
+                if (
+                    asset.expected_target_size is not None
+                    and not expected_structure_matches
+                    and target_size != asset.expected_target_size
+                ):
+                    raise PatchError(
+                        f"Size mismatch for existing asset target {asset.file_path}: "
+                        f"expected {asset.expected_target_size}, got {target_size}"
+                    )
+                if target_sha == source_sha:
+                    action = "up_to_date"
+                elif not asset.expected_target_sha256 and not asset.overwrite_existing:
+                    raise PatchError(
+                        "Asset target already exists without an expected_target_sha256 or overwrite_existing=true: "
+                        f"{asset.file_path}"
+                    )
+            elif asset.expected_target_sha256 or asset.expected_target_size is not None:
+                raise PatchError(f"Expected existing asset target is missing: {asset.file_path}")
+            if not output_is_validation_target:
+                action = "create"
+                if output_exists:
+                    action = "up_to_date" if output_sha == source_sha else "replace"
+                    if action == "replace" and not asset.overwrite_existing:
+                        raise PatchError(
+                            "Asset output already exists without overwrite_existing=true: "
+                            f"{output_file_path}"
+                        )
+        except PatchError as exc:
+            log_process_event(
+                process_log,
+                phase="validate",
+                kind="asset_patch",
+                status="error",
+                index=asset.index,
+                file_path=asset.file_path,
+                note=asset.note,
+                source_path=asset.source_path,
+                error=str(exc),
+            )
+            report_record_progress(
+                args,
+                phase="Validating",
+                kind="asset patch",
+                current=current,
+                total=total,
+                file_path=asset.file_path,
+                index=asset.index,
+                status="error",
+            )
+            raise
 
-        checks.append(
-            {
-                "index": asset.index,
-                "file_path": asset.file_path,
-                "source_path": asset.source_path,
+        check = {
+            "index": asset.index,
+            "file_path": asset.file_path,
+            "output_file_path": output_file_path,
+            "source_path": asset.source_path,
             "source_sha256": source_sha,
             "source_size": source_size,
             "target_existed": target_exists,
             "target_sha256": target_sha,
             "target_size": target_size,
-            "target_structure_matched": bool(
-                target_exists
-                and asset.expected_target_pe_structure is not None
-                and pe_structure_matches(target, asset.expected_target_pe_structure)
-            ),
+            "target_structure_matched": bool(expected_structure_matches),
+            "output_existed": output_exists,
+            "output_sha256": output_sha,
+            "output_size": output_size,
             "action": action,
             "requires": list(asset.requires),
             "note": asset.note,
-            }
+        }
+        checks.append(check)
+        log_process_event(
+            process_log,
+            phase="validate",
+            kind="asset_patch",
+            status="success",
+            index=asset.index,
+            file_path=asset.file_path,
+            note=asset.note,
+            source_path=asset.source_path,
+            output_file_path=output_file_path,
+            action=action,
+        )
+        report_record_progress(
+            args,
+            phase="Validating",
+            kind="asset patch",
+            current=current,
+            total=total,
+            file_path=asset.file_path,
+            index=asset.index,
         )
     return checks
 
 
-def apply_asset_patches(game_dir: Path, manifest_dir: Path, asset_checks: list[dict[str, Any]]) -> None:
-    for check in asset_checks:
+def apply_asset_patches(
+    output_dir: Path,
+    manifest_dir: Path,
+    asset_checks: list[dict[str, Any]],
+    args: argparse.Namespace,
+    process_log: list[dict[str, Any]],
+) -> None:
+    total = len(asset_checks)
+    for current, check in enumerate(asset_checks, start=1):
+        file_path = str(check["file_path"])
+        output_file_path = str(check.get("output_file_path") or file_path)
+        index = int(check["index"])
         if check["action"] == "up_to_date":
+            log_process_event(
+                process_log,
+                phase="apply",
+                kind="asset_patch",
+                status="skipped",
+                index=index,
+                file_path=file_path,
+                note=str(check.get("note") or ""),
+                source_path=str(check["source_path"]),
+                output_file_path=output_file_path,
+                action="up_to_date",
+            )
+            report_record_progress(
+                args,
+                phase="Applying",
+                kind="asset patch",
+                current=current,
+                total=total,
+                file_path=output_file_path,
+                index=index,
+                status="skipped",
+            )
             continue
         source = resolve_under_manifest_dir(manifest_dir, str(check["source_path"]))
-        target = resolve_under_game_dir(game_dir, str(check["file_path"]))
-        target.parent.mkdir(parents=True, exist_ok=True)
-        temp = target.with_name(target.name + ".vf2patch.tmp")
-        shutil.copy2(source, temp)
-        temp.replace(target)
+        target = resolve_under_game_dir(output_dir, output_file_path)
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temp = target.with_name(target.name + ".vf2patch.tmp")
+            shutil.copy2(source, temp)
+            temp.replace(target)
+        except OSError as exc:
+            log_process_event(
+                process_log,
+                phase="apply",
+                kind="asset_patch",
+                status="error",
+                index=index,
+                file_path=file_path,
+                note=str(check.get("note") or ""),
+                source_path=str(check["source_path"]),
+                output_file_path=output_file_path,
+                action=str(check["action"]),
+                error=str(exc),
+            )
+            report_record_progress(
+                args,
+                phase="Applying",
+                kind="asset patch",
+                current=current,
+                total=total,
+                file_path=output_file_path,
+                index=index,
+                status="error",
+            )
+            raise PatchError(f"Could not apply asset patch #{index} to {output_file_path}: {exc}") from exc
+        log_process_event(
+            process_log,
+            phase="apply",
+            kind="asset_patch",
+            status="success",
+            index=index,
+            file_path=file_path,
+            note=str(check.get("note") or ""),
+            source_path=str(check["source_path"]),
+            output_file_path=output_file_path,
+            action=str(check["action"]),
+        )
+        report_record_progress(
+            args,
+            phase="Applying",
+            kind="asset patch",
+            current=current,
+            total=total,
+            file_path=output_file_path,
+            index=index,
+        )
 
 
 def backup_slug(manifest_path: Path) -> str:
@@ -873,6 +1248,7 @@ def backup_slug(manifest_path: Path) -> str:
 
 def create_backup(
     game_dir: Path,
+    output_dir: Path,
     backup_dir: Path,
     grouped: dict[str, list[BytePatch]],
     asset_checks: list[dict[str, Any]],
@@ -883,7 +1259,11 @@ def create_backup(
     for check in asset_checks:
         if check["action"] == "up_to_date":
             continue
-        backup_targets.setdefault(str(check["file_path"]), bool(check["target_existed"]))
+        output_file_path = str(check.get("output_file_path") or check["file_path"])
+        if output_file_path == str(check["file_path"]):
+            backup_targets.setdefault(str(check["file_path"]), bool(check["target_existed"]))
+        else:
+            backup_targets.setdefault(output_file_path, bool(check.get("output_existed", False)))
 
     files = []
     for rel_path in sorted(backup_targets):
@@ -907,7 +1287,8 @@ def create_backup(
         files.append(row)
     manifest = {
         "backup_created_utc": utc_now(),
-        "game_dir": str(game_dir.resolve()),
+        "game_dir": str(output_dir.resolve()),
+        "source_game_dir": str(game_dir.resolve()),
         "source_manifest": str(manifest_path.resolve()),
         "files": files,
     }
@@ -952,6 +1333,7 @@ def asset_summary(asset_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         {
             "index": check["index"],
             "file_path": check["file_path"],
+            "output_file_path": check.get("output_file_path", check["file_path"]),
             "source_path": check["source_path"],
             "source_sha256": check["source_sha256"],
             "source_size": check["source_size"],
@@ -959,6 +1341,9 @@ def asset_summary(asset_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "target_sha256": check["target_sha256"],
             "target_size": check["target_size"],
             "target_structure_matched": check.get("target_structure_matched", False),
+            "output_existed": check.get("output_existed", check["target_existed"]),
+            "output_sha256": check.get("output_sha256", check["target_sha256"]),
+            "output_size": check.get("output_size", check["target_size"]),
             "action": check["action"],
             "requires": check["requires"],
             "note": check["note"],
@@ -981,83 +1366,190 @@ def apply_manifest(args: argparse.Namespace) -> int:
     manifest_path = Path(args.manifest).resolve()
     if not game_dir.is_dir():
         raise PatchError(f"Game directory does not exist: {game_dir}")
-    manifest = read_json(manifest_path)
-    settings, enabled_settings = resolve_enabled_settings(manifest, args)
-    patches = manifest_patches(manifest, settings, enabled_settings)
-    assets = manifest_asset_patches(manifest, settings, enabled_settings)
-    if not patches and not assets:
-        raise PatchError("No active patches remain after applying setting selections.")
-    grouped = group_patches(patches)
-    target_checks = verify_target_files(game_dir, manifest, settings, enabled_settings)
-    runtime_checks = verify_runtime_requirements(game_dir, manifest, settings, enabled_settings)
-    file_data = verify_patch_bytes(game_dir, grouped)
-    asset_checks = verify_asset_patches(game_dir, manifest_path.parent, assets)
-
+    process_log: list[dict[str, Any]] = []
     backup_dir = None
     backup_manifest = None
-    if not args.dry_run:
-        if args.backup_dir:
-            backup_dir = Path(args.backup_dir).resolve()
-        else:
-            backup_dir = game_dir / DEFAULT_BACKUP_ROOT / backup_slug(manifest_path)
-        backup_manifest = create_backup(game_dir, backup_dir, grouped, asset_checks, manifest_path)
-        for rel_path, patches_for_file in grouped.items():
-            target = resolve_under_game_dir(game_dir, rel_path)
-            atomic_write(target, apply_patches_to_data(file_data[rel_path], patches_for_file))
-        apply_asset_patches(game_dir, manifest_path.parent, asset_checks)
+    try:
+        emit_progress(args, f"Loading manifest: {manifest_path}")
+        manifest = read_json(manifest_path)
+        output_dir = resolve_apply_output_dir(args, game_dir, manifest)
+        settings, enabled_settings = resolve_enabled_settings(manifest, args)
+        patches = manifest_patches(manifest, settings, enabled_settings)
+        assets = manifest_asset_patches(manifest, settings, enabled_settings)
+        if not patches and not assets:
+            raise PatchError("No active patches remain after applying setting selections.")
+        grouped = group_patches(patches)
+        emit_progress(args, "Verifying target files...")
+        target_checks = verify_target_files(game_dir, manifest, settings, enabled_settings)
+        runtime_checks = verify_runtime_requirements(game_dir, manifest, settings, enabled_settings)
+        file_data = verify_patch_bytes(game_dir, grouped, args, process_log)
+        asset_checks = verify_asset_patches(game_dir, output_dir, manifest_path.parent, assets, args, process_log)
 
-    patched_files = []
-    for rel_path in sorted(grouped):
-        target = resolve_under_game_dir(game_dir, rel_path)
-        patched_files.append(
-            {
-                "file_path": rel_path,
-                "sha256": sha256_file(target) if not args.dry_run else None,
-                "size": target.stat().st_size,
+        if not args.dry_run:
+            skip_copy_paths = {
+                str(check["file_path"])
+                for check in asset_checks
+                if str(check.get("output_file_path") or check["file_path"]) != str(check["file_path"])
             }
+            prepare_output_dir(game_dir, output_dir, skip_copy_paths, args)
+            if args.backup_dir:
+                backup_dir = Path(args.backup_dir).resolve()
+            else:
+                backup_dir = output_dir / DEFAULT_BACKUP_ROOT / backup_slug(manifest_path)
+            emit_progress(args, f"Creating backup: {backup_dir}")
+            backup_manifest = create_backup(game_dir, output_dir, backup_dir, grouped, asset_checks, manifest_path)
+            total_byte_patches = sum(len(patches_for_file) for patches_for_file in grouped.values())
+            current_byte_patch = 0
+            for rel_path, patches_for_file in grouped.items():
+                target = resolve_under_game_dir(output_dir, rel_path)
+                try:
+                    atomic_write(target, apply_patches_to_data(file_data[rel_path], patches_for_file))
+                except OSError as exc:
+                    for patch in patches_for_file:
+                        log_process_event(
+                            process_log,
+                            phase="apply",
+                            kind="byte_patch",
+                            status="error",
+                            index=patch.index,
+                            file_path=patch.file_path,
+                            note=patch.note,
+                            offset=f"0x{patch.offset:x}",
+                            error=str(exc),
+                        )
+                    raise PatchError(f"Could not write patched file {rel_path}: {exc}") from exc
+                for patch in patches_for_file:
+                    current_byte_patch += 1
+                    log_process_event(
+                        process_log,
+                        phase="apply",
+                        kind="byte_patch",
+                        status="success",
+                        index=patch.index,
+                        file_path=patch.file_path,
+                        note=patch.note,
+                        offset=f"0x{patch.offset:x}",
+                        length=len(patch.replacement),
+                    )
+                    report_record_progress(
+                        args,
+                        phase="Applying",
+                        kind="byte patch",
+                        current=current_byte_patch,
+                        total=total_byte_patches,
+                        file_path=patch.file_path,
+                        index=patch.index,
+                    )
+            apply_asset_patches(output_dir, manifest_path.parent, asset_checks, args, process_log)
+
+        patched_files = []
+        for rel_path in sorted(grouped):
+            target = resolve_under_game_dir(game_dir if args.dry_run else output_dir, rel_path)
+            patched_files.append(
+                {
+                    "file_path": rel_path,
+                    "sha256": sha256_file(target) if not args.dry_run else None,
+                    "size": target.stat().st_size,
+                }
+            )
+
+        asset_files = []
+        for check in asset_checks:
+            output_file_path = str(check.get("output_file_path") or check["file_path"])
+            output_target = resolve_under_game_dir(output_dir, output_file_path)
+            asset_files.append(
+                {
+                    "file_path": check["file_path"],
+                    "output_file_path": output_file_path,
+                    "action": check["action"],
+                    "sha256": sha256_file(output_target) if not args.dry_run and output_target.is_file() else None,
+                    "size": output_target.stat().st_size if not args.dry_run and output_target.is_file() else check["source_size"],
+                }
+            )
+
+        modded_exe_name = next(
+            (
+                Path(str(row["output_file_path"])).name
+                for row in asset_files
+                if Path(str(row["output_file_path"])).suffix.lower() == ".exe"
+            ),
+            DEFAULT_EXE_NAME,
+        )
+        save_dir = Path.home() / "Documents" / "LDW" / Path(modded_exe_name).stem
+        log = {
+            "action": "apply",
+            "dry_run": bool(args.dry_run),
+            "status": "success",
+            "timestamp_utc": utc_now(),
+            "game_dir": str(game_dir),
+            "output_dir": str(output_dir),
+            "modded_exe_name": modded_exe_name,
+            "modded_save_dir": str(save_dir),
+            "manifest": str(manifest_path),
+            "manifest_name": manifest.get("name"),
+            "settings": settings_log(settings, enabled_settings),
+            "target_checks": target_checks,
+            "runtime_checks": runtime_checks,
+            "backup_dir": None if backup_dir is None else str(backup_dir),
+            "backup_manifest": backup_manifest,
+            "patches": patch_summary(grouped),
+            "asset_patches": asset_summary(asset_checks),
+            "patched_files": patched_files,
+            "asset_files": asset_files,
+            "process_log": process_log,
+        }
+        log_path = Path(args.log).resolve() if args.log else (
+            backup_dir / "patch_log.json" if backup_dir else game_dir / "patch_dry_run_log.json"
+        )
+        write_json(log_path, log)
+        setattr(args, "last_apply_log_path", str(log_path))
+        setattr(
+            args,
+            "last_apply_summary",
+            {
+                "log_path": str(log_path),
+                "output_dir": str(output_dir),
+                "modded_exe_name": modded_exe_name,
+                "modded_save_dir": str(save_dir),
+                "enabled_settings": sorted(enabled_settings),
+                "settings": settings_log(settings, enabled_settings),
+                "patched_files": patched_files,
+                "asset_files": asset_files,
+                "dry_run": bool(args.dry_run),
+            },
         )
 
-    log = {
-        "action": "apply",
-        "dry_run": bool(args.dry_run),
-        "status": "success",
-        "timestamp_utc": utc_now(),
-        "game_dir": str(game_dir),
-        "manifest": str(manifest_path),
-        "manifest_name": manifest.get("name"),
-        "settings": settings_log(settings, enabled_settings),
-        "target_checks": target_checks,
-        "runtime_checks": runtime_checks,
-        "backup_dir": None if backup_dir is None else str(backup_dir),
-        "backup_manifest": backup_manifest,
-        "patches": patch_summary(grouped),
-        "asset_patches": asset_summary(asset_checks),
-        "patched_files": patched_files,
-        "asset_files": [
-            {
-                "file_path": check["file_path"],
-                "action": check["action"],
-                "sha256": check["source_sha256"] if not args.dry_run else None,
-                "size": check["source_size"],
-            }
-            for check in asset_checks
-        ],
-    }
-    log_path = Path(args.log).resolve() if args.log else (backup_dir / "patch_log.json" if backup_dir else game_dir / "patch_dry_run_log.json")
-    write_json(log_path, log)
-
-    if settings:
-        print("Enabled settings: " + (", ".join(sorted(enabled_settings)) if enabled_settings else "(none)"))
-    print(
-        f"Validated {len(patches)} active byte patch record(s) across {len(grouped)} file(s) "
-        f"and {len(assets)} active asset patch record(s)."
-    )
-    if args.dry_run:
-        print(f"Dry run complete. Log: {log_path}")
-    else:
-        print(f"Patched files successfully. Backup: {backup_dir}")
-        print(f"Patch log: {log_path}")
-    return 0
+        if settings:
+            print("Enabled settings: " + (", ".join(sorted(enabled_settings)) if enabled_settings else "(none)"))
+        print(
+            f"Validated {len(patches)} active byte patch record(s) across {len(grouped)} file(s) "
+            f"and {len(assets)} active asset patch record(s)."
+        )
+        if args.dry_run:
+            print(f"Dry run complete. Log: {log_path}")
+        else:
+            print(f"Patched files successfully. Modded folder: {output_dir}")
+            print(f"Backup: {backup_dir}")
+            print(f"Patch log: {log_path}")
+        return 0
+    except PatchError as exc:
+        failure_log_path = Path(args.log).resolve() if args.log else (
+            backup_dir / "patch_error_log.json" if backup_dir else game_dir / "patch_error_log.json"
+        )
+        failure_log = {
+            "action": "apply",
+            "dry_run": bool(args.dry_run),
+            "status": "failure",
+            "timestamp_utc": utc_now(),
+            "game_dir": str(game_dir),
+            "manifest": str(manifest_path),
+            "backup_dir": None if backup_dir is None else str(backup_dir),
+            "error": str(exc),
+            "process_log": process_log,
+        }
+        write_json(failure_log_path, failure_log)
+        emit_progress(args, f"Patch failed. Failure log: {failure_log_path}")
+        raise
 
 
 def list_manifest_settings(args: argparse.Namespace) -> int:
@@ -1136,6 +1628,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--game-dir", help="Path to the user-provided vanilla VF2 game directory.")
     apply_cmd.add_argument("--exe", help=f"Path to {DEFAULT_EXE_NAME}; the game directory is inferred from its parent.")
     apply_cmd.add_argument("--manifest", required=True, help="Path to the JSON patch manifest.")
+    apply_cmd.add_argument("--output-dir", help="Optional modded game output folder. Defaults to the manifest output folder when present, otherwise patches in place.")
     apply_cmd.add_argument("--backup-dir", help="Backup output directory. Defaults under the game directory.")
     apply_cmd.add_argument("--log", help="Patch log JSON path. Defaults inside the backup directory.")
     apply_cmd.add_argument("--dry-run", action="store_true", help="Validate only; do not back up or modify files.")

@@ -56,6 +56,7 @@ LOCKED_GENERATION_CELL_WIDTH = 30
 LOCKED_GENERATION_CELL_HEIGHT = 46
 LOCKED_PNG_SOURCE = Path(r"C:\Users\Owner\Downloads\locked.png")
 VF3_SPRITE_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\Sprite")
+TRANSPARENT_STORE_BAR_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\VF2_TransparentStoreBar\VF2_TransparentStoreBar")
 INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR = ROOT / "work" / "invisible_outdoor_furniture_sprites"
 HOLIDAY_OUTFIT_ARCHIVE = Path(r"C:\Users\Owner\Downloads\VF2_Holiday_Content\Holiday Outfits.zip")
 GENERATED_VILLAGER_BODIES = ROOT / "generated" / "VillagerBodies"
@@ -1163,6 +1164,19 @@ INVISIBLE_TRANSPARENT_BASE_ITEMS = [
         "long_description": "An invisible adult double bed for decorating purposes.",
         "source_png": "BedAdultBrownStd.png",
         "donor_fmap": "BedAdultBrownStd.png.fmap",
+        "item_type": 5,
+        "frame_count": 2,
+    },
+    {
+        "name": "InvisibleHeartShapedBed",
+        "item_id": 0x327,
+        "donor": 0x252,
+        "list": "gFurniture4",
+        "price": 2750,
+        "short_description": "Invisible Heart-Shaped Bed",
+        "long_description": "An invisible heart-shaped bed for decorating purposes.",
+        "source_png": "HeartShapedBed.png",
+        "donor_fmap": "HeartShapedBed.png.fmap",
         "item_type": 5,
         "frame_count": 2,
     },
@@ -3738,7 +3752,7 @@ def sync_invisible_furniture_reference_sets(manifest):
     }
     copied = []
     missing = []
-    root = OUT / "ReferenceAssets"
+    root = OUT / "OptionalVisualMods"
     for name, source in sources.items():
         target = root / name
         if source.exists():
@@ -3760,7 +3774,45 @@ def sync_invisible_furniture_reference_sets(manifest):
                 if override.exists():
                     shutil.copy2(override, target / f"{item_name}.png")
         copied.append({"name": name, "source": source_note, "target": str(target), "png_count": len(list(target.glob("*.png")))})
-    manifest["invisible_furniture_reference_sets"] = {"copied": copied, "missing": missing, "active_game_assets": "unchanged"}
+    manifest["invisible_furniture_reference_sets"] = {
+        "copied": copied,
+        "missing": missing,
+        "active_game_assets": "unchanged",
+        "patcher_settings": [
+            "invisible_furniture_visible_graphics",
+            "invisible_furniture_transparent_graphics",
+        ],
+    }
+
+
+def sync_optional_visual_mod_sources(manifest):
+    copied = []
+    missing = []
+    source = TRANSPARENT_STORE_BAR_SOURCE_DIR
+    target = OUT / "OptionalVisualMods" / "Transparent-Store-Bar" / "VF2_TransparentStoreBar"
+    if source.is_dir():
+        target.mkdir(parents=True, exist_ok=True)
+        for entry in source.iterdir():
+            if entry.is_file():
+                shutil.copy2(entry, target / entry.name)
+                copied.append({
+                    "name": entry.name,
+                    "source": str(entry),
+                    "target": str(target / entry.name),
+                    "bytes": (target / entry.name).stat().st_size,
+                })
+    else:
+        missing.append(str(source))
+    manifest["optional_visual_mod_sources"] = {
+        "transparent_store_bar": {
+            "source": str(source),
+            "target": str(target),
+            "copied": copied,
+            "missing": missing,
+            "patcher_setting": "transparent_store_bar",
+            "credit": "Corylea on LDWForums",
+        }
+    }
 
 
 def item_string_ids(idx):
@@ -8380,6 +8432,8 @@ def main():
     else:
         sync_original_villager_sprite_sheets(manifest)
     sync_desktop_runtime_dlls(manifest)
+    sync_invisible_furniture_reference_sets(manifest)
+    sync_optional_visual_mod_sources(manifest)
     sync_outfit_store_icon_art(manifest)
     sync_visible_special_upgrade_icon_art(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:

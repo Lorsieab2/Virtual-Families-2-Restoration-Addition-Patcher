@@ -192,7 +192,7 @@ Low-level PC table work:
 
 ## Other Mobile/Added Furniture Not in Stock PC
 
-The current additive furniture set has 111 rows. Categories:
+The current additive furniture set has 112 rows. Categories:
 
 | Group | Count | Notes |
 | --- | ---: | --- |
@@ -201,16 +201,16 @@ The current additive furniture set has 111 rows. Categories:
 | LDW poster pack | 6 | Wall decor/posters. |
 | VF3 living room import batch | 6 | Plaid/flowered/striped couches/loveseats. |
 | Invisible outdoor batch | 3 | Invisible kiddie pool, full-size pool, hammock. |
-| Invisible base-furniture batch | 23 | Invisible couches, beds, fireplace, MP3 player, playhouse, trampoline, etc. |
+| Invisible base-furniture batch | 24 | Invisible couches, beds, fireplace, MP3 player, playhouse, trampoline, etc.; B103 adds a separate Invisible Heart-Shaped Bed. |
 | VF3 television import batch | 3 | Large, Small, and Father's Favorite TVs. |
 
-Store category growth in B93:
+Store category growth in current B103 normal builds:
 
 | Store list | Old count | New count | Added examples |
 | --- | ---: | ---: | --- |
 | `gAccessories` | 47 | 107 | Holiday decor, birthday decor, invisible fireplace/clock/MP3, posters |
 | `gFurniture5` | 12 | 30 | Outdoor/patio/invisible pool/hammock/playhouse/trampoline |
-| `gFurniture4` | 74 | 83 | Bedroom/wall/invisible beds/posters |
+| `gFurniture4` | 74 | 84 | Bedroom/wall/invisible beds/posters, including `InvisibleHeartShapedBed` `0x327` |
 | `gFurniture3` | 26 | 27 | Invisible kids table |
 | `gFurniture2` | 88 | 108 | Couches/loveseats/bookshelves |
 | `gAppliances` | targeted widening | includes `0x324-0x326` | VF3 TVs |
@@ -469,6 +469,9 @@ cases. Example: Invisible Hammock uses the same donor-cloned fields, donor
 `HandleMouseDown` lookup-table case, and donor `.fmap` copy as invisible
 fireplaces, then B102 widens only the initial `CHotSpot::Hammock` in-world gate
 so item `0x30C` reaches the unchanged base hammock behavior route.
+The B103 Invisible Heart-Shaped Bed follows the pure donor-clone path: item
+`0x327` uses donor `0x252`, `HeartShapedBed.png.fmap`, and separate invisible
+graphics, leaving `InvisibleAdultDoubleBed` on donor `0x1B7`.
 
 ## Mobile-Exclusive Purchases
 

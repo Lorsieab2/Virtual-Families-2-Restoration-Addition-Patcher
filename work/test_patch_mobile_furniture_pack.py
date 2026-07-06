@@ -260,6 +260,43 @@ class InvisibleHammockBehaviorContractTests(unittest.TestCase):
                 patcher.PATCHED = old_patched
 
 
+class InvisibleHeartShapedBedContractTests(unittest.TestCase):
+    def test_invisible_heart_bed_is_separate_heart_shaped_bed_clone(self):
+        heart_path = "Furniture/InvisibleHeartShapedBed.png"
+        rows = [(idx, row) for idx, row in enumerate(patcher.ITEMS) if row[3] == heart_path]
+
+        self.assertEqual(len(rows), 1)
+        idx, (_name, donor, list_name, path) = rows[0]
+        self.assertEqual(path, heart_path)
+        self.assertEqual(patcher.item_id_for(idx), 0x327)
+        self.assertEqual(donor, 0x252)
+        self.assertEqual(list_name, "gFurniture4")
+
+        data = patcher.MOBILE_DATA_BY_PATH[heart_path]
+        self.assertEqual(data["short_description"], "Invisible Heart-Shaped Bed")
+        self.assertEqual(data["price"], 2750)
+
+        configured = next(
+            item
+            for item in patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS
+            if item["name"] == "InvisibleHeartShapedBed"
+        )
+        self.assertEqual(configured["source_png"], "HeartShapedBed.png")
+        self.assertEqual(configured["donor_fmap"], "HeartShapedBed.png.fmap")
+
+    def test_existing_invisible_adult_double_bed_stays_brown_bed_clone(self):
+        adult = next(
+            item
+            for item in patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS
+            if item["name"] == "InvisibleAdultDoubleBed"
+        )
+
+        self.assertEqual(adult["item_id"], 0x314)
+        self.assertEqual(adult["donor"], 0x1B7)
+        self.assertEqual(adult["source_png"], "BedAdultBrownStd.png")
+        self.assertEqual(adult["donor_fmap"], "BedAdultBrownStd.png.fmap")
+
+
 class SettingsEvictBehaviorTests(unittest.TestCase):
     def test_any_generation_evict_preserves_mobile_state_guard(self):
         with tempfile.TemporaryDirectory() as tmp:

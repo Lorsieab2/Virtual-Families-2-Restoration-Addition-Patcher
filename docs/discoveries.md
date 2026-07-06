@@ -927,3 +927,43 @@
   The B99/B100 bad byte patterns are absent. Test EXE:
   `C:\Users\Owner\Downloads\VF2-B102-Invisible-Hammock-Drop-Parity.exe`,
   SHA-256 `2dfa924aa4a5deed8e543f72303a18069637956ccc79bdd37b2060d8a2986151`.
+
+## 2026-07-05 - B103 Invisible Heart-Shaped Bed and Patcher Refresh
+
+- Added `InvisibleHeartShapedBed` as a separate additive Bedroom item instead
+  of changing `InvisibleAdultDoubleBed`. The new item is `EInventoryItem`
+  `0x327`, donor-cloned from the base Heart-Shaped Bed `0x252`, uses
+  `Furniture/InvisibleHeartShapedBed.png`, and copies
+  `InvisibleHeartShapedBed.png.fmap` from `HeartShapedBed.png.fmap`.
+- The existing `InvisibleAdultDoubleBed` remains item `0x314` with donor
+  `0x1B7`, `BedAdultBrownStd.png`, and `BedAdultBrownStd.png.fmap`.
+- B103 relinked EXE:
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B103-Invisible-Heart-Bed`,
+  size `1,650,688`, SHA-256
+  `66343cac83b0f835fa6decb7c9abeb8249c04be269d85e85e989e16a528957eb`.
+- Refreshed the full-payload offline patcher at
+  `outputs/VF2-B103-Offline-Patcher-Full` and
+  `C:\Users\Owner\Downloads\VF2-B103-Offline-Patcher-Full`. The helper files
+  are now version-labeled (`Apply_B103_Patcher.bat`,
+  `README-B103-PATCHER.txt`) instead of hardcoded B99 names. Smoke apply from a
+  copied vanilla EXE produced the B103 EXE hash and recreated the B98-shaped
+  support folders.
+- The B103 patcher can now create a separate modded output folder declared by
+  manifest `output.default_folder_name` (`VF2-B103-Modded`) and can validate
+  one path while writing another through `asset_patches[].output_file_path`.
+  The current full EXE payload verifies `Virtual Families 2.exe` but writes
+  `Virtual Families 2 - Modded B103.exe`.
+- Optional visual and invisible-furniture files are now true manifest-gated
+  assets. `OptionalVisualMods/Custom Lorsieab2 Map Images`, `Menu-Bar`,
+  `Transparent-Store-Bar`, `Purple-Decor-Tab`, `Invisible Furniture - Base
+  Graphics`, `Invisible Furniture - Transparent`, and `Invisible Furniture
+  Backups` are assigned to their matching default-off settings so an unchecked
+  option is omitted from a fresh output folder.
+- Per-record validation/apply events are written to `process_log` entries in
+  patch logs and streamed to the CLI/GUI progress view. The GUI completion
+  popup summarizes enabled patches, altered files, the modded game folder, the
+  modded save folder, and save-copy guidance.
+- Full bundle exports now include `Transparency Log.txt` and can compile
+  `VF2 Offline Patcher.exe`, a small launcher that auto-loads adjacent
+  `manifest.json` in the Tkinter GUI. It does not inject into or touch a
+  running game.
