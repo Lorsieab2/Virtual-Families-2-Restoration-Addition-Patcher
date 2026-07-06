@@ -683,3 +683,17 @@
   only the compile-response stub and does not modify `HotSpot.obj`.
 - Builds to
   `outputs/VF2-Mobile-Furniture-With-Island-Events-B101-Invisible-Hammock-Fireplace-Style`.
+
+## B102 - Invisible Hammock Drop Parity
+
+- Restores the missing native drop gate for Invisible Hammock. B101 preserved
+  donor item fields, donor click alias, and `HammockStd.png.fmap`, but
+  `CHotSpot::Hammock` still rejected worlds without base item `0x1E1`.
+- Patches `CHotSpot::Hammock` safely by NOPing only the hardcoded
+  `push 0x1E1`, preserving the relocated `mov ecx, FurnitureManager`, and
+  retargeting the existing call to `_VF2EitherHammockInWorld`.
+- `_VF2EitherHammockInWorld` checks `IsInWorld(0x1E1)` or `IsInWorld(0x30C)`,
+  then the stock function continues through
+  `eBehavior_LieInHammockNoLeadIn (0x24)`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B102-Invisible-Hammock-Drop-Parity`.

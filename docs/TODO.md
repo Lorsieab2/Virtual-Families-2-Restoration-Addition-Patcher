@@ -200,11 +200,11 @@
   confirmation/removal flow removes all current family members, returns to the
   adoption/new-person path, and remains stable across save-load. Confirm the
   button is not shown after the family tree has already been cleared.
-- In-game test B101 Invisible Hammock parity: buy/place the base Hammock and
-  Invisible Hammock separately, drop villagers on each, and verify the
-  fireplace-style donor alias/fmap route no longer crashes. Confirm base
-  Hammock behavior remains unchanged and stock `CHotSpot::Hammock` stays
-  unmodified.
+- In-game test B102 Invisible Hammock parity: buy/place the base Hammock and
+  Invisible Hammock separately, drop villagers on each, and verify both use the
+  same native hammock drop behavior without crashes. Confirm the widened
+  `CHotSpot::Hammock` in-world gate accepts item `0x30C` while the downstream
+  base behavior remains `eBehavior_LieInHammockNoLeadIn (0x24)`.
 - Settings Evict research follow-up: fully resolve the mobile PLT/control-ID
   mapping for `theOptionsDialog::HandleMessage` so the first-generation mobile
   confirmation click can be documented down to the exact button ID as well as

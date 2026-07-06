@@ -905,3 +905,25 @@
   `C:\Users\Owner\Downloads\VF2-B101-Invisible-Hammock-Fireplace-Style.exe`,
   size `1,650,176`, SHA-256
   `a2fa2382d1e8015446d8bd7fb8df3532b17b731c00e368e889fa5ba164affde7`.
+
+## 2026-07-05 - B102 Invisible Hammock Drop Parity
+
+- B101 still missed the native drop gate: `CHotSpot::Hammock(CVillager&)`
+  checks whether base `HammockStd` item `0x1E1` is in-world before dispatching
+  the stock hammock action. Donor item fields, click aliases, and copied
+  `HammockStd.png.fmap` are not enough when only Invisible Hammock `0x30C` is
+  placed.
+- B102 restores drop parity with a relocation-safe hotspot patch. It NOPs only
+  the five-byte `push 0x1E1` argument in `HotSpot.obj`, leaves the relocated
+  `mov ecx, FurnitureManager` instruction intact, and retargets the existing
+  call at `?Hammock@CHotSpot@@CA?B_NAAVCVillager@@@Z + 0x0F` to
+  `_VF2EitherHammockInWorld`.
+- `_VF2EitherHammockInWorld` returns true when either
+  `FurnitureManager.IsInWorld(0x1E1)` or `FurnitureManager.IsInWorld(0x30C)`
+  is true. The downstream native behavior remains the base
+  `eBehavior_LieInHammockNoLeadIn (0x24)` route.
+- Linked B102 verification around the hammock function starts:
+  `55 8B EC 51 90 90 90 90 90 B9 <FurnitureManager> E8 <helper> 84 C0`.
+  The B99/B100 bad byte patterns are absent. Test EXE:
+  `C:\Users\Owner\Downloads\VF2-B102-Invisible-Hammock-Drop-Parity.exe`,
+  SHA-256 `2dfa924aa4a5deed8e543f72303a18069637956ccc79bdd37b2060d8a2986151`.

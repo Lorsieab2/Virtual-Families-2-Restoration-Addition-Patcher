@@ -3683,22 +3683,50 @@ def patch_holiday_body_draw_redirect(manifest):
 
 
 def patch_invisible_hammock_drop_action(manifest):
-    """Keep hammock behavior on the same donor-alias path as invisible fireplaces."""
-    helper_cpp = r'''extern "C" void __cdecl VF2InvisibleHammockUsesStockAliasOnly()
+    """Extend the stock hammock drop gate while preserving the base behavior route."""
+    obj = CoffObject(PATCHED / "HotSpot.obj")
+    symbol = obj.symbol("?Hammock@CHotSpot@@CA?B_NAAVCVillager@@@Z")
+    section = obj.section(symbol.section)
+    raw = section.raw_ptr + symbol.value
+    expected = b"\x68\xE1\x01\x00\x00\xB9\x00\x00\x00\x00\xE8"
+    if obj.buf[raw + 4 : raw + 15] != expected:
+        raise RuntimeError("unexpected stock hammock hotspot predicate")
+
+    # Remove only the pushed hardcoded item id. Leave `mov ecx, FurnitureManager`
+    # intact because its DIR32 relocation is still owned by the linker.
+    obj.buf[raw + 4 : raw + 9] = b"\x90" * 5
+    helper = obj.append_undefined_symbol("_VF2EitherHammockInWorld")
+    obj.retarget_relocation(symbol.section, symbol.value + 0x0F, helper, IMAGE_REL_I386_REL32)
+    obj.write(PATCHED / "HotSpot.obj")
+
+    helper_cpp = r'''enum EInventoryItem { eInventoryItemPlaceholder = 0 };
+
+class CFurnitureManager {
+public:
+    bool IsInWorld(EInventoryItem item);
+};
+
+extern CFurnitureManager FurnitureManager;
+
+extern "C" bool __cdecl VF2EitherHammockInWorld()
 {
+    return FurnitureManager.IsInWorld((EInventoryItem)0x1E1) ||
+           FurnitureManager.IsInWorld((EInventoryItem)0x30C);
 }
 '''
     helper_path = PATCHED / "vf2_invisible_hammock.cpp"
     helper_path.write_text(helper_cpp, encoding="ascii")
     manifest["invisible_hammock_drop_action"] = {
-        "status": "stock hotspot preserved; donor alias/fmap route only",
+        "status": "stock hammock drop gate accepts base or invisible hammock",
         "base_item": "0x1E1",
         "added_item": "0x30C",
-        "native_behavior": "stock donor behavior via FurnitureManager click alias and HammockStd fmap",
+        "native_behavior": "eBehavior_LieInHammockNoLeadIn (0x24)",
         "base_hammock_modified": False,
-        "hotspot_modified": False,
-        "matches_invisible_fireplace_strategy": True,
-        "note": "Invisible Hammock now follows the same approach as invisible fireplaces: donor-cloned itemInfo, donor mouse-dispatch alias, and donor fmap; no CHotSpot detour.",
+        "hotspot_modified": True,
+        "drop_gate_helper": "_VF2EitherHammockInWorld",
+        "relocation_safety": "only push 0x1E1 is NOPed; relocated mov ecx,FurnitureManager remains intact before the helper call",
+        "matches_base_hammock_behavior": True,
+        "note": "Invisible Hammock keeps donor-cloned itemInfo, donor mouse-dispatch alias, and donor fmap, then widens the stock CHotSpot::Hammock in-world gate to accept item 0x30C before the native base hammock behavior runs.",
     }
 
 
@@ -8190,10 +8218,14 @@ def validate_invisible_hammock_behavior_contract(manifest):
         errors.append(f"Invisible Hammock click alias donor expected 0x1e1, got {alias.get('donor_item')}")
 
     drop = manifest.get("invisible_hammock_drop_action", {})
-    if drop.get("hotspot_modified") is not False:
-        errors.append("Invisible Hammock must preserve stock CHotSpot::Hammock")
-    if drop.get("matches_invisible_fireplace_strategy") is not True:
-        errors.append("Invisible Hammock must use the invisible-fireplace donor alias/fmap strategy")
+    if drop.get("base_item") != "0x1E1" or drop.get("added_item") != "0x30C":
+        errors.append("Invisible Hammock drop gate must accept base 0x1E1 and added 0x30C")
+    if drop.get("native_behavior") != "eBehavior_LieInHammockNoLeadIn (0x24)":
+        errors.append(f"Invisible Hammock native behavior drifted: {drop.get('native_behavior')}")
+    if drop.get("hotspot_modified") is not True:
+        errors.append("Invisible Hammock must widen stock CHotSpot::Hammock drop gate")
+    if drop.get("matches_base_hammock_behavior") is not True:
+        errors.append("Invisible Hammock must continue through the base hammock behavior route")
 
     behavior_assets = manifest.get("behavior_assets", {})
     fmap_rows = {
@@ -8220,7 +8252,7 @@ def validate_invisible_hammock_behavior_contract(manifest):
         "click_alias": alias,
         "hotspot": drop,
         "fmap": fmap,
-        "recognition_path": "Stock CHotSpot::Hammock is unmodified; InvisibleHammock inherits through the same donor click-alias and fmap-copy path used by invisible fireplaces.",
+        "recognition_path": "InvisibleHammock inherits the donor itemInfo/click/fmap path and widens CHotSpot::Hammock's initial in-world gate so the stock base hammock drop behavior runs.",
     }
 
 
