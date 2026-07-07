@@ -145,7 +145,7 @@ SETTINGS = [
     {
         "id": "behavior_patches",
         "label": "Behavior Patches",
-        "description": "Makes certain actions able to be done automatically by people, including watching the fire, relaxing in the hammock, arcade/table games, radio actions, drawing, and child-only Playhouse behavior.",
+        "description": "Makes certain actions able to be done automatically by people, including watching the fire, relaxing in the hammock, arcade/table games, radio actions, drawing, child-only Playhouse behavior, and child-only Playing quietly at the Kids Table.",
         "default": True,
         "category": "main",
     },
@@ -1646,6 +1646,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B114 patcher refresh: Invisible Furniture Base/Transparent Graphics are rebuilt only from files already inside the generated build. Invisible Full-Size Pool, Invisible Kiddie Pool, and Invisible Hammock Base Graphics use base-game donor art while Transparent Graphics use .pngORIGINAL backups generated from those donor image dimensions.",
             "- B114 game build: Main-world Holiday Body drawing treats the native draw parameters as scale followed by alpha, so child Holiday Outfit crop offsets use body scale on both axes. The Details-screen renderer was left unchanged.",
             "- B115 patcher refresh: Asset records marked up-to-date during validation are rechecked during apply. This prevents an output-folder refresh from deleting an already-up-to-date modded EXE and then skipping the EXE rewrite.",
+            "- B116 game build: Behavior Patches enable child-only Playing quietly at the Kids Table through native behavior 0x130. Invisible Kids Table and Chairs keeps the base KidsTableAndChairsStd donor item/fmap route with no outside asset-folder dependency.",
             "",
             "Experimental patch warning",
             "--------------------------",

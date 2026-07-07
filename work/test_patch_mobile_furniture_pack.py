@@ -140,6 +140,44 @@ def valid_invisible_hammock_manifest():
     }
 
 
+def valid_invisible_kids_table_manifest():
+    return {
+        "FurnitureManager": {
+            "invisible_kids_table_behavior_contracts": [
+                {
+                    "item": "Invisible Kids Table with Chairs",
+                    "item_id": "0x321",
+                    "donor_item": "0x1ce",
+                    "donor_behavior": "base KidsTableAndChairsStd",
+                    "item_type": 5,
+                    "native_behavior": "CBehavior::ChildrenPlayAtKidsTable (0x130)",
+                    "verified": "all non-identity, non-store, non-string fields match donor 0x1CE",
+                }
+            ],
+        },
+        "clickable_added_furniture": {
+            "items": [
+                {
+                    "item": "InvisibleKidsTableAndChairs",
+                    "item_id": "0x321",
+                    "donor_item": "0x1ce",
+                }
+            ]
+        },
+        "behavior_assets": {
+            "invisible_transparent_fmap_donors": [
+                {
+                    "target": "InvisibleKidsTableAndChairs.png.fmap",
+                    "donor": "KidsTableAndChairsStd.png.fmap",
+                    "source": "Assets/KidsTableAndChairsStd.png.fmap",
+                    "bytes": 1,
+                }
+            ],
+            "missing": [],
+        },
+    }
+
+
 class GenerationLockTests(unittest.TestCase):
     def test_mobile_generation_locks_are_preserved(self):
         self.assertEqual(
@@ -302,6 +340,65 @@ class InvisibleHammockBehaviorContractTests(unittest.TestCase):
                 self.assertEqual(manifest["invisible_hammock_drop_action"]["added_item"], "0x30C")
                 self.assertTrue(manifest["invisible_hammock_drop_action"]["hotspot_modified"])
                 self.assertTrue(manifest["invisible_hammock_drop_action"]["matches_base_hammock_behavior"])
+            finally:
+                patcher.PATCHED = old_patched
+
+
+class InvisibleKidsTableBehaviorContractTests(unittest.TestCase):
+    def test_accepts_base_kids_table_inheritance_manifest(self):
+        manifest = valid_invisible_kids_table_manifest()
+
+        patcher.validate_invisible_kids_table_behavior_contract(manifest)
+
+        self.assertEqual(manifest["invisible_kids_table_behavior_contract"]["status"], "validated")
+
+    def test_rejects_missing_kids_table_fmap_donor(self):
+        manifest = valid_invisible_kids_table_manifest()
+        manifest["behavior_assets"]["invisible_transparent_fmap_donors"] = []
+
+        with self.assertRaisesRegex(RuntimeError, "missing InvisibleKidsTableAndChairs.png.fmap"):
+            patcher.validate_invisible_kids_table_behavior_contract(manifest)
+
+    def test_stock_kids_table_hotspot_dispatches_native_behavior_directly(self):
+        obj = CoffObject(patcher.SRC_OBJS / "HotSpot.obj")
+        symbol = obj.symbol("?KidsTable@CHotSpot@@CA?B_NAAVCVillager@@@Z")
+        section = obj.section(symbol.section)
+        raw = section.raw_ptr + symbol.value
+
+        self.assertEqual(obj.buf[raw + 0x0B : raw + 0x11], b"\x68\x30\x01\x00\x00\xE8")
+        reloc_names = []
+        for idx in range(section.nreloc):
+            off = section.reloc_ptr + idx * 10
+            va, symidx, _reloc_type = struct.unpack_from("<LLH", obj.buf, off)
+            if va == symbol.value + 0x11:
+                reloc_names.append(obj.symbol_by_index[symidx].name)
+        self.assertEqual(
+            reloc_names,
+            ["?NewBehavior@CVillager@@QAEXW4EBehavior@@ABUSBehaviorData@@@Z"],
+        )
+
+
+class SpontaneousBehaviorContractTests(unittest.TestCase):
+    def test_children_play_at_kids_table_is_child_only_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            shutil.copy2(patcher.SRC_OBJS / "Villager.obj", temp_root / "Villager.obj")
+            shutil.copy2(patcher.SRC_OBJS / "VillagerAI.obj", temp_root / "VillagerAI.obj")
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = temp_root
+                manifest = {}
+
+                patcher.patch_spontaneous_behaviors(manifest)
+
+                helper = (temp_root / "vf2_spontaneous_behaviors.cpp").read_text(encoding="ascii")
+                self.assertIn(
+                    "EnableChildOnlyAutonomousCandidate(data, 0x130); // ChildrenPlayAtKidsTable / Playing quietly",
+                    helper,
+                )
+                actions = " ".join(manifest["spontaneous_behaviors"]["actions"])
+                self.assertIn("playing quietly at kids table", actions)
+                self.assertIn("children only", actions)
             finally:
                 patcher.PATCHED = old_patched
 

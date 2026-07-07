@@ -1266,3 +1266,19 @@
   patcher converts the record back to `create`/`replace` and copies the
   payload, preventing visual-only toggles from leaving a modded folder without
   its modded executable.
+
+## 2026-07-07 - B116 Child Kids Table Spontaneous Behavior
+
+- `CBehavior::ChildrenPlayAtKidsTable` is registered as behavior ID `0x130`.
+  `CHotSpot::KidsTable(CVillager&)` pushes `0x130` and calls
+  `CVillager::NewBehavior` directly; unlike `CHotSpot::Hammock`, it has no
+  hardcoded `CFurnitureManager::IsInWorld(base_item)` gate to widen.
+- `patch_spontaneous_behaviors()` now enables behavior `0x130` through
+  `EnableChildOnlyAutonomousCandidate`, using the same child boundary as
+  Playhouse (`CVillager+0x6A54 < 0x118`). Adults should not choose this
+  behavior spontaneously.
+- Invisible Kids Table behavior parity is enforced through the donor-cloned
+  furniture path: item `0x321` inherits non-identity behavior fields from
+  `KidsTableAndChairsStd` item `0x1CE`, uses donor fmap
+  `KidsTableAndChairsStd.png.fmap`, and keeps the generated donor click-table
+  alias.

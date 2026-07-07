@@ -659,6 +659,17 @@ B115 patcher-specific notes:
   modded EXE before asset application begins, so the patcher must verify the
   target still exists before skipping.
 
+B116 build-specific notes:
+
+- `behavior_patches` now includes child-only spontaneous "Playing quietly" at
+  the Kids Table. It enables the existing native
+  `CBehavior::ChildrenPlayAtKidsTable` behavior ID `0x130` through the
+  autonomous AI candidate table.
+- Invisible Kids Table and Chairs keeps the base Kids Table inheritance route:
+  item `0x321` clones donor item `0x1CE`, uses
+  `KidsTableAndChairsStd.png.fmap`, and is validated as part of the generated
+  manifest. No outside asset folders are consulted.
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 

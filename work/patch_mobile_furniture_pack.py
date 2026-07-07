@@ -4436,6 +4436,7 @@ def patch_furniture_manager(manifest):
     vf3_tv_animation_records = []
     vf3_tv_behavior_contracts = []
     invisible_hammock_behavior_contracts = []
+    invisible_kids_table_behavior_contracts = []
     vf3_tv_by_name = {item["short_description"]: item for item in VF3_TV_ITEMS}
     for idx, (name, donor_id, _list_name, path) in enumerate(ITEMS):
         donor_vals = records[donor_id]["raw_u32"]
@@ -4515,6 +4516,28 @@ def patch_furniture_manager(manifest):
                 "item_type": vals[4],
                 "verified": "all non-identity, non-store, non-string fields match donor 0x1E1",
             })
+        if new_item_id == 0x321 and donor_id == 0x1CE:
+            allowed = {0, 1, 2, 3, 5, 6}
+            drift = [
+                {
+                    "offset": hex(i * 4),
+                    "donor": hex(donor_vals[i]),
+                    "added": hex(vals[i]),
+                }
+                for i in range(len(vals))
+                if i not in allowed and vals[i] != donor_vals[i]
+            ]
+            if drift:
+                raise RuntimeError(f"Invisible Kids Table behavior fields drifted from base kids table donor: {drift}")
+            invisible_kids_table_behavior_contracts.append({
+                "item": name,
+                "item_id": hex(vals[0]),
+                "donor_item": hex(donor_id),
+                "donor_behavior": "base KidsTableAndChairsStd",
+                "item_type": vals[4],
+                "native_behavior": "CBehavior::ChildrenPlayAtKidsTable (0x130)",
+                "verified": "all non-identity, non-store, non-string fields match donor 0x1CE",
+            })
         if vf3_tv:
             allowed = {0, 1, 2, 3, 5, 6, *range(0x24 // 4, 0x50 // 4 + 1)}
             drift = [
@@ -4590,6 +4613,7 @@ def patch_furniture_manager(manifest):
         "vf3_tv_animation_records": vf3_tv_animation_records,
         "vf3_tv_behavior_contracts": vf3_tv_behavior_contracts,
         "invisible_hammock_behavior_contracts": invisible_hammock_behavior_contracts,
+        "invisible_kids_table_behavior_contracts": invisible_kids_table_behavior_contracts,
     }
 
 
@@ -8415,6 +8439,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAllAgesAutonomousCandidate(data, 0x099); // PlayingPooltable
     EnableAllAgesAutonomousCandidate(data, 0x096); // PlayingFoosball
     EnableChildOnlyAutonomousCandidate(data, 0x11E); // PlayOnPlayStructure / Playhouse
+    EnableChildOnlyAutonomousCandidate(data, 0x130); // ChildrenPlayAtKidsTable / Playing quietly
     EnableAutonomousCandidate(data, 0x0ED); // DancingRadio
     EnableAutonomousCandidate(data, 0x0F5); // ListenToRadio
     EnableAutonomousCandidate(data, 0x118); // DrawingOnEasel
@@ -8426,8 +8451,8 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
         "status": "enabled through the autonomous AI candidate table",
         "hooks": ["CVillager::InitAI", "CVillager::LoadAI", "CVillagerAI::DecideWhatToDo"],
         "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
-        "actions": ["hammock (all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "playhouse (children only; max age 0x117)", "listen to radio", "dance to radio", "drawing"],
-        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only in weather states 0 (neutral) and 1 (sunny). Playhouse is capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is adult.",
+        "actions": ["hammock (all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "playhouse (children only; max age 0x117)", "playing quietly at kids table (children only; base or invisible kids table)", "listen to radio", "dance to radio", "drawing"],
+        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only in weather states 0 (neutral) and 1 (sunny). Playhouse and ChildrenPlayAtKidsTable are capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is adult. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
     }
 
 
@@ -8820,6 +8845,66 @@ def validate_invisible_hammock_behavior_contract(manifest):
     }
 
 
+def validate_invisible_kids_table_behavior_contract(manifest):
+    """Fail fast if Invisible Kids Table stops inheriting the stock kids table path."""
+    errors = []
+    furniture = manifest.get("FurnitureManager", {})
+    rows = {
+        row.get("item_id"): row
+        for row in furniture.get("invisible_kids_table_behavior_contracts", [])
+        if isinstance(row, dict)
+    }
+    row = rows.get("0x321")
+    if row is None:
+        errors.append("missing Invisible Kids Table furniture behavior contract")
+    else:
+        if row.get("donor_item") != "0x1ce":
+            errors.append(f"Invisible Kids Table donor expected 0x1ce, got {row.get('donor_item')}")
+        if row.get("item_type") != 5:
+            errors.append(f"Invisible Kids Table item_type expected 5, got {row.get('item_type')}")
+        if row.get("native_behavior") != "CBehavior::ChildrenPlayAtKidsTable (0x130)":
+            errors.append(f"Invisible Kids Table native behavior drifted: {row.get('native_behavior')}")
+
+    click_aliases = {
+        row.get("item_id"): row
+        for row in manifest.get("clickable_added_furniture", {}).get("items", [])
+        if isinstance(row, dict)
+    }
+    alias = click_aliases.get("0x321")
+    if alias is None:
+        errors.append("missing Invisible Kids Table donor click alias")
+    elif alias.get("donor_item") != "0x1ce":
+        errors.append(f"Invisible Kids Table click alias donor expected 0x1ce, got {alias.get('donor_item')}")
+
+    behavior_assets = manifest.get("behavior_assets", {})
+    fmap_rows = {
+        row.get("target"): row
+        for row in behavior_assets.get("invisible_transparent_fmap_donors", [])
+        if isinstance(row, dict)
+    }
+    fmap = fmap_rows.get("InvisibleKidsTableAndChairs.png.fmap")
+    if fmap is None:
+        errors.append("missing InvisibleKidsTableAndChairs.png.fmap donor copy")
+    elif fmap.get("donor") != "KidsTableAndChairsStd.png.fmap":
+        errors.append(f"Invisible Kids Table fmap donor expected KidsTableAndChairsStd.png.fmap, got {fmap.get('donor')}")
+    for missing in behavior_assets.get("missing", []):
+        if isinstance(missing, dict) and missing.get("target") == "InvisibleKidsTableAndChairs.png.fmap":
+            errors.append(f"Invisible Kids Table fmap was reported missing: {missing}")
+
+    if errors:
+        raise RuntimeError("Invisible Kids Table behavior contract failed:\n- " + "\n- ".join(errors))
+    manifest["invisible_kids_table_behavior_contract"] = {
+        "status": "validated",
+        "item_id": "0x321",
+        "donor_item": "0x1ce",
+        "record_contract": row,
+        "click_alias": alias,
+        "fmap": fmap,
+        "native_behavior": "CBehavior::ChildrenPlayAtKidsTable (0x130)",
+        "recognition_path": "InvisibleKidsTableAndChairs inherits the donor itemInfo/click/fmap path from KidsTableAndChairsStd; stock CHotSpot::KidsTable dispatches behavior 0x130 directly without a separate IsInWorld item gate.",
+    }
+
+
 def validate_runtime_payload_contract(manifest):
     errors = []
     for filename in VANILLA_RUNTIME_REQUIRED_FILES:
@@ -8998,6 +9083,7 @@ def main():
     validate_vf3_tv_animation_contract(manifest)
     validate_vf3_tv_behavior_contract(manifest)
     validate_invisible_hammock_behavior_contract(manifest)
+    validate_invisible_kids_table_behavior_contract(manifest)
     remove_legacy_package_dirs(manifest)
     validate_runtime_payload_contract(manifest)
     (OUT / "patch-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")

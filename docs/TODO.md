@@ -296,6 +296,20 @@
   an existing modded output folder, uncheck only
   `invisible_furniture_transparent_graphics`, click Enable/Disable Patches, and
   confirm the modded EXE remains present after the refresh.
+- In-game spontaneous behavior B116: with a Kids Table and Chairs present,
+  confirm children can spontaneously choose "Playing quietly" and adults do
+  not. Repeat with only Invisible Kids Table and Chairs present to verify the
+  donor-cloned invisible item uses the base Kids Table behavior route.
+- Future patcher builds: properly implement the Settings Evict button path.
+  With the current experimental patch enabled, the button still does not appear
+  in Settings.
+- Future patcher builds: implement mobile-exclusive Island Events so they have
+  real outcomes instead of only shell/event records.
+- Future patcher builds: implement the Holiday Ornaments collection without
+  collection-screen crashes, including proper collectible pickup/spawn behavior,
+  related Goals, and Island Event wiring.
+- Future patcher builds: implement mobile-exclusive villager behaviors for the
+  added furniture beyond the currently confirmed behavior patches.
 - In-game test B106 generation locks: with a fresh save before later
   generations, verify added furniture respects the preserved mobile
   `lock_generation` values rather than appearing fully unlocked by default.
