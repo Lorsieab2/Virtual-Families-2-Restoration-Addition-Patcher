@@ -358,11 +358,48 @@ def pe_structure_fingerprint(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def pe_structure_identity(structure: Any) -> dict[str, Any] | None:
+    if not isinstance(structure, dict):
+        return None
+    sections = structure.get("sections")
+    if not isinstance(sections, list):
+        return None
+    identity_sections = []
+    for section in sections:
+        if not isinstance(section, dict):
+            return None
+        identity_sections.append({
+            "name": section.get("name"),
+            "virtual_address": section.get("virtual_address"),
+            "virtual_size": section.get("virtual_size"),
+            "raw_data_pointer": section.get("raw_data_pointer"),
+            "raw_data_size": section.get("raw_data_size"),
+            "characteristics": section.get("characteristics"),
+        })
+    return {
+        "format": structure.get("format"),
+        "pe_offset": structure.get("pe_offset"),
+        "machine": structure.get("machine"),
+        "number_of_sections": structure.get("number_of_sections"),
+        "characteristics": structure.get("characteristics"),
+        "optional_header_size": structure.get("optional_header_size"),
+        "optional_magic": structure.get("optional_magic"),
+        "address_of_entry_point": structure.get("address_of_entry_point"),
+        "image_base": structure.get("image_base"),
+        "section_alignment": structure.get("section_alignment"),
+        "file_alignment": structure.get("file_alignment"),
+        "size_of_image": structure.get("size_of_image"),
+        "subsystem": structure.get("subsystem"),
+        "sections": identity_sections,
+    }
+
+
 def pe_structure_matches(path: Path, expected: Any) -> bool:
-    if not isinstance(expected, dict):
+    expected_identity = pe_structure_identity(expected)
+    if expected_identity is None:
         return False
     actual = pe_structure_fingerprint(path)
-    return actual == expected
+    return pe_structure_identity(actual) == expected_identity
 
 
 def windows_file_versions(path: Path) -> dict[str, str]:

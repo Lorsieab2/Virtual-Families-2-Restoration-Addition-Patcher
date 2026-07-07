@@ -1097,3 +1097,17 @@
   exporting `payload/OptionalSongMods/menu.ogg` and `song1-4.ogg` from the last
   known working B104 payload. The generated manifest exposes
   `optional_song_mods` only when those five bundled files exist.
+
+## 2026-07-06 - B108 Relaxed Official EXE Identity
+
+- `work/offline_vf2_patcher.py::pe_structure_matches()` now compares a stable
+  PE layout identity instead of the full `pe32-section-raw-v1` fingerprint.
+  `pe_structure_identity()` keeps machine/header/layout fields plus section
+  names, raw offsets/sizes, virtual offsets/sizes, and characteristics, while
+  ignoring whole-file SHA-256, PE timestamp, overlay/certificate bytes, and
+  per-section SHA-256.
+- The install validator still verifies the selected folder shape through
+  `runtime_requirements`, but a valid official `Virtual Families 2.exe` is no
+  longer rejected solely because its SHA-256 or section hashes differ from the
+  manifest's reference EXE. Byte patch records still validate their own
+  `expected_original_bytes` before writing.

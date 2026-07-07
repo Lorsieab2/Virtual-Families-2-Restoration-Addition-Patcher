@@ -240,5 +240,8 @@ Changelog
 - B107 game build: Added a regression check that preserves the stock PC
   furniture itemInfo table bytes when appending mobile/custom records, keeping
   base-game generation locks intact.
+- B108 patcher refresh: Official EXE validation now accepts matching VF2 PE
+  layout identity plus the required installation folder structure instead of
+  requiring exact EXE or section SHA-256 hashes.
 
 Have fun! -Lorsieab2 :)

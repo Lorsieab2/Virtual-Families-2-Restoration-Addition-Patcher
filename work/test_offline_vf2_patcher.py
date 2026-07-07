@@ -19,7 +19,7 @@ def sha256_bytes(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def minimal_pe_bytes(overlay=b""):
+def minimal_pe_bytes(overlay=b"", section_delta=0):
     data = bytearray(0x400)
     data[:2] = b"MZ"
     data[0x3C:0x40] = (0x80).to_bytes(4, "little")
@@ -48,7 +48,7 @@ def minimal_pe_bytes(overlay=b""):
     data[sect + 8:sect + 16] = (0x200).to_bytes(4, "little") + (0x1000).to_bytes(4, "little")
     data[sect + 16:sect + 24] = (0x200).to_bytes(4, "little") + (0x200).to_bytes(4, "little")
     data[sect + 36:sect + 40] = (0x60000020).to_bytes(4, "little")
-    data[0x200:0x400] = bytes((index % 251 for index in range(0x200)))
+    data[0x200:0x400] = bytes(((index + section_delta) % 251 for index in range(0x200)))
     return bytes(data) + overlay
 
 
@@ -379,6 +379,63 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                                 "overwrite_existing": True,
                                 "requires": ["core_executable"],
                                 "note": "replace structurally matched exe",
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_patcher("apply", "--exe", str(game_file), "--manifest", str(manifest), "--backup-dir", str(backup))
+
+            self.assertEqual(game_file.read_bytes(), patched)
+            log = json.loads((backup / "patch_log.json").read_text(encoding="utf-8"))
+            self.assertEqual(log["target_checks"][0]["matched_by"], "pe_structure")
+            self.assertTrue(log["asset_patches"][0]["target_structure_matched"])
+
+    def test_exe_replacement_accepts_matching_pe_layout_when_section_hash_differs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            expected_original = minimal_pe_bytes(section_delta=0)
+            actual_original = minimal_pe_bytes(section_delta=7)
+            patched = b"patched executable"
+            game_file.write_bytes(actual_original)
+            structure_source = tmp_path / "expected.exe"
+            structure_source.write_bytes(expected_original)
+            payload = tmp_path / "payload" / "Virtual Families 2.exe"
+            payload.parent.mkdir()
+            payload.write_bytes(patched)
+            manifest = tmp_path / "exe_layout_replacement.json"
+            backup = tmp_path / "backup"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "exe layout replacement unit test",
+                        "settings": [{"id": "core_executable", "label": "Patch game executable", "default": True}],
+                        "target_files": [
+                            {
+                                "path": game_file.name,
+                                "sha256": sha256_bytes(expected_original),
+                                "size": len(expected_original),
+                                "pe_structure": patcher_mod.pe_structure_fingerprint(structure_source),
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": game_file.name,
+                                "source_path": "payload/Virtual Families 2.exe",
+                                "source_sha256": sha256_bytes(patched),
+                                "source_size": len(patched),
+                                "expected_target_sha256": sha256_bytes(expected_original),
+                                "expected_target_pe_structure": patcher_mod.pe_structure_fingerprint(structure_source),
+                                "overwrite_existing": True,
+                                "requires": ["core_executable"],
+                                "note": "replace layout-matched exe",
                             }
                         ],
                     },

@@ -426,10 +426,12 @@ when the original target did not exist.
 before any patch is written. `size`, `file_version`, `product_version`, and
 `pe_timestamp` are validated when present; version and PE timestamp checks are
 supplemental. `pe_structure` uses the patcher's `pe32-section-raw-v1`
-fingerprint: the PE header layout plus each section's raw file offset, raw
-size, virtual address/size, characteristics, and raw-data SHA-256. This ignores
-overlay/certificate bytes, so an otherwise identical VF2 EXE can still be
-accepted even when its whole-file SHA-256 differs.
+fingerprint for traceability. Install validation compares only the stable PE
+identity fields: PE header layout plus each section's name, raw file offset,
+raw size, virtual address/size, and characteristics. It deliberately ignores
+whole-file SHA-256, PE timestamp, overlay/certificate bytes, and per-section
+raw-data SHA-256 when a compatible structure is present, so valid official VF2
+EXEs with different hashes are accepted.
 
 `runtime_requirements` is optional but should be included by VF2 release
 manifests. It lets the patcher verify that the selected game directory is a
