@@ -260,5 +260,31 @@ Changelog
 - B110 patcher refresh: VF3 TV asset records require Patch game executable so
   private TV animation graphics are not copied without the executable support
   that recognizes them.
+- B111 patcher refresh: Target-file and EXE replacement validation find any
+  accepted VF2 PE-layout executable in the selected install folder, so the
+  patcher does not require a hardcoded install path or exact EXE filename.
+- B111 patcher refresh: VF3 Furniture is split into its own default-off
+  optional setting using the actual runtime stems SofaPlaid, CouchPlaid,
+  CouchFlowers, CouchStriped, SofaStriped, and FloweredLoveseat.
+- B111 patcher refresh: Holiday Outfit Details-screen body files under
+  Images/VillagerDetailBodies are bundled with the Holiday Outfits patch.
+- B111 patcher refresh: Generation-lock standalone icons are bundled under
+  Images/GenerationLocks.
+- B112 patcher refresh: Generation-lock icons now come from explicit bundled
+  lock_02.png through lock_30.png files. The exporter fails if any numbered
+  frame is missing, so generation 10 uses lock_10.png and generation 30 uses
+  lock_30.png.
+- B112 game build: Added mobile/Holiday/VF3 furniture records that had
+  generation_lock 0 are deterministically shuffled into 3-item groups across
+  generations 10-30. Base-game furniture records are not part of that path.
+- B112 game build: VF3 TV animation strips use bundled nonblank runtime strips
+  when external creator Sprite frames are absent, and validation rejects fully
+  transparent strips.
+- B112 game build: Holiday Body animation graphics are not resized. Runtime
+  frame generation transparent-crops the source pixels and stores draw offsets
+  for alignment.
+- B113 game build: Child Holiday Body rendering scales those stored draw
+  offsets by the child/adult draw scale in both the Details screen and main
+  game, while still preserving the supplied source pixels without resizing.
 
 Have fun! -Lorsieab2 :)

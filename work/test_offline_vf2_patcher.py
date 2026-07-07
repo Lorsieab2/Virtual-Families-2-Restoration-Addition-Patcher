@@ -196,6 +196,115 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(log["modded_exe_name"], "Virtual Families 2 - Modded BTest.exe")
             self.assertTrue(log["modded_save_dir"].endswith(str(Path("LDW") / "Virtual Families 2 - Modded BTest")))
 
+    def test_dry_run_accepts_renamed_valid_pe_structure_exe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "Virtual Families 2"
+            game_dir.mkdir()
+            reference = tmp_path / "reference.exe"
+            reference.write_bytes(minimal_pe_bytes())
+            renamed_exe = game_dir / "Renamed VF2 Website Build.exe"
+            renamed_exe.write_bytes(minimal_pe_bytes(section_delta=17))
+            manifest = tmp_path / "structure_manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "renamed PE target unit test",
+                        "output": {"default_folder_name": "VF2-BTest-Modded"},
+                        "target_files": [
+                            {
+                                "path": "Virtual Families 2.exe",
+                                "pe_structures": [patcher_mod.pe_structure_fingerprint(reference)],
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                "--dry-run",
+            )
+
+            self.assertIn("Dry run complete", result.stdout)
+            log = json.loads((tmp_path / "patch_dry_run_log.json").read_text(encoding="utf-8"))
+            self.assertEqual(log["target_checks"][0]["file_path"], renamed_exe.name)
+            self.assertTrue(log["target_checks"][0]["discovered_by_structure"])
+
+    def test_exe_replacement_accepts_renamed_valid_pe_structure_exe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "Virtual Families 2"
+            game_dir.mkdir()
+            reference = tmp_path / "reference.exe"
+            reference.write_bytes(minimal_pe_bytes())
+            renamed_exe = game_dir / "Renamed VF2 Website Build.exe"
+            renamed_exe.write_bytes(minimal_pe_bytes(section_delta=29))
+            payload = tmp_path / "payload" / "Virtual Families 2 - Modded BTest.exe"
+            payload.parent.mkdir()
+            patched = b"patched executable payload"
+            payload.write_bytes(patched)
+            manifest = tmp_path / "exe_replacement_structure_manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "renamed PE replacement unit test",
+                        "output": {
+                            "default_folder_name": "VF2-BTest-Modded",
+                            "default_exe_name": payload.name,
+                        },
+                        "settings": [
+                            {
+                                "id": "core_executable",
+                                "label": "Patch game executable",
+                                "default": True,
+                            }
+                        ],
+                        "target_files": [
+                            {
+                                "path": "Virtual Families 2.exe",
+                                "pe_structures": [patcher_mod.pe_structure_fingerprint(reference)],
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Virtual Families 2.exe",
+                                "output_file_path": payload.name,
+                                "source_path": str(payload.relative_to(tmp_path)).replace("\\", "/"),
+                                "source_sha256": sha256_bytes(patched),
+                                "source_size": len(patched),
+                                "expected_target_pe_structures": [patcher_mod.pe_structure_fingerprint(reference)],
+                                "overwrite_existing": True,
+                                "requires": ["core_executable"],
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+            )
+
+            output_dir = tmp_path / "VF2-BTest-Modded"
+            self.assertIn("Patched files successfully", result.stdout)
+            self.assertEqual((output_dir / payload.name).read_bytes(), patched)
+            self.assertFalse((output_dir / renamed_exe.name).exists())
+
     def test_byte_patch_output_folder_renames_modded_exe_for_save_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -938,6 +1047,85 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             )
             self.assertIn("SHA-256 mismatch for asset source", result.stderr)
             self.assertFalse((game_dir / "Images" / "VF3SmallFlatScreenTVAnim.png").exists())
+
+    def test_output_only_reconfiguration_enables_and_restores_checked_assets(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            modded_dir = tmp_path / "VF2-BUnit-Modded"
+            (modded_dir / ".vf2_patch_backups").mkdir(parents=True)
+            (modded_dir / "Images" / "Upgrades").mkdir(parents=True)
+            (modded_dir / "Virtual Families 2 - Modded BUnit.exe").write_bytes(b"modded exe")
+            upgrade = modded_dir / "Images" / "Upgrades" / "toolwall.png"
+            upgrade.write_bytes(b"original upgrade")
+
+            payload = tmp_path / "payload"
+            invisible = payload / "OptionalVisualMods" / "Invisible Upgrades" / "toolwall.png"
+            original = payload / "Original Virtual Families 2 Assets" / "Upgrades Original Graphics" / "toolwall.png"
+            invisible.parent.mkdir(parents=True)
+            original.parent.mkdir(parents=True)
+            invisible.write_bytes(b"invisible upgrade")
+            original.write_bytes(b"original upgrade")
+
+            manifest = tmp_path / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "output-only reconfigure unit test",
+                        "output": {
+                            "default_folder_name": "VF2-BUnit-Modded",
+                            "default_exe_name": "Virtual Families 2 - Modded BUnit.exe",
+                        },
+                        "settings": [
+                            {
+                                "id": "invisible_upgrades_graphics",
+                                "label": "Invisible Upgrades Graphics",
+                                "default": False,
+                                "category": "optional",
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Images/Upgrades/toolwall.png",
+                                "source_path": "payload/OptionalVisualMods/Invisible Upgrades/toolwall.png",
+                                "source_sha256": sha256_bytes(b"invisible upgrade"),
+                                "source_size": len(b"invisible upgrade"),
+                                "restore_source_path": "payload/Original Virtual Families 2 Assets/Upgrades Original Graphics/toolwall.png",
+                                "restore_source_sha256": sha256_bytes(b"original upgrade"),
+                                "restore_source_size": len(b"original upgrade"),
+                                "overwrite_existing": True,
+                                "requires": ["invisible_upgrades_graphics"],
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_patcher(
+                "apply",
+                "--output-dir",
+                str(modded_dir),
+                "--manifest",
+                str(manifest),
+                "--enable",
+                "invisible_upgrades_graphics",
+            )
+            self.assertEqual(upgrade.read_bytes(), b"invisible upgrade")
+
+            self.run_patcher(
+                "apply",
+                "--output-dir",
+                str(modded_dir),
+                "--manifest",
+                str(manifest),
+            )
+            self.assertEqual(upgrade.read_bytes(), b"original upgrade")
+            log_path = sorted((modded_dir / ".vf2_patch_backups").glob("*/patch_log.json"))[-1]
+            log = json.loads(log_path.read_text(encoding="utf-8"))
+            self.assertEqual(log["mode"], "existing_modded_output")
+            self.assertTrue(any(row["action"] == "replace" for row in log["asset_files"]))
 
     def test_refuses_expected_byte_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:

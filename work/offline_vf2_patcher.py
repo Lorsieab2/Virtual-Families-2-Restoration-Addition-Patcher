@@ -63,6 +63,7 @@ class AssetPatch:
     overwrite_existing: bool
     note: str
     requires: tuple[str, ...]
+    restore: bool = False
 
 
 @dataclass(frozen=True)
@@ -421,6 +422,38 @@ def pe_structure_matches_any(path: Path, expected_rows: tuple[dict[str, Any], ..
     return any(pe_structure_matches(path, expected) for expected in expected_rows)
 
 
+def relative_to_game_dir(game_dir: Path, path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(game_dir.resolve()))
+    except ValueError:
+        return str(path)
+
+
+def resolve_expected_exe_target(
+    game_dir: Path,
+    rel_path: str,
+    expected_pe_structures: tuple[dict[str, Any], ...],
+) -> tuple[Path, str, bool]:
+    """Resolve an EXE target by accepted VF2 PE layout instead of exact name."""
+    target = resolve_under_game_dir(game_dir, rel_path)
+    if Path(rel_path).suffix.lower() != ".exe" or not expected_pe_structures:
+        return target, rel_path, False
+
+    exact_target = target.resolve()
+    matches = [
+        candidate
+        for candidate in sorted(game_dir.glob("*.exe"))
+        if candidate.is_file() and pe_structure_matches_any(candidate, expected_pe_structures)
+    ]
+    if not matches:
+        return target, rel_path, False
+    for candidate in matches:
+        if candidate.resolve() == exact_target:
+            return candidate, relative_to_game_dir(game_dir, candidate), False
+    chosen = matches[0]
+    return chosen, relative_to_game_dir(game_dir, chosen), True
+
+
 def windows_file_versions(path: Path) -> dict[str, str]:
     if os.name != "nt":
         return {}
@@ -680,6 +713,38 @@ def prepare_output_dir(
             shutil.copy2(source, target)
 
 
+def is_recognized_modded_output_dir(path: Path) -> bool:
+    if not path.is_dir():
+        return False
+    if (path / DEFAULT_BACKUP_ROOT).is_dir():
+        return True
+    if path.name.startswith("VF2-") and path.name.endswith("-Modded"):
+        return True
+    return any(child.is_file() and child.suffix.lower() == ".exe" and "modded" in child.stem.lower() for child in path.iterdir())
+
+
+def verify_reconfigure_output_dir(output_dir: Path, manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    if not output_dir.is_dir():
+        raise PatchError(f"Modded output folder does not exist: {output_dir}")
+    if not is_recognized_modded_output_dir(output_dir):
+        raise PatchError(
+            "Output-only reconfiguration requires an existing VF2 modded output folder. "
+            f"This folder was not recognized as modded: {output_dir}"
+        )
+    exe_name = manifest_output_exe_name(manifest)
+    exe_candidates = sorted(output_dir.glob("*.exe"))
+    if exe_name and not (output_dir / exe_name).is_file() and not exe_candidates:
+        raise PatchError(f"Modded output folder does not contain the expected modded executable: {exe_name}")
+    return [
+        {
+            "path": str(output_dir),
+            "status": "success",
+            "mode": "existing_modded_output",
+            "exe_count": len(exe_candidates),
+        }
+    ]
+
+
 def enforce_modded_exe_name(
     game_dir: Path,
     output_dir: Path,
@@ -908,6 +973,8 @@ def manifest_asset_patches(
     manifest: dict[str, Any],
     settings: dict[str, PatchSetting],
     enabled_settings: set[str],
+    *,
+    restore_inactive: bool = False,
 ) -> list[AssetPatch]:
     raw_assets = manifest.get("asset_patches", manifest.get("assets", []))
     if not isinstance(raw_assets, list):
@@ -919,17 +986,27 @@ def manifest_asset_patches(
         target_value = raw.get("file_path", raw.get("target_path", raw.get("target", raw.get("path"))))
         output_value = raw.get("output_file_path", raw.get("output_path", raw.get("write_path")))
         source_value = raw.get("source_path", raw.get("source_file", raw.get("source")))
+        restore_source_value = raw.get("restore_source_path", raw.get("restore_source_file", raw.get("restore_source")))
         file_path = normalize_rel_path(target_value, f"asset patch #{index} target path")
         output_file_path = None
         if output_value is not None:
             output_file_path = normalize_rel_path(output_value, f"asset patch #{index} output path")
-        source_path = normalize_rel_path(source_value, f"asset patch #{index} source path")
         requires = record_requires(raw, f"asset patch #{index}")
         ensure_known_settings(requires, settings, f"Asset patch #{index}")
-        if not record_is_active(requires, enabled_settings):
+        active = record_is_active(requires, enabled_settings)
+        restore = False
+        if not active:
+            if not restore_inactive or restore_source_value is None:
+                continue
+            source_value = restore_source_value
+            restore = True
+        source_path = normalize_rel_path(source_value, f"asset patch #{index} source path")
+        source_sha_field = "restore_source_sha256" if restore else "source_sha256"
+        source_size_field = "restore_source_size" if restore else "source_size"
+        if restore and raw.get(source_sha_field) is None:
             continue
         source_sha = normalize_sha256(
-            raw.get("source_sha256", raw.get("sha256")),
+            raw.get(source_sha_field, raw.get("sha256")),
             f"asset patch #{index} source_sha256",
             required=True,
         )
@@ -954,8 +1031,8 @@ def manifest_asset_patches(
             f"asset patch #{index} expected_target_pe_structures",
         )
         source_size = None
-        if raw.get("source_size", raw.get("size")) is not None:
-            source_size = parse_int(raw.get("source_size", raw.get("size")), f"asset patch #{index} source_size")
+        if raw.get(source_size_field, raw.get("size")) is not None:
+            source_size = parse_int(raw.get(source_size_field, raw.get("size")), f"asset patch #{index} source_size")
         expected_target_size = None
         if raw.get("expected_target_size", raw.get("expected_existing_size")) is not None:
             expected_target_size = parse_int(
@@ -974,10 +1051,11 @@ def manifest_asset_patches(
                 expected_target_pe_structures=expected_target_pe_structures,
                 expected_target_size=expected_target_size,
                 overwrite_existing=bool(
-                    raw.get("overwrite_existing", raw.get("replace_existing", raw.get("overwrite", False)))
+                    True if restore else raw.get("overwrite_existing", raw.get("replace_existing", raw.get("overwrite", False)))
                 ),
-                note=str(raw.get("note", "")).strip(),
-                requires=requires,
+                note=("Restore disabled setting: " if restore else "") + str(raw.get("note", "")).strip(),
+                requires=() if restore else requires,
+                restore=restore,
             )
         )
     return assets
@@ -1023,13 +1101,11 @@ def verify_target_files(
             f"target file #{index} pe_structures",
         )
 
-        path = resolve_under_game_dir(game_dir, rel_path)
-        if not path.is_file() and Path(rel_path).suffix.lower() == ".exe" and expected_pe_structures:
-            for candidate in sorted(game_dir.glob("*.exe")):
-                if pe_structure_matches_any(candidate, expected_pe_structures):
-                    path = candidate
-                    rel_path = candidate.name
-                    break
+        path, rel_path, discovered_by_structure = resolve_expected_exe_target(
+            game_dir,
+            rel_path,
+            expected_pe_structures,
+        )
         if not path.is_file():
             raise install_validation_error(manifest, f"target file does not exist: {rel_path}")
         actual_sha = sha256_file(path)
@@ -1101,6 +1177,7 @@ def verify_target_files(
                 "pe_timestamp": None if actual_timestamp is None else f"0x{actual_timestamp:08x}",
                 "requires": list(requires),
                 "matched_by": matched_by,
+                "discovered_by_structure": discovered_by_structure,
                 **version_info,
             }
         )
@@ -1260,13 +1337,22 @@ def verify_asset_patches(
                     f"expected {asset.source_size}, got {source_size}"
                 )
 
-            target = resolve_under_game_dir(game_dir, asset.file_path)
-            target_exists = target.is_file()
-            target_sha = sha256_file(target) if target_exists else None
-            target_size = target.stat().st_size if target_exists else None
+            reconfigure_output = bool(getattr(args, "reconfigure_output", False))
             output_file_path = asset.output_file_path or asset.file_path
             output_target = resolve_under_game_dir(output_dir, output_file_path)
             output_is_validation_target = output_file_path == asset.file_path
+            target, target_file_path, discovered_by_structure = resolve_expected_exe_target(
+                game_dir,
+                asset.file_path,
+                asset.expected_target_pe_structures,
+            )
+            if reconfigure_output and not output_is_validation_target:
+                target = output_target
+                target_file_path = output_file_path
+                discovered_by_structure = False
+            target_exists = target.is_file()
+            target_sha = sha256_file(target) if target_exists else None
+            target_size = target.stat().st_size if target_exists else None
             if output_dir.resolve() == game_dir.resolve() and output_is_validation_target:
                 output_exists = target_exists
                 output_sha = target_sha
@@ -1283,15 +1369,27 @@ def verify_asset_patches(
             action = "create"
             if target_exists:
                 action = "replace"
-                if asset.expected_target_sha256 and target_sha != asset.expected_target_sha256 and not expected_structure_matches:
+                if (
+                    not reconfigure_output
+                    and asset.expected_target_sha256
+                    and target_sha != asset.expected_target_sha256
+                    and not expected_structure_matches
+                ):
                     raise PatchError(
                         f"SHA-256 mismatch for existing asset target {asset.file_path}: "
                         f"expected {asset.expected_target_sha256}, got {target_sha}; "
                         "PE structure did not match any accepted binary structure."
                     )
-                if asset.expected_target_pe_structures and not expected_structure_matches and not asset.expected_target_sha256:
+                if (
+                    not reconfigure_output
+                    and asset.expected_target_pe_structures
+                    and not expected_structure_matches
+                    and not asset.expected_target_sha256
+                ):
                     raise PatchError(f"PE structure mismatch for existing asset target {asset.file_path}.")
                 if (
+                    not reconfigure_output
+                    and
                     asset.expected_target_size is not None
                     and not expected_structure_matches
                     and target_size != asset.expected_target_size
@@ -1308,7 +1406,8 @@ def verify_asset_patches(
                         f"{asset.file_path}"
                     )
             elif asset.expected_target_sha256 or asset.expected_target_size is not None:
-                raise PatchError(f"Expected existing asset target is missing: {asset.file_path}")
+                if not reconfigure_output:
+                    raise PatchError(f"Expected existing asset target is missing: {asset.file_path}")
             if not output_is_validation_target:
                 action = "create"
                 if output_exists:
@@ -1345,6 +1444,7 @@ def verify_asset_patches(
         check = {
             "index": asset.index,
             "file_path": asset.file_path,
+            "target_file_path": target_file_path,
             "output_file_path": output_file_path,
             "source_path": asset.source_path,
             "source_sha256": source_sha,
@@ -1353,6 +1453,7 @@ def verify_asset_patches(
             "target_sha256": target_sha,
             "target_size": target_size,
             "target_structure_matched": bool(expected_structure_matches),
+            "discovered_by_structure": discovered_by_structure,
             "output_existed": output_exists,
             "output_sha256": output_sha,
             "output_size": output_size,
@@ -1480,7 +1581,7 @@ def backup_slug(manifest_path: Path) -> str:
     stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", manifest_path.stem).strip("._")
     if not stem:
         stem = "vf2_patch"
-    return f"{_dt.datetime.now().strftime('%Y%m%d_%H%M%S')}_{stem}"
+    return f"{_dt.datetime.now().strftime('%Y%m%d_%H%M%S_%f')}_{stem}"
 
 
 def create_backup(
@@ -1570,6 +1671,7 @@ def asset_summary(asset_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
         {
             "index": check["index"],
             "file_path": check["file_path"],
+            "target_file_path": check.get("target_file_path", check["file_path"]),
             "output_file_path": check.get("output_file_path", check["file_path"]),
             "source_path": check["source_path"],
             "source_sha256": check["source_sha256"],
@@ -1591,15 +1693,32 @@ def asset_summary(asset_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def apply_manifest(args: argparse.Namespace) -> int:
     exe_path = Path(args.exe).resolve() if getattr(args, "exe", None) else None
-    game_dir = Path(args.game_dir).resolve() if args.game_dir else None
+    requested_game_dir = Path(args.game_dir).resolve() if args.game_dir else None
+    requested_output_dir = Path(args.output_dir).resolve() if getattr(args, "output_dir", None) else None
+    game_dir = requested_game_dir
+    reconfigure_output = False
     if exe_path is not None:
         if exe_path.suffix.lower() != ".exe":
             raise PatchError(f"--exe must point to a Virtual Families 2 executable, got {exe_path.name!r}.")
         if game_dir is not None and game_dir != exe_path.parent.resolve():
             raise PatchError("--game-dir and --exe disagree; use the EXE's parent folder or omit --game-dir.")
-        game_dir = exe_path.parent.resolve()
+        if (
+            game_dir is None
+            and exe_path.name.lower() != DEFAULT_EXE_NAME.lower()
+            and is_recognized_modded_output_dir(exe_path.parent.resolve())
+        ):
+            game_dir = exe_path.parent.resolve()
+            reconfigure_output = True
+        else:
+            game_dir = exe_path.parent.resolve()
+    if game_dir is None and requested_output_dir is not None:
+        game_dir = requested_output_dir
+        reconfigure_output = True
     if game_dir is None:
-        raise PatchError("Either --game-dir or --exe is required.")
+        raise PatchError("Either --game-dir, --exe, or --output-dir is required.")
+    if reconfigure_output and requested_game_dir is not None:
+        reconfigure_output = False
+    setattr(args, "reconfigure_output", reconfigure_output)
     manifest_path = Path(args.manifest).resolve()
     if not game_dir.is_dir():
         raise PatchError(f"Game directory does not exist: {game_dir}")
@@ -1611,26 +1730,37 @@ def apply_manifest(args: argparse.Namespace) -> int:
     try:
         emit_progress(args, f"Loading manifest: {manifest_path}")
         manifest = read_json(manifest_path)
-        output_dir = resolve_apply_output_dir(args, game_dir, manifest)
+        output_dir = game_dir if reconfigure_output else resolve_apply_output_dir(args, game_dir, manifest)
         settings, enabled_settings = resolve_enabled_settings(manifest, args)
         patches = manifest_patches(manifest, settings, enabled_settings)
         assets = manifest_asset_patches(manifest, settings, enabled_settings)
+        restore_assets = manifest_asset_patches(manifest, settings, enabled_settings, restore_inactive=True) if reconfigure_output else []
+        all_assets = [*assets, *restore_assets]
         grouped = group_patches(patches)
-        if not grouped and not assets and output_dir.resolve() == game_dir.resolve():
+        if reconfigure_output and grouped:
+            raise PatchError("Output-only reconfiguration cannot apply byte patches without a vanilla game folder.")
+        if not grouped and not all_assets and output_dir.resolve() == game_dir.resolve():
             raise PatchError("No active patches remain enabled.")
         emit_progress(args, "Verifying target files...")
-        runtime_checks = verify_runtime_requirements(game_dir, manifest, settings, enabled_settings)
-        target_checks = verify_target_files(game_dir, manifest, settings, enabled_settings)
-        file_data = verify_patch_bytes(game_dir, grouped, args, process_log)
-        asset_checks = verify_asset_patches(game_dir, output_dir, manifest_path.parent, assets, args, process_log)
+        if reconfigure_output:
+            emit_progress(args, f"Reconfiguring existing modded output folder: {output_dir}")
+            runtime_checks = verify_reconfigure_output_dir(output_dir, manifest)
+            target_checks = []
+            file_data = {}
+        else:
+            runtime_checks = verify_runtime_requirements(game_dir, manifest, settings, enabled_settings)
+            target_checks = verify_target_files(game_dir, manifest, settings, enabled_settings)
+            file_data = verify_patch_bytes(game_dir, grouped, args, process_log)
+        asset_checks = verify_asset_patches(game_dir, output_dir, manifest_path.parent, all_assets, args, process_log)
 
         if not args.dry_run:
             skip_copy_paths = {
-                str(check["file_path"])
+                str(check.get("target_file_path") or check["file_path"])
                 for check in asset_checks
                 if str(check.get("output_file_path") or check["file_path"]) != str(check["file_path"])
             }
-            prepare_output_dir(game_dir, output_dir, skip_copy_paths, args)
+            if not reconfigure_output:
+                prepare_output_dir(game_dir, output_dir, skip_copy_paths, args)
             if args.backup_dir:
                 backup_dir = Path(args.backup_dir).resolve()
             else:
@@ -1729,6 +1859,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
             "dry_run": bool(args.dry_run),
             "status": "success",
             "timestamp_utc": utc_now(),
+            "mode": "existing_modded_output" if reconfigure_output else "vanilla_to_modded_output",
             "game_dir": str(game_dir),
             "output_dir": str(output_dir),
             "modded_exe_name": modded_exe_name,
@@ -1761,6 +1892,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 "log_path": str(log_path),
                 "game_dir": str(game_dir),
                 "output_dir": str(output_dir),
+                "mode": "existing_modded_output" if reconfigure_output else "vanilla_to_modded_output",
                 "modded_exe_name": modded_exe_name,
                 "modded_save_dir": str(save_dir),
                 "enabled_settings": sorted(enabled_settings),
@@ -1777,8 +1909,11 @@ def apply_manifest(args: argparse.Namespace) -> int:
             print("Disabled settings: " + (", ".join(disabled_settings) if disabled_settings else "(none)"))
         print(
             f"Validated {len(patches)} active byte patch record(s) across {len(grouped)} file(s) "
-            f"and {len(assets)} active asset patch record(s)."
+            f"and {len(all_assets)} active/restore asset patch record(s)."
         )
+        print(f"Validated {len(assets)} active asset patch record(s).")
+        if restore_assets:
+            print(f"Validated {len(restore_assets)} restore asset patch record(s).")
         if args.dry_run:
             print(f"Dry run complete. Log: {log_path}")
         else:
@@ -1887,10 +2022,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     apply_cmd = sub.add_parser("apply", help="Validate and apply a JSON patch manifest.")
-    apply_cmd.add_argument("--game-dir", help="Path to the user-provided vanilla VF2 game directory.")
+    apply_cmd.add_argument("--game-dir", help="Path to the user-provided vanilla VF2 game directory. Omit only when reconfiguring an existing modded --output-dir.")
     apply_cmd.add_argument("--exe", help=f"Path to {DEFAULT_EXE_NAME}; the game directory is inferred from its parent.")
     apply_cmd.add_argument("--manifest", required=True, help="Path to the JSON patch manifest.")
-    apply_cmd.add_argument("--output-dir", help="Optional modded game output folder. Defaults to the manifest output folder when present, otherwise patches in place.")
+    apply_cmd.add_argument("--output-dir", help="Optional modded game output folder. Defaults to the manifest output folder when a vanilla game folder is supplied. If --game-dir is omitted, this must be an existing modded folder to reconfigure.")
     apply_cmd.add_argument("--backup-dir", help="Backup output directory. Defaults under the game directory.")
     apply_cmd.add_argument("--log", help="Patch log JSON path. Defaults inside the backup directory.")
     apply_cmd.add_argument("--dry-run", action="store_true", help="Validate only; do not back up or modify files.")

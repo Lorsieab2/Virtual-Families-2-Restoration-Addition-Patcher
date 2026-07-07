@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 EXPORTER = ROOT / "work" / "export_offline_patch_bundle.py"
 PATCHER = ROOT / "work" / "offline_vf2_patcher.py"
+sys.path.insert(0, str(ROOT / "work"))
 
 
 def minimal_pe_bytes():
@@ -99,9 +100,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             (build / "Images" / "Furniture" / "CandyCane.png").write_bytes(b"holiday")
             (build / "Images" / "Furniture" / "CouchNeonPurpleStd.png").write_bytes(b"custom couch")
             (build / "Images" / "VF3LargeFlatScreenTVAnim.png").write_bytes(b"tv")
+            (build / "Images" / "VF3TVAnimations" / "Large").mkdir(parents=True)
+            (build / "Images" / "VF3TVAnimations" / "Large" / "Frame01.png").write_bytes(b"tv frame")
+            (build / "Images" / "Furniture" / "SofaPlaid.png").write_bytes(b"vf3 loveseat")
+            (build / "Images" / "VillagerDetailBodies" / "Female" / "Body_50").mkdir(parents=True)
+            (build / "Images" / "VillagerDetailBodies" / "Female" / "Body_50" / "Frame00.png").write_bytes(b"detail body")
             (build / "Assets").mkdir()
             (build / "Assets" / "VF3LargeFlatScreenTV.png.fmap").write_bytes(b"fmap")
             (build / "Assets" / "LDWPoster1Std.fmap").write_bytes(b"poster fmap")
+            (build / "Assets" / "FloweredLoveseat.png.fmap").write_bytes(b"vf3 furniture fmap")
             (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
             (build / "patch-manifest.json").write_text(
                 json.dumps(
@@ -109,9 +116,13 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                         "generated_assets": [
                             {"path": "Furniture/CandyCane.png"},
                             {"path": "Furniture/CouchNeonPurpleStd.png"},
+                            {"path": "Furniture/SofaPlaid.png"},
+                            {"path": "VillagerDetailBodies/Female/Body_50/Frame00.png"},
+                            {"path": "Images/VF3TVAnimations/Large/Frame01.png"},
                             {"runtime_name": "VF3LargeFlatScreenTVAnim.png"},
                             {"fmap": "VF3LargeFlatScreenTV.png.fmap"},
                             {"fmap": "LDWPoster1Std.fmap"},
+                            {"fmap": "FloweredLoveseat.png.fmap"},
                         ]
                     },
                     indent=2,
@@ -127,12 +138,18 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(asset_by_path["Images/Furniture/CandyCane.png"]["requires"], ["holiday_furniture"])
             self.assertEqual(asset_by_path["Images/Furniture/CouchNeonPurpleStd.png"]["requires"], ["custom_couches_ldw_posters"])
             self.assertEqual(asset_by_path["Images/VF3LargeFlatScreenTVAnim.png"]["requires"], ["core_executable", "vf3_tv_assets_recognition"])
+            self.assertEqual(asset_by_path["Images/VF3TVAnimations/Large/Frame01.png"]["requires"], ["core_executable", "vf3_tv_assets_recognition"])
+            self.assertEqual(asset_by_path["Images/Furniture/SofaPlaid.png"]["requires"], ["core_executable", "vf3_furniture"])
+            self.assertEqual(asset_by_path["Assets/FloweredLoveseat.png.fmap"]["requires"], ["core_executable", "vf3_furniture"])
+            self.assertEqual(asset_by_path["Images/VillagerDetailBodies/Female/Body_50/Frame00.png"]["requires"], ["holiday_outfits"])
             self.assertEqual(asset_by_path["Assets/VF3LargeFlatScreenTV.png.fmap"]["requires"], ["core_executable", "vf3_tv_assets_recognition"])
             self.assertEqual(asset_by_path["Assets/LDWPoster1Std.fmap"]["requires"], ["custom_couches_ldw_posters"])
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_furniture"], 1)
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_outfits"], 1)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["custom_couches_ldw_posters"], 2)
-            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["vf3_tv_assets_recognition"], 2)
-            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["core_executable"], 2)
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["vf3_tv_assets_recognition"], 3)
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["vf3_furniture"], 2)
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["core_executable"], 5)
             self.assertTrue((out / "payload" / "Images" / "Furniture" / "CandyCane.png").is_file())
             self.assertNotIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
             self.assertIn({"path": "Images", "min_files": 600}, manifest["runtime_requirements"]["required_dirs"])
@@ -144,6 +161,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("text_fixes [default on]", settings.stdout)
             self.assertIn("store_scroll_bar [default off]", settings.stdout)
             self.assertIn("custom_couches_ldw_posters [default off]", settings.stdout)
+            self.assertIn("vf3_furniture [default off]", settings.stdout)
             self.assertIn("holiday_ornaments_collection [default off]", settings.stdout)
             self.assertIn("settings_evict_button [default off]", settings.stdout)
             self.assertIn("unused_pets [default on]", settings.stdout)
@@ -155,6 +173,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(settings_by_id["holiday_furniture"]["category"], "main")
             self.assertEqual(settings_by_id["unused_pets"]["category"], "main")
             self.assertEqual(settings_by_id["custom_couches_ldw_posters"]["category"], "optional")
+            self.assertEqual(settings_by_id["vf3_furniture"]["category"], "optional")
             self.assertEqual(settings_by_id["settings_evict_button"]["category"], "experimental")
             self.assertEqual(settings_by_id["behavior_patches"]["category"], "main")
             self.assertEqual(settings_by_id["text_fixes"]["category"], "main")
@@ -193,6 +212,74 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("core_native_patch", settings)
             self.assertIn("core_assets", settings)
             self.assertEqual(manifest["export_summary"]["native_patch_status"]["status"], "byte_diff_exported")
+
+    def test_generation_lock_art_is_forced_from_individual_frames(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from PIL import Image
+
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            (build / "Images").mkdir(parents=True)
+            (build / "Images" / "GenerationLocks").mkdir(parents=True)
+            strip = Image.new("RGBA", (29 * 30, 46), (0, 0, 0, 0))
+            for frame in range(29):
+                for x in range(frame * 30, frame * 30 + 30):
+                    strip.putpixel((x, frame % 46), (frame + 1, 10, 20, 255))
+            strip.save(build / "Images" / "locked.png")
+            for generation in range(2, 31):
+                icon = Image.new("RGBA", (30, 46), (generation, 100, 200, 255))
+                icon.save(build / "Images" / "GenerationLocks" / f"lock_{generation:02d}.png")
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+
+            self.run_exporter("--build-dir", str(build), "--base-payload", str(base), "--out-dir", str(out))
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
+            self.assertEqual(asset_by_path["Images/locked.png"]["requires"], ["core_executable"])
+            generated = [
+                path
+                for path in asset_by_path
+                if path.startswith("Images/GenerationLocks/lock_")
+            ]
+            self.assertEqual(len(generated), 29)
+            self.assertEqual(asset_by_path["Images/GenerationLocks/lock_02.png"]["requires"], ["core_executable"])
+            self.assertTrue((out / "payload" / "Images" / "GenerationLocks" / "lock_02.png").is_file())
+            self.assertTrue((out / "payload" / "Images" / "GenerationLocks" / "lock_30.png").is_file())
+            lock_30 = Image.open(out / "payload" / "Images" / "GenerationLocks" / "lock_30.png").convert("RGBA")
+            self.assertEqual(lock_30.getpixel((0, 0)), (30, 100, 200, 255))
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["core_executable"], 30)
+
+    def test_generation_lock_art_uses_numbered_frames_when_strip_is_short(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            from PIL import Image
+
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            (build / "Images").mkdir(parents=True)
+            (build / "Images" / "GenerationLocks").mkdir(parents=True)
+            strip = Image.new("RGBA", (8 * 30, 46), (0, 0, 0, 0))
+            for frame in range(8):
+                strip.putpixel((frame * 30, 0), (frame, 0, 0, 255))
+            strip.save(build / "Images" / "locked.png")
+            for generation in range(2, 31):
+                icon = Image.new("RGBA", (30, 46), (generation, 1, 2, 255))
+                icon.save(build / "Images" / "GenerationLocks" / f"lock_{generation:02d}.png")
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+
+            self.run_exporter("--build-dir", str(build), "--base-payload", str(base), "--out-dir", str(out))
+
+            lock_09 = Image.open(out / "payload" / "Images" / "GenerationLocks" / "lock_09.png").convert("RGBA")
+            lock_30 = Image.open(out / "payload" / "Images" / "GenerationLocks" / "lock_30.png").convert("RGBA")
+            self.assertEqual(lock_09.getpixel((0, 0)), (9, 1, 2, 255))
+            self.assertEqual(lock_30.getpixel((0, 0)), (30, 1, 2, 255))
 
     def test_size_mismatch_records_native_patch_skip_status(self):
         with tempfile.TemporaryDirectory() as tmp:

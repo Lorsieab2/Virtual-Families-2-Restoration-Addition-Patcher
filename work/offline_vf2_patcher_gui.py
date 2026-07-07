@@ -135,7 +135,7 @@ def build_apply_namespace(
     if unknown:
         raise patcher.PatchError(f"Unknown selected setting(s): {', '.join(unknown)}")
     return Namespace(
-        game_dir=required_path(game_dir, "Game directory"),
+        game_dir=optional_path(game_dir),
         manifest=required_path(manifest, "Patch manifest"),
         output_dir=optional_path(output_dir),
         backup_dir=optional_path(backup_dir),
@@ -171,7 +171,7 @@ class VF2PatcherGUI:
         self.log_path_var = tk.StringVar()
         self.restore_backup_var = tk.StringVar()
         self.restore_log_var = tk.StringVar()
-        self.status_var = tk.StringVar(value="Choose a vanilla VF2 folder and a patch manifest.")
+        self.status_var = tk.StringVar(value="Choose a vanilla VF2 folder, or choose an existing modded output folder, plus a patch manifest.")
 
         self.settings: dict[str, patcher.PatchSetting] = {}
         self.setting_vars: dict[str, tk.BooleanVar] = {}
@@ -240,7 +240,7 @@ class VF2PatcherGUI:
         ttk.Label(header, text=APP_DISPLAY_NAME, style="Title.TLabel").grid(row=0, column=1, sticky="w")
         ttk.Label(
             header,
-            text="Created with Codex AI. Applies transparent JSON patch manifests to a user-provided vanilla VF2 PC install.",
+            text="Created with Codex AI. Applies transparent JSON patch manifests to a vanilla VF2 install or an existing modded output folder.",
             style="Muted.TLabel",
         ).grid(row=1, column=1, sticky="w", pady=(2, 0))
 
@@ -253,7 +253,7 @@ class VF2PatcherGUI:
         frame = ttk.LabelFrame(parent, text="Patch Input", style="Section.TLabelframe", padding=10)
         frame.columnconfigure(1, weight=1)
 
-        self._path_row(frame, 0, "Vanilla game folder", self.game_dir_var, self._browse_game_dir)
+        self._path_row(frame, 0, "Vanilla game folder (optional if reconfiguring an existing modded folder)", self.game_dir_var, self._browse_game_dir)
         self._path_row(frame, 1, "Patch manifest", self.manifest_var, self._browse_manifest)
         self._path_row(frame, 2, "Modded output folder", self.output_dir_var, self._browse_output_dir, optional=True)
         self._path_row(frame, 3, "Backup folder", self.backup_dir_var, self._browse_backup_dir, optional=True)
@@ -570,7 +570,8 @@ class VF2PatcherGUI:
 
         if not dry_run and not messagebox.askyesno(
             f"Enable/Disable {APP_DISPLAY_NAME}",
-            "This will validate the vanilla game folder, then refresh the separate modded game folder and apply only the checked patches. Continue?",
+            "This will validate the selected folder, then enable checked patches and disable unchecked patches. "
+            "With a vanilla folder it refreshes the separate modded output folder first; with only a modded output folder it reconfigures that existing modded folder. Continue?",
         ):
             return
 

@@ -38,6 +38,18 @@ FULL_PAYLOAD_ALWAYS_INCLUDE_DIRS = {
     "Original Virtual Families 2 Assets",
     "OptionalSongMods",
 }
+LOCKED_GENERATION_FRAME_COUNT = 29
+LOCKED_GENERATION_CELL_WIDTH = 30
+LOCKED_GENERATION_CELL_HEIGHT = 46
+DEFAULT_GENERATION_LOCK_SOURCE_DIR = SOURCE_DIR / "assets" / "generation_locks"
+VF3_LIVING_ROOM_BATCH_02_FILES = {
+    "SofaPlaid",
+    "CouchPlaid",
+    "CouchFlowers",
+    "CouchStriped",
+    "SofaStriped",
+    "FloweredLoveseat",
+}
 SOURCE_ONLY_PAYLOAD_DIRS = FULL_PAYLOAD_ALWAYS_INCLUDE_DIRS
 OPTIONAL_SONG_SOURCE_DIR = Path("OptionalSongMods")
 OPTIONAL_SONG_TARGET_DIR = Path("Sounds")
@@ -99,6 +111,13 @@ SETTINGS = [
         "id": "custom_couches_ldw_posters",
         "label": "Add Custom Couches and LDW Posters",
         "description": "Adds Colorful Couches and LDW Posters/Paintings mods to the game. Credit to Lorsieab2 on LDWForums.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "vf3_furniture",
+        "label": "Virtual Families 3 Furniture",
+        "description": "Implements furniture from Virtual Families 3, including Plaid Loveseat through Flowered Loveseat.",
         "default": False,
         "category": "optional",
     },
@@ -525,7 +544,13 @@ def candidate_manifest_rel_paths(value: str) -> list[Path]:
     else:
         if text.startswith(("Images/", "Assets/")):
             candidates.append(text)
-        elif text.startswith(("Furniture/", "VillagerBodies/", "HolidayOutfits/", "CollectionOrnaments/")):
+        elif text.startswith((
+            "Furniture/",
+            "VillagerBodies/",
+            "VillagerDetailBodies/",
+            "HolidayOutfits/",
+            "CollectionOrnaments/",
+        )):
             candidates.append("Images/" + text)
         elif "/" not in text and text.lower().endswith((".png", ".jpg", ".bmp")):
             candidates.append("Images/" + text)
@@ -708,10 +733,16 @@ def setting_for_asset(rel_path: Path) -> str:
         return "optional_visual_mod_graphics"
     if text.startswith("OptionalSongMods/"):
         return "optional_song_mods"
-    if text.startswith("Images/VillagerBodies/") or text.startswith("Images/HolidayOutfits/"):
+    if (
+        text.startswith("Images/VillagerBodies/")
+        or text.startswith("Images/VillagerDetailBodies/")
+        or text.startswith("Images/HolidayOutfits/")
+    ):
         return "holiday_outfits"
-    if stem in VF3_TV_FILES:
+    if stem in VF3_TV_FILES or text.startswith("Images/VF3TVAnimations/"):
         return "vf3_tv_assets_recognition"
+    if text.startswith("Images/GenerationLocks/") or text == "Images/locked.png":
+        return "core_executable"
     if text.startswith("Images/CollectionOrnaments/") or "CollectionOrnament" in stem or stem == "collectables_small":
         return "holiday_ornaments_collection"
     if text in {
@@ -730,6 +761,10 @@ def setting_for_asset(rel_path: Path) -> str:
         return "custom_couches_ldw_posters"
     if len(parts) >= 2 and parts[0] == "Assets" and stem in CUSTOM_COUCH_LDW_POSTER_FILES:
         return "custom_couches_ldw_posters"
+    if len(parts) >= 3 and parts[0] == "Images" and parts[1] == "Furniture" and stem in VF3_LIVING_ROOM_BATCH_02_FILES:
+        return "vf3_furniture"
+    if len(parts) >= 2 and parts[0] == "Assets" and stem in VF3_LIVING_ROOM_BATCH_02_FILES:
+        return "vf3_furniture"
     if is_invisible_runtime_asset(rel_path):
         return "invisible_furniture_visible_graphics"
     if stem in MOBILE_PURCHASE_ICON_FILES:
@@ -742,7 +777,7 @@ def setting_for_asset(rel_path: Path) -> str:
 
 
 def asset_requires_for_setting(setting: str) -> list[str]:
-    if setting in {"vf3_tv_assets_recognition", "behavior_patches"}:
+    if setting in {"vf3_tv_assets_recognition", "vf3_furniture", "behavior_patches"}:
         return ["core_executable", setting]
     return [setting]
 
@@ -876,6 +911,80 @@ def export_asset_payloads(
             record["overwrite_existing"] = True
         asset_patches.append(record)
     return asset_patches
+
+
+def generation_lock_source_paths(source_dir: Path) -> dict[int, Path]:
+    return {
+        generation: source_dir / f"lock_{generation:02d}.png"
+        for generation in range(2, LOCKED_GENERATION_FRAME_COUNT + 2)
+    }
+
+
+def find_generation_lock_source_dir(build_dir: Path, override_dir: Path | None = None) -> Path:
+    candidates = [
+        override_dir,
+        build_dir / "Images" / "GenerationLocks",
+        DEFAULT_GENERATION_LOCK_SOURCE_DIR,
+    ]
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        paths = generation_lock_source_paths(candidate)
+        if all(path.is_file() for path in paths.values()):
+            return candidate
+    checked = [str(candidate) for candidate in candidates if candidate is not None]
+    raise RuntimeError(
+        "Could not find complete generation lock art lock_02.png through lock_30.png. "
+        f"Checked: {checked}"
+    )
+
+
+def generation_lock_asset_patches(
+    build_dir: Path,
+    bundle_dir: Path,
+    source_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Force the standalone generation-lock art required by the store hook."""
+    source_strip = build_dir / "Images" / "locked.png"
+    if not source_strip.is_file():
+        return []
+
+    payload_root = bundle_dir / "payload"
+    records: list[dict[str, Any]] = []
+
+    locked_target = payload_root / "Images" / "locked.png"
+    locked_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_strip, locked_target)
+    records.append({
+        "file_path": "Images/locked.png",
+        "source_path": "payload/Images/locked.png",
+        "source_sha256": sha256_file(locked_target),
+        "source_size": locked_target.stat().st_size,
+        "requires": ["core_executable"],
+        "overwrite_existing": True,
+        "note": "Generation-lock strip used by the core store lock draw hook.",
+    })
+
+    output_dir = payload_root / "Images" / "GenerationLocks"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    resolved_source_dir = find_generation_lock_source_dir(build_dir, source_dir)
+    for generation, source in generation_lock_source_paths(resolved_source_dir).items():
+        target = output_dir / f"lock_{generation:02d}.png"
+        shutil.copy2(source, target)
+        records.append({
+            "file_path": f"Images/GenerationLocks/lock_{generation:02d}.png",
+            "source_path": f"payload/Images/GenerationLocks/lock_{generation:02d}.png",
+            "source_sha256": sha256_file(target),
+            "source_size": target.stat().st_size,
+            "requires": ["core_executable"],
+            "overwrite_existing": True,
+            "note": (
+                "Standalone generation-lock icon required by the core store lock draw hook. "
+                f"Uses the explicit lock_{generation:02d}.png frame from {relative_posix(resolved_source_dir)}."
+            ),
+        })
+
+    return records
 
 
 def optional_song_asset_patches(
@@ -1383,7 +1492,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "",
         "What this patcher does",
         "----------------------",
-        "- Verifies the user-provided vanilla Virtual Families 2 executable using SHA-256 and/or PE section structure metadata.",
+        "- Verifies the selected vanilla Virtual Families 2 folder by official install shape and accepts any executable in that folder matching a known VF2 PE layout.",
         "- Applies active patch records from manifest.json only when their required settings are enabled.",
         "- Writes per-record validation/apply progress to the GUI/console and to the JSON patch log.",
         "- Creates a separate clearly labeled modded output folder by default.",
@@ -1418,6 +1527,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "Official install validation",
         "---------------------------",
         "- Before patching, the patcher validates the selected vanilla folder has the official LDW website install shape.",
+        "- The selected folder path and executable name do not need to match any hardcoded local path; executable identity is matched by accepted VF2 PE layout.",
         "- Required top-level entries: " + ", ".join(OFFICIAL_INSTALL_TOP_LEVEL_ENTRIES),
         f"- Invalid-install popup text: {INVALID_INSTALL_MESSAGE.replace(chr(10), ' / ')}",
         "",
@@ -1524,6 +1634,15 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B110 patcher refresh: Adds default-on Behavior Patches and Text fixes settings.",
             "- B110 patcher refresh: Adds default-off Invisible Upgrades Graphics, bundling invisible upgrade PNGs into OptionalVisualMods/Invisible Upgrades and targeting Images/Upgrades.",
             "- B110 patcher refresh: Exposes Store Scroll Bar as a default-off optional setting; current native support still comes from the core modded executable payload.",
+            "- B111 patcher refresh: Target-file and EXE replacement validation find any accepted VF2 PE-layout executable in the selected install folder, so the patcher does not require a hardcoded install path or exact EXE filename.",
+            "- B111 patcher refresh: VF3 Furniture is split into its own default-off optional setting using the runtime stems SofaPlaid, CouchPlaid, CouchFlowers, CouchStriped, SofaStriped, and FloweredLoveseat.",
+            "- B111 patcher refresh: Holiday Outfit Details-screen body files under Images/VillagerDetailBodies are bundled with the Holiday Outfits patch.",
+            "- B111 patcher refresh: Generation-lock standalone icons are bundled under Images/GenerationLocks.",
+            "- B112 patcher refresh: Generation-lock icons now come from explicit bundled lock_02.png through lock_30.png files; missing numbered frames fail export instead of being synthesized from a short strip.",
+            "- B112 game build: Added mobile/Holiday/VF3 furniture records with original generation_lock 0 are deterministically shuffled into 3-item groups across generations 10-30; base-game furniture records are not part of that path.",
+            "- B112 game build: VF3 TV animation strips use bundled nonblank runtime strips when external creator Sprite frames are absent, and validation rejects fully transparent strips.",
+            "- B112 game build: Holiday Body animation graphics are not resized; runtime frame generation transparent-crops the source pixels and stores draw offsets for alignment.",
+            "- B113 game build: Child Holiday Body rendering scales those stored draw offsets by the active child/adult draw scale in both the Details screen and main game, while still preserving supplied source pixels without resizing.",
             "",
             "Experimental patch warning",
             "--------------------------",
@@ -1615,6 +1734,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         args.asset_mode,
         build_label,
     )
+    generation_locks_source = Path(args.generation_locks_dir).resolve() if args.generation_locks_dir else None
+    forced_lock_records = generation_lock_asset_patches(build_dir, bundle_dir, generation_locks_source)
+    if forced_lock_records:
+        forced_paths = {row["file_path"] for row in forced_lock_records}
+        asset_patches = [row for row in asset_patches if row.get("file_path") not in forced_paths]
+        asset_patches.extend(forced_lock_records)
     optional_song_source = Path(args.optional_song_mods_dir).resolve() if args.optional_song_mods_dir else None
     asset_patches.extend(optional_song_asset_patches(bundle_dir, base_payload, optional_song_source))
     invisible_upgrades_source = Path(args.invisible_upgrades_dir).resolve() if args.invisible_upgrades_dir else None
@@ -1709,6 +1834,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--optional-song-mods-dir", help="Folder containing optional song .ogg files to place in payload/OptionalSongMods and target to Sounds/.")
     parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
     parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
+    parser.add_argument("--generation-locks-dir", help="Folder containing lock_02.png through lock_30.png; defaults to bundled workspace assets.")
     parser.add_argument("--include-byte-patches", action="store_true", help="Diff vanilla EXE against patched EXE into byte patch records.")
     parser.add_argument("--include-exe-replacement", action="store_true", help="Copy the patched EXE into payload and replace a verified vanilla target EXE during apply.")
     parser.add_argument("--include-patcher-scripts", action="store_true", help="Copy the CLI/GUI patcher scripts plus convenience batch files into the bundle.")

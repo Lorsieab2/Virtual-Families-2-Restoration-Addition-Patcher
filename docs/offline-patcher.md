@@ -567,6 +567,22 @@ omission. Native/game-code features still bundled through the monolithic
 `core_executable` payload cannot be fully unbundled by checkbox until their
 native changes are converted into separate byte/table patch records.
 
+B111 adds output-only reconfiguration for existing modded folders. If the GUI
+or CLI provides a modded output folder but no vanilla folder, pressing
+Enable/Disable Patches reconfigures that existing folder in place. This mode
+does not refresh from vanilla and does not run byte patches. For unchecked
+asset records that include `restore_source_path`, the patcher copies the
+bundled restore asset back into the modded folder. This keeps visual toggles
+self-contained when the original vanilla install is not available.
+
+B111 also makes EXE identity path-independent for both `target_files` and EXE
+replacement `asset_patches`: `resolve_expected_exe_target()` scans the selected
+folder's top-level `.exe` files for an accepted VF2 PE layout. The manifest may
+still say `Virtual Families 2.exe`, but the actual install EXE can have another
+filename. When a renamed vanilla EXE is discovered, the output refresh skips
+that discovered source EXE so the modded folder contains the clearly named
+modded EXE instead of an ambiguous copied vanilla executable.
+
 Source-only payload folders are read-only/copy-only during apply:
 `OptionalVisualMods/`, `Original Virtual Families 2 Assets/`, and
 `OptionalSongMods/` stay in `payload/` and are not copied wholesale into the
@@ -583,6 +599,42 @@ settings are omitted from the manifest if their corresponding payload files are
 not bundled. `export_offline_patch_bundle.py::validate_bundle_asset_sources()`
 fails export if any `asset_patches[].source_path` or `restore_source_path` is
 absolute, escapes the bundle, or points to a missing file.
+
+B112 payload grouping details:
+
+- `vf3_tv_assets_recognition`: top-level VF3 TV animation strips plus private
+  `Images/VF3TVAnimations/*/Frame*.png` folders; requires `core_executable`.
+- `holiday_outfits`: `Images/VillagerBodies/*` and
+  `Images/VillagerDetailBodies/*`, including Details-screen body 50-53 support.
+- `vf3_furniture`: `SofaPlaid`, `CouchPlaid`, `CouchFlowers`,
+  `CouchStriped`, `SofaStriped`, and `FloweredLoveseat` images/fmaps; default
+  off and requires `core_executable`.
+- `core_executable`: generated standalone `Images/GenerationLocks/lock_02.png`
+  through `lock_30.png`, copied from explicit bundled numbered frames. The
+  exporter no longer synthesizes generation 10-30 from a short `locked.png`
+  strip; missing numbered frames fail export.
+
+B112 build-specific notes:
+
+- Added mobile/Holiday/VF3 furniture records whose original `lock_generation`
+  is `0` are assigned deterministic shuffled generation locks in groups of
+  3-4 items across the 10-30 range. The B112 data set has 39 such records, so
+  it produced 13 groups of 3. Base-game furniture records are not included in
+  this assignment path.
+- VF3 TV runtime animation strips are bundled from
+  `work/assets/vf3_tv_animations/` when external Sprite frame sources are
+  absent. The generated build and patcher payload include top-level strips and
+  `Images/VF3TVAnimations/*/Frame*.png`; validation rejects transparent strips.
+- Holiday Body animation frames are transparent-cropped with stored draw
+  offsets and are not resized. The build manifest records `resized: false`,
+  source canvas size, alpha bounding box, crop size, and draw offset per frame.
+
+B113 build-specific notes:
+
+- Child Holiday Body rendering now scales the stored transparent-crop offsets
+  by the active villager draw scale in both the Details screen and main game.
+  This preserves the B112 no-resize policy while correcting child-only
+  misalignment.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:

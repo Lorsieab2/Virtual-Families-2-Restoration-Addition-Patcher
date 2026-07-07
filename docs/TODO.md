@@ -257,6 +257,32 @@
   with `core_executable` on and confirm VF3 TV private animation strips animate;
   confirm disabling `core_executable` leaves VF3 TV asset records inactive
   rather than copying unusable animation assets.
+- Patcher file-layout test B111 VF3 TV frames: enable
+  `vf3_tv_assets_recognition` without the broad `mobile_furniture` setting and
+  confirm `Images/VF3TVAnimations/*/Frame*.png` are still copied, because the
+  renderer depends on those private frame folders.
+- Patcher file-layout test B111 output-only reconfiguration: run the GUI with
+  only an existing `VF2-*-Modded` output folder selected, toggle a visual patch,
+  click Enable/Disable Patches, and confirm bundled `restore_source_path`
+  assets revert unchecked patches without requiring a vanilla folder.
+- Patcher in-game smoke B111: extract
+  `Virtual-Families-2-Restoration-Addition-Patcher-B111.zip`, run
+  `Launch_GUI.bat`, Dry Run a user-selected vanilla VF2 folder, then apply with
+  Main patches enabled and confirm the modded folder contains
+  `Virtual Families 2 - Modded B111.exe`, VF3 TV animations, Holiday Details
+  body files, generation lock icons, and no dependency on creator-local paths.
+- Patcher in-game smoke B112: extract
+  `Virtual-Families-2-Restoration-Addition-Patcher-B112.zip`, run
+  `Launch_GUI.bat`, Dry Run a user-selected vanilla VF2 folder, then apply with
+  Main patches enabled. Confirm VF3 TV animations show when clicked, lock
+  icons 10-30 render with their matching numbered art, and the 39 newly locked
+  added mobile/Holiday records appear in generation-lock groups of 3 items.
+- In-game Holiday Body B112 audit: apply Holiday Outfit bodies 50-53 to male
+  and female villagers, then verify walking/actions/sit frames stay aligned
+  without resized pixels. Check Details screen body rows separately.
+- In-game Holiday Body B113 audit: apply Holiday Outfit bodies 50-53 to adult
+  and child male/female villagers, then verify Details-screen and main-scene
+  bodies use the correct scaled offsets without resizing the source art.
 - In-game test B106 generation locks: with a fresh save before later
   generations, verify added furniture respects the preserved mobile
   `lock_generation` values rather than appearing fully unlocked by default.

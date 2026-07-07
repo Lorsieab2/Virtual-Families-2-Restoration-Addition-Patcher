@@ -1155,3 +1155,81 @@
   source is absolute, escapes the patcher bundle, or is missing. This enforces
   self-contained patcher ZIPs with no runtime dependency on Downloads or other
   creator-local folders.
+
+## 2026-07-06 - B111 VF3 Animation Frames and Output-Only Reconfiguration
+
+- VF3 TV top-level animation strips (`Images/VF3LargeFlatScreenTVAnim*.png`,
+  `Images/VF3SmallFlatScreenTVAnim*.png`) were correctly gated as
+  `vf3_tv_assets_recognition`, but the private per-frame directories under
+  `Images/VF3TVAnimations/*/Frame*.png` were still classified as
+  `mobile_furniture`. `setting_for_asset()` now classifies the whole
+  `Images/VF3TVAnimations/` tree as VF3 TV recognition assets and
+  `asset_requires_for_setting()` keeps them paired with `core_executable`.
+- `offline_vf2_patcher.py::apply_manifest()` now supports output-only
+  reconfiguration. When no vanilla folder is supplied but `--output-dir` points
+  to a recognized modded folder, the patcher validates that folder, skips
+  vanilla target identity checks and byte patches, and applies checked asset
+  records directly.
+- Asset records may use `restore_source_path`, `restore_source_sha256`, and
+  `restore_source_size`. In output-only reconfiguration, inactive records with
+  bundled restore sources are applied as restore records so unchecking a visual
+  patch can revert the modded folder without asking for files outside the
+  patcher payload.
+- `offline_vf2_patcher.py::resolve_expected_exe_target()` centralizes
+  path-independent EXE lookup. Target-file checks and EXE replacement asset
+  checks now scan top-level `.exe` files for an accepted VF2 PE layout even
+  when the manifest path is `Virtual Families 2.exe`, and `prepare_output_dir()`
+  skips the discovered vanilla EXE path so renamed vanilla executables are not
+  copied into the modded output beside the clearly named modded EXE.
+- The optional `vf3_furniture` setting uses runtime file stems, not store
+  display names: `SofaPlaid`, `CouchPlaid`, `CouchFlowers`, `CouchStriped`,
+  `SofaStriped`, and `FloweredLoveseat`. These image and fmap records now
+  require both `core_executable` and `vf3_furniture`.
+- The B111 generation-lock payload path introduced standalone
+  `Images/GenerationLocks/lock_02.png` through `lock_30.png` records. B112
+  removes the old short-strip fallback: export now requires explicit numbered
+  PNG frames, so generation 10 uses `lock_10.png`, generation 30 uses
+  `lock_30.png`, and missing frames fail the bundle.
+- B111 patcher export verification: `Virtual-Families-2-Restoration-Addition-
+  Patcher-B111.zip` was generated with 6,692 asset records and 8,590 payload
+  files; Dry Run passed against both local accepted VF2 install layouts.
+
+## 2026-07-06 - B112 Lock Art, VF3 TV Strips, and Holiday Body Pixel Policy
+
+- `work/patch_mobile_furniture_pack.py::apply_generation_lock_distribution()`
+  now leaves base-game furniture untouched and assigns locks only to added
+  mobile/Holiday/VF3 furniture records whose original `lock_generation` is
+  `0`. The deterministic seed
+  `vf2-mobile-holiday-vf3-generation-locks-b112` shuffled 39 currently
+  eligible records into 13 groups of 3 items, spread over generations
+  `10, 12, 13, 15, 17, 18, 20, 22, 23, 25, 27, 28, 30`.
+- `work/assets/generation_locks/lock_02.png` through `lock_30.png` is now the
+  source of truth for lock art. `sync_generation_lock_art()` composes
+  `Images/locked.png` from those files and also copies standalone runtime
+  icons to `Images/GenerationLocks/`.
+- VF3 TV animation strips have a workspace-bundled nonblank fallback under
+  `work/assets/vf3_tv_animations/`. `sync_vf3_tv_animation_sheets()` uses these
+  strips if creator-local Sprite frame sources are missing, and
+  `validate_vf3_tv_animation_contract()` now rejects fully transparent runtime
+  sheets.
+- Holiday Body animation frames are no longer resized during fallback
+  normalization. Runtime frames are transparent-cropped and placed by stored
+  offsets; manifest rows record `canvas_size`, `alpha_bbox`, `size`, `offset`,
+  and `resized: false`.
+- B112 verification produced `Virtual-Families-2-Restoration-Addition-Patcher-
+  B112.zip` with 6,692 asset records and 8,590 payload files. Dry Run against
+  `C:\Users\Owner\Downloads\Virtual Families 2 test1` validated 6,505 active
+  asset records, including `Images\GenerationLocks\lock_30.png`.
+
+## 2026-07-07 - B113 Child Holiday Body Offset Scaling
+
+- Child villagers draw Holiday Body frames through the same folder-backed
+  runtime helper as adults, but the game supplies a reduced child scale. The
+  B113 `vf2_villager_body_frames.cpp` helper now scales the stored transparent
+  crop offsets with that draw scale in both the Details-screen
+  `ldwGameWindow::DrawImage` path and the main-scene
+  `ldwImageImpl::DrawFrame` path.
+- The fix changes only offset math. Holiday Body runtime/detail frames are
+  still transparent-cropped from the supplied source art, report
+  `resized: false` in `patch-manifest.json`, and keep the original source
+  pixels unscaled.
