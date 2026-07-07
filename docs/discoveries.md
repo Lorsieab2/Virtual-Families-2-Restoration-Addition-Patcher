@@ -1282,3 +1282,15 @@
   `KidsTableAndChairsStd` item `0x1CE`, uses donor fmap
   `KidsTableAndChairsStd.png.fmap`, and keeps the generated donor click-table
   alias.
+
+## 2026-07-07 - B117 Daytime-Only Playhouse Spontaneous Behavior
+
+- `VillagerAI.obj` and `Behavior.obj` already reference
+  `CNight::AIIsDayTime()`, with global `CNight Night`. This is the native AI
+  daytime predicate and is safer than deriving daytime from raw `GameTime`
+  seconds.
+- `patch_spontaneous_behaviors()` now refreshes behavior `0x11E`
+  (`PlayOnPlayStructure` / "Playhouse!") at each
+  `CVillagerAI::DecideWhatToDo` refresh. The candidate keeps the child-only
+  age cap (`0x117`) but gets weight `0` and enabled flag `0` whenever
+  `Night.AIIsDayTime()` returns false.

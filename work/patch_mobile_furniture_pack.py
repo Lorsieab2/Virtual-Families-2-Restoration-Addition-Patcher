@@ -8391,7 +8391,13 @@ public:
     int currentType;
 };
 
+class CNight {
+public:
+    bool AIIsDayTime();
+};
+
 extern CWeather Weather;
+extern CNight Night;
 
 extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
 {
@@ -8402,6 +8408,13 @@ extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
     *(unsigned int *)(candidate + 0x0C) = weatherAllowsHammock ? 3000 : 0;
     *(unsigned int *)(candidate + 0x48) = 0;
     *(unsigned int *)(candidate + 0x4C) = 0;
+
+    unsigned char *playhouse = data + 0x6BB8 + 0x11E * 0xD0;
+    const int daytimeAllowsPlayhouse = Night.AIIsDayTime();
+    playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;
+    *(unsigned int *)(playhouse + 0x0C) = daytimeAllowsPlayhouse ? 3000 : 0;
+    *(unsigned int *)(playhouse + 0x48) = 0x117;
+    *(unsigned int *)(playhouse + 0x4C) = 0;
 }
 
 class CVillager;
@@ -8451,8 +8464,8 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
         "status": "enabled through the autonomous AI candidate table",
         "hooks": ["CVillager::InitAI", "CVillager::LoadAI", "CVillagerAI::DecideWhatToDo"],
         "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
-        "actions": ["hammock (all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "playhouse (children only; max age 0x117)", "playing quietly at kids table (children only; base or invisible kids table)", "listen to radio", "dance to radio", "drawing"],
-        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only in weather states 0 (neutral) and 1 (sunny). Playhouse and ChildrenPlayAtKidsTable are capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is adult. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
+        "actions": ["hammock (all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "playhouse (children only; max age 0x117; daytime only)", "playing quietly at kids table (children only; base or invisible kids table)", "listen to radio", "dance to radio", "drawing"],
+        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only in weather states 0 (neutral) and 1 (sunny). Playhouse is refreshed through CNight::AIIsDayTime() at each native AI decision, so the spontaneous Playhouse candidate is child-only and daytime-only. Playhouse and ChildrenPlayAtKidsTable are capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is adult. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
     }
 
 

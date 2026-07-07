@@ -300,6 +300,9 @@
   confirm children can spontaneously choose "Playing quietly" and adults do
   not. Repeat with only Invisible Kids Table and Chairs present to verify the
   donor-cloned invisible item uses the base Kids Table behavior route.
+- In-game spontaneous behavior B117: verify children can still spontaneously
+  choose "Playhouse!" during daytime, but not when the in-game clock is in a
+  nighttime state. Also confirm adults still never choose it spontaneously.
 - Future patcher builds: properly implement the Settings Evict button path.
   With the current experimental patch enabled, the button still does not appear
   in Settings.

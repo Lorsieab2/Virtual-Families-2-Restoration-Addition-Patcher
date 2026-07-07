@@ -396,9 +396,14 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     "EnableChildOnlyAutonomousCandidate(data, 0x130); // ChildrenPlayAtKidsTable / Playing quietly",
                     helper,
                 )
+                self.assertIn("class CNight", helper)
+                self.assertIn("extern CNight Night;", helper)
+                self.assertIn("Night.AIIsDayTime()", helper)
+                self.assertIn("playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;", helper)
                 actions = " ".join(manifest["spontaneous_behaviors"]["actions"])
                 self.assertIn("playing quietly at kids table", actions)
                 self.assertIn("children only", actions)
+                self.assertIn("daytime only", actions)
             finally:
                 patcher.PATCHED = old_patched
 

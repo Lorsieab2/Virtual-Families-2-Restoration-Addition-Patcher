@@ -670,6 +670,12 @@ B116 build-specific notes:
   `KidsTableAndChairsStd.png.fmap`, and is validated as part of the generated
   manifest. No outside asset folders are consulted.
 
+B117 build-specific notes:
+
+- Spontaneous "Playhouse!" remains child-only and now also checks native
+  `CNight::AIIsDayTime()` during `CVillagerAI::DecideWhatToDo`. At night, the
+  Playhouse candidate is disabled and its AI weight is set to `0`.
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 

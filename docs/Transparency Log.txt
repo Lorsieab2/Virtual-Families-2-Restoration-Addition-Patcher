@@ -301,5 +301,8 @@ Changelog
   the Kids Table through native behavior 0x130. Invisible Kids Table and Chairs
   keeps the base KidsTableAndChairsStd donor item/fmap route, with no outside
   asset-folder dependency.
+- B117 game build: Spontaneous "Playhouse!" stays child-only and is refreshed
+  through native CNight::AIIsDayTime(), so the AI candidate is disabled at
+  night.
 
 Have fun! -Lorsieab2 :)

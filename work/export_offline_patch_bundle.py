@@ -145,7 +145,7 @@ SETTINGS = [
     {
         "id": "behavior_patches",
         "label": "Behavior Patches",
-        "description": "Makes certain actions able to be done automatically by people, including watching the fire, relaxing in the hammock, arcade/table games, radio actions, drawing, child-only Playhouse behavior, and child-only Playing quietly at the Kids Table.",
+        "description": "Makes certain actions able to be done automatically by people, including watching the fire, relaxing in the hammock, arcade/table games, radio actions, drawing, child-only daytime Playhouse behavior, and child-only Playing quietly at the Kids Table.",
         "default": True,
         "category": "main",
     },
@@ -1647,6 +1647,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B114 game build: Main-world Holiday Body drawing treats the native draw parameters as scale followed by alpha, so child Holiday Outfit crop offsets use body scale on both axes. The Details-screen renderer was left unchanged.",
             "- B115 patcher refresh: Asset records marked up-to-date during validation are rechecked during apply. This prevents an output-folder refresh from deleting an already-up-to-date modded EXE and then skipping the EXE rewrite.",
             "- B116 game build: Behavior Patches enable child-only Playing quietly at the Kids Table through native behavior 0x130. Invisible Kids Table and Chairs keeps the base KidsTableAndChairsStd donor item/fmap route with no outside asset-folder dependency.",
+            "- B117 game build: Spontaneous Playhouse stays child-only and is refreshed through native CNight::AIIsDayTime(), so the AI candidate is disabled at night.",
             "",
             "Experimental patch warning",
             "--------------------------",
