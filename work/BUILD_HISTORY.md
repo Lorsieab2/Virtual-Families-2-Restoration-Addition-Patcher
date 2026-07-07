@@ -795,3 +795,14 @@
   `--include-exe-replacement` for normal releases. This keeps native/code/table
   features working while avoiding a ZIP that contains a ready-made modified game
   executable payload.
+
+## B118 - Settings Evict Button Re-Enable
+
+- Re-enables the dormant Settings Evict button by NOPing both stock
+  `theOptionsDialog` constructor skip branches at `+0x2DA` and `+0x2E7`.
+- Leaves the existing native confirmation click path untouched:
+  `theOptionsDialog::EvictFamily()` still delegates to
+  `CFamilyTree::EvictFamily()`, then resets the villager manager and switches
+  to the adoption scene flow.
+- Exports `Virtual-Families-2-Restoration-Addition-Patcher-B118.zip` and the
+  standalone `Virtual Families 2 - Modded B118.exe` for testing.

@@ -304,5 +304,9 @@ Changelog
 - B117 game build: Spontaneous "Playhouse!" stays child-only and is refreshed
   through native CNight::AIIsDayTime(), so the AI candidate is disabled at
   night.
+- B118 game build: Re-enabled the Settings Evict button by NOPing the two
+  stock constructor skip branches in the existing desktop/mobile
+  theOptionsDialog Evict setup. The native confirmation dialog and
+  CFamilyTree::EvictFamily handler are unchanged.
 
 Have fun! -Lorsieab2 :)

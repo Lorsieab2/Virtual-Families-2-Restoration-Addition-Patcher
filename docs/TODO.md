@@ -328,6 +328,9 @@
 - Standalone patcher repo follow-up: publish the patcher-only source, manifest
   schema docs, and release ZIP to a separate GitHub repository once GitHub
   authentication permits repository creation from this machine.
+- Settings Evict B118 validation: open Settings on a generation 1 and a later
+  generation save, confirm the Evict button appears, then click it and verify
+  the native confirmation/adoption reset path runs without crashing.
 - Settings Evict research follow-up: fully resolve the mobile PLT/control-ID
   mapping for `theOptionsDialog::HandleMessage` so the first-generation mobile
   confirmation click can be documented down to the exact button ID as well as
@@ -335,3 +338,15 @@
 - In-game test B67 visible Special Upgrade icons: verify Brokerage Account,
   Food Club, Health Plan, and Lucky Rock draw their icon graphics in the
   Special Upgrades list while purchase/apply behavior remains unchanged.
+- Island Events patcher bug: enabling the experimental Island Events setting
+  does not currently add the mobile-exclusive event records to the game. Audit
+  whether the event table/native records are only present in the core EXE
+  payload or missing from the generated patch records entirely.
+- Hammock spontaneous behavior alignment: villagers who spontaneously choose
+  Relax in Hammock can lie beside the hammock depending on orientation, while
+  manual drop placement aligns correctly. Compare the autonomous target/drop
+  point route against the base manual hammock drop behavior and reuse the
+  manual orientation-specific placement data.
+- Radio/MP3 behavior parity: when adults or children are dropped on MP3 players
+  or the Invisible Radio, they should use the same radio behavior pool and
+  randomly choose between "Dancing" and "Listening to the Radio".

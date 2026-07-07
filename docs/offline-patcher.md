@@ -517,7 +517,7 @@ as:
   invisible-furniture setting for active replacements.
 - `vf3_tv_animation_graphics` - Fix VF3 TV animation graphics.
 - `settings_evict_button` - Re-enable the Settings menu Evict button. Default
-  off until the in-game implementation is stable.
+  off and Experimental until B118 in-game Settings/click validation is stable.
 - `holiday_ornaments_collection` - Mobile Holiday Ornament yard collectibles,
   collection screen art, and Goals entries. Current manifest conversion must
   include the B86 `CCollectableItem::Find()` and `WasItemSpawned()`
@@ -675,6 +675,14 @@ B117 build-specific notes:
 - Spontaneous "Playhouse!" remains child-only and now also checks native
   `CNight::AIIsDayTime()` during `CVillagerAI::DecideWhatToDo`. At night, the
   Playhouse candidate is disabled and its AI weight is set to `0`.
+
+B118 build-specific notes:
+
+- Settings Evict uses the existing desktop/mobile handler path. The generated
+  core executable NOPs the two `theOptionsDialog` constructor skip branches at
+  `+0x2DA` and `+0x2E7`, so control ID `4` is constructed in Settings. The
+  confirmation dialog and `CFamilyTree::EvictFamily()` click handler are
+  unchanged.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:

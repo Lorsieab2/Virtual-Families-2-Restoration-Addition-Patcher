@@ -328,6 +328,23 @@
   while the B74 any-generation mod should only alter the gate and leave
   `theOptionsDialog::EvictFamily()` / `CFamilyTree::EvictFamily()` untouched.
 
+## 2026-07-07 - Settings Evict Button Re-Enable
+
+- B118 returns to the known-working B72 constructor approach after the B74
+  state-preserving gate failed to show the button in current builds. The patch
+  NOPs both Settings constructor skip branches at `theOptionsDialog::.ctor`
+  `+0x2DA` (`0F 85 80 00 00 00` -> `90 90 90 90 90 90`) and `+0x2E7`
+  (`7D 77` -> `90 90`).
+- The generation compare bytes at `ctor+0x2E0` remain stock
+  `83 3D 04 00 00 00 02`; they are no longer reached as a blocker because the
+  second branch is disabled. This makes control ID `4` construct in every
+  Settings dialog while preserving the native confirmation/click path.
+- The click path is still stock/mobile-derived:
+  `theOptionsDialog::EvictFamily()` -> `CFamilyTree::EvictFamily()` ->
+  `CFamilyTree::Reset()`, villager-manager reset, adoption scene state `2`, and
+  scene `6`. No new save-state clearing routine or villager/furniture behavior
+  code was added.
+
 ## 2026-07-03 - Independent Generated Outfit Tray Items
 
 - Stock clothing item evidence and `theMainScene::HandleMouseDown` show

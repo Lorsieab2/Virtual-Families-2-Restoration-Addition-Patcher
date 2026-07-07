@@ -537,7 +537,7 @@ class InvisibleHeartShapedBedContractTests(unittest.TestCase):
 
 
 class SettingsEvictBehaviorTests(unittest.TestCase):
-    def test_any_generation_evict_preserves_mobile_state_guard(self):
+    def test_evict_button_constructor_is_always_enabled(self):
         with tempfile.TemporaryDirectory() as tmp:
             temp_root = Path(tmp)
             shutil.copy2(patcher.SRC_OBJS / "theOptionsDialog.obj", temp_root / "theOptionsDialog.obj")
@@ -552,10 +552,12 @@ class SettingsEvictBehaviorTests(unittest.TestCase):
                 symbol = obj.symbol("??0theOptionsDialog@@QAE@PADW4DialogColorEnum@@@Z")
                 section = obj.section(symbol.section)
                 start = section.raw_ptr + symbol.value
-                self.assertEqual(obj.buf[start + 0x2DA : start + 0x2E0], b"\x0F\x85\x80\x00\x00\x00")
-                self.assertEqual(obj.buf[start + 0x2E0 : start + 0x2E7], b"\x83\x3D\x04\x00\x00\x00\x00")
-                self.assertEqual(obj.buf[start + 0x2E7 : start + 0x2E9], b"\x7E\x77")
-                self.assertIn("mobile state guard preserved", manifest["settings_menu"]["evict"]["status"])
+                self.assertEqual(obj.buf[start + 0x2DA : start + 0x2E0], b"\x90" * 6)
+                self.assertEqual(obj.buf[start + 0x2E0 : start + 0x2E7], b"\x83\x3D\x04\x00\x00\x00\x02")
+                self.assertEqual(obj.buf[start + 0x2E7 : start + 0x2E9], b"\x90" * 2)
+                obj.symbol("?EvictFamily@theOptionsDialog@@AAEXXZ")
+                obj.symbol("?EvictFamily@CFamilyTree@@QAEXXZ")
+                self.assertIn("button is constructed in every Settings dialog", manifest["settings_menu"]["evict"]["status"])
             finally:
                 patcher.PATCHED = old_patched
 

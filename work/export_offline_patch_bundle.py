@@ -173,7 +173,7 @@ SETTINGS = [
     {
         "id": "settings_evict_button",
         "label": "Add Settings Evict button",
-        "description": "Experimental patch: enables the mobile-style Settings Evict button. This does not work yet and may cause instability or game crashes.",
+        "description": "Experimental patch: enables the mobile-style Settings Evict button in the Settings menu. Needs in-game confirmation and may cause instability or game crashes.",
         "default": False,
         "category": "experimental",
     },
@@ -1648,6 +1648,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B115 patcher refresh: Asset records marked up-to-date during validation are rechecked during apply. This prevents an output-folder refresh from deleting an already-up-to-date modded EXE and then skipping the EXE rewrite.",
             "- B116 game build: Behavior Patches enable child-only Playing quietly at the Kids Table through native behavior 0x130. Invisible Kids Table and Chairs keeps the base KidsTableAndChairsStd donor item/fmap route with no outside asset-folder dependency.",
             "- B117 game build: Spontaneous Playhouse stays child-only and is refreshed through native CNight::AIIsDayTime(), so the AI candidate is disabled at night.",
+            "- B118 game build: Re-enabled the Settings Evict button by NOPing the two stock constructor skip branches in the existing theOptionsDialog Evict setup. The native confirmation dialog and CFamilyTree::EvictFamily handler are unchanged.",
             "",
             "Experimental patch warning",
             "--------------------------",

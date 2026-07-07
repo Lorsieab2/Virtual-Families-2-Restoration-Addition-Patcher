@@ -8533,9 +8533,8 @@ def patch_options_dialog(manifest):
     start = sec.raw_ptr + ctor_sym.value
 
     # Desktop already contains the same Evict button/handler shape as mobile.
-    # Keep the mobile state guard (`FamilyTree+0 == 0`) and only relax the
-    # generation limit so every active PC generation can reach the native
-    # confirmation -> EvictFamily path.
+    # Force the constructor to create the dormant Evict button in all Settings
+    # dialogs, while leaving the native confirmation -> EvictFamily path alone.
     expected_1 = bytes([0x0F, 0x85, 0x80, 0x00, 0x00, 0x00])
     expected_generation_cmp = bytes([0x83, 0x3D, 0x04, 0x00, 0x00, 0x00, 0x02])
     expected_2 = bytes([0x7D, 0x77])
@@ -8545,13 +8544,13 @@ def patch_options_dialog(manifest):
         raise ValueError("Unexpected Evict generation compare bytes")
     if obj.buf[start + 0x2E7:start + 0x2E9] != expected_2:
         raise ValueError("Unexpected Evict second skip branch bytes")
-    obj.buf[start + 0x2E6] = 0
-    obj.buf[start + 0x2E7:start + 0x2E9] = b"\x7E\x77"
+    obj.buf[start + 0x2DA:start + 0x2E0] = b"\x90" * 6
+    obj.buf[start + 0x2E7:start + 0x2E9] = b"\x90" * 2
     obj.write(PATCHED / "theOptionsDialog.obj")
 
     manifest["settings_menu"] = {
         "evict": {
-            "status": "available for every active family generation with mobile state guard preserved",
+            "status": "button is constructed in every Settings dialog; native mobile/desktop confirmation and EvictFamily handler are preserved",
             "button_control_id": 4,
             "label_string_id": "0x10",
             "confirmation_string_id": "0x11",
@@ -8562,20 +8561,20 @@ def patch_options_dialog(manifest):
                 {
                     "offset": "0x2DA",
                     "expected_original_bytes": expected_1.hex(),
-                    "replacement_bytes": expected_1.hex(),
-                    "note": "preserve mobile/stock state guard: skip Evict setup when FamilyTree+0 is nonzero",
+                    "replacement_bytes": "909090909090",
+                    "note": "always allow Evict setup instead of skipping the button on the first stock/mobile state guard",
                 },
                 {
                     "offset": "0x2E0",
                     "expected_original_bytes": expected_generation_cmp.hex(),
-                    "replacement_bytes": "833d0400000000",
-                    "note": "change generation compare threshold from 2 to 0",
+                    "replacement_bytes": expected_generation_cmp.hex(),
+                    "note": "generation compare is left intact because the following skip branch is disabled",
                 },
                 {
                     "offset": "0x2E7",
                     "expected_original_bytes": expected_2.hex(),
-                    "replacement_bytes": "7e77",
-                    "note": "skip Evict when generation count is <= 0; generations 1+ are visible",
+                    "replacement_bytes": "9090",
+                    "note": "always allow Evict setup instead of skipping the button on the generation gate",
                 },
             ],
         }
