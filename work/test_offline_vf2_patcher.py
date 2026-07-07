@@ -196,6 +196,89 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(log["modded_exe_name"], "Virtual Families 2 - Modded BTest.exe")
             self.assertTrue(log["modded_save_dir"].endswith(str(Path("LDW") / "Virtual Families 2 - Modded BTest")))
 
+    def test_refresh_rewrites_exe_that_was_up_to_date_before_refresh(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "Virtual Families 2"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = b"vanilla executable"
+            patched = b"patched executable"
+            game_file.write_bytes(original)
+
+            output_dir = tmp_path / "VF2-BTest-Modded"
+            output_dir.mkdir()
+            output_exe = output_dir / "Virtual Families 2 - Modded BTest.exe"
+            output_exe.write_bytes(patched)
+
+            payload = tmp_path / "payload" / output_exe.name
+            payload.parent.mkdir()
+            payload.write_bytes(patched)
+            manifest = tmp_path / "exe_replacement.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "refresh up-to-date exe unit test",
+                        "output": {
+                            "default_folder_name": output_dir.name,
+                            "default_exe_name": output_exe.name,
+                        },
+                        "settings": [
+                            {
+                                "id": "core_executable",
+                                "label": "Patch game executable",
+                                "default": True,
+                            }
+                        ],
+                        "target_files": [
+                            {
+                                "path": game_file.name,
+                                "sha256": sha256_bytes(original),
+                                "size": len(original),
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": game_file.name,
+                                "output_file_path": output_exe.name,
+                                "source_path": "payload/Virtual Families 2 - Modded BTest.exe",
+                                "source_sha256": sha256_bytes(patched),
+                                "source_size": len(patched),
+                                "expected_target_sha256": sha256_bytes(original),
+                                "expected_target_size": len(original),
+                                "overwrite_existing": True,
+                                "requires": ["core_executable"],
+                                "note": "rewrite modded exe after output-folder refresh",
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--output-dir",
+                str(output_dir),
+                "--manifest",
+                str(manifest),
+            )
+
+            self.assertIn("Applying asset patch", result.stdout)
+            self.assertFalse((output_dir / game_file.name).exists())
+            self.assertEqual(output_exe.read_bytes(), patched)
+            backups = list((output_dir / ".vf2_patch_backups").glob("*/patch_log.json"))
+            self.assertEqual(len(backups), 1)
+            log = json.loads(backups[0].read_text(encoding="utf-8"))
+            self.assertTrue(
+                any(row.get("action") == "up_to_date_recheck_failed" for row in log["process_log"])
+            )
+            self.assertEqual(log["modded_exe_name"], output_exe.name)
+
     def test_dry_run_accepts_renamed_valid_pe_structure_exe(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

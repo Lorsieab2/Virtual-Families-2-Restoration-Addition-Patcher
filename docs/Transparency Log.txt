@@ -294,5 +294,8 @@ Changelog
 - B114 game build: Main-world Holiday Body drawing now treats the native draw
   parameters as scale followed by alpha, so child Holiday Outfit crop offsets
   use body scale on both axes. The Details-screen renderer was left unchanged.
+- B115 patcher refresh: Asset records marked up-to-date during validation are
+  rechecked during apply. This prevents an output-folder refresh from deleting
+  an already-up-to-date modded EXE and then skipping the EXE rewrite.
 
 Have fun! -Lorsieab2 :)

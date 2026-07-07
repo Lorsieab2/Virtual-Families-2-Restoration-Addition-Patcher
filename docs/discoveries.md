@@ -1252,3 +1252,17 @@
   treated that second float like a Y scale, which misaligned Holiday Body
   children in the main scene. B114 uses body scale for both crop-offset axes
   and leaves the Details-screen draw path unchanged.
+
+## 2026-07-07 - B115 Output Refresh EXE Safety
+
+- `offline_vf2_patcher.py::prepare_output_dir()` refreshes recognized modded
+  output folders by deleting all non-backup contents before copying vanilla
+  files and applying active records. If validation saw
+  `Virtual Families 2 - Modded B*.exe` as `up_to_date` before that refresh,
+  the old `apply_asset_patches()` path skipped rewriting the EXE after it had
+  been deleted.
+- `apply_asset_patches()` now rechecks `up_to_date` asset targets at apply
+  time. If the refreshed output folder removed or changed the target, the
+  patcher converts the record back to `create`/`replace` and copies the
+  payload, preventing visual-only toggles from leaving a modded folder without
+  its modded executable.

@@ -1499,29 +1499,45 @@ def apply_asset_patches(
         output_file_path = str(check.get("output_file_path") or file_path)
         index = int(check["index"])
         if check["action"] == "up_to_date":
+            source = resolve_under_manifest_dir(manifest_dir, str(check["source_path"]))
+            target = resolve_under_game_dir(output_dir, output_file_path)
+            if target.is_file() and sha256_file(target) == str(check["source_sha256"]):
+                log_process_event(
+                    process_log,
+                    phase="apply",
+                    kind="asset_patch",
+                    status="skipped",
+                    index=index,
+                    file_path=file_path,
+                    note=str(check.get("note") or ""),
+                    source_path=str(check["source_path"]),
+                    output_file_path=output_file_path,
+                    action="up_to_date",
+                )
+                report_record_progress(
+                    args,
+                    phase="Applying",
+                    kind="asset patch",
+                    current=current,
+                    total=total,
+                    file_path=output_file_path,
+                    index=index,
+                    status="skipped",
+                )
+                continue
+            check["action"] = "create" if not target.exists() else "replace"
             log_process_event(
                 process_log,
                 phase="apply",
                 kind="asset_patch",
-                status="skipped",
+                status="info",
                 index=index,
                 file_path=file_path,
                 note=str(check.get("note") or ""),
                 source_path=str(check["source_path"]),
                 output_file_path=output_file_path,
-                action="up_to_date",
+                action="up_to_date_recheck_failed",
             )
-            report_record_progress(
-                args,
-                phase="Applying",
-                kind="asset patch",
-                current=current,
-                total=total,
-                file_path=output_file_path,
-                index=index,
-                status="skipped",
-            )
-            continue
         source = resolve_under_manifest_dir(manifest_dir, str(check["source_path"]))
         target = resolve_under_game_dir(output_dir, output_file_path)
         try:

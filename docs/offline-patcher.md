@@ -651,6 +651,14 @@ B114 build-specific notes:
   body scale, which fixes child main-scene alignment without changing the
   Details-screen body renderer.
 
+B115 patcher-specific notes:
+
+- Asset records that validate as `up_to_date` are rechecked during apply. This
+  matters when both a vanilla install folder and an existing modded output
+  folder are selected: the output refresh can delete the already-up-to-date
+  modded EXE before asset application begins, so the patcher must verify the
+  target still exists before skipping.
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 

@@ -292,6 +292,10 @@
   male/female villagers and verify main-world body/head alignment. Re-check
   Details screen only as a regression because the B114 fix targets main-scene
   `scale, alpha` handling.
+- Patcher smoke B115 output refresh: select both a vanilla install folder and
+  an existing modded output folder, uncheck only
+  `invisible_furniture_transparent_graphics`, click Enable/Disable Patches, and
+  confirm the modded EXE remains present after the refresh.
 - In-game test B106 generation locks: with a fresh save before later
   generations, verify added furniture respects the preserved mobile
   `lock_generation` values rather than appearing fully unlocked by default.
