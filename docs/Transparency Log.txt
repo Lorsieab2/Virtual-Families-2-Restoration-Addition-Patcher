@@ -248,5 +248,17 @@ Changelog
   filename differs. The exact install check no longer hardcodes the EXE
   filename, and the invalid-install popup links to http://www.ldw.com/ and
   http://www.virtualfamilies.com/index.php.
+- B110 patcher refresh: Adds default-on Behavior Patches and Text fixes main
+  settings.
+- B110 patcher refresh: Adds default-off Invisible Upgrades Graphics. All
+  invisible/original upgrade PNGs are bundled in payload/; the patcher does not
+  request files from Downloads or any outside folder at apply time.
+- B110 patcher refresh: Store Scroll Bar is exposed as a default-off optional
+  setting. Current native support still comes from the core modded executable
+  payload until future byte/table records make it fully independently
+  reversible.
+- B110 patcher refresh: VF3 TV asset records require Patch game executable so
+  private TV animation graphics are not copied without the executable support
+  that recognizes them.
 
 Have fun! -Lorsieab2 :)

@@ -126,12 +126,13 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertNotIn("Images/Furniture/Unchanged.png", asset_by_path)
             self.assertEqual(asset_by_path["Images/Furniture/CandyCane.png"]["requires"], ["holiday_furniture"])
             self.assertEqual(asset_by_path["Images/Furniture/CouchNeonPurpleStd.png"]["requires"], ["custom_couches_ldw_posters"])
-            self.assertEqual(asset_by_path["Images/VF3LargeFlatScreenTVAnim.png"]["requires"], ["vf3_tv_assets_recognition"])
-            self.assertEqual(asset_by_path["Assets/VF3LargeFlatScreenTV.png.fmap"]["requires"], ["vf3_tv_assets_recognition"])
+            self.assertEqual(asset_by_path["Images/VF3LargeFlatScreenTVAnim.png"]["requires"], ["core_executable", "vf3_tv_assets_recognition"])
+            self.assertEqual(asset_by_path["Assets/VF3LargeFlatScreenTV.png.fmap"]["requires"], ["core_executable", "vf3_tv_assets_recognition"])
             self.assertEqual(asset_by_path["Assets/LDWPoster1Std.fmap"]["requires"], ["custom_couches_ldw_posters"])
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_furniture"], 1)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["custom_couches_ldw_posters"], 2)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["vf3_tv_assets_recognition"], 2)
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["core_executable"], 2)
             self.assertTrue((out / "payload" / "Images" / "Furniture" / "CandyCane.png").is_file())
             self.assertNotIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
             self.assertIn({"path": "Images", "min_files": 600}, manifest["runtime_requirements"]["required_dirs"])
@@ -139,6 +140,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             settings = self.run_patcher("settings", "--manifest", str(out / "manifest.json"))
             self.assertIn("holiday_furniture [default on]", settings.stdout)
             self.assertIn("vf3_tv_assets_recognition [default on]", settings.stdout)
+            self.assertIn("behavior_patches [default on]", settings.stdout)
+            self.assertIn("text_fixes [default on]", settings.stdout)
+            self.assertIn("store_scroll_bar [default off]", settings.stdout)
             self.assertIn("custom_couches_ldw_posters [default off]", settings.stdout)
             self.assertIn("holiday_ornaments_collection [default off]", settings.stdout)
             self.assertIn("settings_evict_button [default off]", settings.stdout)
@@ -152,6 +156,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(settings_by_id["unused_pets"]["category"], "main")
             self.assertEqual(settings_by_id["custom_couches_ldw_posters"]["category"], "optional")
             self.assertEqual(settings_by_id["settings_evict_button"]["category"], "experimental")
+            self.assertEqual(settings_by_id["behavior_patches"]["category"], "main")
+            self.assertEqual(settings_by_id["text_fixes"]["category"], "main")
             self.assertNotIn("optional_song_mods", settings_by_id)
 
     def test_exports_byte_patches_when_vanilla_exe_is_supplied(self):
@@ -471,6 +477,47 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
             self.assertEqual(settings_by_id["optional_song_mods"]["category"], "optional")
 
+    def test_invisible_upgrades_target_images_upgrades_from_source_only_payload(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            invisible = tmp_path / "invisible_upgrades"
+            original = tmp_path / "original_upgrades"
+            build.mkdir()
+            invisible.mkdir()
+            original.mkdir()
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            (invisible / "toolwall.png").write_bytes(b"invisible toolwall")
+            (original / "toolwall.png").write_bytes(b"original toolwall")
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--invisible-upgrades-dir",
+                str(invisible),
+                "--original-upgrades-dir",
+                str(original),
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
+            record = asset_by_path["Images/Upgrades/toolwall.png"]
+            self.assertEqual(record["requires"], ["invisible_upgrades_graphics"])
+            self.assertEqual(record["source_path"], "payload/OptionalVisualMods/Invisible Upgrades/toolwall.png")
+            self.assertEqual(record["restore_source_path"], "payload/Original Virtual Families 2 Assets/Upgrades Original Graphics/toolwall.png")
+            self.assertTrue((out / "payload" / "OptionalVisualMods" / "Invisible Upgrades" / "toolwall.png").is_file())
+            self.assertTrue((out / "payload" / "Original Virtual Families 2 Assets" / "Upgrades Original Graphics" / "toolwall.png").is_file())
+            settings_by_id = {row["id"]: row for row in manifest["settings"]}
+            self.assertEqual(settings_by_id["invisible_upgrades_graphics"]["category"], "optional")
+            self.assertFalse(settings_by_id["invisible_upgrades_graphics"]["default"])
+
     def test_disable_all_refreshes_existing_modded_output_to_vanilla(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -563,6 +610,38 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertFalse(stale_runner.exists())
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["export_summary"]["payload_file_count"], 0)
+
+    def test_bundle_asset_source_audit_rejects_missing_source(self):
+        import export_offline_patch_bundle as exporter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            with self.assertRaises(FileNotFoundError):
+                exporter.validate_bundle_asset_sources(
+                    tmp_path,
+                    [
+                        {
+                            "file_path": "Images/missing.png",
+                            "source_path": "payload/Images/missing.png",
+                        }
+                    ],
+                )
+
+    def test_bundle_asset_source_audit_rejects_absolute_source(self):
+        import export_offline_patch_bundle as exporter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            with self.assertRaises(ValueError):
+                exporter.validate_bundle_asset_sources(
+                    tmp_path,
+                    [
+                        {
+                            "file_path": "Images/bad.png",
+                            "source_path": str(tmp_path / "outside.png"),
+                        }
+                    ],
+                )
 
 
 if __name__ == "__main__":

@@ -1129,3 +1129,29 @@
   while the EXE is validated separately by accepted PE structure. New bundles
   also use the exact failure links `http://www.ldw.com/` and
   `http://www.virtualfamilies.com/index.php`.
+
+## 2026-07-06 - B110 Optional Upgrade Graphics and Patch Settings
+
+- `work/export_offline_patch_bundle.py` adds default-on Main settings
+  `behavior_patches` and `text_fixes`. Current native behavior/text changes
+  still travel through the core modded executable payload until those edits are
+  split into narrower byte/table records.
+- `invisible_upgrades_graphics` is a default-off Optional setting. Export reads
+  creator-supplied PNGs only at bundle creation time via
+  `--invisible-upgrades-dir` and `--original-upgrades-dir`, then stores them
+  under `payload/OptionalVisualMods/Invisible Upgrades/` and
+  `payload/Original Virtual Families 2 Assets/Upgrades Original Graphics/`.
+  Runtime records copy invisible PNGs to `Images/Upgrades/*.png`; disabling the
+  setting rebuilds from the selected vanilla install.
+- `store_scroll_bar` is now visible as a default-off Optional setting. The
+  current scroll bar draw/mouse hook is native `CScrollingStoreScene` support in
+  the core executable payload, so full native on/off behavior remains a future
+  byte/table-record split.
+- VF3 TV asset records now require both `core_executable` and
+  `vf3_tv_assets_recognition`, preventing a partial patch where private TV
+  animation strips are copied but the modded executable that recognizes them is
+  not enabled.
+- `validate_bundle_asset_sources()` fails export if any asset source or restore
+  source is absolute, escapes the patcher bundle, or is missing. This enforces
+  self-contained patcher ZIPs with no runtime dependency on Downloads or other
+  creator-local folders.

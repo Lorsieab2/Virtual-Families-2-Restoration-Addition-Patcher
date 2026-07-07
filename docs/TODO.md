@@ -245,8 +245,18 @@
   option copies those files to `Sounds/`, and unchecking it plus clicking
   Enable/Disable Patches refreshes the modded folder back to vanilla songs.
 - Convert the Store Scroll Bar native `CScrollingStoreScene` draw/mouse hooks
-  into setting-gated byte/table records before exposing it as a reversible
-  optional patch.
+  into setting-gated byte/table records. B110 exposes the default-off setting
+  and gates any scroll-bar assets, but current native support still comes from
+  the core modded executable payload.
+- Patcher file-layout test B110 Invisible Upgrades: enable
+  `invisible_upgrades_graphics` and confirm bundled
+  `payload/OptionalVisualMods/Invisible Upgrades/*.png` replace
+  `Images/Upgrades/*.png`; then uncheck it and click Enable/Disable Patches to
+  verify the modded folder refreshes back to vanilla upgrade graphics.
+- In-game test B110 VF3 TV patch dependency: enable `vf3_tv_assets_recognition`
+  with `core_executable` on and confirm VF3 TV private animation strips animate;
+  confirm disabling `core_executable` leaves VF3 TV asset records inactive
+  rather than copying unusable animation assets.
 - In-game test B106 generation locks: with a fresh save before later
   generations, verify added furniture respects the preserved mobile
   `lock_generation` values rather than appearing fully unlocked by default.

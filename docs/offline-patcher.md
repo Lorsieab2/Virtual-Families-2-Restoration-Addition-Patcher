@@ -536,10 +536,13 @@ as:
   Default off. Credit to Corylea on LDWForums.
 - `white_birds` - Optional visual swap that copies bundled white-bird
   `bird.png` and `bird_shadow.png` assets to `Images/`. Default off.
-- `store_scroll_bar` - Planned optional store-screen scroll bar setting. This
-  is native-code work (`CScrollingStoreScene` draw/mouse hooks), so the setting
-  should not be shown in release manifests until byte/table records or an
-  equivalent setting-gated implementation can enable and disable it cleanly.
+- `store_scroll_bar` - Optional store-screen scroll bar setting. Default off.
+  Current native draw/mouse support is bundled in the core modded executable;
+  full native on/off behavior still requires future byte/table record splitting.
+- `invisible_upgrades_graphics` - Optional visual swap that copies bundled
+  Invisible Upgrades PNGs to `Images/Upgrades`. Default off. Disabling it and
+  clicking Enable/Disable Patches refreshes the modded folder from vanilla
+  upgrade graphics.
 - `transparent_decor_tab` - Optional transparent purple Decor tab visual swap.
   Default off. Credit to swedane on LDWForums.
 - `optional_visual_mod_graphics` - Optional loose `OptionalVisualMods` image
@@ -568,14 +571,18 @@ Source-only payload folders are read-only/copy-only during apply:
 `OptionalVisualMods/`, `Original Virtual Families 2 Assets/`, and
 `OptionalSongMods/` stay in `payload/` and are not copied wholesale into the
 game. Optional song records copy `payload/OptionalSongMods/*.ogg` into
-`Sounds/*.ogg` only when `optional_song_mods` is enabled. Optional visual
-records copy source graphics into runtime folders: furniture graphics to
-`Images/Furniture`, future Workshop/Kitchen/Office upgrade graphics to
-`Images/Upgrades`, and animation strips or other loose images to `Images`.
+`Sounds/*.ogg` only when `optional_song_mods` is enabled. Invisible Upgrades
+records copy `payload/OptionalVisualMods/Invisible Upgrades/*.png` into
+`Images/Upgrades/*.png` only when `invisible_upgrades_graphics` is enabled.
+Optional visual records copy source graphics into runtime folders: furniture
+graphics to `Images/Furniture`, future Workshop/Kitchen/Office upgrade graphics
+to `Images/Upgrades`, and animation strips or other loose images to `Images`.
 Generated patcher ZIPs must be self-contained: after export, no setting may
 depend on creator-local folders such as Downloads. Source-backed optional
 settings are omitted from the manifest if their corresponding payload files are
-not bundled.
+not bundled. `export_offline_patch_bundle.py::validate_bundle_asset_sources()`
+fails export if any `asset_patches[].source_path` or `restore_source_path` is
+absolute, escapes the bundle, or points to a missing file.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:

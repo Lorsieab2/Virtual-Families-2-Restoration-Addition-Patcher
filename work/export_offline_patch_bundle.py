@@ -42,11 +42,11 @@ SOURCE_ONLY_PAYLOAD_DIRS = FULL_PAYLOAD_ALWAYS_INCLUDE_DIRS
 OPTIONAL_SONG_SOURCE_DIR = Path("OptionalSongMods")
 OPTIONAL_SONG_TARGET_DIR = Path("Sounds")
 SOURCE_BACKED_OPTIONAL_SETTINGS = {
+    "invisible_upgrades_graphics",
     "optional_song_mods",
     "white_birds",
     "transparent_menu_bar",
     "transparent_store_bar",
-    "store_scroll_bar",
     "transparent_decor_tab",
     "custom_lorsieab2_map_images",
     "optional_visual_mod_graphics",
@@ -119,7 +119,21 @@ SETTINGS = [
     {
         "id": "vf3_tv_assets_recognition",
         "label": "Add VF3 TV assets and recognition",
-        "description": "Adds VF3 TV furniture, private animation strips, and TV fmap recognition assets.",
+        "description": "Adds VF3 TV furniture, private animation strips, and TV fmap recognition assets. Requires Patch game executable so the private TV animations are recognized.",
+        "default": True,
+        "category": "main",
+    },
+    {
+        "id": "behavior_patches",
+        "label": "Behavior Patches",
+        "description": "Makes certain actions able to be done automatically by people, including watching the fire, relaxing in the hammock, arcade/table games, radio actions, drawing, and child-only Playhouse behavior.",
+        "default": True,
+        "category": "main",
+    },
+    {
+        "id": "text_fixes",
+        "label": "Text fixes",
+        "description": "Misc text fixes, including the pet text fix: {name} sees their adorable pet.",
         "default": True,
         "category": "main",
     },
@@ -189,7 +203,14 @@ SETTINGS = [
     {
         "id": "store_scroll_bar",
         "label": "Store Scroll Bar",
-        "description": "Adds a scroll bar to the store screen.",
+        "description": "Adds a scroll bar to the store screen. Default off.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "invisible_upgrades_graphics",
+        "label": "Invisible Upgrades Graphics",
+        "description": "Optional visual mod. Replaces Images/Upgrades graphics with bundled invisible upgrade graphics. Uncheck it and click Enable/Disable Patches to restore bundled vanilla upgrade graphics.",
         "default": False,
         "category": "optional",
     },
@@ -244,6 +265,8 @@ OPTIONAL_VISUAL_SWAP_SPECS = [
 OPTIONAL_MAP_SOURCE_DIR = Path("OptionalVisualMods") / "Custom Lorsieab2 Map Images"
 INVISIBLE_BASE_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Furniture - Base Graphics"
 INVISIBLE_TRANSPARENT_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Furniture - Transparent"
+INVISIBLE_UPGRADES_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Upgrades"
+ORIGINAL_UPGRADES_SOURCE_DIR = Path("Original Virtual Families 2 Assets") / "Upgrades Original Graphics"
 PATCHER_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
 MODDED_EXE_OUTPUT_TEMPLATE = "Virtual Families 2 - Modded {build_label}.exe"
 MODDED_OUTPUT_FOLDER_TEMPLATE = "VF2-{build_label}-Modded"
@@ -718,6 +741,12 @@ def setting_for_asset(rel_path: Path) -> str:
     return "core_assets"
 
 
+def asset_requires_for_setting(setting: str) -> list[str]:
+    if setting in {"vf3_tv_assets_recognition", "behavior_patches"}:
+        return ["core_executable", setting]
+    return [setting]
+
+
 def is_invisible_furniture_image(rel_path: Path) -> bool:
     parts = rel_path.parts
     return len(parts) >= 3 and parts[0] == "Images" and parts[1] == "Furniture" and rel_path.stem.startswith("Invisible")
@@ -820,7 +849,7 @@ def export_asset_payloads(
             "source_path": relative_posix(Path("payload") / rel),
             "source_sha256": source_sha,
             "source_size": source_size,
-            "requires": [setting_for_asset(rel)],
+            "requires": asset_requires_for_setting(setting_for_asset(rel)),
             "note": f"Generated asset payload for {relative_posix(rel)}.",
         }
         invisible_base_build_source = build_dir / INVISIBLE_BASE_SOURCE_DIR / rel.name
@@ -896,6 +925,56 @@ def optional_song_asset_patches(
     return records
 
 
+def copy_optional_png_folder(source_dir: Path | None, target_dir: Path) -> None:
+    if source_dir is None:
+        return
+    if not source_dir.is_dir():
+        raise ValueError(f"Optional graphics directory does not exist: {source_dir}")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    for source in sorted(source_dir.glob("*.png")):
+        if source.is_file():
+            shutil.copy2(source, target_dir / source.name)
+
+
+def invisible_upgrades_asset_patches(
+    bundle_dir: Path,
+    invisible_source_dir: Path | None = None,
+    original_source_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    payload_root = bundle_dir / "payload"
+    payload_invisible_dir = payload_root / INVISIBLE_UPGRADES_SOURCE_DIR
+    payload_original_dir = payload_root / ORIGINAL_UPGRADES_SOURCE_DIR
+    copy_optional_png_folder(invisible_source_dir, payload_invisible_dir)
+    copy_optional_png_folder(original_source_dir, payload_original_dir)
+
+    if not payload_invisible_dir.is_dir():
+        return []
+
+    records: list[dict[str, Any]] = []
+    for source in sorted(payload_invisible_dir.glob("*.png")):
+        target_rel = Path("Images") / "Upgrades" / source.name
+        record: dict[str, Any] = {
+            "file_path": relative_posix(target_rel),
+            "source_path": relative_posix(source.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(source),
+            "source_size": source.stat().st_size,
+            "overwrite_existing": True,
+            "requires": ["invisible_upgrades_graphics"],
+            "note": (
+                "Optional Invisible Upgrades visual swap. Enable this setting to replace the matching "
+                "Images/Upgrades graphic with the bundled invisible version; uncheck it and click "
+                "Enable/Disable Patches to rebuild the modded folder with vanilla upgrade graphics."
+            ),
+        }
+        original = payload_original_dir / source.name
+        if original.is_file():
+            record["restore_source_path"] = relative_posix(original.relative_to(bundle_dir))
+            record["restore_source_sha256"] = sha256_file(original)
+            record["restore_source_size"] = original.stat().st_size
+        records.append(record)
+    return records
+
+
 def loose_optional_visual_target(source: Path) -> Path:
     name = source.name
     stem_lower = source.stem.lower()
@@ -957,7 +1036,7 @@ def optional_visual_asset_patches(bundle_dir: Path) -> list[dict[str, Any]]:
                 "source_sha256": sha256_file(source),
                 "source_size": source.stat().st_size,
                 "overwrite_existing": True,
-                "requires": [setting],
+                "requires": asset_requires_for_setting(setting),
                 "note": (
                     "Named optional visual swap."
                     if setting != "optional_visual_mod_graphics"
@@ -987,6 +1066,23 @@ def optional_visual_asset_patches(bundle_dir: Path) -> list[dict[str, Any]]:
             }
         )
     return records
+
+
+def validate_bundle_asset_sources(bundle_dir: Path, asset_patches: list[dict[str, Any]]) -> None:
+    bundle_root = bundle_dir.resolve()
+    for index, record in enumerate(asset_patches):
+        for key in ("source_path", "restore_source_path"):
+            rel_text = record.get(key)
+            if not rel_text:
+                continue
+            rel_path = Path(str(rel_text))
+            if rel_path.is_absolute():
+                raise ValueError(f"asset patch #{index} {key} must be bundle-relative, got {rel_text!r}")
+            resolved = (bundle_root / rel_path).resolve()
+            if resolved != bundle_root and bundle_root not in resolved.parents:
+                raise ValueError(f"asset patch #{index} {key} escapes the patcher bundle: {rel_text!r}")
+            if not resolved.is_file():
+                raise FileNotFoundError(f"asset patch #{index} {key} does not exist in the patcher bundle: {rel_text!r}")
 
 
 def modded_exe_output_name(build_label: str) -> str:
@@ -1425,6 +1521,9 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B104 patcher refresh: Adds default-on unused Turtle/Hamster pet setting metadata.",
             "- B104 patcher refresh: Adds default-off OptionalSongMods support targeting Sounds/*.ogg.",
             "- B104 patcher refresh: Refreshes the modded output folder from vanilla on Enable/Disable Patches so unchecked patches are removed.",
+            "- B110 patcher refresh: Adds default-on Behavior Patches and Text fixes settings.",
+            "- B110 patcher refresh: Adds default-off Invisible Upgrades Graphics, bundling invisible upgrade PNGs into OptionalVisualMods/Invisible Upgrades and targeting Images/Upgrades.",
+            "- B110 patcher refresh: Exposes Store Scroll Bar as a default-off optional setting; current native support still comes from the core modded executable payload.",
             "",
             "Experimental patch warning",
             "--------------------------",
@@ -1518,6 +1617,9 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     )
     optional_song_source = Path(args.optional_song_mods_dir).resolve() if args.optional_song_mods_dir else None
     asset_patches.extend(optional_song_asset_patches(bundle_dir, base_payload, optional_song_source))
+    invisible_upgrades_source = Path(args.invisible_upgrades_dir).resolve() if args.invisible_upgrades_dir else None
+    original_upgrades_source = Path(args.original_upgrades_dir).resolve() if args.original_upgrades_dir else None
+    asset_patches.extend(invisible_upgrades_asset_patches(bundle_dir, invisible_upgrades_source, original_upgrades_source))
     asset_patches.extend(optional_visual_asset_patches(bundle_dir))
     exe_replacement_record = None
     if args.include_exe_replacement and vanilla_exe is not None:
@@ -1531,6 +1633,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         )
         asset_patches.insert(0, exe_replacement_record)
     native_patch_sources = collect_native_patch_sources(build_manifest_data)
+    validate_bundle_asset_sources(bundle_dir, asset_patches)
 
     asset_counts_by_setting: dict[str, int] = {}
     for row in asset_patches:
@@ -1604,6 +1707,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--name", help="Manifest display name.")
     parser.add_argument("--asset-mode", choices=ASSET_MODES, default="additive", help="Asset export mode. 'additive' exports manifest-referenced assets; 'all' exports every Images/Assets diff.")
     parser.add_argument("--optional-song-mods-dir", help="Folder containing optional song .ogg files to place in payload/OptionalSongMods and target to Sounds/.")
+    parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
+    parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
     parser.add_argument("--include-byte-patches", action="store_true", help="Diff vanilla EXE against patched EXE into byte patch records.")
     parser.add_argument("--include-exe-replacement", action="store_true", help="Copy the patched EXE into payload and replace a verified vanilla target EXE during apply.")
     parser.add_argument("--include-patcher-scripts", action="store_true", help="Copy the CLI/GUI patcher scripts plus convenience batch files into the bundle.")
