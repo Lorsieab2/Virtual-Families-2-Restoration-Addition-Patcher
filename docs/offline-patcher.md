@@ -184,8 +184,8 @@ If validation fails, the GUI/CLI reports:
 No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?
 
 Links:
-LDW.Com
-VirtualFamilies.com
+http://www.ldw.com/
+http://www.virtualfamilies.com/index.php
 ```
 
 By default the exporter uses `--asset-mode additive`, which exports only assets
@@ -413,7 +413,7 @@ when the original target did not exist.
       "source_path": "payload/Images/VF3LargeFlatScreenTVAnim.png",
       "source_sha256": "expected lowercase sha256 of the payload file",
       "source_size": 12345,
-      "expected_target_pe_structure": null,
+      "expected_target_pe_structures": [],
       "requires": ["vf3_tv_animation_graphics"],
       "note": "B65 scaled private VF3 Large TV animation strip."
     }
@@ -421,17 +421,21 @@ when the original target did not exist.
 }
 ```
 
-`target_files` is required, and at least one `.exe` target must include either
-`sha256` or `pe_structure` so the user-provided vanilla executable is verified
-before any patch is written. `size`, `file_version`, `product_version`, and
-`pe_timestamp` are validated when present; version and PE timestamp checks are
-supplemental. `pe_structure` uses the patcher's `pe32-section-raw-v1`
-fingerprint for traceability. Install validation compares only the stable PE
-identity fields: PE header layout plus each section's name, raw file offset,
-raw size, virtual address/size, and characteristics. It deliberately ignores
-whole-file SHA-256, PE timestamp, overlay/certificate bytes, and per-section
-raw-data SHA-256 when a compatible structure is present, so valid official VF2
-EXEs with different hashes are accepted.
+`target_files` is required, and at least one `.exe` target must include
+`pe_structures`, `accepted_pe_structures`, `pe_structure`, or a legacy `sha256`
+fallback so the user-provided vanilla executable is verified before any patch
+is written. The current VF2 releases use accepted PE structures instead of a
+fixed SHA-256. If the manifest's EXE filename is not present, the patcher scans
+top-level `.exe` files in the selected folder and accepts one whose PE layout
+matches an accepted structure.
+
+`pe_structure` uses the patcher's `pe32-section-raw-v1` fingerprint for
+traceability. Install validation compares only the stable PE identity fields:
+PE header layout plus each section's name, raw file offset, raw size, virtual
+address/size, and characteristics. It deliberately ignores whole-file SHA-256,
+PE timestamp, overlay/certificate bytes, and per-section raw-data SHA-256 when
+a compatible structure is present, so valid official VF2 EXEs with different
+hashes are accepted.
 
 `runtime_requirements` is optional but should be included by VF2 release
 manifests. It lets the patcher verify that the selected game directory is a
@@ -480,7 +484,7 @@ instead of shipping a full modded EXE payload.
 Asset records can create new files, which restore later removes. If an asset
 target already exists, the patcher allows it only when it already matches the
 payload, when `expected_target_sha256` matches, when
-`expected_target_pe_structure` matches for a PE target, or when
+one of `expected_target_pe_structures` matches for a PE target, or when
 `overwrite_existing=true` is explicit. This keeps private files such as
 `Images/VF3LargeFlatScreenTVAnim*.png`,
 `Images/VF3SmallFlatScreenTVAnim*.png`, and

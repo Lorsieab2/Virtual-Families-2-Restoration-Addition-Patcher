@@ -257,8 +257,8 @@ CREATOR_DISCLOSURE = "This offline patcher was created with Codex AI in collabor
 INVALID_INSTALL_MESSAGE = (
     "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\n"
     "Links:\n"
-    "LDW.Com\n"
-    "VirtualFamilies.com"
+    "http://www.ldw.com/\n"
+    "http://www.virtualfamilies.com/index.php"
 )
 
 HOLIDAY_FURNITURE_FILES = {
@@ -356,7 +356,6 @@ OFFICIAL_INSTALL_TOP_LEVEL_ENTRIES = [
     "SDL2_image.dll",
     "Sounds",
     "uninst.exe",
-    "Virtual Families 2.exe",
     "Virtual Families 2.url",
     "zlib1.dll",
 ]
@@ -544,16 +543,21 @@ def find_patched_exe(build_dir: Path, explicit: str | None) -> Path:
     raise FileNotFoundError(f"No patched EXE found in {build_dir}")
 
 
-def target_file_record(vanilla_exe: Path, target_exe_name: str) -> dict[str, Any]:
+def target_file_record(vanilla_exe: Path, target_exe_name: str, accepted_exes: list[Path] | None = None) -> dict[str, Any]:
     record = {
         "path": target_exe_name,
-        "sha256": sha256_file(vanilla_exe),
-        "size": vanilla_exe.stat().st_size,
-        "note": "Verified vanilla VF2 PC executable.",
+        "note": "Verified vanilla VF2 PC executable by accepted PE layout, not by fixed SHA-256.",
     }
-    pe_structure = pe_structure_fingerprint(vanilla_exe)
-    if pe_structure is not None:
-        record["pe_structure"] = pe_structure
+    pe_structures = []
+    for exe in [vanilla_exe, *(accepted_exes or [])]:
+        pe_structure = pe_structure_fingerprint(exe)
+        if pe_structure is not None:
+            pe_structures.append(pe_structure)
+    if pe_structures:
+        record["pe_structures"] = pe_structures
+    else:
+        record["sha256"] = sha256_file(vanilla_exe)
+        record["size"] = vanilla_exe.stat().st_size
     return record
 
 
@@ -1000,6 +1004,7 @@ def export_exe_replacement_payload(
     bundle_dir: Path,
     patched_exe: Path,
     vanilla_exe: Path,
+    accepted_exes: list[Path] | None,
     target_exe_name: str,
     build_label: str,
 ) -> dict[str, Any]:
@@ -1008,18 +1013,27 @@ def export_exe_replacement_payload(
     payload_target = bundle_dir / payload_rel
     payload_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(patched_exe, payload_target)
-    return {
+    pe_structures = []
+    for exe in [vanilla_exe, *(accepted_exes or [])]:
+        pe_structure = pe_structure_fingerprint(exe)
+        if pe_structure is not None:
+            pe_structures.append(pe_structure)
+    record = {
         "file_path": target_exe_name,
         "output_file_path": output_exe_name,
         "source_path": relative_posix(payload_rel),
         "source_sha256": sha256_file(payload_target),
         "source_size": payload_target.stat().st_size,
-        "expected_target_sha256": sha256_file(vanilla_exe),
-        "expected_target_pe_structure": pe_structure_fingerprint(vanilla_exe),
         "overwrite_existing": True,
         "requires": ["core_executable"],
         "note": f"Create clearly named modded {build_label} executable after verifying the vanilla Virtual Families 2.exe.",
     }
+    if pe_structures:
+        record["expected_target_pe_structures"] = pe_structures
+    else:
+        record["expected_target_sha256"] = sha256_file(vanilla_exe)
+        record["expected_target_size"] = vanilla_exe.stat().st_size
+    return record
 
 
 def default_settings(
@@ -1437,6 +1451,10 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     build_manifest_data = load_json(manifest_in) if manifest_in.is_file() else {}
     patched_exe = find_patched_exe(build_dir, args.patched_exe)
     vanilla_exe = Path(args.vanilla_exe).resolve() if args.vanilla_exe else None
+    accepted_vanilla_exes = [Path(path).resolve() for path in args.accepted_vanilla_exe]
+    for accepted_exe in accepted_vanilla_exes:
+        if not accepted_exe.is_file():
+            raise FileNotFoundError(f"Accepted vanilla EXE not found: {accepted_exe}")
     target_exe_name = args.target_exe_name or DEFAULT_EXE_NAME
     if args.include_exe_replacement and vanilla_exe is None:
         raise ValueError("--include-exe-replacement requires --vanilla-exe so the patcher can verify the original EXE.")
@@ -1457,7 +1475,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     native_status: dict[str, Any]
     target_files: list[dict[str, Any]] = []
     if vanilla_exe:
-        target_files.append(target_file_record(vanilla_exe, target_exe_name))
+        target_files.append(target_file_record(vanilla_exe, target_exe_name, accepted_vanilla_exes))
         if args.include_byte_patches:
             try:
                 byte_patches = build_byte_patches(vanilla_exe, patched_exe, target_exe_name)
@@ -1507,6 +1525,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             bundle_dir=bundle_dir,
             patched_exe=patched_exe,
             vanilla_exe=vanilla_exe,
+            accepted_exes=accepted_vanilla_exes,
             target_exe_name=target_exe_name,
             build_label=build_label,
         )
@@ -1579,6 +1598,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--build-manifest", help="Generated build patch-manifest.json. Defaults to BUILD_DIR/patch-manifest.json.")
     parser.add_argument("--base-payload", default=str(DEFAULT_BASE_PAYLOAD), help="Clean base asset payload used for diff filtering.")
     parser.add_argument("--vanilla-exe", help="Original vanilla VF2 EXE used for target hash and optional byte diff export.")
+    parser.add_argument("--accepted-vanilla-exe", action="append", default=[], help="Additional official VF2 EXE whose PE layout should be accepted during install validation. Repeatable.")
     parser.add_argument("--patched-exe", help="Patched EXE filename inside build dir. Auto-detected by default.")
     parser.add_argument("--target-exe-name", default=DEFAULT_EXE_NAME, help="Relative EXE path expected in the user's game folder.")
     parser.add_argument("--name", help="Manifest display name.")

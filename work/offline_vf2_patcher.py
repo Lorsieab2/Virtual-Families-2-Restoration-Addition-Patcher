@@ -29,8 +29,8 @@ DEFAULT_EXE_NAME = "Virtual Families 2.exe"
 INVALID_INSTALL_MESSAGE = (
     "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\n"
     "Links:\n"
-    "LDW.Com\n"
-    "VirtualFamilies.com"
+    "http://www.ldw.com/\n"
+    "http://www.virtualfamilies.com/index.php"
 )
 
 
@@ -58,7 +58,7 @@ class AssetPatch:
     source_sha256: str
     source_size: int | None
     expected_target_sha256: str | None
-    expected_target_pe_structure: dict[str, Any] | None
+    expected_target_pe_structures: tuple[dict[str, Any], ...]
     expected_target_size: int | None
     overwrite_existing: bool
     note: str
@@ -400,6 +400,25 @@ def pe_structure_matches(path: Path, expected: Any) -> bool:
         return False
     actual = pe_structure_fingerprint(path)
     return pe_structure_identity(actual) == expected_identity
+
+
+def normalize_pe_structure_list(raw: Any, field: str) -> tuple[dict[str, Any], ...]:
+    if raw is None:
+        return ()
+    if isinstance(raw, dict):
+        return (raw,)
+    if isinstance(raw, list):
+        rows = []
+        for index, row in enumerate(raw):
+            if not isinstance(row, dict):
+                raise PatchError(f"{field} #{index} must be an object.")
+            rows.append(row)
+        return tuple(rows)
+    raise PatchError(f"{field} must be an object or array of objects.")
+
+
+def pe_structure_matches_any(path: Path, expected_rows: tuple[dict[str, Any], ...]) -> bool:
+    return any(pe_structure_matches(path, expected) for expected in expected_rows)
 
 
 def windows_file_versions(path: Path) -> dict[str, str]:
@@ -771,6 +790,26 @@ def verify_runtime_requirements(
     enabled_settings: set[str],
 ) -> list[dict[str, Any]]:
     checks = []
+    accepted_exe_structures: list[dict[str, Any]] = []
+    for index, raw_target in enumerate(manifest_target_files(manifest)):
+        if not isinstance(raw_target, dict):
+            continue
+        requires = record_requires(raw_target, f"target file #{index}")
+        ensure_known_settings(requires, settings, f"Target file #{index}")
+        if not record_is_active(requires, enabled_settings):
+            continue
+        accepted_exe_structures.extend(
+            normalize_pe_structure_list(
+                raw_target.get(
+                    "pe_structures",
+                    raw_target.get(
+                        "accepted_pe_structures",
+                        raw_target.get("pe_structure", raw_target.get("binary_structure", raw_target.get("structure"))),
+                    ),
+                ),
+                f"target file #{index} pe_structures",
+            )
+        )
     raw_runtime = manifest.get("runtime_requirements", manifest.get("required_runtime"))
     if isinstance(raw_runtime, dict):
         exact_entries = raw_runtime.get("exact_top_level_entries", raw_runtime.get("top_level_entries"))
@@ -778,7 +817,18 @@ def verify_runtime_requirements(
             if not isinstance(exact_entries, list) or not all(isinstance(row, str) and row.strip() for row in exact_entries):
                 raise PatchError("runtime_requirements.exact_top_level_entries must be an array of non-empty strings.")
             expected = {row.strip() for row in exact_entries}
-            actual = {path.name for path in game_dir.iterdir()}
+            actual = set()
+            accepted_exe_names = []
+            for path in game_dir.iterdir():
+                if (
+                    path.is_file()
+                    and path.suffix.lower() == ".exe"
+                    and accepted_exe_structures
+                    and pe_structure_matches_any(path, tuple(accepted_exe_structures))
+                ):
+                    accepted_exe_names.append(path.name)
+                    continue
+                actual.add(path.name)
             missing = sorted(expected - actual)
             extra = sorted(actual - expected)
             if missing or extra:
@@ -788,7 +838,7 @@ def verify_runtime_requirements(
                 if extra:
                     details.append("unexpected top-level entries: " + ", ".join(extra))
                 raise install_validation_error(manifest, "; ".join(details))
-            checks.append({"kind": "exact_top_level_entries", "count": len(expected)})
+            checks.append({"kind": "exact_top_level_entries", "count": len(expected), "accepted_exe_names": accepted_exe_names})
     for requirement in manifest_runtime_requirements(manifest, settings, enabled_settings):
         rel_path = str(requirement["path"])
         path = resolve_under_game_dir(game_dir, rel_path)
@@ -890,12 +940,19 @@ def manifest_asset_patches(
             ),
             f"asset patch #{index} expected_target_sha256",
         )
-        expected_target_pe_structure = raw.get(
-            "expected_target_pe_structure",
-            raw.get("expected_target_structure", raw.get("expected_original_pe_structure")),
+        expected_target_pe_structures = normalize_pe_structure_list(
+            raw.get(
+                "expected_target_pe_structures",
+                raw.get(
+                    "accepted_target_pe_structures",
+                    raw.get(
+                        "expected_target_pe_structure",
+                        raw.get("expected_target_structure", raw.get("expected_original_pe_structure")),
+                    ),
+                ),
+            ),
+            f"asset patch #{index} expected_target_pe_structures",
         )
-        if expected_target_pe_structure is not None and not isinstance(expected_target_pe_structure, dict):
-            raise PatchError(f"asset patch #{index} expected_target_pe_structure must be an object.")
         source_size = None
         if raw.get("source_size", raw.get("size")) is not None:
             source_size = parse_int(raw.get("source_size", raw.get("size")), f"asset patch #{index} source_size")
@@ -914,7 +971,7 @@ def manifest_asset_patches(
                 source_sha256=source_sha or "",
                 source_size=source_size,
                 expected_target_sha256=expected_target_sha,
-                expected_target_pe_structure=expected_target_pe_structure,
+                expected_target_pe_structures=expected_target_pe_structures,
                 expected_target_size=expected_target_size,
                 overwrite_existing=bool(
                     raw.get("overwrite_existing", raw.get("replace_existing", raw.get("overwrite", False)))
@@ -945,7 +1002,7 @@ def verify_target_files(
 ) -> list[dict[str, Any]]:
     target_files = manifest_target_files(manifest)
     if not target_files:
-        raise PatchError("Manifest must contain target_files with at least the original EXE SHA-256.")
+        raise PatchError("Manifest must contain target_files with at least one EXE identity record.")
 
     checks = []
     saw_exe_sha = False
@@ -957,7 +1014,22 @@ def verify_target_files(
         if not record_is_active(requires, enabled_settings):
             continue
         rel_path = normalize_rel_path(raw.get("file_path", raw.get("file", raw.get("path"))), f"target file #{index}")
+        expected_sha = raw.get("sha256", raw.get("hash"))
+        expected_pe_structures = normalize_pe_structure_list(
+            raw.get(
+                "pe_structures",
+                raw.get("accepted_pe_structures", raw.get("pe_structure", raw.get("binary_structure", raw.get("structure")))),
+            ),
+            f"target file #{index} pe_structures",
+        )
+
         path = resolve_under_game_dir(game_dir, rel_path)
+        if not path.is_file() and Path(rel_path).suffix.lower() == ".exe" and expected_pe_structures:
+            for candidate in sorted(game_dir.glob("*.exe")):
+                if pe_structure_matches_any(candidate, expected_pe_structures):
+                    path = candidate
+                    rel_path = candidate.name
+                    break
         if not path.is_file():
             raise install_validation_error(manifest, f"target file does not exist: {rel_path}")
         actual_sha = sha256_file(path)
@@ -965,33 +1037,29 @@ def verify_target_files(
         actual_timestamp = pe_timestamp(path)
         version_info = windows_file_versions(path)
 
-        expected_sha = raw.get("sha256", raw.get("hash"))
-        expected_pe_structure = raw.get("pe_structure", raw.get("binary_structure", raw.get("structure")))
-        if expected_pe_structure is not None and not isinstance(expected_pe_structure, dict):
-            raise PatchError(f"target file #{index} pe_structure must be an object.")
         matched_by = None
         if expected_sha and actual_sha.lower() == str(expected_sha).lower():
             matched_by = "sha256"
-        elif expected_pe_structure is not None and pe_structure_matches(path, expected_pe_structure):
+        elif expected_pe_structures and pe_structure_matches_any(path, expected_pe_structures):
             matched_by = "pe_structure"
         elif expected_sha:
-            if expected_pe_structure is not None:
+            if expected_pe_structures:
                 raise install_validation_error(
                     manifest,
                     f"Target identity mismatch for {rel_path}: SHA-256 expected {expected_sha}, got {actual_sha}; "
-                    "PE structure did not match the accepted binary structure.",
+                    "PE structure did not match any accepted binary structure.",
                 )
             raise install_validation_error(
                 manifest,
                 f"SHA-256 mismatch for {rel_path}: expected {expected_sha}, got {actual_sha}",
             )
-        elif expected_pe_structure is not None:
+        elif expected_pe_structures:
             raise install_validation_error(
                 manifest,
                 f"PE structure mismatch for {rel_path}; this is not a recognized VF2 executable build.",
             )
 
-        if path.suffix.lower() == ".exe" and (expected_sha or expected_pe_structure is not None):
+        if path.suffix.lower() == ".exe" and (expected_sha or expected_pe_structures):
             saw_exe_sha = True
 
         expected_size = raw.get("size")
@@ -1037,7 +1105,7 @@ def verify_target_files(
             }
         )
     if not saw_exe_sha:
-        raise PatchError("Manifest must verify the original VF2 executable with a SHA-256 or PE-structure target_files entry.")
+        raise PatchError("Manifest must verify the original VF2 executable with a SHA-256 or accepted PE-structure target_files entry.")
     return checks
 
 
@@ -1209,8 +1277,8 @@ def verify_asset_patches(
                 output_size = output_target.stat().st_size if output_exists else None
             expected_structure_matches = (
                 target_exists
-                and asset.expected_target_pe_structure is not None
-                and pe_structure_matches(target, asset.expected_target_pe_structure)
+                and bool(asset.expected_target_pe_structures)
+                and pe_structure_matches_any(target, asset.expected_target_pe_structures)
             )
             action = "create"
             if target_exists:
@@ -1219,9 +1287,9 @@ def verify_asset_patches(
                     raise PatchError(
                         f"SHA-256 mismatch for existing asset target {asset.file_path}: "
                         f"expected {asset.expected_target_sha256}, got {target_sha}; "
-                        "PE structure did not match the accepted binary structure."
+                        "PE structure did not match any accepted binary structure."
                     )
-                if asset.expected_target_pe_structure is not None and not expected_structure_matches and not asset.expected_target_sha256:
+                if asset.expected_target_pe_structures and not expected_structure_matches and not asset.expected_target_sha256:
                     raise PatchError(f"PE structure mismatch for existing asset target {asset.file_path}.")
                 if (
                     asset.expected_target_size is not None
@@ -1525,8 +1593,8 @@ def apply_manifest(args: argparse.Namespace) -> int:
     exe_path = Path(args.exe).resolve() if getattr(args, "exe", None) else None
     game_dir = Path(args.game_dir).resolve() if args.game_dir else None
     if exe_path is not None:
-        if exe_path.name.lower() != DEFAULT_EXE_NAME.lower():
-            raise PatchError(f"--exe must point to {DEFAULT_EXE_NAME!r}, got {exe_path.name!r}.")
+        if exe_path.suffix.lower() != ".exe":
+            raise PatchError(f"--exe must point to a Virtual Families 2 executable, got {exe_path.name!r}.")
         if game_dir is not None and game_dir != exe_path.parent.resolve():
             raise PatchError("--game-dir and --exe disagree; use the EXE's parent folder or omit --game-dir.")
         game_dir = exe_path.parent.resolve()

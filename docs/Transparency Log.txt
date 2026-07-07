@@ -69,8 +69,8 @@ If validation fails, the user-facing popup says:
 No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?
 
 Links:
-LDW.Com
-VirtualFamilies.com
+http://www.ldw.com/
+http://www.virtualfamilies.com/index.php
 
 Dry Run / Validate Only
 -----------------------
@@ -243,5 +243,10 @@ Changelog
 - B108 patcher refresh: Official EXE validation now accepts matching VF2 PE
   layout identity plus the required installation folder structure instead of
   requiring exact EXE or section SHA-256 hashes.
+- B109 patcher refresh: The manifest can list multiple accepted official VF2
+  EXE layouts, and the patcher can find a matching top-level EXE even when the
+  filename differs. The exact install check no longer hardcodes the EXE
+  filename, and the invalid-install popup links to http://www.ldw.com/ and
+  http://www.virtualfamilies.com/index.php.
 
 Have fun! -Lorsieab2 :)

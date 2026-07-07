@@ -133,7 +133,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["custom_couches_ldw_posters"], 2)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["vf3_tv_assets_recognition"], 2)
             self.assertTrue((out / "payload" / "Images" / "Furniture" / "CandyCane.png").is_file())
-            self.assertIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
+            self.assertNotIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
             self.assertIn({"path": "Images", "min_files": 600}, manifest["runtime_requirements"]["required_dirs"])
 
             settings = self.run_patcher("settings", "--manifest", str(out / "manifest.json"))
@@ -268,9 +268,14 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(asset_by_path["Virtual Families 2.exe"]["requires"], ["core_executable"])
             self.assertEqual(asset_by_path["Virtual Families 2.exe"]["output_file_path"], "Virtual Families 2 - Modded B103.exe")
             self.assertIn("modded B103 executable", asset_by_path["Virtual Families 2.exe"]["note"])
-            self.assertEqual(asset_by_path["Virtual Families 2.exe"]["expected_target_sha256"], hashlib.sha256(vanilla_data).hexdigest())
-            self.assertIsInstance(asset_by_path["Virtual Families 2.exe"]["expected_target_pe_structure"], dict)
-            self.assertIsInstance(manifest["target_files"][0]["pe_structure"], dict)
+            if "expected_target_pe_structures" in asset_by_path["Virtual Families 2.exe"]:
+                self.assertNotIn("expected_target_sha256", asset_by_path["Virtual Families 2.exe"])
+                self.assertIsInstance(asset_by_path["Virtual Families 2.exe"]["expected_target_pe_structures"], list)
+                self.assertNotIn("sha256", manifest["target_files"][0])
+                self.assertIsInstance(manifest["target_files"][0]["pe_structures"], list)
+            else:
+                self.assertIn("expected_target_sha256", asset_by_path["Virtual Families 2.exe"])
+                self.assertIn("sha256", manifest["target_files"][0])
             self.assertEqual(asset_by_path["Images/Furniture/InvisibleHammock.png"]["requires"], ["invisible_furniture_visible_graphics"])
             self.assertEqual(
                 asset_by_path["Images/Furniture/InvisibleHammock.png"]["source_path"],
@@ -294,7 +299,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertNotIn("patch-manifest.json", asset_by_path)
             self.assertEqual(manifest["created_with"], "Codex AI")
             self.assertIn("Codex AI", manifest["creator_disclosure"])
-            self.assertIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
+            self.assertNotIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
             self.assertIn({"path": "Assets", "min_files": 200}, manifest["runtime_requirements"]["required_dirs"])
             self.assertEqual(manifest["output"]["default_folder_name"], "VF2-B103-Modded")
             self.assertTrue((out / "payload" / "Virtual Families 2 - Modded B103.exe").is_file())

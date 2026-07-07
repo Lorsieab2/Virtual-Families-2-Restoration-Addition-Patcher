@@ -1111,3 +1111,21 @@
   longer rejected solely because its SHA-256 or section hashes differ from the
   manifest's reference EXE. Byte patch records still validate their own
   `expected_original_bytes` before writing.
+
+## 2026-07-06 - B109 Accepted EXE Layouts and Install Shape
+
+- `work/offline_vf2_patcher.py::normalize_pe_structure_list()` and
+  `pe_structure_matches_any()` allow manifests to list multiple accepted
+  official VF2 EXE layouts under `pe_structures` /
+  `expected_target_pe_structures`. Dry Run no longer requires the selected EXE
+  to match a single SHA-256.
+- `verify_target_files()` can resolve a missing manifest EXE filename by
+  scanning top-level `.exe` files in the selected game folder and accepting the
+  one whose PE layout matches an accepted structure. This avoids hardcoding the
+  user's folder path or EXE filename while still refusing random binaries.
+- `work/export_offline_patch_bundle.py` no longer includes
+  `Virtual Families 2.exe` in `runtime_requirements.exact_top_level_entries`.
+  The exact folder-shape check covers the official non-EXE runtime contents,
+  while the EXE is validated separately by accepted PE structure. New bundles
+  also use the exact failure links `http://www.ldw.com/` and
+  `http://www.virtualfamilies.com/index.php`.

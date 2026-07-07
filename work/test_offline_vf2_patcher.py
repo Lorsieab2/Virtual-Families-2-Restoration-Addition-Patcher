@@ -318,24 +318,26 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.run_patcher("restore", "--backup-dir", str(backup))
             self.assertEqual(game_file.read_bytes(), original)
 
-    def test_apply_with_exe_path_requires_canonical_name(self):
+    def test_apply_with_exe_path_accepts_any_exe_name(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             game_file = tmp_path / "VF2.exe"
             game_file.write_bytes(b"vanilla")
             manifest = tmp_path / "patch.json"
-            self.write_manifest(manifest, game_file, b"vanilla", expected="76", replacement="70")
+            backup = tmp_path / "backup"
+            self.write_manifest(manifest, game_file, b"vanilla", expected="6e", replacement="70")
 
-            result = self.run_patcher(
+            self.run_patcher(
                 "apply",
                 "--exe",
                 str(game_file),
                 "--manifest",
                 str(manifest),
-                expect=2,
+                "--backup-dir",
+                str(backup),
             )
 
-            self.assertIn("--exe must point to 'Virtual Families 2.exe'", result.stderr)
+            self.assertEqual(game_file.read_bytes(), b"vapilla")
 
     def test_exe_replacement_accepts_matching_pe_structure_when_hash_differs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -451,6 +453,47 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(log["target_checks"][0]["matched_by"], "pe_structure")
             self.assertTrue(log["asset_patches"][0]["target_structure_matched"])
 
+    def test_target_file_can_find_vf2_exe_by_structure_when_name_differs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "VF2WebsiteBuild.exe"
+            original = minimal_pe_bytes(section_delta=3)
+            game_file.write_bytes(original)
+            structure_source = tmp_path / "expected.exe"
+            structure_source.write_bytes(original)
+            manifest = tmp_path / "structure_named_exe.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "structure named exe unit test",
+                        "target_files": [
+                            {
+                                "path": "Virtual Families 2.exe",
+                                "pe_structures": [patcher_mod.pe_structure_fingerprint(structure_source)],
+                            }
+                        ],
+                        "patches": [
+                            {
+                                "file_path": game_file.name,
+                                "offset": "0x0",
+                                "expected_original_bytes": "4d5a",
+                                "replacement_bytes": "4d5a",
+                                "note": "dry-run identity patch",
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher("apply", "--game-dir", str(game_dir), "--manifest", str(manifest), "--dry-run")
+
+            self.assertIn("Dry run complete", result.stdout)
+
     def test_runtime_requirements_validate_game_payload_before_apply(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -531,7 +574,7 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             data = json.loads(manifest.read_text(encoding="utf-8"))
             data["runtime_requirements"] = {
                 "exact_top_level_entries": ["Images", "Virtual Families 2.exe"],
-                "invalid_install_message": "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\nLinks:\nLDW.Com\nVirtualFamilies.com",
+                "invalid_install_message": "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\nLinks:\nhttp://www.ldw.com/\nhttp://www.virtualfamilies.com/index.php",
             }
             manifest.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
