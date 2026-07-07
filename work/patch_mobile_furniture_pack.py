@@ -4293,6 +4293,10 @@ EVENT_CHOICE_OVERRIDES = {
     ("Volunteer", "ChoiceB"): "Sorry, no",
 }
 
+EVENT_TEXT_OVERRIDES = {
+    ("MeteoriteFallsInYard2", "Title"): "Meteorite Fragments",
+}
+
 EMAIL_EVENT_NAMES = {
     "EmailFromACME",
     "EmailFromAntonioGuildenstern",
@@ -4344,6 +4348,7 @@ def normalize_event_text(value):
         "it's artificial intelligence": "its artificial intelligence",
         "God love you": "God loves you",
         "Ressurection": "Resurrection",
+        '".You': '". You',
     }
     for old, new in fixes.items():
         text = text.replace(old, new)
@@ -4363,6 +4368,7 @@ def load_mobile_island_events():
             value = row["value"]
             if not value:
                 continue
+            value = EVENT_TEXT_OVERRIDES.get((event_name, kind), value)
             value = EVENT_CHOICE_OVERRIDES.get((event_name, kind), value)
             event_text.setdefault(event_name, {})[kind] = normalize_event_text(value)
 
@@ -4419,7 +4425,7 @@ def mobile_island_event_string_count():
 
 
 def c_string(text):
-    return text.replace("\\", "\\\\").replace('"', '\\"')
+    return text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
 def max_item_offset():
@@ -5991,34 +5997,82 @@ def patch_string_manager(manifest):
                 "text": text,
             })
 
-    # Retain the existing string id used by the pet behavior while replacing
-    # its text through the normal string-table lookup.
-    pet_candidates = (
-        b"{name} sees pet",
-        b"{name} sees their adorable pet",
-        b"{name} sees their adorable pet.",
-    )
-    pet_new = "{name} sees their adorable pet."
-    pet_symbol = None
-    for symbol in obj.symbols:
-        if symbol.section <= 0:
-            continue
-        section_data = bytes(obj.section_data(symbol.section))
-        if (
-            symbol.name.startswith("??_C@")
-            and any(
-                section_data[symbol.value : symbol.value + len(candidate)] == candidate
-                for candidate in pet_candidates
-            )
-        ):
-            pet_symbol = symbol
-            break
-    if pet_symbol is None:
-        raise RuntimeError("Could not locate the existing pet-behavior string")
-    pet_key_sym = "_vf2petstr_key"
-    pet_text_sym = "_vf2petstr_text"
-    helper_lines.append(f'const char {pet_key_sym[1:]}[] = "eString_SeesTheirAdorablePet";')
-    helper_lines.append(f'const char {pet_text_sym[1:]}[] = "{c_string(pet_new)}";')
+    def find_literal_symbol(candidates):
+        for symbol in obj.symbols:
+            if symbol.section <= 0:
+                continue
+            section_data = bytes(obj.section_data(symbol.section))
+            if (
+                symbol.name.startswith("??_C@")
+                and any(
+                    section_data[symbol.value : symbol.value + len(candidate)] == candidate
+                    for candidate in candidates
+                )
+            ):
+                return symbol
+        return None
+
+    # Retain existing string ids while replacing text through normal
+    # string-table lookups. This supports longer replacement strings safely.
+    existing_text_fixes = [
+        {
+            "old": "{name} sees pet",
+            "new": "{name} sees their adorable pet.",
+            "key": "eString_SeesTheirAdorablePet",
+            "symbol_prefix": "_vf2petstr",
+            "candidates": (
+                b"{name} sees pet",
+                b"{name} sees their adorable pet",
+                b"{name} sees their adorable pet.",
+            ),
+        },
+        {
+            "old": "Cooking like mommy",
+            "new": "Cooking like a grownup",
+            "key": "eString_CookingLikeAGrownup",
+            "symbol_prefix": "_vf2textfix_cooking_grownup",
+            "candidates": (b"Cooking like mommy", b"Cooking like a grownup"),
+        },
+        {
+            "old": "Driving like daddy",
+            "new": "Driving like a grownup",
+            "key": "eString_DrivingLikeAGrownup",
+            "symbol_prefix": "_vf2textfix_driving_grownup",
+            "candidates": (b"Driving like daddy", b"Driving like a grownup"),
+        },
+        {
+            "old": "Settings Evict confirmation",
+            "new": (
+                "This button will EVICT your current family and\n"
+                "RESET the Family Tree. Your Family Tree will be ERASED\n"
+                "and will restart from Generation 1. All Store Items\n"
+                "that were previously generation-locked will need to be\n"
+                "unlocked again.\n\n"
+                "You will keep all the money, the house, the furnishings,\n"
+                "etc. The current residents will be DELETED with no\n"
+                "record of them, and you will be able to adopt a new\n"
+                "little person.\n\n"
+                "ARE YOU SURE YOU WANT TO EVICT YOUR CURRENT FAMILY?\n"
+                "Click OK to continue. Otherwise, click Cancel."
+            ),
+            "key": "eString_EvictFamilyResetWarning",
+            "symbol_prefix": "_vf2textfix_evict_warning",
+            "candidates": (
+                b"If you felt rushed during the brief tutorial",
+                b"ARE YOU SURE YOU WANT TO EVICT YOUR CURRENT FAMILY?",
+            ),
+        },
+    ]
+    existing_text_fix_symbols = []
+    for fix in existing_text_fixes:
+        symbol = find_literal_symbol(fix["candidates"])
+        if symbol is None:
+            raise RuntimeError(f"Could not locate the existing text-fix string: {fix['old']}")
+        fix["key_sym"] = f"{fix['symbol_prefix']}_key"
+        fix["text_sym"] = f"{fix['symbol_prefix']}_text"
+        existing_text_fix_symbols.append((fix, symbol))
+        helper_lines.append(f'const char {fix["key_sym"][1:]}[] = "{c_string(fix["key"])}";')
+        helper_lines.append(f'const char {fix["text_sym"][1:]}[] = "{c_string(fix["new"])}";')
 
     payload = b"".join(struct.pack("<IIII", string_id, 0, 0, 0) for string_id, _key, _text in new_rows)
     obj.insert_section_bytes(table_sym.section, insert_off, payload)
@@ -6029,23 +6083,30 @@ def patch_string_manager(manifest):
         obj.append_relocation(table_sym.section, row_off + 4, key_symidx)
         obj.append_relocation(table_sym.section, row_off + 8, text_symidx)
 
-    pet_text_symidx = obj.append_undefined_symbol(pet_text_sym)
-    pet_retargeted = []
+    updated_existing_strings = []
     table_section = obj.section(table_sym.section)
-    p = table_section.reloc_ptr
-    for _ in range(table_section.nreloc):
-        vaddr, symidx, _rtype = struct.unpack_from("<IIH", obj.buf, p)
-        if (
-            symidx == pet_symbol.index
-            and table_sym.value <= vaddr < insert_off
-            and (vaddr - table_sym.value) % STRING_RECORD_SIZE == 8
-        ):
-            obj.retarget_relocation(table_sym.section, vaddr, pet_text_symidx)
-            pet_retargeted.append(hex(vaddr))
-            break
-        p += 10
-    if not pet_retargeted:
-        raise RuntimeError("Could not retarget the pet behavior string-table entry")
+    for fix, literal_symbol in existing_text_fix_symbols:
+        text_symidx = obj.append_undefined_symbol(fix["text_sym"])
+        retargeted = []
+        p = table_section.reloc_ptr
+        for _ in range(table_section.nreloc):
+            vaddr, symidx, _rtype = struct.unpack_from("<IIH", obj.buf, p)
+            if (
+                symidx == literal_symbol.index
+                and table_sym.value <= vaddr < insert_off
+                and (vaddr - table_sym.value) % STRING_RECORD_SIZE == 8
+            ):
+                obj.retarget_relocation(table_sym.section, vaddr, text_symidx)
+                retargeted.append(hex(vaddr))
+                break
+            p += 10
+        if not retargeted:
+            raise RuntimeError(f"Could not retarget text-fix string-table entry: {fix['old']}")
+        updated_existing_strings.append({
+            "old": fix["old"],
+            "new": fix["new"],
+            "table_relocations": retargeted,
+        })
 
     new_count = ORIG_STRING_COUNT + len(new_rows)
     new_one_past = string_lookup_one_past_for_rows(new_rows)
@@ -6071,11 +6132,7 @@ def patch_string_manager(manifest):
             "get_guard": get_guard_patches,
             "lookup_bytes": lookup_patches,
         },
-        "updated_existing_strings": [{
-            "old": "{name} sees pet",
-            "new": pet_new,
-            "table_relocations": pet_retargeted,
-        }],
+        "updated_existing_strings": updated_existing_strings,
     }
 
 
@@ -8546,17 +8603,32 @@ def patch_options_dialog(manifest):
         raise ValueError("Unexpected Evict second skip branch bytes")
     obj.buf[start + 0x2DA:start + 0x2E0] = b"\x90" * 6
     obj.buf[start + 0x2E7:start + 0x2E9] = b"\x90" * 2
+
+    add_control_insert = ctor_sym.value + 0x360
+    add_control_payload = bytearray([
+        0x56,                         # push esi (the Evict ldwButton*)
+        0x8B, 0xCB,                   # mov ecx, ebx (this)
+        0xE8, 0x00, 0x00, 0x00, 0x00, # call ldwScene::AddControl
+    ])
+    obj.insert_section_bytes(ctor_sym.section, add_control_insert, add_control_payload)
+    add_control_sym = obj.symbol("?AddControl@ldwScene@@IAEXPAVldwControl@@@Z")
+    obj.append_relocation(ctor_sym.section, add_control_insert + 4, add_control_sym.index, IMAGE_REL_I386_REL32)
     obj.write(PATCHED / "theOptionsDialog.obj")
 
     manifest["settings_menu"] = {
         "evict": {
-            "status": "button is constructed in every Settings dialog; native mobile/desktop confirmation and EvictFamily handler are preserved",
+            "status": "button is constructed and added to the Settings control list; native mobile/desktop confirmation and EvictFamily handler are preserved",
             "button_control_id": 4,
             "label_string_id": "0x10",
             "confirmation_string_id": "0x11",
             "handler": "?EvictFamily@theOptionsDialog@@AAEXXZ",
             "family_tree_handler": "?EvictFamily@CFamilyTree@@QAEXXZ",
             "click_safety": "The native mobile/desktop handler path is untouched: confirmation dialog, CFamilyTree::EvictFamily Reset()+evicted mark, villager-manager reset, adoption scene state 2, scene 6.",
+            "add_control_patch": {
+                "insert_offset": hex(add_control_insert),
+                "helper": "?AddControl@ldwScene@@IAEXPAVldwControl@@@Z",
+                "note": "The stock dormant block constructs and labels the Evict button but does not add it to the scene; B119 inserts AddControl(this, evictButton).",
+            },
             "constructor_patches": [
                 {
                     "offset": "0x2DA",

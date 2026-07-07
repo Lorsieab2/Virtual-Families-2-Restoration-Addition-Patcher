@@ -682,7 +682,50 @@ B118 build-specific notes:
   core executable NOPs the two `theOptionsDialog` constructor skip branches at
   `+0x2DA` and `+0x2E7`, so control ID `4` is constructed in Settings. The
   confirmation dialog and `CFamilyTree::EvictFamily()` click handler are
-  unchanged.
+  unchanged. User testing showed this was incomplete because the constructed
+  button was still not added to the scene control list.
+
+B119 build-specific notes:
+
+- Settings Evict additionally inserts the missing
+  `ldwScene::AddControl(evictButton)` call after the Evict button `SetText()`.
+  This is the visibility step B118 lacked.
+- The GUI saves the last vanilla install folder and modded output folder in
+  `patcher_local_settings.json` beside the patcher scripts, then reloads them
+  on the next launch. The bundle still does not hardcode install paths.
+- Text fixes also replace `Cooking like mommy` -> `Cooking like a grownup` and
+  `Driving like daddy` -> `Driving like a grownup`.
+- The exporter can bundle an optional Island Events EXE overlay with
+  `--island-events-exe`; it applies to the same B119 modded EXE name only when
+  both `core_executable` and `island_events` are enabled.
+- The GUI header includes a `Check for updates` hyperlink to the standalone
+  private patcher release repository:
+  `https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases`.
+  Future patcher ZIP releases should be published there only.
+
+B121 build-specific notes:
+
+- The Settings Evict confirmation replacement uses explicit line breaks because
+  the stock in-game dialog does not auto-wrap long injected string-table
+  values. The native Evict button and handler path are unchanged.
+- Adds default-off optional `Misc Graphics Fixes`, currently targeting the
+  Super Fridge ice maker graphic at `Images/Upgrades/superFridge_NW.png`.
+- Adds default-off optional `Glowing Collectibles`, targeting
+  `Images/collectables_small.png`.
+- Both optional graphics patches are portable: their modded payloads live under
+  `payload/OptionalVisualMods/...`, and their vanilla restore sources live
+  under `payload/Original Virtual Families 2 Assets/...`.
+
+B122 build-specific notes:
+
+- `invisible_upgrades_graphics` is now presented as `Invisible Workspace
+  Upgrades`. Its payload lives entirely under
+  `payload/OptionalVisualMods/Invisible Workspace Upgrades/`.
+- Enabling the setting copies bundled `invisible images/*.png` to
+  `Images/Upgrades/*.png`; disabling and applying copies the paired bundled
+  `original images/*.png` files back.
+- The exporter reads these source PNGs from tracked `patcher_assets/`, not from
+  `Downloads` or any machine-specific folder.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:

@@ -178,6 +178,25 @@ def valid_invisible_kids_table_manifest():
     }
 
 
+class MobileIslandEventTextTests(unittest.TestCase):
+    def test_meteorite_followup_uses_short_dialog_title(self):
+        events = {event["name"]: event for event in patcher.load_mobile_island_events()}
+
+        meteorite = events["MeteoriteFallsInYard2"]
+        title = next(row["text"] for row in meteorite["strings"] if row["kind"] == "Title")
+
+        self.assertEqual(title, "Meteorite Fragments")
+        self.assertLess(len(title), 40)
+        self.assertNotIn("scientist is at the door", title)
+
+    def test_metallic_knocking_result_spacing_is_normalized(self):
+        events = {event["name"]: event for event in patcher.load_mobile_island_events()}
+        result = next(row["text"] for row in events["MetallicKnockingOnDoor"]["strings"] if row["kind"] == "ResultA")
+
+        self.assertIn('"Signal lost. Must seek shelter". You open', result)
+        self.assertNotIn('".You', result)
+
+
 class GenerationLockTests(unittest.TestCase):
     def test_mobile_generation_locks_are_preserved(self):
         self.assertEqual(
@@ -555,9 +574,41 @@ class SettingsEvictBehaviorTests(unittest.TestCase):
                 self.assertEqual(obj.buf[start + 0x2DA : start + 0x2E0], b"\x90" * 6)
                 self.assertEqual(obj.buf[start + 0x2E0 : start + 0x2E7], b"\x83\x3D\x04\x00\x00\x00\x02")
                 self.assertEqual(obj.buf[start + 0x2E7 : start + 0x2E9], b"\x90" * 2)
+                self.assertEqual(obj.buf[start + 0x360 : start + 0x364], b"\x56\x8B\xCB\xE8")
                 obj.symbol("?EvictFamily@theOptionsDialog@@AAEXXZ")
                 obj.symbol("?EvictFamily@CFamilyTree@@QAEXXZ")
-                self.assertIn("button is constructed in every Settings dialog", manifest["settings_menu"]["evict"]["status"])
+                obj.symbol("?AddControl@ldwScene@@IAEXPAVldwControl@@@Z")
+                self.assertIn("added to the Settings control list", manifest["settings_menu"]["evict"]["status"])
+            finally:
+                patcher.PATCHED = old_patched
+
+
+class TextFixStringManagerTests(unittest.TestCase):
+    def test_text_fixes_retarget_existing_stock_strings(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            shutil.copy2(patcher.SRC_OBJS / "theStringManager.obj", temp_root / "theStringManager.obj")
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = temp_root
+                manifest = {}
+
+                patcher.patch_string_manager(manifest)
+
+                updates = {
+                    row["old"]: row["new"]
+                    for row in manifest["theStringManager"]["updated_existing_strings"]
+                }
+                self.assertEqual(updates["Cooking like mommy"], "Cooking like a grownup")
+                self.assertEqual(updates["Driving like daddy"], "Driving like a grownup")
+                self.assertIn("Settings Evict confirmation", updates)
+                self.assertIn("This button will EVICT your current family", updates["Settings Evict confirmation"])
+                self.assertIn("Click OK to continue. Otherwise, click Cancel.", updates["Settings Evict confirmation"])
+                helper = (temp_root / "vf2_mobile_string_table.c").read_text(encoding="ascii")
+                self.assertIn("Cooking like a grownup", helper)
+                self.assertIn("Driving like a grownup", helper)
+                self.assertIn("This button will EVICT your current family", helper)
+                self.assertIn("\\n\\nYou will keep all the money", helper)
             finally:
                 patcher.PATCHED = old_patched
 

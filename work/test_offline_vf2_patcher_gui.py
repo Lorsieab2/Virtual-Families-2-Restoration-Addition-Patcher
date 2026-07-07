@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import unittest
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -153,6 +154,54 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
         self.assertEqual(args.backup_dir, "C:\\Games\\VF2\\.vf2_patch_backups\\example")
         self.assertIsNone(args.game_dir)
         self.assertIsNone(args.log)
+
+    def test_saved_paths_round_trip_local_settings_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = Path(tmp) / "patcher_local_settings.json"
+
+            gui.save_saved_paths(
+                vanilla_game_dir="C:\\Games\\Virtual Families 2",
+                modded_output_dir="C:\\Games\\VF2-B119-Modded",
+                settings_path=settings_path,
+            )
+
+            self.assertEqual(
+                gui.load_saved_paths(settings_path),
+                {
+                    "vanilla_game_dir": "C:\\Games\\Virtual Families 2",
+                    "modded_output_dir": "C:\\Games\\VF2-B119-Modded",
+                },
+            )
+
+            gui.save_saved_paths(
+                vanilla_game_dir="",
+                modded_output_dir="C:\\Games\\VF2-B120-Modded",
+                settings_path=settings_path,
+            )
+
+            self.assertEqual(
+                gui.load_saved_paths(settings_path),
+                {
+                    "vanilla_game_dir": "C:\\Games\\Virtual Families 2",
+                    "modded_output_dir": "C:\\Games\\VF2-B120-Modded",
+                },
+            )
+
+    def test_update_link_points_to_standalone_patcher_releases_repo(self):
+        self.assertEqual(
+            gui.PATCHER_RELEASES_URL,
+            "https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases",
+        )
+
+    def test_manifest_build_label_prefers_explicit_build_number(self):
+        self.assertEqual(gui.manifest_build_label({"name": "Virtual Families 2 Restoration/Addition Patcher B119"}), "B119")
+        self.assertEqual(
+            gui.manifest_build_label(
+                {"output": {"default_exe_name": "Virtual Families 2 - Modded B120.exe"}}
+            ),
+            "B120",
+        )
+        self.assertEqual(gui.manifest_build_label({"name": "VF2 patcher"}), "")
 
 
 if __name__ == "__main__":

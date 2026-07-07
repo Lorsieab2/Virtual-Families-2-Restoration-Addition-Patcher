@@ -144,11 +144,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(asset_by_path["Images/VillagerDetailBodies/Female/Body_50/Frame00.png"]["requires"], ["holiday_outfits"])
             self.assertEqual(asset_by_path["Assets/VF3LargeFlatScreenTV.png.fmap"]["requires"], ["core_executable", "vf3_tv_assets_recognition"])
             self.assertEqual(asset_by_path["Assets/LDWPoster1Std.fmap"]["requires"], ["custom_couches_ldw_posters"])
+            self.assertEqual(asset_by_path["Images/Upgrades/superFridge_NW.png"]["requires"], ["misc_graphics_fixes"])
+            self.assertEqual(asset_by_path["Images/collectables_small.png"]["requires"], ["glowing_collectibles"])
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_furniture"], 1)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_outfits"], 1)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["custom_couches_ldw_posters"], 2)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["vf3_tv_assets_recognition"], 3)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["vf3_furniture"], 2)
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["misc_graphics_fixes"], 1)
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["glowing_collectibles"], 1)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["core_executable"], 5)
             self.assertTrue((out / "payload" / "Images" / "Furniture" / "CandyCane.png").is_file())
             self.assertNotIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
@@ -162,6 +166,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("store_scroll_bar [default off]", settings.stdout)
             self.assertIn("custom_couches_ldw_posters [default off]", settings.stdout)
             self.assertIn("vf3_furniture [default off]", settings.stdout)
+            self.assertIn("misc_graphics_fixes [default off]", settings.stdout)
+            self.assertIn("glowing_collectibles [default off]", settings.stdout)
             self.assertIn("holiday_ornaments_collection [default off]", settings.stdout)
             self.assertIn("settings_evict_button [default off]", settings.stdout)
             self.assertIn("unused_pets [default on]", settings.stdout)
@@ -174,7 +180,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(settings_by_id["unused_pets"]["category"], "main")
             self.assertEqual(settings_by_id["custom_couches_ldw_posters"]["category"], "optional")
             self.assertEqual(settings_by_id["vf3_furniture"]["category"], "optional")
-            self.assertEqual(settings_by_id["settings_evict_button"]["category"], "experimental")
+            self.assertEqual(settings_by_id["misc_graphics_fixes"]["category"], "optional")
+            self.assertEqual(settings_by_id["glowing_collectibles"]["category"], "optional")
+            self.assertEqual(settings_by_id["settings_evict_button"]["category"], "optional")
+            self.assertEqual(settings_by_id["island_events"]["category"], "optional")
             self.assertEqual(settings_by_id["behavior_patches"]["category"], "main")
             self.assertEqual(settings_by_id["text_fixes"]["category"], "main")
             self.assertNotIn("optional_song_mods", settings_by_id)
@@ -325,6 +334,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             vanilla.write_bytes(vanilla_data)
             patched_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
             patched_exe.write_bytes(b"patched executable")
+            island_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack Island Events.exe"
+            island_exe.write_bytes(b"patched executable with island events")
             (build / "Images" / "Furniture").mkdir(parents=True)
             (build / "Images" / "Furniture" / "InvisibleHammock.png").write_bytes(b"hammock")
             (build / "OptionalVisualMods" / "Invisible Furniture - Base Graphics").mkdir(parents=True)
@@ -352,23 +363,33 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 "full",
                 "--include-exe-replacement",
                 "--include-patcher-scripts",
+                "--island-events-exe",
+                str(island_exe),
                 "--name",
                 "VF2 B103 Test Bundle",
             )
 
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-            asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
-            self.assertEqual(asset_by_path["Virtual Families 2.exe"]["requires"], ["core_executable"])
-            self.assertEqual(asset_by_path["Virtual Families 2.exe"]["output_file_path"], "Virtual Families 2 - Modded B103.exe")
-            self.assertIn("modded B103 executable", asset_by_path["Virtual Families 2.exe"]["note"])
-            if "expected_target_pe_structures" in asset_by_path["Virtual Families 2.exe"]:
-                self.assertNotIn("expected_target_sha256", asset_by_path["Virtual Families 2.exe"])
-                self.assertIsInstance(asset_by_path["Virtual Families 2.exe"]["expected_target_pe_structures"], list)
+            assets_by_path = {}
+            for row in manifest["asset_patches"]:
+                assets_by_path.setdefault(row["file_path"], []).append(row)
+            exe_records = assets_by_path["Virtual Families 2.exe"]
+            core_exe = next(row for row in exe_records if row["requires"] == ["core_executable"])
+            island_overlay = next(row for row in exe_records if row["requires"] == ["core_executable", "island_events"])
+            self.assertEqual(core_exe["output_file_path"], "Virtual Families 2 - Modded B103.exe")
+            self.assertIn("modded B103 executable", core_exe["note"])
+            self.assertEqual(island_overlay["output_file_path"], "Virtual Families 2 - Modded B103.exe")
+            self.assertIn("Island Events executable overlay", island_overlay["note"])
+            self.assertTrue((out / "payload" / "Virtual Families 2 - Modded B103 - Island Events.exe").is_file())
+            if "expected_target_pe_structures" in core_exe:
+                self.assertNotIn("expected_target_sha256", core_exe)
+                self.assertIsInstance(core_exe["expected_target_pe_structures"], list)
                 self.assertNotIn("sha256", manifest["target_files"][0])
                 self.assertIsInstance(manifest["target_files"][0]["pe_structures"], list)
             else:
-                self.assertIn("expected_target_sha256", asset_by_path["Virtual Families 2.exe"])
+                self.assertIn("expected_target_sha256", core_exe)
                 self.assertIn("sha256", manifest["target_files"][0])
+            asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"] if row["file_path"] != "Virtual Families 2.exe"}
             self.assertEqual(asset_by_path["Images/Furniture/InvisibleHammock.png"]["requires"], ["invisible_furniture_visible_graphics"])
             self.assertEqual(
                 asset_by_path["Images/Furniture/InvisibleHammock.png"]["source_path"],
@@ -597,10 +618,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
             record = asset_by_path["Images/Upgrades/toolwall.png"]
             self.assertEqual(record["requires"], ["invisible_upgrades_graphics"])
-            self.assertEqual(record["source_path"], "payload/OptionalVisualMods/Invisible Upgrades/toolwall.png")
-            self.assertEqual(record["restore_source_path"], "payload/Original Virtual Families 2 Assets/Upgrades Original Graphics/toolwall.png")
-            self.assertTrue((out / "payload" / "OptionalVisualMods" / "Invisible Upgrades" / "toolwall.png").is_file())
-            self.assertTrue((out / "payload" / "Original Virtual Families 2 Assets" / "Upgrades Original Graphics" / "toolwall.png").is_file())
+            self.assertEqual(record["source_path"], "payload/OptionalVisualMods/Invisible Workspace Upgrades/invisible images/toolwall.png")
+            self.assertEqual(record["restore_source_path"], "payload/OptionalVisualMods/Invisible Workspace Upgrades/original images/toolwall.png")
+            self.assertTrue((out / "payload" / "OptionalVisualMods" / "Invisible Workspace Upgrades" / "invisible images" / "toolwall.png").is_file())
+            self.assertTrue((out / "payload" / "OptionalVisualMods" / "Invisible Workspace Upgrades" / "original images" / "toolwall.png").is_file())
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
             self.assertEqual(settings_by_id["invisible_upgrades_graphics"]["category"], "optional")
             self.assertFalse(settings_by_id["invisible_upgrades_graphics"]["default"])

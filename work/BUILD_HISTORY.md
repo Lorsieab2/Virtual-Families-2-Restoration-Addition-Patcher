@@ -806,3 +806,51 @@
   to the adoption scene flow.
 - Exports `Virtual-Families-2-Restoration-Addition-Patcher-B118.zip` and the
   standalone `Virtual Families 2 - Modded B118.exe` for testing.
+
+## B119 - Settings Evict AddControl and Patcher Release Repo
+
+- Completes the Settings Evict visibility patch by inserting the missing
+  `ldwScene::AddControl(evictButton)` call after the dormant button's
+  `SetText()` call. B118 enabled the constructor path but did not attach the
+  button to the Settings scene control list.
+- Adds stock text fixes for `Cooking like mommy` and `Driving like daddy`,
+  retargeting them to gender-neutral `...like a grownup` wording.
+- Adds an optional Island Events EXE overlay export path so enabling the
+  experimental Island Events setting can swap in a bundled event-enabled EXE
+  instead of leaving the checkbox visually enabled but functionally inert.
+- Adds a GUI `Check for updates` hyperlink to the private standalone patcher
+  release repo:
+  `https://github.com/Lorsieab2/Virtual-Families-2-Addition-Restoration-Patcher/releases`.
+- Saves the last vanilla install folder and modded output folder in
+  `patcher_local_settings.json` beside the patcher for the next launch.
+
+## B120 - Patcher Path and Island Events Refresh
+
+- Publishes the portable B120 patcher bundle to the standalone patcher release
+  repo.
+- Shows the current build label in the GUI, adds a Check for updates link, and
+  persists the vanilla/modded paths between launches.
+- Moves Settings Evict and Island Events to Optional patches now that the
+  button/event listing path is functional, and bundles the Island Events EXE
+  overlay so the checkbox has a real payload.
+
+## B121 - Evict Warning Wrap and Optional Graphics Patches
+
+- Pre-wraps the Settings Evict confirmation string with explicit line breaks so
+  it fits inside the stock in-game modal instead of clipping horizontally.
+- Adds default-off optional `Misc Graphics Fixes`, currently replacing
+  `Images/Upgrades/superFridge_NW.png`.
+- Adds default-off optional `Glowing Collectibles`, replacing
+  `Images/collectables_small.png`.
+- Both new graphics patches are self-contained in the patcher payload and carry
+  bundled vanilla restore sources for disable/reapply flows.
+
+## B122 - Invisible Workspace Upgrades Payload
+
+- Renames the optional upgrades visual setting label to `Invisible Workspace
+  Upgrades` while keeping setting ID `invisible_upgrades_graphics`.
+- Bundles the supplied invisible/original workspace upgrade PNG pairs under
+  `payload/OptionalVisualMods/Invisible Workspace Upgrades/`.
+- Enables/restores those graphics through `Images/Upgrades/*.png` asset records
+  with paired `restore_source_path` entries, so applying and disabling the
+  patch are both self-contained.

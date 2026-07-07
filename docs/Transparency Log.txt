@@ -15,6 +15,10 @@ The display name is Virtual Families 2 Restoration/Addition Patcher. The
 GUI starts from Launch_GUI.bat. Prebuilt Launch GUI.lnk shortcuts are not
 shipped because Windows shortcut targets are path-specific and can break after
 ZIP extraction. No compiled patcher launcher EXE is shipped in B105 bundles.
+The update/release repository is Virtual Families 2 Addition/Restoration
+Patcher, published as the private GitHub repo
+https://github.com/Lorsieab2/Virtual-Families-2-Addition-Restoration-Patcher/releases.
+New patcher releases should be uploaded there only.
 
 What the patcher does
 ---------------------
@@ -308,5 +312,29 @@ Changelog
   stock constructor skip branches in the existing desktop/mobile
   theOptionsDialog Evict setup. The native confirmation dialog and
   CFamilyTree::EvictFamily handler are unchanged.
+- B119 game build: Settings Evict now also inserts the missing
+  ldwScene::AddControl call for the constructed Evict button, which B118 did
+  not do.
+- B119 patcher refresh: The GUI stores the last vanilla install folder and
+  modded output folder in patcher_local_settings.json beside the patcher.
+- B119 text fixes: Retargets existing string-table rows so "Cooking like
+  mommy" becomes "Cooking like a grownup" and "Driving like daddy" becomes
+  "Driving like a grownup".
+- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only
+  applies when the Island Events setting is enabled.
+- B120 patcher refresh: Shows the current build label in the GUI, links Check
+  for updates to the patcher release page, saves vanilla/modded folder paths,
+  and moves Settings Evict and Island Events to Optional patches.
+- B121 game build: Settings Evict warning text is explicitly line-broken so the
+  stock dialog renderer keeps it inside the modal bounds.
+- B121 patcher refresh: Adds default-off Misc Graphics Fixes and Glowing
+  Collectibles optional asset swaps. The supplied graphics are bundled in
+  payload/OptionalVisualMods, and bundled vanilla restore images are used when
+  the settings are unchecked and Enable/Disable Patches is clicked.
+- B122 patcher refresh: Renames the optional upgrades visual setting to
+  Invisible Workspace Upgrades and bundles the supplied invisible/original
+  workspace upgrade PNG pairs under
+  payload/OptionalVisualMods/Invisible Workspace Upgrades. No outside folder is
+  needed when applying or disabling the patch.
 
 Have fun! -Lorsieab2 :)

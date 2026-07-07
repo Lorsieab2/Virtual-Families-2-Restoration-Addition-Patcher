@@ -42,6 +42,7 @@ LOCKED_GENERATION_FRAME_COUNT = 29
 LOCKED_GENERATION_CELL_WIDTH = 30
 LOCKED_GENERATION_CELL_HEIGHT = 46
 DEFAULT_GENERATION_LOCK_SOURCE_DIR = SOURCE_DIR / "assets" / "generation_locks"
+OPTIONAL_PATCH_ASSET_DIR = ROOT / "patcher_assets" / "optional_patches"
 VF3_LIVING_ROOM_BATCH_02_FILES = {
     "SofaPlaid",
     "CouchPlaid",
@@ -173,9 +174,9 @@ SETTINGS = [
     {
         "id": "settings_evict_button",
         "label": "Add Settings Evict button",
-        "description": "Experimental patch: enables the mobile-style Settings Evict button in the Settings menu. Needs in-game confirmation and may cause instability or game crashes.",
+        "description": "Adds the mobile-style Settings Evict button in the Settings menu. Evicting removes the current family and resets the Family Tree to Generation 1.",
         "default": False,
-        "category": "experimental",
+        "category": "optional",
     },
     {
         "id": "mobile_furniture_behaviors",
@@ -187,9 +188,9 @@ SETTINGS = [
     {
         "id": "island_events",
         "label": "Add mobile-exclusive Island Events",
-        "description": "Experimental patch: adds mobile-exclusive Island Event shell records. They appear but do not alter anything in the game yet, and may cause instability or game crashes.",
+        "description": "Adds mobile-exclusive Island Event records, including mobile-only email events, with their bundled event text and choice/result dialogs.",
         "default": False,
-        "category": "experimental",
+        "category": "optional",
     },
     {
         "id": "custom_lorsieab2_map_images",
@@ -228,8 +229,8 @@ SETTINGS = [
     },
     {
         "id": "invisible_upgrades_graphics",
-        "label": "Invisible Upgrades Graphics",
-        "description": "Optional visual mod. Replaces Images/Upgrades graphics with bundled invisible upgrade graphics. Uncheck it and click Enable/Disable Patches to restore bundled vanilla upgrade graphics.",
+        "label": "Invisible Workspace Upgrades",
+        "description": "Optional visual mod. Replaces Images/Upgrades workspace graphics with bundled invisible upgrade graphics. Uncheck it and click Enable/Disable Patches to restore bundled vanilla upgrade graphics.",
         "default": False,
         "category": "optional",
     },
@@ -251,6 +252,20 @@ SETTINGS = [
         "id": "optional_song_mods",
         "label": "Add optional song mods",
         "description": "Adds both Virtual Families 1 and 2 songs to the game. When unchecked, click Enable/Disable Patches again to rebuild the modded folder with the original vanilla songs.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "misc_graphics_fixes",
+        "label": "Misc Graphics Fixes",
+        "description": "Fixes various graphics bugs, including the Super Fridge ice maker position.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "glowing_collectibles",
+        "label": "Glowing Collectibles",
+        "description": "Adds a white glow around grabbable objects for easier visibility.",
         "default": False,
         "category": "optional",
     },
@@ -284,9 +299,12 @@ OPTIONAL_VISUAL_SWAP_SPECS = [
 OPTIONAL_MAP_SOURCE_DIR = Path("OptionalVisualMods") / "Custom Lorsieab2 Map Images"
 INVISIBLE_BASE_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Furniture - Base Graphics"
 INVISIBLE_TRANSPARENT_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Furniture - Transparent"
-INVISIBLE_UPGRADES_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Upgrades"
-ORIGINAL_UPGRADES_SOURCE_DIR = Path("Original Virtual Families 2 Assets") / "Upgrades Original Graphics"
+INVISIBLE_UPGRADES_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Workspace Upgrades" / "invisible images"
+ORIGINAL_UPGRADES_SOURCE_DIR = Path("OptionalVisualMods") / "Invisible Workspace Upgrades" / "original images"
 PATCHER_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
+PATCHER_RELEASE_REPO_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
+PATCHER_RELEASE_REPO_NAME = "Virtual-Families-2-Restoration-Addition-Patcher"
+PATCHER_RELEASES_URL = f"https://github.com/Lorsieab2/{PATCHER_RELEASE_REPO_NAME}/releases"
 MODDED_EXE_OUTPUT_TEMPLATE = "Virtual Families 2 - Modded {build_label}.exe"
 MODDED_OUTPUT_FOLDER_TEMPLATE = "VF2-{build_label}-Modded"
 STALE_PATCHER_LAUNCHER_NAME = "Virtual Families 2 Restoration-Addition Patcher.exe"
@@ -1053,6 +1071,14 @@ def invisible_upgrades_asset_patches(
     payload_root = bundle_dir / "payload"
     payload_invisible_dir = payload_root / INVISIBLE_UPGRADES_SOURCE_DIR
     payload_original_dir = payload_root / ORIGINAL_UPGRADES_SOURCE_DIR
+    if invisible_source_dir is None:
+        bundled_invisible = OPTIONAL_PATCH_ASSET_DIR / "invisible_workspace_upgrades" / "invisible images"
+        if bundled_invisible.is_dir():
+            invisible_source_dir = bundled_invisible
+    if original_source_dir is None:
+        bundled_original = OPTIONAL_PATCH_ASSET_DIR / "invisible_workspace_upgrades" / "original images"
+        if bundled_original.is_dir():
+            original_source_dir = bundled_original
     copy_optional_png_folder(invisible_source_dir, payload_invisible_dir)
     copy_optional_png_folder(original_source_dir, payload_original_dir)
 
@@ -1177,6 +1203,67 @@ def optional_visual_asset_patches(bundle_dir: Path) -> list[dict[str, Any]]:
     return records
 
 
+def copy_optional_patch_asset(
+    source_rel: Path,
+    payload_rel: Path,
+    bundle_dir: Path,
+) -> Path | None:
+    source = OPTIONAL_PATCH_ASSET_DIR / source_rel
+    if not source.is_file():
+        return None
+    target = bundle_dir / "payload" / payload_rel
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, target)
+    return target
+
+
+def optional_patch_asset_patches(bundle_dir: Path) -> list[dict[str, Any]]:
+    payload_root = bundle_dir / "payload"
+    records: list[dict[str, Any]] = []
+    specs = [
+        {
+            "setting": "misc_graphics_fixes",
+            "asset_source": Path("misc_graphics_fixes") / "superFridge_NW.png",
+            "payload_rel": Path("OptionalVisualMods") / "Misc Graphics Fixes" / "superFridge_NW.png",
+            "target_rel": Path("Images") / "Upgrades" / "superFridge_NW.png",
+            "restore_rel": Path("Original Virtual Families 2 Assets") / "originalimages" / "Upgrades" / "superFridge_NW.png",
+            "note": "Optional misc graphics fix: Super Fridge ice maker position.",
+        },
+        {
+            "setting": "glowing_collectibles",
+            "asset_source": Path("glowing_collectibles") / "collectables_small.png",
+            "payload_rel": Path("OptionalVisualMods") / "Glowing Collectibles" / "collectables_small.png",
+            "target_rel": Path("Images") / "collectables_small.png",
+            "restore_rel": Path("Original Virtual Families 2 Assets") / "originalimages" / "collectables_small.png",
+            "note": "Optional glowing collectibles visibility sheet.",
+        },
+    ]
+    for spec in specs:
+        source = copy_optional_patch_asset(spec["asset_source"], spec["payload_rel"], bundle_dir)
+        if source is None:
+            continue
+        record: dict[str, Any] = {
+            "file_path": relative_posix(spec["target_rel"]),
+            "source_path": relative_posix(source.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(source),
+            "source_size": source.stat().st_size,
+            "overwrite_existing": True,
+            "requires": [str(spec["setting"])],
+            "note": str(spec["note"]),
+        }
+        restore = payload_root / spec["restore_rel"]
+        if restore.is_file():
+            record.update(
+                {
+                    "restore_source_path": relative_posix(restore.relative_to(bundle_dir)),
+                    "restore_source_sha256": sha256_file(restore),
+                    "restore_source_size": restore.stat().st_size,
+                }
+            )
+        records.append(record)
+    return records
+
+
 def validate_bundle_asset_sources(bundle_dir: Path, asset_patches: list[dict[str, Any]]) -> None:
     bundle_root = bundle_dir.resolve()
     for index, record in enumerate(asset_patches):
@@ -1202,6 +1289,10 @@ def modded_exe_output_name(build_label: str) -> str:
 def modded_output_folder_name(build_label: str) -> str:
     label = re.sub(r"[^A-Za-z0-9_.-]+", "_", build_label).strip("._") or "Modded"
     return MODDED_OUTPUT_FOLDER_TEMPLATE.format(build_label=label)
+
+
+def modded_save_folder_name(build_label: str) -> str:
+    return Path(modded_exe_output_name(build_label)).stem
 
 
 def export_exe_replacement_payload(
@@ -1239,6 +1330,32 @@ def export_exe_replacement_payload(
         record["expected_target_sha256"] = sha256_file(vanilla_exe)
         record["expected_target_size"] = vanilla_exe.stat().st_size
     return record
+
+
+def export_optional_exe_overlay_payload(
+    *,
+    bundle_dir: Path,
+    source_exe: Path,
+    target_exe_name: str,
+    output_exe_name: str,
+    setting_id: str,
+    payload_name: str,
+    note: str,
+) -> dict[str, Any]:
+    payload_rel = Path("payload") / payload_name
+    payload_target = bundle_dir / payload_rel
+    payload_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_exe, payload_target)
+    return {
+        "file_path": target_exe_name,
+        "output_file_path": output_exe_name,
+        "source_path": relative_posix(payload_rel),
+        "source_sha256": sha256_file(payload_target),
+        "source_size": payload_target.stat().st_size,
+        "overwrite_existing": True,
+        "requires": ["core_executable", setting_id],
+        "note": note,
+    }
 
 
 def default_settings(
@@ -1382,6 +1499,9 @@ This patcher makes a separate modded copy of your official Virtual Families 2
 folder. It checks that your original game folder looks correct before it
 changes anything.
 
+Check for updates:
+{PATCHER_RELEASES_URL}
+
 1. Download and install the official Virtual Families 2 PC version.
 
 2. Unzip this patcher package anywhere you like.
@@ -1485,6 +1605,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         f"Source build folder: {source_build.get('build_dir')}",
         f"Source build manifest: {source_build.get('build_manifest')}",
         f"Patched EXE source: {source_build.get('patched_exe')}",
+        f"Official patcher release repo: {PATCHER_RELEASE_REPO_DISPLAY_NAME}",
+        f"Release URL: {PATCHER_RELEASES_URL}",
         "",
         "Creation disclosure",
         "-------------------",
@@ -1553,7 +1675,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "---------------------",
         "- Main Patches (green): core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits.",
         "- Optional Patches (black): optional visual swaps, Invisible Furniture graphics modes, custom maps, LDW Posters/Paintings, and Colorful Couches.",
-        "- Experimental/Not Working Patches (red): Settings Evict, Island Events, and anything not 100% confirmed working and crash-free.",
+        "- Experimental/Not Working Patches (red): Holiday Ornaments, mobile furniture behaviors, and anything not 100% confirmed working and crash-free.",
     ]
     )
     for row in settings:
@@ -1649,6 +1771,12 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B116 game build: Behavior Patches enable child-only Playing quietly at the Kids Table through native behavior 0x130. Invisible Kids Table and Chairs keeps the base KidsTableAndChairsStd donor item/fmap route with no outside asset-folder dependency.",
             "- B117 game build: Spontaneous Playhouse stays child-only and is refreshed through native CNight::AIIsDayTime(), so the AI candidate is disabled at night.",
             "- B118 game build: Re-enabled the Settings Evict button by NOPing the two stock constructor skip branches in the existing theOptionsDialog Evict setup. The native confirmation dialog and CFamilyTree::EvictFamily handler are unchanged.",
+            "- B119 game build: Settings Evict also inserts the missing ldwScene::AddControl call for the constructed Evict button, which B118 did not do.",
+            "- B121 game build: Settings Evict warning text is explicitly line-broken so the stock dialog renderer keeps it inside the modal bounds.",
+            "- B121 patcher refresh: Adds default-off Misc Graphics Fixes and Glowing Collectibles optional asset swaps, each with bundled vanilla restore sources.",
+            "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
+            "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
+            "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the experimental Island Events setting is enabled.",
             "",
             "Experimental patch warning",
             "--------------------------",
@@ -1674,6 +1802,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     manifest_in = Path(args.build_manifest).resolve() if args.build_manifest else build_dir / "patch-manifest.json"
     build_manifest_data = load_json(manifest_in) if manifest_in.is_file() else {}
     patched_exe = find_patched_exe(build_dir, args.patched_exe)
+    island_events_exe = Path(args.island_events_exe).resolve() if args.island_events_exe else None
     vanilla_exe = Path(args.vanilla_exe).resolve() if args.vanilla_exe else None
     accepted_vanilla_exes = [Path(path).resolve() for path in args.accepted_vanilla_exe]
     for accepted_exe in accepted_vanilla_exes:
@@ -1752,8 +1881,10 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     original_upgrades_source = Path(args.original_upgrades_dir).resolve() if args.original_upgrades_dir else None
     asset_patches.extend(invisible_upgrades_asset_patches(bundle_dir, invisible_upgrades_source, original_upgrades_source))
     asset_patches.extend(optional_visual_asset_patches(bundle_dir))
+    asset_patches.extend(optional_patch_asset_patches(bundle_dir))
     exe_replacement_record = None
     if args.include_exe_replacement and vanilla_exe is not None:
+        output_exe_name = modded_exe_output_name(build_label)
         exe_replacement_record = export_exe_replacement_payload(
             bundle_dir=bundle_dir,
             patched_exe=patched_exe,
@@ -1763,6 +1894,20 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             build_label=build_label,
         )
         asset_patches.insert(0, exe_replacement_record)
+        if island_events_exe is not None:
+            island_overlay_record = export_optional_exe_overlay_payload(
+                bundle_dir=bundle_dir,
+                source_exe=island_events_exe,
+                target_exe_name=target_exe_name,
+                output_exe_name=output_exe_name,
+                setting_id="island_events",
+                payload_name=f"{Path(output_exe_name).stem} - Island Events.exe",
+                note=(
+                    "Optional experimental Island Events executable overlay. "
+                    "Applied only when core_executable and island_events are enabled."
+                ),
+            )
+            asset_patches.insert(1, island_overlay_record)
     native_patch_sources = collect_native_patch_sources(build_manifest_data)
     validate_bundle_asset_sources(bundle_dir, asset_patches)
 
@@ -1780,12 +1925,14 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         "output": {
             "default_folder_name": modded_output_folder_name(build_label),
             "default_exe_name": modded_exe_output_name(build_label),
+            "default_save_folder_name": modded_save_folder_name(build_label),
             "description": "The patcher writes a separate clearly labeled modded game folder next to the user's vanilla folder by default.",
         },
         "source_build": {
             "build_dir": str(build_dir),
             "build_manifest": str(manifest_in) if manifest_in.is_file() else None,
             "patched_exe": str(patched_exe),
+            "island_events_exe": str(island_events_exe) if island_events_exe else None,
             "build_manifest_keys": sorted(build_manifest_data) if build_manifest_data else [],
         },
         "settings": default_settings(
@@ -1816,6 +1963,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "target_exe_name": target_exe_name,
             "modded_output_folder_name": modded_output_folder_name(build_label),
             "modded_exe_output_name": modded_exe_output_name(build_label),
+            "modded_save_folder_name": modded_save_folder_name(build_label),
             "requires_vanilla_exe_for_apply": not bool(target_files),
         },
     }
@@ -1834,6 +1982,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vanilla-exe", help="Original vanilla VF2 EXE used for target hash and optional byte diff export.")
     parser.add_argument("--accepted-vanilla-exe", action="append", default=[], help="Additional official VF2 EXE whose PE layout should be accepted during install validation. Repeatable.")
     parser.add_argument("--patched-exe", help="Patched EXE filename inside build dir. Auto-detected by default.")
+    parser.add_argument("--island-events-exe", help="Optional experimental EXE overlay to apply when island_events is enabled.")
     parser.add_argument("--target-exe-name", default=DEFAULT_EXE_NAME, help="Relative EXE path expected in the user's game folder.")
     parser.add_argument("--name", help="Manifest display name.")
     parser.add_argument("--asset-mode", choices=ASSET_MODES, default="additive", help="Asset export mode. 'additive' exports manifest-referenced assets; 'all' exports every Images/Assets diff.")

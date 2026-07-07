@@ -648,6 +648,18 @@ def manifest_output_exe_name(manifest: dict[str, Any]) -> str | None:
     return path.name
 
 
+def manifest_output_save_folder_name(manifest: dict[str, Any], exe_name: str) -> str:
+    raw = manifest.get("output", manifest.get("output_folder"))
+    if isinstance(raw, dict):
+        name = str(raw.get("default_save_folder_name", raw.get("save_folder_name", ""))).strip()
+        if name:
+            rel = normalize_rel_path(name, "manifest output save folder name")
+            if len(Path(rel).parts) != 1:
+                raise PatchError("Manifest output save folder name must be a single folder name.")
+            return rel
+    return Path(exe_name).stem
+
+
 def resolve_apply_output_dir(
     args: argparse.Namespace,
     game_dir: Path,
@@ -1869,7 +1881,8 @@ def apply_manifest(args: argparse.Namespace) -> int:
             ),
             enforced_exe_name or DEFAULT_EXE_NAME,
         )
-        save_dir = Path.home() / "Documents" / "LDW" / Path(modded_exe_name).stem
+        save_folder_name = manifest_output_save_folder_name(manifest, modded_exe_name)
+        save_dir = Path.home() / "Documents" / "LDW" / save_folder_name
         log = {
             "action": "apply",
             "dry_run": bool(args.dry_run),
@@ -1879,6 +1892,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
             "game_dir": str(game_dir),
             "output_dir": str(output_dir),
             "modded_exe_name": modded_exe_name,
+            "modded_save_folder_name": save_folder_name,
             "modded_save_dir": str(save_dir),
             "manifest": str(manifest_path),
             "manifest_name": manifest.get("name"),
@@ -1910,6 +1924,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 "output_dir": str(output_dir),
                 "mode": "existing_modded_output" if reconfigure_output else "vanilla_to_modded_output",
                 "modded_exe_name": modded_exe_name,
+                "modded_save_folder_name": save_folder_name,
                 "modded_save_dir": str(save_dir),
                 "enabled_settings": sorted(enabled_settings),
                 "settings": settings_log(settings, enabled_settings),

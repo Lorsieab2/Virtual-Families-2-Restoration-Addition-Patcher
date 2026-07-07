@@ -325,9 +325,9 @@
   current `custom_couches_ldw_posters` setting gates image/fmap payload files,
   but full-bundle native store support still comes from the verified modded EXE
   payload.
-- Standalone patcher repo follow-up: publish the patcher-only source, manifest
-  schema docs, and release ZIP to a separate GitHub repository once GitHub
-  authentication permits repository creation from this machine.
+- Standalone patcher repo follow-up: keep patcher-only release ZIPs under the
+  private `Virtual-Families-2-Addition-Restoration-Patcher` GitHub repo, and
+  keep the GUI `Check for updates` link pointed at that repo's Releases page.
 - Settings Evict B118 validation: open Settings on a generation 1 and a later
   generation save, confirm the Evict button appears, then click it and verify
   the native confirmation/adoption reset path runs without crashing.

@@ -1311,3 +1311,51 @@
   `CVillagerAI::DecideWhatToDo` refresh. The candidate keeps the child-only
   age cap (`0x117`) but gets weight `0` and enabled flag `0` whenever
   `Night.AIIsDayTime()` returns false.
+
+## 2026-07-07 - B119 Settings Evict Visibility
+
+- B118 proved that NOPing the constructor gates at
+  `theOptionsDialog::.ctor+0x2DA/+0x2E7` is not enough. The dormant Evict block
+  allocates an `ldwButton`, constructs it with control ID `this+0x7C` (`4`),
+  and sets string ID `0x10`, but the stock dormant block does not call
+  `ldwScene::AddControl` for that button.
+- B119 inserts `push esi; mov ecx, ebx; call ldwScene::AddControl` at
+  `theOptionsDialog::.ctor+0x360`, immediately after the Evict button
+  `SetText()` call and before the radio-button setup. The existing handler
+  already compares messages against `this+0x7C` and calls
+  `theOptionsDialog::EvictFamily()`, so no handler rewrite is needed.
+- Text fixes now retarget existing string-table text relocations instead of
+  in-place literal bytes. Stock strings `Cooking like mommy` and
+  `Driving like daddy` are replaced with `Cooking like a grownup` and
+  `Driving like a grownup` while keeping their original string IDs.
+
+## 2026-07-07 - B121 Evict Text and Optional Graphics Payloads
+
+- The Settings Evict confirmation string is drawn by the stock dialog as a
+  literal text run; it does not wrap long replacement strings automatically.
+  B121 pre-wraps `eString_EvictFamilyResetWarning` with explicit `\n` line
+  breaks so the warning stays inside the modal bounds.
+- The patcher now exposes two default-off optional graphics swaps:
+  `misc_graphics_fixes` writes
+  `payload/OptionalVisualMods/Misc Graphics Fixes/superFridge_NW.png` to
+  `Images/Upgrades/superFridge_NW.png`, and `glowing_collectibles` writes
+  `payload/OptionalVisualMods/Glowing Collectibles/collectables_small.png` to
+  `Images/collectables_small.png`.
+- Both B121 optional graphics records include `restore_source_path` entries
+  pointing at bundled `Original Virtual Families 2 Assets` vanilla images, so
+  unchecking the setting and clicking Enable/Disable Patches can restore the
+  vanilla asset from the portable payload.
+
+## 2026-07-07 - B122 Invisible Workspace Upgrades Payload
+
+- The optional upgrades visual swap is now labeled `Invisible Workspace
+  Upgrades` while retaining setting ID `invisible_upgrades_graphics` for
+  compatibility with existing manifests and tests.
+- B122 bundles the supplied paired workspace upgrade PNGs under
+  `payload/OptionalVisualMods/Invisible Workspace Upgrades/invisible images/`
+  and `payload/OptionalVisualMods/Invisible Workspace Upgrades/original images/`.
+  Runtime records target `Images/Upgrades/*.png`; restore records use the
+  bundled original-image mate for each invisible PNG.
+- The exporter source assets live in tracked `patcher_assets/optional_patches/`
+  so the patcher remains portable and future exports do not read from
+  `Downloads` or other creator-local folders.
