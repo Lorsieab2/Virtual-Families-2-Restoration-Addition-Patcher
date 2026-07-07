@@ -1312,6 +1312,19 @@
   age cap (`0x117`) but gets weight `0` and enabled flag `0` whenever
   `Night.AIIsDayTime()` returns false.
 
+## 2026-07-07 - B123 Spontaneous Hammock Anchoring
+
+- Native hammock behavior `0x23` (`CBehavior::LieInHammock`) walks to content
+  object `0x5B` and then plays the sleeping animation, but it does not call
+  `CFurnitureManager::LinkPeepToFurniture`; this is why spontaneous hammock
+  users can rest beside the placed hammock on some orientations.
+- Native hammock behavior `0x24` (`CBehavior::LieInHammockNoLeadIn`) is the
+  manual-drop route. It calls `LinkPeepToFurniture(0x5B, villager, ...)`, walks
+  to the returned furniture point, then issues `CVillagerPlans::PlanToLieDown`
+  or the fallback wait pose. B123 changes the spontaneous hammock candidate to
+  refresh behavior `0x24` so the autonomous action uses the same
+  orientation-specific anchor as manual drops while still resting.
+
 ## 2026-07-07 - B119 Settings Evict Visibility
 
 - B118 proved that NOPing the constructor gates at

@@ -342,11 +342,10 @@
   does not currently add the mobile-exclusive event records to the game. Audit
   whether the event table/native records are only present in the core EXE
   payload or missing from the generated patch records entirely.
-- Hammock spontaneous behavior alignment: villagers who spontaneously choose
-  Relax in Hammock can lie beside the hammock depending on orientation, while
-  manual drop placement aligns correctly. Compare the autonomous target/drop
-  point route against the base manual hammock drop behavior and reuse the
-  manual orientation-specific placement data.
+- In-game test B123 hammock spontaneous behavior alignment: verify villagers
+  who spontaneously choose Relax in Hammock now use the same orientation-specific
+  furniture anchor as manual drops, close their eyes/rest for a while, and do
+  not lie beside the hammock on either orientation.
 - Radio/MP3 behavior parity: when adults or children are dropped on MP3 players
   or the Invisible Radio, they should use the same radio behavior pool and
   randomly choose between "Dancing" and "Listening to the Radio".
