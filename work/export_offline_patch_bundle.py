@@ -1643,6 +1643,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B112 game build: VF3 TV animation strips use bundled nonblank runtime strips when external creator Sprite frames are absent, and validation rejects fully transparent strips.",
             "- B112 game build: Holiday Body animation graphics are not resized; runtime frame generation transparent-crops the source pixels and stores draw offsets for alignment.",
             "- B113 game build: Child Holiday Body rendering scales those stored draw offsets by the active child/adult draw scale in both the Details screen and main game, while still preserving supplied source pixels without resizing.",
+            "- B114 patcher refresh: Invisible Furniture Base/Transparent Graphics are rebuilt only from files already inside the generated build. Invisible Full-Size Pool, Invisible Kiddie Pool, and Invisible Hammock Base Graphics use base-game donor art while Transparent Graphics use .pngORIGINAL backups generated from those donor image dimensions.",
+            "- B114 game build: Main-world Holiday Body drawing treats the native draw parameters as scale followed by alpha, so child Holiday Outfit crop offsets use body scale on both axes. The Details-screen renderer was left unchanged.",
             "",
             "Experimental patch warning",
             "--------------------------",

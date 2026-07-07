@@ -306,6 +306,97 @@ class InvisibleHammockBehaviorContractTests(unittest.TestCase):
                 patcher.PATCHED = old_patched
 
 
+class InvisibleFurnitureReferenceSetTests(unittest.TestCase):
+    def test_outdoor_transparent_backups_are_generated_from_donor_dimensions(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old_out = patcher.OUT
+            try:
+                from PIL import Image
+
+                patcher.OUT = Path(tmp)
+                furniture = patcher.OUT / "Images" / "Furniture"
+                furniture.mkdir(parents=True)
+                sources = {
+                    "InvisibleKiddiePool": ("PoolChildrensStd.png", (8, 6)),
+                    "InvisibleFullSizePool": ("PoolLargeStd.png", (10, 7)),
+                    "InvisibleHammock": ("HammockStd.png", (12, 5)),
+                }
+                for source_name, size in sources.values():
+                    Image.new("RGBA", size, (255, 0, 0, 255)).save(furniture / source_name)
+
+                manifest = {}
+                patcher.sync_invisible_outdoor_sprites(manifest)
+
+                self.assertEqual(manifest["invisible_outdoor_sprites"]["missing"], [])
+                self.assertEqual(manifest["invisible_outdoor_sprites"]["issues"], [])
+                for invisible_name, (source_name, size) in sources.items():
+                    self.assertEqual((furniture / f"{invisible_name}.png").read_bytes(), (furniture / source_name).read_bytes())
+                    with Image.open(furniture / f"{invisible_name}.pngORIGINAL").convert("RGBA") as transparent:
+                        self.assertEqual(transparent.size, size)
+                        self.assertIsNone(transparent.getbbox())
+            finally:
+                patcher.OUT = old_out
+
+    def test_outdoor_base_graphics_use_base_game_donors(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old_out = patcher.OUT
+            try:
+                patcher.OUT = Path(tmp)
+                furniture = patcher.OUT / "Images" / "Furniture"
+                furniture.mkdir(parents=True)
+                sources = {
+                    "InvisibleKiddiePool": ("PoolChildrensStd.png", b"visible kiddie pool", b"transparent kiddie pool"),
+                    "InvisibleFullSizePool": ("PoolLargeStd.png", b"visible full pool", b"transparent full pool"),
+                    "InvisibleHammock": ("HammockStd.png", b"visible hammock", b"transparent hammock"),
+                }
+                for invisible_name, (source_name, visible_bytes, transparent_bytes) in sources.items():
+                    (furniture / source_name).write_bytes(visible_bytes)
+                    (furniture / f"{invisible_name}.png").write_bytes(b"active invisible placeholder")
+                    (furniture / f"{invisible_name}.pngORIGINAL").write_bytes(transparent_bytes)
+
+                manifest = {}
+                patcher.sync_invisible_furniture_reference_sets(manifest)
+
+                base = patcher.OUT / "OptionalVisualMods" / "Invisible Furniture - Base Graphics"
+                transparent = patcher.OUT / "OptionalVisualMods" / "Invisible Furniture - Transparent"
+                for invisible_name, (_, visible_bytes, transparent_bytes) in sources.items():
+                    self.assertEqual((base / f"{invisible_name}.png").read_bytes(), visible_bytes)
+                    self.assertEqual((transparent / f"{invisible_name}.png").read_bytes(), transparent_bytes)
+                self.assertEqual(manifest["invisible_furniture_reference_sets"]["missing"], [])
+            finally:
+                patcher.OUT = old_out
+
+    def test_reference_transparent_graphics_can_be_generated_before_original_backups(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old_out = patcher.OUT
+            try:
+                from PIL import Image
+
+                patcher.OUT = Path(tmp)
+                furniture = patcher.OUT / "Images" / "Furniture"
+                furniture.mkdir(parents=True)
+                sources = {
+                    "InvisibleKiddiePool": ("PoolChildrensStd.png", (8, 6)),
+                    "InvisibleFullSizePool": ("PoolLargeStd.png", (10, 7)),
+                    "InvisibleHammock": ("HammockStd.png", (12, 5)),
+                }
+                for invisible_name, (source_name, size) in sources.items():
+                    Image.new("RGBA", size, (255, 0, 0, 255)).save(furniture / source_name)
+                    (furniture / f"{invisible_name}.png").write_bytes(b"active invisible placeholder")
+
+                manifest = {}
+                patcher.sync_invisible_furniture_reference_sets(manifest)
+
+                transparent = patcher.OUT / "OptionalVisualMods" / "Invisible Furniture - Transparent"
+                for invisible_name, (_source_name, size) in sources.items():
+                    with Image.open(transparent / f"{invisible_name}.png").convert("RGBA") as generated:
+                        self.assertEqual(generated.size, size)
+                        self.assertIsNone(generated.getbbox())
+                self.assertEqual(manifest["invisible_furniture_reference_sets"]["missing"], [])
+            finally:
+                patcher.OUT = old_out
+
+
 class InvisibleHeartShapedBedContractTests(unittest.TestCase):
     def test_invisible_heart_bed_is_separate_heart_shaped_bed_clone(self):
         heart_path = "Furniture/InvisibleHeartShapedBed.png"
@@ -520,6 +611,27 @@ class OutfitStoreMappingTests(unittest.TestCase):
             patcher.HOLIDAY_BODY_VALUES = old_values
             patcher.HOLIDAY_BODY_SET_IDS = old_sets
             patcher.HOLIDAY_BODY_ROLE_SPECS = old_specs
+
+
+class HolidayBodyDrawHelperTests(unittest.TestCase):
+    def test_main_scene_offsets_use_body_scale_not_alpha(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = Path(tmp)
+                manifest = {}
+
+                patcher.write_holiday_body_draw_helper(manifest)
+
+                helper = (patcher.PATCHED / "vf2_villager_body_frames.cpp").read_text(encoding="ascii")
+                self.assertIn("float scale,\n    float alpha", helper)
+                self.assertIn("point.x += VF2ScaleFloatOffset(kOffsetX[index], scale);", helper)
+                self.assertIn("point.y += VF2ScaleFloatOffset(kOffsetY[index], scale);", helper)
+                self.assertIn("scene->DrawScaled(frameGrid, point, 0, 0, scale, alpha);", helper)
+                self.assertNotIn("point.y += VF2ScaleFloatOffset(kOffsetY[index], alpha);", helper)
+                self.assertIn("body scale followed by alpha", manifest["holiday_body_draw_helper"]["main_scene"])
+            finally:
+                patcher.PATCHED = old_patched
 
 
 class HolidayOrnamentGateTests(unittest.TestCase):

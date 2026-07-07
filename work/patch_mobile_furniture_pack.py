@@ -1469,6 +1469,10 @@ INVISIBLE_TRANSPARENT_GRAPHIC_OVERRIDES = {
     "InvisibleMantleFireplace": ROOT / "work" / "assets" / "invisible_transparent_overrides" / "InvisibleMantleFireplace.png",
     "InvisibleGrandfatherClock": ROOT / "work" / "assets" / "invisible_transparent_overrides" / "InvisibleGrandfatherClock.png",
 }
+INVISIBLE_BASE_GRAPHIC_SOURCE_BY_NAME = {
+    item["name"]: item.get("base_png", item["source_png"])
+    for item in (*INVISIBLE_OUTDOOR_ITEMS, *INVISIBLE_TRANSPARENT_BASE_ITEMS)
+}
 VF3_TV_FMAP_DONORS = {
     "VF3LargeFlatScreenTV.png.fmap": "TVFlatScreenStd.png.fmap",
     "VF3SmallFlatScreenTV.png.fmap": "TVFlatScreenStd.png.fmap",
@@ -2816,25 +2820,37 @@ def sync_vf3_tv_animation_sheets(manifest):
 def sync_invisible_outdoor_sprites(manifest):
     copied = []
     missing = []
+    issues = []
     for item in INVISIBLE_OUTDOOR_ITEMS:
-        transparent_src = INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR / item["source_png"]
         base_src = OUT / "Images" / "Furniture" / item["base_png"]
         dst = OUT / "Images" / "Furniture" / f"{item['name']}.png"
         original_dst = dst.with_name(dst.name + "ORIGINAL")
-        if not transparent_src.exists() or not base_src.exists():
+        if not base_src.exists():
             missing.append({
                 "name": item["short_description"],
-                "transparent_source": str(transparent_src),
                 "base_source": str(base_src),
                 "target": str(dst),
             })
             continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(transparent_src, original_dst)
-        shutil.copy2(base_src, dst)
+        try:
+            from PIL import Image
+
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            with Image.open(base_src).convert("RGBA") as image:
+                transparent = Image.new("RGBA", image.size, (0, 0, 0, 0))
+                transparent.save(original_dst, format="PNG")
+            shutil.copy2(base_src, dst)
+        except Exception as exc:
+            issues.append({
+                "name": item["short_description"],
+                "base_source": str(base_src),
+                "target": str(dst),
+                "reason": str(exc),
+            })
+            continue
         copied.append({
             "name": item["short_description"],
-            "transparent_source": str(transparent_src),
+            "transparent_source": "generated from base-game donor dimensions",
             "base_source": str(base_src),
             "target": str(dst),
             "original": str(original_dst),
@@ -2843,9 +2859,10 @@ def sync_invisible_outdoor_sprites(manifest):
             "size": list(read_png_size(dst) or []),
         })
     manifest["invisible_outdoor_sprites"] = {
-        "source_dir": str(INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR),
+        "source_dir": "generated from in-build base-game donor images",
         "copied": copied,
         "missing": missing,
+        "issues": issues,
     }
 
 
@@ -3865,7 +3882,7 @@ public:
 
 class CSceneManager {{
 public:
-    void DrawScaled(ldwImageGrid* grid, ldwPoint point, int row, int col, float scaleX, float scaleY) const;
+    void DrawScaled(ldwImageGrid* grid, ldwPoint point, int row, int col, float scale, float alpha) const;
 }};
 
 class theGraphicsManager {{
@@ -4002,8 +4019,8 @@ extern "C" void __cdecl VF2DrawSceneVillagerBodyFrameImpl(
     int y,
     int body,
     int frame,
-    float scaleX,
-    float scaleY
+    float scale,
+    float alpha
 ) {{
     theGraphicsManager* graphics = theGraphicsManager::Get();
     int roleSlot = VF2ResolveBodyRole(graphics, stockGrid);
@@ -4020,16 +4037,16 @@ extern "C" void __cdecl VF2DrawSceneVillagerBodyFrameImpl(
             if (index >= 0 && index < kFrameImageCount) {{
                 ldwImageGrid* frameGrid = graphics->GetImageGrid((EImage)kImageIds[index]);
                 if (frameGrid) {{
-                    point.x += VF2ScaleFloatOffset(kOffsetX[index], scaleX);
-                    point.y += VF2ScaleFloatOffset(kOffsetY[index], scaleY);
-                    scene->DrawScaled(frameGrid, point, 0, 0, scaleX, scaleY);
+                    point.x += VF2ScaleFloatOffset(kOffsetX[index], scale);
+                    point.y += VF2ScaleFloatOffset(kOffsetY[index], scale);
+                    scene->DrawScaled(frameGrid, point, 0, 0, scale, alpha);
                     return;
                 }}
             }}
         }}
     }}
     int fallbackBody = VF2SafeFallbackBody(body);
-    if (scene) scene->DrawScaled(stockGrid, point, fallbackBody, frame, scaleX, scaleY);
+    if (scene) scene->DrawScaled(stockGrid, point, fallbackBody, frame, scale, alpha);
 }}
 
 extern "C" __declspec(naked) void VF2DrawVillagerBodyFrame() {{
@@ -4074,6 +4091,7 @@ extern "C" __declspec(naked) void VF2DrawSceneVillagerBodyFrame() {{
         "body_values": list(HOLIDAY_BODY_VALUES),
         "stock_fallback": "recognized holiday body grids and invalid body values clamp to stock-safe rows before DrawScaled",
         "detail_screen": "highrez_bodies_final2.png detail draws resolve body values 50-53 through same-gender VillagerDetailBodies frames.",
+        "main_scene": "CVillagerManager::DrawVillager passes body scale followed by alpha; both crop offsets scale by body scale.",
     }
 
 
@@ -4158,30 +4176,48 @@ extern "C" bool __cdecl VF2EitherHammockInWorld()
 
 
 def sync_invisible_furniture_reference_sets(manifest):
-    """Bundle the user's editable invisible-furniture variants without activating them."""
-    sources = {
-        "Invisible Furniture - Transparent": Path(r"C:\Users\Owner\Downloads\Invisible Furniture - Transparent"),
-        "Invisible Furniture - Base Graphics": Path(r"C:\Users\Owner\Downloads\Invisible Furniture - Base Graphics"),
-    }
+    """Bundle editable invisible-furniture variants from the generated build."""
     copied = []
     missing = []
     root = OUT / "OptionalVisualMods"
-    for name, source in sources.items():
+    for name in ("Invisible Furniture - Transparent", "Invisible Furniture - Base Graphics"):
         target = root / name
-        if source.exists():
-            shutil.copytree(source, target, dirs_exist_ok=True)
-            source_note = str(source)
-        else:
-            # Build the editable pair from the active base image and its saved
-            # transparent original. This keeps both folders in every build.
-            target.mkdir(parents=True, exist_ok=True)
-            for image in (OUT / "Images" / "Furniture").glob("Invisible*.png"):
-                transparent = image.with_name(image.name + "ORIGINAL")
-                if name == "Invisible Furniture - Transparent" and transparent.exists():
+        if target.exists():
+            shutil.rmtree(target)
+        target.mkdir(parents=True, exist_ok=True)
+        # Build the editable pair from the active visible/base image and its
+        # saved transparent original. This keeps the patcher self-contained and
+        # avoids stale creator-local folders.
+        for image in sorted((OUT / "Images" / "Furniture").glob("Invisible*.png")):
+            transparent = image.with_name(image.name + "ORIGINAL")
+            source_name = INVISIBLE_BASE_GRAPHIC_SOURCE_BY_NAME.get(image.stem)
+            visible_source = (OUT / "Images" / "Furniture" / source_name) if source_name else image
+            if name == "Invisible Furniture - Transparent":
+                if transparent.exists():
                     shutil.copy2(transparent, target / image.name)
-                elif name == "Invisible Furniture - Base Graphics":
-                    shutil.copy2(image, target / image.name)
-            source_note = "generated from active base sheets and .pngORIGINAL variants"
+                elif visible_source.exists():
+                    from PIL import Image
+
+                    with Image.open(visible_source).convert("RGBA") as visible:
+                        blank = Image.new("RGBA", visible.size, (0, 0, 0, 0))
+                        blank.save(target / image.name, format="PNG")
+                else:
+                    missing.append({
+                        "folder": name,
+                        "target": str(target / image.name),
+                        "missing_transparent_source": str(transparent),
+                        "missing_dimension_source": str(visible_source),
+                    })
+            elif name == "Invisible Furniture - Base Graphics":
+                if visible_source.exists():
+                    shutil.copy2(visible_source, target / image.name)
+                else:
+                    missing.append({
+                        "folder": name,
+                        "target": str(target / image.name),
+                        "missing_visible_source": str(visible_source),
+                    })
+        source_note = "generated from in-build Images/Furniture and .pngORIGINAL variants"
         if name == "Invisible Furniture - Transparent":
             for item_name, override in INVISIBLE_TRANSPARENT_GRAPHIC_OVERRIDES.items():
                 if override.exists():

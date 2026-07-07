@@ -286,5 +286,13 @@ Changelog
 - B113 game build: Child Holiday Body rendering scales those stored draw
   offsets by the child/adult draw scale in both the Details screen and main
   game, while still preserving the supplied source pixels without resizing.
+- B114 patcher refresh: Invisible Furniture Base/Transparent Graphics are
+  rebuilt only from files already inside the generated build. Invisible
+  Full-Size Pool, Invisible Kiddie Pool, and Invisible Hammock Base Graphics
+  use their base-game donor art, while Transparent Graphics use .pngORIGINAL
+  backups generated from those donor image dimensions.
+- B114 game build: Main-world Holiday Body drawing now treats the native draw
+  parameters as scale followed by alpha, so child Holiday Outfit crop offsets
+  use body scale on both axes. The Details-screen renderer was left unchanged.
 
 Have fun! -Lorsieab2 :)

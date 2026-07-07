@@ -1233,3 +1233,22 @@
   still transparent-cropped from the supplied source art, report
   `resized: false` in `patch-manifest.json`, and keep the original source
   pixels unscaled.
+
+## 2026-07-07 - B114 Portable Invisible Furniture Reference Graphics
+
+- `sync_invisible_furniture_reference_sets()` no longer consults creator-local
+  `Downloads` folders for Invisible Furniture reference graphics. The
+  `OptionalVisualMods/Invisible Furniture - Base Graphics` and
+  `OptionalVisualMods/Invisible Furniture - Transparent` folders are rebuilt
+  only from files already inside the generated build.
+- Invisible Full-Size Pool, Invisible Kiddie Pool, and Invisible Hammock now
+  use their base-game donor images for the Base Graphics folder:
+  `PoolLargeStd.png`, `PoolChildrensStd.png`, and `HammockStd.png`,
+  respectively. Their `.pngORIGINAL` transparent backups are generated from
+  those same donor image dimensions inside the build, then copied into the
+  Transparent folder.
+- `CVillagerManager::DrawVillager` passes the main-world body draw parameters
+  to `CSceneManager::DrawScaled` as body `scale` followed by `alpha`. B113
+  treated that second float like a Y scale, which misaligned Holiday Body
+  children in the main scene. B114 uses body scale for both crop-offset axes
+  and leaves the Details-screen draw path unchanged.

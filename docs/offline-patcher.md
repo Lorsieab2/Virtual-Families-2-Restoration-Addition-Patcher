@@ -636,6 +636,21 @@ B113 build-specific notes:
   This preserves the B112 no-resize policy while correcting child-only
   misalignment.
 
+B114 build-specific notes:
+
+- Invisible Furniture Base/Transparent Graphics are generated only from files
+  already present in the build payload. The patcher does not look in
+  creator-local or user-local folders for Invisible Full-Size Pool, Invisible
+  Kiddie Pool, or Invisible Hammock graphics.
+- The Base Graphics folder maps those three invisible items to their base-game
+  donor art (`PoolLargeStd.png`, `PoolChildrensStd.png`, `HammockStd.png`).
+  The Transparent folder maps them to `.pngORIGINAL` transparent backups that
+  are generated from the same donor image dimensions inside the build.
+- The main-world Holiday Body draw helper now treats the two trailing draw
+  parameters as `scale, alpha`. Both stored crop offsets are multiplied by the
+  body scale, which fixes child main-scene alignment without changing the
+  Details-screen body renderer.
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 

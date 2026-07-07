@@ -283,6 +283,15 @@
 - In-game Holiday Body B113 audit: apply Holiday Outfit bodies 50-53 to adult
   and child male/female villagers, then verify Details-screen and main-scene
   bodies use the correct scaled offsets without resizing the source art.
+- Patcher in-game smoke B114: enable Add Invisible Furniture - Visible
+  Graphics and confirm Invisible Full-Size Pool, Invisible Kiddie Pool, and
+  Invisible Hammock can be placed with visible base-game graphics. Then enable
+  Swap Invisible Furniture Graphics with Transparent Graphics and confirm those
+  same items become transparent without requiring any outside asset folders.
+- In-game Holiday Body B114 audit: apply Holiday Outfit bodies 50-53 to child
+  male/female villagers and verify main-world body/head alignment. Re-check
+  Details screen only as a regression because the B114 fix targets main-scene
+  `scale, alpha` handling.
 - In-game test B106 generation locks: with a fresh save before later
   generations, verify added furniture respects the preserved mobile
   `lock_generation` values rather than appearing fully unlocked by default.
