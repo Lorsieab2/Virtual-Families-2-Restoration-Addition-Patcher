@@ -351,3 +351,7 @@
 - Radio/MP3 behavior parity: when adults or children are dropped on MP3 players
   or the Invisible Radio, they should use the same radio behavior pool and
   randomly choose between "Dancing" and "Listening to the Radio".
+- In-game test B127 patcher apply path: with all main and optional settings
+  enabled, confirm generated additive files such as `Assets/*.fmap`, VF3 TV
+  animation strips, and Cheat Upgrades payloads are created in the modded
+  output folder and no longer fail as missing vanilla targets.

@@ -269,6 +269,13 @@ SETTINGS = [
         "default": False,
         "category": "optional",
     },
+    {
+        "id": "cheat_upgrades",
+        "label": "Cheat Upgrades",
+        "description": "Adds money and food cheats to the Special Upgrades section, including reset-to-zero, add-small, add-large, and max amount rows.",
+        "default": False,
+        "category": "optional",
+    },
 ]
 
 OPTIONAL_VISUAL_SWAP_SPECS = [
@@ -883,7 +890,23 @@ def export_asset_payloads(
 ) -> list[dict[str, Any]]:
     payload_root = bundle_dir / "payload"
     asset_patches: list[dict[str, Any]] = []
-    for source in iter_candidate_assets(build_dir, manifest_data, asset_mode):
+    candidate_assets = iter_candidate_assets(build_dir, manifest_data, asset_mode)
+    if candidate_assets:
+        for dirname in SOURCE_ONLY_PAYLOAD_DIRS:
+            source_root = build_dir / dirname
+            if not source_root.is_dir():
+                continue
+            for source in source_root.rglob("*"):
+                if not source.is_file():
+                    continue
+                rel = source.relative_to(build_dir)
+                if not is_full_payload_candidate(rel):
+                    continue
+                target = payload_root / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, target)
+
+    for source in candidate_assets:
         rel = source.relative_to(build_dir)
         base = base_payload / rel
         source_sha = sha256_file(source)
@@ -902,15 +925,19 @@ def export_asset_payloads(
             "source_path": relative_posix(Path("payload") / rel),
             "source_sha256": source_sha,
             "source_size": source_size,
+            "allow_missing_target": asset_mode == "additive",
             "requires": asset_requires_for_setting(setting_for_asset(rel)),
             "note": f"Generated asset payload for {relative_posix(rel)}.",
         }
         invisible_base_build_source = build_dir / INVISIBLE_BASE_SOURCE_DIR / rel.name
         if is_invisible_furniture_image(rel) and invisible_base_build_source.is_file():
             base_source_rel = Path("payload") / INVISIBLE_BASE_SOURCE_DIR / rel.name
+            base_payload_target = bundle_dir / base_source_rel
+            base_payload_target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(invisible_base_build_source, base_payload_target)
             record["source_path"] = relative_posix(base_source_rel)
-            record["source_sha256"] = sha256_file(invisible_base_build_source)
-            record["source_size"] = invisible_base_build_source.stat().st_size
+            record["source_sha256"] = sha256_file(base_payload_target)
+            record["source_size"] = base_payload_target.stat().st_size
             record["requires"] = ["invisible_furniture_visible_graphics"]
             record["note"] = (
                 "Invisible Furniture visible-graphics placement payload. Enable this first so the furniture can be placed."
@@ -1338,7 +1365,8 @@ def export_optional_exe_overlay_payload(
     source_exe: Path,
     target_exe_name: str,
     output_exe_name: str,
-    setting_id: str,
+    setting_id: str | None = None,
+    requires: list[str] | None = None,
     payload_name: str,
     note: str,
 ) -> dict[str, Any]:
@@ -1353,7 +1381,7 @@ def export_optional_exe_overlay_payload(
         "source_sha256": sha256_file(payload_target),
         "source_size": payload_target.stat().st_size,
         "overwrite_existing": True,
-        "requires": ["core_executable", setting_id],
+        "requires": requires if requires is not None else ["core_executable", setting_id],
         "note": note,
     }
 
@@ -1803,6 +1831,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     build_manifest_data = load_json(manifest_in) if manifest_in.is_file() else {}
     patched_exe = find_patched_exe(build_dir, args.patched_exe)
     island_events_exe = Path(args.island_events_exe).resolve() if args.island_events_exe else None
+    cheat_upgrades_exe = Path(args.cheat_upgrades_exe).resolve() if args.cheat_upgrades_exe else None
+    island_events_cheat_upgrades_exe = (
+        Path(args.island_events_cheat_upgrades_exe).resolve()
+        if args.island_events_cheat_upgrades_exe
+        else None
+    )
     vanilla_exe = Path(args.vanilla_exe).resolve() if args.vanilla_exe else None
     accepted_vanilla_exes = [Path(path).resolve() for path in args.accepted_vanilla_exe]
     for accepted_exe in accepted_vanilla_exes:
@@ -1900,7 +1934,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 source_exe=island_events_exe,
                 target_exe_name=target_exe_name,
                 output_exe_name=output_exe_name,
-                setting_id="island_events",
+                requires=["core_executable", "island_events"],
                 payload_name=f"{Path(output_exe_name).stem} - Island Events.exe",
                 note=(
                     "Optional experimental Island Events executable overlay. "
@@ -1908,6 +1942,34 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 ),
             )
             asset_patches.insert(1, island_overlay_record)
+        if cheat_upgrades_exe is not None:
+            cheat_overlay_record = export_optional_exe_overlay_payload(
+                bundle_dir=bundle_dir,
+                source_exe=cheat_upgrades_exe,
+                target_exe_name=target_exe_name,
+                output_exe_name=output_exe_name,
+                requires=["core_executable", "cheat_upgrades"],
+                payload_name=f"{Path(output_exe_name).stem} - Cheat Upgrades.exe",
+                note=(
+                    "Optional Cheat Upgrades executable overlay. "
+                    "Applied only when core_executable and cheat_upgrades are enabled."
+                ),
+            )
+            asset_patches.insert(2, cheat_overlay_record)
+        if island_events_cheat_upgrades_exe is not None:
+            combined_overlay_record = export_optional_exe_overlay_payload(
+                bundle_dir=bundle_dir,
+                source_exe=island_events_cheat_upgrades_exe,
+                target_exe_name=target_exe_name,
+                output_exe_name=output_exe_name,
+                requires=["core_executable", "island_events", "cheat_upgrades"],
+                payload_name=f"{Path(output_exe_name).stem} - Island Events + Cheat Upgrades.exe",
+                note=(
+                    "Combined optional executable overlay. Applied only when "
+                    "core_executable, island_events, and cheat_upgrades are enabled."
+                ),
+            )
+            asset_patches.insert(3, combined_overlay_record)
     native_patch_sources = collect_native_patch_sources(build_manifest_data)
     validate_bundle_asset_sources(bundle_dir, asset_patches)
 
@@ -1933,6 +1995,8 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "build_manifest": str(manifest_in) if manifest_in.is_file() else None,
             "patched_exe": str(patched_exe),
             "island_events_exe": str(island_events_exe) if island_events_exe else None,
+            "cheat_upgrades_exe": str(cheat_upgrades_exe) if cheat_upgrades_exe else None,
+            "island_events_cheat_upgrades_exe": str(island_events_cheat_upgrades_exe) if island_events_cheat_upgrades_exe else None,
             "build_manifest_keys": sorted(build_manifest_data) if build_manifest_data else [],
         },
         "settings": default_settings(
@@ -1983,6 +2047,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--accepted-vanilla-exe", action="append", default=[], help="Additional official VF2 EXE whose PE layout should be accepted during install validation. Repeatable.")
     parser.add_argument("--patched-exe", help="Patched EXE filename inside build dir. Auto-detected by default.")
     parser.add_argument("--island-events-exe", help="Optional experimental EXE overlay to apply when island_events is enabled.")
+    parser.add_argument("--cheat-upgrades-exe", help="Optional EXE overlay to apply when cheat_upgrades is enabled.")
+    parser.add_argument("--island-events-cheat-upgrades-exe", help="Combined optional EXE overlay to apply when island_events and cheat_upgrades are both enabled.")
     parser.add_argument("--target-exe-name", default=DEFAULT_EXE_NAME, help="Relative EXE path expected in the user's game folder.")
     parser.add_argument("--name", help="Manifest display name.")
     parser.add_argument("--asset-mode", choices=ASSET_MODES, default="additive", help="Asset export mode. 'additive' exports manifest-referenced assets; 'all' exports every Images/Assets diff.")

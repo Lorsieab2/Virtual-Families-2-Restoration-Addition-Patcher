@@ -60,6 +60,7 @@ class AssetPatch:
     expected_target_sha256: str | None
     expected_target_pe_structures: tuple[dict[str, Any], ...]
     expected_target_size: int | None
+    allow_missing_target: bool
     overwrite_existing: bool
     note: str
     requires: tuple[str, ...]
@@ -1062,6 +1063,7 @@ def manifest_asset_patches(
                 expected_target_sha256=expected_target_sha,
                 expected_target_pe_structures=expected_target_pe_structures,
                 expected_target_size=expected_target_size,
+                allow_missing_target=bool(raw.get("allow_missing_target", raw.get("allow_create_if_missing", False))),
                 overwrite_existing=bool(
                     True if restore else raw.get("overwrite_existing", raw.get("replace_existing", raw.get("overwrite", False)))
                 ),
@@ -1419,7 +1421,9 @@ def verify_asset_patches(
                     )
             elif asset.expected_target_sha256 or asset.expected_target_size is not None:
                 if not reconfigure_output:
-                    raise PatchError(f"Expected existing asset target is missing: {asset.file_path}")
+                    if not asset.allow_missing_target:
+                        raise PatchError(f"Expected existing asset target is missing: {asset.file_path}")
+                    action = "create"
             if not output_is_validation_target:
                 action = "create"
                 if output_exists:

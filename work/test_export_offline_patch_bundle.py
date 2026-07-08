@@ -717,7 +717,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertFalse(stale.exists())
             self.assertFalse(stale_runner.exists())
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(manifest["export_summary"]["payload_file_count"], 0)
+            self.assertNotIn("Images/stale.png", {row["file_path"] for row in manifest["asset_patches"]})
 
     def test_bundle_asset_source_audit_rejects_missing_source(self):
         import export_offline_patch_bundle as exporter

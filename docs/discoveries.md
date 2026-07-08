@@ -1337,6 +1337,17 @@
   `CVillager + 0x1BBA8` before `StartNewBehavior`. B125 mirrors that copy in
   `_VF2LieInHammockAnchoredRest`; without it the behavior runs but the HUD
   action text stays at the default "Nothing".
+- B126 keeps the same spontaneous behavior `0x23`, weight, and hammock-rest
+  lead-in pose, but calls the head-direction overload:
+  `PlanToWait(10, EBodyPosition 9, headDirection)`. `sFurnitureInfo2`
+  orientation `1` uses head direction `7` before `SleepNW`; the other
+  orientation uses head direction `1` before `SleepNE`.
+- Added `work/dump_villager_action_plan_data.py` to generate a human-readable
+  behavior/action-plan dump from `dump_behavior_disasm.txt` and
+  `dump_villagerplans_disasm.txt`. The dump preserves raw x86 push context and
+  best-effort inferred `CVillagerPlans::PlanTo*` args, including known
+  `EBodyPosition` values `0`, `9`, `0x17` and head directions `1`/`7` used by
+  hammock work.
 
 ## 2026-07-07 - B119 Settings Evict Visibility
 
@@ -1385,3 +1396,16 @@
 - The exporter source assets live in tracked `patcher_assets/optional_patches/`
   so the patcher remains portable and future exports do not read from
   `Downloads` or other creator-local folders.
+
+## 2026-07-08 - B127 Patcher Additive Asset Validation
+
+- B126 failed before applying because generated additive asset records such as
+  `Assets/Balloons_birthday.png.fmap` carried vanilla target expectations even
+  though those files are supposed to be created in a vanilla install.
+- `offline_vf2_patcher.py` now supports an explicit `allow_missing_target`
+  field on asset records. Missing targets are only created when this flag is
+  present; ordinary replacement/restore records still fail if their expected
+  target is absent.
+- `export_offline_patch_bundle.py` writes `allow_missing_target: true` for
+  additive generated payload records. B127 dry-run validation covered all 943
+  active/restore asset records with all main and optional settings enabled.

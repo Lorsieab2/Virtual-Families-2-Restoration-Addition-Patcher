@@ -28,6 +28,9 @@ ENABLE_HOLIDAY_BODY_TYPES = os.environ.get("VF2_ENABLE_HOLIDAY_BODY_TYPES", "1")
 # Holiday Ornaments still need native parity proof. Keep normal builds on the
 # stock PC collection table; opt into the mobile collection for isolated tests.
 ENABLE_HOLIDAY_ORNAMENTS = os.environ.get("VF2_ENABLE_HOLIDAY_ORNAMENTS", "0") == "1"
+# Optional Special Upgrades rows used by the offline patcher. Normal/modded
+# builds keep them off unless the patcher setting selects the matching overlay.
+ENABLE_CHEAT_UPGRADES = os.environ.get("VF2_ENABLE_CHEAT_UPGRADES", "0") == "1"
 ANALYSIS = ROOT / "outputs" / "VF2-Desktop-Object-Analysis"
 if not (ANALYSIS / "furniture-records.json").exists():
     ANALYSIS = ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis"
@@ -264,8 +267,69 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x118: "FoodClub_icon.png",
     0x119: "HealthPlan_icon.png",
     0x11A: "LuckyRock_icon.png",
+    0x11B: "cheat_no_coins.png",
+    0x11C: "cheat_no_food.png",
+    0x11D: "cheat_add_coins.png",
+    0x11E: "cheat_add_coins.png",
+    0x11F: "cheat_add_coins.png",
+    0x120: "cheat_add_food.png",
+    0x121: "cheat_add_food.png",
+    0x122: "cheat_add_food.png",
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
+CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
+MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
+CHEAT_UPGRADE_ITEMS = [
+    {
+        "item_id": 0x11B,
+        "name": "No Money",
+        "description": "Sets coins to 0. Useful for starting the game over.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x11C,
+        "name": "No Food",
+        "description": "Sets food to 0. Useful for starting the game over.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x11D,
+        "name": "Add 100 coins",
+        "description": "Adds 100 coins to the current amount.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x11E,
+        "name": "Add 10 thousand coins",
+        "description": "Adds 10,000 coins to the current amount.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x11F,
+        "name": "Add max amount of coins",
+        "description": "Sets coins to the game's maximum amount.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x120,
+        "name": "Add 100 food",
+        "description": "Adds 100 food to the current amount.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x121,
+        "name": "Add 10 thousand food",
+        "description": "Adds 10,000 food to the current amount.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x122,
+        "name": "Add max amount of food",
+        "description": "Sets food to the game's maximum signed amount.",
+        "price": 0,
+    },
+]
+CHEAT_UPGRADE_STRING_COUNT = len(CHEAT_UPGRADE_ITEMS) * 2
 HOLIDAY_ORNAMENT_COLLECTABLE_START = 0x9E
 HOLIDAY_ORNAMENT_COLLECTABLE_END = 0xA9
 HOLIDAY_ORNAMENT_COLLECTION_PAGE = 5
@@ -2244,6 +2308,7 @@ def holiday_ornament_collection_title_string_id():
         + len(ITEMS) * 2
         + mobile_island_event_string_count()
         + SPECIAL_UPGRADE_DESCRIPTION_COUNT
+        + CHEAT_UPGRADE_STRING_COUNT
         + OUTFIT_STORE_ENTRY_COUNT * 2
         + len(BEHAVIOR_LABELS)
     )
@@ -3569,7 +3634,8 @@ def sync_visible_special_upgrade_icon_art(manifest):
         source = None
         status = "existing"
         if not target.exists():
-            for root in _outfit_icon_source_roots():
+            source_roots = [CHEAT_UPGRADE_ICON_SOURCE_DIR] + _outfit_icon_source_roots()
+            for root in source_roots:
                 candidate = root / filename
                 if candidate.exists() and candidate.resolve() != target.resolve():
                     source = candidate
@@ -4316,12 +4382,24 @@ def visible_special_upgrade_desc_id_for(index):
     return ORIG_STRING_ONE_PAST_MAX + len(ITEMS) * 2 + mobile_island_event_string_count() + index
 
 
+def cheat_upgrade_string_ids_for_entry(entry_index):
+    base = (
+        ORIG_STRING_ONE_PAST_MAX
+        + len(ITEMS) * 2
+        + mobile_island_event_string_count()
+        + SPECIAL_UPGRADE_DESCRIPTION_COUNT
+        + entry_index * 2
+    )
+    return base, base + 1
+
+
 def outfit_string_ids_for_entry(entry_index):
     base = (
         ORIG_STRING_ONE_PAST_MAX
         + len(ITEMS) * 2
         + mobile_island_event_string_count()
         + SPECIAL_UPGRADE_DESCRIPTION_COUNT
+        + CHEAT_UPGRADE_STRING_COUNT
         + entry_index * 2
     )
     return base, base + 1
@@ -4333,6 +4411,7 @@ def behavior_label_string_id_for(index):
         + len(ITEMS) * 2
         + mobile_island_event_string_count()
         + SPECIAL_UPGRADE_DESCRIPTION_COUNT
+        + CHEAT_UPGRADE_STRING_COUNT
         + OUTFIT_STORE_ENTRY_COUNT * 2
         + index
     )
@@ -4882,12 +4961,14 @@ def patch_visible_special_upgrades(manifest):
     if original_visible_ids != [0x111, 0x112, 0x113, 0x115, 0x116, 0x114]:
         raise RuntimeError(f"Unexpected visible Special Upgrades base list: {[hex(x) for x in original_visible_ids]}")
 
-    added_service_ids = [0x117, 0x118, 0x119, 0x11A]
+    added_service_ids = MOBILE_SPECIAL_UPGRADE_ITEM_IDS + (
+        [item["item_id"] for item in CHEAT_UPGRADE_ITEMS] if ENABLE_CHEAT_UPGRADES else []
+    )
     insert_off = services_sym.value + len(original_visible_ids) * 4
-    existing_after = list(struct.unpack_from("<4I", obj.buf, services_sec.raw_ptr + insert_off))
+    existing_after = list(struct.unpack_from(f"<{len(added_service_ids)}I", obj.buf, services_sec.raw_ptr + insert_off))
     inserted = False
     if existing_after != added_service_ids:
-        obj.insert_section_bytes(services_sym.section, insert_off, struct.pack("<4I", *added_service_ids))
+        obj.insert_section_bytes(services_sym.section, insert_off, struct.pack(f"<{len(added_service_ids)}I", *added_service_ids))
         inserted = True
 
     iteminfo_sym = obj.symbol(INVENTORY_ITEMINFO)
@@ -4899,22 +4980,37 @@ def patch_visible_special_upgrades(manifest):
         0x119: [0x119, visible_special_upgrade_icon_id_for(0x119), 1, 10000, 0, 0x2E, visible_special_upgrade_desc_id_for(2), 0, 0],
         0x11A: [0x11A, visible_special_upgrade_icon_id_for(0x11A), 1, 77777, 0, 0x2F, visible_special_upgrade_desc_id_for(3), 0, 0],
     }
+    if ENABLE_CHEAT_UPGRADES:
+        for index, item in enumerate(CHEAT_UPGRADE_ITEMS):
+            short_id, long_id = cheat_upgrade_string_ids_for_entry(index)
+            special_upgrade_records[item["item_id"]] = [
+                item["item_id"],
+                visible_special_upgrade_icon_id_for(item["item_id"]),
+                1,
+                item["price"],
+                0,
+                short_id,
+                long_id,
+                0,
+                0,
+            ]
     for item_id, vals in special_upgrade_records.items():
         struct.pack_into("<9I", obj.buf, iteminfo_raw + item_id * 36, *vals)
 
+    new_count = len(original_visible_ids) + len(added_service_ids)
     count_sym = obj.symbol(GET_CATEGORY_ITEM_COUNT)
     count_sec = obj.section(count_sym.section)
     count_raw = count_sec.raw_ptr + count_sym.value + 0x19
     if obj.buf[count_raw : count_raw + 5] != b"\xB8\x06\x00\x00\x00":
         raise RuntimeError("Unexpected GetCategoryItemCount Special Upgrades return bytes")
-    obj.buf[count_raw : count_raw + 5] = b"\xB8\x0A\x00\x00\x00"
+    obj.buf[count_raw : count_raw + 5] = b"\xB8" + struct.pack("<I", new_count)
 
     item_sym = obj.symbol(GET_CATEGORY_ITEM)
     item_sec = obj.section(item_sym.section)
     item_raw = item_sec.raw_ptr + item_sym.value + 0x1D
     if obj.buf[item_raw : item_raw + 3] != b"\x83\xFE\x05":
         raise RuntimeError("Unexpected GetCategoryItem Special Upgrades bounds bytes")
-    obj.buf[item_raw : item_raw + 3] = b"\x83\xFE\x09"
+    obj.buf[item_raw : item_raw + 3] = b"\x83\xFE" + bytes([new_count - 1])
 
     price_sym = obj.symbol("?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z")
     price_insert = price_sym.value + 0x3
@@ -4941,7 +5037,7 @@ def patch_visible_special_upgrades(manifest):
         "status": "visible Special Upgrades category extended additively",
         "source_list": "gServicesList",
         "old_count": 6,
-        "new_count": 10,
+        "new_count": new_count,
         "inserted_list_entries": inserted,
         "base_items_preserved": [hex(x) for x in original_visible_ids],
         "added_items": [
@@ -4949,7 +5045,22 @@ def patch_visible_special_upgrades(manifest):
             {"item_id": "0x118", "name": "Food Club", "price": 10000, "icon": hex(visible_special_upgrade_icon_id_for(0x118)), "icon_file": VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x118], "title_string": "0x2d", "description_string": hex(visible_special_upgrade_desc_id_for(1))},
             {"item_id": "0x119", "name": "Health Plan", "price": 10000, "icon": hex(visible_special_upgrade_icon_id_for(0x119)), "icon_file": VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x119], "title_string": "0x2e", "description_string": hex(visible_special_upgrade_desc_id_for(2))},
             {"item_id": "0x11a", "name": "Lucky Rock", "price": 77777, "icon": hex(visible_special_upgrade_icon_id_for(0x11A)), "icon_file": VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x11A], "title_string": "0x2f", "description_string": hex(visible_special_upgrade_desc_id_for(3))},
-        ],
+        ] + (
+            [
+                {
+                    "item_id": hex(item["item_id"]),
+                    "name": item["name"],
+                    "price": item["price"],
+                    "icon": hex(visible_special_upgrade_icon_id_for(item["item_id"])),
+                    "icon_file": VISIBLE_SPECIAL_UPGRADE_ICON_FILES[item["item_id"]],
+                    "title_string": hex(cheat_upgrade_string_ids_for_entry(index)[0]),
+                    "description_string": hex(cheat_upgrade_string_ids_for_entry(index)[1]),
+                }
+                for index, item in enumerate(CHEAT_UPGRADE_ITEMS)
+            ]
+            if ENABLE_CHEAT_UPGRADES
+            else []
+        ),
         "active_reset_price": {
             "status": "GetPrice hook returns 0 coins when one of the added Special Upgrades is already active",
             "hook": "?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z + 0x3",
@@ -5429,8 +5540,9 @@ def patch_scrolling_store_scene(manifest):
     special_payload_start = len(purchase_payload)
     purchase_payload += b"\x8B\x86\x60\x01\x00\x00"                  # mov eax,[esi+160h]
     purchase_payload += b"\x8B\xC8"                                  # mov ecx,eax
+    max_visible_special_index = (CHEAT_UPGRADE_ITEMS[-1]["item_id"] if ENABLE_CHEAT_UPGRADES else MOBILE_SPECIAL_UPGRADE_ITEM_IDS[-1]) - MOBILE_SPECIAL_UPGRADE_ITEM_IDS[0]
     purchase_payload += b"\x2D\x17\x01\x00\x00"                      # sub eax,117h
-    purchase_payload += b"\x83\xF8\x03"                              # cmp eax,3
+    purchase_payload += b"\x83\xF8" + bytes([max_visible_special_index])  # cmp eax,last added Special Upgrade index
     purchase_payload += b"\x77\x0E"                                  # ja normal visible purchase
     purchase_payload += b"\x51"                                      # push ecx ; original item id
     purchase_payload += b"\xE8\x00\x00\x00\x00"                      # call _VF2ApplyVisibleSpecialUpgrade
@@ -5625,19 +5737,24 @@ extern "C" void __cdecl VF2HandleStoreScrollbarMouse(void *scene, int message, i
         r"""
 class CFoodStore {
 public:
-    char pad0[0x7C];
+    char pad0[0x78];
+    int food;
     unsigned char haveFoodClub;
     char pad1[3];
     unsigned int lastFoodClubDelivery;
     unsigned char organicDelivery[4];
 
+    void Adjust(int amount);
     void JoinFoodClub();
 };
 
 class CMoney {
 public:
-    char pad0[8];
+    double balance;
     float bankingInterest;
+
+    void Adjust(float amount, bool advanceAchievements);
+    void Set(double amount);
 };
 
 enum ECarrying {
@@ -5727,6 +5844,30 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
             break;
         }
         CollectableItem.luckyRockActive = 1;
+        break;
+    case 0x11B:
+        Money.Set(0.0);
+        break;
+    case 0x11C:
+        FoodStore.food = 0;
+        break;
+    case 0x11D:
+        Money.Adjust(100.0f, true);
+        break;
+    case 0x11E:
+        Money.Adjust(10000.0f, true);
+        break;
+    case 0x11F:
+        Money.Set(3999999999.0);
+        break;
+    case 0x120:
+        FoodStore.Adjust(100);
+        break;
+    case 0x121:
+        FoodStore.Adjust(10000);
+        break;
+    case 0x122:
+        FoodStore.Adjust(0x7FFFFFFF);
         break;
     default:
         return;
@@ -5907,6 +6048,27 @@ def patch_string_manager(manifest):
             "key": key,
             "text": text,
         })
+
+    for index, item in enumerate(CHEAT_UPGRADE_ITEMS):
+        short_id, long_id = cheat_upgrade_string_ids_for_entry(index)
+        rows = [
+            (short_id, f"eString_CheatUpgrade{item['item_id']:03X}ShortDesc", item["name"], "short"),
+            (long_id, f"eString_CheatUpgrade{item['item_id']:03X}LongDesc", item["description"], "long"),
+        ]
+        for string_id, key, text, role in rows:
+            key_sym = f"_vf2cheatstr_key_{string_id:X}"
+            text_sym = f"_vf2cheatstr_text_{string_id:X}"
+            helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+            helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+            new_rows.append((string_id, key_sym, text_sym))
+            string_manifest.append({
+                "pc_string_id": hex(string_id),
+                "source": "cheat upgrade entry",
+                "item_id": hex(item["item_id"]),
+                "role": role,
+                "key": key,
+                "text": text,
+            })
 
     for entry in outfit_store_entries():
         short_id, long_id = outfit_string_ids_for_entry(entry["entry_index"])
@@ -6499,7 +6661,7 @@ def patch_graphics_manager(manifest):
         desc_off = img_sym.value + image_id * DESC_SIZE
         img_sec = obj.section(img_sym.section)
         obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
-        sym = "_vf2specialicon_" + filename.replace(".", "_").replace("-", "_")
+        sym = f"_vf2specialicon_{item_id:X}_" + filename.replace(".", "_").replace("-", "_")
         helper_lines.append(f'const char {sym[1:]}[] = "{filename}";')
         symidx = obj.append_undefined_symbol(sym)
         obj.append_relocation(img_sym.section, desc_off + 4, symidx)
@@ -8476,6 +8638,7 @@ public:
 enum ESpeed { eSpeedNormal = 0xC8 };
 enum EPriority { ePriorityNormal = 0 };
 enum EBodyPosition { eBodyPositionRestingHammock = 9 };
+enum EHeadDirection { eHeadDirectionNE = 1, eHeadDirectionNW = 7 };
 
 struct ldwPoint {
     int x;
@@ -8496,6 +8659,7 @@ public:
     bool PlanToGo(CContentMap::EObject object, ESpeed speed, EPriority priority, bool unknown);
     void PlanToGo(ldwPoint point, ESpeed speed, EPriority priority);
     void PlanToWait(int duration, EBodyPosition bodyPosition);
+    void PlanToWait(int duration, EBodyPosition bodyPosition, EHeadDirection headDirection);
     void PlanToPlayAnim(int duration, char const *anim, bool unknown, float speed);
     void PlanToIncDirtiness(int amount);
     void PlanToIncHappinessTrend(int amount);
@@ -8576,9 +8740,10 @@ extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &villager)
         plans->PlanToGo(CContentMap::eObjectHammock, eSpeedNormal, ePriorityNormal, false);
     }
 
-    plans->PlanToWait(10, eBodyPositionRestingHammock);
     // LinkPeepToFurniture reports the placed hammock orientation; keep the
-    // sleep strip parallel to the hammock itself.
+    // getting-in pose and sleep strip parallel to the hammock itself.
+    EHeadDirection hammockHead = (info.orientation == 1) ? eHeadDirectionNW : eHeadDirectionNE;
+    plans->PlanToWait(10, eBodyPositionRestingHammock, hammockHead);
     char const *sleepAnim = (info.orientation == 1) ? "SleepNW" : "SleepNE";
     plans->PlanToPlayAnim(ldwGameState::GetRandom(180) + 180, sleepAnim, false, 0.02f);
     plans->PlanToIncDirtiness(4);
@@ -8625,9 +8790,9 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
         "hammock_behavior": {
             "enabled_behavior": "0x23 LieInHammock retargeted to _VF2LieInHammockAnchoredRest",
             "manual_drop_behavior": "0x24 LieInHammockNoLeadIn remains native",
-            "reason": "The spontaneous route keeps the long SleepNW/SleepNE rest animation sequence, writes the native eString 0xE9 behavior label, requires either base HammockStd item 0x1E1 or Invisible Hammock item 0x30C in-world, then calls FurnitureManager.LinkPeepToFurniture to use the placed hammock anchor and choose the matching sleep strip for the linked orientation: NW hammock -> SleepNW, NE hammock -> SleepNE.",
+            "reason": "The spontaneous route keeps the long SleepNW/SleepNE rest animation sequence, writes the native eString 0xE9 behavior label, requires either base HammockStd item 0x1E1 or Invisible Hammock item 0x30C in-world, then calls FurnitureManager.LinkPeepToFurniture to use the placed hammock anchor and choose the matching hammock-rest head direction plus sleep strip for the linked orientation: NW hammock -> body position 9, head direction 7, and SleepNW; NE hammock -> body position 9, head direction 1, and SleepNE.",
         },
-        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only when base HammockStd item 0x1E1 or Invisible Hammock item 0x30C is in-world and weather is state 0 (neutral) or 1 (sunny). It remains behavior 0x23 so villagers close their eyes and rest through the sleep animation, but the macro now writes the native behavior label and uses _VF2LieInHammockAnchoredRest to get the placed hammock point/orientation before planning the sleep strip. Playhouse is refreshed through CNight::AIIsDayTime() at each native AI decision, so the spontaneous Playhouse candidate is child-only and daytime-only. Playhouse and ChildrenPlayAtKidsTable are capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is adult. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
+        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only when base HammockStd item 0x1E1 or Invisible Hammock item 0x30C is in-world and weather is state 0 (neutral) or 1 (sunny). It remains behavior 0x23 so villagers close their eyes and rest through the sleep animation, but the macro now writes the native behavior label and uses _VF2LieInHammockAnchoredRest to get the placed hammock point/orientation before planning the orientation-specific hammock-rest head direction and sleep strip. Playhouse is refreshed through CNight::AIIsDayTime() at each native AI decision, so the spontaneous Playhouse candidate is child-only and daytime-only. Playhouse and ChildrenPlayAtKidsTable are capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is adult. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
     }
 
 

@@ -388,6 +388,50 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual((output_dir / payload.name).read_bytes(), patched)
             self.assertFalse((output_dir / renamed_exe.name).exists())
 
+    def test_asset_patch_allow_missing_target_creates_additive_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "Virtual Families 2"
+            game_dir.mkdir()
+            game_exe = game_dir / "Virtual Families 2.exe"
+            game_exe.write_bytes(minimal_pe_bytes(section_delta=12))
+            payload = tmp_path / "payload" / "Assets" / "Balloons_birthday.png.fmap"
+            payload.parent.mkdir(parents=True)
+            payload_bytes = b"new additive fmap"
+            payload.write_bytes(payload_bytes)
+            manifest = tmp_path / "allow_missing_asset.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "target_files": [
+                            {
+                                "path": "Virtual Families 2.exe",
+                                "pe_structures": [patcher_mod.pe_structure_fingerprint(game_exe)],
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Assets/Balloons_birthday.png.fmap",
+                                "source_path": "payload/Assets/Balloons_birthday.png.fmap",
+                                "source_sha256": sha256_bytes(payload_bytes),
+                                "source_size": len(payload_bytes),
+                                "expected_target_sha256": "0" * 64,
+                                "expected_target_size": 123,
+                                "allow_missing_target": True,
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher("apply", "--game-dir", str(game_dir), "--manifest", str(manifest))
+
+            self.assertIn("Patched files successfully", result.stdout)
+            self.assertEqual((game_dir / "Assets" / "Balloons_birthday.png.fmap").read_bytes(), payload_bytes)
+
     def test_byte_patch_output_folder_renames_modded_exe_for_save_folder(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
