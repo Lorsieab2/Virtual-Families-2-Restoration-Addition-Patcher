@@ -8467,23 +8467,7 @@ public:
 extern CWeather Weather;
 extern CNight Night;
 
-extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
-{
-    unsigned char *data = (unsigned char *)villager;
-    unsigned char *candidate = data + 0x6BB8 + 0x023 * 0xD0;
-    const int weatherAllowsHammock = Weather.currentType == 0 || Weather.currentType == 1;
-    candidate[0xCD] = (unsigned char)weatherAllowsHammock;
-    *(unsigned int *)(candidate + 0x0C) = weatherAllowsHammock ? 3000 : 0;
-    *(unsigned int *)(candidate + 0x48) = 0;
-    *(unsigned int *)(candidate + 0x4C) = 0;
-
-    unsigned char *playhouse = data + 0x6BB8 + 0x11E * 0xD0;
-    const int daytimeAllowsPlayhouse = Night.AIIsDayTime();
-    playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;
-    *(unsigned int *)(playhouse + 0x0C) = daytimeAllowsPlayhouse ? 3000 : 0;
-    *(unsigned int *)(playhouse + 0x48) = 0x117;
-    *(unsigned int *)(playhouse + 0x4C) = 0;
-}
+enum EInventoryItem { eInventoryItemPlaceholder = 0 };
 
 class CContentMap {
 public:
@@ -8522,10 +8506,36 @@ public:
 
 class CFurnitureManager {
 public:
+    bool IsInWorld(EInventoryItem item);
     bool LinkPeepToFurniture(CContentMap::EObject object, CVillager *villager, sFurnitureInfo2 &info, bool a, int b, bool c);
 };
 
 extern CFurnitureManager FurnitureManager;
+
+static bool AnyHammockInWorld()
+{
+    return FurnitureManager.IsInWorld((EInventoryItem)0x1E1) ||
+           FurnitureManager.IsInWorld((EInventoryItem)0x30C);
+}
+
+extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
+{
+    unsigned char *data = (unsigned char *)villager;
+    unsigned char *candidate = data + 0x6BB8 + 0x023 * 0xD0;
+    const int weatherAllowsHammock = Weather.currentType == 0 || Weather.currentType == 1;
+    const int hammockAllowsAction = weatherAllowsHammock && AnyHammockInWorld();
+    candidate[0xCD] = (unsigned char)hammockAllowsAction;
+    *(unsigned int *)(candidate + 0x0C) = hammockAllowsAction ? 3000 : 0;
+    *(unsigned int *)(candidate + 0x48) = 0;
+    *(unsigned int *)(candidate + 0x4C) = 0;
+
+    unsigned char *playhouse = data + 0x6BB8 + 0x11E * 0xD0;
+    const int daytimeAllowsPlayhouse = Night.AIIsDayTime();
+    playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;
+    *(unsigned int *)(playhouse + 0x0C) = daytimeAllowsPlayhouse ? 3000 : 0;
+    *(unsigned int *)(playhouse + 0x48) = 0x117;
+    *(unsigned int *)(playhouse + 0x4C) = 0;
+}
 
 class CVillager;
 extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &);
@@ -8543,9 +8553,22 @@ public:
     static int __cdecl GetRandom(int);
 };
 
+enum StringId { eStringRelaxingInTheHammock = 0xE9 };
+
+class theStringManager {
+public:
+    static theStringManager *__cdecl Get();
+    char *GetString(StringId id);
+};
+
+extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
+
 extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &villager)
 {
     CVillagerPlans *plans = (CVillagerPlans *)&villager;
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    strncpy(behaviorLabel, theStringManager::Get()->GetString(eStringRelaxingInTheHammock), 0x27);
+
     sFurnitureInfo2 info = {};
     if (FurnitureManager.LinkPeepToFurniture(CContentMap::eObjectHammock, &villager, info, true, 0, 0)) {
         plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
@@ -8602,9 +8625,9 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
         "hammock_behavior": {
             "enabled_behavior": "0x23 LieInHammock retargeted to _VF2LieInHammockAnchoredRest",
             "manual_drop_behavior": "0x24 LieInHammockNoLeadIn remains native",
-            "reason": "The spontaneous route keeps the long SleepNW/SleepNE rest animation sequence, but first calls FurnitureManager.LinkPeepToFurniture to use the placed hammock anchor and choose the matching sleep strip for the linked orientation: NW hammock -> SleepNW, NE hammock -> SleepNE.",
+            "reason": "The spontaneous route keeps the long SleepNW/SleepNE rest animation sequence, writes the native eString 0xE9 behavior label, requires either base HammockStd item 0x1E1 or Invisible Hammock item 0x30C in-world, then calls FurnitureManager.LinkPeepToFurniture to use the placed hammock anchor and choose the matching sleep strip for the linked orientation: NW hammock -> SleepNW, NE hammock -> SleepNE.",
         },
-        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only in weather states 0 (neutral) and 1 (sunny). It remains behavior 0x23 so villagers close their eyes and rest through the sleep animation, but the macro now uses _VF2LieInHammockAnchoredRest to get the placed hammock point/orientation before planning the sleep strip. Playhouse is refreshed through CNight::AIIsDayTime() at each native AI decision, so the spontaneous Playhouse candidate is child-only and daytime-only. Playhouse and ChildrenPlayAtKidsTable are capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is adult. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
+        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only when base HammockStd item 0x1E1 or Invisible Hammock item 0x30C is in-world and weather is state 0 (neutral) or 1 (sunny). It remains behavior 0x23 so villagers close their eyes and rest through the sleep animation, but the macro now writes the native behavior label and uses _VF2LieInHammockAnchoredRest to get the placed hammock point/orientation before planning the sleep strip. Playhouse is refreshed through CNight::AIIsDayTime() at each native AI decision, so the spontaneous Playhouse candidate is child-only and daytime-only. Playhouse and ChildrenPlayAtKidsTable are capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is adult. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
     }
 
 

@@ -1328,6 +1328,15 @@
   `CFurnitureManager::LinkPeepToFurniture` first, plans a walk to the linked
   hammock point, then chooses the sleep strip from the returned
   `sFurnitureInfo2` orientation. Manual-drop behavior `0x24` remains native.
+- B125 tightens the same spontaneous candidate's eligibility: it now requires
+  `CFurnitureManager::IsInWorld(0x1E1)` for base `HammockStd` or
+  `IsInWorld(0x30C)` for `InvisibleHammock`. When either item exists and
+  weather is neutral/sunny, the candidate keeps the standard behavior-patch
+  weight `3000`; otherwise the candidate is disabled and weighted `0`.
+- The native hammock behaviors write action label string id `0xE9` to
+  `CVillager + 0x1BBA8` before `StartNewBehavior`. B125 mirrors that copy in
+  `_VF2LieInHammockAnchoredRest`; without it the behavior runs but the HUD
+  action text stays at the default "Nothing".
 
 ## 2026-07-07 - B119 Settings Evict Visibility
 

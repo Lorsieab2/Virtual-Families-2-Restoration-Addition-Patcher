@@ -342,11 +342,12 @@
   does not currently add the mobile-exclusive event records to the game. Audit
   whether the event table/native records are only present in the core EXE
   payload or missing from the generated patch records entirely.
-- In-game test B124 hammock spontaneous behavior alignment: verify villagers
-  who spontaneously choose Relax in Hammock now use the linked hammock point,
-  choose the matching `SleepNW`/`SleepNE` strip for the placed hammock
-  orientation, close their eyes/rest for a while, and do not lie beside the
-  hammock on either orientation.
+- In-game test B125 hammock spontaneous behavior alignment/eligibility: verify
+  villagers can spontaneously choose Relax in Hammock when either base
+  `HammockStd` (`0x1E1`) or `InvisibleHammock` (`0x30C`) is placed, use the
+  linked hammock point, choose the matching `SleepNW`/`SleepNE` strip for the
+  placed hammock orientation, close their eyes/rest for a while, and do not lie
+  beside the hammock on either orientation.
 - Radio/MP3 behavior parity: when adults or children are dropped on MP3 players
   or the Invisible Radio, they should use the same radio behavior pool and
   randomly choose between "Dancing" and "Listening to the Radio".
