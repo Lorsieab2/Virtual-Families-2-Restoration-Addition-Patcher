@@ -8413,6 +8413,17 @@ def patch_spontaneous_behaviors(manifest):
     ai_obj.append_relocation(ai_sec.index, refresh_insert + 2, refresh_helper, IMAGE_REL_I386_REL32)
     ai_obj.write(PATCHED / "VillagerAI.obj")
 
+    behavior_obj = CoffObject(PATCHED / "Behavior.obj")
+    ctor = behavior_obj.symbol("??0CBehavior@@QAE@XZ")
+    behavior_sec = behavior_obj.section(ctor.section)
+    hammock_macro_raw = behavior_sec.raw_ptr + ctor.value + 0x1A7
+    hammock_macro_expected = b"\x68\x00\x00\x00\x00\x6A\x23"
+    if behavior_obj.buf[hammock_macro_raw:hammock_macro_raw + len(hammock_macro_expected)] != hammock_macro_expected:
+        raise ValueError("Unexpected LieInHammock behavior macro entry")
+    anchored_hammock = behavior_obj.append_undefined_symbol("_VF2LieInHammockAnchoredRest")
+    behavior_obj.retarget_relocation(behavior_sec.index, ctor.value + 0x1A8, anchored_hammock)
+    behavior_obj.write(PATCHED / "Behavior.obj")
+
     helper_cpp = r'''
 // CVillager::InitAI owns the real autonomous candidate table. Each candidate
 // is 0xD0 bytes; +0xCD is its enabled flag and +0x0C its random-choice weight.
@@ -8459,7 +8470,7 @@ extern CNight Night;
 extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
 {
     unsigned char *data = (unsigned char *)villager;
-    unsigned char *candidate = data + 0x6BB8 + 0x024 * 0xD0;
+    unsigned char *candidate = data + 0x6BB8 + 0x023 * 0xD0;
     const int weatherAllowsHammock = Weather.currentType == 0 || Weather.currentType == 1;
     candidate[0xCD] = (unsigned char)weatherAllowsHammock;
     *(unsigned int *)(candidate + 0x0C) = weatherAllowsHammock ? 3000 : 0;
@@ -8474,19 +8485,85 @@ extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
     *(unsigned int *)(playhouse + 0x4C) = 0;
 }
 
+class CContentMap {
+public:
+    enum EObject { eObjectHammock = 0x5B };
+};
+enum ESpeed { eSpeedNormal = 0xC8 };
+enum EPriority { ePriorityNormal = 0 };
+enum EBodyPosition { eBodyPositionRestingHammock = 9 };
+
+struct ldwPoint {
+    int x;
+    int y;
+};
+
+struct sFurnitureInfo2 {
+    int unknown0;
+    int orientation;
+    ldwPoint point;
+    int padding[4];
+};
+
+class CVillager;
+
+class CVillagerPlans {
+public:
+    bool PlanToGo(CContentMap::EObject object, ESpeed speed, EPriority priority, bool unknown);
+    void PlanToGo(ldwPoint point, ESpeed speed, EPriority priority);
+    void PlanToWait(int duration, EBodyPosition bodyPosition);
+    void PlanToPlayAnim(int duration, char const *anim, bool unknown, float speed);
+    void PlanToIncDirtiness(int amount);
+    void PlanToIncHappinessTrend(int amount);
+    void PlanToIncEnergy(int amount);
+    void PlanToReleaseSemaphore();
+    void StartNewBehavior(CVillager &villager);
+};
+
+class CFurnitureManager {
+public:
+    bool LinkPeepToFurniture(CContentMap::EObject object, CVillager *villager, sFurnitureInfo2 &info, bool a, int b, bool c);
+};
+
+extern CFurnitureManager FurnitureManager;
+
 class CVillager;
 extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &);
+extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
 class CBehavior {
 private:
     static void __cdecl ReadMagazine(CVillager &);
     static void __cdecl ReadingBook(CVillager &);
     friend void __cdecl VF2RandomBookshelfReading(CVillager &);
+    friend void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
 };
 
 class ldwGameState {
 public:
     static int __cdecl GetRandom(int);
 };
+
+extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &villager)
+{
+    CVillagerPlans *plans = (CVillagerPlans *)&villager;
+    sFurnitureInfo2 info = {};
+    if (FurnitureManager.LinkPeepToFurniture(CContentMap::eObjectHammock, &villager, info, true, 0, 0)) {
+        plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    } else {
+        plans->PlanToGo(CContentMap::eObjectHammock, eSpeedNormal, ePriorityNormal, false);
+    }
+
+    plans->PlanToWait(10, eBodyPositionRestingHammock);
+    // LinkPeepToFurniture reports the placed hammock orientation; keep the
+    // sleep strip parallel to the hammock itself.
+    char const *sleepAnim = (info.orientation == 1) ? "SleepNW" : "SleepNE";
+    plans->PlanToPlayAnim(ldwGameState::GetRandom(180) + 180, sleepAnim, false, 0.02f);
+    plans->PlanToIncDirtiness(4);
+    plans->PlanToIncHappinessTrend(1);
+    plans->PlanToIncEnergy(2);
+    plans->PlanToReleaseSemaphore();
+    plans->StartNewBehavior(villager);
+}
 
 extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &villager)
 {
@@ -8519,15 +8596,15 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     (PATCHED / "vf2_spontaneous_behaviors.cpp").write_text(helper_cpp, encoding="ascii")
     manifest["spontaneous_behaviors"] = {
         "status": "enabled through the autonomous AI candidate table",
-        "hooks": ["CVillager::InitAI", "CVillager::LoadAI", "CVillagerAI::DecideWhatToDo"],
+        "hooks": ["CVillager::InitAI", "CVillager::LoadAI", "CVillagerAI::DecideWhatToDo", "CBehavior::CBehavior"],
         "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
-        "actions": ["hammock NoLeadIn (0x24; all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "playhouse (children only; max age 0x117; daytime only)", "playing quietly at kids table (children only; base or invisible kids table)", "listen to radio", "dance to radio", "drawing"],
+        "actions": ["hammock anchored rest (0x23; all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "playhouse (children only; max age 0x117; daytime only)", "playing quietly at kids table (children only; base or invisible kids table)", "listen to radio", "dance to radio", "drawing"],
         "hammock_behavior": {
-            "enabled_behavior": "0x24 LieInHammockNoLeadIn",
-            "disabled_behavior": "0x23 LieInHammock",
-            "reason": "Behavior 0x24 uses FurnitureManager.LinkPeepToFurniture before walking/lying down, matching the manual-drop hammock route and preserving furniture-orientation anchoring.",
+            "enabled_behavior": "0x23 LieInHammock retargeted to _VF2LieInHammockAnchoredRest",
+            "manual_drop_behavior": "0x24 LieInHammockNoLeadIn remains native",
+            "reason": "The spontaneous route keeps the long SleepNW/SleepNE rest animation sequence, but first calls FurnitureManager.LinkPeepToFurniture to use the placed hammock anchor and choose the matching sleep strip for the linked orientation: NW hammock -> SleepNW, NE hammock -> SleepNE.",
         },
-        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only in weather states 0 (neutral) and 1 (sunny). It uses behavior 0x24 instead of 0x23 so spontaneous relaxation goes through the same LinkPeepToFurniture orientation path as manual hammock drops. Playhouse is refreshed through CNight::AIIsDayTime() at each native AI decision, so the spontaneous Playhouse candidate is child-only and daytime-only. Playhouse and ChildrenPlayAtKidsTable are capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is adult. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
+        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only in weather states 0 (neutral) and 1 (sunny). It remains behavior 0x23 so villagers close their eyes and rest through the sleep animation, but the macro now uses _VF2LieInHammockAnchoredRest to get the placed hammock point/orientation before planning the sleep strip. Playhouse is refreshed through CNight::AIIsDayTime() at each native AI decision, so the spontaneous Playhouse candidate is child-only and daytime-only. Playhouse and ChildrenPlayAtKidsTable are capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is adult. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
     }
 
 
