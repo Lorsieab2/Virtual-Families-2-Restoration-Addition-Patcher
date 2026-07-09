@@ -1409,3 +1409,46 @@
 - `export_offline_patch_bundle.py` writes `allow_missing_target: true` for
   additive generated payload records. B127 dry-run validation covered all 943
   active/restore asset records with all main and optional settings enabled.
+
+## 2026-07-08 - B128 Portable Songs, TV Sprite, Cheat Icons, and Radio Behavior
+
+- `export_offline_patch_bundle.py` now defaults optional song-mod input to
+  tracked `patcher_assets/optional_patches/optional_song_mods/OptionalSongMods`.
+  This keeps `optional_song_mods` portable and prevents future patcher exports
+  from silently dropping the song setting when no creator-local Downloads path
+  is present.
+- `work/patch_mobile_furniture_pack.py::sync_vf3_tv_sprite_strips()` now checks
+  tracked `work/assets/vf3_tv_sprites/` before the legacy Sprite folder. The
+  `FathersFavoriteTV` record is marked as a two-frame source strip and copied
+  verbatim from the smaller `214x123` workspace sprite instead of regenerating
+  the oversized cabinet-style `294x174` strip.
+- Father’s Favorite private TV animation boxes are constrained to
+  `(8, 10, 90, 62)` for both directions so animation frames stay inside the
+  brown screen border on the smaller sprite.
+- Cheat Upgrade store icons are normalized to `90x90` transparent PNGs and
+  `sync_visible_special_upgrade_icon_art()` force-refreshes `cheat_*.png`
+  targets from the workspace source to avoid stale oversized payload icons.
+- Behavior patch radio support now retargets behavior `0x0ED`
+  (`DancingRadio`) to `_VF2RandomRadioBehavior`, which randomly calls the
+  native `DancingRadio` or `ListenToRadio` macros. Spontaneous radio behavior
+  enables the same randomized `0x0ED` candidate for all ages.
+- Text fixes now also retarget `Not feeling fresh` to `Not feeling clean`
+  through the existing string-table relocation path.
+
+## 2026-07-08 - B129 Outfit Icon Export and VF3 TV Strip Source
+
+- `export_offline_patch_bundle.py::candidate_manifest_rel_paths()` now treats
+  manifest shorthand paths under `OutfitIcons/` as `Images/OutfitIcons/`.
+  `setting_for_asset()` also assigns `Images/OutfitIcons/*` to
+  `outfit_store_expansion`, so generated female, male, and Holiday outfit store
+  icons are bundled and toggled with the expanded Outfit Store patch.
+- The supplied `FlatScreenVF3BigE.png` and `FlatScreenVF3Big.png` 6x3 TV
+  animation sheets are stored under tracked
+  `work/assets/vf3_tv_animations/` and used by
+  `sync_vf3_tv_animation_sheets()` for VF3 Large Flat Screen TV animations.
+  Father's Favorite TV reuses those individual frames and scales them into its
+  smaller screen box from the same workspace source.
+- `patch_arcade_behavior_labels()` is now called during the normal build. It
+  retargets the shared stock `Playing` label pushes inside
+  `CBehavior::PlayingPachinko` and `CBehavior::PlayingPinball` to the added
+  string IDs for `Playing pachinko` and `Playing pinball`.

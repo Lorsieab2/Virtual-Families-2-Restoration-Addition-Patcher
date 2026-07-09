@@ -174,7 +174,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("island_events [default off]", settings.stdout)
             self.assertIn("body field sync", settings.stdout)
             self.assertNotIn("transparent_store_bar [default off]", settings.stdout)
-            self.assertNotIn("optional_song_mods [default off]", settings.stdout)
+            self.assertIn("optional_song_mods [default off]", settings.stdout)
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
             self.assertEqual(settings_by_id["holiday_furniture"]["category"], "main")
             self.assertEqual(settings_by_id["unused_pets"]["category"], "main")
@@ -186,7 +186,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(settings_by_id["island_events"]["category"], "optional")
             self.assertEqual(settings_by_id["behavior_patches"]["category"], "main")
             self.assertEqual(settings_by_id["text_fixes"]["category"], "main")
-            self.assertNotIn("optional_song_mods", settings_by_id)
+            self.assertEqual(settings_by_id["optional_song_mods"]["category"], "optional")
 
     def test_exports_byte_patches_when_vanilla_exe_is_supplied(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -425,7 +425,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertTrue((out / "patcher_icon.ico").is_file())
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
             self.assertEqual(settings_by_id["white_birds"]["category"], "optional")
-            self.assertNotIn("optional_song_mods", settings_by_id)
+            self.assertEqual(settings_by_id["optional_song_mods"]["category"], "optional")
             self.assertFalse((out / "Virtual Families 2 Restoration-Addition Patcher.exe").exists())
             self.assertFalse((out / "vf2_patcher_launcher.cs").exists())
             self.assertFalse((out / "patcher_launcher_build.json").exists())

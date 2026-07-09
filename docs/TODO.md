@@ -348,10 +348,23 @@
   linked hammock point, choose the matching `SleepNW`/`SleepNE` strip for the
   placed hammock orientation, close their eyes/rest for a while, and do not lie
   beside the hammock on either orientation.
-- Radio/MP3 behavior parity: when adults or children are dropped on MP3 players
-  or the Invisible Radio, they should use the same radio behavior pool and
-  randomly choose between "Dancing" and "Listening to the Radio".
+- In-game test B128 radio/MP3 behavior parity: when adults or children are
+  dropped on base radio, MP3 player, or invisible inherited radio/MP3 items,
+  confirm they randomly choose between "Dancing" and "Listening to the Radio".
+  With Behavior Patches enabled, confirm spontaneous radio behavior also chooses
+  from the same randomized behavior pool.
 - In-game test B127 patcher apply path: with all main and optional settings
   enabled, confirm generated additive files such as `Assets/*.fmap`, VF3 TV
   animation strips, and Cheat Upgrades payloads are created in the modded
   output folder and no longer fail as missing vanilla targets.
+- In-game visual test B129: verify Father's Favorite TV uses the smaller
+  two-frame sprite, its private TV animation is generated from the bundled VF3
+  strip frames and fits inside the brown screen border, Cheat Upgrade icons fit
+  the Special Upgrades icon column, the optional song patch swaps/restores OGGs,
+  and the HUD status reads "Not feeling clean".
+- In-game test B129 expanded Outfit Store patcher payload: after applying the
+  patcher to a vanilla install, confirm all female and male generated Outfit
+  rows 0-53 have preview icons, including Holiday body values 50-53.
+- In-game test B129 behavior labels: with Behavior Patches enabled, verify
+  Pachinko Machine and Pinball Machine actions show "Playing pachinko" and
+  "Playing pinball" instead of the shared "Playing" label.

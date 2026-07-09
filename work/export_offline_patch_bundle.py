@@ -54,6 +54,7 @@ VF3_LIVING_ROOM_BATCH_02_FILES = {
 SOURCE_ONLY_PAYLOAD_DIRS = FULL_PAYLOAD_ALWAYS_INCLUDE_DIRS
 OPTIONAL_SONG_SOURCE_DIR = Path("OptionalSongMods")
 OPTIONAL_SONG_TARGET_DIR = Path("Sounds")
+DEFAULT_OPTIONAL_SONG_MODS_SOURCE = OPTIONAL_PATCH_ASSET_DIR / "optional_song_mods" / "OptionalSongMods"
 SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "invisible_upgrades_graphics",
     "optional_song_mods",
@@ -146,7 +147,7 @@ SETTINGS = [
     {
         "id": "behavior_patches",
         "label": "Behavior Patches",
-        "description": "Makes certain actions able to be done automatically by people, including watching the fire, relaxing in the hammock, arcade/table games, radio actions, drawing, child-only daytime Playhouse behavior, and child-only Playing quietly at the Kids Table.",
+        "description": "Makes certain actions able to be done automatically by people, including watching the fire, relaxing in the hammock, arcade/table games, random radio/MP3 dancing or listening, drawing, child-only daytime Playhouse behavior, and child-only Playing quietly at the Kids Table.",
         "default": True,
         "category": "main",
     },
@@ -573,6 +574,7 @@ def candidate_manifest_rel_paths(value: str) -> list[Path]:
             "Furniture/",
             "VillagerBodies/",
             "VillagerDetailBodies/",
+            "OutfitIcons/",
             "HolidayOutfits/",
             "CollectionOrnaments/",
         )):
@@ -794,7 +796,7 @@ def setting_for_asset(rel_path: Path) -> str:
         return "invisible_furniture_visible_graphics"
     if stem in MOBILE_PURCHASE_ICON_FILES:
         return "mobile_purchases"
-    if text.startswith("Images/OutfitStoreIcons/") or stem.startswith(("female_", "male_")):
+    if text.startswith("Images/OutfitIcons/") or text.startswith("Images/OutfitStoreIcons/") or stem.startswith(("female_", "male_")):
         return "outfit_store_expansion"
     if parts and parts[0] in {"Images", "Assets"}:
         return "mobile_furniture"
@@ -1909,7 +1911,9 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         forced_paths = {row["file_path"] for row in forced_lock_records}
         asset_patches = [row for row in asset_patches if row.get("file_path") not in forced_paths]
         asset_patches.extend(forced_lock_records)
-    optional_song_source = Path(args.optional_song_mods_dir).resolve() if args.optional_song_mods_dir else None
+    optional_song_source = Path(args.optional_song_mods_dir).resolve() if args.optional_song_mods_dir else (
+        DEFAULT_OPTIONAL_SONG_MODS_SOURCE if DEFAULT_OPTIONAL_SONG_MODS_SOURCE.is_dir() else None
+    )
     asset_patches.extend(optional_song_asset_patches(bundle_dir, base_payload, optional_song_source))
     invisible_upgrades_source = Path(args.invisible_upgrades_dir).resolve() if args.invisible_upgrades_dir else None
     original_upgrades_source = Path(args.original_upgrades_dir).resolve() if args.original_upgrades_dir else None

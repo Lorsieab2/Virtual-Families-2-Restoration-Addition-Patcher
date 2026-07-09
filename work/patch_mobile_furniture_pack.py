@@ -65,6 +65,7 @@ ADDED_FURNITURE_LOCK_MIN_GROUP_SIZE = 3
 ADDED_FURNITURE_LOCK_MAX_GROUP_SIZE = 4
 ADDED_FURNITURE_LOCK_SEED = "vf2-mobile-holiday-vf3-generation-locks-b112"
 VF3_SPRITE_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\Sprite")
+VF3_SPRITE_WORKSPACE_DIR = ROOT / "work" / "assets" / "vf3_tv_sprites"
 VF3_TV_ANIMATION_ASSET_DIR = ROOT / "work" / "assets" / "vf3_tv_animations"
 TRANSPARENT_STORE_BAR_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\VF2_TransparentStoreBar\VF2_TransparentStoreBar")
 INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR = ROOT / "work" / "invisible_outdoor_furniture_sprites"
@@ -225,8 +226,10 @@ VILLAGER_SPRITE_SHEET_FILES = (
     "male_sit00.png",
 )
 LARGE_TV_ANIMATION_SHEETS = {
-    "Large": Path(r"C:\Users\Owner\Downloads\TVAnimBigE.png"),
-    "LargeEast": Path(r"C:\Users\Owner\Downloads\TVAnimBig.png"),
+    "Large": VF3_TV_ANIMATION_ASSET_DIR / "FlatScreenVF3BigE.png",
+    "LargeEast": VF3_TV_ANIMATION_ASSET_DIR / "FlatScreenVF3Big.png",
+    "FathersFavorite": VF3_TV_ANIMATION_ASSET_DIR / "FlatScreenVF3BigE.png",
+    "FathersFavoriteEast": VF3_TV_ANIMATION_ASSET_DIR / "FlatScreenVF3Big.png",
 }
 VF3_TV_ANIMATION_FRAME_PREFIXES = {
     "Large": "TVAnimBigE",
@@ -259,8 +262,8 @@ VF3_TV_ANIMATION_SCREEN_BOXES = {
     "LargeEast": (4, 5, 65, 80),
     "Small": (2, 2, 48, 60),
     "SmallEast": (2, 2, 48, 60),
-    "FathersFavorite": (5, 8, 96, 104),
-    "FathersFavoriteEast": (5, 8, 96, 104),
+    "FathersFavorite": (8, 10, 90, 62),
+    "FathersFavoriteEast": (8, 10, 90, 62),
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x117: "BrokerUpgrade_icon.png",
@@ -1502,6 +1505,7 @@ VF3_TV_ITEMS = [
         "short_description": "Father's Favorite TV",
         "long_description": "A fiery flat screen TV from Virtual Families 3.",
         "source_png": "FathersFavoriteTV.png",
+        "source_strip_frames": 2,
         "animation_labels": ("FathersFavorite", "FathersFavoriteEast"),
     },
 ]
@@ -2673,7 +2677,9 @@ def sync_vf3_tv_sprite_strips(manifest):
         from PIL import Image
 
         for item in VF3_TV_ITEMS:
-            source = VF3_SPRITE_SOURCE_DIR / item["source_png"]
+            workspace_source = VF3_SPRITE_WORKSPACE_DIR / item["source_png"]
+            legacy_source = VF3_SPRITE_SOURCE_DIR / item["source_png"]
+            source = workspace_source if workspace_source.exists() else legacy_source
             target = OUT / "Images" / "Furniture" / f"{item['name']}.png"
             if not source.exists():
                 if target.exists():
@@ -2687,16 +2693,38 @@ def sync_vf3_tv_sprite_strips(manifest):
                     missing.append(str(source))
                 continue
             with Image.open(source).convert("RGBA") as image:
-                cell_w, cell_h = image.size
-                strip = Image.new("RGBA", (cell_w * 2, cell_h), (0, 0, 0, 0))
-                strip.paste(image, (0, 0), image)
-                strip.paste(image.transpose(Image.Transpose.FLIP_LEFT_RIGHT), (cell_w, 0), image.transpose(Image.Transpose.FLIP_LEFT_RIGHT))
                 target.parent.mkdir(parents=True, exist_ok=True)
-                strip.save(target)
-            copied.append({"item": item["short_description"], "source": str(source), "target": str(target), "size": [cell_w * 2, cell_h], "frames": 2})
+                if item.get("source_strip_frames") == 2:
+                    image.save(target)
+                    cell_w, cell_h = image.width // 2, image.height
+                    output_size = [image.width, image.height]
+                    mode = "copied_workspace_two_frame_strip"
+                else:
+                    cell_w, cell_h = image.size
+                    strip = Image.new("RGBA", (cell_w * 2, cell_h), (0, 0, 0, 0))
+                    strip.paste(image, (0, 0), image)
+                    flipped = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+                    strip.paste(flipped, (cell_w, 0), flipped)
+                    strip.save(target)
+                    output_size = [cell_w * 2, cell_h]
+                    mode = "mirrored_single_frame_source"
+            copied.append({
+                "item": item["short_description"],
+                "source": str(source),
+                "target": str(target),
+                "size": output_size,
+                "cell_size": [cell_w, cell_h],
+                "frames": 2,
+                "mode": mode,
+            })
     except Exception as exc:
         missing.append(str(exc))
-    manifest["vf3_tv_sprite_strips"] = {"copied": copied, "missing": missing}
+    manifest["vf3_tv_sprite_strips"] = {
+        "workspace_source_dir": str(VF3_SPRITE_WORKSPACE_DIR),
+        "legacy_source_dir": str(VF3_SPRITE_SOURCE_DIR),
+        "copied": copied,
+        "missing": missing,
+    }
 
 
 def paste_scaled_tv_anim_frame(sheet, frame, label, column, row, cell_w, cell_h):
@@ -3633,13 +3661,13 @@ def sync_visible_special_upgrade_icon_art(manifest):
         target = output_root / filename
         source = None
         status = "existing"
-        if not target.exists():
-            source_roots = [CHEAT_UPGRADE_ICON_SOURCE_DIR] + _outfit_icon_source_roots()
-            for root in source_roots:
-                candidate = root / filename
-                if candidate.exists() and candidate.resolve() != target.resolve():
-                    source = candidate
-                    break
+        source_roots = [CHEAT_UPGRADE_ICON_SOURCE_DIR] + _outfit_icon_source_roots()
+        for root in source_roots:
+            candidate = root / filename
+            if candidate.exists() and candidate.resolve() != target.resolve():
+                source = candidate
+                break
+        if not target.exists() or (filename.startswith("cheat_") and source is not None):
             if source:
                 shutil.copy2(source, target)
                 status = "copied"
@@ -6203,6 +6231,13 @@ def patch_string_manager(manifest):
             "candidates": (b"Driving like daddy", b"Driving like a grownup"),
         },
         {
+            "old": "Not feeling fresh",
+            "new": "Not feeling clean",
+            "key": "eString_NotFeelingClean",
+            "symbol_prefix": "_vf2textfix_not_feeling_clean",
+            "candidates": (b"Not feeling fresh", b"Not feeling clean"),
+        },
+        {
             "old": "Settings Evict confirmation",
             "new": (
                 "This button will EVICT your current family and\n"
@@ -8704,11 +8739,15 @@ extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
 class CVillager;
 extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &);
 extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
+extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &);
 class CBehavior {
 private:
     static void __cdecl ReadMagazine(CVillager &);
     static void __cdecl ReadingBook(CVillager &);
+    static void __cdecl DancingRadio(CVillager &);
+    static void __cdecl ListenToRadio(CVillager &);
     friend void __cdecl VF2RandomBookshelfReading(CVillager &);
+    friend void __cdecl VF2RandomRadioBehavior(CVillager &);
     friend void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
 };
 
@@ -8762,6 +8801,15 @@ extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &villager)
     }
 }
 
+extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &villager)
+{
+    if (ldwGameState::GetRandom(2) == 0) {
+        CBehavior::DancingRadio(villager);
+    } else {
+        CBehavior::ListenToRadio(villager);
+    }
+}
+
 extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
 {
     unsigned char *data = (unsigned char *)villager;
@@ -8775,8 +8823,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAllAgesAutonomousCandidate(data, 0x096); // PlayingFoosball
     EnableChildOnlyAutonomousCandidate(data, 0x11E); // PlayOnPlayStructure / Playhouse
     EnableChildOnlyAutonomousCandidate(data, 0x130); // ChildrenPlayAtKidsTable / Playing quietly
-    EnableAutonomousCandidate(data, 0x0ED); // DancingRadio
-    EnableAutonomousCandidate(data, 0x0F5); // ListenToRadio
+    EnableAutonomousCandidate(data, 0x0ED); // Random radio: DancingRadio or ListenToRadio
     EnableAutonomousCandidate(data, 0x118); // DrawingOnEasel
     VF2RefreshHammockEligibility(data);
 }
@@ -8814,6 +8861,27 @@ def patch_bookshelf_reading_behavior(manifest):
         "old_behavior": "0x33 ReadMagazine",
         "new_behavior": "random choice: ReadMagazine or ReadingBook",
         "scope": "the native bookshelf drop route; no furniture records or fmaps changed",
+    }
+
+
+def patch_radio_drop_behavior(manifest):
+    """Randomize the stock radio/MP3 drop route between dance and listen."""
+    obj = CoffObject(PATCHED / "Behavior.obj")
+    ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+    sec = obj.section(ctor.section)
+    relocation_vaddr = ctor.value + 0xC3C
+    expected = b"\x68\x00\x00\x00\x00\x68\xED\x00\x00\x00"
+    raw = sec.raw_ptr + ctor.value + 0xC3B
+    if obj.buf[raw:raw + len(expected)] != expected:
+        raise ValueError("Unexpected DancingRadio behavior macro entry")
+    random_radio = obj.append_undefined_symbol("_VF2RandomRadioBehavior")
+    obj.retarget_relocation(sec.index, relocation_vaddr, random_radio)
+    obj.write(PATCHED / "Behavior.obj")
+    manifest["radio_drop_behavior"] = {
+        "status": "stock radio/MP3 dispatch calls a random native radio behavior",
+        "old_behavior": "0x0ED DancingRadio",
+        "new_behavior": "random choice: DancingRadio or ListenToRadio",
+        "scope": "base radio, MP3 player, and inherited invisible MP3/radio routes that use the stock radio macro",
     }
 
 
@@ -9361,6 +9429,8 @@ def main():
         }
     patch_spontaneous_behaviors(manifest)
     patch_bookshelf_reading_behavior(manifest)
+    patch_radio_drop_behavior(manifest)
+    patch_arcade_behavior_labels(manifest)
     if ENABLE_DEBUGGER_FEATURES:
         patch_debug_features(manifest)
     else:
