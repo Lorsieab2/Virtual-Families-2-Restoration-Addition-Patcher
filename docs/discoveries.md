@@ -1452,3 +1452,23 @@
   retargets the shared stock `Playing` label pushes inside
   `CBehavior::PlayingPachinko` and `CBehavior::PlayingPinball` to the added
   string IDs for `Playing pachinko` and `Playing pinball`.
+
+## 2026-07-08 - B130 Direct VF3 TV Animation Strip Payloads
+
+- `work/patch_mobile_furniture_pack.py::split_supplied_tv_animation_cells()`
+  now splits the bundled `FlatScreenVF3BigE.png` and `FlatScreenVF3Big.png`
+  sheets into a fixed `6 x 3` grid, writing `Frame01.png` through
+  `Frame18.png` under `Images/VF3TVAnimations/<label>/`.
+- `build_supplied_tv_animation_strip()` replaces the previous bounded
+  compositor for supplied Large VF3 TV sheets. Large/LargeEast runtime strips
+  preserve the supplied cells with only transparent padding to `76 x 89`
+  cells, yielding `456 x 267` runtime sheets.
+- Father's Favorite TV now reuses those split supplied cells and scales each
+  whole cell to the Father's Favorite furniture canvas (`107 x 123` per cell,
+  `642 x 369` runtime sheet). This keeps the patcher payload tied to the
+  supplied strip art instead of the old generated screen-box overlay.
+- B130 patcher validation compared payload files against B129: file counts
+  matched (`2947` each), with only the four renamed B129 EXE payloads replaced
+  by B130 EXE payloads. The B130 payload includes `108` outfit icons, `5`
+  optional-song OGGs, `6` runtime TV animation sheets, and `108` split TV
+  animation frame PNGs.

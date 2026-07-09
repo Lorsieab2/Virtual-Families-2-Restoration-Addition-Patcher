@@ -2780,8 +2780,54 @@ def copy_vf3_tv_animation_sheet_cells(source_sheet, frame_dir):
     return present, copied_frames
 
 
+def split_supplied_tv_animation_cells(source_sheet):
+    cells = []
+    for index in range(1, 19):
+        column = (index - 1) % 6
+        row = (index - 1) // 6
+        left = source_sheet.width * column // 6
+        right = source_sheet.width * (column + 1) // 6
+        top = source_sheet.height * row // 3
+        bottom = source_sheet.height * (row + 1) // 3
+        cells.append((index, column, row, source_sheet.crop((left, top, right, bottom))))
+    return cells
+
+
+def build_supplied_tv_animation_strip(source_sheet, frame_dir, *, target_cell=None, scale_cells=False):
+    from PIL import Image
+
+    if target_cell is None:
+        cell_w = (source_sheet.width + 5) // 6
+        cell_h = (source_sheet.height + 2) // 3
+    else:
+        cell_w, cell_h = target_cell
+    resampling = getattr(Image, "Resampling", Image).LANCZOS
+    sheet = Image.new("RGBA", (cell_w * 6, cell_h * 3), (0, 0, 0, 0))
+    copied_frames = []
+    present = 0
+    for index, column, row, cell in split_supplied_tv_animation_cells(source_sheet):
+        bbox = cell.getchannel("A").getbbox()
+        if not bbox:
+            copied_frames.append({"frame": index, "status": "blank"})
+            continue
+        output_cell = cell.resize((cell_w, cell_h), resampling) if scale_cells else cell
+        sheet.paste(output_cell, (column * cell_w, row * cell_h), output_cell)
+        frame_path = frame_dir / f"Frame{index:02d}.png"
+        output_cell.save(frame_path)
+        copied_frames.append({
+            "frame": index,
+            "target": str(frame_path),
+            "source_cell_size": list(cell.size),
+            "output_cell_size": [cell_w, cell_h],
+            "alpha_bbox": list(bbox),
+            "mode": "scaled_supplied_cell" if scale_cells else "supplied_cell_no_resize",
+        })
+        present += 1
+    return sheet, present, copied_frames
+
+
 def sync_vf3_tv_animation_sheets(manifest):
-    """Split supplied TV sheets and assemble bounded animation sheets."""
+    """Split supplied TV sheets and assemble runtime animation sheets."""
     copied = []
     missing = []
     try:
@@ -2815,33 +2861,25 @@ def sync_vf3_tv_animation_sheets(manifest):
                     })
                 else:
                     with Image.open(supplied_sheet).convert("RGBA") as source_sheet:
-                        for index in range(1, 19):
-                            column = (index - 1) % 6
-                            row = (index - 1) // 6
-                            left = source_sheet.width * column // 6
-                            right = source_sheet.width * (column + 1) // 6
-                            top = source_sheet.height * row // 3
-                            bottom = source_sheet.height * (row + 1) // 3
-                            cell = source_sheet.crop((left, top, right, bottom))
-                            bbox = cell.getchannel("A").getbbox()
-                            if not bbox:
-                                missing.append(f"{supplied_sheet}: blank frame {index}")
-                                continue
-                            frame = cell.crop(bbox)
-                            composed = paste_scaled_tv_anim_frame(sheet, frame, label, column, row, cell_w, cell_h)
-                            if not composed:
-                                missing.append(f"{supplied_sheet}: blank trimmed frame {index}")
-                                continue
-                            frame_path = frame_dir / f"Frame{index:02d}.png"
-                            composed[0].save(frame_path)
-                            copied.append({
-                                "source_sheet": str(supplied_sheet),
-                                "frame": index,
-                                "target": str(frame_path),
-                                "source_trimmed_size": list(frame.size),
-                                "screen_box": composed[1],
-                            })
-                            present += 1
+                        use_furniture_cell = label.startswith("FathersFavorite")
+                        sheet, present, supplied_frames = build_supplied_tv_animation_strip(
+                            source_sheet,
+                            frame_dir,
+                            target_cell=(cell_w, cell_h) if use_furniture_cell else None,
+                            scale_cells=use_furniture_cell,
+                        )
+                        cell_w = sheet.width // 6
+                        cell_h = sheet.height // 3
+                        copied.append({
+                            "source_sheet": str(supplied_sheet),
+                            "status": "used_supplied_strip_cells",
+                            "frames": present,
+                            "grid": [6, 3],
+                            "cell": [cell_w, cell_h],
+                            "size": list(sheet.size),
+                            "mode": "scaled_to_fathers_favorite_cell" if use_furniture_cell else "direct_supplied_strip_with_transparent_padding",
+                            "frame_exports": supplied_frames,
+                        })
             if not supplied_sheet or not supplied_sheet.exists():
                 for index in range(1, 19):
                     source = VF3_SPRITE_SOURCE_DIR / f"{frame_prefix}_{index:02d}.png"

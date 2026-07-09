@@ -368,3 +368,9 @@
 - In-game test B129 behavior labels: with Behavior Patches enabled, verify
   Pachinko Machine and Pinball Machine actions show "Playing pachinko" and
   "Playing pinball" instead of the shared "Playing" label.
+- In-game visual test B130 VF3 TV animation payloads: apply the B130 patcher
+  with `vf3_tv_assets_recognition` enabled and confirm the Large VF3 Flat
+  Screen TV uses the bundled `FlatScreenVF3Big*.png` strip frames directly.
+  Also confirm Father's Favorite TV uses the same split supplied frames scaled
+  to its smaller furniture canvas, with no stale B129/bounded-compositor strip
+  visible in-game.
