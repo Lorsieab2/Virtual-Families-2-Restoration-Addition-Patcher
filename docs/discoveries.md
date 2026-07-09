@@ -1536,3 +1536,17 @@
   is `< 50` and a tool-tray slot is available, the game awards random item
   `4..7` and displays `eString_WonABagOfGroceries` (`0x4D1`). All other
   remaining rolls display `eString_NotAWinner` (`0x4D0`).
+
+## 2026-07-09 - Villager Age/Growth Thresholds
+
+- `CVillager+0x6A54` is a growth scalar with multiple native cutoffs. The
+  stock child/non-child boundary is `< 0x118`; `AdultPopulation()` and
+  `GetRandomVillager(EAgeSelecter)` selector bit `2` start at `>= 0x118`,
+  which is better described as teen-or-older for patch logic.
+- Mature adult checks use a stricter range. `SelectOtherAvailableMatingVillager`
+  requires both villagers to be `>= 0x168` and `< 0x44C`;
+  `MothersCaringForBabies` starts at `>= 0x168`; `GetRandomCollegeKid()` starts
+  at `>= 0x17C`; selector bit `4` uses `>= 0x44C` for elder/senior selection.
+- Future behavior patches should separate helper names by intent: child-only
+  (`< 0x118`), teen-or-older (`>= 0x118`), and mature adult
+  (`>= 0x168 && < 0x44C`).

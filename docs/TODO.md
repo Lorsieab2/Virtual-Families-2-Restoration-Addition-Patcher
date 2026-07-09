@@ -381,8 +381,9 @@
   playground, and snow-play label variants display correctly while preserving
   the native animation/targeting route.
 - In-game behavior test B131: confirm Drawing is no longer selected by adults,
-  but still appears for children/teenagers if the stock non-adult threshold
-  `CVillager+0x6A54 < 0x118` covers both groups.
+  but still appears for children. If teenagers should also draw, use the
+  documented growth range between the child cutoff and mature-adult cutoff
+  instead of the stock child-only `< 0x118` test.
 - In-game behavior test B131: while snow weather is active, confirm children
   and teenagers can spontaneously choose Playing in Snow variants. If enum
   `Weather.currentType == 5` is wrong, re-map weather enums from live state.
@@ -390,9 +391,9 @@
   generation locks disappear from stock and added furniture; buy it again and
   confirm the generated original lock table is restored without corrupting
   store rows.
-- Research: document the exact teen/adult boundary separately from the proven
-  adult boundary, then decide whether teen+adult web/social variants should
-  use a broader gate than the current adult-only wrappers.
+- Follow-up: audit behavior-patch helper names so teen-or-older variants use
+  `CVillager+0x6A54 >= 0x118`, while mature-adult-only variants use
+  `0x168 <= CVillager+0x6A54 < 0x44C`.
 - Research: implement nursing-mother infant-care variants and the requested
   shared infant-care handoff only after documenting the baby/babyplets fields
   and native partner-wait plan route. Native baby-related behavior IDs are now

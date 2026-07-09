@@ -33,11 +33,32 @@ Confirmed useful villager fields:
 
 | Offset | Current meaning |
 | --- | --- |
-| `CVillager+0x6A54` | Age/growth field. Stock gates use `< 0x118` as non-adult and `>= 0x118` as adult. |
+| `CVillager+0x6A54` | Age/growth field. Stock gates use several thresholds; see below. |
 | `CVillager+0x6A58` | Likely gender field. Stock routines compare it to `0/1` for gender-specific choices. |
 | `CVillager+0x6A5C` | Likely body/clothing value, used by body/outfit graphics selection. |
 | `CVillager+0x6A60` | Likely head/voice selector. `MomTeachingTalk` reads it while choosing baby-talk sounds; it is not a confirmed baby/nursing counter. |
 | `CVillager+0x1BBA8` | Current action/status label buffer. Behavior routines copy string-manager text here with a `0x27` byte limit. |
+
+## Age/Growth Thresholds
+
+`CVillager+0x6A54` is a growth scalar, not the displayed age in years. Native
+code uses different cutoffs depending on subsystem, so patch helpers should be
+named by intent instead of relying on one broad `IsAdult` meaning.
+
+| Range | Confirmed use |
+| --- | --- |
+| `< 0x118` | Child/kid-only checks. `GetRandomVillager(EAgeSelecter)` age selector bit `1` accepts this range. |
+| `>= 0x118` | Teen-or-older/non-child checks. `AdultPopulation()` and selector bit `2` start here, even though this is broader than mature adult. |
+| `>= 0x168 && < 0x44C` | Mature adult range for mating/partner selection. `SelectOtherAvailableMatingVillager()` requires both villagers in this range. |
+| `>= 0x168` | Nursing-mother-capable floor. `MothersCaringForBabies()` counts villagers at or above this threshold with a baby/care field set. |
+| `>= 0x17C` | `GetRandomCollegeKid()` floor. |
+| `>= 0x44C` | Elder/senior selector range; mating selection excludes this range. |
+
+Recommended patch helpers:
+
+- `VF2IsChild`: `age < 0x118`
+- `VF2IsTeenOrOlder`: `age >= 0x118`
+- `VF2IsMatureAdult`: `age >= 0x168 && age < 0x44C`
 
 Known content object constants in the current dump:
 

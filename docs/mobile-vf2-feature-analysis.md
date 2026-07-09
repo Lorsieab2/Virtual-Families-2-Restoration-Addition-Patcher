@@ -451,7 +451,8 @@ replacing generic behaviors:
 - weighted choice value: `+0x0C`
 - max age: `+0x48`
 - min age: `+0x4C`
-- child/adult boundary: `CVillager+0x6A54 < 0x118`
+- child/non-child boundary: `CVillager+0x6A54 < 0x118`
+- mature-adult behavior boundary: `0x168 <= CVillager+0x6A54 < 0x44C`
 
 Enabled B93 spontaneous candidates:
 
