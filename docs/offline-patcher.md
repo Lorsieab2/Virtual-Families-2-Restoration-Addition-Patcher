@@ -781,6 +781,15 @@ B134 build/export notes:
   `CMobileIslandEvent` registration lines are inserted instead of literal
   Python text.
 
+B135 patcher/export notes:
+
+- `export_asset_payloads()` now copies source-only payload folders whenever
+  they exist in the generated build. `OptionalSongMods/` and
+  `Original Virtual Families 2 Assets/originalsounds/` therefore stay bundled
+  even when the export has no normal image/fmap asset diffs, so disabling the
+  optional song patch can restore vanilla `Sounds/menu.ogg` and
+  `Sounds/song1-4.ogg` from inside the portable patcher.
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 
