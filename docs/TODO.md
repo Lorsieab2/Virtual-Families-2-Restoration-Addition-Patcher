@@ -124,8 +124,10 @@
   villager behavior routes for those furniture items.
 - Implement the correct outcomes for added mobile-exclusive Island Events.
   Current added events can fire but do not yet perform their mobile outcomes.
-- Allow the second bathroom to have water leaks like the first bathroom; the
-  current first-bathroom-only leak behavior is an inconsistency.
+- In-game test B132 second-bathroom leaks: after buying the second-bathroom
+  renovation, trigger Water Pressure Surge and confirm the north toilet,
+  shower, and sink leaks appear and can be repaired through their native
+  second-bathroom repair routes.
 - Allow the Kitchen, Workshop, and Office to be renovated with their exclusive
   mobile renovation variants.
 - Make all house renovations and upgrades removable and purchasable again after
