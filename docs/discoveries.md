@@ -1585,3 +1585,16 @@
   `Villager.obj` and `VillagerAI.obj`. The visible behavior-manifest wording is
   `non-adults` for kids-table/playground-style actions because the helper gates
   on the stock child cutoff rather than a separate prose-only "children" label.
+
+## 2026-07-09 - Radio/MP3 Behavior Patch Contract
+
+- `patch_radio_drop_behavior()` retargets the `CBehavior` constructor macro
+  relocation at `??0CBehavior@@QAE@XZ + 0xC3C` from the stock `DancingRadio`
+  behavior entry to `_VF2RandomRadioBehavior`. The helper randomly dispatches
+  the native `CBehavior::DancingRadio()` or `CBehavior::ListenToRadio()`, so
+  base radios, MP3 players, and inherited invisible radio/MP3 routes share the
+  same drop behavior pool.
+- `patch_spontaneous_behaviors()` enables candidate `0x0ED` for all ages after
+  `InitAI` and `LoadAI` restore weights. Because `0x0ED` now resolves through
+  `_VF2RandomRadioBehavior`, spontaneous radio/MP3 behavior uses the same
+  dance-or-listen selection as manual drops.

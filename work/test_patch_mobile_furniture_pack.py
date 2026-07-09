@@ -430,6 +430,60 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 patcher.PATCHED = old_patched
 
 
+class RadioBehaviorContractTests(unittest.TestCase):
+    def test_radio_and_mp3_drop_route_randomizes_dance_or_listen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            shutil.copy2(patcher.SRC_OBJS / "Behavior.obj", temp_root / "Behavior.obj")
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = temp_root
+                manifest = {}
+
+                patcher.patch_radio_drop_behavior(manifest)
+
+                obj = CoffObject(temp_root / "Behavior.obj")
+                ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+                sec = obj.section(ctor.section)
+                relocation_vaddr = ctor.value + 0xC3C
+                reloc_names = []
+                for idx in range(sec.nreloc):
+                    off = sec.reloc_ptr + idx * 10
+                    va, symidx, _reloc_type = struct.unpack_from("<LLH", obj.buf, off)
+                    if va == relocation_vaddr:
+                        reloc_names.append(obj.symbol_by_index[symidx].name)
+                self.assertEqual(reloc_names, ["_VF2RandomRadioBehavior"])
+                self.assertEqual(
+                    manifest["radio_drop_behavior"]["new_behavior"],
+                    "random choice: DancingRadio or ListenToRadio",
+                )
+                self.assertIn("base radio, MP3 player", manifest["radio_drop_behavior"]["scope"])
+            finally:
+                patcher.PATCHED = old_patched
+
+    def test_spontaneous_radio_uses_same_randomized_candidate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            shutil.copy2(patcher.SRC_OBJS / "Villager.obj", temp_root / "Villager.obj")
+            shutil.copy2(patcher.SRC_OBJS / "VillagerAI.obj", temp_root / "VillagerAI.obj")
+            shutil.copy2(patcher.SRC_OBJS / "Behavior.obj", temp_root / "Behavior.obj")
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = temp_root
+                manifest = {}
+
+                patcher.patch_spontaneous_behaviors(manifest)
+
+                helper = (temp_root / "vf2_spontaneous_behaviors.cpp").read_text(encoding="ascii")
+                self.assertIn(
+                    "EnableAutonomousCandidate(data, 0x0ED); // Random radio: DancingRadio or ListenToRadio",
+                    helper,
+                )
+                self.assertIn("random radio/MP3 dancing or listening (all ages)", manifest["spontaneous_behaviors"]["actions"])
+            finally:
+                patcher.PATCHED = old_patched
+
+
 class InvisibleFurnitureReferenceSetTests(unittest.TestCase):
     def test_outdoor_transparent_backups_are_generated_from_donor_dimensions(self):
         with tempfile.TemporaryDirectory() as tmp:
