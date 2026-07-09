@@ -305,11 +305,10 @@
 - In-game spontaneous behavior B117: verify children can still spontaneously
   choose "Playhouse!" during daytime, but not when the in-game clock is in a
   nighttime state. Also confirm adults still never choose it spontaneously.
-- Future patcher builds: properly implement the Settings Evict button path.
-  With the current experimental patch enabled, the button still does not appear
-  in Settings.
-- Future patcher builds: implement mobile-exclusive Island Events so they have
-  real outcomes instead of only shell/event records.
+- Future patcher builds: continue mobile-exclusive Island Event outcome work.
+  The optional Island Events patch can add event/dialog records, but most
+  mobile reward, penalty, spawn, pet, and villager-state effects still need
+  native side-effect mapping.
 - Future patcher builds: implement the Holiday Ornaments collection without
   collection-screen crashes, including proper collectible pickup/spawn behavior,
   related Goals, and Island Event wiring.
