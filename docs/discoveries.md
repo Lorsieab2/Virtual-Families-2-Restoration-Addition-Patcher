@@ -1573,3 +1573,15 @@
   applied all settings to a separate modded folder. With all settings enabled,
   the patcher selected `Virtual Families 2 - Modded B134.exe` from the combined
   Island Events + Cheat Upgrades overlay payload.
+
+## 2026-07-09 - Regression Test Contract Cleanup
+
+- `work/test_patch_mobile_furniture_pack.py` now matches the current VF3 TV
+  animation contract: Father's Favorite TV uses the B129 smaller-screen box
+  `(8, 10, 90, 62)` for both orientations while Large and Small VF3 TVs keep
+  their existing screen boxes.
+- `patch_spontaneous_behaviors()` now also edits `Behavior.obj`, so isolated
+  tests for the spontaneous behavior helper need to stage `Behavior.obj` beside
+  `Villager.obj` and `VillagerAI.obj`. The visible behavior-manifest wording is
+  `non-adults` for kids-table/playground-style actions because the helper gates
+  on the stock child cutoff rather than a separate prose-only "children" label.

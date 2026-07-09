@@ -273,10 +273,10 @@ class VF3TVAnimationContractTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "missing graphics descriptor.*SmallEast"):
             patcher.validate_vf3_tv_animation_contract(manifest, check_files=False)
 
-    def test_private_tv_screen_boxes_match_b84_geometry(self):
+    def test_private_tv_screen_boxes_match_current_geometry(self):
         self.assertEqual(patcher.VF3_TV_ANIMATION_SCREEN_BOXES["Large"], (4, 5, 65, 80))
         self.assertEqual(patcher.VF3_TV_ANIMATION_SCREEN_BOXES["Small"], (2, 2, 48, 60))
-        self.assertEqual(patcher.VF3_TV_ANIMATION_SCREEN_BOXES["FathersFavorite"], (5, 8, 96, 104))
+        self.assertEqual(patcher.VF3_TV_ANIMATION_SCREEN_BOXES["FathersFavorite"], (8, 10, 90, 62))
         self.assertEqual(
             patcher.VF3_TV_ANIMATION_SCREEN_BOXES["Large"],
             patcher.VF3_TV_ANIMATION_SCREEN_BOXES["LargeEast"],
@@ -405,6 +405,7 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
             temp_root = Path(tmp)
             shutil.copy2(patcher.SRC_OBJS / "Villager.obj", temp_root / "Villager.obj")
             shutil.copy2(patcher.SRC_OBJS / "VillagerAI.obj", temp_root / "VillagerAI.obj")
+            shutil.copy2(patcher.SRC_OBJS / "Behavior.obj", temp_root / "Behavior.obj")
             old_patched = patcher.PATCHED
             try:
                 patcher.PATCHED = temp_root
@@ -423,7 +424,7 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 self.assertIn("playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;", helper)
                 actions = " ".join(manifest["spontaneous_behaviors"]["actions"])
                 self.assertIn("playing quietly at kids table", actions)
-                self.assertIn("children only", actions)
+                self.assertIn("non-adults", actions)
                 self.assertIn("daytime only", actions)
             finally:
                 patcher.PATCHED = old_patched
