@@ -347,5 +347,10 @@ Changelog
 - B131 patcher refresh: Adds an Experimental/Not Working `Expand game map`
   setting placeholder so the planned map expansion is documented but not
   presented as implemented.
+- B132 game build: Water Pressure Surge now preserves the stock first-bathroom
+  leak writes and also sets north bathroom leak props `0x48`, `0x49`, and
+  `0x4A` when the second-bathroom renovation `0xE6` exists. Villagers route
+  those active north props to the native north leak reactions or existing
+  bathroom sink leak reaction.
 
 Have fun! -Lorsieab2 :)

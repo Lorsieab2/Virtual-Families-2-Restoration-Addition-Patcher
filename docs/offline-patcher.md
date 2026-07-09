@@ -747,6 +747,17 @@ B131 build-specific notes:
 - B131 manifests include top-level `build` and `build_label` fields so the GUI
   can display the current build number without relying on folder names.
 
+B132 build-specific notes:
+
+- Water Pressure Surge now preserves the stock first-bathroom leak writes and
+  also sets north bathroom leak props `0x48` (toilet), `0x49` (shower), and
+  `0x4A` (sink) when the second-bathroom renovation item `0xE6` exists.
+- `CVillager::NewBehavior` maps those active north leak props to
+  `FreakOutShowerLeakNorth` (`0x135`), `FreakOutToiletLeakNorth` (`0x137`),
+  or the existing bathroom sink freak-out (`0x133`); native repair behaviors
+  remain `FixingNorthShower` (`0x140`), `FixingNorthToilet` (`0x142`), and
+  `FixingNorthBRoomSink` (`0x04E`).
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 
