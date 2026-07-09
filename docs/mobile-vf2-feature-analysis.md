@@ -508,6 +508,29 @@ Store implementation:
 - The old hidden-IAP dialog route is bypassed because calling it from visible
   desktop store rows caused blank/crashing dialogs.
 
+### Stock Lotto Ticket odds
+
+The base Special Upgrades `Lotto Ticket` is item `0x114` in `gServicesList`.
+Its purchase effect lives in
+`CScrollingStoreScene::HandleUpgrade()` case `$LN50`.
+
+The first roll is `ldwGameState::GetRandom(10000)`, treated as `0..9999`.
+Thresholds are:
+
+| Roll range | Outcome | Chance |
+| ---: | --- | ---: |
+| `0` | 50000 coins | 0.01% |
+| `1..2` | 25000 coins | 0.02% |
+| `3..22` | 5000 coins | 0.20% |
+| `23..222` | 1000 coins | 2.00% |
+| `223..722` | 750 coins | 5.00% |
+| `723..4055` plus `GetRandom(100) < 50` and an open tray slot | random grocery/tool-tray item `4..7` | 16.665% before slot failure |
+| Remaining rolls, failed 50% item roll, or no open tray slot | not a winner | 76.105% plus any item-slot failures |
+
+Cash payout text uses string `0x4CF` (`eString_LottoWinnings`), no-win text
+uses `0x4D0`, and grocery prize text uses `0x4D1`
+(`eString_WonABagOfGroceries`).
+
 ## Settings Evict Button
 
 Mobile VF2 implements Evict as a normal Settings-dialog control, gated by

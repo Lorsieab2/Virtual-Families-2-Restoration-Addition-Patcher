@@ -1524,3 +1524,15 @@
   (toilet), `0x49` (shower), and `0x4A` (sink); `CVillager::NewBehavior`
   calls `_VF2MapNorthBathroomLeakBehavior` to route villagers to the native
   north leak reactions.
+
+## 2026-07-09 - Stock Special Upgrades Lotto Ticket Odds
+
+- `CScrollingStoreScene::HandleUpgrade()` case `$LN50` handles base Special
+  Upgrade item `0x114` (`Lotto Ticket`). It rolls
+  `ldwGameState::GetRandom(10000)` and awards 50000 coins on roll `0`, 25000
+  coins on `1..2`, 5000 coins on `3..22`, 1000 coins on `23..222`, and 750
+  coins on `223..722`.
+- Non-cash rolls `723..4055` get a second `GetRandom(100)` check; if the roll
+  is `< 50` and a tool-tray slot is available, the game awards random item
+  `4..7` and displays `eString_WonABagOfGroceries` (`0x4D1`). All other
+  remaining rolls display `eString_NotAWinner` (`0x4D0`).
