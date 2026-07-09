@@ -117,8 +117,8 @@ checkboxes:
 | Category | GUI color | Intended settings |
 | --- | --- | --- |
 | `main` | Green | Core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits. |
-| `optional` | Black | Invisible Furniture graphics modes, optional visual swaps, custom maps, LDW Posters/Paintings, and Colorful Couches. |
-| `experimental` | Red | Settings Evict, Island Events, and anything not 100% confirmed working and crash-free. |
+| `optional` | Black | Settings Evict, Island Events, Invisible Furniture graphics modes, optional visual swaps, custom maps, LDW Posters/Paintings, and Colorful Couches. |
+| `experimental` | Red | Holiday Ornaments, mobile furniture behaviors, Expand game map, and anything not 100% confirmed working and crash-free. |
 
 Bundles can include `patcher_icon.png` and `patcher_icon.ico`. The GUI uses the
 PNG as the literal picture beside the bold title and uses the ICO/PNG for the
@@ -517,7 +517,7 @@ as:
   invisible-furniture setting for active replacements.
 - `vf3_tv_animation_graphics` - Fix VF3 TV animation graphics.
 - `settings_evict_button` - Re-enable the Settings menu Evict button. Default
-  off and Experimental until B118 in-game Settings/click validation is stable.
+  off Optional patch.
 - `holiday_ornaments_collection` - Mobile Holiday Ornament yard collectibles,
   collection screen art, and Goals entries. Current manifest conversion must
   include the B86 `CCollectableItem::Find()` and `WasItemSpawned()`
@@ -757,6 +757,15 @@ B132 build-specific notes:
   or the existing bathroom sink freak-out (`0x133`); native repair behaviors
   remain `FixingNorthShower` (`0x140`), `FixingNorthToilet` (`0x142`), and
   `FixingNorthBRoomSink` (`0x04E`).
+
+B133 patcher-specific notes:
+
+- `settings_evict_button` and `island_events` are categorized as default-off
+  Optional patches instead of Experimental/Not Working. Island Events still
+  needs in-game outcome validation, but the patcher setting is no longer a
+  placeholder.
+- Experimental/Not Working remains reserved for Holiday Ornaments, mobile
+  furniture behaviors, Expand game map, and future unstable features.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:

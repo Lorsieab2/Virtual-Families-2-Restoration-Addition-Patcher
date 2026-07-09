@@ -328,7 +328,7 @@
   but full-bundle native store support still comes from the verified modded EXE
   payload.
 - Standalone patcher repo follow-up: keep patcher-only release ZIPs under the
-  private `Virtual-Families-2-Addition-Restoration-Patcher` GitHub repo, and
+  private `Virtual-Families-2-Restoration-Addition-Patcher` GitHub repo, and
   keep the GUI `Check for updates` link pointed at that repo's Releases page.
 - Settings Evict B118 validation: open Settings on a generation 1 and a later
   generation save, confirm the Evict button appears, then click it and verify
@@ -340,10 +340,10 @@
 - In-game test B67 visible Special Upgrade icons: verify Brokerage Account,
   Food Club, Health Plan, and Lucky Rock draw their icon graphics in the
   Special Upgrades list while purchase/apply behavior remains unchanged.
-- Island Events patcher bug: enabling the experimental Island Events setting
-  does not currently add the mobile-exclusive event records to the game. Audit
-  whether the event table/native records are only present in the core EXE
-  payload or missing from the generated patch records entirely.
+- In-game test B133 optional Island Events: enable the Optional Island Events
+  patch and verify mobile-exclusive events plus mobile-only email events appear
+  in-game. Continue auditing outcomes/effects before marking the Island Events
+  work complete.
 - In-game test B125 hammock spontaneous behavior alignment/eligibility: verify
   villagers can spontaneously choose Relax in Hammock when either base
   `HammockStd` (`0x1E1`) or `InvisibleHammock` (`0x30C`) is placed, use the

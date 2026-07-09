@@ -15,9 +15,9 @@ The display name is Virtual Families 2 Restoration/Addition Patcher. The
 GUI starts from Launch_GUI.bat. Prebuilt Launch GUI.lnk shortcuts are not
 shipped because Windows shortcut targets are path-specific and can break after
 ZIP extraction. No compiled patcher launcher EXE is shipped in B105 bundles.
-The update/release repository is Virtual Families 2 Addition/Restoration
+The update/release repository is Virtual Families 2 Restoration/Addition
 Patcher, published as the private GitHub repo
-https://github.com/Lorsieab2/Virtual-Families-2-Addition-Restoration-Patcher/releases.
+https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases.
 New patcher releases should be uploaded there only.
 
 What the patcher does
@@ -165,8 +165,9 @@ Current B105 behavior
 - Invisible Furniture visible graphics and transparent graphics are separate
   default-off settings.
 - Add Custom Couches and LDW Posters is a separate default-off setting.
-- Settings Evict, mobile furniture behaviors, Holiday Ornaments, and Island
-  Events remain default off experimental settings.
+- Settings Evict and Island Events are default-off Optional patches. Mobile
+  furniture behaviors and Holiday Ornaments remain default-off Experimental/Not
+  Working patches.
 - Patch settings are grouped in the GUI as Main Patches (green), Optional
   Patches (black), and Experimental/Not Working Patches (red).
 - patcher_icon.png is shown beside the bold GUI title, and patcher_icon.ico is
@@ -352,5 +353,9 @@ Changelog
   `0x4A` when the second-bathroom renovation `0xE6` exists. Villagers route
   those active north props to the native north leak reactions or existing
   bathroom sink leak reaction.
+- B133 patcher refresh: Keeps Settings Evict and Island Events grouped under
+  Optional Patches in generated manifests/logs, with Experimental/Not Working
+  reserved for Holiday Ornaments, mobile furniture behaviors, Expand game map,
+  and future unstable work.
 
 Have fun! -Lorsieab2 :)

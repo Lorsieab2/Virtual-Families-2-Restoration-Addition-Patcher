@@ -1717,8 +1717,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "Settings and defaults",
         "---------------------",
         "- Main Patches (green): core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits.",
-        "- Optional Patches (black): optional visual swaps, Invisible Furniture graphics modes, custom maps, LDW Posters/Paintings, and Colorful Couches.",
-        "- Experimental/Not Working Patches (red): Holiday Ornaments, mobile furniture behaviors, and anything not 100% confirmed working and crash-free.",
+        "- Optional Patches (black): Settings Evict, Island Events, optional visual swaps, Invisible Furniture graphics modes, custom maps, LDW Posters/Paintings, and Colorful Couches.",
+        "- Experimental/Not Working Patches (red): Holiday Ornaments, mobile furniture behaviors, Expand game map, and anything not 100% confirmed working and crash-free.",
     ]
     )
     for row in settings:
@@ -1821,9 +1821,10 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B131 patcher refresh: Cheat Upgrades adds Unlock all furniture under Special Upgrades. It toggles live furniture generation locks to 0 and restores the generated original-lock snapshot if bought again.",
             "- B131 patcher refresh: Adds an Experimental/Not Working Expand game map setting placeholder so the planned map expansion is documented but not presented as implemented.",
             "- B132 game build: Water Pressure Surge now sets north bathroom leak props 0x48, 0x49, and 0x4A when the second-bathroom renovation 0xE6 exists, and CVillager::NewBehavior routes those active props to the native north leak reactions.",
+            "- B133 patcher refresh: Moves Settings Evict and Island Events into Optional Patches now that their button/event records are implemented; Experimental/Not Working remains for Holiday Ornaments, mobile furniture behaviors, Expand game map, and future unstable work.",
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
-            "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the experimental Island Events setting is enabled.",
+            "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the optional Island Events setting is enabled.",
             "",
             "Experimental patch warning",
             "--------------------------",
@@ -1958,7 +1959,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 requires=["core_executable", "island_events"],
                 payload_name=f"{Path(output_exe_name).stem} - Island Events.exe",
                 note=(
-                    "Optional experimental Island Events executable overlay. "
+                    "Optional Island Events executable overlay. "
                     "Applied only when core_executable and island_events are enabled."
                 ),
             )
@@ -2069,7 +2070,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--vanilla-exe", help="Original vanilla VF2 EXE used for target hash and optional byte diff export.")
     parser.add_argument("--accepted-vanilla-exe", action="append", default=[], help="Additional official VF2 EXE whose PE layout should be accepted during install validation. Repeatable.")
     parser.add_argument("--patched-exe", help="Patched EXE filename inside build dir. Auto-detected by default.")
-    parser.add_argument("--island-events-exe", help="Optional experimental EXE overlay to apply when island_events is enabled.")
+    parser.add_argument("--island-events-exe", help="Optional EXE overlay to apply when island_events is enabled.")
     parser.add_argument("--cheat-upgrades-exe", help="Optional EXE overlay to apply when cheat_upgrades is enabled.")
     parser.add_argument("--island-events-cheat-upgrades-exe", help="Combined optional EXE overlay to apply when island_events and cheat_upgrades are both enabled.")
     parser.add_argument("--target-exe-name", default=DEFAULT_EXE_NAME, help="Relative EXE path expected in the user's game folder.")

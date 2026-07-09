@@ -1008,11 +1008,11 @@
   area of the completion popup.
 - `PatchSetting.category` drives GUI grouping without hardcoding setting IDs in
   the UI. Generated manifests use `main` (green) for core/mobile/Holiday
-  patches, `optional` (black) for visual/invisible/custom additions, and
-  `experimental` (red) for Settings Evict, Island Events, Holiday Ornaments,
-  and other not-yet-proven work. Tk `Text.count(..., "displaylines")` is used
-  to auto-size description blocks so long setting descriptions are fully
-  visible.
+  patches, `optional` (black) for Settings Evict, Island Events,
+  visual/invisible/custom additions, and `experimental` (red) for Holiday
+  Ornaments, mobile furniture behaviors, Expand game map, and other
+  not-yet-proven work. Tk `Text.count(..., "displaylines")` is used to
+  auto-size description blocks so long setting descriptions are fully visible.
 - Patcher bundle icon assets are source-controlled under `work/assets/` as
   `patcher_icon.png` and `patcher_icon.ico`. The GUI loads the PNG from the
   bundle folder or source `work/assets`, displays it beside the bold title, and
