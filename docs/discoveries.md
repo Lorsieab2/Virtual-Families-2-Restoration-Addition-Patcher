@@ -1598,3 +1598,14 @@
   `InitAI` and `LoadAI` restore weights. Because `0x0ED` now resolves through
   `_VF2RandomRadioBehavior`, spontaneous radio/MP3 behavior uses the same
   dance-or-listen selection as manual drops.
+
+## 2026-07-09 - Optional Song Payload Restore Contract
+
+- `work/export_offline_patch_bundle.py::export_asset_payloads()` now copies
+  source-only payload folders (`OptionalVisualMods/`,
+  `Original Virtual Families 2 Assets/`, and `OptionalSongMods/`) whenever they
+  exist in the generated build, even if there are no normal `Images/` or
+  `Assets/` candidate diffs. This keeps optional-song restore records portable:
+  `optional_song_asset_patches()` can attach
+  `payload/Original Virtual Families 2 Assets/originalsounds/*.ogg` as vanilla
+  restore sources for `Sounds/menu.ogg` and `Sounds/song1-4.ogg`.

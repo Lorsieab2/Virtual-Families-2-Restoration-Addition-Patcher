@@ -555,13 +555,19 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             build = tmp_path / "build"
             out = tmp_path / "bundle"
             songs = tmp_path / "songs"
+            original_sounds = build / "Original Virtual Families 2 Assets" / "originalsounds"
             (base / "Sounds").mkdir(parents=True)
-            (base / "Sounds" / "menu.ogg").write_bytes(b"vanilla menu")
+            song_names = ["menu.ogg", "song1.ogg", "song2.ogg", "song3.ogg", "song4.ogg"]
+            for name in song_names:
+                (base / "Sounds" / name).write_bytes(f"vanilla target {name}".encode("ascii"))
             build.mkdir()
             (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
             (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            original_sounds.mkdir(parents=True)
             songs.mkdir()
-            (songs / "menu.ogg").write_bytes(b"optional menu")
+            for name in song_names:
+                (songs / name).write_bytes(f"optional {name}".encode("ascii"))
+                (original_sounds / name).write_bytes(f"restore {name}".encode("ascii"))
 
             self.run_exporter(
                 "--build-dir",
@@ -576,12 +582,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
 
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
-            song = asset_by_path["Sounds/menu.ogg"]
-            self.assertEqual(song["requires"], ["optional_song_mods"])
-            self.assertEqual(song["source_path"], "payload/OptionalSongMods/menu.ogg")
-            self.assertEqual(song["expected_target_size"], len(b"vanilla menu"))
-            self.assertTrue((out / "payload" / "OptionalSongMods" / "menu.ogg").is_file())
-            self.assertFalse((out / "payload" / "Sounds" / "menu.ogg").exists())
+            for name in song_names:
+                song = asset_by_path[f"Sounds/{name}"]
+                self.assertEqual(song["requires"], ["optional_song_mods"])
+                self.assertEqual(song["source_path"], f"payload/OptionalSongMods/{name}")
+                self.assertEqual(song["restore_source_path"], f"payload/Original Virtual Families 2 Assets/originalsounds/{name}")
+                self.assertEqual(song["expected_target_size"], len(f"vanilla target {name}".encode("ascii")))
+                self.assertTrue((out / "payload" / "OptionalSongMods" / name).is_file())
+                self.assertTrue((out / "payload" / "Original Virtual Families 2 Assets" / "originalsounds" / name).is_file())
+                self.assertFalse((out / "payload" / "Sounds" / name).exists())
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
             self.assertEqual(settings_by_id["optional_song_mods"]["category"], "optional")
 

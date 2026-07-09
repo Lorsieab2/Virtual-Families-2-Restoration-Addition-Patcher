@@ -906,20 +906,19 @@ def export_asset_payloads(
     payload_root = bundle_dir / "payload"
     asset_patches: list[dict[str, Any]] = []
     candidate_assets = iter_candidate_assets(build_dir, manifest_data, asset_mode)
-    if candidate_assets:
-        for dirname in SOURCE_ONLY_PAYLOAD_DIRS:
-            source_root = build_dir / dirname
-            if not source_root.is_dir():
+    for dirname in SOURCE_ONLY_PAYLOAD_DIRS:
+        source_root = build_dir / dirname
+        if not source_root.is_dir():
+            continue
+        for source in source_root.rglob("*"):
+            if not source.is_file():
                 continue
-            for source in source_root.rglob("*"):
-                if not source.is_file():
-                    continue
-                rel = source.relative_to(build_dir)
-                if not is_full_payload_candidate(rel):
-                    continue
-                target = payload_root / rel
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(source, target)
+            rel = source.relative_to(build_dir)
+            if not is_full_payload_candidate(rel):
+                continue
+            target = payload_root / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
 
     for source in candidate_assets:
         rel = source.relative_to(build_dir)
