@@ -1497,3 +1497,25 @@
   `sFurnitureInfo` generation locks, sets all live locks to `0`, and restores
   the generated lock table when bought again. `sFurnitureInfo` stride is
   `0x6C`; generation lock is field `+0x0C`.
+
+## 2026-07-09 - Villager Behavior/Plan Dump
+
+- `work/dump_villager_action_plan_data.py` now exports a grouped
+  `CBehavior -> CVillagerPlans` report under
+  `outputs/villager-action-plan-dump/`, including registered behavior IDs,
+  recovered plan API signatures, inferred push arguments, known content-object
+  constants, and recovered `CVillager` field notes.
+- Confirmed field anchors: `CVillager+0x6A54` is the age/growth field used by
+  stock adult/non-adult gates, `+0x6A58` is likely gender, `+0x6A5C` is likely
+  body/outfit value, `+0x6A60` appears to be head/voice-related rather than a
+  baby counter, and `+0x1BBA8` is the current action/status label buffer.
+- Native baby-related behavior constructors exist for
+  `TeachingFirstWords`, `MomTeachingTalk`, `WashBaby`, `ChangeBaby`,
+  `ShowingBabyGarden`, `ShowingBabyToys`, `CelebratingBaby`,
+  `JealousAboutBaby`, `ExcitedAboutBaby`, and `PlayingMommy`; actual
+  nursing/baby ownership fields still need mapping before enabling these as
+  spontaneous nursing-mother behaviors.
+- Native north leak reactions exist for `FreakOutShowerLeakNorth` and
+  `FreakOutToiletLeakNorth`. A distinct `FreakOutBathroomSinkLeakNorth` symbol
+  has not been found, so second-bathroom sink leak support should start from
+  `CEventTheWaterPressureSurge::ImpactGame` and content-map object writes.

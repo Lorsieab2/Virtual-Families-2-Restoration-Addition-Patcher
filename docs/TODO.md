@@ -394,12 +394,17 @@
   use a broader gate than the current adult-only wrappers.
 - Research: implement nursing-mother infant-care variants and the requested
   shared infant-care handoff only after documenting the baby/babyplets fields
-  and native partner-wait plan route.
+  and native partner-wait plan route. Native baby-related behavior IDs are now
+  known: `TeachingFirstWords` (`0x11F`), `WashBaby` (`0x181`), `ChangeBaby`
+  (`0x182`), `MomTeachingTalk` (`0x18F`), plus `ShowingBabyGarden`,
+  `ShowingBabyToys`, `CelebratingBaby`, `JealousAboutBaby`,
+  `ExcitedAboutBaby`, and `PlayingMommy`.
 - Research: re-enable second-bathroom north leak reactions. Native behavior
-  constructors exist for `FreakOutShowerLeakNorth` and
-  `FreakOutToiletLeakNorth`; `FreakOutBathroomSinkLeak` exists but a distinct
-  `BathroomSinkLeakNorth` behavior symbol has not been proven yet. Also find
-  the Water Pressure Surge faucet-outcome event hook before patching.
+  constructors exist for `FreakOutShowerLeakNorth` (`0x135`) and
+  `FreakOutToiletLeakNorth` (`0x137`); `FreakOutBathroomSinkLeak` (`0x133`)
+  exists but a distinct `BathroomSinkLeakNorth` behavior symbol has not been
+  proven yet. Also inspect `CEventTheWaterPressureSurge::ImpactGame` and the
+  faucet-outcome writes before patching second-bathroom leak spawning.
 - Research: `expand_game_map` is exposed as experimental/not implemented in
   the patcher setting list. Implement only after mapping map-tile bounds,
   content/collision fmaps, camera clamps, and save references.
