@@ -9424,10 +9424,26 @@ static int VF2ArrayCount(int const *begin, int const *end)
 
 #define VF2_LABEL_COUNT(arr) ((int)(sizeof(arr) / sizeof((arr)[0])))
 
-static bool VF2IsAdult(CVillager &villager)
+static unsigned int VF2AgeValue(CVillager &villager)
 {
     unsigned char *data = (unsigned char *)&villager;
-    return *(unsigned int *)(data + 0x6A54) >= 0x118;
+    return *(unsigned int *)(data + 0x6A54);
+}
+
+static bool VF2IsChild(CVillager &villager)
+{
+    return VF2AgeValue(villager) < 0x118;
+}
+
+static bool VF2IsTeenOrOlder(CVillager &villager)
+{
+    return VF2AgeValue(villager) >= 0x118;
+}
+
+static bool VF2IsMatureAdult(CVillager &villager)
+{
+    unsigned int age = VF2AgeValue(villager);
+    return age >= 0x168 && age < 0x44C;
 }
 
 static void VF2SetBehaviorLabel(CVillager &villager, int stringId)
@@ -9455,11 +9471,11 @@ static void VF2ApplyCoffeeLabel(CVillager &villager)
 
 static void VF2ApplyShowerLabel(CVillager &villager)
 {
-    if (!VF2IsAdult(villager) && ldwGameState::GetRandom(5) == 0) {
+    if (VF2IsChild(villager) && ldwGameState::GetRandom(5) == 0) {
         VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_shower_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_child));
         return;
     }
-    if (VF2IsAdult(villager) && ldwGameState::GetRandom(8) == 0) {
+    if (VF2IsTeenOrOlder(villager) && ldwGameState::GetRandom(8) == 0) {
         VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_shower_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_adult));
         return;
     }
@@ -9521,7 +9537,7 @@ extern "C" void __cdecl VF2RandomTVLabel(CVillager &villager)
 extern "C" void __cdecl VF2RandomWebLabel(CVillager &villager)
 {
     CBehavior::BrowsingWeb(villager);
-    if (VF2IsAdult(villager) && ldwGameState::GetRandom(4) == 0) {
+    if (VF2IsTeenOrOlder(villager) && ldwGameState::GetRandom(4) == 0) {
         VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_web_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_web_adult));
         return;
     }
@@ -9573,7 +9589,7 @@ extern "C" void __cdecl VF2RandomWorkshopCareerLabel(CVillager &villager)
 extern "C" void __cdecl VF2RandomPoolLabel(CVillager &villager)
 {
     CBehavior::SwimmingPool(villager);
-    if (!VF2IsAdult(villager) && ldwGameState::GetRandom(3) == 0) {
+    if (VF2IsChild(villager) && ldwGameState::GetRandom(3) == 0) {
         VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_pool_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_child));
         return;
     }
@@ -9796,8 +9812,9 @@ def patch_behavior_label_variants(manifest):
         "status": "native behavior macros call wrapper functions that preserve native behavior plans and only vary the visible behavior label",
         "changed": changed,
         "age_notes": {
-            "non_adult_boundary": "CVillager+0x6A54 < 0x118 is treated as the stock non-adult range for spontaneous gates; >= 0x118 is adult.",
-            "teen_boundary": "No separate teen-only threshold is patched yet. Requests that specifically require teens and adults together use either the native behavior's stock gates or the proven adult gate until the teen threshold is documented.",
+            "child_boundary": "CVillager+0x6A54 < 0x118 is treated as the stock child range for child-only spontaneous gates.",
+            "teen_or_older_boundary": "CVillager+0x6A54 >= 0x118 is treated as the teen-or-older/non-child range for label variants such as web/social and spa-day text.",
+            "mature_adult_boundary": "0x168 <= CVillager+0x6A54 < 0x44C is the documented mature-adult range used by native mating/partner selection; the helper is present for future adult-only variants.",
         },
     }
 

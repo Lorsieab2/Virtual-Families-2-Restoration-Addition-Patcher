@@ -1550,3 +1550,7 @@
 - Future behavior patches should separate helper names by intent: child-only
   (`< 0x118`), teen-or-older (`>= 0x118`), and mature adult
   (`>= 0x168 && < 0x44C`).
+- `work/patch_mobile_furniture_pack.py` now emits helper names matching those
+  semantics: `VF2IsChild`, `VF2IsTeenOrOlder`, and `VF2IsMatureAdult`. Current
+  label routing remains behavior-equivalent; this mainly prevents future
+  teen/adult wording mistakes.

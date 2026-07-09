@@ -391,9 +391,11 @@
   generation locks disappear from stock and added furniture; buy it again and
   confirm the generated original lock table is restored without corrupting
   store rows.
-- Follow-up: audit behavior-patch helper names so teen-or-older variants use
-  `CVillager+0x6A54 >= 0x118`, while mature-adult-only variants use
-  `0x168 <= CVillager+0x6A54 < 0x44C`.
+- In-game behavior test: after the next patcher/build export, verify label
+  variants still choose the same animations after the helper-name cleanup
+  (`VF2IsChild`, `VF2IsTeenOrOlder`, `VF2IsMatureAdult`).
+- Follow-up: use `VF2IsMatureAdult` for future mature-adult-only variants such
+  as nursing/partner/romance routes once those behaviors are implemented.
 - Research: implement nursing-mother infant-care variants and the requested
   shared infant-care handoff only after documenting the baby/babyplets fields
   and native partner-wait plan route. Native baby-related behavior IDs are now
