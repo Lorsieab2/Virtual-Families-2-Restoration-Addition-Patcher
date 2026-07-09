@@ -336,5 +336,16 @@ Changelog
   workspace upgrade PNG pairs under
   payload/OptionalVisualMods/Invisible Workspace Upgrades. No outside folder is
   needed when applying or disabling the patch.
+- B131 game build: Behavior Patches add grouped visible-label variants for
+  native TV, web, video game, radio, reading, petting, mending, ironing,
+  telescope, workout, career, shower/bath, coffee/tea, cocktail, pool,
+  sandbox, toy train, playground, and snow-play routes. The wrappers preserve
+  the original behavior plans and only change the displayed action text.
+- B131 patcher refresh: Cheat Upgrades adds `Unlock all furniture` under
+  Special Upgrades. It toggles live furniture generation locks to `0` and
+  restores the generated original-lock snapshot if bought again.
+- B131 patcher refresh: Adds an Experimental/Not Working `Expand game map`
+  setting placeholder so the planned map expansion is documented but not
+  presented as implemented.
 
 Have fun! -Lorsieab2 :)

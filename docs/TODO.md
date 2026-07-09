@@ -374,3 +374,32 @@
   Also confirm Father's Favorite TV uses the same split supplied frames scaled
   to its smaller furniture canvas, with no stale B129/bounded-compositor strip
   visible in-game.
+- In-game behavior test B131: enable Behavior Patches and confirm TV, radio,
+  web, video game, reading, petting, mending, ironing, telescope, workout,
+  career, shower/bath, coffee/tea, cocktail, pool, sandbox, toy train,
+  playground, and snow-play label variants display correctly while preserving
+  the native animation/targeting route.
+- In-game behavior test B131: confirm Drawing is no longer selected by adults,
+  but still appears for children/teenagers if the stock non-adult threshold
+  `CVillager+0x6A54 < 0x118` covers both groups.
+- In-game behavior test B131: while snow weather is active, confirm children
+  and teenagers can spontaneously choose Playing in Snow variants. If enum
+  `Weather.currentType == 5` is wrong, re-map weather enums from live state.
+- In-game Cheat Upgrades test B131: buy `Unlock all furniture` and confirm
+  generation locks disappear from stock and added furniture; buy it again and
+  confirm the generated original lock table is restored without corrupting
+  store rows.
+- Research: document the exact teen/adult boundary separately from the proven
+  adult boundary, then decide whether teen+adult web/social variants should
+  use a broader gate than the current adult-only wrappers.
+- Research: implement nursing-mother infant-care variants and the requested
+  shared infant-care handoff only after documenting the baby/babyplets fields
+  and native partner-wait plan route.
+- Research: re-enable second-bathroom north leak reactions. Native behavior
+  constructors exist for `FreakOutShowerLeakNorth` and
+  `FreakOutToiletLeakNorth`; `FreakOutBathroomSinkLeak` exists but a distinct
+  `BathroomSinkLeakNorth` behavior symbol has not been proven yet. Also find
+  the Water Pressure Surge faucet-outcome event hook before patching.
+- Research: `expand_game_map` is exposed as experimental/not implemented in
+  the patcher setting list. Implement only after mapping map-tile bounds,
+  content/collision fmaps, camera clamps, and save references.

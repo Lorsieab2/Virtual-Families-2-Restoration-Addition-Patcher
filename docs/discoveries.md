@@ -1472,3 +1472,28 @@
   by B130 EXE payloads. The B130 payload includes `108` outfit icons, `5`
   optional-song OGGs, `6` runtime TV animation sheets, and `108` split TV
   animation frame PNGs.
+
+## 2026-07-09 - B131 Behavior Label Variants and Furniture Unlock Cheat
+
+- `work/patch_mobile_furniture_pack.py::patch_spontaneous_behaviors()` now
+  writes grouped behavior-label string arrays into
+  `vf2_spontaneous_behaviors.cpp`. Wrapper helpers call the native behavior
+  first, then replace only the visible action label through
+  `CVillager+0x1BBA8` and `theStringManager::GetString()`.
+- `patch_behavior_label_variants()` retargets safe no-data
+  `CBehavior::CBehavior()` macro rows to wrappers for TV, web, video games,
+  mending, ironing, telescope, workout, career, pool, playhouse, snow,
+  sandbox, toy train, petting, shower, coffee, and cocktail variants. It
+  preserves native plans, walking, animation, sounds, and furniture targeting.
+- The non-adult autonomous gate still uses the proven stock boundary
+  `CVillager+0x6A54 < 0x118`. Drawing, snow play, sandbox, toy train,
+  Playhouse, and Kids Table spontaneous candidates use that range; adult
+  ironing/mending/career candidates use `>= 0x118`.
+- Snow-play spontaneity is gated by `Weather.currentType == 5`, inferred from
+  native weather event callsites that pass enum values `0`, `3`, `4`, and `5`.
+  This needs in-game weather verification.
+- The optional Cheat Upgrades overlay adds item `0x123`:
+  `Unlock all furniture`. Its helper snapshots stock plus appended
+  `sFurnitureInfo` generation locks, sets all live locks to `0`, and restores
+  the generated lock table when bought again. `sFurnitureInfo` stride is
+  `0x6C`; generation lock is field `+0x0C`.

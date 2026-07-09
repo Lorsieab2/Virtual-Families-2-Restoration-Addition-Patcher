@@ -278,6 +278,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x120: "cheat_add_food.png",
     0x121: "cheat_add_food.png",
     0x122: "cheat_add_food.png",
+    0x123: "cheat_add_coins.png",
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
@@ -329,6 +330,12 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": 0x122,
         "name": "Add max amount of food",
         "description": "Sets food to the game's maximum signed amount.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x123,
+        "name": "Unlock all furniture",
+        "description": "Sets all furniture generation locks to 0. Buy again to reset.",
         "price": 0,
     },
 ]
@@ -436,10 +443,267 @@ ORIG_STRING_ONE_PAST_MAX = 0xA69
 ORIG_STRING_GET_MAX_MINUS_ONE = 0xA67
 ORIG_STRING_LOOKUP_BYTES = 0x29A4
 SPECIAL_UPGRADE_DESCRIPTION_COUNT = 4
-BEHAVIOR_LABELS = [
-    ("eString_PlayingPachinko", "Playing pachinko"),
-    ("eString_PlayingPinball", "Playing pinball"),
+BEHAVIOR_LABEL_GROUPS = [
+    (
+        "arcade",
+        [
+            ("eString_PlayingPachinko", "Playing pachinko"),
+            ("eString_PlayingPinball", "Playing pinball"),
+        ],
+    ),
+    (
+        "reading",
+        [
+            ("eString_ReadingNovel", "Reading a novel"),
+            ("eString_ReadingTextbook", "Reading a textbook"),
+            ("eString_ReadingComicBook", "Reading a comic book"),
+            ("eString_ReadingPictureBook", "Reading a picture book"),
+            ("eString_ReadingChapterBook", "Reading a chapter book"),
+            ("eString_ReadingManga", "Reading manga"),
+            ("eString_ReadingHowToManual", "Reading a how-to manual"),
+        ],
+    ),
+    (
+        "radio_dance",
+        [
+            ("eString_SingingToMusic", "Singing to the music"),
+            ("eString_PracticingDanceMoves", "Practicing dance moves"),
+            ("eString_HavingSingAlong", "Having a sing-a-long"),
+            ("eString_PracticingVocalLessons", "Practicing vocal lessons"),
+            ("eString_HavingKaraokeParty", "Having a karaoke party"),
+        ],
+    ),
+    (
+        "tv",
+        [
+            ("eString_WatchingMovie", "Watching a movie"),
+            ("eString_WatchingTVShow", "Watching a TV show"),
+            ("eString_WatchingDocumentary", "Watching a documentary"),
+            ("eString_WatchingNews", "Watching the news"),
+            ("eString_WatchingWeatherChannel", "Watching the weather channel"),
+            ("eString_WatchingMovieFlix", "Watching MovieFlix"),
+        ],
+    ),
+    (
+        "video_game",
+        [
+            ("eString_PlayingVirtualVillagers", "Playing Virtual Villagers"),
+            ("eString_PlayingVirtualTown", "Playing Virtual Town"),
+            ("eString_PlayingVirtualFamilies", "Playing Virtual Families"),
+            ("eString_PlayingLittlePocketPet", "Playing Little Pocket Pet"),
+            ("eString_PlayingFishTycoon", "Playing Fish Tycoon"),
+            ("eString_PlayingPlantTycoon", "Playing Plant Tycoon"),
+        ],
+    ),
+    (
+        "web_basic",
+        [
+            ("eString_BrowsingLDWForums", "Browsing LDWForums"),
+            ("eString_WatchingCatVideos", "Watching cat videos"),
+        ],
+    ),
+    (
+        "web_adult",
+        [
+            ("eString_BrowsingFakebook", "Browsing Fakebook"),
+            ("eString_BrowsingSocialMedia", "Browsing social media"),
+            ("eString_BrowsingVideoTube", "Browsing VideoTube"),
+            ("eString_BrowsingClipTok", "Browsing ClipTok"),
+            ("eString_BrowsingPicstagram", "Browsing Picstagram"),
+            ("eString_PostingOnFakebook", "Posting on Fakebook"),
+            ("eString_PostingOnSocialMedia", "Posting on social media"),
+            ("eString_PostingOnVideoTube", "Posting on VideoTube"),
+            ("eString_PostingOnClipTok", "Posting on ClipTok"),
+            ("eString_PostingOnPicstagram", "Posting on Picstagram"),
+        ],
+    ),
+    (
+        "playhouse",
+        [
+            ("eString_PlayingJungleGym", "Playing on the jungle gym"),
+            ("eString_PlayingSwings", "Playing on the swings"),
+            ("eString_JumpingOffSwings", "Jumping off the swings"),
+            ("eString_RunningAroundPlayground", "Running around the playground"),
+            ("eString_PretendingMountEverest", "Pretending to climb Mount Everest"),
+            ("eString_PlayingMonkeyBars", "Playing on the monkey bars"),
+            ("eString_SlidingDownSlide", "Sliding down the slide"),
+        ],
+    ),
+    (
+        "sandbox",
+        [
+            ("eString_MakingSandSculptures", "Making sand sculptures"),
+            ("eString_DiggingMoats", "Digging moats"),
+            ("eString_DiggingCenterEarth", "Digging to the center of the earth"),
+        ],
+    ),
+    (
+        "train_child",
+        [
+            ("eString_FloorIsLava", "The floor is lava!"),
+            ("eString_PlayingTag", "Playing tag"),
+            ("eString_DuckDuckGoose", "Playing Duck Duck Goose"),
+        ],
+    ),
+    (
+        "pool_general",
+        [
+            ("eString_DoingPoolLaps", "Doing laps in the pool"),
+            ("eString_PracticingSwimmingLessons", "Practicing swimming lessons"),
+            ("eString_PracticingDivingTechnique", "Practicing diving technique"),
+            ("eString_DivingUnderwater", "Diving underwater"),
+            ("eString_Cannonball", "Cannonball!"),
+            ("eString_DivingBottomPool", "Diving to the bottom of the pool"),
+            ("eString_UnderwaterBackflips", "Practicing underwater backflips"),
+            ("eString_UnderwaterFrontflips", "Practicing underwater frontflips"),
+            ("eString_UnderwaterHandstands", "Practicing underwater handstands"),
+        ],
+    ),
+    (
+        "pool_child",
+        [
+            ("eString_PlayingMermaids", "Playing mermaids"),
+            ("eString_PlayingPirates", "Playing pirates"),
+            ("eString_PlayingDolphins", "Playing dolphins"),
+            ("eString_PlayingSharks", "Playing sharks"),
+        ],
+    ),
+    (
+        "pet",
+        [
+            ("eString_Petting", "Petting"),
+            ("eString_PraisingPet", "Praising pet"),
+            ("eString_ScoldingPet", "Scolding pet"),
+            ("eString_PlayingWithPet", "Playing with pet"),
+            ("eString_CuddlingWithPet", "Cuddling with pet"),
+            ("eString_TrainingPet", "Training pet"),
+            ("eString_GivingPetTreats", "Giving pet treats"),
+        ],
+    ),
+    (
+        "mending",
+        [
+            ("eString_Sewing", "Sewing"),
+            ("eString_PatchingHole", "Patching up a hole"),
+            ("eString_Quilting", "Quilting"),
+            ("eString_SewingClothes", "Sewing clothes"),
+            ("eString_Crocheting", "Crocheting"),
+            ("eString_TailoringClothes", "Tailoring clothes"),
+        ],
+    ),
+    ("ironing", [("eString_IroningClothes", "Ironing clothes")]),
+    (
+        "telescope",
+        [
+            ("eString_FindingConstellations", "Finding constellations"),
+            ("eString_FindingPlanets", "Finding planets"),
+            ("eString_LookingForAliens", "Looking for aliens"),
+            ("eString_PracticingAstronomy", "Practicing astronomy"),
+            ("eString_FindingSpaceStations", "Finding space stations"),
+            ("eString_FindingISS", "Finding the ISS"),
+        ],
+    ),
+    (
+        "workout",
+        [
+            ("eString_DoingLegExercises", "Doing leg exercises"),
+            ("eString_DoingArmExercises", "Doing arm exercises"),
+            ("eString_DoingBackExercises", "Doing back exercises"),
+            ("eString_DoingAbdominalExercises", "Doing abdominal exercises"),
+        ],
+    ),
+    (
+        "career",
+        [
+            ("eString_PracticingCareerSkills", "Practicing career skills"),
+            ("eString_PracticingWorkTechniques", "Practicing new work techniques"),
+            ("eString_WorkingJobProject", "Working on a job project"),
+        ],
+    ),
+    (
+        "shower_general",
+        [
+            ("eString_TakingBath", "Taking a bath"),
+            ("eString_TakingBubbleBath", "Taking a bubble bath"),
+            ("eString_SingingInShower", "Singing in the shower"),
+            ("eString_TakingRelaxingBath", "Taking a relaxing bath"),
+            ("eString_TakingRelaxingBubbleBath", "Taking a relaxing bubble bath"),
+        ],
+    ),
+    ("shower_adult", [("eString_HavingSpaDay", "Having a spa day")]),
+    ("shower_child", [("eString_PlayingBathToys", "Playing with bath toys")]),
+    (
+        "cocktail",
+        [
+            ("eString_PracticingBartending", "Practicing bartending skills"),
+            ("eString_PracticingMixology", "Practicing mixology skills"),
+            ("eString_RearrangingBottles", "Rearranging bottles"),
+            ("eString_CraftingMixedDrinks", "Crafting new mixed drinks"),
+            ("eString_MakingCocktail", "Making a cocktail"),
+        ],
+    ),
+    (
+        "coffee",
+        [
+            ("eString_MakingEspresso", "Making espresso"),
+            ("eString_MakingLatte", "Making a latte"),
+            ("eString_MakingMatchaLatte", "Making a matcha latte"),
+            ("eString_MakingCaffeMocha", "Making a caffe mocha"),
+            ("eString_MakingAmericano", "Making an americano"),
+            ("eString_MakingRistretto", "Making a ristretto"),
+            ("eString_MakingDoubleShotEspresso", "Making a double-shot espresso"),
+            ("eString_MakingBlackCoffee", "Making black coffee"),
+            ("eString_MakingCappuccino", "Making cappuccino"),
+            ("eString_MakingFrozenCoffee", "Making frozen coffee"),
+            ("eString_MakingIcedCoffee", "Making iced coffee"),
+            ("eString_MakingFrappe", "Making a frappe"),
+            ("eString_MakingTea", "Making tea"),
+            ("eString_MakingMatchaTea", "Making matcha tea"),
+            ("eString_MakingEarlGreyTea", "Making earl grey tea"),
+            ("eString_MakingJasmineTea", "Making jasmine tea"),
+            ("eString_MakingBlackTea", "Making black tea"),
+            ("eString_MakingIcedTea", "Making iced tea"),
+        ],
+    ),
+    ("coffee_evening", [("eString_MakingChamomileTea", "Making chamomile tea")]),
+    (
+        "coffee_rare",
+        [
+            (
+                "eString_MakingLeviathanLatte",
+                "Making a Half-Caff Double-Shot Leviathan Latte-Espresso with Heavy Cream",
+            ),
+        ],
+    ),
+    (
+        "snow",
+        [
+            ("eString_PlayingInSnow", "Playing in Snow"),
+            ("eString_MakingSnowmen", "Making snowmen"),
+            ("eString_MakingSnowAngels", "Making snow angels"),
+            ("eString_ThrowingSnowballs", "Throwing snowballs"),
+            ("eString_HavingSnowballFight", "Having a snowball fight"),
+            ("eString_MakingSnowSculptures", "Making snow sculptures"),
+        ],
+    ),
 ]
+BEHAVIOR_LABELS = [
+    entry
+    for _group_name, group_entries in BEHAVIOR_LABEL_GROUPS
+    for entry in group_entries
+]
+BEHAVIOR_LABEL_INDEX = {
+    key: index
+    for index, (key, _text) in enumerate(BEHAVIOR_LABELS)
+}
+BEHAVIOR_LABEL_GROUP_RANGES = {}
+_behavior_label_cursor = 0
+for _group_name, _group_entries in BEHAVIOR_LABEL_GROUPS:
+    BEHAVIOR_LABEL_GROUP_RANGES[_group_name] = (
+        _behavior_label_cursor,
+        _behavior_label_cursor + len(_group_entries),
+    )
+    _behavior_label_cursor += len(_group_entries)
 
 
 def build_native_array_contract():
@@ -4483,6 +4747,19 @@ def behavior_label_string_id_for(index):
     )
 
 
+def behavior_label_string_id_by_key(key):
+    return behavior_label_string_id_for(BEHAVIOR_LABEL_INDEX[key])
+
+
+def behavior_label_string_ids_for_group(group_name):
+    start, end = BEHAVIOR_LABEL_GROUP_RANGES[group_name]
+    return [behavior_label_string_id_for(index) for index in range(start, end)]
+
+
+def cpp_int_array(name, values):
+    return f"static const int {name}[] = {{{', '.join(str(value) for value in values)}}};"
+
+
 def normalize_event_text(value):
     text = value.replace("\r\n", "\n").replace("\r", "\n")
     text = " ".join(part.strip() for part in text.split())
@@ -5799,8 +6076,20 @@ extern "C" void __cdecl VF2HandleStoreScrollbarMouse(void *scene, int message, i
 """.lstrip(),
         encoding="ascii",
     )
-    (PATCHED / "vf2_special_upgrade_effects.cpp").write_text(
-        r"""
+    records = raw_records_by_item()
+    furniture_generation_locks = []
+    for item_id in range(0x1AD, 0x1AD + ORIG_FURNITURE_COUNT):
+        if item_id not in records:
+            raise RuntimeError(f"Missing stock furniture record for lock snapshot: {item_id:#x}")
+        furniture_generation_locks.append(records[item_id]["raw_u32"][3])
+    for _idx, (_name, _donor_id, _list_name, path) in enumerate(ITEMS):
+        furniture_generation_locks.append(int(MOBILE_DATA_BY_PATH[path].get("lock_generation", 0)))
+    furniture_lock_array_cpp = cpp_int_array(
+        "kVF2OriginalFurnitureGenerationLocks",
+        furniture_generation_locks,
+    )
+
+    special_upgrade_helper_cpp = r"""
 class CFoodStore {
 public:
     char pad0[0x78];
@@ -5848,6 +6137,40 @@ extern CFoodStore FoodStore;
 extern CMoney Money;
 extern CCollectableItem CollectableItem;
 
+struct sFurnitureInfo {
+    int item;
+    int image;
+    int price;
+    int generationLock;
+    char pad0[0x5C];
+};
+
+extern sFurnitureInfo itemInfo[];
+
+__VF2_FURNITURE_LOCK_ARRAY__
+static const int kVF2FurnitureRecordCount = __VF2_FURNITURE_RECORD_COUNT__;
+
+static bool VF2AllFurnitureLocksUnlocked() {
+    for (int i = 0; i < kVF2FurnitureRecordCount; ++i) {
+        if (kVF2OriginalFurnitureGenerationLocks[i] > 0 && itemInfo[i].generationLock != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void VF2UnlockAllFurnitureGenerationLocks() {
+    for (int i = 0; i < kVF2FurnitureRecordCount; ++i) {
+        itemInfo[i].generationLock = 0;
+    }
+}
+
+static void VF2RestoreFurnitureGenerationLocks() {
+    for (int i = 0; i < kVF2FurnitureRecordCount; ++i) {
+        itemInfo[i].generationLock = kVF2OriginalFurnitureGenerationLocks[i];
+    }
+}
+
 extern "C" int __cdecl VF2CollectionPageCount(int page) {
     static const int starts[6] = {0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E};
     if (page < 0 || page >= 6) {
@@ -5866,6 +6189,8 @@ extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
         return theGameState::Get()->healthPlanActive ? 0 : -1;
     case 0x11A:
         return CollectableItem.luckyRockActive ? 0 : -1;
+    case 0x123:
+        return VF2AllFurnitureLocksUnlocked() ? 0 : -1;
     default:
         return -1;
     }
@@ -5935,13 +6260,30 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     case 0x122:
         FoodStore.Adjust(0x7FFFFFFF);
         break;
+    case 0x123:
+        if (VF2AllFurnitureLocksUnlocked()) {
+            VF2RestoreFurnitureGenerationLocks();
+            break;
+        }
+        VF2UnlockAllFurnitureGenerationLocks();
+        break;
     default:
         return;
     }
 
     theGameState::Get()->SaveCurrentGame();
 }
-""".lstrip(),
+""".lstrip()
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_FURNITURE_LOCK_ARRAY__",
+        furniture_lock_array_cpp,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_FURNITURE_RECORD_COUNT__",
+        str(len(furniture_generation_locks)),
+    )
+    (PATCHED / "vf2_special_upgrade_effects.cpp").write_text(
+        special_upgrade_helper_cpp,
         encoding="ascii",
     )
     manifest["ScrollingStoreScene"] = {
@@ -6491,7 +6833,7 @@ def patch_island_events(manifest):
             )
         )
 
-    helper_cpp = f'''
+    helper_cpp = r'''
 #include <stddef.h>
 
 enum StringId {{ eStringDummy = 0 }};
@@ -8659,34 +9001,63 @@ def patch_spontaneous_behaviors(manifest):
     behavior_obj.retarget_relocation(behavior_sec.index, ctor.value + 0x1A8, anchored_hammock)
     behavior_obj.write(PATCHED / "Behavior.obj")
 
+    behavior_label_arrays = "\n".join(
+        cpp_int_array(f"kVF2BehaviorLabels_{group_name}", behavior_label_string_ids_for_group(group_name))
+        for group_name, _entries in BEHAVIOR_LABEL_GROUPS
+    )
+
     helper_cpp = r'''
 // CVillager::InitAI owns the real autonomous candidate table. Each candidate
 // is 0xD0 bytes; +0xCD is its enabled flag and +0x0C its random-choice weight.
 // These IDs are existing VF2 behavior macros, so their native object search,
 // walking, animation, sounds, and failure handling remain unchanged.
-static void EnableAutonomousCandidate(unsigned char *villager, unsigned int behavior)
+static void EnableAutonomousCandidateWithWeight(unsigned char *villager, unsigned int behavior, unsigned int weight)
 {
     unsigned char *candidate = villager + 0x6BB8 + behavior * 0xD0;
     candidate[0xCD] = 1;
-    *(unsigned int *)(candidate + 0x0C) = 3000;
+    *(unsigned int *)(candidate + 0x0C) = weight;
+}
+
+static void EnableAutonomousCandidate(unsigned char *villager, unsigned int behavior)
+{
+    EnableAutonomousCandidateWithWeight(villager, behavior, 3000);
+}
+
+static void EnableAllAgesAutonomousCandidateWithWeight(unsigned char *villager, unsigned int behavior, unsigned int weight)
+{
+    unsigned char *candidate = villager + 0x6BB8 + behavior * 0xD0;
+    candidate[0xCD] = 1;
+    *(unsigned int *)(candidate + 0x0C) = weight;
+    *(unsigned int *)(candidate + 0x48) = 0;
+    *(unsigned int *)(candidate + 0x4C) = 0;
 }
 
 static void EnableAllAgesAutonomousCandidate(unsigned char *villager, unsigned int behavior)
 {
+    EnableAllAgesAutonomousCandidateWithWeight(villager, behavior, 3000);
+}
+
+static void EnableChildOnlyAutonomousCandidateWithWeight(unsigned char *villager, unsigned int behavior, unsigned int weight)
+{
     unsigned char *candidate = villager + 0x6BB8 + behavior * 0xD0;
     candidate[0xCD] = 1;
-    *(unsigned int *)(candidate + 0x0C) = 3000;
-    *(unsigned int *)(candidate + 0x48) = 0;
+    *(unsigned int *)(candidate + 0x0C) = weight;
+    *(unsigned int *)(candidate + 0x48) = 0x117;
     *(unsigned int *)(candidate + 0x4C) = 0;
 }
 
 static void EnableChildOnlyAutonomousCandidate(unsigned char *villager, unsigned int behavior)
 {
+    EnableChildOnlyAutonomousCandidateWithWeight(villager, behavior, 3000);
+}
+
+static void EnableAdultOnlyAutonomousCandidateWithWeight(unsigned char *villager, unsigned int behavior, unsigned int weight)
+{
     unsigned char *candidate = villager + 0x6BB8 + behavior * 0xD0;
     candidate[0xCD] = 1;
-    *(unsigned int *)(candidate + 0x0C) = 3000;
-    *(unsigned int *)(candidate + 0x48) = 0x117;
-    *(unsigned int *)(candidate + 0x4C) = 0;
+    *(unsigned int *)(candidate + 0x0C) = weight;
+    *(unsigned int *)(candidate + 0x48) = 0;
+    *(unsigned int *)(candidate + 0x4C) = 0x118;
 }
 
 class CWeather {
@@ -8772,21 +9143,88 @@ extern "C" void __cdecl VF2RefreshHammockEligibility(void *villager)
     *(unsigned int *)(playhouse + 0x0C) = daytimeAllowsPlayhouse ? 3000 : 0;
     *(unsigned int *)(playhouse + 0x48) = 0x117;
     *(unsigned int *)(playhouse + 0x4C) = 0;
+
+    unsigned char *snow = data + 0x6BB8 + 0x108 * 0xD0;
+    const int weatherAllowsSnow = Weather.currentType == 5;
+    snow[0xCD] = (unsigned char)weatherAllowsSnow;
+    *(unsigned int *)(snow + 0x0C) = weatherAllowsSnow ? 700 : 0;
+    *(unsigned int *)(snow + 0x48) = 0x117;
+    *(unsigned int *)(snow + 0x4C) = 0;
 }
 
 class CVillager;
 extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &);
 extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
 extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &);
+extern "C" void __cdecl VF2RandomTVLabel(CVillager &);
+extern "C" void __cdecl VF2RandomWebLabel(CVillager &);
+extern "C" void __cdecl VF2RandomVideoGameLabel(CVillager &);
+extern "C" void __cdecl VF2RandomMendingLabel(CVillager &);
+extern "C" void __cdecl VF2RandomIroningLabel(CVillager &);
+extern "C" void __cdecl VF2RandomTelescopeLabel(CVillager &);
+extern "C" void __cdecl VF2RandomWorkoutLabel(CVillager &);
+extern "C" void __cdecl VF2RandomOfficeCareerLabel(CVillager &);
+extern "C" void __cdecl VF2RandomWorkshopCareerLabel(CVillager &);
+extern "C" void __cdecl VF2RandomPoolLabel(CVillager &);
+extern "C" void __cdecl VF2RandomPlayhouseLabel(CVillager &);
+extern "C" void __cdecl VF2RandomSnowLabel(CVillager &);
+extern "C" void __cdecl VF2RandomSandboxLabel(CVillager &);
+extern "C" void __cdecl VF2RandomToyTrainLabel(CVillager &);
+extern "C" void __cdecl VF2RandomPetLabel(CVillager &);
+extern "C" void __cdecl VF2RandomShowerLabel(CVillager &);
+extern "C" void __cdecl VF2RandomNorthShowerLabel(CVillager &);
+extern "C" void __cdecl VF2RandomCoffeeLabel(CVillager &);
+extern "C" void __cdecl VF2RandomBigCoffeeLabel(CVillager &);
+extern "C" void __cdecl VF2RandomCocktailLabel(CVillager &);
 class CBehavior {
 private:
     static void __cdecl ReadMagazine(CVillager &);
     static void __cdecl ReadingBook(CVillager &);
     static void __cdecl DancingRadio(CVillager &);
     static void __cdecl ListenToRadio(CVillager &);
+    static void __cdecl WatchTVDispatch(CVillager &);
+    static void __cdecl BrowsingWeb(CVillager &);
+    static void __cdecl PlayingVideoGame(CVillager &);
+    static void __cdecl MendingButton(CVillager &);
+    static void __cdecl IroningShirt(CVillager &);
+    static void __cdecl UseTelescope(CVillager &);
+    static void __cdecl WorkingOut(CVillager &);
+    static void __cdecl OfficeCarreerWork(CVillager &);
+    static void __cdecl WorkWorkshop(CVillager &);
+    static void __cdecl SwimmingPool(CVillager &);
+    static void __cdecl PlayOnPlayStructure(CVillager &);
+    static void __cdecl PlayingInSnow(CVillager &);
+    static void __cdecl ToySandbox(CVillager &);
+    static void __cdecl ToyTrainTableForKids(CVillager &);
+    static void __cdecl Petting(CVillager &);
+    static void __cdecl Shower(CVillager &);
+    static void __cdecl NorthShower(CVillager &);
+    static void __cdecl MakeCoffee(CVillager &);
+    static void __cdecl MakingAVanillaSoyDecafGrandeLatte(CVillager &);
+    static void __cdecl HavingACocktail(CVillager &);
     friend void __cdecl VF2RandomBookshelfReading(CVillager &);
     friend void __cdecl VF2RandomRadioBehavior(CVillager &);
     friend void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
+    friend void __cdecl VF2RandomTVLabel(CVillager &);
+    friend void __cdecl VF2RandomWebLabel(CVillager &);
+    friend void __cdecl VF2RandomVideoGameLabel(CVillager &);
+    friend void __cdecl VF2RandomMendingLabel(CVillager &);
+    friend void __cdecl VF2RandomIroningLabel(CVillager &);
+    friend void __cdecl VF2RandomTelescopeLabel(CVillager &);
+    friend void __cdecl VF2RandomWorkoutLabel(CVillager &);
+    friend void __cdecl VF2RandomOfficeCareerLabel(CVillager &);
+    friend void __cdecl VF2RandomWorkshopCareerLabel(CVillager &);
+    friend void __cdecl VF2RandomPoolLabel(CVillager &);
+    friend void __cdecl VF2RandomPlayhouseLabel(CVillager &);
+    friend void __cdecl VF2RandomSnowLabel(CVillager &);
+    friend void __cdecl VF2RandomSandboxLabel(CVillager &);
+    friend void __cdecl VF2RandomToyTrainLabel(CVillager &);
+    friend void __cdecl VF2RandomPetLabel(CVillager &);
+    friend void __cdecl VF2RandomShowerLabel(CVillager &);
+    friend void __cdecl VF2RandomNorthShowerLabel(CVillager &);
+    friend void __cdecl VF2RandomCoffeeLabel(CVillager &);
+    friend void __cdecl VF2RandomBigCoffeeLabel(CVillager &);
+    friend void __cdecl VF2RandomCocktailLabel(CVillager &);
 };
 
 class ldwGameState {
@@ -8803,6 +9241,57 @@ public:
 };
 
 extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
+
+__VF2_BEHAVIOR_LABEL_ARRAYS__
+
+static int VF2ArrayCount(int const *begin, int const *end)
+{
+    return (int)(end - begin);
+}
+
+#define VF2_LABEL_COUNT(arr) ((int)(sizeof(arr) / sizeof((arr)[0])))
+
+static bool VF2IsAdult(CVillager &villager)
+{
+    unsigned char *data = (unsigned char *)&villager;
+    return *(unsigned int *)(data + 0x6A54) >= 0x118;
+}
+
+static void VF2SetBehaviorLabel(CVillager &villager, int stringId)
+{
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    strncpy(behaviorLabel, theStringManager::Get()->GetString((StringId)stringId), 0x27);
+}
+
+static void VF2ApplyRandomLabel(CVillager &villager, int const *labels, int count)
+{
+    if (count <= 0) {
+        return;
+    }
+    VF2SetBehaviorLabel(villager, labels[ldwGameState::GetRandom(count)]);
+}
+
+static void VF2ApplyCoffeeLabel(CVillager &villager)
+{
+    if (Night.AIIsDayTime() || ldwGameState::GetRandom(5) != 0) {
+        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_coffee, VF2_LABEL_COUNT(kVF2BehaviorLabels_coffee));
+        return;
+    }
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_coffee_evening, VF2_LABEL_COUNT(kVF2BehaviorLabels_coffee_evening));
+}
+
+static void VF2ApplyShowerLabel(CVillager &villager)
+{
+    if (!VF2IsAdult(villager) && ldwGameState::GetRandom(5) == 0) {
+        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_shower_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_child));
+        return;
+    }
+    if (VF2IsAdult(villager) && ldwGameState::GetRandom(8) == 0) {
+        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_shower_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_adult));
+        return;
+    }
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_shower_general, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_general));
+}
 
 extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &villager)
 {
@@ -8837,15 +9326,149 @@ extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &villager)
     } else {
         CBehavior::ReadingBook(villager);
     }
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_reading, VF2_LABEL_COUNT(kVF2BehaviorLabels_reading));
 }
 
 extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &villager)
 {
     if (ldwGameState::GetRandom(2) == 0) {
         CBehavior::DancingRadio(villager);
+        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_radio_dance, VF2_LABEL_COUNT(kVF2BehaviorLabels_radio_dance));
     } else {
         CBehavior::ListenToRadio(villager);
     }
+}
+
+extern "C" void __cdecl VF2RandomTVLabel(CVillager &villager)
+{
+    CBehavior::WatchTVDispatch(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_tv, VF2_LABEL_COUNT(kVF2BehaviorLabels_tv));
+}
+
+extern "C" void __cdecl VF2RandomWebLabel(CVillager &villager)
+{
+    CBehavior::BrowsingWeb(villager);
+    if (VF2IsAdult(villager) && ldwGameState::GetRandom(4) == 0) {
+        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_web_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_web_adult));
+        return;
+    }
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_web_basic, VF2_LABEL_COUNT(kVF2BehaviorLabels_web_basic));
+}
+
+extern "C" void __cdecl VF2RandomVideoGameLabel(CVillager &villager)
+{
+    CBehavior::PlayingVideoGame(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_video_game, VF2_LABEL_COUNT(kVF2BehaviorLabels_video_game));
+}
+
+extern "C" void __cdecl VF2RandomMendingLabel(CVillager &villager)
+{
+    CBehavior::MendingButton(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_mending, VF2_LABEL_COUNT(kVF2BehaviorLabels_mending));
+}
+
+extern "C" void __cdecl VF2RandomIroningLabel(CVillager &villager)
+{
+    CBehavior::IroningShirt(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_ironing, VF2_LABEL_COUNT(kVF2BehaviorLabels_ironing));
+}
+
+extern "C" void __cdecl VF2RandomTelescopeLabel(CVillager &villager)
+{
+    CBehavior::UseTelescope(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_telescope, VF2_LABEL_COUNT(kVF2BehaviorLabels_telescope));
+}
+
+extern "C" void __cdecl VF2RandomWorkoutLabel(CVillager &villager)
+{
+    CBehavior::WorkingOut(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_workout));
+}
+
+extern "C" void __cdecl VF2RandomOfficeCareerLabel(CVillager &villager)
+{
+    CBehavior::OfficeCarreerWork(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
+}
+
+extern "C" void __cdecl VF2RandomWorkshopCareerLabel(CVillager &villager)
+{
+    CBehavior::WorkWorkshop(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
+}
+
+extern "C" void __cdecl VF2RandomPoolLabel(CVillager &villager)
+{
+    CBehavior::SwimmingPool(villager);
+    if (!VF2IsAdult(villager) && ldwGameState::GetRandom(3) == 0) {
+        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_pool_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_child));
+        return;
+    }
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_pool_general, VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_general));
+}
+
+extern "C" void __cdecl VF2RandomPlayhouseLabel(CVillager &villager)
+{
+    CBehavior::PlayOnPlayStructure(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_playhouse, VF2_LABEL_COUNT(kVF2BehaviorLabels_playhouse));
+}
+
+extern "C" void __cdecl VF2RandomSnowLabel(CVillager &villager)
+{
+    CBehavior::PlayingInSnow(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_snow, VF2_LABEL_COUNT(kVF2BehaviorLabels_snow));
+}
+
+extern "C" void __cdecl VF2RandomSandboxLabel(CVillager &villager)
+{
+    CBehavior::ToySandbox(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_sandbox, VF2_LABEL_COUNT(kVF2BehaviorLabels_sandbox));
+}
+
+extern "C" void __cdecl VF2RandomToyTrainLabel(CVillager &villager)
+{
+    CBehavior::ToyTrainTableForKids(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_train_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_train_child));
+}
+
+extern "C" void __cdecl VF2RandomPetLabel(CVillager &villager)
+{
+    CBehavior::Petting(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_pet, VF2_LABEL_COUNT(kVF2BehaviorLabels_pet));
+}
+
+extern "C" void __cdecl VF2RandomShowerLabel(CVillager &villager)
+{
+    CBehavior::Shower(villager);
+    VF2ApplyShowerLabel(villager);
+}
+
+extern "C" void __cdecl VF2RandomNorthShowerLabel(CVillager &villager)
+{
+    CBehavior::NorthShower(villager);
+    VF2ApplyShowerLabel(villager);
+}
+
+extern "C" void __cdecl VF2RandomCoffeeLabel(CVillager &villager)
+{
+    CBehavior::MakeCoffee(villager);
+    VF2ApplyCoffeeLabel(villager);
+}
+
+extern "C" void __cdecl VF2RandomBigCoffeeLabel(CVillager &villager)
+{
+    CBehavior::MakingAVanillaSoyDecafGrandeLatte(villager);
+    if (ldwGameState::GetRandom(80) == 0) {
+        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_coffee_rare, VF2_LABEL_COUNT(kVF2BehaviorLabels_coffee_rare));
+        return;
+    }
+    VF2ApplyCoffeeLabel(villager);
+}
+
+extern "C" void __cdecl VF2RandomCocktailLabel(CVillager &villager)
+{
+    CBehavior::HavingACocktail(villager);
+    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_cocktail, VF2_LABEL_COUNT(kVF2BehaviorLabels_cocktail));
 }
 
 extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
@@ -8862,22 +9485,49 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableChildOnlyAutonomousCandidate(data, 0x11E); // PlayOnPlayStructure / Playhouse
     EnableChildOnlyAutonomousCandidate(data, 0x130); // ChildrenPlayAtKidsTable / Playing quietly
     EnableAutonomousCandidate(data, 0x0ED); // Random radio: DancingRadio or ListenToRadio
-    EnableAutonomousCandidate(data, 0x118); // DrawingOnEasel
+    EnableChildOnlyAutonomousCandidateWithWeight(data, 0x118, 900); // DrawingOnEasel
+    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x08D, 700); // MendingButton
+    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x08E, 700); // IroningShirt
+    EnableAllAgesAutonomousCandidateWithWeight(data, 0x19A, 450); // Petting
+    EnableAllAgesAutonomousCandidateWithWeight(data, 0x114, 650); // PlayingVideoGame
+    EnableAllAgesAutonomousCandidateWithWeight(data, 0x05A, 650); // BrowsingWeb
+    EnableAllAgesAutonomousCandidateWithWeight(data, 0x03E, 650); // WatchTVDispatch
+    EnableAllAgesAutonomousCandidateWithWeight(data, 0x091, 450); // SwimmingPool
+    EnableChildOnlyAutonomousCandidateWithWeight(data, 0x196, 450); // ToySandbox
+    EnableChildOnlyAutonomousCandidateWithWeight(data, 0x198, 450); // ToyTrainTableForKids
+    EnableAutonomousCandidateWithWeight(data, 0x11D, 450); // UseTelescope
+    EnableAutonomousCandidateWithWeight(data, 0x04A, 450); // WorkingOut, retain stock age gates
+    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x02C, 450); // OfficeCarreerWork
+    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x04B, 450); // WorkWorkshop
     VF2RefreshHammockEligibility(data);
 }
 '''.strip() + "\n"
+    helper_cpp = helper_cpp.replace("__VF2_BEHAVIOR_LABEL_ARRAYS__", behavior_label_arrays)
     (PATCHED / "vf2_spontaneous_behaviors.cpp").write_text(helper_cpp, encoding="ascii")
     manifest["spontaneous_behaviors"] = {
         "status": "enabled through the autonomous AI candidate table",
         "hooks": ["CVillager::InitAI", "CVillager::LoadAI", "CVillagerAI::DecideWhatToDo", "CBehavior::CBehavior"],
         "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
-        "actions": ["hammock anchored rest (0x23; all ages; neutral/sunny only)", "warm hands by fireplace (all ages)", "watch fireplace (all ages)", "pinball (all ages)", "slots (all ages)", "pachinko (all ages)", "pool (all ages)", "foosball (all ages)", "playhouse (children only; max age 0x117; daytime only)", "playing quietly at kids table (children only; base or invisible kids table)", "listen to radio", "dance to radio", "drawing"],
+        "actions": [
+            "hammock anchored rest (0x23; all ages; neutral/sunny only)",
+            "warm hands by fireplace (all ages)",
+            "watch fireplace (all ages)",
+            "pinball/slots/pachinko/pool table/foosball (all ages)",
+            "playhouse/playground label variants (non-adults; max age 0x117; daytime only)",
+            "playing quietly at kids table (non-adults; base or invisible kids table)",
+            "random radio/MP3 dancing or listening (all ages)",
+            "drawing (non-adults; max age 0x117)",
+            "mending/sewing variants (adults)",
+            "ironing clothes (adults)",
+            "petting/pet label variants (all ages)",
+            "TV, web, video game, reading, telescope, workout, career, shower, coffee/tea, cocktail, pool, sandbox, toy-train, and snow-play label variants",
+        ],
         "hammock_behavior": {
             "enabled_behavior": "0x23 LieInHammock retargeted to _VF2LieInHammockAnchoredRest",
             "manual_drop_behavior": "0x24 LieInHammockNoLeadIn remains native",
             "reason": "The spontaneous route keeps the long SleepNW/SleepNE rest animation sequence, writes the native eString 0xE9 behavior label, requires either base HammockStd item 0x1E1 or Invisible Hammock item 0x30C in-world, then calls FurnitureManager.LinkPeepToFurniture to use the placed hammock anchor and choose the matching hammock-rest head direction plus sleep strip for the linked orientation: NW hammock -> body position 9, head direction 7, and SleepNW; NE hammock -> body position 9, head direction 1, and SleepNE.",
         },
-        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only when base HammockStd item 0x1E1 or Invisible Hammock item 0x30C is in-world and weather is state 0 (neutral) or 1 (sunny). It remains behavior 0x23 so villagers close their eyes and rest through the sleep animation, but the macro now writes the native behavior label and uses _VF2LieInHammockAnchoredRest to get the placed hammock point/orientation before planning the orientation-specific hammock-rest head direction and sleep strip. Playhouse is refreshed through CNight::AIIsDayTime() at each native AI decision, so the spontaneous Playhouse candidate is child-only and daytime-only. Playhouse and ChildrenPlayAtKidsTable are capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is adult. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
+        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only when base HammockStd item 0x1E1 or Invisible Hammock item 0x30C is in-world and weather is state 0 (neutral) or 1 (sunny). It remains behavior 0x23 so villagers close their eyes and rest through the sleep animation, but the macro now writes the native eString 0xE9 behavior label and uses _VF2LieInHammockAnchoredRest to get the placed hammock point/orientation before planning the orientation-specific hammock-rest head direction and sleep strip. Playhouse is refreshed through CNight::AIIsDayTime() at each native AI decision, so the spontaneous Playhouse candidate is non-adult and daytime-only. Drawing, snow play, sandbox, toy train, Playhouse, and ChildrenPlayAtKidsTable are capped at the stock non-adult boundary, where CVillager+0x6A54 < 0x118 is non-adult and >= 0x118 is adult. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
     }
 
 
@@ -8923,12 +9573,68 @@ def patch_radio_drop_behavior(manifest):
     }
 
 
+def patch_behavior_label_variants(manifest):
+    """Retarget safe native no-data behavior macros to wrappers that vary labels."""
+    obj = CoffObject(PATCHED / "Behavior.obj")
+    ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+    sec = obj.section(ctor.section)
+
+    def retarget(offset, behavior_id, helper_name, note):
+        if behavior_id <= 0x7F:
+            expected = b"\x68\x00\x00\x00\x00\x6A" + bytes([behavior_id])
+        else:
+            expected = b"\x68\x00\x00\x00\x00\x68" + struct.pack("<I", behavior_id)
+        raw = sec.raw_ptr + ctor.value + offset
+        if obj.buf[raw:raw + len(expected)] != expected:
+            raise ValueError(f"Unexpected behavior macro entry for {note}")
+        helper = obj.append_undefined_symbol(helper_name)
+        obj.retarget_relocation(sec.index, ctor.value + offset + 1, helper)
+        return {
+            "behavior_id": hex(behavior_id),
+            "constructor_offset": hex(offset),
+            "helper": helper_name,
+            "note": note,
+        }
+
+    changed = [
+        retarget(0x332, 0x03E, "_VF2RandomTVLabel", "Watching TV label variants"),
+        retarget(0x4F6, 0x05A, "_VF2RandomWebLabel", "Browsing Web label variants"),
+        retarget(0xF6B, 0x114, "_VF2RandomVideoGameLabel", "Playing video game label variants"),
+        retarget(0x7CB, 0x08D, "_VF2RandomMendingLabel", "Mending/sewing label variants"),
+        retarget(0x7DC, 0x08E, "_VF2RandomIroningLabel", "Ironing clothes label"),
+        retarget(0xD07, 0x11D, "_VF2RandomTelescopeLabel", "Telescope label variants"),
+        retarget(0x3CC, 0x04A, "_VF2RandomWorkoutLabel", "Workout label variants"),
+        retarget(0x225, 0x02C, "_VF2RandomOfficeCareerLabel", "Office career label variants"),
+        retarget(0x3E8, 0x04B, "_VF2RandomWorkshopCareerLabel", "Workshop career label variants"),
+        retarget(0x80F, 0x091, "_VF2RandomPoolLabel", "Pool label variants"),
+        retarget(0xD18, 0x11E, "_VF2RandomPlayhouseLabel", "Playhouse/playground label variants"),
+        retarget(0xE9F, 0x108, "_VF2RandomSnowLabel", "Snow play label variants"),
+        retarget(0x1842, 0x196, "_VF2RandomSandboxLabel", "Sandbox label variants"),
+        retarget(0x1864, 0x198, "_VF2RandomToyTrainLabel", "Toy train/table label variants"),
+        retarget(0x1886, 0x19A, "_VF2RandomPetLabel", "Petting label variants"),
+        retarget(0x2A6, 0x034, "_VF2RandomShowerLabel", "Shower/bath label variants"),
+        retarget(0x831, 0x016, "_VF2RandomNorthShowerLabel", "North shower/bath label variants"),
+        retarget(0xA92, 0x0D3, "_VF2RandomCoffeeLabel", "Coffee/tea label variants"),
+        retarget(0xAE7, 0x0D9, "_VF2RandomBigCoffeeLabel", "Grande latte/rare coffee label variants"),
+        retarget(0xD8F, 0x094, "_VF2RandomCocktailLabel", "Cocktail/mixology label variants"),
+    ]
+    obj.write(PATCHED / "Behavior.obj")
+    manifest["behavior_label_variants"] = {
+        "status": "native behavior macros call wrapper functions that preserve native behavior plans and only vary the visible behavior label",
+        "changed": changed,
+        "age_notes": {
+            "non_adult_boundary": "CVillager+0x6A54 < 0x118 is treated as the stock non-adult range for spontaneous gates; >= 0x118 is adult.",
+            "teen_boundary": "No separate teen-only threshold is patched yet. Requests that specifically require teens and adults together use either the native behavior's stock gates or the proven adult gate until the teen threshold is documented.",
+        },
+    }
+
+
 def patch_arcade_behavior_labels(manifest):
     """Give pachinko and pinball their own labels without changing shared text."""
     obj = CoffObject(PATCHED / "Behavior.obj")
     patches = [
-        ("?PlayingPachinko@CBehavior@@CAXAAVCVillager@@@Z", behavior_label_string_id_for(0), "Playing pachinko"),
-        ("?PlayingPinball@CBehavior@@CAXAAVCVillager@@@Z", behavior_label_string_id_for(1), "Playing pinball"),
+        ("?PlayingPachinko@CBehavior@@CAXAAVCVillager@@@Z", behavior_label_string_id_by_key("eString_PlayingPachinko"), "Playing pachinko"),
+        ("?PlayingPinball@CBehavior@@CAXAAVCVillager@@@Z", behavior_label_string_id_by_key("eString_PlayingPinball"), "Playing pinball"),
     ]
     changed = []
     for symbol_name, string_id, text in patches:
@@ -9468,6 +10174,7 @@ def main():
     patch_spontaneous_behaviors(manifest)
     patch_bookshelf_reading_behavior(manifest)
     patch_radio_drop_behavior(manifest)
+    patch_behavior_label_variants(manifest)
     patch_arcade_behavior_labels(manifest)
     if ENABLE_DEBUGGER_FEATURES:
         patch_debug_features(manifest)

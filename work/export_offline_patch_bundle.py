@@ -147,7 +147,7 @@ SETTINGS = [
     {
         "id": "behavior_patches",
         "label": "Behavior Patches",
-        "description": "Makes certain actions able to be done automatically by people, including watching the fire, relaxing in the hammock, arcade/table games, random radio/MP3 dancing or listening, drawing, child-only daytime Playhouse behavior, and child-only Playing quietly at the Kids Table.",
+        "description": "Makes certain actions able to be done automatically by people, including watching the fire, relaxing in the hammock, arcade/table games, random radio/MP3 dancing or listening, child/teen Drawing, adult ironing/mending, petting, TV/web/video game label variants, playground/sandbox/pool/snow/coffee/tea variants, child-only daytime Playhouse behavior, and child-only Playing quietly at the Kids Table.",
         "default": True,
         "category": "main",
     },
@@ -183,6 +183,13 @@ SETTINGS = [
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
         "description": "Experimental patch: enables added villager behavior routes for mobile furniture where implemented. May not work and might cause instability or game crashes.",
+        "default": False,
+        "category": "experimental",
+    },
+    {
+        "id": "expand_game_map",
+        "label": "Expand game map",
+        "description": "Experimental/not implemented yet: intended to expand the playable house area with more map tiles around the existing playable area. May not work and might cause instability or game crashes.",
         "default": False,
         "category": "experimental",
     },
@@ -273,7 +280,7 @@ SETTINGS = [
     {
         "id": "cheat_upgrades",
         "label": "Cheat Upgrades",
-        "description": "Adds money and food cheats to the Special Upgrades section, including reset-to-zero, add-small, add-large, and max amount rows.",
+        "description": "Adds money, food, and furniture-unlock cheats to the Special Upgrades section, including reset-to-zero, add-small, add-large, max amount, and Unlock all furniture rows. Buy Unlock all furniture again to restore generation locks.",
         "default": False,
         "category": "optional",
     },
@@ -570,6 +577,12 @@ def candidate_manifest_rel_paths(value: str) -> list[Path]:
     else:
         if text.startswith(("Images/", "Assets/")):
             candidates.append(text)
+        elif "/Images/" in text or "/Assets/" in text:
+            for marker in ("/Images/", "/Assets/"):
+                if marker in text:
+                    root_name = marker.strip("/")
+                    candidates.append(root_name + "/" + text.split(marker, 1)[1])
+                    break
         elif text.startswith((
             "Furniture/",
             "VillagerBodies/",
@@ -1804,6 +1817,9 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B119 game build: Settings Evict also inserts the missing ldwScene::AddControl call for the constructed Evict button, which B118 did not do.",
             "- B121 game build: Settings Evict warning text is explicitly line-broken so the stock dialog renderer keeps it inside the modal bounds.",
             "- B121 patcher refresh: Adds default-off Misc Graphics Fixes and Glowing Collectibles optional asset swaps, each with bundled vanilla restore sources.",
+            "- B131 game build: Behavior Patches add grouped visible-label variants for native TV, web, video game, radio, reading, petting, mending, ironing, telescope, workout, career, shower/bath, coffee/tea, cocktail, pool, sandbox, toy train, playground, and snow-play routes. The wrappers preserve the original behavior plans and only change the displayed action text.",
+            "- B131 patcher refresh: Cheat Upgrades adds Unlock all furniture under Special Upgrades. It toggles live furniture generation locks to 0 and restores the generated original-lock snapshot if bought again.",
+            "- B131 patcher refresh: Adds an Experimental/Not Working Expand game map setting placeholder so the planned map expansion is documented but not presented as implemented.",
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
             "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the experimental Island Events setting is enabled.",
@@ -1985,6 +2001,8 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     manifest = {
         "manifest_version": 1,
         "name": args.name or f"VF2 offline patch bundle from {build_dir.name}",
+        "build": build_label,
+        "build_label": build_label,
         "description": "Generated offline patch bundle for user-provided vanilla VF2 PC installs.",
         "created_with": "Codex AI",
         "creator_disclosure": CREATOR_DISCLOSURE,

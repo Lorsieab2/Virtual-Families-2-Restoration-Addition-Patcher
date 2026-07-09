@@ -727,6 +727,26 @@ B122 build-specific notes:
 - The exporter reads these source PNGs from tracked `patcher_assets/`, not from
   `Downloads` or any machine-specific folder.
 
+B131 build-specific notes:
+
+- `behavior_patches` now includes grouped behavior-label variants for native
+  TV, web, video game, radio, reading, petting, mending, ironing, telescope,
+  workout, career, shower/bath, coffee/tea, cocktail, pool, sandbox, toy train,
+  playground, and snow-play routes. The wrappers call the original native
+  behavior and only alter the displayed action label afterward.
+- The optional `cheat_upgrades` overlay adds `Unlock all furniture` to Special
+  Upgrades. It toggles all live `sFurnitureInfo+0x0C` generation locks between
+  `0` and the generated original-lock snapshot.
+- `expand_game_map` appears under Experimental/Not Working patches as a
+  transparent placeholder only. It is intentionally marked not implemented
+  until map bounds, tile loading, camera clamps, and save references are mapped.
+- The exporter now normalizes manifest paths that contain generated
+  `Images/` or `Assets/` segments anywhere in the string. This ensures support
+  payloads referenced as `outputs/.../Images/...`, such as split VF3 TV
+  animation frames and villager source sheets, are packaged automatically.
+- B131 manifests include top-level `build` and `build_label` fields so the GUI
+  can display the current build number without relying on folder names.
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 
