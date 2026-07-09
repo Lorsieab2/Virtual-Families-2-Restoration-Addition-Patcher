@@ -1515,7 +1515,12 @@
   `JealousAboutBaby`, `ExcitedAboutBaby`, and `PlayingMommy`; actual
   nursing/baby ownership fields still need mapping before enabling these as
   spontaneous nursing-mother behaviors.
-- Native north leak reactions exist for `FreakOutShowerLeakNorth` and
-  `FreakOutToiletLeakNorth`. A distinct `FreakOutBathroomSinkLeakNorth` symbol
-  has not been found, so second-bathroom sink leak support should start from
-  `CEventTheWaterPressureSurge::ImpactGame` and content-map object writes.
+- Native north leak reactions exist for `FreakOutShowerLeakNorth` (`0x135`)
+  and `FreakOutToiletLeakNorth` (`0x137`). A distinct north sink freak-out
+  symbol is absent, but native repair behavior `FixingNorthBRoomSink`
+  (`0x04E`) exists. B132 hooks `CEventTheWaterPressureSurge::ImpactGame(int)`
+  with `_VF2WaterPressureSurgeSecondBathLeaks`, guarded by
+  `InventoryManager.HaveUpgrade(0xE6)`, to add north leak props `0x48`
+  (toilet), `0x49` (shower), and `0x4A` (sink); `CVillager::NewBehavior`
+  calls `_VF2MapNorthBathroomLeakBehavior` to route villagers to the native
+  north leak reactions.

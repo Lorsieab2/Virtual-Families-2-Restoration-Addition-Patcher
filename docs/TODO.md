@@ -399,12 +399,13 @@
   (`0x182`), `MomTeachingTalk` (`0x18F`), plus `ShowingBabyGarden`,
   `ShowingBabyToys`, `CelebratingBaby`, `JealousAboutBaby`,
   `ExcitedAboutBaby`, and `PlayingMommy`.
-- Research: re-enable second-bathroom north leak reactions. Native behavior
-  constructors exist for `FreakOutShowerLeakNorth` (`0x135`) and
-  `FreakOutToiletLeakNorth` (`0x137`); `FreakOutBathroomSinkLeak` (`0x133`)
-  exists but a distinct `BathroomSinkLeakNorth` behavior symbol has not been
-  proven yet. Also inspect `CEventTheWaterPressureSurge::ImpactGame` and the
-  faucet-outcome writes before patching second-bathroom leak spawning.
+- Test: second-bathroom north leak support is patched through
+  `CEventTheWaterPressureSurge::ImpactGame(int)` and
+  `CVillager::NewBehavior`. Verify in-game that Water Pressure Surge sets the
+  north toilet (`0x48`), north shower (`0x49`), and north sink (`0x4A`) leak
+  visuals only after second-bathroom renovation (`0xE6`), and that
+  `FixingNorthToilet` (`0x142`), `FixingNorthShower` (`0x140`), and
+  `FixingNorthBRoomSink` (`0x04E`) clear them without crashes.
 - Research: `expand_game_map` is exposed as experimental/not implemented in
   the patcher setting list. Implement only after mapping map-tile bounds,
   content/collision fmaps, camera clamps, and save references.

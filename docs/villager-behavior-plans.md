@@ -82,10 +82,26 @@ Native north leak reactions are partly present:
 | `0x136` | `FreakOutToiletLeak` |
 | `0x137` | `FreakOutToiletLeakNorth` |
 
-No distinct `FreakOutBathroomSinkLeakNorth` symbol has been confirmed. Before
-patching the second-bathroom leak event path, inspect
-`CEventTheWaterPressureSurge::ImpactGame` and identify which content-map leak
-objects are set when the north bathroom renovation exists.
+No distinct `FreakOutBathroomSinkLeakNorth` symbol has been confirmed. The
+north sink repair path is `FixingNorthBRoomSink` (`0x04E`), so the B132
+patch keeps sink freak-out labeling on `FreakOutBathroomSinkLeak` (`0x133`)
+and routes repair to the native north sink behavior.
+
+Confirmed leak prop relationships:
+
+| Prop | Meaning |
+| --- | --- |
+| `0x48` | north toilet leak |
+| `0x49` | north shower leak |
+| `0x4A` | north bathroom sink leak |
+
+`CEventTheWaterPressureSurge::ImpactGame(int)` normally sets first-bathroom
+leak props on the "close faucets tight" branch. The additive patch preserves
+those writes, then calls `_VF2WaterPressureSurgeSecondBathLeaks`, which checks
+`InventoryManager.HaveUpgrade(0xE6)` before setting the north leak props.
+`CVillager::NewBehavior` also gains `_VF2MapNorthBathroomLeakBehavior` so
+active north props remap to `FreakOutShowerLeakNorth` (`0x135`),
+`FreakOutToiletLeakNorth` (`0x137`), or the existing sink freak-out (`0x133`).
 
 ## Behavior Variant Patching Guidance
 

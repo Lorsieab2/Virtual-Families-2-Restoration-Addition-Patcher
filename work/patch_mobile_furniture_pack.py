@@ -2446,6 +2446,23 @@ def patch_all_in_sections(obj: CoffObject, section_names, old: bytes, new: bytes
     return n
 
 
+def move_relocation(obj: CoffObject, sec_index: int, old_vaddr: int, new_vaddr: int, symidx: int | None = None, rtype: int | None = None):
+    sec = obj.section(sec_index)
+    p = sec.reloc_ptr
+    for _ in range(sec.nreloc):
+        rec_vaddr = struct.unpack_from("<I", obj.buf, p)[0]
+        if rec_vaddr == old_vaddr:
+            struct.pack_into("<I", obj.buf, p, new_vaddr)
+            if symidx is not None:
+                struct.pack_into("<I", obj.buf, p + 4, symidx)
+            if rtype is not None:
+                struct.pack_into("<H", obj.buf, p + 8, rtype)
+            obj._parse()
+            return
+        p += 10
+    raise ValueError(f"relocation not found for section {sec_index} vaddr {old_vaddr:#x}")
+
+
 def patch_count_sites(obj, list_name, old_max, old_count, new_max_index, new_count):
     target = COUNT_PATCH_TARGETS.get(list_name)
     if target is None:
@@ -6941,6 +6958,162 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
     }
 
 
+SECOND_BATHROOM_LEAK_HELPER_CPP = r'''
+
+enum EInventoryItem { eInventoryItemDummy = 0 };
+enum EPropEnum { ePropDummy = 0 };
+
+class CInventoryManager {
+public:
+    bool HaveUpgrade(EInventoryItem item);
+};
+
+class CEnvironment {
+public:
+    void SetProp(EPropEnum prop);
+    bool PropIsActive(EPropEnum prop);
+};
+
+extern CInventoryManager InventoryManager;
+extern CEnvironment Environment;
+
+static bool VF2HasSecondBathroomRenovation()
+{
+    return InventoryManager.HaveUpgrade((EInventoryItem)0xE6);
+}
+
+extern "C" void __cdecl VF2WaterPressureSurgeSecondBathLeaks()
+{
+    if (!VF2HasSecondBathroomRenovation()) {
+        return;
+    }
+    Environment.SetProp((EPropEnum)0x48); // north toilet leak
+    Environment.SetProp((EPropEnum)0x49); // north shower leak
+    Environment.SetProp((EPropEnum)0x4A); // north bathroom sink leak
+}
+
+extern "C" int __cdecl VF2MapNorthBathroomLeakBehavior(int behavior)
+{
+    if (!VF2HasSecondBathroomRenovation()) {
+        return behavior;
+    }
+    if (Environment.PropIsActive((EPropEnum)0x4A)) {
+        if (behavior != 0x4E && behavior != 0x13D && behavior != 0x13E) {
+            return 0x133; // FreakOutBathroomSinkLeak; north sink repair is behavior 0x4E.
+        }
+    }
+    if (Environment.PropIsActive((EPropEnum)0x49)) {
+        if (behavior != 0x140) {
+            return 0x135; // FreakOutShowerLeakNorth
+        }
+    }
+    if (Environment.PropIsActive((EPropEnum)0x48)) {
+        if (behavior != 0x142) {
+            return 0x137; // FreakOutToiletLeakNorth
+        }
+    }
+    return behavior;
+}
+'''.lstrip()
+
+
+def append_second_bathroom_leak_helper_cpp():
+    helper_path = PATCHED / "vf2_island_events.cpp"
+    text = helper_path.read_text(encoding="ascii") if helper_path.exists() else ""
+    if "VF2WaterPressureSurgeSecondBathLeaks" not in text:
+        helper_path.write_text(text.rstrip() + "\n\n" + SECOND_BATHROOM_LEAK_HELPER_CPP, encoding="ascii")
+
+
+def patch_second_bathroom_leaks(manifest):
+    append_second_bathroom_leak_helper_cpp()
+
+    island_obj = CoffObject(PATCHED / "IslandEvents.obj")
+    impact = island_obj.symbol("?ImpactGame@CEventTheWaterPressureSurge@@UAEXH@Z")
+    impact_sec = island_obj.section(impact.section)
+    tail_off = impact.value + 0x39
+    tail_raw = impact_sec.raw_ptr + tail_off
+    tail_expected = b"\xC7\x45\x08\x1B\x00\x00\x00\xB9\x00\x00\x00\x00\x5D\xE9\x00\x00\x00\x00"
+    if island_obj.buf[tail_raw:tail_raw + len(tail_expected)] != tail_expected:
+        raise ValueError("Unexpected CEventTheWaterPressureSurge::ImpactGame tail")
+
+    event_stub_off = impact_sec.raw_size
+    event_stub = bytearray([
+        0x68, 0x1B, 0x00, 0x00, 0x00,       # push 1Bh
+        0xB9, 0x00, 0x00, 0x00, 0x00,       # mov ecx, Environment
+        0xE8, 0x00, 0x00, 0x00, 0x00,       # call CEnvironment::SetProp
+        0xE8, 0x00, 0x00, 0x00, 0x00,       # call VF2WaterPressureSurgeSecondBathLeaks
+        0x5D,                               # pop ebp
+        0xC2, 0x04, 0x00,                   # ret 4
+    ])
+    island_obj.insert_section_bytes(impact_sec.index, event_stub_off, bytes(event_stub))
+    helper_sym = island_obj.append_undefined_symbol("_VF2WaterPressureSurgeSecondBathLeaks")
+    move_relocation(island_obj, impact_sec.index, impact.value + 0x41, event_stub_off + 6)
+    move_relocation(island_obj, impact_sec.index, impact.value + 0x47, event_stub_off + 11, rtype=IMAGE_REL_I386_REL32)
+    island_obj.append_relocation(impact_sec.index, event_stub_off + 16, helper_sym, IMAGE_REL_I386_REL32)
+    event_jump = struct.pack("<i", event_stub_off - (tail_off + 5))
+    island_obj.buf[tail_raw:tail_raw + len(tail_expected)] = b"\xE9" + event_jump + b"\x90" * (len(tail_expected) - 5)
+    island_obj.write(PATCHED / "IslandEvents.obj")
+
+    villager_obj = CoffObject(PATCHED / "Villager.obj")
+    new_behavior = villager_obj.symbol("?NewBehavior@CVillager@@QAEXW4EBehavior@@ABUSBehaviorData@@@Z")
+    villager_sec = villager_obj.section(new_behavior.section)
+    remap_off = new_behavior.value + 0x132
+    remap_raw = villager_sec.raw_ptr + remap_off
+    remap_expected = b"\x6A\x64\xE8\x00\x00\x00\x00\x83\xC4\x04"
+    if villager_obj.buf[remap_raw:remap_raw + len(remap_expected)] != remap_expected:
+        raise ValueError("Unexpected CVillager::NewBehavior random-router site")
+
+    remap_stub_off = villager_sec.raw_size
+    remap_stub = bytearray([
+        0x56,                               # push esi
+        0xE8, 0x00, 0x00, 0x00, 0x00,       # call VF2MapNorthBathroomLeakBehavior
+        0x83, 0xC4, 0x04,                   # add esp,4
+        0x8B, 0xF0,                         # mov esi,eax
+        0x6A, 0x64,                         # push 64h
+        0xE8, 0x00, 0x00, 0x00, 0x00,       # call ldwGameState::GetRandom
+        0x83, 0xC4, 0x04,                   # add esp,4
+        0xE9, 0x00, 0x00, 0x00, 0x00,       # jmp back after original random call
+    ])
+    back_rel = (remap_off + len(remap_expected)) - (remap_stub_off + len(remap_stub))
+    struct.pack_into("<i", remap_stub, len(remap_stub) - 4, back_rel)
+    villager_obj.insert_section_bytes(villager_sec.index, remap_stub_off, bytes(remap_stub))
+    map_helper_sym = villager_obj.append_undefined_symbol("_VF2MapNorthBathroomLeakBehavior")
+    villager_obj.append_relocation(villager_sec.index, remap_stub_off + 2, map_helper_sym, IMAGE_REL_I386_REL32)
+    move_relocation(villager_obj, villager_sec.index, new_behavior.value + 0x135, remap_stub_off + 14, rtype=IMAGE_REL_I386_REL32)
+    remap_jump = struct.pack("<i", remap_stub_off - (remap_off + 5))
+    villager_obj.buf[remap_raw:remap_raw + len(remap_expected)] = b"\xE9" + remap_jump + b"\x90" * (len(remap_expected) - 5)
+    villager_obj.write(PATCHED / "Villager.obj")
+
+    manifest["SecondBathroomLeaks"] = {
+        "status": "enabled",
+        "second_bathroom_upgrade_item": "0xE6",
+        "water_pressure_surge_hook": {
+            "function": "?ImpactGame@CEventTheWaterPressureSurge@@UAEXH@Z",
+            "tail_offset": hex(tail_off),
+            "helper": "_VF2WaterPressureSurgeSecondBathLeaks",
+            "stock_first_bathroom_props_preserved": ["0x1C", "0x1D", "0x1F", "0x1A", "0x1B"],
+            "north_props_added": {
+                "toilet": "0x48",
+                "shower": "0x49",
+                "bathroom_sink": "0x4A",
+            },
+        },
+        "villager_behavior_remap": {
+            "function": "?NewBehavior@CVillager@@QAEXW4EBehavior@@ABUSBehaviorData@@@Z",
+            "hook_offset": hex(remap_off),
+            "helper": "_VF2MapNorthBathroomLeakBehavior",
+            "north_behaviors": {
+                "sink_freakout": "0x133",
+                "sink_repair": "0x04E",
+                "shower_freakout": "0x135",
+                "shower_repair": "0x140",
+                "toilet_freakout": "0x137",
+                "toilet_repair": "0x142",
+            },
+        },
+    }
+
+
 def patch_graphics_manager(manifest):
     obj = CoffObject(PATCHED / "theGraphicsManager.obj")
     image_records = image_records_by_id()
@@ -10193,6 +10366,7 @@ def main():
             "added": [],
             "status": "disabled because the additive event object graft crashes the game",
         }
+    patch_second_bathroom_leaks(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
         sync_original_villager_sprite_sheets(manifest)
         sync_holiday_body_runtime_frames(manifest)
