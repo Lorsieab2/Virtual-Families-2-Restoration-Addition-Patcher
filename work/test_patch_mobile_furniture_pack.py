@@ -237,8 +237,10 @@ class GenerationLockTests(unittest.TestCase):
                 after_sec = after_obj.section(after_sym.section)
                 after_raw = after_sec.raw_ptr + after_sym.value
                 after_stock_records = bytes(after_obj.buf[after_raw : after_raw + stock_len])
+                _value, _sectnum, _typ, storage, _aux = struct.unpack_from("<IhHBB", after_obj.buf, after_sym.off + 8)
 
                 self.assertEqual(after_stock_records, before_stock_records)
+                self.assertEqual(storage, 2)
             finally:
                 patcher.PATCHED = old_patched
 

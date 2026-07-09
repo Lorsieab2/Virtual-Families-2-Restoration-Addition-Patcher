@@ -6,6 +6,8 @@ import struct
 
 
 IMAGE_REL_I386_DIR32 = 0x0006
+IMAGE_SYM_CLASS_EXTERNAL = 2
+IMAGE_SYM_CLASS_STATIC = 3
 
 
 @dataclass
@@ -81,6 +83,11 @@ class CoffObject:
 
     def symbol(self, name: str) -> Symbol:
         return self.symbol_by_name[name]
+
+    def set_symbol_storage_class(self, name: str, storage_class: int):
+        sym = self.symbol(name)
+        struct.pack_into("<B", self.buf, sym.off + 16, storage_class)
+        self._parse()
 
     def section_data(self, section_index: int) -> memoryview:
         sec = self.section(section_index)

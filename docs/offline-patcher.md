@@ -767,6 +767,20 @@ B133 patcher-specific notes:
 - Experimental/Not Working remains reserved for Holiday Ornaments, mobile
   furniture behaviors, Expand game map, and future unstable features.
 
+B134 build/export notes:
+
+- `CFurnitureManager.obj` defines `?itemInfo@@3PAUsFurnitureInfo@@A` as a
+  section symbol with COFF storage class `3` (`static`) in the stock object.
+  B134 changes the patched symbol storage class to external after appending
+  records, without changing the stock table bytes, so helper objects can link
+  against the live furniture table for the optional Cheat Upgrades
+  `Unlock all furniture` generation-lock toggle.
+- The optional Island Events helper source is emitted from a Python template.
+  B134 formats that template before writing `vf2_island_events.cpp`, so the
+  doubled C++ braces become normal braces and the generated
+  `CMobileIslandEvent` registration lines are inserted instead of literal
+  Python text.
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 

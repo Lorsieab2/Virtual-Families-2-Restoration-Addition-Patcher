@@ -357,5 +357,11 @@ Changelog
   Optional Patches in generated manifests/logs, with Experimental/Not Working
   reserved for Holiday Ornaments, mobile furniture behaviors, Expand game map,
   and future unstable work.
+- B134 build/export refresh: `FurnitureManager.obj` now exports the patched
+  `itemInfo` furniture table symbol so generated helper objects can link the
+  Cheat Upgrades `Unlock all furniture` generation-lock toggle. The Island
+  Events helper source template is also formatted before compile, so the
+  optional overlay emits valid event-registration C++ instead of literal Python
+  placeholder text.
 
 Have fun! -Lorsieab2 :)

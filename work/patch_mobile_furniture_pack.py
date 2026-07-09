@@ -11,7 +11,7 @@ from io import BytesIO
 from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from coff_patch import CoffObject
+from coff_patch import CoffObject, IMAGE_SYM_CLASS_EXTERNAL
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_OBJS = ROOT / "work" / "desktop_obj_files"
@@ -5045,6 +5045,7 @@ def patch_furniture_manager(manifest):
     lookup_sym = obj.symbol(ITEMLOOKUP)
     lookup_sec = obj.section(lookup_sym.section)
     obj.grow_bss_section(lookup_sym.section, lookup_sec.raw_size, (new_max - 0xFB) * 4)
+    obj.set_symbol_storage_class(ITEMINFO, IMAGE_SYM_CLASS_EXTERNAL)
 
     obj.write(PATCHED / "FurnitureManager.obj")
     manifest["FurnitureManager"] = {
@@ -5059,6 +5060,9 @@ def patch_furniture_manager(manifest):
         "vf3_tv_behavior_contracts": vf3_tv_behavior_contracts,
         "invisible_hammock_behavior_contracts": invisible_hammock_behavior_contracts,
         "invisible_kids_table_behavior_contracts": invisible_kids_table_behavior_contracts,
+        "exported_symbols": {
+            "itemInfo": "storage class changed from static to external so generated helper objects can toggle generation_lock values for the optional Cheat Upgrades patch",
+        },
     }
 
 
@@ -6925,9 +6929,9 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
     if (!slots) {{
         return;
     }}
-{chr(10).join(registrations)}
+{registrations}
 }}
-'''.strip() + "\n"
+'''.format(registrations="\n".join(registrations)).strip() + "\n"
     (PATCHED / "vf2_island_events.cpp").write_text(helper_cpp, encoding="ascii")
     manifest["IslandEvents"] = {
         "added": [
