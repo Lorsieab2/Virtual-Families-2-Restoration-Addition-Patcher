@@ -278,10 +278,11 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x120: "cheat_add_food.png",
     0x121: "cheat_add_food.png",
     0x122: "cheat_add_food.png",
-    0x123: "cheat_add_coins.png",
+    0x123: "cheat_no_generation_locks.png",
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
+PATCHER_CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "patcher_assets" / "optional_patches" / "cheat_upgrades"
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
 CHEAT_UPGRADE_ITEMS = [
     {
@@ -452,6 +453,13 @@ BEHAVIOR_LABEL_GROUPS = [
         ],
     ),
     (
+        "board_game",
+        [
+            ("eString_PlayingChess", "Playing chess"),
+            ("eString_PlayingCheckers", "Playing checkers"),
+        ],
+    ),
+    (
         "reading",
         [
             ("eString_ReadingNovel", "Reading a novel"),
@@ -482,6 +490,79 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_WatchingNews", "Watching the news"),
             ("eString_WatchingWeatherChannel", "Watching the weather channel"),
             ("eString_WatchingMovieFlix", "Watching MovieFlix"),
+            ("eString_WatchingCartoons", "Watching cartoons"),
+            ("eString_WatchingAnime", "Watching anime"),
+        ],
+    ),
+    (
+        "drink",
+        [
+            ("eString_GettingDrinkSoda", "Drinking soda"),
+            ("eString_GettingDrinkMilkshakes", "Drinking milkshakes"),
+            ("eString_GettingDrinkMilk", "Drinking milk"),
+            ("eString_GettingDrinkJuice", "Drinking juice"),
+            ("eString_GettingDrinkMineralWater", "Drinking mineral water"),
+            ("eString_GettingDrinkSparklingWater", "Drinking sparkling water"),
+            ("eString_GettingDrinkTea", "Drinking tea"),
+            ("eString_GettingDrinkEnergyDrink", "Drinking an energy drink"),
+            ("eString_GettingDrinkHydrAid", "Drinking Hydr-Aid"),
+            ("eString_GettingDrinkBobaTea", "Drinking boba tea"),
+        ],
+    ),
+    (
+        "heat_food",
+        [
+            ("eString_BakingCake", "Baking a cake"),
+            ("eString_HeatingLeftovers", "Heating up leftovers"),
+            ("eString_BakingPie", "Baking a pie"),
+            ("eString_BakingCookies", "Baking cookies"),
+            ("eString_HeatingPizza", "Heating up pizza"),
+            ("eString_EatingTakeout", "Eating takeout"),
+        ],
+    ),
+    (
+        "snacks",
+        [
+            ("eString_EatingBagChips", "Eating a bag of chips"),
+            ("eString_EatingPretzels", "Eating pretzels"),
+            ("eString_EatingTrailMix", "Eating trail mix"),
+            ("eString_EatingCookies", "Eating cookies"),
+            ("eString_EatingPizza", "Eating pizza"),
+            ("eString_EatingPopcorn", "Eating popcorn"),
+            ("eString_EatingCandy", "Eating candy"),
+            ("eString_SnackingDrinkingSoda", "Drinking soda"),
+            ("eString_SnackingDrinkingMilkshakes", "Drinking milkshakes"),
+            ("eString_SnackingDrinkingMilk", "Drinking milk"),
+            ("eString_SnackingDrinkingJuice", "Drinking juice"),
+        ],
+    ),
+    (
+        "meal_prep",
+        [
+            ("eString_MakingSushi", "Making sushi"),
+            ("eString_MakingChineseFood", "Making Chinese food"),
+            ("eString_MakingMexicanFood", "Making Mexican food"),
+            ("eString_MakingAmericanFood", "Making American food"),
+            ("eString_MakingVegetarianFood", "Making vegetarian food"),
+            ("eString_MakingJapaneseFood", "Making Japanese food"),
+            ("eString_MakingSalad", "Making salad"),
+            ("eString_MakingIndianFood", "Making Indian food"),
+            ("eString_MakingTurkishFood", "Making Turkish Food"),
+            ("eString_MakingSpanishFood", "Making Spanish food"),
+            ("eString_MakingAfricanFood", "Making African food"),
+            ("eString_MakingFilipinoFood", "Making Filipino food"),
+            ("eString_MakingFishAndChips", "Making fish and chips"),
+            ("eString_MakingLasagna", "Making lasagna"),
+            ("eString_MakingPasta", "Making pasta"),
+            ("eString_MakingDimSum", "Making dim sum"),
+            ("eString_MakingPizza", "Making pizza"),
+            ("eString_MakingFrenchFood", "Making French food"),
+            ("eString_MakingEscargot", "Making escargot"),
+            ("eString_MakingBurgersAndFries", "Making burgers and fries"),
+            ("eString_MakingTacos", "Making tacos"),
+            ("eString_MakingPaella", "Making paella"),
+            ("eString_MakingSeafood", "Making seafood"),
+            ("eString_MakingSteakAuPoivre", "Making steak au poivre"),
         ],
     ),
     (
@@ -493,6 +574,17 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_PlayingLittlePocketPet", "Playing Little Pocket Pet"),
             ("eString_PlayingFishTycoon", "Playing Fish Tycoon"),
             ("eString_PlayingPlantTycoon", "Playing Plant Tycoon"),
+            ("eString_PlayingTheSims", "Playing the Sims"),
+            ("eString_PlayingBlockCraft", "Playing BlockCraft"),
+            ("eString_PlayingEarthRarria", "Playing Earth-rarria"),
+            ("eString_PlayingFarmdewValley", "Playing Farmdew Valley"),
+        ],
+    ),
+    (
+        "video_game_teen",
+        [
+            ("eString_PlayingOlderScrolls", "Playing The Older Scrolls"),
+            ("eString_PlayingRimWorld", "Playing RimWorld"),
         ],
     ),
     (
@@ -500,6 +592,7 @@ BEHAVIOR_LABEL_GROUPS = [
         [
             ("eString_BrowsingLDWForums", "Browsing LDWForums"),
             ("eString_WatchingCatVideos", "Watching cat videos"),
+            ("eString_WatchingMemes", "Watching memes"),
         ],
     ),
     (
@@ -543,6 +636,69 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_FloorIsLava", "The floor is lava!"),
             ("eString_PlayingTag", "Playing tag"),
             ("eString_DuckDuckGoose", "Playing Duck Duck Goose"),
+            ("eString_ChasingPeople", "Chasing people"),
+            ("eString_RunningAroundHouse", "Running around the house"),
+        ],
+    ),
+    (
+        "driving_child",
+        [
+            ("eString_PlayingRacecar", "Playing racecar"),
+            ("eString_PracticingDrivingSkills", "Practicing driving skills"),
+        ],
+    ),
+    ("trampoline_textfix", [("eString_JumpingOnTheTrampoline", "Jumping on the trampoline")]),
+    (
+        "kids_table",
+        [
+            ("eString_DoingArtsAndCrafts", "Doing arts and crafts"),
+            ("eString_MakingOrigami", "Making origami"),
+            ("eString_ColoringBook", "Coloring in a coloring book"),
+            ("eString_MakingClaySculptures", "Making clay sculptures"),
+            ("eString_MakingCharmBracelets", "Making charm bracelets"),
+            ("eString_MakingNecklaces", "Making necklaces"),
+            ("eString_DoingHomework", "Doing homework"),
+            ("eString_Procrastinating", "Procrastinating"),
+        ],
+    ),
+    (
+        "teen_online_test",
+        [
+            ("eString_ApplyingVolunteerOpportunities", "Applying for volunteer opportunities"),
+            ("eString_PlanningCareerPath", "Planning career path"),
+            ("eString_LookingForSchools", "Looking for schools to apply to"),
+            ("eString_ExploringCareerOpportunities", "Exploring future career opportunities"),
+            ("eString_ExploringVolunteerOpportunities", "Exploring future volunteer opportunities"),
+        ],
+    ),
+    (
+        "teen_homework",
+        [
+            ("eString_DoingMathHomework", "Doing math homework"),
+            ("eString_DoingGeographyHomework", "Doing geography homework"),
+            ("eString_DoingBiologyHomework", "Doing biology homework"),
+            ("eString_DoingLiteratureHomework", "Doing literature homework"),
+        ],
+    ),
+    (
+        "sit_down_general",
+        [
+            ("eString_ThinkingOfFamily", "Thinking of family"),
+            ("eString_ThinkingOfRelatives", "Thinking of relatives"),
+            ("eString_ThinkingOfFriends", "Thinking of friends"),
+            ("eString_Resting", "Resting"),
+            ("eString_RestingFeetNew", "Resting feet"),
+            ("eString_RelaxingForABit", "Relaxing for a bit"),
+            ("eString_TakingABreak", "Taking a break"),
+            ("eString_EnjoyingLife", "Enjoying life"),
+        ],
+    ),
+    (
+        "sit_down_adult",
+        [
+            ("eString_ThinkingOfChildren", "Thinking of children"),
+            ("eString_ThinkingOfGrandchildren", "Thinking of grandchildren"),
+            ("eString_ThinkingOfSpouse", "Thinking of spouse"),
         ],
     ),
     (
@@ -557,6 +713,7 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_UnderwaterBackflips", "Practicing underwater backflips"),
             ("eString_UnderwaterFrontflips", "Practicing underwater frontflips"),
             ("eString_UnderwaterHandstands", "Practicing underwater handstands"),
+            ("eString_Snorkelling", "Snorkelling"),
         ],
     ),
     (
@@ -601,6 +758,10 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_PracticingAstronomy", "Practicing astronomy"),
             ("eString_FindingSpaceStations", "Finding space stations"),
             ("eString_FindingISS", "Finding the ISS"),
+            ("eString_LookingForRocketShips", "Looking for rocket ships"),
+            ("eString_LookingForMeteors", "Looking for meteors"),
+            ("eString_TryingFindShootingStars", "Trying to find shooting stars"),
+            ("eString_LookingForComets", "Looking for comets"),
         ],
     ),
     (
@@ -618,6 +779,82 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_PracticingCareerSkills", "Practicing career skills"),
             ("eString_PracticingWorkTechniques", "Practicing new work techniques"),
             ("eString_WorkingJobProject", "Working on a job project"),
+            ("eString_PracticingInterviewSkills", "Practicing interview skills"),
+            ("eString_LearningNewJobSkills", "Learning new job skills"),
+            ("eString_PracticingNewJobSkill", "Practicing a new job skill"),
+            ("eString_ImprovingJobPerformance", "Improving job performance"),
+            ("eString_WorkingClientProject", "Working on a project for a client"),
+            ("eString_TakingBossAdvice", "Taking boss's advice on a career project"),
+            ("eString_ReflectingCareerPerformance", "Reflecting on recent career performance"),
+            ("eString_TryingImproveCareerPerformance", "Trying to improve career performance"),
+            ("eString_WorkingNextPromotion", "Working hard for the next promotion!"),
+            ("eString_PerfectingCareerSkills", "Perfecting skills for career"),
+            ("eString_MeetJobDeadline", "Need to meet a job deadline!"),
+            ("eString_PursuingJobOpportunities", "Pursuing further job opportunities"),
+            ("eString_PursuingCareerGoals", "Pursuing personal career goals"),
+            ("eString_BusyWorking", "Busy working!"),
+            ("eString_LearningCareerTips", "Learning new tips and tricks for career"),
+            ("eString_UpdatingCareerPortfolio", "Updating career portfolio"),
+            ("eString_UpdatingResume", "Updating resume"),
+            ("eString_UpdatingCV", "Updating CV"),
+        ],
+    ),
+    (
+        "drawing",
+        [
+            ("eString_DrawingManga", "Drawing manga"),
+            ("eString_Sketching", "Sketching"),
+            ("eString_Painting", "Painting"),
+            ("eString_DrawingCartoons", "Drawing cartoons"),
+        ],
+    ),
+    (
+        "nap_dream",
+        [
+            ("eString_DreamingOfIsolaVariant", "Dreaming of Isola"),
+            ("eString_DreamingOfFamily", "Dreaming of family"),
+            ("eString_DreamingOfPets", "Dreaming of pets"),
+            ("eString_DreamingOfFriends", "Dreaming of friends"),
+            ("eString_DreamingOfFuture", "Dreaming of the future"),
+        ],
+    ),
+    (
+        "breakfast",
+        [
+            ("eString_EatingPancakes", "Eating pancakes"),
+            ("eString_EatingWaffles", "Eating waffles"),
+            ("eString_EatingToast", "Eating toast"),
+            ("eString_EatingSunnysideEggs", "Eating sunnyside-up eggs"),
+            ("eString_EatingOverEasyEggs", "Eating over-easy eggs"),
+            ("eString_EatingSausages", "Eating sausages"),
+            ("eString_EatingCereal", "Eating cereal"),
+            ("eString_EatingOatmeal", "Eating oatmeal"),
+        ],
+    ),
+    (
+        "flower_watering",
+        [
+            ("eString_Gardening", "Gardening"),
+            ("eString_CaringMagicPlants", "Caring for the Magic Plants"),
+        ],
+    ),
+    (
+        "bathroom_sink_general",
+        [
+            ("eString_PuttingOnFaceMask", "Putting on face mask"),
+            ("eString_TrimmingNails", "Trimming nails"),
+            ("eString_ApplyingLotionVariant", "Applying lotion"),
+            ("eString_ApplyingSunscreen", "Applying sunscreen"),
+        ],
+    ),
+    (
+        "bathroom_sink_grooming",
+        [
+            ("eString_PaintingFingernails", "Painting fingernails"),
+            ("eString_PaintingToenails", "Painting toenails"),
+            ("eString_DoingManicure", "Doing a manicure"),
+            ("eString_DoingPedicure", "Doing a pedicure"),
+            ("eString_PuttingOnMakeupVariant", "Putting on makeup"),
         ],
     ),
     (
@@ -3980,7 +4217,10 @@ def sync_visible_special_upgrade_icon_art(manifest):
         target = output_root / filename
         source = None
         status = "existing"
-        source_roots = [CHEAT_UPGRADE_ICON_SOURCE_DIR] + _outfit_icon_source_roots()
+        source_roots = [
+            CHEAT_UPGRADE_ICON_SOURCE_DIR,
+            PATCHER_CHEAT_UPGRADE_ICON_SOURCE_DIR,
+        ] + _outfit_icon_source_roots()
         for root in source_roots:
             candidate = root / filename
             if candidate.exists() and candidate.resolve() != target.resolve():
@@ -9334,19 +9574,45 @@ extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &);
 extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
 extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &);
 extern "C" void __cdecl VF2RandomTVLabel(CVillager &);
+extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &);
+extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &);
+extern "C" void __cdecl VF2RandomHeatFoodLabel(CVillager &);
+extern "C" void __cdecl VF2RandomSnacksLabel(CVillager &);
+extern "C" void __cdecl VF2RandomMealPrepLabel(CVillager &);
 extern "C" void __cdecl VF2RandomWebLabel(CVillager &);
 extern "C" void __cdecl VF2RandomVideoGameLabel(CVillager &);
 extern "C" void __cdecl VF2RandomMendingLabel(CVillager &);
 extern "C" void __cdecl VF2RandomIroningLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTelescopeLabel(CVillager &);
 extern "C" void __cdecl VF2RandomWorkoutLabel(CVillager &);
+extern "C" void __cdecl VF2RandomKitchenCareerDispatchLabel(CVillager &);
+extern "C" void __cdecl VF2RandomKitchenCareerLabel(CVillager &);
 extern "C" void __cdecl VF2RandomOfficeCareerLabel(CVillager &);
 extern "C" void __cdecl VF2RandomWorkshopCareerLabel(CVillager &);
+extern "C" void __cdecl VF2RandomDrawingLabel(CVillager &);
+extern "C" void __cdecl VF2RandomNapDreamLabel(CVillager &);
+extern "C" void __cdecl VF2RandomBreakfastLabel(CVillager &);
+extern "C" void __cdecl VF2RandomWateringFlowersLabel(CVillager &);
+extern "C" void __cdecl VF2RandomWateringRosesLabel(CVillager &);
+extern "C" void __cdecl VF2RandomWateringWindowBoxesLabel(CVillager &);
+extern "C" void __cdecl VF2RandomBathroomSinkLabel(CVillager &);
+extern "C" void __cdecl VF2RandomBathroomSink0Label(CVillager &);
+extern "C" void __cdecl VF2RandomBathroomSink1Label(CVillager &);
+extern "C" void __cdecl VF2RandomBathroomSink2Label(CVillager &);
+extern "C" void __cdecl VF2RandomBathroomSink3Label(CVillager &);
+extern "C" void __cdecl VF2RandomBathroomGroomingGeneralLabel(CVillager &);
+extern "C" void __cdecl VF2RandomBathroomGroomingShaveMakeupLabel(CVillager &);
 extern "C" void __cdecl VF2RandomPoolLabel(CVillager &);
 extern "C" void __cdecl VF2RandomPlayhouseLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSnowLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSandboxLabel(CVillager &);
 extern "C" void __cdecl VF2RandomToyTrainLabel(CVillager &);
+extern "C" void __cdecl VF2RandomDrivingChildLabel(CVillager &);
+extern "C" void __cdecl VF2TrampolineLabel(CVillager &);
+extern "C" void __cdecl VF2RandomKidsTableLabel(CVillager &);
+extern "C" void __cdecl VF2RandomTeenHomeworkLabel(CVillager &);
+extern "C" void __cdecl VF2RandomTeenOnlineTestLabel(CVillager &);
+extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &);
 extern "C" void __cdecl VF2RandomPetLabel(CVillager &);
 extern "C" void __cdecl VF2RandomShowerLabel(CVillager &);
 extern "C" void __cdecl VF2RandomNorthShowerLabel(CVillager &);
@@ -9360,19 +9626,45 @@ private:
     static void __cdecl DancingRadio(CVillager &);
     static void __cdecl ListenToRadio(CVillager &);
     static void __cdecl WatchTVDispatch(CVillager &);
+    static void __cdecl PlayingBoardGame(CVillager &);
+    static void __cdecl GetADrink(CVillager &);
+    static void __cdecl HeatUpFood(CVillager &);
+    static void __cdecl LookingForSnacksDispatch(CVillager &);
+    static void __cdecl PreparingAMeal(CVillager &);
     static void __cdecl BrowsingWeb(CVillager &);
     static void __cdecl PlayingVideoGame(CVillager &);
     static void __cdecl MendingButton(CVillager &);
     static void __cdecl IroningShirt(CVillager &);
     static void __cdecl UseTelescope(CVillager &);
     static void __cdecl WorkingOut(CVillager &);
+    static void __cdecl WorkKitchenDispatch(CVillager &);
+    static void __cdecl WorkKitchen0(CVillager &);
     static void __cdecl OfficeCarreerWork(CVillager &);
     static void __cdecl WorkWorkshop(CVillager &);
+    static void __cdecl DrawingOnEasel(CVillager &);
+    static void __cdecl NappingCouch(CVillager &);
+    static void __cdecl HaveBreakfast(CVillager &);
+    static void __cdecl WateringFlowers(CVillager &);
+    static void __cdecl WateringRoses(CVillager &);
+    static void __cdecl WateringWindowBoxes(CVillager &);
+    static void __cdecl WashingInBathroomSink(CVillager &);
+    static void __cdecl WashingInBathroomSink0(CVillager &);
+    static void __cdecl WashingInBathroomSink1(CVillager &);
+    static void __cdecl WashingInBathroomSink2(CVillager &);
+    static void __cdecl WashingInBathroomSink3(CVillager &);
+    static void __cdecl BathroomGroomingGeneral(CVillager &);
+    static void __cdecl BathroomGroomingShaveMakeup(CVillager &);
     static void __cdecl SwimmingPool(CVillager &);
     static void __cdecl PlayOnPlayStructure(CVillager &);
     static void __cdecl PlayingInSnow(CVillager &);
     static void __cdecl ToySandbox(CVillager &);
     static void __cdecl ToyTrainTableForKids(CVillager &);
+    static void __cdecl ChildrenPlayOffice(CVillager &);
+    static void __cdecl ToyTrampoline(CVillager &);
+    static void __cdecl ChildrenPlayAtKidsTable(CVillager &);
+    static void __cdecl TeenHomework(CVillager &);
+    static void __cdecl TeenOnlineExam(CVillager &);
+    static void __cdecl RestingBody(CVillager &);
     static void __cdecl Petting(CVillager &);
     static void __cdecl Shower(CVillager &);
     static void __cdecl NorthShower(CVillager &);
@@ -9383,19 +9675,45 @@ private:
     friend void __cdecl VF2RandomRadioBehavior(CVillager &);
     friend void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
     friend void __cdecl VF2RandomTVLabel(CVillager &);
+    friend void __cdecl VF2RandomBoardGameLabel(CVillager &);
+    friend void __cdecl VF2RandomDrinkLabel(CVillager &);
+    friend void __cdecl VF2RandomHeatFoodLabel(CVillager &);
+    friend void __cdecl VF2RandomSnacksLabel(CVillager &);
+    friend void __cdecl VF2RandomMealPrepLabel(CVillager &);
     friend void __cdecl VF2RandomWebLabel(CVillager &);
     friend void __cdecl VF2RandomVideoGameLabel(CVillager &);
     friend void __cdecl VF2RandomMendingLabel(CVillager &);
     friend void __cdecl VF2RandomIroningLabel(CVillager &);
     friend void __cdecl VF2RandomTelescopeLabel(CVillager &);
     friend void __cdecl VF2RandomWorkoutLabel(CVillager &);
+    friend void __cdecl VF2RandomKitchenCareerDispatchLabel(CVillager &);
+    friend void __cdecl VF2RandomKitchenCareerLabel(CVillager &);
     friend void __cdecl VF2RandomOfficeCareerLabel(CVillager &);
     friend void __cdecl VF2RandomWorkshopCareerLabel(CVillager &);
+    friend void __cdecl VF2RandomDrawingLabel(CVillager &);
+    friend void __cdecl VF2RandomNapDreamLabel(CVillager &);
+    friend void __cdecl VF2RandomBreakfastLabel(CVillager &);
+    friend void __cdecl VF2RandomWateringFlowersLabel(CVillager &);
+    friend void __cdecl VF2RandomWateringRosesLabel(CVillager &);
+    friend void __cdecl VF2RandomWateringWindowBoxesLabel(CVillager &);
+    friend void __cdecl VF2RandomBathroomSinkLabel(CVillager &);
+    friend void __cdecl VF2RandomBathroomSink0Label(CVillager &);
+    friend void __cdecl VF2RandomBathroomSink1Label(CVillager &);
+    friend void __cdecl VF2RandomBathroomSink2Label(CVillager &);
+    friend void __cdecl VF2RandomBathroomSink3Label(CVillager &);
+    friend void __cdecl VF2RandomBathroomGroomingGeneralLabel(CVillager &);
+    friend void __cdecl VF2RandomBathroomGroomingShaveMakeupLabel(CVillager &);
     friend void __cdecl VF2RandomPoolLabel(CVillager &);
     friend void __cdecl VF2RandomPlayhouseLabel(CVillager &);
     friend void __cdecl VF2RandomSnowLabel(CVillager &);
     friend void __cdecl VF2RandomSandboxLabel(CVillager &);
     friend void __cdecl VF2RandomToyTrainLabel(CVillager &);
+    friend void __cdecl VF2RandomDrivingChildLabel(CVillager &);
+    friend void __cdecl VF2TrampolineLabel(CVillager &);
+    friend void __cdecl VF2RandomKidsTableLabel(CVillager &);
+    friend void __cdecl VF2RandomTeenHomeworkLabel(CVillager &);
+    friend void __cdecl VF2RandomTeenOnlineTestLabel(CVillager &);
+    friend void __cdecl VF2RandomSitDownLabel(CVillager &);
     friend void __cdecl VF2RandomPetLabel(CVillager &);
     friend void __cdecl VF2RandomShowerLabel(CVillager &);
     friend void __cdecl VF2RandomNorthShowerLabel(CVillager &);
@@ -9418,6 +9736,7 @@ public:
 };
 
 extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
+extern "C" int __cdecl strncmp(char const *, char const *, unsigned int);
 
 __VF2_BEHAVIOR_LABEL_ARRAYS__
 
@@ -9456,16 +9775,161 @@ static void VF2SetBehaviorLabel(CVillager &villager, int stringId)
     strncpy(behaviorLabel, theStringManager::Get()->GetString((StringId)stringId), 0x27);
 }
 
-static void VF2ApplyRandomLabel(CVillager &villager, int const *labels, int count)
+static int VF2CurrentLabelInGroup(CVillager &villager, int const *labels, int count)
 {
+    if (count <= 0) {
+        return 0;
+    }
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    theStringManager *strings = theStringManager::Get();
+    for (int index = 0; index < count; ++index) {
+        char *candidate = strings->GetString((StringId)labels[index]);
+        if (candidate && strncmp(behaviorLabel, candidate, 0x27) == 0) {
+            return labels[index];
+        }
+    }
+    return 0;
+}
+
+static int VF2CurrentLabelInGroups2(
+    CVillager &villager,
+    int const *labelsA,
+    int countA,
+    int const *labelsB,
+    int countB)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, labelsA, countA);
+    if (remembered) {
+        return remembered;
+    }
+    return VF2CurrentLabelInGroup(villager, labelsB, countB);
+}
+
+static int VF2CurrentLabelInGroups3(
+    CVillager &villager,
+    int const *labelsA,
+    int countA,
+    int const *labelsB,
+    int countB,
+    int const *labelsC,
+    int countC)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, labelsA, countA);
+    if (remembered) {
+        return remembered;
+    }
+    remembered = VF2CurrentLabelInGroup(villager, labelsB, countB);
+    if (remembered) {
+        return remembered;
+    }
+    return VF2CurrentLabelInGroup(villager, labelsC, countC);
+}
+
+static void VF2ApplyRememberedOrRandomLabel(CVillager &villager, int const *labels, int count, int rememberedStringId)
+{
+    if (rememberedStringId) {
+        VF2SetBehaviorLabel(villager, rememberedStringId);
+        return;
+    }
     if (count <= 0) {
         return;
     }
-    VF2SetBehaviorLabel(villager, labels[ldwGameState::GetRandom(count)]);
+    int roll = ldwGameState::GetRandom(count + 1);
+    if (roll == 0) {
+        return;
+    }
+    VF2SetBehaviorLabel(villager, labels[roll - 1]);
 }
 
-static void VF2ApplyCoffeeLabel(CVillager &villager)
+static void VF2ApplyRandomLabel(CVillager &villager, int const *labels, int count)
 {
+    VF2ApplyRememberedOrRandomLabel(villager, labels, count, 0);
+}
+
+static void VF2ApplyRememberedOrRandomLabels2(
+    CVillager &villager,
+    int const *labelsA,
+    int countA,
+    int const *labelsB,
+    int countB,
+    int rememberedStringId)
+{
+    if (rememberedStringId) {
+        VF2SetBehaviorLabel(villager, rememberedStringId);
+        return;
+    }
+    int total = countA + countB;
+    if (total <= 0) {
+        return;
+    }
+    int roll = ldwGameState::GetRandom(total + 1);
+    if (roll == 0) {
+        return;
+    }
+    --roll;
+    if (roll < countA) {
+        VF2SetBehaviorLabel(villager, labelsA[roll]);
+        return;
+    }
+    roll -= countA;
+    VF2SetBehaviorLabel(villager, labelsB[roll]);
+}
+
+static void VF2ApplyRememberedOrRandomLabels3(
+    CVillager &villager,
+    int const *labelsA,
+    int countA,
+    int const *labelsB,
+    int countB,
+    int const *labelsC,
+    int countC,
+    int rememberedStringId)
+{
+    if (rememberedStringId) {
+        VF2SetBehaviorLabel(villager, rememberedStringId);
+        return;
+    }
+    int total = countA + countB + countC;
+    if (total <= 0) {
+        return;
+    }
+    int roll = ldwGameState::GetRandom(total + 1);
+    if (roll == 0) {
+        return;
+    }
+    --roll;
+    if (roll < countA) {
+        VF2SetBehaviorLabel(villager, labelsA[roll]);
+        return;
+    }
+    roll -= countA;
+    if (roll < countB) {
+        VF2SetBehaviorLabel(villager, labelsB[roll]);
+        return;
+    }
+    roll -= countB;
+    VF2SetBehaviorLabel(villager, labelsC[roll]);
+}
+
+static int VF2CurrentCoffeeLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_coffee, VF2_LABEL_COUNT(kVF2BehaviorLabels_coffee));
+    if (remembered) {
+        return remembered;
+    }
+    remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_coffee_evening, VF2_LABEL_COUNT(kVF2BehaviorLabels_coffee_evening));
+    if (remembered) {
+        return remembered;
+    }
+    return VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_coffee_rare, VF2_LABEL_COUNT(kVF2BehaviorLabels_coffee_rare));
+}
+
+static void VF2ApplyCoffeeLabel(CVillager &villager, int rememberedStringId)
+{
+    if (rememberedStringId) {
+        VF2SetBehaviorLabel(villager, rememberedStringId);
+        return;
+    }
     if (Night.AIIsDayTime() || ldwGameState::GetRandom(5) != 0) {
         VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_coffee, VF2_LABEL_COUNT(kVF2BehaviorLabels_coffee));
         return;
@@ -9473,14 +9937,43 @@ static void VF2ApplyCoffeeLabel(CVillager &villager)
     VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_coffee_evening, VF2_LABEL_COUNT(kVF2BehaviorLabels_coffee_evening));
 }
 
-static void VF2ApplyShowerLabel(CVillager &villager)
+static int VF2CurrentShowerLabel(CVillager &villager)
 {
-    if (VF2IsChild(villager) && ldwGameState::GetRandom(5) == 0) {
-        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_shower_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_child));
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_shower_general, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_general));
+    if (remembered) {
+        return remembered;
+    }
+    remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_shower_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_adult));
+    if (remembered) {
+        return remembered;
+    }
+    return VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_shower_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_child));
+}
+
+static void VF2ApplyShowerLabel(CVillager &villager, int rememberedStringId)
+{
+    if (rememberedStringId) {
+        VF2SetBehaviorLabel(villager, rememberedStringId);
         return;
     }
-    if (VF2IsTeenOrOlder(villager) && ldwGameState::GetRandom(8) == 0) {
-        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_shower_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_adult));
+    if (VF2IsChild(villager)) {
+        VF2ApplyRememberedOrRandomLabels2(
+            villager,
+            kVF2BehaviorLabels_shower_general,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_general),
+            kVF2BehaviorLabels_shower_child,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_child),
+            0);
+        return;
+    }
+    if (VF2IsTeenOrOlder(villager)) {
+        VF2ApplyRememberedOrRandomLabels2(
+            villager,
+            kVF2BehaviorLabels_shower_general,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_general),
+            kVF2BehaviorLabels_shower_adult,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_adult),
+            0);
         return;
     }
     VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_shower_general, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_general));
@@ -9514,12 +10007,13 @@ extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &villager)
 
 extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_reading, VF2_LABEL_COUNT(kVF2BehaviorLabels_reading));
     if (ldwGameState::GetRandom(2) == 0) {
         CBehavior::ReadMagazine(villager);
     } else {
         CBehavior::ReadingBook(villager);
     }
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_reading, VF2_LABEL_COUNT(kVF2BehaviorLabels_reading));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_reading, VF2_LABEL_COUNT(kVF2BehaviorLabels_reading), remembered);
 }
 
 extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &villager)
@@ -9534,134 +10028,421 @@ extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &villager)
 
 extern "C" void __cdecl VF2RandomTVLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_tv, VF2_LABEL_COUNT(kVF2BehaviorLabels_tv));
     CBehavior::WatchTVDispatch(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_tv, VF2_LABEL_COUNT(kVF2BehaviorLabels_tv));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_tv, VF2_LABEL_COUNT(kVF2BehaviorLabels_tv), remembered);
+}
+
+extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_board_game, VF2_LABEL_COUNT(kVF2BehaviorLabels_board_game));
+    CBehavior::PlayingBoardGame(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_board_game, VF2_LABEL_COUNT(kVF2BehaviorLabels_board_game), remembered);
+}
+
+extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_drink, VF2_LABEL_COUNT(kVF2BehaviorLabels_drink));
+    CBehavior::GetADrink(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_drink, VF2_LABEL_COUNT(kVF2BehaviorLabels_drink), remembered);
+}
+
+extern "C" void __cdecl VF2RandomHeatFoodLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_heat_food, VF2_LABEL_COUNT(kVF2BehaviorLabels_heat_food));
+    CBehavior::HeatUpFood(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_heat_food, VF2_LABEL_COUNT(kVF2BehaviorLabels_heat_food), remembered);
+}
+
+extern "C" void __cdecl VF2RandomSnacksLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_snacks, VF2_LABEL_COUNT(kVF2BehaviorLabels_snacks));
+    CBehavior::LookingForSnacksDispatch(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_snacks, VF2_LABEL_COUNT(kVF2BehaviorLabels_snacks), remembered);
+}
+
+extern "C" void __cdecl VF2RandomMealPrepLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_meal_prep, VF2_LABEL_COUNT(kVF2BehaviorLabels_meal_prep));
+    CBehavior::PreparingAMeal(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_meal_prep, VF2_LABEL_COUNT(kVF2BehaviorLabels_meal_prep), remembered);
 }
 
 extern "C" void __cdecl VF2RandomWebLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroups2(
+        villager,
+        kVF2BehaviorLabels_web_basic,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_web_basic),
+        kVF2BehaviorLabels_web_adult,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_web_adult));
     CBehavior::BrowsingWeb(villager);
-    if (VF2IsTeenOrOlder(villager) && ldwGameState::GetRandom(4) == 0) {
-        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_web_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_web_adult));
+    if (VF2IsTeenOrOlder(villager)) {
+        VF2ApplyRememberedOrRandomLabels2(
+            villager,
+            kVF2BehaviorLabels_web_basic,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_web_basic),
+            kVF2BehaviorLabels_web_adult,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_web_adult),
+            remembered);
         return;
     }
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_web_basic, VF2_LABEL_COUNT(kVF2BehaviorLabels_web_basic));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_web_basic, VF2_LABEL_COUNT(kVF2BehaviorLabels_web_basic), remembered);
 }
 
 extern "C" void __cdecl VF2RandomVideoGameLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroups2(
+        villager,
+        kVF2BehaviorLabels_video_game,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_video_game),
+        kVF2BehaviorLabels_video_game_teen,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_video_game_teen));
     CBehavior::PlayingVideoGame(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_video_game, VF2_LABEL_COUNT(kVF2BehaviorLabels_video_game));
+    if (VF2IsTeenOrOlder(villager)) {
+        VF2ApplyRememberedOrRandomLabels2(
+            villager,
+            kVF2BehaviorLabels_video_game,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_video_game),
+            kVF2BehaviorLabels_video_game_teen,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_video_game_teen),
+            remembered);
+        return;
+    }
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_video_game, VF2_LABEL_COUNT(kVF2BehaviorLabels_video_game), remembered);
 }
 
 extern "C" void __cdecl VF2RandomMendingLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_mending, VF2_LABEL_COUNT(kVF2BehaviorLabels_mending));
     CBehavior::MendingButton(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_mending, VF2_LABEL_COUNT(kVF2BehaviorLabels_mending));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_mending, VF2_LABEL_COUNT(kVF2BehaviorLabels_mending), remembered);
 }
 
 extern "C" void __cdecl VF2RandomIroningLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_ironing, VF2_LABEL_COUNT(kVF2BehaviorLabels_ironing));
     CBehavior::IroningShirt(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_ironing, VF2_LABEL_COUNT(kVF2BehaviorLabels_ironing));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_ironing, VF2_LABEL_COUNT(kVF2BehaviorLabels_ironing), remembered);
 }
 
 extern "C" void __cdecl VF2RandomTelescopeLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_telescope, VF2_LABEL_COUNT(kVF2BehaviorLabels_telescope));
     CBehavior::UseTelescope(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_telescope, VF2_LABEL_COUNT(kVF2BehaviorLabels_telescope));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_telescope, VF2_LABEL_COUNT(kVF2BehaviorLabels_telescope), remembered);
 }
 
 extern "C" void __cdecl VF2RandomWorkoutLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_workout));
     CBehavior::WorkingOut(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_workout));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_workout), remembered);
+}
+
+extern "C" void __cdecl VF2RandomKitchenCareerDispatchLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
+    CBehavior::WorkKitchenDispatch(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career), remembered);
+}
+
+extern "C" void __cdecl VF2RandomKitchenCareerLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
+    CBehavior::WorkKitchen0(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career), remembered);
 }
 
 extern "C" void __cdecl VF2RandomOfficeCareerLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
     CBehavior::OfficeCarreerWork(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career), remembered);
 }
 
 extern "C" void __cdecl VF2RandomWorkshopCareerLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
     CBehavior::WorkWorkshop(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career), remembered);
+}
+
+extern "C" void __cdecl VF2RandomDrawingLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_drawing, VF2_LABEL_COUNT(kVF2BehaviorLabels_drawing));
+    CBehavior::DrawingOnEasel(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_drawing, VF2_LABEL_COUNT(kVF2BehaviorLabels_drawing), remembered);
+}
+
+extern "C" void __cdecl VF2RandomNapDreamLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_nap_dream, VF2_LABEL_COUNT(kVF2BehaviorLabels_nap_dream));
+    CBehavior::NappingCouch(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_nap_dream, VF2_LABEL_COUNT(kVF2BehaviorLabels_nap_dream), remembered);
+}
+
+extern "C" void __cdecl VF2RandomBreakfastLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_breakfast, VF2_LABEL_COUNT(kVF2BehaviorLabels_breakfast));
+    CBehavior::HaveBreakfast(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_breakfast, VF2_LABEL_COUNT(kVF2BehaviorLabels_breakfast), remembered);
+}
+
+extern "C" void __cdecl VF2RandomWateringFlowersLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering));
+    CBehavior::WateringFlowers(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering), remembered);
+}
+
+extern "C" void __cdecl VF2RandomWateringRosesLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering));
+    CBehavior::WateringRoses(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering), remembered);
+}
+
+extern "C" void __cdecl VF2RandomWateringWindowBoxesLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering));
+    CBehavior::WateringWindowBoxes(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering), remembered);
+}
+
+static int VF2CurrentBathroomSinkLabel(CVillager &villager)
+{
+    return VF2CurrentLabelInGroups2(
+        villager,
+        kVF2BehaviorLabels_bathroom_sink_general,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_general),
+        kVF2BehaviorLabels_bathroom_sink_grooming,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_grooming));
+}
+
+static void VF2ApplyBathroomSinkGeneralLabel(CVillager &villager, int rememberedStringId)
+{
+    VF2ApplyRememberedOrRandomLabel(
+        villager,
+        kVF2BehaviorLabels_bathroom_sink_general,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_general),
+        rememberedStringId);
+}
+
+static void VF2ApplyBathroomSinkGroomingLabel(CVillager &villager, int rememberedStringId)
+{
+    VF2ApplyRememberedOrRandomLabels2(
+        villager,
+        kVF2BehaviorLabels_bathroom_sink_general,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_general),
+        kVF2BehaviorLabels_bathroom_sink_grooming,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_grooming),
+        rememberedStringId);
+}
+
+extern "C" void __cdecl VF2RandomBathroomSinkLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentBathroomSinkLabel(villager);
+    CBehavior::WashingInBathroomSink(villager);
+    VF2ApplyBathroomSinkGeneralLabel(villager, remembered);
+}
+
+extern "C" void __cdecl VF2RandomBathroomSink0Label(CVillager &villager)
+{
+    int remembered = VF2CurrentBathroomSinkLabel(villager);
+    CBehavior::WashingInBathroomSink0(villager);
+    VF2ApplyBathroomSinkGeneralLabel(villager, remembered);
+}
+
+extern "C" void __cdecl VF2RandomBathroomSink1Label(CVillager &villager)
+{
+    int remembered = VF2CurrentBathroomSinkLabel(villager);
+    CBehavior::WashingInBathroomSink1(villager);
+    VF2ApplyBathroomSinkGeneralLabel(villager, remembered);
+}
+
+extern "C" void __cdecl VF2RandomBathroomSink2Label(CVillager &villager)
+{
+    int remembered = VF2CurrentBathroomSinkLabel(villager);
+    CBehavior::WashingInBathroomSink2(villager);
+    VF2ApplyBathroomSinkGeneralLabel(villager, remembered);
+}
+
+extern "C" void __cdecl VF2RandomBathroomSink3Label(CVillager &villager)
+{
+    int remembered = VF2CurrentBathroomSinkLabel(villager);
+    CBehavior::WashingInBathroomSink3(villager);
+    VF2ApplyBathroomSinkGeneralLabel(villager, remembered);
+}
+
+extern "C" void __cdecl VF2RandomBathroomGroomingGeneralLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentBathroomSinkLabel(villager);
+    CBehavior::BathroomGroomingGeneral(villager);
+    VF2ApplyBathroomSinkGroomingLabel(villager, remembered);
+}
+
+extern "C" void __cdecl VF2RandomBathroomGroomingShaveMakeupLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentBathroomSinkLabel(villager);
+    CBehavior::BathroomGroomingShaveMakeup(villager);
+    VF2ApplyBathroomSinkGroomingLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomPoolLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroups2(
+        villager,
+        kVF2BehaviorLabels_pool_general,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_general),
+        kVF2BehaviorLabels_pool_child,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_child));
     CBehavior::SwimmingPool(villager);
-    if (VF2IsChild(villager) && ldwGameState::GetRandom(3) == 0) {
-        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_pool_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_child));
+    if (VF2IsChild(villager)) {
+        VF2ApplyRememberedOrRandomLabels2(
+            villager,
+            kVF2BehaviorLabels_pool_general,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_general),
+            kVF2BehaviorLabels_pool_child,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_child),
+            remembered);
         return;
     }
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_pool_general, VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_general));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_pool_general, VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_general), remembered);
 }
 
 extern "C" void __cdecl VF2RandomPlayhouseLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_playhouse, VF2_LABEL_COUNT(kVF2BehaviorLabels_playhouse));
     CBehavior::PlayOnPlayStructure(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_playhouse, VF2_LABEL_COUNT(kVF2BehaviorLabels_playhouse));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_playhouse, VF2_LABEL_COUNT(kVF2BehaviorLabels_playhouse), remembered);
 }
 
 extern "C" void __cdecl VF2RandomSnowLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_snow, VF2_LABEL_COUNT(kVF2BehaviorLabels_snow));
     CBehavior::PlayingInSnow(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_snow, VF2_LABEL_COUNT(kVF2BehaviorLabels_snow));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_snow, VF2_LABEL_COUNT(kVF2BehaviorLabels_snow), remembered);
 }
 
 extern "C" void __cdecl VF2RandomSandboxLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sandbox, VF2_LABEL_COUNT(kVF2BehaviorLabels_sandbox));
     CBehavior::ToySandbox(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_sandbox, VF2_LABEL_COUNT(kVF2BehaviorLabels_sandbox));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_sandbox, VF2_LABEL_COUNT(kVF2BehaviorLabels_sandbox), remembered);
 }
 
 extern "C" void __cdecl VF2RandomToyTrainLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_train_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_train_child));
     CBehavior::ToyTrainTableForKids(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_train_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_train_child));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_train_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_train_child), remembered);
+}
+
+extern "C" void __cdecl VF2RandomDrivingChildLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_driving_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_driving_child));
+    CBehavior::ChildrenPlayOffice(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_driving_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_driving_child), remembered);
+}
+
+extern "C" void __cdecl VF2TrampolineLabel(CVillager &villager)
+{
+    CBehavior::ToyTrampoline(villager);
+    VF2SetBehaviorLabel(villager, kVF2BehaviorLabels_trampoline_textfix[0]);
+}
+
+extern "C" void __cdecl VF2RandomKidsTableLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_kids_table, VF2_LABEL_COUNT(kVF2BehaviorLabels_kids_table));
+    CBehavior::ChildrenPlayAtKidsTable(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_kids_table, VF2_LABEL_COUNT(kVF2BehaviorLabels_kids_table), remembered);
+}
+
+extern "C" void __cdecl VF2RandomTeenHomeworkLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_teen_homework, VF2_LABEL_COUNT(kVF2BehaviorLabels_teen_homework));
+    CBehavior::TeenHomework(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_teen_homework, VF2_LABEL_COUNT(kVF2BehaviorLabels_teen_homework), remembered);
+}
+
+extern "C" void __cdecl VF2RandomTeenOnlineTestLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_teen_online_test, VF2_LABEL_COUNT(kVF2BehaviorLabels_teen_online_test));
+    CBehavior::TeenOnlineExam(villager);
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_teen_online_test, VF2_LABEL_COUNT(kVF2BehaviorLabels_teen_online_test), remembered);
+}
+
+extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroups2(
+        villager,
+        kVF2BehaviorLabels_sit_down_general,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general),
+        kVF2BehaviorLabels_sit_down_adult,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_adult));
+    CBehavior::RestingBody(villager);
+    if (VF2IsMatureAdult(villager)) {
+        VF2ApplyRememberedOrRandomLabels2(
+            villager,
+            kVF2BehaviorLabels_sit_down_general,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general),
+            kVF2BehaviorLabels_sit_down_adult,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_adult),
+            remembered);
+        return;
+    }
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_sit_down_general, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general), remembered);
 }
 
 extern "C" void __cdecl VF2RandomPetLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_pet, VF2_LABEL_COUNT(kVF2BehaviorLabels_pet));
     CBehavior::Petting(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_pet, VF2_LABEL_COUNT(kVF2BehaviorLabels_pet));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_pet, VF2_LABEL_COUNT(kVF2BehaviorLabels_pet), remembered);
 }
 
 extern "C" void __cdecl VF2RandomShowerLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentShowerLabel(villager);
     CBehavior::Shower(villager);
-    VF2ApplyShowerLabel(villager);
+    VF2ApplyShowerLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomNorthShowerLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentShowerLabel(villager);
     CBehavior::NorthShower(villager);
-    VF2ApplyShowerLabel(villager);
+    VF2ApplyShowerLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomCoffeeLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentCoffeeLabel(villager);
     CBehavior::MakeCoffee(villager);
-    VF2ApplyCoffeeLabel(villager);
+    VF2ApplyCoffeeLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomBigCoffeeLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentCoffeeLabel(villager);
     CBehavior::MakingAVanillaSoyDecafGrandeLatte(villager);
+    if (remembered) {
+        VF2SetBehaviorLabel(villager, remembered);
+        return;
+    }
     if (ldwGameState::GetRandom(80) == 0) {
         VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_coffee_rare, VF2_LABEL_COUNT(kVF2BehaviorLabels_coffee_rare));
         return;
     }
-    VF2ApplyCoffeeLabel(villager);
+    VF2ApplyCoffeeLabel(villager, 0);
 }
 
 extern "C" void __cdecl VF2RandomCocktailLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_cocktail, VF2_LABEL_COUNT(kVF2BehaviorLabels_cocktail));
     CBehavior::HavingACocktail(villager);
-    VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_cocktail, VF2_LABEL_COUNT(kVF2BehaviorLabels_cocktail));
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_cocktail, VF2_LABEL_COUNT(kVF2BehaviorLabels_cocktail), remembered);
 }
 
 extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
@@ -9685,11 +10466,30 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAllAgesAutonomousCandidateWithWeight(data, 0x114, 650); // PlayingVideoGame
     EnableAllAgesAutonomousCandidateWithWeight(data, 0x05A, 650); // BrowsingWeb
     EnableAllAgesAutonomousCandidateWithWeight(data, 0x03E, 650); // WatchTVDispatch
+    EnableAutonomousCandidateWithWeight(data, 0x107, 450); // PlayingBoardGame, retain stock object gates
     EnableAllAgesAutonomousCandidateWithWeight(data, 0x091, 450); // SwimmingPool
     EnableChildOnlyAutonomousCandidateWithWeight(data, 0x196, 450); // ToySandbox
     EnableChildOnlyAutonomousCandidateWithWeight(data, 0x198, 450); // ToyTrainTableForKids
+    EnableChildOnlyAutonomousCandidateWithWeight(data, 0x00B, 450); // ChildrenPlayOffice / Driving like a grownup variants
+    EnableAutonomousCandidateWithWeight(data, 0x0C0, 450); // TeenHomework, retain stock age/object gates
+    EnableAutonomousCandidateWithWeight(data, 0x0C1, 450); // TeenOnlineExam, retain stock age/object gates
+    EnableAllAgesAutonomousCandidateWithWeight(data, 0x127, 450); // RestingBody / Needs to sit down
+    EnableAutonomousCandidateWithWeight(data, 0x083, 350); // NappingCouch / Dreaming variants
+    EnableAutonomousCandidateWithWeight(data, 0x0D6, 450); // HaveBreakfast
+    EnableAutonomousCandidateWithWeight(data, 0x075, 450); // WateringFlowers
+    EnableAutonomousCandidateWithWeight(data, 0x076, 450); // WateringRoses
+    EnableAutonomousCandidateWithWeight(data, 0x077, 450); // WateringWindowBoxes
+    EnableAutonomousCandidateWithWeight(data, 0x0A4, 450); // WashingInBathroomSink
+    EnableAutonomousCandidateWithWeight(data, 0x0A5, 450); // WashingInBathroomSink0
+    EnableAutonomousCandidateWithWeight(data, 0x0A6, 450); // WashingInBathroomSink1
+    EnableAutonomousCandidateWithWeight(data, 0x0A7, 450); // WashingInBathroomSink2
+    EnableAutonomousCandidateWithWeight(data, 0x0A8, 450); // WashingInBathroomSink3
+    EnableAutonomousCandidateWithWeight(data, 0x0A9, 450); // BathroomGroomingGeneral
+    EnableAutonomousCandidateWithWeight(data, 0x0AD, 450); // BathroomGroomingShaveMakeup
     EnableAutonomousCandidateWithWeight(data, 0x11D, 450); // UseTelescope
     EnableAutonomousCandidateWithWeight(data, 0x04A, 450); // WorkingOut, retain stock age gates
+    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x047, 450); // WorkKitchenDispatch
+    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x048, 450); // WorkKitchen0
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x02C, 450); // OfficeCarreerWork
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x04B, 450); // WorkWorkshop
     VF2RefreshHammockEligibility(data);
@@ -9713,7 +10513,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
             "mending/sewing variants (adults)",
             "ironing clothes (adults)",
             "petting/pet label variants (all ages)",
-            "TV, web, video game, reading, telescope, workout, career, shower, coffee/tea, cocktail, pool, sandbox, toy-train, and snow-play label variants",
+            "TV, drink, heat-food, snack, meal-prep, web, video game, reading, telescope, workout, career, shower, coffee/tea, cocktail, pool, sandbox, toy-train, and snow-play label variants",
         ],
         "hammock_behavior": {
             "enabled_behavior": "0x23 LieInHammock retargeted to _VF2LieInHammockAnchoredRest",
@@ -9791,19 +10591,45 @@ def patch_behavior_label_variants(manifest):
 
     changed = [
         retarget(0x332, 0x03E, "_VF2RandomTVLabel", "Watching TV label variants"),
+        retarget(0xE8E, 0x107, "_VF2RandomBoardGameLabel", "Board game label variants"),
+        retarget(0x11B, 0x019, "_VF2RandomDrinkLabel", "Getting a drink label variants"),
+        retarget(0xAB4, 0x0D5, "_VF2RandomHeatFoodLabel", "Heating up some food label variants"),
+        retarget(0x1C3, 0x025, "_VF2RandomSnacksLabel", "Looking for snacks label variants"),
+        retarget(0x28A, 0x032, "_VF2RandomMealPrepLabel", "Preparing a meal label variants"),
         retarget(0x4F6, 0x05A, "_VF2RandomWebLabel", "Browsing Web label variants"),
         retarget(0xF6B, 0x114, "_VF2RandomVideoGameLabel", "Playing video game label variants"),
         retarget(0x7CB, 0x08D, "_VF2RandomMendingLabel", "Mending/sewing label variants"),
         retarget(0x7DC, 0x08E, "_VF2RandomIroningLabel", "Ironing clothes label"),
         retarget(0xD07, 0x11D, "_VF2RandomTelescopeLabel", "Telescope label variants"),
         retarget(0x3CC, 0x04A, "_VF2RandomWorkoutLabel", "Workout label variants"),
+        retarget(0x3B0, 0x047, "_VF2RandomKitchenCareerDispatchLabel", "Kitchen career label variants"),
+        retarget(0x3BE, 0x048, "_VF2RandomKitchenCareerLabel", "Kitchen career label variants"),
         retarget(0x225, 0x02C, "_VF2RandomOfficeCareerLabel", "Office career label variants"),
         retarget(0x3E8, 0x04B, "_VF2RandomWorkshopCareerLabel", "Workshop career label variants"),
+        retarget(0xFAF, 0x118, "_VF2RandomDrawingLabel", "Drawing label variants"),
+        retarget(0x721, 0x083, "_VF2RandomNapDreamLabel", "Nap dream label variants"),
+        retarget(0xAC5, 0x0D6, "_VF2RandomBreakfastLabel", "Breakfast label variants"),
+        retarget(0x654, 0x075, "_VF2RandomWateringFlowersLabel", "Flower watering label variants"),
+        retarget(0x662, 0x076, "_VF2RandomWateringRosesLabel", "Flower watering label variants"),
+        retarget(0x670, 0x077, "_VF2RandomWateringWindowBoxesLabel", "Flower watering label variants"),
+        retarget(0x8D8, 0x0A4, "_VF2RandomBathroomSinkLabel", "Bathroom sink label variants"),
+        retarget(0x8E9, 0x0A5, "_VF2RandomBathroomSink0Label", "Bathroom sink label variants"),
+        retarget(0x8FA, 0x0A6, "_VF2RandomBathroomSink1Label", "Bathroom sink label variants"),
+        retarget(0x90B, 0x0A7, "_VF2RandomBathroomSink2Label", "Bathroom sink label variants"),
+        retarget(0x91C, 0x0A8, "_VF2RandomBathroomSink3Label", "Bathroom sink label variants"),
+        retarget(0x92D, 0x0A9, "_VF2RandomBathroomGroomingGeneralLabel", "Bathroom grooming label variants"),
+        retarget(0x971, 0x0AD, "_VF2RandomBathroomGroomingShaveMakeupLabel", "Bathroom grooming label variants"),
         retarget(0x80F, 0x091, "_VF2RandomPoolLabel", "Pool label variants"),
         retarget(0xD18, 0x11E, "_VF2RandomPlayhouseLabel", "Playhouse/playground label variants"),
         retarget(0xE9F, 0x108, "_VF2RandomSnowLabel", "Snow play label variants"),
         retarget(0x1842, 0x196, "_VF2RandomSandboxLabel", "Sandbox label variants"),
         retarget(0x1864, 0x198, "_VF2RandomToyTrainLabel", "Toy train/table label variants"),
+        retarget(0x09D, 0x00B, "_VF2RandomDrivingChildLabel", "Child driving label variants"),
+        retarget(0x1875, 0x199, "_VF2TrampolineLabel", "Trampoline label text fix"),
+        retarget(0x1125, 0x130, "_VF2RandomKidsTableLabel", "Kids table label variants"),
+        retarget(0x4AA, 0x0C0, "_VF2RandomTeenHomeworkLabel", "Teen homework label variants"),
+        retarget(0x4BB, 0x0C1, "_VF2RandomTeenOnlineTestLabel", "Teen online test label variants"),
+        retarget(0x108C, 0x127, "_VF2RandomSitDownLabel", "Sit-down/rest label variants"),
         retarget(0x1886, 0x19A, "_VF2RandomPetLabel", "Petting label variants"),
         retarget(0x2A6, 0x034, "_VF2RandomShowerLabel", "Shower/bath label variants"),
         retarget(0x831, 0x016, "_VF2RandomNorthShowerLabel", "North shower/bath label variants"),

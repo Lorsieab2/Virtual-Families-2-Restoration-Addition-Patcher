@@ -148,14 +148,14 @@ SETTINGS = [
     {
         "id": "behavior_patches",
         "label": "Behavior Patches",
-        "description": "Makes certain actions able to be done automatically by people, including watching the fire, relaxing in the hammock, arcade/table games, random radio/MP3 dancing or listening, child/teen Drawing, adult ironing/mending, petting, TV/web/video game label variants, playground/sandbox/pool/snow/coffee/tea variants, child-only daytime Playhouse behavior, and child-only Playing quietly at the Kids Table.",
+        "description": "Makes certain actions able to be done automatically by people and adds label variants to native behavior routes. Includes fire, hammock, arcade/table games, radio/MP3, pets, TV/web/video games, careers, meals/snacks/drinks, bathroom sink/grooming, breakfast, watering flowers, playhouse/playground, kids table, trampoline, sandbox/train, pool, snow, shower/bath, coffee/tea, cocktail, telescope, workout, naps, and sit-down/rest variants.",
         "default": True,
         "category": "main",
     },
     {
         "id": "text_fixes",
         "label": "Text fixes",
-        "description": "Misc text fixes, including the pet text fix: {name} sees their adorable pet.",
+        "description": "Misc text fixes, including {name} sees their adorable pet and Not feeling clean.",
         "default": True,
         "category": "main",
     },

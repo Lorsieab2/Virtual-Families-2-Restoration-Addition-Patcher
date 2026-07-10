@@ -400,6 +400,20 @@
 - In-game behavior test: after the next patcher/build export, verify label
   variants still choose the same animations after the helper-name cleanup
   (`VF2IsChild`, `VF2IsTeenOrOlder`, `VF2IsMatureAdult`).
+- In-game behavior test B137: with Behavior Patches enabled, praise villagers
+  while they are doing generated label variants and confirm the visible action
+  string stays stable instead of rerolling. Also verify the new label-only
+  variants for `Watching TV`, `Getting a drink`, `Heating up some food`,
+  `Looking for snacks`, and `Preparing a meal` reuse the same native animations
+  and targeting as their base actions.
+- In-game behavior test B137: verify the newly wrapped native entries for
+  board games, breakfast, flower watering, bathroom sink/grooming, kids table,
+  teen homework/online test, sit-down/rest, and `Jumping on the trampoline`.
+  These should display the new labels while preserving base routes and object
+  targeting.
+- Research: implement requested gendered behavior variation toggle and exact
+  teen/up-to-19 eligibility only after the relevant stock age/gender gates are
+  mapped. Do not widen base-game behavior eligibility just for label variants.
 - Follow-up: use `VF2IsMatureAdult` for future mature-adult-only variants such
   as nursing/partner/romance routes once those behaviors are implemented.
 - Research: implement nursing-mother infant-care variants and the requested

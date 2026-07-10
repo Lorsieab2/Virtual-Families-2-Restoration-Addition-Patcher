@@ -429,6 +429,93 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
             finally:
                 patcher.PATCHED = old_patched
 
+    def test_behavior_label_variants_preserve_current_label_on_refresh(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            shutil.copy2(patcher.SRC_OBJS / "Villager.obj", temp_root / "Villager.obj")
+            shutil.copy2(patcher.SRC_OBJS / "VillagerAI.obj", temp_root / "VillagerAI.obj")
+            shutil.copy2(patcher.SRC_OBJS / "Behavior.obj", temp_root / "Behavior.obj")
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = temp_root
+                manifest = {}
+
+                patcher.patch_spontaneous_behaviors(manifest)
+
+                helper = (temp_root / "vf2_spontaneous_behaviors.cpp").read_text(encoding="ascii")
+                self.assertIn("static int VF2CurrentLabelInGroup", helper)
+                self.assertIn("static int VF2CurrentLabelInGroups2", helper)
+                self.assertIn("static void VF2ApplyRememberedOrRandomLabel", helper)
+                self.assertIn(
+                    "int remembered = VF2CurrentLabelInGroups2(",
+                    helper,
+                )
+                self.assertIn("kVF2BehaviorLabels_video_game_teen", helper)
+                self.assertIn("CBehavior::PlayingVideoGame(villager);", helper)
+                self.assertIn(
+                    "VF2ApplyRememberedOrRandomLabels2(",
+                    helper,
+                )
+                self.assertIn("VF2SetBehaviorLabel(villager, kVF2BehaviorLabels_trampoline_textfix[0]);", helper)
+                self.assertIn("int remembered = VF2CurrentCoffeeLabel(villager);", helper)
+                self.assertIn("int remembered = VF2CurrentShowerLabel(villager);", helper)
+                self.assertIn("extern \"C\" int __cdecl strncmp", helper)
+                self.assertNotIn("rememberedDance", helper)
+                self.assertNotIn("VF2CurrentLabelMatchesStringId", helper)
+            finally:
+                patcher.PATCHED = old_patched
+
+    def test_food_drink_label_variants_use_native_base_sequences(self):
+        expected_labels = {
+            "eString_WatchingCartoons",
+            "eString_GettingDrinkMineralWater",
+            "eString_GettingDrinkHydrAid",
+            "eString_BakingCake",
+            "eString_EatingBagChips",
+            "eString_MakingPaella",
+            "eString_EatingPancakes",
+            "eString_PlayingChess",
+            "eString_Gardening",
+            "eString_PuttingOnFaceMask",
+            "eString_PaintingFingernails",
+            "eString_JumpingOnTheTrampoline",
+        }
+        self.assertTrue(expected_labels.issubset(patcher.BEHAVIOR_LABEL_INDEX))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            shutil.copy2(patcher.SRC_OBJS / "Villager.obj", temp_root / "Villager.obj")
+            shutil.copy2(patcher.SRC_OBJS / "VillagerAI.obj", temp_root / "VillagerAI.obj")
+            shutil.copy2(patcher.SRC_OBJS / "Behavior.obj", temp_root / "Behavior.obj")
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = temp_root
+                manifest = {}
+
+                patcher.patch_spontaneous_behaviors(manifest)
+                helper = (temp_root / "vf2_spontaneous_behaviors.cpp").read_text(encoding="ascii")
+
+                for group in ("drink", "heat_food", "snacks", "meal_prep"):
+                    self.assertIn(f"kVF2BehaviorLabels_{group}", helper)
+                self.assertIn("CBehavior::GetADrink(villager);", helper)
+                self.assertIn("CBehavior::HeatUpFood(villager);", helper)
+                self.assertIn("CBehavior::LookingForSnacksDispatch(villager);", helper)
+                self.assertIn("CBehavior::PreparingAMeal(villager);", helper)
+                self.assertIn("TV, drink, heat-food, snack, meal-prep", " ".join(manifest["spontaneous_behaviors"]["actions"]))
+
+                patcher.patch_behavior_label_variants(manifest)
+                helpers = {row["helper"] for row in manifest["behavior_label_variants"]["changed"]}
+                self.assertTrue(
+                    {
+                        "_VF2RandomDrinkLabel",
+                        "_VF2RandomHeatFoodLabel",
+                        "_VF2RandomSnacksLabel",
+                        "_VF2RandomMealPrepLabel",
+                    }.issubset(helpers)
+                )
+            finally:
+                patcher.PATCHED = old_patched
+
 
 class RadioBehaviorContractTests(unittest.TestCase):
     def test_radio_and_mp3_drop_route_randomizes_dance_or_listen(self):

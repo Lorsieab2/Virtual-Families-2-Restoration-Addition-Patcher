@@ -131,6 +131,42 @@ behavior first, then replace only `CVillager+0x1BBA8` with a string-manager
 result. This preserves route selection, animations, sounds, and object
 targeting.
 
+For B137 and later label variants, wrappers should preserve an already-selected
+variant if the current HUD label is in the same generated string group. This is
+done by comparing `CVillager+0x1BBA8` against each candidate string before the
+native behavior call, then restoring the matched string ID afterward. Without
+that guard, praise/refresh paths can reroll the label while the same plan is
+still active.
+
+Confirmed food/drink label-only base behavior IDs:
+
+| ID | Native behavior | Wrapper use |
+| --- | --- | --- |
+| `0x019` | `GetADrink` | drink text variants |
+| `0x025` | `LookingForSnacksDispatch` | snack/drink text variants |
+| `0x032` | `PreparingAMeal` | meal-prep text variants |
+| `0x0D5` | `HeatUpFood` | reheating/baking text variants |
+
+B137 also retargets these existing native behavior entries with the same
+label-only wrapper pattern:
+
+| ID | Native behavior | Wrapper use |
+| --- | --- | --- |
+| `0x00B` | `ChildrenPlayOffice` | child driving/racecar text variants |
+| `0x047` | `WorkKitchenDispatch` | kitchen career text variants |
+| `0x048` | `WorkKitchen0` | kitchen career text variants |
+| `0x075`-`0x077` | flower/window-box watering | gardening text variants |
+| `0x083` | `NappingCouch` | dream text variants |
+| `0x0A4`-`0x0A9`, `0x0AD` | bathroom sink/grooming | sink and grooming text variants |
+| `0x0C0` | `TeenHomework` | homework subject variants |
+| `0x0C1` | `TeenOnlineExam` | online test/future-planning variants |
+| `0x0D6` | `HaveBreakfast` | breakfast food variants |
+| `0x107` | `PlayingBoardGame` | chess/checkers variants |
+| `0x118` | `DrawingOnEasel` | drawing/art variants |
+| `0x127` | `RestingBody` | sit-down/resting variants |
+| `0x130` | `ChildrenPlayAtKidsTable` | kids-table craft/homework variants |
+| `0x199` | `ToyTrampoline` | `Jumping on the trampoline` label fix |
+
 For new behaviors that require different furniture targets, positions, or
 state mutation, clone a native behavior only after the dump proves its
 `PlanToGo`, `PlanToWait`, object IDs, and side effects. Do not infer baby,

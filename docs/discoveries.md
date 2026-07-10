@@ -1628,3 +1628,35 @@
   official layout with `pe_offset=0x100`, `number_of_sections=5`, and
   `file_alignment=0x1000`. Runtime patchers use only the embedded manifest
   records, not outside paths.
+
+## 2026-07-10 - Behavior Label Variant Stability
+
+- `CVillager+0x1BBA8` is the visible action-label buffer used by the HUD. B137
+  helper wrappers now compare the current buffer to their generated string
+  groups with `strncmp(..., 0x27)` before calling the native behavior, then
+  restore the same string ID afterward. This prevents praise/refresh paths from
+  rerolling a label such as `Playing Virtual Families` into another video-game
+  variant while the underlying native behavior is still active.
+- Food/drink variants are label-only wrappers over stock behavior entries:
+  `GetADrink` (`0x019`, constructor offset `0x11B`), `HeatUpFood` (`0x0D5`,
+  `0xAB4`), `LookingForSnacksDispatch` (`0x025`, `0x1C3`), and
+  `PreparingAMeal` (`0x032`, `0x28A`). The wrappers call the original
+  `CBehavior` method first and only swap the visible label afterward, so route
+  planning, animations, object targeting, and side effects stay native.
+- Additional B137 wrapper targets are now documented from
+  `work/Behavior_patched_disasm.txt`: board games (`0x107`/`0xE8E`), kitchen
+  career (`0x047`/`0x3B0`, `0x048`/`0x3BE`), drawing (`0x118`/`0xFAF`), nap
+  dreams (`0x083`/`0x721`), breakfast (`0x0D6`/`0xAC5`), flower watering
+  (`0x075`-`0x077`), bathroom sink/grooming (`0x0A4`-`0x0A9`, `0x0AD`), child
+  driving (`0x00B`/`0x09D`), kids table (`0x130`/`0x1125`), teen homework/test
+  (`0x0C0`/`0x4AA`, `0x0C1`/`0x4BB`), and sit-down/rest (`0x127`/`0x108C`).
+- `ToyTrampoline` (`0x199`, constructor offset `0x1875`) does not expose the
+  old phrase through `theStringManager.obj`; the B137 fix therefore retargets
+  the behavior label wrapper and writes `Jumping on the trampoline` after the
+  native trampoline behavior runs.
+- The `Unlock all furniture` / no-generation-locks store icon is now copied
+  from the self-contained patcher payload source
+  `patcher_assets/optional_patches/cheat_upgrades/cheat_no_generation_locks.png`
+  instead of relying on an external Downloads path.
+- The radio/MP3 dance/listen switch remains the existing `0x0ED` wrapper and
+  was intentionally not changed by the B137 label-stability helper.
