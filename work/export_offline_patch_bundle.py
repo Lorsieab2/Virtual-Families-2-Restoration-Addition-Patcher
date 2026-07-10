@@ -281,7 +281,7 @@ SETTINGS = [
     {
         "id": "cheat_upgrades",
         "label": "Cheat Upgrades",
-        "description": "Adds money, food, and furniture-unlock cheats to the Special Upgrades section, including reset-to-zero, add-small, add-large, max amount, and Unlock all furniture rows. Buy Unlock all furniture again to restore generation locks.",
+        "description": "Adds money, food, achievement-reset, and furniture-unlock cheats to the Special Upgrades section, including reset-to-zero, add-small, add-large, max amount, Reset Achievements, and Unlock all furniture rows. Buy Unlock all furniture again to restore generation locks.",
         "default": False,
         "category": "optional",
     },
@@ -1903,6 +1903,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B135 patcher refresh: Source-only payload folders are copied whenever present, even when no normal asset diffs exist, so OptionalSongMods and Original Virtual Families 2 Assets/originalsounds restore files stay self-contained in the patcher ZIP.",
             "- B136 patcher refresh: Exact install-shape validation now tolerates top-level game EXE files separately from required folder/runtime entries, and generated manifests embed both known official VF2 PC PE layouts so older official install EXEs remain accepted without outside files.",
             "- B138 game build: Flea Market store rows now use the full native eligible sale pool from item IDs 0x1AD-0x2A8 by detouring GetCategoryItemCount/GetCategoryItem for category 3. The stock three-slot random cache is left untouched, and the helper keeps native locked-item, pet, and AvailableForSale filters.",
+            "- B139 game build: Cheat Upgrades adds Reset Achievements under Special Upgrades. The row calls the stock CAchievement::Reset() routine and then saves the current game through the existing visible-special-upgrade apply path.",
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
             "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the optional Island Events setting is enabled.",

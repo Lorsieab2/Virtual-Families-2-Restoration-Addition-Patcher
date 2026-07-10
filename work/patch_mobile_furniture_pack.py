@@ -279,6 +279,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x121: "cheat_add_food.png",
     0x122: "cheat_add_food.png",
     0x123: "cheat_no_generation_locks.png",
+    0x124: "cheat_reset_achievements.png",
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
@@ -337,6 +338,12 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": 0x123,
         "name": "Unlock all furniture",
         "description": "Sets all furniture generation locks to 0. Buy again to reset.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x124,
+        "name": "Reset Achievements",
+        "description": "Resets all goals and progress. Useful for starting the game over.",
         "price": 0,
     },
 ]
@@ -6494,6 +6501,11 @@ public:
     unsigned char luckyRockActive;
 };
 
+class CAchievement {
+public:
+    void Reset();
+};
+
 class theGameState {
 public:
     static theGameState *Get();
@@ -6506,6 +6518,7 @@ public:
 extern CFoodStore FoodStore;
 extern CMoney Money;
 extern CCollectableItem CollectableItem;
+extern CAchievement Achievement;
 
 struct sFurnitureInfo {
     int item;
@@ -6636,6 +6649,9 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
             break;
         }
         VF2UnlockAllFurnitureGenerationLocks();
+        break;
+    case 0x124:
+        Achievement.Reset();
         break;
     default:
         return;

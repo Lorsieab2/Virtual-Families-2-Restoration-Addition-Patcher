@@ -820,6 +820,16 @@ B138 build/export notes:
   overlays so this native hook is present no matter which optional overlay
   combination is selected.
 
+B139 build/export notes:
+
+- `Cheat Upgrades` adds `Reset Achievements` as visible Special Upgrades row
+  `0x124`. The generated helper declares `CAchievement::Reset()` and calls the
+  global `Achievement` instance, then uses the existing save-at-end path in
+  `VF2ApplyVisibleSpecialUpgrade`.
+- The trophy icon is bundled as `Images/cheat_reset_achievements.png` in the
+  generated build and patcher payload; future exports should not read this icon
+  from any Downloads path.
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 

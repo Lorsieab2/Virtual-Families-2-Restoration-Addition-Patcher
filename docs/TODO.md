@@ -443,3 +443,6 @@
   furniture remains hidden until its generation unlock, pets are excluded,
   purchases add the selected furniture to storage, and non-Flea store
   categories keep their previous row counts.
+- In-game Cheat Upgrades test B139: complete or partially progress a few goals,
+  buy `Reset Achievements`, reopen the Goals screen, and confirm all completion
+  and progress values are cleared and still cleared after saving/reopening.

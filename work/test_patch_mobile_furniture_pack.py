@@ -758,6 +758,25 @@ class TextFixStringManagerTests(unittest.TestCase):
 
 
 class OutfitStoreMappingTests(unittest.TestCase):
+    def test_reset_achievements_cheat_upgrade_is_wired_to_native_reset(self):
+        reset_rows = [
+            item for item in patcher.CHEAT_UPGRADE_ITEMS
+            if item["name"] == "Reset Achievements"
+        ]
+
+        self.assertEqual(len(reset_rows), 1)
+        self.assertEqual(reset_rows[0]["item_id"], 0x124)
+        self.assertEqual(
+            patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x124],
+            "cheat_reset_achievements.png",
+        )
+
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn("class CAchievement", source)
+        self.assertIn("extern CAchievement Achievement;", source)
+        self.assertIn("case 0x124:", source)
+        self.assertIn("Achievement.Reset();", source)
+
     def test_holiday_outfit_item_ids_decode_to_body_values_50_53(self):
         for gender in patcher.OUTFIT_STORE_GENDERS:
             for body_value in patcher.HOLIDAY_BODY_VALUES:

@@ -865,3 +865,11 @@
   `AvailableForSale` filters seen in `MaybeUpdateSaleItems()`.
 - Leaves the stock three-item sale cache at `CInventoryManager+0x474`
   untouched so its adjacent count and refresh timer fields are not overwritten.
+
+## B139 - Reset Achievements Cheat Upgrade
+
+- Adds `Reset Achievements` as Cheat Upgrades row `0x124` in Special Upgrades.
+- Reuses the stock `CAchievement::Reset()` routine, then follows the existing
+  visible-special-upgrade save path so goal/progress reset state persists.
+- Bundles the trophy icon as `cheat_reset_achievements.png` in the workspace
+  cheat-upgrade asset sources for self-contained patcher exports.

@@ -1688,3 +1688,14 @@
   detour to `VF2GetExpandedFleaMarketCount` /
   `VF2GetExpandedFleaMarketItem`, which recompute the full valid sale pool on
   demand and leave every non-Flea category on the stock path.
+
+## 2026-07-10 - Reset Achievements Cheat Upgrade
+
+- `CAchievement::Reset()` is the stock goals/progress reset routine. It clears
+  the achievement records and notify queue without changing the save-state
+  record count.
+- B139 adds Cheat Upgrades item `0x124` (`Reset Achievements`) and routes it
+  through `VF2ApplyVisibleSpecialUpgrade` to call global `Achievement.Reset()`,
+  then uses the existing `theGameState::SaveCurrentGame()` save path.
+- The row uses workspace-local `cheat_reset_achievements.png`, copied from the
+  supplied trophy icon, so future patcher builds stay portable.
