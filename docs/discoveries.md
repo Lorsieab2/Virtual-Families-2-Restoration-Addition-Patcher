@@ -1703,3 +1703,14 @@
   payload references with no outside-payload source paths and no missing files
   in either the output folder or ZIP. The exporter now writes source-build
   provenance as filenames/build labels instead of absolute local paths.
+
+## 2026-07-10 - B140 Patcher Release Portability
+
+- GitHub rejected replacing the B139 release asset because the release is
+  immutable, so the cleaned self-contained patcher was re-exported as B140.
+- B140 preserves the B139 gameplay payload shape: `1052` asset records, `1089`
+  payload/restore references, `2949` payload files, and four EXE replacement
+  payloads (`core`, `Island Events`, `Cheat Upgrades`, and combined overlay).
+- All-enabled dry run against the workspace vanilla install validated every
+  active/restore asset record and reported no byte patch records, matching the
+  full-EXE-overlay patcher model.

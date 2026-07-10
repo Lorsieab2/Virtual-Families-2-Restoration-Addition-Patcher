@@ -873,3 +873,13 @@
   visible-special-upgrade save path so goal/progress reset state persists.
 - Bundles the trophy icon as `cheat_reset_achievements.png` in the workspace
   cheat-upgrade asset sources for self-contained patcher exports.
+
+## B140 - Portable Patcher Metadata Refresh
+
+- Re-exports the B139 gameplay payload as a B140 patcher release because the
+  existing B139 GitHub Release asset is immutable and cannot be replaced.
+- Keeps the same `1052` asset records and four EXE overlay payloads, but writes
+  source-build provenance as portable filenames/build labels instead of local
+  `C:\Users\...` paths.
+- Verified the B140 patcher with an all-settings dry run against the workspace
+  vanilla install; all `1052` active/restore asset records validated.

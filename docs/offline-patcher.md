@@ -834,6 +834,16 @@ B139 build/export notes:
   should not contain build-machine `C:\Users\...` or Downloads paths; provenance
   fields use filenames/build labels only.
 
+B140 patcher release notes:
+
+- B139's existing GitHub Release asset is immutable, so the cleaned portable
+  patcher was released as B140 instead of replacing the locked B139 ZIP.
+- B140 keeps the B139 gameplay payload shape (`1052` asset records, `2949`
+  payload files, four EXE overlay payloads) and changes only the patcher build
+  labels/portable metadata.
+- All-settings dry run validated all `1052` active/restore asset records
+  against the workspace vanilla install.
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 
