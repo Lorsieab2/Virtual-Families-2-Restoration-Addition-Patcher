@@ -433,3 +433,8 @@
 - Research: `expand_game_map` is exposed as experimental/not implemented in
   the patcher setting list. Implement only after mapping map-tile bounds,
   content/collision fmaps, camera clamps, and save references.
+- Research: name the copied `CVillagerState` fields used by
+  `CDailyEmail::Show` at stack offsets `-0x16854`, `-0x16858`, `-0x1683C`,
+  and `-0x1692C`; current trigger notes identify them only by branch semantics.
+- Research: trace `eString_EmailRepairHouse` outside `CDailyEmail::Show` to
+  confirm whether it is unused, reserved, or reached through another object.
