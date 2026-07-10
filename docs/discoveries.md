@@ -1740,3 +1740,26 @@
   `C:\Users\Owner\Downloads\Virtual Families 2test2` validated `1052`
   active/restore asset patch records with no missing/error entries. The
   portable patcher folder contains `2949` payload files.
+
+## 2026-07-10 - Holiday Ornaments Sell-All Path
+
+- The experimental Holiday Ornaments family uses carrying values `0x9E-0xA9`
+  and achievement row `0x5F`. Stock `CEventTheCollector::ImpactGame(0)` already
+  calls `CCollectableItem::ResetCollection()`, which clears the shared
+  collection-state table, so B142 only adds the missing
+  `CAchievement::ResetSingleAchievementProgress(0x5F)` call before the stock
+  achievement reset tail.
+- Holiday Ornament art lookup no longer points at Downloads. Collection-page
+  art comes from workspace-local supplied files when present or the mobile
+  `tp225.pvr` atlas fallback, and the ornament-aware `collectables_small.png`
+  now lives under `work/assets/holiday_collectibles/` for portable patcher
+  payloads.
+- The offline patcher exporter now accepts a standalone Holiday Ornaments EXE
+  overlay plus Island Events/Cheat Upgrades combination overlays so multiple
+  optional native patches do not overwrite each other.
+- B142 export validation: an all-settings dry run validated `1070`
+  active/restore records, and a minimal `core_executable` +
+  `holiday_ornaments_collection` dry run validated the Holiday overlay EXE,
+  `Images/collectables_small.png`, `Images/collection-ornaments_background.png`,
+  and all `Images/CollectionOrnaments/*` records without needing
+  `mobile_furniture`.

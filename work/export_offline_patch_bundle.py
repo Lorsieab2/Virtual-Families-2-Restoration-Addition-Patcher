@@ -865,7 +865,12 @@ def setting_for_asset(rel_path: Path) -> str:
         return "vf3_tv_assets_recognition"
     if text.startswith("Images/GenerationLocks/") or text == "Images/locked.png":
         return "core_executable"
-    if text.startswith("Images/CollectionOrnaments/") or "CollectionOrnament" in stem or stem == "collectables_small":
+    if (
+        text.startswith("Images/CollectionOrnaments/")
+        or "CollectionOrnament" in stem
+        or stem == "collection-ornaments_background"
+        or stem == "collectables_small"
+    ):
         return "holiday_ornaments_collection"
     if text in {
         "Images/familytree_scrollknob_btm.png",
@@ -1904,6 +1909,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B136 patcher refresh: Exact install-shape validation now tolerates top-level game EXE files separately from required folder/runtime entries, and generated manifests embed both known official VF2 PC PE layouts so older official install EXEs remain accepted without outside files.",
             "- B138 game build: Flea Market store rows now use the full native eligible sale pool from item IDs 0x1AD-0x2A8 by detouring GetCategoryItemCount/GetCategoryItem for category 3. The stock three-slot random cache is left untouched, and the helper keeps native locked-item, pet, and AvailableForSale filters.",
             "- B139 game build: Cheat Upgrades adds Reset Achievements under Special Upgrades. The row calls the stock CAchievement::Reset() routine and then saves the current game through the existing visible-special-upgrade apply path.",
+            "- B142 game build: Holiday Ornaments opt-in removes stale outside-file dependencies, uses workspace-local/mobile-atlas art, and wires Mr. B/The Collector's sell branch to reset the Ornamentologist goal row 0x5F after stock ResetCollection() clears the collection table.",
+            "- B142 patcher refresh: Holiday Ornaments can ship as a standalone experimental EXE overlay and as combined overlays with Island Events and Cheat Upgrades, so enabling multiple optional native patches no longer drops one overlay.",
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
             "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the optional Island Events setting is enabled.",
@@ -1934,9 +1941,25 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     patched_exe = find_patched_exe(build_dir, args.patched_exe)
     island_events_exe = Path(args.island_events_exe).resolve() if args.island_events_exe else None
     cheat_upgrades_exe = Path(args.cheat_upgrades_exe).resolve() if args.cheat_upgrades_exe else None
+    holiday_ornaments_exe = Path(args.holiday_ornaments_exe).resolve() if args.holiday_ornaments_exe else None
     island_events_cheat_upgrades_exe = (
         Path(args.island_events_cheat_upgrades_exe).resolve()
         if args.island_events_cheat_upgrades_exe
+        else None
+    )
+    island_events_holiday_ornaments_exe = (
+        Path(args.island_events_holiday_ornaments_exe).resolve()
+        if args.island_events_holiday_ornaments_exe
+        else None
+    )
+    cheat_upgrades_holiday_ornaments_exe = (
+        Path(args.cheat_upgrades_holiday_ornaments_exe).resolve()
+        if args.cheat_upgrades_holiday_ornaments_exe
+        else None
+    )
+    island_events_cheat_upgrades_holiday_ornaments_exe = (
+        Path(args.island_events_cheat_upgrades_holiday_ornaments_exe).resolve()
+        if args.island_events_cheat_upgrades_holiday_ornaments_exe
         else None
     )
     vanilla_exe = Path(args.vanilla_exe).resolve() if args.vanilla_exe else None
@@ -2039,48 +2062,64 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             build_label=build_label,
         )
         asset_patches.insert(0, exe_replacement_record)
-        if island_events_exe is not None:
-            island_overlay_record = export_optional_exe_overlay_payload(
+        overlay_specs = [
+            (
+                island_events_exe,
+                "Island Events",
+                ["core_executable", "island_events"],
+                "Optional Island Events executable overlay. Applied only when core_executable and island_events are enabled.",
+            ),
+            (
+                cheat_upgrades_exe,
+                "Cheat Upgrades",
+                ["core_executable", "cheat_upgrades"],
+                "Optional Cheat Upgrades executable overlay. Applied only when core_executable and cheat_upgrades are enabled.",
+            ),
+            (
+                holiday_ornaments_exe,
+                "Holiday Ornaments",
+                ["core_executable", "holiday_ornaments_collection"],
+                "Experimental Holiday Ornaments executable overlay. Applied only when core_executable and holiday_ornaments_collection are enabled.",
+            ),
+            (
+                island_events_cheat_upgrades_exe,
+                "Island Events + Cheat Upgrades",
+                ["core_executable", "island_events", "cheat_upgrades"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, and cheat_upgrades are enabled.",
+            ),
+            (
+                island_events_holiday_ornaments_exe,
+                "Island Events + Holiday Ornaments",
+                ["core_executable", "island_events", "holiday_ornaments_collection"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, and holiday_ornaments_collection are enabled.",
+            ),
+            (
+                cheat_upgrades_holiday_ornaments_exe,
+                "Cheat Upgrades + Holiday Ornaments",
+                ["core_executable", "cheat_upgrades", "holiday_ornaments_collection"],
+                "Combined optional executable overlay. Applied only when core_executable, cheat_upgrades, and holiday_ornaments_collection are enabled.",
+            ),
+            (
+                island_events_cheat_upgrades_holiday_ornaments_exe,
+                "Island Events + Cheat Upgrades + Holiday Ornaments",
+                ["core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, cheat_upgrades, and holiday_ornaments_collection are enabled.",
+            ),
+        ]
+        overlay_records = []
+        for source_exe, label, requires, note in overlay_specs:
+            if source_exe is None:
+                continue
+            overlay_records.append(export_optional_exe_overlay_payload(
                 bundle_dir=bundle_dir,
-                source_exe=island_events_exe,
+                source_exe=source_exe,
                 target_exe_name=target_exe_name,
                 output_exe_name=output_exe_name,
-                requires=["core_executable", "island_events"],
-                payload_name=f"{Path(output_exe_name).stem} - Island Events.exe",
-                note=(
-                    "Optional Island Events executable overlay. "
-                    "Applied only when core_executable and island_events are enabled."
-                ),
-            )
-            asset_patches.insert(1, island_overlay_record)
-        if cheat_upgrades_exe is not None:
-            cheat_overlay_record = export_optional_exe_overlay_payload(
-                bundle_dir=bundle_dir,
-                source_exe=cheat_upgrades_exe,
-                target_exe_name=target_exe_name,
-                output_exe_name=output_exe_name,
-                requires=["core_executable", "cheat_upgrades"],
-                payload_name=f"{Path(output_exe_name).stem} - Cheat Upgrades.exe",
-                note=(
-                    "Optional Cheat Upgrades executable overlay. "
-                    "Applied only when core_executable and cheat_upgrades are enabled."
-                ),
-            )
-            asset_patches.insert(2, cheat_overlay_record)
-        if island_events_cheat_upgrades_exe is not None:
-            combined_overlay_record = export_optional_exe_overlay_payload(
-                bundle_dir=bundle_dir,
-                source_exe=island_events_cheat_upgrades_exe,
-                target_exe_name=target_exe_name,
-                output_exe_name=output_exe_name,
-                requires=["core_executable", "island_events", "cheat_upgrades"],
-                payload_name=f"{Path(output_exe_name).stem} - Island Events + Cheat Upgrades.exe",
-                note=(
-                    "Combined optional executable overlay. Applied only when "
-                    "core_executable, island_events, and cheat_upgrades are enabled."
-                ),
-            )
-            asset_patches.insert(3, combined_overlay_record)
+                requires=requires,
+                payload_name=f"{Path(output_exe_name).stem} - {label}.exe",
+                note=note,
+            ))
+        asset_patches[1:1] = overlay_records
     native_patch_sources = collect_native_patch_sources(build_manifest_data)
     validate_bundle_asset_sources(bundle_dir, asset_patches)
 
@@ -2109,7 +2148,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "patched_exe": patched_exe.name,
             "island_events_exe": island_events_exe.name if island_events_exe else None,
             "cheat_upgrades_exe": cheat_upgrades_exe.name if cheat_upgrades_exe else None,
+            "holiday_ornaments_exe": holiday_ornaments_exe.name if holiday_ornaments_exe else None,
             "island_events_cheat_upgrades_exe": island_events_cheat_upgrades_exe.name if island_events_cheat_upgrades_exe else None,
+            "island_events_holiday_ornaments_exe": island_events_holiday_ornaments_exe.name if island_events_holiday_ornaments_exe else None,
+            "cheat_upgrades_holiday_ornaments_exe": cheat_upgrades_holiday_ornaments_exe.name if cheat_upgrades_holiday_ornaments_exe else None,
+            "island_events_cheat_upgrades_holiday_ornaments_exe": island_events_cheat_upgrades_holiday_ornaments_exe.name if island_events_cheat_upgrades_holiday_ornaments_exe else None,
             "build_manifest_keys": sorted(build_manifest_data) if build_manifest_data else [],
         },
         "settings": default_settings(
@@ -2161,7 +2204,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--patched-exe", help="Patched EXE filename inside build dir. Auto-detected by default.")
     parser.add_argument("--island-events-exe", help="Optional EXE overlay to apply when island_events is enabled.")
     parser.add_argument("--cheat-upgrades-exe", help="Optional EXE overlay to apply when cheat_upgrades is enabled.")
+    parser.add_argument("--holiday-ornaments-exe", help="Experimental EXE overlay to apply when holiday_ornaments_collection is enabled.")
     parser.add_argument("--island-events-cheat-upgrades-exe", help="Combined optional EXE overlay to apply when island_events and cheat_upgrades are both enabled.")
+    parser.add_argument("--island-events-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when island_events and holiday_ornaments_collection are both enabled.")
+    parser.add_argument("--cheat-upgrades-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when cheat_upgrades and holiday_ornaments_collection are both enabled.")
+    parser.add_argument("--island-events-cheat-upgrades-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when island_events, cheat_upgrades, and holiday_ornaments_collection are all enabled.")
     parser.add_argument("--target-exe-name", default=DEFAULT_EXE_NAME, help="Relative EXE path expected in the user's game folder.")
     parser.add_argument("--name", help="Manifest display name.")
     parser.add_argument("--asset-mode", choices=ASSET_MODES, default="additive", help="Asset export mode. 'additive' exports manifest-referenced assets; 'all' exports every Images/Assets diff.")

@@ -453,3 +453,9 @@
 - In-game visual test B141: verify `No Money`, `No Food`, add-food/add-coin,
   `Unlock all furniture`, and `Reset Achievements` icons fit the Special
   Upgrades row and buy dialog without clipping or white canvases.
+- In-game Holiday Ornaments test B142: enable the experimental Holiday
+  Ornaments patch, collect ornaments, then trigger Mr. B/The Collector and
+  choose `Sell`. Confirm the `0x9E-0xA9` collection flags clear and
+  Ornamentologist achievement row `0x5F` resets. Follow-up research: add
+  ornament base `0x9E` to `CEventTheCollector::CanFire()` availability/award
+  counting so ornaments affect his coin offer like the stock five collections.

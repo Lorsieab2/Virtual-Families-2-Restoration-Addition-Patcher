@@ -107,17 +107,23 @@ constructor registrations for `0x9E-0xA9` so villager `Carry`/`Drop` calls reach
 Stock PC `CCollectionScene::gCollectable` is a five-page table with 60 dwords:
 `0x4F-0x72`, `0x86-0x91`, and `0x92-0x9D`. Mobile 1.7.16 expands the same
 table to six pages/72 dwords by appending `0x9E-0xA9`; B92 mirrors that shape
-instead of replacing page `4`. The page uses supplied collection-screen art from
-`C:\Users\Owner\Downloads\Holiday Collectibles`: the 12 placeholder images are
-baked into the frame background, while the 12 collected ornament images are
-copied under `Images/CollectionOrnaments/` and drawn by the stock
+instead of replacing page `4`. The page uses workspace-local supplied art when
+available, otherwise it decodes the mobile `tp225.pvr` atlas and writes the 12
+collected ornament images under `Images/CollectionOrnaments/` for the stock
 `Count(item) > 0` overlay path. `Collection_ChristmasOrnament_CandyCane.png` is
-decorative source art, not a 13th collectible. The build also copies the
-supplied `collectables_small.png` over the runtime sheet so the small collection
-atlas contains the Holiday Ornament row. The matching Goals entry is
+decorative source art, not a 13th collectible. B142 also sources the ornament
+aware `collectables_small.png` from `work/assets/holiday_collectibles/` so the
+small yard/collection sheet is portable. The matching Goals entry is
 achievement `0x5F`; visible achievement/order bounds must widen to `0x60`,
 while the existing achievement save block remains large enough for this row.
 Mobile row `0x5F` has target `12`, and mobile Goal Collector row `0x54` has
 target `13`. The third achievement-list field is platform-global rather than
 ornament-specific (`0x23E` on mobile, `0x1ED` on PC), so the PC additive row
 keeps the PC-native `0x1ED`.
+
+B142 adds the stock Mr. B/The Collector sell-all acknowledgement path.
+`CEventTheCollector::ImpactGame(0)` already calls
+`CCollectableItem::ResetCollection()`, which clears the collection-state table
+used by the appended `0x9E-0xA9` family. The additive hook only inserts an
+extra `CAchievement::ResetSingleAchievementProgress(0x5F)` call before the
+stock achievement-reset tail; it does not alter the keep branch.

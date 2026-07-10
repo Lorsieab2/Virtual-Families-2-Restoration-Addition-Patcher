@@ -368,8 +368,8 @@ HOLIDAY_ORNAMENT_SPAWN_RECTS = [
 HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT = ROOT / "work" / "vf2_obb" / "assets" / "tp225.dat"
 HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR = ROOT / "work" / "vf2_obb" / "assets" / "tp225.pvr"
 HOLIDAY_ORNAMENT_BACKGROUND_FILENAME = "collection-ornaments_background.png"
-HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR = Path(r"C:\Users\Owner\Downloads\Holiday Collectibles")
-HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE = Path(r"C:\Users\Owner\Downloads\collectables_small.png")
+HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR = ROOT / "work" / "assets" / "holiday_collectibles"
+HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE = HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / "collectables_small.png"
 HOLIDAY_ORNAMENT_FRAME_SOURCE = "Collection_ChristmasOrnament_Frame.png"
 HOLIDAY_ORNAMENT_IMAGE_SCALE = 1024.0 / 800.0
 HOLIDAY_ORNAMENT_ATLAS_RECORDS = [
@@ -4328,6 +4328,23 @@ def sync_holiday_ornament_collection_art(manifest):
     output_root = OUT / "Images" / "CollectionOrnaments"
     output_root.mkdir(parents=True, exist_ok=True)
     background_target = OUT / "Images" / HOLIDAY_ORNAMENT_BACKGROUND_FILENAME
+
+    def sync_small_collectables_sheet():
+        small_target = OUT / "Images" / "collectables_small.png"
+        if HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE.exists():
+            small_target.parent.mkdir(parents=True, exist_ok=True)
+            small_image = Image.open(HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE).convert("RGBA")
+            small_image.save(small_target)
+            return {
+                "source": str(HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE),
+                "path": str(small_target.relative_to(OUT)).replace("\\", "/"),
+                "output_size": list(small_image.size),
+            }
+        return {
+            "status": "missing_workspace_sheet",
+            "source": str(HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE),
+        }
+
     status = {
         "preferred_source_dir": str(HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR),
         "fallback_source_dat": str(HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT),
@@ -4382,21 +4399,7 @@ def sync_holiday_ornament_collection_art(manifest):
                 "output_size": list(icon.size),
             })
 
-        if HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE.exists():
-            small_target = OUT / "Images" / "collectables_small.png"
-            small_target.parent.mkdir(parents=True, exist_ok=True)
-            small_image = Image.open(HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE).convert("RGBA")
-            small_image.save(small_target)
-            status["collectables_small"] = {
-                "source": str(HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE),
-                "path": str(small_target),
-                "output_size": list(small_image.size),
-            }
-        else:
-            status["collectables_small"] = {
-                "status": "missing_supplied_sheet",
-                "source": str(HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE),
-            }
+        status["collectables_small"] = sync_small_collectables_sheet()
 
         manifest["holiday_ornament_collection_art"] = {
             **status,
@@ -4443,6 +4446,7 @@ def sync_holiday_ornament_collection_art(manifest):
             "output_size": list(icon.size),
         })
 
+    status["collectables_small"] = sync_small_collectables_sheet()
     manifest["holiday_ornament_collection_art"] = {
         **status,
         "status": "generated_from_fallback_mobile_atlas" if len(status["entries"]) == HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT else "partial",
@@ -8392,6 +8396,41 @@ def patch_collection_scene_holiday_ornaments(manifest):
     }
 
 
+def patch_the_collector_holiday_ornaments(manifest):
+    obj = CoffObject(PATCHED / "IslandEvents.obj")
+    impact_sym = obj.symbol("?ImpactGame@CEventTheCollector@@UAEXH@Z")
+    impact_sec = obj.section(impact_sym.section)
+    insert_off = impact_sym.value + 0x5D
+    expected_tail = (
+        b"\xC7\x45\x08\x5E\x00\x00\x00"
+        b"\xB9\x00\x00\x00\x00"
+        b"\x5D\xE9\x00\x00\x00\x00"
+    )
+    if obj.buf[impact_sec.raw_ptr + insert_off : impact_sec.raw_ptr + insert_off + len(expected_tail)] != expected_tail:
+        raise RuntimeError("Unexpected CEventTheCollector::ImpactGame achievement-reset tail")
+
+    achievement_sym = obj.symbol("?Achievement@@3VCAchievement@@A").index
+    reset_sym = obj.symbol("?ResetSingleAchievementProgress@CAchievement@@QAEXW4EAchievement@@@Z").index
+    payload = bytearray()
+    payload += b"\x6A" + bytes([HOLIDAY_ORNAMENT_ACHIEVEMENT_ID])
+    payload += b"\xB9\x00\x00\x00\x00"
+    payload += b"\xE8\x00\x00\x00\x00"
+    obj.insert_section_bytes(impact_sym.section, insert_off, bytes(payload))
+    obj.append_relocation(impact_sym.section, insert_off + 3, achievement_sym)
+    obj.append_relocation(impact_sym.section, insert_off + 8, reset_sym, IMAGE_REL_I386_REL32)
+    obj.write(PATCHED / "IslandEvents.obj")
+
+    manifest["TheCollectorHolidayOrnaments"] = {
+        "status": "patched",
+        "function": "?ImpactGame@CEventTheCollector@@UAEXH@Z",
+        "insert_offset": hex(insert_off),
+        "sell_choice": 0,
+        "collection_reset": "stock CCollectableItem::ResetCollection() clears the collection state table, including added 0x9E-0xA9 entries",
+        "achievement_reset": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
+        "note": "Adds Ornamentologist progress reset to Mr. B/The Collector sell branch without changing the keep branch.",
+    }
+
+
 def generation_lock_source_paths(source_dir=GENERATION_LOCK_ART_DIR):
     return {
         generation: source_dir / f"lock_{generation:02d}.png"
@@ -11512,6 +11551,7 @@ def main():
         patch_collectable_item_holiday_ornaments(manifest)
         patch_collectable_holiday_ornament_observers(manifest)
         patch_collection_scene_holiday_ornaments(manifest)
+        patch_the_collector_holiday_ornaments(manifest)
     else:
         manifest["HolidayOrnamentsCollection"] = {
             "enabled": False,

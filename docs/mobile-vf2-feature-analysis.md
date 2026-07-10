@@ -358,6 +358,23 @@ rather than copying mobile's platform-global value. `CAchievement` already
 serializes `0x125` 12-byte records, so no save-state size increase is required
 for row `0x5F`.
 
+### Mr. B / The Collector Sell-All Path
+
+Mobile maps the Holiday Ornament family into the same collection-state table as
+the five stock collectible families. Desktop `CEventTheCollector::ImpactGame`
+choice `0` (`Sell`) already calls `CCollectableItem::ResetCollection()`, which
+clears the whole collection table rather than individual families. The B142
+Holiday Ornaments opt-in therefore reuses that stock reset for item flags and
+adds one small `CEventTheCollector::ImpactGame` hook before the existing
+achievement tail-call so `CAchievement::ResetSingleAchievementProgress(0x5F)`
+also runs. Choice `1` (`Keep`) remains untouched.
+
+`CEventTheCollector::CanFire()` still counts stock family bases `0x67`, `0x4F`,
+`0x5B`, `0x86`, and `0x92` when deciding availability/award. Counting the
+Holiday Ornament base `0x9E` for Mr. B's offer amount is the next research
+hook; the current confirmed wiring makes sold ornaments clear correctly once
+the event fires.
+
 ## Exclusive Island Events and Outcomes
 
 ### Mobile Event Table
