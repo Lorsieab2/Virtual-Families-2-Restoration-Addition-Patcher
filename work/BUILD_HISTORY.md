@@ -854,3 +854,14 @@
 - Enables/restores those graphics through `Images/Upgrades/*.png` asset records
   with paired `restore_source_path` entries, so applying and disabling the
   patch are both self-contained.
+
+## B138 - Flea Market Expanded Sale Pool
+
+- Adds native hooks for `CInventoryManager::GetCategoryItemCount` and
+  `CInventoryManager::GetCategoryItem` when the active store category is the
+  Flea Market (`3`).
+- Recomputes the native eligible sale pool across item IDs `0x1AD` through
+  `0x2A8` using the same generation-lock, pet-exclusion, and
+  `AvailableForSale` filters seen in `MaybeUpdateSaleItems()`.
+- Leaves the stock three-item sale cache at `CInventoryManager+0x474`
+  untouched so its adjacent count and refresh timer fields are not overwritten.

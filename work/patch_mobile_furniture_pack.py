@@ -5519,6 +5519,52 @@ def patch_inventory_manager(manifest):
             "count_return_offset": hex(0x83),
         }
 
+    def insert_expanded_flea_market_hook(function_name, helper_name, ret_bytes, arg_offsets):
+        symbol = obj.symbol(function_name)
+        section = obj.section(symbol.section)
+        insert_off = symbol.value + 3
+        raw = section.raw_ptr + insert_off
+        if obj.buf[raw - 3 : raw] != b"\x55\x8B\xEC":
+            raise RuntimeError(f"Unexpected prologue in {function_name}")
+        helper_sym = obj.append_undefined_symbol(helper_name)
+        payload = bytearray()
+        payload += b"\x51"  # preserve this/ecx for stock fallthrough
+        for offset in reversed(arg_offsets):
+            payload += b"\xFF\x75" + bytes([offset])
+        payload += b"\x51"                  # push this/ecx as helper argument
+        payload += b"\xE8\x00\x00\x00\x00"  # call helper
+        payload += b"\x83\xC4" + bytes([(len(arg_offsets) + 1) * 4])
+        payload += b"\x59"                  # restore this/ecx before fallthrough
+        payload += b"\x83\xF8\xFF"          # cmp eax,-1
+        payload += b"\x74\x04"              # je original body
+        payload += b"\x5D"                  # pop ebp
+        payload += ret_bytes
+        obj.insert_section_bytes(symbol.section, insert_off, bytes(payload))
+        call_reloc_offset = insert_off + 1 + len(arg_offsets) * 3 + 1 + 1
+        obj.append_relocation(symbol.section, call_reloc_offset, helper_sym, IMAGE_REL_I386_REL32)
+        return {
+            "function": function_name,
+            "helper": helper_name,
+            "insert_offset": hex(insert_off),
+            "category": "0x3",
+            "preserves_stock_fallthrough": True,
+        }
+
+    expanded_flea_market_hooks = [
+        insert_expanded_flea_market_hook(
+            GET_CATEGORY_ITEM_COUNT,
+            "_VF2GetExpandedFleaMarketCount",
+            b"\xC2\x04\x00",
+            (0x08,),
+        ),
+        insert_expanded_flea_market_hook(
+            GET_CATEGORY_ITEM,
+            "_VF2GetExpandedFleaMarketItem",
+            b"\xC2\x08\x00",
+            (0x08, 0x0C),
+        ),
+    ]
+
     obj.write(PATCHED / "InventoryManager.obj")
     manifest["InventoryManager"] = {
         "lists": list_manifest,
@@ -5552,6 +5598,20 @@ def patch_inventory_manager(manifest):
             "draw_hooks": outfit_draw_hooks,
         },
         "generation_sort_cap": {"old": 9, "new": 30, "patches": generation_cap_patches},
+        "expanded_flea_market": {
+            "status": "Flea Market category 0x3 lists every currently valid item from the native sale pool instead of the cached random three",
+            "native_pool_first_item": "0x1ad",
+            "native_pool_count": "0xfc",
+            "native_pool_last_item": "0x2a8",
+            "filters": [
+                "CInventoryManager::IsLocked(item) must be false",
+                "CFurnitureManager::IsPet(item) must be false",
+                "CInventoryManager::AvailableForSale(item) must be true",
+            ],
+            "hooks": expanded_flea_market_hooks,
+            "stock_categories_unchanged": True,
+            "cache_not_expanded": "the original this+0x474 sale cache remains untouched to avoid overwriting count/timer fields at this+0x480/+0x484",
+        },
     }
 
 
@@ -5702,13 +5762,24 @@ public:
 
 class CInventoryManager {{
 public:
+    bool IsLocked(EInventoryItem item);
+private:
+    bool AvailableForSale(EInventoryItem item);
+    friend bool VF2InventoryAvailableForSale(CInventoryManager* inventory, EInventoryItem item);
+public:
     char pad0[0x468];
     int maleOutfitBody;
     int femaleOutfitBody;
 }};
 
+class CFurnitureManager {{
+public:
+    bool IsPet(EInventoryItem item);
+}};
+
 extern CToolTray ToolTray;
 extern CInventoryManager InventoryManager;
+extern CFurnitureManager FurnitureManager;
 
 static const int kVF2OutfitStoreFemaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["female"]};
 static const int kVF2OutfitStoreMaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["male"]};
@@ -5723,9 +5794,47 @@ static const int kVF2VisibleSpecialUpgradeFirstItem = {min(VISIBLE_SPECIAL_UPGRA
 static const int kVF2VisibleSpecialUpgradeCount = {len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)};
 static const int kVF2VisibleSpecialUpgradeIconImageBase = {visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))};
 static const int kVF2VisibleSpecialUpgradeIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
+static const int kVF2FleaMarketCategory = 3;
+static const int kVF2FleaMarketFirstItem = 0x1AD;
+static const int kVF2FleaMarketCandidateCount = 0xFC;
 static int gVF2SyntheticOutfitToolInHand = 0;
 static int gVF2SyntheticOutfitToolInUse = 0;
 static int gVF2LastSyntheticOutfitByGender[2] = {{0, 0}};
+
+bool VF2InventoryAvailableForSale(CInventoryManager* inventory, EInventoryItem item) {{
+    return inventory && inventory->AvailableForSale(item);
+}}
+
+static bool VF2ExpandedFleaMarketCandidate(CInventoryManager* inventory, int itemId) {{
+    if (!inventory) return false;
+    if (itemId < kVF2FleaMarketFirstItem) return false;
+    if (itemId >= kVF2FleaMarketFirstItem + kVF2FleaMarketCandidateCount) return false;
+    EInventoryItem item = (EInventoryItem)itemId;
+    if (inventory->IsLocked(item)) return false;
+    if (FurnitureManager.IsPet(item)) return false;
+    return VF2InventoryAvailableForSale(inventory, item);
+}}
+
+extern "C" int __cdecl VF2GetExpandedFleaMarketCount(CInventoryManager* inventory, int category) {{
+    if (category != kVF2FleaMarketCategory) return -1;
+    int count = 0;
+    for (int itemId = kVF2FleaMarketFirstItem; itemId < kVF2FleaMarketFirstItem + kVF2FleaMarketCandidateCount; ++itemId) {{
+        if (VF2ExpandedFleaMarketCandidate(inventory, itemId)) ++count;
+    }}
+    return count;
+}}
+
+extern "C" int __cdecl VF2GetExpandedFleaMarketItem(CInventoryManager* inventory, int category, int index) {{
+    if (category != kVF2FleaMarketCategory) return -1;
+    if (index < 0) return 0;
+    int seen = 0;
+    for (int itemId = kVF2FleaMarketFirstItem; itemId < kVF2FleaMarketFirstItem + kVF2FleaMarketCandidateCount; ++itemId) {{
+        if (!VF2ExpandedFleaMarketCandidate(inventory, itemId)) continue;
+        if (seen == index) return itemId;
+        ++seen;
+    }}
+    return 0;
+}}
 
 static int VF2OutfitStoreEntryIndex(int itemId) {{
     int femaleBody = itemId - kVF2OutfitStoreFemaleItemBase;

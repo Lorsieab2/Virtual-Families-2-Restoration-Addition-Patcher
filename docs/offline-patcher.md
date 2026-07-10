@@ -806,6 +806,20 @@ B136 patcher/export notes:
   does not need any outside official-EXE path to recognize both official
   vanilla layouts.
 
+B138 build/export notes:
+
+- The Flea Market expansion is implemented in native helper code rather than
+  by enlarging `CInventoryManager+0x474`, because the stock three-item sale
+  cache is immediately followed by count/timer fields at `+0x480/+0x484`.
+- Only Flea Market category `3` is detoured. `GetCategoryItemCount` and
+  `GetCategoryItem` ask the helper to enumerate furniture IDs `0x1AD` through
+  `0x2A8`, while preserving the stock filters for generation locks, pets, and
+  `CInventoryManager::AvailableForSale`.
+- Non-Flea store categories keep the stock paths. The B138 patcher export must
+  include the refreshed core, Island Events, Cheat Upgrades, and combined EXE
+  overlays so this native hook is present no matter which optional overlay
+  combination is selected.
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 

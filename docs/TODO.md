@@ -438,3 +438,8 @@
   and `-0x1692C`; current trigger notes identify them only by branch semantics.
 - Research: trace `eString_EmailRepairHouse` outside `CDailyEmail::Show` to
   confirm whether it is unused, reserved, or reached through another object.
+- In-game store test B138: open the Flea Market and confirm it lists the full
+  native eligible sale pool rather than only three random rows. Verify locked
+  furniture remains hidden until its generation unlock, pets are excluded,
+  purchases add the selected furniture to storage, and non-Flea store
+  categories keep their previous row counts.

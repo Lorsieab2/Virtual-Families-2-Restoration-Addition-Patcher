@@ -832,6 +832,28 @@ class OutfitStoreMappingTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
+    def test_outfit_helper_embeds_expanded_flea_market_pool(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                helper = patcher.PATCHED / "vf2_special_upgrade_effects.cpp"
+                helper.write_text("", encoding="ascii")
+
+                patcher.write_outfit_store_helpers({})
+                source = helper.read_text(encoding="ascii")
+
+                self.assertIn("kVF2FleaMarketCategory = 3", source)
+                self.assertIn("kVF2FleaMarketFirstItem = 0x1AD", source)
+                self.assertIn("kVF2FleaMarketCandidateCount = 0xFC", source)
+                self.assertIn("inventory->IsLocked(item)", source)
+                self.assertIn("FurnitureManager.IsPet(item)", source)
+                self.assertIn("inventory->AvailableForSale(item)", source)
+                self.assertIn("VF2GetExpandedFleaMarketCount", source)
+                self.assertIn("VF2GetExpandedFleaMarketItem", source)
+        finally:
+            patcher.PATCHED = old_patched
+
     def test_main_scene_outfit_apply_resolver_manifest_contract(self):
         with tempfile.TemporaryDirectory() as tmp:
             obj_path = Path(tmp) / "theMainScene.obj"
