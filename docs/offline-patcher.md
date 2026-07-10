@@ -790,6 +790,22 @@ B135 patcher/export notes:
   optional song patch can restore vanilla `Sounds/menu.ogg` and
   `Sounds/song1-4.ogg` from inside the portable patcher.
 
+B136 patcher/export notes:
+
+- Exact install-shape validation is intentionally name-agnostic for the game
+  executable. `runtime_requirements.exact_top_level_entries` still requires the
+  official runtime folders/files, but top-level `.exe` files that are not in
+  that list are ignored by the folder-shape check. `verify_target_files()`
+  still validates the selected/discovered executable against SHA or accepted
+  PE structure before anything is written, so invalid EXEs are rejected at the
+  binary-identity step instead of as "unexpected top-level entries".
+- `work/official_vf2_pe_structures.json` stores the known official VF2 PC PE
+  layouts as structural metadata only. `export_offline_patch_bundle.py` embeds
+  those layouts into `target_files[].pe_structures` and the core EXE
+  replacement asset record, so the shipped patcher stays self-contained and
+  does not need any outside official-EXE path to recognize both official
+  vanilla layouts.
+
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
 

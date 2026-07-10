@@ -391,12 +391,12 @@
   generation locks disappear from stock and added furniture; buy it again and
   confirm the generated original lock table is restored without corrupting
   store rows.
-- Patcher smoke B135: extract the B135 patcher ZIP, run Dry Run with all Main
+- Patcher smoke B136: extract the B136 patcher ZIP, run Dry Run with all Main
   and Optional patches enabled against a clean vanilla VF2 folder, then apply
   and confirm the combined Island Events + Cheat Upgrades EXE is selected when
   both optional overlays are enabled. In-game, re-check `Unlock all furniture`
-  and the optional song restore path now that source-only payload folders are
-  copied into the portable patcher.
+  and the optional song restore path. Also confirm the official game EXE is not
+  rejected as an "unexpected top-level entry" during folder-shape validation.
 - In-game behavior test: after the next patcher/build export, verify label
   variants still choose the same animations after the helper-name cleanup
   (`VF2IsChild`, `VF2IsTeenOrOlder`, `VF2IsMatureAdult`).

@@ -21,6 +21,7 @@ from typing import Any
 SOURCE_DIR = Path(__file__).resolve().parent
 ROOT = SOURCE_DIR.parent
 DEFAULT_BASE_PAYLOAD = SOURCE_DIR / "vanilla_runtime_payload"
+OFFICIAL_PE_STRUCTURES_FILE = SOURCE_DIR / "official_vf2_pe_structures.json"
 DEFAULT_EXE_NAME = "Virtual Families 2.exe"
 PATCHED_EXE_NAMES = (
     "Virtual Families 2 - Additive Mobile Furniture Pack.exe",
@@ -527,6 +528,81 @@ def pe_structure_fingerprint(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def pe_structure_identity(structure: Any) -> dict[str, Any] | None:
+    if not isinstance(structure, dict):
+        return None
+    sections = structure.get("sections")
+    if not isinstance(sections, list):
+        return None
+    identity_sections = []
+    for section in sections:
+        if not isinstance(section, dict):
+            return None
+        identity_sections.append(
+            {
+                "name": section.get("name"),
+                "virtual_address": section.get("virtual_address"),
+                "virtual_size": section.get("virtual_size"),
+                "raw_data_pointer": section.get("raw_data_pointer"),
+                "raw_data_size": section.get("raw_data_size"),
+                "characteristics": section.get("characteristics"),
+            }
+        )
+    return {
+        "format": structure.get("format"),
+        "pe_offset": structure.get("pe_offset"),
+        "machine": structure.get("machine"),
+        "number_of_sections": structure.get("number_of_sections"),
+        "characteristics": structure.get("characteristics"),
+        "optional_header_size": structure.get("optional_header_size"),
+        "optional_magic": structure.get("optional_magic"),
+        "address_of_entry_point": structure.get("address_of_entry_point"),
+        "image_base": structure.get("image_base"),
+        "section_alignment": structure.get("section_alignment"),
+        "file_alignment": structure.get("file_alignment"),
+        "size_of_image": structure.get("size_of_image"),
+        "subsystem": structure.get("subsystem"),
+        "sections": identity_sections,
+    }
+
+
+def load_official_vf2_pe_structures() -> list[dict[str, Any]]:
+    if not OFFICIAL_PE_STRUCTURES_FILE.is_file():
+        return []
+    data = json.loads(OFFICIAL_PE_STRUCTURES_FILE.read_text(encoding="utf-8"))
+    raw_structures = data.get("structures") if isinstance(data, dict) else None
+    if not isinstance(raw_structures, list):
+        raise ValueError(f"{OFFICIAL_PE_STRUCTURES_FILE} must contain a structures array.")
+    structures = []
+    for index, structure in enumerate(raw_structures):
+        if pe_structure_identity(structure) is None:
+            raise ValueError(f"{OFFICIAL_PE_STRUCTURES_FILE} structure #{index} is not a valid PE identity record.")
+        structures.append(structure)
+    return structures
+
+
+def accepted_vf2_pe_structures(vanilla_exe: Path, accepted_exes: list[Path] | None = None) -> list[dict[str, Any]]:
+    structures: list[dict[str, Any]] = []
+    for exe in [vanilla_exe, *(accepted_exes or [])]:
+        pe_structure = pe_structure_fingerprint(exe)
+        if pe_structure is not None:
+            structures.append(pe_structure)
+    structures.extend(load_official_vf2_pe_structures())
+
+    unique: list[dict[str, Any]] = []
+    seen = set()
+    for structure in structures:
+        identity = pe_structure_identity(structure)
+        if identity is None:
+            continue
+        key = json.dumps(identity, sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(structure)
+    return unique
+
+
 def relative_posix(path: Path) -> str:
     return path.as_posix()
 
@@ -631,16 +707,22 @@ def find_patched_exe(build_dir: Path, explicit: str | None) -> Path:
     raise FileNotFoundError(f"No patched EXE found in {build_dir}")
 
 
-def target_file_record(vanilla_exe: Path, target_exe_name: str, accepted_exes: list[Path] | None = None) -> dict[str, Any]:
+def target_file_record(
+    vanilla_exe: Path,
+    target_exe_name: str,
+    accepted_exes: list[Path] | None = None,
+    *,
+    use_pe_structures: bool = True,
+) -> dict[str, Any]:
+    pe_structures = accepted_vf2_pe_structures(vanilla_exe, accepted_exes) if use_pe_structures else []
     record = {
         "path": target_exe_name,
-        "note": "Verified vanilla VF2 PC executable by accepted PE layout, not by fixed SHA-256.",
+        "note": (
+            "Verified vanilla VF2 PC executable by accepted PE layout, not by fixed SHA-256."
+            if pe_structures
+            else "Verified vanilla VF2 PC executable by exact SHA-256 and file size."
+        ),
     }
-    pe_structures = []
-    for exe in [vanilla_exe, *(accepted_exes or [])]:
-        pe_structure = pe_structure_fingerprint(exe)
-        if pe_structure is not None:
-            pe_structures.append(pe_structure)
     if pe_structures:
         record["pe_structures"] = pe_structures
     else:
@@ -1350,11 +1432,7 @@ def export_exe_replacement_payload(
     payload_target = bundle_dir / payload_rel
     payload_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(patched_exe, payload_target)
-    pe_structures = []
-    for exe in [vanilla_exe, *(accepted_exes or [])]:
-        pe_structure = pe_structure_fingerprint(exe)
-        if pe_structure is not None:
-            pe_structures.append(pe_structure)
+    pe_structures = accepted_vf2_pe_structures(vanilla_exe, accepted_exes)
     record = {
         "file_path": target_exe_name,
         "output_file_path": output_exe_name,
@@ -1823,6 +1901,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B133 patcher refresh: Moves Settings Evict and Island Events into Optional Patches now that their button/event records are implemented; Experimental/Not Working remains for Holiday Ornaments, mobile furniture behaviors, Expand game map, and future unstable work.",
             "- B134 build/export refresh: FurnitureManager's generated itemInfo table is exported for helper objects so Cheat Upgrades can link the Unlock all furniture generation-lock toggle, and the Island Events helper template now emits valid C++ registrations for the optional overlay.",
             "- B135 patcher refresh: Source-only payload folders are copied whenever present, even when no normal asset diffs exist, so OptionalSongMods and Original Virtual Families 2 Assets/originalsounds restore files stay self-contained in the patcher ZIP.",
+            "- B136 patcher refresh: Exact install-shape validation now tolerates top-level game EXE files separately from required folder/runtime entries, and generated manifests embed both known official VF2 PC PE layouts so older official install EXEs remain accepted without outside files.",
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
             "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the optional Island Events setting is enabled.",
@@ -1883,7 +1962,14 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     native_status: dict[str, Any]
     target_files: list[dict[str, Any]] = []
     if vanilla_exe:
-        target_files.append(target_file_record(vanilla_exe, target_exe_name, accepted_vanilla_exes))
+        target_files.append(
+            target_file_record(
+                vanilla_exe,
+                target_exe_name,
+                accepted_vanilla_exes,
+                use_pe_structures=args.include_exe_replacement,
+            )
+        )
         if args.include_byte_patches:
             try:
                 byte_patches = build_byte_patches(vanilla_exe, patched_exe, target_exe_name)

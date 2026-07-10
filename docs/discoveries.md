@@ -1609,3 +1609,22 @@
   `optional_song_asset_patches()` can attach
   `payload/Original Virtual Families 2 Assets/originalsounds/*.ogg` as vanilla
   restore sources for `Sounds/menu.ogg` and `Sounds/song1-4.ogg`.
+
+## 2026-07-09 - Patcher Install-Shape EXE Validation
+
+- `work/offline_vf2_patcher.py::verify_runtime_requirements()` now treats
+  top-level `.exe` files as executable candidates outside
+  `runtime_requirements.exact_top_level_entries`. This fixes the B135 false
+  invalid-install popup where `Virtual Families 2.exe` was reported as an
+  "unexpected top-level entry" even though the EXE is supposed to be validated
+  separately.
+- `verify_target_files()` remains the binary authority after folder-shape
+  validation. The selected/discovered EXE still must match either a manifest
+  SHA-256 record or accepted PE section-layout record before patches can be
+  applied.
+- `work/official_vf2_pe_structures.json` is the source-side list of accepted
+  official VF2 PC PE layouts. `export_offline_patch_bundle.py` embeds those
+  structures into every EXE-replacement patcher manifest, including the older
+  official layout with `pe_offset=0x100`, `number_of_sections=5`, and
+  `file_alignment=0x1000`. Runtime patchers use only the embedded manifest
+  records, not outside paths.

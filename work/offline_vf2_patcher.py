@@ -897,14 +897,19 @@ def verify_runtime_requirements(
             expected = {row.strip() for row in exact_entries}
             actual = set()
             accepted_exe_names = []
+            ignored_exe_names = []
             for path in game_dir.iterdir():
+                if path.name in expected:
+                    actual.add(path.name)
+                    continue
                 if (
                     path.is_file()
                     and path.suffix.lower() == ".exe"
-                    and accepted_exe_structures
-                    and pe_structure_matches_any(path, tuple(accepted_exe_structures))
                 ):
-                    accepted_exe_names.append(path.name)
+                    if accepted_exe_structures and pe_structure_matches_any(path, tuple(accepted_exe_structures)):
+                        accepted_exe_names.append(path.name)
+                    else:
+                        ignored_exe_names.append(path.name)
                     continue
                 actual.add(path.name)
             missing = sorted(expected - actual)
@@ -916,7 +921,14 @@ def verify_runtime_requirements(
                 if extra:
                     details.append("unexpected top-level entries: " + ", ".join(extra))
                 raise install_validation_error(manifest, "; ".join(details))
-            checks.append({"kind": "exact_top_level_entries", "count": len(expected), "accepted_exe_names": accepted_exe_names})
+            checks.append(
+                {
+                    "kind": "exact_top_level_entries",
+                    "count": len(expected),
+                    "accepted_exe_names": accepted_exe_names,
+                    "ignored_exe_names": ignored_exe_names,
+                }
+            )
     for requirement in manifest_runtime_requirements(manifest, settings, enabled_settings):
         rel_path = str(requirement["path"])
         path = resolve_under_game_dir(game_dir, rel_path)

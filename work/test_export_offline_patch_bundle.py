@@ -386,6 +386,16 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 self.assertIsInstance(core_exe["expected_target_pe_structures"], list)
                 self.assertNotIn("sha256", manifest["target_files"][0])
                 self.assertIsInstance(manifest["target_files"][0]["pe_structures"], list)
+                self.assertGreaterEqual(len(manifest["target_files"][0]["pe_structures"]), 2)
+                self.assertGreaterEqual(len(core_exe["expected_target_pe_structures"]), 2)
+                self.assertIn(
+                    "0x100",
+                    {row.get("pe_offset") for row in manifest["target_files"][0]["pe_structures"]},
+                )
+                self.assertIn(
+                    "0x100",
+                    {row.get("pe_offset") for row in core_exe["expected_target_pe_structures"]},
+                )
             else:
                 self.assertIn("expected_target_sha256", core_exe)
                 self.assertIn("sha256", manifest["target_files"][0])
