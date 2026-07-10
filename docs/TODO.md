@@ -400,12 +400,13 @@
 - In-game behavior test: after the next patcher/build export, verify label
   variants still choose the same animations after the helper-name cleanup
   (`VF2IsChild`, `VF2IsTeenOrOlder`, `VF2IsMatureAdult`).
-- In-game behavior test B137: with Behavior Patches enabled, praise villagers
+- In-game behavior test B141: with Behavior Patches enabled, praise villagers
   while they are doing generated label variants and confirm the visible action
-  string stays stable instead of rerolling. Also verify the new label-only
-  variants for `Watching TV`, `Getting a drink`, `Heating up some food`,
-  `Looking for snacks`, and `Preparing a meal` reuse the same native animations
-  and targeting as their base actions.
+  string stays stable instead of rerolling. This specifically covers the new
+  per-villager/per-wrapper label cache after native behavior start. Also verify
+  the label-only variants for `Watching TV`, `Getting a drink`, `Heating up
+  some food`, `Looking for snacks`, and `Preparing a meal` reuse the same
+  native animations and targeting as their base actions.
 - In-game behavior test B137: verify the newly wrapped native entries for
   board games, breakfast, flower watering, bathroom sink/grooming, kids table,
   teen homework/online test, sit-down/rest, and `Jumping on the trampoline`.
@@ -438,11 +439,17 @@
   and `-0x1692C`; current trigger notes identify them only by branch semantics.
 - Research: trace `eString_EmailRepairHouse` outside `CDailyEmail::Show` to
   confirm whether it is unused, reserved, or reached through another object.
-- In-game store test B138: open the Flea Market and confirm it lists the full
-  native eligible sale pool rather than only three random rows. Verify locked
-  furniture remains hidden until its generation unlock, pets are excluded,
-  purchases add the selected furniture to storage, and non-Flea store
-  categories keep their previous row counts.
+- In-game store test B141: open `On Sale` and confirm it still shows stock
+  discounted furniture rows. Then open `Flea Market` and confirm it lists the
+  expanded native `gGoodiesList` pool rather than only five random rows, with
+  already-purchased upgrade goodies omitted and purchases still functioning.
 - In-game Cheat Upgrades test B139: complete or partially progress a few goals,
   buy `Reset Achievements`, reopen the Goals screen, and confirm all completion
   and progress values are cleared and still cleared after saving/reopening.
+- In-game behavior test B141: with Behavior Patches enabled, drop children and
+  adults on stock showers, north showers, bathroom sinks, and grooming-capable
+  bathroom objects. Confirm base-game eligibility/targeting is unchanged and
+  variants only appear when the native behavior starts.
+- In-game visual test B141: verify `No Money`, `No Food`, add-food/add-coin,
+  `Unlock all furniture`, and `Reset Achievements` icons fit the Special
+  Upgrades row and buy dialog without clipping or white canvases.

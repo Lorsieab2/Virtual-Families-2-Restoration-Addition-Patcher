@@ -422,6 +422,7 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 self.assertIn("extern CNight Night;", helper)
                 self.assertIn("Night.AIIsDayTime()", helper)
                 self.assertIn("playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;", helper)
+                self.assertIn("EnableAllAgesAutonomousCandidateWithWeight(data, 0x127, 450); // RestingBody / Needs to sit down", helper)
                 actions = " ".join(manifest["spontaneous_behaviors"]["actions"])
                 self.assertIn("playing quietly at kids table", actions)
                 self.assertIn("non-adults", actions)
@@ -446,20 +447,31 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 self.assertIn("static int VF2CurrentLabelInGroup", helper)
                 self.assertIn("static int VF2CurrentLabelInGroups2", helper)
                 self.assertIn("static void VF2ApplyRememberedOrRandomLabel", helper)
+                self.assertIn("static bool VF2RunNativeBehaviorAndChangedLabel", helper)
+                self.assertIn("struct VF2BehaviorLabelCacheSlot", helper)
+                self.assertIn("static bool VF2GetCachedBehaviorLabel", helper)
+                self.assertIn("VF2RememberBehaviorLabel(villager, (int)labels, selectedStringId);", helper)
+                self.assertIn("VF2ApplyUncachedRandomLabel(villager, kVF2BehaviorLabels_radio_dance", helper)
+                self.assertIn("VF2CopyBehaviorLabel(villager, before);", helper)
+                self.assertIn("VF2CopyBehaviorLabel(villager, gVF2BehaviorLabelBeforeNative);", helper)
+                self.assertIn("return VF2BehaviorLabelChangedSince(villager, before);", helper)
                 self.assertIn(
                     "int remembered = VF2CurrentLabelInGroups2(",
                     helper,
                 )
                 self.assertIn("kVF2BehaviorLabels_video_game_teen", helper)
-                self.assertIn("CBehavior::PlayingVideoGame(villager);", helper)
+                self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingVideoGame)) return;", helper)
                 self.assertIn(
                     "VF2ApplyRememberedOrRandomLabels2(",
                     helper,
                 )
+                self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::Shower)) return;", helper)
+                self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::NorthShower)) return;", helper)
+                self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WashingInBathroomSink)) return;", helper)
+                self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::BathroomGroomingGeneral)) return;", helper)
                 self.assertIn("VF2SetBehaviorLabel(villager, kVF2BehaviorLabels_trampoline_textfix[0]);", helper)
                 self.assertIn("int remembered = VF2CurrentCoffeeLabel(villager);", helper)
                 self.assertIn("int remembered = VF2CurrentShowerLabel(villager);", helper)
-                self.assertIn("extern \"C\" int __cdecl strncmp", helper)
                 self.assertNotIn("rememberedDance", helper)
                 self.assertNotIn("VF2CurrentLabelMatchesStringId", helper)
             finally:
@@ -497,10 +509,10 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
 
                 for group in ("drink", "heat_food", "snacks", "meal_prep"):
                     self.assertIn(f"kVF2BehaviorLabels_{group}", helper)
-                self.assertIn("CBehavior::GetADrink(villager);", helper)
-                self.assertIn("CBehavior::HeatUpFood(villager);", helper)
-                self.assertIn("CBehavior::LookingForSnacksDispatch(villager);", helper)
-                self.assertIn("CBehavior::PreparingAMeal(villager);", helper)
+                self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::GetADrink)) return;", helper)
+                self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::HeatUpFood)) return;", helper)
+                self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::LookingForSnacksDispatch)) return;", helper)
+                self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PreparingAMeal)) return;", helper)
                 self.assertIn("TV, drink, heat-food, snack, meal-prep", " ".join(manifest["spontaneous_behaviors"]["actions"]))
 
                 patcher.patch_behavior_label_variants(manifest)
@@ -772,6 +784,8 @@ class OutfitStoreMappingTests(unittest.TestCase):
         )
 
         source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn("def normalize_visible_special_upgrade_icon", source)
+        self.assertIn("status = \"normalized\"", source)
         self.assertIn("class CAchievement", source)
         self.assertIn("extern CAchievement Achievement;", source)
         self.assertIn("case 0x124:", source)
@@ -862,12 +876,13 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 patcher.write_outfit_store_helpers({})
                 source = helper.read_text(encoding="ascii")
 
-                self.assertIn("kVF2FleaMarketCategory = 3", source)
-                self.assertIn("kVF2FleaMarketFirstItem = 0x1AD", source)
-                self.assertIn("kVF2FleaMarketCandidateCount = 0xFC", source)
-                self.assertIn("inventory->IsLocked(item)", source)
-                self.assertIn("FurnitureManager.IsPet(item)", source)
-                self.assertIn("inventory->AvailableForSale(item)", source)
+                self.assertIn("kVF2FleaMarketCategory = 0x0F", source)
+                self.assertIn("kVF2FleaMarketGoodiesCount = 0x24", source)
+                self.assertIn("extern EInventoryItem *gGoodiesList;", source)
+                self.assertIn("int itemId = (int)gGoodiesList[index];", source)
+                self.assertIn("inventory->HaveUpgrade(item)", source)
+                self.assertNotIn("kVF2FleaMarketCategory = 3", source)
+                self.assertNotIn("inventory->AvailableForSale(item)", source)
                 self.assertIn("VF2GetExpandedFleaMarketCount", source)
                 self.assertIn("VF2GetExpandedFleaMarketItem", source)
         finally:

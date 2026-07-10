@@ -4214,6 +4214,27 @@ def sync_outfit_store_icon_art(manifest):
     }
 
 
+def normalize_visible_special_upgrade_icon(source, target, cell_size=VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE):
+    from PIL import Image
+
+    with Image.open(source) as opened:
+        image = opened.convert("RGBA")
+    bbox = image.getbbox()
+    if bbox:
+        image = image.crop(bbox)
+    if image.width <= 0 or image.height <= 0:
+        image = Image.new("RGBA", (cell_size, cell_size), (0, 0, 0, 0))
+    resample = getattr(getattr(Image, "Resampling", Image), "LANCZOS")
+    scale = min(cell_size / image.width, cell_size / image.height)
+    resized = image.resize(
+        (max(1, round(image.width * scale)), max(1, round(image.height * scale))),
+        resample,
+    )
+    canvas = Image.new("RGBA", (cell_size, cell_size), (0, 0, 0, 0))
+    canvas.alpha_composite(resized, ((cell_size - resized.width) // 2, (cell_size - resized.height) // 2))
+    canvas.save(target)
+
+
 def sync_visible_special_upgrade_icon_art(manifest):
     output_root = OUT / "Images"
     output_root.mkdir(parents=True, exist_ok=True)
@@ -4233,13 +4254,22 @@ def sync_visible_special_upgrade_icon_art(manifest):
             if candidate.exists() and candidate.resolve() != target.resolve():
                 source = candidate
                 break
-        if not target.exists() or (filename.startswith("cheat_") and source is not None):
+        normalize_icon = filename.startswith("cheat_")
+        if not target.exists() or (normalize_icon and source is not None):
             if source:
-                shutil.copy2(source, target)
-                status = "copied"
+                if normalize_icon:
+                    normalize_visible_special_upgrade_icon(source, target)
+                    status = "normalized"
+                else:
+                    shutil.copy2(source, target)
+                    status = "copied"
             else:
                 missing.append(filename)
                 status = "missing"
+        elif normalize_icon:
+            normalize_visible_special_upgrade_icon(target, target)
+            source = target
+            status = "normalized_existing"
         else:
             source = target
 
@@ -5553,7 +5583,7 @@ def patch_inventory_manager(manifest):
             "function": function_name,
             "helper": helper_name,
             "insert_offset": hex(insert_off),
-            "category": "0x3",
+            "category": "0x0F",
             "preserves_stock_fallthrough": True,
         }
 
@@ -5606,18 +5636,16 @@ def patch_inventory_manager(manifest):
         },
         "generation_sort_cap": {"old": 9, "new": 30, "patches": generation_cap_patches},
         "expanded_flea_market": {
-            "status": "Flea Market category 0x3 lists every currently valid item from the native sale pool instead of the cached random three",
-            "native_pool_first_item": "0x1ad",
-            "native_pool_count": "0xfc",
-            "native_pool_last_item": "0x2a8",
+            "status": "Flea Market category 0x0F lists every currently valid item from the native rotating goodies pool instead of the cached random five",
+            "native_pool": "gGoodiesList",
+            "native_pool_count": "0x24",
             "filters": [
-                "CInventoryManager::IsLocked(item) must be false",
-                "CFurnitureManager::IsPet(item) must be false",
-                "CInventoryManager::AvailableForSale(item) must be true",
+                "candidate comes from the native gGoodiesList array",
+                "already-purchased upgrade entries at or above item 0xE1 are omitted through CInventoryManager::HaveUpgrade(item)",
             ],
             "hooks": expanded_flea_market_hooks,
             "stock_categories_unchanged": True,
-            "cache_not_expanded": "the original this+0x474 sale cache remains untouched to avoid overwriting count/timer fields at this+0x480/+0x484",
+            "cache_not_expanded": "the original this+0x488 rotating-goodies cache remains untouched to avoid overwriting count/timer fields at this+0x49C/+0x4A0; category 0x03 On Sale keeps its native sale cache at this+0x474",
         },
     }
 
@@ -5770,9 +5798,7 @@ public:
 class CInventoryManager {{
 public:
     bool IsLocked(EInventoryItem item);
-private:
-    bool AvailableForSale(EInventoryItem item);
-    friend bool VF2InventoryAvailableForSale(CInventoryManager* inventory, EInventoryItem item);
+    bool HaveUpgrade(EInventoryItem item);
 public:
     char pad0[0x468];
     int maleOutfitBody;
@@ -5787,6 +5813,7 @@ public:
 extern CToolTray ToolTray;
 extern CInventoryManager InventoryManager;
 extern CFurnitureManager FurnitureManager;
+extern EInventoryItem *gGoodiesList;
 
 static const int kVF2OutfitStoreFemaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["female"]};
 static const int kVF2OutfitStoreMaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["male"]};
@@ -5801,32 +5828,27 @@ static const int kVF2VisibleSpecialUpgradeFirstItem = {min(VISIBLE_SPECIAL_UPGRA
 static const int kVF2VisibleSpecialUpgradeCount = {len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)};
 static const int kVF2VisibleSpecialUpgradeIconImageBase = {visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))};
 static const int kVF2VisibleSpecialUpgradeIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
-static const int kVF2FleaMarketCategory = 3;
-static const int kVF2FleaMarketFirstItem = 0x1AD;
-static const int kVF2FleaMarketCandidateCount = 0xFC;
+static const int kVF2FleaMarketCategory = 0x0F;
+static const int kVF2FleaMarketGoodiesCount = 0x24;
 static int gVF2SyntheticOutfitToolInHand = 0;
 static int gVF2SyntheticOutfitToolInUse = 0;
 static int gVF2LastSyntheticOutfitByGender[2] = {{0, 0}};
 
-bool VF2InventoryAvailableForSale(CInventoryManager* inventory, EInventoryItem item) {{
-    return inventory && inventory->AvailableForSale(item);
-}}
-
-static bool VF2ExpandedFleaMarketCandidate(CInventoryManager* inventory, int itemId) {{
+static bool VF2ExpandedFleaMarketCandidate(CInventoryManager* inventory, int index) {{
     if (!inventory) return false;
-    if (itemId < kVF2FleaMarketFirstItem) return false;
-    if (itemId >= kVF2FleaMarketFirstItem + kVF2FleaMarketCandidateCount) return false;
+    if (index < 0 || index >= kVF2FleaMarketGoodiesCount) return false;
+    int itemId = (int)gGoodiesList[index];
+    if (itemId <= 0) return false;
     EInventoryItem item = (EInventoryItem)itemId;
-    if (inventory->IsLocked(item)) return false;
-    if (FurnitureManager.IsPet(item)) return false;
-    return VF2InventoryAvailableForSale(inventory, item);
+    if (itemId >= 0xE1 && inventory->HaveUpgrade(item)) return false;
+    return true;
 }}
 
 extern "C" int __cdecl VF2GetExpandedFleaMarketCount(CInventoryManager* inventory, int category) {{
     if (category != kVF2FleaMarketCategory) return -1;
     int count = 0;
-    for (int itemId = kVF2FleaMarketFirstItem; itemId < kVF2FleaMarketFirstItem + kVF2FleaMarketCandidateCount; ++itemId) {{
-        if (VF2ExpandedFleaMarketCandidate(inventory, itemId)) ++count;
+    for (int index = 0; index < kVF2FleaMarketGoodiesCount; ++index) {{
+        if (VF2ExpandedFleaMarketCandidate(inventory, index)) ++count;
     }}
     return count;
 }}
@@ -5835,9 +5857,9 @@ extern "C" int __cdecl VF2GetExpandedFleaMarketItem(CInventoryManager* inventory
     if (category != kVF2FleaMarketCategory) return -1;
     if (index < 0) return 0;
     int seen = 0;
-    for (int itemId = kVF2FleaMarketFirstItem; itemId < kVF2FleaMarketFirstItem + kVF2FleaMarketCandidateCount; ++itemId) {{
-        if (!VF2ExpandedFleaMarketCandidate(inventory, itemId)) continue;
-        if (seen == index) return itemId;
+    for (int candidateIndex = 0; candidateIndex < kVF2FleaMarketGoodiesCount; ++candidateIndex) {{
+        if (!VF2ExpandedFleaMarketCandidate(inventory, candidateIndex)) continue;
+        if (seen == index) return (int)gGoodiesList[candidateIndex];
         ++seen;
     }}
     return 0;
@@ -9900,6 +9922,107 @@ static void VF2SetBehaviorLabel(CVillager &villager, int stringId)
     strncpy(behaviorLabel, theStringManager::Get()->GetString((StringId)stringId), 0x27);
 }
 
+struct VF2BehaviorLabelCacheSlot {
+    CVillager *villager;
+    int cacheTag;
+    int stringId;
+    char nativeLabel[0x28];
+};
+
+static VF2BehaviorLabelCacheSlot gVF2BehaviorLabelCache[64];
+static CVillager *gVF2BehaviorLabelBeforeVillager = 0;
+static char gVF2BehaviorLabelBeforeNative[0x28];
+
+static bool VF2LabelBytesEqual(char const *left, char const *right)
+{
+    for (int i = 0; i < 0x27; ++i) {
+        if (left[i] != right[i]) return false;
+        if (left[i] == 0 && right[i] == 0) return true;
+    }
+    return true;
+}
+
+static bool VF2LabelTextEqual(char const *left, char const *right)
+{
+    if (!left || !right) {
+        return false;
+    }
+    return strncmp(left, right, 0x27) == 0;
+}
+
+static void VF2CopyCurrentBehaviorLabel(CVillager &villager, char *dest)
+{
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    for (int i = 0; i < 0x27; ++i) {
+        dest[i] = behaviorLabel[i];
+    }
+    dest[0x27] = 0;
+}
+
+static VF2BehaviorLabelCacheSlot *VF2FindBehaviorLabelCache(CVillager &villager, int cacheTag, bool create)
+{
+    VF2BehaviorLabelCacheSlot *emptySlot = 0;
+    for (int i = 0; i < 64; ++i) {
+        VF2BehaviorLabelCacheSlot *slot = &gVF2BehaviorLabelCache[i];
+        if (slot->villager == &villager && slot->cacheTag == cacheTag) {
+            return slot;
+        }
+        if (!emptySlot && !slot->villager) {
+            emptySlot = slot;
+        }
+    }
+    if (!create) {
+        return 0;
+    }
+    if (!emptySlot) {
+        emptySlot = &gVF2BehaviorLabelCache[((unsigned int)&villager >> 2) & 63];
+    }
+    emptySlot->villager = &villager;
+    emptySlot->cacheTag = cacheTag;
+    emptySlot->stringId = 0;
+    for (int i = 0; i < 0x28; ++i) {
+        emptySlot->nativeLabel[i] = 0;
+    }
+    return emptySlot;
+}
+
+static bool VF2BehaviorLabelCacheStillActive(VF2BehaviorLabelCacheSlot *slot)
+{
+    if (!slot || gVF2BehaviorLabelBeforeVillager != slot->villager) {
+        return false;
+    }
+    if (VF2LabelBytesEqual(gVF2BehaviorLabelBeforeNative, slot->nativeLabel)) {
+        return true;
+    }
+    if (slot->stringId) {
+        char *chosenLabel = theStringManager::Get()->GetString((StringId)slot->stringId);
+        if (VF2LabelTextEqual(gVF2BehaviorLabelBeforeNative, chosenLabel)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool VF2GetCachedBehaviorLabel(CVillager &villager, int cacheTag, int *stringId)
+{
+    VF2BehaviorLabelCacheSlot *slot = VF2FindBehaviorLabelCache(villager, cacheTag, false);
+    if (!VF2BehaviorLabelCacheStillActive(slot)) {
+        return false;
+    }
+    *stringId = slot->stringId;
+    return true;
+}
+
+static void VF2RememberBehaviorLabel(CVillager &villager, int cacheTag, int stringId)
+{
+    VF2BehaviorLabelCacheSlot *slot = VF2FindBehaviorLabelCache(villager, cacheTag, true);
+    if (!slot) {
+        return;
+    }
+    slot->stringId = stringId;
+    VF2CopyCurrentBehaviorLabel(villager, slot->nativeLabel);
+}
+
 static int VF2CurrentLabelInGroup(CVillager &villager, int const *labels, int count)
 {
     if (count <= 0) {
@@ -9953,9 +10076,37 @@ static int VF2CurrentLabelInGroups3(
 static void VF2ApplyRememberedOrRandomLabel(CVillager &villager, int const *labels, int count, int rememberedStringId)
 {
     if (rememberedStringId) {
+        VF2RememberBehaviorLabel(villager, (int)labels, rememberedStringId);
         VF2SetBehaviorLabel(villager, rememberedStringId);
         return;
     }
+    int cachedStringId = 0;
+    if (VF2GetCachedBehaviorLabel(villager, (int)labels, &cachedStringId)) {
+        if (cachedStringId) {
+            VF2SetBehaviorLabel(villager, cachedStringId);
+        }
+        return;
+    }
+    if (count <= 0) {
+        return;
+    }
+    int roll = ldwGameState::GetRandom(count + 1);
+    if (roll == 0) {
+        VF2RememberBehaviorLabel(villager, (int)labels, 0);
+        return;
+    }
+    int selectedStringId = labels[roll - 1];
+    VF2RememberBehaviorLabel(villager, (int)labels, selectedStringId);
+    VF2SetBehaviorLabel(villager, selectedStringId);
+}
+
+static void VF2ApplyRandomLabel(CVillager &villager, int const *labels, int count)
+{
+    VF2ApplyRememberedOrRandomLabel(villager, labels, count, 0);
+}
+
+static void VF2ApplyUncachedRandomLabel(CVillager &villager, int const *labels, int count)
+{
     if (count <= 0) {
         return;
     }
@@ -9966,11 +10117,6 @@ static void VF2ApplyRememberedOrRandomLabel(CVillager &villager, int const *labe
     VF2SetBehaviorLabel(villager, labels[roll - 1]);
 }
 
-static void VF2ApplyRandomLabel(CVillager &villager, int const *labels, int count)
-{
-    VF2ApplyRememberedOrRandomLabel(villager, labels, count, 0);
-}
-
 static void VF2ApplyRememberedOrRandomLabels2(
     CVillager &villager,
     int const *labelsA,
@@ -9979,8 +10125,17 @@ static void VF2ApplyRememberedOrRandomLabels2(
     int countB,
     int rememberedStringId)
 {
+    int cacheTag = (int)labelsA;
     if (rememberedStringId) {
+        VF2RememberBehaviorLabel(villager, cacheTag, rememberedStringId);
         VF2SetBehaviorLabel(villager, rememberedStringId);
+        return;
+    }
+    int cachedStringId = 0;
+    if (VF2GetCachedBehaviorLabel(villager, cacheTag, &cachedStringId)) {
+        if (cachedStringId) {
+            VF2SetBehaviorLabel(villager, cachedStringId);
+        }
         return;
     }
     int total = countA + countB;
@@ -9989,15 +10144,19 @@ static void VF2ApplyRememberedOrRandomLabels2(
     }
     int roll = ldwGameState::GetRandom(total + 1);
     if (roll == 0) {
+        VF2RememberBehaviorLabel(villager, cacheTag, 0);
         return;
     }
     --roll;
+    int selectedStringId = 0;
     if (roll < countA) {
-        VF2SetBehaviorLabel(villager, labelsA[roll]);
-        return;
+        selectedStringId = labelsA[roll];
+    } else {
+        roll -= countA;
+        selectedStringId = labelsB[roll];
     }
-    roll -= countA;
-    VF2SetBehaviorLabel(villager, labelsB[roll]);
+    VF2RememberBehaviorLabel(villager, cacheTag, selectedStringId);
+    VF2SetBehaviorLabel(villager, selectedStringId);
 }
 
 static void VF2ApplyRememberedOrRandomLabels3(
@@ -10010,8 +10169,17 @@ static void VF2ApplyRememberedOrRandomLabels3(
     int countC,
     int rememberedStringId)
 {
+    int cacheTag = (int)labelsA;
     if (rememberedStringId) {
+        VF2RememberBehaviorLabel(villager, cacheTag, rememberedStringId);
         VF2SetBehaviorLabel(villager, rememberedStringId);
+        return;
+    }
+    int cachedStringId = 0;
+    if (VF2GetCachedBehaviorLabel(villager, cacheTag, &cachedStringId)) {
+        if (cachedStringId) {
+            VF2SetBehaviorLabel(villager, cachedStringId);
+        }
         return;
     }
     int total = countA + countB + countC;
@@ -10020,20 +10188,24 @@ static void VF2ApplyRememberedOrRandomLabels3(
     }
     int roll = ldwGameState::GetRandom(total + 1);
     if (roll == 0) {
+        VF2RememberBehaviorLabel(villager, cacheTag, 0);
         return;
     }
     --roll;
+    int selectedStringId = 0;
     if (roll < countA) {
-        VF2SetBehaviorLabel(villager, labelsA[roll]);
-        return;
+        selectedStringId = labelsA[roll];
+    } else {
+        roll -= countA;
+        if (roll < countB) {
+            selectedStringId = labelsB[roll];
+        } else {
+            roll -= countB;
+            selectedStringId = labelsC[roll];
+        }
     }
-    roll -= countA;
-    if (roll < countB) {
-        VF2SetBehaviorLabel(villager, labelsB[roll]);
-        return;
-    }
-    roll -= countB;
-    VF2SetBehaviorLabel(villager, labelsC[roll]);
+    VF2RememberBehaviorLabel(villager, cacheTag, selectedStringId);
+    VF2SetBehaviorLabel(villager, selectedStringId);
 }
 
 static int VF2CurrentCoffeeLabel(CVillager &villager)
@@ -10104,6 +10276,31 @@ static void VF2ApplyShowerLabel(CVillager &villager, int rememberedStringId)
     VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_shower_general, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_general));
 }
 
+static void VF2CopyBehaviorLabel(CVillager &villager, char *dest)
+{
+    VF2CopyCurrentBehaviorLabel(villager, dest);
+}
+
+static bool VF2BehaviorLabelChangedSince(CVillager &villager, char const *before)
+{
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    for (int i = 0; i < 0x27; ++i) {
+        if (behaviorLabel[i] != before[i]) return true;
+        if (behaviorLabel[i] == 0 && before[i] == 0) return false;
+    }
+    return false;
+}
+
+static bool VF2RunNativeBehaviorAndChangedLabel(CVillager &villager, void (__cdecl *nativeBehavior)(CVillager &))
+{
+    char before[0x28];
+    VF2CopyBehaviorLabel(villager, before);
+    gVF2BehaviorLabelBeforeVillager = &villager;
+    VF2CopyBehaviorLabel(villager, gVF2BehaviorLabelBeforeNative);
+    nativeBehavior(villager);
+    return VF2BehaviorLabelChangedSince(villager, before);
+}
+
 extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &villager)
 {
     CVillagerPlans *plans = (CVillagerPlans *)&villager;
@@ -10133,11 +10330,14 @@ extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &villager)
 extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_reading, VF2_LABEL_COUNT(kVF2BehaviorLabels_reading));
+    char before[0x28];
+    VF2CopyBehaviorLabel(villager, before);
     if (ldwGameState::GetRandom(2) == 0) {
         CBehavior::ReadMagazine(villager);
     } else {
         CBehavior::ReadingBook(villager);
     }
+    if (!VF2BehaviorLabelChangedSince(villager, before)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_reading, VF2_LABEL_COUNT(kVF2BehaviorLabels_reading), remembered);
 }
 
@@ -10145,7 +10345,7 @@ extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &villager)
 {
     if (ldwGameState::GetRandom(2) == 0) {
         CBehavior::DancingRadio(villager);
-        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_radio_dance, VF2_LABEL_COUNT(kVF2BehaviorLabels_radio_dance));
+        VF2ApplyUncachedRandomLabel(villager, kVF2BehaviorLabels_radio_dance, VF2_LABEL_COUNT(kVF2BehaviorLabels_radio_dance));
     } else {
         CBehavior::ListenToRadio(villager);
     }
@@ -10154,42 +10354,42 @@ extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &villager)
 extern "C" void __cdecl VF2RandomTVLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_tv, VF2_LABEL_COUNT(kVF2BehaviorLabels_tv));
-    CBehavior::WatchTVDispatch(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WatchTVDispatch)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_tv, VF2_LABEL_COUNT(kVF2BehaviorLabels_tv), remembered);
 }
 
 extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_board_game, VF2_LABEL_COUNT(kVF2BehaviorLabels_board_game));
-    CBehavior::PlayingBoardGame(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingBoardGame)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_board_game, VF2_LABEL_COUNT(kVF2BehaviorLabels_board_game), remembered);
 }
 
 extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_drink, VF2_LABEL_COUNT(kVF2BehaviorLabels_drink));
-    CBehavior::GetADrink(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::GetADrink)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_drink, VF2_LABEL_COUNT(kVF2BehaviorLabels_drink), remembered);
 }
 
 extern "C" void __cdecl VF2RandomHeatFoodLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_heat_food, VF2_LABEL_COUNT(kVF2BehaviorLabels_heat_food));
-    CBehavior::HeatUpFood(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::HeatUpFood)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_heat_food, VF2_LABEL_COUNT(kVF2BehaviorLabels_heat_food), remembered);
 }
 
 extern "C" void __cdecl VF2RandomSnacksLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_snacks, VF2_LABEL_COUNT(kVF2BehaviorLabels_snacks));
-    CBehavior::LookingForSnacksDispatch(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::LookingForSnacksDispatch)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_snacks, VF2_LABEL_COUNT(kVF2BehaviorLabels_snacks), remembered);
 }
 
 extern "C" void __cdecl VF2RandomMealPrepLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_meal_prep, VF2_LABEL_COUNT(kVF2BehaviorLabels_meal_prep));
-    CBehavior::PreparingAMeal(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PreparingAMeal)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_meal_prep, VF2_LABEL_COUNT(kVF2BehaviorLabels_meal_prep), remembered);
 }
 
@@ -10201,7 +10401,7 @@ extern "C" void __cdecl VF2RandomWebLabel(CVillager &villager)
         VF2_LABEL_COUNT(kVF2BehaviorLabels_web_basic),
         kVF2BehaviorLabels_web_adult,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_web_adult));
-    CBehavior::BrowsingWeb(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::BrowsingWeb)) return;
     if (VF2IsTeenOrOlder(villager)) {
         VF2ApplyRememberedOrRandomLabels2(
             villager,
@@ -10223,7 +10423,7 @@ extern "C" void __cdecl VF2RandomVideoGameLabel(CVillager &villager)
         VF2_LABEL_COUNT(kVF2BehaviorLabels_video_game),
         kVF2BehaviorLabels_video_game_teen,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_video_game_teen));
-    CBehavior::PlayingVideoGame(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingVideoGame)) return;
     if (VF2IsTeenOrOlder(villager)) {
         VF2ApplyRememberedOrRandomLabels2(
             villager,
@@ -10240,98 +10440,98 @@ extern "C" void __cdecl VF2RandomVideoGameLabel(CVillager &villager)
 extern "C" void __cdecl VF2RandomMendingLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_mending, VF2_LABEL_COUNT(kVF2BehaviorLabels_mending));
-    CBehavior::MendingButton(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::MendingButton)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_mending, VF2_LABEL_COUNT(kVF2BehaviorLabels_mending), remembered);
 }
 
 extern "C" void __cdecl VF2RandomIroningLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_ironing, VF2_LABEL_COUNT(kVF2BehaviorLabels_ironing));
-    CBehavior::IroningShirt(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::IroningShirt)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_ironing, VF2_LABEL_COUNT(kVF2BehaviorLabels_ironing), remembered);
 }
 
 extern "C" void __cdecl VF2RandomTelescopeLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_telescope, VF2_LABEL_COUNT(kVF2BehaviorLabels_telescope));
-    CBehavior::UseTelescope(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::UseTelescope)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_telescope, VF2_LABEL_COUNT(kVF2BehaviorLabels_telescope), remembered);
 }
 
 extern "C" void __cdecl VF2RandomWorkoutLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_workout));
-    CBehavior::WorkingOut(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkingOut)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_workout), remembered);
 }
 
 extern "C" void __cdecl VF2RandomKitchenCareerDispatchLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
-    CBehavior::WorkKitchenDispatch(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkKitchenDispatch)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career), remembered);
 }
 
 extern "C" void __cdecl VF2RandomKitchenCareerLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
-    CBehavior::WorkKitchen0(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkKitchen0)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career), remembered);
 }
 
 extern "C" void __cdecl VF2RandomOfficeCareerLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
-    CBehavior::OfficeCarreerWork(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::OfficeCarreerWork)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career), remembered);
 }
 
 extern "C" void __cdecl VF2RandomWorkshopCareerLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career));
-    CBehavior::WorkWorkshop(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkWorkshop)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_career, VF2_LABEL_COUNT(kVF2BehaviorLabels_career), remembered);
 }
 
 extern "C" void __cdecl VF2RandomDrawingLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_drawing, VF2_LABEL_COUNT(kVF2BehaviorLabels_drawing));
-    CBehavior::DrawingOnEasel(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::DrawingOnEasel)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_drawing, VF2_LABEL_COUNT(kVF2BehaviorLabels_drawing), remembered);
 }
 
 extern "C" void __cdecl VF2RandomNapDreamLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_nap_dream, VF2_LABEL_COUNT(kVF2BehaviorLabels_nap_dream));
-    CBehavior::NappingCouch(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::NappingCouch)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_nap_dream, VF2_LABEL_COUNT(kVF2BehaviorLabels_nap_dream), remembered);
 }
 
 extern "C" void __cdecl VF2RandomBreakfastLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_breakfast, VF2_LABEL_COUNT(kVF2BehaviorLabels_breakfast));
-    CBehavior::HaveBreakfast(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::HaveBreakfast)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_breakfast, VF2_LABEL_COUNT(kVF2BehaviorLabels_breakfast), remembered);
 }
 
 extern "C" void __cdecl VF2RandomWateringFlowersLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering));
-    CBehavior::WateringFlowers(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WateringFlowers)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering), remembered);
 }
 
 extern "C" void __cdecl VF2RandomWateringRosesLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering));
-    CBehavior::WateringRoses(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WateringRoses)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering), remembered);
 }
 
 extern "C" void __cdecl VF2RandomWateringWindowBoxesLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering));
-    CBehavior::WateringWindowBoxes(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WateringWindowBoxes)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_flower_watering, VF2_LABEL_COUNT(kVF2BehaviorLabels_flower_watering), remembered);
 }
 
@@ -10368,49 +10568,49 @@ static void VF2ApplyBathroomSinkGroomingLabel(CVillager &villager, int remembere
 extern "C" void __cdecl VF2RandomBathroomSinkLabel(CVillager &villager)
 {
     int remembered = VF2CurrentBathroomSinkLabel(villager);
-    CBehavior::WashingInBathroomSink(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WashingInBathroomSink)) return;
     VF2ApplyBathroomSinkGeneralLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomBathroomSink0Label(CVillager &villager)
 {
     int remembered = VF2CurrentBathroomSinkLabel(villager);
-    CBehavior::WashingInBathroomSink0(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WashingInBathroomSink0)) return;
     VF2ApplyBathroomSinkGeneralLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomBathroomSink1Label(CVillager &villager)
 {
     int remembered = VF2CurrentBathroomSinkLabel(villager);
-    CBehavior::WashingInBathroomSink1(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WashingInBathroomSink1)) return;
     VF2ApplyBathroomSinkGeneralLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomBathroomSink2Label(CVillager &villager)
 {
     int remembered = VF2CurrentBathroomSinkLabel(villager);
-    CBehavior::WashingInBathroomSink2(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WashingInBathroomSink2)) return;
     VF2ApplyBathroomSinkGeneralLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomBathroomSink3Label(CVillager &villager)
 {
     int remembered = VF2CurrentBathroomSinkLabel(villager);
-    CBehavior::WashingInBathroomSink3(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WashingInBathroomSink3)) return;
     VF2ApplyBathroomSinkGeneralLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomBathroomGroomingGeneralLabel(CVillager &villager)
 {
     int remembered = VF2CurrentBathroomSinkLabel(villager);
-    CBehavior::BathroomGroomingGeneral(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::BathroomGroomingGeneral)) return;
     VF2ApplyBathroomSinkGroomingLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomBathroomGroomingShaveMakeupLabel(CVillager &villager)
 {
     int remembered = VF2CurrentBathroomSinkLabel(villager);
-    CBehavior::BathroomGroomingShaveMakeup(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::BathroomGroomingShaveMakeup)) return;
     VF2ApplyBathroomSinkGroomingLabel(villager, remembered);
 }
 
@@ -10422,7 +10622,7 @@ extern "C" void __cdecl VF2RandomPoolLabel(CVillager &villager)
         VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_general),
         kVF2BehaviorLabels_pool_child,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_pool_child));
-    CBehavior::SwimmingPool(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::SwimmingPool)) return;
     if (VF2IsChild(villager)) {
         VF2ApplyRememberedOrRandomLabels2(
             villager,
@@ -10439,62 +10639,62 @@ extern "C" void __cdecl VF2RandomPoolLabel(CVillager &villager)
 extern "C" void __cdecl VF2RandomPlayhouseLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_playhouse, VF2_LABEL_COUNT(kVF2BehaviorLabels_playhouse));
-    CBehavior::PlayOnPlayStructure(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayOnPlayStructure)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_playhouse, VF2_LABEL_COUNT(kVF2BehaviorLabels_playhouse), remembered);
 }
 
 extern "C" void __cdecl VF2RandomSnowLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_snow, VF2_LABEL_COUNT(kVF2BehaviorLabels_snow));
-    CBehavior::PlayingInSnow(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingInSnow)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_snow, VF2_LABEL_COUNT(kVF2BehaviorLabels_snow), remembered);
 }
 
 extern "C" void __cdecl VF2RandomSandboxLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sandbox, VF2_LABEL_COUNT(kVF2BehaviorLabels_sandbox));
-    CBehavior::ToySandbox(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::ToySandbox)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_sandbox, VF2_LABEL_COUNT(kVF2BehaviorLabels_sandbox), remembered);
 }
 
 extern "C" void __cdecl VF2RandomToyTrainLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_train_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_train_child));
-    CBehavior::ToyTrainTableForKids(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::ToyTrainTableForKids)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_train_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_train_child), remembered);
 }
 
 extern "C" void __cdecl VF2RandomDrivingChildLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_driving_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_driving_child));
-    CBehavior::ChildrenPlayOffice(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::ChildrenPlayOffice)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_driving_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_driving_child), remembered);
 }
 
 extern "C" void __cdecl VF2TrampolineLabel(CVillager &villager)
 {
-    CBehavior::ToyTrampoline(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::ToyTrampoline)) return;
     VF2SetBehaviorLabel(villager, kVF2BehaviorLabels_trampoline_textfix[0]);
 }
 
 extern "C" void __cdecl VF2RandomKidsTableLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_kids_table, VF2_LABEL_COUNT(kVF2BehaviorLabels_kids_table));
-    CBehavior::ChildrenPlayAtKidsTable(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::ChildrenPlayAtKidsTable)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_kids_table, VF2_LABEL_COUNT(kVF2BehaviorLabels_kids_table), remembered);
 }
 
 extern "C" void __cdecl VF2RandomTeenHomeworkLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_teen_homework, VF2_LABEL_COUNT(kVF2BehaviorLabels_teen_homework));
-    CBehavior::TeenHomework(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::TeenHomework)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_teen_homework, VF2_LABEL_COUNT(kVF2BehaviorLabels_teen_homework), remembered);
 }
 
 extern "C" void __cdecl VF2RandomTeenOnlineTestLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_teen_online_test, VF2_LABEL_COUNT(kVF2BehaviorLabels_teen_online_test));
-    CBehavior::TeenOnlineExam(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::TeenOnlineExam)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_teen_online_test, VF2_LABEL_COUNT(kVF2BehaviorLabels_teen_online_test), remembered);
 }
 
@@ -10506,7 +10706,7 @@ extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &villager)
         VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general),
         kVF2BehaviorLabels_sit_down_adult,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_adult));
-    CBehavior::RestingBody(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RestingBody)) return;
     if (VF2IsMatureAdult(villager)) {
         VF2ApplyRememberedOrRandomLabels2(
             villager,
@@ -10523,35 +10723,35 @@ extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &villager)
 extern "C" void __cdecl VF2RandomPetLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_pet, VF2_LABEL_COUNT(kVF2BehaviorLabels_pet));
-    CBehavior::Petting(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::Petting)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_pet, VF2_LABEL_COUNT(kVF2BehaviorLabels_pet), remembered);
 }
 
 extern "C" void __cdecl VF2RandomShowerLabel(CVillager &villager)
 {
     int remembered = VF2CurrentShowerLabel(villager);
-    CBehavior::Shower(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::Shower)) return;
     VF2ApplyShowerLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomNorthShowerLabel(CVillager &villager)
 {
     int remembered = VF2CurrentShowerLabel(villager);
-    CBehavior::NorthShower(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::NorthShower)) return;
     VF2ApplyShowerLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomCoffeeLabel(CVillager &villager)
 {
     int remembered = VF2CurrentCoffeeLabel(villager);
-    CBehavior::MakeCoffee(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::MakeCoffee)) return;
     VF2ApplyCoffeeLabel(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomBigCoffeeLabel(CVillager &villager)
 {
     int remembered = VF2CurrentCoffeeLabel(villager);
-    CBehavior::MakingAVanillaSoyDecafGrandeLatte(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::MakingAVanillaSoyDecafGrandeLatte)) return;
     if (remembered) {
         VF2SetBehaviorLabel(villager, remembered);
         return;
@@ -10566,7 +10766,7 @@ extern "C" void __cdecl VF2RandomBigCoffeeLabel(CVillager &villager)
 extern "C" void __cdecl VF2RandomCocktailLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_cocktail, VF2_LABEL_COUNT(kVF2BehaviorLabels_cocktail));
-    CBehavior::HavingACocktail(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::HavingACocktail)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_cocktail, VF2_LABEL_COUNT(kVF2BehaviorLabels_cocktail), remembered);
 }
 
@@ -10638,7 +10838,8 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
             "mending/sewing variants (adults)",
             "ironing clothes (adults)",
             "petting/pet label variants (all ages)",
-            "TV, drink, heat-food, snack, meal-prep, web, video game, reading, telescope, workout, career, shower, coffee/tea, cocktail, pool, sandbox, toy-train, and snow-play label variants",
+            "needs-to-sit-down/rest variants (0x127; all ages; native sittable/bed targeting)",
+            "TV, drink, heat-food, snack, meal-prep, web, video game, reading, telescope, workout, career, shower, bathroom sink/grooming, coffee/tea, cocktail, pool, sandbox, toy-train, and snow-play label variants",
         ],
         "hammock_behavior": {
             "enabled_behavior": "0x23 LieInHammock retargeted to _VF2LieInHammockAnchoredRest",
@@ -10766,6 +10967,11 @@ def patch_behavior_label_variants(manifest):
     manifest["behavior_label_variants"] = {
         "status": "native behavior macros call wrapper functions that preserve native behavior plans and only vary the visible behavior label",
         "changed": changed,
+        "label_stability": (
+            "Wrappers keep a small per-villager/per-wrapper label cache after the native behavior accepts the action. "
+            "Praise or HUD refresh paths reuse the selected stock/custom label instead of rerolling a new variant while the same native route is still active. "
+            "The radio/MP3 dancing-vs-listening random switch intentionally remains uncached."
+        ),
         "age_notes": {
             "child_boundary": "CVillager+0x6A54 < 0x118 is treated as the stock child range for child-only spontaneous gates.",
             "teen_or_older_boundary": "CVillager+0x6A54 >= 0x118 is treated as the teen-or-older/non-child range for label variants such as web/social and spa-day text.",

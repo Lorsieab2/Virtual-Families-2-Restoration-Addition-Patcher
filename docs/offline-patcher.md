@@ -806,19 +806,21 @@ B136 patcher/export notes:
   does not need any outside official-EXE path to recognize both official
   vanilla layouts.
 
-B138 build/export notes:
+B138/B141 Flea Market build/export notes:
 
-- The Flea Market expansion is implemented in native helper code rather than
-  by enlarging `CInventoryManager+0x474`, because the stock three-item sale
-  cache is immediately followed by count/timer fields at `+0x480/+0x484`.
-- Only Flea Market category `3` is detoured. `GetCategoryItemCount` and
-  `GetCategoryItem` ask the helper to enumerate furniture IDs `0x1AD` through
-  `0x2A8`, while preserving the stock filters for generation locks, pets, and
-  `CInventoryManager::AvailableForSale`.
-- Non-Flea store categories keep the stock paths. The B138 patcher export must
-  include the refreshed core, Island Events, Cheat Upgrades, and combined EXE
-  overlays so this native hook is present no matter which optional overlay
-  combination is selected.
+- B138 initially followed `MaybeUpdateSaleItems()`, which is actually the
+  category `0x03` On Sale cache (`CInventoryManager+0x474`, count/timer at
+  `+0x480/+0x484`). B141 corrects the expansion to the real Flea Market path:
+  category `0x0F`, `MaybeUpdateRotatingItems()`, `gGoodiesList`, and the
+  rotating-goodies cache at `CInventoryManager+0x488` with count/timer fields
+  at `+0x49C/+0x4A0`.
+- The B141 helper enumerates all `0x24` native `gGoodiesList` entries directly
+  and omits already-purchased upgrade rows at or above item `0xE1` by calling
+  `CInventoryManager::HaveUpgrade`.
+- Non-Flea store categories, including On Sale, keep the stock paths. The
+  patcher export must include the refreshed core, Island Events, Cheat
+  Upgrades, and combined EXE overlays so this native hook is present no matter
+  which optional overlay combination is selected.
 
 B139 build/export notes:
 
@@ -843,6 +845,25 @@ B140 patcher release notes:
   labels/portable metadata.
 - All-settings dry run validated all `1052` active/restore asset records
   against the workspace vanilla install.
+
+B141 patcher release notes:
+
+- Behavior-label wrappers now guard their variant labels by checking whether
+  the native behavior changed the action label first. This keeps stock
+  rejection, shower, bathroom sink, grooming, and age gates intact while still
+  adding variants when the action actually starts.
+- The generated behavior helper now records the selected stock/custom label in
+  a small per-villager/per-wrapper cache. Praise and HUD refresh paths reuse
+  that cached label instead of rerolling a sibling variation while the same
+  native route remains active. The radio/MP3 dance-vs-listen random switch is
+  intentionally left uncached.
+- Cheat Upgrade icons are normalized to transparent `90x90` PNGs during
+  payload sync so store rows and buy dialogs do not inherit oversized or
+  undersized source art.
+- Export verification: `Virtual-Families-2-Restoration-Addition-Patcher-B141`
+  contains `1052` asset records and `2949` payload files. An all-settings dry
+  run against a valid official test install validated every active/restore
+  record and reported no missing payload entries.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:

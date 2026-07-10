@@ -1675,19 +1675,21 @@
   into `outputs/vf2-email-to-player-strings/`; the technical architecture notes
   live in `docs/email-to-player.md`.
 
-## 2026-07-10 - Flea Market Sale Pool Expansion
+## 2026-07-10 - Flea Market Rotating Goodies Expansion
 
-- `CInventoryManager::MaybeUpdateSaleItems()` is the native Flea Market source:
-  it scans `0xFC` furniture IDs from `0x1AD` through `0x2A8`, skips locked
-  furniture, skips pets via `CFurnitureManager::IsPet`, and keeps only records
-  accepted by private `CInventoryManager::AvailableForSale`.
-- The stock Flea Market cache at `CInventoryManager+0x474` holds only three
-  item IDs; its count and refresh timestamp immediately follow at `+0x480` and
-  `+0x484`. The B138 approach does not enlarge that inline cache. Instead,
-  `GetCategoryItemCount(category=3)` and `GetCategoryItem(category=3,index)`
-  detour to `VF2GetExpandedFleaMarketCount` /
-  `VF2GetExpandedFleaMarketItem`, which recompute the full valid sale pool on
-  demand and leave every non-Flea category on the stock path.
+- `CInventoryManager::MaybeUpdateSaleItems()` is the `On Sale` source, not the
+  Flea Market. It scans `0xFC` furniture IDs from `0x1AD` through `0x2A8` and
+  stores three sale rows at `CInventoryManager+0x474`, with count/timer fields
+  at `+0x480/+0x484`.
+- The actual Flea Market uses `CInventoryManager::MaybeUpdateRotatingItems()`.
+  It walks the external `gGoodiesList` array (`0x24` entries), shuffles the
+  valid goodies, and stores five rows at `CInventoryManager+0x488`, with
+  count/timer fields at `+0x49C/+0x4A0`.
+- B141 retargets the expansion hook from category `0x03` to Flea Market
+  category `0x0F`. `VF2GetExpandedFleaMarketCount` /
+  `VF2GetExpandedFleaMarketItem` enumerate `gGoodiesList` directly and omit
+  already-purchased upgrade entries at or above item `0xE1` via
+  `CInventoryManager::HaveUpgrade`, while leaving the On Sale cache untouched.
 
 ## 2026-07-10 - Reset Achievements Cheat Upgrade
 
@@ -1714,3 +1716,27 @@
 - All-enabled dry run against the workspace vanilla install validated every
   active/restore asset record and reported no byte patch records, matching the
   full-EXE-overlay patcher model.
+
+## 2026-07-10 - B141 Behavior and Icon Safety
+
+- Behavior-label wrappers now call the native `CBehavior::*` routine first and
+  compare the villager action label at `CVillager+0x1BBA8` before applying a
+  variant. If the stock behavior rejects the action, the wrapper returns
+  without forcing a new label. This preserves stock shower, bathroom sink,
+  grooming, age, object, and targeting gates while still allowing label
+  variants when the native route starts.
+- B141 adds a small generated `VF2BehaviorLabelCacheSlot` table keyed by
+  villager pointer and wrapper label group. The cache reuses the selected
+  stock/custom label across praise/HUD refresh calls while the same native
+  route is active, so labels such as `Playing Virtual Families` no longer
+  reroll into sibling variants after praise.
+- The radio/MP3 dance/listen random switch remains intentionally unchanged and
+  uses an uncached random label helper only after the native dancing route wins.
+- `sync_visible_special_upgrade_icon_art()` normalizes `cheat_*.png` images to
+  a transparent `90x90` canvas before embedding them, so oversized `No Money` /
+  `No Food` icons and small `Unlock all furniture` / trophy icons fit the
+  Special Upgrades row and buy dialog consistently.
+- B141 export smoke: all-settings dry run against
+  `C:\Users\Owner\Downloads\Virtual Families 2test2` validated `1052`
+  active/restore asset patch records with no missing/error entries. The
+  portable patcher folder contains `2949` payload files.

@@ -883,3 +883,22 @@
   `C:\Users\...` paths.
 - Verified the B140 patcher with an all-settings dry run against the workspace
   vanilla install; all `1052` active/restore asset records validated.
+
+## B141 - Behavior Guard and Flea Market Retarget
+
+- Guards Behavior Patch label variants behind the native behavior start result
+  by comparing the villager action label at `CVillager+0x1BBA8` before and
+  after each stock `CBehavior::*` call. This keeps stock shower, bathroom sink,
+  grooming, age, object, and targeting gates intact while still applying label
+  variants after accepted actions.
+- Adds a per-villager/per-wrapper label cache so praise/HUD refresh calls keep
+  the selected stock/custom behavior label instead of rerolling another
+  variation while the same native route is still active.
+- Corrects the Flea Market expansion from the category `0x03` On Sale cache to
+  the real category `0x0F` rotating-goodies path backed by `gGoodiesList`.
+- Normalizes Cheat Upgrade icons to transparent `90x90` payload images and
+  refreshes the bundled `Reset Achievements` trophy icon from the supplied
+  workspace-local copy.
+- Exports `Virtual-Families-2-Restoration-Addition-Patcher-B141` with `1052`
+  asset records, `2949` payload files, four B141 EXE overlays, and a clean
+  all-settings dry run.
