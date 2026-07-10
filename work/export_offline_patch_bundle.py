@@ -1121,7 +1121,7 @@ def generation_lock_asset_patches(
             "overwrite_existing": True,
             "note": (
                 "Standalone generation-lock icon required by the core store lock draw hook. "
-                f"Uses the explicit lock_{generation:02d}.png frame from {relative_posix(resolved_source_dir)}."
+                f"Uses the bundled explicit lock_{generation:02d}.png frame."
             ),
         })
 
@@ -1721,7 +1721,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "=" * (len(PATCHER_DISPLAY_NAME) + len(" Transparency Log")),
         "",
         f"Manifest name: {manifest.get('name')}",
-        f"Generated bundle folder: {bundle_dir}",
+        f"Generated bundle folder: {bundle_dir.name}",
         f"Source build folder: {source_build.get('build_dir')}",
         f"Source build manifest: {source_build.get('build_manifest')}",
         f"Patched EXE source: {source_build.get('patched_exe')}",
@@ -2104,12 +2104,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "description": "The patcher writes a separate clearly labeled modded game folder next to the user's vanilla folder by default.",
         },
         "source_build": {
-            "build_dir": str(build_dir),
-            "build_manifest": str(manifest_in) if manifest_in.is_file() else None,
-            "patched_exe": str(patched_exe),
-            "island_events_exe": str(island_events_exe) if island_events_exe else None,
-            "cheat_upgrades_exe": str(cheat_upgrades_exe) if cheat_upgrades_exe else None,
-            "island_events_cheat_upgrades_exe": str(island_events_cheat_upgrades_exe) if island_events_cheat_upgrades_exe else None,
+            "build_dir": build_dir.name,
+            "build_manifest": manifest_in.name if manifest_in.is_file() else None,
+            "patched_exe": patched_exe.name,
+            "island_events_exe": island_events_exe.name if island_events_exe else None,
+            "cheat_upgrades_exe": cheat_upgrades_exe.name if cheat_upgrades_exe else None,
+            "island_events_cheat_upgrades_exe": island_events_cheat_upgrades_exe.name if island_events_cheat_upgrades_exe else None,
             "build_manifest_keys": sorted(build_manifest_data) if build_manifest_data else [],
         },
         "settings": default_settings(

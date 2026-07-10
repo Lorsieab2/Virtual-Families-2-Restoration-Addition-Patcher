@@ -1699,3 +1699,7 @@
   then uses the existing `theGameState::SaveCurrentGame()` save path.
 - The row uses workspace-local `cheat_reset_achievements.png`, copied from the
   supplied trophy icon, so future patcher builds stay portable.
+- B139 patcher portability audit confirmed `1052` asset records and `1089`
+  payload references with no outside-payload source paths and no missing files
+  in either the output folder or ZIP. The exporter now writes source-build
+  provenance as filenames/build labels instead of absolute local paths.

@@ -829,6 +829,10 @@ B139 build/export notes:
 - The trophy icon is bundled as `Images/cheat_reset_achievements.png` in the
   generated build and patcher payload; future exports should not read this icon
   from any Downloads path.
+- The B139 patcher export is audited for portable metadata as well as portable
+  payloads. `manifest.json`, `Transparency Log.txt`, and active runner scripts
+  should not contain build-machine `C:\Users\...` or Downloads paths; provenance
+  fields use filenames/build labels only.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:
