@@ -1787,3 +1787,24 @@
 - The same patch adds a final completed-collection availability check for
   `CollectionCount(0x9E, true, true, true)`. Stock completed-family checks for
   `0x67` and `0x86` still short-circuit to success.
+
+## 2026-07-11 - Holiday Ornaments Collection Tooltip
+
+- `CCollectionScene::HandleMouse()` has a separate click-tooltip rarity-label
+  lookup in stack locals sized for the 60 stock collectibles. Appending page
+  `5` is not enough by itself: ornament indices `60-71` index three additional
+  four-item rarity buckets past the stock table.
+- B145 initializes the extra tooltip buckets before the stock lookup runs:
+  `0x9E-0xA1` uses string `0x751`, `0xA2-0xA5` uses `0x752`, and
+  `0xA6-0xA9` uses `0x753`. This preserves the stock five pages while keeping
+  the appended Holiday Ornament page from reading scratch stack space during
+  click/tooltip handling.
+
+## 2026-07-11 - Patcher Overlay Assets
+
+- `work/export_offline_patch_bundle.py` cannot rely only on the core build's
+  `patch-manifest.json` for assets that belong to optional EXE overlays. The
+  Holiday Ornaments art is generated in the Holiday overlay build, so B145
+  exports overlay assets whose `setting_for_asset()` resolves to
+  `holiday_ornaments_collection` from the `--holiday-ornaments-exe` build
+  folder and keeps those records gated behind that setting.

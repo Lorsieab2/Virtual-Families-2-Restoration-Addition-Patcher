@@ -15,7 +15,7 @@ import re
 import shutil
 import struct
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 SOURCE_DIR = Path(__file__).resolve().parent
@@ -731,6 +731,64 @@ def target_file_record(
     return record
 
 
+def load_target_identity_from_manifest(manifest_path: Path, target_exe_name: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Load reusable EXE validation metadata from a previously exported manifest."""
+    manifest = load_json(manifest_path)
+    for row in manifest.get("target_files", []):
+        if row.get("path") != target_exe_name:
+            continue
+        if row.get("pe_structures"):
+            structures = row["pe_structures"]
+            return (
+                {
+                    "path": target_exe_name,
+                    "note": "Verified vanilla VF2 PC executable by accepted PE layout reused from a bundled patcher manifest.",
+                    "pe_structures": structures,
+                },
+                {"expected_target_pe_structures": structures},
+            )
+        if row.get("sha256") and row.get("size") is not None:
+            return (
+                {
+                    "path": target_exe_name,
+                    "note": "Verified vanilla VF2 PC executable by exact SHA-256 and file size reused from a bundled patcher manifest.",
+                    "sha256": row["sha256"],
+                    "size": row["size"],
+                },
+                {
+                    "expected_target_sha256": row["sha256"],
+                    "expected_target_size": row["size"],
+                },
+            )
+    for row in manifest.get("asset_patches", []):
+        if row.get("file_path") != target_exe_name:
+            continue
+        if row.get("expected_target_pe_structures"):
+            structures = row["expected_target_pe_structures"]
+            return (
+                {
+                    "path": target_exe_name,
+                    "note": "Verified vanilla VF2 PC executable by accepted PE layout reused from a bundled patcher manifest.",
+                    "pe_structures": structures,
+                },
+                {"expected_target_pe_structures": structures},
+            )
+        if row.get("expected_target_sha256") and row.get("expected_target_size") is not None:
+            return (
+                {
+                    "path": target_exe_name,
+                    "note": "Verified vanilla VF2 PC executable by exact SHA-256 and file size reused from a bundled patcher manifest.",
+                    "sha256": row["expected_target_sha256"],
+                    "size": row["expected_target_size"],
+                },
+                {
+                    "expected_target_sha256": row["expected_target_sha256"],
+                    "expected_target_size": row["expected_target_size"],
+                },
+            )
+    raise ValueError(f"No reusable target identity for {target_exe_name!r} found in {manifest_path}")
+
+
 def build_byte_patches(vanilla_exe: Path, patched_exe: Path, target_exe_name: str) -> list[dict[str, Any]]:
     original = vanilla_exe.read_bytes()
     replacement = patched_exe.read_bytes()
@@ -943,7 +1001,12 @@ def is_full_payload_candidate(rel_path: Path) -> bool:
     return False
 
 
-def iter_candidate_assets(build_dir: Path, manifest_data: dict[str, Any], asset_mode: str) -> list[Path]:
+def iter_candidate_assets(
+    build_dir: Path,
+    manifest_data: dict[str, Any],
+    asset_mode: str,
+    asset_filter: Callable[[Path], bool] | None = None,
+) -> list[Path]:
     if asset_mode == "full":
         paths: list[Path] = []
         patched_exe_candidates = {name.lower() for name in PATCHED_EXE_NAMES}
@@ -957,6 +1020,8 @@ def iter_candidate_assets(build_dir: Path, manifest_data: dict[str, Any], asset_
             if len(rel.parts) == 1 and rel.name.lower() in patched_exe_candidates:
                 continue
             if not is_full_payload_candidate(rel):
+                continue
+            if asset_filter is not None and not asset_filter(rel):
                 continue
             paths.append(path)
         return sorted(paths)
@@ -976,7 +1041,10 @@ def iter_candidate_assets(build_dir: Path, manifest_data: dict[str, Any], asset_
             for path in root.rglob("*"):
                 if not path.is_file():
                     continue
-                if allowed_paths is not None and path.relative_to(build_dir) not in allowed_paths:
+                rel = path.relative_to(build_dir)
+                if allowed_paths is not None and rel not in allowed_paths:
+                    continue
+                if asset_filter is not None and not asset_filter(rel):
                     continue
                 paths.append(path)
     return sorted(paths)
@@ -989,10 +1057,11 @@ def export_asset_payloads(
     manifest_data: dict[str, Any],
     asset_mode: str,
     build_label: str,
+    asset_filter: Callable[[Path], bool] | None = None,
 ) -> list[dict[str, Any]]:
     payload_root = bundle_dir / "payload"
     asset_patches: list[dict[str, Any]] = []
-    candidate_assets = iter_candidate_assets(build_dir, manifest_data, asset_mode)
+    candidate_assets = iter_candidate_assets(build_dir, manifest_data, asset_mode, asset_filter)
     for dirname in SOURCE_ONLY_PAYLOAD_DIRS:
         source_root = build_dir / dirname
         if not source_root.is_dir():
@@ -1057,6 +1126,46 @@ def export_asset_payloads(
             record["overwrite_existing"] = True
         asset_patches.append(record)
     return asset_patches
+
+
+def export_setting_overlay_asset_payloads(
+    overlay_build_dir: Path,
+    base_payload: Path,
+    bundle_dir: Path,
+    setting_id: str,
+    asset_mode: str,
+    build_label: str,
+) -> list[dict[str, Any]]:
+    manifest_path = overlay_build_dir / "patch-manifest.json"
+    if not manifest_path.is_file():
+        return []
+    overlay_manifest = load_json(manifest_path)
+    records = export_asset_payloads(
+        overlay_build_dir,
+        base_payload,
+        bundle_dir,
+        overlay_manifest,
+        asset_mode,
+        build_label,
+        asset_filter=lambda rel: setting_for_asset(rel) == setting_id,
+    )
+    for record in records:
+        record["requires"] = asset_requires_for_setting(setting_id)
+        record["note"] = f"{setting_id} overlay asset payload for {record['file_path']}."
+    return records
+
+
+def append_unique_asset_records(asset_patches: list[dict[str, Any]], records: list[dict[str, Any]]) -> None:
+    existing = {
+        (row.get("file_path"), tuple(row.get("requires", [])))
+        for row in asset_patches
+    }
+    for record in records:
+        key = (record.get("file_path"), tuple(record.get("requires", [])))
+        if key in existing:
+            continue
+        asset_patches.append(record)
+        existing.add(key)
 
 
 def generation_lock_source_paths(source_dir: Path) -> dict[int, Path]:
@@ -1427,17 +1536,17 @@ def export_exe_replacement_payload(
     *,
     bundle_dir: Path,
     patched_exe: Path,
-    vanilla_exe: Path,
+    vanilla_exe: Path | None,
     accepted_exes: list[Path] | None,
     target_exe_name: str,
     build_label: str,
+    target_identity_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     output_exe_name = modded_exe_output_name(build_label)
     payload_rel = Path("payload") / output_exe_name
     payload_target = bundle_dir / payload_rel
     payload_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(patched_exe, payload_target)
-    pe_structures = accepted_vf2_pe_structures(vanilla_exe, accepted_exes)
     record = {
         "file_path": target_exe_name,
         "output_file_path": output_exe_name,
@@ -1448,9 +1557,18 @@ def export_exe_replacement_payload(
         "requires": ["core_executable"],
         "note": f"Create clearly named modded {build_label} executable after verifying the vanilla Virtual Families 2.exe.",
     }
-    if pe_structures:
-        record["expected_target_pe_structures"] = pe_structures
+    if target_identity_fields:
+        record.update(target_identity_fields)
+    elif vanilla_exe is not None:
+        pe_structures = accepted_vf2_pe_structures(vanilla_exe, accepted_exes)
+        if pe_structures:
+            record["expected_target_pe_structures"] = pe_structures
+        else:
+            record["expected_target_sha256"] = sha256_file(vanilla_exe)
+            record["expected_target_size"] = vanilla_exe.stat().st_size
     else:
+        raise ValueError("EXE replacement export requires --vanilla-exe or --target-identity-manifest.")
+    if "expected_target_pe_structures" not in record and "expected_target_sha256" not in record:
         record["expected_target_sha256"] = sha256_file(vanilla_exe)
         record["expected_target_size"] = vanilla_exe.stat().st_size
     return record
@@ -1913,6 +2031,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B142 patcher refresh: Holiday Ornaments can ship as a standalone experimental EXE overlay and as combined overlays with Island Events and Cheat Upgrades, so enabling multiple optional native patches no longer drops one overlay.",
             "- B143 game build: Flea Market Expansion now follows the expanded Clothing-section pattern. Category 0x0F returns the fixed 0x24-entry native gGoodiesList pool and reads gGoodiesList[index] directly instead of filtering through the rotating five-item cache.",
             "- B144 game build: Holiday Ornaments are now included in Mr. B/The Collector's CanFire offer and availability counts by adding base collectible 0x9E to the same CollectionCount passes used for the five stock collectible families.",
+            "- B145 game build: Holiday Ornaments now extend CCollectionScene::HandleMouse's stock 60-item tooltip rarity lookup with three ornament buckets, preventing the appended page from reading uninitialized stack locals during click/tooltip handling.",
+            "- B145 patcher refresh: The exporter can reuse target EXE validation metadata from a previous manifest through --target-identity-manifest, avoiding any dependency on a local vanilla EXE path when rebuilding a portable patcher package.",
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
             "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the optional Island Events setting is enabled.",
@@ -1970,8 +2090,15 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         if not accepted_exe.is_file():
             raise FileNotFoundError(f"Accepted vanilla EXE not found: {accepted_exe}")
     target_exe_name = args.target_exe_name or DEFAULT_EXE_NAME
-    if args.include_exe_replacement and vanilla_exe is None:
-        raise ValueError("--include-exe-replacement requires --vanilla-exe so the patcher can verify the original EXE.")
+    target_identity_record = None
+    target_identity_fields = None
+    if args.target_identity_manifest:
+        target_identity_record, target_identity_fields = load_target_identity_from_manifest(
+            Path(args.target_identity_manifest).resolve(),
+            target_exe_name,
+        )
+    if args.include_exe_replacement and vanilla_exe is None and target_identity_record is None:
+        raise ValueError("--include-exe-replacement requires --vanilla-exe or --target-identity-manifest.")
 
     if bundle_dir.exists() and any(bundle_dir.iterdir()) and not args.force:
         raise FileExistsError(f"Output bundle directory is not empty: {bundle_dir}")
@@ -2023,6 +2150,16 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 vanilla_size=vanilla_exe.stat().st_size,
                 patched_size=patched_exe.stat().st_size,
             )
+    elif target_identity_record:
+        target_files.append(target_identity_record)
+        native_status = native_patch_status(
+            "target_identity_reused",
+            reason=(
+                "No --vanilla-exe was supplied; target EXE validation metadata "
+                "was reused from --target-identity-manifest."
+            ),
+            patched_size=patched_exe.stat().st_size,
+        )
     else:
         native_status = native_patch_status(
             "missing_vanilla_exe",
@@ -2037,6 +2174,16 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         args.asset_mode,
         build_label,
     )
+    if holiday_ornaments_exe is not None:
+        holiday_asset_records = export_setting_overlay_asset_payloads(
+            holiday_ornaments_exe.parent,
+            base_payload,
+            bundle_dir,
+            "holiday_ornaments_collection",
+            args.asset_mode,
+            build_label,
+        )
+        append_unique_asset_records(asset_patches, holiday_asset_records)
     generation_locks_source = Path(args.generation_locks_dir).resolve() if args.generation_locks_dir else None
     forced_lock_records = generation_lock_asset_patches(build_dir, bundle_dir, generation_locks_source)
     if forced_lock_records:
@@ -2053,7 +2200,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     asset_patches.extend(optional_visual_asset_patches(bundle_dir))
     asset_patches.extend(optional_patch_asset_patches(bundle_dir))
     exe_replacement_record = None
-    if args.include_exe_replacement and vanilla_exe is not None:
+    if args.include_exe_replacement and (vanilla_exe is not None or target_identity_fields is not None):
         output_exe_name = modded_exe_output_name(build_label)
         exe_replacement_record = export_exe_replacement_payload(
             bundle_dir=bundle_dir,
@@ -2062,6 +2209,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             accepted_exes=accepted_vanilla_exes,
             target_exe_name=target_exe_name,
             build_label=build_label,
+            target_identity_fields=target_identity_fields,
         )
         asset_patches.insert(0, exe_replacement_record)
         overlay_specs = [
@@ -2203,6 +2351,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-payload", default=str(DEFAULT_BASE_PAYLOAD), help="Clean base asset payload used for diff filtering.")
     parser.add_argument("--vanilla-exe", help="Original vanilla VF2 EXE used for target hash and optional byte diff export.")
     parser.add_argument("--accepted-vanilla-exe", action="append", default=[], help="Additional official VF2 EXE whose PE layout should be accepted during install validation. Repeatable.")
+    parser.add_argument("--target-identity-manifest", help="Previously exported manifest.json to reuse target EXE validation metadata without reading a vanilla EXE.")
     parser.add_argument("--patched-exe", help="Patched EXE filename inside build dir. Auto-detected by default.")
     parser.add_argument("--island-events-exe", help="Optional EXE overlay to apply when island_events is enabled.")
     parser.add_argument("--cheat-upgrades-exe", help="Optional EXE overlay to apply when cheat_upgrades is enabled.")

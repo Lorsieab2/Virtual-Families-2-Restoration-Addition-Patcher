@@ -358,6 +358,9 @@ HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET = 12
 HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT = 0x60
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID = 0x54
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
+# CCollectionScene::HandleMouse keeps a 60-item stock rarity-label lookup in
+# stack locals. The appended ornament page needs three more four-item buckets.
+HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS = (0x751, 0x752, 0x753)
 ACHIEVEMENT_ROW_SIZE = 0x1C
 HOLIDAY_ORNAMENT_SPAWN_RECTS = [
     ("__xmm@0000030200000764000000b400000634", (0x634, 0x0B4, 0x764, 0x302)),
@@ -8340,6 +8343,17 @@ def patch_collection_scene_holiday_ornaments(manifest):
     if obj.buf[mouse_raw + 0x79 : mouse_raw + 0x7C] != b"\x83\xF8\x05":
         raise RuntimeError("Unexpected CCollectionScene::HandleMouse increment wrap bytes")
     obj.buf[mouse_raw + 0x7B] = HOLIDAY_ORNAMENT_COLLECTION_PAGE + 1
+    tooltip_insert = mouse_sym.value + 0x1EB
+    tooltip_expected = b"\x8B\x9C\x85\xC0\xFE\xFF\xFF"
+    if obj.buf[mouse_sec.raw_ptr + tooltip_insert : mouse_sec.raw_ptr + tooltip_insert + len(tooltip_expected)] != tooltip_expected:
+        raise RuntimeError("Unexpected CCollectionScene::HandleMouse tooltip rarity lookup bytes")
+    tooltip_payload = b"".join(
+        b"\xC7\x85"
+        + struct.pack("<i", -0x104 + index * 4)
+        + struct.pack("<I", label_id)
+        for index, label_id in enumerate(HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS)
+    )
+    obj.insert_section_bytes(mouse_sym.section, tooltip_insert, tooltip_payload)
 
     draw_sym = obj.symbol("?DrawScene@CCollectionScene@@MAEXXZ")
     draw_sec = obj.section(draw_sym.section)
@@ -8369,6 +8383,8 @@ def patch_collection_scene_holiday_ornaments(manifest):
             for index, (image_id, x, y) in enumerate(page_entries)
         ],
         "page_count_helper": "_VF2CollectionPageCount",
+        "tooltip_rarity_label_ids": [hex(label_id) for label_id in HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS],
+        "tooltip_rarity_note": "Extends the stock 60-item click tooltip rarity lookup by three four-item buckets for common, uncommon, and rare ornaments.",
         "object_size_note": "CCollectionScene stays 0x30 bytes; DrawScene asks helper for page counts instead of adding a sixth cached field.",
     }
 

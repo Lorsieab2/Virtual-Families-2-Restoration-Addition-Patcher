@@ -188,6 +188,71 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(settings_by_id["text_fixes"]["category"], "main")
             self.assertEqual(settings_by_id["optional_song_mods"]["category"], "optional")
 
+    def test_holiday_ornament_assets_export_from_overlay_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            holiday_build = tmp_path / "holiday"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            (holiday_build / "Images" / "CollectionOrnaments").mkdir(parents=True)
+            (holiday_build / "Images" / "Furniture").mkdir(parents=True)
+            (holiday_build / "Images" / "collectables_small.png").write_bytes(b"holiday sheet")
+            (holiday_build / "Images" / "collection-ornaments_background.png").write_bytes(b"holiday background")
+            (holiday_build / "Images" / "CollectionOrnaments" / "collection_christmasornament_blueball.png").write_bytes(b"blueball")
+            (holiday_build / "Images" / "Furniture" / "CandyCane.png").write_bytes(b"not part of ornament overlay")
+            (holiday_build / "Virtual Families 2 - Additive Mobile Furniture Pack Holiday Ornaments.exe").write_bytes(b"holiday exe")
+            (holiday_build / "patch-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "generated_assets": [
+                            {"path": "Images/collectables_small.png"},
+                            {"path": "collection-ornaments_background.png"},
+                            {"path": "CollectionOrnaments/collection_christmasornament_blueball.png"},
+                            {"path": "Furniture/CandyCane.png"},
+                        ]
+                    },
+                    indent=2,
+                ),
+                encoding="ascii",
+            )
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--holiday-ornaments-exe",
+                str(holiday_build / "Virtual Families 2 - Additive Mobile Furniture Pack Holiday Ornaments.exe"),
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            records_by_path = {}
+            for row in manifest["asset_patches"]:
+                records_by_path.setdefault(row["file_path"], []).append(row)
+
+            def find_requires(path, requires):
+                return next((row for row in records_by_path[path] if row["requires"] == requires), None)
+
+            self.assertIsNotNone(find_requires("Images/collectables_small.png", ["holiday_ornaments_collection"]))
+            self.assertIsNotNone(find_requires("Images/collection-ornaments_background.png", ["holiday_ornaments_collection"]))
+            self.assertIsNotNone(find_requires(
+                "Images/CollectionOrnaments/collection_christmasornament_blueball.png",
+                ["holiday_ornaments_collection"],
+            ))
+            self.assertNotIn("Images/Furniture/CandyCane.png", records_by_path)
+            self.assertTrue((out / "payload" / "Images" / "collectables_small.png").is_file())
+            self.assertTrue((out / "payload" / "Images" / "collection-ornaments_background.png").is_file())
+            self.assertTrue((out / "payload" / "Images" / "CollectionOrnaments" / "collection_christmasornament_blueball.png").is_file())
+            self.assertFalse((out / "payload" / "Images" / "Furniture" / "CandyCane.png").exists())
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_ornaments_collection"], 3)
+
     def test_exports_byte_patches_when_vanilla_exe_is_supplied(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -458,6 +523,63 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertNotIn("launch_gui_shortcut", manifest["export_summary"])
             self.assertNotIn("launcher", manifest["export_summary"])
             self.assertTrue(manifest["export_summary"]["exe_replacement"])
+
+    def test_exe_replacement_can_reuse_target_identity_manifest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            (build / "VF2-B145-Core.exe").write_bytes(b"patched-binary")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            identity_manifest = tmp_path / "identity.json"
+            identity_manifest.write_text(
+                json.dumps(
+                    {
+                        "target_files": [
+                            {
+                                "path": "Virtual Families 2.exe",
+                                "pe_structures": [
+                                    {
+                                        "format": "pe32-section-raw-v1",
+                                        "machine": "0x14c",
+                                        "pe_offset": "0x130",
+                                    }
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--patched-exe",
+                "VF2-B145-Core.exe",
+                "--target-identity-manifest",
+                str(identity_manifest),
+                "--asset-mode",
+                "additive",
+                "--include-exe-replacement",
+                "--name",
+                "B145",
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            core_exe = next(row for row in manifest["asset_patches"] if row["file_path"] == "Virtual Families 2.exe")
+            self.assertEqual(core_exe["output_file_path"], "Virtual Families 2 - Modded B145.exe")
+            self.assertEqual(core_exe["expected_target_pe_structures"][0]["pe_offset"], "0x130")
+            self.assertEqual(manifest["target_files"][0]["pe_structures"][0]["pe_offset"], "0x130")
+            self.assertEqual(manifest["export_summary"]["native_patch_status"]["status"], "target_identity_reused")
+            self.assertFalse(manifest["export_summary"]["requires_vanilla_exe_for_apply"])
 
     def test_exports_object_relative_native_patch_sources_as_metadata_only(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -133,3 +133,9 @@ same `CCollectableItem::CollectionCount()` offer passes used by the five stock
 families, plus one completed-family availability check for the ornament
 family. `CEventTheCollector::CalcAward(int)` is a stub on PC, so the
 offer/availability hook belongs in `CanFire()`.
+
+`CCollectionScene::HandleMouse()` also keeps its click-tooltip rarity labels in
+a stock 60-item stack-local lookup. B145 initializes three additional four-item
+buckets for ornament indices `60-71`, reusing the stock common/uncommon/rare
+string IDs `0x751`, `0x752`, and `0x753`; otherwise the sixth page can render
+but click/tooltip handling reads past the initialized stock table.

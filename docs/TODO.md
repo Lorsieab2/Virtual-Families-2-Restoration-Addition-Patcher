@@ -458,7 +458,9 @@
   choose `Sell`. Confirm the `0x9E-0xA9` collection flags clear and
   Ornamentologist achievement row `0x5F` resets. In B144+, confirm collected
   ornaments also contribute to Mr. B/The Collector's coin offer and can make
-  the event available when the stock collectible families are empty.
+  the event available when the stock collectible families are empty. In B145+,
+  click/hover each slot on the sixth Collections page and confirm the tooltip
+  path does not crash or show garbage rarity text.
 - Research: use the workspace-local `work/assets/TextAsset/` mirror as the
   source for future mobile furniture/map additions. Do not reference the
   original `Downloads\TextAsset` path in build or patcher code; copy any needed

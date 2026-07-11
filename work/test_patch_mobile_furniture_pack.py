@@ -1049,6 +1049,18 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             )
             self.assertEqual(values, expected)
             self.assertEqual(manifest["CollectionSceneHolidayOrnaments"]["page"], 5)
+            mouse_sym = obj.symbol("?HandleMouse@CCollectionScene@@UAE_NHUldwPoint@@@Z")
+            mouse_sec = obj.section(mouse_sym.section)
+            mouse_data = bytes(obj.buf[mouse_sec.raw_ptr + mouse_sym.value : mouse_sec.raw_ptr + mouse_sec.raw_size])
+            tooltip_payload = b"".join(
+                b"\xC7\x85" + struct.pack("<i", -0x104 + index * 4) + struct.pack("<I", label_id)
+                for index, label_id in enumerate(patcher.HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS)
+            )
+            self.assertIn(tooltip_payload, mouse_data)
+            self.assertEqual(
+                manifest["CollectionSceneHolidayOrnaments"]["tooltip_rarity_label_ids"],
+                ["0x751", "0x752", "0x753"],
+            )
 
         self.with_temp_patched_objs(["CollectionScene.obj"], run)
 
