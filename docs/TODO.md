@@ -459,3 +459,7 @@
   Ornamentologist achievement row `0x5F` resets. Follow-up research: add
   ornament base `0x9E` to `CEventTheCollector::CanFire()` availability/award
   counting so ornaments affect his coin offer like the stock five collections.
+- Research: use the workspace-local `work/assets/TextAsset/` mirror as the
+  source for future mobile furniture/map additions. Do not reference the
+  original `Downloads\TextAsset` path in build or patcher code; copy any needed
+  files from the workspace mirror into generated payloads.

@@ -1763,3 +1763,11 @@
   `Images/collectables_small.png`, `Images/collection-ornaments_background.png`,
   and all `Images/CollectionOrnaments/*` records without needing
   `mobile_furniture`.
+
+## 2026-07-10 - Mobile TextAsset Workspace Mirror
+
+- The user-supplied mobile `TextAsset` dump has been mirrored to
+  `work/assets/TextAsset/` so future furniture additions can use workspace-local
+  `.fmap`, `.asset`, `.atlas`, `.skel`, `.txt`, and `.json` material without
+  depending on `Downloads` or other outside paths. The mirrored set currently
+  contains `574` files, about `5.03 MB`.
