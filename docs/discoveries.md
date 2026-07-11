@@ -1850,3 +1850,14 @@
   rarity labels `0x751/0x752/0x753`, `Find`/`WasItemSpawned` range hooks,
   `CCollectable` observer registrations, and the `0x5F` Ornamentologist reset
   on the sell-all branch.
+
+## 2026-07-11 - Holiday Ornament Collection Page Counts
+
+- B149 tightens the Holiday Ornament validator around `CCollectionScene`.
+  `Activate(bool)` still caches only the five stock collection counts at
+  `this+0x18..0x28` and leaves `this+0x2C` as the hover-state field.
+- The sixth page count is therefore intentionally live-routed in
+  `DrawScene()` through `_VF2CollectionPageCount(page)`. The helper maps pages
+  to bases `{0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E}`, so page `5` displays the
+  `0x9E-0xA9` Ornament family without changing the `CCollectionScene` object
+  size.

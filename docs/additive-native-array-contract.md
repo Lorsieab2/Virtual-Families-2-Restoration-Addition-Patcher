@@ -167,3 +167,12 @@ verifies the appended `gCollectable` page, `_VF2CollectionPageCount` draw
 helper, tooltip rarity labels, `Find`/`WasItemSpawned` hooks, observer
 registrations, and Ornamentologist row `0x5F` reset before a Holiday Ornaments
 overlay can be packaged.
+
+B149 extends that guard to the collection-page count route. Stock
+`CCollectionScene::Activate(bool)` remains a five-count cache for bases
+`0x4F`, `0x5B`, `0x67`, `0x86`, and `0x92`; `this+0x2C` is still the hover
+state, not a sixth counter. `CCollectionScene::DrawScene()` must call
+`_VF2CollectionPageCount(page)` instead of indexing the five-entry cache. The
+helper's page-start table is `{0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E}`, so the
+sixth page can report the Ornament family count without growing
+`CCollectionScene`.

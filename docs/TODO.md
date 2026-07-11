@@ -109,7 +109,7 @@
 - Translate B93 `settings_menu.evict.constructor_patches` from object/function-
   relative offsets into final vanilla EXE file offsets before moving them from
   `native_patch_sources` into applyable offline patcher `patches[]` records.
-- In-game test B148 Holiday Ornaments: open Collections, verify six pages/72
+- In-game test B149 Holiday Ornaments: open Collections, verify six pages/72
   collectibles with the Ornaments page last, confirm yard ornaments can be
   picked up and removed, confirm collection counts and the Ornamentologist goal
   advance, verify Lucky Rock odds still affect the new collection through the
@@ -121,7 +121,9 @@
   native collection-state/save/reset span, appended sixth-page table,
   page-count helper, pickup-dispatch hooks, observer registrations, tooltip
   buckets, and Mr. B sell-all `0x5F` reset before packaging the experimental
-  overlay.
+  overlay. B149 additionally proves `Activate()` still uses the five stock
+  cached counters while `DrawScene()` routes page-count display through
+  `_VF2CollectionPageCount(page)` with page `5 -> 0x9E`.
 - In-game test B77 Playhouse spontaneous behavior: verify children can still
   spontaneously use the Playhouse, adults do not select Playhouse
   spontaneously, and manual furniture/drop behavior remains unchanged.

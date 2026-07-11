@@ -353,6 +353,7 @@ HOLIDAY_ORNAMENT_COLLECTABLE_END = 0xA9
 HOLIDAY_ORNAMENT_COLLECTION_PAGE = 5
 HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT = 12
 HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT = HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT + 1
+HOLIDAY_ORNAMENT_COLLECTION_PAGE_STARTS = (0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E)
 HOLIDAY_ORNAMENT_ACHIEVEMENT_ID = 0x5F
 HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET = 12
 HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT = 0x60
@@ -4564,6 +4565,34 @@ def validate_holiday_ornament_native_contract(manifest):
         errors.append("CCollectableItem::WasItemSpawned missing Holiday Ornament base-to-variant range handling")
 
     collection_scene_obj = CoffObject(PATCHED / "CollectionScene.obj")
+    activate_data, _activate_sym, _activate_sec = function_bytes(
+        collection_scene_obj, "?Activate@CCollectionScene@@MAEX_N@Z"
+    )
+    activate_stock_start_needles = (
+        b"\x6A\x4F",
+        b"\x6A\x5B",
+        b"\x6A\x67",
+        b"\x68\x86\x00\x00\x00",
+        b"\x68\x92\x00\x00\x00",
+    )
+    activate_stock_store_needles = (
+        b"\x89\x46\x18",
+        b"\x89\x46\x1C",
+        b"\x89\x46\x20",
+        b"\x89\x46\x24",
+        b"\x89\x46\x28",
+    )
+    for needle in activate_stock_start_needles:
+        if needle not in activate_data:
+            errors.append("CCollectionScene::Activate missing a stock collection-family count seed")
+    for needle in activate_stock_store_needles:
+        if needle not in activate_data:
+            errors.append("CCollectionScene::Activate missing a stock collection-family count cache store")
+    if b"\x89\x46\x2C" in activate_data:
+        errors.append("CCollectionScene::Activate appears to cache a sixth count over the hover-state field")
+    if b"\xC7\x46\x2C\xFF\xFF\xFF\xFF" not in activate_data:
+        errors.append("CCollectionScene::Activate no longer resets the hover-state field at this+0x2C")
+
     g_collectable = collection_scene_obj.symbol("?gCollectable@@3PAW4ECarrying@@A")
     g_collectable_sec = collection_scene_obj.section(g_collectable.section)
     ornament_table_raw = (
@@ -4600,8 +4629,10 @@ def validate_holiday_ornament_native_contract(manifest):
     draw_data, draw_sym, draw_sec = function_bytes(
         collection_scene_obj, "?DrawScene@CCollectionScene@@MAEXXZ"
     )
-    if draw_data[0x17D : 0x185] != b"\xFF\x77\x14\xE8\x00\x00\x00\x00":
+    if draw_data[0x17D : 0x186] != b"\xFF\x77\x14\xE8\x00\x00\x00\x00\x50":
         errors.append("CCollectionScene::DrawScene missing Holiday Ornament page-count helper call")
+    if b"\xFF\x74\x87\x18" in draw_data:
+        errors.append("CCollectionScene::DrawScene still uses the five-entry cached count array")
     helper_symbol = collection_scene_obj.symbol_by_name.get("_VF2CollectionPageCount")
     if helper_symbol is None:
         errors.append("CCollectionScene.obj has no _VF2CollectionPageCount helper import")
@@ -4612,6 +4643,12 @@ def validate_holiday_ornament_native_contract(manifest):
         ]
         if not any(va == draw_sym.value + 0x181 and idx == helper_symbol.index for va, idx, _typ in relocs):
             errors.append("CCollectionScene::DrawScene helper call has no relocation to _VF2CollectionPageCount")
+    helper_source = PATCHED / "vf2_special_upgrade_effects.cpp"
+    helper_starts_literal = "static const int starts[6] = {0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E};"
+    if not helper_source.is_file():
+        errors.append("vf2_special_upgrade_effects.cpp missing _VF2CollectionPageCount source")
+    elif helper_starts_literal not in helper_source.read_text(encoding="ascii"):
+        errors.append("VF2CollectionPageCount helper source no longer maps page 5 to Holiday Ornaments base 0x9E")
 
     collectable_observer = manifest.get("CollectableHolidayOrnamentObservers", {})
     observer_items = collectable_observer.get("registered_collectables", [])
@@ -4644,8 +4681,10 @@ def validate_holiday_ornament_native_contract(manifest):
         },
         "collection_scene": {
             "page": HOLIDAY_ORNAMENT_COLLECTION_PAGE,
+            "page_starts": [hex(value) for value in HOLIDAY_ORNAMENT_COLLECTION_PAGE_STARTS],
             "g_collectable_values": [hex(value) for value in ornament_values],
             "page_count_helper": "_VF2CollectionPageCount",
+            "page_count_route": "DrawScene calls _VF2CollectionPageCount(page); Activate keeps five stock cached counts and this+0x2C as hover state.",
             "tooltip_rarity_label_ids": [hex(value) for value in HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS],
         },
         "pickup_dispatch": {
@@ -8709,6 +8748,7 @@ def patch_collection_scene_holiday_ornaments(manifest):
     manifest["CollectionSceneHolidayOrnaments"] = {
         "status": "patched",
         "page": HOLIDAY_ORNAMENT_COLLECTION_PAGE,
+        "page_starts": [hex(value) for value in HOLIDAY_ORNAMENT_COLLECTION_PAGE_STARTS],
         "collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
         "title_string": hex(holiday_ornament_collection_title_string_id()),
         "background_image_id": hex(holiday_ornament_collection_background_image_id(holiday_desc_count)),
@@ -8721,6 +8761,7 @@ def patch_collection_scene_holiday_ornaments(manifest):
             for index, (image_id, x, y) in enumerate(page_entries)
         ],
         "page_count_helper": "_VF2CollectionPageCount",
+        "page_count_route": "DrawScene calls _VF2CollectionPageCount(page) instead of reading the five-entry stock count cache.",
         "tooltip_rarity_label_ids": [hex(label_id) for label_id in HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS],
         "tooltip_rarity_note": "Extends the stock 60-item click tooltip rarity lookup by three four-item buckets for common, uncommon, and rare ornaments.",
         "object_size_note": "CCollectionScene stays 0x30 bytes; DrawScene asks helper for page counts instead of adding a sixth cached field.",

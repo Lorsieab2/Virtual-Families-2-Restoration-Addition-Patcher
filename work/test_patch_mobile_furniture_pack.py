@@ -1088,6 +1088,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             )
             self.assertEqual(values, expected)
             self.assertEqual(manifest["CollectionSceneHolidayOrnaments"]["page"], 5)
+            self.assertEqual(
+                manifest["CollectionSceneHolidayOrnaments"]["page_starts"],
+                ["0x4f", "0x5b", "0x67", "0x86", "0x92", "0x9e"],
+            )
             mouse_sym = obj.symbol("?HandleMouse@CCollectionScene@@UAE_NHUldwPoint@@@Z")
             mouse_sec = obj.section(mouse_sym.section)
             mouse_data = bytes(obj.buf[mouse_sec.raw_ptr + mouse_sym.value : mouse_sec.raw_ptr + mouse_sec.raw_size])
@@ -1100,6 +1104,16 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 manifest["CollectionSceneHolidayOrnaments"]["tooltip_rarity_label_ids"],
                 ["0x751", "0x752", "0x753"],
             )
+            draw_sym = obj.symbol("?DrawScene@CCollectionScene@@MAEXXZ")
+            draw_sec = obj.section(draw_sym.section)
+            draw_data = bytes(obj.buf[draw_sec.raw_ptr + draw_sym.value : draw_sec.raw_ptr + draw_sec.raw_size])
+            self.assertEqual(draw_data[0x17D : 0x186], b"\xFF\x77\x14\xE8\x00\x00\x00\x00\x50")
+            self.assertNotIn(b"\xFF\x74\x87\x18", draw_data)
+            activate_sym = obj.symbol("?Activate@CCollectionScene@@MAEX_N@Z")
+            activate_sec = obj.section(activate_sym.section)
+            activate_data = bytes(obj.buf[activate_sec.raw_ptr + activate_sym.value : activate_sec.raw_ptr + activate_sec.raw_size])
+            self.assertIn(b"\xC7\x46\x2C\xFF\xFF\xFF\xFF", activate_data)
+            self.assertNotIn(b"\x89\x46\x2C", activate_data)
 
         self.with_temp_patched_objs(["CollectionScene.obj"], run)
 
@@ -1206,6 +1220,40 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             self.assertEqual(meta["achievement_reset"], "0x5f")
 
         self.with_temp_patched_objs(["IslandEvents.obj"], run)
+
+    def test_holiday_ornament_native_contract_validates_sixth_page_count_route(self):
+        def run(temp_root):
+            manifest = {}
+            (temp_root / "vf2_special_upgrade_effects.cpp").write_text(
+                "extern \"C\" int __cdecl VF2CollectionPageCount(int page) {\n"
+                "    static const int starts[6] = {0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E};\n"
+                "    return starts[page];\n"
+                "}\n",
+                encoding="ascii",
+            )
+
+            patcher.patch_achievement_holiday_ornaments(manifest)
+            patcher.patch_collectable_item_holiday_ornaments(manifest)
+            patcher.patch_collectable_holiday_ornament_observers(manifest)
+            patcher.patch_collection_scene_holiday_ornaments(manifest)
+            patcher.patch_the_collector_holiday_ornaments(manifest)
+            patcher.validate_holiday_ornament_native_contract(manifest)
+
+            scene_contract = manifest["holiday_ornament_native_contract"]["collection_scene"]
+            self.assertEqual(scene_contract["page_starts"][-1], "0x9e")
+            self.assertIn("_VF2CollectionPageCount", scene_contract["page_count_route"])
+
+        self.with_temp_patched_objs(
+            [
+                "Achievement.obj",
+                "AchievementsScene.obj",
+                "CollectableItem.obj",
+                "Collectable.obj",
+                "CollectionScene.obj",
+                "IslandEvents.obj",
+            ],
+            run,
+        )
 
 
 class RuntimePayloadContractTests(unittest.TestCase):
