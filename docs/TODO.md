@@ -109,11 +109,12 @@
 - Translate B93 `settings_menu.evict.constructor_patches` from object/function-
   relative offsets into final vanilla EXE file offsets before moving them from
   `native_patch_sources` into applyable offline patcher `patches[]` records.
-- In-game test B146 Holiday Ornaments: open Collections, verify six pages/72
+- In-game test B147 Holiday Ornaments: open Collections, verify six pages/72
   collectibles with the Ornaments page last, confirm yard ornaments can be
   picked up and removed, confirm collection counts and the Ornamentologist goal
   advance, verify Lucky Rock odds still affect the new collection through the
-  stock `CCollectableItem::Update/Add` path, and verify save/load persistence.
+  stock `CCollectableItem::Update/Add` path, verify ornaments still draw when
+  `Glowing Collectibles` is enabled, and verify save/load persistence.
   Static mobile comparison now confirms row `0x5F` target `12`, Goal Collector
   target `13`, rarity ranges, the four full-yard `0x9E` spawn rectangles, and
   the small-sheet frame mapping `0x9E-0xA9 => 79-90`.

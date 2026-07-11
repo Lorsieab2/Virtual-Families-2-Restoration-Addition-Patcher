@@ -1044,6 +1044,31 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         self.assertEqual(contract["frame_count"], 96)
         self.assertEqual(contract["engine_frame_range"], [79, 90])
         self.assertEqual(contract["engine_index_formula"], "ECarrying - 0x4F")
+        self.assertEqual(
+            [row["frame"] for row in contract["visible_engine_frames"]],
+            list(range(79, 91)),
+        )
+        self.assertTrue(
+            all(row["alpha_pixels"] > 0 for row in contract["visible_engine_frames"])
+        )
+
+    def test_holiday_ornament_all_payload_sheets_keep_visible_engine_frames(self):
+        from PIL import Image
+
+        for source in (
+            patcher.HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE,
+            patcher.HOLIDAY_ORNAMENT_GLOWING_COLLECTABLES_SOURCE,
+        ):
+            with self.subTest(source=source):
+                with Image.open(source) as image:
+                    contract = patcher.holiday_ornament_small_collectables_sheet_contract(
+                        image.convert("RGBA")
+                    )
+                self.assertEqual(contract["grid"], [6, 16])
+                self.assertEqual(contract["engine_frame_range"], [79, 90])
+                self.assertTrue(
+                    all(row["alpha_pixels"] > 0 for row in contract["visible_engine_frames"])
+                )
 
     def test_collection_scene_table_extends_to_mobile_ornament_page(self):
         def run(temp_root):

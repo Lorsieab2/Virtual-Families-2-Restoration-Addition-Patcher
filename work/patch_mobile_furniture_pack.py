@@ -379,6 +379,9 @@ HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR = ROOT / "work" / "vf2_obb" / "assets" / "tp22
 HOLIDAY_ORNAMENT_BACKGROUND_FILENAME = "collection-ornaments_background.png"
 HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR = ROOT / "work" / "assets" / "holiday_collectibles"
 HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE = HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / "collectables_small.png"
+HOLIDAY_ORNAMENT_GLOWING_COLLECTABLES_SOURCE = (
+    ROOT / "patcher_assets" / "optional_patches" / "glowing_collectibles" / "collectables_small.png"
+)
 HOLIDAY_ORNAMENT_FRAME_SOURCE = "Collection_ChristmasOrnament_Frame.png"
 HOLIDAY_ORNAMENT_IMAGE_SCALE = 1024.0 / 800.0
 HOLIDAY_ORNAMENT_ATLAS_RECORDS = [
@@ -4351,6 +4354,36 @@ def holiday_ornament_small_collectables_sheet_contract(image):
             f"engine frame range {HOLIDAY_ORNAMENT_SMALL_FRAME_START}-"
             f"{HOLIDAY_ORNAMENT_SMALL_FRAME_END}"
         )
+    visible_frames = []
+    missing_frames = []
+    alpha = image.convert("RGBA").getchannel("A")
+    for frame in range(HOLIDAY_ORNAMENT_SMALL_FRAME_START, HOLIDAY_ORNAMENT_SMALL_FRAME_END + 1):
+        col = frame % columns
+        row = frame // columns
+        box = (
+            col * COLLECTABLE_SMALL_FRAME_WIDTH,
+            row * COLLECTABLE_SMALL_FRAME_HEIGHT,
+            (col + 1) * COLLECTABLE_SMALL_FRAME_WIDTH,
+            (row + 1) * COLLECTABLE_SMALL_FRAME_HEIGHT,
+        )
+        frame_alpha = alpha.crop(box)
+        bbox = frame_alpha.getbbox()
+        if bbox is None:
+            missing_frames.append(frame)
+            visible_frames.append({"frame": frame, "bbox": None, "alpha_pixels": 0})
+            continue
+        histogram = frame_alpha.histogram()
+        alpha_pixels = (COLLECTABLE_SMALL_FRAME_WIDTH * COLLECTABLE_SMALL_FRAME_HEIGHT) - histogram[0]
+        visible_frames.append({
+            "frame": frame,
+            "bbox": list(bbox),
+            "alpha_pixels": alpha_pixels,
+        })
+    if missing_frames:
+        raise RuntimeError(
+            "Holiday Ornament collectables_small.png has blank engine frames: "
+            + ", ".join(str(frame) for frame in missing_frames)
+        )
     return {
         "cell_size": [COLLECTABLE_SMALL_FRAME_WIDTH, COLLECTABLE_SMALL_FRAME_HEIGHT],
         "grid": [columns, rows],
@@ -4360,6 +4393,62 @@ def holiday_ornament_small_collectables_sheet_contract(image):
             HOLIDAY_ORNAMENT_SMALL_FRAME_END,
         ],
         "engine_index_formula": "ECarrying - 0x4F",
+        "visible_engine_frames": visible_frames,
+    }
+
+
+def validate_holiday_ornament_collectables_small_variants(manifest):
+    from PIL import Image
+
+    variants = [
+        {
+            "id": "holiday_ornaments_collection",
+            "path": OUT / "Images" / "collectables_small.png",
+            "note": "Primary Holiday Ornament yard icon sheet generated into the modded game folder.",
+        },
+        {
+            "id": "glowing_collectibles",
+            "path": HOLIDAY_ORNAMENT_GLOWING_COLLECTABLES_SOURCE,
+            "note": "Optional Glowing Collectibles payload sheet that can replace Images/collectables_small.png.",
+        },
+    ]
+    contracts = []
+    missing = []
+    errors = []
+    for variant in variants:
+        path = variant["path"]
+        if not path.is_file():
+            missing.append({"id": variant["id"], "path": str(path)})
+            continue
+        try:
+            with Image.open(path) as image:
+                contract = holiday_ornament_small_collectables_sheet_contract(image.convert("RGBA"))
+        except Exception as exc:
+            errors.append(f"{variant['id']} ({path}): {exc}")
+            continue
+        contracts.append({
+            "id": variant["id"],
+            "path": str(path),
+            "note": variant["note"],
+            **contract,
+        })
+    if missing:
+        errors.extend(
+            f"{row['id']} missing required collectables_small.png variant: {row['path']}"
+            for row in missing
+        )
+    if errors:
+        raise RuntimeError(
+            "Holiday Ornament collectables_small.png variant contract failed:\n- "
+            + "\n- ".join(errors)
+        )
+    manifest["holiday_ornament_collectables_small_variants"] = {
+        "status": "validated",
+        "reason": (
+            "Every bundled sheet that can become Images/collectables_small.png "
+            "must keep visible engine frames 79-90 for Holiday Ornaments."
+        ),
+        "variants": contracts,
     }
 
 
@@ -11726,6 +11815,7 @@ def main():
     sync_visible_special_upgrade_icon_art(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:
         sync_holiday_ornament_collection_art(manifest)
+        validate_holiday_ornament_collectables_small_variants(manifest)
     else:
         manifest["holiday_ornament_collection_art"] = {
             "enabled": False,

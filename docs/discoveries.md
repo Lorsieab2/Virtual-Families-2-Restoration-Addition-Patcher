@@ -1821,3 +1821,15 @@
   frames `79-90`. B146 validates the workspace-local `240x640` sheet as a
   `40x40`, six-column grid with enough frames before exporting the portable
   payload.
+
+## 2026-07-11 - Holiday Ornament Small-Sheet Variants
+
+- `Glowing Collectibles` is an optional patcher asset swap for the same runtime
+  target, `Images/collectables_small.png`, used by Holiday Ornament yard
+  drawing. B147 validates both the generated Holiday sheet and
+  `patcher_assets/optional_patches/glowing_collectibles/collectables_small.png`
+  against the `ECarrying - 0x4F` frame contract.
+- The guard requires nonblank alpha in frames `79-90`, not only a matching
+  `240x640`/six-column sheet size. This prevents a future payload cleanup from
+  shipping a valid-size visual replacement that silently removes the ornament
+  pickup icons.

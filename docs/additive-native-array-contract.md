@@ -151,3 +151,9 @@ but click/tooltip handling reads past the initialized stock table.
 small-sheet frames `79-90`. The portable source sheet is validated as a stock
 `40x40`, six-column grid with 96 frames, so the engine can draw the appended
 ornaments without referencing any outside asset folder.
+
+B147 also validates the optional Glowing Collectibles replacement sheet against
+the same frame contract. Any payload that can replace
+`Images/collectables_small.png` must preserve visible, nonblank cells for
+frames `79-90`, because the engine does not know which optional visual sheet is
+active when it draws `0x9E-0xA9`.
