@@ -1776,3 +1776,14 @@
   `.fmap`, `.asset`, `.atlas`, `.skel`, `.txt`, and `.json` material without
   depending on `Downloads` or other outside paths. The mirrored set currently
   contains `574` files, about `5.03 MB`.
+
+## 2026-07-11 - Holiday Ornaments Collector Count
+
+- `CEventTheCollector::CanFire()` is where Mr. B/The Collector both calculates
+  the coin offer and decides if the event can fire; `CalcAward(int)` is a stub.
+- B144 extends the three stock `CCollectableItem::CollectionCount()` offer
+  passes with base collectible `0x9E`, matching the appended Holiday Ornament
+  family `0x9E-0xA9` without adding a separate scheduler or counter.
+- The same patch adds a final completed-collection availability check for
+  `CollectionCount(0x9E, true, true, true)`. Stock completed-family checks for
+  `0x67` and `0x86` still short-circuit to success.

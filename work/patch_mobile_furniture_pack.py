@@ -8375,6 +8375,85 @@ def patch_collection_scene_holiday_ornaments(manifest):
 
 def patch_the_collector_holiday_ornaments(manifest):
     obj = CoffObject(PATCHED / "IslandEvents.obj")
+
+    canfire_sym = obj.symbol("?CanFire@CEventTheCollector@@UAE_NXZ")
+    canfire_sec_index = canfire_sym.section
+    collectable_item_sym = obj.symbol("?CollectableItem@@3VCCollectableItem@@A").index
+    collection_count_sym = obj.symbol("?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z").index
+
+    def push_byte(value):
+        return bytes([0x6A, value & 0xFF])
+
+    def count_payload(arg3, arg2, arg1, add_to_esi=True):
+        payload = bytearray()
+        payload += push_byte(arg3)
+        payload += push_byte(arg2)
+        payload += push_byte(arg1)
+        payload += b"\x68" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+        payload += b"\xB9\x00\x00\x00\x00"
+        mov_reloc = len(payload) - 4
+        payload += b"\xE8\x00\x00\x00\x00"
+        call_reloc = len(payload) - 4
+        if add_to_esi:
+            payload += b"\x03\xF0"
+        return bytes(payload), mov_reloc, call_reloc
+
+    inserted = []
+
+    def current_off(original_off):
+        return original_off + sum(length for at, length in inserted if at <= original_off)
+
+    canfire_offer_patches = []
+    for original_off, args, expected, note in (
+        (0x08E, (0, 0, 1), b"\xB9\x00\x00\x00\x00", "stock first rarity/offer pass"),
+        (0x101, (0, 1, 0), b"\xB9\x00\x00\x00\x00", "stock second rarity/offer pass"),
+        (0x177, (1, 0, 0), b"\x6B\xC6\x64", "stock third rarity/offer pass"),
+    ):
+        insert_off = current_off(original_off)
+        canfire_sec = obj.section(canfire_sec_index)
+        if obj.buf[canfire_sec.raw_ptr + insert_off : canfire_sec.raw_ptr + insert_off + len(expected)] != expected:
+            raise RuntimeError(f"Unexpected CEventTheCollector::CanFire ornament count insertion site at {original_off:#x}")
+        payload, mov_reloc, call_reloc = count_payload(*args)
+        obj.insert_section_bytes(canfire_sec_index, insert_off, payload)
+        obj.append_relocation(canfire_sec_index, insert_off + mov_reloc, collectable_item_sym)
+        obj.append_relocation(canfire_sec_index, insert_off + call_reloc, collection_count_sym, IMAGE_REL_I386_REL32)
+        inserted.append((original_off, len(payload)))
+        canfire_offer_patches.append({
+            "insert_offset": hex(original_off),
+            "collection_count_args": [hex(HOLIDAY_ORNAMENT_COLLECTABLE_START), *args],
+            "note": note,
+        })
+
+    availability_off = current_off(0x1B4)
+    canfire_sec = obj.section(canfire_sec_index)
+    expected_true = b"\xB0\x01\x8B\xE5\x5D\xC3"
+    if obj.buf[canfire_sec.raw_ptr + availability_off : canfire_sec.raw_ptr + availability_off + len(expected_true)] != expected_true:
+        raise RuntimeError("Unexpected CEventTheCollector::CanFire ornament availability insertion site")
+    availability_payload, mov_reloc, call_reloc = count_payload(1, 1, 1, add_to_esi=False)
+    availability_payload += b"\x85\xC0" + b"\x74\x06"
+    obj.insert_section_bytes(canfire_sec_index, availability_off, availability_payload)
+    obj.append_relocation(canfire_sec_index, availability_off + mov_reloc, collectable_item_sym)
+    obj.append_relocation(canfire_sec_index, availability_off + call_reloc, collection_count_sym, IMAGE_REL_I386_REL32)
+    inserted.append((0x1B4, len(availability_payload)))
+
+    canfire_sec = obj.section(canfire_sec_index)
+    branch_patches = [
+        (0x184, 0x35 + len(availability_payload), "no target villager still exits false"),
+        (0x199, 0x75, 0x19 + len(availability_payload), "completed stock family still exits true"),
+        (0x1B2, 0x75, len(availability_payload), "empty stock families fall through to ornament availability"),
+    ]
+    no_villager_current = current_off(0x184)
+    if obj.buf[canfire_sec.raw_ptr + no_villager_current - 1] != 0x74:
+        raise RuntimeError("Unexpected CEventTheCollector::CanFire no-villager branch")
+    obj.buf[canfire_sec.raw_ptr + no_villager_current] = 0x35 + len(availability_payload)
+
+    for original_jump_off, opcode, rel, note in branch_patches[1:]:
+        jump_current = current_off(original_jump_off)
+        if obj.buf[canfire_sec.raw_ptr + jump_current] not in (0x74, 0x75):
+            raise RuntimeError(f"Unexpected CEventTheCollector::CanFire branch at {original_jump_off:#x}")
+        obj.buf[canfire_sec.raw_ptr + jump_current] = opcode
+        obj.buf[canfire_sec.raw_ptr + jump_current + 1] = rel
+
     impact_sym = obj.symbol("?ImpactGame@CEventTheCollector@@UAEXH@Z")
     impact_sec = obj.section(impact_sym.section)
     insert_off = impact_sym.value + 0x5D
@@ -8399,12 +8478,23 @@ def patch_the_collector_holiday_ornaments(manifest):
 
     manifest["TheCollectorHolidayOrnaments"] = {
         "status": "patched",
-        "function": "?ImpactGame@CEventTheCollector@@UAEXH@Z",
-        "insert_offset": hex(insert_off),
+        "impact_function": "?ImpactGame@CEventTheCollector@@UAEXH@Z",
+        "impact_insert_offset": hex(insert_off),
+        "can_fire_function": "?CanFire@CEventTheCollector@@UAE_NXZ",
+        "can_fire_offer_patches": canfire_offer_patches,
+        "can_fire_availability_patch": {
+            "insert_offset": "0x1b4",
+            "collection_count_args": [hex(HOLIDAY_ORNAMENT_COLLECTABLE_START), 1, 1, 1],
+            "branch_adjustments": [
+                {"offset": hex(0x184), "note": "no target villager still exits false"},
+                {"offset": hex(0x199), "note": "completed stock family still exits true"},
+                {"offset": hex(0x1B2), "note": "empty stock families now test Holiday Ornaments before false"},
+            ],
+        },
         "sell_choice": 0,
         "collection_reset": "stock CCollectableItem::ResetCollection() clears the collection state table, including added 0x9E-0xA9 entries",
         "achievement_reset": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
-        "note": "Adds Ornamentologist progress reset to Mr. B/The Collector sell branch without changing the keep branch.",
+        "note": "Adds ornament base 0x9E to The Collector's offer/availability counts and resets Ornamentologist on the sell branch without changing the keep branch.",
     }
 
 

@@ -127,3 +127,9 @@ B142 adds the stock Mr. B/The Collector sell-all acknowledgement path.
 used by the appended `0x9E-0xA9` family. The additive hook only inserts an
 extra `CAchievement::ResetSingleAchievementProgress(0x5F)` call before the
 stock achievement-reset tail; it does not alter the keep branch.
+
+B144 also extends `CEventTheCollector::CanFire()` with base `0x9E` in the
+same `CCollectableItem::CollectionCount()` offer passes used by the five stock
+families, plus one completed-family availability check for the ornament
+family. `CEventTheCollector::CalcAward(int)` is a stub on PC, so the
+offer/availability hook belongs in `CanFire()`.

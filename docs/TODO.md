@@ -456,9 +456,9 @@
 - In-game Holiday Ornaments test B142: enable the experimental Holiday
   Ornaments patch, collect ornaments, then trigger Mr. B/The Collector and
   choose `Sell`. Confirm the `0x9E-0xA9` collection flags clear and
-  Ornamentologist achievement row `0x5F` resets. Follow-up research: add
-  ornament base `0x9E` to `CEventTheCollector::CanFire()` availability/award
-  counting so ornaments affect his coin offer like the stock five collections.
+  Ornamentologist achievement row `0x5F` resets. In B144+, confirm collected
+  ornaments also contribute to Mr. B/The Collector's coin offer and can make
+  the event available when the stock collectible families are empty.
 - Research: use the workspace-local `work/assets/TextAsset/` mirror as the
   source for future mobile furniture/map additions. Do not reference the
   original `Downloads\TextAsset` path in build or patcher code; copy any needed

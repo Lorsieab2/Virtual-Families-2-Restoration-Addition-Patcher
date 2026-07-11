@@ -1101,6 +1101,30 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         self.assertEqual(len(source_names), len(set(source_names)))
         self.assertFalse(any("CandyCane" in name for name in source_names))
 
+    def test_the_collector_counts_holiday_ornaments_for_offer_and_availability(self):
+        def run(temp_root):
+            manifest = {}
+
+            patcher.patch_the_collector_holiday_ornaments(manifest)
+            obj = CoffObject(temp_root / "IslandEvents.obj")
+            sym = obj.symbol("?CanFire@CEventTheCollector@@UAE_NXZ")
+            sec = obj.section(sym.section)
+            data = bytes(obj.buf[sec.raw_ptr + sym.value : sec.raw_ptr + sec.raw_size])
+
+            self.assertEqual(
+                data.count(b"\x68" + struct.pack("<I", patcher.HOLIDAY_ORNAMENT_COLLECTABLE_START)),
+                4,
+            )
+            meta = manifest["TheCollectorHolidayOrnaments"]
+            self.assertEqual(len(meta["can_fire_offer_patches"]), 3)
+            self.assertEqual(
+                meta["can_fire_availability_patch"]["collection_count_args"],
+                ["0x9e", 1, 1, 1],
+            )
+            self.assertEqual(meta["achievement_reset"], "0x5f")
+
+        self.with_temp_patched_objs(["IslandEvents.obj"], run)
+
 
 class RuntimePayloadContractTests(unittest.TestCase):
     def test_previous_build_source_prefers_highest_lower_b_number(self):

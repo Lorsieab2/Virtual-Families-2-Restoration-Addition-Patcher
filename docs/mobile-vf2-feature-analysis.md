@@ -369,11 +369,12 @@ adds one small `CEventTheCollector::ImpactGame` hook before the existing
 achievement tail-call so `CAchievement::ResetSingleAchievementProgress(0x5F)`
 also runs. Choice `1` (`Keep`) remains untouched.
 
-`CEventTheCollector::CanFire()` still counts stock family bases `0x67`, `0x4F`,
-`0x5B`, `0x86`, and `0x92` when deciding availability/award. Counting the
-Holiday Ornament base `0x9E` for Mr. B's offer amount is the next research
-hook; the current confirmed wiring makes sold ornaments clear correctly once
-the event fires.
+`CEventTheCollector::CanFire()` is also the PC-side offer/availability counter.
+B144 adds Holiday Ornament base `0x9E` to the same three
+`CCollectableItem::CollectionCount()` offer passes used for stock bases
+`0x67`, `0x4F`, `0x5B`, `0x86`, and `0x92`, then adds one completed-family
+availability check for `0x9E`. Sold ornaments still clear through the stock
+collection reset path once the event fires.
 
 ## Exclusive Island Events and Outcomes
 
