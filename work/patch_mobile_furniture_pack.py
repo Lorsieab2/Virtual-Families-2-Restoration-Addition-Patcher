@@ -358,6 +358,12 @@ HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET = 12
 HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT = 0x60
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID = 0x54
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
+COLLECTABLE_SMALL_FRAME_WIDTH = 40
+COLLECTABLE_SMALL_FRAME_HEIGHT = 40
+COLLECTABLE_SMALL_COLUMNS = 6
+COLLECTABLE_SMALL_IMAGE_BASE_CARRYING = 0x4F
+HOLIDAY_ORNAMENT_SMALL_FRAME_START = HOLIDAY_ORNAMENT_COLLECTABLE_START - COLLECTABLE_SMALL_IMAGE_BASE_CARRYING
+HOLIDAY_ORNAMENT_SMALL_FRAME_END = HOLIDAY_ORNAMENT_COLLECTABLE_END - COLLECTABLE_SMALL_IMAGE_BASE_CARRYING
 # CCollectionScene::HandleMouse keeps a 60-item stock rarity-label lookup in
 # stack locals. The appended ornament page needs three more four-item buckets.
 HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS = (0x751, 0x752, 0x753)
@@ -4324,6 +4330,39 @@ def decode_rgba4444_pvr(path):
     return Image.frombytes("RGBA", (width, height), bytes(rgba))
 
 
+def holiday_ornament_small_collectables_sheet_contract(image):
+    width, height = image.size
+    if width % COLLECTABLE_SMALL_FRAME_WIDTH or height % COLLECTABLE_SMALL_FRAME_HEIGHT:
+        raise RuntimeError(
+            "Holiday Ornament collectables_small.png must use exact "
+            f"{COLLECTABLE_SMALL_FRAME_WIDTH}x{COLLECTABLE_SMALL_FRAME_HEIGHT} cells"
+        )
+    columns = width // COLLECTABLE_SMALL_FRAME_WIDTH
+    rows = height // COLLECTABLE_SMALL_FRAME_HEIGHT
+    frame_count = columns * rows
+    if columns != COLLECTABLE_SMALL_COLUMNS:
+        raise RuntimeError(
+            "Holiday Ornament collectables_small.png must keep the stock "
+            f"{COLLECTABLE_SMALL_COLUMNS}-column grid"
+        )
+    if frame_count <= HOLIDAY_ORNAMENT_SMALL_FRAME_END:
+        raise RuntimeError(
+            "Holiday Ornament collectables_small.png does not contain the "
+            f"engine frame range {HOLIDAY_ORNAMENT_SMALL_FRAME_START}-"
+            f"{HOLIDAY_ORNAMENT_SMALL_FRAME_END}"
+        )
+    return {
+        "cell_size": [COLLECTABLE_SMALL_FRAME_WIDTH, COLLECTABLE_SMALL_FRAME_HEIGHT],
+        "grid": [columns, rows],
+        "frame_count": frame_count,
+        "engine_frame_range": [
+            HOLIDAY_ORNAMENT_SMALL_FRAME_START,
+            HOLIDAY_ORNAMENT_SMALL_FRAME_END,
+        ],
+        "engine_index_formula": "ECarrying - 0x4F",
+    }
+
+
 def sync_holiday_ornament_collection_art(manifest):
     from PIL import Image
 
@@ -4337,11 +4376,13 @@ def sync_holiday_ornament_collection_art(manifest):
         if HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE.exists():
             small_target.parent.mkdir(parents=True, exist_ok=True)
             small_image = Image.open(HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE).convert("RGBA")
+            sheet_contract = holiday_ornament_small_collectables_sheet_contract(small_image)
             small_image.save(small_target)
             return {
                 "source": str(HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE),
                 "path": str(small_target.relative_to(OUT)).replace("\\", "/"),
                 "output_size": list(small_image.size),
+                **sheet_contract,
             }
         return {
             "status": "missing_workspace_sheet",

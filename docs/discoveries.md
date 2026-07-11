@@ -1808,3 +1808,16 @@
   exports overlay assets whose `setting_for_asset()` resolves to
   `holiday_ornaments_collection` from the `--holiday-ornaments-exe` build
   folder and keeps those records gated behind that setting.
+
+## 2026-07-11 - Holiday Ornament Yard Sprite Index
+
+- `CCollectableItem::Add(ECarrying, ldwPoint, bool)` already expands a
+  registered spawn-area base with `GetRandom(4)`, then applies the stock
+  uncommon `+4` and rare `+8` branches. Holiday Ornaments should continue to
+  register base `0x9E` with the mobile full-yard rectangles and let stock odds,
+  including Lucky Rock, choose `0x9E-0xA9`.
+- `CCollectableItem::Draw(int)` indexes `Images/collectables_small.png` as
+  `ECarrying - 0x4F`, so the ornament values `0x9E-0xA9` map to small-sheet
+  frames `79-90`. B146 validates the workspace-local `240x640` sheet as a
+  `40x40`, six-column grid with enough frames before exporting the portable
+  payload.

@@ -1031,6 +1031,20 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             ],
         )
 
+    def test_holiday_ornament_small_sheet_covers_engine_frame_range(self):
+        from PIL import Image
+
+        with Image.open(patcher.HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE) as image:
+            contract = patcher.holiday_ornament_small_collectables_sheet_contract(
+                image.convert("RGBA")
+            )
+
+        self.assertEqual(contract["cell_size"], [40, 40])
+        self.assertEqual(contract["grid"], [6, 16])
+        self.assertEqual(contract["frame_count"], 96)
+        self.assertEqual(contract["engine_frame_range"], [79, 90])
+        self.assertEqual(contract["engine_index_formula"], "ECarrying - 0x4F")
+
     def test_collection_scene_table_extends_to_mobile_ornament_page(self):
         def run(temp_root):
             manifest = {}
@@ -1098,8 +1112,39 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 item_patch["mobile_spawn_rects"],
                 [[hex(value) for value in rect] for _symbol, rect in patcher.HOLIDAY_ORNAMENT_SPAWN_RECTS],
             )
+            patched_functions = {
+                item["function"]
+                for item in manifest["CollectableItemHolidayOrnaments"]["patches"]
+            }
+            self.assertGreaterEqual(
+                patched_functions,
+                {
+                    "?Reset@CCollectableItem@@QAEXXZ",
+                    "?IsCommonCollectable@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
+                    "?IsUncommonCollectable@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
+                    "?IsRareCollectable@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
+                    "?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z",
+                    "?Drop@CCollectableItem@@UAEXAAVCVillager@@W4ECarrying@@@Z",
+                    "?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z",
+                    "?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
+                },
+            )
 
         self.with_temp_patched_objs(["CollectableItem.obj"], run)
+
+    def test_stock_collectable_add_keeps_generic_rarity_roll_contract(self):
+        obj = CoffObject(patcher.SRC_OBJS / "CollectableItem.obj")
+        sym = obj.symbol("?Add@CCollectableItem@@QAEXW4ECarrying@@UldwPoint@@_N@Z")
+        sec = obj.section(sym.section)
+        data = bytes(
+            obj.buf[sec.raw_ptr + sym.value : sec.raw_ptr + sec.raw_size]
+        )
+
+        self.assertIn(b"\x6A\x04", data)
+        self.assertIn(b"\x03\xBC\x8B\x94\x03\x00\x00", data)
+        self.assertIn(b"\x83\xC7\x04", data)
+        self.assertIn(b"\x83\xC7\x08", data)
+        self.assertIn(b"\x89\xBE\x50\x03\x00\x00", data)
 
     def test_supplied_collection_art_maps_to_twelve_collectibles(self):
         self.assertEqual(

@@ -109,13 +109,14 @@
 - Translate B93 `settings_menu.evict.constructor_patches` from object/function-
   relative offsets into final vanilla EXE file offsets before moving them from
   `native_patch_sources` into applyable offline patcher `patches[]` records.
-- In-game test B92 Holiday Ornaments: open Collections, verify six pages/72
+- In-game test B146 Holiday Ornaments: open Collections, verify six pages/72
   collectibles with the Ornaments page last, confirm yard ornaments can be
   picked up and removed, confirm collection counts and the Ornamentologist goal
   advance, verify Lucky Rock odds still affect the new collection through the
   stock `CCollectableItem::Update/Add` path, and verify save/load persistence.
   Static mobile comparison now confirms row `0x5F` target `12`, Goal Collector
-  target `13`, rarity ranges, and the four full-yard `0x9E` spawn rectangles.
+  target `13`, rarity ranges, the four full-yard `0x9E` spawn rectangles, and
+  the small-sheet frame mapping `0x9E-0xA9 => 79-90`.
 - In-game test B77 Playhouse spontaneous behavior: verify children can still
   spontaneously use the Playhouse, adults do not select Playhouse
   spontaneously, and manual furniture/drop behavior remains unchanged.
@@ -453,14 +454,16 @@
 - In-game visual test B141: verify `No Money`, `No Food`, add-food/add-coin,
   `Unlock all furniture`, and `Reset Achievements` icons fit the Special
   Upgrades row and buy dialog without clipping or white canvases.
-- In-game Holiday Ornaments test B142: enable the experimental Holiday
+- In-game Holiday Ornaments test B146: enable the experimental Holiday
   Ornaments patch, collect ornaments, then trigger Mr. B/The Collector and
   choose `Sell`. Confirm the `0x9E-0xA9` collection flags clear and
   Ornamentologist achievement row `0x5F` resets. In B144+, confirm collected
   ornaments also contribute to Mr. B/The Collector's coin offer and can make
   the event available when the stock collectible families are empty. In B145+,
   click/hover each slot on the sixth Collections page and confirm the tooltip
-  path does not crash or show garbage rarity text.
+  path does not crash or show garbage rarity text. In B146+, confirm spawned
+  yard ornaments render with the expected icons from `collectables_small.png`
+  frames `79-90`.
 - Research: use the workspace-local `work/assets/TextAsset/` mirror as the
   source for future mobile furniture/map additions. Do not reference the
   original `Downloads\TextAsset` path in build or patcher code; copy any needed

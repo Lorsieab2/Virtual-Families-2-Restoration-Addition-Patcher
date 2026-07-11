@@ -90,6 +90,12 @@ full-yard spawn rectangles:
 
 The mobile rarity helpers classify `0x9E-0xA1` as common ornaments,
 `0xA2-0xA5` as uncommon ornaments, and `0xA6-0xA9` as rare ornaments.
+Stock `CCollectableItem::Add(ECarrying, ldwPoint, bool)` already treats a
+registered spawn-area base generically: it rolls `GetRandom(4)` for base
+members, then applies the existing `+4` uncommon and `+8` rare bumps before
+storing the concrete spawned collectible. That means the Holiday Ornament patch
+should keep using `AddSpawnArea(0x9E, ...)` instead of adding a separate
+ornament scheduler; Lucky Rock remains in the stock odds path.
 
 The base value must also be taught to every hard-coded collectible family
 recognizer. `CCollectableItem::WasItemSpawned(ECarrying)` checks exact IDs, and
@@ -139,3 +145,9 @@ a stock 60-item stack-local lookup. B145 initializes three additional four-item
 buckets for ornament indices `60-71`, reusing the stock common/uncommon/rare
 string IDs `0x751`, `0x752`, and `0x753`; otherwise the sixth page can render
 but click/tooltip handling reads past the initialized stock table.
+
+`CCollectableItem::Draw(int)` indexes `Images/collectables_small.png` with
+`ECarrying - 0x4F`. Holiday Ornaments `0x9E-0xA9` therefore require exact
+small-sheet frames `79-90`. The portable source sheet is validated as a stock
+`40x40`, six-column grid with 96 frames, so the engine can draw the appended
+ornaments without referencing any outside asset folder.
