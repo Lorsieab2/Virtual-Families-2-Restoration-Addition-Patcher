@@ -814,9 +814,13 @@ B138/B141 Flea Market build/export notes:
   category `0x0F`, `MaybeUpdateRotatingItems()`, `gGoodiesList`, and the
   rotating-goodies cache at `CInventoryManager+0x488` with count/timer fields
   at `+0x49C/+0x4A0`.
-- The B141 helper enumerates all `0x24` native `gGoodiesList` entries directly
-  and omits already-purchased upgrade rows at or above item `0xE1` by calling
-  `CInventoryManager::HaveUpgrade`.
+- The next Flea Market helper uses the same fixed-list expansion style as the
+  Clothing section: count returns `0x24`, and item lookup returns
+  `gGoodiesList[index]` directly. It does not filter through
+  `CInventoryManager::HaveUpgrade` or the native five-row rotating cache.
+- B143 export verification: the patcher ZIP/folder include the fixed core EXE
+  and all optional EXE overlays. A CLI `--enable-all --dry-run` passed against
+  the test install folder and validated `1070` active/restore asset records.
 - Non-Flea store categories, including On Sale, keep the stock paths. The
   patcher export must include the refreshed core, Island Events, Cheat
   Upgrades, and combined EXE overlays so this native hook is present no matter

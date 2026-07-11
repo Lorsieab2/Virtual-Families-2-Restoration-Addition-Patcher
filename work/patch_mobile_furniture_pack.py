@@ -5640,13 +5640,10 @@ def patch_inventory_manager(manifest):
         },
         "generation_sort_cap": {"old": 9, "new": 30, "patches": generation_cap_patches},
         "expanded_flea_market": {
-            "status": "Flea Market category 0x0F lists every currently valid item from the native rotating goodies pool instead of the cached random five",
+            "status": "Flea Market category 0x0F is exposed as a fixed 0x24-entry list backed by the native rotating goodies pool, matching the static-list style used by the expanded Clothing section",
             "native_pool": "gGoodiesList",
             "native_pool_count": "0x24",
-            "filters": [
-                "candidate comes from the native gGoodiesList array",
-                "already-purchased upgrade entries at or above item 0xE1 are omitted through CInventoryManager::HaveUpgrade(item)",
-            ],
+            "filters": [],
             "hooks": expanded_flea_market_hooks,
             "stock_categories_unchanged": True,
             "cache_not_expanded": "the original this+0x488 rotating-goodies cache remains untouched to avoid overwriting count/timer fields at this+0x49C/+0x4A0; category 0x03 On Sale keeps its native sale cache at this+0x474",
@@ -5817,7 +5814,7 @@ public:
 extern CToolTray ToolTray;
 extern CInventoryManager InventoryManager;
 extern CFurnitureManager FurnitureManager;
-extern EInventoryItem *gGoodiesList;
+extern EInventoryItem gGoodiesList[];
 
 static const int kVF2OutfitStoreFemaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["female"]};
 static const int kVF2OutfitStoreMaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["male"]};
@@ -5838,35 +5835,15 @@ static int gVF2SyntheticOutfitToolInHand = 0;
 static int gVF2SyntheticOutfitToolInUse = 0;
 static int gVF2LastSyntheticOutfitByGender[2] = {{0, 0}};
 
-static bool VF2ExpandedFleaMarketCandidate(CInventoryManager* inventory, int index) {{
-    if (!inventory) return false;
-    if (index < 0 || index >= kVF2FleaMarketGoodiesCount) return false;
-    int itemId = (int)gGoodiesList[index];
-    if (itemId <= 0) return false;
-    EInventoryItem item = (EInventoryItem)itemId;
-    if (itemId >= 0xE1 && inventory->HaveUpgrade(item)) return false;
-    return true;
-}}
-
 extern "C" int __cdecl VF2GetExpandedFleaMarketCount(CInventoryManager* inventory, int category) {{
     if (category != kVF2FleaMarketCategory) return -1;
-    int count = 0;
-    for (int index = 0; index < kVF2FleaMarketGoodiesCount; ++index) {{
-        if (VF2ExpandedFleaMarketCandidate(inventory, index)) ++count;
-    }}
-    return count;
+    return kVF2FleaMarketGoodiesCount;
 }}
 
 extern "C" int __cdecl VF2GetExpandedFleaMarketItem(CInventoryManager* inventory, int category, int index) {{
     if (category != kVF2FleaMarketCategory) return -1;
-    if (index < 0) return 0;
-    int seen = 0;
-    for (int candidateIndex = 0; candidateIndex < kVF2FleaMarketGoodiesCount; ++candidateIndex) {{
-        if (!VF2ExpandedFleaMarketCandidate(inventory, candidateIndex)) continue;
-        if (seen == index) return (int)gGoodiesList[candidateIndex];
-        ++seen;
-    }}
-    return 0;
+    if (index < 0 || index >= kVF2FleaMarketGoodiesCount) return 0;
+    return (int)gGoodiesList[index];
 }}
 
 static int VF2OutfitStoreEntryIndex(int itemId) {{

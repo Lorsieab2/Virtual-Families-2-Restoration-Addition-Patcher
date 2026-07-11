@@ -1685,11 +1685,16 @@
   It walks the external `gGoodiesList` array (`0x24` entries), shuffles the
   valid goodies, and stores five rows at `CInventoryManager+0x488`, with
   count/timer fields at `+0x49C/+0x4A0`.
-- B141 retargets the expansion hook from category `0x03` to Flea Market
-  category `0x0F`. `VF2GetExpandedFleaMarketCount` /
-  `VF2GetExpandedFleaMarketItem` enumerate `gGoodiesList` directly and omit
-  already-purchased upgrade entries at or above item `0xE1` via
-  `CInventoryManager::HaveUpgrade`, while leaving the On Sale cache untouched.
+- The next Flea Market fix keeps category `0x0F` but changes the expansion to
+  the same fixed-list style used by the expanded Clothing section:
+  `VF2GetExpandedFleaMarketCount` returns `0x24`, and
+  `VF2GetExpandedFleaMarketItem` reads `gGoodiesList[index]` directly. This
+  avoids filtering through the rotating five-item cache and leaves the On Sale
+  cache untouched.
+- B143 exporter validation: the patcher payload contains the fixed core EXE
+  plus all Island Events / Cheat Upgrades / Holiday Ornaments overlay
+  combinations. An `--enable-all --dry-run` validated `1070` active/restore
+  asset records against the test install shape.
 
 ## 2026-07-10 - Reset Achievements Cheat Upgrade
 

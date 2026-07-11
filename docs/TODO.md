@@ -439,10 +439,10 @@
   and `-0x1692C`; current trigger notes identify them only by branch semantics.
 - Research: trace `eString_EmailRepairHouse` outside `CDailyEmail::Show` to
   confirm whether it is unused, reserved, or reached through another object.
-- In-game store test B141: open `On Sale` and confirm it still shows stock
+- In-game store test: open `On Sale` and confirm it still shows stock
   discounted furniture rows. Then open `Flea Market` and confirm it lists the
-  expanded native `gGoodiesList` pool rather than only five random rows, with
-  already-purchased upgrade goodies omitted and purchases still functioning.
+  fixed `0x24`-entry native `gGoodiesList` pool rather than only five random
+  rows, with purchases still functioning.
 - In-game Cheat Upgrades test B139: complete or partially progress a few goals,
   buy `Reset Achievements`, reopen the Goals screen, and confirm all completion
   and progress values are cleared and still cleared after saving/reopening.
