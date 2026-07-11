@@ -157,3 +157,13 @@ the same frame contract. Any payload that can replace
 `Images/collectables_small.png` must preserve visible, nonblank cells for
 frames `79-90`, because the engine does not know which optional visual sheet is
 active when it draws `0x9E-0xA9`.
+
+B148 adds a native contract validator for the experimental overlay. The stock
+collection-state table is still accessed as `this + 0x4A4 + ECarrying * 4`;
+`0x9E-0xA9` therefore lives inside `0x71C-0x74C`. `ResetCollection()` and
+`SaveState()` continue to cover the wider `0x5E0-0x89C` state span, so
+sell-all resets and persistence include the ornament family. The same guard
+verifies the appended `gCollectable` page, `_VF2CollectionPageCount` draw
+helper, tooltip rarity labels, `Find`/`WasItemSpawned` hooks, observer
+registrations, and Ornamentologist row `0x5F` reset before a Holiday Ornaments
+overlay can be packaged.

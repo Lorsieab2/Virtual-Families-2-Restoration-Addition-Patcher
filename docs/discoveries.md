@@ -1833,3 +1833,20 @@
   `240x640`/six-column sheet size. This prevents a future payload cleanup from
   shipping a valid-size visual replacement that silently removes the ornament
   pickup icons.
+
+## 2026-07-11 - Holiday Ornament Native State Contract
+
+- B148 adds `validate_holiday_ornament_native_contract()` for the isolated
+  `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` build path. It audits patched COFF objects
+  before packaging, without changing stock behavior in normal builds.
+- The validator proves `CCollectableItem::Count(ECarrying)` still indexes the
+  collection-state table at `this + 0x4A4 + ECarrying * 4`; for ornaments
+  `0x9E-0xA9`, that maps to `0x71C-0x74B`.
+- It also proves `ResetCollection()` and `SaveState()` still cover the stock
+  collection-state span `0x5E0-0x89B` (`0xAF` dwords), so Mr. B/The Collector's
+  sell-all reset and save/load persistence include Holiday Ornaments.
+- The same contract checks the appended `CCollectionScene::gCollectable` page
+  values `0x9E-0xA9`, `_VF2CollectionPageCount` draw helper relocation, tooltip
+  rarity labels `0x751/0x752/0x753`, `Find`/`WasItemSpawned` range hooks,
+  `CCollectable` observer registrations, and the `0x5F` Ornamentologist reset
+  on the sell-all branch.
