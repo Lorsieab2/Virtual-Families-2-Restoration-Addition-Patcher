@@ -2143,3 +2143,26 @@
   `CVillagerManager::AllVillagersRealtimePhysiologyAndProductivityUpkeep`,
   not merely change IsOld. The stock IsOld threshold may remain useful for
   senior behavior/healing unless B151 intentionally redesigns it too.
+
+## 2026-07-12 - B151 Holiday Ornaments Native Contract
+
+- Mobile 1.7.16 uses carrying IDs `0x9E-0xA9` and exactly three Holiday spawn
+  rectangles: `(0x112,0x0C4,0x2FA,0x1BD)`,
+  `(0x098,0x178,0x19D,0x26F)`, and
+  `(0x08D,0x568,0x137,0x750)`. Adding those to the 16 stock registrations
+  produces 19 total spawn areas.
+- `CCollectableItem::Find` and `WasItemSpawned` retain stock exact
+  carrying-value matches, and `Add` remains byte-identical to stock. Its
+  `0x11/0x22` rarity thresholds give 4% rare and 13% uncommon normally; Lucky
+  Rock doubles both probabilities.
+- The Collections Chest has six 12-item pages and reports 72 collectibles when
+  Holiday Ornaments is enabled. The collection remains inside the stock
+  `0xAF`-entry Count/Reset/Save/Load state span.
+- Master Collector `0x4D` targets 6 completed collections, Goal Collector
+  `0x54` targets 13 contributing achievements, and Ornamentologist `0x5F`
+  targets 12 unique ornaments. The achievement order/notification queue covers
+  `0x60` rows.
+- The Collector adds Holiday common, uncommon, and rare counts with three
+  relocation-only `CanFire` insertions. Stock final availability and Keep
+  behavior remain unchanged; Sell resets unfinished `0x5F` progress before
+  entering the stock collection-reset tail.

@@ -117,3 +117,13 @@ new perimeter with matching grass, and extend the northwest beach into the
 rounded sandy area. Camera limits, map bounds, walkability, placement, hit
 testing, weather/decor coverage, and save-safe coordinates must expand with the
 art.
+
+## Workstream 3: Holiday Ornaments collection
+
+B151's focused third workstream is the complete mobile 1.7.16 Holiday Ornaments collection. It restores carrying IDs `0x9E`-`0xA9`, their three spawn rectangles, exact rarity ranges, sixth Collections Chest page, 72-item total, collection persistence, achievements, Collector offer/reset behavior, canonical artwork, disabled-build cleanup, and sixteen-state matrix coverage. The native implementation preserves stock exact-match `Find`, `WasItemSpawned`, `Add`, and Lucky Rock behavior and uses isolated caves or relocation-only insertions where stock code has no room.
+
+All sixteen executables compile; 129 source/exporter tests and independent linked validation pass. This is static/build evidence only. Launch, chest navigation, pickup/duplicate/completion, save/reload, Collector Keep/Sell, and collection-cheat testing still require a manual in-game cycle.
+
+### Explicitly deferred
+
+The expanded-map concept and proposed next-build goals are not B151 workstreams and are not implemented in this build. Their mockups and design notes remain planning material only.

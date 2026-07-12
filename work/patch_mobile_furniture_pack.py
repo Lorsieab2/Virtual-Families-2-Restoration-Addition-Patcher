@@ -1,5 +1,6 @@
 from pathlib import Path
 import csv
+import hashlib
 import json
 import os
 import random
@@ -25,8 +26,8 @@ ENABLE_DEBUGGER_FEATURES = os.environ.get("VF2_ENABLE_DEBUGGER_FEATURES", "0") =
 # Holiday body rows are now part of the normal additive build.  Set the env var
 # to 0 only when intentionally making a stock-body diagnostic build.
 ENABLE_HOLIDAY_BODY_TYPES = os.environ.get("VF2_ENABLE_HOLIDAY_BODY_TYPES", "1") != "0"
-# Holiday Ornaments still need native parity proof. Keep normal builds on the
-# stock PC collection table; opt into the mobile collection for isolated tests.
+# Holiday Ornaments are a complete optional collection overlay.  The offline
+# patcher selects a matching executable built with this gate enabled.
 ENABLE_HOLIDAY_ORNAMENTS = os.environ.get("VF2_ENABLE_HOLIDAY_ORNAMENTS", "0") == "1"
 # Optional Special Upgrades rows used by the offline patcher. Normal/modded
 # builds keep them off unless the patcher setting selects the matching overlay.
@@ -425,8 +426,11 @@ HOLIDAY_ORNAMENT_COLLECTION_TOTAL = 72
 HOLIDAY_ORNAMENT_ACHIEVEMENT_ID = 0x5F
 HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET = 12
 HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT = 0x60
+HOLIDAY_ORNAMENT_MASTER_COLLECTOR_ID = 0x4D
+HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET = 6
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID = 0x54
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
+HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x60
 COLLECTABLE_SMALL_FRAME_WIDTH = 40
 COLLECTABLE_SMALL_FRAME_HEIGHT = 40
 COLLECTABLE_SMALL_COLUMNS = 6
@@ -438,7 +442,6 @@ HOLIDAY_ORNAMENT_SMALL_FRAME_END = HOLIDAY_ORNAMENT_COLLECTABLE_END - COLLECTABL
 HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS = (0x751, 0x752, 0x753)
 ACHIEVEMENT_ROW_SIZE = 0x1C
 HOLIDAY_ORNAMENT_SPAWN_RECTS = [
-    ("__xmm@0000030200000764000000b400000634", (0x634, 0x0B4, 0x764, 0x302)),
     ("__xmm@000001bd000002fa000000c400000112", (0x112, 0x0C4, 0x2FA, 0x1BD)),
     ("__xmm@0000026f0000019d0000017800000098", (0x098, 0x178, 0x19D, 0x26F)),
     ("__xmm@0000075000000137000005680000008d", (0x08D, 0x568, 0x137, 0x750)),
@@ -447,6 +450,7 @@ HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT = ROOT / "work" / "vf2_obb" / "assets" / "tp22
 HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR = ROOT / "work" / "vf2_obb" / "assets" / "tp225.pvr"
 HOLIDAY_ORNAMENT_BACKGROUND_FILENAME = "collection-ornaments_background.png"
 HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR = ROOT / "work" / "assets" / "holiday_collectibles"
+HOLIDAY_ORNAMENT_PREEXTRACTED_ART_DIR = HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / "collection"
 HOLIDAY_ORNAMENT_SMALL_COLLECTABLES_SOURCE = HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / "collectables_small.png"
 HOLIDAY_ORNAMENT_GLOWING_COLLECTABLES_SOURCE = (
     ROOT / "patcher_assets" / "optional_patches" / "glowing_collectibles" / "collectables_small.png"
@@ -481,19 +485,31 @@ HOLIDAY_ORNAMENT_COLLECTION_FILES = [
     ("collection_christmasornament_twirl.png", "Collection_ChristmasOrnament_Twirl.png", "Collection_ChristmasOrnament_Twirl-Placeholder.png"),
     ("collection_christmasornament_twisty.png", "Collection_ChristmasOrnament_Twisty.png", "Collection_ChristmasOrnament_Twisty-Placeholder.png"),
 ]
+# Exact mobile 1.7.16 page-five coordinates from
+# CCollectionScene::sm_sCollectable.  The fallback page and icons are scaled
+# from 800x600 to 1024x768, so descriptor coordinates use the same 1.28 scale.
+# The engine interprets Y from the bottom; no top-origin conversion belongs in
+# this descriptor table.
+HOLIDAY_ORNAMENT_MOBILE_SLOT_POSITIONS = [
+    (0x092, 0x087),
+    (0x11D, 0x088),
+    (0x1A5, 0x087),
+    (0x226, 0x082),
+    (0x095, 0x10C),
+    (0x119, 0x10A),
+    (0x1A9, 0x108),
+    (0x23F, 0x108),
+    (0x08C, 0x18B),
+    (0x121, 0x183),
+    (0x1A5, 0x18D),
+    (0x228, 0x189),
+]
 HOLIDAY_ORNAMENT_COLLECTION_SLOT_POSITIONS = [
-    (0x0B4, 0x1DC),
-    (0x161, 0x1DC),
-    (0x213, 0x1DC),
-    (0x2C4, 0x1DC),
-    (0x0C1, 0x12E),
-    (0x213, 0x12E),
-    (0x161, 0x12E),
-    (0x2C4, 0x12E),
-    (0x0B4, 0x07E),
-    (0x161, 0x07E),
-    (0x213, 0x07E),
-    (0x2C4, 0x07E),
+    (
+        round(x * HOLIDAY_ORNAMENT_IMAGE_SCALE),
+        round(y * HOLIDAY_ORNAMENT_IMAGE_SCALE),
+    )
+    for x, y in HOLIDAY_ORNAMENT_MOBILE_SLOT_POSITIONS
 ]
 CHARACTER_SHEET_SPECS = {
     "female_heads": {
@@ -1212,9 +1228,9 @@ def build_native_array_contract():
                 for _symbol, rect in HOLIDAY_ORNAMENT_SPAWN_RECTS
             ],
             "status": (
-                "default-on mobile six-page collection"
+                "enabled mobile-parity six-page collection"
                 if ENABLE_HOLIDAY_ORNAMENTS
-                else "disabled for diagnostics; stock PC Collections UI remains 60 collectibles"
+                else "optional patch not selected; stock PC Collections UI remains 60 collectibles"
             ),
             "requirements": [
                 "reuse CCollectableItem::Update/Add so spawn timing and Lucky Rock odds remain stock",
@@ -1222,7 +1238,7 @@ def build_native_array_contract():
                 "register carrying values 0x9E-0xA9 with CCollectable so pickup/drop/count events reach CCollectableItem",
                 "append one Collections scene page without changing CCollectionScene object size",
                 "append one Goals screen achievement row without changing the save-state size",
-                "use supplied Holiday Collectibles page art and collectables_small.png copied into the modified build folder",
+                "use hash-verified workspace Holiday page art and collectables_small.png copied into the modified build folder",
             ],
         },
     }
@@ -4667,6 +4683,21 @@ def validate_holiday_ornament_native_contract(manifest):
     ) not in save_data:
         errors.append("CCollectableItem::SaveState no longer copies the stock collection-state table span")
 
+    load_data, _load_sym, _load_sec = function_bytes(
+        collectable_obj, "?LoadState@CCollectableItem@@QAE?B_NABUSSaveState@1@@Z"
+    )
+    if (
+        b"\xBE" + struct.pack("<I", stock_collection_state_entries)
+    ) not in load_data or (
+        b"\x8D\x8F" + struct.pack("<I", stock_collection_state_start)
+    ) not in load_data or (
+        b"\x8D\x93\x48\x03\x00\x00"
+    ) not in load_data:
+        errors.append(
+            "CCollectableItem::LoadState no longer restores the full "
+            "0xAF-entry collection-state table"
+        )
+
     total_data, _total_sym, _total_sec = function_bytes(
         collectable_obj, "?CountTotalCollectables@CCollectableItem@@QAE?BHXZ"
     )
@@ -4709,52 +4740,121 @@ def validate_holiday_ornament_native_contract(manifest):
     ) not in drop_data:
         errors.append("CCollectableItem::Drop lacks the incomplete-family reentry sentinel")
 
-    find_data, find_sym, _find_sec = function_bytes(
-        collectable_obj, "?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z"
-    )
-    if find_data[0x86] != 0xE9 or find_data[0x8B : 0x93] != b"\x90" * 8:
-        errors.append("CCollectableItem::Find does not use the fixed-size Holiday code-cave detour")
-    else:
-        find_cave = 0x86 + 5 + struct.unpack_from("<i", find_data, 0x87)[0]
-        if find_data[find_cave : find_cave + 6] != b"\x81\xFF" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START):
-            errors.append("CCollectableItem::Find code cave lacks the imm32 Holiday base comparison")
-        expected_find_targets = {
-            find_cave + 16: 0x93,
-            find_cave + 22: 0xC4,
-            find_cave + 30: 0xC4,
-            find_cave + 42: 0xC4,
-            find_cave + 48: 0x93,
-        }
-        for branch_off, target_off in expected_find_targets.items():
-            opcode_len = 6 if find_data[branch_off] == 0x0F else 5
-            displacement_off = branch_off + (2 if opcode_len == 6 else 1)
-            actual_target = branch_off + opcode_len + struct.unpack_from("<i", find_data, displacement_off)[0]
-            if actual_target != target_off:
-                errors.append(
-                    f"CCollectableItem::Find cave branch {branch_off - find_cave:#x} targets {actual_target:#x}, expected {target_off:#x}"
-                )
-    if b"\x83\xFF" + bytes([HOLIDAY_ORNAMENT_COLLECTABLE_START]) in find_data:
-        errors.append("CCollectableItem::Find still uses sign-extended imm8 for Holiday base 0x9E")
+    stock_collectable_obj = CoffObject(SRC_OBJS / "CollectableItem.obj")
+    for function_name, purpose in (
+        (
+            "?Add@CCollectableItem@@QAEXW4ECarrying@@UldwPoint@@_N@Z",
+            "variant selection and Lucky Rock rarity thresholds",
+        ),
+        (
+            "?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z",
+            "exact carrying-value pickup search",
+        ),
+        (
+            "?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
+            "exact carrying-value duplicate check",
+        ),
+    ):
+        patched_data, _patched_sym, _patched_sec = function_bytes(
+            collectable_obj,
+            function_name,
+        )
+        stock_data, _stock_sym, _stock_sec = function_bytes(
+            stock_collectable_obj,
+            function_name,
+        )
+        if patched_data != stock_data:
+            errors.append(
+                f"{function_name} no longer retains stock/mobile-parity "
+                f"{purpose}"
+            )
 
-    spawned_data, spawned_sym, _spawned_sec = function_bytes(
-        collectable_obj, "?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z"
+    spawn_reset_data, spawn_reset_sym, spawn_reset_sec = function_bytes(
+        collectable_obj,
+        "?Reset@CCollectableItem@@QAEXXZ",
     )
-    if spawned_data[0x14] != 0xE9 or spawned_data[0x19 : 0x1B] != b"\x90\x90":
-        errors.append("CCollectableItem::WasItemSpawned does not use the fixed-size Holiday code-cave detour")
-    else:
-        spawned_cave = 0x14 + 5 + struct.unpack_from("<i", spawned_data, 0x15)[0]
-        if b"\x81\xF9" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START) not in spawned_data[spawned_cave : spawned_cave + 48]:
-            errors.append("CCollectableItem::WasItemSpawned cave lacks the imm32 Holiday base comparison")
-        if b"\x81\x38" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_END) not in spawned_data[spawned_cave : spawned_cave + 48]:
-            errors.append("CCollectableItem::WasItemSpawned cave lacks the Holiday variant upper bound")
-        true_target = spawned_cave + 8 + 6 + struct.unpack_from("<i", spawned_data, spawned_cave + 10)[0]
-        if true_target != 0x29:
-            errors.append("CCollectableItem::WasItemSpawned exact-match branch no longer reaches true")
-        back_target = spawned_cave + 43 + 5 + struct.unpack_from("<i", spawned_data, spawned_cave + 44)[0]
-        if back_target != 0x1B:
-            errors.append("CCollectableItem::WasItemSpawned cave no longer resumes the stock loop")
-    if b"\x83\xF9" + bytes([HOLIDAY_ORNAMENT_COLLECTABLE_START]) in spawned_data:
-        errors.append("CCollectableItem::WasItemSpawned still uses sign-extended imm8 for Holiday base 0x9E")
+    stock_spawn_reset_sym = stock_collectable_obj.symbol(
+        "?Reset@CCollectableItem@@QAEXXZ"
+    )
+    stock_spawn_reset_sec = stock_collectable_obj.section(
+        stock_spawn_reset_sym.section
+    )
+    add_spawn_name = (
+        "?AddSpawnArea@CCollectableItem@@"
+        "QAEXUldwRect@@W4ECarrying@@@Z"
+    )
+    add_spawn_symbol = collectable_obj.symbol(add_spawn_name)
+    stock_add_spawn_symbol = stock_collectable_obj.symbol(add_spawn_name)
+    spawn_reset_relocs = [
+        struct.unpack_from(
+            "<IIH",
+            collectable_obj.buf,
+            spawn_reset_sec.reloc_ptr + index * 10,
+        )
+        for index in range(spawn_reset_sec.nreloc)
+    ]
+    stock_spawn_reset_relocs = [
+        struct.unpack_from(
+            "<IIH",
+            stock_collectable_obj.buf,
+            stock_spawn_reset_sec.reloc_ptr + index * 10,
+        )
+        for index in range(stock_spawn_reset_sec.nreloc)
+    ]
+    stock_spawn_call_count = sum(
+        symbol_index == stock_add_spawn_symbol.index
+        for _vaddr, symbol_index, _rtype in stock_spawn_reset_relocs
+    )
+    patched_spawn_call_count = sum(
+        symbol_index == add_spawn_symbol.index
+        for _vaddr, symbol_index, _rtype in spawn_reset_relocs
+    )
+    expected_spawn_call_count = (
+        stock_spawn_call_count + len(HOLIDAY_ORNAMENT_SPAWN_RECTS)
+    )
+    if patched_spawn_call_count != expected_spawn_call_count:
+        errors.append(
+            "CCollectableItem::Reset expected "
+            f"{expected_spawn_call_count} total spawn registrations, got "
+            f"{patched_spawn_call_count}"
+        )
+    spawn_insert = spawn_reset_sym.value + 0x1ED
+    relocation_targets = {
+        vaddr: collectable_obj.symbol_by_index[symbol_index].name
+        for vaddr, symbol_index, _rtype in spawn_reset_relocs
+    }
+    for index, (rect_symbol, _rect) in enumerate(
+        HOLIDAY_ORNAMENT_SPAWN_RECTS
+    ):
+        record_off = spawn_insert + index * 27
+        expected_record = (
+            b"\x0F\x28\x05\x00\x00\x00\x00"
+            b"\x8B\xCB\x68"
+            + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+            + b"\x83\xEC\x10\x8B\xC4\x0F\x11\x00"
+            b"\xE8\x00\x00\x00\x00"
+        )
+        if (
+            spawn_reset_data[
+                record_off - spawn_reset_sym.value :
+                record_off - spawn_reset_sym.value + len(expected_record)
+            ]
+            != expected_record
+        ):
+            errors.append(
+                f"CCollectableItem::Reset Holiday spawn record {index} "
+                "does not match the fixed 27-byte AddSpawnArea sequence"
+            )
+        if relocation_targets.get(record_off + 3) != rect_symbol:
+            errors.append(
+                f"CCollectableItem::Reset Holiday spawn record {index} "
+                "uses the wrong mobile rectangle"
+            )
+        if relocation_targets.get(record_off + 23) != add_spawn_name:
+            errors.append(
+                f"CCollectableItem::Reset Holiday spawn record {index} "
+                "does not call AddSpawnArea"
+            )
 
     collection_scene_obj = CoffObject(PATCHED / "CollectionScene.obj")
     activate_data, _activate_sym, _activate_sec = function_bytes(
@@ -4807,6 +4907,42 @@ def validate_holiday_ornament_native_contract(manifest):
             f"CCollectionScene::gCollectable ornament page expected {expected_ornament_values}, got {ornament_values}"
         )
 
+    holiday_desc_count = (
+        holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
+    )
+    sm_collectable = collection_scene_obj.symbol(
+        "?sm_sCollectable@CCollectionScene@@0PAUSCollectable@1@A"
+    )
+    sm_collectable_sec = collection_scene_obj.section(sm_collectable.section)
+    ornament_slots_raw = (
+        sm_collectable_sec.raw_ptr
+        + sm_collectable.value
+        + 5 * HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT * 12
+    )
+    ornament_slots = [
+        struct.unpack_from(
+            "<III",
+            collection_scene_obj.buf,
+            ornament_slots_raw + index * 12,
+        )
+        for index in range(HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT)
+    ]
+    expected_ornament_slots = [
+        (
+            holiday_ornament_collection_item_image_id(
+                index,
+                holiday_desc_count,
+            ),
+            *HOLIDAY_ORNAMENT_COLLECTION_SLOT_POSITIONS[index],
+        )
+        for index in range(HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT)
+    ]
+    if ornament_slots != expected_ornament_slots:
+        errors.append(
+            "CCollectionScene::sm_sCollectable does not contain the "
+            "12 mobile-order Holiday Ornament slots"
+        )
+
     mouse_data, mouse_sym, mouse_sec = function_bytes(
         collection_scene_obj, "?HandleMouse@CCollectionScene@@UAE_NHUldwPoint@@@Z"
     )
@@ -4839,10 +4975,45 @@ def validate_holiday_ornament_native_contract(manifest):
     draw_data, draw_sym, draw_sec = function_bytes(
         collection_scene_obj, "?DrawScene@CCollectionScene@@MAEXXZ"
     )
-    if draw_data[0x17D : 0x186] != b"\xFF\x77\x14\xE8\x00\x00\x00\x00\x50":
-        errors.append("CCollectionScene::DrawScene missing Holiday Ornament page-count helper call")
-    if b"\xFF\x74\x87\x18" in draw_data:
-        errors.append("CCollectionScene::DrawScene still uses the five-entry cached count array")
+    draw_cave = None
+    if (
+        draw_data[0x17D] != 0xE9
+        or draw_data[0x182 : 0x184] != b"\x90\x90"
+    ):
+        errors.append(
+            "CCollectionScene::DrawScene page-count lookup is not a "
+            "fixed-size seven-byte detour"
+        )
+    else:
+        draw_cave = (
+            0x17D
+            + 5
+            + struct.unpack_from("<i", draw_data, 0x17E)[0]
+        )
+        expected_draw_cave = (
+            b"\xFF\x77\x14\xE8\x00\x00\x00\x00\x50\xE9"
+        )
+        if (
+            draw_data[
+                draw_cave : draw_cave + len(expected_draw_cave)
+            ]
+            != expected_draw_cave
+        ):
+            errors.append(
+                "CCollectionScene::DrawScene code cave does not call the "
+                "Holiday page-count helper and push its result"
+            )
+        else:
+            return_target = (
+                draw_cave
+                + 14
+                + struct.unpack_from("<i", draw_data, draw_cave + 10)[0]
+            )
+            if return_target != 0x184:
+                errors.append(
+                    "CCollectionScene::DrawScene page-count cave does not "
+                    "resume at the first untouched instruction"
+                )
     helper_symbol = collection_scene_obj.symbol_by_name.get("_VF2CollectionPageCount@4")
     if helper_symbol is None:
         errors.append("CCollectionScene.obj has no stdcall _VF2CollectionPageCount@4 helper import")
@@ -4851,7 +5022,12 @@ def validate_holiday_ornament_native_contract(manifest):
             struct.unpack_from("<IIH", collection_scene_obj.buf, draw_sec.reloc_ptr + index * 10)
             for index in range(draw_sec.nreloc)
         ]
-        if not any(va == draw_sym.value + 0x181 and idx == helper_symbol.index for va, idx, _typ in relocs):
+        if draw_cave is None or not any(
+            va == draw_sym.value + draw_cave + 4
+            and idx == helper_symbol.index
+            and typ == IMAGE_REL_I386_REL32
+            for va, idx, typ in relocs
+        ):
             errors.append("CCollectionScene::DrawScene helper call has no relocation to _VF2CollectionPageCount@4")
     helper_source = PATCHED / "vf2_special_upgrade_effects.cpp"
     helper_starts_literal = "static const int starts[6] = {0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E};"
@@ -4896,13 +5072,109 @@ def validate_holiday_ornament_native_contract(manifest):
     if observer_items != [hex(value) for value in expected_ornament_values]:
         errors.append("CCollectable observer registration manifest does not cover every Holiday Ornament item")
 
+    collectable_item_manifest = manifest.get(
+        "CollectableItemHolidayOrnaments",
+        {},
+    )
+    if (
+        collectable_item_manifest.get("spawn_area_count")
+        != len(HOLIDAY_ORNAMENT_SPAWN_RECTS)
+    ):
+        errors.append(
+            "Holiday Ornament manifest does not record the three mobile "
+            "spawn regions"
+        )
+    if collectable_item_manifest.get("mobile_spawn_rects") != [
+        [hex(value) for value in rect]
+        for _symbol, rect in HOLIDAY_ORNAMENT_SPAWN_RECTS
+    ]:
+        errors.append(
+            "Holiday Ornament manifest spawn rectangles do not match mobile "
+            "1.7.16"
+        )
+
     the_collector = manifest.get("TheCollectorHolidayOrnaments", {})
     if the_collector.get("achievement_reset") != hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID):
         errors.append("The Collector sell-all hook does not reset the Ornamentologist achievement row")
-    if the_collector.get("keep_choice_branch_repaired", {}).get("new_displacement") != "0x72":
-        errors.append("The Collector keep-choice branch repair is not recorded")
+    if not the_collector.get("keep_choice_branch", {}).get("unchanged"):
+        errors.append("The Collector keep-choice stock branch is not recorded as unchanged")
+    if [
+        row.get("operand_offset")
+        for row in the_collector.get("offer_count_relocations", [])
+    ] != ["0x88", "0xfb", "0x171"]:
+        errors.append(
+            "The Collector manifest does not record the three relocation-only "
+            "Holiday rarity counts"
+        )
 
     achievement_obj = CoffObject(PATCHED / "Achievement.obj")
+    achievements_complete_data, _complete_count_sym, _complete_count_sec = (
+        function_bytes(
+            achievement_obj,
+            "?AchievementsComplete@CAchievement@@QAEHXZ",
+        )
+    )
+    if achievements_complete_data[0x23 : 0x26] != b"\x83\xFE\x60":
+        errors.append(
+            "CAchievement::AchievementsComplete does not scan all "
+            "96 achievement rows in the patched COFF object"
+        )
+    achievement_list = achievement_obj.symbol(
+        "?achievementList@@3PAUsAchievementListEntry@@A"
+    )
+    achievement_list_sec = achievement_obj.section(achievement_list.section)
+    for achievement_id, expected_target, label in (
+        (
+            HOLIDAY_ORNAMENT_MASTER_COLLECTOR_ID,
+            HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET,
+            "Master Collector",
+        ),
+        (
+            HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID,
+            HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET,
+            "Goal Collector",
+        ),
+        (
+            HOLIDAY_ORNAMENT_ACHIEVEMENT_ID,
+            HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET,
+            "Ornamentologist",
+        ),
+    ):
+        target = struct.unpack_from(
+            "<I",
+            achievement_obj.buf,
+            achievement_list_sec.raw_ptr
+            + achievement_list.value
+            + achievement_id * ACHIEVEMENT_ROW_SIZE
+            + 4,
+        )[0]
+        if target != expected_target:
+            errors.append(
+                f"{label} target expected {expected_target}, got {target}"
+            )
+
+    queue_data, _queue_sym, _queue_sec = function_bytes(
+        achievement_obj,
+        "?QueueAchievementNotify@CAchievement@@AAEXW4EAchievement@@@Z",
+    )
+    if queue_data[0x19 : 0x1C] != b"\x83\xF8\x60":
+        errors.append(
+            "CAchievement::QueueAchievementNotify does not scan all "
+            "96 achievement slots"
+        )
+    reset_queue_data, _reset_queue_sym, _reset_queue_sec = function_bytes(
+        achievement_obj,
+        "?ResetNotifyQueue@CAchievement@@AAEXXZ",
+    )
+    if (
+        reset_queue_data[0x11 : 0x16]
+        != b"\xB9\x60\x00\x00\x00"
+    ):
+        errors.append(
+            "CAchievement::ResetNotifyQueue does not clear all "
+            "96 achievement slots"
+        )
+
     set_complete_data, set_complete_sym, set_complete_sec = function_bytes(
         achievement_obj,
         "?SetComplete@CAchievement@@QAEXW4EAchievement@@@Z",
@@ -4929,12 +5201,105 @@ def validate_holiday_ornament_native_contract(manifest):
         errors.append("CAchievement::SetComplete Holiday hook lacks its IncrementProgress relocation")
 
     island_obj = CoffObject(PATCHED / "IslandEvents.obj")
-    impact_data, _impact_sym, _impact_sec = function_bytes(
+    canfire_data, canfire_sym, canfire_sec = function_bytes(
+        island_obj,
+        "?CanFire@CEventTheCollector@@UAE_NXZ",
+    )
+    stock_island_obj = CoffObject(SRC_OBJS / "IslandEvents.obj")
+    stock_canfire_data, _stock_canfire_sym, _stock_canfire_sec = function_bytes(
+        stock_island_obj,
+        "?CanFire@CEventTheCollector@@UAE_NXZ",
+    )
+    if canfire_data != stock_canfire_data:
+        errors.append(
+            "CEventTheCollector::CanFire bytes changed even though B151 "
+            "uses relocation-only Holiday offer hooks"
+        )
+    collector_count_helper_name = (
+        "?CollectionCountWithHolidayOrnaments@CCollectableItem@@"
+        "QBE?BHW4ECarrying@@_N11@Z"
+    )
+    collector_count_helper = island_obj.symbol_by_name.get(
+        collector_count_helper_name
+    )
+    stock_count_symbol = island_obj.symbol(
+        "?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z"
+    )
+    canfire_relocs = {
+        vaddr: (symbol_index, rtype)
+        for vaddr, symbol_index, rtype in (
+            struct.unpack_from(
+                "<IIH",
+                island_obj.buf,
+                canfire_sec.reloc_ptr + index * 10,
+            )
+            for index in range(canfire_sec.nreloc)
+        )
+    }
+    if collector_count_helper is None:
+        errors.append(
+            "IslandEvents.obj has no Holiday aggregate count helper import"
+        )
+    else:
+        for operand_off in (0x088, 0x0FB, 0x171):
+            if canfire_relocs.get(
+                canfire_sym.value + operand_off
+            ) != (collector_count_helper.index, IMAGE_REL_I386_REL32):
+                errors.append(
+                    "CEventTheCollector::CanFire rarity call "
+                    f"{operand_off:#x} does not include Holiday Ornaments"
+                )
+        if canfire_relocs.get(
+            canfire_sym.value + 0x1AC
+        ) != (stock_count_symbol.index, IMAGE_REL_I386_REL32):
+            errors.append(
+                "CEventTheCollector::CanFire final eligibility no longer "
+                "matches mobile stock-family behavior"
+            )
+
+    impact_data, impact_sym, impact_sec = function_bytes(
         island_obj,
         "?ImpactGame@CEventTheCollector@@UAEXH@Z",
     )
-    if impact_data[0x07 : 0x09] != b"\x75\x72":
-        errors.append("CEventTheCollector::ImpactGame keep-choice branch still targets inserted bytes")
+    if impact_data[0x07 : 0x09] != b"\x75\x66":
+        errors.append(
+            "CEventTheCollector::ImpactGame keep-choice branch is not the "
+            "unchanged stock branch"
+        )
+    reset_helper_name = (
+        "?ResetHolidayOrnamentCollectorProgress@CAchievement@@"
+        "QAEXW4EAchievement@@@Z"
+    )
+    reset_helper = island_obj.symbol_by_name.get(reset_helper_name)
+    impact_relocs = {
+        vaddr: (symbol_index, rtype)
+        for vaddr, symbol_index, rtype in (
+            struct.unpack_from(
+                "<IIH",
+                island_obj.buf,
+                impact_sec.reloc_ptr + index * 10,
+            )
+            for index in range(impact_sec.nreloc)
+        )
+    }
+    if reset_helper is None or impact_relocs.get(
+        impact_sym.value + 0x6B
+    ) != (reset_helper.index, IMAGE_REL_I386_REL32):
+        errors.append(
+            "CEventTheCollector::ImpactGame sell tail does not route through "
+            "the Holiday progress-reset helper"
+        )
+    if helper_source.is_file():
+        if (
+            "void CAchievement::ResetHolidayOrnamentCollectorProgress("
+            not in helper_text
+            or "ResetSingleAchievementProgress((EAchievement)0x5F);"
+            not in helper_text
+        ):
+            errors.append(
+                "Holiday Collector reset helper source does not reset "
+                "Ornamentologist progress before the stock tail"
+            )
 
     if errors:
         raise RuntimeError("Holiday Ornament native contract failed:\n- " + "\n- ".join(errors))
@@ -4949,7 +5314,23 @@ def validate_holiday_ornament_native_contract(manifest):
             "holiday_state_start": hex(holiday_state_start),
             "holiday_state_end_exclusive": hex(holiday_state_end),
             "save_state_covers_holiday_range": True,
+            "load_state_covers_holiday_range": True,
             "reset_collection_covers_holiday_range": True,
+        },
+        "spawning": {
+            "stock_spawn_area_count": stock_spawn_call_count,
+            "holiday_spawn_area_count": len(
+                HOLIDAY_ORNAMENT_SPAWN_RECTS
+            ),
+            "total_spawn_area_count": expected_spawn_call_count,
+            "mobile_spawn_rects": [
+                [hex(value) for value in rect]
+                for _symbol, rect in HOLIDAY_ORNAMENT_SPAWN_RECTS
+            ],
+            "add_and_lucky_rock_route": (
+                "stock/mobile-parity Add retained: 4 percent rare and "
+                "13 percent uncommon normally; Lucky Rock doubles both"
+            ),
         },
         "count_total_collectables": {
             "stock_scan_range": "0x4f-0xfd",
@@ -4960,8 +5341,19 @@ def validate_holiday_ornament_native_contract(manifest):
             "page": HOLIDAY_ORNAMENT_COLLECTION_PAGE,
             "page_starts": [hex(value) for value in HOLIDAY_ORNAMENT_COLLECTION_PAGE_STARTS],
             "g_collectable_values": [hex(value) for value in ornament_values],
+            "slot_entries": [
+                {
+                    "image_id": hex(image_id),
+                    "position": [x, y],
+                }
+                for image_id, x, y in ornament_slots
+            ],
+            "mobile_slot_positions": [
+                [x, y]
+                for x, y in HOLIDAY_ORNAMENT_MOBILE_SLOT_POSITIONS
+            ],
             "page_count_helper": "_VF2CollectionPageCount@4",
-            "page_count_route": "DrawScene calls stdcall _VF2CollectionPageCount@4(page); Activate keeps five stock cached counts and this+0x2C as hover state.",
+            "page_count_route": "DrawScene uses a fixed-size code cave to call stdcall _VF2CollectionPageCount@4(page); Activate keeps five stock cached counts and this+0x2C as hover state.",
             "tooltip_rarity_label_ids": [hex(value) for value in HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS],
         },
         "main_scene_total": {
@@ -4971,22 +5363,69 @@ def validate_holiday_ornament_native_contract(manifest):
             "helper": aggregate_helper_name,
         },
         "pickup_dispatch": {
-            "find_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
             "active_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
             "observer_registration": "validated",
+            "find": "stock exact ECarrying equality retained",
+            "was_item_spawned": "stock exact ECarrying equality retained",
+            "drop": (
+                "first copies increment 0x5F; duplicates retain the stock "
+                "coin-only route; the twelfth unique copy completes 0x4D"
+            ),
         },
         "sell_all": {
             "event": "CEventTheCollector",
             "achievement_reset": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
-            "keep_choice_branch_repaired": True,
+            "offer_count_relocations": ["0x88", "0xfb", "0x171"],
+            "keep_choice_branch_unchanged": True,
+            "availability_route": "stock mobile-parity eligibility retained",
+        },
+        "achievement": {
+            "collection_master_target": HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET,
+            "goal_collector_target": HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET,
+            "ornamentologist_target": HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET,
+            "visible_order_bound": HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT,
+            "notify_queue_bound": HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT,
         },
         "control_flow": {
-            "find_code_cave": True,
-            "was_item_spawned_code_cave": True,
+            "find_code_cave": False,
+            "was_item_spawned_code_cave": False,
             "handle_mouse_code_cave": True,
+            "page_count_code_cave": True,
             "drop_incomplete_reentry_guard": True,
+            "drop_first_copy_route": True,
             "achievement_completion_idempotent": True,
         },
+    }
+
+
+def remove_holiday_ornament_collection_art(manifest):
+    image_root = OUT / "Images"
+    collection_root = image_root / "CollectionOrnaments"
+    targets = [
+        image_root / HOLIDAY_ORNAMENT_BACKGROUND_FILENAME,
+        *[
+            collection_root / runtime_name
+            for runtime_name, _source_name, _placeholder_name
+            in HOLIDAY_ORNAMENT_COLLECTION_FILES
+        ],
+    ]
+    removed = []
+    for target in targets:
+        if target.is_file():
+            target.unlink()
+            removed.append(
+                str(target.relative_to(OUT)).replace(chr(92), "/")
+            )
+    if collection_root.is_dir() and not any(collection_root.iterdir()):
+        collection_root.rmdir()
+    manifest["holiday_ornament_collection_art"] = {
+        "enabled": False,
+        "status": "removed from Holiday-disabled runtime payload",
+        "removed": removed,
+        "reason": (
+            "No image descriptors reference Holiday Ornament collection art "
+            "while the optional collection page is disabled."
+        ),
     }
 
 
@@ -5017,6 +5456,10 @@ def sync_holiday_ornament_collection_art(manifest):
         }
 
     status = {
+        "canonical_source_dir": str(HOLIDAY_ORNAMENT_PREEXTRACTED_ART_DIR),
+        "canonical_asset_manifest": str(
+            HOLIDAY_ORNAMENT_PREEXTRACTED_ART_DIR / "asset-manifest.json"
+        ),
         "preferred_source_dir": str(HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR),
         "fallback_source_dat": str(HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT),
         "fallback_source_pvr": str(HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR),
@@ -5024,6 +5467,109 @@ def sync_holiday_ornament_collection_art(manifest):
         "background_image_id": hex(holiday_ornament_collection_background_image_id(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)),
         "entries": [],
     }
+
+    canonical_manifest_path = (
+        HOLIDAY_ORNAMENT_PREEXTRACTED_ART_DIR / "asset-manifest.json"
+    )
+    canonical_names = [
+        runtime_name
+        for runtime_name, _source_name, _placeholder_name
+        in HOLIDAY_ORNAMENT_COLLECTION_FILES
+    ] + [HOLIDAY_ORNAMENT_BACKGROUND_FILENAME]
+    missing_canonical = [
+        name
+        for name in canonical_names
+        if not (HOLIDAY_ORNAMENT_PREEXTRACTED_ART_DIR / name).is_file()
+    ]
+    if not canonical_manifest_path.is_file():
+        missing_canonical.append("asset-manifest.json")
+    if missing_canonical:
+        raise RuntimeError(
+            "Canonical Holiday Ornament artwork is incomplete: "
+            + ", ".join(sorted(set(missing_canonical)))
+        )
+
+    canonical_manifest = json.loads(
+        canonical_manifest_path.read_text(encoding="utf-8")
+    )
+    canonical_records = {
+        row["filename"]: row
+        for row in canonical_manifest.get("assets", [])
+        if isinstance(row, dict) and "filename" in row
+    }
+    if set(canonical_records) != set(canonical_names):
+        raise RuntimeError(
+            "Canonical Holiday Ornament asset manifest does not describe "
+            "exactly the 12 icons and collection background"
+        )
+
+    verified_canonical = {}
+    for name in canonical_names:
+        source = HOLIDAY_ORNAMENT_PREEXTRACTED_ART_DIR / name
+        record = canonical_records[name]
+        digest = hashlib.sha256(source.read_bytes()).hexdigest()
+        if digest != record.get("sha256"):
+            raise RuntimeError(
+                f"Canonical Holiday Ornament artwork hash mismatch: {name}"
+            )
+        with Image.open(source) as opened:
+            image = opened.convert("RGBA")
+        if list(image.size) != record.get("dimensions"):
+            raise RuntimeError(
+                f"Canonical Holiday Ornament artwork size mismatch: {name}"
+            )
+        if image.getbbox() is None or image.getchannel("A").getbbox() is None:
+            raise RuntimeError(
+                f"Canonical Holiday Ornament artwork is blank: {name}"
+            )
+        verified_canonical[name] = {
+            "sha256": digest,
+            "dimensions": list(image.size),
+        }
+
+    background_source = (
+        HOLIDAY_ORNAMENT_PREEXTRACTED_ART_DIR
+        / HOLIDAY_ORNAMENT_BACKGROUND_FILENAME
+    )
+    background_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(background_source, background_target)
+    status["background"] = {
+        "path": str(background_target.relative_to(OUT)).replace(chr(92), "/"),
+        "source": str(background_source),
+        **verified_canonical[HOLIDAY_ORNAMENT_BACKGROUND_FILENAME],
+    }
+
+    for index, (runtime_name, _source_name, _placeholder_name) in enumerate(
+        HOLIDAY_ORNAMENT_COLLECTION_FILES
+    ):
+        source = HOLIDAY_ORNAMENT_PREEXTRACTED_ART_DIR / runtime_name
+        target = output_root / runtime_name
+        shutil.copy2(source, target)
+        status["entries"].append({
+            "collectable": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START + index),
+            "image_id": hex(
+                holiday_ornament_collection_item_image_id(
+                    index,
+                    holiday_body_descriptor_count()
+                    if ENABLE_HOLIDAY_BODY_TYPES
+                    else 0,
+                )
+            ),
+            "path": str(target.relative_to(OUT / "Images")).replace(chr(92), "/"),
+            "source": str(source),
+            **verified_canonical[runtime_name],
+        })
+
+    status["collectables_small"] = sync_small_collectables_sheet()
+    manifest["holiday_ornament_collection_art"] = {
+        **status,
+        "status": "copied_from_workspace_preextracted_assets",
+        "output_root": str(output_root),
+        "asset_manifest_schema": canonical_manifest.get("schema_version"),
+        "provenance": canonical_manifest.get("provenance", {}),
+    }
+    return
+
     supplied_files = [HOLIDAY_ORNAMENT_FRAME_SOURCE]
     for _runtime_name, source_name, placeholder_name in HOLIDAY_ORNAMENT_COLLECTION_FILES:
         supplied_files.append(source_name)
@@ -7399,6 +7945,7 @@ class CAchievement {
 public:
     void Reset();
     void ResetSingleAchievementProgress(EAchievement achievement);
+    void ResetHolidayOrnamentCollectorProgress(EAchievement stockAchievement);
     void SetComplete(EAchievement achievement);
     bool IsComplete(EAchievement achievement);
     void IncrementProgress(EAchievement achievement, int amount);
@@ -7477,6 +8024,7 @@ static void VF2ResetAchievementRaw(int achievement) {
     unsigned char *record = (unsigned char *)&Achievement + achievement * 12;
     record[0] = 0;
     *(unsigned int *)(record + 4) = 0;
+    *(unsigned int *)(record + 8) = 0;
 }
 
 static void VF2ResetCollectionAchievements() {
@@ -7534,6 +8082,13 @@ int const CCollectableItem::CollectionCountWithHolidayOrnaments(
 ) const {
     return CollectionCount(item, common, uncommon, rare)
         + CollectionCount((ECarrying)0x9E, common, uncommon, rare);
+}
+
+void CAchievement::ResetHolidayOrnamentCollectorProgress(
+    EAchievement stockAchievement
+) {
+    ResetSingleAchievementProgress((EAchievement)0x5F);
+    ResetSingleAchievementProgress(stockAchievement);
 }
 
 extern "C" int __stdcall VF2CollectionPageCount(int page) {
@@ -8958,6 +9513,24 @@ def patch_achievement_holiday_ornaments(manifest):
     )
     achievement_obj.insert_section_bytes(list_sym.section, row_insert, ornament_row)
 
+    master_collector_target_off = (
+        list_sym.value
+        + HOLIDAY_ORNAMENT_MASTER_COLLECTOR_ID * ACHIEVEMENT_ROW_SIZE
+        + 4
+    )
+    if struct.unpack_from(
+        "<I",
+        achievement_obj.buf,
+        list_sec.raw_ptr + master_collector_target_off,
+    )[0] != 5:
+        raise RuntimeError("Unexpected Master Collector target count")
+    struct.pack_into(
+        "<I",
+        achievement_obj.buf,
+        list_sec.raw_ptr + master_collector_target_off,
+        HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET,
+    )
+
     goal_collector_target_off = list_sym.value + HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID * ACHIEVEMENT_ROW_SIZE + 4
     if struct.unpack_from("<I", achievement_obj.buf, list_sec.raw_ptr + goal_collector_target_off)[0] != 12:
         raise RuntimeError("Unexpected Goal collector target count")
@@ -9008,6 +9581,45 @@ def patch_achievement_holiday_ornaments(manifest):
         increment_sym,
         IMAGE_REL_I386_REL32,
     )
+
+    queue_sym = achievement_obj.symbol(
+        "?QueueAchievementNotify@CAchievement@@AAEXW4EAchievement@@@Z"
+    )
+    queue_sec = achievement_obj.section(queue_sym.section)
+    queue_bound = queue_sym.value + 0x19
+    if (
+        achievement_obj.buf[
+            queue_sec.raw_ptr + queue_bound : queue_sec.raw_ptr + queue_bound + 3
+        ]
+        != b"\x83\xF8\x5F"
+    ):
+        raise RuntimeError("Unexpected QueueAchievementNotify bound")
+    achievement_obj.buf[queue_sec.raw_ptr + queue_bound + 2] = (
+        HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT
+    )
+
+    reset_queue_sym = achievement_obj.symbol(
+        "?ResetNotifyQueue@CAchievement@@AAEXXZ"
+    )
+    reset_queue_sec = achievement_obj.section(reset_queue_sym.section)
+    reset_queue_count = reset_queue_sym.value + 0x11
+    expected_reset_queue_count = b"\xB9\x5F\x00\x00\x00"
+    if (
+        achievement_obj.buf[
+            reset_queue_sec.raw_ptr
+            + reset_queue_count : reset_queue_sec.raw_ptr
+            + reset_queue_count
+            + len(expected_reset_queue_count)
+        ]
+        != expected_reset_queue_count
+    ):
+        raise RuntimeError("Unexpected ResetNotifyQueue count")
+    struct.pack_into(
+        "<I",
+        achievement_obj.buf,
+        reset_queue_sec.raw_ptr + reset_queue_count + 1,
+        HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT,
+    )
     achievement_obj.write(PATCHED / "Achievement.obj")
 
     scene_obj = CoffObject(PATCHED / "AchievementsScene.obj")
@@ -9055,8 +9667,11 @@ def patch_achievement_holiday_ornaments(manifest):
         "description": "You completed the collection of holiday ornaments.",
         "title_string": hex(holiday_ornament_achievement_title_string_id()),
         "description_string": hex(holiday_ornament_achievement_desc_string_id()),
+        "master_collector_id": hex(HOLIDAY_ORNAMENT_MASTER_COLLECTOR_ID),
+        "master_collector_target": HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET,
         "goal_collector_id": hex(HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID),
         "goal_collector_target": HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET,
+        "notification_queue_count": HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT,
         "save_state_note": "CAchievement already serializes 0x125 12-byte records; no save-state size change was needed for achievement 0x5F.",
     }
 
@@ -9202,102 +9817,27 @@ def patch_collectable_item_holiday_ornaments(manifest):
         "complete_check_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
         "specific_goal_row": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
         "incomplete_reentry_sentinel": "xor edi,edi",
-    })
-
-    find_sym = obj.symbol("?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z")
-    find_sec = obj.section(find_sym.section)
-    find_detour = find_sym.value + 0x86
-    find_expected = b"\x83\xFF\x7D\x75\x39\x83\xC0\x83\x83\xF8\x03\x77\x31"
-    find_accept = find_sym.value + 0x93
-    find_skip = find_sym.value + 0xC4
-    find_cave = find_sec.raw_size
-    find_payload = bytearray()
-    find_payload += b"\x81\xFF" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
-    find_payload += b"\x75\x00"
-    find_stock_rel = len(find_payload) - 1
-    find_payload += b"\x2D" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
-    find_payload += b"\x83\xF8" + bytes([HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT - 1])
-    find_payload += b"\x0F\x86" + section_rel32(find_cave + len(find_payload), 6, find_accept)
-    find_payload += b"\xE9" + section_rel32(find_cave + len(find_payload), 5, find_skip)
-    find_stock = len(find_payload)
-    find_payload[find_stock_rel] = find_stock - (find_stock_rel + 1)
-    find_payload += b"\x83\xFF\x7D"
-    find_payload += b"\x0F\x85" + section_rel32(find_cave + len(find_payload), 6, find_skip)
-    find_payload += b"\x83\xC0\x83"
-    find_payload += b"\x83\xF8\x03"
-    find_payload += b"\x0F\x87" + section_rel32(find_cave + len(find_payload), 6, find_skip)
-    find_payload += b"\xE9" + section_rel32(find_cave + len(find_payload), 5, find_accept)
-    obj.insert_section_bytes(find_sym.section, find_cave, bytes(find_payload))
-    patch_section_near_jump(
-        obj,
-        find_sym.section,
-        find_detour,
-        find_cave,
-        len(find_expected),
-        find_expected,
-    )
-    patches.append({
-        "function": "?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z",
-        "detour_offset": "0x86",
-        "code_cave_offset": hex(find_cave),
-        "request_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
-        "active_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
-        "note": "Lets villager searches for base ornament request 0x9E match any spawned ornament variant.",
-    })
-
-    spawned_sym = obj.symbol("?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z")
-    spawned_sec = obj.section(spawned_sym.section)
-    spawned_detour = spawned_sym.value + 0x14
-    spawned_expected = b"\x74\x04\x39\x08\x74\x0F\x42"
-    spawned_continue = spawned_sym.value + 0x1B
-    spawned_true = spawned_sym.value + 0x29
-    spawned_cave = spawned_sec.raw_size
-    spawned_payload = bytearray()
-    spawned_payload += b"\x0F\x84\x00\x00\x00\x00"
-    inactive_rel = 2
-    spawned_payload += b"\x39\x08"
-    spawned_payload += b"\x0F\x84" + section_rel32(spawned_cave + len(spawned_payload), 6, spawned_true)
-    spawned_payload += b"\x81\xF9" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
-    spawned_payload += b"\x75\x00"
-    nonholiday_rel = len(spawned_payload) - 1
-    spawned_payload += b"\x81\x38" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
-    spawned_payload += b"\x72\x00"
-    below_rel = len(spawned_payload) - 1
-    spawned_payload += b"\x81\x38" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_END)
-    spawned_payload += b"\x0F\x86" + section_rel32(spawned_cave + len(spawned_payload), 6, spawned_true)
-    spawned_false = len(spawned_payload)
-    spawned_payload[inactive_rel : inactive_rel + 4] = section_rel32(
-        spawned_cave,
-        6,
-        spawned_cave + spawned_false,
-    )
-    spawned_payload[nonholiday_rel] = spawned_false - (nonholiday_rel + 1)
-    spawned_payload[below_rel] = spawned_false - (below_rel + 1)
-    spawned_payload += b"\x42"
-    spawned_payload += b"\xE9" + section_rel32(spawned_cave + len(spawned_payload), 5, spawned_continue)
-    obj.insert_section_bytes(spawned_sym.section, spawned_cave, bytes(spawned_payload))
-    patch_section_near_jump(
-        obj,
-        spawned_sym.section,
-        spawned_detour,
-        spawned_cave,
-        len(spawned_expected),
-        spawned_expected,
-    )
-    patches.append({
-        "function": "?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
-        "detour_offset": "0x14",
-        "code_cave_offset": hex(spawned_cave),
-        "request_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
-        "active_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
-        "note": "Prevents repeated base-spawn attempts when any ornament variant is already active.",
+        "duplicate_route": (
+            "Duplicate ornaments retain the stock coin-only path; only a "
+            "first copy increments Ornamentologist 0x5F"
+        ),
     })
 
     obj.write(PATCHED / "CollectableItem.obj")
     manifest["CollectableItemHolidayOrnaments"] = {
         "status": "patched",
         "collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
-        "spawn_model": "registered as an additional AddSpawnArea collection; CCollectableItem::Update/Add and Lucky Rock odds remain stock",
+        "spawn_model": "registered as three exact mobile AddSpawnArea regions; CCollectableItem::Update/Add and Lucky Rock odds remain stock",
+        "spawn_area_count": len(HOLIDAY_ORNAMENT_SPAWN_RECTS),
+        "mobile_spawn_rects": [
+            [hex(value) for value in rect]
+            for _symbol, rect in HOLIDAY_ORNAMENT_SPAWN_RECTS
+        ],
+        "exact_item_matching": {
+            "find": "stock exact ECarrying equality retained",
+            "was_item_spawned": "stock exact ECarrying equality retained",
+            "reason": "mobile 1.7.16 Add selects a concrete 0x9E-0xA9 variant before duplicate checking",
+        },
         "patches": patches,
     }
 
@@ -9411,14 +9951,34 @@ def patch_collection_scene_holiday_ornaments(manifest):
     draw_sym = obj.symbol("?DrawScene@CCollectionScene@@MAEXXZ")
     draw_sec = obj.section(draw_sym.section)
     draw_count_off = draw_sym.value + 0x17D
-    if obj.buf[draw_sec.raw_ptr + draw_count_off : draw_sec.raw_ptr + draw_count_off + 7] != b"\x8B\x47\x14\xFF\x74\x87\x18":
-        raise RuntimeError("Unexpected CCollectionScene::DrawScene count bytes")
-    obj.insert_section_bytes(draw_sym.section, draw_sym.value + 0x184, b"\x90\x90")
-    draw_sec = obj.section(draw_sym.section)
-    draw_payload = b"\xFF\x77\x14\xE8\x00\x00\x00\x00\x50"
-    obj.buf[draw_sec.raw_ptr + draw_count_off : draw_sec.raw_ptr + draw_count_off + len(draw_payload)] = draw_payload
+    draw_expected = b"\x8B\x47\x14\xFF\x74\x87\x18"
+    draw_continue = draw_sym.value + 0x184
+    draw_cave = draw_sec.raw_size
+    draw_payload = bytearray()
+    draw_payload += b"\xFF\x77\x14"                  # push [edi+14h] (page)
+    draw_payload += b"\xE8\x00\x00\x00\x00"       # call page-count helper
+    draw_payload += b"\x50"                           # push returned count
+    draw_payload += b"\xE9" + section_rel32(
+        draw_cave + len(draw_payload),
+        5,
+        draw_continue,
+    )
+    obj.insert_section_bytes(draw_sym.section, draw_cave, bytes(draw_payload))
     helper_sym = obj.append_undefined_symbol("_VF2CollectionPageCount@4")
-    obj.append_relocation(draw_sym.section, draw_sym.value + 0x181, helper_sym, IMAGE_REL_I386_REL32)
+    obj.append_relocation(
+        draw_sym.section,
+        draw_cave + 4,
+        helper_sym,
+        IMAGE_REL_I386_REL32,
+    )
+    patch_section_near_jump(
+        obj,
+        draw_sym.section,
+        draw_count_off,
+        draw_cave,
+        len(draw_expected),
+        draw_expected,
+    )
 
     # Append the tooltip extension only after every in-function insertion in
     # this section, so its detour target cannot move afterward.
@@ -9506,7 +10066,9 @@ def patch_collection_scene_holiday_ornaments(manifest):
             for index, (image_id, x, y) in enumerate(page_entries)
         ],
         "page_count_helper": "_VF2CollectionPageCount@4",
-        "page_count_route": "DrawScene calls the stdcall page-count helper instead of reading the five-entry stock count cache.",
+        "page_count_route": "fixed-size DrawScene detour calls the stdcall page-count helper instead of reading the five-entry stock count cache.",
+        "page_count_detour_offset": "0x17d",
+        "page_count_code_cave_offset": hex(draw_cave),
         "main_scene_total": {
             "function": "theMainScene::MapClickFeedback",
             "family_starts": [hex(value) for value in HOLIDAY_ORNAMENT_COLLECTION_PAGE_STARTS],
@@ -9525,134 +10087,99 @@ def patch_the_collector_holiday_ornaments(manifest):
     obj = CoffObject(PATCHED / "IslandEvents.obj")
 
     canfire_sym = obj.symbol("?CanFire@CEventTheCollector@@UAE_NXZ")
-    canfire_sec_index = canfire_sym.section
-    collectable_item_sym = obj.symbol("?CollectableItem@@3VCCollectableItem@@A").index
-    collection_count_sym = obj.symbol("?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z").index
-
-    def push_byte(value):
-        return bytes([0x6A, value & 0xFF])
-
-    def count_payload(arg3, arg2, arg1, add_to_esi=True):
-        payload = bytearray()
-        payload += push_byte(arg3)
-        payload += push_byte(arg2)
-        payload += push_byte(arg1)
-        payload += b"\x68" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
-        payload += b"\xB9\x00\x00\x00\x00"
-        mov_reloc = len(payload) - 4
-        payload += b"\xE8\x00\x00\x00\x00"
-        call_reloc = len(payload) - 4
-        if add_to_esi:
-            payload += b"\x03\xF0"
-        return bytes(payload), mov_reloc, call_reloc
-
-    inserted = []
-
-    def current_off(original_off):
-        return original_off + sum(length for at, length in inserted if at <= original_off)
-
-    canfire_offer_patches = []
-    for original_off, args, expected, note in (
-        (0x08E, (0, 0, 1), b"\xB9\x00\x00\x00\x00", "stock first rarity/offer pass"),
-        (0x101, (0, 1, 0), b"\xB9\x00\x00\x00\x00", "stock second rarity/offer pass"),
-        (0x177, (1, 0, 0), b"\x6B\xC6\x64", "stock third rarity/offer pass"),
+    canfire_sec = obj.section(canfire_sym.section)
+    aggregate_helper_name = (
+        "?CollectionCountWithHolidayOrnaments@CCollectableItem@@"
+        "QBE?BHW4ECarrying@@_N11@Z"
+    )
+    aggregate_helper = obj.append_undefined_symbol(aggregate_helper_name)
+    offer_count_relocations = []
+    for operand_off, rarity in (
+        (0x088, "common"),
+        (0x0FB, "uncommon"),
+        (0x171, "rare"),
     ):
-        insert_off = current_off(original_off)
-        canfire_sec = obj.section(canfire_sec_index)
-        if obj.buf[canfire_sec.raw_ptr + insert_off : canfire_sec.raw_ptr + insert_off + len(expected)] != expected:
-            raise RuntimeError(f"Unexpected CEventTheCollector::CanFire ornament count insertion site at {original_off:#x}")
-        payload, mov_reloc, call_reloc = count_payload(*args)
-        obj.insert_section_bytes(canfire_sec_index, insert_off, payload)
-        obj.append_relocation(canfire_sec_index, insert_off + mov_reloc, collectable_item_sym)
-        obj.append_relocation(canfire_sec_index, insert_off + call_reloc, collection_count_sym, IMAGE_REL_I386_REL32)
-        inserted.append((original_off, len(payload)))
-        canfire_offer_patches.append({
-            "insert_offset": hex(original_off),
-            "collection_count_args": [hex(HOLIDAY_ORNAMENT_COLLECTABLE_START), *args],
-            "note": note,
+        call_off = canfire_sym.value + operand_off - 1
+        canfire_sec = obj.section(canfire_sym.section)
+        if (
+            obj.buf[
+                canfire_sec.raw_ptr + call_off : canfire_sec.raw_ptr + call_off + 5
+            ]
+            != b"\xE8\x00\x00\x00\x00"
+        ):
+            raise RuntimeError(
+                "Unexpected CEventTheCollector::CanFire collection-count call "
+                f"at {operand_off:#x}"
+            )
+        obj.retarget_relocation(
+            canfire_sym.section,
+            canfire_sym.value + operand_off,
+            aggregate_helper,
+            IMAGE_REL_I386_REL32,
+        )
+        offer_count_relocations.append({
+            "operand_offset": hex(operand_off),
+            "rarity": rarity,
+            "route": aggregate_helper_name,
         })
-
-    availability_off = current_off(0x1B4)
-    canfire_sec = obj.section(canfire_sec_index)
-    expected_true = b"\xB0\x01\x8B\xE5\x5D\xC3"
-    if obj.buf[canfire_sec.raw_ptr + availability_off : canfire_sec.raw_ptr + availability_off + len(expected_true)] != expected_true:
-        raise RuntimeError("Unexpected CEventTheCollector::CanFire ornament availability insertion site")
-    availability_payload, mov_reloc, call_reloc = count_payload(1, 1, 1, add_to_esi=False)
-    availability_payload += b"\x85\xC0" + b"\x74\x06"
-    obj.insert_section_bytes(canfire_sec_index, availability_off, availability_payload)
-    obj.append_relocation(canfire_sec_index, availability_off + mov_reloc, collectable_item_sym)
-    obj.append_relocation(canfire_sec_index, availability_off + call_reloc, collection_count_sym, IMAGE_REL_I386_REL32)
-    inserted.append((0x1B4, len(availability_payload)))
-
-    canfire_sec = obj.section(canfire_sec_index)
-    branch_patches = [
-        (0x184, 0x35 + len(availability_payload), "no target villager still exits false"),
-        (0x199, 0x75, 0x19 + len(availability_payload), "completed stock family still exits true"),
-        (0x1B2, 0x75, len(availability_payload), "empty stock families fall through to ornament availability"),
-    ]
-    no_villager_current = current_off(0x184)
-    if obj.buf[canfire_sec.raw_ptr + no_villager_current - 1] != 0x74:
-        raise RuntimeError("Unexpected CEventTheCollector::CanFire no-villager branch")
-    obj.buf[canfire_sec.raw_ptr + no_villager_current] = 0x35 + len(availability_payload)
-
-    for original_jump_off, opcode, rel, note in branch_patches[1:]:
-        jump_current = current_off(original_jump_off)
-        if obj.buf[canfire_sec.raw_ptr + jump_current] not in (0x74, 0x75):
-            raise RuntimeError(f"Unexpected CEventTheCollector::CanFire branch at {original_jump_off:#x}")
-        obj.buf[canfire_sec.raw_ptr + jump_current] = opcode
-        obj.buf[canfire_sec.raw_ptr + jump_current + 1] = rel
 
     impact_sym = obj.symbol("?ImpactGame@CEventTheCollector@@UAEXH@Z")
     impact_sec = obj.section(impact_sym.section)
-    insert_off = impact_sym.value + 0x5D
+    reset_tail = impact_sym.value + 0x5D
     expected_tail = (
         b"\xC7\x45\x08\x5E\x00\x00\x00"
         b"\xB9\x00\x00\x00\x00"
         b"\x5D\xE9\x00\x00\x00\x00"
     )
-    if obj.buf[impact_sec.raw_ptr + insert_off : impact_sec.raw_ptr + insert_off + len(expected_tail)] != expected_tail:
+    if (
+        obj.buf[
+            impact_sec.raw_ptr + reset_tail :
+            impact_sec.raw_ptr + reset_tail + len(expected_tail)
+        ]
+        != expected_tail
+    ):
         raise RuntimeError("Unexpected CEventTheCollector::ImpactGame achievement-reset tail")
     keep_branch_raw = impact_sec.raw_ptr + impact_sym.value + 0x07
     if obj.buf[keep_branch_raw : keep_branch_raw + 2] != b"\x75\x66":
         raise RuntimeError("Unexpected CEventTheCollector::ImpactGame keep-choice branch")
 
-    achievement_sym = obj.symbol("?Achievement@@3VCAchievement@@A").index
-    reset_sym = obj.symbol("?ResetSingleAchievementProgress@CAchievement@@QAEXW4EAchievement@@@Z").index
-    payload = bytearray()
-    payload += b"\x6A" + bytes([HOLIDAY_ORNAMENT_ACHIEVEMENT_ID])
-    payload += b"\xB9\x00\x00\x00\x00"
-    payload += b"\xE8\x00\x00\x00\x00"
-    obj.insert_section_bytes(impact_sym.section, insert_off, bytes(payload))
-    obj.append_relocation(impact_sym.section, insert_off + 3, achievement_sym)
-    obj.append_relocation(impact_sym.section, insert_off + 8, reset_sym, IMAGE_REL_I386_REL32)
-    impact_sec = obj.section(impact_sym.section)
-    obj.buf[impact_sec.raw_ptr + impact_sym.value + 0x08] = 0x66 + len(payload)
+    reset_helper_name = (
+        "?ResetHolidayOrnamentCollectorProgress@CAchievement@@"
+        "QAEXW4EAchievement@@@Z"
+    )
+    reset_helper = obj.append_undefined_symbol(reset_helper_name)
+    obj.retarget_relocation(
+        impact_sym.section,
+        impact_sym.value + 0x6B,
+        reset_helper,
+        IMAGE_REL_I386_REL32,
+    )
     obj.write(PATCHED / "IslandEvents.obj")
 
     manifest["TheCollectorHolidayOrnaments"] = {
         "status": "patched",
-        "impact_function": "?ImpactGame@CEventTheCollector@@UAEXH@Z",
-        "impact_insert_offset": hex(insert_off),
-        "keep_choice_branch_repaired": {
-            "offset": "0x7",
-            "old_displacement": "0x66",
-            "new_displacement": hex(0x66 + len(payload)),
-        },
         "can_fire_function": "?CanFire@CEventTheCollector@@UAE_NXZ",
-        "can_fire_offer_patches": canfire_offer_patches,
-        "can_fire_availability_patch": {
-            "insert_offset": "0x1b4",
-            "collection_count_args": [hex(HOLIDAY_ORNAMENT_COLLECTABLE_START), 1, 1, 1],
-            "branch_adjustments": [
-                {"offset": hex(0x184), "note": "no target villager still exits false"},
-                {"offset": hex(0x199), "note": "completed stock family still exits true"},
-                {"offset": hex(0x1B2), "note": "empty stock families now test Holiday Ornaments before false"},
-            ],
+        "offer_count_relocations": offer_count_relocations,
+        "availability_route": (
+            "mobile-parity stock eligibility retained; Holiday counts join all "
+            "three offer pools after the event fires"
+        ),
+        "impact_function": "?ImpactGame@CEventTheCollector@@UAEXH@Z",
+        "achievement_reset_route": {
+            "tail_relocation_operand": "0x6b",
+            "helper": reset_helper_name,
+            "stock_tail_argument": "0x5e",
+            "holiday_progress": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
+        },
+        "keep_choice_branch": {
+            "offset": "0x7",
+            "bytes": "75 66",
+            "unchanged": True,
         },
         "sell_choice": 0,
         "collection_reset": "stock CCollectableItem::ResetCollection() clears the collection state table, including added 0x9E-0xA9 entries",
         "achievement_reset": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
-        "note": "Adds ornament base 0x9E to The Collector's offer/availability counts and resets Ornamentologist on the sell branch without changing the keep branch.",
+        "note": "Adds ornament base 0x9E to all three offer counts and resets unfinished Ornamentologist progress on Sell without inserting or shifting native branches.",
     }
 
 
@@ -13221,12 +13748,12 @@ def main():
     else:
         manifest["HolidayOrnamentsCollection"] = {
             "enabled": False,
-            "status": "disabled for normal-build stability",
-            "reason": "The timed Holiday Ornament spawn/pickup hooks are still isolated research until the mobile implementation is proven crash-free.",
+            "status": "optional patch not selected",
+            "reason": "The matching stock-collection executable intentionally retains the vanilla five-page Collections Chest.",
             "stock_collection_total": 60,
             "mobile_collection_total": 72,
-            "experimental_collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
-            "opt_in": "Set VF2_ENABLE_HOLIDAY_ORNAMENTS=1 only for isolated mobile Holiday Ornament collection tests.",
+            "collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
+            "selection": "Enable Holiday Ornaments in the offline patcher to install the fully linked six-page executable and artwork.",
         }
     if ENABLE_BEHAVIOR_PATCHES:
         patch_invisible_hammock_drop_action(manifest)
@@ -13293,11 +13820,7 @@ def main():
         validate_holiday_ornament_collectables_small_variants(manifest)
         validate_holiday_ornament_native_contract(manifest)
     else:
-        manifest["holiday_ornament_collection_art"] = {
-            "enabled": False,
-            "status": "not generated in normal builds",
-            "reason": "No image descriptors reference Holiday Ornament collection art while the collection page is disabled.",
-        }
+        remove_holiday_ornament_collection_art(manifest)
     patch_graphics_manager(manifest)
     patch_floating_anim_table(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:

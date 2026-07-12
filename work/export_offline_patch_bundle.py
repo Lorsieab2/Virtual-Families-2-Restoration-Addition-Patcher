@@ -162,9 +162,9 @@ SETTINGS = [
     {
         "id": "holiday_ornaments_collection",
         "label": "Add Holiday Ornaments collection",
-        "description": "Experimental patch: adds mobile Holiday Ornament yard collectibles, collection art, and goals. The B150 hotfix replaces unsafe in-function insertions with branch-safe code caves, repairs The Collector keep path, prevents repeated goal credit, and displays six pages/72 collectibles. It remains default-off until this replacement receives an in-game collection-cycle retest.",
+        "description": "Adds the fully linked mobile Holiday Ornament collection: 12 yard collectibles, six Collections Chest pages/72 total items, Ornamentologist and six-family collection goals, save/load support, Lucky Rock rarity odds, and The Collector offer/sell handling. B151 removes the non-mobile launch-crash hooks and uses tracked canonical artwork. Default-off so players opt into the extra collection; manual gameplay verification is still recommended.",
         "default": False,
-        "category": "experimental",
+        "category": "optional",
     },
     {
         "id": "mobile_purchases",
@@ -354,6 +354,14 @@ B150_CHANGELOG_LINES = (
     "- B150 patcher notices: The GUI, generated README, manifest, and Transparency Log identify Lorsieab2's passion project, ask players to support the original creators, and state that vanilla Virtual Families 2 saves are compatible with the modded version.",
     "- B150 compact package: The exporter prunes every payload file unreachable from manifest source/restore records, rejects accidental .bak generated assets, revalidates retained source hashes and sizes, and records portable base-payload metadata. This removed 1,860 unreachable files (100,244,363 bytes) without removing a selectable feature.",
     "- B150 hotfix verification status: All 16 native feature combinations generated, compiled, linked, passed manifest-gate checks, produced unique EXE hashes, and had clean build logs. All eight Holiday-enabled linked PEs passed direct detour/branch-target validation. Automated validation passed 71 binary-patcher tests plus 56 exporter/runner/GUI tests (127 total). The final export contains 1,075 asset records and 1,112 manifest-reachable payload files after pruning 1,860 unreachable files. Manual in-game verification remains required for the full Collections Chest cycle, praise retention, every autonomous/label eligibility branch, all store categories, reversible workers/upgrades, and simultaneous malfunction/repair gameplay.",
+)
+B151_CHANGELOG_LINES = (
+    "- B151 Holiday Ornaments completion: Uses the exact mobile 1.7.16 collectible IDs 0x9E-0xA9, rarity groups, and three Holiday spawn regions. The desktop total is 19 spawn registrations. Stock Add, Find, WasItemSpawned, and Lucky Rock logic remain byte-identical instead of using the two non-mobile family-match caves associated with the B150 launch crash.",
+    "- B151 Collections Chest: Adds the sixth 12-item page in mobile order, corrects every ornament slot against the resized 1024x768 mobile page, keeps the 0x30-byte scene object/hover field intact, routes page counts through a fixed-size DrawScene code cave, extends tooltip rarity buckets, and displays 72 total collectibles only in Holiday-enabled overlays.",
+    "- B151 persistence and goals: Explicitly validates Count, ResetCollection, SaveState, and LoadState across the existing 0xAF-entry collection-state block. Master Collector now requires six families, Goal Collector requires 13 goals, Ornamentologist requires 12 unique ornaments, and the achievement notification queue covers all 0x60 rows.",
+    "- B151 Collector event: Three relocation-only CanFire calls add Holiday common/uncommon/rare counts to the offer. Stock final eligibility and the Keep branch remain unchanged. Sell routes through a helper that resets unfinished Ornamentologist progress before the stock collection reset tail.",
+    "- B151 self-contained art: The 12 ornament icons and 1024x768 collection page are tracked, hash-verified workspace assets. Holiday-disabled outputs remove inherited unused collection PNGs; Holiday-enabled outputs no longer depend on ignored tp225.dat/tp225.pvr files.",
+    "- B151 verification: The complete 16-overlay matrix and independent positive/negative linked-PE validator cover spawning, observers, exact item matching, rarity/Lucky Rock thresholds, pickup/completion, chest navigation/tooltips, persistence, achievements, Collector routes, and canonical art. Manual in-game launch, chest, pickup, save/reload, Collector, and collection-cheat testing remains required.",
 )
 INVALID_INSTALL_MESSAGE = (
     "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\n"
@@ -1824,9 +1832,9 @@ intact. It does not actually change or write files. If you do not choose a
 custom log path, dry-run and pre-write failure logs are written next to
 manifest.json so the vanilla game folder stays untouched.
 
-B150 changelog
+B151 changelog
 --------------
-{chr(10).join(B150_CHANGELOG_LINES)}
+{chr(10).join(B151_CHANGELOG_LINES)}
 """,
         encoding="ascii",
         newline="\r\n",
@@ -2020,12 +2028,12 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "Settings and defaults",
         "---------------------",
         "- Main Patches (green): core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits.",
-        "- Optional Patches (black): Settings Evict, Island Events, optional visual swaps, Invisible Furniture graphics modes, custom maps, LDW Posters/Paintings, and Colorful Couches.",
-        "- Experimental/Not Working Patches (red): Holiday Ornaments, mobile furniture behaviors, Expand game map, and anything not 100% confirmed working and crash-free.",
+        "- Optional Patches (black): Holiday Ornaments, Settings Evict, Island Events, optional visual swaps, Invisible Furniture graphics modes, custom maps, LDW Posters/Paintings, and Colorful Couches.",
+        "- Experimental/Not Working Patches (red): mobile furniture behaviors, Expand game map, and anything not 100% confirmed working and crash-free.",
         "",
-        "B150 native feature gating",
+        "B151 native feature gating",
         "--------------------------",
-        "- The B150 package carries 16 executable overlays: core plus all 15 non-empty combinations of Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches.",
+        "- The B151 package carries 16 executable overlays: core plus all 15 non-empty combinations of Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches.",
         "- The patcher selects exactly one matching overlay from the enabled-setting combination; disabling a native feature selects an executable built without that feature's patch functions.",
         "- Behavior variations, autonomous candidates, direct sink subroutines, and exact normal-praise label capture/restore require behavior_patches.",
         "- Cheat rows, price multipliers/reset, Trigger/Fix malfunction actions, Router offline/online changes, and reversible Maid/Gardener/Rockhound/Anti-Spam handling require cheat_upgrades.",
@@ -2049,7 +2057,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
     elif summary.get("exe_replacement"):
         limitation = (
             "This bundle uses verified modified EXE payloads for native/game-code changes. "
-            "B150 isolates Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches with a complete 16-state executable overlay matrix; other native changes that still belong to the core executable remain controlled at their documented feature-family level."
+            "B151 isolates Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches with a complete 16-state executable overlay matrix; other native changes that still belong to the core executable remain controlled at their documented feature-family level."
         )
     else:
         limitation = (
@@ -2151,6 +2159,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B148 game build: Holiday Ornaments now validate the native collection-state contract before packaging, proving the 0x9E-0xA9 family is covered by Count, SaveState, ResetCollection, page routing, pickup dispatch, observer registration, and Mr. B/The Collector's sell-all reset.",
             "- B149 game build: Holiday Ornaments now validate the collection page-count route, proving DrawScene uses _VF2CollectionPageCount(page) for page 5 while Activate keeps the five stock cached counters and this+0x2C hover field intact.",
             *B150_CHANGELOG_LINES,
+            *B151_CHANGELOG_LINES,
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
             "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the optional Island Events setting is enabled.",
@@ -2383,7 +2392,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 holiday_ornaments_exe,
                 "Holiday Ornaments",
                 ["core_executable", "holiday_ornaments_collection"],
-                "Experimental Holiday Ornaments executable overlay. Applied only when core_executable and holiday_ornaments_collection are enabled.",
+                "Optional fully linked Holiday Ornaments executable overlay. Applied only when core_executable and holiday_ornaments_collection are enabled.",
             ),
             (
                 behavior_patches_exe,
@@ -2573,7 +2582,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--patched-exe", help="Patched EXE filename inside build dir. Auto-detected by default.")
     parser.add_argument("--island-events-exe", help="Optional EXE overlay to apply when island_events is enabled.")
     parser.add_argument("--cheat-upgrades-exe", help="Optional EXE overlay to apply when cheat_upgrades is enabled.")
-    parser.add_argument("--holiday-ornaments-exe", help="Experimental EXE overlay to apply when holiday_ornaments_collection is enabled.")
+    parser.add_argument("--holiday-ornaments-exe", help="Optional fully linked EXE overlay to apply when holiday_ornaments_collection is enabled.")
     parser.add_argument("--behavior-patches-exe", help="Optional EXE overlay to apply when behavior_patches is enabled.")
     parser.add_argument("--island-events-cheat-upgrades-exe", help="Combined optional EXE overlay to apply when island_events and cheat_upgrades are both enabled.")
     parser.add_argument("--island-events-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when island_events and holiday_ornaments_collection are both enabled.")

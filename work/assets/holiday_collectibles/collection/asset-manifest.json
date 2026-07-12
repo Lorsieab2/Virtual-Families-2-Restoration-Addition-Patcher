@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "collection": "Holiday Ornaments",
+  "provenance": {
+    "build": "B150",
+    "origin": "Virtual Families 2 mobile 1.7.16 tp225 collection atlas",
+    "source_root": "outputs/VF2-Mobile-Furniture-With-Island-Events-B150-holiday_ornaments/Images",
+    "copy_policy": "Bit-for-bit copies of the finalized B150 runtime PNGs."
+  },
+  "assets": [
+    {"filename": "collection_christmasornament_blueball.png", "collectable_id": "0x9E", "sha256": "6790f9e53b2a05ee3d8663b4c2214a07c211c8eb66ec70f9f662ad89cad5f11f", "dimensions": [119, 147]},
+    {"filename": "collection_christmasornament_crosses.png", "collectable_id": "0x9F", "sha256": "09d576cbd14ba0d8afec73892a20ee2546cbae31708bf61a8552b49267c8c65b", "dimensions": [118, 146]},
+    {"filename": "collection_christmasornament_disco.png", "collectable_id": "0xA0", "sha256": "9cedf1aa808e46df01cfca6af59d174cf08f781c9f1618065e4a3880ac1c4d22", "dimensions": [122, 146]},
+    {"filename": "collection_christmasornament_golddealio.png", "collectable_id": "0xA1", "sha256": "956444a7727e2dc04f1adbe40140bd64f28783026d62f47b56415892cbae5a1f", "dimensions": [146, 150]},
+    {"filename": "collection_christmasornament_heart.png", "collectable_id": "0xA2", "sha256": "e6285bfd402e15124ec7ecad2f7bf6fe994c8053edc776ff1c965b35dfd079b5", "dimensions": [113, 136]},
+    {"filename": "collection_christmasornament_hotairballoon.png", "collectable_id": "0xA3", "sha256": "c70c32943b236190cec14e636dee54cbb73bd6f908876f980681e6811b5a008e", "dimensions": [128, 140]},
+    {"filename": "collection_christmasornament_redgoldornament.png", "collectable_id": "0xA4", "sha256": "aeb617b5a79dbaa9c4e384279824b3189fd9fd650289f5a10ca69cff0c2047c3", "dimensions": [114, 146]},
+    {"filename": "collection_christmasornament_silverbell.png", "collectable_id": "0xA5", "sha256": "0d4737852c9190b2b2eedaf74952ce1b54c839749f1104438efb0f592f94e5a0", "dimensions": [82, 145]},
+    {"filename": "collection_christmasornament_star.png", "collectable_id": "0xA6", "sha256": "b42d2314949fc695747f0d0fa029d6400dddd19ec8ccbd30812ea0138a0f7e6a", "dimensions": [134, 141]},
+    {"filename": "collection_christmasornament_threebells.png", "collectable_id": "0xA7", "sha256": "09eb147e3dfb7905f0f1a011d0f1631d8df653cde92cbfe0ef8bf21c3da2e4d7", "dimensions": [109, 152]},
+    {"filename": "collection_christmasornament_twirl.png", "collectable_id": "0xA8", "sha256": "e5e151063e885c3a6e55ac4f8be1b7183928ad6d3261de8cf4292592e6217233", "dimensions": [123, 132]},
+    {"filename": "collection_christmasornament_twisty.png", "collectable_id": "0xA9", "sha256": "8fdc9030741b6e9a9c178ce6e08874d8860bcde0ba9c3d4790cf70b5888d81ac", "dimensions": [138, 131]},
+    {"filename": "collection-ornaments_background.png", "role": "collection_background", "sha256": "af8a6061ecee385bfe3d34a8fe9e3ab3495d288d5289a4b896a5b42618ff46ce", "dimensions": [1024, 768]}
+  ]
+}

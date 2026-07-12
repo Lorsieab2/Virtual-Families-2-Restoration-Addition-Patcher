@@ -116,7 +116,8 @@
   stock `CCollectableItem::Update/Add` path, verify ornaments still draw when
   `Glowing Collectibles` is enabled, and verify save/load persistence.
   Static mobile comparison now confirms row `0x5F` target `12`, Goal Collector
-  target `13`, rarity ranges, the four full-yard `0x9E` spawn rectangles, and
+  target `13`, rarity ranges, the three exact mobile `0x9E` spawn rectangles
+  (19 total registrations), and
   the small-sheet frame mapping `0x9E-0xA9 => 79-90`. B148 also proves the
   native collection-state/save/reset span, appended sixth-page table,
   page-count helper, pickup-dispatch hooks, observer registrations, tooltip
@@ -556,11 +557,26 @@
   vanilla-save compatibility note; generated README, manifest, changelog, and
   Transparency Log carry the same disclosures without local machine paths.
 
-## B151 Expanded Map
+## B151 Holiday Ornaments Release Status
 
-- Use `work/reference_images/Expanded VF2 Map.png` as the corrected B151 visual
-  target. Keep the existing house/map composition centered and add one full map
-  tile beyond every current side and corner instead of scaling the current map.
+- [x] Static/build work is complete: all 16 native-feature variants compile,
+  all 129 source/exporter tests pass, the independent linked validator passes
+  eight Holiday-enabled and eight Holiday-disabled executables, canonical art
+  hashes match, and default/Holiday-focused/enable-all patcher dry runs pass.
+- [ ] Complete the required manual in-game cycle: launch and idle through yard
+  spawning; open the Collections Chest and navigate all six pages; collect
+  unique and duplicate ornaments from every rarity; save and reload; exercise
+  The Collector's Keep and Sell choices; and verify Reset All Collections and
+  Complete All Collections with Holiday Ornaments both enabled and disabled.
+- Deferred from B151: the expanded map, new goals, and Older Villagers work
+  below remain planning material for a later build.
+
+## Deferred after B151: Expanded Map
+
+- For a future build, use `work/reference_images/Expanded VF2 Map.png` as the
+  visual target. Keep the existing house/map composition centered and add one
+  full map tile beyond every current side and corner instead of scaling the
+  current map.
 - Fill the new perimeter with the matching Lorsieab2 grass treatment, except
   for the northwest/upper-left expansion where the existing beach grows into
   the large rounded sandy area shown in the mock-up.
@@ -572,10 +588,10 @@
   yard features, vehicles, and custom map art at their current scale and
   relative positions. Audit any hardcoded map dimensions before implementation.
 
-## B151 Goals and Older Villagers
+## Deferred after B151: Goals and Older Villagers
 
-- Implement the resource, pet, longevity, and family-tree appearance goals
-  specified in `docs/B151-design.md`, starting from the final B150 hotfix.
+- In a future build, implement the resource, pet, longevity, and family-tree
+  appearance goals specified in `docs/B151-design.md`.
 - Add a separately gated Older Villagers patch with a mortality distribution
   centered near age 75 and a genuine rare survival tail beyond age 122. Verify
   the raw age multiplier, stock death routine, time-away simulation, and save

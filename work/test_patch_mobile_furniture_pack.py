@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import ast
 import copy
+import hashlib
+import json
 import shutil
 import struct
 import tempfile
@@ -1450,7 +1452,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
-    def test_holiday_ornaments_are_opt_in_for_normal_build_stability(self):
+    def test_holiday_ornaments_are_an_optional_patcher_overlay(self):
         self.assertFalse(patcher.ENABLE_HOLIDAY_ORNAMENTS)
 
     def test_mobile_island_events_are_opt_in_for_normal_build_stability(self):
@@ -1460,7 +1462,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         contract = patcher.build_native_array_contract()
 
         self.assertFalse(contract["holiday_ornaments"]["enabled"])
-        self.assertIn("disabled", contract["holiday_ornaments"]["status"])
+        self.assertIn(
+            "optional patch not selected",
+            contract["holiday_ornaments"]["status"],
+        )
         self.assertEqual(contract["holiday_ornaments"]["achievement"], "0x5f")
         self.assertEqual(contract["holiday_ornaments"]["achievement_target"], 12)
         self.assertEqual(contract["holiday_ornaments"]["goal_collector_target"], 13)
@@ -1469,7 +1474,6 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         self.assertEqual(
             [rect for _symbol, rect in patcher.HOLIDAY_ORNAMENT_SPAWN_RECTS],
             [
-                (0x634, 0x0B4, 0x764, 0x302),
                 (0x112, 0x0C4, 0x2FA, 0x1BD),
                 (0x098, 0x178, 0x19D, 0x26F),
                 (0x08D, 0x568, 0x137, 0x750),
@@ -1532,6 +1536,47 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 + list(range(patcher.HOLIDAY_ORNAMENT_COLLECTABLE_START, patcher.HOLIDAY_ORNAMENT_COLLECTABLE_END + 1))
             )
             self.assertEqual(values, expected)
+            sm_sym = obj.symbol(
+                "?sm_sCollectable@CCollectionScene@@0PAUSCollectable@1@A"
+            )
+            sm_sec = obj.section(sm_sym.section)
+            sm_raw = (
+                sm_sec.raw_ptr
+                + sm_sym.value
+                + 5 * patcher.HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT * 12
+            )
+            slots = [
+                struct.unpack_from("<III", obj.buf, sm_raw + index * 12)
+                for index in range(
+                    patcher.HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT
+                )
+            ]
+            self.assertEqual(
+                slots,
+                [
+                    (
+                        patcher.holiday_ornament_collection_item_image_id(
+                            index,
+                            patcher.holiday_body_descriptor_count()
+                            if patcher.ENABLE_HOLIDAY_BODY_TYPES
+                            else 0,
+                        ),
+                        *patcher.HOLIDAY_ORNAMENT_COLLECTION_SLOT_POSITIONS[
+                            index
+                        ],
+                    )
+                    for index in range(
+                        patcher.HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT
+                    )
+                ],
+            )
+            self.assertEqual(
+                patcher.HOLIDAY_ORNAMENT_COLLECTION_SLOT_POSITIONS,
+                [
+                    (round(x * 1.28), round(y * 1.28))
+                    for x, y in patcher.HOLIDAY_ORNAMENT_MOBILE_SLOT_POSITIONS
+                ],
+            )
             self.assertEqual(manifest["CollectionSceneHolidayOrnaments"]["page"], 5)
             self.assertEqual(
                 manifest["CollectionSceneHolidayOrnaments"]["page_starts"],
@@ -1564,8 +1609,23 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             draw_sym = obj.symbol("?DrawScene@CCollectionScene@@MAEXXZ")
             draw_sec = obj.section(draw_sym.section)
             draw_data = bytes(obj.buf[draw_sec.raw_ptr + draw_sym.value : draw_sec.raw_ptr + draw_sec.raw_size])
-            self.assertEqual(draw_data[0x17D : 0x186], b"\xFF\x77\x14\xE8\x00\x00\x00\x00\x50")
-            self.assertNotIn(b"\xFF\x74\x87\x18", draw_data)
+            self.assertEqual(draw_data[0x17D], 0xE9)
+            self.assertEqual(draw_data[0x182 : 0x184], b"\x90\x90")
+            draw_cave = 0x17D + 5 + struct.unpack_from(
+                "<i",
+                draw_data,
+                0x17E,
+            )[0]
+            self.assertEqual(
+                draw_data[draw_cave : draw_cave + 10],
+                b"\xFF\x77\x14\xE8\x00\x00\x00\x00\x50\xE9",
+            )
+            self.assertEqual(
+                draw_cave
+                + 14
+                + struct.unpack_from("<i", draw_data, draw_cave + 10)[0],
+                0x184,
+            )
             self.assertIn("_VF2CollectionPageCount@4", obj.symbol_by_name)
             self.assertNotIn("_VF2CollectionPageCount", obj.symbol_by_name)
             draw_relocs = [
@@ -1574,7 +1634,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             ]
             self.assertIn(
                 (
-                    draw_sym.value + 0x181,
+                    draw_sym.value + draw_cave + 4,
                     obj.symbol("_VF2CollectionPageCount@4").index,
                     patcher.IMAGE_REL_I386_REL32,
                 ),
@@ -1634,6 +1694,67 @@ class HolidayOrnamentGateTests(unittest.TestCase):
 
             patcher.patch_achievement_holiday_ornaments(manifest)
             obj = CoffObject(temp_root / "Achievement.obj")
+            complete = obj.symbol(
+                "?AchievementsComplete@CAchievement@@QAEHXZ"
+            )
+            complete_sec = obj.section(complete.section)
+            complete_data = bytes(
+                obj.buf[
+                    complete_sec.raw_ptr + complete.value :
+                    complete_sec.raw_ptr + complete_sec.raw_size
+                ]
+            )
+            self.assertEqual(
+                complete_data[0x23 : 0x26],
+                b"\x83\xFE\x60",
+            )
+            achievement_list = obj.symbol(
+                "?achievementList@@3PAUsAchievementListEntry@@A"
+            )
+            list_sec = obj.section(achievement_list.section)
+            for achievement_id, target in (
+                (0x4D, 6),
+                (0x54, 13),
+                (0x5F, 12),
+            ):
+                self.assertEqual(
+                    struct.unpack_from(
+                        "<I",
+                        obj.buf,
+                        list_sec.raw_ptr
+                        + achievement_list.value
+                        + achievement_id * patcher.ACHIEVEMENT_ROW_SIZE
+                        + 4,
+                    )[0],
+                    target,
+                )
+
+            queue = obj.symbol(
+                "?QueueAchievementNotify@CAchievement@@AAEXW4EAchievement@@@Z"
+            )
+            queue_sec = obj.section(queue.section)
+            queue_data = bytes(
+                obj.buf[
+                    queue_sec.raw_ptr + queue.value :
+                    queue_sec.raw_ptr + queue_sec.raw_size
+                ]
+            )
+            self.assertEqual(queue_data[0x19 : 0x1C], b"\x83\xF8\x60")
+            reset_queue = obj.symbol(
+                "?ResetNotifyQueue@CAchievement@@AAEXXZ"
+            )
+            reset_queue_sec = obj.section(reset_queue.section)
+            reset_queue_data = bytes(
+                obj.buf[
+                    reset_queue_sec.raw_ptr + reset_queue.value :
+                    reset_queue_sec.raw_ptr + reset_queue_sec.raw_size
+                ]
+            )
+            self.assertEqual(
+                reset_queue_data[0x11 : 0x16],
+                b"\xB9\x60\x00\x00\x00",
+            )
+
             sym = obj.symbol("?SetComplete@CAchievement@@QAEXW4EAchievement@@@Z")
             sec = obj.section(sym.section)
             data = bytes(obj.buf[sec.raw_ptr + sym.value : sec.raw_ptr + sec.raw_size])
@@ -1671,7 +1792,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 if item["function"] == "?Reset@CCollectableItem@@QAEXXZ"
             )
 
-            self.assertEqual(item_patch["spawn_area_count"], 4)
+            self.assertEqual(item_patch["spawn_area_count"], 3)
             self.assertEqual(item_patch["base_collectable"], "0x9e")
             self.assertEqual(
                 item_patch["mobile_spawn_rects"],
@@ -1681,7 +1802,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 item["function"]
                 for item in manifest["CollectableItemHolidayOrnaments"]["patches"]
             }
-            self.assertGreaterEqual(
+            self.assertEqual(
                 patched_functions,
                 {
                     "?Reset@CCollectableItem@@QAEXXZ",
@@ -1690,42 +1811,75 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "?IsRareCollectable@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
                     "?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z",
                     "?Drop@CCollectableItem@@UAEXAAVCVillager@@W4ECarrying@@@Z",
-                    "?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z",
-                    "?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
                 },
             )
 
             obj = CoffObject(temp_root / "CollectableItem.obj")
-            find = obj.symbol("?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z")
-            find_sec = obj.section(find.section)
-            find_data = bytes(obj.buf[find_sec.raw_ptr + find.value : find_sec.raw_ptr + find_sec.raw_size])
-            self.assertEqual(find_data[0x86], 0xE9)
-            self.assertEqual(find_data[0x8B : 0x93], b"\x90" * 8)
-            find_cave = 0x86 + 5 + struct.unpack_from("<i", find_data, 0x87)[0]
-            self.assertEqual(
-                find_data[find_cave : find_cave + 6],
-                b"\x81\xFF" + struct.pack("<I", 0x9E),
+            stock_obj = CoffObject(
+                patcher.SRC_OBJS / "CollectableItem.obj"
             )
-            self.assertNotIn(b"\x83\xFF\x9E", find_data)
+            for function_name in (
+                "?Add@CCollectableItem@@QAEXW4ECarrying@@UldwPoint@@_N@Z",
+                "?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z",
+                "?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
+            ):
+                patched_sym = obj.symbol(function_name)
+                patched_sec = obj.section(patched_sym.section)
+                stock_sym = stock_obj.symbol(function_name)
+                stock_sec = stock_obj.section(stock_sym.section)
+                self.assertEqual(
+                    bytes(
+                        obj.buf[
+                            patched_sec.raw_ptr + patched_sym.value :
+                            patched_sec.raw_ptr + patched_sec.raw_size
+                        ]
+                    ),
+                    bytes(
+                        stock_obj.buf[
+                            stock_sec.raw_ptr + stock_sym.value :
+                            stock_sec.raw_ptr + stock_sec.raw_size
+                        ]
+                    ),
+                    function_name,
+                )
 
-            spawned = obj.symbol("?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z")
-            spawned_sec = obj.section(spawned.section)
-            spawned_data = bytes(
-                obj.buf[spawned_sec.raw_ptr + spawned.value : spawned_sec.raw_ptr + spawned_sec.raw_size]
+            reset = obj.symbol("?Reset@CCollectableItem@@QAEXXZ")
+            reset_sec = obj.section(reset.section)
+            add_spawn = obj.symbol(
+                "?AddSpawnArea@CCollectableItem@@"
+                "QAEXUldwRect@@W4ECarrying@@@Z"
             )
-            self.assertEqual(spawned_data[0x14], 0xE9)
-            self.assertEqual(spawned_data[0x19 : 0x1B], b"\x90\x90")
-            spawned_cave = 0x14 + 5 + struct.unpack_from("<i", spawned_data, 0x15)[0]
-            self.assertIn(
-                b"\x81\xF9" + struct.pack("<I", 0x9E),
-                spawned_data[spawned_cave : spawned_cave + 48],
+            reset_relocs = [
+                struct.unpack_from(
+                    "<IIH",
+                    obj.buf,
+                    reset_sec.reloc_ptr + index * 10,
+                )
+                for index in range(reset_sec.nreloc)
+            ]
+            self.assertEqual(
+                sum(
+                    symbol_index == add_spawn.index
+                    for _vaddr, symbol_index, _rtype in reset_relocs
+                ),
+                19,
             )
-            self.assertNotIn(b"\x83\xF9\x9E", spawned_data)
 
             drop = obj.symbol("?Drop@CCollectableItem@@UAEXAAVCVillager@@W4ECarrying@@@Z")
             drop_sec = obj.section(drop.section)
             drop_data = bytes(obj.buf[drop_sec.raw_ptr + drop.value : drop_sec.raw_ptr + drop_sec.raw_size])
             self.assertIn(b"\x68\x9E\x00\x00\x00\x31\xFF\xE9", drop_data)
+            drop_meta = next(
+                item
+                for item in manifest[
+                    "CollectableItemHolidayOrnaments"
+                ]["patches"]
+                if item["function"].startswith(
+                    "?Drop@CCollectableItem"
+                )
+            )
+            self.assertIn("coin-only", drop_meta["duplicate_route"])
+            self.assertIn("Duplicate", drop_meta["duplicate_route"])
 
         self.with_temp_patched_objs(["CollectableItem.obj"], run)
 
@@ -1742,8 +1896,22 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         self.assertIn(b"\x83\xC7\x04", data)
         self.assertIn(b"\x83\xC7\x08", data)
         self.assertIn(b"\x89\xBE\x50\x03\x00\x00", data)
+        self.assertEqual(
+            data[0x194 : 0x19F],
+            b"\x8A\x83\xA8\x08\x00\x00\x6A\x04\x88\x45\x0B",
+        )
+        self.assertEqual(data[0x1B0 : 0x1B2], b"\x6A\x64")
+        self.assertEqual(
+            data[0x1C1 : 0x1CD],
+            b"\x84\xD2\x0F\x95\xC1\x8D\x0C\x8D\x04\x00\x00\x00",
+        )
+        self.assertEqual(
+            data[0x1D8 : 0x1EA],
+            b"\x84\xD2\xC7\x45\x14\x11\x00\x00\x00"
+            b"\xB8\x22\x00\x00\x00\x0F\x44\x45\x14",
+        )
 
-    def test_supplied_collection_art_maps_to_twelve_collectibles(self):
+    def test_workspace_collection_art_maps_to_twelve_collectibles(self):
         self.assertEqual(
             len(patcher.HOLIDAY_ORNAMENT_COLLECTION_FILES),
             patcher.HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT,
@@ -1754,8 +1922,103 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         self.assertEqual(len(runtime_names), len(set(runtime_names)))
         self.assertEqual(len(source_names), len(set(source_names)))
         self.assertFalse(any("CandyCane" in name for name in source_names))
+        asset_manifest = json.loads(
+            (
+                patcher.HOLIDAY_ORNAMENT_PREEXTRACTED_ART_DIR
+                / "asset-manifest.json"
+            ).read_text(encoding="utf-8")
+        )
+        records = {
+            row["filename"]: row
+            for row in asset_manifest["assets"]
+        }
+        expected_names = set(runtime_names) | {
+            patcher.HOLIDAY_ORNAMENT_BACKGROUND_FILENAME
+        }
+        self.assertEqual(set(records), expected_names)
+        for name, record in records.items():
+            source = (
+                patcher.HOLIDAY_ORNAMENT_PREEXTRACTED_ART_DIR / name
+            )
+            self.assertTrue(source.is_file(), name)
+            self.assertEqual(
+                hashlib.sha256(source.read_bytes()).hexdigest(),
+                record["sha256"],
+                name,
+            )
 
-    def test_the_collector_counts_holiday_ornaments_for_offer_and_availability(self):
+    def test_collection_art_sync_uses_only_tracked_canonical_assets(self):
+        old_out = patcher.OUT
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.OUT = Path(tmp)
+                manifest = {}
+
+                patcher.sync_holiday_ornament_collection_art(manifest)
+
+                art = manifest["holiday_ornament_collection_art"]
+                self.assertEqual(
+                    art["status"],
+                    "copied_from_workspace_preextracted_assets",
+                )
+                self.assertEqual(len(art["entries"]), 12)
+                self.assertEqual(
+                    art["background"]["dimensions"],
+                    [1024, 768],
+                )
+                for row in art["entries"]:
+                    target = patcher.OUT / "Images" / row["path"]
+                    self.assertTrue(target.is_file())
+                    self.assertEqual(
+                        hashlib.sha256(target.read_bytes()).hexdigest(),
+                        row["sha256"],
+                    )
+        finally:
+            patcher.OUT = old_out
+
+    def test_holiday_disabled_art_cleanup_removes_only_collection_payload(self):
+        old_out = patcher.OUT
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.OUT = Path(tmp)
+                image_root = patcher.OUT / "Images"
+                collection_root = image_root / "CollectionOrnaments"
+                collection_root.mkdir(parents=True)
+                background = (
+                    image_root
+                    / patcher.HOLIDAY_ORNAMENT_BACKGROUND_FILENAME
+                )
+                background.write_bytes(b"background")
+                for runtime_name, _source_name, _placeholder_name in (
+                    patcher.HOLIDAY_ORNAMENT_COLLECTION_FILES
+                ):
+                    (collection_root / runtime_name).write_bytes(b"icon")
+                unrelated = collection_root / "keep-me.png"
+                unrelated.write_bytes(b"unrelated")
+                manifest = {}
+
+                patcher.remove_holiday_ornament_collection_art(manifest)
+
+                self.assertFalse(background.exists())
+                for runtime_name, _source_name, _placeholder_name in (
+                    patcher.HOLIDAY_ORNAMENT_COLLECTION_FILES
+                ):
+                    self.assertFalse(
+                        (collection_root / runtime_name).exists()
+                    )
+                self.assertTrue(unrelated.exists())
+                self.assertEqual(
+                    len(
+                        manifest["holiday_ornament_collection_art"][
+                            "removed"
+                        ]
+                    ),
+                    13,
+                )
+        finally:
+            patcher.OUT = old_out
+
+    def test_the_collector_uses_relocation_only_holiday_offer_counts(self):
         def run(temp_root):
             manifest = {}
 
@@ -1764,25 +2027,84 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             sym = obj.symbol("?CanFire@CEventTheCollector@@UAE_NXZ")
             sec = obj.section(sym.section)
             data = bytes(obj.buf[sec.raw_ptr + sym.value : sec.raw_ptr + sec.raw_size])
-
+            stock_obj = CoffObject(patcher.SRC_OBJS / "IslandEvents.obj")
+            stock_sym = stock_obj.symbol(
+                "?CanFire@CEventTheCollector@@UAE_NXZ"
+            )
+            stock_sec = stock_obj.section(stock_sym.section)
             self.assertEqual(
-                data.count(b"\x68" + struct.pack("<I", patcher.HOLIDAY_ORNAMENT_COLLECTABLE_START)),
-                4,
+                data,
+                bytes(
+                    stock_obj.buf[
+                        stock_sec.raw_ptr + stock_sym.value :
+                        stock_sec.raw_ptr + stock_sec.raw_size
+                    ]
+                ),
+            )
+            aggregate_helper = obj.symbol(
+                "?CollectionCountWithHolidayOrnaments@CCollectableItem@@"
+                "QBE?BHW4ECarrying@@_N11@Z"
+            )
+            stock_count = obj.symbol(
+                "?CollectionCount@CCollectableItem@@"
+                "QBE?BHW4ECarrying@@_N11@Z"
+            )
+            relocs = {
+                vaddr: (symbol_index, rtype)
+                for vaddr, symbol_index, rtype in (
+                    struct.unpack_from(
+                        "<IIH",
+                        obj.buf,
+                        sec.reloc_ptr + index * 10,
+                    )
+                    for index in range(sec.nreloc)
+                )
+            }
+            for operand_off in (0x88, 0xFB, 0x171):
+                self.assertEqual(
+                    relocs[sym.value + operand_off],
+                    (
+                        aggregate_helper.index,
+                        patcher.IMAGE_REL_I386_REL32,
+                    ),
+                )
+            self.assertEqual(
+                relocs[sym.value + 0x1AC],
+                (stock_count.index, patcher.IMAGE_REL_I386_REL32),
             )
             meta = manifest["TheCollectorHolidayOrnaments"]
-            self.assertEqual(len(meta["can_fire_offer_patches"]), 3)
-            self.assertEqual(
-                meta["can_fire_availability_patch"]["collection_count_args"],
-                ["0x9e", 1, 1, 1],
-            )
+            self.assertEqual(len(meta["offer_count_relocations"]), 3)
+            self.assertIn("stock eligibility", meta["availability_route"])
             self.assertEqual(meta["achievement_reset"], "0x5f")
-            self.assertEqual(meta["keep_choice_branch_repaired"]["new_displacement"], "0x72")
+            self.assertTrue(meta["keep_choice_branch"]["unchanged"])
             impact = obj.symbol("?ImpactGame@CEventTheCollector@@UAEXH@Z")
             impact_sec = obj.section(impact.section)
             impact_data = bytes(
                 obj.buf[impact_sec.raw_ptr + impact.value : impact_sec.raw_ptr + impact_sec.raw_size]
             )
-            self.assertEqual(impact_data[0x07 : 0x09], b"\x75\x72")
+            self.assertEqual(impact_data[0x07 : 0x09], b"\x75\x66")
+            impact_relocs = {
+                vaddr: (symbol_index, rtype)
+                for vaddr, symbol_index, rtype in (
+                    struct.unpack_from(
+                        "<IIH",
+                        obj.buf,
+                        impact_sec.reloc_ptr + index * 10,
+                    )
+                    for index in range(impact_sec.nreloc)
+                )
+            }
+            reset_helper = obj.symbol(
+                "?ResetHolidayOrnamentCollectorProgress@CAchievement@@"
+                "QAEXW4EAchievement@@@Z"
+            )
+            self.assertEqual(
+                impact_relocs[impact.value + 0x6B],
+                (
+                    reset_helper.index,
+                    patcher.IMAGE_REL_I386_REL32,
+                ),
+            )
 
         self.with_temp_patched_objs(["IslandEvents.obj"], run)
 
@@ -1793,6 +2115,12 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 "extern \"C\" int __cdecl VF2CollectionPageCount(int page) {\n"
                 "    static const int starts[6] = {0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E};\n"
                 "    return starts[page];\n"
+                "}\n"
+                "void CAchievement::ResetHolidayOrnamentCollectorProgress(\n"
+                "    EAchievement stockAchievement\n"
+                ") {\n"
+                "    ResetSingleAchievementProgress((EAchievement)0x5F);\n"
+                "    ResetSingleAchievementProgress(stockAchievement);\n"
                 "}\n",
                 encoding="ascii",
             )
@@ -1815,6 +2143,37 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             scene_contract = manifest["holiday_ornament_native_contract"]["collection_scene"]
             self.assertEqual(scene_contract["page_starts"][-1], "0x9e")
             self.assertIn("_VF2CollectionPageCount", scene_contract["page_count_route"])
+            native_contract = manifest["holiday_ornament_native_contract"]
+            self.assertTrue(
+                native_contract["collection_state"][
+                    "load_state_covers_holiday_range"
+                ]
+            )
+            self.assertEqual(
+                native_contract["spawning"]["total_spawn_area_count"],
+                19,
+            )
+            self.assertEqual(
+                native_contract["achievement"],
+                {
+                    "collection_master_target": 6,
+                    "goal_collector_target": 13,
+                    "ornamentologist_target": 12,
+                    "visible_order_bound": 0x60,
+                    "notify_queue_bound": 0x60,
+                },
+            )
+            self.assertFalse(
+                native_contract["control_flow"]["find_code_cave"]
+            )
+            self.assertFalse(
+                native_contract["control_flow"][
+                    "was_item_spawned_code_cave"
+                ]
+            )
+            self.assertTrue(
+                native_contract["control_flow"]["page_count_code_cave"]
+            )
 
         self.with_temp_patched_objs(
             [

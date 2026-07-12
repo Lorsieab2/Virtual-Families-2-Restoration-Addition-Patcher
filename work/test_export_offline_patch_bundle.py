@@ -189,6 +189,11 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(settings_by_id["glowing_collectibles"]["category"], "optional")
             self.assertEqual(settings_by_id["settings_evict_button"]["category"], "optional")
             self.assertEqual(settings_by_id["island_events"]["category"], "optional")
+            self.assertEqual(settings_by_id["holiday_ornaments_collection"]["category"], "optional")
+            self.assertIn(
+                "fully linked mobile Holiday Ornament collection",
+                settings_by_id["holiday_ornaments_collection"]["description"],
+            )
             self.assertEqual(settings_by_id["behavior_patches"]["category"], "main")
             self.assertEqual(settings_by_id["text_fixes"]["category"], "main")
             self.assertEqual(settings_by_id["optional_song_mods"]["category"], "optional")
