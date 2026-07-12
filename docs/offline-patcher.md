@@ -157,6 +157,12 @@ It compares build assets against `work/vanilla_runtime_payload`, skips
 vanilla-identical files, assigns each asset patch to a feature setting, records
 payload SHA-256/size, and includes official-install runtime requirements.
 
+After all asset and restore records are assembled, the exporter removes every
+payload file that is not referenced by `source_path` or `restore_source_path`.
+This reachability pass happens before final validation, is summarized in
+`export_summary.payload_pruning`, and prevents copied source-only folders from
+silently inflating distributable builds with files the patcher cannot read.
+
 Current generated manifests require the selected vanilla folder to have exactly
 these top-level entries before any output folder, backup, or patch write occurs:
 
@@ -859,8 +865,9 @@ B141 patcher release notes:
 - The generated behavior helper now records the selected stock/custom label in
   a small per-villager/per-wrapper cache. Praise and HUD refresh paths reuse
   that cached label instead of rerolling a sibling variation while the same
-  native route remains active. The radio/MP3 dance-vs-listen random switch is
-  intentionally left uncached.
+  native route remains active. This describes the B141 release state; B150
+  supersedes it by caching both radio/MP3 listen and dance choices so praise
+  cannot reroll the visible action.
 - Cheat Upgrade icons are normalized to transparent `90x90` PNGs during
   payload sync so store rows and buy dialogs do not inherit oversized or
   undersized source art.
@@ -868,6 +875,91 @@ B141 patcher release notes:
   contains `1052` asset records and `2949` payload files. An all-settings dry
   run against a valid official test install validated every active/restore
   record and reported no missing payload entries.
+
+B150 patcher/build notes:
+
+- The patcher now treats Behavior Patches as a true executable feature gate,
+  not merely descriptive setting metadata. B150 accepts core and all 15
+  non-empty combinations of Island Events, Cheat Upgrades, Holiday Ornaments,
+  and Behavior Patches, for a complete 16-state overlay matrix. Every overlay
+  asset record requires core_executable plus exactly the enabled native feature
+  IDs that produced it.
+- Behavior Patches owns every B150 autonomous/label/praise/sink change. Cheat
+  Upgrades owns every B150 cheat, price mode/reset, malfunction trigger, and
+  Maid/Gardener/Rockhound/Anti-Spam removal. Holiday Ornaments owns the
+  six-page/72-item collection fix. Water Pressure Surge requires Island Events,
+  while Brokerage's 11% description follows mobile_purchases.
+- The Holiday setting remains default-off Experimental for final manual
+  collection-cycle testing, but its old known chest crash/count warning is no
+  longer accurate. The B150 overlay exports the stdcall page-count fix,
+  Holiday-aware main-scene count, and visible " / 72" suffix. Disabling it
+  selects the stock five-page/60-item executable.
+- Behavior Patches enables all-age Needs to sit down and Checking weight,
+  displayed-age-14+ Mending a button and Ironing clothes, and nursing-mother
+  Teaching first words/infant care. Petting is deliberately non-spontaneous.
+  Snow routes remain Snowing-only and direct sink subroutines clone the stock
+  sink gate rather than becoming unconditional.
+- Web additions are Watching memes, Making memes, Posting memes online, and
+  age-13+ Buying stuff online. Nursing labels are Teaching baby how to walk,
+  Talking with baby, Feeding baby, Singing lullabies to baby, Playing with
+  baby, Admiring baby, Playing peek-a-boo with baby, Kissing baby, and Taking
+  pictures of baby.
+- Nap labels cover Isola, family, pets, friends, the future, beach, snow,
+  holidays, vacations, roller coasters, climbing mountains, camping, family
+  trips, countryside, LDW games, city, forest, unicorns, fish, jungles,
+  tropical islands, skyscrapers, floating in space, treasure, getting rich,
+  adventures, swimming, flying, falling, and discovering something.
+- The all-age sit-down pool covers thinking/reflection; family, relatives,
+  friends, pets, vacations, weekends, and viewing plans; rest/eyes/feet/break;
+  enjoying life/scenery; texting, phone games, scrolling/social media;
+  scrapbooking; and texting friends/family/relatives. Age 19+ adds
+  children/grandchildren/spouse and Texting spouse. Thinking of work requires
+  age 19+ with a career; Thinking of school requires that the villager is not an
+  age-19+ career holder; Texting boyfriend is female-only and Texting girlfriend
+  male-only at ages 14-18.
+- Bathroom sink general labels remain face mask, trimming nails, lotion, and
+  sunscreen; female grooming adds fingernails, toenails, manicure, pedicure,
+  and makeup. Putting on jewelry is female-only from displayed age 14. Praise
+  refreshes now reuse the cached behavior ID/serial/string when the native
+  praise counter changes, restore exact cached native text for stock-label
+  rolls, and preserve the Radio listening-versus-dancing branch.
+- New gated cheat rows are Reset Ants 0x125, Reset all collections 0x126,
+  Complete all collections 0x127, 2x Prices 0x128, 5x Prices 0x129, 100x
+  Prices 0x12A, Trigger all house malfunctions 0x12B, and Reset Price
+  Multiplier 0x12C. The last row's exact description is "Resets store prices to
+  original values."
+- Reset Ants resets world-state puzzle 0x13, clears props 0x4D-0x54, and reseeds
+  a playable starting set. Collection reset/complete operates on five stock
+  12-item pages and conditionally the 0x9E Holiday page/0x5F achievement only
+  when that overlay is active.
+- Price modes are mutually exclusive, persistent inventory upgrades applied at
+  final CalcPrice return. That route covers furniture, Flea Market, renovations,
+  career upgrades, Special Upgrades, and the other store categories. Positive
+  multiplication saturates at signed INT_MAX. Reset Price Multiplier removes
+  active IDs 0x128-0x12A and immediately restores original calculated prices.
+- Trigger all house malfunctions sets the regular failure props. Dryer fire is
+  conditional on the native Dryer object lookup. North toilet/shower/sink leaks
+  require second-bathroom renovation 0xE6. Water Pressure Surge adds them only
+  when the Island Events overlay can register/fire that event; stock standalone
+  north random failures remain independently available with the renovation
+  gate.
+- With Cheat Upgrades active, buying an already active Maid or Gardener row at
+  zero price clears its service timer, deactivates worker 0x23/0x24, and safely
+  clears selection. Rebuying Rockhound Certificate or Anti-Spam removes its
+  inventory/state flag. Cheat-disabled overlays retain stock already-purchased
+  behavior because the removal helper is explicitly gated.
+- Generated runner README text now includes the shared B150 changelog. Generated
+  Transparency Log.txt includes the feature matrix, setting-to-feature map, all
+  B150 behavior/cheat/fix notes, and an explicit distinction between automated
+  source contracts and outstanding manual in-game tests.
+- The GUI, README, manifest, and transparency output carry the exact vanilla
+  save-compatibility note plus Lorsieab2's passion-project/no-infringement/
+  support-the-original-creators message. Brokerage Account states that it can
+  increase the Interest Rate up to 11%.
+- Automated exporter/unit/build-contract verification does not replace runtime
+  gameplay testing. The B150 release still needs the manual matrix, collection,
+  behavior gate, price-category, removal, save/reload, and malfunction/repair
+  passes recorded in docs/TODO.md.
 
 Settings default to off unless the manifest sets `"default": true`. Command-line
 flags can override those defaults:

@@ -11,6 +11,18 @@ import offline_vf2_patcher_gui as gui
 
 
 class OfflineVF2PatcherGUITests(unittest.TestCase):
+    def test_b150_creator_and_save_compatibility_messages_are_exact(self):
+        self.assertEqual(
+            gui.PROJECT_CREATOR_MESSAGE,
+            'Created by Lorsieab2. This is a passion project dedicated to improving the '
+            '"Virtual Families 2" experience!\n'
+            'No copyright infringement intended! Please support the original game creators! :)',
+        )
+        self.assertEqual(
+            gui.SAVE_COMPATIBILITY_NOTE,
+            "Vanilla Virtual Families 2 saves are compatible with the modded version!",
+        )
+
     def test_markup_segments_supports_bold_spans(self):
         self.assertEqual(
             gui.markup_segments("Adds **visible graphics** first."),

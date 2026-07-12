@@ -148,7 +148,7 @@ SETTINGS = [
     {
         "id": "behavior_patches",
         "label": "Behavior Patches",
-        "description": "Makes certain actions able to be done automatically by people and adds label variants to native behavior routes. Includes fire, hammock, arcade/table games, radio/MP3, pets, TV/web/video games, careers, meals/snacks/drinks, bathroom sink/grooming, breakfast, watering flowers, playhouse/playground, kids table, trampoline, sandbox/train, pool, snow, shower/bath, coffee/tea, cocktail, telescope, workout, naps, and sit-down/rest variants.",
+        "description": "Enables the behavior-only executable overlay. B150 adds spontaneous Needs to sit down, Mending a button, Ironing clothes, Checking weight, and nursing-mother Teaching first words/infant care; enables the registered web, nap, sit-down, sink/grooming, snow, shower, meal, career, play, and other label routes while preserving their documented native age, object, weather, nursing, and gender gates; and keeps Petting non-spontaneous. All Behavior Patch native changes and variations are absent when this setting is disabled.",
         "default": True,
         "category": "main",
     },
@@ -162,7 +162,7 @@ SETTINGS = [
     {
         "id": "holiday_ornaments_collection",
         "label": "Add Holiday Ornaments collection",
-        "description": "Experimental patch: adds mobile Holiday Ornament yard collectibles, collection art, and goals. May not work and might cause instability or game crashes.",
+        "description": "Experimental patch: adds mobile Holiday Ornament yard collectibles, collection art, and goals. B150 fixes the Collections Chest calling-convention crash and displays six pages/72 collectibles. It remains default-off while the complete in-game collection cycle receives final manual verification.",
         "default": False,
         "category": "experimental",
     },
@@ -281,7 +281,7 @@ SETTINGS = [
     {
         "id": "cheat_upgrades",
         "label": "Cheat Upgrades",
-        "description": "Adds money, food, achievement-reset, and furniture-unlock cheats to the Special Upgrades section, including reset-to-zero, add-small, add-large, max amount, Reset Achievements, and Unlock all furniture rows. Buy Unlock all furniture again to restore generation locks.",
+        "description": "Enables the cheat-only executable overlay. Adds money, food, Reset Achievements, Unlock all furniture, Reset Ants, Reset all collections, Complete all collections, 2x/5x/100x Prices, Reset Price Multiplier, and Trigger all house malfunctions rows. Price modes affect every purchase routed through the store price calculator; Reset Price Multiplier removes the active mode and restores original calculated prices. Rebuying Maid/Gardener fires that worker; rebuying Rockhound Certificate/Anti-Spam removes it. All B150 cheat and reversible-upgrade behavior is absent when this setting is disabled.",
         "default": False,
         "category": "optional",
     },
@@ -330,6 +330,31 @@ TRANSPARENCY_LOG_NAME = "Transparency Log.txt"
 PATCHER_ICON_PNG = "patcher_icon.png"
 PATCHER_ICON_ICO = "patcher_icon.ico"
 CREATOR_DISCLOSURE = "This offline patcher was created with Codex AI in collaboration with Lorsieab2."
+PROJECT_CREATOR_MESSAGE = (
+    'Created by Lorsieab2. This is a passion project dedicated to improving the '
+    '"Virtual Families 2" experience!\n'
+    'No copyright infringement intended! Please support the original game creators! :)'
+)
+SAVE_COMPATIBILITY_NOTE = "Vanilla Virtual Families 2 saves are compatible with the modded version!"
+B150_CHANGELOG_LINES = (
+    "- B150 native patch gating: Adds a complete 16-overlay executable matrix for every combination of Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches. Each native feature is present only when its matching manifest setting is enabled; the behavior-disabled core keeps the stock behavior objects.",
+    "- B150 Holiday Ornaments: Fixes the Collections Chest crash by using the stdcall page-count helper expected by the patched call site, routes the main-scene collection total through the Holiday-aware count, and changes the visible total from 60 to 72. The Holiday gate now supplies six 12-item pages while the five stock pages remain unchanged.",
+    "- B150 spontaneous behaviors: Behavior Patches enables Needs to sit down/RestingBody, Mending a button, Ironing clothes, and Checking weight. Checking weight and sit-down are all-ages; mending and ironing start at displayed age 14. Petting retains its manual/native label variants but is deliberately not added to the autonomous candidate table.",
+    "- B150 nursing behavior: Behavior Patches makes the native Teaching first words route spontaneous only for nursing mothers carrying a baby and adds Teaching baby how to walk, Talking with baby, Feeding baby, Singing lullabies to baby, Playing with baby, Admiring baby, Playing peek-a-boo with baby, Kissing baby, and Taking pictures of baby.",
+    "- B150 web variations: Browsing web adds Watching memes, Making memes, and Posting memes online to the general pool. Buying stuff online is available only from displayed age 13 upward; the existing teen/adult social-web pool still follows its native age route.",
+    "- B150 nap variations: Taking a nap can show Dreaming of Isola, Dreaming of family, Dreaming of pets, Dreaming of friends, Dreaming of the future, Dreaming of the beach, Dreaming of snow, Dreaming of holidays, Dreaming of vacations, Dreaming of roller coasters, Dreaming of climbing mountains, Dreaming of camping, Dreaming of family trips, Dreaming of the countryside, Dreaming of LDW games, Dreaming of the city, Dreaming of the forest, Dreaming of unicorns, Dreaming of fish, Dreaming of jungles, Dreaming of tropical islands, Dreaming of skyscrapers, Dreaming of floating in space, Dreaming of treasure, Dreaming of getting rich, Dreaming of adventures, Dreaming of swimming, Dreaming of flying, Dreaming of falling, or Dreaming of discovering something.",
+    "- B150 sit-down variations: The all-age pool includes Thinking, Taking a moment to reflect, Taking a break, Enjoying life, Enjoying the scenery, Resting, Resting eyes, Resting feet, Relaxing for a bit, Thinking of weekend plans, Thinking of family, Thinking of friends, Thinking of pets, Thinking of vacations, Thinking of what to watch next, Thinking of relatives, Texting, Playing games on phone, Scrolling on phone, Checking social media on phone, Scrapbooking, Texting friends, Texting family, and Texting relatives. Displayed age 19+ also receives Thinking of children, Thinking of grandchildren, Thinking of spouse, and Texting spouse; Thinking of work requires age 19+ with a career; Thinking of school is for anyone who is not an age-19+ career holder; Texting boyfriend is female-only and Texting girlfriend male-only at displayed ages 14-18.",
+    "- B150 sink, snow, and native-gate audit: Behavior Patches enables the direct bathroom-sink subroutines by cloning the stock sink candidate gates, retains the existing face-mask/nails/lotion/sunscreen and female grooming pools, and adds Putting on jewelry only for females age 14+. North-shower, snow-play, and other registered variation routes preserve their native object/age/gender gates; snow play is enabled only while Weather.currentType is Snowing.",
+    "- B150 praise stability: Behavior-label caching now keys the current behavior ID and serial plus the native praise counter, restores cached native text when the selected variation is the stock label, and caches both Radio listening and dancing. Praising a villager therefore keeps the same displayed action instead of rerolling it.",
+    "- B150 collection and puzzle cheats: Reset Ants restarts world-state puzzle 0x13, clears ant props 0x4D-0x54, and reseeds the native starting ant pieces. Reset all collections uses the native collection reset, raw-clears completed/progress state for all page achievements (including cross-overlay Holiday state) and Master Collector, then recomputes Goal Collector from preserved selling goals. Complete all collections fills exactly 12 items per active page and completes the matching page/aggregate achievements.",
+    "- B150 price cheats: 2x Prices, 5x Prices, and 100x Prices are mutually exclusive persistent toggles. They multiply the final store price for furniture, Flea Market goods, house renovations, career upgrades, Special Upgrades, and every other purchase routed through CalcPrice; multiplication saturates at signed INT_MAX instead of wrapping. Reset Price Multiplier (0x12C) removes any active 0x128-0x12A mode and restores original calculated store prices; its description is 'Resets store prices to original values.'",
+    "- B150 malfunction cheat: Trigger all house malfunctions sets the normal house failure props, including sink/toilet/shower leaks and oven/stove failures. The dryer fire is set only when a Dryer is present. North toilet, north shower, and north sink leaks are set only when second-bathroom renovation 0xE6 is owned. Water Pressure Surge adds those gated north leaks only when Island Events is enabled; the stock standalone north random-malfunction path remains independently available with its existing renovation gate.",
+    "- B150 reversible upgrades: Under Cheat Upgrades, rebuying Maid or Gardener at the active zero-price row clears the worker timer/active villager and fires that worker. Rebuying Rockhound Certificate or Anti-Spam removes the owned upgrade. Explicit cheat-overlay guards keep these removal hooks inert when Cheat Upgrades is disabled.",
+    "- B150 mobile purchase text: The Brokerage Account description now states that repeated upgrades can increase the Interest Rate up to 11%. This wording follows the visible mobile Special Upgrades/mobile_purchases feature family.",
+    "- B150 patcher notices: The GUI, generated README, manifest, and Transparency Log identify Lorsieab2's passion project, ask players to support the original creators, and state that vanilla Virtual Families 2 saves are compatible with the modded version.",
+    "- B150 compact package: The exporter prunes every payload file unreachable from manifest source/restore records, rejects accidental .bak generated assets, revalidates retained source hashes and sizes, and records portable base-payload metadata. This removed 1,860 unreachable files (100,244,363 bytes) without removing a selectable feature.",
+    "- B150 verification status: All 16 native feature combinations generated, compiled, linked, passed manifest-gate checks, produced unique EXE hashes, and had clean build logs. Automated validation passed 69 binary-patcher tests plus 30 exporter/GUI tests. The final export contains 1,075 asset records and 1,112 manifest-reachable payload files after pruning 1,860 unreachable files. Manual in-game verification remains required for the full Collections Chest cycle, every autonomous/label eligibility branch, all store categories, reversible workers/upgrades, and simultaneous malfunction/repair gameplay.",
+)
 INVALID_INSTALL_MESSAGE = (
     "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\n"
     "Links:\n"
@@ -1042,6 +1067,8 @@ def iter_candidate_assets(
                 if not path.is_file():
                     continue
                 rel = path.relative_to(build_dir)
+                if rel.suffix.lower() == ".bak":
+                    continue
                 if allowed_paths is not None and rel not in allowed_paths:
                     continue
                 if asset_filter is not None and not asset_filter(rel):
@@ -1516,6 +1543,69 @@ def validate_bundle_asset_sources(bundle_dir: Path, asset_patches: list[dict[str
                 raise ValueError(f"asset patch #{index} {key} escapes the patcher bundle: {rel_text!r}")
             if not resolved.is_file():
                 raise FileNotFoundError(f"asset patch #{index} {key} does not exist in the patcher bundle: {rel_text!r}")
+            sha_key = "restore_source_sha256" if key == "restore_source_path" else "source_sha256"
+            size_key = "restore_source_size" if key == "restore_source_path" else "source_size"
+            expected_sha = record.get(sha_key)
+            if expected_sha and sha256_file(resolved).lower() != str(expected_sha).lower():
+                raise ValueError(f"asset patch #{index} {key} SHA-256 does not match {sha_key}")
+            expected_size = record.get(size_key)
+            if expected_size is not None and resolved.stat().st_size != int(expected_size):
+                raise ValueError(f"asset patch #{index} {key} size does not match {size_key}")
+
+
+def prune_unreferenced_payload_files(
+    bundle_dir: Path,
+    asset_patches: list[dict[str, Any]],
+) -> dict[str, int]:
+    """Remove payload files that no manifest asset record can ever read."""
+
+    bundle_root = bundle_dir.resolve()
+    payload_root = (bundle_root / "payload").resolve()
+    if not payload_root.is_dir():
+        return {
+            "removed_file_count": 0,
+            "removed_bytes": 0,
+            "retained_file_count": 0,
+            "retained_bytes": 0,
+        }
+
+    referenced: set[Path] = set()
+    for record in asset_patches:
+        for key in ("source_path", "restore_source_path"):
+            rel_text = record.get(key)
+            if not rel_text:
+                continue
+            resolved = (bundle_root / Path(str(rel_text))).resolve()
+            if resolved == payload_root or payload_root in resolved.parents:
+                referenced.add(resolved)
+
+    removed_file_count = 0
+    removed_bytes = 0
+    for path in sorted(payload_root.rglob("*")):
+        if not path.is_file() or path.resolve() in referenced:
+            continue
+        removed_file_count += 1
+        removed_bytes += path.stat().st_size
+        path.unlink()
+
+    directories = sorted(
+        (path for path in payload_root.rglob("*") if path.is_dir()),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    )
+    for path in directories:
+        try:
+            path.rmdir()
+        except OSError:
+            pass
+
+    retained_files = [path for path in payload_root.rglob("*") if path.is_file()]
+    return {
+        "removed_file_count": removed_file_count,
+        "removed_bytes": removed_bytes,
+        "retained_file_count": len(retained_files),
+        "retained_bytes": sum(path.stat().st_size for path in retained_files),
+    }
 
 
 def modded_exe_output_name(build_label: str) -> str:
@@ -1707,6 +1797,10 @@ if %ERRORLEVEL%==0 (
 
 {CREATOR_DISCLOSURE}
 
+{PROJECT_CREATOR_MESSAGE}
+
+{SAVE_COMPATIBILITY_NOTE}
+
 Use {apply_name} and enter or drag the original Virtual Families 2.exe, or run
 Launch_GUI.bat for the GUI. This package does not ship a prebuilt Windows
 shortcut because .lnk targets are path-specific and can break after ZIP
@@ -1729,6 +1823,10 @@ one, whether all patch data matches, and whether the needed payload files are
 intact. It does not actually change or write files. If you do not choose a
 custom log path, dry-run and pre-write failure logs are written next to
 manifest.json so the vanilla game folder stays untouched.
+
+B150 changelog
+--------------
+{chr(10).join(B150_CHANGELOG_LINES)}
 """,
         encoding="ascii",
         newline="\r\n",
@@ -1778,6 +1876,7 @@ Check for updates:
 10. Run the clearly named modded EXE inside the new modded folder.
 
 Existing saves:
+{SAVE_COMPATIBILITY_NOTE}
 The modded game uses its own save folder under Documents/LDW using the modded
 EXE name. To play existing saves in the modded game, copy the contents of your
 original Documents/LDW/Virtual Families 2 save folder into the modded save
@@ -1853,6 +1952,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "",
         "Creation disclosure",
         "-------------------",
+        PROJECT_CREATOR_MESSAGE,
         CREATOR_DISCLOSURE,
         "",
         "What this patcher does",
@@ -1888,6 +1988,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Feature-specific payloads for optional visual mods and Invisible Furniture are tied to their default-off settings, so unchecked settings leave those files unused and omitted from refreshed modded output folders.",
         "- Custom Couches and LDW Posters/Paintings payload files are tied to their own default-off setting. Current native store-row support still comes from the full modded EXE payload until those native table edits are split into per-feature patch records.",
         f"- Payload file count in this bundle: {len(payload_files)}",
+        f"- Unreachable payload files pruned during export: {summary.get('payload_pruning', {}).get('removed_file_count', 0)} ({summary.get('payload_pruning', {}).get('removed_bytes', 0)} bytes)",
+        "- Every retained payload file is reachable through a manifest source_path or restore_source_path; every retained source is revalidated after pruning.",
         "",
         "Official install validation",
         "---------------------------",
@@ -1910,6 +2012,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "----------------",
         f"- Default modded output folder: {summary.get('modded_output_folder_name')}",
         f"- Modded EXE name: {summary.get('modded_exe_output_name')}",
+        f"- {SAVE_COMPATIBILITY_NOTE}",
         "- Modded saves are expected under Documents/LDW/(name of modded Virtual Families 2 exe).",
         "- Existing Virtual Families 2 saves can be used by copying the contents of the original Documents/LDW/Virtual Families 2 save folder into the modded save folder.",
         "- Existing saves remain unaltered in the original save folder.",
@@ -1919,6 +2022,14 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Main Patches (green): core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits.",
         "- Optional Patches (black): Settings Evict, Island Events, optional visual swaps, Invisible Furniture graphics modes, custom maps, LDW Posters/Paintings, and Colorful Couches.",
         "- Experimental/Not Working Patches (red): Holiday Ornaments, mobile furniture behaviors, Expand game map, and anything not 100% confirmed working and crash-free.",
+        "",
+        "B150 native feature gating",
+        "--------------------------",
+        "- The B150 package carries 16 executable overlays: core plus all 15 non-empty combinations of Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches.",
+        "- The patcher selects exactly one matching overlay from the enabled-setting combination; disabling a native feature selects an executable built without that feature's patch functions.",
+        "- Behavior variations, autonomous candidates, direct sink subroutines, and praise-cache changes require behavior_patches.",
+        "- Cheat rows, price multipliers/reset, the malfunction trigger, and reversible Maid/Gardener/Rockhound/Anti-Spam handling require cheat_upgrades.",
+        "- The six-page/72-item collection and Holiday-aware count require holiday_ornaments_collection. Brokerage 11% wording follows mobile_purchases.",
     ]
     )
     for row in settings:
@@ -1936,8 +2047,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         )
     elif summary.get("exe_replacement"):
         limitation = (
-            "This bundle uses a verified full modded EXE payload for native/game-code changes. "
-            "Asset and file patches are gated by settings, but complete native per-feature off/on behavior requires translating future native changes into separate byte/table patch records with their own setting requirements."
+            "This bundle uses verified modified EXE payloads for native/game-code changes. "
+            "B150 isolates Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches with a complete 16-state executable overlay matrix; other native changes that still belong to the core executable remain controlled at their documented feature-family level."
         )
     else:
         limitation = (
@@ -2038,6 +2149,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B147 game build: Holiday Ornaments now validate every bundled collectables_small.png variant that can become the runtime sheet, including the optional Glowing Collectibles replacement, and require nonblank ornament frames 79-90.",
             "- B148 game build: Holiday Ornaments now validate the native collection-state contract before packaging, proving the 0x9E-0xA9 family is covered by Count, SaveState, ResetCollection, page routing, pickup dispatch, observer registration, and Mr. B/The Collector's sell-all reset.",
             "- B149 game build: Holiday Ornaments now validate the collection page-count route, proving DrawScene uses _VF2CollectionPageCount(page) for page 5 while Activate keeps the five stock cached counters and this+0x2C hover field intact.",
+            *B150_CHANGELOG_LINES,
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
             "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the optional Island Events setting is enabled.",
@@ -2069,6 +2181,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     island_events_exe = Path(args.island_events_exe).resolve() if args.island_events_exe else None
     cheat_upgrades_exe = Path(args.cheat_upgrades_exe).resolve() if args.cheat_upgrades_exe else None
     holiday_ornaments_exe = Path(args.holiday_ornaments_exe).resolve() if args.holiday_ornaments_exe else None
+    behavior_patches_exe = Path(args.behavior_patches_exe).resolve() if args.behavior_patches_exe else None
     island_events_cheat_upgrades_exe = (
         Path(args.island_events_cheat_upgrades_exe).resolve()
         if args.island_events_cheat_upgrades_exe
@@ -2087,6 +2200,41 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     island_events_cheat_upgrades_holiday_ornaments_exe = (
         Path(args.island_events_cheat_upgrades_holiday_ornaments_exe).resolve()
         if args.island_events_cheat_upgrades_holiday_ornaments_exe
+        else None
+    )
+    island_events_behavior_patches_exe = (
+        Path(args.island_events_behavior_patches_exe).resolve()
+        if args.island_events_behavior_patches_exe
+        else None
+    )
+    cheat_upgrades_behavior_patches_exe = (
+        Path(args.cheat_upgrades_behavior_patches_exe).resolve()
+        if args.cheat_upgrades_behavior_patches_exe
+        else None
+    )
+    holiday_ornaments_behavior_patches_exe = (
+        Path(args.holiday_ornaments_behavior_patches_exe).resolve()
+        if args.holiday_ornaments_behavior_patches_exe
+        else None
+    )
+    island_events_cheat_upgrades_behavior_patches_exe = (
+        Path(args.island_events_cheat_upgrades_behavior_patches_exe).resolve()
+        if args.island_events_cheat_upgrades_behavior_patches_exe
+        else None
+    )
+    island_events_holiday_ornaments_behavior_patches_exe = (
+        Path(args.island_events_holiday_ornaments_behavior_patches_exe).resolve()
+        if args.island_events_holiday_ornaments_behavior_patches_exe
+        else None
+    )
+    cheat_upgrades_holiday_ornaments_behavior_patches_exe = (
+        Path(args.cheat_upgrades_holiday_ornaments_behavior_patches_exe).resolve()
+        if args.cheat_upgrades_holiday_ornaments_behavior_patches_exe
+        else None
+    )
+    island_events_cheat_upgrades_holiday_ornaments_behavior_patches_exe = (
+        Path(args.island_events_cheat_upgrades_holiday_ornaments_behavior_patches_exe).resolve()
+        if args.island_events_cheat_upgrades_holiday_ornaments_behavior_patches_exe
         else None
     )
     vanilla_exe = Path(args.vanilla_exe).resolve() if args.vanilla_exe else None
@@ -2237,6 +2385,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 "Experimental Holiday Ornaments executable overlay. Applied only when core_executable and holiday_ornaments_collection are enabled.",
             ),
             (
+                behavior_patches_exe,
+                "Behavior Patches",
+                ["core_executable", "behavior_patches"],
+                "Optional Behavior Patches executable overlay. Applied only when core_executable and behavior_patches are enabled.",
+            ),
+            (
                 island_events_cheat_upgrades_exe,
                 "Island Events + Cheat Upgrades",
                 ["core_executable", "island_events", "cheat_upgrades"],
@@ -2255,12 +2409,57 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 "Combined optional executable overlay. Applied only when core_executable, cheat_upgrades, and holiday_ornaments_collection are enabled.",
             ),
             (
+                island_events_behavior_patches_exe,
+                "Island Events + Behavior Patches",
+                ["core_executable", "island_events", "behavior_patches"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, and behavior_patches are enabled.",
+            ),
+            (
+                cheat_upgrades_behavior_patches_exe,
+                "Cheat Upgrades + Behavior Patches",
+                ["core_executable", "cheat_upgrades", "behavior_patches"],
+                "Combined optional executable overlay. Applied only when core_executable, cheat_upgrades, and behavior_patches are enabled.",
+            ),
+            (
+                holiday_ornaments_behavior_patches_exe,
+                "Holiday Ornaments + Behavior Patches",
+                ["core_executable", "holiday_ornaments_collection", "behavior_patches"],
+                "Combined optional executable overlay. Applied only when core_executable, holiday_ornaments_collection, and behavior_patches are enabled.",
+            ),
+            (
                 island_events_cheat_upgrades_holiday_ornaments_exe,
                 "Island Events + Cheat Upgrades + Holiday Ornaments",
                 ["core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection"],
                 "Combined optional executable overlay. Applied only when core_executable, island_events, cheat_upgrades, and holiday_ornaments_collection are enabled.",
             ),
+            (
+                island_events_cheat_upgrades_behavior_patches_exe,
+                "Island Events + Cheat Upgrades + Behavior Patches",
+                ["core_executable", "island_events", "cheat_upgrades", "behavior_patches"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, cheat_upgrades, and behavior_patches are enabled.",
+            ),
+            (
+                island_events_holiday_ornaments_behavior_patches_exe,
+                "Island Events + Holiday Ornaments + Behavior Patches",
+                ["core_executable", "island_events", "holiday_ornaments_collection", "behavior_patches"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, holiday_ornaments_collection, and behavior_patches are enabled.",
+            ),
+            (
+                cheat_upgrades_holiday_ornaments_behavior_patches_exe,
+                "Cheat Upgrades + Holiday Ornaments + Behavior Patches",
+                ["core_executable", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches"],
+                "Combined optional executable overlay. Applied only when core_executable, cheat_upgrades, holiday_ornaments_collection, and behavior_patches are enabled.",
+            ),
+            (
+                island_events_cheat_upgrades_holiday_ornaments_behavior_patches_exe,
+                "Island Events + Cheat Upgrades + Holiday Ornaments + Behavior Patches",
+                ["core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, cheat_upgrades, holiday_ornaments_collection, and behavior_patches are enabled.",
+            ),
         ]
+        # The patcher applies active records in manifest order. Keep overlays
+        # ordered from least to most specific so the exact combination wins.
+        overlay_specs.sort(key=lambda spec: len(spec[2]))
         overlay_records = []
         for source_exe, label, requires, note in overlay_specs:
             if source_exe is None:
@@ -2275,8 +2474,10 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 note=note,
             ))
         asset_patches[1:1] = overlay_records
-    native_patch_sources = collect_native_patch_sources(build_manifest_data)
     validate_bundle_asset_sources(bundle_dir, asset_patches)
+    payload_pruning = prune_unreferenced_payload_files(bundle_dir, asset_patches)
+    validate_bundle_asset_sources(bundle_dir, asset_patches)
+    native_patch_sources = collect_native_patch_sources(build_manifest_data)
 
     asset_counts_by_setting: dict[str, int] = {}
     for row in asset_patches:
@@ -2291,6 +2492,8 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         "description": "Generated offline patch bundle for user-provided vanilla VF2 PC installs.",
         "created_with": "Codex AI",
         "creator_disclosure": CREATOR_DISCLOSURE,
+        "project_creator_message": PROJECT_CREATOR_MESSAGE,
+        "save_compatibility_note": SAVE_COMPATIBILITY_NOTE,
         "output": {
             "default_folder_name": modded_output_folder_name(build_label),
             "default_exe_name": modded_exe_output_name(build_label),
@@ -2304,10 +2507,18 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "island_events_exe": island_events_exe.name if island_events_exe else None,
             "cheat_upgrades_exe": cheat_upgrades_exe.name if cheat_upgrades_exe else None,
             "holiday_ornaments_exe": holiday_ornaments_exe.name if holiday_ornaments_exe else None,
+            "behavior_patches_exe": behavior_patches_exe.name if behavior_patches_exe else None,
             "island_events_cheat_upgrades_exe": island_events_cheat_upgrades_exe.name if island_events_cheat_upgrades_exe else None,
             "island_events_holiday_ornaments_exe": island_events_holiday_ornaments_exe.name if island_events_holiday_ornaments_exe else None,
             "cheat_upgrades_holiday_ornaments_exe": cheat_upgrades_holiday_ornaments_exe.name if cheat_upgrades_holiday_ornaments_exe else None,
             "island_events_cheat_upgrades_holiday_ornaments_exe": island_events_cheat_upgrades_holiday_ornaments_exe.name if island_events_cheat_upgrades_holiday_ornaments_exe else None,
+            "island_events_behavior_patches_exe": island_events_behavior_patches_exe.name if island_events_behavior_patches_exe else None,
+            "cheat_upgrades_behavior_patches_exe": cheat_upgrades_behavior_patches_exe.name if cheat_upgrades_behavior_patches_exe else None,
+            "holiday_ornaments_behavior_patches_exe": holiday_ornaments_behavior_patches_exe.name if holiday_ornaments_behavior_patches_exe else None,
+            "island_events_cheat_upgrades_behavior_patches_exe": island_events_cheat_upgrades_behavior_patches_exe.name if island_events_cheat_upgrades_behavior_patches_exe else None,
+            "island_events_holiday_ornaments_behavior_patches_exe": island_events_holiday_ornaments_behavior_patches_exe.name if island_events_holiday_ornaments_behavior_patches_exe else None,
+            "cheat_upgrades_holiday_ornaments_behavior_patches_exe": cheat_upgrades_holiday_ornaments_behavior_patches_exe.name if cheat_upgrades_holiday_ornaments_behavior_patches_exe else None,
+            "island_events_cheat_upgrades_holiday_ornaments_behavior_patches_exe": island_events_cheat_upgrades_holiday_ornaments_behavior_patches_exe.name if island_events_cheat_upgrades_holiday_ornaments_behavior_patches_exe else None,
             "build_manifest_keys": sorted(build_manifest_data) if build_manifest_data else [],
         },
         "settings": default_settings(
@@ -2332,7 +2543,8 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "asset_patch_count": len(asset_patches),
             "asset_counts_by_setting": dict(sorted(asset_counts_by_setting.items())),
             "payload_file_count": count_files(bundle_dir / "payload"),
-            "base_payload": str(base_payload),
+            "payload_pruning": payload_pruning,
+            "base_payload": base_payload.name,
             "asset_mode": args.asset_mode,
             "exe_replacement": exe_replacement_record is not None,
             "target_exe_name": target_exe_name,
@@ -2361,10 +2573,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--island-events-exe", help="Optional EXE overlay to apply when island_events is enabled.")
     parser.add_argument("--cheat-upgrades-exe", help="Optional EXE overlay to apply when cheat_upgrades is enabled.")
     parser.add_argument("--holiday-ornaments-exe", help="Experimental EXE overlay to apply when holiday_ornaments_collection is enabled.")
+    parser.add_argument("--behavior-patches-exe", help="Optional EXE overlay to apply when behavior_patches is enabled.")
     parser.add_argument("--island-events-cheat-upgrades-exe", help="Combined optional EXE overlay to apply when island_events and cheat_upgrades are both enabled.")
     parser.add_argument("--island-events-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when island_events and holiday_ornaments_collection are both enabled.")
     parser.add_argument("--cheat-upgrades-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when cheat_upgrades and holiday_ornaments_collection are both enabled.")
     parser.add_argument("--island-events-cheat-upgrades-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when island_events, cheat_upgrades, and holiday_ornaments_collection are all enabled.")
+    parser.add_argument("--island-events-behavior-patches-exe", help="Combined optional EXE overlay to apply when island_events and behavior_patches are both enabled.")
+    parser.add_argument("--cheat-upgrades-behavior-patches-exe", help="Combined optional EXE overlay to apply when cheat_upgrades and behavior_patches are both enabled.")
+    parser.add_argument("--holiday-ornaments-behavior-patches-exe", help="Combined optional EXE overlay to apply when holiday_ornaments_collection and behavior_patches are both enabled.")
+    parser.add_argument("--island-events-cheat-upgrades-behavior-patches-exe", help="Combined optional EXE overlay to apply when island_events, cheat_upgrades, and behavior_patches are all enabled.")
+    parser.add_argument("--island-events-holiday-ornaments-behavior-patches-exe", help="Combined optional EXE overlay to apply when island_events, holiday_ornaments_collection, and behavior_patches are all enabled.")
+    parser.add_argument("--cheat-upgrades-holiday-ornaments-behavior-patches-exe", help="Combined optional EXE overlay to apply when cheat_upgrades, holiday_ornaments_collection, and behavior_patches are all enabled.")
+    parser.add_argument("--island-events-cheat-upgrades-holiday-ornaments-behavior-patches-exe", help="Combined optional EXE overlay to apply when island_events, cheat_upgrades, holiday_ornaments_collection, and behavior_patches are all enabled.")
     parser.add_argument("--target-exe-name", default=DEFAULT_EXE_NAME, help="Relative EXE path expected in the user's game folder.")
     parser.add_argument("--name", help="Manifest display name.")
     parser.add_argument("--asset-mode", choices=ASSET_MODES, default="additive", help="Asset export mode. 'additive' exports manifest-referenced assets; 'all' exports every Images/Assets diff.")

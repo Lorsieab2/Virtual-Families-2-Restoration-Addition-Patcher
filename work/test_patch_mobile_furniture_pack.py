@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import ast
 import copy
 import shutil
 import struct
@@ -400,6 +401,79 @@ class InvisibleKidsTableBehaviorContractTests(unittest.TestCase):
 
 
 class SpontaneousBehaviorContractTests(unittest.TestCase):
+    def test_b150_behavior_groups_and_native_gates(self):
+        groups = {name: entries for name, entries in patcher.BEHAVIOR_LABEL_GROUPS}
+        self.assertEqual(
+            [text for _key, text in groups["web_13_plus"]],
+            ["Buying stuff online"],
+        )
+        web_basic = [text for _key, text in groups["web_basic"]]
+        self.assertEqual(web_basic.count("Watching memes"), 1)
+        self.assertIn("Making memes", web_basic)
+        self.assertIn("Posting memes online", web_basic)
+        self.assertEqual(len(groups["infant_care"]), 9)
+        self.assertEqual(
+            {text for _key, text in groups["infant_care"]},
+            {
+                "Teaching baby how to walk",
+                "Talking with baby",
+                "Feeding baby",
+                "Singing lullabies to baby",
+                "Playing with baby",
+                "Admiring baby",
+                "Playing peek-a-boo with baby",
+                "Kissing baby",
+                "Taking pictures of baby",
+            },
+        )
+        nap_labels = [text for _key, text in groups["nap_dream"]]
+        self.assertEqual(len(nap_labels), 30)
+        self.assertEqual(len(set(nap_labels)), 30)
+        self.assertEqual(nap_labels.count("Dreaming of Isola"), 1)
+        self.assertIn("Dreaming of roller coasters", nap_labels)
+        self.assertIn("Dreaming of discovering something", nap_labels)
+        self.assertEqual(
+            groups["bathroom_sink_female_teen_plus"],
+            [("eString_PuttingOnJewelry", "Putting on jewelry")],
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            for filename in ("Villager.obj", "VillagerAI.obj", "Behavior.obj"):
+                shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+            old_patched = patcher.PATCHED
+            try:
+                patcher.PATCHED = temp_root
+                manifest = {}
+                patcher.patch_spontaneous_behaviors(manifest)
+                helper = (temp_root / "vf2_spontaneous_behaviors.cpp").read_text(encoding="ascii")
+                self.assertIn("EnableAllAgesAutonomousCandidateWithWeight(data, 0x046, 450)", helper)
+                self.assertIn("EnableNursingMotherAutonomousCandidateWithWeight(data, 0x11F, 450)", helper)
+                self.assertIn("*(unsigned int *)(candidate + 0x4C) = 0x168;", helper)
+                self.assertIn("candidate[0xA3] = 1;", helper)
+                self.assertNotIn("EnableAllAgesAutonomousCandidateWithWeight(data, 0x19A", helper)
+                for target in range(0x0A5, 0x0A9):
+                    self.assertIn(
+                        f"CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x{target:03X}, 450)",
+                        helper,
+                    )
+                self.assertIn("CloneAutonomousCandidateWithWeight(data, 0x034, 0x016, 450)", helper)
+                self.assertIn("return VF2AgeValue(villager) >= 0x104;", helper)
+                self.assertIn("age >= 0x118 && age < 0x17C", helper)
+                self.assertIn("+ 0x6A58", helper)
+                self.assertIn("+ 0x6B8C", helper)
+                self.assertIn("VF2GenderValue(villager) == 1 && VF2AgeValue(villager) >= 0x118", helper)
+                self.assertIn("Weather.currentType == 5", helper)
+
+                patcher.patch_behavior_label_variants(manifest)
+                infant = next(
+                    row for row in manifest["behavior_label_variants"]["changed"]
+                    if row["behavior_id"] == "0x11f"
+                )
+                self.assertEqual(infant["helper"], "_VF2RandomInfantCareLabel")
+            finally:
+                patcher.PATCHED = old_patched
+
     def test_children_play_at_kids_table_is_child_only_candidate(self):
         with tempfile.TemporaryDirectory() as tmp:
             temp_root = Path(tmp)
@@ -450,8 +524,26 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 self.assertIn("static bool VF2RunNativeBehaviorAndChangedLabel", helper)
                 self.assertIn("struct VF2BehaviorLabelCacheSlot", helper)
                 self.assertIn("static bool VF2GetCachedBehaviorLabel", helper)
+                self.assertIn("static void VF2RestoreCachedNativeLabel", helper)
                 self.assertIn("VF2RememberBehaviorLabel(villager, (int)labels, selectedStringId);", helper)
-                self.assertIn("VF2ApplyUncachedRandomLabel(villager, kVF2BehaviorLabels_radio_dance", helper)
+                self.assertNotIn("VF2ApplyUncachedRandomLabel", helper)
+                self.assertIn("if (slot->stringId == 0)", helper)
+                self.assertIn("behaviorLabel[i] = slot->nativeLabel[i];", helper)
+                self.assertIn("kVF2RadioListenCacheSentinel = -1", helper)
+                self.assertIn("CBehavior::ListenToRadio", helper)
+                self.assertIn(
+                    "VF2RememberBehaviorLabel(villager, cacheTag, kVF2RadioListenCacheSentinel)",
+                    helper,
+                )
+                self.assertIn("int behaviorId;", helper)
+                self.assertIn("unsigned int behaviorSerial;", helper)
+                self.assertIn("unsigned int praiseCount;", helper)
+                self.assertIn("data + 0x1BBA0", helper)
+                self.assertIn("data + 0x1BBA4", helper)
+                self.assertIn("data + 0x6B48", helper)
+                self.assertIn("data + 0x6B4C", helper)
+                self.assertIn("behaviorSerial == slot->behaviorSerial + 1", helper)
+                self.assertIn("praiseCount != slot->praiseCount", helper)
                 self.assertIn("VF2CopyBehaviorLabel(villager, before);", helper)
                 self.assertIn("VF2CopyBehaviorLabel(villager, gVF2BehaviorLabelBeforeNative);", helper)
                 self.assertIn("return VF2BehaviorLabelChangedSince(villager, before);", helper)
@@ -469,9 +561,11 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::NorthShower)) return;", helper)
                 self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WashingInBathroomSink)) return;", helper)
                 self.assertIn("if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::BathroomGroomingGeneral)) return;", helper)
-                self.assertIn("VF2SetBehaviorLabel(villager, kVF2BehaviorLabels_trampoline_textfix[0]);", helper)
+                self.assertIn("int fixedStringId = kVF2BehaviorLabels_trampoline_textfix[0];", helper)
+                self.assertIn("VF2RememberBehaviorLabel(villager, cacheTag, fixedStringId);", helper)
                 self.assertIn("int remembered = VF2CurrentCoffeeLabel(villager);", helper)
                 self.assertIn("int remembered = VF2CurrentShowerLabel(villager);", helper)
+                self.assertIn("VF2ApplyRememberedOrRandomLabel(\n        villager,\n        kVF2BehaviorLabels_radio_dance", helper)
                 self.assertNotIn("rememberedDance", helper)
                 self.assertNotIn("VF2CurrentLabelMatchesStringId", helper)
             finally:
@@ -768,8 +862,271 @@ class TextFixStringManagerTests(unittest.TestCase):
             finally:
                 patcher.PATCHED = old_patched
 
-
 class OutfitStoreMappingTests(unittest.TestCase):
+    def test_behavior_patch_mutations_are_all_inside_compile_time_gate(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            'ENABLE_BEHAVIOR_PATCHES = os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "0") == "1"',
+            source,
+        )
+        tree = ast.parse(source)
+        main = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "main"
+        )
+        gate = next(
+            node for node in main.body
+            if isinstance(node, ast.If)
+            and isinstance(node.test, ast.Name)
+            and node.test.id == "ENABLE_BEHAVIOR_PATCHES"
+        )
+        gated_calls = {
+            node.func.id
+            for node in ast.walk(gate)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        }
+        expected = {
+            "patch_invisible_hammock_drop_action",
+            "patch_spontaneous_behaviors",
+            "patch_bookshelf_reading_behavior",
+            "patch_radio_drop_behavior",
+            "patch_behavior_label_variants",
+            "patch_arcade_behavior_labels",
+        }
+
+        self.assertTrue(expected.issubset(gated_calls))
+        for node in main.body:
+            if node is gate:
+                continue
+            outside_calls = {
+                call.func.id
+                for call in ast.walk(node)
+                if isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+            }
+            self.assertTrue(expected.isdisjoint(outside_calls))
+        self.assertIn('PATCHED / "vf2_invisible_hammock.cpp"', source)
+        self.assertIn('PATCHED / "vf2_spontaneous_behaviors.cpp"', source)
+        self.assertIn("Behavior Patches disabled: stock spontaneous and label behavior retained.", source)
+        self.assertIn("if ENABLE_BEHAVIOR_PATCHES:\n        validate_invisible_hammock_behavior_contract(manifest)", source)
+        self.assertIn(
+            "if ENABLE_BEHAVIOR_PATCHES:\n"
+            "        for index, (key, text) in enumerate(BEHAVIOR_LABELS):",
+            source,
+        )
+
+    def test_b150_cheat_upgrade_rows_and_exact_descriptions(self):
+        rows = {item["item_id"]: item for item in patcher.CHEAT_UPGRADE_ITEMS}
+
+        self.assertEqual(rows[0x125]["name"], "Reset Ants")
+        self.assertEqual(rows[0x126]["name"], "Reset all collections")
+        self.assertEqual(rows[0x127]["name"], "Complete all collections")
+        self.assertEqual(rows[0x128]["description"], "Everything in the store costs twice as much.")
+        self.assertEqual(rows[0x129]["description"], "Everything in the store costs five times as much.")
+        self.assertEqual(
+            rows[0x12A]["description"],
+            "Everything in the store now costs an insane amount. Good Luck!",
+        )
+        self.assertEqual(rows[0x12B]["name"], "Trigger all house malfunctions")
+        self.assertIn('Useful for getting the "Handyman" goal.', rows[0x12B]["description"])
+        self.assertIn(0x12B, patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
+        self.assertEqual(rows[0x12C]["name"], "Reset Price Multiplier")
+        self.assertEqual(rows[0x12C]["description"], "Resets store prices to original values.")
+        self.assertIn(0x12C, patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
+
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn("theGameState::Get()->ResetWorldState(0x13)", source)
+        self.assertIn("for (int prop = 0x4D; prop <= 0x54; ++prop)", source)
+        self.assertIn("0x4D + ldwGameState::GetRandom(3)", source)
+        self.assertIn("Environment.SetProp((EPropEnum)0x50)", source)
+        self.assertIn("Environment.SetProp((EPropEnum)0x51)", source)
+        self.assertIn("static void VF2ResetAchievementRaw(int achievement)", source)
+        self.assertIn("record[0] = 0;", source)
+        self.assertIn("*(unsigned int *)(record + 4) = 0;", source)
+        self.assertIn("VF2ResetAchievementRaw(0x4D)", source)
+        self.assertIn("VF2ResetAchievementRaw(0x54)", source)
+        self.assertIn("for (int i = 0; i < 6; ++i)", source)
+        self.assertNotIn("int count = kVF2IncludeHolidayOrnamentCollection ? 6 : 5;", source)
+        self.assertIn("for (int sellingGoal = 0x4E; sellingGoal <= 0x53; ++sellingGoal)", source)
+        self.assertIn("Achievement.IsComplete((EAchievement)sellingGoal)", source)
+        self.assertIn("Achievement.IncrementProgress((EAchievement)0x54, completedSellingGoals)", source)
+
+    def test_trigger_all_malfunctions_uses_native_dryer_and_renovation_gates(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                helper = patcher.PATCHED / "vf2_special_upgrade_effects.cpp"
+                helper.write_text("", encoding="ascii")
+
+                patcher.write_outfit_store_helpers({})
+                source = helper.read_text(encoding="ascii")
+
+                self.assertIn("VF2TriggerAllHouseMalfunctions", source)
+                self.assertIn("{0x17, 0x1A, 0x1B, 0x1C, 0x1D, 0x1F, 0x20}", source)
+                self.assertIn("eObjectDryer = 0x48", source)
+                self.assertIn("origin = {100, 100}", source)
+                self.assertIn("FurnitureManager.FindFurniture", source)
+                self.assertIn("Environment.SetProp((EPropEnum)0x21)", source)
+                self.assertIn("InventoryManager.HaveUpgrade((EInventoryItem)0xE6)", source)
+                for prop in (0x48, 0x49, 0x4A):
+                    self.assertIn(f"Environment.SetProp((EPropEnum)0x{prop:02X})", source)
+                self.assertNotIn("Environment.SetProp((EPropEnum)0x4D)", source)
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_native_north_bathroom_random_malfunctions_remain_renovation_gated(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                shutil.copy2(
+                    patcher.SRC_OBJS / "theMainScene.obj",
+                    patcher.PATCHED / "theMainScene.obj",
+                )
+                manifest = {}
+
+                patcher.validate_native_north_bathroom_malfunction_selection(manifest)
+
+                contract = manifest["native_north_bathroom_malfunctions"]
+                self.assertEqual(contract["status"], "validated and preserved")
+                self.assertEqual(contract["second_bathroom_upgrade"], "0xE6")
+                self.assertEqual(
+                    [(row["name"], row["prop"]) for row in contract["cases"]],
+                    [
+                        ("north shower leak", "0x49"),
+                        ("north toilet leak", "0x48"),
+                        ("north sink leak", "0x4a"),
+                    ],
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_water_pressure_surge_adds_all_three_renovation_gated_north_leaks(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                for name in ("IslandEvents.obj", "Villager.obj"):
+                    shutil.copy2(patcher.SRC_OBJS / name, patcher.PATCHED / name)
+                manifest = {}
+
+                patcher.patch_second_bathroom_leaks(manifest)
+
+                contract = manifest["SecondBathroomLeaks"]
+                self.assertEqual(contract["second_bathroom_upgrade_item"], "0xE6")
+                self.assertEqual(
+                    contract["water_pressure_surge_hook"]["north_props_added"],
+                    {
+                        "toilet": "0x48",
+                        "shower": "0x49",
+                        "bathroom_sink": "0x4A",
+                    },
+                )
+                helper = (
+                    patcher.PATCHED / "vf2_island_events.cpp"
+                ).read_text(encoding="ascii")
+                self.assertIn("InventoryManager.HaveUpgrade((EInventoryItem)0xE6)", helper)
+                for prop in (0x48, 0x49, 0x4A):
+                    self.assertIn(f"Environment.SetProp((EPropEnum)0x{prop:02X})", helper)
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_reversible_and_price_helpers_follow_cheat_upgrade_compile_gate(self):
+        old_patched = patcher.PATCHED
+        old_enabled = patcher.ENABLE_CHEAT_UPGRADES
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                for enabled, expected in ((False, "false"), (True, "true")):
+                    patcher.ENABLE_CHEAT_UPGRADES = enabled
+                    helper = patcher.PATCHED / "vf2_special_upgrade_effects.cpp"
+                    helper.write_text("", encoding="ascii")
+                    manifest = {}
+                    patcher.write_outfit_store_helpers(manifest)
+                    source = helper.read_text(encoding="ascii")
+
+                    self.assertIn(
+                        f"static const bool kVF2EnableB150CheatUpgrades = {expected};",
+                        source,
+                    )
+                    self.assertIn("if (!kVF2EnableB150CheatUpgrades) return -1;", source)
+                    self.assertIn("if (!kVF2EnableB150CheatUpgrades) return false;", source)
+                    self.assertIn("if (!kVF2EnableB150CheatUpgrades) return price;", source)
+                    self.assertIn("if (kVF2EnableB150CheatUpgrades &&", source)
+                    self.assertIn("VF2ResetB150PriceMode", source)
+                    self.assertIn("for (int mode = 0x128; mode <= 0x12A; ++mode)", source)
+                    self.assertIn("CVillager& GetVillager(int id);", source)
+                    self.assertIn("VillagerManager.GetVillager(workerId)", source)
+                    self.assertNotIn("GetVillagerPtr(workerId)", source)
+                    self.assertIn("VF2DeactivateWorker(0x23, 0x25AF8)", source)
+                    self.assertIn("VF2DeactivateWorker(0x24, 0x25AFC)", source)
+                    self.assertIn("((unsigned char*)&worker)[0x1BB84] = 0", source)
+                    self.assertIn("gameState + 0x25CC4", source)
+                    self.assertEqual(
+                        manifest["outfit_store_helpers"]["b150_cheat_upgrade_gate"]["enabled"],
+                        enabled,
+                    )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_CHEAT_UPGRADES = old_enabled
+
+    def test_calc_price_multiplier_coff_hooks_follow_cheat_gate(self):
+        old_patched = patcher.PATCHED
+        old_enabled = patcher.ENABLE_CHEAT_UPGRADES
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                for enabled in (False, True):
+                    patcher.PATCHED = root / ("enabled" if enabled else "disabled")
+                    patcher.PATCHED.mkdir()
+                    patcher.ENABLE_CHEAT_UPGRADES = enabled
+                    shutil.copy2(
+                        patcher.SRC_OBJS / "ScrollingStoreScene.obj",
+                        patcher.PATCHED / "ScrollingStoreScene.obj",
+                    )
+                    manifest = {}
+
+                    patcher.patch_scrolling_store_scene(manifest)
+
+                    obj = CoffObject(patcher.PATCHED / "ScrollingStoreScene.obj")
+                    calc = obj.symbol("?CalcPrice@CScrollingStoreScene@@AAEHW4EInventoryItem@@PA_N@Z")
+                    section = obj.section(calc.section)
+                    data = bytes(
+                        obj.buf[
+                            section.raw_ptr + calc.value :
+                            section.raw_ptr + section.raw_size
+                        ]
+                    )
+                    if enabled:
+                        self.assertEqual(data[0x79:0x7C], b"\x0F\xAF\xC7")
+                        self.assertEqual(data[0x7C], 0xE9)
+                        self.assertEqual(data[0x83:0x85], b"\x8B\xC7")
+                        self.assertEqual(data[0x85], 0xE9)
+                        self.assertIn("_VF2ApplyPriceMultiplier", obj.symbol_by_name)
+                        helper = obj.symbol("_VF2ApplyPriceMultiplier")
+                        relocs = [
+                            struct.unpack_from("<IIH", obj.buf, section.reloc_ptr + index * 10)
+                            for index in range(section.nreloc)
+                        ]
+                        self.assertTrue(any(row[1] == helper.index for row in relocs))
+                    else:
+                        self.assertEqual(
+                            data[0x79:0x83],
+                            b"\x0F\xAF\xC7\x5F\x5E\x5B\x5D\xC2\x08\x00",
+                        )
+                        self.assertEqual(
+                            data[0x83:0x8C],
+                            b"\x8B\xC7\x5F\x5E\x5B\x5D\xC2\x08\x00",
+                        )
+                        self.assertNotIn("_VF2ApplyPriceMultiplier", obj.symbol_by_name)
+                    self.assertEqual(
+                        manifest["ScrollingStoreScene"]["price_multiplier"]["enabled"],
+                        enabled,
+                    )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_CHEAT_UPGRADES = old_enabled
+
     def test_reset_achievements_cheat_upgrade_is_wired_to_native_reset(self):
         reset_rows = [
             item for item in patcher.CHEAT_UPGRADE_ITEMS
@@ -1109,13 +1466,50 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             draw_data = bytes(obj.buf[draw_sec.raw_ptr + draw_sym.value : draw_sec.raw_ptr + draw_sec.raw_size])
             self.assertEqual(draw_data[0x17D : 0x186], b"\xFF\x77\x14\xE8\x00\x00\x00\x00\x50")
             self.assertNotIn(b"\xFF\x74\x87\x18", draw_data)
+            self.assertIn("_VF2CollectionPageCount@4", obj.symbol_by_name)
+            self.assertNotIn("_VF2CollectionPageCount", obj.symbol_by_name)
+            draw_relocs = [
+                struct.unpack_from("<IIH", obj.buf, draw_sec.reloc_ptr + index * 10)
+                for index in range(draw_sec.nreloc)
+            ]
+            self.assertIn(
+                (
+                    draw_sym.value + 0x181,
+                    obj.symbol("_VF2CollectionPageCount@4").index,
+                    patcher.IMAGE_REL_I386_REL32,
+                ),
+                draw_relocs,
+            )
             activate_sym = obj.symbol("?Activate@CCollectionScene@@MAEX_N@Z")
             activate_sec = obj.section(activate_sym.section)
             activate_data = bytes(obj.buf[activate_sec.raw_ptr + activate_sym.value : activate_sec.raw_ptr + activate_sec.raw_size])
             self.assertIn(b"\xC7\x46\x2C\xFF\xFF\xFF\xFF", activate_data)
             self.assertNotIn(b"\x89\x46\x2C", activate_data)
 
-        self.with_temp_patched_objs(["CollectionScene.obj"], run)
+            main_obj = CoffObject(temp_root / "theMainScene.obj")
+            map_sym = main_obj.symbol("?MapClickFeedback@theMainScene@@IAEXUldwPoint@@@Z")
+            map_sec = main_obj.section(map_sym.section)
+            aggregate_helper_name = (
+                "?CollectionCountWithHolidayOrnaments@CCollectableItem@@"
+                "QBE?BHW4ECarrying@@_N11@Z"
+            )
+            aggregate_helper = main_obj.symbol(aggregate_helper_name)
+            map_relocs = [
+                struct.unpack_from("<IIH", main_obj.buf, map_sec.reloc_ptr + index * 10)
+                for index in range(map_sec.nreloc)
+            ]
+            self.assertIn(
+                (map_sym.value + 0x66B, aggregate_helper.index, patcher.IMAGE_REL_I386_REL32),
+                map_relocs,
+            )
+            self.assertIn(b" / 72\x00", main_obj.buf)
+            self.assertNotIn(b" / 60\x00", main_obj.buf)
+            self.assertEqual(
+                manifest["CollectionSceneHolidayOrnaments"]["main_scene_total"]["total"],
+                72,
+            )
+
+        self.with_temp_patched_objs(["CollectionScene.obj", "theMainScene.obj"], run)
 
     def test_collectable_observers_register_all_mobile_ornaments(self):
         def run(temp_root):
@@ -1231,6 +1625,14 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 "}\n",
                 encoding="ascii",
             )
+            helper_path = temp_root / 'vf2_special_upgrade_effects.cpp'
+            helper_path.write_text(
+                helper_path.read_text(encoding='ascii').replace(
+                    '__cdecl VF2CollectionPageCount',
+                    '__stdcall VF2CollectionPageCount',
+                ),
+                encoding='ascii',
+            )
 
             patcher.patch_achievement_holiday_ornaments(manifest)
             patcher.patch_collectable_item_holiday_ornaments(manifest)
@@ -1250,6 +1652,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 "CollectableItem.obj",
                 "Collectable.obj",
                 "CollectionScene.obj",
+                "theMainScene.obj",
                 "IslandEvents.obj",
             ],
             run,

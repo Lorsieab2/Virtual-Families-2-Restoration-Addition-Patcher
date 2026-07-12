@@ -99,6 +99,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             (build / "Images" / "Furniture" / "Unchanged.png").write_bytes(b"same")
             (build / "Images" / "Furniture" / "CandyCane.png").write_bytes(b"holiday")
             (build / "Images" / "Furniture" / "CouchNeonPurpleStd.png").write_bytes(b"custom couch")
+            (build / "Images" / "Furniture" / "Transient.png.pre-frame-pad.bak").write_bytes(b"backup")
             (build / "Images" / "VF3LargeFlatScreenTVAnim.png").write_bytes(b"tv")
             (build / "Images" / "VF3TVAnimations" / "Large").mkdir(parents=True)
             (build / "Images" / "VF3TVAnimations" / "Large" / "Frame01.png").write_bytes(b"tv frame")
@@ -116,6 +117,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                         "generated_assets": [
                             {"path": "Furniture/CandyCane.png"},
                             {"path": "Furniture/CouchNeonPurpleStd.png"},
+                            {"path": "Furniture/Transient.png.pre-frame-pad.bak"},
                             {"path": "Furniture/SofaPlaid.png"},
                             {"path": "VillagerDetailBodies/Female/Body_50/Frame00.png"},
                             {"path": "Images/VF3TVAnimations/Large/Frame01.png"},
@@ -135,6 +137,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
             self.assertNotIn("Images/Furniture/Unchanged.png", asset_by_path)
+            self.assertNotIn("Images/Furniture/Transient.png.pre-frame-pad.bak", asset_by_path)
             self.assertEqual(asset_by_path["Images/Furniture/CandyCane.png"]["requires"], ["holiday_furniture"])
             self.assertEqual(asset_by_path["Images/Furniture/CouchNeonPurpleStd.png"]["requires"], ["custom_couches_ldw_posters"])
             self.assertEqual(asset_by_path["Images/VF3LargeFlatScreenTVAnim.png"]["requires"], ["core_executable", "vf3_tv_assets_recognition"])
@@ -154,6 +157,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["misc_graphics_fixes"], 1)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["glowing_collectibles"], 1)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["core_executable"], 5)
+            self.assertEqual(manifest["export_summary"]["base_payload"], base.name)
+            self.assertNotIn(str(tmp_path), json.dumps(manifest))
             self.assertTrue((out / "payload" / "Images" / "Furniture" / "CandyCane.png").is_file())
             self.assertNotIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
             self.assertIn({"path": "Images", "min_files": 600}, manifest["runtime_requirements"]["required_dirs"])
@@ -488,6 +493,14 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertNotIn("patch-manifest.json", asset_by_path)
             self.assertEqual(manifest["created_with"], "Codex AI")
             self.assertIn("Codex AI", manifest["creator_disclosure"])
+            creator_message = (
+                'Created by Lorsieab2. This is a passion project dedicated to improving the '
+                '"Virtual Families 2" experience!\n'
+                'No copyright infringement intended! Please support the original game creators! :)'
+            )
+            compatibility_note = "Vanilla Virtual Families 2 saves are compatible with the modded version!"
+            self.assertEqual(manifest["project_creator_message"], creator_message)
+            self.assertEqual(manifest["save_compatibility_note"], compatibility_note)
             self.assertNotIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
             self.assertIn({"path": "Assets", "min_files": 200}, manifest["runtime_requirements"]["required_dirs"])
             self.assertEqual(manifest["output"]["default_folder_name"], "VF2-B103-Modded")
@@ -510,7 +523,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertFalse((out / "payload" / "SDL2.dll").exists())
             self.assertFalse((out / "payload" / "Sounds" / "sound00.wav").exists())
             self.assertIn("Codex AI", (out / "README-B103-PATCHER.txt").read_text(encoding="ascii"))
+            self.assertIn(creator_message, (out / "README-B103-PATCHER.txt").read_text(encoding="ascii"))
+            self.assertIn(compatibility_note, (out / "README-B103-PATCHER.txt").read_text(encoding="ascii"))
+            self.assertIn(compatibility_note, (out / "How to Use.txt").read_text(encoding="ascii"))
+            gui_source = (out / "offline_vf2_patcher_gui.py").read_text(encoding="utf-8")
+            self.assertIn("PROJECT_CREATOR_MESSAGE", gui_source)
+            self.assertIn("SAVE_COMPATIBILITY_NOTE", gui_source)
             self.assertIn("Official install validation", (out / "Transparency Log.txt").read_text(encoding="utf-8"))
+            self.assertIn(creator_message, (out / "Transparency Log.txt").read_text(encoding="utf-8"))
+            self.assertIn(compatibility_note, (out / "Transparency Log.txt").read_text(encoding="utf-8"))
             self.assertIn("Main Patches (green)", (out / "Transparency Log.txt").read_text(encoding="utf-8"))
             self.assertIn("Prebuilt Launch GUI.lnk is intentionally omitted", (out / "Transparency Log.txt").read_text(encoding="utf-8"))
             self.assertNotIn("Apply_B99_Patcher.bat", manifest["export_summary"]["runner_files"])
@@ -523,6 +544,166 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertNotIn("launch_gui_shortcut", manifest["export_summary"])
             self.assertNotIn("launcher", manifest["export_summary"])
             self.assertTrue(manifest["export_summary"]["exe_replacement"])
+
+    def test_exports_complete_behavior_exe_overlay_matrix_and_applies_most_specific(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            game = tmp_path / "game"
+            base.mkdir()
+            build.mkdir()
+            game.mkdir()
+            vanilla_data = minimal_pe_bytes()
+            vanilla = game / "Virtual Families 2.exe"
+            vanilla.write_bytes(vanilla_data)
+            patched_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
+            patched_exe.write_bytes(b"core executable without optional native patches")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+
+            overlay_specs = [
+                ("--island-events-exe", "Island Events", ["core_executable", "island_events"]),
+                ("--cheat-upgrades-exe", "Cheat Upgrades", ["core_executable", "cheat_upgrades"]),
+                ("--holiday-ornaments-exe", "Holiday Ornaments", ["core_executable", "holiday_ornaments_collection"]),
+                ("--behavior-patches-exe", "Behavior Patches", ["core_executable", "behavior_patches"]),
+                ("--island-events-cheat-upgrades-exe", "Island Events + Cheat Upgrades", ["core_executable", "island_events", "cheat_upgrades"]),
+                ("--island-events-holiday-ornaments-exe", "Island Events + Holiday Ornaments", ["core_executable", "island_events", "holiday_ornaments_collection"]),
+                ("--cheat-upgrades-holiday-ornaments-exe", "Cheat Upgrades + Holiday Ornaments", ["core_executable", "cheat_upgrades", "holiday_ornaments_collection"]),
+                ("--island-events-behavior-patches-exe", "Island Events + Behavior Patches", ["core_executable", "island_events", "behavior_patches"]),
+                ("--cheat-upgrades-behavior-patches-exe", "Cheat Upgrades + Behavior Patches", ["core_executable", "cheat_upgrades", "behavior_patches"]),
+                ("--holiday-ornaments-behavior-patches-exe", "Holiday Ornaments + Behavior Patches", ["core_executable", "holiday_ornaments_collection", "behavior_patches"]),
+                ("--island-events-cheat-upgrades-holiday-ornaments-exe", "Island Events + Cheat Upgrades + Holiday Ornaments", ["core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection"]),
+                ("--island-events-cheat-upgrades-behavior-patches-exe", "Island Events + Cheat Upgrades + Behavior Patches", ["core_executable", "island_events", "cheat_upgrades", "behavior_patches"]),
+                ("--island-events-holiday-ornaments-behavior-patches-exe", "Island Events + Holiday Ornaments + Behavior Patches", ["core_executable", "island_events", "holiday_ornaments_collection", "behavior_patches"]),
+                ("--cheat-upgrades-holiday-ornaments-behavior-patches-exe", "Cheat Upgrades + Holiday Ornaments + Behavior Patches", ["core_executable", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches"]),
+                ("--island-events-cheat-upgrades-holiday-ornaments-behavior-patches-exe", "Island Events + Cheat Upgrades + Holiday Ornaments + Behavior Patches", ["core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches"]),
+            ]
+            export_args = [
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--vanilla-exe",
+                str(vanilla),
+                "--asset-mode",
+                "additive",
+                "--include-exe-replacement",
+                "--name",
+                "B150",
+            ]
+            source_data_by_requires = {}
+            source_name_by_field = {}
+            for index, (flag, label, requires) in enumerate(overlay_specs, start=1):
+                source = build / f"overlay-{index:02d}.exe"
+                source_data = f"overlay executable: {label}".encode("ascii")
+                source.write_bytes(source_data)
+                export_args.extend([flag, str(source)])
+                source_data_by_requires[tuple(requires)] = source_data
+                source_name_by_field[flag.removeprefix("--").replace("-", "_")] = source.name
+
+            self.run_exporter(*export_args)
+
+            manifest_path = out / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            exe_records = [
+                row for row in manifest["asset_patches"]
+                if row["file_path"] == "Virtual Families 2.exe"
+            ]
+            expected_requires = [["core_executable"], *[spec[2] for spec in overlay_specs]]
+            self.assertEqual([row["requires"] for row in exe_records], expected_requires)
+            self.assertEqual(len(exe_records), 16)
+            self.assertEqual(
+                [len(row["requires"]) for row in exe_records],
+                sorted(len(row["requires"]) for row in exe_records),
+            )
+            behavior_records = [
+                row for row in exe_records
+                if "behavior_patches" in row["requires"]
+            ]
+            self.assertEqual(len(behavior_records), 8)
+            self.assertTrue(all("core_executable" in row["requires"] for row in behavior_records))
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["behavior_patches"], 8)
+            self.assertIn("behavior_patches", {row["id"] for row in manifest["settings"]})
+            for field, source_name in source_name_by_field.items():
+                self.assertEqual(manifest["source_build"][field], source_name)
+            for record, (_, label, requires) in zip(exe_records[1:], overlay_specs):
+                payload = out / record["source_path"]
+                self.assertEqual(payload.name, f"Virtual Families 2 - Modded B150 - {label}.exe")
+                self.assertEqual(payload.read_bytes(), source_data_by_requires[tuple(requires)])
+
+            # Strip unrelated official-install requirements so this focused test
+            # can prove executable overlay precedence with a one-file game tree.
+            manifest["runtime_requirements"] = {}
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            modded_exe_name = "Virtual Families 2 - Modded B150.exe"
+
+            all_enabled_output = tmp_path / "all-enabled"
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game),
+                "--manifest",
+                str(manifest_path),
+                "--output-dir",
+                str(all_enabled_output),
+                "--enable-all",
+            )
+            all_features = (
+                "core_executable",
+                "island_events",
+                "cheat_upgrades",
+                "holiday_ornaments_collection",
+                "behavior_patches",
+            )
+            self.assertEqual(
+                (all_enabled_output / modded_exe_name).read_bytes(),
+                source_data_by_requires[all_features],
+            )
+
+            behavior_off_output = tmp_path / "behavior-off"
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game),
+                "--manifest",
+                str(manifest_path),
+                "--output-dir",
+                str(behavior_off_output),
+                "--enable-all",
+                "--disable",
+                "behavior_patches",
+            )
+            nonbehavior_features = (
+                "core_executable",
+                "island_events",
+                "cheat_upgrades",
+                "holiday_ornaments_collection",
+            )
+            self.assertEqual(
+                (behavior_off_output / modded_exe_name).read_bytes(),
+                source_data_by_requires[nonbehavior_features],
+            )
+
+            behavior_only_output = tmp_path / "behavior-only"
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game),
+                "--manifest",
+                str(manifest_path),
+                "--output-dir",
+                str(behavior_only_output),
+                "--disable-all",
+                "--enable",
+                "core_executable,behavior_patches",
+            )
+            self.assertEqual(
+                (behavior_only_output / modded_exe_name).read_bytes(),
+                source_data_by_requires[("core_executable", "behavior_patches")],
+            )
 
     def test_exe_replacement_can_reuse_target_identity_manifest(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -891,6 +1072,43 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                         }
                     ],
                 )
+
+    def test_payload_pruning_keeps_only_manifest_referenced_sources(self):
+        import export_offline_patch_bundle as exporter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            keep = bundle / "payload" / "Images" / "keep.png"
+            restore = bundle / "payload" / "Original" / "restore.png"
+            orphan = bundle / "payload" / "Unused" / "orphan.png"
+            for path, data in ((keep, b"keep"), (restore, b"restore"), (orphan, b"orphan")):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+
+            records = [
+                {
+                    "source_path": "payload/Images/keep.png",
+                    "source_sha256": hashlib.sha256(b"keep").hexdigest(),
+                    "source_size": len(b"keep"),
+                    "restore_source_path": "payload/Original/restore.png",
+                    "restore_source_sha256": hashlib.sha256(b"restore").hexdigest(),
+                    "restore_source_size": len(b"restore"),
+                }
+            ]
+            summary = exporter.prune_unreferenced_payload_files(bundle, records)
+
+            self.assertTrue(keep.is_file())
+            self.assertTrue(restore.is_file())
+            self.assertFalse(orphan.exists())
+            self.assertFalse(orphan.parent.exists())
+            self.assertEqual(summary["removed_file_count"], 1)
+            self.assertEqual(summary["removed_bytes"], len(b"orphan"))
+            self.assertEqual(summary["retained_file_count"], 2)
+            self.assertEqual(summary["retained_bytes"], len(b"keep") + len(b"restore"))
+            exporter.validate_bundle_asset_sources(bundle, records)
+            keep.write_bytes(b"tampered")
+            with self.assertRaises(ValueError):
+                exporter.validate_bundle_asset_sources(bundle, records)
 
 
 if __name__ == "__main__":

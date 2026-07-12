@@ -902,3 +902,90 @@
 - Exports `Virtual-Families-2-Restoration-Addition-Patcher-B141` with `1052`
   asset records, `2949` payload files, four B141 EXE overlays, and a clean
   all-settings dry run.
+
+## B150 - Gated Behavior, Collection, Cheat, and Patcher Upgrade
+
+- Adds Behavior Patches as the fourth independently built optional native
+  switch. Together with Island Events, Cheat Upgrades, and Holiday Ornaments,
+  B150 produces the full 16-state executable overlay matrix. Disabled features
+  are absent from the selected executable instead of relying only on GUI
+  checkbox metadata.
+- Fixes the Holiday Ornaments Collections Chest crash by changing the injected
+  collection page-count helper from cdecl to stdcall. Adds the Holiday family
+  to the main-scene total and changes the unique visible suffix from 60 to 72,
+  yielding six pages of 12 only under holiday_ornaments_collection.
+- Behavior Patches makes Needs to sit down and Checking weight spontaneous for
+  all ages; Mending a button and Ironing clothes spontaneous from displayed age
+  14; and Teaching first words spontaneous only for nursing mothers carrying a
+  baby. Petting label variants remain manual/native and Petting is not made
+  spontaneous.
+- Adds infant-care labels Teaching baby how to walk, Talking with baby, Feeding
+  baby, Singing lullabies to baby, Playing with baby, Admiring baby, Playing
+  peek-a-boo with baby, Kissing baby, and Taking pictures of baby.
+- Adds Browsing web labels Watching memes, Making memes, Posting memes online,
+  and Buying stuff online. Buying is gated to displayed age 13+.
+- Expands Taking a nap to 30 dream labels: Isola, family, pets, friends, future,
+  beach, snow, holidays, vacations, roller coasters, climbing mountains,
+  camping, family trips, countryside, LDW games, city, forest, unicorns, fish,
+  jungles, tropical islands, skyscrapers, floating in space, treasure, getting
+  rich, adventures, swimming, flying, falling, and discovering something.
+- Expands Needs to sit down with general reflection/rest/phone/scrapbook/texting
+  labels. Age 19+ adds children/grandchildren/spouse and Texting spouse;
+  Thinking of work requires age 19+ with a career; Thinking of school requires
+  not being an age-19+ career holder; Texting boyfriend is female-only and
+  Texting girlfriend male-only at ages 14-18.
+- Enables direct sink behaviors 0x0A5-0x0A8 by cloning the native sink candidate
+  gates, retains the general and female grooming pools, and adds Putting on
+  jewelry for females age 14+. North-shower and snow routes preserve their
+  object/weather gates; snow remains Weather.currentType 5 only.
+- Repairs praise label retention by caching behavior ID/serial, the native
+  praise counter, exact stock-label bytes, and the Radio listening/dancing
+  branch, allowing a praise restart to reuse the current action string.
+- Adds Cheat Upgrade rows Reset Ants 0x125, Reset all collections 0x126,
+  Complete all collections 0x127, 2x Prices 0x128, 5x Prices 0x129, 100x
+  Prices 0x12A, Trigger all house malfunctions 0x12B, and Reset Price
+  Multiplier 0x12C.
+- Reset Ants resets native world puzzle 0x13, clears ant props 0x4D-0x54, and
+  reseeds the native start pieces. Collection reset raw-clears page/Master
+  completion and progress, resets Holiday achievement state across overlay
+  toggles, and recomputes Goal Collector from preserved selling goals.
+  Completion covers five stock 12-item pages and conditionally adds the Holiday
+  page/achievement only in a Holiday overlay.
+- Price modes are mutually exclusive persistent toggles applied to the final
+  CalcPrice result, covering furniture, Flea Market, renovations, career and
+  Special Upgrades, and other store purchases. Overflow saturates at INT_MAX.
+  Reset Price Multiplier removes active 0x128-0x12A and uses the exact
+  description "Resets store prices to original values."
+- Trigger all house malfunctions sets the normal house failure props. Dryer fire
+  requires a Dryer lookup; north toilet/shower/sink leaks require renovation
+  0xE6. Island Events Water Pressure Surge adds the three gated north leaks,
+  while the stock standalone north random path remains independently available
+  with its native renovation gate.
+- Under Cheat Upgrades, rebuying Maid/Gardener fires the active service worker,
+  clears its timer, and repairs selected-villager state. Rebuying Rockhound
+  Certificate/Anti-Spam removes the owned upgrade/flag. Explicit cheat guards
+  retain stock already-purchased behavior when the setting is disabled.
+- Updates Brokerage Account text to state that its Interest Rate can reach 11%
+  under mobile_purchases.
+- Adds the exact vanilla-save compatibility note and Lorsieab2 passion-project,
+  no-infringement, and support-the-original-creators message to the GUI,
+  generated README, manifest metadata, and Transparency Log.
+- Automated source, COFF, string, manifest, and exporter contracts cover these
+  additions. Manual in-game matrix/collection/eligibility/store/removal/
+  save-reload/malfunction testing remains tracked in docs/TODO.md and is not
+  represented here as completed runtime verification.
+- Final B150 automation generated, compiled, linked, and manifest-checked all
+  16 Island/Cheat/Holiday/Behavior combinations. All build logs were clean and
+  all 16 EXE SHA-256 values were unique. Test totals were 69 binary-patcher and
+  30 exporter/GUI tests. Export totals were 1,075 asset records and 1,112
+  manifest-reachable payload files.
+- Final reachability pruning removed 1,860 payload files (100,244,363 bytes)
+  that no source/restore record could read, excluded three generated `.bak`
+  artifacts, revalidated retained hashes/sizes, and replaced the absolute
+  base-payload metadata with its portable folder name. The 16-overlay matrix
+  is retained because it contributes only about 10.9 MB compressed and
+  preserves every independent native-setting combination.
+- Final release archive:
+  `outputs/Virtual-Families-2-Restoration-Addition-Patcher-B150.zip`,
+  86,326,515 bytes, 1,122 entries, SHA-256
+  `5A2EAE1FA89D723CE808FD82EC3FDA182AEF3E02E298F79CD3EEEECE5E7BF1DE`.

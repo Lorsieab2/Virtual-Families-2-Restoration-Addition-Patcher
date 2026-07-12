@@ -1735,8 +1735,9 @@
   stock/custom label across praise/HUD refresh calls while the same native
   route is active, so labels such as `Playing Virtual Families` no longer
   reroll into sibling variants after praise.
-- The radio/MP3 dance/listen random switch remains intentionally unchanged and
-  uses an uncached random label helper only after the native dancing route wins.
+- B141 originally left the radio/MP3 dance/listen switch uncached. B150
+  supersedes that exception: both the native listening branch and the
+  dancing/custom-label branch now reuse the praise-stable per-villager cache.
 - `sync_visible_special_upgrade_icon_art()` normalizes `cheat_*.png` images to
   a transparent `90x90` canvas before embedding them, so oversized `No Money` /
   `No Food` icons and small `Unlock all furniture` / trophy icons fit the
@@ -1861,3 +1862,182 @@
   to bases `{0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E}`, so page `5` displays the
   `0x9E-0xA9` Ornament family without changing the `CCollectionScene` object
   size.
+
+## 2026-07-11 - B150 Feature Gates and Holiday Collection Repair
+
+- B150 adds VF2_ENABLE_BEHAVIOR_PATCHES as a real build-time native gate,
+  alongside Island Events, Cheat Upgrades, and Holiday Ornaments. The offline
+  patcher exports core plus every non-empty combination of those four switches:
+  16 executable overlay states in total. The manifest requires exactly the
+  corresponding setting IDs before selecting an overlay, so disabling Behavior
+  Patches uses an executable whose stock behavior objects were not retargeted.
+- Behavior variations, autonomous candidates, the direct bathroom-sink routes,
+  and praise-cache changes belong only to behavior_patches. Cheat rows, price
+  modes/reset, the malfunction trigger, and removable worker/certificate
+  handling belong only to cheat_upgrades. The six-page collection belongs to
+  holiday_ornaments_collection; Water Pressure Surge itself belongs to
+  island_events; the Brokerage description follows mobile_purchases.
+- The B149 Collections Chest crash was a calling-convention mismatch.
+  DrawScene() pushed a page argument for _VF2CollectionPageCount, but the
+  injected helper was cdecl and left that argument on the stack. A later
+  sprintf path could then read page 0 as a string pointer and crash. B150 emits
+  _VF2CollectionPageCount@4 as __stdcall, so the helper removes its own
+  argument.
+- The Holiday overlay also routes the final main-scene collection count through
+  CCollectableItem::CollectionCountWithHolidayOrnaments and patches the unique
+  visible suffix from " / 60" to " / 72". The Collections screen remains six
+  pages of exactly 12 items, with the stock five-page cache/object layout intact
+  and page 5 counted live from base carrying value 0x9E.
+
+## 2026-07-11 - B150 Behavior Eligibility and Variations
+
+- The raw age field at CVillager+0x6A54 uses 20 units per displayed year. B150
+  therefore uses 0x104 for age 13, 0x118 for age 14, and 0x17C for age 19.
+  Gender remains at CVillager+0x6A58 (1 is female in the audited routes), and
+  career ID at CVillager+0x6B8C is -1 when no career exists.
+- "Needs to sit down"/RestingBody (0x127) and "Checking weight"/WeighingSelf
+  (0x046) are autonomous for all ages under Behavior Patches. "Mending a
+  button" (0x08D) and "Ironing clothes" (0x08E) become autonomous from displayed
+  age 14. Their stock object search, plan, animation, and failure routes remain
+  in control after candidate selection.
+- "Teaching first words" (0x11F) becomes autonomous only through the audited
+  nursing-mother candidate gate: minimum nursing age state 0x168 plus the
+  native own-baby/carried-baby requirement. Its label pool adds "Teaching baby
+  how to walk", "Talking with baby", "Feeding baby", "Singing lullabies to
+  baby", "Playing with baby", "Admiring baby", "Playing peek-a-boo with baby",
+  "Kissing baby", and "Taking pictures of baby".
+- Petting is the explicit exception to the autonomous-variation audit.
+  _VF2RandomPetLabel remains available when a manual/native Petting route
+  starts, but candidate 0x19A is not enabled by B150.
+- "Browsing web" adds "Watching memes", "Making memes", and "Posting memes
+  online" to its general pool. "Buying stuff online" requires displayed age
+  13+ (raw >= 0x104). Existing teen/social labels keep the audited native age
+  route instead of being widened for the new labels.
+- The couch-nap pool contains 30 distinct labels: "Dreaming of Isola",
+  "Dreaming of family", "Dreaming of pets", "Dreaming of friends", "Dreaming of
+  the future", "Dreaming of the beach", "Dreaming of snow", "Dreaming of
+  holidays", "Dreaming of vacations", "Dreaming of roller coasters", "Dreaming
+  of climbing mountains", "Dreaming of camping", "Dreaming of family trips",
+  "Dreaming of the countryside", "Dreaming of LDW games", "Dreaming of the
+  city", "Dreaming of the forest", "Dreaming of unicorns", "Dreaming of fish",
+  "Dreaming of jungles", "Dreaming of tropical islands", "Dreaming of
+  skyscrapers", "Dreaming of floating in space", "Dreaming of treasure",
+  "Dreaming of getting rich", "Dreaming of adventures", "Dreaming of swimming",
+  "Dreaming of flying", "Dreaming of falling", and "Dreaming of discovering
+  something".
+- The all-age sit-down pool contains "Thinking", "Taking a moment to reflect",
+  "Thinking of family", "Thinking of relatives", "Thinking of friends",
+  "Thinking of pets", "Thinking of vacations", "Thinking of weekend plans",
+  "Thinking of what to watch next", "Resting", "Resting eyes", "Resting feet",
+  "Relaxing for a bit", "Taking a break", "Enjoying life", "Enjoying the
+  scenery", "Texting", "Playing games on phone", "Scrolling on phone",
+  "Checking social media on phone", "Scrapbooking", "Texting friends", "Texting
+  family", and "Texting relatives".
+- At displayed age 19+, the sit-down pool also contains "Thinking of children",
+  "Thinking of grandchildren", "Thinking of spouse", and "Texting spouse".
+  "Thinking of work" requires age 19+ with a career. "Thinking of school" is
+  available to anyone who is not both age 19+ and holding a career. At ages
+  14-18, "Texting boyfriend" is female-only and "Texting girlfriend" is
+  male-only.
+- Direct sink behaviors 0x0A5-0x0A8 clone the full stock 0x0A4 candidate
+  record before their own IDs/weights are restored. This enables the requested
+  subroutines without discarding the native sink, object, and household gates.
+  The general sink pool is face mask, trimming nails, lotion, and sunscreen;
+  the female grooming pool adds fingernails, toenails, manicure, pedicure, and
+  makeup. "Putting on jewelry" is female-only at displayed age 14+.
+- The north-shower route clones the stock shower candidate, and snow-play
+  eligibility is refreshed against Weather.currentType == 5 (Snowing).
+  Hammocks remain Sunny/Cloudy-only, Playhouse remains child/daytime-only, and
+  all other audited candidates retain native object, time, age, gender, and
+  career fields unless B150 explicitly documents an override above.
+- The label cache now stores behavior ID, behavior serial, the native praise
+  counter, and the original native label bytes. A praise restart with the same
+  praised behavior and incremented counter restores either the selected custom
+  string or exact cached native text. Radio listening/dancing uses the same
+  cache through a listening sentinel, fixing the last route that could reroll
+  the visible action when a villager was praised.
+
+## 2026-07-11 - B150 Cheat Upgrades, Malfunctions, and Removable Upgrades
+
+- Cheat Upgrade IDs added after Reset Achievements 0x124 are: Reset Ants 0x125,
+  Reset all collections 0x126, Complete all collections 0x127, 2x Prices 0x128,
+  5x Prices 0x129, 100x Prices 0x12A, Trigger all house malfunctions 0x12B,
+  and Reset Price Multiplier 0x12C.
+- Reset Ants calls the native ResetWorldState(0x13), clears environment props
+  0x4D-0x54, then reseeds one of the first three ant props plus the two fixed
+  start pieces 0x50/0x51. This restarts the puzzle instead of merely hiding the
+  current ants.
+- Reset all collections uses ResetCollection(), resets the five stock page
+  achievements 0x4A/0x4B/0x4C/0x5D/0x5E, the aggregate 0x4D, and
+  Ornamentologist 0x5F only when Holiday Ornaments is active. Complete all
+  collections writes exactly 12 obtained flags for each active page base
+  0x4F/0x5B/0x67/0x86/0x92/(optional 0x9E), then completes the corresponding
+  page and aggregate achievements.
+- 2x, 5x, and 100x are mutually exclusive persistent modes. The helper
+  multiplies the final CalcPrice return, covering ordinary store categories and
+  career upgrades: furniture, Flea Market goods, renovations, Special
+  Upgrades, and other purchases routed through that calculator. Positive
+  overflow saturates at signed INT_MAX. Reset Price Multiplier 0x12C removes
+  active IDs 0x128-0x12A and restores the original calculated values; its exact
+  description is "Resets store prices to original values."
+- Trigger all house malfunctions sets the normal native failure props at once.
+  It uses the native furniture lookup for Dryer object 0x48 and sets its fire
+  only if a Dryer is present. North toilet 0x48, north shower 0x49, and north
+  sink 0x4A leaks require second-bathroom renovation item 0xE6.
+- Water Pressure Surge adds the three north leaks only in an Island Events
+  executable, because that event is registered/firable only when island_events
+  is enabled. The native standalone random north-malfunction selectors remain
+  available independently and retain their second-bathroom renovation gate.
+  Native north repair/freak-out behavior mapping remains shared so existing
+  standalone failures can still be noticed and repaired.
+- Under Cheat Upgrades only, owned Maid 0x115 and Gardener 0x116 rows become
+  zero-price removal actions: buying again clears the service timer, deactivates
+  worker villager 0x23/0x24, and clears the selected-villager field if needed.
+  Rebuying Rockhound Certificate 0x10A returns/removes the inventory upgrade;
+  rebuying Anti-Spam 0x33 clears its game-state flag. Explicit helper guards are
+  inert in cheat-disabled executables.
+- The visible mobile Brokerage Account description now states that it can
+  increase the Interest Rate up to 11%. This is a mobile_purchases-family text
+  change rather than a Cheat Upgrades row.
+- B150 patcher surfaces state: "Vanilla Virtual Families 2 saves are compatible
+  with the modded version!" It also displays Lorsieab2's passion-project/no
+  copyright-infringement/support-the-original-creators message in the GUI,
+  generated README, manifest metadata, and generated Transparency Log.
+- Automated tests and build validators establish source/COFF/string/manifest
+  contracts. Manual in-game verification is still required for the complete
+  Collections Chest loop, every autonomous eligibility branch, all purchase
+  categories, worker/certificate removal, price-mode save/reload/reset, and
+  simultaneous malfunction repair behavior.
+
+## 2026-07-11 - B150 Patcher Payload Reachability
+
+- The pre-pruning B150 patcher contained 2,975 payload files, but 1,860 were
+  unreachable from every manifest `source_path` and `restore_source_path`.
+  Those unreachable files accounted for about 96.6 MB of the 184.1 MB ZIP.
+- All patcher file reads are driven by active manifest asset records. The B150
+  exporter now performs a final reachability pass, removes only unreachable
+  payload files, deletes newly empty directories, revalidates every retained
+  source, and records removed/retained counts and bytes in
+  `export_summary.payload_pruning`.
+- The 16 feature-matrix EXEs account for only about 10.9 MB of the compressed
+  ZIP. They remain separate in B150 to preserve the proven four-toggle matrix;
+  a future solid archive, binary-delta scheme, or runtime-gated superset EXE can
+  reduce that portion without sacrificing independent settings.
+- Export-only metadata now records the clean base payload by portable folder
+  name instead of embedding a machine-specific absolute workspace path.
+
+## 2026-07-11 - B151 Expanded Map Visual Target
+
+- The corrected user mock-up is preserved at
+  `work/reference_images/Expanded VF2 Map.png`: 3072x3070 RGBA,
+  SHA-256 `44AE62A37E67C274D52554298FBCCDCD12C29FF4FB97633DF87386E09659F372`.
+- B151 should retain the current centered map/house at its existing scale,
+  extend the map by one complete tile on every side and corner, and fill the
+  added perimeter with matching Lorsieab2 grass.
+- The northwest extension is intentionally different from a uniform grass
+  border: the current beach expands into the mock-up's large rounded sandy
+  field. This corrected reference supersedes the earlier all-grass perimeter
+  mock-up.
+- A real implementation must widen camera, world, placement, pathing,
+  interaction, and save-coordinate contracts alongside the art. Merely placing
+  the mock-up behind the current map would not satisfy the B151 target.

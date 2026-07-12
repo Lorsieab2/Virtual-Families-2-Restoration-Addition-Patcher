@@ -31,6 +31,10 @@ ENABLE_HOLIDAY_ORNAMENTS = os.environ.get("VF2_ENABLE_HOLIDAY_ORNAMENTS", "0") =
 # Optional Special Upgrades rows used by the offline patcher. Normal/modded
 # builds keep them off unless the patcher setting selects the matching overlay.
 ENABLE_CHEAT_UPGRADES = os.environ.get("VF2_ENABLE_CHEAT_UPGRADES", "0") == "1"
+# Behavior Patches are a real executable overlay in the offline patcher.
+# Unflagged builds retain stock behavior; the checked patcher setting selects a
+# matching build made with VF2_ENABLE_BEHAVIOR_PATCHES=1.
+ENABLE_BEHAVIOR_PATCHES = os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "0") == "1"
 ANALYSIS = ROOT / "outputs" / "VF2-Desktop-Object-Analysis"
 if not (ANALYSIS / "furniture-records.json").exists():
     ANALYSIS = ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis"
@@ -280,6 +284,14 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x122: "cheat_add_food.png",
     0x123: "cheat_no_generation_locks.png",
     0x124: "cheat_reset_achievements.png",
+    0x125: "cheat_reset_achievements.png",
+    0x126: "cheat_reset_achievements.png",
+    0x127: "cheat_no_generation_locks.png",
+    0x128: "cheat_add_coins.png",
+    0x129: "cheat_add_coins.png",
+    0x12A: "cheat_add_coins.png",
+    0x12B: "cheat_reset_achievements.png",
+    0x12C: "cheat_add_coins.png",
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
@@ -346,6 +358,54 @@ CHEAT_UPGRADE_ITEMS = [
         "description": "Resets all goals and progress. Useful for starting the game over.",
         "price": 0,
     },
+    {
+        "item_id": 0x125,
+        "name": "Reset Ants",
+        "description": "Resets the ants puzzle so it can be completed again.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x126,
+        "name": "Reset all collections",
+        "description": "Removes every collected item and resets collection progress.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x127,
+        "name": "Complete all collections",
+        "description": "Completes every collection and its related achievements.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x128,
+        "name": "2x Prices",
+        "description": "Everything in the store costs twice as much.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x129,
+        "name": "5x Prices",
+        "description": "Everything in the store costs five times as much.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x12A,
+        "name": "100x Prices",
+        "description": "Everything in the store now costs an insane amount. Good Luck!",
+        "price": 0,
+    },
+    {
+        "item_id": 0x12B,
+        "name": "Trigger all house malfunctions",
+        "description": 'Cause all possible house malfunctions, including sink/toilet leaks, oven/dryer fires, etc. Useful for getting the "Handyman" goal.',
+        "price": 0,
+    },
+    {
+        "item_id": 0x12C,
+        "name": "Reset Price Multiplier",
+        "description": "Resets store prices to original values.",
+        "price": 0,
+    },
 ]
 CHEAT_UPGRADE_STRING_COUNT = len(CHEAT_UPGRADE_ITEMS) * 2
 HOLIDAY_ORNAMENT_COLLECTABLE_START = 0x9E
@@ -354,6 +414,7 @@ HOLIDAY_ORNAMENT_COLLECTION_PAGE = 5
 HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT = 12
 HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT = HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT + 1
 HOLIDAY_ORNAMENT_COLLECTION_PAGE_STARTS = (0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E)
+HOLIDAY_ORNAMENT_COLLECTION_TOTAL = 72
 HOLIDAY_ORNAMENT_ACHIEVEMENT_ID = 0x5F
 HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET = 12
 HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT = 0x60
@@ -613,8 +674,11 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_BrowsingLDWForums", "Browsing LDWForums"),
             ("eString_WatchingCatVideos", "Watching cat videos"),
             ("eString_WatchingMemes", "Watching memes"),
+            ("eString_MakingMemes", "Making memes"),
+            ("eString_PostingMemesOnline", "Posting memes online"),
         ],
     ),
+    ("web_13_plus", [("eString_BuyingStuffOnline", "Buying stuff online")]),
     (
         "web_adult",
         [
@@ -703,14 +767,30 @@ BEHAVIOR_LABEL_GROUPS = [
     (
         "sit_down_general",
         [
+            ("eString_Thinking", "Thinking"),
+            ("eString_TakingMomentToReflect", "Taking a moment to reflect"),
             ("eString_ThinkingOfFamily", "Thinking of family"),
             ("eString_ThinkingOfRelatives", "Thinking of relatives"),
             ("eString_ThinkingOfFriends", "Thinking of friends"),
+            ("eString_ThinkingOfPets", "Thinking of pets"),
+            ("eString_ThinkingOfVacations", "Thinking of vacations"),
+            ("eString_ThinkingOfWeekendPlans", "Thinking of weekend plans"),
+            ("eString_ThinkingWhatToWatchNext", "Thinking of what to watch next"),
             ("eString_Resting", "Resting"),
+            ("eString_RestingEyes", "Resting eyes"),
             ("eString_RestingFeetNew", "Resting feet"),
             ("eString_RelaxingForABit", "Relaxing for a bit"),
             ("eString_TakingABreak", "Taking a break"),
             ("eString_EnjoyingLife", "Enjoying life"),
+            ("eString_EnjoyingScenery", "Enjoying the scenery"),
+            ("eString_Texting", "Texting"),
+            ("eString_PlayingGamesOnPhone", "Playing games on phone"),
+            ("eString_ScrollingOnPhone", "Scrolling on phone"),
+            ("eString_CheckingSocialMediaOnPhone", "Checking social media on phone"),
+            ("eString_Scrapbooking", "Scrapbooking"),
+            ("eString_TextingFriends", "Texting friends"),
+            ("eString_TextingFamily", "Texting family"),
+            ("eString_TextingRelatives", "Texting relatives"),
         ],
     ),
     (
@@ -719,8 +799,13 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_ThinkingOfChildren", "Thinking of children"),
             ("eString_ThinkingOfGrandchildren", "Thinking of grandchildren"),
             ("eString_ThinkingOfSpouse", "Thinking of spouse"),
+            ("eString_TextingSpouse", "Texting spouse"),
         ],
     ),
+    ("sit_down_work", [("eString_ThinkingOfWork", "Thinking of work")]),
+    ("sit_down_school", [("eString_ThinkingOfSchool", "Thinking of school")]),
+    ("sit_down_teen_female", [("eString_TextingBoyfriend", "Texting boyfriend")]),
+    ("sit_down_teen_male", [("eString_TextingGirlfriend", "Texting girlfriend")]),
     (
         "pool_general",
         [
@@ -836,6 +921,45 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_DreamingOfPets", "Dreaming of pets"),
             ("eString_DreamingOfFriends", "Dreaming of friends"),
             ("eString_DreamingOfFuture", "Dreaming of the future"),
+            ("eString_DreamingOfBeach", "Dreaming of the beach"),
+            ("eString_DreamingOfSnow", "Dreaming of snow"),
+            ("eString_DreamingOfHolidays", "Dreaming of holidays"),
+            ("eString_DreamingOfVacations", "Dreaming of vacations"),
+            ("eString_DreamingOfRollerCoasters", "Dreaming of roller coasters"),
+            ("eString_DreamingOfClimbingMountains", "Dreaming of climbing mountains"),
+            ("eString_DreamingOfCamping", "Dreaming of camping"),
+            ("eString_DreamingOfFamilyTrips", "Dreaming of family trips"),
+            ("eString_DreamingOfCountryside", "Dreaming of the countryside"),
+            ("eString_DreamingOfLDWGames", "Dreaming of LDW games"),
+            ("eString_DreamingOfCity", "Dreaming of the city"),
+            ("eString_DreamingOfForest", "Dreaming of the forest"),
+            ("eString_DreamingOfUnicorns", "Dreaming of unicorns"),
+            ("eString_DreamingOfFish", "Dreaming of fish"),
+            ("eString_DreamingOfJungles", "Dreaming of jungles"),
+            ("eString_DreamingOfTropicalIslands", "Dreaming of tropical islands"),
+            ("eString_DreamingOfSkyscrapers", "Dreaming of skyscrapers"),
+            ("eString_DreamingOfFloatingInSpace", "Dreaming of floating in space"),
+            ("eString_DreamingOfTreasure", "Dreaming of treasure"),
+            ("eString_DreamingOfGettingRich", "Dreaming of getting rich"),
+            ("eString_DreamingOfAdventures", "Dreaming of adventures"),
+            ("eString_DreamingOfSwimming", "Dreaming of swimming"),
+            ("eString_DreamingOfFlying", "Dreaming of flying"),
+            ("eString_DreamingOfFalling", "Dreaming of falling"),
+            ("eString_DreamingOfDiscoveringSomething", "Dreaming of discovering something"),
+        ],
+    ),
+    (
+        "infant_care",
+        [
+            ("eString_TeachingBabyHowToWalk", "Teaching baby how to walk"),
+            ("eString_TalkingWithBaby", "Talking with baby"),
+            ("eString_FeedingBaby", "Feeding baby"),
+            ("eString_SingingLullabiesToBaby", "Singing lullabies to baby"),
+            ("eString_PlayingWithBaby", "Playing with baby"),
+            ("eString_AdmiringBaby", "Admiring baby"),
+            ("eString_PlayingPeekABooWithBaby", "Playing peek-a-boo with baby"),
+            ("eString_KissingBaby", "Kissing baby"),
+            ("eString_TakingPicturesOfBaby", "Taking pictures of baby"),
         ],
     ),
     (
@@ -877,6 +1001,7 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_PuttingOnMakeupVariant", "Putting on makeup"),
         ],
     ),
+    ("bathroom_sink_female_teen_plus", [("eString_PuttingOnJewelry", "Putting on jewelry")]),
     (
         "shower_general",
         [
@@ -4633,22 +4758,53 @@ def validate_holiday_ornament_native_contract(manifest):
         errors.append("CCollectionScene::DrawScene missing Holiday Ornament page-count helper call")
     if b"\xFF\x74\x87\x18" in draw_data:
         errors.append("CCollectionScene::DrawScene still uses the five-entry cached count array")
-    helper_symbol = collection_scene_obj.symbol_by_name.get("_VF2CollectionPageCount")
+    helper_symbol = collection_scene_obj.symbol_by_name.get("_VF2CollectionPageCount@4")
     if helper_symbol is None:
-        errors.append("CCollectionScene.obj has no _VF2CollectionPageCount helper import")
+        errors.append("CCollectionScene.obj has no stdcall _VF2CollectionPageCount@4 helper import")
     else:
         relocs = [
             struct.unpack_from("<IIH", collection_scene_obj.buf, draw_sec.reloc_ptr + index * 10)
             for index in range(draw_sec.nreloc)
         ]
         if not any(va == draw_sym.value + 0x181 and idx == helper_symbol.index for va, idx, _typ in relocs):
-            errors.append("CCollectionScene::DrawScene helper call has no relocation to _VF2CollectionPageCount")
+            errors.append("CCollectionScene::DrawScene helper call has no relocation to _VF2CollectionPageCount@4")
     helper_source = PATCHED / "vf2_special_upgrade_effects.cpp"
     helper_starts_literal = "static const int starts[6] = {0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E};"
+    helper_abi_literal = 'extern "C" int __stdcall VF2CollectionPageCount(int page)'
     if not helper_source.is_file():
-        errors.append("vf2_special_upgrade_effects.cpp missing _VF2CollectionPageCount source")
-    elif helper_starts_literal not in helper_source.read_text(encoding="ascii"):
-        errors.append("VF2CollectionPageCount helper source no longer maps page 5 to Holiday Ornaments base 0x9E")
+        errors.append("vf2_special_upgrade_effects.cpp missing _VF2CollectionPageCount@4 source")
+    else:
+        helper_text = helper_source.read_text(encoding="ascii")
+        if helper_starts_literal not in helper_text:
+            errors.append("VF2CollectionPageCount helper source no longer maps page 5 to Holiday Ornaments base 0x9E")
+        if helper_abi_literal not in helper_text:
+            errors.append("VF2CollectionPageCount helper is not stdcall; DrawScene would leak its page argument")
+
+    main_obj = CoffObject(PATCHED / "theMainScene.obj")
+    map_data, map_sym, map_sec = function_bytes(
+        main_obj, "?MapClickFeedback@theMainScene@@IAEXUldwPoint@@@Z"
+    )
+    aggregate_helper_name = (
+        "?CollectionCountWithHolidayOrnaments@CCollectableItem@@"
+        "QBE?BHW4ECarrying@@_N11@Z"
+    )
+    aggregate_helper = main_obj.symbol_by_name.get(aggregate_helper_name)
+    if aggregate_helper is None:
+        errors.append("theMainScene.obj has no six-family collection-count helper import")
+    else:
+        relocs = [
+            struct.unpack_from("<IIH", main_obj.buf, map_sec.reloc_ptr + index * 10)
+            for index in range(map_sec.nreloc)
+        ]
+        if not any(
+            va == map_sym.value + 0x66B and idx == aggregate_helper.index
+            for va, idx, _typ in relocs
+        ):
+            errors.append("theMainScene::MapClickFeedback final family count does not include Holiday Ornaments")
+    if b" / 72\x00" not in main_obj.buf:
+        errors.append("theMainScene collection-total suffix is not / 72")
+    if b" / 60\x00" in main_obj.buf:
+        errors.append("theMainScene still contains the stock / 60 collection-total suffix")
 
     collectable_observer = manifest.get("CollectableHolidayOrnamentObservers", {})
     observer_items = collectable_observer.get("registered_collectables", [])
@@ -4683,9 +4839,15 @@ def validate_holiday_ornament_native_contract(manifest):
             "page": HOLIDAY_ORNAMENT_COLLECTION_PAGE,
             "page_starts": [hex(value) for value in HOLIDAY_ORNAMENT_COLLECTION_PAGE_STARTS],
             "g_collectable_values": [hex(value) for value in ornament_values],
-            "page_count_helper": "_VF2CollectionPageCount",
-            "page_count_route": "DrawScene calls _VF2CollectionPageCount(page); Activate keeps five stock cached counts and this+0x2C as hover state.",
+            "page_count_helper": "_VF2CollectionPageCount@4",
+            "page_count_route": "DrawScene calls stdcall _VF2CollectionPageCount@4(page); Activate keeps five stock cached counts and this+0x2C as hover state.",
             "tooltip_rarity_label_ids": [hex(value) for value in HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS],
+        },
+        "main_scene_total": {
+            "family_starts": [hex(value) for value in HOLIDAY_ORNAMENT_COLLECTION_PAGE_STARTS],
+            "total": HOLIDAY_ORNAMENT_COLLECTION_TOTAL,
+            "suffix": " / 72",
+            "helper": aggregate_helper_name,
         },
         "pickup_dispatch": {
             "find_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
@@ -6063,9 +6225,10 @@ def patch_visible_special_upgrades(manifest):
     if ENABLE_CHEAT_UPGRADES:
         for index, item in enumerate(CHEAT_UPGRADE_ITEMS):
             short_id, long_id = cheat_upgrade_string_ids_for_entry(index)
+            persistent_upgrade_type = 1 if item["item_id"] in (0x128, 0x129, 0x12A) else visible_special_upgrade_icon_id_for(item["item_id"])
             special_upgrade_records[item["item_id"]] = [
                 item["item_id"],
-                visible_special_upgrade_icon_id_for(item["item_id"]),
+                persistent_upgrade_type,
                 1,
                 item["price"],
                 0,
@@ -6171,6 +6334,23 @@ public:
 }};
 
 enum EInventoryItem {{ eInventoryItemDummy = 0 }};
+class CContentMap {{
+public:
+    enum EObject {{ eObjectDryer = 0x48 }};
+}};
+
+struct ldwPoint {{
+    int x;
+    int y;
+}};
+
+struct sFurnitureInfo2 {{
+    int unknown0;
+    int orientation;
+    ldwPoint point;
+    int padding[4];
+}};
+
 class CToolTray {{
 public:
     bool AddItem(EInventoryItem item, int useCount);
@@ -6180,6 +6360,8 @@ class CInventoryManager {{
 public:
     bool IsLocked(EInventoryItem item);
     bool HaveUpgrade(EInventoryItem item);
+    void TakeOne(EInventoryItem item);
+    void ReturnOne(EInventoryItem item);
 public:
     char pad0[0x468];
     int maleOutfitBody;
@@ -6189,12 +6371,44 @@ public:
 class CFurnitureManager {{
 public:
     bool IsPet(EInventoryItem item);
+    bool FindFurniture(CContentMap::EObject object, ldwPoint point,
+        sFurnitureInfo2 &info, bool a, int b, bool c);
+}};
+
+class CVillager {{}};
+class CVillagerManager {{
+public:
+    CVillager* GetVillagerPtr(int id);
+    CVillager& GetVillager(int id);
 }};
 
 extern CToolTray ToolTray;
 extern CInventoryManager InventoryManager;
 extern CFurnitureManager FurnitureManager;
+extern CVillagerManager VillagerManager;
 extern EInventoryItem gGoodiesList[];
+static const bool kVF2EnableB150CheatUpgrades = {"true" if ENABLE_CHEAT_UPGRADES else "false"};
+
+extern "C" void __cdecl VF2TriggerAllHouseMalfunctions() {{
+    if (!kVF2EnableB150CheatUpgrades) return;
+    static const int baseProps[] = {{0x17, 0x1A, 0x1B, 0x1C, 0x1D, 0x1F, 0x20}};
+    for (int i = 0; i < (int)(sizeof(baseProps) / sizeof(baseProps[0])); ++i) {{
+        Environment.SetProp((EPropEnum)baseProps[i]);
+    }}
+
+    sFurnitureInfo2 dryerInfo = {{0}};
+    ldwPoint origin = {{100, 100}};
+    if (FurnitureManager.FindFurniture(
+            (CContentMap::EObject)0x48, origin, dryerInfo, false, 0, false)) {{
+        Environment.SetProp((EPropEnum)0x21);
+    }}
+
+    if (InventoryManager.HaveUpgrade((EInventoryItem)0xE6)) {{
+        Environment.SetProp((EPropEnum)0x48);
+        Environment.SetProp((EPropEnum)0x49);
+        Environment.SetProp((EPropEnum)0x4A);
+    }}
+}}
 
 static const int kVF2OutfitStoreFemaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["female"]};
 static const int kVF2OutfitStoreMaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["male"]};
@@ -6214,6 +6428,73 @@ static const int kVF2FleaMarketGoodiesCount = 0x24;
 static int gVF2SyntheticOutfitToolInHand = 0;
 static int gVF2SyntheticOutfitToolInUse = 0;
 static int gVF2LastSyntheticOutfitByGender[2] = {{0, 0}};
+
+static bool VF2B150UpgradeIsActive(int itemId) {{
+    if (!kVF2EnableB150CheatUpgrades) return false;
+    unsigned char* gameState = (unsigned char*)theGameState::Get();
+    if (itemId == 0x33) return gameState && gameState[0x6C] != 0;
+    if (itemId == 0x10A || itemId == 0x115 || itemId == 0x116 ||
+        itemId == 0x128 || itemId == 0x129 || itemId == 0x12A) {{
+        return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
+    }}
+    return false;
+}}
+
+extern "C" int __cdecl VF2GetB150UpgradePrice(int itemId) {{
+    if (!kVF2EnableB150CheatUpgrades) return -1;
+    return VF2B150UpgradeIsActive(itemId) ? 0 : -1;
+}}
+
+extern "C" void __cdecl VF2ResetB150PriceMode() {{
+    if (!kVF2EnableB150CheatUpgrades) return;
+    for (int mode = 0x128; mode <= 0x12A; ++mode) {{
+        InventoryManager.ReturnOne((EInventoryItem)mode);
+    }}
+}}
+
+extern "C" void __cdecl VF2ToggleB150PriceMode(int itemId) {{
+    if (!kVF2EnableB150CheatUpgrades) return;
+    if (itemId < 0x128 || itemId > 0x12A) return;
+    bool disable = InventoryManager.HaveUpgrade((EInventoryItem)itemId);
+    VF2ResetB150PriceMode();
+    if (!disable) InventoryManager.TakeOne((EInventoryItem)itemId);
+}}
+
+extern "C" int __cdecl VF2ApplyPriceMultiplier(int price) {{
+    if (!kVF2EnableB150CheatUpgrades) return price;
+    int multiplier = 1;
+    if (InventoryManager.HaveUpgrade((EInventoryItem)0x12A)) multiplier = 100;
+    else if (InventoryManager.HaveUpgrade((EInventoryItem)0x129)) multiplier = 5;
+    else if (InventoryManager.HaveUpgrade((EInventoryItem)0x128)) multiplier = 2;
+    if (price <= 0 || multiplier == 1) return price;
+    __int64 result = (__int64)price * multiplier;
+    return result > 0x7FFFFFFF ? 0x7FFFFFFF : (int)result;
+}}
+
+static void VF2DeactivateWorker(int workerId, int expiryOffset) {{
+    unsigned char* gameState = (unsigned char*)theGameState::Get();
+    if (!gameState) return;
+    *(unsigned int*)(gameState + expiryOffset) = 0;
+    CVillager& worker = VillagerManager.GetVillager(workerId);
+    ((unsigned char*)&worker)[0x1BB84] = 0;
+    int* selectedVillager = (int*)(gameState + 0x25CC4);
+    if (*selectedVillager == workerId) *selectedVillager = -1;
+}}
+
+extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
+    if (!kVF2EnableB150CheatUpgrades) return false;
+    if (!VF2B150UpgradeIsActive(itemId)) return false;
+    unsigned char* gameState = (unsigned char*)theGameState::Get();
+    if (itemId == 0x33) {{
+        if (gameState) gameState[0x6C] = 0;
+    }} else {{
+        InventoryManager.ReturnOne((EInventoryItem)itemId);
+        if (itemId == 0x115) VF2DeactivateWorker(0x23, 0x25AF8);
+        if (itemId == 0x116) VF2DeactivateWorker(0x24, 0x25AFC);
+    }}
+    if (gameState) theGameState::Get()->SaveCurrentGame();
+    return true;
+}}
 
 extern "C" int __cdecl VF2GetExpandedFleaMarketCount(CInventoryManager* inventory, int category) {{
     if (category != kVF2FleaMarketCategory) return -1;
@@ -6300,6 +6581,11 @@ extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
+    if (kVF2EnableB150CheatUpgrades &&
+        (itemId == 0x33 || itemId == 0x10A || itemId == 0x115 || itemId == 0x116 ||
+        itemId == 0x128 || itemId == 0x129 || itemId == 0x12A)) {{
+        return 1;
+    }}
     return VF2OutfitBodyForItem(itemId) < 0 ? -1 : 1;
 }}
 
@@ -6471,6 +6757,16 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
         "visible_special_upgrade_icon_base": hex(visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))),
         "visible_special_upgrade_icon_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
         "draw_route": "shared DrawItem hook resolves outfit icons and added visible Special Upgrade icons",
+        "b150_cheat_upgrade_gate": {
+            "enabled": ENABLE_CHEAT_UPGRADES,
+            "setting": "cheat_upgrades",
+            "gated_effects": [
+                "price modes",
+                "trigger all house malfunctions",
+                "repurchase Maid/Gardener to fire",
+                "repurchase Rockhound/Anti-Spam to remove",
+            ],
+        },
         "purchase_route": {
             "male_stock_tray_item": "0x49",
             "female_stock_tray_item": "0x4a",
@@ -6628,7 +6924,21 @@ def patch_scrolling_store_scene(manifest):
 
     outfit_purchase_helper_sym = obj.append_undefined_symbol("_VF2PurchaseOutfitStoreItem")
     special_upgrade_helper_sym = obj.append_undefined_symbol("_VF2ApplyVisibleSpecialUpgrade")
+    reversible_upgrade_helper_sym = obj.append_undefined_symbol("_VF2RemoveOwnedUpgrade")
     purchase_payload = bytearray()
+
+    purchase_payload += b"\x8B\x86\x60\x01\x00\x00"                  # mov eax,[esi+160h]
+    purchase_payload += b"\x50"                                      # push eax ; original item id
+    purchase_payload += b"\xE8\x00\x00\x00\x00"                      # call _VF2RemoveOwnedUpgrade
+    purchase_payload += b"\x83\xC4\x04"                              # add esp,4
+    purchase_payload += b"\x84\xC0"                                  # test al,al
+    purchase_payload += b"\x74\x05"                                  # jz outfit purchase test
+    reversible_return_jmp_off = len(purchase_payload)
+    purchase_payload += b"\xE9\x00\x00\x00\x00"                      # jmp post-save cleanup; helper saved
+    if len(purchase_payload) != 0x18:
+        raise RuntimeError("Unexpected reversible upgrade payload length")
+
+    outfit_payload_start = len(purchase_payload)
     purchase_payload += b"\x8B\x86\x60\x01\x00\x00"                  # mov eax,[esi+160h]
     purchase_payload += b"\x50"                                      # push eax ; original item id
     purchase_payload += b"\xE8\x00\x00\x00\x00"                      # call _VF2PurchaseOutfitStoreItem
@@ -6637,7 +6947,7 @@ def patch_scrolling_store_scene(manifest):
     purchase_payload += b"\x74\x05"                                  # jz visible special purchase test
     outfit_return_jmp_off = len(purchase_payload)
     purchase_payload += b"\xE9\x00\x00\x00\x00"                      # jmp post-save cleanup; helper saved
-    if len(purchase_payload) != 0x18:
+    if len(purchase_payload) - outfit_payload_start != 0x18:
         raise RuntimeError("Unexpected outfit purchase payload length")
 
     special_payload_start = len(purchase_payload)
@@ -6655,13 +6965,57 @@ def patch_scrolling_store_scene(manifest):
     if len(purchase_payload) - special_payload_start != 0x20:
         raise RuntimeError("Unexpected visible Special Upgrades purchase payload length")
     return_after_purchase = purchase_sym.value + 0x31C + len(purchase_payload)
-    for jmp_off in (outfit_return_jmp_off, special_return_jmp_off):
+    for jmp_off in (reversible_return_jmp_off, outfit_return_jmp_off, special_return_jmp_off):
         rel_to_return = (return_after_purchase - (purchase_insert + jmp_off + 5)) & 0xFFFFFFFF
         purchase_payload[jmp_off + 1 : jmp_off + 5] = struct.pack("<I", rel_to_return)
 
     obj.insert_section_bytes(purchase_sym.section, purchase_insert, bytes(purchase_payload))
-    obj.append_relocation(purchase_sym.section, purchase_insert + 8, outfit_purchase_helper_sym, IMAGE_REL_I386_REL32)
+    obj.append_relocation(purchase_sym.section, purchase_insert + 8, reversible_upgrade_helper_sym, IMAGE_REL_I386_REL32)
+    obj.append_relocation(purchase_sym.section, purchase_insert + outfit_payload_start + 8, outfit_purchase_helper_sym, IMAGE_REL_I386_REL32)
     obj.append_relocation(purchase_sym.section, purchase_insert + special_payload_start + 20, special_upgrade_helper_sym, IMAGE_REL_I386_REL32)
+
+    price_multiplier_patches = []
+    if ENABLE_CHEAT_UPGRADES:
+        calc_sym = obj.symbol("?CalcPrice@CScrollingStoreScene@@AAEHW4EInventoryItem@@PA_N@Z")
+        calc_sec = obj.section(calc_sym.section)
+        career_tail_off = calc_sym.value + 0x79
+        ordinary_tail_off = calc_sym.value + 0x83
+        career_expected = b"\x0F\xAF\xC7\x5F\x5E\x5B\x5D\xC2\x08\x00"
+        ordinary_expected = b"\x8B\xC7\x5F\x5E\x5B\x5D\xC2\x08\x00"
+        if obj.buf[calc_sec.raw_ptr + career_tail_off : calc_sec.raw_ptr + career_tail_off + len(career_expected)] != career_expected:
+            raise RuntimeError("Unexpected CalcPrice career-upgrade return path")
+        if obj.buf[calc_sec.raw_ptr + ordinary_tail_off : calc_sec.raw_ptr + ordinary_tail_off + len(ordinary_expected)] != ordinary_expected:
+            raise RuntimeError("Unexpected CalcPrice ordinary return path")
+
+        multiplier_helper = obj.append_undefined_symbol("_VF2ApplyPriceMultiplier")
+        calc_sec = obj.section(calc_sym.section)
+        multiplier_stub_off = calc_sec.raw_size
+        multiplier_stub = (
+            b"\x50"                                      # push eax ; final calculated price
+            b"\xE8\x00\x00\x00\x00"                  # call helper
+            b"\x83\xC4\x04"                          # add esp,4
+            b"\x5F\x5E\x5B\x5D"                      # restore registers/frame
+            b"\xC2\x08\x00"                          # ret 8
+        )
+        obj.insert_section_bytes(calc_sym.section, multiplier_stub_off, multiplier_stub)
+        obj.append_relocation(calc_sym.section, multiplier_stub_off + 2, multiplier_helper, IMAGE_REL_I386_REL32)
+        calc_sym = obj.symbol("?CalcPrice@CScrollingStoreScene@@AAEHW4EInventoryItem@@PA_N@Z")
+        calc_sec = obj.section(calc_sym.section)
+
+        career_jump_off = calc_sym.value + 0x7C
+        career_rel = multiplier_stub_off - (career_jump_off + 5)
+        career_patch = b"\x0F\xAF\xC7\xE9" + struct.pack("<i", career_rel) + b"\x90\x90"
+        obj.buf[calc_sec.raw_ptr + career_tail_off : calc_sec.raw_ptr + career_tail_off + len(career_patch)] = career_patch
+
+        ordinary_jump_off = calc_sym.value + 0x85
+        ordinary_rel = multiplier_stub_off - (ordinary_jump_off + 5)
+        ordinary_patch = b"\x8B\xC7\xE9" + struct.pack("<i", ordinary_rel) + b"\x90\x90"
+        obj.buf[calc_sec.raw_ptr + ordinary_tail_off : calc_sec.raw_ptr + ordinary_tail_off + len(ordinary_patch)] = ordinary_patch
+
+        price_multiplier_patches = [
+            {"path": "career upgrade", "offset": hex(career_tail_off)},
+            {"path": "ordinary purchase", "offset": hex(ordinary_tail_off)},
+        ]
 
     obj.write(PATCHED / "ScrollingStoreScene.obj")
     lock_base = lock_image_id_for(0)
@@ -6876,9 +7230,19 @@ enum ECarrying {
     eCarryingDummy = 0
 };
 
+enum EAchievement {
+    eAchievementDummy = 0
+};
+
+enum EPropEnum {
+    ePropDummy = 0
+};
+
 class CCollectableItem {
 public:
     int const CollectionCount(ECarrying item, bool common, bool uncommon, bool rare) const;
+    int const CollectionCountWithHolidayOrnaments(ECarrying item, bool common, bool uncommon, bool rare) const;
+    void ResetCollection();
 
     char pad0[0x8A8];
     unsigned char luckyRockActive;
@@ -6887,12 +7251,28 @@ public:
 class CAchievement {
 public:
     void Reset();
+    void ResetSingleAchievementProgress(EAchievement achievement);
+    void SetComplete(EAchievement achievement);
+    bool IsComplete(EAchievement achievement);
+    void IncrementProgress(EAchievement achievement, int amount);
+};
+
+class CEnvironment {
+public:
+    void ClearProp(EPropEnum prop);
+    void SetProp(EPropEnum prop);
+};
+
+class ldwGameState {
+public:
+    static int __cdecl GetRandom(int limit);
 };
 
 class theGameState {
 public:
     static theGameState *Get();
     bool SaveCurrentGame();
+    void ResetWorldState(int worldState);
 
     char pad0[0x25B1D];
     unsigned char healthPlanActive;
@@ -6902,6 +7282,12 @@ extern CFoodStore FoodStore;
 extern CMoney Money;
 extern CCollectableItem CollectableItem;
 extern CAchievement Achievement;
+extern CEnvironment Environment;
+
+extern "C" int __cdecl VF2GetB150UpgradePrice(int itemId);
+extern "C" void __cdecl VF2ToggleB150PriceMode(int itemId);
+extern "C" void __cdecl VF2ResetB150PriceMode();
+extern "C" void __cdecl VF2TriggerAllHouseMalfunctions();
 
 struct sFurnitureInfo {
     int item;
@@ -6937,7 +7323,72 @@ static void VF2RestoreFurnitureGenerationLocks() {
     }
 }
 
-extern "C" int __cdecl VF2CollectionPageCount(int page) {
+static const bool kVF2IncludeHolidayOrnamentCollection = __VF2_INCLUDE_HOLIDAY_COLLECTION__;
+
+static void VF2ResetAchievementRaw(int achievement) {
+    unsigned char *record = (unsigned char *)&Achievement + achievement * 12;
+    record[0] = 0;
+    *(unsigned int *)(record + 4) = 0;
+}
+
+static void VF2ResetCollectionAchievements() {
+    static const int achievements[6] = {0x4A, 0x4B, 0x4C, 0x5D, 0x5E, 0x5F};
+    int completedSellingGoals = 0;
+    for (int sellingGoal = 0x4E; sellingGoal <= 0x53; ++sellingGoal) {
+        if (Achievement.IsComplete((EAchievement)sellingGoal)) {
+            ++completedSellingGoals;
+        }
+    }
+    for (int i = 0; i < 6; ++i) {
+        VF2ResetAchievementRaw(achievements[i]);
+    }
+    VF2ResetAchievementRaw(0x4D);
+    VF2ResetAchievementRaw(0x54);
+    if (completedSellingGoals > 0) {
+        Achievement.IncrementProgress((EAchievement)0x54, completedSellingGoals);
+    }
+}
+
+static void VF2ResetAllCollections() {
+    CollectableItem.ResetCollection();
+    VF2ResetCollectionAchievements();
+}
+
+static void VF2CompleteAllCollections() {
+    static const int starts[6] = {0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E};
+    static const int achievements[6] = {0x4A, 0x4B, 0x4C, 0x5D, 0x5E, 0x5F};
+    int pageCount = kVF2IncludeHolidayOrnamentCollection ? 6 : 5;
+    int *collectionState = (int *)((unsigned char *)&CollectableItem + 0x4A4);
+    for (int page = 0; page < pageCount; ++page) {
+        for (int item = 0; item < 12; ++item) {
+            collectionState[starts[page] + item] = 1;
+        }
+        Achievement.SetComplete((EAchievement)achievements[page]);
+    }
+    Achievement.SetComplete((EAchievement)0x4D);
+}
+
+static void VF2ResetAntPuzzle() {
+    theGameState::Get()->ResetWorldState(0x13);
+    for (int prop = 0x4D; prop <= 0x54; ++prop) {
+        Environment.ClearProp((EPropEnum)prop);
+    }
+    Environment.SetProp((EPropEnum)(0x4D + ldwGameState::GetRandom(3)));
+    Environment.SetProp((EPropEnum)0x50);
+    Environment.SetProp((EPropEnum)0x51);
+}
+
+int const CCollectableItem::CollectionCountWithHolidayOrnaments(
+    ECarrying item,
+    bool common,
+    bool uncommon,
+    bool rare
+) const {
+    return CollectionCount(item, common, uncommon, rare)
+        + CollectionCount((ECarrying)0x9E, common, uncommon, rare);
+}
+
+extern "C" int __stdcall VF2CollectionPageCount(int page) {
     static const int starts[6] = {0x4F, 0x5B, 0x67, 0x86, 0x92, 0x9E};
     if (page < 0 || page >= 6) {
         return 0;
@@ -6946,6 +7397,10 @@ extern "C" int __cdecl VF2CollectionPageCount(int page) {
 }
 
 extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
+    int b150Price = VF2GetB150UpgradePrice(itemId);
+    if (b150Price != -1) {
+        return b150Price;
+    }
     switch (itemId) {
     case 0x117:
         return Money.bankingInterest > 0.1001f ? 0 : -1;
@@ -7036,6 +7491,26 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     case 0x124:
         Achievement.Reset();
         break;
+    case 0x125:
+        VF2ResetAntPuzzle();
+        break;
+    case 0x126:
+        VF2ResetAllCollections();
+        break;
+    case 0x127:
+        VF2CompleteAllCollections();
+        break;
+    case 0x128:
+    case 0x129:
+    case 0x12A:
+        VF2ToggleB150PriceMode(itemId);
+        break;
+    case 0x12B:
+        VF2TriggerAllHouseMalfunctions();
+        break;
+    case 0x12C:
+        VF2ResetB150PriceMode();
+        break;
     default:
         return;
     }
@@ -7050,6 +7525,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_FURNITURE_RECORD_COUNT__",
         str(len(furniture_generation_locks)),
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_INCLUDE_HOLIDAY_COLLECTION__",
+        "true" if ENABLE_HOLIDAY_ORNAMENTS else "false",
     )
     (PATCHED / "vf2_special_upgrade_effects.cpp").write_text(
         special_upgrade_helper_cpp,
@@ -7111,6 +7590,22 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
                 "image_base": hex(visible_special_upgrade_icon_id_for(0x117)),
                 "image_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
             },
+        },
+        "price_multiplier": {
+            "enabled": ENABLE_CHEAT_UPGRADES,
+            "helper": "_VF2ApplyPriceMultiplier" if ENABLE_CHEAT_UPGRADES else None,
+            "multipliers": [2, 5, 100] if ENABLE_CHEAT_UPGRADES else [],
+            "scope": "every coin-priced CScrollingStoreScene purchase through CalcPrice, including furniture, flea-market goods, Special Upgrades, house renovations, and career upgrades",
+            "verified_categories": [
+                "furniture",
+                "flea market",
+                "Special Upgrades",
+                "house renovations 0xE1-0xEA",
+                "career upgrade 0x10F",
+            ],
+            "excluded_non_price_path": "category 0x16 real-money coin packs add reward coins and intentionally bypass the price multiplier",
+            "overflow": "saturates at signed INT_MAX",
+            "patches": price_multiplier_patches,
         },
     }
 
@@ -7195,7 +7690,7 @@ def patch_string_manager(manifest):
         (
             visible_special_upgrade_desc_id_for(0),
             "eString_BrokerageAccountDescRemovable",
-            "Upgrade your broker. Provides a permanent 2% boost to your family's banking interest rate." + removable_note,
+            "Upgrade your broker. Provides a permanent 2% boost to your family's banking interest rate. The Brokerage Account can increase the Interest Rate up to 11%." + removable_note,
         ),
         (
             visible_special_upgrade_desc_id_for(1),
@@ -7281,19 +7776,20 @@ def patch_string_manager(manifest):
                 "text": text,
             })
 
-    for index, (key, text) in enumerate(BEHAVIOR_LABELS):
-        string_id = behavior_label_string_id_for(index)
-        key_sym = f"_vf2behaviorstr_key_{string_id:X}"
-        text_sym = f"_vf2behaviorstr_text_{string_id:X}"
-        helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
-        helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
-        new_rows.append((string_id, key_sym, text_sym))
-        string_manifest.append({
-            "pc_string_id": hex(string_id),
-            "source": "behavior label",
-            "key": key,
-            "text": text,
-        })
+    if ENABLE_BEHAVIOR_PATCHES:
+        for index, (key, text) in enumerate(BEHAVIOR_LABELS):
+            string_id = behavior_label_string_id_for(index)
+            key_sym = f"_vf2behaviorstr_key_{string_id:X}"
+            text_sym = f"_vf2behaviorstr_text_{string_id:X}"
+            helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+            helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+            new_rows.append((string_id, key_sym, text_sym))
+            string_manifest.append({
+                "pc_string_id": hex(string_id),
+                "source": "behavior label",
+                "key": key,
+                "text": text,
+            })
 
     if ENABLE_HOLIDAY_ORNAMENTS:
         ornament_title_id = holiday_ornament_collection_title_string_id()
@@ -8741,10 +9237,39 @@ def patch_collection_scene_holiday_ornaments(manifest):
     draw_sec = obj.section(draw_sym.section)
     draw_payload = b"\xFF\x77\x14\xE8\x00\x00\x00\x00\x50"
     obj.buf[draw_sec.raw_ptr + draw_count_off : draw_sec.raw_ptr + draw_count_off + len(draw_payload)] = draw_payload
-    helper_sym = obj.append_undefined_symbol("_VF2CollectionPageCount")
+    helper_sym = obj.append_undefined_symbol("_VF2CollectionPageCount@4")
     obj.append_relocation(draw_sym.section, draw_sym.value + 0x181, helper_sym, IMAGE_REL_I386_REL32)
 
     obj.write(PATCHED / "CollectionScene.obj")
+
+    main_obj = CoffObject(PATCHED / "theMainScene.obj")
+    map_sym = main_obj.symbol("?MapClickFeedback@theMainScene@@IAEXUldwPoint@@@Z")
+    map_sec = main_obj.section(map_sym.section)
+    final_count_call = map_sym.value + 0x66A
+    expected_final_count_call = b"\xE8\x00\x00\x00\x00"
+    if main_obj.buf[map_sec.raw_ptr + final_count_call : map_sec.raw_ptr + final_count_call + 5] != expected_final_count_call:
+        raise RuntimeError("Unexpected theMainScene::MapClickFeedback final collection-count call")
+    aggregate_helper_name = (
+        "?CollectionCountWithHolidayOrnaments@CCollectableItem@@"
+        "QBE?BHW4ECarrying@@_N11@Z"
+    )
+    aggregate_helper = main_obj.append_undefined_symbol(aggregate_helper_name)
+    main_obj.retarget_relocation(
+        map_sym.section,
+        map_sym.value + 0x66B,
+        aggregate_helper,
+        IMAGE_REL_I386_REL32,
+    )
+
+    total_suffix_name = "??_C@_05FFJCODFA@?5?1?560?$AA@"
+    total_suffix = main_obj.symbol(total_suffix_name)
+    total_suffix_sec = main_obj.section(total_suffix.section)
+    total_suffix_raw = total_suffix_sec.raw_ptr + total_suffix.value
+    if main_obj.buf[total_suffix_raw : total_suffix_raw + 6] != b" / 60\x00":
+        raise RuntimeError("Unexpected theMainScene collection-total suffix")
+    main_obj.buf[total_suffix_raw : total_suffix_raw + 6] = b" / 72\x00"
+    main_obj.write(PATCHED / "theMainScene.obj")
+
     manifest["CollectionSceneHolidayOrnaments"] = {
         "status": "patched",
         "page": HOLIDAY_ORNAMENT_COLLECTION_PAGE,
@@ -8760,8 +9285,14 @@ def patch_collection_scene_holiday_ornaments(manifest):
             }
             for index, (image_id, x, y) in enumerate(page_entries)
         ],
-        "page_count_helper": "_VF2CollectionPageCount",
-        "page_count_route": "DrawScene calls _VF2CollectionPageCount(page) instead of reading the five-entry stock count cache.",
+        "page_count_helper": "_VF2CollectionPageCount@4",
+        "page_count_route": "DrawScene calls the stdcall page-count helper instead of reading the five-entry stock count cache.",
+        "main_scene_total": {
+            "function": "theMainScene::MapClickFeedback",
+            "family_starts": [hex(value) for value in HOLIDAY_ORNAMENT_COLLECTION_PAGE_STARTS],
+            "total": HOLIDAY_ORNAMENT_COLLECTION_TOTAL,
+            "helper": aggregate_helper_name,
+        },
         "tooltip_rarity_label_ids": [hex(label_id) for label_id in HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS],
         "tooltip_rarity_note": "Extends the stock 60-item click tooltip rarity lookup by three four-item buckets for common, uncommon, and rare ornaments.",
         "object_size_note": "CCollectionScene stays 0x30 bytes; DrawScene asks helper for page counts instead of adding a sixth cached field.",
@@ -10125,6 +10656,30 @@ static void EnableAdultOnlyAutonomousCandidateWithWeight(unsigned char *villager
     *(unsigned int *)(candidate + 0x4C) = 0x118;
 }
 
+static void EnableNursingMotherAutonomousCandidateWithWeight(unsigned char *villager, unsigned int behavior, unsigned int weight)
+{
+    unsigned char *candidate = villager + 0x6BB8 + behavior * 0xD0;
+    candidate[0xCD] = 1;
+    *(unsigned int *)(candidate + 0x0C) = weight;
+    *(unsigned int *)(candidate + 0x48) = 0;
+    *(unsigned int *)(candidate + 0x4C) = 0x168;
+    candidate[0xA3] = 1;
+}
+
+static void CloneAutonomousCandidateWithWeight(
+    unsigned char *villager,
+    unsigned int donorBehavior,
+    unsigned int targetBehavior,
+    unsigned int weight)
+{
+    unsigned char *donor = villager + 0x6BB8 + donorBehavior * 0xD0;
+    unsigned char *target = villager + 0x6BB8 + targetBehavior * 0xD0;
+    for (int i = 0; i < 0xD0; ++i) target[i] = donor[i];
+    *(unsigned int *)(target + 0x00) = targetBehavior;
+    *(unsigned int *)(target + 0x0C) = weight;
+    target[0xCD] = 1;
+}
+
 class CWeather {
 public:
     int currentType;
@@ -10239,6 +10794,7 @@ extern "C" void __cdecl VF2RandomOfficeCareerLabel(CVillager &);
 extern "C" void __cdecl VF2RandomWorkshopCareerLabel(CVillager &);
 extern "C" void __cdecl VF2RandomDrawingLabel(CVillager &);
 extern "C" void __cdecl VF2RandomNapDreamLabel(CVillager &);
+extern "C" void __cdecl VF2RandomInfantCareLabel(CVillager &);
 extern "C" void __cdecl VF2RandomBreakfastLabel(CVillager &);
 extern "C" void __cdecl VF2RandomWateringFlowersLabel(CVillager &);
 extern "C" void __cdecl VF2RandomWateringRosesLabel(CVillager &);
@@ -10291,6 +10847,7 @@ private:
     static void __cdecl WorkWorkshop(CVillager &);
     static void __cdecl DrawingOnEasel(CVillager &);
     static void __cdecl NappingCouch(CVillager &);
+    static void __cdecl TeachingFirstWords(CVillager &);
     static void __cdecl HaveBreakfast(CVillager &);
     static void __cdecl WateringFlowers(CVillager &);
     static void __cdecl WateringRoses(CVillager &);
@@ -10340,6 +10897,7 @@ private:
     friend void __cdecl VF2RandomWorkshopCareerLabel(CVillager &);
     friend void __cdecl VF2RandomDrawingLabel(CVillager &);
     friend void __cdecl VF2RandomNapDreamLabel(CVillager &);
+    friend void __cdecl VF2RandomInfantCareLabel(CVillager &);
     friend void __cdecl VF2RandomBreakfastLabel(CVillager &);
     friend void __cdecl VF2RandomWateringFlowersLabel(CVillager &);
     friend void __cdecl VF2RandomWateringRosesLabel(CVillager &);
@@ -10411,6 +10969,32 @@ static bool VF2IsTeenOrOlder(CVillager &villager)
     return VF2AgeValue(villager) >= 0x118;
 }
 
+static bool VF2IsAge13OrOlder(CVillager &villager)
+{
+    return VF2AgeValue(villager) >= 0x104;
+}
+
+static bool VF2IsTeen14Through18(CVillager &villager)
+{
+    unsigned int age = VF2AgeValue(villager);
+    return age >= 0x118 && age < 0x17C;
+}
+
+static bool VF2IsAdult19OrOlder(CVillager &villager)
+{
+    return VF2AgeValue(villager) >= 0x17C;
+}
+
+static int VF2GenderValue(CVillager &villager)
+{
+    return *(int *)(((unsigned char *)&villager) + 0x6A58);
+}
+
+static bool VF2HasCareer(CVillager &villager)
+{
+    return *(int *)(((unsigned char *)&villager) + 0x6B8C) != -1;
+}
+
 static bool VF2IsMatureAdult(CVillager &villager)
 {
     unsigned int age = VF2AgeValue(villager);
@@ -10427,6 +11011,9 @@ struct VF2BehaviorLabelCacheSlot {
     CVillager *villager;
     int cacheTag;
     int stringId;
+    int behaviorId;
+    unsigned int behaviorSerial;
+    unsigned int praiseCount;
     char nativeLabel[0x28];
 };
 
@@ -10481,10 +11068,23 @@ static VF2BehaviorLabelCacheSlot *VF2FindBehaviorLabelCache(CVillager &villager,
     emptySlot->villager = &villager;
     emptySlot->cacheTag = cacheTag;
     emptySlot->stringId = 0;
+    emptySlot->behaviorId = -1;
+    emptySlot->behaviorSerial = 0;
+    emptySlot->praiseCount = 0;
     for (int i = 0; i < 0x28; ++i) {
         emptySlot->nativeLabel[i] = 0;
     }
     return emptySlot;
+}
+
+static void VF2RestoreCachedNativeLabel(CVillager &villager, int cacheTag)
+{
+    VF2BehaviorLabelCacheSlot *slot = VF2FindBehaviorLabelCache(villager, cacheTag, false);
+    if (!slot) return;
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    for (int i = 0; i < 0x28; ++i) {
+        behaviorLabel[i] = slot->nativeLabel[i];
+    }
 }
 
 static bool VF2BehaviorLabelCacheStillActive(VF2BehaviorLabelCacheSlot *slot)
@@ -10492,14 +11092,24 @@ static bool VF2BehaviorLabelCacheStillActive(VF2BehaviorLabelCacheSlot *slot)
     if (!slot || gVF2BehaviorLabelBeforeVillager != slot->villager) {
         return false;
     }
-    if (VF2LabelBytesEqual(gVF2BehaviorLabelBeforeNative, slot->nativeLabel)) {
+    unsigned char *data = (unsigned char *)slot->villager;
+    int behaviorId = *(int *)(data + 0x1BBA0);
+    unsigned int behaviorSerial = *(unsigned int *)(data + 0x1BBA4);
+    int praisedBehaviorId = *(int *)(data + 0x6B48);
+    unsigned int praiseCount = *(unsigned int *)(data + 0x6B4C);
+    if (behaviorId != slot->behaviorId) {
+        return false;
+    }
+    if (behaviorSerial == slot->behaviorSerial) {
+        slot->praiseCount = praiseCount;
         return true;
     }
-    if (slot->stringId) {
-        char *chosenLabel = theStringManager::Get()->GetString((StringId)slot->stringId);
-        if (VF2LabelTextEqual(gVF2BehaviorLabelBeforeNative, chosenLabel)) {
-            return true;
-        }
+    if (behaviorSerial == slot->behaviorSerial + 1 &&
+        praisedBehaviorId == behaviorId &&
+        praiseCount != slot->praiseCount) {
+        slot->behaviorSerial = behaviorSerial;
+        slot->praiseCount = praiseCount;
+        return true;
     }
     return false;
 }
@@ -10511,6 +11121,9 @@ static bool VF2GetCachedBehaviorLabel(CVillager &villager, int cacheTag, int *st
         return false;
     }
     *stringId = slot->stringId;
+    if (slot->stringId == 0) {
+        VF2RestoreCachedNativeLabel(villager, cacheTag);
+    }
     return true;
 }
 
@@ -10521,6 +11134,10 @@ static void VF2RememberBehaviorLabel(CVillager &villager, int cacheTag, int stri
         return;
     }
     slot->stringId = stringId;
+    unsigned char *data = (unsigned char *)&villager;
+    slot->behaviorId = *(int *)(data + 0x1BBA0);
+    slot->behaviorSerial = *(unsigned int *)(data + 0x1BBA4);
+    slot->praiseCount = *(unsigned int *)(data + 0x6B4C);
     VF2CopyCurrentBehaviorLabel(villager, slot->nativeLabel);
 }
 
@@ -10604,18 +11221,6 @@ static void VF2ApplyRememberedOrRandomLabel(CVillager &villager, int const *labe
 static void VF2ApplyRandomLabel(CVillager &villager, int const *labels, int count)
 {
     VF2ApplyRememberedOrRandomLabel(villager, labels, count, 0);
-}
-
-static void VF2ApplyUncachedRandomLabel(CVillager &villager, int const *labels, int count)
-{
-    if (count <= 0) {
-        return;
-    }
-    int roll = ldwGameState::GetRandom(count + 1);
-    if (roll == 0) {
-        return;
-    }
-    VF2SetBehaviorLabel(villager, labels[roll - 1]);
 }
 
 static void VF2ApplyRememberedOrRandomLabels2(
@@ -10844,12 +11449,40 @@ extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &villager)
 
 extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &villager)
 {
-    if (ldwGameState::GetRandom(2) == 0) {
-        CBehavior::DancingRadio(villager);
-        VF2ApplyUncachedRandomLabel(villager, kVF2BehaviorLabels_radio_dance, VF2_LABEL_COUNT(kVF2BehaviorLabels_radio_dance));
-    } else {
-        CBehavior::ListenToRadio(villager);
+    static const int kVF2RadioListenCacheSentinel = -1;
+    int cacheTag = (int)kVF2BehaviorLabels_radio_dance;
+    gVF2BehaviorLabelBeforeVillager = &villager;
+    VF2CopyBehaviorLabel(villager, gVF2BehaviorLabelBeforeNative);
+    int cachedStringId = 0;
+    if (VF2GetCachedBehaviorLabel(villager, cacheTag, &cachedStringId)) {
+        if (cachedStringId == kVF2RadioListenCacheSentinel) {
+            if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::ListenToRadio)) return;
+            VF2RestoreCachedNativeLabel(villager, cacheTag);
+            return;
+        }
+        if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::DancingRadio)) return;
+        if (cachedStringId > 0) {
+            VF2SetBehaviorLabel(villager, cachedStringId);
+        } else {
+            VF2RestoreCachedNativeLabel(villager, cacheTag);
+        }
+        return;
     }
+    if (ldwGameState::GetRandom(2) != 0) {
+        if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::ListenToRadio)) return;
+        VF2RememberBehaviorLabel(villager, cacheTag, kVF2RadioListenCacheSentinel);
+        return;
+    }
+    int remembered = VF2CurrentLabelInGroup(
+        villager,
+        kVF2BehaviorLabels_radio_dance,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_radio_dance));
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::DancingRadio)) return;
+    VF2ApplyRememberedOrRandomLabel(
+        villager,
+        kVF2BehaviorLabels_radio_dance,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_radio_dance),
+        remembered);
 }
 
 extern "C" void __cdecl VF2RandomTVLabel(CVillager &villager)
@@ -10896,20 +11529,34 @@ extern "C" void __cdecl VF2RandomMealPrepLabel(CVillager &villager)
 
 extern "C" void __cdecl VF2RandomWebLabel(CVillager &villager)
 {
-    int remembered = VF2CurrentLabelInGroups2(
+    int remembered = VF2CurrentLabelInGroups3(
         villager,
         kVF2BehaviorLabels_web_basic,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_web_basic),
+        kVF2BehaviorLabels_web_13_plus,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_web_13_plus),
         kVF2BehaviorLabels_web_adult,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_web_adult));
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::BrowsingWeb)) return;
     if (VF2IsTeenOrOlder(villager)) {
+        VF2ApplyRememberedOrRandomLabels3(
+            villager,
+            kVF2BehaviorLabels_web_basic,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_web_basic),
+            kVF2BehaviorLabels_web_13_plus,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_web_13_plus),
+            kVF2BehaviorLabels_web_adult,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_web_adult),
+            remembered);
+        return;
+    }
+    if (VF2IsAge13OrOlder(villager)) {
         VF2ApplyRememberedOrRandomLabels2(
             villager,
             kVF2BehaviorLabels_web_basic,
             VF2_LABEL_COUNT(kVF2BehaviorLabels_web_basic),
-            kVF2BehaviorLabels_web_adult,
-            VF2_LABEL_COUNT(kVF2BehaviorLabels_web_adult),
+            kVF2BehaviorLabels_web_13_plus,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_web_13_plus),
             remembered);
         return;
     }
@@ -11008,6 +11655,13 @@ extern "C" void __cdecl VF2RandomNapDreamLabel(CVillager &villager)
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_nap_dream, VF2_LABEL_COUNT(kVF2BehaviorLabels_nap_dream), remembered);
 }
 
+extern "C" void __cdecl VF2RandomInfantCareLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_infant_care, VF2_LABEL_COUNT(kVF2BehaviorLabels_infant_care));
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::TeachingFirstWords)) return;
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_infant_care, VF2_LABEL_COUNT(kVF2BehaviorLabels_infant_care), remembered);
+}
+
 extern "C" void __cdecl VF2RandomBreakfastLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_breakfast, VF2_LABEL_COUNT(kVF2BehaviorLabels_breakfast));
@@ -11038,16 +11692,33 @@ extern "C" void __cdecl VF2RandomWateringWindowBoxesLabel(CVillager &villager)
 
 static int VF2CurrentBathroomSinkLabel(CVillager &villager)
 {
-    return VF2CurrentLabelInGroups2(
+    return VF2CurrentLabelInGroups3(
         villager,
         kVF2BehaviorLabels_bathroom_sink_general,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_general),
         kVF2BehaviorLabels_bathroom_sink_grooming,
-        VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_grooming));
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_grooming),
+        kVF2BehaviorLabels_bathroom_sink_female_teen_plus,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_female_teen_plus));
+}
+
+static bool VF2CanPutOnJewelry(CVillager &villager)
+{
+    return VF2GenderValue(villager) == 1 && VF2AgeValue(villager) >= 0x118;
 }
 
 static void VF2ApplyBathroomSinkGeneralLabel(CVillager &villager, int rememberedStringId)
 {
+    if (VF2CanPutOnJewelry(villager)) {
+        VF2ApplyRememberedOrRandomLabels2(
+            villager,
+            kVF2BehaviorLabels_bathroom_sink_general,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_general),
+            kVF2BehaviorLabels_bathroom_sink_female_teen_plus,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_female_teen_plus),
+            rememberedStringId);
+        return;
+    }
     VF2ApplyRememberedOrRandomLabel(
         villager,
         kVF2BehaviorLabels_bathroom_sink_general,
@@ -11057,6 +11728,26 @@ static void VF2ApplyBathroomSinkGeneralLabel(CVillager &villager, int remembered
 
 static void VF2ApplyBathroomSinkGroomingLabel(CVillager &villager, int rememberedStringId)
 {
+    if (VF2GenderValue(villager) != 1) {
+        VF2ApplyRememberedOrRandomLabel(
+            villager,
+            kVF2BehaviorLabels_bathroom_sink_general,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_general),
+            rememberedStringId);
+        return;
+    }
+    if (VF2CanPutOnJewelry(villager)) {
+        VF2ApplyRememberedOrRandomLabels3(
+            villager,
+            kVF2BehaviorLabels_bathroom_sink_general,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_general),
+            kVF2BehaviorLabels_bathroom_sink_grooming,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_grooming),
+            kVF2BehaviorLabels_bathroom_sink_female_teen_plus,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_bathroom_sink_female_teen_plus),
+            rememberedStringId);
+        return;
+    }
     VF2ApplyRememberedOrRandomLabels2(
         villager,
         kVF2BehaviorLabels_bathroom_sink_general,
@@ -11174,8 +11865,25 @@ extern "C" void __cdecl VF2RandomDrivingChildLabel(CVillager &villager)
 
 extern "C" void __cdecl VF2TrampolineLabel(CVillager &villager)
 {
+    int remembered = VF2CurrentLabelInGroup(
+        villager,
+        kVF2BehaviorLabels_trampoline_textfix,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_trampoline_textfix));
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::ToyTrampoline)) return;
-    VF2SetBehaviorLabel(villager, kVF2BehaviorLabels_trampoline_textfix[0]);
+    int cacheTag = (int)kVF2BehaviorLabels_trampoline_textfix;
+    if (remembered) {
+        VF2RememberBehaviorLabel(villager, cacheTag, remembered);
+        VF2SetBehaviorLabel(villager, remembered);
+        return;
+    }
+    int cachedStringId = 0;
+    if (VF2GetCachedBehaviorLabel(villager, cacheTag, &cachedStringId)) {
+        if (cachedStringId) VF2SetBehaviorLabel(villager, cachedStringId);
+        return;
+    }
+    int fixedStringId = kVF2BehaviorLabels_trampoline_textfix[0];
+    VF2RememberBehaviorLabel(villager, cacheTag, fixedStringId);
+    VF2SetBehaviorLabel(villager, fixedStringId);
 }
 
 extern "C" void __cdecl VF2RandomKidsTableLabel(CVillager &villager)
@@ -11199,26 +11907,71 @@ extern "C" void __cdecl VF2RandomTeenOnlineTestLabel(CVillager &villager)
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_teen_online_test, VF2_LABEL_COUNT(kVF2BehaviorLabels_teen_online_test), remembered);
 }
 
+static int VF2CurrentSitDownLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_general, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general));
+    if (remembered) return remembered;
+    remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_adult));
+    if (remembered) return remembered;
+    remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_work, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_work));
+    if (remembered) return remembered;
+    remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_school, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_school));
+    if (remembered) return remembered;
+    remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_teen_female, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_teen_female));
+    if (remembered) return remembered;
+    return VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_teen_male, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_teen_male));
+}
+
 extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &villager)
 {
-    int remembered = VF2CurrentLabelInGroups2(
-        villager,
-        kVF2BehaviorLabels_sit_down_general,
-        VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general),
-        kVF2BehaviorLabels_sit_down_adult,
-        VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_adult));
+    int remembered = VF2CurrentSitDownLabel(villager);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RestingBody)) return;
-    if (VF2IsMatureAdult(villager)) {
-        VF2ApplyRememberedOrRandomLabels2(
+    if (VF2IsAdult19OrOlder(villager) && VF2HasCareer(villager)) {
+        VF2ApplyRememberedOrRandomLabels3(
             villager,
             kVF2BehaviorLabels_sit_down_general,
             VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general),
             kVF2BehaviorLabels_sit_down_adult,
             VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_adult),
+            kVF2BehaviorLabels_sit_down_work,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_work),
             remembered);
         return;
     }
-    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_sit_down_general, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general), remembered);
+    if (VF2IsAdult19OrOlder(villager)) {
+        VF2ApplyRememberedOrRandomLabels3(
+            villager,
+            kVF2BehaviorLabels_sit_down_general,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general),
+            kVF2BehaviorLabels_sit_down_adult,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_adult),
+            kVF2BehaviorLabels_sit_down_school,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_school),
+            remembered);
+        return;
+    }
+    if (VF2IsTeen14Through18(villager)) {
+        int const *teenLabels = VF2GenderValue(villager) == 1
+            ? kVF2BehaviorLabels_sit_down_teen_female
+            : kVF2BehaviorLabels_sit_down_teen_male;
+        VF2ApplyRememberedOrRandomLabels3(
+            villager,
+            kVF2BehaviorLabels_sit_down_general,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general),
+            kVF2BehaviorLabels_sit_down_school,
+            VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_school),
+            teenLabels,
+            1,
+            remembered);
+        return;
+    }
+    VF2ApplyRememberedOrRandomLabels2(
+        villager,
+        kVF2BehaviorLabels_sit_down_general,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general),
+        kVF2BehaviorLabels_sit_down_school,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_school),
+        remembered);
 }
 
 extern "C" void __cdecl VF2RandomPetLabel(CVillager &villager)
@@ -11288,10 +12041,22 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableChildOnlyAutonomousCandidateWithWeight(data, 0x118, 900); // DrawingOnEasel
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x08D, 700); // MendingButton
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x08E, 700); // IroningShirt
-    EnableAllAgesAutonomousCandidateWithWeight(data, 0x19A, 450); // Petting
+    EnableAllAgesAutonomousCandidateWithWeight(data, 0x046, 450); // WeighingSelf / Checking weight
+    EnableNursingMotherAutonomousCandidateWithWeight(data, 0x11F, 450); // TeachingFirstWords / infant-care labels
     EnableAllAgesAutonomousCandidateWithWeight(data, 0x114, 650); // PlayingVideoGame
     EnableAllAgesAutonomousCandidateWithWeight(data, 0x05A, 650); // BrowsingWeb
     EnableAllAgesAutonomousCandidateWithWeight(data, 0x03E, 650); // WatchTVDispatch
+    EnableAutonomousCandidateWithWeight(data, 0x019, 450); // GetADrink label variants
+    EnableAutonomousCandidateWithWeight(data, 0x0D5, 450); // HeatUpFood label variants
+    EnableAutonomousCandidateWithWeight(data, 0x025, 450); // LookingForSnacksDispatch variants
+    EnableAutonomousCandidateWithWeight(data, 0x032, 450); // PreparingAMeal variants
+    EnableAutonomousCandidateWithWeight(data, 0x033, 450); // Bookshelf reading variants
+    EnableAutonomousCandidateWithWeight(data, 0x034, 450); // Shower/bath variants
+    CloneAutonomousCandidateWithWeight(data, 0x034, 0x016, 450); // North shower, with stock shower gates
+    EnableAutonomousCandidateWithWeight(data, 0x0D3, 450); // Coffee/tea variants
+    EnableAutonomousCandidateWithWeight(data, 0x0D9, 150); // Rare grande-latte variants
+    EnableAutonomousCandidateWithWeight(data, 0x094, 300); // Cocktail variants
+    EnableAutonomousCandidateWithWeight(data, 0x199, 450); // Trampoline text/behavior route
     EnableAutonomousCandidateWithWeight(data, 0x107, 450); // PlayingBoardGame, retain stock object gates
     EnableAllAgesAutonomousCandidateWithWeight(data, 0x091, 450); // SwimmingPool
     EnableChildOnlyAutonomousCandidateWithWeight(data, 0x196, 450); // ToySandbox
@@ -11304,18 +12069,19 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAutonomousCandidateWithWeight(data, 0x0D6, 450); // HaveBreakfast
     EnableAutonomousCandidateWithWeight(data, 0x075, 450); // WateringFlowers
     EnableAutonomousCandidateWithWeight(data, 0x076, 450); // WateringRoses
-    EnableAutonomousCandidateWithWeight(data, 0x077, 450); // WateringWindowBoxes
+    CloneAutonomousCandidateWithWeight(data, 0x076, 0x077, 450); // WateringWindowBoxes, with flower-water gates
     EnableAutonomousCandidateWithWeight(data, 0x0A4, 450); // WashingInBathroomSink
-    EnableAutonomousCandidateWithWeight(data, 0x0A5, 450); // WashingInBathroomSink0
-    EnableAutonomousCandidateWithWeight(data, 0x0A6, 450); // WashingInBathroomSink1
-    EnableAutonomousCandidateWithWeight(data, 0x0A7, 450); // WashingInBathroomSink2
-    EnableAutonomousCandidateWithWeight(data, 0x0A8, 450); // WashingInBathroomSink3
+    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A5, 450); // WashingInBathroomSink0
+    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A6, 450); // WashingInBathroomSink1
+    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A7, 450); // WashingInBathroomSink2
+    CloneAutonomousCandidateWithWeight(data, 0x0A4, 0x0A8, 450); // WashingInBathroomSink3
     EnableAutonomousCandidateWithWeight(data, 0x0A9, 450); // BathroomGroomingGeneral
     EnableAutonomousCandidateWithWeight(data, 0x0AD, 450); // BathroomGroomingShaveMakeup
     EnableAutonomousCandidateWithWeight(data, 0x11D, 450); // UseTelescope
     EnableAutonomousCandidateWithWeight(data, 0x04A, 450); // WorkingOut, retain stock age gates
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x047, 450); // WorkKitchenDispatch
-    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x048, 450); // WorkKitchen0
+    CloneAutonomousCandidateWithWeight(data, 0x047, 0x048, 450); // WorkKitchen0, with kitchen career gates
+    EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x048, 450);
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x02C, 450); // OfficeCarreerWork
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x04B, 450); // WorkWorkshop
     VF2RefreshHammockEligibility(data);
@@ -11328,7 +12094,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
         "hooks": ["CVillager::InitAI", "CVillager::LoadAI", "CVillagerAI::DecideWhatToDo", "CBehavior::CBehavior"],
         "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
         "actions": [
-            "hammock anchored rest (0x23; all ages; neutral/sunny only)",
+            "hammock anchored rest (0x23; all ages; Sunny/Cloudy weather only)",
             "warm hands by fireplace (all ages)",
             "watch fireplace (all ages)",
             "pinball/slots/pachinko/pool table/foosball (all ages)",
@@ -11336,9 +12102,11 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
             "playing quietly at kids table (non-adults; base or invisible kids table)",
             "random radio/MP3 dancing or listening (all ages)",
             "drawing (non-adults; max age 0x117)",
-            "mending/sewing variants (adults)",
-            "ironing clothes (adults)",
-            "petting/pet label variants (all ages)",
+            "mending/sewing variants (displayed age 14+)",
+            "ironing clothes (displayed age 14+)",
+            "checking weight (0x046; all ages; native scale targeting)",
+            "teaching first words/infant-care variants (0x11F; nursing mothers carrying babies)",
+            "petting label variants remain available through manual/native routes but Petting is not spontaneous",
             "needs-to-sit-down/rest variants (0x127; all ages; native sittable/bed targeting)",
             "TV, drink, heat-food, snack, meal-prep, web, video game, reading, telescope, workout, career, shower, bathroom sink/grooming, coffee/tea, cocktail, pool, sandbox, toy-train, and snow-play label variants",
         ],
@@ -11347,7 +12115,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
             "manual_drop_behavior": "0x24 LieInHammockNoLeadIn remains native",
             "reason": "The spontaneous route keeps the long SleepNW/SleepNE rest animation sequence, writes the native eString 0xE9 behavior label, requires either base HammockStd item 0x1E1 or Invisible Hammock item 0x30C in-world, then calls FurnitureManager.LinkPeepToFurniture to use the placed hammock anchor and choose the matching hammock-rest head direction plus sleep strip for the linked orientation: NW hammock -> body position 9, head direction 7, and SleepNW; NE hammock -> body position 9, head direction 1, and SleepNE.",
         },
-        "note": "No Bored hook. The patch enables existing native behavior candidates after stock InitAI and after saved weights are restored by LoadAI. The hammock candidate is refreshed at each native AI decision and is eligible only when base HammockStd item 0x1E1 or Invisible Hammock item 0x30C is in-world and weather is state 0 (neutral) or 1 (sunny). It remains behavior 0x23 so villagers close their eyes and rest through the sleep animation, but the macro now writes the native eString 0xE9 behavior label and uses _VF2LieInHammockAnchoredRest to get the placed hammock point/orientation before planning the orientation-specific hammock-rest head direction and sleep strip. Playhouse is refreshed through CNight::AIIsDayTime() at each native AI decision, so the spontaneous Playhouse candidate is child-only and daytime-only. Drawing, snow play, sandbox, toy train, Playhouse, and ChildrenPlayAtKidsTable are capped at the stock child boundary, where CVillager+0x6A54 < 0x118 is child and >= 0x118 is teen-or-older. The stock CHotSpot::KidsTable route dispatches native behavior 0x130 directly; the Invisible Kids Table keeps the donor-cloned itemInfo/click/fmap route from KidsTableAndChairsStd.",
+        "note": "No Bored hook. Behavior Patches enables every registered variation route after stock InitAI and LoadAI, except Petting which is explicitly kept non-spontaneous. Native candidate fields continue to supply age, time, object, weather, and gender eligibility unless B150 documents an intentional override. The hammock candidate is refreshed at each native AI decision and is eligible only when base HammockStd item 0x1E1 or Invisible Hammock item 0x30C is in-world and Weather.currentType is 0 (Sunny) or 1 (Cloudy). Snow play is enabled only for Weather.currentType 5 (Snowing). Playhouse remains child-only and daytime-only. Raw age at CVillager+0x6A54 is displayed as years by dividing by 20.",
     }
 
 
@@ -11435,6 +12203,7 @@ def patch_behavior_label_variants(manifest):
         retarget(0x3E8, 0x04B, "_VF2RandomWorkshopCareerLabel", "Workshop career label variants"),
         retarget(0xFAF, 0x118, "_VF2RandomDrawingLabel", "Drawing label variants"),
         retarget(0x721, 0x083, "_VF2RandomNapDreamLabel", "Nap dream label variants"),
+        retarget(0x1004, 0x11F, "_VF2RandomInfantCareLabel", "Nursing-mother infant-care label variants"),
         retarget(0xAC5, 0x0D6, "_VF2RandomBreakfastLabel", "Breakfast label variants"),
         retarget(0x654, 0x075, "_VF2RandomWateringFlowersLabel", "Flower watering label variants"),
         retarget(0x662, 0x076, "_VF2RandomWateringRosesLabel", "Flower watering label variants"),
@@ -11471,7 +12240,7 @@ def patch_behavior_label_variants(manifest):
         "label_stability": (
             "Wrappers keep a small per-villager/per-wrapper label cache after the native behavior accepts the action. "
             "Praise or HUD refresh paths reuse the selected stock/custom label instead of rerolling a new variant while the same native route is still active. "
-            "The radio/MP3 dancing-vs-listening random switch intentionally remains uncached."
+            "Stock-label selections restore their cached native text, and radio/MP3 listening-versus-dancing uses the same praise-stable cache."
         ),
         "age_notes": {
             "child_boundary": "CVillager+0x6A54 < 0x118 is treated as the stock child range for child-only spontaneous gates.",
@@ -11923,6 +12692,68 @@ def validate_invisible_kids_table_behavior_contract(manifest):
     }
 
 
+def validate_native_north_bathroom_malfunction_selection(manifest):
+    obj = CoffObject(PATCHED / "theMainScene.obj")
+    update = obj.symbol("?UpdateScene@theMainScene@@MAEXXZ")
+    section = obj.section(update.section)
+    data = bytes(obj.buf[section.raw_ptr + update.value : section.raw_ptr + section.raw_size])
+    cases = [
+        {
+            "name": "north shower leak",
+            "case_offset": 0x459,
+            "permanent_fix_offset": 0x11C,
+            "upgrade_check_offset": 0x469,
+            "prop_offset": 0x480,
+            "prop": 0x49,
+        },
+        {
+            "name": "north toilet leak",
+            "case_offset": 0x487,
+            "permanent_fix_offset": 0x10C,
+            "upgrade_check_offset": 0x497,
+            "prop_offset": 0x4AA,
+            "prop": 0x48,
+        },
+        {
+            "name": "north sink leak",
+            "case_offset": 0x4AE,
+            "permanent_fix_offset": 0x12C,
+            "upgrade_check_offset": 0x4BA,
+            "prop_offset": 0x4CD,
+            "prop": 0x4A,
+        },
+    ]
+    for row in cases:
+        case_off = row["case_offset"]
+        state_pattern = b"\x8B\x43\x14\x80\xB8" + struct.pack(
+            "<I",
+            row["permanent_fix_offset"],
+        ) + b"\x00"
+        if data[case_off : case_off + len(state_pattern)] != state_pattern:
+            raise RuntimeError(f"Native {row['name']} permanent-fix gate drifted")
+        upgrade_off = row["upgrade_check_offset"]
+        if data[upgrade_off : upgrade_off + 5] != b"\x68\xE6\x00\x00\x00":
+            raise RuntimeError(f"Native {row['name']} renovation gate drifted")
+        prop_off = row["prop_offset"]
+        if data[prop_off : prop_off + 2] != b"\x6A" + bytes([row["prop"]]):
+            raise RuntimeError(f"Native {row['name']} SetProp selection drifted")
+
+    manifest["native_north_bathroom_malfunctions"] = {
+        "status": "validated and preserved",
+        "function": "?UpdateScene@theMainScene@@MAEXXZ",
+        "selection": "stock standalone random-malfunction jump-table cases",
+        "second_bathroom_upgrade": "0xE6",
+        "cases": [
+            {
+                "name": row["name"],
+                "prop": hex(row["prop"]),
+                "permanent_fix_world_state_byte": hex(row["permanent_fix_offset"]),
+            }
+            for row in cases
+        ],
+    }
+
+
 def validate_runtime_payload_contract(manifest):
     errors = []
     for filename in VANILLA_RUNTIME_REQUIRED_FILES:
@@ -11993,7 +12824,6 @@ def main():
     sync_vanilla_runtime_payload(manifest)
     patch_furniture_manager(manifest)
     patch_added_furniture_click_aliases(manifest)
-    patch_invisible_hammock_drop_action(manifest)
     patch_visible_special_upgrades(manifest)
     patch_inventory_manager(manifest)
     patch_scrolling_store_scene(manifest)
@@ -12024,11 +12854,33 @@ def main():
             "experimental_collectable_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
             "opt_in": "Set VF2_ENABLE_HOLIDAY_ORNAMENTS=1 only for isolated mobile Holiday Ornament collection tests.",
         }
-    patch_spontaneous_behaviors(manifest)
-    patch_bookshelf_reading_behavior(manifest)
-    patch_radio_drop_behavior(manifest)
-    patch_behavior_label_variants(manifest)
-    patch_arcade_behavior_labels(manifest)
+    if ENABLE_BEHAVIOR_PATCHES:
+        patch_invisible_hammock_drop_action(manifest)
+        patch_spontaneous_behaviors(manifest)
+        patch_bookshelf_reading_behavior(manifest)
+        patch_radio_drop_behavior(manifest)
+        patch_behavior_label_variants(manifest)
+        patch_arcade_behavior_labels(manifest)
+        manifest["BehaviorPatchesGate"] = {
+            "enabled": True,
+            "environment": "VF2_ENABLE_BEHAVIOR_PATCHES",
+            "offline_patcher_setting": "behavior_patches",
+        }
+    else:
+        (PATCHED / "vf2_invisible_hammock.cpp").write_text(
+            "// Behavior Patches disabled: stock hammock behavior retained.\n",
+            encoding="ascii",
+        )
+        (PATCHED / "vf2_spontaneous_behaviors.cpp").write_text(
+            "// Behavior Patches disabled: stock spontaneous and label behavior retained.\n",
+            encoding="ascii",
+        )
+        manifest["BehaviorPatchesGate"] = {
+            "enabled": False,
+            "environment": "VF2_ENABLE_BEHAVIOR_PATCHES",
+            "offline_patcher_setting": "behavior_patches",
+            "status": "stock behavior objects preserved for the behavior-disabled core executable",
+        }
     if ENABLE_DEBUGGER_FEATURES:
         patch_debug_features(manifest)
     else:
@@ -12107,7 +12959,14 @@ def main():
     write_internal_workings_summary(manifest)
     validate_vf3_tv_animation_contract(manifest)
     validate_vf3_tv_behavior_contract(manifest)
-    validate_invisible_hammock_behavior_contract(manifest)
+    validate_native_north_bathroom_malfunction_selection(manifest)
+    if ENABLE_BEHAVIOR_PATCHES:
+        validate_invisible_hammock_behavior_contract(manifest)
+    else:
+        manifest["invisible_hammock_behavior_contract"] = {
+            "status": "disabled by Behavior Patches gate",
+            "stock_drop_gate_preserved": True,
+        }
     validate_invisible_kids_table_behavior_contract(manifest)
     remove_legacy_package_dirs(manifest)
     validate_runtime_payload_contract(manifest)

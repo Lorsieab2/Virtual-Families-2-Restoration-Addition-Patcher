@@ -3,10 +3,10 @@ Virtual Families 2 Restoration/Addition Patcher Transparency Log
 
 Purpose
 -------
-This document describes the offline VF2 patcher design used by the B105 patcher
-refresh. Each exported patcher bundle also generates its own Transparency
-Log.txt with exact manifest counts, paths, and changelog
-details for that bundle.
+This document began with the offline VF2 patcher design used by the B105
+refresh and is maintained through B150. Each exported patcher bundle also
+generates its own Transparency Log.txt with exact manifest counts, paths,
+feature gates, and changelog details for that bundle.
 
 Creation disclosure
 -------------------
@@ -14,7 +14,7 @@ This offline patcher was created with Codex AI in collaboration with Lorsieab2.
 The display name is Virtual Families 2 Restoration/Addition Patcher. The
 GUI starts from Launch_GUI.bat. Prebuilt Launch GUI.lnk shortcuts are not
 shipped because Windows shortcut targets are path-specific and can break after
-ZIP extraction. No compiled patcher launcher EXE is shipped in B105 bundles.
+ZIP extraction. No compiled patcher launcher EXE is shipped in patcher bundles.
 The update/release repository is Virtual Families 2 Restoration/Addition
 Patcher, published as the private GitHub repo
 https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases.
@@ -149,8 +149,8 @@ Important files
   the modded beta folder used as patcher payload input while native byte/table
   records are still being extracted.
 
-Current B105 behavior
----------------------
+Historical B105 behavior
+------------------------
 - The manifest declares a separate output folder named VF2-B105-Modded for the
   B105 patcher bundle.
 - The B105 patcher bundle does not ship a compiled patcher launcher EXE.
@@ -192,8 +192,8 @@ This applies to OptionalSongMods, optional visual source folders, active
 transparent UI swaps, custom map images, Invisible Furniture visible graphics,
 and transparent Invisible Furniture swaps.
 
-Known limitation
-----------------
+Historical B105 limitation
+--------------------------
 The B105 release direction is to avoid distributing a prebuilt modified game
 EXE. Native/code/table changes should be represented as explicit byte/table
 patch records where possible, applied locally after validating the user's
@@ -363,5 +363,114 @@ Changelog
   Events helper source template is also formatted before compile, so the
   optional overlay emits valid event-registration C++ instead of literal Python
   placeholder text.
+
+B150 transparency addendum
+--------------------------
+- B150 is gated by actual executable payload selection. The exporter supports
+  core plus all 15 non-empty combinations of Island Events, Cheat Upgrades,
+  Holiday Ornaments, and Behavior Patches: 16 overlay states. A setting does
+  not merely hide a checkbox; the selected EXE is built with only its matching
+  optional native changes.
+- behavior_patches owns autonomous behavior additions, every behavior
+  variation, direct sink candidate clones, snow/shower routing, and praise
+  cache changes. cheat_upgrades owns cheat rows, price modes/reset, the
+  malfunction trigger, and reversible Maid/Gardener/Rockhound/Anti-Spam.
+  holiday_ornaments_collection owns the six-page collection. island_events
+  owns Water Pressure Surge registration. mobile_purchases owns Brokerage text.
+- The B150 Holiday overlay repairs the Collections Chest calling convention:
+  the page helper is stdcall, the main-scene collection count includes the
+  0x9E family, and the visible total is 72. Holiday remains default-off during
+  final manual gameplay testing, but the old known 60-count/chest-crash
+  description has been removed.
+- Behavior Patches makes Needs to sit down and Checking weight spontaneous for
+  all ages; Mending a button and Ironing clothes spontaneous from displayed age
+  14; and Teaching first words spontaneous only for nursing mothers carrying a
+  baby. Petting remains non-spontaneous.
+- Infant labels are Teaching baby how to walk, Talking with baby, Feeding baby,
+  Singing lullabies to baby, Playing with baby, Admiring baby, Playing
+  peek-a-boo with baby, Kissing baby, and Taking pictures of baby.
+- Web additions are Watching memes, Making memes, Posting memes online, and
+  Buying stuff online. Buying requires displayed age 13+.
+- Nap labels are Dreaming of Isola, Dreaming of family, Dreaming of pets,
+  Dreaming of friends, Dreaming of the future, Dreaming of the beach, Dreaming
+  of snow, Dreaming of holidays, Dreaming of vacations, Dreaming of roller
+  coasters, Dreaming of climbing mountains, Dreaming of camping, Dreaming of
+  family trips, Dreaming of the countryside, Dreaming of LDW games, Dreaming
+  of the city, Dreaming of the forest, Dreaming of unicorns, Dreaming of fish,
+  Dreaming of jungles, Dreaming of tropical islands, Dreaming of skyscrapers,
+  Dreaming of floating in space, Dreaming of treasure, Dreaming of getting
+  rich, Dreaming of adventures, Dreaming of swimming, Dreaming of flying,
+  Dreaming of falling, and Dreaming of discovering something.
+- The all-age sit-down pool includes Thinking; Taking a moment to reflect;
+  Taking a break; Enjoying life; Enjoying the scenery; Resting; Resting eyes;
+  Resting feet; Relaxing for a bit; Thinking of weekend plans; Thinking of
+  family; Thinking of friends; Thinking of pets; Thinking of vacations;
+  Thinking of what to watch next; Thinking of relatives; Texting; Playing
+  games on phone; Scrolling on phone; Checking social media on phone;
+  Scrapbooking; Texting friends; Texting family; and Texting relatives.
+  Age 19+ adds Thinking of children, Thinking of grandchildren, Thinking of
+  spouse, and Texting spouse. Thinking of work requires age 19+ with a career;
+  Thinking of school requires not being an age-19+ career holder; Texting
+  boyfriend is female-only and Texting girlfriend male-only at ages 14-18.
+- Bathroom sink routes preserve native candidate gates. General labels are face
+  mask, trimming nails, lotion, and sunscreen; female grooming adds
+  fingernails, toenails, manicure, pedicure, and makeup. Putting on jewelry is
+  female-only at displayed age 14+. Snow labels remain Snowing-only, and all
+  audited native object/time/gender/age gates remain unless explicitly noted.
+- Praise caching records behavior ID/serial, the native praise counter, and
+  exact native label bytes. Stock-label rolls restore those bytes, while Radio
+  listening/dancing uses a cached branch sentinel, so praise refreshes reuse
+  the current displayed action instead of rerolling it.
+- New Cheat Upgrade rows are Reset Ants 0x125, Reset all collections 0x126,
+  Complete all collections 0x127, 2x Prices 0x128, 5x Prices 0x129, 100x
+  Prices 0x12A, Trigger all house malfunctions 0x12B, and Reset Price
+  Multiplier 0x12C.
+- Reset Ants resets world puzzle 0x13, clears props 0x4D-0x54, and reseeds a
+  playable native start. Reset all collections raw-clears completed/progress
+  state for every page achievement (including Holiday state even when its
+  overlay is temporarily disabled) and Master Collector, then rebuilds Goal
+  Collector from preserved selling goals. Complete all collections processes
+  exactly 12 items on each of the five stock pages and conditionally the
+  Holiday page/achievement only when that patch is enabled.
+- 2x, 5x, and 100x modes are mutually exclusive persistent modifiers at final
+  CalcPrice return. They cover furniture, Flea Market, renovations, career and
+  Special Upgrades, and every other purchase routed through that calculator;
+  overflow saturates at signed INT_MAX. Reset Price Multiplier removes active
+  0x128-0x12A and restores original calculated prices. Its exact description is
+  "Resets store prices to original values."
+- Trigger all house malfunctions sets the normal failure props. Dryer fire
+  requires a Dryer to be present. North toilet/shower/sink leaks require
+  second-bathroom renovation 0xE6. Water Pressure Surge adds those north leaks
+  only when Island Events is enabled; stock standalone random north failures
+  remain independently possible with the native renovation gate.
+- With Cheat Upgrades enabled, rebuying Maid/Gardener clears the service timer,
+  deactivates the worker, and repairs selected-villager state. Rebuying
+  Rockhound Certificate/Anti-Spam removes that owned upgrade/flag.
+  Cheat-disabled executables keep stock already-purchased behavior.
+- Brokerage Account now tells players its Interest Rate can reach 11%.
+- The B150 GUI, generated README, manifest, and generated transparency log state
+  exactly: "Vanilla Virtual Families 2 saves are compatible with the modded
+  version!"
+- Those surfaces also state the two exact lines:
+  Created by Lorsieab2. This is a passion project dedicated to improving the
+  "Virtual Families 2" experience!
+  No copyright infringement intended! Please support the original game
+  creators! :)
+- Automated source, COFF, string, manifest, and exporter tests verify patch
+  structure, not the full game runtime. Manual collection, overlay, behavior,
+  store-category, price reset, worker/certificate removal, save/reload, and
+  simultaneous malfunction/repair tests remain explicitly open in
+  docs/TODO.md.
+- Release engineering verification generated, compiled, linked, and checked all
+  16 feature combinations. Their manifests matched the intended Island/Cheat/
+  Holiday/Behavior gates, all build logs were free of compiler/linker errors,
+  and all 16 EXE SHA-256 values were unique. Automated validation passed 69
+  binary-patcher tests and 30 exporter/GUI tests. The final export contains
+  1,075 asset records and 1,112 payload files. The exporter removed 1,860
+  files (100,244,363 bytes) that were unreachable from every manifest source
+  or restore record, then revalidated every retained payload source.
+- The portable final ZIP is 86,326,515 bytes with 1,122 entries and SHA-256
+  5A2EAE1FA89D723CE808FD82EC3FDA182AEF3E02E298F79CD3EEEECE5E7BF1DE.
+  The pre-pruning ZIP was 184,056,834 bytes; no selectable feature was removed.
 
 Have fun! -Lorsieab2 :)

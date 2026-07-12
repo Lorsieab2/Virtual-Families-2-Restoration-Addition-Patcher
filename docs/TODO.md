@@ -420,18 +420,11 @@
   teen homework/online test, sit-down/rest, and `Jumping on the trampoline`.
   These should display the new labels while preserving base routes and object
   targeting.
-- Research: implement requested gendered behavior variation toggle and exact
-  teen/up-to-19 eligibility only after the relevant stock age/gender gates are
-  mapped. Do not widen base-game behavior eligibility just for label variants.
-- Follow-up: use `VF2IsMatureAdult` for future mature-adult-only variants such
-  as nursing/partner/romance routes once those behaviors are implemented.
-- Research: implement nursing-mother infant-care variants and the requested
-  shared infant-care handoff only after documenting the baby/babyplets fields
-  and native partner-wait plan route. Native baby-related behavior IDs are now
-  known: `TeachingFirstWords` (`0x11F`), `WashBaby` (`0x181`), `ChangeBaby`
-  (`0x182`), `MomTeachingTalk` (`0x18F`), plus `ShowingBabyGarden`,
-  `ShowingBabyToys`, `CelebratingBaby`, `JealousAboutBaby`,
-  `ExcitedAboutBaby`, and `PlayingMommy`.
+- B150 source work completed: raw age/gender/career gates are mapped for the
+  requested sit-down, web, and jewelry pools, and TeachingFirstWords 0x11F now
+  supplies the nursing-mother infant-care label pool. The remaining work is the
+  manual in-game eligibility/animation verification listed below; do not widen
+  any gate unless that runtime test demonstrates a native mismatch.
 - Test: second-bathroom north leak support is patched through
   `CEventTheWaterPressureSurge::ImpactGame(int)` and
   `CVillager::NewBehavior`. Verify in-game that Water Pressure Surge sets the
@@ -475,3 +468,98 @@
   source for future mobile furniture/map additions. Do not reference the
   original `Downloads\TextAsset` path in build or patcher code; copy any needed
   files from the workspace mirror into generated payloads.
+
+## B150 Manual Runtime Verification
+
+- Packaging complete: the B150 exporter retains only manifest-reachable
+  payload sources. It removed 1,860 unreachable files (100,244,363 bytes),
+  excluded three accidental `.pre-frame-pad.bak` records, and produced 1,075
+  asset records referencing 1,112 payload files. Keep this reachability audit
+  enabled for every future patcher build.
+
+- Holiday Ornaments: with only holiday_ornaments_collection enabled, click the
+  Collections Chest repeatedly, navigate all six pages, and confirm the HUD
+  total is 72 rather than 60. Click/hover every ornament slot; collect/save/load
+  all 12 ornaments; verify Ornamentologist, Mr. B/The Collector sell/reset, yard
+  sprites, and the five stock collections. Repeat with Holiday disabled to
+  confirm the stock five-page/60-item screen.
+- Overlay gating: exercise representative installs from the 16-state
+  Island Events/Cheat Upgrades/Holiday Ornaments/Behavior Patches matrix.
+  Confirm the manifest selects the one matching EXE and that a disabled feature
+  has no native side effects. In particular, Behavior disabled must retain
+  stock labels/candidates, and Cheat disabled must not make owned services or
+  certificates removable.
+- Behavior autonomy: under Behavior Patches, confirm all-age Checking weight and
+  Needs to sit down; age-14+ Mending a button and Ironing clothes; and
+  nursing-mother-with-carried-baby Teaching first words. Confirm children under
+  14 do not receive mending/ironing, non-nursing villagers do not receive infant
+  care, and Petting is never added as a spontaneous choice.
+- Behavior labels: exercise all 30 nap labels and the B150 web labels. Buying
+  stuff online must be absent below age 13 and present at 13+; Watching memes,
+  Making memes, and Posting memes online remain in the general web pool.
+  Confirm the nine infant-care labels reuse Teaching first words targeting and
+  animation safely.
+- Sit-down gates: sample the complete general pool at every life stage.
+  Thinking of work must require displayed age 19+ with a career; Thinking of
+  school must appear only when that conjunction is false; Texting spouse is
+  age-19+ only; Texting boyfriend is female-only ages 14-18; Texting girlfriend
+  is male-only ages 14-18. Verify adult children/grandchildren/spouse labels and
+  all general phone/rest/reflection labels.
+- Sink/weather gates: exercise WashingInBathroomSink 0x0A4-0x0A8 and both
+  grooming routes on every installed sink. Males must not receive the female
+  grooming pool; Putting on jewelry must be female-only age 14+. Verify north
+  shower variants require a usable north shower, snow-play fires only during
+  Snowing, hammock remains Sunny/Cloudy-only, and Playhouse remains
+  child/daytime-only.
+- Praise stability: praise each representative generated action multiple times
+  and confirm the current visible string never rerolls, including radio,
+  trampoline, web, nap, sit-down, sink, infant-care, and snow variants. Also
+  confirm starting a genuinely new behavior can choose a new label.
+- Reset Ants: test from unstarted, partially solved, and completed puzzle states.
+  Confirm world-state 0x13 and props 0x4D-0x54 reset to a playable starting
+  layout, persist after save/reload, and do not alter unrelated malfunctions.
+- Collection cheats: test reset/complete with Holiday disabled and enabled.
+  Verify exactly five or six 12-item pages, matching page achievements,
+  aggregate achievement 0x4D, optional Ornamentologist 0x5F, UI refresh, and
+  persistence after save/reload.
+- Price modes: activate 2x, 5x, and 100x one at a time and verify furniture,
+  Flea Market goods, renovations, career upgrades, Special Upgrades, outfits,
+  food/medicine/pets, and every other purchasable category. Confirm modes are
+  mutually exclusive, persist across reload, do not overflow negative, and
+  Reset Price Multiplier 0x12C removes 0x128-0x12A and restores exact vanilla
+  prices with the description "Resets store prices to original values."
+- Trigger all house malfunctions: confirm every normal leak/fire/failure becomes
+  active and can be repaired for Handyman credit. Confirm no dryer fire without
+  a placed Dryer, then place one and retry. Confirm north toilet/shower/sink
+  leaks are absent without renovation 0xE6 and present with it.
+- North malfunction paths: independently wait/force the stock standalone random
+  north toilet/shower/sink failures with renovation 0xE6. With Island Events
+  enabled, trigger Water Pressure Surge and verify all three north leaks; with
+  Island Events disabled, verify that event cannot fire while the stock
+  standalone failures remain possible. Repair every north prop without loops or
+  crashes.
+- Reversible upgrades: with Cheat Upgrades enabled, repurchase Maid/Gardener
+  and verify the correct worker disappears, service expiry clears, and selected
+  villager state is valid. Repurchase Rockhound Certificate and Anti-Spam and
+  verify their effects disappear and remain removed after reload. Repeat in a
+  Cheat-disabled EXE and confirm stock "already purchased" behavior remains.
+- Text/notices: verify Brokerage Account states the Interest Rate can reach 11%;
+  the GUI shows the Lorsieab2 passion-project/support message and the exact
+  vanilla-save compatibility note; generated README, manifest, changelog, and
+  Transparency Log carry the same disclosures without local machine paths.
+
+## B151 Expanded Map
+
+- Use `work/reference_images/Expanded VF2 Map.png` as the corrected B151 visual
+  target. Keep the existing house/map composition centered and add one full map
+  tile beyond every current side and corner instead of scaling the current map.
+- Fill the new perimeter with the matching Lorsieab2 grass treatment, except
+  for the northwest/upper-left expansion where the existing beach grows into
+  the large rounded sandy area shown in the mock-up.
+- Treat expansion as native world work, not a background-only composite:
+  extend terrain/map tiles, camera clamp/scroll limits, world and placement
+  bounds, walkability/pathing, hit testing, drop targets, weather/decoration
+  coverage, and save-safe coordinates together.
+- Preserve the existing house, rooms, renovations, furniture positions, beach,
+  yard features, vehicles, and custom map art at their current scale and
+  relative positions. Audit any hardcoded map dimensions before implementation.

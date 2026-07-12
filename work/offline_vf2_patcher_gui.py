@@ -26,6 +26,16 @@ PATCHER_RELEASES_URL = "https://github.com/Lorsieab2/Virtual-Families-2-Restorat
 PATCHER_ICON_PNG = "patcher_icon.png"
 PATCHER_ICON_ICO = "patcher_icon.ico"
 LOCAL_SETTINGS_FILE = "patcher_local_settings.json"
+PROJECT_CREATOR_MESSAGE = (
+    'Created by Lorsieab2. This is a passion project dedicated to improving the '
+    '"Virtual Families 2" experience!\n'
+    'No copyright infringement intended! Please support the original game creators! :)'
+)
+SAVE_COMPATIBILITY_NOTE = "Vanilla Virtual Families 2 saves are compatible with the modded version!"
+CODEX_DISCLOSURE = (
+    "Created with Codex AI. Applies transparent JSON patch manifests to a vanilla VF2 "
+    "install or an existing modded output folder."
+)
 SETTING_CATEGORIES = [
     ("main", "Main Patches", "#00802b"),
     ("optional", "Optional Patches", "#000000"),
@@ -313,13 +323,15 @@ class VF2PatcherGUI:
         header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         header.columnconfigure(1, weight=1)
         if self.title_icon_image is not None:
-            ttk.Label(header, image=self.title_icon_image).grid(row=0, column=0, rowspan=2, sticky="w", padx=(0, 10))
+            ttk.Label(header, image=self.title_icon_image).grid(row=0, column=0, rowspan=4, sticky="w", padx=(0, 10))
         ttk.Label(header, text=APP_DISPLAY_NAME, style="Title.TLabel").grid(row=0, column=1, sticky="w")
         ttk.Label(header, textvariable=self.version_var, style="Muted.TLabel").grid(row=0, column=2, sticky="e", padx=(12, 0))
         ttk.Label(
             header,
-            text="Created with Codex AI. Applies transparent JSON patch manifests to a vanilla VF2 install or an existing modded output folder.",
+            text=PROJECT_CREATOR_MESSAGE,
             style="Muted.TLabel",
+            justify="left",
+            wraplength=660,
         ).grid(row=1, column=1, sticky="w", pady=(2, 0))
         update_link = ttk.Label(
             header,
@@ -329,6 +341,20 @@ class VF2PatcherGUI:
         )
         update_link.grid(row=1, column=2, sticky="e", padx=(12, 0), pady=(2, 0))
         update_link.bind("<Button-1>", lambda _event: self._open_updates_url())
+        ttk.Label(
+            header,
+            text=SAVE_COMPATIBILITY_NOTE,
+            style="Muted.TLabel",
+            justify="left",
+            wraplength=660,
+        ).grid(row=2, column=1, columnspan=2, sticky="w", pady=(2, 0))
+        ttk.Label(
+            header,
+            text=CODEX_DISCLOSURE,
+            style="Muted.TLabel",
+            justify="left",
+            wraplength=660,
+        ).grid(row=3, column=1, columnspan=2, sticky="w", pady=(2, 0))
 
         self._build_file_section(root_frame).grid(row=1, column=0, sticky="ew")
         self._build_settings_section(root_frame).grid(row=2, column=0, sticky="nsew", pady=(10, 0))
