@@ -2041,3 +2041,105 @@
 - A real implementation must widen camera, world, placement, pathing,
   interaction, and save-coordinate contracts alongside the art. Merely placing
   the mock-up behind the current map would not satisfy the B151 target.
+
+## 2026-07-11 - B150 Holiday Ornaments Native Crash Root Cause
+
+- The B150 runtime access violation was not caused by overlay selection, asset
+  packaging, the 72-item state range, or the stdcall page-count helper.
+  `CoffObject.insert_section_bytes()` shifts COFF symbols and relocations, but
+  it cannot rewrite x86 relative branches encoded inside function bodies.
+- The Holiday overlay inserted bytes into `CCollectionScene::HandleMouse`,
+  `CCollectableItem::Find`, `CCollectableItem::WasItemSpawned`, and
+  `CEventTheCollector::ImpactGame`. Native branches that crossed those
+  insertions retained old displacements. In the linked B150 EXE,
+  `HandleMouse+0x18D` landed inside a call displacement on the ordinary
+  no-hover path, directly explaining the Collections Chest crash.
+- `Find` and `WasItemSpawned` also encoded 0x9E with signed imm8 compares,
+  which compared against -98 instead of carrying value 158. Their replacement
+  caves use imm32 compares. `Drop` had a separate incomplete-family reentry
+  loop, and the original SetComplete hook could award Goal Collector more than
+  once.
+- The hotfix uses fixed-size near-jump detours at `HandleMouse+0x1EB`,
+  `Find+0x86`, and `WasItemSpawned+0x14`, with appended code caves after
+  all in-section insertions. It repairs The Collector's `+0x07` Keep branch,
+  adds an EDI reentry sentinel to Drop, and gives SetComplete separate
+  already-complete and newly-completed entries.
+- Validators now decode the detour and cave displacements, require every cave
+  return/accept/skip target, reject the bad signed-imm8 form, and verify the
+  idempotent achievement and Collector branch bytes before packaging.
+
+## 2026-07-11 - B150 Direct Praise Label Preservation
+
+- Native `theMainScene::InvokeReward` calls
+  `CVillagerPlans::ForgetPlans` at relocation `+0x36B`; ForgetPlans clears
+  the 0x28-byte action label at `CVillager+0x1BBA8` before the restarted
+  behavior wrapper can inspect it. The previous 64-slot behavior cache was
+  therefore a fallback after the authoritative string had already been lost.
+- Behavior Patches now retarget only the normal-praise calls: `+0x36B`
+  captures the exact label, calls native ForgetPlans, and immediately restores
+  it; `+0x3B7` calls native StartNewBehavior and restores the exact bytes
+  again. This lets wrappers preserve their current group choice and guarantees
+  stock/custom text stability.
+- The over-praise RunAway branch at relocations `+0x2EB` and `+0x31B`
+  remains native because that path intentionally changes behavior.
+
+## 2026-07-11 - B150 Fix All, Router, and Native Dryer Fire
+
+- Cheat Upgrade 0x12D is `Fix all house malfunctions`. It clears exactly
+  props 0x17, 0x1A, 0x1B, 0x1C, 0x1D, 0x1F, 0x20, 0x21, 0x48, 0x49, and 0x4A;
+  it does not call ResetWorldState or alter ant props 0x4D-0x54.
+- Prop 0x17 is Router Offline. Trigger All already sets it, and Fix All clears
+  it, so the paired cheats explicitly drive Router offline/online state.
+- Dryer lint fire is already a legitimate stock random malfunction. The
+  UpdateScene jump table reaches case +0x41D, checks permanent-fix state +0xCC,
+  requires Dryer EObject 0x48 through FindFurniture, and sets prop 0x21.
+  `CBehavior::FixingLaundryFire` deactivates 0x21 and advances Handyman
+  achievement 0x3A. B150 preserves and validates this native path rather than
+  adding a duplicate selector that would distort its odds.
+- Special Upgrades display order is now grouped by function while every item ID
+  remains stable: money, food, unlock/goals/puzzle/collections, price
+  multipliers followed by Reset Price Multiplier, then Trigger/Fix
+  malfunctions. Numeric icon indexing stays contiguous through 0x12D.
+
+## 2026-07-11 - B151 Goal and Longevity Intake
+
+- The requested B151 resource, pet, longevity, family-tree head-value, and Older
+  Villagers work is specified in `docs/B151-design.md`. The corrected goal
+  spelling is `Centenarian`; the requested `Hampster Dance` title remains
+  intentionally unchanged.
+- Pet goals must require a live placed pet; family-tree appearance goals must
+  scan persistent records; and the age-times-20 assumption must be verified in
+  VF2 before using candidate raw thresholds.
+- Older Villagers is a separate future gate. Its mortality curve is centered
+  near 75 but must keep a real rare tail beyond 122, without changing stock
+  mortality when disabled.
+
+## 2026-07-11 - Base-Game Villager Mortality
+
+- Raw age is `CVillager+0x6A54` and uses 20 units per displayed year.
+  `CVillagerBio::IsOld/IsNotOld` compares it with 0x44C, so the game's
+  separate "old" threshold is age 55.
+- Stock game speed is 10. AllVillagersTimeflowUpkeep converts wall-clock
+  seconds into one raw age unit per 10 minutes, or one displayed year per
+  3 hours 20 minutes. The accumulator includes time while the game is closed,
+  caps one catch-up at 86,400 seconds, and replays crossed physiology ticks and
+  birthdays after return.
+- Once per 20 raw age ticks, the realtime physiology routine computes
+  `T = 55 + N`, where `N` is the current number of active nutrition groups.
+  If age is greater than T, old-age death probability is
+  `min(100, 10 * (age - T))` percent. A hit calls SetHealth(0, OldAge)
+  immediately, regardless of prior health.
+- Four nutrition groups are actually reachable. FoodGroupsActive loops across
+  five slots, but the fifth overlaps unrelated state/expiry data and does not
+  count normally; this is a stock layout/off-by-one defect. Practical constant
+  nutrition outcomes are: N0 first risk 56/mean about 58.66/guaranteed by 65;
+  N1 57/59.66/66; N2 58/60.66/67; N3 59/61.66/68; and N4
+  60/62.66/69. Base-game villagers therefore cannot normally survive past 69.
+- Age 55 also reduces passive healthy recovery: its recovery gate falls from
+  50% below 55 to about 10% at 55+. Disease and starvation use separate
+  health-loss paths and causes. Energy/exhaustion is tracked separately and is
+  not a direct death input in the audited physiology routine.
+- The Older Villagers patch should detour the annual old-age decision in
+  `CVillagerManager::AllVillagersRealtimePhysiologyAndProductivityUpkeep`,
+  not merely change IsOld. The stock IsOld threshold may remain useful for
+  senior behavior/healing unless B151 intentionally redesigns it too.

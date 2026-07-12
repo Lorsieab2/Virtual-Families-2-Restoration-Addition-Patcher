@@ -474,3 +474,61 @@ B150 transparency addendum
   The pre-pruning ZIP was 184,056,834 bytes; no selectable feature was removed.
 
 Have fun! -Lorsieab2 :)
+
+B150 post-release hotfix transparency
+--------------------------------------
+
+- A user runtime test proved that enabling Holiday Ornaments in the first B150
+  archive caused an access violation shortly after the house appeared and when
+  opening the Collections Chest. The source overlay and release asset were
+  treated as faulty even though Main + Optional without Holiday worked.
+- The cause was unsafe insertion into native x86 function bodies. COFF symbols
+  and relocations moved, but internal relative branches did not. The replacement
+  uses fixed-size detours and appended code caves for HandleMouse, Find, and
+  WasItemSpawned; repairs The Collector Keep branch; stops the incomplete Drop
+  reentry loop; uses correct imm32 comparisons for 0x9E; and makes
+  Ornamentologist/Goal Collector completion idempotent.
+- The remaining praise-string bug was also reproduced in native control flow:
+  normal praise called ForgetPlans, which erased the current 0x28-byte action
+  string before the behavior variation wrapper ran. Behavior Patches now
+  captures and restores those exact bytes around the normal InvokeReward path.
+  The deliberate over-praise RunAway path is unchanged.
+- Cheat Upgrade 0x12D, Fix all house malfunctions, clears all 11 malfunction
+  props and returns Router prop 0x17 online without touching ant puzzle props.
+  Trigger All sets Router Offline. Cheat rows are displayed in functional
+  groups without renumbering any existing IDs.
+- Dryer lint fire was verified as a legitimate stock random malfunction, not
+  merely a cheat effect. It requires Dryer object 0x48, sets prop 0x21, and its
+  native repair clears the prop and advances Handyman achievement 0x3A. The
+  build validator now fails if that selector/gate/repair contract drifts.
+- Holiday Ornaments remains default-off Experimental until the replacement
+  archive is manually retested in game. Automated branch and build checks do
+  not substitute for that runtime test.
+- GitHub's current immutable-release endpoint reports release immutability is
+  disabled for the public patcher repository, allowing the faulty B150 asset to
+  be replaced in place.
+- New resource, pet, longevity, family-tree appearance, and Older Villagers
+  requests are assigned to B151 and recorded in docs/B151-design.md. They are
+  not silently included in this B150 hotfix.
+
+B150 hotfix release verification
+--------------------------------
+
+- All 16 Island/Cheat/Holiday/Behavior executable combinations regenerated,
+  compiled, linked, passed feature-gate checks, and have unique SHA-256 values.
+- All eight Holiday-enabled linked PEs passed direct validation of HandleMouse,
+  Find, WasItemSpawned, Drop, and SetComplete detours/branches.
+- Automated validation passed 71 binary-patcher tests plus 56 exporter,
+  runner, and GUI tests: 127 total.
+- Both default-setting and enable-all dry runs passed against the complete
+  workspace-local official-install fixture; enable-all validated all 1,075
+  active/restore asset records.
+- The replacement export retains 1,075 asset records, 1,112 reachable payload
+  files, and 16 executable records with 16 unique hashes. It prunes the same
+  1,860 unreachable payload files (100,244,363 bytes).
+- Replacement ZIP:
+  outputs/Virtual-Families-2-Restoration-Addition-Patcher-B150.zip,
+  86,331,216 bytes, 1,122 file entries, SHA-256
+  847B8999135290632AD4216E463585EB2E7D3C4BCFEA79AF47A1BCE10CAAEC48.
+- Holiday Ornaments remains default-off pending the user's in-game retest.
+  Passing structural tests does not claim the crash is runtime-confirmed fixed.

@@ -989,3 +989,26 @@
   `outputs/Virtual-Families-2-Restoration-Addition-Patcher-B150.zip`,
   86,326,515 bytes, 1,122 entries, SHA-256
   `5A2EAE1FA89D723CE808FD82EC3FDA182AEF3E02E298F79CD3EEEECE5E7BF1DE`.
+
+## B150 Hotfix - Holiday Control Flow, Praise, and Malfunction Pair
+
+- Replaces the first B150 Holiday asset after a user-confirmed access violation.
+  HandleMouse, Find, and WasItemSpawned use fixed-size detours to appended code
+  caves; Drop has an incomplete-family reentry sentinel; The Collector Keep
+  branch is repaired; and SetComplete awards the new collection meta-goal only
+  on first completion.
+- Normal praise now captures/restores the exact 0x28-byte action label around
+  InvokeReward's native ForgetPlans/StartNewBehavior sequence. The intentional
+  over-praise RunAway path remains native.
+- Adds Fix all house malfunctions 0x12D, pairs Router offline/online state with
+  Trigger/Fix, groups cheat rows by function without renumbering, and validates
+  the stock Dryer-gated lint-fire/Handyman path.
+- Records the requested B151 goal and Older Villagers design separately in
+  docs/B151-design.md.
+- Rebuilt all 16 overlays. All eight linked Holiday PEs passed direct branch
+  validation. Tests: 71 binary patcher plus 56 exporter/runner/GUI, 127 total.
+  Default and enable-all dry runs passed on the full official-install fixture.
+- Replacement package retains 1,075 asset records, 1,112 reachable payload
+  files, and 16 unique executable hashes. ZIP: 86,331,216 bytes, 1,122 files,
+  SHA-256
+  `847B8999135290632AD4216E463585EB2E7D3C4BCFEA79AF47A1BCE10CAAEC48`.

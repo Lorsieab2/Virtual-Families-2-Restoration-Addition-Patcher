@@ -477,12 +477,15 @@
   asset records referencing 1,112 payload files. Keep this reachability audit
   enabled for every future patcher build.
 
-- Holiday Ornaments: with only holiday_ornaments_collection enabled, click the
+- Holiday Ornaments B150 hotfix: with only holiday_ornaments_collection enabled, click the
   Collections Chest repeatedly, navigate all six pages, and confirm the HUD
   total is 72 rather than 60. Click/hover every ornament slot; collect/save/load
   all 12 ornaments; verify Ornamentologist, Mr. B/The Collector sell/reset, yard
   sprites, and the five stock collections. Repeat with Holiday disabled to
-  confirm the stock five-page/60-item screen.
+  confirm the stock five-page/60-item screen. Specifically retest the no-hover
+  path that previously branched into inserted bytes, picking an incomplete
+  ornament collection, The Collector's Keep choice, and repeated completion
+  calls for duplicate Goal Collector credit.
 - Overlay gating: exercise representative installs from the 16-state
   Island Events/Cheat Upgrades/Holiday Ornaments/Behavior Patches matrix.
   Confirm the manifest selects the one matching EXE and that a disabled feature
@@ -511,10 +514,11 @@
   shower variants require a usable north shower, snow-play fires only during
   Snowing, hammock remains Sunny/Cloudy-only, and Playhouse remains
   child/daytime-only.
-- Praise stability: praise each representative generated action multiple times
+- Praise stability hotfix: praise each representative generated action multiple times
   and confirm the current visible string never rerolls, including radio,
   trampoline, web, nap, sit-down, sink, infant-care, and snow variants. Also
-  confirm starting a genuinely new behavior can choose a new label.
+  confirm starting a genuinely new behavior can choose a new label and that
+  deliberate repeated over-praise still uses the native RunAway behavior.
 - Reset Ants: test from unstarted, partially solved, and completed puzzle states.
   Confirm world-state 0x13 and props 0x4D-0x54 reset to a playable starting
   layout, persist after save/reload, and do not alter unrelated malfunctions.
@@ -528,10 +532,14 @@
   mutually exclusive, persist across reload, do not overflow negative, and
   Reset Price Multiplier 0x12C removes 0x128-0x12A and restores exact vanilla
   prices with the description "Resets store prices to original values."
-- Trigger all house malfunctions: confirm every normal leak/fire/failure becomes
-  active and can be repaired for Handyman credit. Confirm no dryer fire without
-  a placed Dryer, then place one and retry. Confirm north toilet/shower/sink
-  leaks are absent without renovation 0xE6 and present with it.
+- Trigger/Fix all house malfunctions: confirm every normal leak/fire/failure
+  becomes active and can be repaired for Handyman credit. Trigger must make the
+  Router offline; Fix must clear all 11 malfunction props and return it online
+  without changing ant props 0x4D-0x54. Confirm no cheat-triggered dryer fire
+  without a placed Dryer, then place one and retry. Independently wait/force the
+  legitimate stock Dryer lint-fire case, repair prop 0x21, and verify Handyman
+  0x3A advances. Confirm north toilet/shower/sink leaks are absent without
+  renovation 0xE6 and present with it.
 - North malfunction paths: independently wait/force the stock standalone random
   north toilet/shower/sink failures with renovation 0xE6. With Island Events
   enabled, trigger Water Pressure Surge and verify all three north leaks; with
@@ -563,3 +571,18 @@
 - Preserve the existing house, rooms, renovations, furniture positions, beach,
   yard features, vehicles, and custom map art at their current scale and
   relative positions. Audit any hardcoded map dimensions before implementation.
+
+## B151 Goals and Older Villagers
+
+- Implement the resource, pet, longevity, and family-tree appearance goals
+  specified in `docs/B151-design.md`, starting from the final B150 hotfix.
+- Add a separately gated Older Villagers patch with a mortality distribution
+  centered near age 75 and a genuine rare survival tail beyond age 122. Verify
+  the raw age multiplier, stock death routine, time-away simulation, and save
+  layout before choosing the distribution width or achievement IDs.
+- Keep the exact requested title `Hampster Dance`; use the corrected spelling
+  `Centenarian`; and make pet goals require a live placed pet rather than a
+  purchased-but-unplaced inventory item.
+- Audit package growth before adding another native feature dimension. Prefer
+  runtime gating or compact deltas if a naive Older Villagers toggle would
+  double the 16-overlay executable matrix.

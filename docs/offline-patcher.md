@@ -885,15 +885,17 @@ B150 patcher/build notes:
   asset record requires core_executable plus exactly the enabled native feature
   IDs that produced it.
 - Behavior Patches owns every B150 autonomous/label/praise/sink change. Cheat
-  Upgrades owns every B150 cheat, price mode/reset, malfunction trigger, and
+  Upgrades owns every B150 cheat, price mode/reset, malfunction Trigger/Fix, and
   Maid/Gardener/Rockhound/Anti-Spam removal. Holiday Ornaments owns the
   six-page/72-item collection fix. Water Pressure Surge requires Island Events,
   while Brokerage's 11% description follows mobile_purchases.
-- The Holiday setting remains default-off Experimental for final manual
-  collection-cycle testing, but its old known chest crash/count warning is no
-  longer accurate. The B150 overlay exports the stdcall page-count fix,
-  Holiday-aware main-scene count, and visible " / 72" suffix. Disabling it
-  selects the stock five-page/60-item executable.
+- The Holiday setting remains default-off Experimental for a replacement
+  in-game collection-cycle test. The first B150 release still crashed because
+  several internal x86 branches crossed inserted bytes. The hotfix replaces
+  HandleMouse/Find/WasItemSpawned insertions with fixed-size code-cave detours,
+  repairs The Collector Keep branch and Drop reentry, makes goal completion
+  idempotent, retains the stdcall page count and " / 72" suffix, and leaves the
+  stock five-page/60-item executable selected when disabled.
 - Behavior Patches enables all-age Needs to sit down and Checking weight,
   displayed-age-14+ Mending a button and Ironing clothes, and nursing-mother
   Teaching first words/infant care. Petting is deliberately non-spontaneous.
@@ -919,15 +921,17 @@ B150 patcher/build notes:
   male-only at ages 14-18.
 - Bathroom sink general labels remain face mask, trimming nails, lotion, and
   sunscreen; female grooming adds fingernails, toenails, manicure, pedicure,
-  and makeup. Putting on jewelry is female-only from displayed age 14. Praise
-  refreshes now reuse the cached behavior ID/serial/string when the native
-  praise counter changes, restore exact cached native text for stock-label
-  rolls, and preserve the Radio listening-versus-dancing branch.
+  and makeup. Putting on jewelry is female-only from displayed age 14. Normal
+  praise now captures the exact 0x28-byte current label before native
+  ForgetPlans erases it and restores it before/after the restarted behavior.
+  The deliberate over-praise RunAway branch stays native.
 - New gated cheat rows are Reset Ants 0x125, Reset all collections 0x126,
   Complete all collections 0x127, 2x Prices 0x128, 5x Prices 0x129, 100x
-  Prices 0x12A, Trigger all house malfunctions 0x12B, and Reset Price
-  Multiplier 0x12C. The last row's exact description is "Resets store prices to
-  original values."
+  Prices 0x12A, Trigger all house malfunctions 0x12B, Reset Price Multiplier
+  0x12C, and Fix all house malfunctions 0x12D. The display groups money, food,
+  goals/puzzles/collections, prices/reset, and Trigger/Fix while retaining all
+  IDs. Reset Price's exact description is "Resets store prices to original
+  values."
 - Reset Ants resets world-state puzzle 0x13, clears props 0x4D-0x54, and reseeds
   a playable starting set. Collection reset/complete operates on five stock
   12-item pages and conditionally the 0x9E Holiday page/0x5F achievement only
@@ -937,12 +941,12 @@ B150 patcher/build notes:
   career upgrades, Special Upgrades, and the other store categories. Positive
   multiplication saturates at signed INT_MAX. Reset Price Multiplier removes
   active IDs 0x128-0x12A and immediately restores original calculated prices.
-- Trigger all house malfunctions sets the regular failure props. Dryer fire is
-  conditional on the native Dryer object lookup. North toilet/shower/sink leaks
-  require second-bathroom renovation 0xE6. Water Pressure Surge adds them only
-  when the Island Events overlay can register/fire that event; stock standalone
-  north random failures remain independently available with the renovation
-  gate.
+- Trigger all house malfunctions sets the regular failure props and Router
+  Offline prop 0x17. Fix All clears the exact 11-malfunction set, brings the
+  Router online, and leaves ants 0x4D-0x54 alone. Dryer lint fire is also a
+  legitimate stock random malfunction: it requires Dryer object 0x48, sets
+  prop 0x21, and its native repair advances Handyman 0x3A. North leaks require
+  renovation 0xE6; Water Pressure Surge adds them only with Island Events.
 - With Cheat Upgrades active, buying an already active Maid or Gardener row at
   zero price clears its service timer, deactivates worker 0x23/0x24, and safely
   clears selection. Rebuying Rockhound Certificate or Anti-Spam removes its

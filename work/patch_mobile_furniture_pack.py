@@ -292,6 +292,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x12A: "cheat_add_coins.png",
     0x12B: "cheat_reset_achievements.png",
     0x12C: "cheat_add_coins.png",
+    0x12D: "cheat_reset_achievements.png",
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
@@ -302,12 +303,6 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": 0x11B,
         "name": "No Money",
         "description": "Sets coins to 0. Useful for starting the game over.",
-        "price": 0,
-    },
-    {
-        "item_id": 0x11C,
-        "name": "No Food",
-        "description": "Sets food to 0. Useful for starting the game over.",
         "price": 0,
     },
     {
@@ -326,6 +321,12 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": 0x11F,
         "name": "Add max amount of coins",
         "description": "Sets coins to the game's maximum amount.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x11C,
+        "name": "No Food",
+        "description": "Sets food to 0. Useful for starting the game over.",
         "price": 0,
     },
     {
@@ -395,15 +396,21 @@ CHEAT_UPGRADE_ITEMS = [
         "price": 0,
     },
     {
+        "item_id": 0x12C,
+        "name": "Reset Price Multiplier",
+        "description": "Resets store prices to original values.",
+        "price": 0,
+    },
+    {
         "item_id": 0x12B,
         "name": "Trigger all house malfunctions",
         "description": 'Cause all possible house malfunctions, including sink/toilet leaks, oven/dryer fires, etc. Useful for getting the "Handyman" goal.',
         "price": 0,
     },
     {
-        "item_id": 0x12C,
-        "name": "Reset Price Multiplier",
-        "description": "Resets store prices to original values.",
+        "item_id": 0x12D,
+        "name": "Fix all house malfunctions",
+        "description": "Fixes every active house malfunction and brings the Router back online.",
         "price": 0,
     },
 ]
@@ -2845,6 +2852,33 @@ def move_relocation(obj: CoffObject, sec_index: int, old_vaddr: int, new_vaddr: 
     raise ValueError(f"relocation not found for section {sec_index} vaddr {old_vaddr:#x}")
 
 
+def section_rel32(source_off: int, instruction_size: int, target_off: int) -> bytes:
+    """Encode a section-relative x86 branch without changing native layout."""
+    return struct.pack("<i", target_off - (source_off + instruction_size))
+
+
+def patch_section_near_jump(
+    obj: CoffObject,
+    sec_index: int,
+    source_off: int,
+    target_off: int,
+    overwrite_size: int,
+    expected: bytes,
+):
+    """Replace whole native instructions with a near jump and NOP padding."""
+    if overwrite_size < 5 or len(expected) != overwrite_size:
+        raise ValueError("near-jump overwrite must cover at least five exact bytes")
+    sec = obj.section(sec_index)
+    raw = sec.raw_ptr + source_off
+    if obj.buf[raw : raw + overwrite_size] != expected:
+        raise RuntimeError(f"Unexpected near-jump source bytes at {source_off:#x}")
+    obj.buf[raw : raw + overwrite_size] = (
+        b"\xE9"
+        + section_rel32(source_off, 5, target_off)
+        + b"\x90" * (overwrite_size - 5)
+    )
+
+
 def patch_count_sites(obj, list_name, old_max, old_count, new_max_index, new_count):
     target = COUNT_PATCH_TARGETS.get(list_name)
     if target is None:
@@ -4668,26 +4702,59 @@ def validate_holiday_ornament_native_contract(manifest):
         errors.append("CCollectableItem::Drop missing Holiday Ornament first-copy achievement hook")
     if b"\x68" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START) not in drop_data:
         errors.append("CCollectableItem::Drop missing Holiday Ornament family-complete base check")
+    if (
+        b"\x68"
+        + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+        + b"\x31\xFF\xE9"
+    ) not in drop_data:
+        errors.append("CCollectableItem::Drop lacks the incomplete-family reentry sentinel")
 
-    find_data, _find_sym, _find_sec = function_bytes(
+    find_data, find_sym, _find_sec = function_bytes(
         collectable_obj, "?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z"
     )
-    if (
-        b"\x83\xFF" + bytes([HOLIDAY_ORNAMENT_COLLECTABLE_START])
-    ) not in find_data or (
-        b"\x83\xF8" + bytes([HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT - 1])
-    ) not in find_data:
-        errors.append("CCollectableItem::Find missing Holiday Ornament base-to-variant range handling")
+    if find_data[0x86] != 0xE9 or find_data[0x8B : 0x93] != b"\x90" * 8:
+        errors.append("CCollectableItem::Find does not use the fixed-size Holiday code-cave detour")
+    else:
+        find_cave = 0x86 + 5 + struct.unpack_from("<i", find_data, 0x87)[0]
+        if find_data[find_cave : find_cave + 6] != b"\x81\xFF" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START):
+            errors.append("CCollectableItem::Find code cave lacks the imm32 Holiday base comparison")
+        expected_find_targets = {
+            find_cave + 16: 0x93,
+            find_cave + 22: 0xC4,
+            find_cave + 30: 0xC4,
+            find_cave + 42: 0xC4,
+            find_cave + 48: 0x93,
+        }
+        for branch_off, target_off in expected_find_targets.items():
+            opcode_len = 6 if find_data[branch_off] == 0x0F else 5
+            displacement_off = branch_off + (2 if opcode_len == 6 else 1)
+            actual_target = branch_off + opcode_len + struct.unpack_from("<i", find_data, displacement_off)[0]
+            if actual_target != target_off:
+                errors.append(
+                    f"CCollectableItem::Find cave branch {branch_off - find_cave:#x} targets {actual_target:#x}, expected {target_off:#x}"
+                )
+    if b"\x83\xFF" + bytes([HOLIDAY_ORNAMENT_COLLECTABLE_START]) in find_data:
+        errors.append("CCollectableItem::Find still uses sign-extended imm8 for Holiday base 0x9E")
 
-    spawned_data, _spawned_sym, _spawned_sec = function_bytes(
+    spawned_data, spawned_sym, _spawned_sec = function_bytes(
         collectable_obj, "?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z"
     )
-    if (
-        b"\x83\xF9" + bytes([HOLIDAY_ORNAMENT_COLLECTABLE_START])
-    ) not in spawned_data or (
-        b"\x83\xF8" + bytes([HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT - 1])
-    ) not in spawned_data:
-        errors.append("CCollectableItem::WasItemSpawned missing Holiday Ornament base-to-variant range handling")
+    if spawned_data[0x14] != 0xE9 or spawned_data[0x19 : 0x1B] != b"\x90\x90":
+        errors.append("CCollectableItem::WasItemSpawned does not use the fixed-size Holiday code-cave detour")
+    else:
+        spawned_cave = 0x14 + 5 + struct.unpack_from("<i", spawned_data, 0x15)[0]
+        if b"\x81\xF9" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START) not in spawned_data[spawned_cave : spawned_cave + 48]:
+            errors.append("CCollectableItem::WasItemSpawned cave lacks the imm32 Holiday base comparison")
+        if b"\x81\x38" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_END) not in spawned_data[spawned_cave : spawned_cave + 48]:
+            errors.append("CCollectableItem::WasItemSpawned cave lacks the Holiday variant upper bound")
+        true_target = spawned_cave + 8 + 6 + struct.unpack_from("<i", spawned_data, spawned_cave + 10)[0]
+        if true_target != 0x29:
+            errors.append("CCollectableItem::WasItemSpawned exact-match branch no longer reaches true")
+        back_target = spawned_cave + 43 + 5 + struct.unpack_from("<i", spawned_data, spawned_cave + 44)[0]
+        if back_target != 0x1B:
+            errors.append("CCollectableItem::WasItemSpawned cave no longer resumes the stock loop")
+    if b"\x83\xF9" + bytes([HOLIDAY_ORNAMENT_COLLECTABLE_START]) in spawned_data:
+        errors.append("CCollectableItem::WasItemSpawned still uses sign-extended imm8 for Holiday base 0x9E")
 
     collection_scene_obj = CoffObject(PATCHED / "CollectionScene.obj")
     activate_data, _activate_sym, _activate_sec = function_bytes(
@@ -4747,6 +4814,24 @@ def validate_holiday_ornament_native_contract(manifest):
         errors.append("CCollectionScene::HandleMouse previous-page wrap does not include the Holiday Ornament page")
     if mouse_data[0x7B] != HOLIDAY_ORNAMENT_COLLECTION_PAGE + 1:
         errors.append("CCollectionScene::HandleMouse next-page wrap does not include the Holiday Ornament page")
+    if mouse_data[0x1EB] != 0xE9 or mouse_data[0x1F0 : 0x1F2] != b"\x90\x90":
+        errors.append("CCollectionScene::HandleMouse tooltip lookup is not a fixed-size detour")
+    else:
+        tooltip_cave = 0x1EB + 5 + struct.unpack_from("<i", mouse_data, 0x1EC)[0]
+        if mouse_data[tooltip_cave : tooltip_cave + 3] != b"\x83\xF8\x0F":
+            errors.append("CCollectionScene::HandleMouse tooltip cave lacks the first Holiday bucket")
+        if mouse_data[tooltip_cave + 5 : tooltip_cave + 8] != b"\x83\xF8\x12":
+            errors.append("CCollectionScene::HandleMouse tooltip cave has the wrong upper bucket bound")
+        if mouse_data[tooltip_cave + 10 : tooltip_cave + 16] != b"\x8D\x98\x42\x07\x00\x00":
+            errors.append("CCollectionScene::HandleMouse tooltip cave no longer maps buckets 15-17 to 0x751-0x753")
+        stock_target = tooltip_cave + 5 + struct.unpack_from("<b", mouse_data, tooltip_cave + 4)[0]
+        high_target = tooltip_cave + 10 + struct.unpack_from("<b", mouse_data, tooltip_cave + 9)[0]
+        if stock_target != tooltip_cave + 21 or high_target != tooltip_cave + 21:
+            errors.append("CCollectionScene::HandleMouse tooltip bounds no longer reach the stock lookup")
+        for jump_off in (tooltip_cave + 16, tooltip_cave + 28):
+            jump_target = jump_off + 5 + struct.unpack_from("<i", mouse_data, jump_off + 1)[0]
+            if jump_target != 0x1F2:
+                errors.append("CCollectionScene::HandleMouse tooltip cave no longer resumes at +0x1F2")
     for label_id in HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS:
         if struct.pack("<I", label_id) not in mouse_data:
             errors.append(f"CCollectionScene::HandleMouse missing Holiday Ornament tooltip rarity label {hex(label_id)}")
@@ -4814,6 +4899,42 @@ def validate_holiday_ornament_native_contract(manifest):
     the_collector = manifest.get("TheCollectorHolidayOrnaments", {})
     if the_collector.get("achievement_reset") != hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID):
         errors.append("The Collector sell-all hook does not reset the Ornamentologist achievement row")
+    if the_collector.get("keep_choice_branch_repaired", {}).get("new_displacement") != "0x72":
+        errors.append("The Collector keep-choice branch repair is not recorded")
+
+    achievement_obj = CoffObject(PATCHED / "Achievement.obj")
+    set_complete_data, set_complete_sym, set_complete_sec = function_bytes(
+        achievement_obj,
+        "?SetComplete@CAchievement@@QAEXW4EAchievement@@@Z",
+    )
+    if set_complete_data[0x15 : 0x17] != b"\x75\x7E":
+        errors.append("CAchievement::SetComplete already-complete branch no longer enters the skip stub")
+    if set_complete_data[0x88 : 0x8A] != b"\x75\x0D":
+        errors.append("CAchievement::SetComplete new-completion branch no longer enters the Holiday hook")
+    expected_set_complete_hook = (
+        b"\xEB\x10\x83\xFE\x5F\x75\x0B\x6A\x01"
+        b"\x6A\x54\x8B\xCF\xE8\x00\x00\x00\x00"
+    )
+    if set_complete_data[0x95 : 0x95 + len(expected_set_complete_hook)] != expected_set_complete_hook:
+        errors.append("CAchievement::SetComplete Holiday hook is not the idempotent split-entry form")
+    increment_progress = achievement_obj.symbol("?IncrementProgress@CAchievement@@QAEXW4EAchievement@@H@Z")
+    set_complete_relocs = [
+        struct.unpack_from("<IIH", achievement_obj.buf, set_complete_sec.reloc_ptr + index * 10)
+        for index in range(set_complete_sec.nreloc)
+    ]
+    if not any(
+        vaddr == set_complete_sym.value + 0xA3 and symbol_index == increment_progress.index
+        for vaddr, symbol_index, _rtype in set_complete_relocs
+    ):
+        errors.append("CAchievement::SetComplete Holiday hook lacks its IncrementProgress relocation")
+
+    island_obj = CoffObject(PATCHED / "IslandEvents.obj")
+    impact_data, _impact_sym, _impact_sec = function_bytes(
+        island_obj,
+        "?ImpactGame@CEventTheCollector@@UAEXH@Z",
+    )
+    if impact_data[0x07 : 0x09] != b"\x75\x72":
+        errors.append("CEventTheCollector::ImpactGame keep-choice branch still targets inserted bytes")
 
     if errors:
         raise RuntimeError("Holiday Ornament native contract failed:\n- " + "\n- ".join(errors))
@@ -4857,6 +4978,14 @@ def validate_holiday_ornament_native_contract(manifest):
         "sell_all": {
             "event": "CEventTheCollector",
             "achievement_reset": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
+            "keep_choice_branch_repaired": True,
+        },
+        "control_flow": {
+            "find_code_cave": True,
+            "was_item_spawned_code_cave": True,
+            "handle_mouse_code_cave": True,
+            "drop_incomplete_reentry_guard": True,
+            "achievement_completion_idempotent": True,
         },
     }
 
@@ -6410,6 +6539,18 @@ extern "C" void __cdecl VF2TriggerAllHouseMalfunctions() {{
     }}
 }}
 
+extern "C" void __cdecl VF2FixAllHouseMalfunctions() {{
+    if (!kVF2EnableB150CheatUpgrades) return;
+    // Prop 0x17 is Router Offline; clearing it returns the Router online.
+    // Prop 0x21 is the native Dryer lint fire. Ant props 0x4D-0x54 are separate.
+    static const int malfunctionProps[] = {{
+        0x17, 0x1A, 0x1B, 0x1C, 0x1D, 0x1F, 0x20, 0x21, 0x48, 0x49, 0x4A
+    }};
+    for (int i = 0; i < (int)(sizeof(malfunctionProps) / sizeof(malfunctionProps[0])); ++i) {{
+        Environment.ClearProp((EPropEnum)malfunctionProps[i]);
+    }}
+}}
+
 static const int kVF2OutfitStoreFemaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["female"]};
 static const int kVF2OutfitStoreMaleItemBase = {OUTFIT_STORE_GENDER_ITEM_BASES["male"]};
 static const int kVF2OutfitStoreBodyCount = {len(OUTFIT_STORE_BODY_VALUES)};
@@ -6763,6 +6904,8 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
             "gated_effects": [
                 "price modes",
                 "trigger all house malfunctions",
+                "fix all house malfunctions",
+                "Router offline/online malfunction state",
                 "repurchase Maid/Gardener to fire",
                 "repurchase Rockhound/Anti-Spam to remove",
             ],
@@ -6953,7 +7096,11 @@ def patch_scrolling_store_scene(manifest):
     special_payload_start = len(purchase_payload)
     purchase_payload += b"\x8B\x86\x60\x01\x00\x00"                  # mov eax,[esi+160h]
     purchase_payload += b"\x8B\xC8"                                  # mov ecx,eax
-    max_visible_special_index = (CHEAT_UPGRADE_ITEMS[-1]["item_id"] if ENABLE_CHEAT_UPGRADES else MOBILE_SPECIAL_UPGRADE_ITEM_IDS[-1]) - MOBILE_SPECIAL_UPGRADE_ITEM_IDS[0]
+    max_visible_special_index = (
+        max(item["item_id"] for item in CHEAT_UPGRADE_ITEMS)
+        if ENABLE_CHEAT_UPGRADES
+        else MOBILE_SPECIAL_UPGRADE_ITEM_IDS[-1]
+    ) - MOBILE_SPECIAL_UPGRADE_ITEM_IDS[0]
     purchase_payload += b"\x2D\x17\x01\x00\x00"                      # sub eax,117h
     purchase_payload += b"\x83\xF8" + bytes([max_visible_special_index])  # cmp eax,last added Special Upgrade index
     purchase_payload += b"\x77\x0E"                                  # ja normal visible purchase
@@ -7288,6 +7435,7 @@ extern "C" int __cdecl VF2GetB150UpgradePrice(int itemId);
 extern "C" void __cdecl VF2ToggleB150PriceMode(int itemId);
 extern "C" void __cdecl VF2ResetB150PriceMode();
 extern "C" void __cdecl VF2TriggerAllHouseMalfunctions();
+extern "C" void __cdecl VF2FixAllHouseMalfunctions();
 
 struct sFurnitureInfo {
     int item;
@@ -7510,6 +7658,9 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x12C:
         VF2ResetB150PriceMode();
+        break;
+    case 0x12D:
+        VF2FixAllHouseMalfunctions();
         break;
     default:
         return;
@@ -8833,9 +8984,17 @@ def patch_achievement_holiday_ornaments(manifest):
     expected_epilogue = b"\x5F\x5E\x5B\x5D\xC2\x04\x00"
     if achievement_obj.buf[set_complete_sec.raw_ptr + set_complete_insert : set_complete_sec.raw_ptr + set_complete_insert + len(expected_epilogue)] != expected_epilogue:
         raise RuntimeError("Unexpected SetComplete epilogue")
+    new_completion_branch = set_complete_sym.value + 0x88
+    new_completion_raw = set_complete_sec.raw_ptr + new_completion_branch
+    if achievement_obj.buf[new_completion_raw : new_completion_raw + 2] != b"\x75\x0B":
+        raise RuntimeError("Unexpected SetComplete new-completion branch")
+    # Already-complete achievements enter at +0x95 and must skip the new hook.
+    # Only the freshly-completed fallthrough chain is retargeted to +0x97.
+    achievement_obj.buf[new_completion_raw + 1] = 0x0D
     increment_sym = achievement_obj.symbol("?IncrementProgress@CAchievement@@QAEXW4EAchievement@@H@Z").index
     collection_meta_payload = (
-        b"\x83\xFE" + bytes([HOLIDAY_ORNAMENT_ACHIEVEMENT_ID])
+        b"\xEB\x10"
+        + b"\x83\xFE" + bytes([HOLIDAY_ORNAMENT_ACHIEVEMENT_ID])
         + b"\x75\x0B"
         + b"\x6A\x01"
         + b"\x6A\x54"
@@ -8845,7 +9004,7 @@ def patch_achievement_holiday_ornaments(manifest):
     achievement_obj.insert_section_bytes(set_complete_sym.section, set_complete_insert, collection_meta_payload)
     achievement_obj.append_relocation(
         set_complete_sym.section,
-        set_complete_insert + len(collection_meta_payload) - 4,
+        set_complete_insert + 0x0E,
         increment_sym,
         IMAGE_REL_I386_REL32,
     )
@@ -9028,6 +9187,9 @@ def patch_collectable_item_holiday_ornaments(manifest):
     drop_payload += b"\xE8\x00\x00\x00\x00"
     increment_reloc_off = len(drop_payload) - 4
     drop_payload += b"\x68" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+    # If the family is not complete, the native JE returns to this hook.
+    # Zeroing EDI makes that second pass fail the ornament-range test and exit.
+    drop_payload += b"\x31\xFF"
     drop_payload += b"\xE9" + struct.pack("<i", (drop_sym.value + 0x168) - (drop_insert + len(drop_payload) + 5))
     drop_payload[drop_skip_rel_off] = len(drop_payload) - (drop_skip_rel_off + 1)
     obj.insert_section_bytes(drop_sym.section, drop_insert, bytes(drop_payload))
@@ -9039,64 +9201,93 @@ def patch_collectable_item_holiday_ornaments(manifest):
         "first_copy_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
         "complete_check_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
         "specific_goal_row": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
+        "incomplete_reentry_sentinel": "xor edi,edi",
     })
 
-    def rel32(from_off, instr_len, target_off):
-        return struct.pack("<i", target_off - (from_off + instr_len))
-
     find_sym = obj.symbol("?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z")
-    find_insert = find_sym.value + 0x86
     find_sec = obj.section(find_sym.section)
-    expected_find = b"\x83\xFF\x7D\x75\x39\x83\xC0\x83"
-    if obj.buf[find_sec.raw_ptr + find_insert : find_sec.raw_ptr + find_insert + len(expected_find)] != expected_find:
-        raise RuntimeError("Unexpected CCollectableItem::Find ornament range insertion site")
-    find_payload_len = 28
-    find_continue = find_insert + find_payload_len
-    find_accept = find_sym.value + 0x93 + find_payload_len
-    find_skip = find_sym.value + 0xC4 + find_payload_len
+    find_detour = find_sym.value + 0x86
+    find_expected = b"\x83\xFF\x7D\x75\x39\x83\xC0\x83\x83\xF8\x03\x77\x31"
+    find_accept = find_sym.value + 0x93
+    find_skip = find_sym.value + 0xC4
+    find_cave = find_sec.raw_size
     find_payload = bytearray()
-    find_payload += b"\x83\xFF" + bytes([HOLIDAY_ORNAMENT_COLLECTABLE_START])
-    find_payload += b"\x0F\x85" + rel32(find_insert + len(find_payload), 6, find_continue)
+    find_payload += b"\x81\xFF" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+    find_payload += b"\x75\x00"
+    find_stock_rel = len(find_payload) - 1
     find_payload += b"\x2D" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
     find_payload += b"\x83\xF8" + bytes([HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT - 1])
-    find_payload += b"\x0F\x86" + rel32(find_insert + len(find_payload), 6, find_accept)
-    find_payload += b"\xE9" + rel32(find_insert + len(find_payload), 5, find_skip)
-    if len(find_payload) != find_payload_len:
-        raise RuntimeError("Unexpected CCollectableItem::Find ornament range payload length")
-    obj.insert_section_bytes(find_sym.section, find_insert, bytes(find_payload))
+    find_payload += b"\x0F\x86" + section_rel32(find_cave + len(find_payload), 6, find_accept)
+    find_payload += b"\xE9" + section_rel32(find_cave + len(find_payload), 5, find_skip)
+    find_stock = len(find_payload)
+    find_payload[find_stock_rel] = find_stock - (find_stock_rel + 1)
+    find_payload += b"\x83\xFF\x7D"
+    find_payload += b"\x0F\x85" + section_rel32(find_cave + len(find_payload), 6, find_skip)
+    find_payload += b"\x83\xC0\x83"
+    find_payload += b"\x83\xF8\x03"
+    find_payload += b"\x0F\x87" + section_rel32(find_cave + len(find_payload), 6, find_skip)
+    find_payload += b"\xE9" + section_rel32(find_cave + len(find_payload), 5, find_accept)
+    obj.insert_section_bytes(find_sym.section, find_cave, bytes(find_payload))
+    patch_section_near_jump(
+        obj,
+        find_sym.section,
+        find_detour,
+        find_cave,
+        len(find_expected),
+        find_expected,
+    )
     patches.append({
         "function": "?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z",
-        "insert_offset": "0x86",
+        "detour_offset": "0x86",
+        "code_cave_offset": hex(find_cave),
         "request_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
         "active_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
         "note": "Lets villager searches for base ornament request 0x9E match any spawned ornament variant.",
     })
 
     spawned_sym = obj.symbol("?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z")
-    spawned_insert = spawned_sym.value + 0x1A
     spawned_sec = obj.section(spawned_sym.section)
-    expected_spawned = b"\x42\x83\xC0\x1C\x83\xFA\x02"
-    if obj.buf[spawned_sec.raw_ptr + spawned_insert : spawned_sec.raw_ptr + spawned_insert + len(expected_spawned)] != expected_spawned:
-        raise RuntimeError("Unexpected CCollectableItem::WasItemSpawned ornament range insertion site")
-    spawned_payload_len = 32
-    spawned_continue = spawned_insert + spawned_payload_len
-    spawned_true = spawned_sym.value + 0x29 + spawned_payload_len
+    spawned_detour = spawned_sym.value + 0x14
+    spawned_expected = b"\x74\x04\x39\x08\x74\x0F\x42"
+    spawned_continue = spawned_sym.value + 0x1B
+    spawned_true = spawned_sym.value + 0x29
+    spawned_cave = spawned_sec.raw_size
     spawned_payload = bytearray()
-    spawned_payload += b"\x83\xF9" + bytes([HOLIDAY_ORNAMENT_COLLECTABLE_START])
-    spawned_payload += b"\x0F\x85" + rel32(spawned_insert + len(spawned_payload), 6, spawned_continue)
-    spawned_payload += b"\x50"
-    spawned_payload += b"\x8B\x00"
-    spawned_payload += b"\x2D" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
-    spawned_payload += b"\x83\xF8" + bytes([HOLIDAY_ORNAMENT_COLLECTION_ITEM_COUNT - 1])
-    spawned_payload += b"\x58"
-    spawned_payload += b"\x0F\x86" + rel32(spawned_insert + len(spawned_payload), 6, spawned_true)
-    spawned_payload += b"\xE9" + rel32(spawned_insert + len(spawned_payload), 5, spawned_continue)
-    if len(spawned_payload) != spawned_payload_len:
-        raise RuntimeError("Unexpected CCollectableItem::WasItemSpawned ornament range payload length")
-    obj.insert_section_bytes(spawned_sym.section, spawned_insert, bytes(spawned_payload))
+    spawned_payload += b"\x0F\x84\x00\x00\x00\x00"
+    inactive_rel = 2
+    spawned_payload += b"\x39\x08"
+    spawned_payload += b"\x0F\x84" + section_rel32(spawned_cave + len(spawned_payload), 6, spawned_true)
+    spawned_payload += b"\x81\xF9" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+    spawned_payload += b"\x75\x00"
+    nonholiday_rel = len(spawned_payload) - 1
+    spawned_payload += b"\x81\x38" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_START)
+    spawned_payload += b"\x72\x00"
+    below_rel = len(spawned_payload) - 1
+    spawned_payload += b"\x81\x38" + struct.pack("<I", HOLIDAY_ORNAMENT_COLLECTABLE_END)
+    spawned_payload += b"\x0F\x86" + section_rel32(spawned_cave + len(spawned_payload), 6, spawned_true)
+    spawned_false = len(spawned_payload)
+    spawned_payload[inactive_rel : inactive_rel + 4] = section_rel32(
+        spawned_cave,
+        6,
+        spawned_cave + spawned_false,
+    )
+    spawned_payload[nonholiday_rel] = spawned_false - (nonholiday_rel + 1)
+    spawned_payload[below_rel] = spawned_false - (below_rel + 1)
+    spawned_payload += b"\x42"
+    spawned_payload += b"\xE9" + section_rel32(spawned_cave + len(spawned_payload), 5, spawned_continue)
+    obj.insert_section_bytes(spawned_sym.section, spawned_cave, bytes(spawned_payload))
+    patch_section_near_jump(
+        obj,
+        spawned_sym.section,
+        spawned_detour,
+        spawned_cave,
+        len(spawned_expected),
+        spawned_expected,
+    )
     patches.append({
         "function": "?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
-        "insert_offset": "0x1a",
+        "detour_offset": "0x14",
+        "code_cave_offset": hex(spawned_cave),
         "request_base": hex(HOLIDAY_ORNAMENT_COLLECTABLE_START),
         "active_range": f"{hex(HOLIDAY_ORNAMENT_COLLECTABLE_START)}-{hex(HOLIDAY_ORNAMENT_COLLECTABLE_END)}",
         "note": "Prevents repeated base-spawn attempts when any ornament variant is already active.",
@@ -9216,17 +9407,6 @@ def patch_collection_scene_holiday_ornaments(manifest):
     if obj.buf[mouse_raw + 0x79 : mouse_raw + 0x7C] != b"\x83\xF8\x05":
         raise RuntimeError("Unexpected CCollectionScene::HandleMouse increment wrap bytes")
     obj.buf[mouse_raw + 0x7B] = HOLIDAY_ORNAMENT_COLLECTION_PAGE + 1
-    tooltip_insert = mouse_sym.value + 0x1EB
-    tooltip_expected = b"\x8B\x9C\x85\xC0\xFE\xFF\xFF"
-    if obj.buf[mouse_sec.raw_ptr + tooltip_insert : mouse_sec.raw_ptr + tooltip_insert + len(tooltip_expected)] != tooltip_expected:
-        raise RuntimeError("Unexpected CCollectionScene::HandleMouse tooltip rarity lookup bytes")
-    tooltip_payload = b"".join(
-        b"\xC7\x85"
-        + struct.pack("<i", -0x104 + index * 4)
-        + struct.pack("<I", label_id)
-        for index, label_id in enumerate(HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS)
-    )
-    obj.insert_section_bytes(mouse_sym.section, tooltip_insert, tooltip_payload)
 
     draw_sym = obj.symbol("?DrawScene@CCollectionScene@@MAEXXZ")
     draw_sec = obj.section(draw_sym.section)
@@ -9239,6 +9419,46 @@ def patch_collection_scene_holiday_ornaments(manifest):
     obj.buf[draw_sec.raw_ptr + draw_count_off : draw_sec.raw_ptr + draw_count_off + len(draw_payload)] = draw_payload
     helper_sym = obj.append_undefined_symbol("_VF2CollectionPageCount@4")
     obj.append_relocation(draw_sym.section, draw_sym.value + 0x181, helper_sym, IMAGE_REL_I386_REL32)
+
+    # Append the tooltip extension only after every in-function insertion in
+    # this section, so its detour target cannot move afterward.
+    mouse_sym = obj.symbol("?HandleMouse@CCollectionScene@@UAE_NHUldwPoint@@@Z")
+    mouse_sec = obj.section(mouse_sym.section)
+    tooltip_detour = mouse_sym.value + 0x1EB
+    tooltip_expected = b"\x8B\x9C\x85\xC0\xFE\xFF\xFF"
+    tooltip_continue = mouse_sym.value + 0x1F2
+    tooltip_cave = mouse_sec.raw_size
+    tooltip_payload = bytearray()
+    tooltip_payload += b"\x83\xF8\x0F"
+    tooltip_payload += b"\x72\x00"
+    tooltip_stock_rel = len(tooltip_payload) - 1
+    tooltip_payload += b"\x83\xF8\x12"
+    tooltip_payload += b"\x73\x00"
+    tooltip_high_rel = len(tooltip_payload) - 1
+    tooltip_payload += b"\x8D\x98\x42\x07\x00\x00"
+    tooltip_payload += b"\xE9" + section_rel32(
+        tooltip_cave + len(tooltip_payload),
+        5,
+        tooltip_continue,
+    )
+    tooltip_stock = len(tooltip_payload)
+    tooltip_payload[tooltip_stock_rel] = tooltip_stock - (tooltip_stock_rel + 1)
+    tooltip_payload[tooltip_high_rel] = tooltip_stock - (tooltip_high_rel + 1)
+    tooltip_payload += tooltip_expected
+    tooltip_payload += b"\xE9" + section_rel32(
+        tooltip_cave + len(tooltip_payload),
+        5,
+        tooltip_continue,
+    )
+    obj.insert_section_bytes(mouse_sym.section, tooltip_cave, bytes(tooltip_payload))
+    patch_section_near_jump(
+        obj,
+        mouse_sym.section,
+        tooltip_detour,
+        tooltip_cave,
+        len(tooltip_expected),
+        tooltip_expected,
+    )
 
     obj.write(PATCHED / "CollectionScene.obj")
 
@@ -9294,7 +9514,9 @@ def patch_collection_scene_holiday_ornaments(manifest):
             "helper": aggregate_helper_name,
         },
         "tooltip_rarity_label_ids": [hex(label_id) for label_id in HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS],
-        "tooltip_rarity_note": "Extends the stock 60-item click tooltip rarity lookup by three four-item buckets for common, uncommon, and rare ornaments.",
+        "tooltip_rarity_note": "A fixed-size detour reaches an end-of-section code cave for common, uncommon, and rare ornament labels without shifting native HandleMouse branches.",
+        "tooltip_detour_offset": "0x1eb",
+        "tooltip_code_cave_offset": hex(tooltip_cave),
         "object_size_note": "CCollectionScene stays 0x30 bytes; DrawScene asks helper for page counts instead of adding a sixth cached field.",
     }
 
@@ -9390,6 +9612,9 @@ def patch_the_collector_holiday_ornaments(manifest):
     )
     if obj.buf[impact_sec.raw_ptr + insert_off : impact_sec.raw_ptr + insert_off + len(expected_tail)] != expected_tail:
         raise RuntimeError("Unexpected CEventTheCollector::ImpactGame achievement-reset tail")
+    keep_branch_raw = impact_sec.raw_ptr + impact_sym.value + 0x07
+    if obj.buf[keep_branch_raw : keep_branch_raw + 2] != b"\x75\x66":
+        raise RuntimeError("Unexpected CEventTheCollector::ImpactGame keep-choice branch")
 
     achievement_sym = obj.symbol("?Achievement@@3VCAchievement@@A").index
     reset_sym = obj.symbol("?ResetSingleAchievementProgress@CAchievement@@QAEXW4EAchievement@@@Z").index
@@ -9400,12 +9625,19 @@ def patch_the_collector_holiday_ornaments(manifest):
     obj.insert_section_bytes(impact_sym.section, insert_off, bytes(payload))
     obj.append_relocation(impact_sym.section, insert_off + 3, achievement_sym)
     obj.append_relocation(impact_sym.section, insert_off + 8, reset_sym, IMAGE_REL_I386_REL32)
+    impact_sec = obj.section(impact_sym.section)
+    obj.buf[impact_sec.raw_ptr + impact_sym.value + 0x08] = 0x66 + len(payload)
     obj.write(PATCHED / "IslandEvents.obj")
 
     manifest["TheCollectorHolidayOrnaments"] = {
         "status": "patched",
         "impact_function": "?ImpactGame@CEventTheCollector@@UAEXH@Z",
         "impact_insert_offset": hex(insert_off),
+        "keep_choice_branch_repaired": {
+            "offset": "0x7",
+            "old_displacement": "0x66",
+            "new_displacement": hex(0x66 + len(payload)),
+        },
         "can_fire_function": "?CanFire@CEventTheCollector@@UAE_NXZ",
         "can_fire_offer_patches": canfire_offer_patches,
         "can_fire_availability_patch": {
@@ -10597,6 +10829,37 @@ def patch_spontaneous_behaviors(manifest):
     behavior_obj.retarget_relocation(behavior_sec.index, ctor.value + 0x1A8, anchored_hammock)
     behavior_obj.write(PATCHED / "Behavior.obj")
 
+    # Normal praise clears the action label in ForgetPlans before the behavior
+    # wrapper can inspect it. Capture and restore the raw label around that
+    # exact InvokeReward lifecycle; leave the deliberate over-praise RunAway
+    # branch untouched.
+    main_obj = CoffObject(PATCHED / "theMainScene.obj")
+    reward = main_obj.symbol("?InvokeReward@theMainScene@@IAEXAAVCVillager@@@Z")
+    reward_sec = main_obj.section(reward.section)
+    capture_raw = reward_sec.raw_ptr + reward.value + 0x365
+    capture_expected = b"\x6A\x00\x53\x8B\xCB\xE8\x00\x00\x00\x00"
+    if main_obj.buf[capture_raw : capture_raw + len(capture_expected)] != capture_expected:
+        raise ValueError("Unexpected theMainScene::InvokeReward normal-praise ForgetPlans call")
+    restore_raw = reward_sec.raw_ptr + reward.value + 0x3B3
+    restore_expected = b"\x53\x8B\xCB\xE8\x00\x00\x00\x00"
+    if main_obj.buf[restore_raw : restore_raw + len(restore_expected)] != restore_expected:
+        raise ValueError("Unexpected theMainScene::InvokeReward normal-praise StartNewBehavior call")
+    capture_helper = main_obj.append_undefined_symbol("_VF2PraiseCaptureAndForget@8")
+    restore_helper = main_obj.append_undefined_symbol("_VF2PraiseStartAndRestore@4")
+    main_obj.retarget_relocation(
+        reward.section,
+        reward.value + 0x36B,
+        capture_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    main_obj.retarget_relocation(
+        reward.section,
+        reward.value + 0x3B7,
+        restore_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    main_obj.write(PATCHED / "theMainScene.obj")
+
     behavior_label_arrays = "\n".join(
         cpp_int_array(f"kVF2BehaviorLabels_{group_name}", behavior_label_string_ids_for_group(group_name))
         for group_name, _entries in BEHAVIOR_LABEL_GROUPS
@@ -10729,8 +10992,52 @@ public:
     void PlanToIncHappinessTrend(int amount);
     void PlanToIncEnergy(int amount);
     void PlanToReleaseSemaphore();
+    void ForgetPlans(CVillager &villager, bool force);
     void StartNewBehavior(CVillager &villager);
 };
+
+static CVillager *gVF2PraisedLabelVillager = 0;
+static char gVF2PraisedLabel[0x28];
+
+static void VF2CopyRawPraiseLabel(CVillager &villager, char *dest)
+{
+    char *source = ((char *)&villager) + 0x1BBA8;
+    for (int i = 0; i < 0x28; ++i) {
+        dest[i] = source[i];
+    }
+}
+
+static void VF2RestoreRawPraiseLabel(CVillager &villager)
+{
+    char *dest = ((char *)&villager) + 0x1BBA8;
+    for (int i = 0; i < 0x28; ++i) {
+        dest[i] = gVF2PraisedLabel[i];
+    }
+}
+
+extern "C" void __stdcall VF2PraiseCaptureAndForget(CVillager &villager, bool force)
+{
+    gVF2PraisedLabelVillager = &villager;
+    VF2CopyRawPraiseLabel(villager, gVF2PraisedLabel);
+    CVillagerPlans *plans = (CVillagerPlans *)&villager;
+    plans->ForgetPlans(villager, force);
+    // ForgetPlans blanks the label. Put it back before the restarted behavior
+    // wrapper runs so its current-group check sees the exact prior variation.
+    if (gVF2PraisedLabelVillager == &villager) {
+        VF2RestoreRawPraiseLabel(villager);
+    }
+}
+
+extern "C" void __stdcall VF2PraiseStartAndRestore(CVillager &villager)
+{
+    bool restore = gVF2PraisedLabelVillager == &villager;
+    CVillagerPlans *plans = (CVillagerPlans *)&villager;
+    plans->StartNewBehavior(villager);
+    if (restore) {
+        VF2RestoreRawPraiseLabel(villager);
+    }
+    gVF2PraisedLabelVillager = 0;
+}
 
 class CFurnitureManager {
 public:
@@ -12091,7 +12398,13 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     (PATCHED / "vf2_spontaneous_behaviors.cpp").write_text(helper_cpp, encoding="ascii")
     manifest["spontaneous_behaviors"] = {
         "status": "enabled through the autonomous AI candidate table",
-        "hooks": ["CVillager::InitAI", "CVillager::LoadAI", "CVillagerAI::DecideWhatToDo", "CBehavior::CBehavior"],
+        "hooks": ["CVillager::InitAI", "CVillager::LoadAI", "CVillagerAI::DecideWhatToDo", "CBehavior::CBehavior", "theMainScene::InvokeReward"],
+        "praise_label_stability": {
+            "capture_hook": "InvokeReward +0x36B -> _VF2PraiseCaptureAndForget@8",
+            "restore_hook": "InvokeReward +0x3B7 -> _VF2PraiseStartAndRestore@4",
+            "preserved_bytes": "exact 0x28-byte CVillager+0x1BBA8 label",
+            "over_praise_runaway_path_unchanged": True,
+        },
         "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
         "actions": [
             "hammock anchored rest (0x23; all ages; Sunny/Cloudy weather only)",
@@ -12754,6 +13067,67 @@ def validate_native_north_bathroom_malfunction_selection(manifest):
     }
 
 
+def validate_native_dryer_lint_fire_contract(manifest):
+    """Keep the stock Dryer-gated lint fire and its Handyman repair path intact."""
+
+    def relocation_target(obj, section, vaddr):
+        for index in range(section.nreloc):
+            reloc_off = section.reloc_ptr + index * 10
+            reloc_vaddr, symbol_index, _rtype = struct.unpack_from("<IIH", obj.buf, reloc_off)
+            if reloc_vaddr == vaddr:
+                return obj.symbol_by_index[symbol_index]
+        raise RuntimeError(f"Missing relocation at section offset {vaddr:#x}")
+
+    main_obj = CoffObject(PATCHED / "theMainScene.obj")
+    update = main_obj.symbol("?UpdateScene@theMainScene@@MAEXXZ")
+    update_sec = main_obj.section(update.section)
+    update_data = bytes(
+        main_obj.buf[
+            update_sec.raw_ptr + update.value :
+            update_sec.raw_ptr + update_sec.raw_size
+        ]
+    )
+    if update_data[0x41D : 0x427] != b"\x8B\x43\x14\x80\xB8\xCC\x00\x00\x00\x00":
+        raise RuntimeError("Native Dryer lint-fire permanent-fix gate drifted")
+    if update_data[0x443 : 0x445] != b"\x6A\x48":
+        raise RuntimeError("Native Dryer lint-fire furniture gate drifted")
+    if update_data[0x452 : 0x454] != b"\x6A\x21":
+        raise RuntimeError("Native Dryer lint-fire SetProp selection drifted")
+    find_target = relocation_target(main_obj, update_sec, update.value + 0x446)
+    if find_target.name != "?FindFurniture@CFurnitureManager@@QAE_NW4EObject@CContentMap@@UldwPoint@@AAUsFurnitureInfo2@@_NH3@Z":
+        raise RuntimeError("Native Dryer lint-fire furniture lookup no longer calls FindFurniture")
+    dryer_case = relocation_target(main_obj, update_sec, update.value + 0x1094)
+    if dryer_case.section != update.section or dryer_case.value != update.value + 0x41D:
+        raise RuntimeError("Native random-malfunction jump table no longer reaches the Dryer case")
+
+    behavior_obj = CoffObject(PATCHED / "Behavior.obj")
+    fixing = behavior_obj.symbol("?FixingLaundryFire@CBehavior@@CAXAAVCVillager@@@Z")
+    fixing_sec = behavior_obj.section(fixing.section)
+    fixing_data = bytes(
+        behavior_obj.buf[
+            fixing_sec.raw_ptr + fixing.value :
+            fixing_sec.raw_ptr + fixing_sec.raw_size
+        ]
+    )
+    if fixing_data[0x10B : 0x111] != b"\x6A\x21\x8B\xCE\xE8\x00":
+        raise RuntimeError("Native Dryer lint-fire repair no longer deactivates prop 0x21")
+    if fixing_data[0x114 : 0x11B] != b"\x6A\x00\x6A\x3A\x8B\xCE\xE8":
+        raise RuntimeError("Native Dryer lint-fire repair no longer advances Handyman 0x3A")
+
+    manifest["native_dryer_lint_fire"] = {
+        "status": "validated and preserved",
+        "selection": "stock random-malfunction jump-table case",
+        "dryer_object": "0x48",
+        "malfunction_prop": "0x21",
+        "permanent_fix_world_state_byte": "0xcc",
+        "requires_dryer_in_house": True,
+        "repair_behavior": "CBehavior::FixingLaundryFire",
+        "repair_clears_prop": "0x21",
+        "repair_advances_achievement": "0x3a",
+        "achievement_name": "Handyman",
+    }
+
+
 def validate_runtime_payload_contract(manifest):
     errors = []
     for filename in VANILLA_RUNTIME_REQUIRED_FILES:
@@ -12960,6 +13334,7 @@ def main():
     validate_vf3_tv_animation_contract(manifest)
     validate_vf3_tv_behavior_contract(manifest)
     validate_native_north_bathroom_malfunction_selection(manifest)
+    validate_native_dryer_lint_fire_contract(manifest)
     if ENABLE_BEHAVIOR_PATCHES:
         validate_invisible_hammock_behavior_contract(manifest)
     else:
