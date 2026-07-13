@@ -133,9 +133,15 @@ The desktop Light Source Editor already contains the requested core operations:
 - L: add a light source at the cursor.
 - D: delete the selected/nearby light source.
 - S: save changes through CNight::Save.
+- +: advance the selected light-source type, wrapping from 11 to 3.
+- -: move to the previous selected light-source type, wrapping from 3 to 11.
 - mouse drag: move a selected light source.
-- two additional character cases cycle the selected light-source type through
-  native values 3 through 11.
+
+The desktop Waypoint Editor uses W to select the next of five native waypoint
+positions and scroll it into view, S to save through CWaypoint::Save, and mouse
+down/move/up to select a nearby waypoint and drag it. Its key-down handler is a
+return-false stub, so W/w and S/s are character events rather than raw key-down
+commands.
 
 CLightSourceEditor::Activate(true) temporarily forces the night-light state
 needed to see the editor; Activate(false) restores the prior value. This

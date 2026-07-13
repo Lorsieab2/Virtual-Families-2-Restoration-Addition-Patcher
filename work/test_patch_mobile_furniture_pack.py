@@ -446,6 +446,84 @@ class DebuggerResearchTests(unittest.TestCase):
             }.issubset(relocation_targets)
         )
 
+    def test_native_editor_character_key_maps_are_pinned(self):
+        light = CoffObject(patcher.SRC_OBJS / "LightSourceEditor.obj")
+        character = light.symbol(
+            "?HandleKeyCharacter@CLightSourceEditor@@UAE?B_ND@Z"
+        )
+        section = light.section(character.section)
+        jump_table = light.symbol("$LN33")
+        character_map = light.symbol("$LN31")
+        self.assertEqual(jump_table.section, character.section)
+        self.assertEqual(character_map.section, character.section)
+
+        relocation_symbols = {}
+        cursor = section.reloc_ptr
+        for _ in range(section.nreloc):
+            virtual_address, symbol_index, _ = struct.unpack_from(
+                "<IIH", light.buf, cursor
+            )
+            relocation_symbols[virtual_address] = (
+                light.symbol_by_index[symbol_index].name
+            )
+            cursor += 10
+
+        slots = [
+            relocation_symbols[jump_table.value + offset]
+            for offset in range(0, 24, 4)
+        ]
+        encoded = bytes(
+            light.buf[
+                section.raw_ptr + character_map.value:
+                section.raw_ptr + character_map.value + 0x49
+            ]
+        )
+        commands = {
+            chr(0x2B + index): slots[slot]
+            for index, slot in enumerate(encoded)
+            if slots[slot] != "$LN2"
+        }
+        self.assertEqual(
+            commands,
+            {
+                "+": "$LN8",
+                "-": "$LN12",
+                "D": "$LN4",
+                "L": "$LN5",
+                "S": "$LN7",
+                "d": "$LN4",
+                "l": "$LN5",
+                "s": "$LN7",
+            },
+        )
+
+        waypoint = CoffObject(patcher.SRC_OBJS / "WaypointEditor.obj")
+        waypoint_character = waypoint.symbol(
+            "?HandleKeyCharacter@CWaypointEditor@@UAE?B_ND@Z"
+        )
+        waypoint_section = waypoint.section(waypoint_character.section)
+        waypoint_raw = waypoint_section.raw_ptr + waypoint_character.value
+        self.assertEqual(
+            bytes(waypoint.buf[waypoint_raw + 0x2C:waypoint_raw + 0x3A]),
+            b"\x3C\x53\x74\x74\x3C\x73\x74\x70\x3C\x77\x74\x09\x32\xC0",
+        )
+        waypoint_targets = set()
+        cursor = waypoint_section.reloc_ptr
+        for _ in range(waypoint_section.nreloc):
+            _, symbol_index, _ = struct.unpack_from(
+                "<IIH", waypoint.buf, cursor
+            )
+            waypoint_targets.add(
+                waypoint.symbol_by_index[symbol_index].name
+            )
+            cursor += 10
+        self.assertTrue(
+            {
+                "?Save@CWaypoint@@IAE?B_NXZ",
+                "?ScrollTo@CWorldView@@QAEXUldwPoint@@@Z",
+            }.issubset(waypoint_targets)
+        )
+
     def test_default_off_writer_preserves_stock_main_scene(self):
         old_patched = patcher.PATCHED
         try:

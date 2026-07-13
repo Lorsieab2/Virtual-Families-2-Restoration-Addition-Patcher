@@ -33,21 +33,26 @@ last action.
    two minutes, move/click around the house, and confirm ordinary play still
    works before pressing any debugger key.
 3. Press F5 once. Confirm the game stays open and
-   `vf2_additive_debug.txt` contains “VF2 debugger input enabled by F5.”
+   `vf2_additive_debug.txt` contains `VF2 debugger input enabled by F5.`
 4. Press Up and Down. Confirm the native debugger overlay changes pages without
    affecting normal house input.
-5. Press F6. Confirm the Waypoint Editor appears. Exercise only reversible
-   selection/mouse movement first, then press F4 and confirm normal play resumes.
+5. Press F6. Confirm the Waypoint Editor appears. Press W five times: the view
+   should visit each of the five native waypoint positions once and then wrap.
+   Click near a waypoint marker, drag it once, release it, then press F4 and
+   confirm normal play resumes. Do not press S during this first pass.
 6. Press F7. Confirm the Light Source Editor appears and the night-light view is
    enabled. Press F4 without editing and confirm the previous lighting state is
    restored.
 7. Re-enter with F7. Press L exactly once and verify exactly one light is added.
    Press D exactly once and verify exactly one selected/nearby light is removed.
    This specifically validates the single character-event route.
-8. Select a light, drag it with the mouse, and try each documented type-cycle
-   character once. Confirm one visible change per key press.
+8. Select a light and drag it with the mouse. Press + once to advance its native
+   type and - once to return to the previous type. Confirm one visible change
+   per key press. Native light types cycle through values 3 through 11.
 9. Only on the disposable save, press S once. Exit normally, relaunch the
-   debugger test, and confirm the saved light layout persists.
+   debugger test, and confirm the saved light layout persists. S is also the
+   Waypoint Editor save command; do not use it there unless you intentionally
+   want to persist the dragged waypoint in the disposable save.
 10. Press F4, then test ordinary keyboard/mouse input again. Confirm unhandled
     input falls through to the stock handlers.
 11. Exit and attach the completed results template plus both debugger logs.

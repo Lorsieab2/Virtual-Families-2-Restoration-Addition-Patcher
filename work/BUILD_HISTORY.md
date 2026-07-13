@@ -1154,7 +1154,7 @@
 - The corrected COFF scene/helper link into a 1,737,216-byte x86 Windows GUI
   diagnostic. SHA-256:
   `1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520`.
-- The complete 100-test suite passes.
+- The complete 101-test suite passes.
 - Prepared the minimized `outputs/B153-Debugger-Live-Test-All-Patches`
   developer-only folder from the exact B152 all-patches runtime. It contains
   both the untouched control and opt-in debugger executable, launchers,
@@ -1164,3 +1164,10 @@
   original-asset backups; 8,465 reused runtime files are hardlinked.
 - Live save-load, selector, waypoint, light-source, input-fallthrough, and
   fault-recovery validation remains before enabling this path in a release.
+
+## B153 native editor key-map audit (2026-07-13)
+
+- Pinned the stock Light Source Editor controls: `+`, `-`, `L`, `D`, and `S`.
+- Pinned the stock Waypoint Editor controls: `W` and `S`.
+- Letter commands are case-insensitive; both editors receive them through the
+  character route, not raw key-down.

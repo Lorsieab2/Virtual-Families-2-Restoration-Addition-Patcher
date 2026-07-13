@@ -758,7 +758,7 @@ B153 default-off native debugger input milestone
   commands now use only the character hook, preventing double execution.
 - The corrected 1,737,216-byte x86 Windows GUI diagnostic links at SHA-256
   1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520.
-  The full 100-test suite passes.
+  The full 101-test suite passes.
 - This is not a live-game claim; save loading, selector drawing, all editor
   controls, input fallthrough, and fault recovery still require in-game
   testing before any release can enable it.
@@ -781,3 +781,10 @@ B153 isolated debugger live-test handoff
 - The package includes separate control/test launchers, generated manifests, a
   save-safety checklist, and a results template. It has not been launched and
   no save was touched; live validation remains explicitly pending.
+
+B153 native editor key-map audit
+- Light Source Editor native character controls are + and - for type cycling,
+  plus L/D/S for add/delete/save. The letter commands are case-insensitive.
+- Waypoint Editor native character controls are W to cycle and scroll among
+  five waypoints and S to save; both are case-insensitive. Automated regression
+  coverage now pins these mappings before the disposable-save live test.

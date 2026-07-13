@@ -2490,7 +2490,12 @@
 - The corrected patched scene/helper compile and link into a 1,737,216-byte x86
   Windows GUI diagnostic, SHA-256
   `1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520`.
-- The expanded debugger and patcher regression suite passes all 100 tests.
+- The expanded debugger and patcher regression suite passes all 101 tests.
+- Native character jump tables remove the remaining editor-control ambiguity:
+  the Light Source Editor accepts `+`/`-` for next/previous type and `L`, `D`,
+  and `S` (case-insensitive) for add/delete/save. The Waypoint Editor accepts
+  `W` to cycle and scroll among five waypoint positions and `S` to save; both
+  letter commands are case-insensitive. A regression test now pins these maps.
 - A minimized isolated live-test folder pairs that executable with the exact
   B152 all-patches runtime and untouched control executable SHA-256
   `23D0E330AE82C745F8395FA5D22D9B3ACFC49FA85D9B83A5474FEA8382495B4F`.

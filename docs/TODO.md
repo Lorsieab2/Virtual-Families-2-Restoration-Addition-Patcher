@@ -162,6 +162,9 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - [x] Route printable editor commands only through HandleKeyCharacter; native
   object tests prove Light Source Editor key-down is a no-op and add/delete/save
   belong to the character handler.
+- [x] Pin the native editor character maps before live testing: Light Source
+  Editor `+`/`-`/`L`/`D`/`S`, and Waypoint Editor `W`/`S` (letter commands are
+  case-insensitive).
 - [x] Assemble a minimized, isolated B153 debugger live-test folder with the
   untouched B152 all-patches control, opt-in debugger executable, exact hashes,
   save-safety checklist, launchers, and results template.
