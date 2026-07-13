@@ -647,3 +647,30 @@ B152 upright Holiday Ornament graphics payload
 - Twenty-two Holiday Ornament regression tests and the focused exporter
   routing test pass. Runtime visual confirmation remains a separate manual
   check and is not claimed by these automated tests.
+
+B153 request ledger and debugger research groundwork
+-----------------------------------------------------
+
+- docs/REQUEST_LEDGER.md now preserves recovered requests across chats and
+  labels each as shipped, in-game-QA pending, partial, uncertain, blocked, or
+  not started. Being present in source or a GUI is explicitly not treated as
+  proof of completed runtime behavior.
+- The ledger records the new exact-action goals Explore, Collect, Compete
+  (Playing Poptropicals), Waddle On! Wait a minute... (Playing Club Puffle),
+  and Pixel Pets (Playing PetKinz). They remain not implemented.
+- COFF symbols prove that theMainScene exposes an IDebugger subobject at +8,
+  while the Waypoint and Light Source editor globals implement IEditor only.
+  The old experimental code incorrectly registered those IEditor addresses as
+  IDebugger providers; that invalid cast is removed.
+- The corrected research helper remains default-off and isolated. It registers
+  only the real main-scene provider and uses F6/F7/F4 to select/deactivate the
+  native editors through IEditor. No normal build or published B152 executable
+  is changed.
+- Native Light Source Editor evidence confirms L add, D delete, S save,
+  selected-light type cycling, and mouse-drag movement. This research phase
+  does not restore mouse hooks because B58-B62 demonstrated save-load/input
+  instability.
+- The generated helper compiles with the Visual C++ x86 toolchain. A targeted
+  regression test proves the invalid casts are absent and the patched
+  theMainScene COFF object remains parseable. This does not claim in-game F5,
+  F6, F7, editor, or save-load success.

@@ -1070,3 +1070,21 @@
   `outputs/Virtual-Families-2-Restoration-Addition-Patcher-B152.zip`,
   85,738,821 bytes, SHA-256
   `543A2E5814DECC7F70F30D8454F1475E3AD1A49FF8D3E6D63B8CFF709BE0DC36`.
+
+## B153 Research - Request Ledger and Native Debugger Interface
+
+- Adds `docs/REQUEST_LEDGER.md` as the durable cross-build completeness gate.
+  It separates shipped, runtime-QA-pending, partial, uncertain, blocked, and
+  not-started requests and includes all currently recovered behavior, cheat,
+  goal, renovation, map, family, event, UI, packaging, and debugger requests.
+- Desktop COFF inspection proves `theMainScene+8` is an `IDebugger` base,
+  while `WaypointEditor` and `LightSourceEditor` are `IEditor` globals.
+  The old research helper's editor-to-debugger casts were invalid.
+- Corrects the dormant/default-off helper to register only the real main-scene
+  debugger provider. F6 selects Waypoint Editor, F7 selects Light Source
+  Editor, and F4 exits the selected editor through an independent IEditor route.
+- Keeps mouse handlers stock in this phase. The native light editor's L add,
+  D delete, S save, type cycling, and drag code are documented, but drag is not
+  exposed until the key/display-only path passes save-load testing.
+- The generated helper compiles successfully with the Visual C++ x86 toolchain.
+  The targeted debugger interface regression test and Python syntax checks pass.

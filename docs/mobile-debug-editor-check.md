@@ -78,6 +78,33 @@ CContentMapEditor
 
 ## Interpretation
 
-The mobile game appears to have the same usable debug-editor surface we can safely enable in the desktop rebuild: the `CDebugger` selector plus waypoint and light-source editors.
+The mobile game and desktop objects contain the same useful debug surface, but
+the interfaces are separate:
+
+- theMainScene implements IDebugger through its secondary base at this+8.
+- CWaypointEditor and CLightSourceEditor implement IEditor.
+- The editor globals are therefore not valid arguments to
+  CDebugger::Register(IDebugger *). The former B62 research helper's casts from
+  those editor addresses to IDebugger * were type-invalid.
+
+The corrected default-off research design registers only the real theMainScene
+debugger provider. F6 selects the native Waypoint Editor, F7 selects the native
+Light Source Editor, and F4 deactivates the selected editor through a separate
+IEditor * route. This stage intentionally does not route main-scene mouse
+events; the B58-B62 mouse/input hooks remain disallowed until the
+key/display-only build proves save-load stability.
+
+The desktop Light Source Editor already contains the requested core operations:
+
+- L: add a light source at the cursor.
+- D: delete the selected/nearby light source.
+- S: save changes through CNight::Save.
+- mouse drag: move a selected light source.
+- two additional character cases cycle the selected light-source type through
+  native values 3 through 11.
+
+CLightSourceEditor::Activate(true) temporarily forces the night-light state
+needed to see the editor; Activate(false) restores the prior value. This
+lifecycle must always run when switching or leaving editors.
 
 Behavior editing and content-map editing may have existed in another internal/dev build, but they are not present as named editor implementations in this mobile release. If we want those features, the safer route is to build new editor functionality around existing systems like `CBehavior`, `CVillagerPlans`, `CContentMap`, and `CContentMapUtil`, rather than trying to register missing editor singletons.

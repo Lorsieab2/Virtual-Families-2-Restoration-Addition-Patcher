@@ -30,6 +30,8 @@ After extracting a release, run `Launch_GUI.bat`. The exported bundle also conta
 - `work/assets/holiday_collectibles/` - curated Holiday Ornament source art and reproducible runtime assets.
 - `docs/offline-patcher.md` - technical patcher documentation.
 - `docs/Transparency Log.txt` - implementation and verification disclosures.
+- `docs/REQUEST_LEDGER.md` - durable shipped/partial/unverified/deferred request
+  inventory and release-completeness gate.
 - `docs/discoveries.md` and `docs/TODO.md` - reverse-engineering evidence and remaining manual checks.
 
 ## Development

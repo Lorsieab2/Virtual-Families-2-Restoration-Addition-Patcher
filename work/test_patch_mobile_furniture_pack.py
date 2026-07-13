@@ -32,6 +32,52 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         )
 
 
+class DebuggerResearchTests(unittest.TestCase):
+    def test_editor_selector_respects_native_interface_split(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(
+                    patcher.SRC_OBJS / "theMainScene.obj",
+                    temp / "theMainScene.obj",
+                )
+                patcher.PATCHED = temp
+                manifest = {}
+
+                patcher.patch_debug_features(manifest)
+
+                helper = (temp / "vf2_debug_features.cpp").read_text(
+                    encoding="ascii"
+                )
+                developer = manifest["debug_features"]["developer_keys"]
+                self.assertEqual(
+                    developer["registered_providers"],
+                    ["main scene debugger"],
+                )
+                self.assertEqual(
+                    developer["editor_selector"]["interface_contract"],
+                    (
+                        "CWaypointEditor and CLightSourceEditor are IEditor "
+                        "objects, not IDebugger providers"
+                    ),
+                )
+                self.assertNotIn(
+                    "reinterpret_cast<IDebugger *>(&WaypointEditor)",
+                    helper,
+                )
+                self.assertNotIn(
+                    "reinterpret_cast<IDebugger *>(&LightSourceEditor)",
+                    helper,
+                )
+                self.assertIn("VF2SetActiveEditor(&WaypointEditor)", helper)
+                self.assertIn("VF2SetActiveEditor(&LightSourceEditor)", helper)
+                self.assertIn("VF2SetActiveEditor(0)", helper)
+                CoffObject(temp / "theMainScene.obj")
+        finally:
+            patcher.PATCHED = old_patched
+
+
 def valid_vf3_tv_manifest():
     records = []
     for item in patcher.VF3_TV_ITEMS:

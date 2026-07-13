@@ -1,5 +1,10 @@
 # TODO
 
+The cross-build completeness source is docs/REQUEST_LEDGER.md. Before a
+release, reconcile it against this file, build history, source settings/hooks,
+tests, release notes, and the exported payload. An uncertain historical request
+must remain visible as Needs source audit; it must not be silently omitted.
+
 ## Highest Priority
 
 - Refactor the mod so releases stop distributing modified executables. Build an

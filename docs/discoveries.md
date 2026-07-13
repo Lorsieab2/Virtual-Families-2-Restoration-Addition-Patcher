@@ -1,5 +1,22 @@
 # Discoveries
 
+## 2026-07-12 - Native Debugger and Editor Interface Split
+
+- Desktop theMainScene.obj implements IDebugger as a secondary base at object
+  offset +8; its provider virtual is theMainScene::Debug().
+- WaypointEditor.obj and LightSourceEditor.obj implement IEditor, not
+  IDebugger. Registering either global with CDebugger::Register is an invalid
+  interface cast and has been removed from the dormant research helper.
+- The default-off research path now registers only theMainScene+8. It keeps
+  editor selection separate: F6 selects Waypoint Editor, F7 selects Light
+  Source Editor, and F4 deactivates the current editor.
+- The native light editor calls CNight::AddLightSource, DeleteLightSource,
+  SetupLightSource, and Save. Visible controls are L add, D delete, and S save;
+  dragging moves a source, and two character cases cycle native light types 3
+  through 11.
+- This remains a key/display-first isolated research path. No main-scene mouse
+  handler is restored until save-load and F5/F6/F7 display tests prove stable.
+
 ## 2026-07-03 - Mobile Native Reconstruction Bootstrap
 
 - `work/make_mobile_reconstruction_report.py` now bootstraps its own evidence

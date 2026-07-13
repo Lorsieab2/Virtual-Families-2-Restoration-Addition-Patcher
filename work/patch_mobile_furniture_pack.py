@@ -11937,8 +11937,14 @@ public:
     virtual bool const HandleMouseUp(ldwPoint point);
 };
 
-class CWaypointEditor : public IEditor {};
-class CLightSourceEditor : public IEditor {};
+class CWaypointEditor : public IEditor {
+public:
+    void LoadAssets();
+};
+class CLightSourceEditor : public IEditor {
+public:
+    void LoadAssets();
+};
 
 class CFloatingAnim {
 public:
@@ -11963,6 +11969,7 @@ struct VF2DebuggerLayout {
 static bool gVF2DebuggerInputEnabled = false;
 static bool gVF2DebuggerFaulted = false;
 static IDebugger *gVF2MainSceneDebuggerProvider = 0;
+static IEditor *gVF2ActiveEditor = 0;
 
 static void VF2WriteDirectDebug(char const *fmt, ...)
 {
@@ -12026,29 +12033,7 @@ static void VF2EnsureDebugLogging()
 
 static IEditor *VF2ActiveDebugEditor()
 {
-    if (!VF2CanUseDebugger()) {
-        return 0;
-    }
-    IEditor *editor = 0;
-    __try {
-        VF2DebuggerLayout *state = reinterpret_cast<VF2DebuggerLayout *>(&Debugger);
-        if (!state->visible || state->providerCount <= 0) {
-            return 0;
-        }
-        int selected = state->selectedProvider;
-        if (selected < 0 || selected >= state->providerCount || selected >= 8) {
-            return 0;
-        }
-        IDebugger *provider = state->providers[selected];
-        if (!provider || provider == gVF2MainSceneDebuggerProvider) {
-            return 0;
-        }
-        editor = reinterpret_cast<IEditor *>(provider);
-    } __except(EXCEPTION_EXECUTE_HANDLER) {
-        VF2DisableDebuggerAfterFault("VF2ActiveDebugEditor");
-        return 0;
-    }
-    return editor;
+    return VF2CanUseDebugger() ? gVF2ActiveEditor : 0;
 }
 
 static void VF2RegisterDebuggerProvider(IDebugger *provider, char const *label)
@@ -12066,7 +12051,27 @@ static void VF2RegisterDebuggerProvider(IDebugger *provider, char const *label)
     }
 }
 
-static void VF2EnsureEditorDebuggers(void *mainScene)
+static void VF2SetActiveEditor(IEditor *editor)
+{
+    if (gVF2ActiveEditor == editor) {
+        return;
+    }
+    __try {
+        if (gVF2ActiveEditor) {
+            gVF2ActiveEditor->Activate(false);
+        }
+        gVF2ActiveEditor = editor;
+        if (gVF2ActiveEditor) {
+            gVF2ActiveEditor->Reset();
+            gVF2ActiveEditor->Activate(true);
+        }
+    } __except(EXCEPTION_EXECUTE_HANDLER) {
+        gVF2ActiveEditor = 0;
+        VF2DisableDebuggerAfterFault("VF2SetActiveEditor");
+    }
+}
+
+static void VF2EnsureDebuggerProvider(void *mainScene)
 {
     static bool registered = false;
     if (!VF2CanUseDebugger() || registered || !mainScene) {
@@ -12075,13 +12080,11 @@ static void VF2EnsureEditorDebuggers(void *mainScene)
     __try {
         gVF2MainSceneDebuggerProvider = reinterpret_cast<IDebugger *>(static_cast<char *>(mainScene) + 8);
         VF2RegisterDebuggerProvider(gVF2MainSceneDebuggerProvider, "main scene");
-        WaypointEditor.Activate(true);
-        LightSourceEditor.Activate(true);
-        VF2RegisterDebuggerProvider(reinterpret_cast<IDebugger *>(&WaypointEditor), "waypoint editor");
-        VF2RegisterDebuggerProvider(reinterpret_cast<IDebugger *>(&LightSourceEditor), "light source editor");
+        WaypointEditor.LoadAssets();
+        LightSourceEditor.LoadAssets();
         registered = true;
     } __except(EXCEPTION_EXECUTE_HANDLER) {
-        VF2DisableDebuggerAfterFault("VF2EnsureEditorDebuggers");
+        VF2DisableDebuggerAfterFault("VF2EnsureDebuggerProvider");
     }
 }
 
@@ -12191,9 +12194,21 @@ extern "C" bool __cdecl VF2PatchedMainSceneHandleKeyDown(void *mainScene, int ke
         gVF2DebuggerInputEnabled = true;
     }
     VF2EnsureDebugLogging();
-    VF2EnsureEditorDebuggers(mainScene);
+    VF2EnsureDebuggerProvider(mainScene);
     if (!VF2CanUseDebugger()) {
         return false;
+    }
+    if (key == 0x73 || key == 0x4000003d) {
+        VF2SetActiveEditor(0);
+        return true;
+    }
+    if (key == 0x75 || key == 0x4000003f) {
+        VF2SetActiveEditor(&WaypointEditor);
+        return true;
+    }
+    if (key == 0x76 || key == 0x40000040) {
+        VF2SetActiveEditor(&LightSourceEditor);
+        return true;
     }
     int translated = VF2TranslateDebugKey(key);
     VF2WriteDirectDebug("main scene keydown raw=%d translated=%d", key, translated);
@@ -12201,7 +12216,13 @@ extern "C" bool __cdecl VF2PatchedMainSceneHandleKeyDown(void *mainScene, int ke
         return true;
     }
     IEditor *editor = VF2ActiveDebugEditor();
-    return editor ? VF2SafeEditorKeyDown(editor, key) : false;
+    if (!editor) {
+        return false;
+    }
+    if (key >= 0x20 && key <= 0x7e && VF2SafeEditorKeyCharacter(editor, key)) {
+        return true;
+    }
+    return VF2SafeEditorKeyDown(editor, key);
 }
 
 extern "C" bool __cdecl VF2PatchedDebuggerKeyCharacter(int key)
@@ -12257,6 +12278,14 @@ extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
     FloatingAnim.DrawOverlays();
     if (VF2CanUseDebugger()) {
         VF2SafeDebuggerDraw();
+        IEditor *editor = VF2ActiveDebugEditor();
+        if (editor) {
+            __try {
+                editor->Draw();
+            } __except(EXCEPTION_EXECUTE_HANDLER) {
+                VF2DisableDebuggerAfterFault("IEditor.Draw");
+            }
+        }
     }
 }
 '''.strip() + "\n"
@@ -12281,7 +12310,9 @@ extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
                 "F5": "enable debugger input and toggle CDebugger overlay",
                 "Up": "next debugger page",
                 "Down": "previous debugger page",
-                "F4": "handled by selected editor when supported",
+                "F4": "exit the active editor",
+                "F6": "select the native Waypoint Editor",
+                "F7": "select the native Light Source Editor",
             },
             "skipped_hooks": [
                 {
@@ -12307,9 +12338,15 @@ extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
             ],
             "registered_providers": [
                 "main scene debugger",
-                "CWaypointEditor global",
-                "CLightSourceEditor global",
             ],
+            "editor_selector": {
+                "interface_contract": "CWaypointEditor and CLightSourceEditor are IEditor objects, not IDebugger providers",
+                "F6": "CWaypointEditor",
+                "F7": "CLightSourceEditor",
+                "F4": "deactivate active IEditor",
+                "light_character_controls": "native D delete, L add, S save and type-cycle keys are passed through from keydown",
+                "mouse_status": "not routed in this key/display-first research stage",
+            },
             "unavailable_in_this_object_set": [
                 "BehaviorEditor.obj has no exported behavior editor class/object methods",
                 "ContentMapEditor.obj has no exported content-map editor class/object methods",
