@@ -95,6 +95,61 @@ class DebuggerResearchTests(unittest.TestCase):
                     "VF2PatchedDebuggerMouseUp",
                     helper,
                 )
+                editor_block = helper.split("class IEditor {", 1)[1].split(
+                    "};",
+                    1,
+                )[0]
+                declarations = [
+                    "virtual void Reset();",
+                    "virtual void Draw();",
+                    "virtual bool const HandleKeyCharacter(char key);",
+                    "virtual bool const HandleKeyDown(int key);",
+                    "virtual bool const HandleKeyUp(int key);",
+                    "virtual bool const HandleMouseDown(ldwPoint point);",
+                    "virtual bool const HandleMouseUp(ldwPoint point);",
+                    "virtual bool const HandleMouseMove(ldwPoint point);",
+                    "virtual void Activate(bool active);",
+                ]
+                self.assertEqual(
+                    [
+                        editor_block.index(declaration)
+                        for declaration in declarations
+                    ],
+                    sorted(editor_block.index(value) for value in declarations),
+                )
+
+                native_editor = CoffObject(
+                    patcher.SRC_OBJS / "LightSourceEditor.obj"
+                )
+                vtable = native_editor.symbol("??_7CLightSourceEditor@@6B@")
+                vtable_section = native_editor.section(vtable.section)
+                cursor = vtable_section.reloc_ptr
+                native_slots = []
+                for _ in range(vtable_section.nreloc):
+                    vaddr, symbol_index, _ = struct.unpack_from(
+                        "<IIH",
+                        native_editor.buf,
+                        cursor,
+                    )
+                    if vaddr >= vtable.value:
+                        native_slots.append(
+                            native_editor.symbol_by_index[symbol_index].name
+                        )
+                    cursor += 10
+                self.assertEqual(
+                    native_slots,
+                    [
+                        "?Reset@CLightSourceEditor@@UAEXXZ",
+                        "?Draw@CLightSourceEditor@@UAEXXZ",
+                        "?HandleKeyCharacter@CLightSourceEditor@@UAE?B_ND@Z",
+                        "?HandleKeyDown@CLightSourceEditor@@UAE?B_NH@Z",
+                        "?HandleKeyUp@CLightSourceEditor@@UAE?B_NH@Z",
+                        "?HandleMouseDown@CLightSourceEditor@@UAE?B_NUldwPoint@@@Z",
+                        "?HandleMouseUp@CLightSourceEditor@@UAE?B_NUldwPoint@@@Z",
+                        "?HandleMouseMove@CLightSourceEditor@@UAE?B_NUldwPoint@@@Z",
+                        "?Activate@CLightSourceEditor@@UAEX_N@Z",
+                    ],
+                )
                 CoffObject(temp / "theMainScene.obj")
         finally:
             patcher.PATCHED = old_patched

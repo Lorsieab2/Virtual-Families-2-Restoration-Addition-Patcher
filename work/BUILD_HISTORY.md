@@ -1134,10 +1134,14 @@
 - Stock disassembly found and the source corrects an interim character-hook
   cleanup mismatch: `HandleKeyCharacter(char)` uses `ret 4`, not `ret 12`.
   The superseded research diagnostic was never shipped.
-- The corrected COFF object and helper link into a disposable x86 diagnostic.
-  SHA-256:
-  `680A40B76E38C381AC3817687553078378616F1B18AE88B7E95D5537223B8FA3`.
+- A second ABI audit corrects the generated IEditor vtable order to the native
+  Reset/Draw/KeyCharacter/KeyDown/KeyUp/MouseDown/MouseUp/MouseMove/Activate
+  relocation sequence. The earlier research-only validator was never shipped.
+- The fully corrected COFF object and helper link into a disposable x86
+  diagnostic. SHA-256:
+  `73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305`.
 - Byte-level tests cover all five payloads, native cleanup widths, REL32 helper
-  targets, and stock fallthrough. The complete 97-test suite passes.
+  targets, and stock fallthrough. Native-object tests pin all nine editor
+  vtable relocations. The complete 97-test suite passes.
 - Live save-load, selector, waypoint, light-source, input-fallthrough, and
   fault-recovery validation remains before enabling this path in a release.

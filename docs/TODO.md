@@ -155,6 +155,8 @@ must remain visible as Needs source audit; it must not be silently omitted.
   developer build; disabled sessions fall through to stock handlers.
 - [x] Pin all five native cleanup widths, inserted payloads, REL32 helper
   targets, and stock fallthrough bytes in regression tests.
+- [x] Match the generated IEditor declaration to the nine-slot native vtable
+  and pin the relocation order in tests.
 - [ ] Run live save-load and F5/F6/F7/F4 testing before enabling the developer
   build anywhere. Confirm selector drawing, waypoint editing, light add/delete/
   drag/type/save, normal input fallthrough, and fault-disable behavior.

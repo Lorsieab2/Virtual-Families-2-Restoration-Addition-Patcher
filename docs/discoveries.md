@@ -2466,9 +2466,13 @@
   all three point handlers use `ret 8`. Follow-up byte validation caught an
   initial research-only `ret 12` mismatch in the character hook before release.
   That interim diagnostic was never shipped and is superseded.
-- The corrected patched object and generated helper compile and link into an
-  x86 diagnostic executable. Its SHA-256 is
-  `680A40B76E38C381AC3817687553078378616F1B18AE88B7E95D5537223B8FA3`.
+- Native vtable relocations prove the slot order is Reset, Draw, KeyCharacter,
+  KeyDown, KeyUp, MouseDown, MouseUp, MouseMove, Activate. The earlier generated
+  declaration placed Draw, Activate, MouseMove, and MouseUp in wrong slots;
+  guarded calls could therefore dispatch to the wrong native method.
+- The fully corrected patched object and generated helper compile and link into
+  an x86 diagnostic executable. Its SHA-256 is
+  `73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305`.
 - This is structural/link validation only. `ENABLE_DEBUGGER_FEATURES` remains
   false by default, published builds retain stock input, and F5/F6/F7/F4 plus
   light add/delete/drag/type/save still require live save-load testing.

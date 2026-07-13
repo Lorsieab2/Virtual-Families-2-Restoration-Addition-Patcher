@@ -12140,15 +12140,15 @@ public:
 
 class IEditor {
 public:
-    virtual void Draw();
     virtual void Reset();
-    virtual void Activate(bool active);
+    virtual void Draw();
     virtual bool const HandleKeyCharacter(char key);
     virtual bool const HandleKeyDown(int key);
     virtual bool const HandleKeyUp(int key);
     virtual bool const HandleMouseDown(ldwPoint point);
-    virtual bool const HandleMouseMove(ldwPoint point);
     virtual bool const HandleMouseUp(ldwPoint point);
+    virtual bool const HandleMouseMove(ldwPoint point);
+    virtual void Activate(bool active);
 };
 
 class CWaypointEditor : public IEditor {

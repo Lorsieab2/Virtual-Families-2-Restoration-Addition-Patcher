@@ -734,11 +734,16 @@ B153 default-off native debugger input milestone
   with `ret 4`; point handlers use `ret 8`. A follow-up byte audit caught and
   corrected an initial research-only `ret 12` character-hook mismatch. The
   earlier disposable diagnostic was never shipped or enabled in normal builds.
-- The corrected helper compiles and a disposable x86 executable links with
-  SHA-256
-  680A40B76E38C381AC3817687553078378616F1B18AE88B7E95D5537223B8FA3.
+- A second ABI audit found the handwritten IEditor vtable order did not match
+  native relocations. Reset, Draw, KeyCharacter, KeyDown, KeyUp, MouseDown,
+  MouseUp, MouseMove, and Activate are now declared in their exact native slot
+  order. The earlier research-only validator was never shipped.
+- The fully corrected helper compiles and a disposable x86 executable links
+  with SHA-256
+  73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305.
 - Exact-byte tests cover every inserted payload, cleanup width, helper REL32
-  relocation, and stock fallthrough window. The full 97-test suite passes.
+  relocation, and stock fallthrough window. A native-object test also pins all
+  nine vtable relocations. The full 97-test suite passes.
 - This is not a live-game claim; save loading, selector drawing, all editor
   controls, input fallthrough, and fault recovery still require in-game
   testing before any release can enable it.

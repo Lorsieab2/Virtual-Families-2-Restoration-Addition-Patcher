@@ -103,6 +103,12 @@ The regression suite now asserts each inserted payload, cleanup width, REL32
 helper relocation target, and a 24-byte stock fallthrough window for every
 hook.
 
+The native vtable relocation order is Reset, Draw, KeyCharacter, KeyDown,
+KeyUp, MouseDown, MouseUp, MouseMove, Activate. The generated `IEditor`
+declaration now matches those nine slots exactly, and the regression test reads
+the relocations from `LightSourceEditor.obj` rather than trusting the handwritten
+declaration.
+
 The desktop Light Source Editor already contains the requested core operations:
 
 - L: add a light source at the cursor.
