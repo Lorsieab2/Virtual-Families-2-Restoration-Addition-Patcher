@@ -47,9 +47,9 @@ dormant hook, or successful link is not proof that a feature is finished.
 | Upright Ornament art and corrected lower-right Candy Cane | Shipped / automated-verified | Canonical sources copied into payload and hash-validated. |
 | Page label `Ornaments`, footer strings, Ornamentologist after Bottlologist | Shipped / automated-verified | B152 string/order validator. |
 | Holiday Furniture achievement runtime gate | Shipped / in-game QA pending | Exact-SHA `.vf2goal` gate; purchase, award, persistence, and off-state QA remain. |
-| Allow Older Pregnancies | Partial | Default-off `.vf2preg` hook ships. Stock under 50; 10% at 50, decreasing to 0.1% floor at 69+; native multiples preserved. Full conception/tutorial/birth/save-load QA remains. |
+| Allow Older Pregnancies | Partial / automated-verified | Default-off `.vf2preg` hook ships. Stock under 50; 10% at 50, decreasing to 0.1% floor at 69+; native multiples preserved. All 16 linked layouts, exact-SHA records, helper ABI, stock fallback, and toggle cycles pass; conception/tutorial/birth/save-load QA remains. |
 | Reset Ants; Reset/Complete all collections | Shipped / in-game QA pending | Native/package checks exist; verify awards, reset semantics, Holiday on/off, and save/load. |
-| 2x/5x/100x Prices and Reset Price Multiplier | Shipped / in-game QA pending | `CalcPrice` route and saturation are source-verified; broad purchase QA remains. |
+| 2x/5x/100x Prices and Reset Price Multiplier | Shipped / automated-verified | Both ordinary and career `CalcPrice` returns are hooked; 2x/5x/100x are mutually exclusive and saturate at `INT_MAX`. Reset removes all multiplier inventory flags and returns the current canonical incoming price unchanged, so it does not restore stale cached prices. Broad in-game purchase QA remains. |
 | Trigger/Fix malfunctions, Router state, dryer fire, north leaks | Shipped / in-game QA pending | Props and renovation gates linked; gameplay/repair/Handyman/Water Surge QA remains. |
 | Rebuy Maid/Gardener to fire and Rockhound/Anti-Spam to remove | Shipped / in-game QA pending | Source route exists; active-flag/save/rebuy QA remains. |
 | B150 behavior variations and gates | Needs source audit | Audit the whole age/weather/nursing/gender/manual/autonomous matrix. |
@@ -60,8 +60,8 @@ dormant hook, or successful link is not proof that a feature is finished.
 
 | Request | Status | Completion contract |
 |---|---|---|
-| Fully working Allow Older Pregnancies | Partial | Prove stock parity under 50, decimal curve, tutorial route, Wants Kids/perfumes, multiples, birth, save/load, and extreme ages. |
-| Older Villagers mortality curve | Partial | Default-off `.vf2mort` source hook now replaces only the birthday old-age roll: normal survival curve centered at effective age 75, nutrition shift 0-4 years, 0.02% rare tail, and no hard maximum. COFF and exact-SHA exporter tests pass; linked-matrix and live aging/save/time-away QA remain before release. |
+| Fully working Allow Older Pregnancies | Partial / linked validation complete | All 16 layouts pass flag, detour, helper, stock-fallback, exact-SHA, and reversible-toggle checks. Live proof remains for stock parity under 50, decimal curve outcomes, tutorial route, Wants Kids/perfumes, multiples, birth, save/load, and extreme ages. |
+| Older Villagers mortality curve | Partial | Default-off `.vf2mort` source hook replaces only the birthday old-age roll: normal survival curve centered at effective age 75, nutrition shift 0-4 years, 0.02% rare tail, and no hard maximum. All 16 linked layouts and exact-SHA toggle cycles pass; live aging/save/time-away QA remains before release. |
 | Next Generation button around age 60 with age patch | Not started | Gated only with the age patch; stock flow when off. |
 | Increase Child Limit to 12 | Partial | Native audit complete: live `CVillagerManager` already has 30 ordinary peep slots, but each generation persists only six `SPeepRecord`s and the Next Generation scene owns two six-entry candidate arrays. A safe implementation needs additive persistence for six extra records per generation plus matched Family Tree draw/hit-test and candidate-array detours; changing the limit constant alone would overwrite the next generation. |
 | Force Successful Pregnancy | Not started | Next eligible attempt never argues and succeeds; clear after resulting birth. |
@@ -69,7 +69,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 | Next pregnancy Singleton/Twins/Triplets | Not started | Saved mutually exclusive, cap-safe one-shot; clear after birth. |
 | Complete all Achievements cheat | Not started | Normal completion/award semantics; enabled base/modded rows; no duplicate awards; Achiever Extraordinaire last. |
 | Trophy icon for Complete all collections and future cheats | Needs source audit | Change requested row and use trophy as fallback when no dedicated icon exists. |
-| Restore F5 debugger selector and native editors | Partial | Default-off source registers only the real main-scene debugger and routes character commands exactly once through HandleKeyCharacter; guarded mouse down/move/up and non-character key-down routes activate only after F5. A minimized isolated all-patches control/test folder and checklist are prepared; live save-load and F5/F6/F7/F4 testing remains mandatory. |
+| Restore F5 debugger selector and native editors | Fix built / live retest pending | WER pinned the first test's house-load crash to `0xC0000005` at RVA `0xC5D4B`: JE `+4` entered the `ret 8` immediate. Both hooks now use `+6`; the corrected SHA-256 `82936F22A33F8991D9282DB15D90CE1105828C7A2FE57014E7924B98D1510135` passes linked fallthrough validation. It remains default-off and excluded from playable builds until live house-load and editor QA pass. |
 | Light editor: edit/place/remove sources | Partial | Native L add, D delete, S save, type-cycle, and mouse-drag routes are wired in the default-off developer build. Verify feedback, persistence/export, cancel/reset, fault handling, and patch-off behavior in game. |
 | Recreate dummied debug tools | Needs source audit | Behavior/Content Map editors are absent in checked binaries; replacements require verified engine contracts. |
 
@@ -77,8 +77,8 @@ dormant hook, or successful link is not proof that a feature is finished.
 
 | Request group | Status | Notes |
 |---|---|---|
-| `Needs to sit down` spontaneous plus thinking/resting/phone/texting/scrapbooking variations and all age/gender/relationship gates | Needs source audit | Verify records, age unit, spontaneous eligibility, locations, and stock-weight parity. |
-| `Ironing clothes` and `Mending a button` spontaneous | Needs source audit | Verify plan registration and patch-off state. |
+| `Needs to sit down` spontaneous plus thinking/resting/phone/texting/scrapbooking variations and all age/gender/relationship gates | Partial / linked validation | `Needs to sit down` is registered all-ages at weight 450 only under Behavior Patches, and all 16 layouts preserve the gate. Variation age/gender/relationship/location sampling and live stock-weight parity remain. |
+| `Ironing clothes` and `Mending a button` spontaneous | Shipped / automated-verified | Adult-only helper uses native age-unit minimum `0x118` (displayed age 14+) and registers Ironing at weight 700; linked 16-layout validation confirms patch-on presence and patch-off absence. Live frequency QA remains. |
 | `Petting` not spontaneous | Needs source audit | Manual route remains; only autonomous eligibility changes under patch. |
 | `Checking weight` spontaneous for all ages | Needs source audit | Verify safe all-age route and location. |
 | Nursing actions: first words, walking, talking, feeding, lullabies, playing, admiring, peek-a-boo, kissing, pictures | Needs source audit | Require nursing mother with baby; preserve base frequencies. |
@@ -118,7 +118,7 @@ and reset only through their documented reset action.
 | Exact scold: social/child | Not started | Fakebook Fakery; Dance Dunce; The Last Trend; Lazy Crazy. |
 | Pet interaction corrections | Not started | Good boy = praise someone praising pet; Bad dog = praise someone scolding pet; Pavlovian Association = praise someone training pet. |
 | Birthday purchases | Not started | Happy Birthday banner; Not a lie cake; Full of helium balloons. |
-| Discipline | Not started | No clothes-throwing; no toilet play; no bed jumping; no wall drawing; Props to you after Tight Ship plus those four. |
+| Discipline | Not started | No clothes-throwing; no toilet play; no bed jumping; no wall drawing; No messing with the light switch! (scold a child for switching the light on and off); Props to you after Tight Ship plus all five additional discipline goals. |
 | Holiday Furniture purchases | Shipped / in-game QA pending | Audit valid IDs/names, coins, persistence, and patch-off absence. |
 | VF3 furniture | Not started | Furnishing the Future. |
 | Ornamentologist/collection goals | Shipped / in-game QA pending | Verify award/counters/persistence and all reset paths. |

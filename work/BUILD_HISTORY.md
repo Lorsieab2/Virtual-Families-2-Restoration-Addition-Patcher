@@ -1171,3 +1171,23 @@
 - Pinned the stock Waypoint Editor controls: `W` and `S`.
 - Letter commands are case-insensitive; both editors receive them through the
   character route, not raw key-down.
+
+## B153 linked validation and debugger fallthrough correction
+
+- Completed the 16-layout B153 linked matrix and validated Holiday positive/
+  negative states, three independent writable runtime flags, exact-SHA patch
+  records, unique executable hashes, and reversible toggle cycles.
+- Verified Behavior Patches gating for spontaneous Ironing clothes and Needs to
+  sit down, and changed the linked label to `Taking boss' advice on a job
+  project`.
+- Audited price multipliers and Reset semantics across ordinary/career
+  `CalcPrice` paths; Reset removes multiplier flags and resumes current
+  canonical prices without a stale cache.
+- Diagnosed the live debugger test's house-load access violation at RVA
+  `0xC5D4B` as a JE `+4` branch into a six-byte true-return sequence. Corrected
+  both hooks to JE `+6` and built a structurally validated isolated diagnostic
+  at SHA-256
+  `82936F22A33F8991D9282DB15D90CE1105828C7A2FE57014E7924B98D1510135`.
+- The debugger remains default-off and excluded from playable builds pending a
+  successful live house-load and editor retest. This milestone is not a B153
+  release.

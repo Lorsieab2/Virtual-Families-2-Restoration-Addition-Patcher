@@ -12,6 +12,7 @@ from pathlib import Path
 import patch_mobile_furniture_pack as patcher
 import rebuild_holiday_ornament_collection_assets as ornament_assets
 import validate_b152_custom_achievement_diagnostics as b152_diagnostics
+import validate_b153_runtime_flags as b153_runtime
 from coff_patch import CoffObject
 
 
@@ -186,7 +187,7 @@ class DebuggerResearchTests(unittest.TestCase):
                 payload += b"\xFF\x75" + bytes([offset])
             payload += b"\xE8\x00\x00\x00\x00"
             payload += b"\x83\xC4" + bytes([len(argument_offsets) * 4])
-            payload += b"\x59\x84\xC0\x74\x04\xB0\x01\x5D\xC2"
+            payload += b"\x59\x84\xC0\x74\x06\xB0\x01\x5D\xC2"
             payload += struct.pack("<H", cleanup)
             return bytes(payload)
 
@@ -198,7 +199,7 @@ class DebuggerResearchTests(unittest.TestCase):
             0x83, 0xC4, 0x08,
             0x59,
             0x84, 0xC0,
-            0x74, 0x04,
+            0x74, 0x06,
             0xB0, 0x01,
             0x5D,
             0xC2, 0x04, 0x00,
@@ -277,9 +278,17 @@ class DebuggerResearchTests(unittest.TestCase):
                         bytes(stock.buf[stock_raw + ret_off:stock_raw + ret_off + 3]),
                         b"\xC2" + struct.pack("<H", cleanup),
                     )
+                    hook_bytes = bytes(
+                        patched.buf[patched_raw + 3:patched_raw + 3 + len(payload)]
+                    )
+                    self.assertEqual(hook_bytes, payload)
+                    test_offset = hook_bytes.index(b"\x84\xC0")
+                    self.assertEqual(hook_bytes[test_offset + 2], 0x74)
+                    branch_delta = struct.unpack_from("<b", hook_bytes, test_offset + 3)[0]
                     self.assertEqual(
-                        bytes(patched.buf[patched_raw + 3:patched_raw + 3 + len(payload)]),
-                        payload,
+                        test_offset + 4 + branch_delta,
+                        len(hook_bytes),
+                        "false helper result must branch exactly to the stock body",
                     )
                     self.assertEqual(
                         bytes(
@@ -315,6 +324,20 @@ class DebuggerResearchTests(unittest.TestCase):
                     )
         finally:
             patcher.PATCHED = old_patched
+
+
+    def test_debugger_fallthrough_validator_pins_six_byte_true_return(self):
+        source = (patcher.ROOT / "work" / "validate_b153_debugger_fallthrough.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('b"\\x59\\x84\\xC0\\x74\\x06\\xB0\\x01\\x5D\\xC2"', source)
+        self.assertIn("target = branch_end + 6", source)
+        self.assertIn("expected_target = start + len(pattern)", source)
+        builder = (patcher.ROOT / "work" / "build_b153_debugger_test.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('VF2_ENABLE_DEBUGGER_FEATURES = "1"', builder)
+        self.assertIn("validate_b153_debugger_fallthrough.py", builder)
 
     def test_debugger_provider_offsets_match_native_objects(self):
         def relocation_target(obj, section, vaddr):
@@ -993,6 +1016,14 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 patcher.patch_spontaneous_behaviors(manifest)
                 helper = (temp_root / "vf2_spontaneous_behaviors.cpp").read_text(encoding="ascii")
                 self.assertIn("EnableAllAgesAutonomousCandidateWithWeight(data, 0x046, 450)", helper)
+                self.assertIn(
+                    "EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x08E, 700); // IroningShirt",
+                    helper,
+                )
+                self.assertIn(
+                    "EnableAllAgesAutonomousCandidateWithWeight(data, 0x127, 450); // RestingBody / Needs to sit down",
+                    helper,
+                )
                 self.assertIn("EnableNursingMotherAutonomousCandidateWithWeight(data, 0x11F, 450)", helper)
                 self.assertIn("*(unsigned int *)(candidate + 0x4C) = 0x168;", helper)
                 self.assertIn("candidate[0xA3] = 1;", helper)
@@ -1692,6 +1723,17 @@ class OutfitStoreMappingTests(unittest.TestCase):
             source,
         )
 
+    def test_career_behavior_label_uses_requested_job_project_wording(self):
+        groups = dict(patcher.BEHAVIOR_LABEL_GROUPS)
+        self.assertIn(
+            ("eString_TakingBossAdvice", "Taking boss' advice on a job project"),
+            groups["career"],
+        )
+        self.assertNotIn(
+            ("eString_TakingBossAdvice", "Taking boss's advice on a career project"),
+            groups["career"],
+        )
+
     def test_b150_cheat_upgrade_rows_and_exact_descriptions(self):
         rows = {item["item_id"]: item for item in patcher.CHEAT_UPGRADE_ITEMS}
 
@@ -1882,6 +1924,19 @@ class OutfitStoreMappingTests(unittest.TestCase):
                     self.assertIn("if (kVF2EnableB150CheatUpgrades &&", source)
                     self.assertIn("VF2ResetB150PriceMode", source)
                     self.assertIn("for (int mode = 0x128; mode <= 0x12A; ++mode)", source)
+                    self.assertIn("InventoryManager.ReturnOne((EInventoryItem)mode);", source)
+                    self.assertIn("bool disable = InventoryManager.HaveUpgrade((EInventoryItem)itemId);", source)
+                    self.assertIn("if (!disable) InventoryManager.TakeOne((EInventoryItem)itemId);", source)
+                    self.assertIn("if (InventoryManager.HaveUpgrade((EInventoryItem)0x12A)) multiplier = 100;", source)
+                    self.assertIn("else if (InventoryManager.HaveUpgrade((EInventoryItem)0x129)) multiplier = 5;", source)
+                    self.assertIn("else if (InventoryManager.HaveUpgrade((EInventoryItem)0x128)) multiplier = 2;", source)
+                    self.assertIn("if (price <= 0 || multiplier == 1) return price;", source)
+                    self.assertIn("VF2ResetB150PriceMode();", source)
+                    patch_source = Path(patcher.__file__).read_text(encoding="utf-8")
+                    self.assertIn(
+                        "case 0x12C:\n        VF2ResetB150PriceMode();\n        break;",
+                        patch_source,
+                    )
                     self.assertIn("CVillager& GetVillager(int id);", source)
                     self.assertIn("VillagerManager.GetVillager(workerId)", source)
                     self.assertNotIn("GetVillagerPtr(workerId)", source)
@@ -1946,10 +2001,28 @@ class OutfitStoreMappingTests(unittest.TestCase):
                             b"\x8B\xC7\x5F\x5E\x5B\x5D\xC2\x08\x00",
                         )
                         self.assertNotIn("_VF2ApplyPriceMultiplier", obj.symbol_by_name)
-                    self.assertEqual(
-                        manifest["ScrollingStoreScene"]["price_multiplier"]["enabled"],
-                        enabled,
-                    )
+                    price_contract = manifest["ScrollingStoreScene"]["price_multiplier"]
+                    self.assertEqual(price_contract["enabled"], enabled)
+                    if enabled:
+                        self.assertEqual(price_contract["multipliers"], [2, 5, 100])
+                        self.assertEqual(
+                            price_contract["verified_categories"],
+                            [
+                                "furniture",
+                                "flea market",
+                                "Special Upgrades",
+                                "house renovations 0xE1-0xEA",
+                                "career upgrade 0x10F",
+                            ],
+                        )
+                        self.assertEqual(
+                            {row["path"] for row in price_contract["patches"]},
+                            {"career upgrade", "ordinary purchase"},
+                        )
+                        self.assertEqual(
+                            price_contract["overflow"],
+                            "saturates at signed INT_MAX",
+                        )
         finally:
             patcher.PATCHED = old_patched
             patcher.ENABLE_CHEAT_UPGRADES = old_enabled
@@ -2385,6 +2458,52 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
             "Petting",
         ):
             self.assertIsNone(patcher.custom_achievement_scold_label_dispatch(negative))
+
+
+class B153LinkedRuntimeValidatorTests(unittest.TestCase):
+    def test_mortality_trampoline_matcher_allows_only_link_fields_to_vary(self):
+        linked = bytearray(b153_runtime.MORTALITY_TRAMPOLINE)
+        for offset in b153_runtime.MORTALITY_WILDCARDS:
+            linked[offset] = (offset * 17 + 3) & 0xFF
+        haystack = b"prefix" + bytes(linked) + b"suffix"
+        self.assertEqual(
+            list(
+                b153_runtime.masked_matches(
+                    haystack,
+                    b153_runtime.MORTALITY_TRAMPOLINE,
+                    b153_runtime.MORTALITY_WILDCARDS,
+                )
+            ),
+            [len(b"prefix")],
+        )
+        linked[30] ^= 1
+        self.assertEqual(
+            list(
+                b153_runtime.masked_matches(
+                    bytes(linked),
+                    b153_runtime.MORTALITY_TRAMPOLINE,
+                    b153_runtime.MORTALITY_WILDCARDS,
+                )
+            ),
+            [],
+        )
+
+    def test_b153_matrix_builder_uses_b152_base_and_separate_outputs(self):
+        source = (patcher.ROOT / "work" / "build_b153_matrix.ps1").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'VF2-Mobile-Furniture-With-Island-Events-B152-$variant', source
+        )
+        self.assertIn(
+            'VF2-Mobile-Furniture-With-Island-Events-B153-$variant', source
+        )
+        self.assertIn("validate_b153_runtime_flags.py", source)
+        self.assertIn("validate_b153_holiday_collection.py", source)
+        self.assertNotIn(
+            '$previous = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-B153-',
+            source,
+        )
 
 
 class OlderPregnancyPatchTests(unittest.TestCase):

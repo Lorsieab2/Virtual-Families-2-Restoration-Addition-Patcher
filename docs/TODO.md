@@ -168,9 +168,16 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - [x] Assemble a minimized, isolated B153 debugger live-test folder with the
   untouched B152 all-patches control, opt-in debugger executable, exact hashes,
   save-safety checklist, launchers, and results template.
-- [ ] Run live save-load and F5/F6/F7/F4 testing before enabling the developer
-  build anywhere. Confirm selector drawing, waypoint editing, light add/delete/
-  drag/type/save, normal input fallthrough, and fault-disable behavior.
+- [x] Isolate the house-load crash in the first debugger test: Windows Error
+  Reporting identified access violation `0xC0000005` at RVA `0xC5D4B`; the
+  disabled JE used `+4` and entered the middle of the six-byte true-return
+  sequence's `ret 8` immediate. Both generated hooks now use `+6`, which lands
+  exactly at the stock body, and the corrected diagnostic passes the linked
+  fallthrough validator.
+- [ ] Live-retest the corrected debugger diagnostic. Keep debugger features
+  default-off and excluded from playable builds until house loading plus
+  F5/F6/F7/F4, selector, waypoint, light editor, input-fallthrough, and
+  save-persistence QA pass.
 - Audit other category list count patches for small/common desktop counts before
   adding more furniture entries.
 - In-game test B78 VF3 TV private floating-animation entries: verify both
@@ -634,9 +641,11 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - [x] Phase B3 exporter: discover .vf2goal from every selected executable,
   emit its exact-SHA record under core_executable plus holiday_furniture, and
   prove it can coexist with .vf2preg across 16 unique synthetic layouts.
-- [ ] Phase B3 final matrix/runtime: export the 16 final linked payloads, then
-  re-test enable, repeated-enable, disable-after-enable, save/reload, and
-  completed-goal restoration in game.
+- [x] Phase B3 final linked matrix: build and independently validate all 16
+  executable layouts, including unique hashes, `.vf2goal`/`.vf2preg`/`.vf2mort`
+  sections, exact-SHA records, and enable/repeated-enable/disable byte cycles.
+- [ ] In game, re-test runtime enable/disable, save/reload, and completed-goal
+  restoration across representative overlay combinations.
 
 ## Deferred after B151: Expanded Map
 
@@ -666,11 +675,10 @@ must remain visible as Needs source audit; it must not be silently omitted.
   patcher/exporter sources, focused tests, and these documentation updates;
   verify the CSV is tracked before committing so the workspace-local catalog
   cannot be omitted.
-- [ ] In B3, collect the stable Holiday Furniture runtime flag's exact payload
-  SHA-256/file-offset pair for every remaining executable variant and emit one
-  unambiguous manifest variant per SHA. Verify disabled, enabled, repeated-
-  enable, and disable-after-enable reconfiguration against every overlay
-  combination.
+- [x] In B3, collect the stable Holiday Furniture runtime flag's exact payload
+  SHA-256/file-offset pair for all 16 executable variants and emit one
+  unambiguous manifest variant per SHA. Automated toggle cycles verify disabled,
+  enabled, repeated-enable, and disable-after-enable bytes for every layout.
 - In a future build, implement the resource, pet, longevity, and family-tree
   appearance goals specified in `docs/B151-design.md`.
 - [x] Add a separately gated dormant `.vf2mort` hook that replaces only the
@@ -678,10 +686,11 @@ must remain visible as Needs source audit; it must not be silently omitted.
   uses a normal survival curve centered at effective age 75 (sigma 7), shifts
   effective age by 0-4 active food groups, and retains a 0.02% exponential
   no-hard-cap tail with a 3% annual hazard after effective age 130.
-- [ ] Link all B153 executable layouts and validate the `.vf2mort` section,
-  helper ABI, exact-SHA post-asset records, and coexistence with `.vf2preg` and
-  `.vf2goal`; then live-test birthdays, time-away catch-up, starvation/sickness
-  causes, ages 55/60/75/90/100/122+, save/reload, and patch-off stock parity.
+- [x] Link all 16 B153 executable layouts and validate the `.vf2mort` section,
+  helper ABI, exact-SHA post-asset records, coexistence with `.vf2preg` and
+  `.vf2goal`, unique hashes, and reversible byte-toggle cycles.
+- [ ] Live-test birthdays, time-away catch-up, starvation/sickness causes, ages
+  55/60/75/90/100/122+, save/reload, and patch-off stock parity.
 - Keep the exact requested title `Hampster Dance`; use the corrected spelling
   `Centenarian`; and make pet goals require a live placed pet rather than a
   purchased-but-unplaced inventory item.
@@ -718,8 +727,9 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - [x] Compile and bounded-validate a real core diagnostic: .vf2preg is
   writable/default-00 at raw 0x188800, and the native detour/helper/stock
   fallback plus 1000-way roll and success-only tutorial queue all decode.
-- [ ] Run the linked validator over all final B152 matrix executables and
-  dry-run/apply the setting against every selected-overlay SHA.
+- [x] Run the linked validator over all 16 final B153 matrix executables and
+  dry-run/apply `.vf2preg` with enable, repeated-enable, and disable restoration
+  against every selected-overlay SHA.
 - [ ] Manually test ages 49, 50, 59, 60, 68, 69, and an extreme old-age save;
   confirm normal under-50 attempts, late-age failures, successful births,
   save/reload, and native singleton/twin/triplet outcomes.

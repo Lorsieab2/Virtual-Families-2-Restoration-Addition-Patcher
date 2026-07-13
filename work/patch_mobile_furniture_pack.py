@@ -1138,7 +1138,7 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_PracticingNewJobSkill", "Practicing a new job skill"),
             ("eString_ImprovingJobPerformance", "Improving job performance"),
             ("eString_WorkingClientProject", "Working on a project for a client"),
-            ("eString_TakingBossAdvice", "Taking boss's advice on a career project"),
+            ("eString_TakingBossAdvice", "Taking boss' advice on a job project"),
             ("eString_ReflectingCareerPerformance", "Reflecting on recent career performance"),
             ("eString_TryingImproveCareerPerformance", "Trying to improve career performance"),
             ("eString_WorkingNextPromotion", "Working hard for the next promotion!"),
@@ -12047,7 +12047,7 @@ def patch_debug_features(manifest):
         payload += b"\x83\xC4" + bytes([len(arg_bytes) * 4])
         payload += b"\x59"  # pop ecx
         payload += b"\x84\xC0"  # test al,al
-        payload += b"\x74\x04"  # je original body
+        payload += b"\x74\x06"  # je original body; skip six-byte true return
         payload += b"\xB0\x01"  # mov al,1
         payload += b"\x5D"  # pop ebp
         payload += b"\xC2" + struct.pack("<H", ret_bytes)
@@ -12072,7 +12072,7 @@ def patch_debug_features(manifest):
             0x83, 0xC4, 0x08,             # add esp, 8
             0x59,                         # pop ecx
             0x84, 0xC0,                   # test al,al
-            0x74, 0x04,                   # je original body
+            0x74, 0x06,                   # je original body; skip six-byte true return
             0xB0, 0x01,                   # mov al,1
             0x5D,                         # pop ebp
             0xC2, 0x04, 0x00,             # ret 4

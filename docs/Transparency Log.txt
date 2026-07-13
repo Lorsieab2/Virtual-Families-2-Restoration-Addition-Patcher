@@ -788,3 +788,28 @@ B153 native editor key-map audit
 - Waypoint Editor native character controls are W to cycle and scroll among
   five waypoints and S to save; both are case-insensitive. Automated regression
   coverage now pins these mappings before the disposable-save live test.
+
+B153 linked-matrix and debugger-crash follow-up (2026-07-13)
+------------------------------------------------------------
+
+- All 16 final B153 executable layouts pass linked Holiday and runtime-flag
+  validation. The three optional runtime flags are default-zero, independently
+  addressable by exact payload SHA, and restore their original bytes after a
+  toggle cycle. These automated checks do not claim live gameplay validation.
+- Behavior-on layouts contain the exact label "Taking boss' advice on a job
+  project" and spontaneous registrations for age-14+ Ironing clothes and
+  all-age Needs to sit down. Behavior-off layouts contain none of those custom
+  records.
+- Reset Price Multiplier does not restore a saved table of prices. It removes
+  multiplier ownership IDs 0x128-0x12A, after which the helper returns the
+  game's current calculated incoming price unchanged. Normal and career pricing
+  returns are both covered.
+- The first opt-in debugger test crashed on house load with access violation
+  0xC0000005 at RVA 0xC5D4B. Its disabled JE displacement was four bytes even
+  though the preceding true-return sequence was six bytes, so execution entered
+  the RET 8 immediate instead of the stock body.
+- Both debugger hooks now branch by six bytes. Corrected isolated diagnostic:
+  SHA-256 82936F22A33F8991D9282DB15D90CE1105828C7A2FE57014E7924B98D1510135.
+  Its linked fallthrough validator passes, but it has not yet passed a live
+  house-load retest. Debugger functionality remains default-off and excluded
+  from playable builds.

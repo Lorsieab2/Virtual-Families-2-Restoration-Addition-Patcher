@@ -2506,3 +2506,33 @@
 - This is structural/link validation only. `ENABLE_DEBUGGER_FEATURES` remains
   false by default, published builds retain stock input, and F5/F6/F7/F4 plus
   light add/delete/drag/type/save still require live save-load testing.
+
+## 2026-07-13 - B153 linked matrix, behavior, price, and debugger crash audit
+
+- Built and independently validated all 16 B153 Island Events / Cheat Upgrades /
+  Holiday Ornaments / Behavior Patches layouts. Every executable hash is unique;
+  `.vf2goal`, `.vf2preg`, and `.vf2mort` remain writable/default-zero and have
+  nonoverlapping exact-SHA records with reversible enable/idempotent-enable/
+  disable cycles. This is linked structural proof, not live gameplay proof.
+- Holiday validation passes eight positive and eight negative layouts, including
+  collection labels, Ornamentologist placement, and patch-off absence.
+- Behavior validation proves `Ironing clothes` is an age-14+ spontaneous
+  candidate and `Needs to sit down` is an all-age spontaneous candidate only
+  when Behavior Patches is enabled. The linked label is exactly
+  `Taking boss' advice on a job project`; the former career-project string is
+  absent.
+- Price-multiplier audit confirms both normal and career `CalcPrice` return
+  paths use the multiplier helper. The three multipliers are mutually exclusive,
+  overflow saturates at `INT_MAX`, and Reset removes IDs `0x128`-`0x12A` then
+  returns the current incoming canonical price unchanged; no stale price cache
+  is involved.
+- Windows Error Reporting identified the first debugger test crash as
+  `0xC0000005` at RVA `0xC5D4B`. The disabled branch's JE `+4` landed inside the
+  immediate bytes of the six-byte `mov al,1; pop ebp; ret 8` sequence. Both
+  generated debugger hooks now use JE `+6`, landing exactly at the stock body.
+- The corrected isolated diagnostic is 1,739,264 bytes, SHA-256
+  `82936F22A33F8991D9282DB15D90CE1105828C7A2FE57014E7924B98D1510135`.
+  Linked validation finds one key-down, one key-character, and three mouse
+  hooks, no stale `+4` branch, and exact stock fallthrough targets. Live
+  house-load/editor retesting is still required; normal builds remain stock and
+  the debugger remains default-off.
