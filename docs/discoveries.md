@@ -2491,6 +2491,13 @@
   Windows GUI diagnostic, SHA-256
   `1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520`.
 - The expanded debugger and patcher regression suite passes all 100 tests.
+- A minimized isolated live-test folder pairs that executable with the exact
+  B152 all-patches runtime and untouched control executable SHA-256
+  `23D0E330AE82C745F8395FA5D22D9B3ACFC49FA85D9B83A5474FEA8382495B4F`.
+  It contains 8,472 files / 239,085,638 logical bytes; 8,465 runtime files are
+  same-volume hardlinks and no runtime file required a duplicate copy.
+- Dumpbin confirms the control and developer executables have the same DLL
+  dependency set; the developer image is x86 / Windows GUI.
 - This is structural/link validation only. `ENABLE_DEBUGGER_FEATURES` remains
   false by default, published builds retain stock input, and F5/F6/F7/F4 plus
   light add/delete/drag/type/save still require live save-load testing.

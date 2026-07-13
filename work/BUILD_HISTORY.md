@@ -1155,5 +1155,12 @@
   diagnostic. SHA-256:
   `1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520`.
 - The complete 100-test suite passes.
+- Prepared the minimized `outputs/B153-Debugger-Live-Test-All-Patches`
+  developer-only folder from the exact B152 all-patches runtime. It contains
+  both the untouched control and opt-in debugger executable, launchers,
+  manifests, a save-safe checklist, and a results template.
+- The folder contains 8,472 files / 239,085,638 logical bytes. It omits patcher
+  backups, old logs, historical executables, optional source payloads, and
+  original-asset backups; 8,465 reused runtime files are hardlinked.
 - Live save-load, selector, waypoint, light-source, input-fallthrough, and
   fault-recovery validation remains before enabling this path in a release.

@@ -124,6 +124,10 @@ could execute a command twice. The corrected helper and scene link into a
 1,737,216-byte x86 Windows GUI diagnostic with SHA-256
 `1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520`.
 
+The save-safe test order, stop conditions, exact controls, and pass boundary are
+in the [debugger live-test checklist](debugger-live-test-checklist.md). The
+developer executable must be tested only with a disposable save/player.
+
 The desktop Light Source Editor already contains the requested core operations:
 
 - L: add a light source at the cursor.

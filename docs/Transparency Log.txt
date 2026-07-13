@@ -762,3 +762,22 @@ B153 default-off native debugger input milestone
 - This is not a live-game claim; save loading, selector drawing, all editor
   controls, input fallthrough, and fault recovery still require in-game
   testing before any release can enable it.
+
+B153 isolated debugger live-test handoff
+-----------------------------------------
+
+- Prepared outputs/B153-Debugger-Live-Test-All-Patches as a developer-only
+  folder; it is not a release and was not uploaded as a release asset.
+- The untouched B152 all-patches control remains SHA-256
+  23D0E330AE82C745F8395FA5D22D9B3ACFC49FA85D9B83A5474FEA8382495B4F.
+  The opt-in debugger test remains SHA-256
+  1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520.
+- The minimized payload has 8,472 files and 239,085,638 logical bytes. It omits
+  patcher backups, old logs, historical executables, OptionalVisualMods, and
+  original-asset backups. All 8,465 reused runtime files are same-volume
+  hardlinks; no runtime content required a duplicate copy.
+- Dumpbin reports the same DLL dependency set for control and debugger images;
+  the developer executable is x86 / Windows GUI.
+- The package includes separate control/test launchers, generated manifests, a
+  save-safety checklist, and a results template. It has not been launched and
+  no save was touched; live validation remains explicitly pending.
