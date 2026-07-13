@@ -2404,3 +2404,47 @@
 - The canonical manifest is schema 3 and records all 15 page layers. The
   resulting background SHA-256 is
   C94D42F228B78FB018F8F27392165072202BB57F5BA72B1FC902058678B983E0.
+
+## 2026-07-12 - B153 Twelve-Child Native Layout Audit
+
+- The live household is not limited to six storage objects. `CVillagerManager`
+  owns 30 ordinary `CVillager` slots at stride `0x1CC0C`; `GetVillager(int)`
+  accepts ordinary indices 0-29, and pregnancy uses generic
+  `SpawnSpecificPeep` free-slot allocation. This is sufficient for two parents
+  plus 12 living children without widening `CVillagerManager`.
+- The hard ceiling is the current `CFamilyTree::SFamilyRecord`. Its child count
+  is at `+0x1B4`, its child array begins at `+0x1B8`, each `SPeepRecord` is
+  `0xD8` bytes, and each generation record is `0x6C8` bytes: exactly six child
+  records. `AddOffspring` rejects count 6 and `EmptyOffspringSlots` returns
+  `6-count`. `CVillager::Impregnate` calls the latter before choosing
+  singleton/twin/triplet count, so patching that one constant without new
+  storage would write into the next generation record.
+- The tree owns 30 records. Its `.bss` is `0xCB80`, with the `CFamilyTree`
+  global at `+8`; 30 times `0x6C8` is `0xCB70`. The serialized Family Tree
+  block in `theGameData` starts at `+0x1840` and the next component starts at
+  `+0xE3B4`, leaving exactly `0xCB74` bytes: a four-byte generation count plus
+  the 30 stock records and no spare tail. A naive 12-child inline record would
+  be `0xBD8`; 30 such records require `0x16350`, adding `0x97E0` bytes and
+  shifting every later save component. That is not compatible with stock
+  saves without a versioned migration.
+- `CFamilyTreeScene::DrawFamily` and `CheckForFamilyPeepHit` both loop the
+  recorded child count and address children at `+0x1B8 + index*0xD8`, but their
+  only layout break occurs at index 3. Counts above six would continue off the
+  existing two-row layout; draw and hit testing must be replaced together with
+  a compact 12-child grid.
+- `CAdoptionScene::CreateNextGenerationCandidates` does iterate every recorded
+  child and filters only missing/dead live IDs, but writes candidate villager
+  indices to `this+0x20` and persistent peep IDs to `this+0x38`. Each array has
+  only six dwords; the count is already at `this+0x50`. `GetNextCandidate`
+  cycles by that count, and acceptance passes the paired peep ID to
+  `StartNextGeneration`. Twelve candidates therefore require external arrays
+  or a safely enlarged scene object; changing the loop count would overwrite
+  scene fields.
+- Safe architecture: retain all stock six-child fields for vanilla-save
+  compatibility; add default-off sidecar records for child indices 6-11;
+  migrate/reset/move them in lockstep with the 30-generation tree; merge stock
+  and sidecar children in count/find/death/update/Next Generation paths; and
+  persist the sidecar through an explicitly versioned extension before
+  enabling births 7-12. The optional patch must remain unavailable until that
+  persistence plus 12-candidate and draw/hit-test paths pass save/reload and
+  generation-transition tests.

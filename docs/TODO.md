@@ -715,3 +715,25 @@ must remain visible as Needs source audit; it must not be silently omitted.
   Holiday gate behavior, and exporter payload routing.
 - [ ] Open the collection page in game and visually confirm the frame, Candy
   Cane, placeholders, and collected ornaments are upright and aligned.
+
+## B153 Experimental Increase Child Limit
+
+- [x] Audit live villager capacity, conception allocation, Family Tree record
+  geometry, save-block boundaries, Family Tree draw/hit testing, and Next
+  Generation candidate arrays from the desktop COFF objects.
+- [ ] Design and prove a vanilla-save-compatible, versioned persistence
+  extension for six extra `SPeepRecord`s per generation. Do not raise
+  `EmptyOffspringSlots` before this exists: the stock record has room for only
+  six and would overwrite the following generation.
+- [ ] Add sidecar-aware Family Tree count/add/find/death/update/reset,
+  `MakeRoomInTree`, and `StartNextGeneration` routes while preserving the
+  stock six records byte-for-byte when the patch is disabled.
+- [ ] Replace Family Tree child drawing and hit testing as one unit with a
+  readable 12-child grid; verify all 12 names, portraits, death tinting, and
+  information dialogs across current and historical generations.
+- [ ] Replace the two six-dword Adoption/Next Generation arrays with
+  12-candidate external storage and verify cycling plus selection of every
+  child, including indices 6-11.
+- [ ] Test singleton/twin/triplet births at counts 5-11, adoption, save/reload,
+  time away, death, generation transition, generation-30 rollover, patch-off
+  parity, and loading unmodified vanilla saves before exposing the setting.

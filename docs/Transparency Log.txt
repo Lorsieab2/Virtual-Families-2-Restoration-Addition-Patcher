@@ -695,3 +695,22 @@ B153 optional Older Villager Mortality source implementation
   A9EE0A6BB1D96296129F4EFE603837512E848BD5F28D6AC536EB318A3F87DC5C and its
   writable/default-zero `.vf2mort` byte is raw offset 197A00. The complete
   patcher/exporter regression run passes 117 tests.
+
+B153 Increase Child Limit native audit
+---------------------------------------
+
+- No 12-child toggle is shipped by this research milestone. The live villager
+  manager already has 30 ordinary slots, enough for two parents and 12 living
+  children; it does not need to be enlarged.
+- The Family Tree is the actual hard limit. Every generation record contains
+  exactly six 0xD8 child records, and its serialized block has no unused tail.
+  Raising only the limit would overwrite the following generation.
+- The Family Tree display and its click hit-testing share a six-child,
+  two-row layout. Both need a coordinated compact 12-child replacement.
+- The Next Generation screen uses two embedded six-entry arrays: one for
+  temporary candidate villager indices and one for persistent peep IDs.
+  Allowing its existing loop to exceed six would overwrite later scene fields.
+- The planned safe route keeps the stock six-child records intact for vanilla
+  save compatibility, adds versioned sidecar persistence for children 7-12,
+  and merges those records through tree maintenance, display/hit testing, and
+  Next Generation selection. Births 7-12 must remain disabled until those

@@ -1106,3 +1106,16 @@
   writable/default-zero `.vf2mort` at raw `0x197A00`; SHA-256 is
   `A9EE0A6BB1D96296129F4EFE603837512E848BD5F28D6AC536EB318A3F87DC5C`.
   The full patcher/exporter suite passes 117 tests.
+
+## B153 Research - Twelve-Child Storage and Next Generation
+
+- Proves the live villager manager already has 30 ordinary slots, so 12 living
+  children do not require enlarging the household object.
+- Maps the actual blockers: six `0xD8` child records inside each `0x6C8`
+  generation, a completely occupied `0xCB74` Family Tree save block, a
+  two-row renderer/hit tester designed around six children, and two six-entry
+  Next Generation candidate arrays embedded in `CAdoptionScene`.
+- Records the safe implementation boundary: versioned sidecar persistence and
+  coordinated tree/candidate/UI detours must land before the birth limit can
+  be raised. This research milestone intentionally does not ship a partial
+  12-child toggle that could corrupt generations or scene fields.
