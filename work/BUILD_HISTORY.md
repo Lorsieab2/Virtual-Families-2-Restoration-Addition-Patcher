@@ -1088,3 +1088,21 @@
   exposed until the key/display-only path passes save-load testing.
 - The generated helper compiles successfully with the Visual C++ x86 toolchain.
   The targeted debugger interface regression test and Python syntax checks pass.
+
+## B153 Source - Optional Older Villager Mortality Curve
+
+- Adds a dormant `.vf2mort` byte and a default-off Experimental patcher row.
+  Exact-SHA post-asset records toggle it independently of `.vf2preg` and
+  `.vf2goal`, without expanding the 16 executable layouts.
+- Detours only the annual old-age decision in VillagerManager upkeep. Flag-off
+  calls native FoodGroupsActive and rejoins the unchanged stock block;
+  enabled mode rolls the replacement curve and rejoins immediately afterward.
+- Uses a normal survival component centered at effective age 75 (sigma 7), a
+  0-4 year nutrition shift, and a 0.02% exponential no-hard-cap tail. Above
+  effective age 130, annual old-age hazard remains 3%.
+- Focused COFF, curve, and three-runtime-flag exporter tests pass. This source
+  milestone is not yet a B153 release or a claim of live-gameplay validation.
+- A disposable linked diagnostic resolves the native hook/helper and exposes
+  writable/default-zero `.vf2mort` at raw `0x197A00`; SHA-256 is
+  `A9EE0A6BB1D96296129F4EFE603837512E848BD5F28D6AC536EB318A3F87DC5C`.
+  The full patcher/exporter suite passes 117 tests.

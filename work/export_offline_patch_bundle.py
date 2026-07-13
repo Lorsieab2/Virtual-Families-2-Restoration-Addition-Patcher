@@ -58,6 +58,7 @@ OPTIONAL_SONG_TARGET_DIR = Path("Sounds")
 DEFAULT_OPTIONAL_SONG_MODS_SOURCE = OPTIONAL_PATCH_ASSET_DIR / "optional_song_mods" / "OptionalSongMods"
 SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "allow_older_pregnancies",
+    "older_villager_mortality",
     "invisible_upgrades_graphics",
     "optional_song_mods",
     "white_birds",
@@ -185,6 +186,13 @@ SETTINGS = [
         "id": "allow_older_pregnancies",
         "label": "Allow Older Pregnancies",
         "description": "Experimental patch: preserves normal fertility behavior below age 50, then allows a small pregnancy chance when either parent is 50 or older. The older parent caps the chance from 10.0% at age 50 down to a permanent 0.1% floor at age 69+.",
+        "default": False,
+        "category": "experimental",
+    },
+    {
+        "id": "older_villager_mortality",
+        "label": "Older Villager Mortality Curve",
+        "description": "Experimental patch: replaces only the annual old-age death roll with a lifespan distribution centered near age 75. Active food groups can extend life by up to four effective years, and a very rare no-hard-cap tail permits ages beyond 122. All stock mortality remains active when disabled.",
         "default": False,
         "category": "experimental",
     },
@@ -688,6 +696,30 @@ def older_pregnancy_post_asset_patches(
     )
 
 
+def older_mortality_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("OlderVillagerMortality")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError(
+            "Build manifest has an invalid OlderVillagerMortality contract."
+        )
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=".vf2mort",
+        setting_id="older_villager_mortality",
+        feature_label="Older Villager Mortality Curve",
+    )
+
+
 def holiday_furniture_goal_post_asset_patches(
     executable_sources: list[Path],
     *,
@@ -725,6 +757,11 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *older_pregnancy_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *older_mortality_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
@@ -2200,7 +2237,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "---------------------",
         "- Main Patches (green): core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits.",
         "- Optional Patches (black): Holiday Ornaments, Settings Evict, Island Events, optional visual swaps, Invisible Furniture graphics modes, custom maps, LDW Posters/Paintings, and Colorful Couches.",
-        "- Experimental/Not Working Patches (red): Allow Older Pregnancies, mobile furniture behaviors, Expand game map, and anything not 100% confirmed working and crash-free.",
+        "- Experimental/Not Working Patches (red): Allow Older Pregnancies, Older Villager Mortality Curve, mobile furniture behaviors, Expand game map, and anything not 100% confirmed working and crash-free.",
         "",
         "B151 native feature gating",
         "--------------------------",
@@ -2212,6 +2249,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- The six-page/72-item collection and Holiday-aware count require holiday_ornaments_collection. Brokerage 11% wording follows mobile_purchases.",
         "- Holiday Furniture goals 0x6D-0x7F use an exact-SHA .vf2goal post-asset byte enabled only with core_executable plus holiday_furniture.",
         "- Allow Older Pregnancies is a default-off exact-SHA post-asset toggle of the dormant .vf2preg byte; it does not add another executable overlay dimension.",
+        "- Older Villager Mortality Curve is a default-off exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
     ]
     )
     for row in settings:
@@ -2230,7 +2268,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
     elif summary.get("exe_replacement"):
         limitation = (
             "This bundle uses verified modified EXE payloads for native/game-code changes. "
-            "B152 isolates Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches with a complete 16-state executable overlay matrix; Holiday Furniture goals and Allow Older Pregnancies use independent post-asset runtime bytes so they do not expand that matrix."
+            "B152 isolates Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches with a complete 16-state executable overlay matrix; Holiday Furniture goals, Allow Older Pregnancies, and Older Villager Mortality use independent post-asset runtime bytes so they do not expand that matrix."
         )
     else:
         limitation = (

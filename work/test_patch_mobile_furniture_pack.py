@@ -2065,6 +2065,106 @@ class OlderPregnancyPatchTests(unittest.TestCase):
         self.assertNotIn("VF2_ENABLE_ALLOW_OLDER_PREGNANCIES", source)
 
 
+class OlderMortalityPatchTests(unittest.TestCase):
+    def test_curve_has_normal_center_nutrition_shift_and_no_hard_cap(self):
+        hazards = {
+            age: patcher.older_mortality_hazard_basis_points(age)
+            for age in (54, 55, 65, 75, 85, 100, 122, 130, 131)
+        }
+        self.assertEqual(hazards[54], 0)
+        self.assertGreater(hazards[75], hazards[65])
+        self.assertGreater(hazards[85], hazards[75])
+        self.assertEqual(hazards[122], 300)
+        self.assertEqual(hazards[130], 300)
+        self.assertEqual(hazards[131], 300)
+        self.assertGreater(patcher.older_mortality_survival_weight(122), 0.0)
+
+    def test_dormant_hook_preserves_stock_mortality_path_and_exact_abi(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                patcher.PATCHED = temp_root
+                shutil.copy2(
+                    patcher.SRC_OBJS / "VillagerManager.obj",
+                    temp_root / "VillagerManager.obj",
+                )
+                manifest = {}
+                patcher.patch_older_villager_mortality(manifest)
+
+                stock = CoffObject(patcher.SRC_OBJS / "VillagerManager.obj")
+                patched = CoffObject(temp_root / "VillagerManager.obj")
+                name = (
+                    "?AllVillagersRealtimePhysiologyAndProductivityUpkeep@"
+                    "CVillagerManager@@QAEXXZ"
+                )
+                stock_sec = stock.section(stock.symbol(name).section)
+                patched_sec = patched.section(patched.symbol(name).section)
+                stock_data = bytes(
+                    stock.buf[stock_sec.raw_ptr : stock_sec.raw_ptr + stock_sec.raw_size]
+                )
+                patched_data = bytes(
+                    patched.buf[
+                        patched_sec.raw_ptr : patched_sec.raw_ptr + patched_sec.raw_size
+                    ]
+                )
+                cave = 0x7E2
+                self.assertEqual(patched_data[0x353], 0xE9)
+                self.assertEqual(patched_data[0x358:0x35C], b"\x90" * 4)
+                self.assertEqual(patched_data[0x35C:0x3C8], stock_data[0x35C:0x3C8])
+                self.assertEqual(patched_data[cave:cave + 4], b"\x6A\x00\x8B\xCB")
+                self.assertEqual(patched_data[cave + 16:cave + 18], b"\x74\x20")
+                self.assertEqual(patched_data[cave + 30:cave + 34], b"\x85\xC0\x74\x0B")
+
+                relocs = {
+                    (vaddr, patched.symbol_by_index[symidx].name, rtype)
+                    for vaddr, symidx, rtype in (
+                        struct.unpack_from(
+                            "<IIH", patched.buf, patched_sec.reloc_ptr + i * 10
+                        )
+                        for i in range(patched_sec.nreloc)
+                    )
+                }
+                self.assertIn(
+                    (cave + 11, patcher.OLDER_MORTALITY_FLAG_SYMBOL, 0x0006),
+                    relocs,
+                )
+                self.assertIn(
+                    (cave + 23, patcher.OLDER_MORTALITY_HELPER_SYMBOL, 0x0014),
+                    relocs,
+                )
+                self.assertIn(
+                    (
+                        cave + 5,
+                        "?FoodGroupsActive@CVillagerState@@QAEH_N@Z",
+                        0x0014,
+                    ),
+                    relocs,
+                )
+                contract = manifest["OlderVillagerMortality"]
+                self.assertFalse(contract["default"])
+                self.assertEqual(contract["runtime_flag"]["source_section"], ".vf2mort")
+                self.assertIsNone(contract["curve"]["hard_maximum"])
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_hook_is_installed_in_all_compile_time_layouts(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        main = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "main"
+        )
+        calls = [
+            node for node in main.body
+            if isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "patch_older_villager_mortality"
+        ]
+        self.assertEqual(len(calls), 1)
+
+
 class HolidayOrnamentGateTests(unittest.TestCase):
     def with_temp_patched_objs(self, filenames, callback):
         old_patched = patcher.PATCHED

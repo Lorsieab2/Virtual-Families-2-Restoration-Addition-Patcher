@@ -2,6 +2,7 @@ from pathlib import Path
 import csv
 import hashlib
 import json
+import math
 import os
 import random
 import re
@@ -45,6 +46,40 @@ OLDER_PREGNANCY_FLAG_SECTION = ".vf2preg"
 OLDER_PREGNANCY_FLAG_SYMBOL = "_gVF2AllowOlderPregnancies"
 OLDER_PREGNANCY_HELPER_SYMBOL = "_VF2RollOlderPregnancy"
 OLDER_PREGNANCY_INTERNAL_AGE_50 = 50 * 20
+
+# B153 mortality research uses the same dormant-byte architecture as older
+# pregnancies. Every executable contains the hook with a zero byte; the
+# offline patcher flips only .vf2mort for the selected exact-SHA payload.
+OLDER_MORTALITY_FLAG_SECTION = ".vf2mort"
+OLDER_MORTALITY_FLAG_SYMBOL = "_gVF2OlderVillagerMortality"
+OLDER_MORTALITY_HELPER_SYMBOL = "_VF2RollOlderVillagerMortality"
+OLDER_MORTALITY_TABLE_FIRST_AGE = 55
+OLDER_MORTALITY_TABLE_LAST_AGE = 130
+
+
+def older_mortality_survival_weight(effective_age):
+    """Target survival weight for the optional birthday hazard curve.
+
+    The main population follows a normal lifespan distribution centered at
+    effective age 75 with sigma 7. A 0.02% exponential tail prevents a hard
+    maximum and permits exceptionally rare ages beyond 122.
+    """
+    normal_cdf = 0.5 * (
+        1.0 + math.erf((effective_age + 0.5 - 75.0) / (7.0 * math.sqrt(2.0)))
+    )
+    tail = 1.0 if effective_age < 75 else 0.97 ** (effective_age - 75)
+    return 0.9998 * (1.0 - normal_cdf) + 0.0002 * tail
+
+
+def older_mortality_hazard_basis_points(effective_age):
+    """Return the annual death roll threshold in the 0..9999 domain."""
+    if effective_age < OLDER_MORTALITY_TABLE_FIRST_AGE:
+        return 0
+    if effective_age > OLDER_MORTALITY_TABLE_LAST_AGE:
+        return 300
+    previous = older_mortality_survival_weight(effective_age - 1)
+    current = older_mortality_survival_weight(effective_age)
+    return max(1, min(9900, round(10000.0 * (previous - current) / previous)))
 
 
 def older_pregnancy_cap_tenths(age_years):
@@ -8331,6 +8366,16 @@ extern "C" void __cdecl VF2HandleStoreScrollbarMouse(void *scene, int message, i
         for item_id, goal_id in CUSTOM_ACHIEVEMENT_HOLIDAY_PURCHASE_GOALS.items()
     )
 
+    mortality_hazards_cpp = cpp_int_array(
+        "kVF2OlderMortalityHazardsBasisPoints",
+        [
+            older_mortality_hazard_basis_points(age)
+            for age in range(
+                OLDER_MORTALITY_TABLE_FIRST_AGE,
+                OLDER_MORTALITY_TABLE_LAST_AGE + 1,
+            )
+        ],
+    )
     special_upgrade_helper_cpp = r"""
 class CFoodStore {
 public:
@@ -8473,6 +8518,12 @@ volatile unsigned char gVF2HolidayFurnitureGoalsEnabled = 0;
 extern "C" __declspec(allocate(".vf2preg"))
 volatile unsigned char gVF2AllowOlderPregnancies = 0;
 
+#pragma section(".vf2mort", read, write)
+extern "C" __declspec(allocate(".vf2mort"))
+volatile unsigned char gVF2OlderVillagerMortality = 0;
+
+__VF2_MORTALITY_HAZARD_ARRAY__
+
 static const bool kVF2IncludeOrnamentologistGoal = __VF2_INCLUDE_ORNAMENT_GOAL__;
 static const bool kVF2IncludeBehaviorGoals = __VF2_INCLUDE_BEHAVIOR_GOALS__;
 
@@ -8535,6 +8586,25 @@ extern "C" int __cdecl VF2RollOlderPregnancy(
     }
     TutorialTip.Queue(eStringPregnancyTutorial, eGameSceneNone, false);
     return 1;
+}
+
+extern "C" int __cdecl VF2RollOlderVillagerMortality(
+    int internalAge,
+    int activeFoodGroups
+) {
+    if (internalAge < 0 || internalAge % 20 != 0) return 0;
+    if (activeFoodGroups < 0) activeFoodGroups = 0;
+    if (activeFoodGroups > 4) activeFoodGroups = 4;
+
+    int effectiveAge = internalAge / 20 - activeFoodGroups;
+    if (effectiveAge < 55) return 0;
+
+    int hazardBasisPoints = 300;
+    if (effectiveAge <= 130) {
+        hazardBasisPoints =
+            kVF2OlderMortalityHazardsBasisPoints[effectiveAge - 55];
+    }
+    return ldwGameState::GetRandom(10000) < hazardBasisPoints ? 1 : 0;
 }
 
 static int VF2AchievementVisibleCountInternal() {
@@ -8888,6 +8958,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_FURNITURE_LOCK_ARRAY__",
         furniture_lock_array_cpp,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_MORTALITY_HAZARD_ARRAY__",
+        mortality_hazards_cpp,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_FURNITURE_RECORD_COUNT__",
@@ -10847,6 +10921,122 @@ def patch_allow_older_pregnancies(manifest):
             "failed_roll_forced_success_disabled_for_late_age_path": True,
         },
         "multiples": "native pregnancy/birth logic remains unmodified",
+    }
+
+
+def patch_older_villager_mortality(manifest):
+    """Install a dormant optional replacement for only stock old-age death."""
+    obj = CoffObject(PATCHED / "VillagerManager.obj")
+    stock = CoffObject(SRC_OBJS / "VillagerManager.obj")
+    function_name = (
+        "?AllVillagersRealtimePhysiologyAndProductivityUpkeep@"
+        "CVillagerManager@@QAEXXZ"
+    )
+    sym = obj.symbol(function_name)
+    stock_sym = stock.symbol(function_name)
+    sec = obj.section(sym.section)
+    stock_sec = stock.section(stock_sym.section)
+    if sym.value != 0 or stock_sym.value != 0:
+        raise RuntimeError("Unexpected VillagerManager upkeep symbol offset")
+    if stock_sec.raw_size != 0x7E2:
+        raise RuntimeError("Unexpected stock VillagerManager upkeep span")
+
+    hook = sym.value + 0x353
+    stock_continue = sym.value + 0x35C
+    mortality_done = sym.value + 0x3C8
+    expected = b"\x6A\x00\x8B\xCB\xE8\x00\x00\x00\x00\x8D\x34\x80"
+    raw = sec.raw_ptr + hook
+    if bytes(obj.buf[raw : raw + len(expected)]) != expected:
+        raise RuntimeError("Unexpected VillagerManager mortality hook bytes")
+
+    cave = sec.raw_size
+    trampoline = bytearray([
+        0x6A, 0x00,                         # push 0
+        0x8B, 0xCB,                         # mov ecx,ebx
+        0xE8, 0, 0, 0, 0,                  # call FoodGroupsActive
+        0x80, 0x3D, 0, 0, 0, 0, 0x00,     # cmp byte ptr [flag],0
+        0x74, 0x20,                         # je stock continuation
+        0x50,                               # push eax ; food groups
+        0xFF, 0x73, 0x08,                   # push [ebx+8] ; internal age
+        0xE8, 0, 0, 0, 0,                  # call mortality helper
+        0x83, 0xC4, 0x08,                   # add esp,8
+        0x85, 0xC0,                         # test eax,eax
+        0x74, 0x0B,                         # je mortality done jump
+        0x6A, 0x02,                         # push OldAge
+        0x6A, 0x00,                         # push zero health
+        0x8B, 0xCB,                         # mov ecx,ebx
+        0xE8, 0, 0, 0, 0,                  # call SetHealth
+        0xE9, 0, 0, 0, 0,                  # jmp mortality done
+        0xE9, 0, 0, 0, 0,                  # stock: jmp original+35C
+    ])
+    if len(trampoline) != 55:
+        raise AssertionError("Older-mortality trampoline size drifted")
+    struct.pack_into("<i", trampoline, 46, mortality_done - (cave + 50))
+    struct.pack_into("<i", trampoline, 51, stock_continue - (cave + 55))
+    obj.insert_section_bytes(sec.index, cave, bytes(trampoline))
+
+    food_symbol = obj.symbol(
+        "?FoodGroupsActive@CVillagerState@@QAEH_N@Z"
+    ).index
+    set_health_symbol = obj.symbol(
+        "?SetHealth@CVillagerState@@QAEXHW4ECauseOfDeath@@@Z"
+    ).index
+    move_relocation(
+        obj,
+        sec.index,
+        hook + 5,
+        cave + 5,
+        food_symbol,
+        IMAGE_REL_I386_REL32,
+    )
+    flag_symbol = obj.append_undefined_symbol(OLDER_MORTALITY_FLAG_SYMBOL)
+    helper_symbol = obj.append_undefined_symbol(OLDER_MORTALITY_HELPER_SYMBOL)
+    obj.append_relocation(sec.index, cave + 11, flag_symbol, IMAGE_REL_I386_DIR32)
+    obj.append_relocation(sec.index, cave + 23, helper_symbol, IMAGE_REL_I386_REL32)
+    obj.append_relocation(sec.index, cave + 41, set_health_symbol, IMAGE_REL_I386_REL32)
+
+    sec = obj.section(sym.section)
+    raw = sec.raw_ptr + hook
+    detour = b"\xE9" + struct.pack("<i", cave - (hook + 5)) + b"\x90" * 4
+    obj.buf[raw : raw + len(detour)] = detour
+    obj.write(PATCHED / "VillagerManager.obj")
+
+    manifest["OlderVillagerMortality"] = {
+        "status": "dormant native hook installed in every executable",
+        "offline_patcher_setting": "older_villager_mortality",
+        "category": "experimental",
+        "default": False,
+        "function": function_name,
+        "hook_offset": hex(hook),
+        "stock_path": (
+            "flag zero calls native FoodGroupsActive and rejoins at +0x35C; "
+            "stock mortality instructions +0x35C..+0x3C7 remain unchanged"
+        ),
+        "enabled_path": (
+            "one basis-point roll on exact 20-tick birthdays, then rejoin at +0x3C8"
+        ),
+        "runtime_flag": {
+            "symbol": OLDER_MORTALITY_FLAG_SYMBOL,
+            "source_section": OLDER_MORTALITY_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "curve": {
+            "main_distribution": "normal survival curve centered at effective age 75, sigma 7",
+            "nutrition": "each active food group subtracts one effective year, capped 0..4",
+            "rare_tail": "0.02% exponential mixture; 3% annual hazard after effective age 130",
+            "hard_maximum": None,
+            "random_limit": 10000,
+            "table_first_age": OLDER_MORTALITY_TABLE_FIRST_AGE,
+            "table_last_age": OLDER_MORTALITY_TABLE_LAST_AGE,
+        },
+        "unchanged": [
+            "CVillagerBio::IsOld remains age 55",
+            "all sickness, healing, productivity, and non-old-age physiology paths",
+            "stock mortality when the option is disabled",
+        ],
     }
 
 
@@ -15206,6 +15396,9 @@ def main():
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
     # this feature adds no executable-matrix dimension.
     patch_allow_older_pregnancies(manifest)
+    # The optional mortality curve is another exact-SHA dormant-byte hook.
+    # Its zero .vf2mort default resumes the untouched stock mortality block.
+    patch_older_villager_mortality(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:
         patch_collectable_item_holiday_ornaments(manifest)
         patch_collectable_holiday_ornament_observers(manifest)

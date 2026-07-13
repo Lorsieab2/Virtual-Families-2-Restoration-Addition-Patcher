@@ -18,15 +18,24 @@ import export_offline_patch_bundle as exporter
 def minimal_pe_bytes(
     with_older_pregnancy_flag=False,
     marker=0,
+    with_older_mortality_flag=False,
+    mortality_marker=0,
     with_holiday_goal_flag=False,
     goal_marker=0,
 ):
     runtime_flags = []
     if with_older_pregnancy_flag:
         runtime_flags.append((".vf2preg", marker))
+    if with_older_mortality_flag:
+        runtime_flags.append((".vf2mort", mortality_marker))
     if with_holiday_goal_flag:
         runtime_flags.append((".vf2goal", goal_marker))
-    data = bytearray(0x400 + 0x200 * len(runtime_flags))
+    # Three runtime-flag sections extend the PE section table past 0x200, so
+    # keep the legacy fixture offsets for zero-to-two flags and shift only the
+    # three-flag B153 coexistence fixtures by one file-alignment block.
+    text_raw_offset = 0x400 if len(runtime_flags) > 2 else 0x200
+    flag_raw_base = text_raw_offset + 0x200
+    data = bytearray(flag_raw_base + 0x200 * len(runtime_flags))
     data[:2] = b"MZ"
     data[0x3C:0x40] = (0x80).to_bytes(4, "little")
     pe = 0x80
@@ -54,12 +63,16 @@ def minimal_pe_bytes(
     sect = opt + 0xE0
     data[sect:sect + 8] = b".text\0\0\0"
     data[sect + 8:sect + 16] = (0x200).to_bytes(4, "little") + (0x1000).to_bytes(4, "little")
-    data[sect + 16:sect + 24] = (0x200).to_bytes(4, "little") + (0x200).to_bytes(4, "little")
+    data[sect + 16:sect + 24] = (
+        (0x200).to_bytes(4, "little") + text_raw_offset.to_bytes(4, "little")
+    )
     data[sect + 36:sect + 40] = (0x60000020).to_bytes(4, "little")
-    data[0x200:0x400] = bytes((index % 251 for index in range(0x200)))
+    data[text_raw_offset:text_raw_offset + 0x200] = bytes(
+        (index % 251 for index in range(0x200))
+    )
     for index, (section_name, value) in enumerate(runtime_flags):
         flag_sect = sect + 40 * (index + 1)
-        raw_offset = 0x400 + 0x200 * index
+        raw_offset = flag_raw_base + 0x200 * index
         rva = 0x2000 + 0x1000 * index
         data[flag_sect:flag_sect + 8] = section_name.encode("ascii")
         data[flag_sect + 8:flag_sect + 16] = (
@@ -133,6 +146,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             patched_data = minimal_pe_bytes(
                 with_older_pregnancy_flag=True,
                 marker=0,
+                with_older_mortality_flag=True,
+                mortality_marker=0,
                 with_holiday_goal_flag=True,
                 goal_marker=0,
             )
@@ -143,6 +158,13 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                         "AllowOlderPregnancies": {
                             "runtime_flag": {
                                 "source_section": ".vf2preg",
+                                "size": 1,
+                                "default": "00",
+                            }
+                        },
+                        "OlderVillagerMortality": {
+                            "runtime_flag": {
+                                "source_section": ".vf2mort",
                                 "size": 1,
                                 "default": "00",
                             }
@@ -181,7 +203,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             }["allow_older_pregnancies"]
             self.assertFalse(setting["default"])
             self.assertEqual(setting["category"], "experimental")
-            self.assertEqual(len(manifest["post_asset_patches"]), 2)
+            self.assertEqual(len(manifest["post_asset_patches"]), 3)
             records = {
                 row["requires"][-1]: row
                 for row in manifest["post_asset_patches"]
@@ -191,7 +213,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 goal_record["requires"],
                 ["core_executable", "holiday_furniture"],
             )
-            self.assertEqual(goal_record["variants"][0]["offset"], "0x600")
+            self.assertEqual(goal_record["variants"][0]["offset"], "0xa00")
             record = records["allow_older_pregnancies"]
             self.assertEqual(
                 record["requires"],
@@ -199,7 +221,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             )
             self.assertEqual(len(record["variants"]), 1)
             variant = record["variants"][0]
-            self.assertEqual(variant["offset"], "0x400")
+            self.assertEqual(variant["offset"], "0x600")
             self.assertEqual(variant["expected_asset_bytes"], "00")
             self.assertEqual(variant["replacement_bytes"], "01")
             self.assertEqual(
@@ -208,8 +230,14 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             )
             self.assertEqual(
                 manifest["export_summary"]["post_asset_patch_count"],
-                2,
+                3,
             )
+            mortality_record = records["older_villager_mortality"]
+            self.assertEqual(
+                mortality_record["requires"],
+                ["core_executable", "older_villager_mortality"],
+            )
+            self.assertEqual(mortality_record["variants"][0]["offset"], "0x800")
 
             # Keep this integration fixture focused on target/asset/post-asset
             # validation rather than the production folder-shape validator.
@@ -233,8 +261,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             disabled_installed = (
                 disabled_output / manifest["output"]["default_exe_name"]
             )
-            self.assertEqual(disabled_installed.read_bytes()[0x400], 0)
-            self.assertEqual(disabled_installed.read_bytes()[0x600], 1)
+            self.assertEqual(disabled_installed.read_bytes()[0x600], 0)
+            self.assertEqual(disabled_installed.read_bytes()[0x800], 0)
+            self.assertEqual(disabled_installed.read_bytes()[0xA00], 1)
             self.run_patcher(
                 "apply",
                 "--game-dir",
@@ -248,8 +277,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             )
             installed = output / manifest["output"]["default_exe_name"]
             self.assertTrue(installed.is_file())
-            self.assertEqual(installed.read_bytes()[0x400], 1)
             self.assertEqual(installed.read_bytes()[0x600], 1)
+            self.assertEqual(installed.read_bytes()[0x800], 0)
+            self.assertEqual(installed.read_bytes()[0xA00], 1)
             self.run_patcher(
                 "apply",
                 "--game-dir",
@@ -264,8 +294,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             all_disabled = (
                 all_disabled_output / manifest["output"]["default_exe_name"]
             ).read_bytes()
-            self.assertEqual(all_disabled[0x400], 0)
             self.assertEqual(all_disabled[0x600], 0)
+            self.assertEqual(all_disabled[0x800], 0)
+            self.assertEqual(all_disabled[0xA00], 0)
 
     def test_b152_runtime_records_cover_sixteen_unique_layout_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -275,10 +306,11 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 data = bytearray(
                     minimal_pe_bytes(
                         with_older_pregnancy_flag=True,
+                        with_older_mortality_flag=True,
                         with_holiday_goal_flag=True,
                     )
                 )
-                data[0x200 + index] ^= index + 1
+                data[0x400 + index] ^= index + 1
                 path = tmp_path / f"variant-{index:02d}.exe"
                 path.write_bytes(data)
                 sources.append(path)
@@ -291,6 +323,11 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                             "source_section": ".vf2preg",
                         }
                     },
+                    "OlderVillagerMortality": {
+                        "runtime_flag": {
+                            "source_section": ".vf2mort",
+                        }
+                    },
                     "CustomAchievements": {
                         "runtime_flag": {
                             "source_section": ".vf2goal",
@@ -298,13 +335,14 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                     }
                 },
             )
-            self.assertEqual(len(records), 2)
+            self.assertEqual(len(records), 3)
             records_by_setting = {
                 row["requires"][-1]: row for row in records
             }
             expected_offsets = {
-                "allow_older_pregnancies": "0x400",
-                "holiday_furniture": "0x600",
+                "allow_older_pregnancies": "0x600",
+                "older_villager_mortality": "0x800",
+                "holiday_furniture": "0xa00",
             }
             hashes_by_setting = {}
             for setting_id, offset in expected_offsets.items():
@@ -325,6 +363,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(
                 hashes_by_setting["allow_older_pregnancies"],
                 hashes_by_setting["holiday_furniture"],
+            )
+            self.assertEqual(
+                hashes_by_setting["allow_older_pregnancies"],
+                hashes_by_setting["older_villager_mortality"],
             )
 
     def test_exports_changed_assets_with_feature_settings(self):

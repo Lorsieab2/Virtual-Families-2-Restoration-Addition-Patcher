@@ -656,8 +656,8 @@ B153 request ledger and debugger research groundwork
   not started. Being present in source or a GUI is explicitly not treated as
   proof of completed runtime behavior.
 - The ledger records the new exact-action goals Explore, Collect, Compete
-  (Playing Poptropicals), Waddle On! Wait a minute... (Playing Club Puffle),
-  and Pixel Pets (Playing PetKinz). They remain not implemented.
+  (Playing Poptropicals), Waddle On! (Playing Club Puffle), and Pixel Pets
+  (Playing PetKinz). They remain not implemented.
 - COFF symbols prove that theMainScene exposes an IDebugger subobject at +8,
   while the Waypoint and Light Source editor globals implement IEditor only.
   The old experimental code incorrectly registered those IEditor addresses as
@@ -674,3 +674,24 @@ B153 request ledger and debugger research groundwork
   regression test proves the invalid casts are absent and the patched
   theMainScene COFF object remains parseable. This does not claim in-game F5,
   F6, F7, editor, or save-load success.
+
+B153 optional Older Villager Mortality source implementation
+-------------------------------------------------------------
+
+- Adds a default-off Experimental setting backed by a writable `.vf2mort`
+  byte and an exact-SHA post-asset toggle; it does not expand the 16-layout
+  executable matrix.
+- Flag-off calls native FoodGroupsActive and rejoins the unchanged stock
+  annual old-age block. Enabled mode replaces only that block's death roll.
+- Enabled birthdays use a normal survival curve centered at effective age 75
+  with sigma 7. Active nutrition groups subtract up to four effective years.
+  A 0.02% exponential tail and 3% annual hazard after effective age 130 mean
+  there is no forced maximum age and exceptionally rare ages past 122 remain
+  possible.
+- Focused COFF and exporter tests pass. This is source implementation, not a
+  released or live-gameplay claim; final linking, matrix validation,
+  time-away, save/reload, cause-of-death, and patch-off runtime QA remain.
+- A disposable one-layout x86 diagnostic linked successfully. Its SHA-256 is
+  A9EE0A6BB1D96296129F4EFE603837512E848BD5F28D6AC536EB318A3F87DC5C and its
+  writable/default-zero `.vf2mort` byte is raw offset 197A00. The complete
+  patcher/exporter regression run passes 117 tests.

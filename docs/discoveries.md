@@ -2161,6 +2161,32 @@
   not merely change IsOld. The stock IsOld threshold may remain useful for
   senior behavior/healing unless B151 intentionally redesigns it too.
 
+## 2026-07-12 - B153 Optional Older Villager Mortality Hook
+
+- The source now installs a dormant detour at upkeep `+0x353`, immediately
+  before the stock `FoodGroupsActive(false)` call. The trampoline reproduces
+  that call once. A zero `.vf2mort` byte jumps back to stock `+0x35C`, leaving
+  the original old-age block through `+0x3C7` unchanged and reachable.
+- When enabled, the trampoline passes raw age and active food-group count to
+  `VF2RollOlderVillagerMortality`, calls native `SetHealth(0, OldAge)` only on
+  a hit, and rejoins at `+0x3C8`. All unrelated sickness, healing,
+  productivity, and family-event code remains outside the detour.
+- The helper rolls only when raw age is divisible by 20. Its effective age is
+  displayed age minus 0-4 active food groups. The main survival component is
+  normal with center 75 and sigma 7; a 0.02% exponential component retains a
+  genuine no-hard-cap tail. Effective ages above 130 use a 300/10000 annual
+  hazard, so survival past 122 is possible but rare.
+- `.vf2mort` follows the existing exact-SHA post-asset architecture instead of
+  adding another executable overlay dimension. Focused tests prove relocation
+  targets, stock rejoin bytes, a 10,000-way helper roll, all-layout hook
+  installation, and coexistence with `.vf2preg` and `.vf2goal`. Linked-matrix
+  and live gameplay/time-away/save-load validation remain release gates.
+- A one-layout x86 diagnostic linked successfully with both the detoured
+  VillagerManager object and generated helper. SHA-256 is
+  `A9EE0A6BB1D96296129F4EFE603837512E848BD5F28D6AC536EB318A3F87DC5C`;
+  its writable/default-zero `.vf2mort` byte is raw offset `0x197A00`.
+  The full native patcher plus exporter regression run passes 117 tests.
+
 ## 2026-07-12 - B151 Holiday Ornaments Native Contract
 
 - Mobile 1.7.16 uses carrying IDs `0x9E-0xA9` and exactly three Holiday spawn

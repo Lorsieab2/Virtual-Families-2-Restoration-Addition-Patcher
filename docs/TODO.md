@@ -654,10 +654,15 @@ must remain visible as Needs source audit; it must not be silently omitted.
   combination.
 - In a future build, implement the resource, pet, longevity, and family-tree
   appearance goals specified in `docs/B151-design.md`.
-- Add a separately gated Older Villagers patch with a mortality distribution
-  centered near age 75 and a genuine rare survival tail beyond age 122. Verify
-  the raw age multiplier, stock death routine, time-away simulation, and save
-  layout before choosing the distribution width or achievement IDs.
+- [x] Add a separately gated dormant `.vf2mort` hook that replaces only the
+  birthday old-age decision, preserves the entire stock block when disabled,
+  uses a normal survival curve centered at effective age 75 (sigma 7), shifts
+  effective age by 0-4 active food groups, and retains a 0.02% exponential
+  no-hard-cap tail with a 3% annual hazard after effective age 130.
+- [ ] Link all B153 executable layouts and validate the `.vf2mort` section,
+  helper ABI, exact-SHA post-asset records, and coexistence with `.vf2preg` and
+  `.vf2goal`; then live-test birthdays, time-away catch-up, starvation/sickness
+  causes, ages 55/60/75/90/100/122+, save/reload, and patch-off stock parity.
 - Keep the exact requested title `Hampster Dance`; use the corrected spelling
   `Centenarian`; and make pet goals require a live placed pet rather than a
   purchased-but-unplaced inventory item.

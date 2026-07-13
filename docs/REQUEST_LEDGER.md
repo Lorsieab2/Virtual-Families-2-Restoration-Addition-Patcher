@@ -61,7 +61,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 | Request | Status | Completion contract |
 |---|---|---|
 | Fully working Allow Older Pregnancies | Partial | Prove stock parity under 50, decimal curve, tutorial route, Wants Kids/perfumes, multiples, birth, save/load, and extreme ages. |
-| Older Villagers mortality curve | Not started | Separate default-off patch; stock off-state; normal curve centered near 75 with typical mid-70s-to-80s deaths and possible outliers. |
+| Older Villagers mortality curve | Partial | Default-off `.vf2mort` source hook now replaces only the birthday old-age roll: normal survival curve centered at effective age 75, nutrition shift 0-4 years, 0.02% rare tail, and no hard maximum. COFF and exact-SHA exporter tests pass; linked-matrix and live aging/save/time-away QA remain before release. |
 | Next Generation button around age 60 with age patch | Not started | Gated only with the age patch; stock flow when off. |
 | Increase Child Limit to 12 | Not started | Safely widen birth/adoption storage, household/save records, Family Tree layout, all 12 Next Generation candidates, transition, and compatibility. |
 | Force Successful Pregnancy | Not started | Next eligible attempt never argues and succeeds; clear after resulting birth. |
@@ -114,7 +114,7 @@ and reset only through their documented reset action.
 | Longevity | Not started | Lucky 70's; Great 80's; Mighty 90's; Centenarian; Oldest Person in History (>122). |
 | Family-tree appearance | Not started | Return of the Rainbow (female head 48); Spiky! (male head 48). |
 | LDW paintings/posters | Not started | Portal to Paradise; LDW Fan; Palm Pioneer; Caring Soul; Spin-off Specialist; The Adventures Never End. |
-| Exact praise: web/games | Not started | Nyan Cat; Like and Subscribe; VF-Inception; Isolan Refugees; Memz; Sim-ling Rivalry; Blocky Business; Dovahkiin; Reshaping the World; Farming Fanatic; Forum Browser; Explore, Collect, Compete (Playing Poptropicals); Waddle On! Wait a minute... (Playing Club Puffle); Pixel Pets (Playing PetKinz). |
+| Exact praise: web/games | Not started | Nyan Cat; Like and Subscribe; VF-Inception; Isolan Refugees; Memz; Sim-ling Rivalry; Blocky Business; Dovahkiin; Reshaping the World; Farming Fanatic; Forum Browser; Explore, Collect, Compete (Playing Poptropicals); Waddle On! (Playing Club Puffle); Pixel Pets (Playing PetKinz). |
 | Exact scold: social/child | Not started | Fakebook Fakery; Dance Dunce; The Last Trend; Lazy Crazy. |
 | Pet interaction corrections | Not started | Good boy = praise someone praising pet; Bad dog = praise someone scolding pet; Pavlovian Association = praise someone training pet. |
 | Birthday purchases | Not started | Happy Birthday banner; Not a lie cake; Full of helium balloons. |
