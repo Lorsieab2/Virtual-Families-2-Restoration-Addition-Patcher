@@ -149,9 +149,13 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - Continue B63 in-game validation after the confirmed save-load crash fix:
   click normal gameplay/furniture UI, open General Appliances, place the VF3
   TVs, and verify base TV behavior is unchanged.
-- Rebuild debugger support as an isolated opt-in/dev-only path. Do not patch
-  main-scene mouse handlers in normal builds; first prove a key/display-only
-  debugger path can load saves and run without crashes.
+- [x] Rebuild debugger support as an isolated opt-in/dev-only path with the
+  main-scene debugger provider separate from the native IEditor globals.
+- [x] Add guarded key-character and mouse down/move/up routes to the dormant
+  developer build; disabled sessions fall through to stock handlers.
+- [ ] Run live save-load and F5/F6/F7/F4 testing before enabling the developer
+  build anywhere. Confirm selector drawing, waypoint editing, light add/delete/
+  drag/type/save, normal input fallthrough, and fault-disable behavior.
 - Audit other category list count patches for small/common desktop counts before
   adding more furniture entries.
 - In-game test B78 VF3 TV private floating-animation entries: verify both

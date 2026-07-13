@@ -73,6 +73,28 @@ class DebuggerResearchTests(unittest.TestCase):
                 self.assertIn("VF2SetActiveEditor(&WaypointEditor)", helper)
                 self.assertIn("VF2SetActiveEditor(&LightSourceEditor)", helper)
                 self.assertIn("VF2SetActiveEditor(0)", helper)
+                self.assertEqual(
+                    [row["function"] for row in developer["input_hooks"]],
+                    [
+                        "?HandleKeyDown@theMainScene@@IAE?B_NH@Z",
+                        "?HandleKeyCharacter@theMainScene@@IAE?B_ND@Z",
+                        "?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z",
+                        "?HandleMouseMove@theMainScene@@IAE?B_NUldwPoint@@@Z",
+                        "?HandleMouseUp@theMainScene@@IAE?B_NUldwPoint@@@Z",
+                    ],
+                )
+                self.assertIn(
+                    "VF2PatchedDebuggerMouseDown",
+                    helper,
+                )
+                self.assertIn(
+                    "VF2PatchedDebuggerMouseMove",
+                    helper,
+                )
+                self.assertIn(
+                    "VF2PatchedDebuggerMouseUp",
+                    helper,
+                )
                 CoffObject(temp / "theMainScene.obj")
         finally:
             patcher.PATCHED = old_patched

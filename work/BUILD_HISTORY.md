@@ -1119,3 +1119,21 @@
   coordinated tree/candidate/UI detours must land before the birth limit can
   be raised. This research milestone intentionally does not ship a partial
   12-child toggle that could corrupt generations or scene fields.
+
+## B153 Source - Guarded Native Debugger Input
+
+- Keeps debugger support completely default-off. Normal builds still use the
+  stock `theMainScene.obj`; only `ENABLE_DEBUGGER_FEATURES=1` produces the
+  developer research route.
+- Extends the existing F5-gated key-down hook with key-character and mouse
+  down/move/up hooks. Disabled sessions and unhandled events resume the stock
+  functions, while guarded access faults disable the research session.
+- Preserves the correct interface split: only `theMainScene+8` registers as an
+  `IDebugger`; F6/F7 select Waypoint/Light Source through `IEditor`, and F4
+  exits the active editor.
+- The patched COFF object and generated helper compile and link into a
+  disposable x86 diagnostic. SHA-256:
+  `2F2B251497D12F5F636BC3F8B5AA9CC542A629399DC4123C050A28DEE92FC632`.
+- The focused debugger regression test passes. Live save-load, selector,
+  waypoint, light-source, input-fallthrough, and fault-recovery validation
+  remains before this path may be enabled in a release.

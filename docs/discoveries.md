@@ -2448,3 +2448,23 @@
   enabling births 7-12. The optional patch must remain unavailable until that
   persistence plus 12-candidate and draw/hit-test paths pass save/reload and
   generation-transition tests.
+
+## 2026-07-13 - Default-off debugger input routing
+
+- The dormant developer build now patches five `theMainScene` input entries:
+  key down, key character, mouse down, mouse move, and mouse up. Key up remains
+  stock because its native function is only a tiny return-false stub without a
+  safely replaceable prologue.
+- Every new route preserves the stock path until F5 activates the guarded
+  debugger session. Key-character and mouse calls are sent to the selected
+  `IEditor`; a handled call returns immediately, while an unhandled or disabled
+  call resumes the original `theMainScene` function.
+- Mouse point arguments are forwarded as x/y dwords. The key-character hook
+  intentionally forwards only the character byte needed by `IEditor`; its
+  original double argument remains untouched for stock fallthrough.
+- A disposable patched `theMainScene.obj` and generated helper compile and link
+  into an x86 diagnostic executable. Its SHA-256 is
+  `2F2B251497D12F5F636BC3F8B5AA9CC542A629399DC4123C050A28DEE92FC632`.
+- This is structural/link validation only. `ENABLE_DEBUGGER_FEATURES` remains
+  false by default, published builds retain stock input, and F5/F6/F7/F4 plus
+  light add/delete/drag/type/save still require live save-load testing.

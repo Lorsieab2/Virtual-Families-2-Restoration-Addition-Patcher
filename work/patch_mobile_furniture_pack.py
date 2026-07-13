@@ -12086,6 +12086,30 @@ def patch_debug_features(manifest):
     obj.retarget_relocation(draw_sym.section, draw_sym.value + 0x149, draw_helper_sym, IMAGE_REL_I386_REL32)
     input_hooks = [
         insert_main_scene_keydown_hook(),
+        insert_debug_input_hook(
+            "?HandleKeyCharacter@theMainScene@@IAE?B_ND@Z",
+            "_VF2PatchedDebuggerKeyCharacter",
+            [0x08],
+            0x0C,
+        ),
+        insert_debug_input_hook(
+            "?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z",
+            "_VF2PatchedDebuggerMouseDown",
+            [0x08, 0x0C],
+            0x08,
+        ),
+        insert_debug_input_hook(
+            "?HandleMouseMove@theMainScene@@IAE?B_NUldwPoint@@@Z",
+            "_VF2PatchedDebuggerMouseMove",
+            [0x08, 0x0C],
+            0x08,
+        ),
+        insert_debug_input_hook(
+            "?HandleMouseUp@theMainScene@@IAE?B_NUldwPoint@@@Z",
+            "_VF2PatchedDebuggerMouseUp",
+            [0x08, 0x0C],
+            0x08,
+        ),
     ]
     obj.write(PATCHED / "theMainScene.obj")
 
@@ -12509,22 +12533,6 @@ extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
                     "function": "?HandleKeyUp@theMainScene@@IAE?B_NH@Z",
                     "reason": "stock function is a tiny return-false stub without a patchable prologue",
                 },
-                {
-                    "function": "?HandleKeyCharacter@theMainScene@@IAE?B_ND@Z",
-                    "reason": "left stock to reduce debugger surface area in opt-in builds",
-                },
-                {
-                    "function": "?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z",
-                    "reason": "left stock after B61/B62 mouse-path crashes",
-                },
-                {
-                    "function": "?HandleMouseMove@theMainScene@@IAE?B_NUldwPoint@@@Z",
-                    "reason": "left stock after B58-B62 save-load and mouse-path crashes",
-                },
-                {
-                    "function": "?HandleMouseUp@theMainScene@@IAE?B_NUldwPoint@@@Z",
-                    "reason": "left stock after B61/B62 mouse-path crashes",
-                }
             ],
             "registered_providers": [
                 "main scene debugger",
@@ -12535,7 +12543,7 @@ extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
                 "F7": "CLightSourceEditor",
                 "F4": "deactivate active IEditor",
                 "light_character_controls": "native D delete, L add, S save and type-cycle keys are passed through from keydown",
-                "mouse_status": "not routed in this key/display-first research stage",
+                "mouse_status": "routed only after F5 through guarded opt-in hooks; disabled sessions fall through to stock handlers",
             },
             "unavailable_in_this_object_set": [
                 "BehaviorEditor.obj has no exported behavior editor class/object methods",

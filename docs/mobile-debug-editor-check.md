@@ -90,9 +90,12 @@ the interfaces are separate:
 The corrected default-off research design registers only the real theMainScene
 debugger provider. F6 selects the native Waypoint Editor, F7 selects the native
 Light Source Editor, and F4 deactivates the selected editor through a separate
-IEditor * route. This stage intentionally does not route main-scene mouse
-events; the B58-B62 mouse/input hooks remain disallowed until the
-key/display-only build proves save-load stability.
+IEditor * route. The dormant developer build now also routes key-character and
+mouse down/move/up calls through guarded hooks only after F5 activation.
+Disabled, unhandled, or fault-disabled sessions fall through to the original
+main-scene handlers. The normal build does not install any of these hooks.
+This source and link proof does not replace live save-load and input testing
+after the B58-B62 failures.
 
 The desktop Light Source Editor already contains the requested core operations:
 

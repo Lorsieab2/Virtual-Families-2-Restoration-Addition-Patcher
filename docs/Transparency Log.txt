@@ -714,3 +714,25 @@ B153 Increase Child Limit native audit
   save compatibility, adds versioned sidecar persistence for children 7-12,
   and merges those records through tree maintenance, display/hit testing, and
   Next Generation selection. Births 7-12 must remain disabled until those
+  coordinated persistence, UI, and candidate routes pass save/reload and
+  generation-transition tests.
+
+B153 default-off native debugger input milestone
+-------------------------------------------------
+
+- Extends only the dormant developer build. Normal and published builds keep
+  the stock theMainScene object because ENABLE_DEBUGGER_FEATURES remains false.
+- Routes key down, key character, mouse down, mouse move, and mouse up into the
+  guarded debugger/editor helper. Before F5, after an access fault, or when an
+  editor does not handle the event, execution falls through to the stock input
+  handler.
+- F5 activates the main-scene debugger session, F6 selects Waypoint Editor, F7
+  selects Light Source Editor, and F4 deactivates the active IEditor. This
+  exposes the native light editor's add, delete, drag, type-cycle, and save
+  paths only in the explicit developer build.
+- The generated helper compiles and a disposable x86 executable links
+  successfully with SHA-256
+  2F2B251497D12F5F636BC3F8B5AA9CC542A629399DC4123C050A28DEE92FC632.
+- Targeted automated validation passes. This is not a live-game claim; save
+  loading, selector drawing, all editor controls, input fallthrough, and fault
+  recovery still require in-game testing before any release can enable it.

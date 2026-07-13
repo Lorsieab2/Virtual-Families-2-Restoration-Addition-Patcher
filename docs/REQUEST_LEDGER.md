@@ -69,8 +69,8 @@ dormant hook, or successful link is not proof that a feature is finished.
 | Next pregnancy Singleton/Twins/Triplets | Not started | Saved mutually exclusive, cap-safe one-shot; clear after birth. |
 | Complete all Achievements cheat | Not started | Normal completion/award semantics; enabled base/modded rows; no duplicate awards; Achiever Extraordinaire last. |
 | Trophy icon for Complete all collections and future cheats | Needs source audit | Change requested row and use trophy as fallback when no dedicated icon exists. |
-| Restore F5 debugger selector and native editors | Partial | Evidence confirms CDebugger, Waypoint, and Light Source editors. Previous main-scene hooks crashed saves; rebuild default-off and key/display-first. |
-| Light editor: edit/place/remove sources | Not started | Verify add/move/delete, feedback, persistence/export, cancel/reset, and patch-off behavior. |
+| Restore F5 debugger selector and native editors | Partial | Default-off source now registers only the real main-scene debugger and routes key-character plus mouse down/move/up only after F5; helper compilation and a disposable x86 link pass. Live save-load and F5/F6/F7/F4 testing remains mandatory. |
+| Light editor: edit/place/remove sources | Partial | Native L add, D delete, S save, type-cycle, and mouse-drag routes are wired in the default-off developer build. Verify feedback, persistence/export, cancel/reset, fault handling, and patch-off behavior in game. |
 | Recreate dummied debug tools | Needs source audit | Behavior/Content Map editors are absent in checked binaries; replacements require verified engine contracts. |
 
 ## Behaviors and variations
