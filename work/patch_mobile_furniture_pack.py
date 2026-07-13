@@ -12090,7 +12090,7 @@ def patch_debug_features(manifest):
             "?HandleKeyCharacter@theMainScene@@IAE?B_ND@Z",
             "_VF2PatchedDebuggerKeyCharacter",
             [0x08],
-            0x0C,
+            0x04,
         ),
         insert_debug_input_hook(
             "?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z",

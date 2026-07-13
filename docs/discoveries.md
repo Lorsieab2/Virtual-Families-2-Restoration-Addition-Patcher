@@ -2460,11 +2460,15 @@
   `IEditor`; a handled call returns immediately, while an unhandled or disabled
   call resumes the original `theMainScene` function.
 - Mouse point arguments are forwarded as x/y dwords. The key-character hook
-  intentionally forwards only the character byte needed by `IEditor`; its
-  original double argument remains untouched for stock fallthrough.
-- A disposable patched `theMainScene.obj` and generated helper compile and link
-  into an x86 diagnostic executable. Its SHA-256 is
-  `2F2B251497D12F5F636BC3F8B5AA9CC542A629399DC4123C050A28DEE92FC632`.
+  widens the native char stack slot for its C helper; the original slot remains
+  untouched when execution falls through to the stock function.
+- Stock disassembly proves `HandleKeyCharacter(char)` cleans up with `ret 4`;
+  all three point handlers use `ret 8`. Follow-up byte validation caught an
+  initial research-only `ret 12` mismatch in the character hook before release.
+  That interim diagnostic was never shipped and is superseded.
+- The corrected patched object and generated helper compile and link into an
+  x86 diagnostic executable. Its SHA-256 is
+  `680A40B76E38C381AC3817687553078378616F1B18AE88B7E95D5537223B8FA3`.
 - This is structural/link validation only. `ENABLE_DEBUGGER_FEATURES` remains
   false by default, published builds retain stock input, and F5/F6/F7/F4 plus
   light add/delete/drag/type/save still require live save-load testing.

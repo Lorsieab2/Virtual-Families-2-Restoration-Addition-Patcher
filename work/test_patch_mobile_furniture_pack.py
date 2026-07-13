@@ -99,6 +99,143 @@ class DebuggerResearchTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
+    def test_input_hooks_preserve_native_stack_and_fallthrough(self):
+        def generic_payload(argument_offsets, cleanup):
+            payload = bytearray(b"\x51")
+            for offset in reversed(argument_offsets):
+                payload += b"\xFF\x75" + bytes([offset])
+            payload += b"\xE8\x00\x00\x00\x00"
+            payload += b"\x83\xC4" + bytes([len(argument_offsets) * 4])
+            payload += b"\x59\x84\xC0\x74\x04\xB0\x01\x5D\xC2"
+            payload += struct.pack("<H", cleanup)
+            return bytes(payload)
+
+        keydown_payload = bytes([
+            0x51,
+            0xFF, 0x75, 0x08,
+            0x51,
+            0xE8, 0, 0, 0, 0,
+            0x83, 0xC4, 0x08,
+            0x59,
+            0x84, 0xC0,
+            0x74, 0x04,
+            0xB0, 0x01,
+            0x5D,
+            0xC2, 0x04, 0x00,
+        ])
+        specs = [
+            (
+                "?HandleKeyDown@theMainScene@@IAE?B_NH@Z",
+                "_VF2PatchedMainSceneHandleKeyDown",
+                keydown_payload,
+                6,
+                0x0F,
+                0x04,
+            ),
+            (
+                "?HandleKeyCharacter@theMainScene@@IAE?B_ND@Z",
+                "_VF2PatchedDebuggerKeyCharacter",
+                generic_payload([0x08], 0x04),
+                5,
+                0x49,
+                0x04,
+            ),
+            (
+                "?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z",
+                "_VF2PatchedDebuggerMouseDown",
+                generic_payload([0x08, 0x0C], 0x08),
+                8,
+                0xC4,
+                0x08,
+            ),
+            (
+                "?HandleMouseMove@theMainScene@@IAE?B_NUldwPoint@@@Z",
+                "_VF2PatchedDebuggerMouseMove",
+                generic_payload([0x08, 0x0C], 0x08),
+                8,
+                0x50,
+                0x08,
+            ),
+            (
+                "?HandleMouseUp@theMainScene@@IAE?B_NUldwPoint@@@Z",
+                "_VF2PatchedDebuggerMouseUp",
+                generic_payload([0x08, 0x0C], 0x08),
+                8,
+                0x44,
+                0x08,
+            ),
+        ]
+
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                stock_path = patcher.SRC_OBJS / "theMainScene.obj"
+                shutil.copy2(stock_path, temp / "theMainScene.obj")
+                patcher.PATCHED = temp
+                patcher.patch_debug_features({})
+
+                stock = CoffObject(stock_path)
+                patched = CoffObject(temp / "theMainScene.obj")
+                for function, helper, payload, call_imm, ret_off, cleanup in specs:
+                    stock_symbol = stock.symbol(function)
+                    patched_symbol = patched.symbol(function)
+                    stock_section = stock.section(stock_symbol.section)
+                    patched_section = patched.section(patched_symbol.section)
+                    stock_raw = stock_section.raw_ptr + stock_symbol.value
+                    patched_raw = patched_section.raw_ptr + patched_symbol.value
+
+                    self.assertEqual(
+                        bytes(stock.buf[stock_raw:stock_raw + 3]),
+                        b"\x55\x8B\xEC",
+                    )
+                    self.assertEqual(
+                        bytes(patched.buf[patched_raw:patched_raw + 3]),
+                        b"\x55\x8B\xEC",
+                    )
+                    self.assertEqual(
+                        bytes(stock.buf[stock_raw + ret_off:stock_raw + ret_off + 3]),
+                        b"\xC2" + struct.pack("<H", cleanup),
+                    )
+                    self.assertEqual(
+                        bytes(patched.buf[patched_raw + 3:patched_raw + 3 + len(payload)]),
+                        payload,
+                    )
+                    self.assertEqual(
+                        bytes(
+                            patched.buf[
+                                patched_raw + 3 + len(payload):
+                                patched_raw + 3 + len(payload) + 24
+                            ]
+                        ),
+                        bytes(stock.buf[stock_raw + 3:stock_raw + 27]),
+                    )
+
+                    relocation_vaddr = patched_symbol.value + 3 + call_imm
+                    matches = []
+                    cursor = patched_section.reloc_ptr
+                    for _ in range(patched_section.nreloc):
+                        vaddr, symbol_index, relocation_type = struct.unpack_from(
+                            "<IIH",
+                            patched.buf,
+                            cursor,
+                        )
+                        if vaddr == relocation_vaddr:
+                            matches.append((symbol_index, relocation_type))
+                        cursor += 10
+                    self.assertEqual(len(matches), 1)
+                    symbol_index, relocation_type = matches[0]
+                    self.assertEqual(
+                        patched.symbol_by_index[symbol_index].name,
+                        helper,
+                    )
+                    self.assertEqual(
+                        relocation_type,
+                        patcher.IMAGE_REL_I386_REL32,
+                    )
+        finally:
+            patcher.PATCHED = old_patched
+
 
 def valid_vf3_tv_manifest():
     records = []

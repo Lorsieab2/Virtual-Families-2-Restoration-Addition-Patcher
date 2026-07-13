@@ -1131,9 +1131,13 @@
 - Preserves the correct interface split: only `theMainScene+8` registers as an
   `IDebugger`; F6/F7 select Waypoint/Light Source through `IEditor`, and F4
   exits the active editor.
-- The patched COFF object and generated helper compile and link into a
-  disposable x86 diagnostic. SHA-256:
-  `2F2B251497D12F5F636BC3F8B5AA9CC542A629399DC4123C050A28DEE92FC632`.
-- The focused debugger regression test passes. Live save-load, selector,
-  waypoint, light-source, input-fallthrough, and fault-recovery validation
-  remains before this path may be enabled in a release.
+- Stock disassembly found and the source corrects an interim character-hook
+  cleanup mismatch: `HandleKeyCharacter(char)` uses `ret 4`, not `ret 12`.
+  The superseded research diagnostic was never shipped.
+- The corrected COFF object and helper link into a disposable x86 diagnostic.
+  SHA-256:
+  `680A40B76E38C381AC3817687553078378616F1B18AE88B7E95D5537223B8FA3`.
+- Byte-level tests cover all five payloads, native cleanup widths, REL32 helper
+  targets, and stock fallthrough. The complete 97-test suite passes.
+- Live save-load, selector, waypoint, light-source, input-fallthrough, and
+  fault-recovery validation remains before enabling this path in a release.

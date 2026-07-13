@@ -730,9 +730,15 @@ B153 default-off native debugger input milestone
   selects Light Source Editor, and F4 deactivates the active IEditor. This
   exposes the native light editor's add, delete, drag, type-cycle, and save
   paths only in the explicit developer build.
-- The generated helper compiles and a disposable x86 executable links
-  successfully with SHA-256
-  2F2B251497D12F5F636BC3F8B5AA9CC542A629399DC4123C050A28DEE92FC632.
-- Targeted automated validation passes. This is not a live-game claim; save
-  loading, selector drawing, all editor controls, input fallthrough, and fault
-  recovery still require in-game testing before any release can enable it.
+- Stock disassembly proves the character handler is `HandleKeyCharacter(char)`
+  with `ret 4`; point handlers use `ret 8`. A follow-up byte audit caught and
+  corrected an initial research-only `ret 12` character-hook mismatch. The
+  earlier disposable diagnostic was never shipped or enabled in normal builds.
+- The corrected helper compiles and a disposable x86 executable links with
+  SHA-256
+  680A40B76E38C381AC3817687553078378616F1B18AE88B7E95D5537223B8FA3.
+- Exact-byte tests cover every inserted payload, cleanup width, helper REL32
+  relocation, and stock fallthrough window. The full 97-test suite passes.
+- This is not a live-game claim; save loading, selector drawing, all editor
+  controls, input fallthrough, and fault recovery still require in-game
+  testing before any release can enable it.

@@ -97,6 +97,12 @@ main-scene handlers. The normal build does not install any of these hooks.
 This source and link proof does not replace live save-load and input testing
 after the B58-B62 failures.
 
+Native disassembly pins `HandleKeyDown(int)` and
+`HandleKeyCharacter(char)` to `ret 4`, while all point handlers use `ret 8`.
+The regression suite now asserts each inserted payload, cleanup width, REL32
+helper relocation target, and a 24-byte stock fallthrough window for every
+hook.
+
 The desktop Light Source Editor already contains the requested core operations:
 
 - L: add a light source at the cursor.
