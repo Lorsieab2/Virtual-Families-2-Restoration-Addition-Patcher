@@ -291,6 +291,132 @@ class DebuggerResearchTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
+    def test_debugger_provider_offsets_match_native_objects(self):
+        def relocation_target(obj, section, vaddr):
+            cursor = section.reloc_ptr
+            matches = []
+            for _ in range(section.nreloc):
+                reloc_vaddr, symbol_index, relocation_type = struct.unpack_from(
+                    "<IIH",
+                    obj.buf,
+                    cursor,
+                )
+                if reloc_vaddr == vaddr:
+                    matches.append(
+                        (
+                            obj.symbol_by_index[symbol_index].name,
+                            relocation_type,
+                        )
+                    )
+                cursor += 10
+            self.assertEqual(len(matches), 1)
+            return matches[0]
+
+        main_scene = CoffObject(patcher.SRC_OBJS / "theMainScene.obj")
+        constructor = main_scene.symbol("??0theMainScene@@AAE@XZ")
+        constructor_section = main_scene.section(constructor.section)
+        constructor_raw = constructor_section.raw_ptr + constructor.value
+        self.assertEqual(
+            bytes(main_scene.buf[constructor_raw + 0x45:constructor_raw + 0x48]),
+            b"\xC7\x47\x08",
+        )
+        target, relocation_type = relocation_target(
+            main_scene,
+            constructor_section,
+            constructor.value + 0x48,
+        )
+        self.assertEqual(
+            target,
+            "??_7theMainScene@@6BIDebugger@@@",
+        )
+        self.assertEqual(relocation_type, patcher.IMAGE_REL_I386_DIR32)
+
+        debugger_vtable = main_scene.symbol(
+            "??_7theMainScene@@6BIDebugger@@@"
+        )
+        vtable_section = main_scene.section(debugger_vtable.section)
+        target, relocation_type = relocation_target(
+            main_scene,
+            vtable_section,
+            debugger_vtable.value,
+        )
+        self.assertEqual(target, "?Debug@theMainScene@@MAEXXZ")
+        self.assertEqual(relocation_type, patcher.IMAGE_REL_I386_DIR32)
+
+        debugger = CoffObject(patcher.SRC_OBJS / "Debugger.obj")
+        register = debugger.symbol(
+            "?Register@CDebugger@@QAE?B_NPAVIDebugger@@@Z"
+        )
+        register_section = debugger.section(register.section)
+        register_raw = register_section.raw_ptr + register.value
+        self.assertEqual(
+            bytes(debugger.buf[register_raw + 0x03:register_raw + 0x09]),
+            b"\x8B\x51\x24\x83\xFA\x08",
+        )
+        self.assertEqual(
+            bytes(debugger.buf[register_raw + 0x14:register_raw + 0x18]),
+            b"\x89\x44\x91\x04",
+        )
+        self.assertEqual(
+            bytes(debugger.buf[register_raw + 0x1A:register_raw + 0x1D]),
+            b"\xFF\x41\x24",
+        )
+
+        draw = debugger.symbol("?Draw@CDebugger@@QAEXXZ")
+        draw_section = debugger.section(draw.section)
+        draw_raw = draw_section.raw_ptr + draw.value
+        self.assertEqual(
+            bytes(debugger.buf[draw_raw + 0x03:draw_raw + 0x06]),
+            b"\x80\x3E\x00",
+        )
+        self.assertEqual(
+            bytes(debugger.buf[draw_raw + 0x08:draw_raw + 0x0B]),
+            b"\x8B\x46\x28",
+        )
+        self.assertEqual(
+            bytes(debugger.buf[draw_raw + 0x0B:draw_raw + 0x0E]),
+            b"\xC7\x46\x2C",
+        )
+        self.assertEqual(
+            bytes(debugger.buf[draw_raw + 0x12:draw_raw + 0x15]),
+            b"\xC7\x46\x30",
+        )
+        self.assertEqual(
+            bytes(debugger.buf[draw_raw + 0x19:draw_raw + 0x1D]),
+            b"\x8B\x4C\x86\x04",
+        )
+
+    def test_default_off_writer_preserves_stock_main_scene(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                stock_path = patcher.SRC_OBJS / "theMainScene.obj"
+                copied_path = temp / "theMainScene.obj"
+                shutil.copy2(stock_path, copied_path)
+                before = hashlib.sha256(copied_path.read_bytes()).hexdigest()
+                patcher.PATCHED = temp
+                manifest = {}
+
+                patcher.write_disabled_debug_features(manifest)
+
+                self.assertEqual(
+                    hashlib.sha256(copied_path.read_bytes()).hexdigest(),
+                    before,
+                )
+                self.assertEqual(
+                    (temp / "vf2_debug_features.cpp").read_text(
+                        encoding="ascii"
+                    ),
+                    "/* Debugger hooks are disabled for normal builds. */\n",
+                )
+                self.assertEqual(
+                    manifest["debug_features"]["status"],
+                    "disabled",
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
 
 def valid_vf3_tv_manifest():
     records = []

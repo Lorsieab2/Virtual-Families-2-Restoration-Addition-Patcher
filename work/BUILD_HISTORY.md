@@ -1142,6 +1142,11 @@
   `73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305`.
 - Byte-level tests cover all five payloads, native cleanup widths, REL32 helper
   targets, and stock fallthrough. Native-object tests pin all nine editor
-  vtable relocations. The complete 97-test suite passes.
+  vtable relocations.
+- Constructor/vtable evidence pins the main-scene IDebugger base at `+8`, and
+  CDebugger Register/Draw bytes pin the provider/count/selection/draw layout.
+- Default-off parity preserves the canonical main-scene object at SHA-256
+  `BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB`.
+  The complete 99-test suite passes.
 - Live save-load, selector, waypoint, light-source, input-fallthrough, and
   fault-recovery validation remains before enabling this path in a release.

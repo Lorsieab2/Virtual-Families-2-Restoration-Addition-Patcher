@@ -157,6 +157,8 @@ must remain visible as Needs source audit; it must not be silently omitted.
   targets, and stock fallthrough bytes in regression tests.
 - [x] Match the generated IEditor declaration to the nine-slot native vtable
   and pin the relocation order in tests.
+- [x] Pin the main-scene IDebugger +8 base, CDebugger provider layout, and
+  byte-identical default-off main-scene object in native regression tests.
 - [ ] Run live save-load and F5/F6/F7/F4 testing before enabling the developer
   build anywhere. Confirm selector drawing, waypoint editing, light add/delete/
   drag/type/save, normal input fallthrough, and fault-disable behavior.

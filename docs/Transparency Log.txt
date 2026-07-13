@@ -742,8 +742,15 @@ B153 default-off native debugger input milestone
   with SHA-256
   73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305.
 - Exact-byte tests cover every inserted payload, cleanup width, helper REL32
-  relocation, and stock fallthrough window. A native-object test also pins all
-  nine vtable relocations. The full 97-test suite passes.
+  relocation, and stock fallthrough window. Native-object tests pin all nine
+  IEditor vtable relocations.
+- Main-scene constructor relocations prove the IDebugger base is at `+8` and its
+  single vtable slot targets `Debug`. CDebugger Register/Draw bytes prove the
+  provider array, count, selection, and drawing offsets used by the helper.
+- A default-off parity test leaves the canonical main-scene object byte-for-byte
+  unchanged at SHA-256
+  BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB and
+  emits only the disabled helper stub. The full 99-test suite passes.
 - This is not a live-game claim; save loading, selector drawing, all editor
   controls, input fallthrough, and fault recovery still require in-game
   testing before any release can enable it.

@@ -109,6 +109,13 @@ declaration now matches those nine slots exactly, and the regression test reads
 the relocations from `LightSourceEditor.obj` rather than trusting the handwritten
 declaration.
 
+The main-scene constructor writes its IDebugger vptr at object offset `+8`, and
+that vtable's only slot targets `theMainScene::Debug`. `CDebugger::Register` and
+`Draw` independently prove the provider array, count, selected index, and draw
+anchor offsets used by the helper. A separate default-off test proves the stock
+main-scene object remains SHA-256
+`BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB`.
+
 The desktop Light Source Editor already contains the requested core operations:
 
 - L: add a light source at the cursor.

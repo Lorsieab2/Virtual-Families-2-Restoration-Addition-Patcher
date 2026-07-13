@@ -2473,6 +2473,15 @@
 - The fully corrected patched object and generated helper compile and link into
   an x86 diagnostic executable. Its SHA-256 is
   `73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305`.
+- Constructor relocation at `theMainScene+0x48` targets its IDebugger vtable at
+  object offset `+8`; that secondary vtable has one slot targeting `Debug`.
+- `CDebugger::Register` and `Draw` machine code confirm the provider array at
+  `+4`, capacity/count at `+0x24`, selected index at `+0x28`, and draw anchors
+  at `+0x2C/+0x30`, matching the guarded helper overlay.
+- The default-off writer leaves the canonical 228,896-byte `theMainScene.obj`
+  SHA-256 `BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB`
+  byte-identical and emits only the disabled helper stub.
+- The expanded debugger and patcher regression suite passes all 99 tests.
 - This is structural/link validation only. `ENABLE_DEBUGGER_FEATURES` remains
   false by default, published builds retain stock input, and F5/F6/F7/F4 plus
   light add/delete/drag/type/save still require live save-load testing.
