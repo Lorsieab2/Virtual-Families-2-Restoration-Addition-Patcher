@@ -57,6 +57,7 @@ OPTIONAL_SONG_SOURCE_DIR = Path("OptionalSongMods")
 OPTIONAL_SONG_TARGET_DIR = Path("Sounds")
 DEFAULT_OPTIONAL_SONG_MODS_SOURCE = OPTIONAL_PATCH_ASSET_DIR / "optional_song_mods" / "OptionalSongMods"
 SOURCE_BACKED_OPTIONAL_SETTINGS = {
+    "allow_older_pregnancies",
     "invisible_upgrades_graphics",
     "optional_song_mods",
     "white_birds",
@@ -179,6 +180,13 @@ SETTINGS = [
         "description": "Adds the mobile-style Settings Evict button in the Settings menu. Evicting removes the current family and resets the Family Tree to Generation 1.",
         "default": False,
         "category": "optional",
+    },
+    {
+        "id": "allow_older_pregnancies",
+        "label": "Allow Older Pregnancies",
+        "description": "Experimental patch: preserves normal fertility behavior below age 50, then allows a small pregnancy chance when either parent is 50 or older. The older parent caps the chance from 10.0% at age 50 down to a permanent 0.1% floor at age 69+.",
+        "default": False,
+        "category": "experimental",
     },
     {
         "id": "mobile_furniture_behaviors",
@@ -559,6 +567,169 @@ def pe_structure_fingerprint(path: Path) -> dict[str, Any] | None:
         }
     except (OSError, struct.error):
         return None
+
+
+def runtime_flag_variant_for_exe(
+    path: Path,
+    *,
+    section_name: str,
+    expected_byte: int,
+    replacement_byte: int,
+    note: str,
+) -> dict[str, Any]:
+    """Build one exact-SHA post-asset variant from a one-byte PE section."""
+    structure = pe_structure_fingerprint(path)
+    if structure is None:
+        raise ValueError(f"Runtime-flag executable is not a valid PE32 image: {path}")
+    matches = [
+        section
+        for section in structure["sections"]
+        if section.get("name") == section_name
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            f"Expected exactly one {section_name} section in {path}, found {len(matches)}."
+        )
+    section = matches[0]
+    virtual_size = int(str(section["virtual_size"]), 0)
+    raw_size = int(str(section["raw_data_size"]), 0)
+    raw_offset = int(str(section["raw_data_pointer"]), 0)
+    characteristics = int(str(section["characteristics"]), 0)
+    if virtual_size != 1 or raw_size < 1:
+        raise ValueError(
+            f"{section_name} in {path} must contain exactly one initialized runtime byte."
+        )
+    if not (characteristics & 0x80000000):
+        raise ValueError(f"{section_name} in {path} is not writable.")
+    data = path.read_bytes()
+    if raw_offset >= len(data) or data[raw_offset] != expected_byte:
+        actual = data[raw_offset] if raw_offset < len(data) else None
+        actual_text = f"{actual:02x}" if actual is not None else "end-of-file"
+        raise ValueError(
+            f"{section_name} default byte mismatch in {path}: "
+            f"expected {expected_byte:02x}, got {actual_text}"
+        )
+    return {
+        "asset_sha256": sha256_file(path),
+        "offset": f"0x{raw_offset:x}",
+        "expected_asset_bytes": f"{expected_byte:02X}",
+        "replacement_bytes": f"{replacement_byte:02X}",
+        "note": note,
+    }
+
+
+def setting_runtime_flag_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    runtime_flag: dict[str, Any],
+    section_name: str,
+    setting_id: str,
+    feature_label: str,
+) -> list[dict[str, Any]]:
+    """Emit one exact-SHA setting gate covering every linked matrix payload."""
+    if runtime_flag.get("source_section") != section_name:
+        raise ValueError(
+            f"Build manifest has an invalid {feature_label} runtime flag contract."
+        )
+    variants_by_sha: dict[str, dict[str, Any]] = {}
+    for source in executable_sources:
+        variant = runtime_flag_variant_for_exe(
+            source,
+            section_name=section_name,
+            expected_byte=0,
+            replacement_byte=1,
+            note=f"Enable {feature_label} in {source.name}.",
+        )
+        sha = str(variant["asset_sha256"]).lower()
+        prior = variants_by_sha.get(sha)
+        if prior is not None and prior["offset"] != variant["offset"]:
+            raise ValueError(
+                f"Duplicate executable SHA {sha} has conflicting "
+                f"{section_name} offsets."
+            )
+        variants_by_sha[sha] = variant
+    if not variants_by_sha:
+        raise ValueError(f"{feature_label} has no exported executable payloads.")
+    return [
+        {
+            "file_path": output_exe_name,
+            "requires": ["core_executable", setting_id],
+            "note": (
+                f"Exact-SHA runtime toggle for {feature_label} "
+                f"({section_name})."
+            ),
+            "variants": list(variants_by_sha.values()),
+        }
+    ]
+
+
+def older_pregnancy_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("AllowOlderPregnancies")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError(
+            "Build manifest has an invalid AllowOlderPregnancies contract."
+        )
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=".vf2preg",
+        setting_id="allow_older_pregnancies",
+        feature_label="Allow Older Pregnancies",
+    )
+
+
+def holiday_furniture_goal_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("CustomAchievements")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError(
+            "Build manifest has an invalid CustomAchievements runtime flag contract."
+        )
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=".vf2goal",
+        setting_id="holiday_furniture",
+        feature_label="Holiday Furniture goals",
+    )
+
+
+def b152_runtime_flag_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    return [
+        *holiday_furniture_goal_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *older_pregnancy_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+    ]
 
 
 def pe_structure_identity(structure: Any) -> dict[str, Any] | None:
@@ -2029,7 +2200,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "---------------------",
         "- Main Patches (green): core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits.",
         "- Optional Patches (black): Holiday Ornaments, Settings Evict, Island Events, optional visual swaps, Invisible Furniture graphics modes, custom maps, LDW Posters/Paintings, and Colorful Couches.",
-        "- Experimental/Not Working Patches (red): mobile furniture behaviors, Expand game map, and anything not 100% confirmed working and crash-free.",
+        "- Experimental/Not Working Patches (red): Allow Older Pregnancies, mobile furniture behaviors, Expand game map, and anything not 100% confirmed working and crash-free.",
         "",
         "B151 native feature gating",
         "--------------------------",
@@ -2039,6 +2210,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Cheat rows, price multipliers/reset, Trigger/Fix malfunction actions, Router offline/online changes, and reversible Maid/Gardener/Rockhound/Anti-Spam handling require cheat_upgrades.",
         "- Dryer lint fire remains a stock random malfunction gated on Dryer object 0x48; native repair clears prop 0x21 and advances Handyman.",
         "- The six-page/72-item collection and Holiday-aware count require holiday_ornaments_collection. Brokerage 11% wording follows mobile_purchases.",
+        "- Holiday Furniture goals 0x6D-0x7F use an exact-SHA .vf2goal post-asset byte enabled only with core_executable plus holiday_furniture.",
+        "- Allow Older Pregnancies is a default-off exact-SHA post-asset toggle of the dormant .vf2preg byte; it does not add another executable overlay dimension.",
     ]
     )
     for row in settings:
@@ -2057,7 +2230,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
     elif summary.get("exe_replacement"):
         limitation = (
             "This bundle uses verified modified EXE payloads for native/game-code changes. "
-            "B151 isolates Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches with a complete 16-state executable overlay matrix; other native changes that still belong to the core executable remain controlled at their documented feature-family level."
+            "B152 isolates Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches with a complete 16-state executable overlay matrix; Holiday Furniture goals and Allow Older Pregnancies use independent post-asset runtime bytes so they do not expand that matrix."
         )
     else:
         limitation = (
@@ -2072,6 +2245,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             f"- Byte patch records: {summary.get('byte_patch_count')}",
             f"- Native patch source metadata records: {summary.get('native_patch_source_count')}",
             f"- Asset patch records: {summary.get('asset_patch_count')}",
+            f"- Post-asset patch records: {summary.get('post_asset_patch_count')}",
             f"- Payload files: {summary.get('payload_file_count')}",
             "",
             "Asset counts by setting",
@@ -2155,6 +2329,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B145 patcher refresh: The exporter can reuse target EXE validation metadata from a previous manifest through --target-identity-manifest, avoiding any dependency on a local vanilla EXE path when rebuilding a portable patcher package.",
             "- B146 game build: Holiday Ornaments now validate the workspace-local collectables_small.png yard sprite sheet against the stock ECarrying - 0x4F frame formula, ensuring ornament values 0x9E-0xA9 map to frames 79-90 in a portable 40x40 six-column sheet.",
             "- B146 patcher refresh: Rebuilt all core, Island Events, Cheat Upgrades, Holiday Ornaments, and combined EXE overlays from the B146 source state so the experimental Holiday Ornaments toggle carries the matching executable and asset payload.",
+            "- B152 patcher refresh: Adds exact-SHA .vf2goal Holiday Furniture goal and .vf2preg Allow Older Pregnancies post-asset variants per selected executable payload, preserving the 16-state overlay matrix.",
             "- B147 game build: Holiday Ornaments now validate every bundled collectables_small.png variant that can become the runtime sheet, including the optional Glowing Collectibles replacement, and require nonblank ornament frames 79-90.",
             "- B148 game build: Holiday Ornaments now validate the native collection-state contract before packaging, proving the 0x9E-0xA9 family is covered by Count, SaveState, ResetCollection, page routing, pickup dispatch, observer registration, and Mr. B/The Collector's sell-all reset.",
             "- B149 game build: Holiday Ornaments now validate the collection page-count route, proving DrawScene uses _VF2CollectionPageCount(page) for page 5 while Activate keeps the five stock cached counters and this+0x2C hover field intact.",
@@ -2363,8 +2538,9 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     asset_patches.extend(optional_visual_asset_patches(bundle_dir))
     asset_patches.extend(optional_patch_asset_patches(bundle_dir))
     exe_replacement_record = None
+    output_exe_name = modded_exe_output_name(build_label)
+    executable_runtime_flag_sources: list[Path] = []
     if args.include_exe_replacement and (vanilla_exe is not None or target_identity_fields is not None):
-        output_exe_name = modded_exe_output_name(build_label)
         exe_replacement_record = export_exe_replacement_payload(
             bundle_dir=bundle_dir,
             patched_exe=patched_exe,
@@ -2375,6 +2551,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             target_identity_fields=target_identity_fields,
         )
         asset_patches.insert(0, exe_replacement_record)
+        executable_runtime_flag_sources.append(patched_exe)
         overlay_specs = [
             (
                 island_events_exe,
@@ -2474,6 +2651,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         for source_exe, label, requires, note in overlay_specs:
             if source_exe is None:
                 continue
+            executable_runtime_flag_sources.append(source_exe)
             overlay_records.append(export_optional_exe_overlay_payload(
                 bundle_dir=bundle_dir,
                 source_exe=source_exe,
@@ -2488,11 +2666,19 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     payload_pruning = prune_unreferenced_payload_files(bundle_dir, asset_patches)
     validate_bundle_asset_sources(bundle_dir, asset_patches)
     native_patch_sources = collect_native_patch_sources(build_manifest_data)
+    post_asset_patches = b152_runtime_flag_post_asset_patches(
+        executable_runtime_flag_sources,
+        output_exe_name=output_exe_name,
+        build_manifest_data=build_manifest_data,
+    ) if exe_replacement_record is not None else []
 
     asset_counts_by_setting: dict[str, int] = {}
     for row in asset_patches:
         for setting in row.get("requires", []):
             asset_counts_by_setting[setting] = asset_counts_by_setting.get(setting, 0) + 1
+    available_settings = set(asset_counts_by_setting)
+    for row in post_asset_patches:
+        available_settings.update(row.get("requires", []))
 
     manifest = {
         "manifest_version": 1,
@@ -2534,7 +2720,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         "settings": default_settings(
             bool(byte_patches),
             bool(exe_replacement_record),
-            set(asset_counts_by_setting),
+            available_settings,
         ),
         "target_files": target_files,
         "runtime_requirements": {
@@ -2546,11 +2732,13 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         "patches": byte_patches,
         "native_patch_sources": native_patch_sources,
         "asset_patches": asset_patches,
+        "post_asset_patches": post_asset_patches,
         "export_summary": {
             "byte_patch_count": len(byte_patches),
             "native_patch_status": native_status,
             "native_patch_source_count": len(native_patch_sources),
             "asset_patch_count": len(asset_patches),
+            "post_asset_patch_count": len(post_asset_patches),
             "asset_counts_by_setting": dict(sorted(asset_counts_by_setting.items())),
             "payload_file_count": count_files(bundle_dir / "payload"),
             "payload_pruning": payload_pruning,
@@ -2622,6 +2810,7 @@ def main() -> int:
                 "manifest": str(manifest_path),
                 "byte_patches": len(manifest["patches"]),
                 "asset_patches": len(manifest["asset_patches"]),
+                "post_asset_patches": len(manifest["post_asset_patches"]),
                 "payload_files": manifest["export_summary"]["payload_file_count"],
                 "requires_vanilla_exe_for_apply": manifest["export_summary"]["requires_vanilla_exe_for_apply"],
             },

@@ -973,12 +973,23 @@ flags can override those defaults:
 --disable holiday_outfits
 --enable holiday_furniture,mobile_furniture,vf3_tv_animation_graphics,settings_evict_button
 --enable holiday_ornaments_collection
+--enable allow_older_pregnancies
 --enable-all
 --disable-all
 ```
 
 Patch logs include the available, enabled, and disabled settings used for the
 run.
+
+allow_older_pregnancies is a default-off Experimental option. It uses an
+exact-SHA post-asset byte toggle in the selected executable rather than a
+separate executable overlay, so it does not expand the Island/Cheat/Holiday/
+Behavior matrix.
+
+The same post-asset phase controls the independent Holiday Furniture goal
+suffix through .vf2goal. Its record requires core_executable and
+holiday_furniture; disabling Holiday Furniture recopies the pristine
+default-zero payload byte.
 
 ## Release Notes
 

@@ -12,10 +12,21 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPORTER = ROOT / "work" / "export_offline_patch_bundle.py"
 PATCHER = ROOT / "work" / "offline_vf2_patcher.py"
 sys.path.insert(0, str(ROOT / "work"))
+import export_offline_patch_bundle as exporter
 
 
-def minimal_pe_bytes():
-    data = bytearray(0x400)
+def minimal_pe_bytes(
+    with_older_pregnancy_flag=False,
+    marker=0,
+    with_holiday_goal_flag=False,
+    goal_marker=0,
+):
+    runtime_flags = []
+    if with_older_pregnancy_flag:
+        runtime_flags.append((".vf2preg", marker))
+    if with_holiday_goal_flag:
+        runtime_flags.append((".vf2goal", goal_marker))
+    data = bytearray(0x400 + 0x200 * len(runtime_flags))
     data[:2] = b"MZ"
     data[0x3C:0x40] = (0x80).to_bytes(4, "little")
     pe = 0x80
@@ -23,7 +34,7 @@ def minimal_pe_bytes():
     coff = pe + 4
     data[coff:coff + 20] = (
         (0x14C).to_bytes(2, "little")
-        + (1).to_bytes(2, "little")
+        + (1 + len(runtime_flags)).to_bytes(2, "little")
         + (0x12345678).to_bytes(4, "little")
         + (0).to_bytes(4, "little")
         + (0).to_bytes(4, "little")
@@ -36,7 +47,9 @@ def minimal_pe_bytes():
     data[opt + 28:opt + 32] = (0x400000).to_bytes(4, "little")
     data[opt + 32:opt + 36] = (0x1000).to_bytes(4, "little")
     data[opt + 36:opt + 40] = (0x200).to_bytes(4, "little")
-    data[opt + 56:opt + 60] = (0x2000).to_bytes(4, "little")
+    data[opt + 56:opt + 60] = (
+        (2 + len(runtime_flags)) * 0x1000
+    ).to_bytes(4, "little")
     data[opt + 68:opt + 70] = (2).to_bytes(2, "little")
     sect = opt + 0xE0
     data[sect:sect + 8] = b".text\0\0\0"
@@ -44,6 +57,21 @@ def minimal_pe_bytes():
     data[sect + 16:sect + 24] = (0x200).to_bytes(4, "little") + (0x200).to_bytes(4, "little")
     data[sect + 36:sect + 40] = (0x60000020).to_bytes(4, "little")
     data[0x200:0x400] = bytes((index % 251 for index in range(0x200)))
+    for index, (section_name, value) in enumerate(runtime_flags):
+        flag_sect = sect + 40 * (index + 1)
+        raw_offset = 0x400 + 0x200 * index
+        rva = 0x2000 + 0x1000 * index
+        data[flag_sect:flag_sect + 8] = section_name.encode("ascii")
+        data[flag_sect + 8:flag_sect + 16] = (
+            (1).to_bytes(4, "little") + rva.to_bytes(4, "little")
+        )
+        data[flag_sect + 16:flag_sect + 24] = (
+            (0x200).to_bytes(4, "little") + raw_offset.to_bytes(4, "little")
+        )
+        data[flag_sect + 36:flag_sect + 40] = (0xC0000040).to_bytes(
+            4, "little"
+        )
+        data[raw_offset] = value
     return bytes(data)
 
 
@@ -86,6 +114,218 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
             )
         return result
+
+    def test_exports_and_applies_coexisting_b152_runtime_flags(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            bundle = tmp_path / "bundle"
+            game = tmp_path / "game"
+            output = tmp_path / "modded"
+            disabled_output = tmp_path / "modded-disabled"
+            all_disabled_output = tmp_path / "modded-all-disabled"
+            base.mkdir()
+            build.mkdir()
+            game.mkdir()
+
+            patched_name = "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
+            patched_data = minimal_pe_bytes(
+                with_older_pregnancy_flag=True,
+                marker=0,
+                with_holiday_goal_flag=True,
+                goal_marker=0,
+            )
+            (build / patched_name).write_bytes(patched_data)
+            (build / "patch-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "AllowOlderPregnancies": {
+                            "runtime_flag": {
+                                "source_section": ".vf2preg",
+                                "size": 1,
+                                "default": "00",
+                            }
+                        },
+                        "CustomAchievements": {
+                            "runtime_flag": {
+                                "source_section": ".vf2goal",
+                                "size": 1,
+                                "default": "00",
+                            }
+                        }
+                    },
+                    indent=2,
+                ),
+                encoding="ascii",
+            )
+            vanilla = game / "Virtual Families 2.exe"
+            vanilla.write_bytes(minimal_pe_bytes())
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(bundle),
+                "--vanilla-exe",
+                str(vanilla),
+                "--include-exe-replacement",
+            )
+
+            manifest_path = bundle / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            setting = {
+                row["id"]: row for row in manifest["settings"]
+            }["allow_older_pregnancies"]
+            self.assertFalse(setting["default"])
+            self.assertEqual(setting["category"], "experimental")
+            self.assertEqual(len(manifest["post_asset_patches"]), 2)
+            records = {
+                row["requires"][-1]: row
+                for row in manifest["post_asset_patches"]
+            }
+            goal_record = records["holiday_furniture"]
+            self.assertEqual(
+                goal_record["requires"],
+                ["core_executable", "holiday_furniture"],
+            )
+            self.assertEqual(goal_record["variants"][0]["offset"], "0x600")
+            record = records["allow_older_pregnancies"]
+            self.assertEqual(
+                record["requires"],
+                ["core_executable", "allow_older_pregnancies"],
+            )
+            self.assertEqual(len(record["variants"]), 1)
+            variant = record["variants"][0]
+            self.assertEqual(variant["offset"], "0x400")
+            self.assertEqual(variant["expected_asset_bytes"], "00")
+            self.assertEqual(variant["replacement_bytes"], "01")
+            self.assertEqual(
+                variant["asset_sha256"],
+                hashlib.sha256(patched_data).hexdigest(),
+            )
+            self.assertEqual(
+                manifest["export_summary"]["post_asset_patch_count"],
+                2,
+            )
+
+            # Keep this integration fixture focused on target/asset/post-asset
+            # validation rather than the production folder-shape validator.
+            manifest["runtime_requirements"] = {
+                "required_files": [],
+                "required_dirs": [],
+            }
+            manifest_path.write_text(
+                json.dumps(manifest, indent=2),
+                encoding="utf-8",
+            )
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game),
+                "--output-dir",
+                str(disabled_output),
+                "--manifest",
+                str(manifest_path),
+            )
+            disabled_installed = (
+                disabled_output / manifest["output"]["default_exe_name"]
+            )
+            self.assertEqual(disabled_installed.read_bytes()[0x400], 0)
+            self.assertEqual(disabled_installed.read_bytes()[0x600], 1)
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game),
+                "--output-dir",
+                str(output),
+                "--manifest",
+                str(manifest_path),
+                "--enable",
+                "allow_older_pregnancies",
+            )
+            installed = output / manifest["output"]["default_exe_name"]
+            self.assertTrue(installed.is_file())
+            self.assertEqual(installed.read_bytes()[0x400], 1)
+            self.assertEqual(installed.read_bytes()[0x600], 1)
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game),
+                "--output-dir",
+                str(all_disabled_output),
+                "--manifest",
+                str(manifest_path),
+                "--disable",
+                "holiday_furniture",
+            )
+            all_disabled = (
+                all_disabled_output / manifest["output"]["default_exe_name"]
+            ).read_bytes()
+            self.assertEqual(all_disabled[0x400], 0)
+            self.assertEqual(all_disabled[0x600], 0)
+
+    def test_b152_runtime_records_cover_sixteen_unique_layout_hashes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            sources = []
+            for index in range(16):
+                data = bytearray(
+                    minimal_pe_bytes(
+                        with_older_pregnancy_flag=True,
+                        with_holiday_goal_flag=True,
+                    )
+                )
+                data[0x200 + index] ^= index + 1
+                path = tmp_path / f"variant-{index:02d}.exe"
+                path.write_bytes(data)
+                sources.append(path)
+            records = exporter.b152_runtime_flag_post_asset_patches(
+                sources,
+                output_exe_name="Virtual Families 2 - Modded B152.exe",
+                build_manifest_data={
+                    "AllowOlderPregnancies": {
+                        "runtime_flag": {
+                            "source_section": ".vf2preg",
+                        }
+                    },
+                    "CustomAchievements": {
+                        "runtime_flag": {
+                            "source_section": ".vf2goal",
+                        }
+                    }
+                },
+            )
+            self.assertEqual(len(records), 2)
+            records_by_setting = {
+                row["requires"][-1]: row for row in records
+            }
+            expected_offsets = {
+                "allow_older_pregnancies": "0x400",
+                "holiday_furniture": "0x600",
+            }
+            hashes_by_setting = {}
+            for setting_id, offset in expected_offsets.items():
+                variants = records_by_setting[setting_id]["variants"]
+                self.assertEqual(len(variants), 16)
+                hashes = {row["asset_sha256"] for row in variants}
+                self.assertEqual(len(hashes), 16)
+                hashes_by_setting[setting_id] = hashes
+                self.assertEqual({row["offset"] for row in variants}, {offset})
+                self.assertEqual(
+                    {row["expected_asset_bytes"] for row in variants},
+                    {"00"},
+                )
+                self.assertEqual(
+                    {row["replacement_bytes"] for row in variants},
+                    {"01"},
+                )
+            self.assertEqual(
+                hashes_by_setting["allow_older_pregnancies"],
+                hashes_by_setting["holiday_furniture"],
+            )
 
     def test_exports_changed_assets_with_feature_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -157,6 +397,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["misc_graphics_fixes"], 1)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["glowing_collectibles"], 1)
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["core_executable"], 5)
+            self.assertEqual(manifest["post_asset_patches"], [])
+            self.assertEqual(manifest["export_summary"]["post_asset_patch_count"], 0)
             self.assertEqual(manifest["export_summary"]["base_payload"], base.name)
             self.assertNotIn(str(tmp_path), json.dumps(manifest))
             self.assertTrue((out / "payload" / "Images" / "Furniture" / "CandyCane.png").is_file())

@@ -487,6 +487,9 @@
   path that previously branched into inserted bytes, picking an incomplete
   ornament collection, The Collector's Keep choice, and repeated completion
   calls for duplicate Goal Collector credit.
+  The B152 upright-source refresh is automated and hash-verified; runtime QA
+  should additionally confirm the 12 collected overlays appear upright over
+  the matching baked placeholders on the 940x732 supplied frame.
 - Overlay gating: exercise representative installs from the 16-state
   Island Events/Cheat Upgrades/Holiday Ornaments/Behavior Patches matrix.
   Confirm the manifest selects the one matching EXE and that a disabled feature
@@ -571,6 +574,46 @@
 - Deferred from B151: the expanded map, new goals, and Older Villagers work
   below remain planning material for a later build.
 
+## B152 Custom Achievement Phase B1/B2 Status
+
+- [x] Materialize stable rows `0x5F-0x7F` in every native variant, register all
+  64 exact strings, and keep Holiday Furniture goals as the final contiguous
+  `0x6D-0x7F` order suffix.
+- [x] Preserve SaveState/Reset at `0x125` records and repair LoadState so IDs
+  through hidden record `0x80` persist while only reserved IDs
+  `0x81-0x124` are cleared. Record `0x80` dword `+4` low bits persist the
+  `0x2CF`/`0x2CC` Taters purchase mask.
+- [x] Restore the notification queue to its real `0x5F`-dword capacity and
+  structurally protect popup timer/state fields `+0xF38/+0xF3C`.
+- [x] Route achievement scene height/order end and completed-goal totals
+  through the filtered visible count, with a default-off writable one-byte
+  `.vf2goal` Holiday Furniture flag.
+- [x] Pass 81 patcher tests and link/inspect the required B152 off-off and
+  on-on diagnostics from their matching B151 bases. Both contain 128 rows and
+  a writable, size-one, default-`00` `.vf2goal` section.
+- [x] Harden B1 with exact Save/Reset/Pop/Update symbol-span guards, preserve
+  `ECX/EDX` around the order-end helper, validate its object and linked cave
+  bytes/branches, and cover Holiday-only plus Behavior-only object layouts in
+  addition to both diagnostic extremes.
+- [x] Phase B2 purchase awards: retarget only shifted
+  `HandlePurchaseItem+0x2DE`; call native AddToStorage first; preserve its
+  bool; award only on success before stock SaveCurrentGame; gate Holiday
+  Furniture mappings on `.vf2goal == 1`; and make Taters `0x74`
+  order/duplicate/save safe through hidden record `0x80`.
+- [x] Phase B2 behavior awards: exact pre-ForgetPlans praise labels complete
+  `0x66-0x6B` while preserving both restorations and over-praise; exact
+  `Scolding pet` completes `0x6C` before one native ForgetPlans call with
+  no restoration.
+- [x] Validate B2 source, object, and linked contracts in core/off-off and
+  Holiday+Behavior/on-on diagnostics. This is structural verification only;
+  no manual runtime result is claimed.
+- [x] Phase B3 exporter: discover .vf2goal from every selected executable,
+  emit its exact-SHA record under core_executable plus holiday_furniture, and
+  prove it can coexist with .vf2preg across 16 unique synthetic layouts.
+- [ ] Phase B3 final matrix/runtime: export the 16 final linked payloads, then
+  re-test enable, repeated-enable, disable-after-enable, save/reload, and
+  completed-goal restoration in game.
+
 ## Deferred after B151: Expanded Map
 
 - For a future build, use `work/reference_images/Expanded VF2 Map.png` as the
@@ -590,6 +633,20 @@
 
 ## Deferred after B151: Goals and Older Villagers
 
+- [x] Add exact-SHA, setting-gated `post_asset_patches` infrastructure so a
+  one-byte runtime goal flag can be applied after any selected executable
+  overlay without doubling the overlay matrix. Keep exporter output empty
+  until real linked offsets are available.
+- [ ] Final Phase A commit allowlist: explicitly include
+  `data/vf2/vf2_desktop_base_and_mobile_furniture_sections.csv` with the
+  patcher/exporter sources, focused tests, and these documentation updates;
+  verify the CSV is tracked before committing so the workspace-local catalog
+  cannot be omitted.
+- [ ] In B3, collect the stable Holiday Furniture runtime flag's exact payload
+  SHA-256/file-offset pair for every remaining executable variant and emit one
+  unambiguous manifest variant per SHA. Verify disabled, enabled, repeated-
+  enable, and disable-after-enable reconfiguration against every overlay
+  combination.
 - In a future build, implement the resource, pet, longevity, and family-tree
   appearance goals specified in `docs/B151-design.md`.
 - Add a separately gated Older Villagers patch with a mortality distribution
@@ -602,3 +659,49 @@
 - Audit package growth before adding another native feature dimension. Prefer
   runtime gating or compact deltas if a naive Older Villagers toggle would
   double the 16-overlay executable matrix.
+
+## B152 Holiday Ornament Text/Order Follow-up
+
+- [x] Use "Ornaments" only as the Collections page title while retaining the
+  full "Holiday Ornaments" feature name elsewhere.
+- [x] Give the Holiday page dedicated common/uncommon/rare footer strings so
+  it never reuses the stock bottle-cap wording.
+- [x] Place visible Ornamentologist 0x5F immediately after Bottlologist 0x5E
+  in every Holiday-enabled goal layout, with exact adjacency tests.
+- [x] Leave all graphics, descriptor orientation, draw-time transforms, and
+  B2 purchase/praise/scold hook regions unchanged.
+- [ ] In game, open page 5 and verify the short title plus all three rarity
+  footers, then open Goals and verify Ornamentologist directly follows
+  Bottlologist. Automated tests are structural and do not replace this check.
+
+## B152 Experimental Allow Older Pregnancies
+
+- [x] Install the dormant hook in every executable with independent writable
+  .vf2preg byte 00; preserve the native path for flag-off and both-under-50.
+- [x] Implement the older-parent cap in tenths of a percent: 10.0% at age 50,
+  1.0% at 59, 0.9% at 60, 0.1% at 68, and a permanent 0.1% floor at 69+.
+- [x] Keep successful tutorial queueing, bypass first-pregnancy forced success
+  after a failed late-age roll, and leave multiple-birth logic untouched.
+- [x] Add default-off Experimental patcher metadata plus exact-SHA post-asset
+  .vf2preg variants without expanding the 16-executable matrix.
+- [x] Coexist with the independent .vf2goal Holiday Furniture record for the
+  same payload SHA; both records are nonoverlapping and grouped safely.
+- [x] Compile and bounded-validate a real core diagnostic: .vf2preg is
+  writable/default-00 at raw 0x188800, and the native detour/helper/stock
+  fallback plus 1000-way roll and success-only tutorial queue all decode.
+- [ ] Run the linked validator over all final B152 matrix executables and
+  dry-run/apply the setting against every selected-overlay SHA.
+- [ ] Manually test ages 49, 50, 59, 60, 68, 69, and an extreme old-age save;
+  confirm normal under-50 attempts, late-age failures, successful births,
+  save/reload, and native singleton/twin/triplet outcomes.
+
+## B152 Upright Holiday Ornament Payload
+
+- [x] Copy all 12 supplied collected icons byte-for-byte with no orientation
+  or size transformation.
+- [x] Rebuild the 1024x768 page from the supplied base, upright frame, upright
+  lower-right Candy Cane at (848, 461), and 12 upright placeholders.
+- [x] Validate deterministic rebuilds, exact source hashes, full-page geometry,
+  Holiday gate behavior, and exporter payload routing.
+- [ ] Open the collection page in game and visually confirm the frame, Candy
+  Cane, placeholders, and collected ornaments are upright and aligned.

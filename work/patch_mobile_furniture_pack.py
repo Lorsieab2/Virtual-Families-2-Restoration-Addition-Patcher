@@ -12,7 +12,7 @@ from io import BytesIO
 from zipfile import ZipFile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from coff_patch import CoffObject, IMAGE_SYM_CLASS_EXTERNAL
+from coff_patch import CoffObject, IMAGE_REL_I386_DIR32, IMAGE_SYM_CLASS_EXTERNAL
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC_OBJS = ROOT / "work" / "desktop_obj_files"
@@ -36,6 +36,58 @@ ENABLE_CHEAT_UPGRADES = os.environ.get("VF2_ENABLE_CHEAT_UPGRADES", "0") == "1"
 # Unflagged builds retain stock behavior; the checked patcher setting selects a
 # matching build made with VF2_ENABLE_BEHAVIOR_PATCHES=1.
 ENABLE_BEHAVIOR_PATCHES = os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "0") == "1"
+
+# B152's Allow Older Pregnancies option is a post-link runtime byte toggle,
+# not another executable-matrix dimension. Every linked executable contains
+# the dormant hook and a default-zero byte in .vf2preg; the offline patcher
+# changes that exact byte only when the user enables the experimental option.
+OLDER_PREGNANCY_FLAG_SECTION = ".vf2preg"
+OLDER_PREGNANCY_FLAG_SYMBOL = "_gVF2AllowOlderPregnancies"
+OLDER_PREGNANCY_HELPER_SYMBOL = "_VF2RollOlderPregnancy"
+OLDER_PREGNANCY_INTERNAL_AGE_50 = 50 * 20
+
+
+def older_pregnancy_cap_tenths(age_years):
+    """Maximum late-age chance in tenths of one percent."""
+    if age_years < 50:
+        raise ValueError("Older-pregnancy cap is defined only for ages 50+")
+    if age_years <= 59:
+        return (60 - age_years) * 10
+    if age_years <= 68:
+        return 69 - age_years
+    return 1
+
+
+def stock_pregnancy_chance_percent_without_cutoff(
+    mother_fertility, father_fertility, mother_age_years, father_age_years
+):
+    """Mirror the stock integer math while omitting only the >50 hard zero."""
+    chance = (
+        105
+        - (100 - mother_fertility) // 3
+        - (100 - father_fertility) // 3
+    )
+    if father_age_years >= 41:
+        chance -= (father_age_years - 40) // 5
+    if mother_age_years > 30:
+        chance -= 2 * (mother_age_years - 20)
+    return chance
+
+
+def older_pregnancy_effective_chance_tenths(
+    mother_fertility, father_fertility, mother_age_years, father_age_years
+):
+    """Return the enabled late-age roll threshold in the 0..999 domain."""
+    older_age = max(mother_age_years, father_age_years)
+    if older_age < 50:
+        raise ValueError("Late-age chance requested for two under-50 parents")
+    stock_tenths = stock_pregnancy_chance_percent_without_cutoff(
+        mother_fertility,
+        father_fertility,
+        mother_age_years,
+        father_age_years,
+    ) * 10
+    return max(1, min(stock_tenths, older_pregnancy_cap_tenths(older_age)))
 ANALYSIS = ROOT / "outputs" / "VF2-Desktop-Object-Analysis"
 if not (ANALYSIS / "furniture-records.json").exists():
     ANALYSIS = ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis"
@@ -430,7 +482,137 @@ HOLIDAY_ORNAMENT_MASTER_COLLECTOR_ID = 0x4D
 HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET = 6
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID = 0x54
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
-HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x60
+HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
+CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
+CUSTOM_ACHIEVEMENT_LAST_ID = 0x7F
+CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
+CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
+CUSTOM_ACHIEVEMENT_BEHAVIOR_END = 0x6C
+CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST = 0x6D
+CUSTOM_ACHIEVEMENT_HOLIDAY_LAST = 0x7F
+CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
+CUSTOM_ACHIEVEMENT_TARGET = 1
+CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
+CUSTOM_ACHIEVEMENT_ROW_SPECS = [
+    (0x60, "general", "Portal to Paradise", "You bought a painting of Isola."),
+    (0x61, "general", "LDW Fan", "You bought a Last Day of Work poster."),
+    (0x62, "general", "Palm Pioneer", "You bought the Casino Games and Wall Calendar poster."),
+    (0x63, "general", "Caring Soul", "You bought the Virtual Families and Tycoon games poster."),
+    (0x64, "general", "Spin-off Specialist", "You bought the Virtual Town and Cook Off poster."),
+    (0x65, "general", "The Adventures Never End", "You bought a Virtual Villagers painting."),
+    (0x66, "behavior", "Nyan Cat", "You praised someone for watching cat videos."),
+    (0x67, "behavior", "Like and Subscribe", "You praised someone for posting on VideoTube."),
+    (0x68, "behavior", "Virtual Families-Inception!", "You praised someone for playing Virtual Families."),
+    (0x69, "behavior", "Isolan Refugees", "You praised someone for playing Virtual Villagers."),
+    (0x6A, "behavior", "Memz", "You praised someone for posting memes online."),
+    (0x6B, "pet_behavior", "Good boy!", "You praised a pet."),
+    (0x6C, "pet_behavior", "Bad dog!", "You scolded a pet."),
+    (0x6D, "holiday_furniture", "Lord of the Rings", "You bought a garden gnome."),
+    (0x6E, "holiday_furniture", "Happy Hanukkah!", "You bought a menorah or a dreidel."),
+    (0x6F, "holiday_furniture", "Merry Christmas!", "You bought a Christmas Tree."),
+    (0x70, "holiday_furniture", "Do you want to build a snowman?", "You bought a snowman."),
+    (0x71, "holiday_furniture", "Red-Nosed Guide", "You bought a reindeer decoration."),
+    (0x72, "holiday_furniture", "Giving Thanks", "You bought a holiday turkey."),
+    (0x73, "holiday_furniture", "Pumpkin Pie!", "You bought a pumpkin pie."),
+    (0x74, "holiday_furniture", "Taters and Gravy", "You bought mashed potatoes and gravy."),
+    (0x75, "holiday_furniture", "Dress me up", "You bought a bowl of dressing."),
+    (0x76, "holiday_furniture", "Full of beans", "You bought green beans."),
+    (0x77, "holiday_furniture", "Super souffle", "You bought Holiday Souffle."),
+    (0x78, "holiday_furniture", "Cran-Merry!", "You bought some cranberry sauce."),
+    (0x79, "holiday_furniture", "Hamming it up", "You bought some Holiday Ham."),
+    (0x7A, "holiday_furniture", "Deck the Halls", "You bought a holiday garland."),
+    (0x7B, "holiday_furniture", "Stocking Stuffers", "You hung up some stockings!"),
+    (0x7C, "holiday_furniture", "Santa Baby", "You hung up a Santa Wall Decoration."),
+    (0x7D, "holiday_furniture", "Ho Ho Ho!", "You set up a Santa Decoration."),
+    (0x7E, "holiday_furniture", "Cookies for Santa", "You bought a Plate of Cookies! With milk!"),
+    (0x7F, "holiday_furniture", "Gingerbread Man", "You bought a Christmas Cookie."),
+]
+CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
+    0x2EA: 0x60,
+    0x2EB: 0x61,
+    0x2EC: 0x62,
+    0x2ED: 0x63,
+    0x2EE: 0x64,
+    0x2E9: 0x65,
+}
+CUSTOM_ACHIEVEMENT_HOLIDAY_PURCHASE_GOALS = {
+    0x2B1: 0x6D,
+    0x2B2: 0x6D,
+    0x2B3: 0x6D,
+    0x2B4: 0x6D,
+    0x2B5: 0x6D,
+    0x2AF: 0x6E,
+    0x2B8: 0x6E,
+    0x2AD: 0x6F,
+    0x2AE: 0x6F,
+    0x2C5: 0x70,
+    0x2C2: 0x71,
+    0x2D2: 0x72,
+    0x2D0: 0x73,
+    0x2CB: 0x75,
+    0x2CD: 0x76,
+    0x2D1: 0x77,
+    0x2CA: 0x78,
+    0x2CE: 0x79,
+    0x2C8: 0x7A,
+    0x2C9: 0x7A,
+    0x2C6: 0x7B,
+    0x2C7: 0x7B,
+    0x2C4: 0x7C,
+    0x2C3: 0x7D,
+    0x2BE: 0x7E,
+    0x2AC: 0x7F,
+}
+CUSTOM_ACHIEVEMENT_TATERS_PURCHASE_BITS = {
+    0x2CF: 0x1,
+    0x2CC: 0x2,
+}
+CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID = 0x80
+CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL = 0x3
+CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS = {
+    "Watching cat videos": 0x66,
+    "Posting on VideoTube": 0x67,
+    "Playing Virtual Families": 0x68,
+    "Playing Virtual Villagers": 0x69,
+    "Posting memes online": 0x6A,
+    "Praising pet": 0x6B,
+}
+CUSTOM_ACHIEVEMENT_SCOLD_LABEL_GOALS = {
+    "Scolding pet": 0x6C,
+}
+
+
+def custom_achievement_purchase_dispatch(
+    item_id,
+    purchase_succeeded,
+    holiday_furniture_enabled,
+    persisted_mask=0,
+):
+    """Pure model for the native purchase wrapper and hidden 0x80 mask."""
+    mask = int(persisted_mask) & CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL
+    if not purchase_succeeded:
+        return None, mask
+    if item_id in CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS:
+        return CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS[item_id], mask
+    if not holiday_furniture_enabled:
+        return None, mask
+    purchase_bit = CUSTOM_ACHIEVEMENT_TATERS_PURCHASE_BITS.get(item_id)
+    if purchase_bit is not None:
+        updated_mask = mask | purchase_bit
+        completed_now = (
+            mask != CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL
+            and updated_mask == CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL
+        )
+        return (0x74 if completed_now else None), updated_mask
+    return CUSTOM_ACHIEVEMENT_HOLIDAY_PURCHASE_GOALS.get(item_id), mask
+
+
+def custom_achievement_praise_label_dispatch(label):
+    return CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS.get(label)
+
+
+def custom_achievement_scold_label_dispatch(label):
+    return CUSTOM_ACHIEVEMENT_SCOLD_LABEL_GOALS.get(label)
 COLLECTABLE_SMALL_FRAME_WIDTH = 40
 COLLECTABLE_SMALL_FRAME_HEIGHT = 40
 COLLECTABLE_SMALL_COLUMNS = 6
@@ -439,7 +621,11 @@ HOLIDAY_ORNAMENT_SMALL_FRAME_START = HOLIDAY_ORNAMENT_COLLECTABLE_START - COLLEC
 HOLIDAY_ORNAMENT_SMALL_FRAME_END = HOLIDAY_ORNAMENT_COLLECTABLE_END - COLLECTABLE_SMALL_IMAGE_BASE_CARRYING
 # CCollectionScene::HandleMouse keeps a 60-item stock rarity-label lookup in
 # stack locals. The appended ornament page needs three more four-item buckets.
-HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS = (0x751, 0x752, 0x753)
+HOLIDAY_ORNAMENT_COLLECTION_FOOTER_ROWS = (
+    ("common", "eSayCommonOrnaments", " of 4 common ornaments found."),
+    ("uncommon", "eSayUncommonOrnaments", " of 4 uncommon ornaments found."),
+    ("rare", "eSayRareOrnaments", " of 4 rare ornaments found."),
+)
 ACHIEVEMENT_ROW_SIZE = 0x1C
 HOLIDAY_ORNAMENT_SPAWN_RECTS = [
     ("__xmm@000001bd000002fa000000c400000112", (0x112, 0x0C4, 0x2FA, 0x1BD)),
@@ -456,6 +642,11 @@ HOLIDAY_ORNAMENT_GLOWING_COLLECTABLES_SOURCE = (
     ROOT / "patcher_assets" / "optional_patches" / "glowing_collectibles" / "collectables_small.png"
 )
 HOLIDAY_ORNAMENT_FRAME_SOURCE = "Collection_ChristmasOrnament_Frame.png"
+HOLIDAY_ORNAMENT_PAGE_BASE_SOURCE = "Collection_Bottlecaps_Background.png"
+HOLIDAY_ORNAMENT_PAGE_DECORATION_SOURCE = "Collection_ChristmasOrnament_CandyCane.png"
+HOLIDAY_ORNAMENT_PAGE_SIZE = (1024, 768)
+HOLIDAY_ORNAMENT_FRAME_POSITION = (74, 4)
+HOLIDAY_ORNAMENT_CANDY_CANE_POSITION = (848, 461)
 HOLIDAY_ORNAMENT_IMAGE_SCALE = 1024.0 / 800.0
 HOLIDAY_ORNAMENT_ATLAS_RECORDS = [
     ("collection_christmasornament_blueball.png", 903, 334, 93, 115),
@@ -1243,9 +1434,7 @@ def build_native_array_contract():
         },
     }
 
-MOBILE_CSV = Path(
-    r"C:\Users\Owner\Documents\Codex\2026-06-01\virtual-families-2-has-a-lot\outputs\mobile-port-analysis\vf2_desktop_base_and_mobile_furniture_sections.csv"
-)
+MOBILE_CSV = ROOT / "data" / "vf2" / "vf2_desktop_base_and_mobile_furniture_sections.csv"
 MOBILE_EVENT_TEXT_PACK = Path(
     r"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\mobile_only_event_text_pack.csv"
 )
@@ -3037,6 +3226,28 @@ def holiday_ornament_achievement_title_string_id():
 
 def holiday_ornament_achievement_desc_string_id():
     return holiday_ornament_collection_title_string_id() + 2
+
+
+def custom_achievement_string_base():
+    return holiday_ornament_collection_title_string_id() + 3
+
+
+def custom_achievement_string_ids(achievement_id):
+    index = achievement_id - CUSTOM_ACHIEVEMENT_FIRST_ID
+    if index < 0 or achievement_id > CUSTOM_ACHIEVEMENT_LAST_ID:
+        raise ValueError(f"Custom achievement id is out of range: {achievement_id:#x}")
+    title_id = custom_achievement_string_base() + index * 2
+    return title_id, title_id + 1
+
+
+def holiday_ornament_collection_footer_string_ids():
+    first_id = custom_achievement_string_ids(CUSTOM_ACHIEVEMENT_LAST_ID)[1] + 1
+    return tuple(
+        range(
+            first_id,
+            first_id + len(HOLIDAY_ORNAMENT_COLLECTION_FOOTER_ROWS),
+        )
+    )
 
 
 def villager_body_image_base():
@@ -4958,8 +5169,17 @@ def validate_holiday_ornament_native_contract(manifest):
             errors.append("CCollectionScene::HandleMouse tooltip cave lacks the first Holiday bucket")
         if mouse_data[tooltip_cave + 5 : tooltip_cave + 8] != b"\x83\xF8\x12":
             errors.append("CCollectionScene::HandleMouse tooltip cave has the wrong upper bucket bound")
-        if mouse_data[tooltip_cave + 10 : tooltip_cave + 16] != b"\x8D\x98\x42\x07\x00\x00":
-            errors.append("CCollectionScene::HandleMouse tooltip cave no longer maps buckets 15-17 to 0x751-0x753")
+        tooltip_label_disp = (
+            holiday_ornament_collection_footer_string_ids()[0] - 0x0F
+        )
+        if (
+            mouse_data[tooltip_cave + 10 : tooltip_cave + 16]
+            != b"\x8D\x98" + struct.pack("<I", tooltip_label_disp)
+        ):
+            errors.append(
+                "CCollectionScene::HandleMouse tooltip cave no longer maps "
+                "buckets 15-17 to the dedicated ornament footer strings"
+            )
         stock_target = tooltip_cave + 5 + struct.unpack_from("<b", mouse_data, tooltip_cave + 4)[0]
         high_target = tooltip_cave + 10 + struct.unpack_from("<b", mouse_data, tooltip_cave + 9)[0]
         if stock_target != tooltip_cave + 21 or high_target != tooltip_cave + 21:
@@ -4968,9 +5188,11 @@ def validate_holiday_ornament_native_contract(manifest):
             jump_target = jump_off + 5 + struct.unpack_from("<i", mouse_data, jump_off + 1)[0]
             if jump_target != 0x1F2:
                 errors.append("CCollectionScene::HandleMouse tooltip cave no longer resumes at +0x1F2")
-    for label_id in HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS:
-        if struct.pack("<I", label_id) not in mouse_data:
-            errors.append(f"CCollectionScene::HandleMouse missing Holiday Ornament tooltip rarity label {hex(label_id)}")
+    footer_ids = holiday_ornament_collection_footer_string_ids()
+    if footer_ids != tuple(range(footer_ids[0], footer_ids[0] + 3)):
+        errors.append(
+            "Holiday Ornament tooltip footer string IDs are not consecutive"
+        )
 
     draw_data, draw_sym, draw_sec = function_bytes(
         collection_scene_obj, "?DrawScene@CCollectionScene@@MAEXXZ"
@@ -5114,11 +5336,23 @@ def validate_holiday_ornament_native_contract(manifest):
             "?AchievementsComplete@CAchievement@@QAEHXZ",
         )
     )
-    if achievements_complete_data[0x23 : 0x26] != b"\x83\xFE\x60":
-        errors.append(
-            "CAchievement::AchievementsComplete does not scan all "
-            "96 achievement rows in the patched COFF object"
-        )
+    expected_complete_stub = b"\x51\xE8\x00\x00\x00\x00\x83\xC4\x04\xC3"
+    if achievements_complete_data[:len(expected_complete_stub)] != expected_complete_stub:
+        errors.append("CAchievement::AchievementsComplete does not use the visible-goal helper")
+    complete_helper = achievement_obj.symbol_by_name.get(
+        "_VF2AchievementsCompleteVisible"
+    )
+    complete_relocs = [
+        struct.unpack_from("<IIH", achievement_obj.buf, _complete_count_sec.reloc_ptr + index * 10)
+        for index in range(_complete_count_sec.nreloc)
+    ]
+    if complete_helper is None or not any(
+        vaddr == _complete_count_sym.value + 2
+        and symbol_index == complete_helper.index
+        and rtype == IMAGE_REL_I386_REL32
+        for vaddr, symbol_index, rtype in complete_relocs
+    ):
+        errors.append("AchievementsComplete helper call lacks its REL32 relocation")
     achievement_list = achievement_obj.symbol(
         "?achievementList@@3PAUsAchievementListEntry@@A"
     )
@@ -5153,27 +5387,154 @@ def validate_holiday_ornament_native_contract(manifest):
                 f"{label} target expected {expected_target}, got {target}"
             )
 
+    physical_rows = (
+        achievement_list_sec.raw_size - achievement_list.value
+    ) // ACHIEVEMENT_ROW_SIZE
+    if physical_rows != 0x80:
+        errors.append(f"achievementList expected 128 physical rows, got {physical_rows}")
+    for achievement_id, _group, _title, _description in CUSTOM_ACHIEVEMENT_ROW_SPECS:
+        row = struct.unpack_from(
+            "<7I",
+            achievement_obj.buf,
+            achievement_list_sec.raw_ptr
+            + achievement_list.value
+            + achievement_id * ACHIEVEMENT_ROW_SIZE,
+        )
+        title_id, description_id = custom_achievement_string_ids(achievement_id)
+        expected_row = (
+            achievement_id,
+            CUSTOM_ACHIEVEMENT_TARGET,
+            CUSTOM_ACHIEVEMENT_ICON_ID,
+            0,
+            title_id,
+            description_id,
+            0,
+        )
+        if row != expected_row:
+            errors.append(f"achievementList row {achievement_id:#x} is not the exact B152 record")
+
+    load_data, _load_state_sym, _load_state_sec = function_bytes(
+        achievement_obj,
+        "?LoadState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z",
+    )
+    for needle, label in (
+        (b"\x8D\x4E\x00\x8D\x83\x0C\x06\x00\x00", "reserved-tail start 0x81"),
+        (b"\x81\xF9\xA4\x00\x00\x00", "reserved-tail scan count 0xA4"),
+        (b"\x8D\x83\x0C\x06\x00\x00\xB9\xA4\x00\x00\x00", "reserved-tail clear span"),
+    ):
+        if needle not in load_data:
+            errors.append(f"CAchievement::LoadState missing {label}")
+
+    draw_achievement_data, _draw_achievement_sym, _draw_achievement_sec = function_bytes(
+        achievement_obj,
+        "?DrawAchievement@CAchievement@@QAEXHHH_NM@Z",
+    )
+    if draw_achievement_data[0xD8:0xDC] != b"\x83\xFF\x7F\x7F":
+        errors.append("DrawAchievement short guard does not accept IDs through 0x7F")
+    if draw_achievement_data[0x191:0x196] != b"\x83\xFF\x7F\x0F\x8F":
+        errors.append("DrawAchievement near guard does not accept IDs through 0x7F")
+
+    achievement_scene_obj = CoffObject(PATCHED / "AchievementsScene.obj")
+    scene_draw_data, scene_draw_sym, scene_draw_sec = function_bytes(
+        achievement_scene_obj,
+        "?DrawScene@CAchievementsScene@@MAEXXZ",
+    )
+    order_cave = None
+    if scene_draw_data[0xF5] != 0xE9:
+        errors.append("AchievementsScene order-end compare is not detoured")
+    else:
+        order_cave = 0xFA + struct.unpack_from("<i", scene_draw_data, 0xF6)[0]
+        expected_cave = b"\x51\x52\xE8\x00\x00\x00\x00\x5A\x59\x3B\xF0\xE9"
+        if scene_draw_data[order_cave : order_cave + len(expected_cave)] != expected_cave:
+            errors.append("AchievementsScene order-end cave does not preserve ECX/EDX around its helper")
+        elif order_cave + 16 + struct.unpack_from("<i", scene_draw_data, order_cave + 12)[0] != 0xFB:
+            errors.append("AchievementsScene order-end cave does not return to +0xFB")
+    order_end_helper = achievement_scene_obj.symbol_by_name.get(
+        "_VF2AchievementOrderEnd"
+    )
+    scene_draw_relocs = [
+        struct.unpack_from(
+            "<IIH",
+            achievement_scene_obj.buf,
+            scene_draw_sec.reloc_ptr + index * 10,
+        )
+        for index in range(scene_draw_sec.nreloc)
+    ]
+    if order_cave is None or order_end_helper is None or (
+        scene_draw_sym.value + order_cave + 3,
+        order_end_helper.index,
+        IMAGE_REL_I386_REL32,
+    ) not in scene_draw_relocs:
+        errors.append("AchievementsScene order-end helper relocation is missing or misplaced")
+
+    order_sym = achievement_scene_obj.symbol("?achievementOrder@@3QBHB")
+    order_sec = achievement_scene_obj.section(order_sym.section)
+    order_count = (order_sec.raw_size - order_sym.value) // 4
+    visible_order = list(struct.unpack_from(
+        "<" + "I" * order_count,
+        achievement_scene_obj.buf,
+        order_sec.raw_ptr + order_sym.value,
+    ))
+    if (
+        visible_order.count(0x5E) != 1
+        or visible_order.count(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID) != 1
+        or visible_order.index(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID)
+        != visible_order.index(0x5E) + 1
+    ):
+        errors.append(
+            "achievementOrder does not place Ornamentologist 0x5F "
+            "immediately after Bottlologist 0x5E"
+        )
+
     queue_data, _queue_sym, _queue_sec = function_bytes(
         achievement_obj,
         "?QueueAchievementNotify@CAchievement@@AAEXW4EAchievement@@@Z",
     )
-    if queue_data[0x19 : 0x1C] != b"\x83\xF8\x60":
-        errors.append(
-            "CAchievement::QueueAchievementNotify does not scan all "
-            "96 achievement slots"
-        )
+    if queue_data[0x19 : 0x1C] != b"\x83\xF8\x5F":
+        errors.append("QueueAchievementNotify no longer preserves the 0x5F-slot allocation")
     reset_queue_data, _reset_queue_sym, _reset_queue_sec = function_bytes(
         achievement_obj,
         "?ResetNotifyQueue@CAchievement@@AAEXXZ",
     )
     if (
         reset_queue_data[0x11 : 0x16]
-        != b"\xB9\x60\x00\x00\x00"
+        != b"\xB9\x5F\x00\x00\x00"
     ):
-        errors.append(
-            "CAchievement::ResetNotifyQueue does not clear all "
-            "96 achievement slots"
-        )
+        errors.append("ResetNotifyQueue no longer clears exactly 0x5F queue slots")
+
+    for function_name, expected_size, count_offset in (
+        ("?SaveState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z", 0x30, 0x06),
+        ("?Reset@CAchievement@@QAEXXZ", 0x27, 0x09),
+    ):
+        state_data, state_sym, state_sec = function_bytes(achievement_obj, function_name)
+        if state_sym.value + expected_size != state_sec.raw_size or len(state_data) != expected_size:
+            errors.append(f"{function_name} no longer has its exact {expected_size:#x}-byte span")
+        elif state_data[count_offset : count_offset + 5] != b"\xBA\x25\x01\x00\x00":
+            errors.append(f"{function_name} no longer covers exactly 0x125 records")
+
+    pop_data, pop_sym, pop_sec = function_bytes(
+        achievement_obj,
+        "?PopAchievementNotify@CAchievement@@AAE?AW4EAchievement@@XZ",
+    )
+    if pop_sym.value + 0x2F != pop_sec.raw_size or len(pop_data) != 0x2F:
+        errors.append("PopAchievementNotify no longer has its exact 0x2F-byte span")
+    elif (
+        pop_data[0x1B:0x22] != b"\xB9\x5E\x00\x00\x00\xF3\xA5"
+        or pop_data[0x22:0x2C] != b"\xC7\x82\x34\x0F\x00\x00\xFF\xFF\xFF\xFF"
+    ):
+        errors.append("PopAchievementNotify queue shift/tail clear bytes drifted")
+
+    update_data, update_sym, update_sec = function_bytes(
+        achievement_obj,
+        "?Update@CAchievement@@QAEXXZ",
+    )
+    if update_sym.value + 0x1A1 != update_sec.raw_size or len(update_data) != 0x1A1:
+        errors.append("CAchievement::Update no longer has its exact 0x1A1-byte span")
+    elif (
+        update_data[0x45:0x4B] != b"\x8B\x96\x38\x0F\x00\x00"
+        or update_data[0x4B:0x51] != b"\x8B\x8E\x3C\x0F\x00\x00"
+    ):
+        errors.append("CAchievement::Update popup timer/state field bytes drifted")
 
     set_complete_data, set_complete_sym, set_complete_sec = function_bytes(
         achievement_obj,
@@ -5354,7 +5715,10 @@ def validate_holiday_ornament_native_contract(manifest):
             ],
             "page_count_helper": "_VF2CollectionPageCount@4",
             "page_count_route": "DrawScene uses a fixed-size code cave to call stdcall _VF2CollectionPageCount@4(page); Activate keeps five stock cached counts and this+0x2C as hover state.",
-            "tooltip_rarity_label_ids": [hex(value) for value in HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS],
+            "tooltip_rarity_label_ids": [
+                hex(value)
+                for value in holiday_ornament_collection_footer_string_ids()
+            ],
         },
         "main_scene_total": {
             "family_starts": [hex(value) for value in HOLIDAY_ORNAMENT_COLLECTION_PAGE_STARTS],
@@ -5383,7 +5747,9 @@ def validate_holiday_ornament_native_contract(manifest):
             "collection_master_target": HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET,
             "goal_collector_target": HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET,
             "ornamentologist_target": HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET,
-            "visible_order_bound": HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT,
+            "physical_row_count": 0x80,
+            "visible_count_flag_0": manifest["CustomAchievements"]["visible_counts"]["holiday_furniture_flag_0"],
+            "visible_count_flag_1": manifest["CustomAchievements"]["visible_counts"]["holiday_furniture_flag_1"],
             "notify_queue_bound": HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT,
         },
         "control_flow": {
@@ -5570,7 +5936,11 @@ def sync_holiday_ornament_collection_art(manifest):
     }
     return
 
-    supplied_files = [HOLIDAY_ORNAMENT_FRAME_SOURCE]
+    supplied_files = [
+        HOLIDAY_ORNAMENT_PAGE_BASE_SOURCE,
+        HOLIDAY_ORNAMENT_FRAME_SOURCE,
+        HOLIDAY_ORNAMENT_PAGE_DECORATION_SOURCE,
+    ]
     for _runtime_name, source_name, placeholder_name in HOLIDAY_ORNAMENT_COLLECTION_FILES:
         supplied_files.append(source_name)
         supplied_files.append(placeholder_name)
@@ -5579,8 +5949,22 @@ def sync_holiday_ornament_collection_art(manifest):
         if not (HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / name).exists()
     ]
     if HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR.exists() and not missing_supplied:
+        base_source = HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / HOLIDAY_ORNAMENT_PAGE_BASE_SOURCE
         frame_source = HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / HOLIDAY_ORNAMENT_FRAME_SOURCE
-        background = Image.open(frame_source).convert("RGBA")
+        decoration_source = HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / HOLIDAY_ORNAMENT_PAGE_DECORATION_SOURCE
+        background = Image.open(base_source).convert("RGBA")
+        if background.size != HOLIDAY_ORNAMENT_PAGE_SIZE:
+            raise RuntimeError(
+                f"Holiday Ornament page base must be {HOLIDAY_ORNAMENT_PAGE_SIZE}, "
+                f"got {background.size}"
+            )
+        frame = Image.open(frame_source).convert("RGBA")
+        decoration = Image.open(decoration_source).convert("RGBA")
+        background.alpha_composite(frame, HOLIDAY_ORNAMENT_FRAME_POSITION)
+        background.alpha_composite(
+            decoration,
+            HOLIDAY_ORNAMENT_CANDY_CANE_POSITION,
+        )
         placeholder_entries = []
         for index, (_runtime_name, _source_name, placeholder_name) in enumerate(HOLIDAY_ORNAMENT_COLLECTION_FILES):
             placeholder_source = HOLIDAY_ORNAMENT_SUPPLIED_ART_DIR / placeholder_name
@@ -5597,8 +5981,12 @@ def sync_holiday_ornament_collection_art(manifest):
         background.save(background_target)
         status["background"] = {
             "path": str(background_target),
+            "source_base": str(base_source),
             "source_frame": str(frame_source),
+            "source_decoration": str(decoration_source),
             "output_size": list(background.size),
+            "frame_position": list(HOLIDAY_ORNAMENT_FRAME_POSITION),
+            "decoration_position": list(HOLIDAY_ORNAMENT_CANDY_CANE_POSITION),
             "placeholders_baked_into_background": placeholder_entries,
         }
 
@@ -5622,7 +6010,7 @@ def sync_holiday_ornament_collection_art(manifest):
             **status,
             "status": "generated_from_supplied_assets",
             "output_root": str(output_root),
-            "decorative_source_not_a_collectable": "Collection_ChristmasOrnament_CandyCane.png",
+            "decorative_source_baked_into_background": HOLIDAY_ORNAMENT_PAGE_DECORATION_SOURCE,
         }
         return
 
@@ -6997,8 +7385,37 @@ def write_outfit_store_helpers(manifest):
     if not helper_path.exists():
         raise RuntimeError("Expected vf2_special_upgrade_effects.cpp before adding outfit helpers")
     first_short, _first_long = outfit_string_ids_for_entry(0)
+    existing_helper = helper_path.read_text(encoding="ascii")
+    shared_type_preamble = ""
+    if (
+        "enum EInventoryItem" not in existing_helper
+        or "class CFurnitureManager" not in existing_helper
+    ):
+        shared_type_preamble = r"""
+enum EInventoryItem { eInventoryItemDummy = 0 };
+class CContentMap {
+public:
+    enum EObject { eObjectDryer = 0x48 };
+};
+struct ldwPoint { int x; int y; };
+struct sFurnitureInfo2 {
+    int unknown0;
+    int orientation;
+    ldwPoint point;
+    int padding[4];
+};
+class CFurnitureManager {
+public:
+    bool AddToStorage(EInventoryItem item);
+    bool AddToStorageAndAward(EInventoryItem item);
+    bool IsPet(EInventoryItem item);
+    bool FindFurniture(CContentMap::EObject object, ldwPoint point,
+        sFurnitureInfo2 &info, bool a, int b, bool c);
+};
+"""
     helper_path.write_text(
-        helper_path.read_text(encoding="ascii")
+        existing_helper
+        + shared_type_preamble
         + f"""
 
 enum EImage {{ eImageDummy = 0 }};
@@ -7006,24 +7423,6 @@ class theGraphicsManager {{
 public:
     static theGraphicsManager* Get();
     void Draw(EImage image, int x, int y, float scale, int alpha);
-}};
-
-enum EInventoryItem {{ eInventoryItemDummy = 0 }};
-class CContentMap {{
-public:
-    enum EObject {{ eObjectDryer = 0x48 }};
-}};
-
-struct ldwPoint {{
-    int x;
-    int y;
-}};
-
-struct sFurnitureInfo2 {{
-    int unknown0;
-    int orientation;
-    ldwPoint point;
-    int padding[4];
 }};
 
 class CToolTray {{
@@ -7041,13 +7440,6 @@ public:
     char pad0[0x468];
     int maleOutfitBody;
     int femaleOutfitBody;
-}};
-
-class CFurnitureManager {{
-public:
-    bool IsPet(EInventoryItem item);
-    bool FindFurniture(CContentMap::EObject object, ldwPoint point,
-        sFurnitureInfo2 &info, bool a, int b, bool c);
 }};
 
 class CVillager {{}};
@@ -7710,6 +8102,41 @@ def patch_scrolling_store_scene(manifest):
             {"path": "ordinary purchase", "offset": hex(ordinary_tail_off)},
         ]
 
+    # The +0x1AD dispatcher above shifts the stock furniture AddToStorage
+    # call operand from +0x28E to +0x2DE. Retarget only that call to a member
+    # wrapper with the identical thiscall ABI; every other storage path stays
+    # native and the caller continues immediately at Get(theMainScene).
+    purchase_sym = obj.symbol("?HandlePurchaseItem@CScrollingStoreScene@@AAEXXZ")
+    purchase_sec = obj.section(purchase_sym.section)
+    award_call_raw = purchase_sec.raw_ptr + purchase_sym.value + 0x2D7
+    if obj.buf[award_call_raw : award_call_raw + 0x10] != (
+        b"\x50\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00"
+        b"\xE8\x00\x00\x00\x00"
+    ):
+        raise RuntimeError("Unexpected HandlePurchaseItem AddToStorage award hook bytes")
+    add_to_storage_name = "?AddToStorage@CFurnitureManager@@QAE_NW4EInventoryItem@@@Z"
+    purchase_relocs = [
+        struct.unpack_from("<IIH", obj.buf, purchase_sec.reloc_ptr + index * 10)
+        for index in range(purchase_sec.nreloc)
+    ]
+    add_to_storage_sym = obj.symbol(add_to_storage_name)
+    if [
+        vaddr - purchase_sym.value
+        for vaddr, symbol_index, rtype in purchase_relocs
+        if symbol_index == add_to_storage_sym.index and rtype == IMAGE_REL_I386_REL32
+    ] != [0x2DE]:
+        raise RuntimeError("HandlePurchaseItem does not have exactly one AddToStorage call at +0x2DE")
+    purchase_award_name = (
+        "?AddToStorageAndAward@CFurnitureManager@@QAE_NW4EInventoryItem@@@Z"
+    )
+    purchase_award_sym = obj.append_undefined_symbol(purchase_award_name)
+    obj.retarget_relocation(
+        purchase_sym.section,
+        purchase_sym.value + 0x2DE,
+        purchase_award_sym,
+        IMAGE_REL_I386_REL32,
+    )
+
     obj.write(PATCHED / "ScrollingStoreScene.obj")
     lock_base = lock_image_id_for(0)
     (PATCHED / "vf2_generation_locks.cpp").write_text(
@@ -7895,6 +8322,14 @@ extern "C" void __cdecl VF2HandleStoreScrollbarMouse(void *scene, int message, i
         "kVF2OriginalFurnitureGenerationLocks",
         furniture_generation_locks,
     )
+    general_purchase_goal_cases_cpp = "\n".join(
+        f"    case 0x{item_id:X}: return 0x{goal_id:X};"
+        for item_id, goal_id in CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS.items()
+    )
+    holiday_purchase_goal_cases_cpp = "\n".join(
+        f"    case 0x{item_id:X}: return 0x{goal_id:X};"
+        for item_id, goal_id in CUSTOM_ACHIEVEMENT_HOLIDAY_PURCHASE_GOALS.items()
+    )
 
     special_upgrade_helper_cpp = r"""
 class CFoodStore {
@@ -7927,6 +8362,27 @@ enum EAchievement {
     eAchievementDummy = 0
 };
 
+enum EInventoryItem {
+    eInventoryItemDummy = 0
+};
+
+class CContentMap {
+public:
+    enum EObject { eObjectDryer = 0x48 };
+};
+
+struct ldwPoint {
+    int x;
+    int y;
+};
+
+struct sFurnitureInfo2 {
+    int unknown0;
+    int orientation;
+    ldwPoint point;
+    int padding[4];
+};
+
 enum EPropEnum {
     ePropDummy = 0
 };
@@ -7951,6 +8407,15 @@ public:
     void IncrementProgress(EAchievement achievement, int amount);
 };
 
+class CFurnitureManager {
+public:
+    bool AddToStorage(EInventoryItem item);
+    bool AddToStorageAndAward(EInventoryItem item);
+    bool IsPet(EInventoryItem item);
+    bool FindFurniture(CContentMap::EObject object, ldwPoint point,
+        sFurnitureInfo2 &info, bool a, int b, bool c);
+};
+
 class CEnvironment {
 public:
     void ClearProp(EPropEnum prop);
@@ -7960,6 +8425,19 @@ public:
 class ldwGameState {
 public:
     static int __cdecl GetRandom(int limit);
+};
+
+enum StringId {
+    eStringPregnancyTutorial = 0x868
+};
+
+enum EGameScene {
+    eGameSceneNone = 0
+};
+
+class CTutorialTip {
+public:
+    void Queue(StringId stringId, EGameScene scene, bool immediate);
 };
 
 class theGameState {
@@ -7977,12 +8455,195 @@ extern CMoney Money;
 extern CCollectableItem CollectableItem;
 extern CAchievement Achievement;
 extern CEnvironment Environment;
+extern CTutorialTip TutorialTip;
 
 extern "C" int __cdecl VF2GetB150UpgradePrice(int itemId);
 extern "C" void __cdecl VF2ToggleB150PriceMode(int itemId);
 extern "C" void __cdecl VF2ResetB150PriceMode();
 extern "C" void __cdecl VF2TriggerAllHouseMalfunctions();
 extern "C" void __cdecl VF2FixAllHouseMalfunctions();
+
+extern const int achievementOrder[];
+
+#pragma section(".vf2goal", read, write)
+extern "C" __declspec(allocate(".vf2goal"))
+volatile unsigned char gVF2HolidayFurnitureGoalsEnabled = 0;
+
+#pragma section(".vf2preg", read, write)
+extern "C" __declspec(allocate(".vf2preg"))
+volatile unsigned char gVF2AllowOlderPregnancies = 0;
+
+static const bool kVF2IncludeOrnamentologistGoal = __VF2_INCLUDE_ORNAMENT_GOAL__;
+static const bool kVF2IncludeBehaviorGoals = __VF2_INCLUDE_BEHAVIOR_GOALS__;
+
+static int VF2PregnancyAgeYears(int internalAge) {
+    return internalAge / 20;
+}
+
+static int VF2OlderPregnancyCapTenths(int ageYears) {
+    if (ageYears <= 59) return (60 - ageYears) * 10;
+    if (ageYears <= 68) return 69 - ageYears;
+    return 1;
+}
+
+static int VF2StockPregnancyChanceWithoutCutoff(
+    int motherFertility,
+    int fatherFertility,
+    int motherAgeYears,
+    int fatherAgeYears
+) {
+    int chance =
+        105
+        - (100 - motherFertility) / 3
+        - (100 - fatherFertility) / 3;
+    if (fatherAgeYears >= 41) {
+        chance -= (fatherAgeYears - 40) / 5;
+    }
+    if (motherAgeYears > 30) {
+        chance -= 2 * (motherAgeYears - 20);
+    }
+    return chance;
+}
+
+extern "C" int __cdecl VF2RollOlderPregnancy(
+    void *villagerState,
+    int motherInternalAge,
+    int fatherInternalAge,
+    int fatherFertility
+) {
+    int motherAgeYears = VF2PregnancyAgeYears(motherInternalAge);
+    int fatherAgeYears = VF2PregnancyAgeYears(fatherInternalAge);
+    int olderAgeYears =
+        motherAgeYears > fatherAgeYears ? motherAgeYears : fatherAgeYears;
+    if (olderAgeYears < 50) {
+        return 0;
+    }
+
+    int motherFertility = *(int *)((unsigned char *)villagerState + 0x4C);
+    int chanceTenths = VF2StockPregnancyChanceWithoutCutoff(
+        motherFertility,
+        fatherFertility,
+        motherAgeYears,
+        fatherAgeYears
+    ) * 10;
+    int ageCapTenths = VF2OlderPregnancyCapTenths(olderAgeYears);
+    if (chanceTenths > ageCapTenths) chanceTenths = ageCapTenths;
+    if (chanceTenths < 1) chanceTenths = 1;
+
+    if (ldwGameState::GetRandom(1000) >= chanceTenths) {
+        return 0;
+    }
+    TutorialTip.Queue(eStringPregnancyTutorial, eGameSceneNone, false);
+    return 1;
+}
+
+static int VF2AchievementVisibleCountInternal() {
+    int count = 0x5F + 6;
+    if (kVF2IncludeOrnamentologistGoal) ++count;
+    if (kVF2IncludeBehaviorGoals) count += 7;
+    if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
+    return count;
+}
+
+static int VF2CountCompletedAchievements(
+    CAchievement *achievement, int first, int last
+) {
+    int completed = 0;
+    for (int id = first; id <= last; ++id) {
+        if (achievement->IsComplete((EAchievement)id)) ++completed;
+    }
+    return completed;
+}
+
+extern "C" int __cdecl VF2AchievementVisibleCount() {
+    return VF2AchievementVisibleCountInternal();
+}
+
+extern "C" int __cdecl VF2AchievementContentHeight() {
+    return VF2AchievementVisibleCountInternal() * 0x42 + 0x1C;
+}
+
+extern "C" int __cdecl VF2AchievementDrawHeight() {
+    return VF2AchievementVisibleCountInternal() * 0x42;
+}
+
+extern "C" const int *__cdecl VF2AchievementOrderEnd() {
+    return achievementOrder + VF2AchievementVisibleCountInternal();
+}
+
+extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement) {
+    int completed = VF2CountCompletedAchievements(achievement, 0x00, 0x5E);
+    if (kVF2IncludeOrnamentologistGoal &&
+        achievement->IsComplete((EAchievement)0x5F)) {
+        ++completed;
+    }
+    completed += VF2CountCompletedAchievements(achievement, 0x60, 0x65);
+    if (kVF2IncludeBehaviorGoals) {
+        completed += VF2CountCompletedAchievements(achievement, 0x66, 0x6C);
+    }
+    if (gVF2HolidayFurnitureGoalsEnabled != 0) {
+        completed += VF2CountCompletedAchievements(achievement, 0x6D, 0x7F);
+    }
+    return completed;
+}
+
+static int VF2GeneralPurchaseAchievement(EInventoryItem item) {
+    switch ((int)item) {
+__VF2_GENERAL_PURCHASE_GOAL_CASES__
+    default: return -1;
+    }
+}
+
+static int VF2HolidayPurchaseAchievement(EInventoryItem item) {
+    switch ((int)item) {
+__VF2_HOLIDAY_PURCHASE_GOAL_CASES__
+    default: return -1;
+    }
+}
+
+static unsigned int &VF2TatersPurchaseMask() {
+    unsigned char *record =
+        (unsigned char *)&Achievement + 0x80 * 12;
+    return *(unsigned int *)(record + 4);
+}
+
+static void VF2DispatchSuccessfulFurniturePurchase(EInventoryItem item) {
+    int achievement = VF2GeneralPurchaseAchievement(item);
+    if (achievement >= 0) {
+        Achievement.SetComplete((EAchievement)achievement);
+        return;
+    }
+    if (gVF2HolidayFurnitureGoalsEnabled == 0) {
+        return;
+    }
+
+    unsigned int purchaseBit = 0;
+    if ((int)item == 0x2CF) purchaseBit = 0x1;
+    if ((int)item == 0x2CC) purchaseBit = 0x2;
+    if (purchaseBit != 0) {
+        unsigned int &storedMask = VF2TatersPurchaseMask();
+        unsigned int oldMask = storedMask & 0x3;
+        unsigned int newMask = oldMask | purchaseBit;
+        storedMask = newMask;
+        if (oldMask != 0x3 && newMask == 0x3) {
+            Achievement.SetComplete((EAchievement)0x74);
+        }
+        return;
+    }
+
+    achievement = VF2HolidayPurchaseAchievement(item);
+    if (achievement >= 0) {
+        Achievement.SetComplete((EAchievement)achievement);
+    }
+}
+
+bool CFurnitureManager::AddToStorageAndAward(EInventoryItem item) {
+    bool stored = AddToStorage(item);
+    if (stored) {
+        VF2DispatchSuccessfulFurniturePurchase(item);
+    }
+    return stored;
+}
 
 struct sFurnitureInfo {
     int item;
@@ -8236,6 +8897,22 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         "__VF2_INCLUDE_HOLIDAY_COLLECTION__",
         "true" if ENABLE_HOLIDAY_ORNAMENTS else "false",
     )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_INCLUDE_ORNAMENT_GOAL__",
+        "true" if ENABLE_HOLIDAY_ORNAMENTS else "false",
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_INCLUDE_BEHAVIOR_GOALS__",
+        "true" if ENABLE_BEHAVIOR_PATCHES else "false",
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_GENERAL_PURCHASE_GOAL_CASES__",
+        general_purchase_goal_cases_cpp,
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_HOLIDAY_PURCHASE_GOAL_CASES__",
+        holiday_purchase_goal_cases_cpp,
+    )
     (PATCHED / "vf2_special_upgrade_effects.cpp").write_text(
         special_upgrade_helper_cpp,
         encoding="ascii",
@@ -8296,6 +8973,16 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
                 "image_base": hex(visible_special_upgrade_icon_id_for(0x117)),
                 "image_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
             },
+        },
+        "custom_achievement_purchase_hook": {
+            "function": "?HandlePurchaseItem@CScrollingStoreScene@@AAEXXZ",
+            "operand_offset": "0x2de",
+            "native_target": add_to_storage_name,
+            "wrapper_target": purchase_award_name,
+            "same_thiscall_abi": True,
+            "native_called_first": True,
+            "award_requires_true_result": True,
+            "stock_save_path_remains_after_wrapper": True,
         },
         "price_multiplier": {
             "enabled": ENABLE_CHEAT_UPGRADES,
@@ -8500,7 +9187,7 @@ def patch_string_manager(manifest):
     if ENABLE_HOLIDAY_ORNAMENTS:
         ornament_title_id = holiday_ornament_collection_title_string_id()
         ornament_key = "eString_CollectionHolidayOrnaments"
-        ornament_text = "Holiday Ornaments"
+        ornament_text = "Ornaments"
         ornament_key_sym = f"_vf2ornamentstr_key_{ornament_title_id:X}"
         ornament_text_sym = f"_vf2ornamentstr_text_{ornament_title_id:X}"
         helper_lines.append(f'const char {ornament_key_sym[1:]}[] = "{c_string(ornament_key)}";')
@@ -8513,27 +9200,78 @@ def patch_string_manager(manifest):
             "text": ornament_text,
         })
 
-        ornament_goal_strings = [
+    # Row 0x5F is materialized in every executable so the new 0x60-0x7F
+    # records have identical offsets. It is order-visible only in Holiday
+    # Ornaments builds, but its strings remain valid in every variant.
+    ornament_goal_strings = [
+        (
+            holiday_ornament_achievement_title_string_id(),
+            "eString_AchievementOrnamentsTitle",
+            "Ornamentologist",
+        ),
+        (
+            holiday_ornament_achievement_desc_string_id(),
+            "eString_AchievementOrnamentsDesc",
+            "You completed the collection of holiday ornaments.",
+        ),
+    ]
+    for string_id, key, text in ornament_goal_strings:
+        key_sym = f"_vf2ornamentachievement_key_{string_id:X}"
+        text_sym = f"_vf2ornamentachievement_text_{string_id:X}"
+        helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+        helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+        new_rows.append((string_id, key_sym, text_sym))
+        string_manifest.append({
+            "pc_string_id": hex(string_id),
+            "source": "mobile holiday ornament achievement",
+            "key": key,
+            "text": text,
+        })
+
+    for achievement_id, group, title, description in CUSTOM_ACHIEVEMENT_ROW_SPECS:
+        title_id, description_id = custom_achievement_string_ids(achievement_id)
+        for string_id, key, text, role in (
+            (title_id, f"eString_CustomAchievement{achievement_id:02X}Title", title, "title"),
             (
-                holiday_ornament_achievement_title_string_id(),
-                "eString_AchievementOrnamentsTitle",
-                "Ornamentologist",
+                description_id,
+                f"eString_CustomAchievement{achievement_id:02X}Description",
+                description,
+                "description",
             ),
-            (
-                holiday_ornament_achievement_desc_string_id(),
-                "eString_AchievementOrnamentsDesc",
-                "You completed the collection of holiday ornaments.",
-            ),
-        ]
-        for string_id, key, text in ornament_goal_strings:
-            key_sym = f"_vf2ornamentachievement_key_{string_id:X}"
-            text_sym = f"_vf2ornamentachievement_text_{string_id:X}"
+        ):
+            key_sym = f"_vf2customachievement_key_{achievement_id:02X}_{role}"
+            text_sym = f"_vf2customachievement_text_{achievement_id:02X}_{role}"
             helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
             helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
             new_rows.append((string_id, key_sym, text_sym))
             string_manifest.append({
                 "pc_string_id": hex(string_id),
-                "source": "mobile holiday ornament achievement",
+                "source": "custom achievement",
+                "achievement_id": hex(achievement_id),
+                "group": group,
+                "role": role,
+                "key": key,
+                "text": text,
+            })
+
+    if ENABLE_HOLIDAY_ORNAMENTS:
+        for string_id, (rarity, key, text) in zip(
+            holiday_ornament_collection_footer_string_ids(),
+            HOLIDAY_ORNAMENT_COLLECTION_FOOTER_ROWS,
+        ):
+            key_sym = f"_vf2ornamentfooter_key_{string_id:X}"
+            text_sym = f"_vf2ornamentfooter_text_{string_id:X}"
+            helper_lines.append(
+                f'const char {key_sym[1:]}[] = "{c_string(key)}";'
+            )
+            helper_lines.append(
+                f'const char {text_sym[1:]}[] = "{c_string(text)}";'
+            )
+            new_rows.append((string_id, key_sym, text_sym))
+            string_manifest.append({
+                "pc_string_id": hex(string_id),
+                "source": "holiday ornament collection footer",
+                "rarity": rarity,
                 "key": key,
                 "text": text,
             })
@@ -9494,24 +10232,43 @@ def patch_floating_anim_table(manifest):
     }
 
 
-def patch_achievement_holiday_ornaments(manifest):
+def patch_custom_achievements(manifest):
     achievement_obj = CoffObject(PATCHED / "Achievement.obj")
     list_sym = achievement_obj.symbol("?achievementList@@3PAUsAchievementListEntry@@A")
     list_sec = achievement_obj.section(list_sym.section)
     row_insert = list_sym.value + 0x5F * ACHIEVEMENT_ROW_SIZE
     if row_insert != list_sec.raw_size:
         raise RuntimeError("Unexpected achievementList append site")
-    ornament_row = struct.pack(
-        "<7I",
+    # Keep every native variant layout-identical through ID 0x7F. Optional
+    # goals are filtered only by achievementOrder/visible-count logic; direct
+    # ID * sizeof(row) indexing therefore remains safe in every executable.
+    rows = [(
         HOLIDAY_ORNAMENT_ACHIEVEMENT_ID,
         HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET,
-        0x1ED,
+        CUSTOM_ACHIEVEMENT_ICON_ID,
         0,
         holiday_ornament_achievement_title_string_id(),
         holiday_ornament_achievement_desc_string_id(),
         0,
+    )]
+    for achievement_id, _group, _title, _description in CUSTOM_ACHIEVEMENT_ROW_SPECS:
+        title_id, description_id = custom_achievement_string_ids(achievement_id)
+        rows.append((
+            achievement_id,
+            CUSTOM_ACHIEVEMENT_TARGET,
+            CUSTOM_ACHIEVEMENT_ICON_ID,
+            0,
+            title_id,
+            description_id,
+            0,
+        ))
+    if [row[0] for row in rows] != list(range(0x5F, CUSTOM_ACHIEVEMENT_LAST_ID + 1)):
+        raise RuntimeError("Custom achievement rows are not dense through ID 0x7F")
+    achievement_obj.insert_section_bytes(
+        list_sym.section,
+        row_insert,
+        b"".join(struct.pack("<7I", *row) for row in rows),
     )
-    achievement_obj.insert_section_bytes(list_sym.section, row_insert, ornament_row)
 
     master_collector_target_off = (
         list_sym.value
@@ -9528,59 +10285,121 @@ def patch_achievement_holiday_ornaments(manifest):
         "<I",
         achievement_obj.buf,
         list_sec.raw_ptr + master_collector_target_off,
-        HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET,
+        HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET if ENABLE_HOLIDAY_ORNAMENTS else 5,
     )
 
     goal_collector_target_off = list_sym.value + HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID * ACHIEVEMENT_ROW_SIZE + 4
     if struct.unpack_from("<I", achievement_obj.buf, list_sec.raw_ptr + goal_collector_target_off)[0] != 12:
         raise RuntimeError("Unexpected Goal collector target count")
-    struct.pack_into("<I", achievement_obj.buf, list_sec.raw_ptr + goal_collector_target_off, HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET)
+    struct.pack_into(
+        "<I",
+        achievement_obj.buf,
+        list_sec.raw_ptr + goal_collector_target_off,
+        HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET if ENABLE_HOLIDAY_ORNAMENTS else 12,
+    )
+
+    # Stock LoadState treats every nonzero row from 0x5F onward as reserved.
+    # Preserve rows through hidden persisted slot 0x80, which stores the
+    # two-bit Taters purchase mask. Validate/clear only IDs 0x81-0x124.
+    load_sym = achievement_obj.symbol(
+        "?LoadState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z"
+    )
+    load_sec = achievement_obj.section(load_sym.section)
+    load_raw = load_sec.raw_ptr + load_sym.value
+    load_patches = (
+        (0x39, b"\x8D\x4E\x5F", b"\x8D\x4E\x00"),
+        (0x3C, b"\x8D\x83\x74\x04\x00\x00", b"\x8D\x83\x0C\x06\x00\x00"),
+        (0x51, b"\x81\xF9\x25\x01\x00\x00", b"\x81\xF9\xA4\x00\x00\x00"),
+        (0x62, b"\x8D\x83\x5C\x04\x00\x00", b"\x8D\x83\x0C\x06\x00\x00"),
+        (0x68, b"\xB9\xC8\x00\x00\x00", b"\xB9\xA4\x00\x00\x00"),
+    )
+    for offset, expected, replacement in load_patches:
+        if achievement_obj.buf[load_raw + offset : load_raw + offset + len(expected)] != expected:
+            raise RuntimeError(f"Unexpected CAchievement::LoadState bytes at {offset:#x}")
+        achievement_obj.buf[load_raw + offset : load_raw + offset + len(expected)] = replacement
+
+    for function_name, expected_size, count_offset in (
+        ("?SaveState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z", 0x30, 0x06),
+        ("?Reset@CAchievement@@QAEXXZ", 0x27, 0x09),
+    ):
+        state_sym = achievement_obj.symbol(function_name)
+        state_sec = achievement_obj.section(state_sym.section)
+        if state_sym.value + expected_size != state_sec.raw_size:
+            raise RuntimeError(
+                f"{function_name} exact symbol span changed from {expected_size:#x} bytes"
+            )
+        state_data = bytes(
+            achievement_obj.buf[
+                state_sec.raw_ptr + state_sym.value :
+                state_sec.raw_ptr + state_sym.value + expected_size
+            ]
+        )
+        if state_data[count_offset : count_offset + 5] != b"\xBA\x25\x01\x00\x00":
+            raise RuntimeError(f"{function_name} no longer covers 0x125 records")
 
     complete_sym = achievement_obj.symbol("?AchievementsComplete@CAchievement@@QAEHXZ")
     complete_sec = achievement_obj.section(complete_sym.section)
-    complete_cmp = complete_sym.value + 0x23
-    if achievement_obj.buf[complete_sec.raw_ptr + complete_cmp : complete_sec.raw_ptr + complete_cmp + 3] != b"\x83\xFE\x5F":
-        raise RuntimeError("Unexpected AchievementsComplete bound")
-    achievement_obj.buf[complete_sec.raw_ptr + complete_cmp + 2] = HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT
+    complete_raw = complete_sec.raw_ptr + complete_sym.value
+    if achievement_obj.buf[complete_raw : complete_raw + 4] != b"\x53\x56\x57\x33":
+        raise RuntimeError("Unexpected AchievementsComplete entry")
+    complete_helper = achievement_obj.append_undefined_symbol(
+        "_VF2AchievementsCompleteVisible"
+    )
+    move_relocation(
+        achievement_obj,
+        complete_sym.section,
+        complete_sym.value + 0x14,
+        complete_sym.value + 0x02,
+        complete_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    complete_sec = achievement_obj.section(complete_sym.section)
+    complete_raw = complete_sec.raw_ptr + complete_sym.value
+    complete_stub = b"\x51\xE8\x00\x00\x00\x00\x83\xC4\x04\xC3"
+    achievement_obj.buf[complete_raw : complete_raw + 0x2E] = (
+        complete_stub + b"\x90" * (0x2E - len(complete_stub))
+    )
 
     draw_achievement_sym = achievement_obj.symbol("?DrawAchievement@CAchievement@@QAEXHHH_NM@Z")
     draw_sec = achievement_obj.section(draw_achievement_sym.section)
     draw_raw = draw_sec.raw_ptr + draw_achievement_sym.value
-    for bound_off in (0xD8, 0x191):
-        if achievement_obj.buf[draw_raw + bound_off : draw_raw + bound_off + 3] != b"\x83\xFF\x5F":
-            raise RuntimeError(f"Unexpected DrawAchievement bound at {bound_off:#x}")
-        achievement_obj.buf[draw_raw + bound_off + 2] = HOLIDAY_ORNAMENT_ACHIEVEMENT_ORDER_COUNT
+    if achievement_obj.buf[draw_raw + 0xD8 : draw_raw + 0xDC] != b"\x83\xFF\x5F\x7D":
+        raise RuntimeError("Unexpected DrawAchievement short bound")
+    achievement_obj.buf[draw_raw + 0xDA] = CUSTOM_ACHIEVEMENT_LAST_ID
+    achievement_obj.buf[draw_raw + 0xDB] = 0x7F
+    if achievement_obj.buf[draw_raw + 0x191 : draw_raw + 0x196] != b"\x83\xFF\x5F\x0F\x8D":
+        raise RuntimeError("Unexpected DrawAchievement near bound")
+    achievement_obj.buf[draw_raw + 0x193] = CUSTOM_ACHIEVEMENT_LAST_ID
+    achievement_obj.buf[draw_raw + 0x195] = 0x8F
 
-    set_complete_sym = achievement_obj.symbol("?SetComplete@CAchievement@@QAEXW4EAchievement@@@Z")
-    set_complete_sec = achievement_obj.section(set_complete_sym.section)
-    set_complete_insert = set_complete_sym.value + 0x95
-    expected_epilogue = b"\x5F\x5E\x5B\x5D\xC2\x04\x00"
-    if achievement_obj.buf[set_complete_sec.raw_ptr + set_complete_insert : set_complete_sec.raw_ptr + set_complete_insert + len(expected_epilogue)] != expected_epilogue:
-        raise RuntimeError("Unexpected SetComplete epilogue")
-    new_completion_branch = set_complete_sym.value + 0x88
-    new_completion_raw = set_complete_sec.raw_ptr + new_completion_branch
-    if achievement_obj.buf[new_completion_raw : new_completion_raw + 2] != b"\x75\x0B":
-        raise RuntimeError("Unexpected SetComplete new-completion branch")
-    # Already-complete achievements enter at +0x95 and must skip the new hook.
-    # Only the freshly-completed fallthrough chain is retargeted to +0x97.
-    achievement_obj.buf[new_completion_raw + 1] = 0x0D
-    increment_sym = achievement_obj.symbol("?IncrementProgress@CAchievement@@QAEXW4EAchievement@@H@Z").index
-    collection_meta_payload = (
-        b"\xEB\x10"
-        + b"\x83\xFE" + bytes([HOLIDAY_ORNAMENT_ACHIEVEMENT_ID])
-        + b"\x75\x0B"
-        + b"\x6A\x01"
-        + b"\x6A\x54"
-        + b"\x8B\xCF"
-        + b"\xE8\x00\x00\x00\x00"
-    )
-    achievement_obj.insert_section_bytes(set_complete_sym.section, set_complete_insert, collection_meta_payload)
-    achievement_obj.append_relocation(
-        set_complete_sym.section,
-        set_complete_insert + 0x0E,
-        increment_sym,
-        IMAGE_REL_I386_REL32,
-    )
+    if ENABLE_HOLIDAY_ORNAMENTS:
+        set_complete_sym = achievement_obj.symbol("?SetComplete@CAchievement@@QAEXW4EAchievement@@@Z")
+        set_complete_sec = achievement_obj.section(set_complete_sym.section)
+        set_complete_insert = set_complete_sym.value + 0x95
+        expected_epilogue = b"\x5F\x5E\x5B\x5D\xC2\x04\x00"
+        if achievement_obj.buf[set_complete_sec.raw_ptr + set_complete_insert : set_complete_sec.raw_ptr + set_complete_insert + len(expected_epilogue)] != expected_epilogue:
+            raise RuntimeError("Unexpected SetComplete epilogue")
+        new_completion_branch = set_complete_sym.value + 0x88
+        new_completion_raw = set_complete_sec.raw_ptr + new_completion_branch
+        if achievement_obj.buf[new_completion_raw : new_completion_raw + 2] != b"\x75\x0B":
+            raise RuntimeError("Unexpected SetComplete new-completion branch")
+        # Already-complete achievements enter at +0x95 and skip the hook.
+        achievement_obj.buf[new_completion_raw + 1] = 0x0D
+        increment_sym = achievement_obj.symbol("?IncrementProgress@CAchievement@@QAEXW4EAchievement@@H@Z").index
+        collection_meta_payload = (
+            b"\xEB\x10"
+            + b"\x83\xFE" + bytes([HOLIDAY_ORNAMENT_ACHIEVEMENT_ID])
+            + b"\x75\x0B\x6A\x01\x6A\x54\x8B\xCF\xE8\x00\x00\x00\x00"
+        )
+        achievement_obj.insert_section_bytes(
+            set_complete_sym.section, set_complete_insert, collection_meta_payload
+        )
+        achievement_obj.append_relocation(
+            set_complete_sym.section,
+            set_complete_insert + 0x0E,
+            increment_sym,
+            IMAGE_REL_I386_REL32,
+        )
 
     queue_sym = achievement_obj.symbol(
         "?QueueAchievementNotify@CAchievement@@AAEXW4EAchievement@@@Z"
@@ -9594,8 +10413,10 @@ def patch_achievement_holiday_ornaments(manifest):
         != b"\x83\xF8\x5F"
     ):
         raise RuntimeError("Unexpected QueueAchievementNotify bound")
+    # Achievement IDs are queue values, not queue indices. Preserve the stock
+    # 0x5F-dword allocation; +0xF38 is the adjacent popup timer.
     achievement_obj.buf[queue_sec.raw_ptr + queue_bound + 2] = (
-        HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT
+        CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT
     )
 
     reset_queue_sym = achievement_obj.symbol(
@@ -9618,47 +10439,284 @@ def patch_achievement_holiday_ornaments(manifest):
         "<I",
         achievement_obj.buf,
         reset_queue_sec.raw_ptr + reset_queue_count + 1,
-        HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT,
+        CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT,
     )
+
+    pop_sym = achievement_obj.symbol(
+        "?PopAchievementNotify@CAchievement@@AAE?AW4EAchievement@@XZ"
+    )
+    pop_sec = achievement_obj.section(pop_sym.section)
+    if pop_sym.value + 0x2F != pop_sec.raw_size:
+        raise RuntimeError("PopAchievementNotify exact symbol span changed from 0x2F bytes")
+    pop_data = bytes(
+        achievement_obj.buf[
+            pop_sec.raw_ptr + pop_sym.value : pop_sec.raw_ptr + pop_sym.value + 0x2F
+        ]
+    )
+    if pop_data[0x1B:0x22] != b"\xB9\x5E\x00\x00\x00\xF3\xA5":
+        raise RuntimeError("PopAchievementNotify no longer shifts exactly 0x5E queue entries")
+    if pop_data[0x22:0x2C] != b"\xC7\x82\x34\x0F\x00\x00\xFF\xFF\xFF\xFF":
+        raise RuntimeError("PopAchievementNotify no longer clears the +0xF34 queue tail")
+
+    update_sym = achievement_obj.symbol("?Update@CAchievement@@QAEXXZ")
+    update_sec = achievement_obj.section(update_sym.section)
+    if update_sym.value + 0x1A1 != update_sec.raw_size:
+        raise RuntimeError("CAchievement::Update exact symbol span changed from 0x1A1 bytes")
+    update_data = bytes(
+        achievement_obj.buf[
+            update_sec.raw_ptr + update_sym.value :
+            update_sec.raw_ptr + update_sym.value + 0x1A1
+        ]
+    )
+    for offset, needle, label in (
+        (0x45, b"\x8B\x96\x38\x0F\x00\x00", "+0xF38 popup timer"),
+        (0x4B, b"\x8B\x8E\x3C\x0F\x00\x00", "+0xF3C popup state"),
+        (0x51, b"\x83\xC2\x21\x89\x96\x38\x0F\x00\x00", "+0xF38 timer write"),
+    ):
+        if update_data[offset : offset + len(needle)] != needle:
+            raise RuntimeError(f"CAchievement::Update no longer owns {label}")
     achievement_obj.write(PATCHED / "Achievement.obj")
 
     scene_obj = CoffObject(PATCHED / "AchievementsScene.obj")
+    # The stock order table is COFF-static because no other stock translation
+    # unit references it. Export the existing symbol for the runtime end helper.
+    scene_obj.set_symbol_storage_class(
+        "?achievementOrder@@3QBHB",
+        IMAGE_SYM_CLASS_EXTERNAL,
+    )
     order_sym = scene_obj.symbol("?achievementOrder@@3QBHB")
     order_sec = scene_obj.section(order_sym.section)
-    order_insert = order_sym.value + 0x5F * 4
-    if order_insert != order_sec.raw_size:
+    stock_order_count = 0x5F
+    stock_order_end = order_sym.value + stock_order_count * 4
+    if stock_order_end != order_sec.raw_size:
         raise RuntimeError("Unexpected achievementOrder append site")
-    scene_obj.insert_section_bytes(order_sym.section, order_insert, struct.pack("<I", HOLIDAY_ORNAMENT_ACHIEVEMENT_ID))
+    stock_order = list(struct.unpack_from(
+        "<" + "I" * stock_order_count,
+        scene_obj.buf,
+        order_sec.raw_ptr + order_sym.value,
+    ))
+    bottlologist_id = 0x5E
+    bottlologist_index = stock_order.index(bottlologist_id)
+    if bottlologist_index != 0x4E:
+        raise RuntimeError("Unexpected Bottlologist achievementOrder position")
+    ornamentologist_index = None
+    if ENABLE_HOLIDAY_ORNAMENTS:
+        ornamentologist_index = bottlologist_index + 1
+        scene_obj.insert_section_bytes(
+            order_sym.section,
+            order_sym.value + ornamentologist_index * 4,
+            struct.pack("<I", HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
+        )
+
+    appended_order = []
+    appended_order.extend(
+        range(CUSTOM_ACHIEVEMENT_FIRST_ID, CUSTOM_ACHIEVEMENT_GENERAL_END + 1)
+    )
+    if ENABLE_BEHAVIOR_PATCHES:
+        appended_order.extend(
+            range(CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST, CUSTOM_ACHIEVEMENT_BEHAVIOR_END + 1)
+        )
+    appended_order.extend(
+        range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
+    )
+    order_sym = scene_obj.symbol("?achievementOrder@@3QBHB")
+    order_sec = scene_obj.section(order_sym.section)
+    order_insert = (
+        order_sym.value
+        + (stock_order_count + (1 if ENABLE_HOLIDAY_ORNAMENTS else 0)) * 4
+    )
+    if order_insert != order_sec.raw_size:
+        raise RuntimeError("Unexpected achievementOrder custom append site")
+    scene_obj.insert_section_bytes(
+        order_sym.section,
+        order_insert,
+        struct.pack("<" + "I" * len(appended_order), *appended_order),
+    )
 
     ctor_sym = scene_obj.symbol("??0CAchievementsScene@@AAE@XZ")
     ctor_sec = scene_obj.section(ctor_sym.section)
     ctor_start = ctor_sec.raw_ptr + ctor_sym.value
-    ctor_data = scene_obj.buf[ctor_start : ctor_start + ctor_sec.raw_size - ctor_sym.value]
-    old_content_height = struct.pack("<I", 0x189A)
-    new_content_height = struct.pack("<I", 0x18DC)
-    patched_heights = 0
-    search_from = 0
-    while True:
-        hit = ctor_data.find(old_content_height, search_from)
-        if hit < 0:
-            break
-        scene_obj.buf[ctor_start + hit : ctor_start + hit + 4] = new_content_height
-        patched_heights += 1
-        search_from = hit + 4
-    if patched_heights != 2:
-        raise RuntimeError("Unexpected CAchievementsScene content height patches")
+    ctor_height_off = 0x1C9
+    expected_ctor_height = (
+        b"\xC7\x47\x68\x9A\x18\x00\x00"
+        b"\x8B\x77\x10\x2B\x77\x18"
+        b"\x81\xC6\x9A\x18\x00\x00"
+    )
+    if scene_obj.buf[ctor_start + ctor_height_off : ctor_start + ctor_height_off + len(expected_ctor_height)] != expected_ctor_height:
+        raise RuntimeError("Unexpected CAchievementsScene constructor height block")
+    content_height_helper = scene_obj.append_undefined_symbol(
+        "_VF2AchievementContentHeight"
+    )
+    ctor_sec = scene_obj.section(ctor_sym.section)
+    ctor_start = ctor_sec.raw_ptr + ctor_sym.value
+    dynamic_ctor_height = (
+        b"\xE8\x00\x00\x00\x00"
+        b"\x89\x47\x68"
+        b"\x8B\x77\x10"
+        b"\x2B\x77\x18"
+        b"\x03\xF0"
+        b"\x90\x90\x90"
+    )
+    scene_obj.buf[ctor_start + ctor_height_off : ctor_start + ctor_height_off + len(dynamic_ctor_height)] = dynamic_ctor_height
+    scene_obj.append_relocation(
+        ctor_sym.section,
+        ctor_sym.value + ctor_height_off + 1,
+        content_height_helper,
+        IMAGE_REL_I386_REL32,
+    )
 
     draw_sym = scene_obj.symbol("?DrawScene@CAchievementsScene@@MAEXXZ")
     draw_sec = scene_obj.section(draw_sym.section)
     draw_raw = draw_sec.raw_ptr + draw_sym.value
     if scene_obj.buf[draw_raw + 0xAD : draw_raw + 0xAD + 6] != b"\x81\xF9\x7E\x18\x00\x00":
         raise RuntimeError("Unexpected CAchievementsScene draw threshold")
-    struct.pack_into("<I", scene_obj.buf, draw_raw + 0xAF, 0x18C0)
+    # Content height is draw height + 0x1C. Compare that relationship directly
+    # without inserting bytes into native control flow.
+    scene_obj.buf[draw_raw + 0xAD : draw_raw + 0xB3] = (
+        b"\x8D\x41\x1C\x3B\x43\x68"
+    )
     if scene_obj.buf[draw_raw + 0xF5 : draw_raw + 0xF5 + 6] != b"\x81\xFE\x7C\x01\x00\x00":
         raise RuntimeError("Unexpected CAchievementsScene order bound")
-    struct.pack_into("<I", scene_obj.buf, draw_raw + 0xF7, 0x180)
+    order_end_helper = scene_obj.append_undefined_symbol("_VF2AchievementOrderEnd")
+    draw_sym = scene_obj.symbol("?DrawScene@CAchievementsScene@@MAEXXZ")
+    draw_sec = scene_obj.section(draw_sym.section)
+    order_cave = draw_sec.raw_size
+    order_return = draw_sym.value + 0xFB
+    order_cave_payload = (
+        b"\x51\x52"
+        b"\xE8\x00\x00\x00\x00"
+        b"\x5A\x59"
+        b"\x3B\xF0"
+        b"\xE9" + section_rel32(order_cave + 11, 5, order_return)
+    )
+    scene_obj.insert_section_bytes(draw_sym.section, order_cave, order_cave_payload)
+    move_relocation(
+        scene_obj,
+        draw_sym.section,
+        draw_sym.value + 0xF7,
+        order_cave + 3,
+        order_end_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    patch_section_near_jump(
+        scene_obj,
+        draw_sym.section,
+        draw_sym.value + 0xF5,
+        order_cave,
+        6,
+        b"\x81\xFE\x7C\x01\x00\x00",
+    )
+    draw_sec = scene_obj.section(draw_sym.section)
+    draw_raw = draw_sec.raw_ptr + draw_sym.value
+    source_jump = draw_sym.value + 0xF5
+    if scene_obj.buf[draw_raw + 0xF5] != 0xE9:
+        raise RuntimeError("AchievementsScene order-end source is not a near jump")
+    source_target = source_jump + 5 + struct.unpack_from(
+        "<i", scene_obj.buf, draw_raw + 0xF6
+    )[0]
+    if source_target != order_cave:
+        raise RuntimeError("AchievementsScene order-end jump misses its code cave")
+    expected_cave_prefix = (
+        b"\x51\x52\xE8\x00\x00\x00\x00\x5A\x59\x3B\xF0\xE9"
+    )
+    cave_raw = draw_sec.raw_ptr + order_cave
+    if scene_obj.buf[cave_raw : cave_raw + len(expected_cave_prefix)] != expected_cave_prefix:
+        raise RuntimeError("AchievementsScene order-end cave does not preserve ECX/EDX")
+    cave_return = order_cave + 16 + struct.unpack_from(
+        "<i", scene_obj.buf, cave_raw + 12
+    )[0]
+    if cave_return != order_return:
+        raise RuntimeError("AchievementsScene order-end cave returns to the wrong byte")
+    draw_relocs = [
+        struct.unpack_from("<IIH", scene_obj.buf, draw_sec.reloc_ptr + index * 10)
+        for index in range(draw_sec.nreloc)
+    ]
+    if (
+        order_cave + 3,
+        order_end_helper,
+        IMAGE_REL_I386_REL32,
+    ) not in draw_relocs:
+        raise RuntimeError("AchievementsScene order-end helper relocation is missing")
     scene_obj.write(PATCHED / "AchievementsScene.obj")
 
+    stock_visible_count = 0x5F
+    compile_visible_count = (
+        stock_visible_count
+        + (1 if ENABLE_HOLIDAY_ORNAMENTS else 0)
+        + 6
+        + (7 if ENABLE_BEHAVIOR_PATCHES else 0)
+    )
+    manifest["CustomAchievements"] = {
+        "status": "patched",
+        "physical_id_range": "0x0-0x7f",
+        "physical_row_count": 0x80,
+        "custom_rows": [
+            {
+                "achievement_id": hex(achievement_id),
+                "group": group,
+                "target": CUSTOM_ACHIEVEMENT_TARGET,
+                "icon": hex(CUSTOM_ACHIEVEMENT_ICON_ID),
+                "title": title,
+                "description": description,
+                "title_string": hex(custom_achievement_string_ids(achievement_id)[0]),
+                "description_string": hex(custom_achievement_string_ids(achievement_id)[1]),
+            }
+            for achievement_id, group, title, description in CUSTOM_ACHIEVEMENT_ROW_SPECS
+        ],
+        "order": [
+            hex(value)
+            for value in (
+                ([HOLIDAY_ORNAMENT_ACHIEVEMENT_ID] if ENABLE_HOLIDAY_ORNAMENTS else [])
+                + appended_order
+            )
+        ],
+        "ornamentologist_order": {
+            "visible": ENABLE_HOLIDAY_ORNAMENTS,
+            "bottlologist_id": hex(bottlologist_id),
+            "ornamentologist_id": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
+            "bottlologist_index": bottlologist_index,
+            "ornamentologist_index": ornamentologist_index,
+            "adjacent": (
+                ornamentologist_index == bottlologist_index + 1
+                if ENABLE_HOLIDAY_ORNAMENTS
+                else None
+            ),
+        },
+        "visible_counts": {
+            "holiday_furniture_flag_0": compile_visible_count,
+            "holiday_furniture_flag_1": compile_visible_count + 19,
+        },
+        "runtime_flag": {
+            "symbol": "_gVF2HolidayFurnitureGoalsEnabled",
+            "source_section": ".vf2goal",
+            "size": 1,
+            "default": "00",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "notification_queue": {
+            "capacity_dwords": CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT,
+            "storage_range": "CAchievement+0xDBC..+0xF34",
+            "pop_shift_dwords": 0x5E,
+            "adjacent_popup_timer": "CAchievement+0xF38",
+            "adjacent_popup_state": "CAchievement+0xF3C",
+        },
+        "save_layout": {
+            "record_count": 0x125,
+            "record_size": 12,
+            "highest_custom_id": hex(CUSTOM_ACHIEVEMENT_LAST_ID),
+            "purchase_mask_record_id": "0x80",
+            "purchase_mask_field": "record+0x4 low two bits",
+            "purchase_mask_meaning": {"0x1": "item 0x2cf", "0x2": "item 0x2cc"},
+            "reserved_tail_first_id": "0x81",
+            "reserved_tail_record_count": 0xA4,
+            "signed_imm8_0x80_used": False,
+        },
+        "meta_targets": {
+            "master_collector": 6 if ENABLE_HOLIDAY_ORNAMENTS else 5,
+            "goal_collector": 13 if ENABLE_HOLIDAY_ORNAMENTS else 12,
+            "new_rows_increment_goal_collector": False,
+        },
+    }
     manifest["HolidayOrnamentAchievement"] = {
         "status": "patched",
         "achievement_id": hex(HOLIDAY_ORNAMENT_ACHIEVEMENT_ID),
@@ -9668,11 +10726,127 @@ def patch_achievement_holiday_ornaments(manifest):
         "title_string": hex(holiday_ornament_achievement_title_string_id()),
         "description_string": hex(holiday_ornament_achievement_desc_string_id()),
         "master_collector_id": hex(HOLIDAY_ORNAMENT_MASTER_COLLECTOR_ID),
-        "master_collector_target": HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET,
+        "master_collector_target": (
+            HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET if ENABLE_HOLIDAY_ORNAMENTS else 5
+        ),
         "goal_collector_id": hex(HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID),
-        "goal_collector_target": HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET,
+        "goal_collector_target": (
+            HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET if ENABLE_HOLIDAY_ORNAMENTS else 12
+        ),
         "notification_queue_count": HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT,
-        "save_state_note": "CAchievement already serializes 0x125 12-byte records; no save-state size change was needed for achievement 0x5F.",
+        "save_state_note": "Save/Reset keep 0x125 records; LoadState preserves rows 0x00-0x80 (0x80 is the hidden Taters mask) and validates only 0x81-0x124.",
+    }
+
+
+def patch_allow_older_pregnancies(manifest):
+    """Install a dormant, post-asset-flagged late-age pregnancy path."""
+    obj = CoffObject(PATCHED / "VillagerState.obj")
+    stock = CoffObject(SRC_OBJS / "VillagerState.obj")
+    function_name = "?ChanceOfPregnancy@CVillagerState@@QAE_NHHH@Z"
+    sym = obj.symbol(function_name)
+    stock_sym = stock.symbol(function_name)
+    sec = obj.section(sym.section)
+    stock_sec = stock.section(stock_sym.section)
+    if sym.value != 0 or stock_sym.value != 0:
+        raise RuntimeError("Unexpected ChanceOfPregnancy symbol offset")
+    if sec.raw_size != 0xF7 or stock_sec.raw_size != 0xF7:
+        raise RuntimeError("Unexpected ChanceOfPregnancy function span")
+
+    original_prefix = b"\x55\x8B\xEC\xB8\x67\x66\x66\x66"
+    raw = sec.raw_ptr + sym.value
+    if bytes(obj.buf[raw : raw + len(original_prefix)]) != original_prefix:
+        raise RuntimeError("Unexpected ChanceOfPregnancy prologue")
+    stock_function = bytes(
+        stock.buf[
+            stock_sec.raw_ptr + stock_sym.value :
+            stock_sec.raw_ptr + stock_sec.raw_size
+        ]
+    )
+
+    cave = sec.raw_size
+    trampoline = bytearray([
+        0x80, 0x3D, 0, 0, 0, 0, 0x00,             # cmp byte ptr [flag],0
+        0x74, 0x2C,                                 # je stock fallback
+        0x81, 0x7C, 0x24, 0x04, 0xE8, 0x03, 0, 0, # cmp mother age,1000
+        0x7D, 0x0A,                                 # jge older path
+        0x81, 0x7C, 0x24, 0x08, 0xE8, 0x03, 0, 0, # cmp father age,1000
+        0x7C, 0x18,                                 # jl stock fallback
+        0xFF, 0x74, 0x24, 0x0C,                    # push father fertility
+        0xFF, 0x74, 0x24, 0x0C,                    # push father age
+        0xFF, 0x74, 0x24, 0x0C,                    # push mother age
+        0x51,                                      # push this
+        0xE8, 0, 0, 0, 0,                          # call late-age helper
+        0x83, 0xC4, 0x10,                          # add esp,10h
+        0xC2, 0x0C, 0x00,                          # ret 0Ch
+        0x55,                                      # stock: push ebp
+        0x8B, 0xEC,                                # mov ebp,esp
+        0xB8, 0x67, 0x66, 0x66, 0x66,             # mov eax,66666667h
+        0xE9, 0, 0, 0, 0,                          # jmp original+8
+    ])
+    if len(trampoline) != 66:
+        raise AssertionError("Older-pregnancy trampoline size drifted")
+    struct.pack_into("<i", trampoline, 62, (sym.value + 8) - (cave + 66))
+    obj.insert_section_bytes(sec.index, cave, bytes(trampoline))
+
+    flag_symbol = obj.append_undefined_symbol(OLDER_PREGNANCY_FLAG_SYMBOL)
+    helper_symbol = obj.append_undefined_symbol(OLDER_PREGNANCY_HELPER_SYMBOL)
+    obj.append_relocation(sec.index, cave + 2, flag_symbol, IMAGE_REL_I386_DIR32)
+    obj.append_relocation(sec.index, cave + 43, helper_symbol, IMAGE_REL_I386_REL32)
+
+    sym = obj.symbol(function_name)
+    sec = obj.section(sym.section)
+    raw = sec.raw_ptr + sym.value
+    detour = b"\xE9" + struct.pack("<i", cave - (sym.value + 5)) + b"\x90\x90\x90"
+    obj.buf[raw : raw + len(detour)] = detour
+
+    patched_body = bytes(obj.buf[raw + 8 : raw + len(stock_function)])
+    if patched_body != stock_function[8:]:
+        raise RuntimeError("ChanceOfPregnancy stock continuation changed")
+    records = [
+        struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + index * 10)
+        for index in range(sec.nreloc)
+    ]
+    expected_new_relocations = {
+        (cave + 2, flag_symbol, IMAGE_REL_I386_DIR32),
+        (cave + 43, helper_symbol, IMAGE_REL_I386_REL32),
+    }
+    if not expected_new_relocations.issubset(set(records)):
+        raise RuntimeError("Older-pregnancy trampoline relocations are incomplete")
+    obj.write(PATCHED / "VillagerState.obj")
+
+    manifest["AllowOlderPregnancies"] = {
+        "status": "dormant native hook installed in every executable",
+        "offline_patcher_setting": "allow_older_pregnancies",
+        "category": "experimental",
+        "default": False,
+        "function": "CVillagerState::ChanceOfPregnancy",
+        "stock_function_span": "0xF7",
+        "detour_span": "0x0-0x7",
+        "stock_continuation": "0x8-0xF6 byte-identical",
+        "trampoline_offset": hex(cave),
+        "runtime_flag": {
+            "symbol": OLDER_PREGNANCY_FLAG_SYMBOL,
+            "source_section": OLDER_PREGNANCY_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "under_50": "both parents below internal age 1000 use the untouched stock path",
+        "late_age_roll": {
+            "random_limit": 1000,
+            "minimum_tenths_percent": 1,
+            "age_50_through_59": "10.0%, 9.0%, ..., 1.0%",
+            "age_60_through_68": "0.9%, 0.8%, ..., 0.1%",
+            "age_69_plus": "0.1%",
+            "age_controller": "older parent",
+            "fertility_rule": "stock integer chance in tenths, capped by older-parent curve",
+        },
+        "tutorial": {
+            "success_queue_preserved": "StringId 0x868",
+            "failed_roll_forced_success_disabled_for_late_age_path": True,
+        },
+        "multiples": "native pregnancy/birth logic remains unmodified",
     }
 
 
@@ -9995,7 +11169,8 @@ def patch_collection_scene_holiday_ornaments(manifest):
     tooltip_payload += b"\x83\xF8\x12"
     tooltip_payload += b"\x73\x00"
     tooltip_high_rel = len(tooltip_payload) - 1
-    tooltip_payload += b"\x8D\x98\x42\x07\x00\x00"
+    tooltip_label_disp = holiday_ornament_collection_footer_string_ids()[0] - 0x0F
+    tooltip_payload += b"\x8D\x98" + struct.pack("<I", tooltip_label_disp)
     tooltip_payload += b"\xE9" + section_rel32(
         tooltip_cave + len(tooltip_payload),
         5,
@@ -10075,7 +11250,10 @@ def patch_collection_scene_holiday_ornaments(manifest):
             "total": HOLIDAY_ORNAMENT_COLLECTION_TOTAL,
             "helper": aggregate_helper_name,
         },
-        "tooltip_rarity_label_ids": [hex(label_id) for label_id in HOLIDAY_ORNAMENT_TOOLTIP_RARITY_LABEL_IDS],
+        "tooltip_rarity_label_ids": [
+            hex(label_id)
+            for label_id in holiday_ornament_collection_footer_string_ids()
+        ],
         "tooltip_rarity_note": "A fixed-size detour reaches an end-of-section code cave for common, uncommon, and rare ornament labels without shifting native HandleMouse branches.",
         "tooltip_detour_offset": "0x1eb",
         "tooltip_code_cave_offset": hex(tooltip_cave),
@@ -11385,11 +12563,57 @@ def patch_spontaneous_behaviors(manifest):
         restore_helper,
         IMAGE_REL_I386_REL32,
     )
+
+    scold = main_obj.symbol("?InvokeScolding@theMainScene@@IAEXAAVCVillager@@@Z")
+    scold_sec = main_obj.section(scold.section)
+    scold_raw = scold_sec.raw_ptr + scold.value + 0x112
+    scold_expected = b"\x6A\x00\x53\x8B\xCB\xE8\x00\x00\x00\x00"
+    if main_obj.buf[scold_raw : scold_raw + len(scold_expected)] != scold_expected:
+        raise ValueError("Unexpected theMainScene::InvokeScolding ForgetPlans call")
+    forget_name = "?ForgetPlans@CVillagerPlans@@QAEXAAVCVillager@@_N@Z"
+    forget_sym = main_obj.symbol(forget_name)
+    scold_relocs = [
+        struct.unpack_from("<IIH", main_obj.buf, scold_sec.reloc_ptr + index * 10)
+        for index in range(scold_sec.nreloc)
+    ]
+    if [
+        vaddr - scold.value
+        for vaddr, symbol_index, rtype in scold_relocs
+        if symbol_index == forget_sym.index and rtype == IMAGE_REL_I386_REL32
+    ] != [0x118]:
+        raise ValueError("InvokeScolding does not have exactly one ForgetPlans call at +0x118")
+    scold_helper = main_obj.append_undefined_symbol("_VF2ScoldAwardAndForget@8")
+    main_obj.retarget_relocation(
+        scold.section,
+        scold.value + 0x118,
+        scold_helper,
+        IMAGE_REL_I386_REL32,
+    )
+
+    reward_relocs = {
+        vaddr - reward.value: main_obj.symbol_by_index[symbol_index].name
+        for vaddr, symbol_index, _rtype in (
+            struct.unpack_from("<IIH", main_obj.buf, reward_sec.reloc_ptr + index * 10)
+            for index in range(reward_sec.nreloc)
+        )
+        if reward.value <= vaddr < reward.value + reward_sec.raw_size
+    }
+    if reward_relocs.get(0x2EB) != forget_name:
+        raise ValueError("InvokeReward over-praise ForgetPlans path changed")
+    if reward_relocs.get(0x31B) != "?StartNewBehavior@CVillagerPlans@@QAEXAAVCVillager@@@Z":
+        raise ValueError("InvokeReward over-praise StartNewBehavior path changed")
     main_obj.write(PATCHED / "theMainScene.obj")
 
     behavior_label_arrays = "\n".join(
         cpp_int_array(f"kVF2BehaviorLabels_{group_name}", behavior_label_string_ids_for_group(group_name))
         for group_name, _entries in BEHAVIOR_LABEL_GROUPS
+    )
+    praise_award_cases_cpp = "\n".join(
+        (
+            f'    if (VF2RawBehaviorLabelEquals(label, "{c_string(label)}")) {{ '
+            f'Achievement.SetComplete((EAchievement)0x{goal_id:X}); return; }}'
+        )
+        for label, goal_id in CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS.items()
     )
 
     helper_cpp = r'''
@@ -11484,6 +12708,14 @@ extern CWeather Weather;
 extern CNight Night;
 
 enum EInventoryItem { eInventoryItemPlaceholder = 0 };
+enum EAchievement { eAchievementPlaceholder = 0 };
+
+class CAchievement {
+public:
+    void SetComplete(EAchievement achievement);
+};
+
+extern CAchievement Achievement;
 
 class CContentMap {
 public:
@@ -11542,10 +12774,25 @@ static void VF2RestoreRawPraiseLabel(CVillager &villager)
     }
 }
 
+static bool VF2RawBehaviorLabelEquals(const char *label, const char *expected)
+{
+    for (int i = 0; i < 0x28; ++i) {
+        if (label[i] != expected[i]) return false;
+        if (expected[i] == 0) return true;
+    }
+    return false;
+}
+
+static void VF2AwardExactPraiseLabel(const char *label)
+{
+__VF2_PRAISE_AWARD_CASES__
+}
+
 extern "C" void __stdcall VF2PraiseCaptureAndForget(CVillager &villager, bool force)
 {
     gVF2PraisedLabelVillager = &villager;
     VF2CopyRawPraiseLabel(villager, gVF2PraisedLabel);
+    VF2AwardExactPraiseLabel(gVF2PraisedLabel);
     CVillagerPlans *plans = (CVillagerPlans *)&villager;
     plans->ForgetPlans(villager, force);
     // ForgetPlans blanks the label. Put it back before the restarted behavior
@@ -11564,6 +12811,17 @@ extern "C" void __stdcall VF2PraiseStartAndRestore(CVillager &villager)
         VF2RestoreRawPraiseLabel(villager);
     }
     gVF2PraisedLabelVillager = 0;
+}
+
+extern "C" void __stdcall VF2ScoldAwardAndForget(CVillager &villager, bool force)
+{
+    char label[0x28];
+    VF2CopyRawPraiseLabel(villager, label);
+    if (VF2RawBehaviorLabelEquals(label, "Scolding pet")) {
+        Achievement.SetComplete((EAchievement)0x6C);
+    }
+    CVillagerPlans *plans = (CVillagerPlans *)&villager;
+    plans->ForgetPlans(villager, force);
 }
 
 class CFurnitureManager {
@@ -12922,6 +14180,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
 }
 '''.strip() + "\n"
     helper_cpp = helper_cpp.replace("__VF2_BEHAVIOR_LABEL_ARRAYS__", behavior_label_arrays)
+    helper_cpp = helper_cpp.replace("__VF2_PRAISE_AWARD_CASES__", praise_award_cases_cpp)
     (PATCHED / "vf2_spontaneous_behaviors.cpp").write_text(helper_cpp, encoding="ascii")
     manifest["spontaneous_behaviors"] = {
         "status": "enabled through the autonomous AI candidate table",
@@ -12931,6 +14190,15 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
             "restore_hook": "InvokeReward +0x3B7 -> _VF2PraiseStartAndRestore@4",
             "preserved_bytes": "exact 0x28-byte CVillager+0x1BBA8 label",
             "over_praise_runaway_path_unchanged": True,
+        },
+        "custom_achievement_behavior_hooks": {
+            "praise_capture_hook": "InvokeReward +0x36B -> _VF2PraiseCaptureAndForget@8",
+            "praise_exact_labels": CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS,
+            "scold_hook": "InvokeScolding +0x118 -> _VF2ScoldAwardAndForget@8",
+            "scold_exact_labels": CUSTOM_ACHIEVEMENT_SCOLD_LABEL_GOALS,
+            "scold_forgetplans_calls": 1,
+            "scold_restores_label": False,
+            "over_praise_paths_unchanged": True,
         },
         "selection": "existing weighted CVillagerAI::DecideWhatToDo selection; weight 3000 per enabled candidate",
         "actions": [
@@ -13702,6 +14970,161 @@ def validate_runtime_payload_contract(manifest):
     }
 
 
+def validate_custom_achievement_award_hook_objects(manifest):
+    errors = []
+
+    def function_data(obj, name):
+        sym = obj.symbol(name)
+        sec = obj.section(sym.section)
+        return bytes(
+            obj.buf[sec.raw_ptr + sym.value : sec.raw_ptr + sec.raw_size]
+        ), sym, sec
+
+    def relocation_targets(obj, sym, sec):
+        return {
+            vaddr - sym.value: (obj.symbol_by_index[symbol_index].name, rtype)
+            for vaddr, symbol_index, rtype in (
+                struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + index * 10)
+                for index in range(sec.nreloc)
+            )
+            if sym.value <= vaddr < sec.raw_size
+        }
+
+    store_obj = CoffObject(PATCHED / "ScrollingStoreScene.obj")
+    purchase_data, purchase_sym, purchase_sec = function_data(
+        store_obj, "?HandlePurchaseItem@CScrollingStoreScene@@AAEXXZ"
+    )
+    expected_purchase_window = (
+        b"\x3D\x28\x03\x00\x00\x7D\x39\x50"
+        b"\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00"
+        b"\xE8\x00\x00\x00\x00\x8B\xC8\xE8\x00\x00\x00\x00"
+    )
+    if purchase_data[0x2D0:0x2EE] != expected_purchase_window:
+        errors.append("HandlePurchaseItem purchase-award call window drifted")
+    if purchase_data[0x360:0x36C] != b"\xE8\x00\x00\x00\x00\x8B\xC8\xE8\x00\x00\x00\x00":
+        errors.append("HandlePurchaseItem stock save call window drifted")
+    purchase_targets = relocation_targets(store_obj, purchase_sym, purchase_sec)
+    expected_purchase_targets = {
+        0x2D9: ("?FurnitureManager@@3VCFurnitureManager@@A", 0x0006),
+        0x2DE: (
+            "?AddToStorageAndAward@CFurnitureManager@@QAE_NW4EInventoryItem@@@Z",
+            IMAGE_REL_I386_REL32,
+        ),
+        0x2E3: ("?Get@theMainScene@@SAPAV1@XZ", IMAGE_REL_I386_REL32),
+        0x2EA: ("?TurnDecorateModeOn@theMainScene@@QAEXXZ", IMAGE_REL_I386_REL32),
+        0x361: ("?Get@theGameState@@SAPAV1@XZ", IMAGE_REL_I386_REL32),
+        0x368: ("?SaveCurrentGame@theGameState@@QAE_NXZ", IMAGE_REL_I386_REL32),
+    }
+    for offset, expected in expected_purchase_targets.items():
+        if purchase_targets.get(offset) != expected:
+            errors.append(
+                f"HandlePurchaseItem relocation {offset:#x} expected {expected}, "
+                f"got {purchase_targets.get(offset)}"
+            )
+
+    special_helper = PATCHED / "vf2_special_upgrade_effects.cpp"
+    helper_text = special_helper.read_text(encoding="ascii") if special_helper.is_file() else ""
+    if helper_text.count("enum EInventoryItem") != 1:
+        errors.append("special helper must define EInventoryItem exactly once")
+    if helper_text.count("class CFurnitureManager") != 1:
+        errors.append("special helper must define CFurnitureManager exactly once")
+    wrapper_marker = "bool CFurnitureManager::AddToStorageAndAward(EInventoryItem item)"
+    if wrapper_marker not in helper_text:
+        errors.append("special helper is missing the same-thiscall purchase wrapper")
+    else:
+        wrapper = helper_text.split(wrapper_marker, 1)[1].split("struct sFurnitureInfo", 1)[0]
+        required_order = (
+            "bool stored = AddToStorage(item);",
+            "if (stored)",
+            "VF2DispatchSuccessfulFurniturePurchase(item);",
+            "return stored;",
+        )
+        try:
+            positions = [wrapper.index(token) for token in required_order]
+            if positions != sorted(positions):
+                errors.append("purchase wrapper does not call native first and return its exact bool")
+        except ValueError:
+            errors.append("purchase wrapper source contract is incomplete")
+
+    behavior_contract = {
+        "enabled": ENABLE_BEHAVIOR_PATCHES,
+        "praise_hook": None,
+        "scold_hook": None,
+    }
+    if ENABLE_BEHAVIOR_PATCHES:
+        main_obj = CoffObject(PATCHED / "theMainScene.obj")
+        stock_main = CoffObject(SRC_OBJS / "theMainScene.obj")
+        for function_name, replacements in (
+            (
+                "?InvokeReward@theMainScene@@IAEXAAVCVillager@@@Z",
+                {
+                    0x36B: "_VF2PraiseCaptureAndForget@8",
+                    0x3B7: "_VF2PraiseStartAndRestore@4",
+                },
+            ),
+            (
+                "?InvokeScolding@theMainScene@@IAEXAAVCVillager@@@Z",
+                {0x118: "_VF2ScoldAwardAndForget@8"},
+            ),
+        ):
+            patched_data, patched_sym, patched_sec = function_data(main_obj, function_name)
+            stock_data, stock_sym, stock_sec = function_data(stock_main, function_name)
+            if patched_data != stock_data:
+                errors.append(f"{function_name} instruction bytes changed instead of relocation-only hooks")
+            patched_targets = relocation_targets(main_obj, patched_sym, patched_sec)
+            stock_targets = relocation_targets(stock_main, stock_sym, stock_sec)
+            for offset, stock_target in stock_targets.items():
+                expected_name = replacements.get(offset, stock_target[0])
+                expected = (expected_name, stock_target[1])
+                if patched_targets.get(offset) != expected:
+                    errors.append(
+                        f"{function_name} relocation {offset:#x} expected {expected}, "
+                        f"got {patched_targets.get(offset)}"
+                    )
+        behavior_helper = PATCHED / "vf2_spontaneous_behaviors.cpp"
+        behavior_text = behavior_helper.read_text(encoding="ascii") if behavior_helper.is_file() else ""
+        for label, goal_id in CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS.items():
+            if (
+                f'VF2RawBehaviorLabelEquals(label, "{label}")' not in behavior_text
+                or f"Achievement.SetComplete((EAchievement)0x{goal_id:X})" not in behavior_text
+            ):
+                errors.append(f"behavior helper missing exact praise award {label!r}")
+        scold_marker = 'extern "C" void __stdcall VF2ScoldAwardAndForget'
+        if scold_marker not in behavior_text:
+            errors.append("behavior helper missing scold wrapper")
+        else:
+            scold_source = behavior_text.split(scold_marker, 1)[1].split("class CFurnitureManager", 1)[0]
+            if scold_source.count("plans->ForgetPlans") != 1:
+                errors.append("scold wrapper must call native ForgetPlans exactly once")
+            if "VF2RestoreRawPraiseLabel" in scold_source:
+                errors.append("scold wrapper must not restore the old label")
+        behavior_contract = {
+            "enabled": True,
+            "praise_hook": "InvokeReward+0x36B",
+            "praise_restore_hook": "InvokeReward+0x3B7",
+            "scold_hook": "InvokeScolding+0x118",
+            "relocation_only": True,
+            "over_praise_paths_unchanged": True,
+        }
+
+    if errors:
+        raise RuntimeError(
+            "Custom achievement award-hook object contract failed:\n- "
+            + "\n- ".join(errors)
+        )
+    manifest["custom_achievement_award_hook_contract"] = {
+        "status": "validated",
+        "purchase": {
+            "hook": "HandlePurchaseItem+0x2DE",
+            "wrapper": "CFurnitureManager::AddToStorageAndAward",
+            "same_thiscall_abi": True,
+            "native_result_preserved": True,
+            "stock_save_relocation": "0x368",
+        },
+        "behavior": behavior_contract,
+    }
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     copy_obj_tree()
@@ -13739,8 +15162,14 @@ def main():
     }
     patch_string_manager(manifest)
     patch_special_upgrade_titles(manifest)
+    # The achievement table/strings/save layout are identical in every
+    # executable; optional settings only filter order and completion routes.
+    patch_custom_achievements(manifest)
+    # Always link the dormant B152 hook. The offline patcher's exact-SHA
+    # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
+    # this feature adds no executable-matrix dimension.
+    patch_allow_older_pregnancies(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:
-        patch_achievement_holiday_ornaments(manifest)
         patch_collectable_item_holiday_ornaments(manifest)
         patch_collectable_holiday_ornament_observers(manifest)
         patch_collection_scene_holiday_ornaments(manifest)
@@ -13782,6 +15211,7 @@ def main():
             "offline_patcher_setting": "behavior_patches",
             "status": "stock behavior objects preserved for the behavior-disabled core executable",
         }
+    validate_custom_achievement_award_hook_objects(manifest)
     if ENABLE_DEBUGGER_FEATURES:
         patch_debug_features(manifest)
     else:

@@ -1,25 +1,690 @@
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "collection": "Holiday Ornaments",
   "provenance": {
-    "build": "B150",
-    "origin": "Virtual Families 2 mobile 1.7.16 tp225 collection atlas",
-    "source_root": "outputs/VF2-Mobile-Furniture-With-Island-Events-B150-holiday_ornaments/Images",
-    "copy_policy": "Bit-for-bit copies of the finalized B150 runtime PNGs."
+    "origin": "User-supplied upright Holiday Ornaments PNG set",
+    "workspace_source_root": "work/assets/holiday_collectibles",
+    "generator": "work/rebuild_holiday_ornament_collection_assets.py",
+    "icon_policy": "Bit-for-bit copies of the supplied collected icons; no flip, rotation, crop, or resize.",
+    "background_policy": "1024x768 Collection_Bottlecaps_Background.png base, upright Collection_ChristmasOrnament_Frame.png at (74, 4), upright Collection_ChristmasOrnament_CandyCane.png at (848, 461), and the 12 upright placeholders at their absolute page positions; no flip, rotation, crop, or resize."
   },
+  "source_assets": [
+    {
+      "filename": "Collection_Bottlecaps_Background.png",
+      "role": "collection_page_base",
+      "position": [
+        0,
+        0
+      ],
+      "sha256": "f27ab0b758053ba226285eca56ca58382bf52dad38da64e19f1cb235bd66cf24",
+      "dimensions": [
+        1024,
+        768
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_BlueBall-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0x9e",
+      "position": [
+        187,
+        173
+      ],
+      "sha256": "893d43365cb368cabef95f29e776dfb22230f83b26067e6318a4c801c5ffc0ad",
+      "dimensions": [
+        112,
+        136
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_BlueBall.png",
+      "role": "collected_icon",
+      "collectable_id": "0x9e",
+      "runtime_filename": "collection_christmasornament_blueball.png",
+      "sha256": "0e47200b9f2d64caecba2fca00267a78560649dd9ce829367f4048d0e4516dc4",
+      "dimensions": [
+        120,
+        148
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_CandyCane.png",
+      "role": "collection_page_decoration",
+      "position": [
+        848,
+        461
+      ],
+      "sha256": "cafbf20661a04cd36b51576ec53703255ab920ccc8bc8531812fbc3c06363c85",
+      "dimensions": [
+        176,
+        307
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Crosses-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0x9f",
+      "position": [
+        365,
+        174
+      ],
+      "sha256": "fcd4c73cc3e9f1e5d54fe4a4489019dac5d632fd7a398330bc9a53c2a4f3415e",
+      "dimensions": [
+        111,
+        134
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Crosses.png",
+      "role": "collected_icon",
+      "collectable_id": "0x9f",
+      "runtime_filename": "collection_christmasornament_crosses.png",
+      "sha256": "34209fd64cf9248a00dc8ceb46351d9b99b45f5173a11dec6eec5f6f3dd8d147",
+      "dimensions": [
+        119,
+        146
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Disco-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0xa0",
+      "position": [
+        539,
+        173
+      ],
+      "sha256": "7767fb84ec828e9dc5f95e69dca7f6a7a1e39dad3c32163767e6b67a2c5646fa",
+      "dimensions": [
+        114,
+        135
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Disco.png",
+      "role": "collected_icon",
+      "collectable_id": "0xa0",
+      "runtime_filename": "collection_christmasornament_disco.png",
+      "sha256": "dfd953bad1857d8e35316aa7a6005fd25569d95f8a3244749d952241e333d01f",
+      "dimensions": [
+        122,
+        147
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Frame.png",
+      "role": "collection_frame",
+      "position": [
+        74,
+        4
+      ],
+      "sha256": "0e1ab1a371c32459e209720d617eb0e39d1a706e492dd1b9ce445ffba3c71671",
+      "dimensions": [
+        940,
+        732
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_GoldDealio-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0xa1",
+      "position": [
+        704,
+        166
+      ],
+      "sha256": "8634134dd00cfe1dd0676804353bcd70e43272d872e8029309b411df057d0d7b",
+      "dimensions": [
+        139,
+        148
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_GoldDealio.png",
+      "role": "collected_icon",
+      "collectable_id": "0xa1",
+      "runtime_filename": "collection_christmasornament_golddealio.png",
+      "sha256": "8ba00533bc58b56d78a8aaad66b9491a4f70cab0c59e141030a9632d07d09fd3",
+      "dimensions": [
+        147,
+        150
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Heart-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0xa2",
+      "position": [
+        191,
+        343
+      ],
+      "sha256": "ed4e192461a7b55d501638f602a41737d7b79b7c99970e315eaac5fb2340cff7",
+      "dimensions": [
+        105,
+        124
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Heart.png",
+      "role": "collected_icon",
+      "collectable_id": "0xa2",
+      "runtime_filename": "collection_christmasornament_heart.png",
+      "sha256": "67b69e8da9b29c4780ab8bb02d466b64eb6e383c0d5a3940b19c3ad674ccba2c",
+      "dimensions": [
+        113,
+        136
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_HotAirBalloon-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0xa3",
+      "position": [
+        360,
+        340
+      ],
+      "sha256": "94ba9050576eb13d59a126fd56f0258a157fd89e127d73be4af45917acc4c361",
+      "dimensions": [
+        121,
+        129
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_HotAirBalloon.png",
+      "role": "collected_icon",
+      "collectable_id": "0xa3",
+      "runtime_filename": "collection_christmasornament_hotairballoon.png",
+      "sha256": "fe361e65d54b4d5fc0ff9803a8b6b4fcf14b22cec9cf3d16f499be4555f86d4d",
+      "dimensions": [
+        128,
+        140
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_RedGoldOrnament-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0xa4",
+      "position": [
+        544,
+        338
+      ],
+      "sha256": "fceef76c17eb9e2cc9f838844490ad89d87e632fe7d21bc7322e4bc818e5dd58",
+      "dimensions": [
+        106,
+        133
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_RedGoldOrnament.png",
+      "role": "collected_icon",
+      "collectable_id": "0xa4",
+      "runtime_filename": "collection_christmasornament_redgoldornament.png",
+      "sha256": "9c707a8beb6e97b7ea31b435cce73965f40c353571289eab35b1672ed0760efd",
+      "dimensions": [
+        114,
+        147
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Silverbell-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0xa5",
+      "position": [
+        736,
+        338
+      ],
+      "sha256": "668c09a6a16abddaa2363dd4dd05f73d283a6673a2ec39c51a90404091d487f4",
+      "dimensions": [
+        75,
+        133
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Silverbell.png",
+      "role": "collected_icon",
+      "collectable_id": "0xa5",
+      "runtime_filename": "collection_christmasornament_silverbell.png",
+      "sha256": "7e78e7bf08cd7893553aa2f5ab938fc33600f1ee4be8805af7928384b769677c",
+      "dimensions": [
+        83,
+        145
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Star-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0xa6",
+      "position": [
+        179,
+        506
+      ],
+      "sha256": "b23cff6edd6d888e7f5741b7fea13f136eb9506af7634692a15a6abdac1ae169",
+      "dimensions": [
+        127,
+        125
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Star.png",
+      "role": "collected_icon",
+      "collectable_id": "0xa6",
+      "runtime_filename": "collection_christmasornament_star.png",
+      "sha256": "65d3739e5133f061b2121426ec64bf5cf5d0fc6cf0fe3ae767b920d44d4d1ce9",
+      "dimensions": [
+        135,
+        141
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Threebells-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0xa7",
+      "position": [
+        370,
+        495
+      ],
+      "sha256": "23e56f820181c29fb030e107cac18a523ca9735c7fe00d8ef6d7e93d72b6580a",
+      "dimensions": [
+        101,
+        145
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Threebells.png",
+      "role": "collected_icon",
+      "collectable_id": "0xa7",
+      "runtime_filename": "collection_christmasornament_threebells.png",
+      "sha256": "b7349397a7f2b4b5a304aa39661079a3b11650cac7abc4d400c7f79c6ba7cbd9",
+      "dimensions": [
+        109,
+        153
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Twirl-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0xa8",
+      "position": [
+        539,
+        508
+      ],
+      "sha256": "d29cb711268063db8f1ff4768e7aa104b0284cf991e5d1515f6376554fef7443",
+      "dimensions": [
+        116,
+        120
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Twirl.png",
+      "role": "collected_icon",
+      "collectable_id": "0xa8",
+      "runtime_filename": "collection_christmasornament_twirl.png",
+      "sha256": "3b002daf65598915842dc4f914645a9f215859c0cbf3b35d2b442d999173f9eb",
+      "dimensions": [
+        124,
+        132
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Twisty-Placeholder.png",
+      "role": "placeholder",
+      "collectable_id": "0xa9",
+      "position": [
+        707,
+        503
+      ],
+      "sha256": "9893c2abcad47bbe440108d6d70e7f31b03b835cb81bb64743b7d691f3ce95f0",
+      "dimensions": [
+        132,
+        159
+      ]
+    },
+    {
+      "filename": "Collection_ChristmasOrnament_Twisty.png",
+      "role": "collected_icon",
+      "collectable_id": "0xa9",
+      "runtime_filename": "collection_christmasornament_twisty.png",
+      "sha256": "f02ae742ca01b69f16cbfbd8be50628c4135eb324e80273a6bf03617c533e0ad",
+      "dimensions": [
+        139,
+        141
+      ]
+    }
+  ],
   "assets": [
-    {"filename": "collection_christmasornament_blueball.png", "collectable_id": "0x9E", "sha256": "6790f9e53b2a05ee3d8663b4c2214a07c211c8eb66ec70f9f662ad89cad5f11f", "dimensions": [119, 147]},
-    {"filename": "collection_christmasornament_crosses.png", "collectable_id": "0x9F", "sha256": "09d576cbd14ba0d8afec73892a20ee2546cbae31708bf61a8552b49267c8c65b", "dimensions": [118, 146]},
-    {"filename": "collection_christmasornament_disco.png", "collectable_id": "0xA0", "sha256": "9cedf1aa808e46df01cfca6af59d174cf08f781c9f1618065e4a3880ac1c4d22", "dimensions": [122, 146]},
-    {"filename": "collection_christmasornament_golddealio.png", "collectable_id": "0xA1", "sha256": "956444a7727e2dc04f1adbe40140bd64f28783026d62f47b56415892cbae5a1f", "dimensions": [146, 150]},
-    {"filename": "collection_christmasornament_heart.png", "collectable_id": "0xA2", "sha256": "e6285bfd402e15124ec7ecad2f7bf6fe994c8053edc776ff1c965b35dfd079b5", "dimensions": [113, 136]},
-    {"filename": "collection_christmasornament_hotairballoon.png", "collectable_id": "0xA3", "sha256": "c70c32943b236190cec14e636dee54cbb73bd6f908876f980681e6811b5a008e", "dimensions": [128, 140]},
-    {"filename": "collection_christmasornament_redgoldornament.png", "collectable_id": "0xA4", "sha256": "aeb617b5a79dbaa9c4e384279824b3189fd9fd650289f5a10ca69cff0c2047c3", "dimensions": [114, 146]},
-    {"filename": "collection_christmasornament_silverbell.png", "collectable_id": "0xA5", "sha256": "0d4737852c9190b2b2eedaf74952ce1b54c839749f1104438efb0f592f94e5a0", "dimensions": [82, 145]},
-    {"filename": "collection_christmasornament_star.png", "collectable_id": "0xA6", "sha256": "b42d2314949fc695747f0d0fa029d6400dddd19ec8ccbd30812ea0138a0f7e6a", "dimensions": [134, 141]},
-    {"filename": "collection_christmasornament_threebells.png", "collectable_id": "0xA7", "sha256": "09eb147e3dfb7905f0f1a011d0f1631d8df653cde92cbfe0ef8bf21c3da2e4d7", "dimensions": [109, 152]},
-    {"filename": "collection_christmasornament_twirl.png", "collectable_id": "0xA8", "sha256": "e5e151063e885c3a6e55ac4f8be1b7183928ad6d3261de8cf4292592e6217233", "dimensions": [123, 132]},
-    {"filename": "collection_christmasornament_twisty.png", "collectable_id": "0xA9", "sha256": "8fdc9030741b6e9a9c178ce6e08874d8860bcde0ba9c3d4790cf70b5888d81ac", "dimensions": [138, 131]},
-    {"filename": "collection-ornaments_background.png", "role": "collection_background", "sha256": "af8a6061ecee385bfe3d34a8fe9e3ab3495d288d5289a4b896a5b42618ff46ce", "dimensions": [1024, 768]}
+    {
+      "filename": "collection_christmasornament_blueball.png",
+      "source_filename": "Collection_ChristmasOrnament_BlueBall.png",
+      "collectable_id": "0x9e",
+      "sha256": "0e47200b9f2d64caecba2fca00267a78560649dd9ce829367f4048d0e4516dc4",
+      "dimensions": [
+        120,
+        148
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection_christmasornament_crosses.png",
+      "source_filename": "Collection_ChristmasOrnament_Crosses.png",
+      "collectable_id": "0x9f",
+      "sha256": "34209fd64cf9248a00dc8ceb46351d9b99b45f5173a11dec6eec5f6f3dd8d147",
+      "dimensions": [
+        119,
+        146
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection_christmasornament_disco.png",
+      "source_filename": "Collection_ChristmasOrnament_Disco.png",
+      "collectable_id": "0xa0",
+      "sha256": "dfd953bad1857d8e35316aa7a6005fd25569d95f8a3244749d952241e333d01f",
+      "dimensions": [
+        122,
+        147
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection_christmasornament_golddealio.png",
+      "source_filename": "Collection_ChristmasOrnament_GoldDealio.png",
+      "collectable_id": "0xa1",
+      "sha256": "8ba00533bc58b56d78a8aaad66b9491a4f70cab0c59e141030a9632d07d09fd3",
+      "dimensions": [
+        147,
+        150
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection_christmasornament_heart.png",
+      "source_filename": "Collection_ChristmasOrnament_Heart.png",
+      "collectable_id": "0xa2",
+      "sha256": "67b69e8da9b29c4780ab8bb02d466b64eb6e383c0d5a3940b19c3ad674ccba2c",
+      "dimensions": [
+        113,
+        136
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection_christmasornament_hotairballoon.png",
+      "source_filename": "Collection_ChristmasOrnament_HotAirBalloon.png",
+      "collectable_id": "0xa3",
+      "sha256": "fe361e65d54b4d5fc0ff9803a8b6b4fcf14b22cec9cf3d16f499be4555f86d4d",
+      "dimensions": [
+        128,
+        140
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection_christmasornament_redgoldornament.png",
+      "source_filename": "Collection_ChristmasOrnament_RedGoldOrnament.png",
+      "collectable_id": "0xa4",
+      "sha256": "9c707a8beb6e97b7ea31b435cce73965f40c353571289eab35b1672ed0760efd",
+      "dimensions": [
+        114,
+        147
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection_christmasornament_silverbell.png",
+      "source_filename": "Collection_ChristmasOrnament_Silverbell.png",
+      "collectable_id": "0xa5",
+      "sha256": "7e78e7bf08cd7893553aa2f5ab938fc33600f1ee4be8805af7928384b769677c",
+      "dimensions": [
+        83,
+        145
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection_christmasornament_star.png",
+      "source_filename": "Collection_ChristmasOrnament_Star.png",
+      "collectable_id": "0xa6",
+      "sha256": "65d3739e5133f061b2121426ec64bf5cf5d0fc6cf0fe3ae767b920d44d4d1ce9",
+      "dimensions": [
+        135,
+        141
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection_christmasornament_threebells.png",
+      "source_filename": "Collection_ChristmasOrnament_Threebells.png",
+      "collectable_id": "0xa7",
+      "sha256": "b7349397a7f2b4b5a304aa39661079a3b11650cac7abc4d400c7f79c6ba7cbd9",
+      "dimensions": [
+        109,
+        153
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection_christmasornament_twirl.png",
+      "source_filename": "Collection_ChristmasOrnament_Twirl.png",
+      "collectable_id": "0xa8",
+      "sha256": "3b002daf65598915842dc4f914645a9f215859c0cbf3b35d2b442d999173f9eb",
+      "dimensions": [
+        124,
+        132
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection_christmasornament_twisty.png",
+      "source_filename": "Collection_ChristmasOrnament_Twisty.png",
+      "collectable_id": "0xa9",
+      "sha256": "f02ae742ca01b69f16cbfbd8be50628c4135eb324e80273a6bf03617c533e0ad",
+      "dimensions": [
+        139,
+        141
+      ],
+      "copy_policy": "bit_for_bit_no_orientation_transform"
+    },
+    {
+      "filename": "collection-ornaments_background.png",
+      "role": "collection_background",
+      "source_base": "Collection_Bottlecaps_Background.png",
+      "source_frame": "Collection_ChristmasOrnament_Frame.png",
+      "source_decoration": "Collection_ChristmasOrnament_CandyCane.png",
+      "sha256": "c94d42f228b78fb018f8f27392165072202bb57f5ba72b1fc902058678b983e0",
+      "dimensions": [
+        1024,
+        768
+      ],
+      "composition": {
+        "operation": "rgba_alpha_composite",
+        "canvas_size": [
+          1024,
+          768
+        ],
+        "coordinate_system": "absolute_full_canvas_top_left",
+        "layers": [
+          {
+            "filename": "Collection_Bottlecaps_Background.png",
+            "role": "base",
+            "position": [
+              0,
+              0
+            ],
+            "dimensions": [
+              1024,
+              768
+            ]
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_Frame.png",
+            "role": "frame",
+            "position": [
+              74,
+              4
+            ],
+            "dimensions": [
+              940,
+              732
+            ]
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_CandyCane.png",
+            "role": "decoration",
+            "position": [
+              848,
+              461
+            ],
+            "dimensions": [
+              176,
+              307
+            ]
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_BlueBall-Placeholder.png",
+            "position": [
+              187,
+              173
+            ],
+            "dimensions": [
+              112,
+              136
+            ],
+            "role": "placeholder"
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_Crosses-Placeholder.png",
+            "position": [
+              365,
+              174
+            ],
+            "dimensions": [
+              111,
+              134
+            ],
+            "role": "placeholder"
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_Disco-Placeholder.png",
+            "position": [
+              539,
+              173
+            ],
+            "dimensions": [
+              114,
+              135
+            ],
+            "role": "placeholder"
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_GoldDealio-Placeholder.png",
+            "position": [
+              704,
+              166
+            ],
+            "dimensions": [
+              139,
+              148
+            ],
+            "role": "placeholder"
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_Heart-Placeholder.png",
+            "position": [
+              191,
+              343
+            ],
+            "dimensions": [
+              105,
+              124
+            ],
+            "role": "placeholder"
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_HotAirBalloon-Placeholder.png",
+            "position": [
+              360,
+              340
+            ],
+            "dimensions": [
+              121,
+              129
+            ],
+            "role": "placeholder"
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_RedGoldOrnament-Placeholder.png",
+            "position": [
+              544,
+              338
+            ],
+            "dimensions": [
+              106,
+              133
+            ],
+            "role": "placeholder"
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_Silverbell-Placeholder.png",
+            "position": [
+              736,
+              338
+            ],
+            "dimensions": [
+              75,
+              133
+            ],
+            "role": "placeholder"
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_Star-Placeholder.png",
+            "position": [
+              179,
+              506
+            ],
+            "dimensions": [
+              127,
+              125
+            ],
+            "role": "placeholder"
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_Threebells-Placeholder.png",
+            "position": [
+              370,
+              495
+            ],
+            "dimensions": [
+              101,
+              145
+            ],
+            "role": "placeholder"
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_Twirl-Placeholder.png",
+            "position": [
+              539,
+              508
+            ],
+            "dimensions": [
+              116,
+              120
+            ],
+            "role": "placeholder"
+          },
+          {
+            "filename": "Collection_ChristmasOrnament_Twisty-Placeholder.png",
+            "position": [
+              707,
+              503
+            ],
+            "dimensions": [
+              132,
+              159
+            ],
+            "role": "placeholder"
+          }
+        ],
+        "orientation_transform": "none",
+        "resize": "none"
+      }
+    }
   ]
 }

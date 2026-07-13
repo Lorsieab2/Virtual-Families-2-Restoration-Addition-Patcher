@@ -6,6 +6,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -89,6 +90,133 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             ],
         }
         path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+
+    def post_asset_record(self, game_file, original, source_path, source_data, output_name, requires):
+        return {
+            "file_path": game_file.name,
+            "output_file_path": output_name,
+            "source_path": source_path,
+            "source_sha256": sha256_bytes(source_data),
+            "source_size": len(source_data),
+            "expected_target_sha256": sha256_bytes(original),
+            "expected_target_size": len(original),
+            "overwrite_existing": True,
+            "requires": requires,
+        }
+
+    def post_asset_manifest(
+        self,
+        game_file,
+        original,
+        output_name,
+        asset_patches,
+        variants,
+        *,
+        feature_default,
+    ):
+        return {
+            "manifest_version": 1,
+            "name": "post-asset patch unit test",
+            "output": {
+                "default_folder_name": "VF2-BPost-Modded",
+                "default_exe_name": output_name,
+            },
+            "settings": [
+                {
+                    "id": "core_executable",
+                    "label": "Core executable",
+                    "default": True,
+                },
+                {
+                    "id": "holiday_goal_visibility",
+                    "label": "Holiday goal visibility",
+                    "default": feature_default,
+                    "category": "optional",
+                },
+            ],
+            "target_files": [
+                {
+                    "path": game_file.name,
+                    "sha256": sha256_bytes(original),
+                    "size": len(original),
+                }
+            ],
+            "asset_patches": asset_patches,
+            "post_asset_patches": [
+                {
+                    "file_path": output_name,
+                    "requires": ["holiday_goal_visibility"],
+                    "note": "Toggle the selected executable's test flag.",
+                    "variants": variants,
+                }
+            ],
+        }
+
+    def assert_post_asset_validation_failure(self, variants_factory, expected_error):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = b"vanilla executable"
+            game_file.write_bytes(original)
+            output_name = "Virtual Families 2 - Modded BPost.exe"
+            payload_data = b"FAIL\x00DATA"
+            payload = tmp_path / "payload" / output_name
+            payload.parent.mkdir()
+            payload.write_bytes(payload_data)
+            asset_patches = [
+                self.post_asset_record(
+                    game_file,
+                    original,
+                    f"payload/{output_name}",
+                    payload_data,
+                    output_name,
+                    ["core_executable"],
+                )
+            ]
+            manifest = tmp_path / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    self.post_asset_manifest(
+                        game_file,
+                        original,
+                        output_name,
+                        asset_patches,
+                        variants_factory(sha256_bytes(payload_data)),
+                        feature_default=True,
+                    ),
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                expect=2,
+            )
+            self.assertIn(expected_error, result.stderr)
+            self.assertEqual(game_file.read_bytes(), original)
+            self.assertFalse((tmp_path / "VF2-BPost-Modded").exists())
+
+    def direct_post_asset_check(self, file_path, data, *, index=0, offset=4):
+        return {
+            "index": index,
+            "variant_index": 0,
+            "file_path": file_path,
+            "asset_patch_index": 0,
+            "source_path": "payload/modded.exe",
+            "asset_sha256": sha256_bytes(data),
+            "offset": offset,
+            "expected": data[offset : offset + 1],
+            "replacement": b"\x01",
+            "requires": ["holiday_goal_visibility"],
+            "note": "direct post-asset failure test",
+        }
 
     def test_apply_and_restore(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -278,6 +406,582 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 any(row.get("action") == "up_to_date_recheck_failed" for row in log["process_log"])
             )
             self.assertEqual(log["modded_exe_name"], output_exe.name)
+
+    def test_post_asset_patch_selects_last_asset_sha_and_runs_after_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = b"vanilla executable"
+            game_file.write_bytes(original)
+            output_name = "Virtual Families 2 - Modded BPost.exe"
+            base_data = b"BASE\x00DATA"
+            selected_data = b"SELECT\x00DATA"
+            payload_dir = tmp_path / "payload"
+            payload_dir.mkdir()
+            (payload_dir / "base.exe").write_bytes(base_data)
+            (payload_dir / "selected.exe").write_bytes(selected_data)
+            asset_patches = [
+                self.post_asset_record(
+                    game_file,
+                    original,
+                    "payload/base.exe",
+                    base_data,
+                    output_name,
+                    ["core_executable"],
+                ),
+                self.post_asset_record(
+                    game_file,
+                    original,
+                    "payload/selected.exe",
+                    selected_data,
+                    output_name,
+                    ["core_executable", "holiday_goal_visibility"],
+                ),
+            ]
+            variants = [
+                {
+                    "asset_sha256": sha256_bytes(base_data),
+                    "offset": "0x4",
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                },
+                {
+                    "asset_sha256": sha256_bytes(selected_data),
+                    "offset": "0x6",
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                },
+            ]
+            manifest = tmp_path / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    self.post_asset_manifest(
+                        game_file,
+                        original,
+                        output_name,
+                        asset_patches,
+                        variants,
+                        feature_default=True,
+                    ),
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+            )
+
+            self.assertIn("Applying post-asset patch 1/1", result.stdout)
+            output_dir = tmp_path / "VF2-BPost-Modded"
+            output_exe = output_dir / output_name
+            self.assertEqual(output_exe.read_bytes(), b"SELECT\x01DATA")
+            log_path = next((output_dir / ".vf2_patch_backups").glob("*/patch_log.json"))
+            log = json.loads(log_path.read_text(encoding="utf-8"))
+            self.assertEqual(log["post_asset_patches"][0]["variant_index"], 1)
+            self.assertEqual(log["post_asset_patches"][0]["asset_patch_index"], 1)
+            apply_events = [
+                row
+                for row in log["process_log"]
+                if row["phase"] == "apply" and row["status"] == "success"
+            ]
+            asset_positions = [
+                index for index, row in enumerate(apply_events) if row["kind"] == "asset_patch"
+            ]
+            post_position = next(
+                index for index, row in enumerate(apply_events) if row["kind"] == "post_asset_patch"
+            )
+            self.assertLess(max(asset_positions), post_position)
+
+    def test_post_asset_patch_groups_mixed_case_windows_target_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = b"vanilla executable"
+            game_file.write_bytes(original)
+            output_name = "Virtual Families 2 - Modded BPost.exe"
+            mixed_case_name = "virtual families 2 - MODDED bpost.EXE"
+            payload_data = b"CASE\x00\x00END"
+            payload = tmp_path / "payload" / output_name
+            payload.parent.mkdir()
+            payload.write_bytes(payload_data)
+            asset_patches = [
+                self.post_asset_record(
+                    game_file,
+                    original,
+                    f"payload/{output_name}",
+                    payload_data,
+                    output_name,
+                    ["core_executable"],
+                )
+            ]
+            manifest_data = self.post_asset_manifest(
+                game_file,
+                original,
+                output_name,
+                asset_patches,
+                [
+                    {
+                        "asset_sha256": sha256_bytes(payload_data),
+                        "offset": 4,
+                        "expected_asset_bytes": "00",
+                        "replacement_bytes": "01",
+                    }
+                ],
+                feature_default=True,
+            )
+            manifest_data["post_asset_patches"].append(
+                {
+                    "file_path": mixed_case_name,
+                    "requires": ["holiday_goal_visibility"],
+                    "variants": [
+                        {
+                            "asset_sha256": sha256_bytes(payload_data),
+                            "offset": 5,
+                            "expected_asset_bytes": "00",
+                            "replacement_bytes": "01",
+                        }
+                    ],
+                }
+            )
+            manifest = tmp_path / "manifest.json"
+            manifest.write_text(json.dumps(manifest_data, indent=2), encoding="utf-8")
+
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+            )
+
+            output_dir = tmp_path / "VF2-BPost-Modded"
+            self.assertEqual((output_dir / output_name).read_bytes(), b"CASE\x01\x01END")
+            log_path = next((output_dir / ".vf2_patch_backups").glob("*/patch_log.json"))
+            log = json.loads(log_path.read_text(encoding="utf-8"))
+            self.assertEqual(
+                [row["file_path"] for row in log["post_asset_patches"]],
+                [output_name, mixed_case_name],
+            )
+            self.assertEqual(
+                len(
+                    [
+                        row
+                        for row in log["process_log"]
+                        if row["phase"] == "apply"
+                        and row["kind"] == "post_asset_patch"
+                        and row["status"] == "success"
+                    ]
+                ),
+                2,
+            )
+
+    def test_post_asset_patch_dry_run_validates_selected_payload_without_writing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = b"vanilla executable"
+            game_file.write_bytes(original)
+            output_name = "Virtual Families 2 - Modded BPost.exe"
+            payload_data = b"DRY\x00RUN"
+            payload = tmp_path / "payload" / output_name
+            payload.parent.mkdir()
+            payload.write_bytes(payload_data)
+            asset_patches = [
+                self.post_asset_record(
+                    game_file,
+                    original,
+                    f"payload/{output_name}",
+                    payload_data,
+                    output_name,
+                    ["core_executable"],
+                )
+            ]
+            variants = [
+                {
+                    "asset_sha256": sha256_bytes(payload_data),
+                    "offset": 3,
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                }
+            ]
+            manifest = tmp_path / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    self.post_asset_manifest(
+                        game_file,
+                        original,
+                        output_name,
+                        asset_patches,
+                        variants,
+                        feature_default=True,
+                    ),
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                "--dry-run",
+            )
+
+            self.assertIn("Validating post-asset patch 1/1", result.stdout)
+            self.assertEqual(game_file.read_bytes(), original)
+            self.assertFalse((tmp_path / "VF2-BPost-Modded").exists())
+            log = json.loads((tmp_path / "patch_dry_run_log.json").read_text(encoding="utf-8"))
+            self.assertEqual(log["post_asset_patches"][0]["asset_sha256"], sha256_bytes(payload_data))
+            self.assertTrue(
+                any(row["phase"] == "validate" and row["kind"] == "post_asset_patch" for row in log["process_log"])
+            )
+            self.assertFalse(
+                any(row["phase"] == "apply" and row["kind"] == "post_asset_patch" for row in log["process_log"])
+            )
+
+    def test_post_asset_patch_setting_gates_and_reconfigures_from_pristine_asset(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = b"vanilla executable"
+            game_file.write_bytes(original)
+            output_name = "Virtual Families 2 - Modded BPost.exe"
+            payload_data = b"FLAG\x00END"
+            patched_data = b"FLAG\x01END"
+            payload = tmp_path / "payload" / output_name
+            payload.parent.mkdir()
+            payload.write_bytes(payload_data)
+            asset_patches = [
+                self.post_asset_record(
+                    game_file,
+                    original,
+                    f"payload/{output_name}",
+                    payload_data,
+                    output_name,
+                    ["core_executable"],
+                )
+            ]
+            variants = [
+                {
+                    "asset_sha256": sha256_bytes(payload_data),
+                    "offset": 4,
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                }
+            ]
+            manifest = tmp_path / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    self.post_asset_manifest(
+                        game_file,
+                        original,
+                        output_name,
+                        asset_patches,
+                        variants,
+                        feature_default=False,
+                    ),
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+            )
+            output_dir = tmp_path / "VF2-BPost-Modded"
+            output_exe = output_dir / output_name
+            self.assertEqual(output_exe.read_bytes(), payload_data)
+            first_log = next((output_dir / ".vf2_patch_backups").glob("*/patch_log.json"))
+            self.assertEqual(json.loads(first_log.read_text(encoding="utf-8"))["post_asset_patches"], [])
+
+            self.run_patcher(
+                "apply",
+                "--output-dir",
+                str(output_dir),
+                "--manifest",
+                str(manifest),
+                "--enable",
+                "holiday_goal_visibility",
+            )
+            self.assertEqual(output_exe.read_bytes(), patched_data)
+            enabled_logs = []
+            for log_path in (output_dir / ".vf2_patch_backups").glob("*/patch_log.json"):
+                log = json.loads(log_path.read_text(encoding="utf-8"))
+                if log["post_asset_patches"]:
+                    enabled_logs.append((log_path, log))
+            self.assertEqual(len(enabled_logs), 1)
+            enabled_log_path, enabled_log = enabled_logs[0]
+            self.assertEqual(enabled_log["mode"], "existing_modded_output")
+            backup_manifest = json.loads(
+                (enabled_log_path.parent / "vf2_patch_backup_manifest.json").read_text(encoding="utf-8")
+            )
+            backup_row = next(row for row in backup_manifest["files"] if row["file_path"] == output_name)
+            self.assertTrue(backup_row["existed"])
+            self.assertEqual((enabled_log_path.parent / backup_row["backup_path"]).read_bytes(), payload_data)
+
+            self.run_patcher(
+                "apply",
+                "--output-dir",
+                str(output_dir),
+                "--manifest",
+                str(manifest),
+            )
+            self.assertEqual(output_exe.read_bytes(), payload_data)
+            latest_log_path = sorted((output_dir / ".vf2_patch_backups").glob("*/patch_log.json"))[-1]
+            latest_log = json.loads(latest_log_path.read_text(encoding="utf-8"))
+            self.assertEqual(latest_log["post_asset_patches"], [])
+
+    def test_post_asset_patch_rejects_missing_selected_sha_variant(self):
+        self.assert_post_asset_validation_failure(
+            lambda _selected_sha: [
+                {
+                    "asset_sha256": sha256_bytes(b"different payload"),
+                    "offset": 4,
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                }
+            ],
+            "has no variant for selected asset SHA-256",
+        )
+
+    def test_post_asset_patch_rejects_duplicate_selected_sha_variants(self):
+        self.assert_post_asset_validation_failure(
+            lambda selected_sha: [
+                {
+                    "asset_sha256": selected_sha,
+                    "offset": 4,
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                },
+                {
+                    "asset_sha256": selected_sha,
+                    "offset": 4,
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                },
+            ],
+            "duplicates asset_sha256",
+        )
+
+    def test_post_asset_patch_rejects_latent_duplicate_sha_variants(self):
+        self.assert_post_asset_validation_failure(
+            lambda selected_sha: [
+                {
+                    "asset_sha256": selected_sha,
+                    "offset": 4,
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                },
+                {
+                    "asset_sha256": sha256_bytes(b"latent payload"),
+                    "offset": 0,
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                },
+                {
+                    "asset_sha256": sha256_bytes(b"latent payload"),
+                    "offset": 1,
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                },
+            ],
+            "duplicates asset_sha256",
+        )
+
+    def test_post_asset_patch_rejects_selected_payload_byte_mismatch(self):
+        self.assert_post_asset_validation_failure(
+            lambda selected_sha: [
+                {
+                    "asset_sha256": selected_sha,
+                    "offset": 4,
+                    "expected_asset_bytes": "FF",
+                    "replacement_bytes": "01",
+                }
+            ],
+            "expected asset bytes do not match",
+        )
+
+    def test_post_asset_patch_source_read_failure_is_logged_patch_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source_data = b"FLAG\x00END"
+            source = tmp_path / "payload" / "modded.exe"
+            source.parent.mkdir()
+            source.write_bytes(source_data)
+            patch = patcher_mod.PostAssetPatch(
+                index=0,
+                file_path="Modded.exe",
+                variants=(
+                    patcher_mod.PostAssetPatchVariant(
+                        index=0,
+                        asset_sha256=sha256_bytes(source_data),
+                        offset=4,
+                        expected=b"\x00",
+                        replacement=b"\x01",
+                        note="",
+                    ),
+                ),
+                note="source read failure",
+                requires=(),
+            )
+            asset_checks = [
+                {
+                    "index": 0,
+                    "file_path": "Virtual Families 2.exe",
+                    "output_file_path": "Modded.exe",
+                    "source_path": "payload/modded.exe",
+                    "source_sha256": sha256_bytes(source_data),
+                }
+            ]
+            process_log = []
+            progress = []
+            args = mock.Mock(progress_callback=progress.append)
+
+            with mock.patch.object(Path, "read_bytes", side_effect=OSError("read denied")):
+                with self.assertRaisesRegex(patcher_mod.PatchError, "Could not read selected asset source"):
+                    patcher_mod.verify_post_asset_patches(
+                        tmp_path,
+                        [patch],
+                        asset_checks,
+                        args,
+                        process_log,
+                    )
+
+            self.assertEqual(len(process_log), 1)
+            self.assertEqual(process_log[0]["kind"], "post_asset_patch")
+            self.assertEqual(process_log[0]["status"], "error")
+            self.assertIn("Could not read selected asset source", process_log[0]["error"])
+            self.assertTrue(any("[error]" in message for message in progress))
+
+    def test_post_asset_patch_target_read_failure_is_logged_patch_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            target_data = b"FLAG\x00END"
+            target = output_dir / "Modded.exe"
+            target.write_bytes(target_data)
+            checks = [self.direct_post_asset_check(target.name, target_data)]
+            process_log = []
+            progress = []
+            args = mock.Mock(progress_callback=progress.append)
+
+            with mock.patch.object(Path, "read_bytes", side_effect=OSError("read denied")):
+                with self.assertRaisesRegex(patcher_mod.PatchError, "Could not read post-asset patch target"):
+                    patcher_mod.apply_post_asset_patches(output_dir, checks, args, process_log)
+
+            self.assertEqual(len(process_log), 1)
+            self.assertEqual(process_log[0]["status"], "error")
+            self.assertIn("Could not read post-asset patch target", process_log[0]["error"])
+            self.assertTrue(any("[error]" in message for message in progress))
+
+    def test_post_asset_patch_missing_target_is_logged_for_every_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            output_dir = Path(tmp)
+            target_data = b"FLAG\x00\x00END"
+            checks = [
+                self.direct_post_asset_check("Modded.exe", target_data, index=0, offset=4),
+                self.direct_post_asset_check("modded.EXE", target_data, index=1, offset=5),
+            ]
+            process_log = []
+            progress = []
+            args = mock.Mock(progress_callback=progress.append)
+
+            with self.assertRaisesRegex(patcher_mod.PatchError, "target does not exist after asset copy"):
+                patcher_mod.apply_post_asset_patches(output_dir, checks, args, process_log)
+
+            self.assertEqual(len(process_log), 2)
+            self.assertEqual({row["status"] for row in process_log}, {"error"})
+            self.assertEqual({row["file_path"] for row in process_log}, {"Modded.exe", "modded.EXE"})
+            self.assertEqual(len([message for message in progress if "[error]" in message]), 2)
+
+    def test_post_asset_patch_write_failure_reaches_outer_failure_log(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = b"vanilla executable"
+            game_file.write_bytes(original)
+            output_name = "Virtual Families 2 - Modded BPost.exe"
+            payload_data = b"FLAG\x00END"
+            payload = tmp_path / "payload" / output_name
+            payload.parent.mkdir()
+            payload.write_bytes(payload_data)
+            manifest_data = self.post_asset_manifest(
+                game_file,
+                original,
+                output_name,
+                [
+                    self.post_asset_record(
+                        game_file,
+                        original,
+                        f"payload/{output_name}",
+                        payload_data,
+                        output_name,
+                        ["core_executable"],
+                    )
+                ],
+                [
+                    {
+                        "asset_sha256": sha256_bytes(payload_data),
+                        "offset": 4,
+                        "expected_asset_bytes": "00",
+                        "replacement_bytes": "01",
+                    }
+                ],
+                feature_default=True,
+            )
+            manifest = tmp_path / "manifest.json"
+            manifest.write_text(json.dumps(manifest_data, indent=2), encoding="utf-8")
+            failure_log_path = tmp_path / "failure.json"
+            args = patcher_mod.build_parser().parse_args(
+                [
+                    "apply",
+                    "--game-dir",
+                    str(game_dir),
+                    "--manifest",
+                    str(manifest),
+                    "--log",
+                    str(failure_log_path),
+                ]
+            )
+            args.progress_callback = lambda _message: None
+
+            with mock.patch.object(patcher_mod, "atomic_write", side_effect=OSError("write denied")):
+                with self.assertRaisesRegex(patcher_mod.PatchError, "Could not write post-asset patch target"):
+                    patcher_mod.apply_manifest(args)
+
+            self.assertTrue(failure_log_path.is_file())
+            failure_log = json.loads(failure_log_path.read_text(encoding="utf-8"))
+            self.assertEqual(failure_log["status"], "failure")
+            self.assertIn("Could not write post-asset patch target", failure_log["error"])
+            error_rows = [
+                row
+                for row in failure_log["process_log"]
+                if row["phase"] == "apply"
+                and row["kind"] == "post_asset_patch"
+                and row["status"] == "error"
+            ]
+            self.assertEqual(len(error_rows), 1)
+            self.assertIn("write denied", error_rows[0]["error"])
 
     def test_dry_run_accepts_renamed_valid_pe_structure_exe(self):
         with tempfile.TemporaryDirectory() as tmp:

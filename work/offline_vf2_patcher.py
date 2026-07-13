@@ -68,6 +68,25 @@ class AssetPatch:
 
 
 @dataclass(frozen=True)
+class PostAssetPatchVariant:
+    index: int
+    asset_sha256: str
+    offset: int
+    expected: bytes
+    replacement: bytes
+    note: str
+
+
+@dataclass(frozen=True)
+class PostAssetPatch:
+    index: int
+    file_path: str
+    variants: tuple[PostAssetPatchVariant, ...]
+    note: str
+    requires: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class PatchSetting:
     id: str
     label: str
@@ -261,6 +280,11 @@ def normalize_rel_path(value: Any, field: str = "file path") -> str:
     if any(part in ("", ".", "..") for part in parts):
         raise PatchError(f"{field} must not contain '.', '..', or empty segments: {value!r}")
     return str(Path(*parts))
+
+
+def canonical_rel_path_key(rel_path: str) -> str:
+    """Return a platform-independent key matching Windows path semantics."""
+    return str(Path(rel_path)).replace("\\", "/").casefold()
 
 
 def resolve_under_game_dir(game_dir: Path, rel_path: str) -> Path:
@@ -1087,6 +1111,96 @@ def manifest_asset_patches(
     return assets
 
 
+def manifest_post_asset_patches(
+    manifest: dict[str, Any],
+    settings: dict[str, PatchSetting],
+    enabled_settings: set[str],
+) -> list[PostAssetPatch]:
+    raw_patches = manifest.get("post_asset_patches", [])
+    if not isinstance(raw_patches, list):
+        raise PatchError("Manifest 'post_asset_patches' must be an array when present.")
+    patches: list[PostAssetPatch] = []
+    for index, raw in enumerate(raw_patches):
+        if not isinstance(raw, dict):
+            raise PatchError(f"Post-asset patch #{index} must be an object.")
+        file_path = normalize_rel_path(
+            raw.get("file_path", raw.get("file", raw.get("path"))),
+            f"post-asset patch #{index} file path",
+        )
+        requires = record_requires(raw, f"post-asset patch #{index}")
+        ensure_known_settings(requires, settings, f"Post-asset patch #{index}")
+        if not record_is_active(requires, enabled_settings):
+            continue
+        raw_variants = raw.get("variants")
+        if not isinstance(raw_variants, list) or not raw_variants:
+            raise PatchError(f"Post-asset patch #{index} variants must be a non-empty array.")
+        variants: list[PostAssetPatchVariant] = []
+        variant_indexes_by_sha256: dict[str, int] = {}
+        for variant_index, raw_variant in enumerate(raw_variants):
+            if not isinstance(raw_variant, dict):
+                raise PatchError(f"Post-asset patch #{index} variant #{variant_index} must be an object.")
+            asset_sha256 = normalize_sha256(
+                raw_variant.get(
+                    "asset_sha256",
+                    raw_variant.get("expected_asset_sha256", raw_variant.get("source_sha256")),
+                ),
+                f"post-asset patch #{index} variant #{variant_index} asset_sha256",
+                required=True,
+            )
+            normalized_asset_sha256 = asset_sha256 or ""
+            previous_variant_index = variant_indexes_by_sha256.get(normalized_asset_sha256)
+            if previous_variant_index is not None:
+                raise PatchError(
+                    f"Post-asset patch #{index} variant #{variant_index} duplicates asset_sha256 "
+                    f"from variant #{previous_variant_index}: {normalized_asset_sha256}"
+                )
+            variant_indexes_by_sha256[normalized_asset_sha256] = variant_index
+            expected = parse_hex_bytes(
+                raw_variant.get(
+                    "expected_asset_bytes",
+                    raw_variant.get("expected_bytes", raw_variant.get("expected")),
+                ),
+                f"post-asset patch #{index} variant #{variant_index} expected bytes",
+            )
+            replacement = parse_hex_bytes(
+                raw_variant.get("replacement_bytes", raw_variant.get("replacement", raw_variant.get("new"))),
+                f"post-asset patch #{index} variant #{variant_index} replacement bytes",
+            )
+            if not expected:
+                raise PatchError(f"Post-asset patch #{index} variant #{variant_index} expected bytes must not be empty.")
+            if len(expected) != len(replacement):
+                raise PatchError(
+                    f"Post-asset patch #{index} variant #{variant_index} changes byte length "
+                    f"({len(expected)} -> {len(replacement)}); length-changing patches are not supported."
+                )
+            offset = parse_int(
+                raw_variant.get("offset"),
+                f"post-asset patch #{index} variant #{variant_index} offset",
+            )
+            if offset < 0:
+                raise PatchError(f"Post-asset patch #{index} variant #{variant_index} offset must not be negative.")
+            variants.append(
+                PostAssetPatchVariant(
+                    index=variant_index,
+                    asset_sha256=normalized_asset_sha256,
+                    offset=offset,
+                    expected=expected,
+                    replacement=replacement,
+                    note=str(raw_variant.get("note", "")).strip(),
+                )
+            )
+        patches.append(
+            PostAssetPatch(
+                index=index,
+                file_path=file_path,
+                variants=tuple(variants),
+                note=str(raw.get("note", "")).strip(),
+                requires=requires,
+            )
+        )
+    return patches
+
+
 def manifest_target_files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
     if isinstance(manifest.get("target_files"), list):
         return manifest["target_files"]
@@ -1514,6 +1628,145 @@ def verify_asset_patches(
     return checks
 
 
+def verify_post_asset_patches(
+    manifest_dir: Path,
+    patches: list[PostAssetPatch],
+    asset_checks: list[dict[str, Any]],
+    args: argparse.Namespace,
+    process_log: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    selected_assets: dict[str, dict[str, Any]] = {}
+    for check in asset_checks:
+        output_file_path = str(check.get("output_file_path") or check["file_path"])
+        # Asset patches are applied in manifest order, so the last active record
+        # for an output path is the payload that the post-asset phase will see.
+        selected_assets[canonical_rel_path_key(output_file_path)] = check
+
+    checks: list[dict[str, Any]] = []
+    total = len(patches)
+    for current, patch in enumerate(patches, start=1):
+        try:
+            selected_asset = selected_assets.get(canonical_rel_path_key(patch.file_path))
+            if selected_asset is None:
+                raise PatchError(
+                    f"Post-asset patch #{patch.index} has no active asset payload for {patch.file_path}."
+                )
+            selected_sha256 = str(selected_asset["source_sha256"]).lower()
+            matching_variants = [
+                variant for variant in patch.variants if variant.asset_sha256 == selected_sha256
+            ]
+            if not matching_variants:
+                raise PatchError(
+                    f"Post-asset patch #{patch.index} has no variant for selected asset SHA-256 "
+                    f"{selected_sha256} ({patch.file_path})."
+                )
+            if len(matching_variants) != 1:
+                raise PatchError(
+                    f"Post-asset patch #{patch.index} has {len(matching_variants)} ambiguous variants for "
+                    f"selected asset SHA-256 {selected_sha256} ({patch.file_path})."
+                )
+            variant = matching_variants[0]
+            source_path = str(selected_asset["source_path"])
+            source = resolve_under_manifest_dir(manifest_dir, source_path)
+            if not source.is_file():
+                raise PatchError(f"Selected asset source file does not exist: {source_path}")
+            try:
+                source_data = source.read_bytes()
+            except OSError as exc:
+                raise PatchError(f"Could not read selected asset source {source_path}: {exc}") from exc
+            source_sha256 = hashlib.sha256(source_data).hexdigest()
+            if source_sha256 != selected_sha256:
+                raise PatchError(
+                    f"Selected asset source SHA-256 changed for {source_path}: "
+                    f"expected {selected_sha256}, got {source_sha256}"
+                )
+            end = variant.offset + len(variant.expected)
+            if end > len(source_data):
+                raise PatchError(
+                    f"Post-asset patch #{patch.index} variant #{variant.index} runs past the end of "
+                    f"selected asset {source_path}."
+                )
+            actual = source_data[variant.offset:end]
+            if actual != variant.expected:
+                raise PatchError(
+                    f"Post-asset patch #{patch.index} expected asset bytes do not match {source_path} "
+                    f"at 0x{variant.offset:x}: expected {variant.expected.hex(' ')}, got {actual.hex(' ')}"
+                )
+            for prior in checks:
+                if canonical_rel_path_key(str(prior["file_path"])) != canonical_rel_path_key(patch.file_path):
+                    continue
+                prior_end = int(prior["offset"]) + len(prior["expected"])
+                if variant.offset < prior_end and int(prior["offset"]) < end:
+                    raise PatchError(
+                        f"Post-asset patch #{patch.index} overlaps post-asset patch #{prior['index']} "
+                        f"for {patch.file_path}."
+                    )
+        except PatchError as exc:
+            log_process_event(
+                process_log,
+                phase="validate",
+                kind="post_asset_patch",
+                status="error",
+                index=patch.index,
+                file_path=patch.file_path,
+                note=patch.note,
+                error=str(exc),
+            )
+            report_record_progress(
+                args,
+                phase="Validating",
+                kind="post-asset patch",
+                current=current,
+                total=total,
+                file_path=patch.file_path,
+                index=patch.index,
+                status="error",
+            )
+            raise
+
+        note = variant.note or patch.note
+        check = {
+            "index": patch.index,
+            "variant_index": variant.index,
+            "file_path": patch.file_path,
+            "asset_patch_index": int(selected_asset["index"]),
+            "source_path": source_path,
+            "asset_sha256": selected_sha256,
+            "offset": variant.offset,
+            "expected": variant.expected,
+            "replacement": variant.replacement,
+            "requires": list(patch.requires),
+            "note": note,
+        }
+        checks.append(check)
+        log_process_event(
+            process_log,
+            phase="validate",
+            kind="post_asset_patch",
+            status="success",
+            index=patch.index,
+            file_path=patch.file_path,
+            note=note,
+            variant_index=variant.index,
+            asset_patch_index=int(selected_asset["index"]),
+            source_path=source_path,
+            asset_sha256=selected_sha256,
+            offset=f"0x{variant.offset:x}",
+            expected=variant.expected.hex(),
+            replacement=variant.replacement.hex(),
+        )
+        report_record_progress(
+            args,
+            phase="Validating",
+            kind="post-asset patch",
+            current=current,
+            total=total,
+            file_path=patch.file_path,
+            index=patch.index,
+        )
+    return checks
+
+
 def apply_asset_patches(
     output_dir: Path,
     manifest_dir: Path,
@@ -1621,6 +1874,142 @@ def apply_asset_patches(
         )
 
 
+def report_post_asset_apply_error(
+    checks: list[dict[str, Any]],
+    message: str,
+    args: argparse.Namespace,
+    process_log: list[dict[str, Any]],
+    *,
+    completed: int,
+    total: int,
+) -> None:
+    for relative_index, check in enumerate(checks, start=1):
+        file_path = str(check["file_path"])
+        index = int(check["index"])
+        log_process_event(
+            process_log,
+            phase="apply",
+            kind="post_asset_patch",
+            status="error",
+            index=index,
+            file_path=file_path,
+            note=str(check.get("note") or ""),
+            variant_index=int(check["variant_index"]),
+            asset_patch_index=int(check["asset_patch_index"]),
+            asset_sha256=str(check["asset_sha256"]),
+            offset=f"0x{int(check['offset']):x}",
+            error=message,
+        )
+        report_record_progress(
+            args,
+            phase="Applying",
+            kind="post-asset patch",
+            current=min(completed + relative_index, total),
+            total=total,
+            file_path=file_path,
+            index=index,
+            status="error",
+        )
+
+
+def apply_post_asset_patches(
+    output_dir: Path,
+    post_asset_checks: list[dict[str, Any]],
+    args: argparse.Namespace,
+    process_log: list[dict[str, Any]],
+) -> None:
+    grouped: dict[str, dict[str, Any]] = {}
+    for check in post_asset_checks:
+        file_path = str(check["file_path"])
+        key = canonical_rel_path_key(file_path)
+        group = grouped.setdefault(key, {"display_path": file_path, "checks": []})
+        group["checks"].append(check)
+
+    total = len(post_asset_checks)
+    current = 0
+    for group in grouped.values():
+        file_path = str(group["display_path"])
+        checks = list(group["checks"])
+        try:
+            target = resolve_under_game_dir(output_dir, file_path)
+        except PatchError as exc:
+            report_post_asset_apply_error(checks, str(exc), args, process_log, completed=current, total=total)
+            raise
+        if not target.is_file():
+            message = f"Post-asset patch target does not exist after asset copy: {file_path}"
+            report_post_asset_apply_error(checks, message, args, process_log, completed=current, total=total)
+            raise PatchError(message)
+        selected_hashes = {str(check["asset_sha256"]) for check in checks}
+        if len(selected_hashes) != 1:
+            message = f"Post-asset patches selected conflicting asset payloads for {file_path}."
+            report_post_asset_apply_error(checks, message, args, process_log, completed=current, total=total)
+            raise PatchError(message)
+        selected_sha256 = next(iter(selected_hashes))
+        try:
+            data = target.read_bytes()
+        except OSError as exc:
+            message = f"Could not read post-asset patch target {file_path}: {exc}"
+            report_post_asset_apply_error(checks, message, args, process_log, completed=current, total=total)
+            raise PatchError(message) from exc
+        actual_sha256 = hashlib.sha256(data).hexdigest()
+        if actual_sha256 != selected_sha256:
+            message = (
+                f"Post-asset patch target SHA-256 mismatch after asset copy for {file_path}: "
+                f"expected selected asset {selected_sha256}, got {actual_sha256}"
+            )
+            report_post_asset_apply_error(checks, message, args, process_log, completed=current, total=total)
+            raise PatchError(message)
+
+        patched = bytearray(data)
+        for check in checks:
+            offset = int(check["offset"])
+            expected = bytes(check["expected"])
+            actual = bytes(patched[offset : offset + len(expected)])
+            if actual != expected:
+                message = (
+                    f"Post-asset patch #{check['index']} expected bytes do not match {file_path} "
+                    f"at 0x{offset:x}: expected {expected.hex(' ')}, got {actual.hex(' ')}"
+                )
+                report_post_asset_apply_error(checks, message, args, process_log, completed=current, total=total)
+                raise PatchError(message)
+            replacement = bytes(check["replacement"])
+            patched[offset : offset + len(expected)] = replacement
+        try:
+            atomic_write(target, bytes(patched))
+        except OSError as exc:
+            message = f"Could not write post-asset patch target {file_path}: {exc}"
+            report_post_asset_apply_error(checks, message, args, process_log, completed=current, total=total)
+            raise PatchError(message) from exc
+
+        for check in checks:
+            current += 1
+            offset = int(check["offset"])
+            replacement = bytes(check["replacement"])
+            log_process_event(
+                process_log,
+                phase="apply",
+                kind="post_asset_patch",
+                status="success",
+                index=int(check["index"]),
+                file_path=str(check["file_path"]),
+                note=str(check.get("note") or ""),
+                variant_index=int(check["variant_index"]),
+                asset_patch_index=int(check["asset_patch_index"]),
+                asset_sha256=selected_sha256,
+                offset=f"0x{offset:x}",
+                length=len(replacement),
+            )
+            report_record_progress(
+                args,
+                phase="Applying",
+                kind="post-asset patch",
+                current=current,
+                total=total,
+                file_path=str(check["file_path"]),
+                index=int(check["index"]),
+            )
+
+
 def backup_slug(manifest_path: Path) -> str:
     stem = re.sub(r"[^A-Za-z0-9_.-]+", "_", manifest_path.stem).strip("._")
     if not stem:
@@ -1634,10 +2023,12 @@ def create_backup(
     backup_dir: Path,
     grouped: dict[str, list[BytePatch]],
     asset_checks: list[dict[str, Any]],
+    post_asset_checks: list[dict[str, Any]],
     manifest_path: Path,
 ) -> dict[str, Any]:
     backup_dir.mkdir(parents=True, exist_ok=False)
     backup_targets: dict[str, bool] = {rel_path: True for rel_path in grouped}
+    output_backup_paths: set[str] = set()
     for check in asset_checks:
         if check["action"] == "up_to_date":
             continue
@@ -1646,10 +2037,19 @@ def create_backup(
             backup_targets.setdefault(str(check["file_path"]), bool(check["target_existed"]))
         else:
             backup_targets.setdefault(output_file_path, bool(check.get("output_existed", False)))
+    post_asset_display_paths: dict[str, str] = {}
+    for check in post_asset_checks:
+        file_path = str(check["file_path"])
+        post_asset_display_paths.setdefault(canonical_rel_path_key(file_path), file_path)
+    for file_path in post_asset_display_paths.values():
+        target = resolve_under_game_dir(output_dir, file_path)
+        backup_targets[file_path] = target.is_file()
+        output_backup_paths.add(file_path)
 
     files = []
     for rel_path in sorted(backup_targets):
-        source = resolve_under_game_dir(game_dir, rel_path)
+        source_root = output_dir if rel_path in output_backup_paths else game_dir
+        source = resolve_under_game_dir(source_root, rel_path)
         existed = backup_targets[rel_path]
         row: dict[str, Any] = {"file_path": rel_path, "existed": existed}
         if existed:
@@ -1735,6 +2135,25 @@ def asset_summary(asset_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def post_asset_patch_summary(post_asset_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "index": int(check["index"]),
+            "variant_index": int(check["variant_index"]),
+            "file_path": str(check["file_path"]),
+            "asset_patch_index": int(check["asset_patch_index"]),
+            "source_path": str(check["source_path"]),
+            "asset_sha256": str(check["asset_sha256"]),
+            "offset": f"0x{int(check['offset']):x}",
+            "expected_asset_bytes": bytes(check["expected"]).hex(" "),
+            "replacement_bytes": bytes(check["replacement"]).hex(" "),
+            "requires": list(check["requires"]),
+            "note": str(check.get("note") or ""),
+        }
+        for check in post_asset_checks
+    ]
+
+
 def apply_manifest(args: argparse.Namespace) -> int:
     exe_path = Path(args.exe).resolve() if getattr(args, "exe", None) else None
     requested_game_dir = Path(args.game_dir).resolve() if args.game_dir else None
@@ -1778,12 +2197,13 @@ def apply_manifest(args: argparse.Namespace) -> int:
         settings, enabled_settings = resolve_enabled_settings(manifest, args)
         patches = manifest_patches(manifest, settings, enabled_settings)
         assets = manifest_asset_patches(manifest, settings, enabled_settings)
+        post_asset_patches = manifest_post_asset_patches(manifest, settings, enabled_settings)
         restore_assets = manifest_asset_patches(manifest, settings, enabled_settings, restore_inactive=True) if reconfigure_output else []
         all_assets = [*assets, *restore_assets]
         grouped = group_patches(patches)
         if reconfigure_output and grouped:
             raise PatchError("Output-only reconfiguration cannot apply byte patches without a vanilla game folder.")
-        if not grouped and not all_assets and output_dir.resolve() == game_dir.resolve():
+        if not grouped and not all_assets and not post_asset_patches and output_dir.resolve() == game_dir.resolve():
             raise PatchError("No active patches remain enabled.")
         emit_progress(args, "Verifying target files...")
         if reconfigure_output:
@@ -1796,6 +2216,13 @@ def apply_manifest(args: argparse.Namespace) -> int:
             target_checks = verify_target_files(game_dir, manifest, settings, enabled_settings)
             file_data = verify_patch_bytes(game_dir, grouped, args, process_log)
         asset_checks = verify_asset_patches(game_dir, output_dir, manifest_path.parent, all_assets, args, process_log)
+        post_asset_checks = verify_post_asset_patches(
+            manifest_path.parent,
+            post_asset_patches,
+            asset_checks,
+            args,
+            process_log,
+        )
 
         if not args.dry_run:
             skip_copy_paths = {
@@ -1810,7 +2237,15 @@ def apply_manifest(args: argparse.Namespace) -> int:
             else:
                 backup_dir = output_dir / DEFAULT_BACKUP_ROOT / backup_slug(manifest_path)
             emit_progress(args, f"Creating backup: {backup_dir}")
-            backup_manifest = create_backup(game_dir, output_dir, backup_dir, grouped, asset_checks, manifest_path)
+            backup_manifest = create_backup(
+                game_dir,
+                output_dir,
+                backup_dir,
+                grouped,
+                asset_checks,
+                post_asset_checks,
+                manifest_path,
+            )
             total_byte_patches = sum(len(patches_for_file) for patches_for_file in grouped.values())
             current_byte_patch = 0
             for rel_path, patches_for_file in grouped.items():
@@ -1854,6 +2289,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
                         index=patch.index,
                     )
             apply_asset_patches(output_dir, manifest_path.parent, asset_checks, args, process_log)
+            apply_post_asset_patches(output_dir, post_asset_checks, args, process_log)
             enforced_exe_name = enforce_modded_exe_name(game_dir, output_dir, manifest, process_log)
         else:
             enforced_exe_name = manifest_output_exe_name(manifest)
@@ -1919,6 +2355,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
             "backup_manifest": backup_manifest,
             "patches": patch_summary(grouped),
             "asset_patches": asset_summary(asset_checks),
+            "post_asset_patches": post_asset_patch_summary(post_asset_checks),
             "patched_files": patched_files,
             "asset_files": asset_files,
             "process_log": process_log,
@@ -1959,6 +2396,7 @@ def apply_manifest(args: argparse.Namespace) -> int:
             f"and {len(all_assets)} active/restore asset patch record(s)."
         )
         print(f"Validated {len(assets)} active asset patch record(s).")
+        print(f"Validated {len(post_asset_patches)} active post-asset patch record(s).")
         if restore_assets:
             print(f"Validated {len(restore_assets)} restore asset patch record(s).")
         if args.dry_run:

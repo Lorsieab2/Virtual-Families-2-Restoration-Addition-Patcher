@@ -37,6 +37,13 @@
 !/work/*.md
 !/work/*.idc
 
+# Curated, user-supplied Holiday Ornament source PNGs and the reproducible
+# canonical runtime layer are project inputs, not extracted bulk assets.
+!/work/assets/
+!/work/assets/holiday_collectibles/
+!/work/assets/holiday_collectibles/*.png
+!/work/assets/holiday_collectibles/collection/
+!/work/assets/holiday_collectibles/collection/*.png
 # Game payloads and compiled artifacts are release assets or local inputs.
 *.apk
 *.xapk

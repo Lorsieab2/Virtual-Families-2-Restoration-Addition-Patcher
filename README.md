@@ -1,1 +1,43 @@
-# Private-Virtual-Families-2-Build
+# Virtual Families 2 Restoration/Addition Patcher
+
+Offline patcher and restoration/addition project for the official Windows version of *Virtual Families 2*.
+
+Created with Codex AI in collaboration with Lorsieab2. This is a passion project dedicated to improving the *Virtual Families 2* experience. No copyright infringement is intended; please support the original game creators. :)
+
+## Download
+
+Download the newest patcher ZIP from the [official releases page](https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases). Release ZIPs and compiled game payloads are intentionally not committed to the source tree.
+
+Vanilla *Virtual Families 2* saves are compatible with the modded version. The patcher creates a separate modded game folder by default and does not overwrite the selected vanilla installation.
+
+## What the patcher does
+
+- Validates a user-selected official VF2 installation before changing files.
+- Applies only the patches selected in the manifest-driven GUI.
+- Creates or refreshes a clearly named modded copy of the game.
+- Supports dry-run validation, backups, restore, and machine-readable logs.
+- Uses offline file patching; it does not inject into a running process.
+
+After extracting a release, run `Launch_GUI.bat`. The exported bundle also contains `How to Use.txt` with player-facing instructions.
+
+## Source layout
+
+- `work/offline_vf2_patcher.py` - command-line patcher and validation/apply/restore engine.
+- `work/offline_vf2_patcher_gui.py` - Tkinter GUI.
+- `work/export_offline_patch_bundle.py` - self-contained release-bundle exporter.
+- `work/patch_mobile_furniture_pack.py` - native VF2 build/patch pipeline.
+- `work/test_*.py` - source, binary-contract, exporter, runner, and GUI tests.
+- `work/assets/holiday_collectibles/` - curated Holiday Ornament source art and reproducible runtime assets.
+- `docs/offline-patcher.md` - technical patcher documentation.
+- `docs/Transparency Log.txt` - implementation and verification disclosures.
+- `docs/discoveries.md` and `docs/TODO.md` - reverse-engineering evidence and remaining manual checks.
+
+## Development
+
+The project is designed to be self-contained. Do not add dependencies on Downloads, Desktop, OneDrive, or another private repository. Build outputs, extracted payloads, executables, caches, and archives stay out of Git and are distributed only through the latest GitHub Release.
+
+Run the Python test modules from the repository root with a compatible Python 3 interpreter, for example:
+
+```powershell
+python -m unittest work.test_offline_vf2_patcher work.test_export_offline_patch_bundle work.test_offline_vf2_patcher_gui work.test_patch_mobile_furniture_pack
+```

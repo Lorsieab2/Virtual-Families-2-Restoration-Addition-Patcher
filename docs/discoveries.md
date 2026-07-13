@@ -2160,9 +2160,204 @@
   `0xAF`-entry Count/Reset/Save/Load state span.
 - Master Collector `0x4D` targets 6 completed collections, Goal Collector
   `0x54` targets 13 contributing achievements, and Ornamentologist `0x5F`
-  targets 12 unique ornaments. The achievement order/notification queue covers
-  `0x60` rows.
+  targets 12 unique ornaments. Achievement IDs are queue values, not queue
+  slots; the physical notification queue must remain its stock `0x5F` dwords.
 - The Collector adds Holiday common, uncommon, and rare counts with three
   relocation-only `CanFire` insertions. Stock final availability and Keep
   behavior remain unchanged; Sell resets unfinished `0x5F` progress before
   entering the stock collection-reset tail.
+
+## 2026-07-12 - Workspace Catalog and Post-Asset Patch Infrastructure
+
+- The authoritative desktop/mobile furniture catalog is now self-contained at
+  `data/vf2/vf2_desktop_base_and_mobile_furniture_sections.csv` (104,577
+  bytes; SHA-256
+  `a8e965309016d0933f1577ad0865e103e58d5df9a24cb4012a39d8457f293b8c`).
+  `patch_mobile_furniture_pack.py` and its data exporter both consume this
+  workspace path through `MOBILE_CSV`.
+- Offline manifests can declare setting-gated `post_asset_patches`. Each record
+  names an output file and carries exact `asset_sha256` variants with their own
+  offset, expected asset bytes, and equal-length replacement bytes. The
+  patcher selects the last active asset payload for that output path and
+  rejects missing, duplicate, overlapping, out-of-range, or byte-mismatched
+  variants. Duplicate asset SHA-256 variants are rejected while parsing even
+  when that payload is not the selected overlay; output target keys use
+  Windows case-insensitive path semantics while logs retain manifest spelling.
+- Dry runs validate against the hash-verified selected payload without writing.
+  Real applies copy all active asset overlays first, recheck the pristine
+  target SHA-256, apply grouped post-asset bytes, and only then enforce the
+  final executable name and write hashes/logs. Output-only reconfiguration
+  recopies the pristine payload before applying an enabled delta; disabling the
+  setting therefore restores the payload without another executable variant.
+  Selected-source reads, target reads, target identity failures, and atomic
+  writes all surface as per-record logged `PatchError` failures so the outer
+  failure JSON is preserved instead of leaking an uncaught OS exception.
+- Phase A initially emitted the schema and count with an empty
+  post_asset_patches array. B152 now has two consumers: Holiday Furniture
+  goals through .vf2goal and Allow Older Pregnancies through .vf2preg. Each
+  selected executable contributes exact-SHA variants for both independent
+  bytes.
+
+## 2026-07-12 - B152 Custom Achievement Layout and Runtime Gate
+
+- Every executable now materializes a dense 128-row `achievementList` through
+  ID `0x7F`: stable Ornamentologist row `0x5F`, general goals `0x60-0x65`,
+  Behavior/Pet goals `0x66-0x6C`, and the final Holiday Furniture suffix
+  `0x6D-0x7F`. All 32 new rows use target 1 and icon `0x1ED`; their 64 exact
+  strings occupy stable IDs `0xE02-0xE41` in every native variant.
+- `achievementOrder` is filtered at build time for Ornamentologist and
+  Behavior goals, while Holiday Furniture remains the final 19-row suffix.
+  A writable one-byte `.vf2goal` flag, default `00`, changes the visible count
+  at runtime without moving rows or changing save data. Scene height, draw
+  bounds, order end, and completed-goal totals all use the filtered count.
+- `CAchievement::LoadState` previously copied all `0x125` records and then
+  treated IDs `0x5F-0x124` as unused, clearing new progress after reload. It
+  now preserves IDs `0x00-0x80` and validates/clears only the true reserved
+  tail `0x81-0x124`; SaveState and Reset remain at `0x125` records. Hidden
+  record `0x80` is not part of the row/order/meta/notification tables: the low
+  two bits of its dword at record `+4` persist whether furniture `0x2CF` and
+  `0x2CC` have been bought for the Taters goal. DrawAchievement accepts IDs
+  through `0x7F` using `cmp ...,0x7F` plus `JG`, never the unsafe
+  sign-extended imm8 `0x80`.
+- The notification queue is deliberately still 95 dwords at
+  `CAchievement+0xDBC..+0xF34`. The earlier 96-slot widening overwrote the
+  adjacent popup timer at `+0xF38`; Pop continues to shift `0x5E` entries and
+  clear `+0xF34`, while `+0xF38/+0xF3C` remain popup timer/state fields.
+- Native guards now require the exact SaveState (`0x30` bytes), Reset (`0x27`),
+  PopAchievementNotify (`0x2F`), and Update (`0x1A1`) symbol spans plus their
+  fixed instruction offsets. The DrawScene order-end cave preserves caller-
+  saved `ECX` and `EDX` around the helper call while retaining its `EAX`
+  result; object and linked-PE validators decode its relocation, source jump,
+  register sequence, and exact return site.
+- Phase B2 retargets only the shifted
+  `CScrollingStoreScene::HandlePurchaseItem+0x2DE` AddToStorage relocation.
+  The same-ABI wrapper calls native `CFurnitureManager::AddToStorage` first,
+  returns its exact bool, and dispatches an award only when that bool is true,
+  before the stock `SaveCurrentGame` call. General purchase mappings are
+  `2EA->60`, `2EB->61`, `2EC->62`, `2ED->63`, `2EE->64`, and
+  `2E9->65`.
+- Holiday Furniture purchase awards run only while the writable `.vf2goal`
+  byte is 1. Their mappings are `2B1-2B5->6D`, `2AF/2B8->6E`,
+  `2AD/2AE->6F`, `2C5->70`, `2C2->71`, `2D2->72`, `2D0->73`,
+  `2CB->75`, `2CD->76`, `2D1->77`, `2CA->78`, `2CE->79`,
+  `2C8/2C9->7A`, `2C6/2C7->7B`, `2C4->7C`, `2C3->7D`,
+  `2BE->7E`, and `2AC->7F`.
+- Taters (`0x74`) uses the hidden record-`0x80` mask described above.
+  Successful purchases of `0x2CF` and `0x2CC` set separate bits and award
+  only on the transition from a mask other than 3 to mask 3, so either purchase
+  order, duplicate purchases, and save/reload are safe.
+- The existing `_VF2PraiseCaptureAndForget@8` wrapper now awards from the
+  exact captured pre-ForgetPlans label: `Watching cat videos->66`,
+  `Posting on VideoTube->67`, `Playing Virtual Families->68`,
+  `Playing Virtual Villagers->69`, `Posting memes online->6A`, and
+  `Praising pet->6B`. Awards occur before native ForgetPlans; both exact-label
+  restorations and the stock over-praise path remain unchanged. The sole
+  `InvokeScolding+0x118` ForgetPlans relocation calls a stdcall wrapper that
+  awards exact `Scolding pet->6C`, then invokes native ForgetPlans exactly
+  once with no restoration.
+- Object tests cover all four Holiday/Behavior combinations: visible counts
+  are `101/120`, `102/121`, `108/127`, and `109/128` for flag off/on,
+  respectively, with exact order suffixes and stock-or-Holiday meta targets.
+  The complete patcher module now passes 81 automated tests.
+- Two linked B152 diagnostics passed: core/off-off SHA-256
+  `F968A57877C151FD046996BCB1FB2B474BB418D594DC036E1B9F6E204AB81629`
+  has `.vf2goal` at file offset `0x188400`, purchase wrapper `0xB0230`,
+  and purchase hook `0x8B45D`. Holiday+Behavior/on-on SHA-256
+  `90A4567943CC423D562FA106A467C91D2D051D0AD3AC6FC4A0BC5FF738D0ADA8`
+  has `.vf2goal` at `0x191200`, purchase wrapper `0xB0350`, purchase hook
+  `0x8B55D`, praise wrapper `0xB27D0`, and scold wrapper `0xB3D30`.
+  Both flag sections have virtual size 1, default byte `00`, and writable PE
+  characteristics. Phase B2 is structurally complete; exporter emission and
+  the post-asset flag matrix remain B3. These checks do not claim manual
+  runtime verification.
+
+## 2026-07-12 - B152 Holiday Ornament Collection Text and Goal Order
+
+- Stock collection rarity strings 0x751-0x753 are specifically bottle-cap
+  text (common, uncommon, and rare bottle caps). Reusing them for page 5 made
+  the Holiday footer name the wrong family. The Holiday page now owns three
+  consecutive additive strings 0xE42-0xE44 with the exact texts
+  " of 4 common ornaments found.", " of 4 uncommon ornaments found.", and
+  " of 4 rare ornaments found." The existing fixed-size HandleMouse detour
+  still uses its isolated cave; only the LEA string-ID base changes.
+- The Collections screen alone uses the shorter title "Ornaments". The full
+  "Holiday Ornaments" feature name and the Ornamentologist achievement wording
+  remain unchanged elsewhere.
+- Stock Bottlologist is achievement 0x5E at display-order index 0x4E.
+  Holiday-enabled layouts now insert Ornamentologist 0x5F at index 0x4F,
+  immediately after Bottlologist, before appending the other custom goals.
+  Holiday-disabled layouts still omit 0x5F.
+- Exact tests cover the title/footer rows, absence of bottle-cap wording in
+  Holiday collection-screen strings, tooltip-cave ID routing, and 0x5E,0x5F
+  adjacency for every Holiday/Behavior compile-time combination and both
+  runtime-visible counts. The 18-test Holiday-focused run and full 82-test
+  patcher module pass. No PNG, descriptor, draw-time flip, or B2 award-hook
+  region changed.
+
+## 2026-07-12 - Upright Holiday Ornament Source Art
+
+- The complete 27-PNG supplied set is now workspace-local under
+  `work/assets/holiday_collectibles/`: 12 upright collected icons, 12 matching
+  placeholders, the decorative Candy Cane, the 940x732 collection frame, and
+  the separate 1024x768 Bottlecaps background. Each tracked source is preserved
+  byte-for-byte.
+- `work/rebuild_holiday_ornament_collection_assets.py` recreates the committed
+  runtime layer deterministically. The collected icons are byte-for-byte copies
+  with no flip, rotation, crop, or resize. The background is the raw frame with
+  the 12 placeholders alpha-composited at
+  `HOLIDAY_ORNAMENT_COLLECTION_SLOT_POSITIONS`, matching the existing raw
+  fallback; the Bottlecaps background remains separate.
+- The version-2 manifest records all 27 source hashes and dimensions plus the
+  13 runtime hashes, dimensions, source mappings, placeholder positions, and
+  no-orientation-transform provenance. Tests compare icon bytes, independently
+  reconstruct the background pixels, and rebuild every canonical file
+  byte-for-byte.
+
+## 2026-07-12 - B152 Experimental Allow Older Pregnancies
+
+- Stock CVillagerState::ChanceOfPregnancy(int motherAge, int fatherAge,
+  int fatherFertility) stores ages in twentieths of a year. Its 0xF7-byte
+  native function hard-zeros pregnancy only when the mother's integer age is
+  above 50; successful and first-tutorial-forced outcomes both queue string
+  0x868.
+- Every B152 executable now carries the same dormant detour and a writable
+  one-byte .vf2preg section initialized to 00. When the flag is zero, or
+  when both parents are below internal age 1000, the detour restores the exact
+  eight displaced prologue bytes and resumes at native offset +0x8; the
+  remaining stock bytes and relocations are unchanged.
+- With .vf2preg == 01 and either parent age 50+, the helper mirrors stock
+  fertility and age-penalty integer math without the mother-over-50 hard zero,
+  converts it to tenths of a percent, and caps it by the older parent: 10.0%
+  at 50 through 1.0% at 59, then 0.9% at 60 through 0.1% at 68, with a 0.1%
+  floor from 69 onward. It compares against GetRandom(1000).
+- A successful late-age roll still queues tutorial string 0x868. A failed
+  late-age roll returns false directly, so the stock first-pregnancy tutorial
+  cannot turn that failure into a success. Multiples selection and all later
+  pregnancy/birth logic remain native and unmodified.
+- The offline setting is default-off Experimental. Export discovers the
+  default-zero byte from each selected linked PE and emits one exact-SHA
+  post_asset_patches variant per unique executable payload, so no seventeenth
+  build dimension is added.
+- A real core diagnostic linked from the B151 core base at 1,669,120 bytes,
+  SHA-256 74C8F440FEAE80C3087818BD4B24A0D4B4685A7C2C1916AB01D5C7EF57BC657B.
+  Bounded linked validation found .vf2preg at raw offset 0x188800/RVA
+  0x757000, ChanceOfPregnancy at RVA 0xC2E50, its cave at 0xC2F47, and the
+  helper at 0xB1DE0. It also decoded the 1000-way roll, success-only 0x868
+  arguments, direct false return, and stock +0x8 fallback.
+- The same real core payload exposes default-00 .vf2goal at raw 0x188600 and
+  .vf2preg at raw 0x188800. The exporter emits two nonoverlapping records for
+  the same selected SHA: Holiday Furniture goals require core_executable plus
+  holiday_furniture; older pregnancies require core_executable plus
+  allow_older_pregnancies. The post-asset phase groups and applies both safely.
+
+## 2026-07-12 - Upright Holiday Ornament payload
+
+- The runtime page is a 1024x768 composite built from the supplied
+  Collection_Bottlecaps_Background.png base, the upright frame at (74, 4), the
+  upright Candy Cane at (848, 461), and all 12 upright placeholders at their
+  existing absolute full-page coordinates.
+- The 12 collected ornament images are copied byte-for-byte from the supplied
+  PNGs. No source layer is flipped, rotated, cropped, or resized.
+- The canonical manifest is schema 3 and records all 15 page layers. The
+  resulting background SHA-256 is
+  C94D42F228B78FB018F8F27392165072202BB57F5BA72B1FC902058678B983E0.

@@ -820,7 +820,7 @@
   instead of leaving the checkbox visually enabled but functionally inert.
 - Adds a GUI `Check for updates` hyperlink to the private standalone patcher
   release repo:
-  `https://github.com/Lorsieab2/Virtual-Families-2-Addition-Restoration-Patcher/releases`.
+  `https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases`.
 - Saves the last vanilla install folder and modded output folder in
   `patcher_local_settings.json` beside the patcher for the next launch.
 
@@ -1012,3 +1012,61 @@
   files, and 16 unique executable hashes. ZIP: 86,331,216 bytes, 1,122 files,
   SHA-256
   `847B8999135290632AD4216E463585EB2E7D3C4BCFEA79AF47A1BCE10CAAEC48`.
+
+## B152 - Holiday Ornament Collection Text and Order
+
+- Shortens only the Collections page title from "Holiday Ornaments" to
+  "Ornaments".
+- Replaces the reused bottle-cap rarity/footer IDs with dedicated additive
+  ornament strings 0xE42-0xE44 and routes the existing fixed-size tooltip cave
+  to their consecutive ID base.
+- Keeps Ornamentologist at internal achievement ID 0x5F while inserting it
+  directly after Bottlologist 0x5E in every layout where it is visible.
+- Adds exact string, cave-routing, native-contract, and four-layout adjacency
+  tests. The 18-test Holiday-focused run and full 82-test patcher module pass.
+  No graphics or B2 award-hook regions changed; manual UI verification remains
+  outstanding.
+
+## B152 - Experimental Allow Older Pregnancies
+
+- Adds a dormant ChanceOfPregnancy detour and default-zero writable .vf2preg
+  byte to every executable, preserving the untouched native continuation when
+  disabled or when both parents are under 50.
+- The enabled late-age path uses GetRandom(1000), caps stock fertility math
+  by the older parent's requested 10.0%-to-0.1% curve, and prevents the stock
+  first-pregnancy tutorial from forcing a failed old-age roll to success.
+- Adds a default-off Experimental patcher setting and generates exact-SHA
+  post-asset variants for selected executable overlays, avoiding another
+  matrix dimension. Multiples logic remains native.
+- Core diagnostic SHA-256
+  74C8F440FEAE80C3087818BD4B24A0D4B4685A7C2C1916AB01D5C7EF57BC657B
+  links .vf2preg at raw 0x188800 and passes the bounded detour/helper validator.
+- The exporter also locates .vf2goal at raw 0x188600 in that same payload and
+  emits an independent Holiday Furniture goal record. Two-record apply tests
+  cover default, both-enabled, both-disabled, and 16 unique layout hashes.
+
+## B152 - Upright Holiday Ornament Graphics Payload
+
+- Rebuilds the runtime collection page at 1024x768 from the supplied wood
+  background, upright frame at (74, 4), upright Candy Cane at (848, 461), and 12
+  upright placeholders at their absolute page coordinates.
+- Ships the 12 supplied collected-icon PNGs byte-for-byte. No graphics are
+  flipped, rotated, cropped, or resized.
+- Canonical manifest schema 3 records all page layers. The rebuilt background
+  SHA-256 is C94D42F228B78FB018F8F27392165072202BB57F5BA72B1FC902058678B983E0.
+- Twenty-two Holiday Ornament tests plus the exporter routing test pass.
+
+## B152 - Fresh Matrix Export and Package Pruning
+
+- Rebuilt all 16 Island Events/Cheat Upgrades/Holiday Ornaments/Behavior
+  Patches combinations from the B151 matrix instead of reusing stale output
+  executables.
+- Every generated variant passed its feature-gate check. The linked Holiday
+  validator passed all eight Holiday-enabled and all eight Holiday-disabled
+  variants.
+- Exported only manifest-reachable files. The final ZIP contains 1,112 payload
+  files and excludes stale EXEs plus build and patch logs.
+- Final release archive:
+  `outputs/Virtual-Families-2-Restoration-Addition-Patcher-B152.zip`,
+  85,738,821 bytes, SHA-256
+  `543A2E5814DECC7F70F30D8454F1475E3AD1A49FF8D3E6D63B8CFF709BE0DC36`.

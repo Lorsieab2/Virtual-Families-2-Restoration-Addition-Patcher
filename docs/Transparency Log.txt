@@ -532,3 +532,118 @@ B150 hotfix release verification
   847B8999135290632AD4216E463585EB2E7D3C4BCFEA79AF47A1BCE10CAAEC48.
 - Holiday Ornaments remains default-off pending the user's in-game retest.
   Passing structural tests does not claim the crash is runtime-confirmed fixed.
+
+B152 custom achievement Phase B1/B2 transparency
+-------------------------------------------------
+
+- Phase B1 implements the native achievement rows, exact strings, display
+  order, save persistence, UI bounds, completed-goal counting, and runtime
+  visibility gate for IDs 0x5F-0x7F. Phase B2 implements their native purchase,
+  praise, and scold award hooks. B3 now exports the .vf2goal gate; final
+  16-payload and manual runtime validation remain.
+- All executables contain the same 128 physical rows. Ornamentologist is shown
+  only in Holiday Ornaments builds; Behavior/Pet rows are shown only in
+  Behavior Patches builds; Holiday Furniture rows 0x6D-0x7F are a final suffix
+  controlled by a writable one-byte .vf2goal flag that defaults to 00.
+- SaveState and Reset still cover 0x125 twelve-byte records. LoadState now
+  preserves IDs 0x00-0x80 and validates/clears only reserved IDs 0x81-0x124.
+  Hidden record 0x80 is excluded from row/order/meta/notification tables; the
+  low two bits of its dword at +4 persist the 2CF/2CC Taters purchase mask.
+- The only purchase callsite retargeted is shifted HandlePurchaseItem+0x2DE.
+  Its same-ABI wrapper calls native AddToStorage first, returns the exact bool,
+  and awards only on true before the stock SaveCurrentGame. General mappings
+  are 2EA->60, 2EB->61, 2EC->62, 2ED->63, 2EE->64, and 2E9->65.
+- Holiday mappings run only when .vf2goal is 1: 2B1-2B5->6D,
+  2AF/2B8->6E, 2AD/2AE->6F, 2C5->70, 2C2->71, 2D2->72, 2D0->73,
+  2CB->75, 2CD->76, 2D1->77, 2CA->78, 2CE->79, 2C8/2C9->7A,
+  2C6/2C7->7B, 2C4->7C, 2C3->7D, 2BE->7E, and 2AC->7F.
+  Taters 74 sets separate hidden-mask bits for 2CF and 2CC and awards only on
+  the transition from a mask other than 3 to 3, making either order and
+  duplicate purchases safe across saves.
+- Exact captured pre-ForgetPlans praise labels award Watching cat videos->66,
+  Posting on VideoTube->67, Playing Virtual Families->68, Playing Virtual
+  Villagers->69, Posting memes online->6A, and Praising pet->6B. Awards occur
+  before native ForgetPlans; both label restorations and the stock over-praise
+  path remain unchanged. The sole InvokeScolding+0x118 ForgetPlans relocation
+  awards exact Scolding pet->6C, then calls native ForgetPlans exactly once
+  with no restoration.
+- The achievement notification queue remains the stock 95 dwords. An earlier
+  attempt to widen it to 96 would overwrite the popup timer at object offset
+  0xF38; that unsafe change is removed and guarded by source tests.
+- Automated verification passed 81 patcher tests. Two linked diagnostics also
+  passed: B152 core SHA-256
+  F968A57877C151FD046996BCB1FB2B474BB418D594DC036E1B9F6E204AB81629 and
+  B152 Holiday Ornaments + Behavior Patches SHA-256
+  90A4567943CC423D562FA106A467C91D2D051D0AD3AC6FC4A0BC5FF738D0ADA8.
+  Their default-00 .vf2goal bytes are at 0x188400 and 0x191200. Core links the
+  purchase wrapper/hook at 0xB0230/0x8B45D; on-on links them at
+  0xB0350/0x8B55D plus praise/scold wrappers at 0xB27D0/0xB3D30.
+  These structural/link checks do not claim manual gameplay, save/reload,
+  collection-chest, or patch-toggle verification.
+- The hardened order-end cave saves and restores caller-saved ECX and EDX
+  around the visible-count helper while retaining EAX. Exact object and linked
+  validators require that sequence, its unique source jump, helper call, and
+  return site. All four Holiday/Behavior object combinations are tested; only
+  the two diagnostic extremes were linked during this phase. Phase B2 is
+  complete; exporter emission and the remaining post-asset flag matrix are B3.
+
+B152 Holiday Ornament text/order follow-up
+------------------------------------------
+
+- The Collections page now says "Ornaments"; the full "Holiday Ornaments"
+  feature name remains in patcher and project-facing text.
+- The Holiday page no longer borrows stock string IDs 751-753, whose text says
+  bottle caps. Dedicated additive IDs E42-E44 report common, uncommon, and rare
+  ornament counts and are reached through the existing tooltip code cave.
+- Ornamentologist keeps internal ID 5F but is inserted immediately after
+  Bottlologist 5E whenever it is visible. Holiday-disabled layouts still omit
+  it.
+- The 18-test Holiday-focused run and full 82-test patcher module pass,
+  including all Holiday/Behavior layouts and both runtime-visible counts. No
+  image, sprite, descriptor orientation, draw-time flip, or B2
+  purchase/praise/scold hook was changed. Manual Collections/Goals screen
+  verification remains required.
+
+B152 Experimental Allow Older Pregnancies
+-----------------------------------------
+
+- Adds a default-off Experimental setting backed by a writable one-byte
+  .vf2preg control in every linked executable. The offline patcher changes 00
+  to 01 only through an exact-SHA post-asset record for the selected EXE.
+- Flag-off and enabled attempts where both parents are under 50 resume the
+  original ChanceOfPregnancy implementation at +8 after reproducing its exact
+  displaced prologue. The rest of that stock function remains byte-identical.
+- When either parent is 50+, the older parent caps the computed stock chance:
+  10.0% at age 50 down to 1.0% at 59, then 0.9% at 60 down to 0.1% at 68,
+  with a permanent 0.1% floor at 69+. This path uses a 0..999 random roll.
+- Successful late-age attempts retain pregnancy tutorial queueing. Failed
+  late-age attempts cannot be converted into success by the first-pregnancy
+  tutorial fallback. Multiple-birth code is not patched.
+- Automated tests and linked-structure validation do not claim live gameplay
+  confirmation; boundary-age, save/reload, and birth testing remain listed in
+  docs/TODO.md.
+- The same exact-SHA payload variants independently toggle Holiday Furniture
+  goals through .vf2goal when holiday_furniture is enabled. In the real core
+  diagnostic, .vf2goal is raw 188600 and .vf2preg is raw 188800; the two
+  grouped post-asset writes do not overlap.
+- Core linked diagnostic SHA-256 is
+  74C8F440FEAE80C3087818BD4B24A0D4B4685A7C2C1916AB01D5C7EF57BC657B
+  (1,669,120 bytes). Its default-00 .vf2preg byte is raw offset 188800/RVA
+  757000; ChanceOfPregnancy/cave/helper RVAs are C2E50/C2F47/B1DE0.
+  Final-matrix validation remains separate from this one-layout diagnostic.
+
+B152 upright Holiday Ornament graphics payload
+------------------------------------------------
+
+- The 12 collected ornament runtime PNGs are byte-identical copies of the
+  user-supplied upright files. The build does not flip, rotate, crop, or resize
+  them.
+- The runtime background is 1024x768 and includes the supplied wood base,
+  upright frame at (74, 4), upright Candy Cane at (848, 461), and 12 supplied
+  placeholders at absolute page coordinates.
+- The canonical asset manifest records 27 source PNGs, 13 runtime assets, and
+  15 ordered background layers. The background SHA-256 is
+  C94D42F228B78FB018F8F27392165072202BB57F5BA72B1FC902058678B983E0.
+- Twenty-two Holiday Ornament regression tests and the focused exporter
+  routing test pass. Runtime visual confirmation remains a separate manual
+  check and is not claimed by these automated tests.
