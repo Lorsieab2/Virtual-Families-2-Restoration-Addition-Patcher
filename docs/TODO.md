@@ -159,6 +159,9 @@ must remain visible as Needs source audit; it must not be silently omitted.
   and pin the relocation order in tests.
 - [x] Pin the main-scene IDebugger +8 base, CDebugger provider layout, and
   byte-identical default-off main-scene object in native regression tests.
+- [x] Route printable editor commands only through HandleKeyCharacter; native
+  object tests prove Light Source Editor key-down is a no-op and add/delete/save
+  belong to the character handler.
 - [ ] Run live save-load and F5/F6/F7/F4 testing before enabling the developer
   build anywhere. Confirm selector drawing, waypoint editing, light add/delete/
   drag/type/save, normal input fallthrough, and fault-disable behavior.

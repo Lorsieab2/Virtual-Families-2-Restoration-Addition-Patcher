@@ -12433,9 +12433,6 @@ extern "C" bool __cdecl VF2PatchedMainSceneHandleKeyDown(void *mainScene, int ke
     if (!editor) {
         return false;
     }
-    if (key >= 0x20 && key <= 0x7e && VF2SafeEditorKeyCharacter(editor, key)) {
-        return true;
-    }
     return VF2SafeEditorKeyDown(editor, key);
 }
 
@@ -12542,7 +12539,9 @@ extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
                 "F6": "CWaypointEditor",
                 "F7": "CLightSourceEditor",
                 "F4": "deactivate active IEditor",
-                "light_character_controls": "native D delete, L add, S save and type-cycle keys are passed through from keydown",
+                "light_character_controls": "native D delete, L add, S save and type-cycle keys are passed through from the character handler",
+                "character_route": "printable editor commands are handled only by the dedicated HandleKeyCharacter hook to prevent double execution",
+                "keydown_route": "F-keys, arrows, and other non-character keys are handled by the dedicated HandleKeyDown hook",
                 "mouse_status": "routed only after F5 through guarded opt-in hooks; disabled sessions fall through to stock handlers",
             },
             "unavailable_in_this_object_set": [

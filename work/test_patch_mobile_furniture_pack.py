@@ -95,6 +95,31 @@ class DebuggerResearchTests(unittest.TestCase):
                     "VF2PatchedDebuggerMouseUp",
                     helper,
                 )
+                keydown_block = helper.split(
+                    'extern "C" bool __cdecl VF2PatchedMainSceneHandleKeyDown',
+                    1,
+                )[1].split(
+                    'extern "C" bool __cdecl VF2PatchedDebuggerKeyCharacter',
+                    1,
+                )[0]
+                self.assertNotIn("VF2SafeEditorKeyCharacter", keydown_block)
+                self.assertIn("VF2SafeEditorKeyDown(editor, key)", keydown_block)
+                character_block = helper.split(
+                    'extern "C" bool __cdecl VF2PatchedDebuggerKeyCharacter',
+                    1,
+                )[1].split(
+                    'extern "C" bool __cdecl VF2PatchedDebuggerKeyUp',
+                    1,
+                )[0]
+                self.assertIn("VF2SafeEditorKeyCharacter(editor, key)", character_block)
+                self.assertEqual(
+                    developer["editor_selector"]["character_route"],
+                    (
+                        "printable editor commands are handled only by the "
+                        "dedicated HandleKeyCharacter hook to prevent double "
+                        "execution"
+                    ),
+                )
                 editor_block = helper.split("class IEditor {", 1)[1].split(
                     "};",
                     1,
@@ -384,6 +409,41 @@ class DebuggerResearchTests(unittest.TestCase):
         self.assertEqual(
             bytes(debugger.buf[draw_raw + 0x19:draw_raw + 0x1D]),
             b"\x8B\x4C\x86\x04",
+        )
+
+    def test_light_editor_character_commands_have_one_native_route(self):
+        editor = CoffObject(patcher.SRC_OBJS / "LightSourceEditor.obj")
+        keydown = editor.symbol(
+            "?HandleKeyDown@CLightSourceEditor@@UAE?B_NH@Z"
+        )
+        keydown_section = editor.section(keydown.section)
+        keydown_raw = keydown_section.raw_ptr + keydown.value
+        self.assertEqual(
+            bytes(editor.buf[keydown_raw:keydown_raw + 5]),
+            b"\x32\xC0\xC2\x04\x00",
+        )
+
+        character = editor.symbol(
+            "?HandleKeyCharacter@CLightSourceEditor@@UAE?B_ND@Z"
+        )
+        character_section = editor.section(character.section)
+        self.assertEqual(character.value, 0)
+        relocation_targets = set()
+        cursor = character_section.reloc_ptr
+        for _ in range(character_section.nreloc):
+            _, symbol_index, _ = struct.unpack_from(
+                "<IIH",
+                editor.buf,
+                cursor,
+            )
+            relocation_targets.add(editor.symbol_by_index[symbol_index].name)
+            cursor += 10
+        self.assertTrue(
+            {
+                "?DeleteLightSource@CNight@@QAEXH@Z",
+                "?AddLightSource@CNight@@QAEXW4ELightSource@@UldwPoint@@@Z",
+                "?Save@CNight@@QAEXXZ",
+            }.issubset(relocation_targets)
         )
 
     def test_default_off_writer_preserves_stock_main_scene(self):

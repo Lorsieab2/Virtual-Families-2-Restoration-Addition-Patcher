@@ -1137,9 +1137,9 @@
 - A second ABI audit corrects the generated IEditor vtable order to the native
   Reset/Draw/KeyCharacter/KeyDown/KeyUp/MouseDown/MouseUp/MouseMove/Activate
   relocation sequence. The earlier research-only validator was never shipped.
-- The fully corrected COFF object and helper link into a disposable x86
-  diagnostic. SHA-256:
-  `73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305`.
+- The earlier vtable-corrected x86 validator at SHA-256
+  `73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305`
+  is superseded by the single-dispatch validator below and was never shipped.
 - Byte-level tests cover all five payloads, native cleanup widths, REL32 helper
   targets, and stock fallthrough. Native-object tests pin all nine editor
   vtable relocations.
@@ -1147,6 +1147,13 @@
   CDebugger Register/Draw bytes pin the provider/count/selection/draw layout.
 - Default-off parity preserves the canonical main-scene object at SHA-256
   `BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB`.
-  The complete 99-test suite passes.
+- Native disassembly proves Light Source Editor key-down is a return-false stub
+  while add/delete/save/type-cycle commands live in the character handler.
+- Printable commands now travel only through the dedicated character hook,
+  preventing key-down plus character-event double execution.
+- The corrected COFF scene/helper link into a 1,737,216-byte x86 Windows GUI
+  diagnostic. SHA-256:
+  `1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520`.
+- The complete 100-test suite passes.
 - Live save-load, selector, waypoint, light-source, input-fallthrough, and
   fault-recovery validation remains before enabling this path in a release.

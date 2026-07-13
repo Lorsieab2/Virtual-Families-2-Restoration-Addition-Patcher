@@ -2470,9 +2470,9 @@
   KeyDown, KeyUp, MouseDown, MouseUp, MouseMove, Activate. The earlier generated
   declaration placed Draw, Activate, MouseMove, and MouseUp in wrong slots;
   guarded calls could therefore dispatch to the wrong native method.
-- The fully corrected patched object and generated helper compile and link into
-  an x86 diagnostic executable. Its SHA-256 is
-  `73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305`.
+- The earlier vtable-corrected x86 validator at SHA-256
+  `73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305`
+  is superseded by the single-dispatch validator below and was never shipped.
 - Constructor relocation at `theMainScene+0x48` targets its IDebugger vtable at
   object offset `+8`; that secondary vtable has one slot targeting `Debug`.
 - `CDebugger::Register` and `Draw` machine code confirm the provider array at
@@ -2481,7 +2481,16 @@
 - The default-off writer leaves the canonical 228,896-byte `theMainScene.obj`
   SHA-256 `BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB`
   byte-identical and emits only the disabled helper stub.
-- The expanded debugger and patcher regression suite passes all 99 tests.
+- Native `CLightSourceEditor::HandleKeyDown(int)` is the five-byte
+  `xor al,al; ret 4` stub. Its character handler instead relocates calls to
+  `CNight::AddLightSource`, `DeleteLightSource`, and `Save`, proving printable
+  commands belong only on the character route.
+- The helper no longer forwards printable keys from key-down and character
+  hooks. This prevents L/D/S and type-cycle commands from executing twice.
+- The corrected patched scene/helper compile and link into a 1,737,216-byte x86
+  Windows GUI diagnostic, SHA-256
+  `1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520`.
+- The expanded debugger and patcher regression suite passes all 100 tests.
 - This is structural/link validation only. `ENABLE_DEBUGGER_FEATURES` remains
   false by default, published builds retain stock input, and F5/F6/F7/F4 plus
   light add/delete/drag/type/save still require live save-load testing.

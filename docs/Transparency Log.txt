@@ -741,6 +741,8 @@ B153 default-off native debugger input milestone
 - The fully corrected helper compiles and a disposable x86 executable links
   with SHA-256
   73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305.
+  This earlier structural validator is superseded by the single-dispatch build
+  below and was never shipped.
 - Exact-byte tests cover every inserted payload, cleanup width, helper REL32
   relocation, and stock fallthrough window. Native-object tests pin all nine
   IEditor vtable relocations.
@@ -750,7 +752,13 @@ B153 default-off native debugger input milestone
 - A default-off parity test leaves the canonical main-scene object byte-for-byte
   unchanged at SHA-256
   BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB and
-  emits only the disabled helper stub. The full 99-test suite passes.
+  emits only the disabled helper stub.
+- Native Light Source Editor disassembly proves HandleKeyDown is a return-false
+  stub while add/delete/save/type cycling live in HandleKeyCharacter. Printable
+  commands now use only the character hook, preventing double execution.
+- The corrected 1,737,216-byte x86 Windows GUI diagnostic links at SHA-256
+  1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520.
+  The full 100-test suite passes.
 - This is not a live-game claim; save loading, selector drawing, all editor
   controls, input fallthrough, and fault recovery still require in-game
   testing before any release can enable it.

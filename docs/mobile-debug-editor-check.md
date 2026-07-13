@@ -116,6 +116,14 @@ anchor offsets used by the helper. A separate default-off test proves the stock
 main-scene object remains SHA-256
 `BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB`.
 
+Native disassembly also proves that `CLightSourceEditor::HandleKeyDown(int)`
+is only a return-false stub. Add, delete, save, and type cycling live in
+`HandleKeyCharacter(char)`. The helper therefore sends printable commands only
+through the dedicated character hook; forwarding them from key-down as well
+could execute a command twice. The corrected helper and scene link into a
+1,737,216-byte x86 Windows GUI diagnostic with SHA-256
+`1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520`.
+
 The desktop Light Source Editor already contains the requested core operations:
 
 - L: add a light source at the cursor.
