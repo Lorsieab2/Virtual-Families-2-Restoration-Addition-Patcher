@@ -41,6 +41,11 @@ MORTALITY_WILDCARDS = frozenset(
     offset for offsets in MORTALITY_WILDCARD_RANGES for offset in offsets
 )
 
+PREGNANCY_COOLDOWN_TRAMPOLINE = bytes.fromhex(
+    "FF B3 54 6A 00 00 FF B7 54 6A 00 00 56 50 E8 00 00 00 00 "
+    "83 C4 10 8B 4D D0 6A CE E9 00 00 00 00"
+)
+PREGNANCY_COOLDOWN_WILDCARDS = frozenset((*range(15, 19), *range(28, 32)))
 
 
 class LinkedPE:
@@ -217,6 +222,87 @@ def validate_older_pregnancy(path: Path, expected_flag: int) -> dict:
     if fallback_rva != function_rva + 8:
         raise ValueError(f"{path}: stock fallback does not resume at +0x8")
 
+    cooldown_candidates = []
+    for section in image.sections:
+        if not (section["characteristics"] & 0x20000000):
+            continue
+        raw = section["raw_offset"]
+        section_data = image.data[raw:raw + section["raw_size"]]
+        cooldown_candidates.extend(
+            raw + offset
+            for offset in masked_matches(
+                section_data,
+                PREGNANCY_COOLDOWN_TRAMPOLINE,
+                PREGNANCY_COOLDOWN_WILDCARDS,
+            )
+        )
+    if len(cooldown_candidates) != 1:
+        raise ValueError(
+            f"{path}: expected one pregnancy-cooldown trampoline, "
+            f"found {len(cooldown_candidates)}"
+        )
+    cooldown_trampoline_raw = cooldown_candidates[0]
+    cooldown_trampoline_rva = image.raw_to_rva(cooldown_trampoline_raw)
+    cooldown_code = image.data[
+        cooldown_trampoline_raw:cooldown_trampoline_raw + 32
+    ]
+    cooldown_helper_rva = rel32_target(
+        cooldown_trampoline_rva + 14,
+        5,
+        struct.unpack_from("<i", cooldown_code, 15)[0],
+    )
+    executable_section_for_rva(image, cooldown_helper_rva)
+    cooldown_continue_rva = rel32_target(
+        cooldown_trampoline_rva + 27,
+        5,
+        struct.unpack_from("<i", cooldown_code, 28)[0],
+    )
+    cooldown_detours = []
+    for section in image.sections:
+        if not (section["characteristics"] & 0x20000000):
+            continue
+        raw = section["raw_offset"]
+        section_data = image.data[raw:raw + section["raw_size"]]
+        for offset in range(0, max(len(section_data) - 11, 0)):
+            if section_data[offset] != 0xE9:
+                continue
+            if section_data[offset + 5:offset + 11] != b"\x90" * 6:
+                continue
+            source_rva = section["rva"] + offset
+            target_rva = rel32_target(
+                source_rva,
+                5,
+                struct.unpack_from("<i", section_data, offset + 1)[0],
+            )
+            if target_rva == cooldown_trampoline_rva:
+                cooldown_detours.append(source_rva)
+    if len(cooldown_detours) != 1:
+        raise ValueError(
+            f"{path}: expected one pregnancy-cooldown detour, "
+            f"found {len(cooldown_detours)}"
+        )
+    cooldown_hook_rva = cooldown_detours[0]
+    if cooldown_continue_rva != cooldown_hook_rva + 11:
+        raise ValueError(f"{path}: pregnancy cooldown does not resume at +0xb")
+
+    cooldown_helper_raw = image.rva_to_raw(cooldown_helper_rva)
+    cooldown_helper = image.data[cooldown_helper_raw:cooldown_helper_raw + 55]
+    helper_prefix = bytes.fromhex(
+        "81 7C 24 0C E8 03 00 00 7D 0E "
+        "81 7C 24 10 E8 03 00 00 7D 04 32 C0 EB 02 B0 01 80 3D"
+    )
+    helper_suffix = bytes.fromhex(
+        "00 74 04 84 C0 75 0E 8B 44 24 04 8B 4C 24 08 "
+        "89 88 E0 5A 02 00 C3"
+    )
+    if cooldown_helper[:28] != helper_prefix:
+        raise ValueError(f"{path}: pregnancy cooldown age-50 gate drifted")
+    cooldown_flag_va = struct.unpack_from("<I", cooldown_helper, 28)[0]
+    if cooldown_flag_va != expected_flag_va:
+        raise ValueError(f"{path}: pregnancy cooldown flag VA drifted")
+    if cooldown_helper[32:54] != helper_suffix:
+        raise ValueError(f"{path}: pregnancy cooldown conditional write drifted")
+
     return {
         "path": str(path),
         "sha256": hashlib.sha256(image.data).hexdigest(),
@@ -231,6 +317,10 @@ def validate_older_pregnancy(path: Path, expected_flag: int) -> dict:
         "helper_success_tutorial_string": "0x868",
         "failed_roll_direct_false_return": True,
         "stock_continuation_bytes": len(STOCK_CONTINUATION),
+        "cooldown_hook_rva": f"0x{cooldown_hook_rva:x}",
+        "cooldown_trampoline_rva": f"0x{cooldown_trampoline_rva:x}",
+        "cooldown_helper_rva": f"0x{cooldown_helper_rva:x}",
+        "age_50_plus_skips_failed_attempt_cooldown": True,
     }
 
 
@@ -382,8 +472,10 @@ def validate_older_mortality(path: Path, expected_flag: int) -> dict:
     )
     if helper_window.find(age_math) != 8:
         raise ValueError(f"{path}: mortality helper 20-tick birthday math drifted")
-    if bytes.fromhex("BE 2C 01 00 00 81 FA 82 00 00 00 7F") not in helper_window:
-        raise ValueError(f"{path}: mortality helper age-130/tail hazard path drifted")
+    if bytes.fromhex("BE 58 1B 00 00 81 FA 82 00 00 00 7F") not in helper_window:
+        raise ValueError(f"{path}: mortality helper 70-percent hazard cap drifted")
+    if bytes.fromhex("83 F9 04 0F 94 C0") not in helper_window:
+        raise ValueError(f"{path}: mortality helper complete-diet gate drifted")
     if bytes.fromhex("83 FA 37 7C") not in helper_window:
         raise ValueError(f"{path}: mortality helper effective-age-55 gate drifted")
 
@@ -397,6 +489,8 @@ def validate_older_mortality(path: Path, expected_flag: int) -> dict:
         "flag_off_rejoins_stock_at_hook_plus": "0x9",
         "enabled_rejoins_after_old_age_block_at_hook_plus": "0x75",
         "helper_random_limit": 10000,
+        "maximum_hazard_basis_points": 7000,
+        "complete_diet_effective_age_reduction": 1,
     }
 
 

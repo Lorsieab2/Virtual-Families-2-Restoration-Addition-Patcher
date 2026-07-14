@@ -42,7 +42,7 @@ CEventInvitation,ChoiceB,Disallow
 CEventInvitation,ResultA,"Yes, of course!"
 CEventInvitation,ResultB,"Sorry, I'm afraid the answer is no."
 CEventLoanReturned,Title,A Loan Returned
-CEventLoanReturned,Desc,"There was a knock at the door. Standing there was a man you didn't recognize at first, but was the homeless man you encountered a year ago. He was nearly unrecognizable"
+CEventLoanReturned,Desc,"There was a knock at the door. Standing there was a man you didn't recognize at first, but he was the homeless man you encountered a year ago. He was nearly unrecognizable - a transformed man. He reminded you that instead of giving him a handout, you made it clear that the money was a loan. You gave him your address so that he could pay it back, but you didn't really expect to hear from him. He didn't go into details, but somehow the respect he felt in being given a loan instead of a handout changed his trajectory. He now has a job and a home, so he came here today to repay the loan and thank you in person."
 CEventMarchingBandTripExpenses,Title,Subject: Upcoming Marching Band Competition Fieldtrip
 CEventMarchingBandTripExpenses,Desc,"We thought you would like to know that the ACME Rocket Propelled Roller Skates that we've been holding on consignment for you have sold! Congratulations. Per our arrangement, we made a direct deposit to your bank. Please let us know if we can assist you further."
 CEventMenInBlackAtDoor,Title,The Men in Black

@@ -1217,3 +1217,12 @@
   1,122 unique entries, passes full CRC validation, contains no build logs or
   caches, and is 85,840,975 bytes. SHA-256:
   E85A18323AF17534E68DAA9D3682C83FA75D5A8E6BCFE966A8873A6F3D7EF20E.
+
+## Post-B153 source - next-release mechanics and cheat follow-up
+
+- Restores the complete A Loan Returned mobile event description in both the canonical CSV and generated payload override.
+- Adds a linked and independently validated age-50+ failed-attempt cooldown bypass to Allow Older Pregnancies while preserving stock flag-off/under-50 behavior.
+- Tightens the optional mortality curve to sigma 3 at age 75, a one-year complete-diet benefit, and a 70% maximum annual hazard with no hard maximum age.
+- Corrects Light Source Editor `+`/`-` direction only inside the debugger editor bridge.
+- Adds Cheat Upgrade 0x12E, Complete all Achievements, through native SetComplete semantics and assigns the trophy icon to it and Complete all collections.
+- Validation: 107 tests pass; all 16 B153-derived native layouts pass linked Holiday and runtime-flag validation. This is source progress for the next release, not a published build claim.

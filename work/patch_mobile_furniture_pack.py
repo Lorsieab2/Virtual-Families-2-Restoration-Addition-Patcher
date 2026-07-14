@@ -45,6 +45,7 @@ ENABLE_BEHAVIOR_PATCHES = os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "0") == 
 OLDER_PREGNANCY_FLAG_SECTION = ".vf2preg"
 OLDER_PREGNANCY_FLAG_SYMBOL = "_gVF2AllowOlderPregnancies"
 OLDER_PREGNANCY_HELPER_SYMBOL = "_VF2RollOlderPregnancy"
+OLDER_PREGNANCY_COOLDOWN_HELPER_SYMBOL = "_VF2StoreTryForBabyCooldownMaybe"
 OLDER_PREGNANCY_INTERNAL_AGE_50 = 50 * 20
 
 # B153 mortality research uses the same dormant-byte architecture as older
@@ -55,20 +56,22 @@ OLDER_MORTALITY_FLAG_SYMBOL = "_gVF2OlderVillagerMortality"
 OLDER_MORTALITY_HELPER_SYMBOL = "_VF2RollOlderVillagerMortality"
 OLDER_MORTALITY_TABLE_FIRST_AGE = 55
 OLDER_MORTALITY_TABLE_LAST_AGE = 130
+OLDER_MORTALITY_MAX_HAZARD_BASIS_POINTS = 7000
 
 
 def older_mortality_survival_weight(effective_age):
     """Target survival weight for the optional birthday hazard curve.
 
-    The main population follows a normal lifespan distribution centered at
-    effective age 75 with sigma 7. A 0.02% exponential tail prevents a hard
-    maximum and permits exceptionally rare ages beyond 122.
+    The main population follows a tight normal lifespan distribution centered
+    at effective age 75 with sigma 3. The annual hazard derived from this
+    weight is capped rather than forced to 100%, so there is no hard maximum.
     """
-    normal_cdf = 0.5 * (
-        1.0 + math.erf((effective_age + 0.5 - 75.0) / (7.0 * math.sqrt(2.0)))
+    return max(
+        1e-300,
+        0.5 * math.erfc(
+            (effective_age + 0.5 - 75.0) / (3.0 * math.sqrt(2.0))
+        ),
     )
-    tail = 1.0 if effective_age < 75 else 0.97 ** (effective_age - 75)
-    return 0.9998 * (1.0 - normal_cdf) + 0.0002 * tail
 
 
 def older_mortality_hazard_basis_points(effective_age):
@@ -76,10 +79,16 @@ def older_mortality_hazard_basis_points(effective_age):
     if effective_age < OLDER_MORTALITY_TABLE_FIRST_AGE:
         return 0
     if effective_age > OLDER_MORTALITY_TABLE_LAST_AGE:
-        return 300
+        return OLDER_MORTALITY_MAX_HAZARD_BASIS_POINTS
     previous = older_mortality_survival_weight(effective_age - 1)
     current = older_mortality_survival_weight(effective_age)
-    return max(1, min(9900, round(10000.0 * (previous - current) / previous)))
+    return max(
+        1,
+        min(
+            OLDER_MORTALITY_MAX_HAZARD_BASIS_POINTS,
+            round(10000.0 * (previous - current) / previous),
+        ),
+    )
 
 
 def older_pregnancy_cap_tenths(age_years):
@@ -374,7 +383,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x124: "cheat_reset_achievements.png",
     0x125: "cheat_reset_achievements.png",
     0x126: "cheat_reset_achievements.png",
-    0x127: "cheat_no_generation_locks.png",
+    0x127: "cheat_reset_achievements.png",
     0x128: "cheat_add_coins.png",
     0x129: "cheat_add_coins.png",
     0x12A: "cheat_add_coins.png",
@@ -382,6 +391,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x12C: "cheat_add_coins.png",
     0x12D: "cheat_reset_achievements.png",
 }
+VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES = {0x12E: 0x124}
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
 PATCHER_CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "patcher_assets" / "optional_patches" / "cheat_upgrades"
@@ -501,8 +511,15 @@ CHEAT_UPGRADE_ITEMS = [
         "description": "Fixes every active house malfunction and brings the Router back online.",
         "price": 0,
     },
+    {
+        "item_id": 0x12E,
+        "name": "Complete all Achievements",
+        "description": "Completes every currently enabled achievement and awards its normal coin reward.",
+        "price": 0,
+    },
 ]
-CHEAT_UPGRADE_STRING_COUNT = len(CHEAT_UPGRADE_ITEMS) * 2
+CHEAT_UPGRADE_LEGACY_COUNT = 19
+CHEAT_UPGRADE_STRING_COUNT = CHEAT_UPGRADE_LEGACY_COUNT * 2
 HOLIDAY_ORNAMENT_COLLECTABLE_START = 0x9E
 HOLIDAY_ORNAMENT_COLLECTABLE_END = 0xA9
 HOLIDAY_ORNAMENT_COLLECTION_PAGE = 5
@@ -3200,6 +3217,7 @@ def lock_image_id_for(frame):
 
 
 def visible_special_upgrade_icon_id_for(item_id):
+    item_id = VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES.get(item_id, item_id)
     ordered = list(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
     return ORIG_IMAGE_MAX + 1 + len(ITEMS) + LOCKED_GENERATION_FRAME_COUNT + ordered.index(item_id)
 
@@ -6629,6 +6647,18 @@ EVENT_CHOICE_OVERRIDES = {
 
 EVENT_TEXT_OVERRIDES = {
     ("MeteoriteFallsInYard2", "Title"): "Meteorite Fragments",
+    ("LoanReturned", "Desc"): (
+        "There was a knock at the door. Standing there was a man you didn't "
+        "recognize at first, but he was the homeless man you encountered a "
+        "year ago. He was nearly unrecognizable - a transformed man. He "
+        "reminded you that instead of giving him a handout, you made it clear "
+        "that the money was a loan. You gave him your address so that he could "
+        "pay it back, but you didn't really expect to hear from him. He didn't "
+        "go into details, but somehow the respect he felt in being given a "
+        "loan instead of a handout changed his trajectory. He now has a job "
+        "and a home, so he came here today to repay the loan and thank you in "
+        "person."
+    ),
 }
 
 EMAIL_EVENT_NAMES = {
@@ -6651,13 +6681,22 @@ def visible_special_upgrade_desc_id_for(index):
 
 
 def cheat_upgrade_string_ids_for_entry(entry_index):
-    base = (
-        ORIG_STRING_ONE_PAST_MAX
-        + len(ITEMS) * 2
-        + mobile_island_event_string_count()
-        + SPECIAL_UPGRADE_DESCRIPTION_COUNT
-        + entry_index * 2
-    )
+    if entry_index < 0 or entry_index >= len(CHEAT_UPGRADE_ITEMS):
+        raise ValueError(f"Cheat upgrade string index is out of range: {entry_index}")
+    if entry_index < CHEAT_UPGRADE_LEGACY_COUNT:
+        base = (
+            ORIG_STRING_ONE_PAST_MAX
+            + len(ITEMS) * 2
+            + mobile_island_event_string_count()
+            + SPECIAL_UPGRADE_DESCRIPTION_COUNT
+            + entry_index * 2
+        )
+    else:
+        # Keep every pre-B154 outfit/behavior/Holiday string ID stable. New
+        # cheat rows live after the fixed Holiday footer range instead of
+        # shifting the Holiday collection's native constants.
+        extra_index = entry_index - CHEAT_UPGRADE_LEGACY_COUNT
+        base = holiday_ornament_collection_footer_string_ids()[-1] + 1 + extra_index * 2
     return base, base + 1
 
 
@@ -7393,7 +7432,7 @@ def patch_visible_special_upgrades(manifest):
                     "name": item["name"],
                     "price": item["price"],
                     "icon": hex(visible_special_upgrade_icon_id_for(item["item_id"])),
-                    "icon_file": VISIBLE_SPECIAL_UPGRADE_ICON_FILES[item["item_id"]],
+                    "icon_file": VISIBLE_SPECIAL_UPGRADE_ICON_FILES[VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES.get(item["item_id"], item["item_id"])],
                     "title_string": hex(cheat_upgrade_string_ids_for_entry(index)[0]),
                     "description_string": hex(cheat_upgrade_string_ids_for_entry(index)[1]),
                 }
@@ -7810,6 +7849,9 @@ extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
 }}
 
 static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
+    // Post-B153 cheats reuse the trophy descriptor so adding a row never
+    // shifts villager-body or Holiday Ornament image IDs.
+    if (itemId == 0x12E) itemId = 0x124;
     int index = itemId - kVF2VisibleSpecialUpgradeFirstItem;
     return index < 0 || index >= kVF2VisibleSpecialUpgradeCount ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -7870,6 +7912,7 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
         "icon_count": OUTFIT_STORE_ENTRY_COUNT,
         "visible_special_upgrade_icon_base": hex(visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))),
         "visible_special_upgrade_icon_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
+        "visible_special_upgrade_icon_aliases": {hex(item): hex(source) for item, source in VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES.items()},
         "draw_route": "shared DrawItem hook resolves outfit icons and added visible Special Upgrade icons",
         "b150_cheat_upgrade_gate": {
             "enabled": ENABLE_CHEAT_UPGRADES,
@@ -8556,6 +8599,19 @@ static int VF2StockPregnancyChanceWithoutCutoff(
     return chance;
 }
 
+extern "C" void __cdecl VF2StoreTryForBabyCooldownMaybe(
+    void *gameState,
+    unsigned int deadline,
+    int motherInternalAge,
+    int fatherInternalAge
+) {
+    bool olderCouple =
+        motherInternalAge >= 50 * 20 || fatherInternalAge >= 50 * 20;
+    if (gVF2AllowOlderPregnancies == 0 || !olderCouple) {
+        *(unsigned int *)((unsigned char *)gameState + 0x25AE0) = deadline;
+    }
+}
+
 extern "C" int __cdecl VF2RollOlderPregnancy(
     void *villagerState,
     int motherInternalAge,
@@ -8596,10 +8652,13 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
     if (activeFoodGroups < 0) activeFoodGroups = 0;
     if (activeFoodGroups > 4) activeFoodGroups = 4;
 
-    int effectiveAge = internalAge / 20 - activeFoodGroups;
+    // A complete four-group diet grants one effective year rather than the
+    // former four-year shift, which pushed too many deaths into the 80s.
+    int nutritionShift = activeFoodGroups == 4 ? 1 : 0;
+    int effectiveAge = internalAge / 20 - nutritionShift;
     if (effectiveAge < 55) return 0;
 
-    int hazardBasisPoints = 300;
+    int hazardBasisPoints = 7000;
     if (effectiveAge <= 130) {
         hazardBasisPoints =
             kVF2OlderMortalityHazardsBasisPoints[effectiveAge - 55];
@@ -8795,6 +8854,34 @@ static void VF2CompleteAllCollections() {
     Achievement.SetComplete((EAchievement)0x4D);
 }
 
+static void VF2CompleteAchievementOnce(int achievement) {
+    EAchievement id = (EAchievement)achievement;
+    if (!Achievement.IsComplete(id)) {
+        Achievement.SetComplete(id);
+    }
+}
+
+static void VF2CompleteAllAchievements() {
+    for (int achievement = 0x00; achievement <= 0x5E; ++achievement) {
+        VF2CompleteAchievementOnce(achievement);
+    }
+    if (kVF2IncludeOrnamentologistGoal) {
+        VF2CompleteAchievementOnce(0x5F);
+    }
+    for (int achievement = 0x60; achievement <= 0x65; ++achievement) {
+        VF2CompleteAchievementOnce(achievement);
+    }
+    if (kVF2IncludeBehaviorGoals) {
+        for (int achievement = 0x66; achievement <= 0x6C; ++achievement) {
+            VF2CompleteAchievementOnce(achievement);
+        }
+    }
+    if (gVF2HolidayFurnitureGoalsEnabled != 0) {
+        for (int achievement = 0x6D; achievement <= 0x7F; ++achievement) {
+            VF2CompleteAchievementOnce(achievement);
+        }
+    }
+}
 static void VF2ResetAntPuzzle() {
     theGameState::Get()->ResetWorldState(0x13);
     for (int prop = 0x4D; prop <= 0x54; ++prop) {
@@ -8947,6 +9034,9 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x12D:
         VF2FixAllHouseMalfunctions();
+        break;
+    case 0x12E:
+        VF2CompleteAllAchievements();
         break;
     default:
         return;
@@ -10888,6 +10978,65 @@ def patch_allow_older_pregnancies(manifest):
         raise RuntimeError("Older-pregnancy trampoline relocations are incomplete")
     obj.write(PATCHED / "VillagerState.obj")
 
+    # A failed try-for-baby attempt normally writes now+0x4B0 to
+    # theGameState+0x25AE0. Keep that exact write for patch-off and under-50
+    # couples, but skip it when the option is enabled and either partner is 50+.
+    plans = CoffObject(PATCHED / "VillagerPlans.obj")
+    process_name = "?ProcessCurrentPlan@CVillagerPlans@@QAEXAAVCVillager@@@Z"
+    process = plans.symbol(process_name)
+    process_sec = plans.section(process.section)
+    cooldown_hook = process.value + 0xA45
+    cooldown_continue = process.value + 0xA50
+    expected_cooldown = b"\x8B\x4D\xD0\x6A\xCE\x89\xB0\xE0\x5A\x02\x00"
+    cooldown_raw = process_sec.raw_ptr + cooldown_hook
+    if bytes(plans.buf[cooldown_raw:cooldown_raw + len(expected_cooldown)]) != expected_cooldown:
+        raise RuntimeError("Unexpected ProcessCurrentPlan pregnancy-cooldown bytes")
+
+    cooldown_cave = process_sec.raw_size
+    cooldown_trampoline = bytearray([
+        0xFF, 0xB3, 0x54, 0x6A, 0x00, 0x00, # push father internal age
+        0xFF, 0xB7, 0x54, 0x6A, 0x00, 0x00, # push mother internal age
+        0x56,                               # push deadline (esi)
+        0x50,                               # push theGameState (eax)
+        0xE8, 0, 0, 0, 0,                  # call cooldown helper
+        0x83, 0xC4, 0x10,                  # add esp,10h
+        0x8B, 0x4D, 0xD0,                  # mov ecx,[ebp-30h]
+        0x6A, 0xCE,                         # push -50
+        0xE9, 0, 0, 0, 0,                  # jmp original+0xA50
+    ])
+    if len(cooldown_trampoline) != 32:
+        raise AssertionError("Pregnancy-cooldown trampoline size drifted")
+    struct.pack_into(
+        "<i",
+        cooldown_trampoline,
+        28,
+        cooldown_continue - (cooldown_cave + 32),
+    )
+    plans.insert_section_bytes(
+        process_sec.index,
+        cooldown_cave,
+        bytes(cooldown_trampoline),
+    )
+    cooldown_helper = plans.append_undefined_symbol(
+        OLDER_PREGNANCY_COOLDOWN_HELPER_SYMBOL
+    )
+    plans.append_relocation(
+        process_sec.index,
+        cooldown_cave + 15,
+        cooldown_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    process = plans.symbol(process_name)
+    process_sec = plans.section(process.section)
+    cooldown_raw = process_sec.raw_ptr + cooldown_hook
+    cooldown_detour = (
+        b"\xE9"
+        + struct.pack("<i", cooldown_cave - (cooldown_hook + 5))
+        + b"\x90" * 6
+    )
+    plans.buf[cooldown_raw:cooldown_raw + len(cooldown_detour)] = cooldown_detour
+    plans.write(PATCHED / "VillagerPlans.obj")
+
     manifest["AllowOlderPregnancies"] = {
         "status": "dormant native hook installed in every executable",
         "offline_patcher_setting": "allow_older_pregnancies",
@@ -10919,6 +11068,13 @@ def patch_allow_older_pregnancies(manifest):
         "tutorial": {
             "success_queue_preserved": "StringId 0x868",
             "failed_roll_forced_success_disabled_for_late_age_path": True,
+        },
+        "failed_attempt_cooldown": {
+            "stock_deadline": "theGameState+0x25AE0 = current seconds + 0x4B0",
+            "patch_off": "unchanged stock write",
+            "both_under_50": "unchanged stock write",
+            "either_parent_50_plus": "deadline write skipped; normal failed-roll happiness effects retained",
+            "helper": OLDER_PREGNANCY_COOLDOWN_HELPER_SYMBOL,
         },
         "multiples": "native pregnancy/birth logic remains unmodified",
     }
@@ -11024,9 +11180,9 @@ def patch_older_villager_mortality(manifest):
             "linked_location_status": "pending_link_metadata",
         },
         "curve": {
-            "main_distribution": "normal survival curve centered at effective age 75, sigma 7",
-            "nutrition": "each active food group subtracts one effective year, capped 0..4",
-            "rare_tail": "0.02% exponential mixture; 3% annual hazard after effective age 130",
+            "main_distribution": "normal survival curve centered at effective age 75, sigma 3",
+            "nutrition": "all four active food groups subtract one effective year; incomplete diets add no shift",
+            "rare_tail": "annual old-age hazard rises steadily and caps at 70%, never 100%",
             "hard_maximum": None,
             "random_limit": 10000,
             "table_first_age": OLDER_MORTALITY_TABLE_FIRST_AGE,
@@ -12466,7 +12622,16 @@ extern "C" bool __cdecl VF2PatchedDebuggerKeyCharacter(int key)
         return false;
     }
     IEditor *editor = VF2ActiveDebugEditor();
-    return editor ? VF2SafeEditorKeyCharacter(editor, key) : false;
+    if (!editor) {
+        return false;
+    }
+    // The desktop input layer reports the two light-type keys reversed to the
+    // native editor. Correct only this editor's printable-character route.
+    if (editor == &LightSourceEditor) {
+        if (key == '+') key = '-';
+        else if (key == '-') key = '+';
+    }
+    return VF2SafeEditorKeyCharacter(editor, key);
 }
 
 extern "C" bool __cdecl VF2PatchedDebuggerKeyUp(int key)

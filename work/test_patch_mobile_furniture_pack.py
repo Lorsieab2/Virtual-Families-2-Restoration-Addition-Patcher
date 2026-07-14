@@ -113,6 +113,9 @@ class DebuggerResearchTests(unittest.TestCase):
                     1,
                 )[0]
                 self.assertIn("VF2SafeEditorKeyCharacter(editor, key)", character_block)
+                self.assertIn("editor == &LightSourceEditor", character_block)
+                self.assertIn("if (key == '+') key = '-';", character_block)
+                self.assertIn("else if (key == '-') key = '+';", character_block)
                 self.assertEqual(
                     developer["editor_selector"]["character_route"],
                     (
@@ -783,6 +786,19 @@ class MobileIslandEventTextTests(unittest.TestCase):
 
         self.assertIn('"Signal lost. Must seek shelter". You open', result)
         self.assertNotIn('".You', result)
+
+    def test_loan_returned_restores_the_complete_mobile_paragraph(self):
+        events = {event["name"]: event for event in patcher.load_mobile_island_events()}
+        description = next(
+            row["text"]
+            for row in events["LoanReturned"]["strings"]
+            if row["kind"] == "Desc"
+        )
+        self.assertIn("a transformed man", description)
+        self.assertIn("instead of a handout changed his trajectory", description)
+        self.assertIn("came here today to repay the loan", description)
+        self.assertTrue(description.endswith("in person."))
+        self.assertGreater(len(description), 500)
 
 
 class GenerationLockTests(unittest.TestCase):
@@ -1774,6 +1790,23 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(rows[0x12D]["name"], "Fix all house malfunctions")
         self.assertIn("Router back online", rows[0x12D]["description"])
         self.assertIn(0x12D, patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
+        self.assertEqual(rows[0x12E]["name"], "Complete all Achievements")
+        self.assertIn("normal coin reward", rows[0x12E]["description"])
+        self.assertEqual(patcher.CHEAT_UPGRADE_LEGACY_COUNT, 19)
+        self.assertEqual(patcher.CHEAT_UPGRADE_STRING_COUNT, 38)
+        self.assertEqual(
+            patcher.cheat_upgrade_string_ids_for_entry(19)[0],
+            patcher.holiday_ornament_collection_footer_string_ids()[-1] + 1,
+        )
+        self.assertEqual(
+            patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x127],
+            "cheat_reset_achievements.png",
+        )
+        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x12E], 0x124)
+        self.assertEqual(
+            patcher.visible_special_upgrade_icon_id_for(0x12E),
+            patcher.visible_special_upgrade_icon_id_for(0x124),
+        )
         self.assertEqual(
             [item["item_id"] for item in patcher.CHEAT_UPGRADE_ITEMS],
             [
@@ -1781,7 +1814,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 0x11C, 0x120, 0x121, 0x122,
                 0x123, 0x124, 0x125, 0x126, 0x127,
                 0x128, 0x129, 0x12A, 0x12C,
-                0x12B, 0x12D,
+                0x12B, 0x12D, 0x12E,
             ],
         )
 
@@ -1801,6 +1834,16 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("for (int sellingGoal = 0x4E; sellingGoal <= 0x53; ++sellingGoal)", source)
         self.assertIn("Achievement.IsComplete((EAchievement)sellingGoal)", source)
         self.assertIn("Achievement.IncrementProgress((EAchievement)0x54, completedSellingGoals)", source)
+        self.assertIn("static void VF2CompleteAchievementOnce(int achievement)", source)
+        self.assertIn("if (!Achievement.IsComplete(id))", source)
+        self.assertIn("static void VF2CompleteAllAchievements()", source)
+        self.assertIn("for (int achievement = 0x00; achievement <= 0x5E; ++achievement)", source)
+        self.assertIn("if (kVF2IncludeOrnamentologistGoal)", source)
+        self.assertIn("if (kVF2IncludeBehaviorGoals)", source)
+        self.assertIn("if (gVF2HolidayFurnitureGoalsEnabled != 0)", source)
+        self.assertIn("case 0x12E:", source)
+        self.assertIn("VF2CompleteAllAchievements();", source)
+        self.assertIn("if (itemId == 0x12E) itemId = 0x124;", source)
 
     def test_trigger_all_malfunctions_uses_native_dryer_and_renovation_gates(self):
         old_patched = patcher.PATCHED
@@ -2535,6 +2578,10 @@ class OlderPregnancyPatchTests(unittest.TestCase):
                     patcher.SRC_OBJS / "VillagerState.obj",
                     patcher.PATCHED / "VillagerState.obj",
                 )
+                shutil.copy2(
+                    patcher.SRC_OBJS / "VillagerPlans.obj",
+                    patcher.PATCHED / "VillagerPlans.obj",
+                )
                 callback(Path(tmp))
         finally:
             patcher.PATCHED = old_patched
@@ -2642,6 +2689,39 @@ class OlderPregnancyPatchTests(unittest.TestCase):
                 (cave + 43, patcher.OLDER_PREGNANCY_HELPER_SYMBOL, 0x0014),
                 relocs,
             )
+
+            plans = CoffObject(temp_root / "VillagerPlans.obj")
+            process_name = "?ProcessCurrentPlan@CVillagerPlans@@QAEXAAVCVillager@@@Z"
+            process = plans.symbol(process_name)
+            process_sec = plans.section(process.section)
+            process_raw = process_sec.raw_ptr + process.value
+            self.assertEqual(bytes(plans.buf[process_raw + 0xA45:process_raw + 0xA46]), b"\xE9")
+            self.assertEqual(bytes(plans.buf[process_raw + 0xA4A:process_raw + 0xA50]), b"\x90" * 6)
+            cooldown_cave = 0xDCA
+            self.assertEqual(
+                bytes(plans.buf[process_raw + cooldown_cave:process_raw + cooldown_cave + 14]),
+                b"\xFF\xB3\x54\x6A\x00\x00\xFF\xB7\x54\x6A\x00\x00\x56\x50",
+            )
+            plans_relocs = {
+                (vaddr, plans.symbol_by_index[symbol_index].name, rtype)
+                for vaddr, symbol_index, rtype in (
+                    struct.unpack_from(
+                        "<IIH",
+                        plans.buf,
+                        process_sec.reloc_ptr + index * 10,
+                    )
+                    for index in range(process_sec.nreloc)
+                )
+            }
+            self.assertIn(
+                (
+                    cooldown_cave + 15,
+                    patcher.OLDER_PREGNANCY_COOLDOWN_HELPER_SYMBOL,
+                    0x0014,
+                ),
+                plans_relocs,
+            )
+
             contract = manifest["AllowOlderPregnancies"]
             self.assertFalse(contract["default"])
             self.assertEqual(contract["runtime_flag"]["source_section"], ".vf2preg")
@@ -2682,18 +2762,38 @@ class OlderPregnancyPatchTests(unittest.TestCase):
 
 
 class OlderMortalityPatchTests(unittest.TestCase):
-    def test_curve_has_normal_center_nutrition_shift_and_no_hard_cap(self):
+    def test_curve_is_tight_centered_capped_and_has_no_hard_maximum(self):
         hazards = {
             age: patcher.older_mortality_hazard_basis_points(age)
-            for age in (54, 55, 65, 75, 85, 100, 122, 130, 131)
+            for age in (54, 55, 65, 72, 75, 78, 85, 100, 122, 130, 131)
         }
         self.assertEqual(hazards[54], 0)
-        self.assertGreater(hazards[75], hazards[65])
-        self.assertGreater(hazards[85], hazards[75])
-        self.assertEqual(hazards[122], 300)
-        self.assertEqual(hazards[130], 300)
-        self.assertEqual(hazards[131], 300)
+        self.assertLess(hazards[72], hazards[75])
+        self.assertLess(hazards[75], hazards[78])
+        self.assertLess(hazards[78], hazards[85])
+        self.assertLess(hazards[85], patcher.OLDER_MORTALITY_MAX_HAZARD_BASIS_POINTS)
+        for age in (100, 122, 130, 131):
+            self.assertEqual(
+                hazards[age],
+                patcher.OLDER_MORTALITY_MAX_HAZARD_BASIS_POINTS,
+            )
+        self.assertLess(max(hazards.values()), 10000)
         self.assertGreater(patcher.older_mortality_survival_weight(122), 0.0)
+
+        alive = 1.0
+        deaths_72_78 = 0.0
+        deaths_80_plus = 0.0
+        for age in range(55, 131):
+            hazard = patcher.older_mortality_hazard_basis_points(age) / 10000.0
+            death = alive * hazard
+            if 72 <= age <= 78:
+                deaths_72_78 += death
+            if age >= 80:
+                deaths_80_plus += death
+            alive *= 1.0 - hazard
+        self.assertGreater(deaths_72_78, 0.70)
+        self.assertLess(deaths_80_plus, 0.08)
+        self.assertGreater(alive, 0.0)
 
     def test_dormant_hook_preserves_stock_mortality_path_and_exact_abi(self):
         old_patched = patcher.PATCHED

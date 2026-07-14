@@ -813,3 +813,12 @@ B153 linked-matrix and debugger-crash follow-up (2026-07-13)
   Its linked fallthrough validator passes, but it has not yet passed a live
   house-load retest. Debugger functionality remains default-off and excluded
   from playable builds.
+
+Next-release source follow-up after B153 (2026-07-13)
+
+- Allow Older Pregnancies now bypasses the stock try-for-baby cooldown only for failed attempts where either parent is age 50+. Disabled mode and couples with both parents under 50 retain the original deadline write.
+- Older Villager Mortality is tightened to a sigma-3 distribution centered at age 75. Only a complete four-group diet grants one effective year, and annual old-age hazard is capped at 70% so there is no forced maximum age.
+- A Loan Returned now ships its complete recovered mobile description instead of ending at 'nearly unrecognizable'.
+- Light Source Editor `+` and `-` commands are corrected at the editor bridge; other input remains unchanged.
+- Cheat Upgrade 0x12E, Complete all Achievements, calls the normal SetComplete path for enabled goal rows, preserving normal reward and duplicate-completion behavior. Complete all collections and this new cheat use the trophy icon.
+- Automated proof: 107 native tests pass; the 16-layout linked matrix, Holiday gating, cooldown hook, mortality hook, and reversible runtime bytes all validate. Live gameplay QA is still required for experimental pregnancy and mortality behavior.

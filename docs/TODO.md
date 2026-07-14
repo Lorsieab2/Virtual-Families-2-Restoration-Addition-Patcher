@@ -179,6 +179,10 @@ must remain visible as Needs source audit; it must not be silently omitted.
   recognizes F4 0x3FD, F5 0x3FE, F6 0x3FF, F7 0x400, Up 0x3EE, and
   Down 0x3EF in all 16 validated layouts. Visible selector, waypoint, light
   editor, input-fallthrough, and save-persistence QA remain.
+  The Light Source Editor bridge now swaps printable `+`/`-` only while that
+  editor is active to match the requested increase/decrease direction. Up/Down
+  are routed, but the desktop registers only the main-scene debugger provider,
+  so page changes may have no visible effect until recreated providers exist.
 - Audit other category list count patches for small/common desktop counts before
   adding more furniture entries.
 - In-game test B78 VF3 TV private floating-animation entries: verify both
@@ -684,9 +688,9 @@ must remain visible as Needs source audit; it must not be silently omitted.
   appearance goals specified in `docs/B151-design.md`.
 - [x] Add a separately gated dormant `.vf2mort` hook that replaces only the
   birthday old-age decision, preserves the entire stock block when disabled,
-  uses a normal survival curve centered at effective age 75 (sigma 7), shifts
-  effective age by 0-4 active food groups, and retains a 0.02% exponential
-  no-hard-cap tail with a 3% annual hazard after effective age 130.
+  uses a normal survival curve centered at effective age 75 (sigma 3), grants
+  one effective year only for a complete four-group diet, and caps the annual
+  hazard at 70% without imposing a hard maximum age.
 - [x] Link all 16 B153 executable layouts and validate the `.vf2mort` section,
   helper ABI, exact-SHA post-asset records, coexistence with `.vf2preg` and
   `.vf2goal`, unique hashes, and reversible byte-toggle cycles.
@@ -731,6 +735,9 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - [x] Run the linked validator over all 16 final B153 matrix executables and
   dry-run/apply `.vf2preg` with enable, repeated-enable, and disable restoration
   against every selected-overlay SHA.
+- [x] Detour the failed-attempt cooldown store and skip only the
+  `theGameState+0x25AE0` deadline write when the patch is enabled and either
+  parent is age 50+; linked validation proves flag-off/both-under-50 parity.
 - [ ] Manually test ages 49, 50, 59, 60, 68, 69, and an extreme old-age save;
   confirm normal under-50 attempts, late-age failures, successful births,
   save/reload, and native singleton/twin/triplet outcomes.

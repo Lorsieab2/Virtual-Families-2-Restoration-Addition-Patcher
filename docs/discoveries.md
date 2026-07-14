@@ -2552,3 +2552,13 @@
 - Every one of the 16 linked B153 layouts contains the same complete key map and
   corrected six-byte false-result fallthrough. The all-patches hash is
   C32E1BC1A5FF4E340C2B8168D06B4DB946C49A4604EA69DDC6F62AD4C367D9C2.
+
+## 2026-07-13 - Next-release pregnancy, mortality, event, and cheat follow-up
+
+- The failed-conception deadline is a 1200-second write to `theGameState+0x25AE0` in `CVillagerPlans::ProcessCurrentPlan`. The new trampoline preserves the exact stock write when the patch is off or both parents are under 50, and skips it only when Allow Older Pregnancies is enabled and either parent is 50+.
+- The linked validator now proves that cooldown trampoline and helper in all 16 layouts, including its age-1000 internal threshold, `.vf2preg` flag address, continuation at hook +0xB, and conditional state write.
+- The mortality curve is now centered at age 75 with sigma 3. A complete four-group diet subtracts one effective year; annual hazard is capped at 7000/10000 rather than becoming certain. The no-100% cap keeps 122+ mathematically possible while making post-mean survival much rarer.
+- The raw mobile `LoanReturned` description was truncated after 'nearly unrecognizable'. The self-contained CSV and generated override now contain the full transformed-man, repaid-loan, and personal-thanks ending; a regression test requires the complete paragraph.
+- Light Source Editor printable `+`/`-` input is swapped only for that active editor, matching the requested direction without changing stock key handling or the Waypoint Editor.
+- Cheat Upgrade 0x12E (`Complete all Achievements`) uses `CAchievement::SetComplete` for only the goal ranges enabled by the current patch selection. Complete all collections 0x127 and 0x12E use the trophy icon. Achiever Extraordinaire remains a separate pending goal.
+- The full 107-test native suite passes, and all 16 linked feature layouts pass Holiday positive/negative and runtime-flag validation after these changes.

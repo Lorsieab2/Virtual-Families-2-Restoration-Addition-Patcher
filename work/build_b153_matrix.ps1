@@ -5,6 +5,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if (Test-Path variable:PSNativeCommandUseErrorActionPreference) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $outputs = Join-Path $root "outputs"
 $patcher = Join-Path $root "work\patch_mobile_furniture_pack.py"
@@ -23,7 +26,7 @@ if (-not [string]::IsNullOrWhiteSpace($Python)) {
         $pythonExe = (Resolve-Path -LiteralPath $Python).Path
     }
     else {
-        $pythonCommand = Get-Command $Python -CommandType Application -ErrorAction SilentlyContinue
+        $pythonCommand = Get-Command $Python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($null -eq $pythonCommand) {
             throw "Python runtime not found: $Python"
         }
@@ -31,9 +34,9 @@ if (-not [string]::IsNullOrWhiteSpace($Python)) {
     }
 }
 else {
-    $pythonCommand = Get-Command python -CommandType Application -ErrorAction SilentlyContinue
+    $pythonCommand = Get-Command python -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($null -eq $pythonCommand) {
-        $pythonCommand = Get-Command py -CommandType Application -ErrorAction SilentlyContinue
+        $pythonCommand = Get-Command py -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if ($null -ne $pythonCommand) {
             $pythonArgs = @("-3")
         }
