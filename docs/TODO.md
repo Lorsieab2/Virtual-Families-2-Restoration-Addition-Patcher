@@ -174,10 +174,11 @@ must remain visible as Needs source audit; it must not be silently omitted.
   sequence's `ret 8` immediate. Both generated hooks now use `+6`, which lands
   exactly at the stock body, and the corrected diagnostic passes the linked
   fallthrough validator.
-- [ ] Live-retest the corrected debugger diagnostic. Keep debugger features
-  default-off and excluded from playable builds until house loading plus
-  F5/F6/F7/F4, selector, waypoint, light editor, input-fallthrough, and
-  save-persistence QA pass.
+- [ ] Live-retest the B153 debugger route. House loading now passes. The first
+  safe build ignored F5 because it omitted VF2's internal key enum; B153 now
+  recognizes F4 0x3FD, F5 0x3FE, F6 0x3FF, F7 0x400, Up 0x3EE, and
+  Down 0x3EF in all 16 validated layouts. Visible selector, waypoint, light
+  editor, input-fallthrough, and save-persistence QA remain.
 - Audit other category list count patches for small/common desktop counts before
   adding more furniture entries.
 - In-game test B78 VF3 TV private floating-animation entries: verify both

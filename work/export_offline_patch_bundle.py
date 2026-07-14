@@ -2239,9 +2239,9 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Optional Patches (black): Holiday Ornaments, Settings Evict, Island Events, optional visual swaps, Invisible Furniture graphics modes, custom maps, LDW Posters/Paintings, and Colorful Couches.",
         "- Experimental/Not Working Patches (red): Allow Older Pregnancies, Older Villager Mortality Curve, mobile furniture behaviors, Expand game map, and anything not 100% confirmed working and crash-free.",
         "",
-        "B151 native feature gating",
+        "B153 native feature gating",
         "--------------------------",
-        "- The B151 package carries 16 executable overlays: core plus all 15 non-empty combinations of Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches.",
+        "- The B153 package carries 16 executable overlays: core plus all 15 non-empty combinations of Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches.",
         "- The patcher selects exactly one matching overlay from the enabled-setting combination; disabling a native feature selects an executable built without that feature's patch functions.",
         "- Behavior variations, autonomous candidates, direct sink subroutines, and exact normal-praise label capture/restore require behavior_patches.",
         "- Cheat rows, price multipliers/reset, Trigger/Fix malfunction actions, Router offline/online changes, and reversible Maid/Gardener/Rockhound/Anti-Spam handling require cheat_upgrades.",
@@ -2250,6 +2250,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Holiday Furniture goals 0x6D-0x7F use an exact-SHA .vf2goal post-asset byte enabled only with core_executable plus holiday_furniture.",
         "- Allow Older Pregnancies is a default-off exact-SHA post-asset toggle of the dormant .vf2preg byte; it does not add another executable overlay dimension.",
         "- Older Villager Mortality Curve is a default-off exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
+        "- F5 enables and toggles the native debugger overlay; Up/Down change pages, F6 selects Waypoint Editor, F7 selects Light Source Editor, and F4 exits an editor. B153 recognizes VF2's internal key codes as well as Win32/SDL fallbacks.",
     ]
     )
     for row in settings:
@@ -2268,7 +2269,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
     elif summary.get("exe_replacement"):
         limitation = (
             "This bundle uses verified modified EXE payloads for native/game-code changes. "
-            "B152 isolates Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches with a complete 16-state executable overlay matrix; Holiday Furniture goals, Allow Older Pregnancies, and Older Villager Mortality use independent post-asset runtime bytes so they do not expand that matrix."
+            "B153 isolates Island Events, Cheat Upgrades, Holiday Ornaments, and Behavior Patches with a complete 16-state executable overlay matrix; Holiday Furniture goals, Allow Older Pregnancies, and Older Villager Mortality use independent post-asset runtime bytes so they do not expand that matrix. Every B153 executable also contains the guarded F5 debugger route with validated internal key codes."
         )
     else:
         limitation = (
@@ -2373,6 +2374,9 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B149 game build: Holiday Ornaments now validate the collection page-count route, proving DrawScene uses _VF2CollectionPageCount(page) for page 5 while Activate keeps the five stock cached counters and this+0x2C hover field intact.",
             *B150_CHANGELOG_LINES,
             *B151_CHANGELOG_LINES,
+            "- B153 game build: Restores the F5-gated native debugger and editor selectors in every executable layout. VF2 internal keys are F4=0x3FD, F5=0x3FE, F6=0x3FF, F7=0x400, Up=0x3EE, and Down=0x3EF.",
+            "- B153 game build: Corrects debugger input-hook false fallthrough from JE +4 to JE +6, preventing the prior house-load access violation while keeping unhandled input on the stock route.",
+            "- B153 validation: Rebuilds and validates all 16 feature combinations, including unique hashes, debugger hook/key maps, eight Holiday-positive/eight Holiday-negative layouts, and reversible exact-SHA runtime toggles.",
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
             "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the optional Island Events setting is enabled.",

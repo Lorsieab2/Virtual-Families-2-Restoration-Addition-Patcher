@@ -1191,3 +1191,29 @@
 - The debugger remains default-off and excluded from playable builds pending a
   successful live house-load and editor retest. This milestone is not a B153
   release.
+
+
+## B153 - Restored debugger keys and full release matrix
+
+- The live-corrected fallthrough build loads the house without the earlier
+  access violation, but F5 produced no visible response.
+- Native CDebugger::HandleKeyDown and VF2 event routing prove the engine sends
+  internal codes, not Win32 virtual keys: Up 0x3EE, Down 0x3EF, F4
+  0x3FD, F5 0x3FE, F6 0x3FF, and F7 0x400.
+- The guarded route now recognizes those exact internal codes while retaining
+  Win32/SDL fallbacks. F5 toggles CDebugger; F6/F7 select the native
+  Waypoint/Light Source editors; F4 exits the selected editor.
+- Rebuilt all 16 B153 native feature layouts from their corresponding B152
+  bases. All 16 have unique hashes and pass the corrected hook and complete
+  key-map validator. Holiday validation passes 8 enabled and 8 disabled
+  layouts; runtime-flag validation passes all three nonoverlapping,
+  idempotent, reversible exact-SHA toggles.
+- The all-patches executable is 1,739,264 bytes, SHA-256
+  C32E1BC1A5FF4E340C2B8168D06B4DB946C49A4604EA69DDC6F62AD4C367D9C2.
+- The 106-test native patcher suite passes. Live confirmation of visible F5
+  overlay/editor behavior remains a gameplay QA item and is not replaced by
+  structural validation.
+- Exported 1,112 reachable payload files into the B153 patcher. The ZIP has
+  1,122 unique entries, passes full CRC validation, contains no build logs or
+  caches, and is 85,840,975 bytes. SHA-256:
+  E85A18323AF17534E68DAA9D3682C83FA75D5A8E6BCFE966A8873A6F3D7EF20E.

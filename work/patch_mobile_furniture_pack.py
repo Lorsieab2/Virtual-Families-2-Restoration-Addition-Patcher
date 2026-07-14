@@ -12185,6 +12185,15 @@ static bool gVF2DebuggerFaulted = false;
 static IDebugger *gVF2MainSceneDebuggerProvider = 0;
 static IEditor *gVF2ActiveEditor = 0;
 
+enum VF2InternalDebugKey {
+    VF2_KEY_UP = 0x3EE,
+    VF2_KEY_DOWN = 0x3EF,
+    VF2_KEY_F4 = 0x3FD,
+    VF2_KEY_F5 = 0x3FE,
+    VF2_KEY_F6 = 0x3FF,
+    VF2_KEY_F7 = 0x400
+};
+
 static void VF2WriteDirectDebug(char const *fmt, ...)
 {
     FILE *f = fopen("vf2_additive_debug.txt", "a");
@@ -12206,19 +12215,34 @@ static bool VF2CanUseDebugger()
 
 static bool VF2IsDebuggerActivationKey(int key)
 {
-    return key == 0x74 || key == 0x4000003e;
+    return key == VF2_KEY_F5 || key == 0x74 || key == 0x4000003e;
+}
+
+static bool VF2IsDebuggerExitEditorKey(int key)
+{
+    return key == VF2_KEY_F4 || key == 0x73 || key == 0x4000003d;
+}
+
+static bool VF2IsWaypointEditorKey(int key)
+{
+    return key == VF2_KEY_F6 || key == 0x75 || key == 0x4000003f;
+}
+
+static bool VF2IsLightSourceEditorKey(int key)
+{
+    return key == VF2_KEY_F7 || key == 0x76 || key == 0x40000040;
 }
 
 static int VF2TranslateDebugKey(int key)
 {
     if (VF2IsDebuggerActivationKey(key)) {
-        return 0x3FE;
+        return VF2_KEY_F5;
     }
     if (key == 0x26 || key == 0x40000052) {
-        return 0x3EE;
+        return VF2_KEY_UP;
     }
     if (key == 0x28 || key == 0x40000051) {
-        return 0x3EF;
+        return VF2_KEY_DOWN;
     }
     return key;
 }
@@ -12412,15 +12436,15 @@ extern "C" bool __cdecl VF2PatchedMainSceneHandleKeyDown(void *mainScene, int ke
     if (!VF2CanUseDebugger()) {
         return false;
     }
-    if (key == 0x73 || key == 0x4000003d) {
+    if (VF2IsDebuggerExitEditorKey(key)) {
         VF2SetActiveEditor(0);
         return true;
     }
-    if (key == 0x75 || key == 0x4000003f) {
+    if (VF2IsWaypointEditorKey(key)) {
         VF2SetActiveEditor(&WaypointEditor);
         return true;
     }
-    if (key == 0x76 || key == 0x40000040) {
+    if (VF2IsLightSourceEditorKey(key)) {
         VF2SetActiveEditor(&LightSourceEditor);
         return true;
     }
@@ -12524,6 +12548,14 @@ extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
                 "F4": "exit the active editor",
                 "F6": "select the native Waypoint Editor",
                 "F7": "select the native Light Source Editor",
+            },
+            "internal_key_codes": {
+                "Up": "0x3EE",
+                "Down": "0x3EF",
+                "F4": "0x3FD",
+                "F5": "0x3FE",
+                "F6": "0x3FF",
+                "F7": "0x400",
             },
             "skipped_hooks": [
                 {

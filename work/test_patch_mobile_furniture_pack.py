@@ -339,6 +339,25 @@ class DebuggerResearchTests(unittest.TestCase):
         self.assertIn('VF2_ENABLE_DEBUGGER_FEATURES = "1"', builder)
         self.assertIn("validate_b153_debugger_fallthrough.py", builder)
 
+    def test_debugger_uses_vf2_internal_function_and_arrow_key_codes(self):
+        source = (patcher.ROOT / "work" / "patch_mobile_furniture_pack.py").read_text(
+            encoding="utf-8"
+        )
+        expected = {
+            "VF2_KEY_UP": "0x3EE",
+            "VF2_KEY_DOWN": "0x3EF",
+            "VF2_KEY_F4": "0x3FD",
+            "VF2_KEY_F5": "0x3FE",
+            "VF2_KEY_F6": "0x3FF",
+            "VF2_KEY_F7": "0x400",
+        }
+        for name, value in expected.items():
+            self.assertIn(f"{name} = {value}", source)
+        self.assertIn("key == VF2_KEY_F5", source)
+        self.assertIn("key == VF2_KEY_F4", source)
+        self.assertIn("key == VF2_KEY_F6", source)
+        self.assertIn("key == VF2_KEY_F7", source)
+
     def test_debugger_provider_offsets_match_native_objects(self):
         def relocation_target(obj, section, vaddr):
             cursor = section.reloc_ptr

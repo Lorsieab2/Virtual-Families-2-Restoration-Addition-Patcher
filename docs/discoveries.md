@@ -2536,3 +2536,19 @@
   hooks, no stale `+4` branch, and exact stock fallthrough targets. Live
   house-load/editor retesting is still required; normal builds remain stock and
   the debugger remains default-off.
+
+
+## 2026-07-13 - VF2 internal debugger key codes
+
+- The house-load-safe debugger diagnostic still ignored F5 because the helper
+  accepted Win32 0x74 and SDL 0x4000003E, while theMainScene receives the
+  LDW/VF2 internal key enum.
+- Stock CDebugger::HandleKeyDown subtracts 0x3EE for Up, recognizes
+  0x3EF for Down, and reaches its visibility toggle at 0x3FE for F5.
+  The contiguous function-key mapping establishes F4 0x3FD, F6 0x3FF,
+  and F7 0x400.
+- The B153 helper now recognizes internal plus Win32/SDL forms for F4-F7 and
+  translates alternate Up/Down forms to the native 0x3EE/0x3EF values.
+- Every one of the 16 linked B153 layouts contains the same complete key map and
+  corrected six-byte false-result fallthrough. The all-patches hash is
+  C32E1BC1A5FF4E340C2B8168D06B4DB946C49A4604EA69DDC6F62AD4C367D9C2.

@@ -42,6 +42,19 @@ def validate(exe: Path, manifest_path: Path) -> dict:
     hooks = developer.get("input_hooks", [])
     if len(hooks) != 5:
         raise ValueError(f"expected five debugger input hooks, found {len(hooks)}")
+    expected_key_codes = {
+        "Up": "0x3EE",
+        "Down": "0x3EF",
+        "F4": "0x3FD",
+        "F5": "0x3FE",
+        "F6": "0x3FF",
+        "F7": "0x400",
+    }
+    if developer.get("internal_key_codes") != expected_key_codes:
+        raise ValueError(
+            "debugger internal key map is incomplete or incorrect: "
+            f"{developer.get('internal_key_codes')!r}"
+        )
 
     specs = [
         ("key_down", *hook_pattern(b"\xFF\x75\x08", 4, helper_this=True), 1),
@@ -78,6 +91,7 @@ def validate(exe: Path, manifest_path: Path) -> dict:
             "fix": "JE +6 lands exactly at the stock function body",
         },
         "hooks": rows,
+        "internal_key_codes": expected_key_codes,
         "live_retest_required": True,
     }
 

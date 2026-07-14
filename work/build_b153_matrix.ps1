@@ -11,6 +11,7 @@ $patcher = Join-Path $root "work\patch_mobile_furniture_pack.py"
 $builder = Join-Path $root "work\build_b119.bat"
 $holidayValidator = Join-Path $root "work\validate_b153_holiday_collection.py"
 $runtimeValidator = Join-Path $root "work\validate_b153_runtime_flags.py"
+$debuggerValidator = Join-Path $root "work\validate_b153_debugger_fallthrough.py"
 $exeName = "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
 
 $pythonArgs = @()
@@ -51,6 +52,9 @@ if (-not (Test-Path -LiteralPath $holidayValidator -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $runtimeValidator -PathType Leaf)) {
     throw "B153 runtime validator not found: $runtimeValidator"
 }
+if (-not (Test-Path -LiteralPath $debuggerValidator -PathType Leaf)) {
+    throw "B153 debugger validator not found: $debuggerValidator"
+}
 
 Push-Location $root
 try {
@@ -82,6 +86,7 @@ try {
         $env:VF2_ENABLE_CHEAT_UPGRADES = if ($cheat) { "1" } else { "0" }
         $env:VF2_ENABLE_HOLIDAY_ORNAMENTS = if ($holiday) { "1" } else { "0" }
         $env:VF2_ENABLE_BEHAVIOR_PATCHES = if ($behavior) { "1" } else { "0" }
+        $env:VF2_ENABLE_DEBUGGER_FEATURES = "1"
 
         $patchLog = Join-Path $out "b153-patch.log"
         $buildLog = Join-Path $out "b153-build.log"
@@ -119,6 +124,11 @@ try {
         }
         if ($manifestData.native_array_contract.holiday_ornaments.enabled -ne $holiday) {
             throw "Holiday gate mismatch in $variant manifest"
+        }
+        $debuggerReport = Join-Path $out "b153-debugger-validation.json"
+        & $pythonExe @pythonArgs $debuggerValidator --exe $exe --manifest $manifest --output $debuggerReport *> $null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Debugger validation failed for $variant with exit code $LASTEXITCODE"
         }
         Write-Host "[$($mask + 1)/16] Verified $variant ($((Get-Item -LiteralPath $exe).Length) bytes)"
     }
