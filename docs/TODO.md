@@ -689,9 +689,9 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - [x] Add a separately gated dormant `.vf2mort` hook that replaces only the
   birthday old-age decision, preserves the entire stock block when disabled,
   uses a normal survival curve centered at effective age 75 (sigma 3), grants
-  one effective year only for a complete four-group diet, and caps the annual
-  hazard at 70% without imposing a hard maximum age.
-- [x] Link all 16 B153 executable layouts and validate the `.vf2mort` section,
+  one effective bonus year per active food group (0-4), and caps the annual
+  hazard at 99.99% without imposing a hard maximum age.
+- [x] Link all 16 B154 executable layouts and validate the `.vf2mort` section,
   helper ABI, exact-SHA post-asset records, coexistence with `.vf2preg` and
   `.vf2goal`, unique hashes, and reversible byte-toggle cycles.
 - [ ] Live-test birthdays, time-away catch-up, starvation/sickness causes, ages

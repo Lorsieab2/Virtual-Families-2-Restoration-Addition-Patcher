@@ -2557,8 +2557,16 @@
 
 - The failed-conception deadline is a 1200-second write to `theGameState+0x25AE0` in `CVillagerPlans::ProcessCurrentPlan`. The new trampoline preserves the exact stock write when the patch is off or both parents are under 50, and skips it only when Allow Older Pregnancies is enabled and either parent is 50+.
 - The linked validator now proves that cooldown trampoline and helper in all 16 layouts, including its age-1000 internal threshold, `.vf2preg` flag address, continuation at hook +0xB, and conditional state write.
-- The mortality curve is now centered at age 75 with sigma 3. A complete four-group diet subtracts one effective year; annual hazard is capped at 7000/10000 rather than becoming certain. The no-100% cap keeps 122+ mathematically possible while making post-mean survival much rarer.
+- The mortality curve is now centered at age 75 with sigma 3. Each active food group subtracts one effective year, preserving the cumulative 0-4-year bonus; annual hazard is capped at 9999/10000 rather than becoming certain. The no-100% cap keeps 122+ mathematically possible while making post-mean survival much rarer.
 - The raw mobile `LoanReturned` description was truncated after 'nearly unrecognizable'. The self-contained CSV and generated override now contain the full transformed-man, repaid-loan, and personal-thanks ending; a regression test requires the complete paragraph.
 - Light Source Editor printable `+`/`-` input is swapped only for that active editor, matching the requested direction without changing stock key handling or the Waypoint Editor.
 - Cheat Upgrade 0x12E (`Complete all Achievements`) uses `CAchievement::SetComplete` for only the goal ranges enabled by the current patch selection. Complete all collections 0x127 and 0x12E use the trophy icon. Achiever Extraordinaire remains a separate pending goal.
 - The full 107-test native suite passes, and all 16 linked feature layouts pass Holiday positive/negative and runtime-flag validation after these changes.
+
+
+## B154 linked release validation (2026-07-14)
+
+- All 177 automated tests pass. The 16 B154 feature layouts have 16 unique hashes and pass linked debugger, Holiday-positive/negative, runtime-flag ABI, exact-SHA enable, repeated-enable idempotence, and exact-disable restoration checks.
+- The linked mortality helper requests `GetRandom(10000)`, clamps food groups with `min(activeFoodGroups, 4)`, preserves the 0-4 effective-age bonus, stays below the cap through effective age 130, and reaches the 9999/10000 cap at 131.
+- User live confirmation covers F5 without the former crash, Light Source Editor, ornament spawning and Ornamentologist, mortality, new purchase/behavior goals, Cheat Upgrades, and north-bathroom malfunctions. This does not replace the narrower persistence and edge-case audits in the request ledger.
+- Mobile-exclusive furniture behaviors remain future default-off optional work. Any disruptive group celebration must be manual-drop-only and cannot become an autonomous household-wide behavior.

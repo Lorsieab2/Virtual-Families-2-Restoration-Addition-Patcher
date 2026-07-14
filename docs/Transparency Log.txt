@@ -814,11 +814,13 @@ B153 linked-matrix and debugger-crash follow-up (2026-07-13)
   house-load retest. Debugger functionality remains default-off and excluded
   from playable builds.
 
-Next-release source follow-up after B153 (2026-07-13)
+B154 release follow-up (2026-07-14)
 
 - Allow Older Pregnancies now bypasses the stock try-for-baby cooldown only for failed attempts where either parent is age 50+. Disabled mode and couples with both parents under 50 retain the original deadline write.
-- Older Villager Mortality is tightened to a sigma-3 distribution centered at age 75. Only a complete four-group diet grants one effective year, and annual old-age hazard is capped at 70% so there is no forced maximum age.
+- Older Villager Mortality is tightened to a sigma-3 distribution centered at age 75. Each active food group grants one effective bonus year, up to four, and annual old-age hazard is capped at 99.99% so there is no forced maximum age.
 - A Loan Returned now ships its complete recovered mobile description instead of ending at 'nearly unrecognizable'.
 - Light Source Editor `+` and `-` commands are corrected at the editor bridge; other input remains unchanged.
 - Cheat Upgrade 0x12E, Complete all Achievements, calls the normal SetComplete path for enabled goal rows, preserving normal reward and duplicate-completion behavior. Complete all collections and this new cheat use the trophy icon.
-- Automated proof: 107 native tests pass; the 16-layout linked matrix, Holiday gating, cooldown hook, mortality hook, and reversible runtime bytes all validate. Live gameplay QA is still required for experimental pregnancy and mortality behavior.
+- Automated proof: all 177 tests pass; the 16 unique B154 layouts pass linked debugger, Holiday-positive/negative, cooldown, mortality, three-flag exact-SHA, idempotence, and exact-disable restoration validation.
+- User-confirmed live in the preceding build: F5 opens without a house-load crash, Light Source Editor works, ornaments spawn and award Ornamentologist, mortality runs, new purchase/behavior goals and Cheat Upgrades work, and north-bathroom malfunctions work. Narrow persistence and edge-case audits remain where listed.
+- Backlog: mobile-exclusive furniture behaviors remain a separate default-off optional patch; disruptive group celebrations must require a manually dropped villager and must not become autonomous family-wide actions.

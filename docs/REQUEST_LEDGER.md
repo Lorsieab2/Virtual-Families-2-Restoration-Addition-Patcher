@@ -61,7 +61,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 | Request | Status | Completion contract |
 |---|---|---|
 | Fully working Allow Older Pregnancies | Partial / linked validation complete | All 16 layouts now also prove the age-50+ failed-attempt cooldown bypass: the patch skips only the stock `theGameState+0x25AE0` deadline write when either parent is 50+, while flag-off and both-under-50 retain it. Live conception/birth/save-load QA remains. |
-| Older Villagers mortality curve | Partial / linked validation complete | Default-off `.vf2mort` replaces only the birthday old-age roll with a normal survival curve centered at 75, sigma 3. A complete four-group diet subtracts one effective year; annual hazard is capped at 70%, never 100%, so 122+ remains possible but extremely rare. All 16 linked layouts pass; live aging/save/time-away QA remains. |
+| Older Villagers mortality curve | Partial / linked validation complete | Default-off `.vf2mort` replaces only the birthday old-age roll with a normal survival curve centered at 75, sigma 3. Each active food group subtracts one effective year, up to four; annual hazard is capped at 99.99%, never 100%, so 122+ remains possible but extremely rare. All 16 linked layouts pass; live aging/save/time-away QA remains. |
 | Next Generation button around age 60 with age patch | Not started | Gated only with the age patch; stock flow when off. |
 | Increase Child Limit to 12 | Partial | Native audit complete: live `CVillagerManager` already has 30 ordinary peep slots, but each generation persists only six `SPeepRecord`s and the Next Generation scene owns two six-entry candidate arrays. A safe implementation needs additive persistence for six extra records per generation plus matched Family Tree draw/hit-test and candidate-array detours; changing the limit constant alone would overwrite the next generation. |
 | Force Successful Pregnancy | Not started | Next eligible attempt never argues and succeeds; clear after resulting birth. |
@@ -69,8 +69,8 @@ dormant hook, or successful link is not proof that a feature is finished.
 | Next pregnancy Singleton/Twins/Triplets | Not started | Saved mutually exclusive, cap-safe one-shot; clear after birth. |
 | Complete all Achievements cheat | Source + linked build validated | Cheat row 0x12E checks `IsComplete` before calling native `SetComplete` for every currently enabled base/modded row, preserving normal coin awards without duplicate payouts. Achiever Extraordinaire itself remains pending and must stay last. |
 | Trophy icon for Complete all collections and future cheats | Current rows source + linked build validated | Complete all collections 0x127 and Complete all Achievements 0x12E use the self-contained trophy descriptor. New future cheat rows should alias that descriptor unless given a dedicated asset. |
-| Restore F5 debugger selector and native editors | B153 built / visible live retest pending | The +6 fallthrough fix passes live house load. F5 was then confirmed ignored because the helper omitted VF2's internal codes. B153 now recognizes F4 0x3FD, F5 0x3FE, F6 0x3FF, F7 0x400, Up 0x3EE, and Down 0x3EF; all 16 layouts pass linked hook/key-map validation. Visible overlay/editor QA remains. |
-| Light editor: edit/place/remove sources | Partial | Native L add, D delete, S save, type-cycle, and mouse-drag routes are wired in the default-off developer build. Verify feedback, persistence/export, cancel/reset, fault handling, and patch-off behavior in game. |
+| Restore F5 debugger selector and native editors | B154 automated + user live confirmed | F5 opens without the prior house-load crash. F4/F5/F6/F7 and Up/Down internal key maps pass all 16 linked layouts; specialized editor edge-case QA remains. |
+| Light editor: edit/place/remove sources | Core editor user-confirmed / hardening pending | Native add/delete/save/type-cycle/mouse-drag routes work in game; B154 corrects + and - direction. Persistence/export, cancel/reset, fault handling, and patch-off parity still need narrow QA. |
 | Recreate dummied debug tools | Needs source audit | Behavior/Content Map editors are absent in checked binaries; replacements require verified engine contracts. |
 
 ## Behaviors and variations
@@ -87,7 +87,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 | Snowy-weather actions | Needs source audit | Identify every ported/requested action and prove weather-only eligibility. |
 | Bathroom sink actions; jewelry for females 14+ | Needs source audit | Every sink route/variation must be Behavior-Patches gated. |
 | Manual `Play video games` on computer drop | Not started | Add beside Browsing web/verified computer routes without changing autonomous likelihoods. |
-| Experimental mobile-only furniture actions | Partial | Audit recognition, routes, gating, animation/location, and base parity. |
+| Experimental mobile-only furniture actions | Backlog / optional patch only | Audit recognition, routes, animation/location, and base parity. Disruptive group actions must require a manually dropped villager and must never autonomously gather the whole family. |
 | Praise string-change bug | Needs source audit | Preserve exact action/variation text and let goals inspect it before praise changes state. |
 
 ## Cheats and house state
@@ -119,9 +119,9 @@ and reset only through their documented reset action.
 | Pet interaction corrections | Not started | Good boy = praise someone praising pet; Bad dog = praise someone scolding pet; Pavlovian Association = praise someone training pet. |
 | Birthday purchases | Not started | Happy Birthday banner; Not a lie cake; Full of helium balloons. |
 | Discipline | Not started | No clothes-throwing; no toilet play; no bed jumping; no wall drawing; No messing with the light switch! (scold a child for switching the light on and off); Props to you after Tight Ship plus all five additional discipline goals. |
-| Holiday Furniture purchases | Shipped / in-game QA pending | Audit valid IDs/names, coins, persistence, and patch-off absence. |
+| Holiday Furniture purchases | Shipped / core purchase goals user-confirmed | Coin awards and purchase-goal firing work in game; exhaustive ID aliases, persistence, and patch-off absence remain narrow QA. |
 | VF3 furniture | Not started | Furnishing the Future. |
-| Ornamentologist/collection goals | Shipped / in-game QA pending | Verify award/counters/persistence and all reset paths. |
+| Ornamentologist/collection goals | Shipped / spawn and award user-confirmed | Ornaments spawn and Ornamentologist wiring works in game; persistence, Lucky Rock weighting, and every reset path remain narrow QA. |
 | Achiever Extraordinaire | Not started | Final visible goal; requires every enabled base/modded goal. |
 
 ## Renovations, map, events, and family systems

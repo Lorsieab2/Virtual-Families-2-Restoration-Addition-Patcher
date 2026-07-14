@@ -2772,11 +2772,15 @@ class OlderMortalityPatchTests(unittest.TestCase):
         self.assertLess(hazards[75], hazards[78])
         self.assertLess(hazards[78], hazards[85])
         self.assertLess(hazards[85], patcher.OLDER_MORTALITY_MAX_HAZARD_BASIS_POINTS)
-        for age in (100, 122, 130, 131):
-            self.assertEqual(
+        for age in (100, 122, 130):
+            self.assertLess(
                 hazards[age],
                 patcher.OLDER_MORTALITY_MAX_HAZARD_BASIS_POINTS,
             )
+        self.assertEqual(
+            hazards[131],
+            patcher.OLDER_MORTALITY_MAX_HAZARD_BASIS_POINTS,
+        )
         self.assertLess(max(hazards.values()), 10000)
         self.assertGreater(patcher.older_mortality_survival_weight(122), 0.0)
 

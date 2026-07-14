@@ -56,7 +56,7 @@ OLDER_MORTALITY_FLAG_SYMBOL = "_gVF2OlderVillagerMortality"
 OLDER_MORTALITY_HELPER_SYMBOL = "_VF2RollOlderVillagerMortality"
 OLDER_MORTALITY_TABLE_FIRST_AGE = 55
 OLDER_MORTALITY_TABLE_LAST_AGE = 130
-OLDER_MORTALITY_MAX_HAZARD_BASIS_POINTS = 7000
+OLDER_MORTALITY_MAX_HAZARD_BASIS_POINTS = 9999
 
 
 def older_mortality_survival_weight(effective_age):
@@ -8652,13 +8652,13 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
     if (activeFoodGroups < 0) activeFoodGroups = 0;
     if (activeFoodGroups > 4) activeFoodGroups = 4;
 
-    // A complete four-group diet grants one effective year rather than the
-    // former four-year shift, which pushed too many deaths into the 80s.
-    int nutritionShift = activeFoodGroups == 4 ? 1 : 0;
+    // Preserve the vanilla cumulative nutrition benefit: every active food
+    // group subtracts one effective year, capped to the native 0..4 range.
+    int nutritionShift = activeFoodGroups;
     int effectiveAge = internalAge / 20 - nutritionShift;
     if (effectiveAge < 55) return 0;
 
-    int hazardBasisPoints = 7000;
+    int hazardBasisPoints = 9999;
     if (effectiveAge <= 130) {
         hazardBasisPoints =
             kVF2OlderMortalityHazardsBasisPoints[effectiveAge - 55];
@@ -11181,8 +11181,8 @@ def patch_older_villager_mortality(manifest):
         },
         "curve": {
             "main_distribution": "normal survival curve centered at effective age 75, sigma 3",
-            "nutrition": "all four active food groups subtract one effective year; incomplete diets add no shift",
-            "rare_tail": "annual old-age hazard rises steadily and caps at 70%, never 100%",
+            "nutrition": "each active food group subtracts one effective year, capped at four",
+            "rare_tail": "annual old-age hazard rises steadily and caps at 99.99%, never 100%",
             "hard_maximum": None,
             "random_limit": 10000,
             "table_first_age": OLDER_MORTALITY_TABLE_FIRST_AGE,

@@ -472,10 +472,10 @@ def validate_older_mortality(path: Path, expected_flag: int) -> dict:
     )
     if helper_window.find(age_math) != 8:
         raise ValueError(f"{path}: mortality helper 20-tick birthday math drifted")
-    if bytes.fromhex("BE 58 1B 00 00 81 FA 82 00 00 00 7F") not in helper_window:
-        raise ValueError(f"{path}: mortality helper 70-percent hazard cap drifted")
-    if bytes.fromhex("83 F9 04 0F 94 C0") not in helper_window:
-        raise ValueError(f"{path}: mortality helper complete-diet gate drifted")
+    if bytes.fromhex("BE 0F 27 00 00 81 FA 82 00 00 00 7F") not in helper_window:
+        raise ValueError(f"{path}: mortality helper 99.99-percent hazard cap drifted")
+    if bytes.fromhex("B8 04 00 00 00 3B C8 0F 4F C8") not in helper_window:
+        raise ValueError(f"{path}: mortality helper four-group clamp drifted")
     if bytes.fromhex("83 FA 37 7C") not in helper_window:
         raise ValueError(f"{path}: mortality helper effective-age-55 gate drifted")
 
@@ -489,8 +489,8 @@ def validate_older_mortality(path: Path, expected_flag: int) -> dict:
         "flag_off_rejoins_stock_at_hook_plus": "0x9",
         "enabled_rejoins_after_old_age_block_at_hook_plus": "0x75",
         "helper_random_limit": 10000,
-        "maximum_hazard_basis_points": 7000,
-        "complete_diet_effective_age_reduction": 1,
+        "maximum_hazard_basis_points": 9999,
+        "maximum_food_group_effective_age_reduction": 4,
     }
 
 
@@ -548,11 +548,12 @@ def validate_post_asset_records(
     results: list[dict],
     executable_paths: list[Path],
     build_manifest_path: Path,
+    build_label: str,
 ) -> list[dict]:
     build_manifest = json.loads(build_manifest_path.read_text(encoding="utf-8"))
     records = exporter.b152_runtime_flag_post_asset_patches(
         executable_paths,
-        output_exe_name="Virtual Families 2 - Modded B153.exe",
+        output_exe_name=f"Virtual Families 2 - Modded {build_label}.exe",
         build_manifest_data=build_manifest,
     )
     expected = {
@@ -598,6 +599,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--exe", action="append", default=[])
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--build-label",
+        default="B153",
+        help="Build label used for automatic output discovery (default: B153).",
+    )
     parser.add_argument("--build-manifest", type=Path)
     parser.add_argument(
         "--expect-enabled",
@@ -611,9 +617,12 @@ def main() -> int:
     args = parse_args()
     paths = [Path(value).resolve() for value in args.exe]
     if not paths:
-        paths = sorted((ROOT / "outputs").glob(DEFAULT_GLOB))
+        build_glob = DEFAULT_GLOB.replace("B153", args.build_label)
+        paths = sorted((ROOT / "outputs").glob(build_glob))
     if not paths:
-        raise SystemExit("No B153 executable paths were supplied or discovered.")
+        raise SystemExit(
+            f"No {args.build_label} executable paths were supplied or discovered."
+        )
     expected_flag = 1 if args.expect_enabled else 0
     results = []
     failures = []
@@ -624,7 +633,8 @@ def main() -> int:
             failures.append(f"{path}: {exc}")
     if failures:
         raise SystemExit(
-            "B153 runtime-flag validation failed:\n- " + "\n- ".join(failures)
+            f"{args.build_label} runtime-flag validation failed:\n- "
+            + "\n- ".join(failures)
         )
     hashes = {row["sha256"] for row in results}
     if len(results) == 16 and len(hashes) != 16:
@@ -639,7 +649,7 @@ def main() -> int:
     post_asset_patches = []
     if build_manifest_path is not None:
         post_asset_patches = validate_post_asset_records(
-            results, paths, build_manifest_path.resolve()
+            results, paths, build_manifest_path.resolve(), args.build_label
         )
     report = {
         "status": "validated",
