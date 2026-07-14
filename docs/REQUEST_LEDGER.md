@@ -1,8 +1,8 @@
 # VF2 Restoration + Addition Patcher Request Ledger
 
 Last reconciled: 2026-07-12
-Published baseline: B152 (`e5f4047`, release
-`B152-restoration-addition-patcher`)
+Published baseline: B153 (`2963ba2`, release
+`B153-restoration-addition-patcher`)
 
 This is the durable completeness gate for future builds. A request does not
 disappear because it was made in an older chat. A label, checkbox, design note,
@@ -39,7 +39,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 - Every release updates notes, TODO/changelog, technical discoveries where
   applicable, and the Transparency Log.
 
-## Published B152 baseline
+## Published B153 baseline
 
 | Request | Status | Evidence / remaining gate |
 |---|---|---|
