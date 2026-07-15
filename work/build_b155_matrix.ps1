@@ -74,10 +74,10 @@ try {
         if ($behavior) { $parts += "behavior_patches" }
         $variant = if ($parts.Count) { $parts -join "_" } else { "core" }
 
-        $previous = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-B153-$variant"
+        $previous = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-B154-$variant"
         $out = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-B155-$variant"
         if (-not (Test-Path -LiteralPath $previous -PathType Container)) {
-            throw "Missing B152 base for ${variant}: $previous"
+            throw "Missing B154 base for ${variant}: $previous"
         }
         New-Item -ItemType Directory -Path $out -Force | Out-Null
 
