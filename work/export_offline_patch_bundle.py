@@ -2383,6 +2383,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B154 fixes: Restores the complete A Loan Returned description and corrects Light Source Editor + and - direction without changing other input.",
             "- B154 validation: All 177 tests pass; all 16 unique executable layouts pass debugger, Holiday-positive/negative, runtime-flag ABI, exact-SHA toggle, idempotence, and exact-disable restoration validation.",
             "- B155 game build: Changes only Older Villager Mortality: replaces the sigma-3 age-75 cliff with sex-averaged SSA 2022 annual death probabilities for effective ages 55-105, then a 50% yearly supercentenarian plateau. Active food groups still subtract 0-4 effective years; sickness and every other physiology path remain unchanged.",
+            "- B155 validation: All 177 automated tests pass. All 16 unique executable layouts pass corrected B155 Holiday-positive/negative and dormant-runtime validation, including the exact embedded SSA hazard table, 50% tail, and reversible exact-SHA flag toggles.",
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
             "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the optional Island Events setting is enabled.",
