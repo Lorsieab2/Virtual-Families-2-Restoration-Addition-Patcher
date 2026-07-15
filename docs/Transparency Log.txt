@@ -839,3 +839,10 @@ B155 mortality-only change
 - No pregnancy, behavior, furniture, collection, debugger, cheat, goal, event,
   price, or other gameplay logic is changed for B155.
 - Statistical source: https://www.ssa.gov/policy/docs/statcomps/supplement/2025/4c.html
+- Final validation: all 177 automated tests pass. All 16 unique executable
+  layouts pass corrected B155 Holiday-positive/negative and dormant-runtime
+  validation, including the exact SSA table, 50% tail, and reversible flag
+  toggles.
+- Release packaging uses only manifest-referenced payload files. The audited
+  full-payload draft was discarded because it contained unnecessary stock and
+  reference files.
