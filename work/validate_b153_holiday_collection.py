@@ -15,6 +15,7 @@ WORK = Path(__file__).resolve().parent
 ROOT = WORK.parent
 DEFAULT_OUTPUTS = ROOT / "outputs"
 DEFAULT_EXE_NAME = "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
+BUILD_LABEL = "B153"
 BUILD_PREFIX = "VF2-Mobile-Furniture-With-Island-Events-B153-"
 
 HOLIDAY_START = 0x9E
@@ -1334,7 +1335,9 @@ def validate_matrix(outputs_root: Path, exe_name: str) -> list[VariantResult]:
 
     if failures:
         details = "\n".join(f"- {failure}" for failure in failures)
-        raise ValidationError(f"B153 Holiday matrix validation failed:\n{details}")
+        raise ValidationError(
+            f"{BUILD_LABEL} Holiday matrix validation failed:\n{details}"
+        )
 
     positives = [result for result in results if result.holiday_enabled]
     negatives = [result for result in results if not result.holiday_enabled]
@@ -1354,6 +1357,8 @@ def validate_matrix(outputs_root: Path, exe_name: str) -> list[VariantResult]:
 
 
 def main() -> int:
+    global BUILD_LABEL, BUILD_PREFIX
+
     parser = argparse.ArgumentParser(
         description=(
             "Validate all 16 linked B153 executables: eight exact Holiday "
@@ -1369,16 +1374,23 @@ def main() -> int:
     parser.add_argument(
         "--exe-name",
         default=DEFAULT_EXE_NAME,
-        help="Linked executable filename inside each B153 variant folder.",
+        help="Linked executable filename inside each selected build variant folder.",
+    )
+    parser.add_argument(
+        "--build-label",
+        default=BUILD_LABEL,
+        help="Build label used in variant folder names (default: B153).",
     )
     args = parser.parse_args()
+    BUILD_LABEL = args.build_label
+    BUILD_PREFIX = f"VF2-Mobile-Furniture-With-Island-Events-{BUILD_LABEL}-"
     try:
         results = validate_matrix(args.outputs_root.resolve(), args.exe_name)
     except ValidationError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     print(
-        "PASS B153 matrix: "
+        f"PASS {BUILD_LABEL} matrix: "
         f"{len(results)} variants, 8 Holiday-positive, 8 Holiday-negative"
     )
     return 0
