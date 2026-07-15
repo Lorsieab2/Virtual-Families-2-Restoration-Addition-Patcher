@@ -192,7 +192,7 @@ SETTINGS = [
     {
         "id": "older_villager_mortality",
         "label": "Older Villager Mortality Curve",
-        "description": "Experimental patch: replaces only the annual old-age death roll with a tight lifespan distribution centered at age 75 (sigma 3). A complete four-group diet grants one effective year; annual hazard is capped at 70%, so extreme ages beyond 122 remain possible but exceptionally rare. All stock mortality remains active when disabled.",
+        "description": "Experimental patch: replaces only the annual old-age death roll with sex-averaged SSA 2022 annual death probabilities for effective ages 55-105, followed by a 50% annual mortality plateau at age 106+. Each active food group subtracts one effective year (0-4 total). Extreme ages beyond 122 remain possible without a hard age cap. All stock mortality remains active when disabled.",
         "default": False,
         "category": "experimental",
     },
