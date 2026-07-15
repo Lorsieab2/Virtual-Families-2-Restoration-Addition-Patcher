@@ -40,6 +40,17 @@ MORTALITY_WILDCARD_RANGES = (
 MORTALITY_WILDCARDS = frozenset(
     offset for offsets in MORTALITY_WILDCARD_RANGES for offset in offsets
 )
+MORTALITY_B155_SSA_2022_BASIS_POINTS_55_TO_105 = (
+    67, 73, 79, 86, 93, 101, 109, 117, 126, 135,
+    145, 154, 164, 175, 189, 204, 221, 240, 262, 287,
+    315, 351, 388, 428, 472, 524, 581, 643, 714, 794,
+    887, 990, 1107, 1237, 1375, 1528, 1695, 1882, 2086, 2302,
+    2527, 2756, 2990, 3222, 3445, 3673, 3906, 4143, 4382, 4622,
+    4875,
+)
+MORTALITY_B155_HAZARDS_BASIS_POINTS_55_TO_130 = (
+    MORTALITY_B155_SSA_2022_BASIS_POINTS_55_TO_105 + (5000,) * 25
+)
 
 PREGNANCY_COOLDOWN_TRAMPOLINE = bytes.fromhex(
     "FF B3 54 6A 00 00 FF B7 54 6A 00 00 56 50 E8 00 00 00 00 "
@@ -374,7 +385,11 @@ def masked_matches(data: bytes, pattern: bytes, wildcards: frozenset[int]):
             yield start
 
 
-def validate_older_mortality(path: Path, expected_flag: int) -> dict:
+def validate_older_mortality(
+    path: Path,
+    expected_flag: int,
+    build_label: str = "B153",
+) -> dict:
     image = LinkedPE(path)
     flag = validate_one_byte_flag(image, ".vf2mort", expected_flag)
     candidates = []
@@ -472,8 +487,25 @@ def validate_older_mortality(path: Path, expected_flag: int) -> dict:
     )
     if helper_window.find(age_math) != 8:
         raise ValueError(f"{path}: mortality helper 20-tick birthday math drifted")
-    if bytes.fromhex("BE 0F 27 00 00 81 FA 82 00 00 00 7F") not in helper_window:
-        raise ValueError(f"{path}: mortality helper 99.99-percent hazard cap drifted")
+    try:
+        build_number = int(build_label.lstrip("Bb"))
+    except ValueError as exc:
+        raise ValueError(f"Invalid build label for mortality validation: {build_label}") from exc
+    if build_number >= 155:
+        if bytes.fromhex("BE 88 13 00 00 81 FA 82 00 00 00 7F") not in helper_window:
+            raise ValueError(f"{path}: mortality helper 50-percent age-106+ plateau drifted")
+        hazard_table = struct.pack(
+            "<76i", *MORTALITY_B155_HAZARDS_BASIS_POINTS_55_TO_130
+        )
+        if image.data.count(hazard_table) != 1:
+            raise ValueError(
+                f"{path}: expected one exact B155 SSA/plateau mortality table"
+            )
+        maximum_hazard_basis_points = 5000
+    else:
+        if bytes.fromhex("BE 0F 27 00 00 81 FA 82 00 00 00 7F") not in helper_window:
+            raise ValueError(f"{path}: mortality helper 99.99-percent hazard cap drifted")
+        maximum_hazard_basis_points = 9999
     if bytes.fromhex("B8 04 00 00 00 3B C8 0F 4F C8") not in helper_window:
         raise ValueError(f"{path}: mortality helper four-group clamp drifted")
     if bytes.fromhex("83 FA 37 7C") not in helper_window:
@@ -489,16 +521,22 @@ def validate_older_mortality(path: Path, expected_flag: int) -> dict:
         "flag_off_rejoins_stock_at_hook_plus": "0x9",
         "enabled_rejoins_after_old_age_block_at_hook_plus": "0x75",
         "helper_random_limit": 10000,
-        "maximum_hazard_basis_points": 9999,
+        "maximum_hazard_basis_points": maximum_hazard_basis_points,
+        "hazard_table_first_effective_age": 55,
+        "hazard_table_last_effective_age": 130,
         "maximum_food_group_effective_age_reduction": 4,
     }
 
 
-def validate_exe(path: Path, expected_flag: int) -> dict:
+def validate_exe(
+    path: Path,
+    expected_flag: int,
+    build_label: str = "B153",
+) -> dict:
     pregnancy = validate_older_pregnancy(path, expected_flag)
     image = LinkedPE(path)
     goal = validate_one_byte_flag(image, ".vf2goal", expected_flag)
-    mortality = validate_older_mortality(path, expected_flag)
+    mortality = validate_older_mortality(path, expected_flag, build_label)
     original = bytes(image.data)
     flag_offsets = [
         int(goal["raw_offset"], 16),
@@ -628,7 +666,7 @@ def main() -> int:
     failures = []
     for path in paths:
         try:
-            results.append(validate_exe(path, expected_flag))
+            results.append(validate_exe(path, expected_flag, args.build_label))
         except (OSError, ValueError, struct.error) as exc:
             failures.append(f"{path}: {exc}")
     if failures:
