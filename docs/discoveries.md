@@ -1,5 +1,23 @@
 # Discoveries
 
+## 2026-07-14 - B155 Realistic Mortality Curve
+
+- Older Villager Mortality now uses the sex-averaged 2022 U.S. Social Security
+  period-life-table annual death probabilities for effective ages 55-105.
+  Values are stored as integer basis points and still use GetRandom(10000)
+  exactly once on each 20-tick birthday.
+- Effective age 106 and above uses a 5,000-basis-point (50%) annual mortality
+  plateau. This avoids both a hard maximum age and B154's 99.99% yearly cliff.
+- Each active food group still subtracts one effective year, clamped to 0-4.
+  With constant food-group history, old-age-only survival through displayed age
+  122 is about 1 in 268.6 million with zero groups and 1 in 16.8 million with
+  all four groups.
+- The optional hook continues replacing only the stock old-age mortality block.
+  Sickness, starvation, healing, productivity, and all other physiology remain
+  native and unchanged.
+- Source: SSA Annual Statistical Supplement 2025, table 4.C6 (2022 period life
+  table): https://www.ssa.gov/policy/docs/statcomps/supplement/2025/4c.html
+
 ## 2026-07-12 - Native Debugger and Editor Interface Split
 
 - Desktop theMainScene.obj implements IDebugger as a secondary base at object
