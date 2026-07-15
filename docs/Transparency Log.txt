@@ -824,3 +824,18 @@ B154 release follow-up (2026-07-14)
 - Automated proof: all 177 tests pass; the 16 unique B154 layouts pass linked debugger, Holiday-positive/negative, cooldown, mortality, three-flag exact-SHA, idempotence, and exact-disable restoration validation.
 - User-confirmed live in the preceding build: F5 opens without a house-load crash, Light Source Editor works, ornaments spawn and award Ornamentologist, mortality runs, new purchase/behavior goals and Cheat Upgrades work, and north-bathroom malfunctions work. Narrow persistence and edge-case audits remain where listed.
 - Backlog: mobile-exclusive furniture behaviors remain a separate default-off optional patch; disruptive group celebrations must require a manually dropped villager and must not become autonomous family-wide actions.
+
+
+B155 mortality-only change
+---------------------------
+- The optional Older Villager Mortality patch no longer uses the B154 normal
+  survival curve centered at age 75 with sigma 3.
+- It now uses sex-averaged SSA 2022 annual death probabilities for effective
+  ages 55-105, rounded to the game's 10,000-way birthday roll.
+- Effective ages 106+ use a 50% annual supercentenarian mortality plateau.
+  There is still no hard maximum age.
+- Active food groups retain the vanilla-style bonus: each active group subtracts
+  one effective year, clamped to four.
+- No pregnancy, behavior, furniture, collection, debugger, cheat, goal, event,
+  price, or other gameplay logic is changed for B155.
+- Statistical source: https://www.ssa.gov/policy/docs/statcomps/supplement/2025/4c.html
