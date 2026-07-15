@@ -141,7 +141,7 @@ finally {
 }
 
 Write-Host "Running B155 linked Holiday positive/negative validation"
-& $pythonExe @pythonArgs $holidayValidator
+& $pythonExe @pythonArgs $holidayValidator --build-label B155
 if ($LASTEXITCODE -ne 0) {
     throw "B155 linked Holiday validation failed with exit code $LASTEXITCODE"
 }
