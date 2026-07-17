@@ -36,9 +36,11 @@
   helper. Stock body values `0-49` fall back to the original draw path.
 - Keeps the original villager spritesheets as fallback assets and leaves head
   rendering untouched.
-- Build folders should be mirrored to both `C:\Users\Owner\Downloads` and
-  `C:\Users\Owner\OneDrive\Desktop\LDW Desktop Games!! And Other Stuff\Virtual Families 2 Codex Test Builds`.
-  Use `work/sync_build_outputs.py` after a successful build.
+- At the time of B57, build folders were mirrored to Downloads and an old
+  OneDrive test-build directory. That external default was retired before
+  B155.5; `work/sync_build_outputs.py` now mirrors only to the repository's
+  ignored `outputs/test-build-copies` directory unless an explicit destination
+  is supplied.
 
 ## B58 - VF3 TV Appliances And Playhouse
 

@@ -846,3 +846,16 @@ B155 mortality-only change
 - Release packaging uses only manifest-referenced payload files. The audited
   full-payload draft was discarded because it contained unnecessary stock and
   reference files.
+
+
+B155.5 local-workspace safety cleanup
+-------------------------------------
+- The repository, Git database, source, documentation, and tracked project
+  inputs are hosted under `C:\Users\Owner\Documents\Codex\Virtual-Families-2-Restoration-Addition-Patcher`.
+- The build-output synchronization helper no longer defaults to Downloads or
+  the former OneDrive VF2 test-build directory. Its only default destination is
+  the ignored local workspace path `outputs/test-build-copies`.
+- Historical documentation now labels the B57 external mirror destinations as
+  retired. An explicitly supplied `--destination` remains supported.
+- This cleanup changes no game executable, mortality formula, patch manifest,
+  asset payload, or player-facing patcher behavior.

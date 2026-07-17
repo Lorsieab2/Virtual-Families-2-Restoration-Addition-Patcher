@@ -7,8 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DESTINATIONS = (
-    Path(r"C:\Users\Owner\Downloads"),
-    Path(r"C:\Users\Owner\OneDrive\Desktop\LDW Desktop Games!! And Other Stuff\Virtual Families 2 Codex Test Builds"),
+    ROOT / "outputs" / "test-build-copies",
 )
 
 
@@ -22,7 +21,7 @@ def copy_build_folder(build_folder: Path, destination_root: Path) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Mirror a completed VF2 build folder to the standard local test locations."
+        description="Mirror a completed VF2 build folder inside the local workspace."
     )
     parser.add_argument("build_folder", help="Build folder to copy, usually under outputs/.")
     parser.add_argument(
@@ -30,7 +29,7 @@ def main() -> None:
         action="append",
         type=Path,
         dest="destinations",
-        help="Extra destination root. Defaults are Downloads and the OneDrive VF2 test builds folder.",
+        help="Extra destination root. The default is outputs/test-build-copies in this workspace.",
     )
     args = parser.parse_args()
 
