@@ -2762,64 +2762,72 @@ class OlderPregnancyPatchTests(unittest.TestCase):
 
 
 class OlderMortalityPatchTests(unittest.TestCase):
-    def test_curve_uses_real_life_table_and_supercentenarian_plateau(self):
+    def test_curve_is_monotonic_full_game_calibration_with_rare_tail(self):
         expected = {
             54: 0,
-            55: 67,
-            65: 145,
-            70: 204,
-            75: 315,
-            80: 524,
-            85: 887,
-            90: 1528,
-            95: 2527,
-            100: 3673,
-            105: 4875,
-            106: 5000,
-            122: 5000,
-            130: 5000,
-            131: 5000,
+            55: 0,
+            56: 3643,
+            60: 18084,
+            65: 35842,
+            70: 53278,
+            75: 70399,
+            80: 87211,
+            90: 119927,
+            100: 151470,
+            110: 181883,
+            111: 232334,
+            122: 618845,
+            130: 770935,
+            317: 999998,
+            318: 999999,
         }
         self.assertEqual(
             {
-                age: patcher.older_mortality_hazard_basis_points(age)
+                age: patcher.older_mortality_hazard_millionths(age)
                 for age in expected
             },
             expected,
         )
         self.assertEqual(
-            len(patcher.OLDER_MORTALITY_HAZARDS_BASIS_POINTS),
-            76,
+            len(patcher.OLDER_MORTALITY_HAZARDS_MILLIONTHS),
+            263,
         )
-        self.assertLess(max(expected.values()), 10000)
+        hazards = [
+            patcher.older_mortality_hazard_millionths(age)
+            for age in range(55, 501)
+        ]
+        self.assertEqual(hazards, sorted(hazards))
+        self.assertLess(max(hazards), patcher.OLDER_MORTALITY_RANDOM_LIMIT)
 
         survival_122 = patcher.older_mortality_survival_probability_through_age(122)
-        self.assertAlmostEqual(survival_122, 3.7225576513957644e-9)
-        self.assertAlmostEqual(
-            1.0 / survival_122,
-            268632508.51872027,
-        )
+        self.assertAlmostEqual(survival_122, 2.2723451388172135e-06)
         with_four_groups = (
             patcher.older_mortality_survival_probability_through_age(122, 4)
         )
-        self.assertAlmostEqual(with_four_groups, 5.956092242233223e-8)
+        self.assertAlmostEqual(with_four_groups, 7.348730358966406e-05)
         self.assertGreater(with_four_groups, survival_122)
 
-        # The realistic curve peaks by decade in the 80s rather than forcing
-        # nearly everyone into a narrow age-75 +/- 3 window.
-        alive = 1.0
-        deaths_by_decade = {70: 0.0, 80: 0.0, 90: 0.0, 100: 0.0}
-        for age in range(55, 110):
-            hazard = patcher.older_mortality_hazard_basis_points(age) / 10000.0
-            death = alive * hazard
-            decade = age // 10 * 10
-            if decade in deaths_by_decade:
-                deaths_by_decade[decade] += death
-            alive *= 1.0 - hazard
-        self.assertGreater(deaths_by_decade[80], deaths_by_decade[70])
-        self.assertGreater(deaths_by_decade[80], deaths_by_decade[90])
-        self.assertGreater(deaths_by_decade[90], deaths_by_decade[100])
-        self.assertGreater(alive, 0.0)
+        for groups in range(5):
+            death_rows = []
+            median = None
+            for age in range(55, 501):
+                reach = patcher.older_mortality_survival_probability_through_age(
+                    age - 1, groups
+                )
+                hazard = (
+                    patcher.older_mortality_hazard_millionths(age - groups)
+                    / patcher.OLDER_MORTALITY_RANDOM_LIMIT
+                )
+                death_rows.append((reach * hazard, age))
+                if median is None and (
+                    patcher.older_mortality_survival_probability_through_age(
+                        age, groups
+                    )
+                    <= 0.5
+                ):
+                    median = age
+            self.assertEqual(max(death_rows)[1], 72 + groups)
+            self.assertEqual(median, 74 + groups)
 
     def test_dormant_hook_preserves_stock_mortality_path_and_exact_abi(self):
         old_patched = patcher.PATCHED

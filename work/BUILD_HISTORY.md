@@ -1229,3 +1229,30 @@
 - Adds Cheat Upgrade 0x12E, Complete all Achievements, through native SetComplete semantics and assigns the trophy icon to it and Complete all collections.
 - Validation: all 177 tests pass; all 16 B154 layouts have unique hashes and pass linked debugger, Holiday-positive/negative, runtime-flag ABI, exact-SHA toggle, idempotence, and exact-disable restoration checks.
 - Release package: 1,122 unique files, 85,847,005 bytes, CRC-clean, no build logs/caches, 16 executable overlays, three runtime toggles, SHA-256 5FFC049FBC4371BF92C69201B74B04B171C32CAEBB8A205880BD2F8BC5E91976.
+
+## B155 - SSA mortality-only follow-up
+
+- Replaced B154's sigma-3 optional mortality curve with sex-averaged SSA 2022
+  annual probabilities for effective ages 55-105 and a 50% yearly plateau
+  thereafter.
+- Retained the native annual timing, old-age death path, optional runtime flag,
+  and 0-4 active-food-group effective-age shift.
+- Released as `Virtual-Families-2-Restoration-Addition-Patcher-B155.zip` with
+  SHA-256 `2C0DC8452D9D09B86380A8330A446B49BC80684EF7A4D699A04FDE481862C4A4`.
+
+## B155.5 - full-game calibrated mortality
+
+- Replaces only B155's optional SSA/50% mortality table with a monotonically
+  increasing, never-certain curve calibrated against 60 adults per full game.
+- Retains the stock threshold `55 + active food groups`, clamped to 0-4, and
+  uses annual intensity `0.00365*n + 0.06*max(0,n-55)`.
+- Uses one native million-way birthday roll, a 999999/1000000 maximum hazard,
+  no hard maximum age, and late acceleration after effective age 110.
+- Adds analytical and million-person-per-food-case validation. All 178 unit
+  tests pass with one intentional skip. All 16 linked layouts have unique
+  hashes and pass Holiday-positive/negative, exact millionth-table/helper,
+  three-flag toggle, idempotence, and exact-disable restoration validation.
+- The manifest-pruned offline bundle contains 1,122 files and no logs, caches,
+  object files, duplicate ZIP names, or other forbidden build artifacts. The
+  CRC-clean ZIP is 85,791,172 bytes with SHA-256
+  `FC1113DF8F85B1D2BF279110E217EE70A64FD14DB5E1FEE873018E7F01ADB3A8`.

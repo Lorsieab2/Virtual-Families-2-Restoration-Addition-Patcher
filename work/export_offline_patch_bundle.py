@@ -192,7 +192,7 @@ SETTINGS = [
     {
         "id": "older_villager_mortality",
         "label": "Older Villager Mortality Curve",
-        "description": "Experimental patch: replaces only the annual old-age death roll with sex-averaged SSA 2022 annual death probabilities for effective ages 55-105, followed by a 50% annual mortality plateau at age 106+. Each active food group subtracts one effective year (0-4 total). Extreme ages beyond 122 remain possible without a hard age cap. All stock mortality remains active when disabled.",
+        "description": "Experimental patch: replaces only the annual old-age death roll with a full-game calibrated chance that increases with effective age and accelerates after effective age 110. The stock threshold and 0-4 active-food-group age bonus remain. Old-age death never becomes certain and there is no hard maximum age; reaching 110 should take multiple 60-adult games and reaching 122 is exceptionally rare. All stock mortality remains active when disabled.",
         "default": False,
         "category": "experimental",
     },
@@ -1944,7 +1944,7 @@ def default_settings(
 
 def infer_build_label(bundle_dir: Path, manifest_name: str | None = None) -> str:
     for text in (manifest_name or "", bundle_dir.name):
-        match = re.search(r"\bB\d+\b", text, flags=re.IGNORECASE)
+        match = re.search(r"\bB\d+(?:\.\d+)?\b", text, flags=re.IGNORECASE)
         if match:
             return match.group(0).upper()
     return "Current"
@@ -2384,6 +2384,8 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B154 validation: All 177 tests pass; all 16 unique executable layouts pass debugger, Holiday-positive/negative, runtime-flag ABI, exact-SHA toggle, idempotence, and exact-disable restoration validation.",
             "- B155 game build: Changes only Older Villager Mortality: replaces the sigma-3 age-75 cliff with sex-averaged SSA 2022 annual death probabilities for effective ages 55-105, then a 50% yearly supercentenarian plateau. Active food groups still subtract 0-4 effective years; sickness and every other physiology path remain unchanged.",
             "- B155 validation: All 177 automated tests pass. All 16 unique executable layouts pass corrected B155 Holiday-positive/negative and dormant-runtime validation, including the exact embedded SSA hazard table, 50% tail, and reversible exact-SHA flag toggles.",
+            "- B155.5 game build: Changes only Older Villager Mortality: retains the stock 55-plus-food-group threshold, uses a monotonic full-game calibrated millionth-resolution birthday roll, accelerates after effective age 110, never reaches certain old-age death, and imposes no hard maximum age.",
+            "- B155.5 calibration: Uses 60 adults per full game. Constant 0-4 food-group cases place modal deaths at ages 72-76; reaching 110 takes about 4.279-2.289 games per success and reaching 122 takes about 2796.10-112.00 games per success.",
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
             "- B119 patcher refresh: Supports a bundled Island Events EXE overlay that only applies when the optional Island Events setting is enabled.",

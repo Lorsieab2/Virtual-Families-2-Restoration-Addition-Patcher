@@ -859,3 +859,33 @@ B155.5 local-workspace safety cleanup
   retired. An explicitly supplied `--destination` remains supported.
 - This cleanup changes no game executable, mortality formula, patch manifest,
   asset payload, or player-facing patcher behavior.
+
+
+B155.5 full-game mortality calibration
+---------------------------------------
+- The optional Older Villager Mortality setting retains the stock annual
+  birthday hook, threshold `55 + active food groups`, 0-4 nutrition input, and
+  native `SetHealth(0, OldAge)` success path.
+- When enabled, effective years past that threshold use annual intensity
+  `0.00365*n + 0.06*max(0,n-55)`. The probability is converted with
+  `1-exp(-intensity)`, rounded half-up to millionths, and capped at
+  999999/1000000. It increases with age, never becomes certain, and imposes no
+  hard maximum age.
+- Calibration uses 60 adults per full game. Constant 0-4 food-group cases put
+  modal deaths at ages 72-76 and medians at 74-78. A game has about a
+  23.3678%-43.6895% chance to produce someone who reaches 110 and a
+  0.0357641%-0.892847% chance to produce someone who reaches 122.
+- Organic food is excluded. Sickness, starvation, exhaustion, pregnancy,
+  achievements, goals, time-away replay, and other gameplay systems are not
+  altered. The planned age-122 longevity achievement remains unimplemented.
+- Analytical and deterministic simulation validation do not substitute for
+  live gameplay QA; live birthday, save/reload, time-away, and patch-off tests
+  remain listed separately.
+- Automated proof: all 178 unit tests pass with one intentional skip. All 16
+  B155.5 layouts have unique hashes and pass Holiday-positive/negative,
+  million-way mortality helper/table, three-flag exact-SHA, idempotence, and
+  exact-disable restoration validation.
+- The final manifest-pruned ZIP contains 1,122 files, is 85,791,172 bytes,
+  passes full CRC validation, and contains no duplicate names or forbidden
+  logs/caches/object files. SHA-256:
+  FC1113DF8F85B1D2BF279110E217EE70A64FD14DB5E1FEE873018E7F01ADB3A8.

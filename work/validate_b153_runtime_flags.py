@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import struct
 from pathlib import Path
 
@@ -50,6 +51,24 @@ MORTALITY_B155_SSA_2022_BASIS_POINTS_55_TO_105 = (
 )
 MORTALITY_B155_HAZARDS_BASIS_POINTS_55_TO_130 = (
     MORTALITY_B155_SSA_2022_BASIS_POINTS_55_TO_105 + (5000,) * 25
+)
+MORTALITY_B155_5_HAZARDS_MILLIONTHS_55_TO_317 = tuple(
+    min(
+        999999,
+        int(
+            math.floor(
+                -math.expm1(
+                    -(
+                        0.00365 * max(0, age - 55)
+                        + 0.06 * max(0, age - 110)
+                    )
+                )
+                * 1000000
+                + 0.5
+            )
+        ),
+    )
+    for age in range(55, 318)
 )
 
 PREGNANCY_COOLDOWN_TRAMPOLINE = bytes.fromhex(
@@ -480,18 +499,36 @@ def validate_older_mortality(
 
     helper_raw = image.rva_to_raw(helper_rva)
     helper_window = image.data[helper_raw:helper_raw + 0x240]
-    if b"\x68\x10\x27\x00\x00" not in helper_window:
-        raise ValueError(f"{path}: mortality helper does not request GetRandom(10000)")
     age_math = bytes.fromhex(
         "B8 CD CC CC CC F7 E1 C1 EA 04 8D 04 92 C1 E0 02 2B C8 75"
     )
     if helper_window.find(age_math) != 8:
         raise ValueError(f"{path}: mortality helper 20-tick birthday math drifted")
     try:
-        build_number = int(build_label.lstrip("Bb"))
+        build_number = float(build_label.lstrip("Bb"))
     except ValueError as exc:
         raise ValueError(f"Invalid build label for mortality validation: {build_label}") from exc
-    if build_number >= 155:
+    if build_number == 155.5:
+        if b"\x68\x40\x42\x0f\x00" not in helper_window:
+            raise ValueError(f"{path}: mortality helper does not request GetRandom(1000000)")
+        if bytes.fromhex("BE 3F 42 0F 00 81 FA 3D 01 00 00 7F") not in helper_window:
+            raise ValueError(f"{path}: B155.5 mortality cap/table boundary drifted")
+        hazard_table = struct.pack(
+            "<263i", *MORTALITY_B155_5_HAZARDS_MILLIONTHS_55_TO_317
+        )
+        if image.data.count(hazard_table) != 1:
+            raise ValueError(
+                f"{path}: expected one exact B155.5 millionth mortality table"
+            )
+        helper_random_limit = 1000000
+        hazard_metadata = {
+            "maximum_hazard_millionths": 999999,
+            "hazard_table_first_effective_age": 55,
+            "hazard_table_last_effective_age": 317,
+        }
+    elif build_number >= 155:
+        if b"\x68\x10\x27\x00\x00" not in helper_window:
+            raise ValueError(f"{path}: mortality helper does not request GetRandom(10000)")
         if bytes.fromhex("BE 88 13 00 00 81 FA 82 00 00 00 7F") not in helper_window:
             raise ValueError(f"{path}: mortality helper 50-percent age-106+ plateau drifted")
         hazard_table = struct.pack(
@@ -501,11 +538,23 @@ def validate_older_mortality(
             raise ValueError(
                 f"{path}: expected one exact B155 SSA/plateau mortality table"
             )
-        maximum_hazard_basis_points = 5000
+        helper_random_limit = 10000
+        hazard_metadata = {
+            "maximum_hazard_basis_points": 5000,
+            "hazard_table_first_effective_age": 55,
+            "hazard_table_last_effective_age": 130,
+        }
     else:
+        if b"\x68\x10\x27\x00\x00" not in helper_window:
+            raise ValueError(f"{path}: mortality helper does not request GetRandom(10000)")
         if bytes.fromhex("BE 0F 27 00 00 81 FA 82 00 00 00 7F") not in helper_window:
             raise ValueError(f"{path}: mortality helper 99.99-percent hazard cap drifted")
-        maximum_hazard_basis_points = 9999
+        helper_random_limit = 10000
+        hazard_metadata = {
+            "maximum_hazard_basis_points": 9999,
+            "hazard_table_first_effective_age": 55,
+            "hazard_table_last_effective_age": 130,
+        }
     if bytes.fromhex("B8 04 00 00 00 3B C8 0F 4F C8") not in helper_window:
         raise ValueError(f"{path}: mortality helper four-group clamp drifted")
     if bytes.fromhex("83 FA 37 7C") not in helper_window:
@@ -520,10 +569,8 @@ def validate_older_mortality(
         "set_health_target_rva": f"0x{set_health_rva:x}",
         "flag_off_rejoins_stock_at_hook_plus": "0x9",
         "enabled_rejoins_after_old_age_block_at_hook_plus": "0x75",
-        "helper_random_limit": 10000,
-        "maximum_hazard_basis_points": maximum_hazard_basis_points,
-        "hazard_table_first_effective_age": 55,
-        "hazard_table_last_effective_age": 130,
+        "helper_random_limit": helper_random_limit,
+        **hazard_metadata,
         "maximum_food_group_effective_age_reduction": 4,
     }
 

@@ -55,46 +55,44 @@ OLDER_MORTALITY_FLAG_SECTION = ".vf2mort"
 OLDER_MORTALITY_FLAG_SYMBOL = "_gVF2OlderVillagerMortality"
 OLDER_MORTALITY_HELPER_SYMBOL = "_VF2RollOlderVillagerMortality"
 OLDER_MORTALITY_TABLE_FIRST_AGE = 55
-OLDER_MORTALITY_TABLE_LAST_AGE = 130
-OLDER_MORTALITY_EXTREME_AGE_HAZARD_BASIS_POINTS = 5000
+OLDER_MORTALITY_RANDOM_LIMIT = 1_000_000
+OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS = 999_999
+OLDER_MORTALITY_BASE_INTENSITY_PER_YEAR = 0.00365
+OLDER_MORTALITY_LATE_INTENSITY_PER_YEAR = 0.06
+OLDER_MORTALITY_LATE_ACCELERATION_EFFECTIVE_AGE = 110
 
-# Sex-averaged 2022 U.S. Social Security period-life-table death
-# probabilities, converted to basis points and rounded half-to-even. Ages
-# 106+ use a 50% annual supercentenarian mortality plateau so exceptional
-# ages remain possible without the old 99.99% birthday cliff.
-# Source: https://www.ssa.gov/policy/docs/statcomps/supplement/2025/4c.html
-OLDER_MORTALITY_SSA_2022_BASIS_POINTS_55_TO_105 = (
-    67, 73, 79, 86, 93, 101, 109, 117, 126, 135,
-    145, 154, 164, 175, 189, 204, 221, 240, 262, 287,
-    315, 351, 388, 428, 472, 524, 581, 643, 714, 794,
-    887, 990, 1107, 1237, 1375, 1528, 1695, 1882, 2086, 2302,
-    2527, 2756, 2990, 3222, 3445, 3673, 3906, 4143, 4382, 4622,
-    4875,
-)
-OLDER_MORTALITY_HAZARDS_BASIS_POINTS = (
-    OLDER_MORTALITY_SSA_2022_BASIS_POINTS_55_TO_105
-    + (OLDER_MORTALITY_EXTREME_AGE_HAZARD_BASIS_POINTS,)
-    * (
-        OLDER_MORTALITY_TABLE_LAST_AGE
-        - (OLDER_MORTALITY_TABLE_FIRST_AGE
-           + len(OLDER_MORTALITY_SSA_2022_BASIS_POINTS_55_TO_105) - 1)
+
+def older_mortality_hazard_millionths(effective_age):
+    """Return the B155.5 annual old-age threshold in the 0..999999 domain."""
+    years_past_threshold = max(0, effective_age - OLDER_MORTALITY_TABLE_FIRST_AGE)
+    late_years = max(
+        0,
+        effective_age - OLDER_MORTALITY_LATE_ACCELERATION_EFFECTIVE_AGE,
+    )
+    intensity = (
+        OLDER_MORTALITY_BASE_INTENSITY_PER_YEAR * years_past_threshold
+        + OLDER_MORTALITY_LATE_INTENSITY_PER_YEAR * late_years
+    )
+    hazard = -math.expm1(-intensity)
+    # Round half up to the nearest millionth, then retain one non-death outcome.
+    threshold = int(math.floor(hazard * OLDER_MORTALITY_RANDOM_LIMIT + 0.5))
+    return min(OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS, threshold)
+
+
+# The first quantized cap occurs at effective age 318. Store every non-cap
+# threshold explicitly in the native helper and use the cap thereafter.
+OLDER_MORTALITY_TABLE_LAST_AGE = 317
+OLDER_MORTALITY_HAZARDS_MILLIONTHS = tuple(
+    older_mortality_hazard_millionths(age)
+    for age in range(
+        OLDER_MORTALITY_TABLE_FIRST_AGE,
+        OLDER_MORTALITY_TABLE_LAST_AGE + 1,
     )
 )
-if len(OLDER_MORTALITY_HAZARDS_BASIS_POINTS) != (
+if len(OLDER_MORTALITY_HAZARDS_MILLIONTHS) != (
     OLDER_MORTALITY_TABLE_LAST_AGE - OLDER_MORTALITY_TABLE_FIRST_AGE + 1
 ):
     raise AssertionError("Older-mortality hazard table length drifted")
-
-
-def older_mortality_hazard_basis_points(effective_age):
-    """Return the realistic annual death threshold in the 0..10000 domain."""
-    if effective_age < OLDER_MORTALITY_TABLE_FIRST_AGE:
-        return 0
-    if effective_age > OLDER_MORTALITY_TABLE_LAST_AGE:
-        return OLDER_MORTALITY_EXTREME_AGE_HAZARD_BASIS_POINTS
-    return OLDER_MORTALITY_HAZARDS_BASIS_POINTS[
-        effective_age - OLDER_MORTALITY_TABLE_FIRST_AGE
-    ]
 
 
 def older_mortality_survival_probability_through_age(age, active_food_groups=0):
@@ -102,8 +100,8 @@ def older_mortality_survival_probability_through_age(age, active_food_groups=0):
     groups = max(0, min(4, active_food_groups))
     probability = 1.0
     for displayed_age in range(OLDER_MORTALITY_TABLE_FIRST_AGE, age + 1):
-        hazard = older_mortality_hazard_basis_points(displayed_age - groups)
-        probability *= 1.0 - hazard / 10000.0
+        hazard = older_mortality_hazard_millionths(displayed_age - groups)
+        probability *= 1.0 - hazard / OLDER_MORTALITY_RANDOM_LIMIT
     return probability
 
 
@@ -148,9 +146,7 @@ def older_pregnancy_effective_chance_tenths(
         father_age_years,
     ) * 10
     return max(1, min(stock_tenths, older_pregnancy_cap_tenths(older_age)))
-ANALYSIS = ROOT / "outputs" / "VF2-Desktop-Object-Analysis"
-if not (ANALYSIS / "furniture-records.json").exists():
-    ANALYSIS = ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis"
+ANALYSIS = ROOT / "data" / "vf2"
 
 ITEMINFO = "?itemInfo@@3PAUsFurnitureInfo@@A"
 ITEMLOOKUP = "?itemInfoLookup@@3PAPAUsFurnitureInfo@@A"
@@ -8426,9 +8422,9 @@ extern "C" void __cdecl VF2HandleStoreScrollbarMouse(void *scene, int message, i
     )
 
     mortality_hazards_cpp = cpp_int_array(
-        "kVF2OlderMortalityHazardsBasisPoints",
+        "kVF2OlderMortalityHazardsMillionths",
         [
-            older_mortality_hazard_basis_points(age)
+            older_mortality_hazard_millionths(age)
             for age in range(
                 OLDER_MORTALITY_TABLE_FIRST_AGE,
                 OLDER_MORTALITY_TABLE_LAST_AGE + 1,
@@ -8674,12 +8670,12 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
     int effectiveAge = internalAge / 20 - nutritionShift;
     if (effectiveAge < 55) return 0;
 
-    int hazardBasisPoints = 5000;
-    if (effectiveAge <= 130) {
-        hazardBasisPoints =
-            kVF2OlderMortalityHazardsBasisPoints[effectiveAge - 55];
+    int hazardMillionths = 999999;
+    if (effectiveAge <= 317) {
+        hazardMillionths =
+            kVF2OlderMortalityHazardsMillionths[effectiveAge - 55];
     }
-    return ldwGameState::GetRandom(10000) < hazardBasisPoints ? 1 : 0;
+    return ldwGameState::GetRandom(1000000) < hazardMillionths ? 1 : 0;
 }
 
 static int VF2AchievementVisibleCountInternal() {
@@ -11185,7 +11181,7 @@ def patch_older_villager_mortality(manifest):
             "stock mortality instructions +0x35C..+0x3C7 remain unchanged"
         ),
         "enabled_path": (
-            "one basis-point roll on exact 20-tick birthdays, then rejoin at +0x3C8"
+            "one millionth-resolution roll on exact 20-tick birthdays, then rejoin at +0x3C8"
         ),
         "runtime_flag": {
             "symbol": OLDER_MORTALITY_FLAG_SYMBOL,
@@ -11196,13 +11192,21 @@ def patch_older_villager_mortality(manifest):
             "linked_location_status": "pending_link_metadata",
         },
         "curve": {
-            "main_distribution": "sex-averaged SSA 2022 annual mortality for effective ages 55-105",
-            "nutrition": "each active food group subtracts one effective year, capped at four",
-            "rare_tail": "effective age 106+ uses a 50% annual supercentenarian mortality plateau",
+            "main_distribution": (
+                "annual intensity 0.00365*n + 0.06*max(0,n-55), where "
+                "n=max(0, displayed age-(55+active food groups))"
+            ),
+            "nutrition": (
+                "stock threshold T=55+active food groups, clamped to 0-4 groups"
+            ),
+            "rare_tail": (
+                "additional intensity begins after effective age 110; the "
+                "999999/1000000 cap retains one non-death outcome"
+            ),
             "hard_maximum": None,
-            "annual_hazard_cap_basis_points": OLDER_MORTALITY_EXTREME_AGE_HAZARD_BASIS_POINTS,
-            "source": "SSA 2022 period life table, Annual Statistical Supplement 2025 table 4.C6",
-            "random_limit": 10000,
+            "annual_hazard_cap_millionths": OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS,
+            "source": "B155.5 full-game calibrated monotonic curve",
+            "random_limit": OLDER_MORTALITY_RANDOM_LIMIT,
             "table_first_age": OLDER_MORTALITY_TABLE_FIRST_AGE,
             "table_last_age": OLDER_MORTALITY_TABLE_LAST_AGE,
         },

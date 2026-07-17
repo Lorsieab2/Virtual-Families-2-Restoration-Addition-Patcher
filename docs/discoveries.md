@@ -1,5 +1,27 @@
 # Discoveries
 
+## 2026-07-17 - B155.5 Full-Game Calibrated Mortality
+
+- The stock old-age rule is an annual birthday roll after threshold
+  `55 + active food groups`, increasing by ten percentage points per effective
+  year and reaching certainty ten effective years later.
+- B155.5 keeps that threshold and the native 0-4 food-group input, but uses the
+  monotonic intensity `0.00365*n + 0.06*max(0,n-55)`, where `n` is effective
+  years past the threshold. The annual probability is `1-exp(-intensity)`,
+  rounded half-up to millionths and capped at 999999/1000000.
+- The late term begins after effective age 110. The first quantized cap is
+  effective age 318; one non-death result always remains and there is no hard
+  maximum age.
+- Calibration treats a full game as 60 adults. Across constant 0-4 food-group
+  scenarios, modal death ages are 72-76 and median ages are 74-78. Reaching
+  age 110 takes about 4.279-2.289 games per success; reaching 122 takes about
+  2796.10-112.00 games per success.
+- Birthday reach odds survive through the preceding birthday roll. They are
+  deliberately distinguished from survival after the roll performed at the
+  milestone age.
+- The planned age-122 longevity achievement remains unimplemented; the curve
+  permits the age but does not add or claim that goal trigger.
+
 ## 2026-07-14 - B155 Realistic Mortality Curve
 
 - Older Villager Mortality now uses the sex-averaged 2022 U.S. Social Security

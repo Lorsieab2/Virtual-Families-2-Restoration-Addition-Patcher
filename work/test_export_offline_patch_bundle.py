@@ -89,6 +89,16 @@ def minimal_pe_bytes(
 
 
 class ExportOfflinePatchBundleTests(unittest.TestCase):
+    def test_decimal_build_label_is_preserved(self):
+        self.assertEqual(
+            exporter.infer_build_label(Path("VF2-Patcher-B155.5")),
+            "B155.5",
+        )
+        self.assertEqual(
+            exporter.infer_build_label(Path("bundle"), "manifest-B155.5.json"),
+            "B155.5",
+        )
+
     def run_exporter(self, *args):
         result = subprocess.run(
             [sys.executable, str(EXPORTER), *args],

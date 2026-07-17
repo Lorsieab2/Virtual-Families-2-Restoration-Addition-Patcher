@@ -694,6 +694,11 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - [x] Link all 16 B154 executable layouts and validate the `.vf2mort` section,
   helper ABI, exact-SHA post-asset records, coexistence with `.vf2preg` and
   `.vf2goal`, unique hashes, and reversible byte-toggle cycles.
+- [x] Replace B155's SSA/50% optional curve in B155.5 with the full-game
+  calibrated monotonic curve; analytically validate all 0-4 food-group cases
+  and simulate at least one million adults per case.
+- [x] Link all 16 B155.5 executable layouts and validate the million-way helper,
+  monotonic hazard table, exact-SHA toggles, and patch-off stock restoration.
 - [ ] Live-test birthdays, time-away catch-up, starvation/sickness causes, ages
   55/60/75/90/100/122+, save/reload, and patch-off stock parity.
 - Keep the exact requested title `Hampster Dance`; use the corrected spelling
