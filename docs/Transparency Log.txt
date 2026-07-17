@@ -881,11 +881,14 @@ B155.5 full-game mortality calibration
 - Analytical and deterministic simulation validation do not substitute for
   live gameplay QA; live birthday, save/reload, time-away, and patch-off tests
   remain listed separately.
+- Release refresh: six active generator constants that still named Downloads or
+  the former checkout now resolve only to workspace-owned paths. The two mobile
+  event CSV inputs were already tracked locally.
 - Automated proof: all 178 unit tests pass with one intentional skip. All 16
   B155.5 layouts have unique hashes and pass Holiday-positive/negative,
   million-way mortality helper/table, three-flag exact-SHA, idempotence, and
   exact-disable restoration validation.
-- The final manifest-pruned ZIP contains 1,122 files, is 85,791,172 bytes,
+- The final manifest-pruned ZIP contains 1,122 files, is 85,791,142 bytes,
   passes full CRC validation, and contains no duplicate names or forbidden
   logs/caches/object files. SHA-256:
-  FC1113DF8F85B1D2BF279110E217EE70A64FD14DB5E1FEE873018E7F01ADB3A8.
+  14ADD32A067848F10BA992FBF41CB2D0CE15FC22505AD6277A7C623E9E7F481C.

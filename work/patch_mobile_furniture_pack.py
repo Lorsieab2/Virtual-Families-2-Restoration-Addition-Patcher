@@ -171,18 +171,17 @@ LOCKED_IMAGE_ID = 632
 LOCKED_GENERATION_FRAME_COUNT = 29
 LOCKED_GENERATION_CELL_WIDTH = 30
 LOCKED_GENERATION_CELL_HEIGHT = 46
-LOCKED_PNG_SOURCE = Path(r"C:\Users\Owner\Downloads\locked.png")
 GENERATION_LOCK_ART_DIR = ROOT / "work" / "assets" / "generation_locks"
 ADDED_FURNITURE_LOCK_GENERATIONS = tuple(range(10, 31))
 ADDED_FURNITURE_LOCK_MIN_GROUP_SIZE = 3
 ADDED_FURNITURE_LOCK_MAX_GROUP_SIZE = 4
 ADDED_FURNITURE_LOCK_SEED = "vf2-mobile-holiday-vf3-generation-locks-b112"
-VF3_SPRITE_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\Sprite")
+VF3_SPRITE_SOURCE_DIR = ROOT / "work" / "assets" / "vf3_source_sprites"
 VF3_SPRITE_WORKSPACE_DIR = ROOT / "work" / "assets" / "vf3_tv_sprites"
 VF3_TV_ANIMATION_ASSET_DIR = ROOT / "work" / "assets" / "vf3_tv_animations"
-TRANSPARENT_STORE_BAR_SOURCE_DIR = Path(r"C:\Users\Owner\Downloads\VF2_TransparentStoreBar\VF2_TransparentStoreBar")
+TRANSPARENT_STORE_BAR_SOURCE_DIR = ROOT / "work" / "assets" / "transparent_store_bar"
 INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR = ROOT / "work" / "invisible_outdoor_furniture_sprites"
-HOLIDAY_OUTFIT_ARCHIVE = Path(r"C:\Users\Owner\Downloads\VF2_Holiday_Content\Holiday Outfits.zip")
+HOLIDAY_OUTFIT_ARCHIVE = ROOT / "work" / "assets" / "holiday_outfits" / "Holiday Outfits.zip"
 GENERATED_VILLAGER_BODIES = ROOT / "generated" / "VillagerBodies"
 HOLIDAY_DETAIL_BODY_SOURCE_DIR = ROOT / "work" / "assets" / "holiday_detail_bodies"
 FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B56-Holiday-Body-Lookup-Test"
@@ -1499,12 +1498,8 @@ def build_native_array_contract():
     }
 
 MOBILE_CSV = ROOT / "data" / "vf2" / "vf2_desktop_base_and_mobile_furniture_sections.csv"
-MOBILE_EVENT_TEXT_PACK = Path(
-    r"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\mobile_only_event_text_pack.csv"
-)
-MOBILE_EVENT_MAPPING_CSV = Path(
-    r"C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\mobile_event_shell_mapping.csv"
-)
+MOBILE_EVENT_TEXT_PACK = ROOT / "work" / "mobile_only_event_text_pack.csv"
+MOBILE_EVENT_MAPPING_CSV = ROOT / "work" / "mobile_event_shell_mapping.csv"
 
 SECTION_LIST = {
     "Accessory/Small Decor": "gAccessories",

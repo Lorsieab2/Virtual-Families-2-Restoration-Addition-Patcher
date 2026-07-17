@@ -1248,11 +1248,14 @@
   uses annual intensity `0.00365*n + 0.06*max(0,n-55)`.
 - Uses one native million-way birthday roll, a 999999/1000000 maximum hazard,
   no hard maximum age, and late acceleration after effective age 110.
+- A release refresh removes six active machine-specific source fallbacks; the
+  generator now resolves those inputs only under the workspace, including the
+  already-tracked mobile event CSV files.
 - Adds analytical and million-person-per-food-case validation. All 178 unit
   tests pass with one intentional skip. All 16 linked layouts have unique
   hashes and pass Holiday-positive/negative, exact millionth-table/helper,
   three-flag toggle, idempotence, and exact-disable restoration validation.
 - The manifest-pruned offline bundle contains 1,122 files and no logs, caches,
   object files, duplicate ZIP names, or other forbidden build artifacts. The
-  CRC-clean ZIP is 85,791,172 bytes with SHA-256
-  `FC1113DF8F85B1D2BF279110E217EE70A64FD14DB5E1FEE873018E7F01ADB3A8`.
+  CRC-clean ZIP is 85,791,142 bytes with SHA-256
+  `14ADD32A067848F10BA992FBF41CB2D0CE15FC22505AD6277A7C623E9E7F481C`.
