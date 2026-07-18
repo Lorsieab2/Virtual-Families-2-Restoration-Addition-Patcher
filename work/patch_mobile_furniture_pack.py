@@ -4384,10 +4384,21 @@ def sync_holiday_body_runtime_frames(manifest):
                                     / f"Body_{body_value:02d}"
                                     / f"{gender_title}_Body_{body_value:02d}_{role}_Frame_{role_frame:02d}.png"
                                 )
+                                existing_runtime_frame = (
+                                    output_root
+                                    / gender_title
+                                    / f"Body_{body_value:02d}"
+                                    / role
+                                    / f"Frame{role_frame:02d}.png"
+                                )
                                 archive_name = f"Holiday Outfits/{archive_folder}/{prefix}{source_set:02d}_{frame_number:04d}.png"
                                 if generated_frame.exists():
                                     normalized = Image.open(generated_frame).convert("RGBA")
                                     source_kind = "generated_frame"
+                                elif existing_runtime_frame.exists():
+                                    with Image.open(existing_runtime_frame).convert("RGBA") as existing_frame:
+                                        normalized = _normalize_holiday_body_frame(existing_frame, template)
+                                    source_kind = "existing_runtime_frame"
                                 elif archive and archive_name in archive_names:
                                     with Image.open(BytesIO(archive.read(archive_name))).convert("RGBA") as mobile_frame:
                                         normalized = _normalize_holiday_body_frame(mobile_frame, template)
@@ -4410,14 +4421,9 @@ def sync_holiday_body_runtime_frames(manifest):
                                     missing.append(archive_name)
                                     missing.extend(fallback_skips)
                                     continue
-                                canvas_size = list(normalized.size)
                                 bbox = _alpha_bbox(normalized)
-                                if bbox:
-                                    cropped = normalized.crop(bbox)
-                                    offset_x, offset_y = bbox[0], bbox[1]
-                                else:
-                                    cropped = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
-                                    offset_x, offset_y = 0, 0
+                                canvas_size = list(normalized.size)
+                                offset_x, offset_y = 0, 0
                                 dst = (
                                     output_root
                                     / gender_title
@@ -4426,7 +4432,7 @@ def sync_holiday_body_runtime_frames(manifest):
                                     / f"Frame{role_frame:02d}.png"
                                 )
                                 dst.parent.mkdir(parents=True, exist_ok=True)
-                                cropped.save(dst)
+                                normalized.save(dst)
                                 frames.append({
                                     "gender": gender,
                                     "body_value": body_value,
@@ -4436,7 +4442,7 @@ def sync_holiday_body_runtime_frames(manifest):
                                     "image_id": hex(villager_body_image_id(gender, body_value, role, role_frame)),
                                     "path": str(dst.relative_to(OUT / "Images")).replace("\\", "/"),
                                     "offset": [offset_x, offset_y],
-                                    "size": list(cropped.size),
+                                    "size": list(normalized.size),
                                     "canvas_size": canvas_size,
                                     "alpha_bbox": list(bbox) if bbox else None,
                                     "resized": False,
@@ -4541,23 +4547,18 @@ def sync_holiday_detail_body_frames(manifest):
 
                     canvas_size = list(normalized.size)
                     bbox = _alpha_bbox(normalized)
-                    if bbox:
-                        cropped = normalized.crop(bbox)
-                        offset_x, offset_y = bbox[0], bbox[1]
-                    else:
-                        cropped = Image.new("RGBA", (1, 1), (0, 0, 0, 0))
-                        offset_x, offset_y = 0, 0
+                    offset_x, offset_y = 0, 0
 
                     dst = output_root / gender_title / f"Body_{body_value:02d}" / "Frame00.png"
                     dst.parent.mkdir(parents=True, exist_ok=True)
-                    cropped.save(dst)
+                    normalized.save(dst)
                     frames.append({
                         "gender": gender,
                         "body_value": body_value,
                         "image_id": hex(villager_detail_body_image_id(gender, body_value)),
                         "path": str(dst.relative_to(OUT / "Images")).replace("\\", "/"),
                         "offset": [offset_x, offset_y],
-                        "size": list(cropped.size),
+                        "size": list(normalized.size),
                         "canvas_size": canvas_size,
                         "alpha_bbox": list(bbox) if bbox else None,
                         "resized": False,

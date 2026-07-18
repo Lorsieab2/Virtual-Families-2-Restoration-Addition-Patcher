@@ -2282,6 +2282,16 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 frames = manifest["holiday_body_runtime_frames"]["frames"]
                 self.assertEqual(len(frames), 1)
                 self.assertEqual(frames[0]["source"], "generated_frame")
+                self.assertEqual(frames[0]["offset"], [0, 0])
+                self.assertEqual(
+                    frames[0]["size"],
+                    [patcher.HOLIDAY_BODY_CELL_SIZE] * 2,
+                )
+                with Image.open(images / frames[0]["path"]) as saved:
+                    self.assertEqual(
+                        saved.size,
+                        (patcher.HOLIDAY_BODY_CELL_SIZE,) * 2,
+                    )
                 self.assertFalse(manifest["holiday_body_runtime_frames"]["issues"])
         finally:
             patcher.OUT = old_out
