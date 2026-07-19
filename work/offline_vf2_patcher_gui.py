@@ -39,7 +39,6 @@ CODEX_DISCLOSURE = (
 SETTING_CATEGORIES = [
     ("main", "Main Patches", "#00802b"),
     ("optional", "Optional Patches", "#000000"),
-    ("experimental", "Experimental/Not Working Patches", "#b00020"),
 ]
 SETTING_CATEGORY_LOOKUP = {key: (label, color) for key, label, color in SETTING_CATEGORIES}
 
@@ -386,7 +385,6 @@ class VF2PatcherGUI:
         self._button(controls, "Disable All", self.clear_all_settings).grid(row=0, column=3, padx=(0, 6))
         self._button(controls, "Enable All Main Patches", lambda: self.select_category_settings("main")).grid(row=1, column=0, padx=(0, 6), pady=(6, 0))
         self._button(controls, "Enable all Optional Content", lambda: self.select_category_settings("optional")).grid(row=1, column=1, padx=(0, 6), pady=(6, 0))
-        self._button(controls, "Enable all Experimental Patches", lambda: self.select_category_settings("experimental")).grid(row=1, column=2, padx=(0, 6), pady=(6, 0))
 
         outer = ttk.Frame(frame)
         outer.grid(row=1, column=0, sticky="nsew")

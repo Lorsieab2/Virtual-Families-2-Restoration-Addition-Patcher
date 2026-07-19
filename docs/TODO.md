@@ -180,9 +180,10 @@ must remain visible as Needs source audit; it must not be silently omitted.
   Down 0x3EF in all 16 validated layouts. Visible selector, waypoint, light
   editor, input-fallthrough, and save-persistence QA remain.
   The Light Source Editor bridge now swaps printable `+`/`-` only while that
-  editor is active to match the requested increase/decrease direction. Up/Down
-  are routed, but the desktop registers only the main-scene debugger provider,
-  so page changes may have no visible effect until recreated providers exist.
+  editor is active to match the requested increase/decrease direction. B156
+  now registers the proven offset-zero `CVillagerManager` debugger provider
+  alongside the main-scene provider, so Up/Down have two real pages to cycle.
+  Live page-switching and villager-field QA remain.
 - Audit other category list count patches for small/common desktop counts before
   adding more furniture entries.
 - In-game test B78 VF3 TV private floating-animation entries: verify both

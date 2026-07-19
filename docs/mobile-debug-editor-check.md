@@ -87,10 +87,14 @@ the interfaces are separate:
   CDebugger::Register(IDebugger *). The former B62 research helper's casts from
   those editor addresses to IDebugger * were type-invalid.
 
-The corrected default-off research design registers only the real theMainScene
-debugger provider. F6 selects the native Waypoint Editor, F7 selects the native
-Light Source Editor, and F4 deactivates the selected editor through a separate
-IEditor * route. The dormant developer build now also routes key-character and
+The original corrected default-off research design registered only the real
+theMainScene debugger provider. The B156 helper also registers the preserved
+offset-zero `CVillagerManager` `IDebugger` provider, whose native `Debug()` page
+reports the focused villager's position, feet position, current behavior,
+current action, next action, and animation frame. F6 selects the native
+Waypoint Editor, F7 selects the native Light Source Editor, and F4 deactivates
+the selected editor through a separate IEditor * route. The dormant developer
+build now also routes key-character and
 mouse down/move/up calls through guarded hooks only after F5 activation.
 Disabled, unhandled, or fault-disabled sessions fall through to the original
 main-scene handlers. The normal build does not install any of these hooks.
@@ -147,4 +151,4 @@ CLightSourceEditor::Activate(true) temporarily forces the night-light state
 needed to see the editor; Activate(false) restores the prior value. This
 lifecycle must always run when switching or leaving editors.
 
-Behavior editing and content-map editing may have existed in another internal/dev build, but they are not present as named editor implementations in this mobile release. If we want those features, the safer route is to build new editor functionality around existing systems like `CBehavior`, `CVillagerPlans`, `CContentMap`, and `CContentMapUtil`, rather than trying to register missing editor singletons.
+Behavior editing and content-map editing may have existed in another internal/dev build, but they are not present as named editor implementations in this mobile release. The restored `CVillagerManager::Debug()` page is a viewer, not a behavior editor. If we want editing features, the safer route is to build new editor functionality around existing systems like `CBehavior`, `CVillagerPlans`, `CContentMap`, and `CContentMapUtil`, rather than trying to register missing editor singletons.

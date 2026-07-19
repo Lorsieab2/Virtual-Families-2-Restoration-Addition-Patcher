@@ -56,10 +56,15 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
 
         rows = gui.categorized_settings(settings)
 
-        self.assertEqual([row[0] for row in rows], ["main", "optional", "experimental"])
+        self.assertEqual(
+            [category[0] for category in gui.SETTING_CATEGORIES],
+            ["main", "optional"],
+        )
+        self.assertEqual([row[0] for row in rows], ["main", "optional", "other"])
+        self.assertNotIn("experimental", [row[0] for row in rows])
         self.assertEqual(rows[0][1:3], ("Main Patches", "#00802b"))
         self.assertEqual(rows[1][1:3], ("Optional Patches", "#000000"))
-        self.assertEqual(rows[2][1:3], ("Experimental/Not Working Patches", "#b00020"))
+        self.assertEqual(rows[2][1:3], ("Other Patches", "#000000"))
         self.assertEqual([setting.id for setting in rows[0][3]], ["core_executable"])
         self.assertEqual([setting.id for setting in rows[1][3]], ["custom_map"])
         self.assertEqual([setting.id for setting in rows[2][3]], ["settings_evict_button"])

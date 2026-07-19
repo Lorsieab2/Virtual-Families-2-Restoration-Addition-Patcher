@@ -152,6 +152,191 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             ],
         }
 
+    def stock_icon_test_resources(self):
+        return (
+            patcher_mod.IconResource(
+                resource_type=patcher_mod.RT_ICON,
+                name=101,
+                language=1033,
+                data=b"stock icon image",
+            ),
+            patcher_mod.IconResource(
+                resource_type=patcher_mod.RT_GROUP_ICON,
+                name="MAINICON",
+                language=1033,
+                data=b"stock icon group",
+            ),
+        )
+
+    def stock_icon_manifest_fixture(self, tmp_path, *, existing_modded=False):
+        game_dir = tmp_path / "game"
+        game_dir.mkdir()
+        game_file = game_dir / "Virtual Families 2.exe"
+        original = b"vanilla executable"
+        game_file.write_bytes(original)
+        output_name = "Virtual Families 2 - Modded BPost.exe"
+        payload_data = b"FLAG\x00DATA"
+        payload = tmp_path / "payload" / output_name
+        payload.parent.mkdir()
+        payload.write_bytes(payload_data)
+        manifest_data = self.post_asset_manifest(
+            game_file,
+            original,
+            output_name,
+            [
+                self.post_asset_record(
+                    game_file,
+                    original,
+                    f"payload/{output_name}",
+                    payload_data,
+                    output_name,
+                    ["core_executable"],
+                )
+            ],
+            [
+                {
+                    "asset_sha256": sha256_bytes(payload_data),
+                    "offset": 4,
+                    "expected_asset_bytes": "00",
+                    "replacement_bytes": "01",
+                }
+            ],
+            feature_default=True,
+        )
+        manifest_data["output"]["preserve_stock_exe_icon"] = True
+        manifest = tmp_path / "manifest.json"
+        manifest.write_text(json.dumps(manifest_data, indent=2), encoding="utf-8")
+        output_dir = tmp_path / "VF2-BPost-Modded"
+        if existing_modded:
+            (output_dir / ".vf2_patch_backups").mkdir(parents=True)
+            (output_dir / output_name).write_bytes(b"existing icon-bearing modded executable")
+        return game_dir, game_file, manifest, output_dir, output_name
+
+    def test_preserves_stock_exe_icon_after_all_executable_mutations(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, game_file, manifest, output_dir, output_name = self.stock_icon_manifest_fixture(tmp_path)
+            resources = self.stock_icon_test_resources()
+            args = patcher_mod.build_parser().parse_args(
+                ["apply", "--game-dir", str(game_dir), "--manifest", str(manifest)]
+            )
+            args.progress_callback = lambda _message: None
+
+            def write_icons(target, captured):
+                self.assertEqual(target, output_dir / output_name)
+                self.assertEqual(target.read_bytes(), b"FLAG\x01DATA")
+                self.assertEqual(captured, resources)
+                target.write_bytes(target.read_bytes() + b"|stock-icons")
+
+            with mock.patch.object(
+                patcher_mod,
+                "read_executable_icon_resources",
+                return_value=resources,
+            ) as read_icons, mock.patch.object(
+                patcher_mod,
+                "write_executable_icon_resources_atomic",
+                side_effect=write_icons,
+            ) as write_icon_resources:
+                patcher_mod.apply_manifest(args)
+
+            read_icons.assert_called_once_with(game_file)
+            write_icon_resources.assert_called_once()
+            self.assertEqual((output_dir / output_name).read_bytes(), b"FLAG\x01DATA|stock-icons")
+            self.assertEqual(game_file.read_bytes(), b"vanilla executable")
+
+    def test_stock_exe_icon_dry_run_validates_without_writing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, game_file, manifest, output_dir, _output_name = self.stock_icon_manifest_fixture(tmp_path)
+            resources = self.stock_icon_test_resources()
+            args = patcher_mod.build_parser().parse_args(
+                [
+                    "apply",
+                    "--game-dir",
+                    str(game_dir),
+                    "--manifest",
+                    str(manifest),
+                    "--dry-run",
+                ]
+            )
+            args.progress_callback = lambda _message: None
+
+            with mock.patch.object(
+                patcher_mod,
+                "read_executable_icon_resources",
+                return_value=resources,
+            ) as read_icons, mock.patch.object(
+                patcher_mod,
+                "write_executable_icon_resources_atomic",
+            ) as write_icon_resources:
+                patcher_mod.apply_manifest(args)
+
+            read_icons.assert_called_once_with(game_file)
+            write_icon_resources.assert_not_called()
+            self.assertFalse(output_dir.exists())
+            self.assertEqual(game_file.read_bytes(), b"vanilla executable")
+
+    def test_missing_stock_exe_icon_fails_before_output_writes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir, game_file, manifest, output_dir, _output_name = self.stock_icon_manifest_fixture(tmp_path)
+            args = patcher_mod.build_parser().parse_args(
+                ["apply", "--game-dir", str(game_dir), "--manifest", str(manifest)]
+            )
+            args.progress_callback = lambda _message: None
+
+            with mock.patch.object(
+                patcher_mod,
+                "read_executable_icon_resources",
+                side_effect=patcher_mod.PatchError("stock icon resources missing"),
+            ), mock.patch.object(patcher_mod, "prepare_output_dir") as prepare_output:
+                with self.assertRaisesRegex(patcher_mod.PatchError, "stock icon resources missing"):
+                    patcher_mod.apply_manifest(args)
+
+            prepare_output.assert_not_called()
+            self.assertFalse(output_dir.exists())
+            self.assertEqual(game_file.read_bytes(), b"vanilla executable")
+
+    def test_reconfigure_preserves_icon_from_existing_modded_exe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            _game_dir, _game_file, manifest, output_dir, output_name = self.stock_icon_manifest_fixture(
+                tmp_path,
+                existing_modded=True,
+            )
+            existing_exe = output_dir / output_name
+            resources = self.stock_icon_test_resources()
+            args = patcher_mod.build_parser().parse_args(
+                ["apply", "--output-dir", str(output_dir), "--manifest", str(manifest)]
+            )
+            args.progress_callback = lambda _message: None
+
+            def read_icons(source):
+                self.assertEqual(source, existing_exe)
+                self.assertEqual(source.read_bytes(), b"existing icon-bearing modded executable")
+                return resources
+
+            def write_icons(target, captured):
+                self.assertEqual(target, existing_exe)
+                self.assertEqual(target.read_bytes(), b"FLAG\x01DATA")
+                self.assertEqual(captured, resources)
+                target.write_bytes(target.read_bytes() + b"|stock-icons")
+
+            with mock.patch.object(
+                patcher_mod,
+                "read_executable_icon_resources",
+                side_effect=read_icons,
+            ) as read_icon_resources, mock.patch.object(
+                patcher_mod,
+                "write_executable_icon_resources_atomic",
+                side_effect=write_icons,
+            ) as write_icon_resources:
+                patcher_mod.apply_manifest(args)
+
+            read_icon_resources.assert_called_once()
+            write_icon_resources.assert_called_once()
+            self.assertEqual(existing_exe.read_bytes(), b"FLAG\x01DATA|stock-icons")
+
     def assert_post_asset_validation_failure(self, variants_factory, expected_error):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

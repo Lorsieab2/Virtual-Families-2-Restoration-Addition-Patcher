@@ -54,7 +54,35 @@ class DebuggerResearchTests(unittest.TestCase):
                 developer = manifest["debug_features"]["developer_keys"]
                 self.assertEqual(
                     developer["registered_providers"],
-                    ["main scene debugger"],
+                    [
+                        "main scene debugger",
+                        "villager manager debugger",
+                    ],
+                )
+                self.assertIn("extern CVillagerManager VillagerManager;", helper)
+                self.assertIn(
+                    "reinterpret_cast<IDebugger *>(&VillagerManager)",
+                    helper,
+                )
+                self.assertIn(
+                    'VF2RegisterDebuggerProvider(gVF2VillagerManagerDebuggerProvider, "villager manager")',
+                    helper,
+                )
+                self.assertEqual(
+                    developer["villager_manager_page"],
+                    {
+                        "global_symbol": "?VillagerManager@@3VCVillagerManager@@A",
+                        "debug_function": "?Debug@CVillagerManager@@UAEXXZ",
+                        "idbugger_base_offset": 0,
+                        "native_lines": [
+                            "Pos: %d, %d",
+                            "FeetPos: %d, %d",
+                            "Current behavior: %d",
+                            "Current action: %d",
+                            "Next action: %d",
+                            "Frame: %d",
+                        ],
+                    },
                 )
                 self.assertEqual(
                     developer["editor_selector"]["interface_contract"],
@@ -336,6 +364,8 @@ class DebuggerResearchTests(unittest.TestCase):
         self.assertIn('b"\\x59\\x84\\xC0\\x74\\x06\\xB0\\x01\\x5D\\xC2"', source)
         self.assertIn("target = branch_end + 6", source)
         self.assertIn("expected_target = start + len(pattern)", source)
+        self.assertIn('"villager manager debugger"', source)
+        self.assertIn('developer.get("registered_providers")', source)
         builder = (patcher.ROOT / "work" / "build_b153_debugger_test.ps1").read_text(
             encoding="utf-8"
         )
@@ -412,6 +442,31 @@ class DebuggerResearchTests(unittest.TestCase):
         )
         self.assertEqual(target, "?Debug@theMainScene@@MAEXXZ")
         self.assertEqual(relocation_type, patcher.IMAGE_REL_I386_DIR32)
+
+        villager_manager = CoffObject(patcher.SRC_OBJS / "VillagerManager.obj")
+        villager_vtable = villager_manager.symbol("??_7CVillagerManager@@6B@")
+        villager_vtable_section = villager_manager.section(villager_vtable.section)
+        target, relocation_type = relocation_target(
+            villager_manager,
+            villager_vtable_section,
+            villager_vtable.value,
+        )
+        self.assertEqual(target, "?Debug@CVillagerManager@@UAEXXZ")
+        self.assertEqual(relocation_type, patcher.IMAGE_REL_I386_DIR32)
+
+        villager_iddebugger_base = villager_manager.symbol(
+            "??_R1A@?0A@EN@IDebugger@@8"
+        )
+        villager_base_section = villager_manager.section(
+            villager_iddebugger_base.section
+        )
+        villager_base_raw = (
+            villager_base_section.raw_ptr + villager_iddebugger_base.value
+        )
+        self.assertEqual(
+            struct.unpack_from("<iii", villager_manager.buf, villager_base_raw + 8),
+            (0, -1, 0),
+        )
 
         debugger = CoffObject(patcher.SRC_OBJS / "Debugger.obj")
         register = debugger.symbol(
@@ -1807,16 +1862,18 @@ class OutfitStoreMappingTests(unittest.TestCase):
             patcher.visible_special_upgrade_icon_id_for(0x12E),
             patcher.visible_special_upgrade_icon_id_for(0x124),
         )
+        item_ids = [item["item_id"] for item in patcher.CHEAT_UPGRADE_ITEMS]
         self.assertEqual(
-            [item["item_id"] for item in patcher.CHEAT_UPGRADE_ITEMS],
+            item_ids,
             [
                 0x11B, 0x11D, 0x11E, 0x11F,
                 0x11C, 0x120, 0x121, 0x122,
-                0x123, 0x124, 0x125, 0x126, 0x127,
+                0x123, 0x124, 0x12E, 0x125, 0x126, 0x127,
                 0x128, 0x129, 0x12A, 0x12C,
-                0x12B, 0x12D, 0x12E,
+                0x12B, 0x12D,
             ],
         )
+        self.assertEqual(item_ids.index(0x12E), item_ids.index(0x124) + 1)
 
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         self.assertIn("theGameState::Get()->ResetWorldState(0x13)", source)

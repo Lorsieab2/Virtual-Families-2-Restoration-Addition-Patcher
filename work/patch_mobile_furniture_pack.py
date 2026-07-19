@@ -469,6 +469,12 @@ CHEAT_UPGRADE_ITEMS = [
         "price": 0,
     },
     {
+        "item_id": 0x12E,
+        "name": "Complete all Achievements",
+        "description": "Completes every currently enabled achievement and awards its normal coin reward.",
+        "price": 0,
+    },
+    {
         "item_id": 0x125,
         "name": "Reset Ants",
         "description": "Resets the ants puzzle so it can be completed again.",
@@ -520,12 +526,6 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": 0x12D,
         "name": "Fix all house malfunctions",
         "description": "Fixes every active house malfunction and brings the Router back online.",
-        "price": 0,
-    },
-    {
-        "item_id": 0x12E,
-        "name": "Complete all Achievements",
-        "description": "Completes every currently enabled achievement and awards its normal coin reward.",
         "price": 0,
     },
 ]
@@ -11048,7 +11048,7 @@ def patch_allow_older_pregnancies(manifest):
     manifest["AllowOlderPregnancies"] = {
         "status": "dormant native hook installed in every executable",
         "offline_patcher_setting": "allow_older_pregnancies",
-        "category": "experimental",
+        "category": "optional",
         "default": False,
         "function": "CVillagerState::ChanceOfPregnancy",
         "stock_function_span": "0xF7",
@@ -11168,7 +11168,7 @@ def patch_older_villager_mortality(manifest):
     manifest["OlderVillagerMortality"] = {
         "status": "dormant native hook installed in every executable",
         "offline_patcher_setting": "older_villager_mortality",
-        "category": "experimental",
+        "category": "optional",
         "default": False,
         "function": function_name,
         "hook_offset": hex(hook),
@@ -12299,6 +12299,7 @@ public:
 };
 
 class IDebugger;
+class CVillagerManager;
 
 struct ldwPoint {
     int x;
@@ -12340,6 +12341,7 @@ public:
 };
 
 extern CDebugger Debugger;
+extern CVillagerManager VillagerManager;
 extern CWaypointEditor WaypointEditor;
 extern CLightSourceEditor LightSourceEditor;
 extern CFloatingAnim FloatingAnim;
@@ -12357,6 +12359,7 @@ struct VF2DebuggerLayout {
 static bool gVF2DebuggerInputEnabled = false;
 static bool gVF2DebuggerFaulted = false;
 static IDebugger *gVF2MainSceneDebuggerProvider = 0;
+static IDebugger *gVF2VillagerManagerDebuggerProvider = 0;
 static IEditor *gVF2ActiveEditor = 0;
 
 enum VF2InternalDebugKey {
@@ -12492,6 +12495,10 @@ static void VF2EnsureDebuggerProvider(void *mainScene)
     __try {
         gVF2MainSceneDebuggerProvider = reinterpret_cast<IDebugger *>(static_cast<char *>(mainScene) + 8);
         VF2RegisterDebuggerProvider(gVF2MainSceneDebuggerProvider, "main scene");
+        // CVillagerManager's native RTTI and vtable prove that IDebugger is
+        // its offset-zero base. Keep it separate from the IEditor-only tools.
+        gVF2VillagerManagerDebuggerProvider = reinterpret_cast<IDebugger *>(&VillagerManager);
+        VF2RegisterDebuggerProvider(gVF2VillagerManagerDebuggerProvider, "villager manager");
         WaypointEditor.LoadAssets();
         LightSourceEditor.LoadAssets();
         registered = true;
@@ -12748,7 +12755,21 @@ extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
             ],
             "registered_providers": [
                 "main scene debugger",
+                "villager manager debugger",
             ],
+            "villager_manager_page": {
+                "global_symbol": "?VillagerManager@@3VCVillagerManager@@A",
+                "debug_function": "?Debug@CVillagerManager@@UAEXXZ",
+                "idbugger_base_offset": 0,
+                "native_lines": [
+                    "Pos: %d, %d",
+                    "FeetPos: %d, %d",
+                    "Current behavior: %d",
+                    "Current action: %d",
+                    "Next action: %d",
+                    "Frame: %d",
+                ],
+            },
             "editor_selector": {
                 "interface_contract": "CWaypointEditor and CLightSourceEditor are IEditor objects, not IDebugger providers",
                 "F6": "CWaypointEditor",

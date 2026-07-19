@@ -99,6 +99,22 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             "B155.5",
         )
 
+    def test_b156_settings_have_no_experimental_section_or_expanded_map(self):
+        settings_by_id = {row["id"]: row for row in exporter.SETTINGS}
+
+        self.assertNotIn("expand_game_map", settings_by_id)
+        self.assertNotIn(
+            "experimental",
+            {row["category"] for row in exporter.SETTINGS},
+        )
+        for setting_id in (
+            "allow_older_pregnancies",
+            "older_villager_mortality",
+            "mobile_furniture_behaviors",
+        ):
+            with self.subTest(setting_id=setting_id):
+                self.assertEqual(settings_by_id[setting_id]["category"], "optional")
+
     def run_exporter(self, *args):
         result = subprocess.run(
             [sys.executable, str(EXPORTER), *args],
@@ -208,11 +224,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
 
             manifest_path = bundle / "manifest.json"
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertTrue(manifest["output"]["preserve_stock_exe_icon"])
+            # This fixture uses a synthetic minimal PE without resources; icon
+            # transfer has dedicated patcher tests with resource-bearing PEs.
+            manifest["output"]["preserve_stock_exe_icon"] = False
             setting = {
                 row["id"]: row for row in manifest["settings"]
             }["allow_older_pregnancies"]
             self.assertFalse(setting["default"])
-            self.assertEqual(setting["category"], "experimental")
+            self.assertEqual(setting["category"], "optional")
             self.assertEqual(len(manifest["post_asset_patches"]), 3)
             records = {
                 row["requires"][-1]: row
@@ -484,6 +504,11 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(settings_by_id["settings_evict_button"]["category"], "optional")
             self.assertEqual(settings_by_id["island_events"]["category"], "optional")
             self.assertEqual(settings_by_id["holiday_ornaments_collection"]["category"], "optional")
+            self.assertNotIn("expand_game_map", settings_by_id)
+            self.assertNotIn(
+                "experimental",
+                {row["category"] for row in manifest["settings"]},
+            )
             self.assertIn(
                 "fully linked mobile Holiday Ornament collection",
                 settings_by_id["holiday_ornaments_collection"]["description"],
@@ -936,6 +961,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             # Strip unrelated official-install requirements so this focused test
             # can prove executable overlay precedence with a one-file game tree.
             manifest["runtime_requirements"] = {}
+            # This synthetic PE intentionally has no resource directory. Icon
+            # preservation is covered against resource-bearing fixtures in the
+            # patch-engine tests; disable it for this overlay-only matrix.
+            manifest["output"]["preserve_stock_exe_icon"] = False
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             modded_exe_name = "Virtual Families 2 - Modded B150.exe"
 

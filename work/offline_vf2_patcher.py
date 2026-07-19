@@ -18,6 +18,7 @@ import re
 import shutil
 import struct
 import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
@@ -26,6 +27,8 @@ from typing import Any, Callable
 BACKUP_MANIFEST = "vf2_patch_backup_manifest.json"
 DEFAULT_BACKUP_ROOT = ".vf2_patch_backups"
 DEFAULT_EXE_NAME = "Virtual Families 2.exe"
+RT_ICON = 3
+RT_GROUP_ICON = 14
 INVALID_INSTALL_MESSAGE = (
     "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\n"
     "Links:\n"
@@ -93,6 +96,14 @@ class PatchSetting:
     description: str
     default: bool
     category: str = "main"
+
+
+@dataclass(frozen=True)
+class IconResource:
+    resource_type: int
+    name: int | str
+    language: int
+    data: bytes
 
 
 ProgressCallback = Callable[[str], None]
@@ -528,6 +539,312 @@ def windows_file_versions(path: Path) -> dict[str, str]:
         return {}
 
 
+def _win32_resource_failure(action: str) -> PatchError:
+    error_code = ctypes.get_last_error()
+    if error_code:
+        detail = ctypes.FormatError(error_code).strip()
+        return PatchError(f"{action} failed (Windows error {error_code}: {detail}).")
+    return PatchError(f"{action} failed (Windows did not report an error code).")
+
+
+def _decode_resource_identifier(pointer: int | None) -> int | str:
+    address = int(pointer or 0)
+    if address <= 0xFFFF:
+        return address
+    return ctypes.wstring_at(address)
+
+
+def _resource_identifier_pointer(
+    value: int | str,
+    keepalive: list[Any],
+) -> ctypes.c_void_p:
+    if isinstance(value, int):
+        if value < 0 or value > 0xFFFF:
+            raise PatchError(f"Invalid integer resource identifier: {value}.")
+        return ctypes.c_void_p(value)
+    buffer = ctypes.create_unicode_buffer(value)
+    keepalive.append(buffer)
+    return ctypes.cast(buffer, ctypes.c_void_p)
+
+
+def _icon_resource_sort_key(resource: IconResource) -> tuple[Any, ...]:
+    name_key: tuple[int, Any]
+    if isinstance(resource.name, int):
+        name_key = (0, resource.name)
+    else:
+        name_key = (1, resource.name)
+    return resource.resource_type, *name_key, resource.language
+
+
+def _canonical_icon_resources(resources: tuple[IconResource, ...] | list[IconResource]) -> tuple[IconResource, ...]:
+    canonical = tuple(sorted(resources, key=_icon_resource_sort_key))
+    seen: set[tuple[int, int | str, int]] = set()
+    for resource in canonical:
+        if resource.resource_type not in {RT_ICON, RT_GROUP_ICON}:
+            raise PatchError(f"Unexpected executable icon resource type: {resource.resource_type}.")
+        if not isinstance(resource.name, (int, str)) or resource.name == "":
+            raise PatchError("Executable icon resource names must be non-empty strings or integer IDs.")
+        if resource.language < 0 or resource.language > 0xFFFF:
+            raise PatchError(f"Invalid executable icon resource language: {resource.language}.")
+        if not resource.data:
+            raise PatchError("Executable icon resources must not be empty.")
+        identity = (resource.resource_type, resource.name, resource.language)
+        if identity in seen:
+            raise PatchError(f"Duplicate executable icon resource: {identity!r}.")
+        seen.add(identity)
+    return canonical
+
+
+def _enumerate_executable_icon_resources(path: Path) -> tuple[IconResource, ...]:
+    if os.name != "nt":
+        raise PatchError("Executable icon preservation is supported only on Windows.")
+    if not path.is_file():
+        raise PatchError(f"Executable icon source does not exist: {path}")
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    name_callback_type = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_ssize_t,
+    )
+    language_callback_type = ctypes.WINFUNCTYPE(  # type: ignore[attr-defined]
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_ushort,
+        ctypes.c_ssize_t,
+    )
+    kernel32.LoadLibraryExW.argtypes = [ctypes.c_wchar_p, ctypes.c_void_p, ctypes.c_uint32]
+    kernel32.LoadLibraryExW.restype = ctypes.c_void_p
+    kernel32.FreeLibrary.argtypes = [ctypes.c_void_p]
+    kernel32.FreeLibrary.restype = ctypes.c_int
+    kernel32.EnumResourceNamesW.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        name_callback_type,
+        ctypes.c_ssize_t,
+    ]
+    kernel32.EnumResourceNamesW.restype = ctypes.c_int
+    kernel32.EnumResourceLanguagesW.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        language_callback_type,
+        ctypes.c_ssize_t,
+    ]
+    kernel32.EnumResourceLanguagesW.restype = ctypes.c_int
+    kernel32.FindResourceExW.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_ushort,
+    ]
+    kernel32.FindResourceExW.restype = ctypes.c_void_p
+    kernel32.LoadResource.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    kernel32.LoadResource.restype = ctypes.c_void_p
+    kernel32.LockResource.argtypes = [ctypes.c_void_p]
+    kernel32.LockResource.restype = ctypes.c_void_p
+    kernel32.SizeofResource.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    kernel32.SizeofResource.restype = ctypes.c_uint32
+
+    load_flags = 0x00000002 | 0x00000020  # LOAD_LIBRARY_AS_DATAFILE | LOAD_LIBRARY_AS_IMAGE_RESOURCE
+    module = kernel32.LoadLibraryExW(str(path), None, load_flags)
+    if not module:
+        raise _win32_resource_failure(f"Loading executable resources from {path}")
+
+    resources: list[IconResource] = []
+    callback_errors: list[PatchError] = []
+    try:
+        for resource_type in (RT_ICON, RT_GROUP_ICON):
+            def on_name(
+                callback_module: int,
+                type_pointer: int,
+                name_pointer: int,
+                _parameter: int,
+                *,
+                current_type: int = resource_type,
+            ) -> int:
+                def on_language(
+                    language_module: int,
+                    language_type_pointer: int,
+                    language_name_pointer: int,
+                    language: int,
+                    _language_parameter: int,
+                ) -> int:
+                    try:
+                        resource_info = kernel32.FindResourceExW(
+                            language_module,
+                            language_type_pointer,
+                            language_name_pointer,
+                            language,
+                        )
+                        if not resource_info:
+                            raise _win32_resource_failure(f"Finding icon resource in {path}")
+                        size = kernel32.SizeofResource(language_module, resource_info)
+                        loaded = kernel32.LoadResource(language_module, resource_info)
+                        if not loaded:
+                            raise _win32_resource_failure(f"Loading icon resource from {path}")
+                        data_pointer = kernel32.LockResource(loaded)
+                        if size and not data_pointer:
+                            raise _win32_resource_failure(f"Locking icon resource from {path}")
+                        resources.append(
+                            IconResource(
+                                resource_type=current_type,
+                                name=_decode_resource_identifier(language_name_pointer),
+                                language=int(language),
+                                data=ctypes.string_at(data_pointer, size),
+                            )
+                        )
+                        return 1
+                    except PatchError as exc:
+                        callback_errors.append(exc)
+                        return 0
+                    except Exception as exc:
+                        callback_errors.append(PatchError(f"Could not read icon resource from {path}: {exc}"))
+                        return 0
+
+                language_callback = language_callback_type(on_language)
+                ctypes.set_last_error(0)
+                enumerated = kernel32.EnumResourceLanguagesW(
+                    callback_module,
+                    type_pointer,
+                    name_pointer,
+                    language_callback,
+                    0,
+                )
+                if not enumerated and not callback_errors:
+                    callback_errors.append(_win32_resource_failure(f"Enumerating icon resource languages in {path}"))
+                return 0 if callback_errors else 1
+
+            name_callback = name_callback_type(on_name)
+            ctypes.set_last_error(0)
+            enumerated = kernel32.EnumResourceNamesW(
+                module,
+                ctypes.c_void_p(resource_type),
+                name_callback,
+                0,
+            )
+            if callback_errors:
+                raise callback_errors[0]
+            if not enumerated:
+                error_code = ctypes.get_last_error()
+                if error_code in {1812, 1813}:  # No resource section, or requested type not found.
+                    continue
+                raise _win32_resource_failure(f"Enumerating executable icon resources in {path}")
+    finally:
+        kernel32.FreeLibrary(module)
+
+    return _canonical_icon_resources(resources)
+
+
+def read_executable_icon_resources(path: Path) -> tuple[IconResource, ...]:
+    resources = _enumerate_executable_icon_resources(path)
+    icon_count = sum(resource.resource_type == RT_ICON for resource in resources)
+    group_count = sum(resource.resource_type == RT_GROUP_ICON for resource in resources)
+    if not icon_count or not group_count:
+        raise PatchError(
+            f"The stock executable does not contain a complete Windows icon resource set: {path} "
+            f"(RT_ICON={icon_count}, RT_GROUP_ICON={group_count})."
+        )
+    return resources
+
+
+def _update_executable_icon_resources(path: Path, resources: tuple[IconResource, ...]) -> None:
+    existing = _enumerate_executable_icon_resources(path)
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)  # type: ignore[attr-defined]
+    kernel32.BeginUpdateResourceW.argtypes = [ctypes.c_wchar_p, ctypes.c_int]
+    kernel32.BeginUpdateResourceW.restype = ctypes.c_void_p
+    kernel32.UpdateResourceW.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+        ctypes.c_ushort,
+        ctypes.c_void_p,
+        ctypes.c_uint32,
+    ]
+    kernel32.UpdateResourceW.restype = ctypes.c_int
+    kernel32.EndUpdateResourceW.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    kernel32.EndUpdateResourceW.restype = ctypes.c_int
+
+    update_handle = kernel32.BeginUpdateResourceW(str(path), 0)
+    if not update_handle:
+        raise _win32_resource_failure(f"Opening {path} for icon resource update")
+
+    keepalive: list[Any] = []
+    try:
+        delete_order = sorted(existing, key=lambda item: item.resource_type != RT_GROUP_ICON)
+        for resource in delete_order:
+            type_pointer = _resource_identifier_pointer(resource.resource_type, keepalive)
+            name_pointer = _resource_identifier_pointer(resource.name, keepalive)
+            if not kernel32.UpdateResourceW(
+                update_handle,
+                type_pointer,
+                name_pointer,
+                resource.language,
+                None,
+                0,
+            ):
+                raise _win32_resource_failure(f"Removing an existing icon resource from {path}")
+
+        add_order = sorted(resources, key=lambda item: item.resource_type == RT_GROUP_ICON)
+        for resource in add_order:
+            type_pointer = _resource_identifier_pointer(resource.resource_type, keepalive)
+            name_pointer = _resource_identifier_pointer(resource.name, keepalive)
+            data_buffer = ctypes.create_string_buffer(resource.data)
+            keepalive.append(data_buffer)
+            if not kernel32.UpdateResourceW(
+                update_handle,
+                type_pointer,
+                name_pointer,
+                resource.language,
+                ctypes.cast(data_buffer, ctypes.c_void_p),
+                len(resource.data),
+            ):
+                raise _win32_resource_failure(f"Writing a stock icon resource to {path}")
+
+        committed = kernel32.EndUpdateResourceW(update_handle, 0)
+        update_handle = None
+        if not committed:
+            raise _win32_resource_failure(f"Committing stock icon resources to {path}")
+    except Exception:
+        if update_handle:
+            kernel32.EndUpdateResourceW(update_handle, 1)
+        raise
+
+
+def write_executable_icon_resources_atomic(path: Path, resources: tuple[IconResource, ...]) -> None:
+    canonical = _canonical_icon_resources(resources)
+    if not any(resource.resource_type == RT_ICON for resource in canonical):
+        raise PatchError("Cannot write executable icon resources without at least one RT_ICON record.")
+    if not any(resource.resource_type == RT_GROUP_ICON for resource in canonical):
+        raise PatchError("Cannot write executable icon resources without at least one RT_GROUP_ICON record.")
+    if not path.is_file():
+        raise PatchError(f"Generated modded executable does not exist: {path}")
+
+    descriptor, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".vf2icon.tmp", dir=path.parent)
+    os.close(descriptor)
+    temp = Path(temp_name)
+    try:
+        shutil.copy2(path, temp)
+        temp.chmod(temp.stat().st_mode | 0o200)
+        _update_executable_icon_resources(temp, canonical)
+        written = _enumerate_executable_icon_resources(temp)
+        if written != canonical:
+            raise PatchError(f"Stock icon resource verification failed after updating {path}.")
+        path.chmod(path.stat().st_mode | 0o200)
+        temp.replace(path)
+    except PatchError:
+        raise
+    except OSError as exc:
+        raise PatchError(f"Could not preserve stock executable icon resources in {path}: {exc}") from exc
+    finally:
+        if temp.exists():
+            temp.unlink()
+
+
 def manifest_settings(manifest: dict[str, Any]) -> dict[str, PatchSetting]:
     raw_settings = manifest.get("settings", [])
     settings: dict[str, PatchSetting] = {}
@@ -671,6 +988,16 @@ def manifest_output_exe_name(manifest: dict[str, Any]) -> str | None:
     if path.name.lower() == DEFAULT_EXE_NAME.lower():
         raise PatchError("Manifest output EXE name must not be the vanilla Virtual Families 2.exe name.")
     return path.name
+
+
+def manifest_preserve_stock_exe_icon(manifest: dict[str, Any]) -> bool:
+    raw = manifest.get("output", manifest.get("output_folder"))
+    if not isinstance(raw, dict):
+        return False
+    value = raw.get("preserve_stock_exe_icon", False)
+    if not isinstance(value, bool):
+        raise PatchError("Manifest output preserve_stock_exe_icon must be true or false.")
+    return value
 
 
 def manifest_output_save_folder_name(manifest: dict[str, Any], exe_name: str) -> str:
@@ -2223,6 +2550,59 @@ def apply_manifest(args: argparse.Namespace) -> int:
             args,
             process_log,
         )
+        preserve_stock_exe_icon = manifest_preserve_stock_exe_icon(manifest)
+        captured_icon_resources: tuple[IconResource, ...] = ()
+        icon_source: Path | None = None
+        if preserve_stock_exe_icon:
+            desired_exe_name = manifest_output_exe_name(manifest)
+            if not desired_exe_name:
+                raise PatchError(
+                    "Manifest output preserve_stock_exe_icon requires a default_exe_name."
+                )
+            icon_asset_check = next(
+                (
+                    check
+                    for check in asset_checks
+                    if Path(str(check.get("output_file_path") or check["file_path"])).name.lower()
+                    == desired_exe_name.lower()
+                    and Path(str(check["file_path"])).suffix.lower() == ".exe"
+                ),
+                None,
+            )
+            if icon_asset_check is None:
+                raise PatchError(
+                    "Manifest requests stock EXE icon preservation, but no active executable replacement "
+                    f"writes {desired_exe_name}."
+                )
+            icon_source = resolve_under_game_dir(game_dir, str(icon_asset_check["target_file_path"]))
+            emit_progress(args, f"Validating stock executable icon resources: {icon_source}")
+            try:
+                captured_icon_resources = read_executable_icon_resources(icon_source)
+            except PatchError as exc:
+                log_process_event(
+                    process_log,
+                    phase="validate",
+                    kind="exe_icon_resources",
+                    status="error",
+                    source_path=str(icon_source),
+                    output_file_path=desired_exe_name,
+                    error=str(exc),
+                )
+                raise
+            log_process_event(
+                process_log,
+                phase="validate",
+                kind="exe_icon_resources",
+                status="success",
+                source_path=str(icon_source),
+                output_file_path=desired_exe_name,
+                icon_count=sum(
+                    resource.resource_type == RT_ICON for resource in captured_icon_resources
+                ),
+                group_icon_count=sum(
+                    resource.resource_type == RT_GROUP_ICON for resource in captured_icon_resources
+                ),
+            )
 
         if not args.dry_run:
             skip_copy_paths = {
@@ -2291,6 +2671,38 @@ def apply_manifest(args: argparse.Namespace) -> int:
             apply_asset_patches(output_dir, manifest_path.parent, asset_checks, args, process_log)
             apply_post_asset_patches(output_dir, post_asset_checks, args, process_log)
             enforced_exe_name = enforce_modded_exe_name(game_dir, output_dir, manifest, process_log)
+            if preserve_stock_exe_icon:
+                if not enforced_exe_name:
+                    raise PatchError("Could not resolve the generated modded EXE name for icon preservation.")
+                icon_target = resolve_under_game_dir(output_dir, enforced_exe_name)
+                emit_progress(args, f"Preserving stock executable icon resources: {icon_target}")
+                try:
+                    write_executable_icon_resources_atomic(icon_target, captured_icon_resources)
+                except PatchError as exc:
+                    log_process_event(
+                        process_log,
+                        phase="apply",
+                        kind="exe_icon_resources",
+                        status="error",
+                        source_path=str(icon_source) if icon_source else None,
+                        output_file_path=enforced_exe_name,
+                        error=str(exc),
+                    )
+                    raise
+                log_process_event(
+                    process_log,
+                    phase="apply",
+                    kind="exe_icon_resources",
+                    status="success",
+                    source_path=str(icon_source) if icon_source else None,
+                    output_file_path=enforced_exe_name,
+                    icon_count=sum(
+                        resource.resource_type == RT_ICON for resource in captured_icon_resources
+                    ),
+                    group_icon_count=sum(
+                        resource.resource_type == RT_GROUP_ICON for resource in captured_icon_resources
+                    ),
+                )
         else:
             enforced_exe_name = manifest_output_exe_name(manifest)
 

@@ -111,14 +111,13 @@ area. The Vanilla Game Folder Path, Modified Game Folder Path, and Modified
 Game Saves Folder Path are shown as bold blue clickable paths.
 
 The GUI groups manifest settings by `category` and provides buttons to enable
-all Main, Optional, or Experimental settings without changing unrelated
-checkboxes:
+all Main or Optional settings without changing unrelated checkboxes. B156 has
+no active Experimental/Not Working section:
 
 | Category | GUI color | Intended settings |
 | --- | --- | --- |
 | `main` | Green | Core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits. |
-| `optional` | Black | Settings Evict, Island Events, Invisible Furniture graphics modes, optional visual swaps, custom maps, LDW Posters/Paintings, and Colorful Couches. |
-| `experimental` | Red | Holiday Ornaments, mobile furniture behaviors, Expand game map, and anything not 100% confirmed working and crash-free. |
+| `optional` | Black | Holiday Ornaments, Settings Evict, Island Events, Allow Older Pregnancies, Older Villager Mortality Curve, mobile furniture behaviors, Invisible Furniture graphics modes, optional visual swaps, custom maps, LDW Posters/Paintings, and Colorful Couches. |
 
 Bundles can include `patcher_icon.png` and `patcher_icon.ico`. The GUI uses the
 PNG as the literal picture beside the bold title and uses the ICO/PNG for the
@@ -981,7 +980,7 @@ flags can override those defaults:
 Patch logs include the available, enabled, and disabled settings used for the
 run.
 
-allow_older_pregnancies is a default-off Experimental option. It uses an
+allow_older_pregnancies is a default-off Optional option. It uses an
 exact-SHA post-asset byte toggle in the selected executable rather than a
 separate executable overlay, so it does not expand the Island/Cheat/Holiday/
 Behavior matrix.
@@ -990,6 +989,12 @@ The same post-asset phase controls the independent Holiday Furniture goal
 suffix through .vf2goal. Its record requires core_executable and
 holiday_furniture; disabling Holiday Furniture recopies the pristine
 default-zero payload byte.
+
+B156 removes the active Experimental/Not Working category and the inactive
+`expand_game_map` placeholder. Allow Older Pregnancies, Older Villager
+Mortality Curve, and mobile furniture behaviors are default-off Optional
+patches. Historical build notes above retain their original category wording
+to describe what those earlier bundles actually shipped.
 
 ## Release Notes
 

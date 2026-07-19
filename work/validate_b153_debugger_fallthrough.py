@@ -42,6 +42,15 @@ def validate(exe: Path, manifest_path: Path) -> dict:
     hooks = developer.get("input_hooks", [])
     if len(hooks) != 5:
         raise ValueError(f"expected five debugger input hooks, found {len(hooks)}")
+    expected_providers = [
+        "main scene debugger",
+        "villager manager debugger",
+    ]
+    if developer.get("registered_providers") != expected_providers:
+        raise ValueError(
+            "debugger provider list is incomplete or incorrect: "
+            f"{developer.get('registered_providers')!r}"
+        )
     expected_key_codes = {
         "Up": "0x3EE",
         "Down": "0x3EF",
@@ -91,6 +100,7 @@ def validate(exe: Path, manifest_path: Path) -> dict:
             "fix": "JE +6 lands exactly at the stock function body",
         },
         "hooks": rows,
+        "registered_providers": expected_providers,
         "internal_key_codes": expected_key_codes,
         "live_retest_required": True,
     }
