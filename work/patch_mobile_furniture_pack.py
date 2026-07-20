@@ -547,7 +547,9 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID = 0x54
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
-CUSTOM_ACHIEVEMENT_LAST_ID = 0x7F
+CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x7F
+CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
 CUSTOM_ACHIEVEMENT_BEHAVIOR_END = 0x6C
@@ -630,7 +632,7 @@ CUSTOM_ACHIEVEMENT_TATERS_PURCHASE_BITS = {
     0x2CF: 0x1,
     0x2CC: 0x2,
 }
-CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID = 0x80
+CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID = 0xA8
 CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL = 0x3
 CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS = {
     "Watching cat videos": 0x66,
@@ -651,7 +653,7 @@ def custom_achievement_purchase_dispatch(
     holiday_furniture_enabled,
     persisted_mask=0,
 ):
-    """Pure model for the native purchase wrapper and hidden 0x80 mask."""
+    """Pure model for the native purchase wrapper and hidden 0xA8 mask."""
     mask = int(persisted_mask) & CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL
     if not purchase_succeeded:
         return None, mask
@@ -3300,6 +3302,27 @@ def custom_achievement_string_ids(achievement_id):
     return title_id, title_id + 1
 
 
+def custom_achievement_capacity_row_specs():
+    """Yield every materialized custom row without inventing future goals."""
+    defined = {row[0]: row for row in CUSTOM_ACHIEVEMENT_ROW_SPECS}
+    if len(defined) != len(CUSTOM_ACHIEVEMENT_ROW_SPECS):
+        raise ValueError("Duplicate custom achievement IDs")
+    if any(
+        achievement_id < CUSTOM_ACHIEVEMENT_FIRST_ID
+        or achievement_id > CUSTOM_ACHIEVEMENT_LAST_ID
+        for achievement_id in defined
+    ):
+        raise ValueError("Custom achievement definition is outside reserved capacity")
+    for achievement_id in range(
+        CUSTOM_ACHIEVEMENT_FIRST_ID,
+        CUSTOM_ACHIEVEMENT_LAST_ID + 1,
+    ):
+        yield defined.get(
+            achievement_id,
+            (achievement_id, "reserved_capacity", "", ""),
+        )
+
+
 def holiday_ornament_collection_footer_string_ids():
     first_id = custom_achievement_string_ids(CUSTOM_ACHIEVEMENT_LAST_ID)[1] + 1
     return tuple(
@@ -5451,8 +5474,11 @@ def validate_holiday_ornament_native_contract(manifest):
     physical_rows = (
         achievement_list_sec.raw_size - achievement_list.value
     ) // ACHIEVEMENT_ROW_SIZE
-    if physical_rows != 0x80:
-        errors.append(f"achievementList expected 128 physical rows, got {physical_rows}")
+    if physical_rows != CUSTOM_ACHIEVEMENT_LAST_ID + 1:
+        errors.append(
+            "achievementList expected "
+            f"{CUSTOM_ACHIEVEMENT_LAST_ID + 1} physical rows, got {physical_rows}"
+        )
     for achievement_id, _group, _title, _description in CUSTOM_ACHIEVEMENT_ROW_SPECS:
         row = struct.unpack_from(
             "<7I",
@@ -5479,9 +5505,9 @@ def validate_holiday_ornament_native_contract(manifest):
         "?LoadState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z",
     )
     for needle, label in (
-        (b"\x8D\x4E\x00\x8D\x83\x0C\x06\x00\x00", "reserved-tail start 0x81"),
-        (b"\x81\xF9\xA4\x00\x00\x00", "reserved-tail scan count 0xA4"),
-        (b"\x8D\x83\x0C\x06\x00\x00\xB9\xA4\x00\x00\x00", "reserved-tail clear span"),
+        (b"\x8D\x4E\x00\x8D\x83\xEC\x07\x00\x00", "reserved-tail start 0xA9"),
+        (b"\x81\xF9\x7C\x00\x00\x00", "reserved-tail scan count 0x7C"),
+        (b"\x8D\x83\xEC\x07\x00\x00\xB9\x7C\x00\x00\x00", "reserved-tail clear span"),
     ):
         if needle not in load_data:
             errors.append(f"CAchievement::LoadState missing {label}")
@@ -5490,10 +5516,10 @@ def validate_holiday_ornament_native_contract(manifest):
         achievement_obj,
         "?DrawAchievement@CAchievement@@QAEXHHH_NM@Z",
     )
-    if draw_achievement_data[0xD8:0xDC] != b"\x83\xFF\x7F\x7F":
-        errors.append("DrawAchievement short guard does not accept IDs through 0x7F")
-    if draw_achievement_data[0x191:0x196] != b"\x83\xFF\x7F\x0F\x8F":
-        errors.append("DrawAchievement near guard does not accept IDs through 0x7F")
+    if draw_achievement_data[0xD8] != 0xE9:
+        errors.append("DrawAchievement short guard is not detoured to imm32 logic")
+    if draw_achievement_data[0x191] != 0xE9:
+        errors.append("DrawAchievement near guard is not detoured to imm32 logic")
 
     achievement_scene_obj = CoffObject(PATCHED / "AchievementsScene.obj")
     scene_draw_data, scene_draw_sym, scene_draw_sec = function_bytes(
@@ -5808,7 +5834,7 @@ def validate_holiday_ornament_native_contract(manifest):
             "collection_master_target": HOLIDAY_ORNAMENT_MASTER_COLLECTOR_TARGET,
             "goal_collector_target": HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET,
             "ornamentologist_target": HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET,
-            "physical_row_count": 0x80,
+            "physical_row_count": CUSTOM_ACHIEVEMENT_LAST_ID + 1,
             "visible_count_flag_0": manifest["CustomAchievements"]["visible_counts"]["holiday_furniture_flag_0"],
             "visible_count_flag_1": manifest["CustomAchievements"]["visible_counts"]["holiday_furniture_flag_1"],
             "notify_queue_bound": HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT,
@@ -8740,7 +8766,7 @@ __VF2_HOLIDAY_PURCHASE_GOAL_CASES__
 
 static unsigned int &VF2TatersPurchaseMask() {
     unsigned char *record =
-        (unsigned char *)&Achievement + 0x80 * 12;
+        (unsigned char *)&Achievement + 0xA8 * 12;
     return *(unsigned int *)(record + 4);
 }
 
@@ -8862,31 +8888,42 @@ static void VF2CompleteAllCollections() {
     Achievement.SetComplete((EAchievement)0x4D);
 }
 
-static void VF2CompleteAchievementOnce(int achievement) {
+static void VF2ClearAchievementNotificationQueueRaw() {
+    int *queue = (int *)((unsigned char *)&Achievement + 0xDBC);
+    for (int index = 0; index < 0x5F; ++index) {
+        queue[index] = -1;
+    }
+}
+
+static void VF2CompleteAchievementForCheat(int achievement) {
     EAchievement id = (EAchievement)achievement;
     if (!Achievement.IsComplete(id)) {
+        // A single native completion can enqueue dependent meta-goals too.
+        // Empty the exact 95-dword queue before every bulk-cheat completion,
+        // so expanding the visible schema can never write past +0xF34.
+        VF2ClearAchievementNotificationQueueRaw();
         Achievement.SetComplete(id);
     }
 }
 
 static void VF2CompleteAllAchievements() {
     for (int achievement = 0x00; achievement <= 0x5E; ++achievement) {
-        VF2CompleteAchievementOnce(achievement);
+        VF2CompleteAchievementForCheat(achievement);
     }
     if (kVF2IncludeOrnamentologistGoal) {
-        VF2CompleteAchievementOnce(0x5F);
+        VF2CompleteAchievementForCheat(0x5F);
     }
     for (int achievement = 0x60; achievement <= 0x65; ++achievement) {
-        VF2CompleteAchievementOnce(achievement);
+        VF2CompleteAchievementForCheat(achievement);
     }
     if (kVF2IncludeBehaviorGoals) {
         for (int achievement = 0x66; achievement <= 0x6C; ++achievement) {
-            VF2CompleteAchievementOnce(achievement);
+            VF2CompleteAchievementForCheat(achievement);
         }
     }
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
         for (int achievement = 0x6D; achievement <= 0x7F; ++achievement) {
-            VF2CompleteAchievementOnce(achievement);
+            VF2CompleteAchievementForCheat(achievement);
         }
     }
 }
@@ -9400,8 +9437,13 @@ def patch_string_manager(manifest):
             "text": text,
         })
 
-    for achievement_id, group, title, description in CUSTOM_ACHIEVEMENT_ROW_SPECS:
+    for achievement_id, group, title, description in custom_achievement_capacity_row_specs():
         title_id, description_id = custom_achievement_string_ids(achievement_id)
+        source = (
+            "custom achievement"
+            if group != "reserved_capacity"
+            else "custom achievement reserved capacity"
+        )
         for string_id, key, text, role in (
             (title_id, f"eString_CustomAchievement{achievement_id:02X}Title", title, "title"),
             (
@@ -9418,7 +9460,7 @@ def patch_string_manager(manifest):
             new_rows.append((string_id, key_sym, text_sym))
             string_manifest.append({
                 "pc_string_id": hex(string_id),
-                "source": "custom achievement",
+                "source": source,
                 "achievement_id": hex(achievement_id),
                 "group": group,
                 "role": role,
@@ -10404,6 +10446,81 @@ def patch_floating_anim_table(manifest):
     }
 
 
+def patch_custom_achievement_draw_bounds(achievement_obj):
+    """Detour signed imm8 guards so visible IDs safely extend through 0xA7."""
+    draw_sym = achievement_obj.symbol(
+        "?DrawAchievement@CAchievement@@QAEXHHH_NM@Z"
+    )
+    draw_sec = achievement_obj.section(draw_sym.section)
+
+    short_source = draw_sym.value + 0xD8
+    short_return = draw_sym.value + 0xE7
+    short_cave = draw_sec.raw_size
+    short_payload = (
+        b"\x81\xFF" + struct.pack("<I", CUSTOM_ACHIEVEMENT_LAST_ID)
+        + b"\x77\x08"
+        + b"\x8D\x0C\x7F"
+        + b"\x8A\x0C\x8E"
+        + b"\xEB\x02"
+        + b"\x32\xC9"
+        + b"\xE9" + section_rel32(short_cave + 0x12, 5, short_return)
+    )
+    achievement_obj.insert_section_bytes(draw_sym.section, short_cave, short_payload)
+    patch_section_near_jump(
+        achievement_obj,
+        draw_sym.section,
+        short_source,
+        short_cave,
+        5,
+        b"\x83\xFF\x5F\x7D\x08",
+    )
+
+    draw_sec = achievement_obj.section(draw_sym.section)
+    near_source = draw_sym.value + 0x191
+    near_fallthrough = draw_sym.value + 0x19A
+    near_above_target = draw_sym.value + 0x3CD
+    near_cave = draw_sec.raw_size
+    near_payload = (
+        b"\x81\xFF" + struct.pack("<I", CUSTOM_ACHIEVEMENT_LAST_ID)
+        + b"\x0F\x87" + section_rel32(
+            near_cave + 0x06,
+            6,
+            near_above_target,
+        )
+        + b"\xE9" + section_rel32(
+            near_cave + 0x0C,
+            5,
+            near_fallthrough,
+        )
+    )
+    achievement_obj.insert_section_bytes(draw_sym.section, near_cave, near_payload)
+    patch_section_near_jump(
+        achievement_obj,
+        draw_sym.section,
+        near_source,
+        near_cave,
+        9,
+        b"\x83\xFF\x5F\x0F\x8D\x33\x02\x00\x00",
+    )
+
+    return {
+        "last_visible_id": hex(CUSTOM_ACHIEVEMENT_LAST_ID),
+        "comparison": "unsigned imm32",
+        "short_guard": {
+            "source": hex(short_source - draw_sym.value),
+            "cave": hex(short_cave - draw_sym.value),
+            "return": hex(short_return - draw_sym.value),
+        },
+        "near_guard": {
+            "source": hex(near_source - draw_sym.value),
+            "cave": hex(near_cave - draw_sym.value),
+            "fallthrough": hex(near_fallthrough - draw_sym.value),
+            "above_target": hex(near_above_target - draw_sym.value),
+        },
+        "coff_relocations_added": 0,
+    }
+
+
 def patch_custom_achievements(manifest):
     achievement_obj = CoffObject(PATCHED / "Achievement.obj")
     list_sym = achievement_obj.symbol("?achievementList@@3PAUsAchievementListEntry@@A")
@@ -10411,9 +10528,10 @@ def patch_custom_achievements(manifest):
     row_insert = list_sym.value + 0x5F * ACHIEVEMENT_ROW_SIZE
     if row_insert != list_sec.raw_size:
         raise RuntimeError("Unexpected achievementList append site")
-    # Keep every native variant layout-identical through ID 0x7F. Optional
-    # goals are filtered only by achievementOrder/visible-count logic; direct
-    # ID * sizeof(row) indexing therefore remains safe in every executable.
+    # Keep every native variant layout-identical through the full B156 visible
+    # capacity at ID 0xA7. Undefined future rows receive empty strings and are
+    # omitted from achievementOrder, so direct ID * sizeof(row) indexing stays
+    # safe without exposing or inventing goal definitions.
     rows = [(
         HOLIDAY_ORNAMENT_ACHIEVEMENT_ID,
         HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET,
@@ -10423,7 +10541,7 @@ def patch_custom_achievements(manifest):
         holiday_ornament_achievement_desc_string_id(),
         0,
     )]
-    for achievement_id, _group, _title, _description in CUSTOM_ACHIEVEMENT_ROW_SPECS:
+    for achievement_id, _group, _title, _description in custom_achievement_capacity_row_specs():
         title_id, description_id = custom_achievement_string_ids(achievement_id)
         rows.append((
             achievement_id,
@@ -10435,7 +10553,7 @@ def patch_custom_achievements(manifest):
             0,
         ))
     if [row[0] for row in rows] != list(range(0x5F, CUSTOM_ACHIEVEMENT_LAST_ID + 1)):
-        raise RuntimeError("Custom achievement rows are not dense through ID 0x7F")
+        raise RuntimeError("Custom achievement rows are not dense through reserved capacity")
     achievement_obj.insert_section_bytes(
         list_sym.section,
         row_insert,
@@ -10471,8 +10589,8 @@ def patch_custom_achievements(manifest):
     )
 
     # Stock LoadState treats every nonzero row from 0x5F onward as reserved.
-    # Preserve rows through hidden persisted slot 0x80, which stores the
-    # two-bit Taters purchase mask. Validate/clear only IDs 0x81-0x124.
+    # Preserve rows through hidden persisted slot 0xA8, which stores the
+    # two-bit Taters purchase mask. Validate/clear only IDs 0xA9-0x124.
     load_sym = achievement_obj.symbol(
         "?LoadState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z"
     )
@@ -10480,10 +10598,10 @@ def patch_custom_achievements(manifest):
     load_raw = load_sec.raw_ptr + load_sym.value
     load_patches = (
         (0x39, b"\x8D\x4E\x5F", b"\x8D\x4E\x00"),
-        (0x3C, b"\x8D\x83\x74\x04\x00\x00", b"\x8D\x83\x0C\x06\x00\x00"),
-        (0x51, b"\x81\xF9\x25\x01\x00\x00", b"\x81\xF9\xA4\x00\x00\x00"),
-        (0x62, b"\x8D\x83\x5C\x04\x00\x00", b"\x8D\x83\x0C\x06\x00\x00"),
-        (0x68, b"\xB9\xC8\x00\x00\x00", b"\xB9\xA4\x00\x00\x00"),
+        (0x3C, b"\x8D\x83\x74\x04\x00\x00", b"\x8D\x83\xEC\x07\x00\x00"),
+        (0x51, b"\x81\xF9\x25\x01\x00\x00", b"\x81\xF9\x7C\x00\x00\x00"),
+        (0x62, b"\x8D\x83\x5C\x04\x00\x00", b"\x8D\x83\xEC\x07\x00\x00"),
+        (0x68, b"\xB9\xC8\x00\x00\x00", b"\xB9\x7C\x00\x00\x00"),
     )
     for offset, expected, replacement in load_patches:
         if achievement_obj.buf[load_raw + offset : load_raw + offset + len(expected)] != expected:
@@ -10532,17 +10650,7 @@ def patch_custom_achievements(manifest):
         complete_stub + b"\x90" * (0x2E - len(complete_stub))
     )
 
-    draw_achievement_sym = achievement_obj.symbol("?DrawAchievement@CAchievement@@QAEXHHH_NM@Z")
-    draw_sec = achievement_obj.section(draw_achievement_sym.section)
-    draw_raw = draw_sec.raw_ptr + draw_achievement_sym.value
-    if achievement_obj.buf[draw_raw + 0xD8 : draw_raw + 0xDC] != b"\x83\xFF\x5F\x7D":
-        raise RuntimeError("Unexpected DrawAchievement short bound")
-    achievement_obj.buf[draw_raw + 0xDA] = CUSTOM_ACHIEVEMENT_LAST_ID
-    achievement_obj.buf[draw_raw + 0xDB] = 0x7F
-    if achievement_obj.buf[draw_raw + 0x191 : draw_raw + 0x196] != b"\x83\xFF\x5F\x0F\x8D":
-        raise RuntimeError("Unexpected DrawAchievement near bound")
-    achievement_obj.buf[draw_raw + 0x193] = CUSTOM_ACHIEVEMENT_LAST_ID
-    achievement_obj.buf[draw_raw + 0x195] = 0x8F
+    draw_bounds = patch_custom_achievement_draw_bounds(achievement_obj)
 
     if ENABLE_HOLIDAY_ORNAMENTS:
         set_complete_sym = achievement_obj.symbol("?SetComplete@CAchievement@@QAEXW4EAchievement@@@Z")
@@ -10820,8 +10928,8 @@ def patch_custom_achievements(manifest):
     )
     manifest["CustomAchievements"] = {
         "status": "patched",
-        "physical_id_range": "0x0-0x7f",
-        "physical_row_count": 0x80,
+        "physical_id_range": f"0x0-{hex(CUSTOM_ACHIEVEMENT_LAST_ID)}",
+        "physical_row_count": CUSTOM_ACHIEVEMENT_LAST_ID + 1,
         "custom_rows": [
             {
                 "achievement_id": hex(achievement_id),
@@ -10871,16 +10979,18 @@ def patch_custom_achievements(manifest):
             "pop_shift_dwords": 0x5E,
             "adjacent_popup_timer": "CAchievement+0xF38",
             "adjacent_popup_state": "CAchievement+0xF3C",
+            "bulk_completion_strategy": "clear all 0x5F slots before each incomplete SetComplete call",
         },
+        "draw_bounds": draw_bounds,
         "save_layout": {
             "record_count": 0x125,
             "record_size": 12,
             "highest_custom_id": hex(CUSTOM_ACHIEVEMENT_LAST_ID),
-            "purchase_mask_record_id": "0x80",
+            "purchase_mask_record_id": hex(CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID),
             "purchase_mask_field": "record+0x4 low two bits",
             "purchase_mask_meaning": {"0x1": "item 0x2cf", "0x2": "item 0x2cc"},
-            "reserved_tail_first_id": "0x81",
-            "reserved_tail_record_count": 0xA4,
+            "reserved_tail_first_id": "0xa9",
+            "reserved_tail_record_count": 0x7C,
             "signed_imm8_0x80_used": False,
         },
         "meta_targets": {
@@ -10906,7 +11016,7 @@ def patch_custom_achievements(manifest):
             HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET if ENABLE_HOLIDAY_ORNAMENTS else 12
         ),
         "notification_queue_count": HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT,
-        "save_state_note": "Save/Reset keep 0x125 records; LoadState preserves rows 0x00-0x80 (0x80 is the hidden Taters mask) and validates only 0x81-0x124.",
+        "save_state_note": "Save/Reset keep 0x125 records; LoadState preserves rows 0x00-0xA8 (0xA8 is the hidden Taters mask) and validates only 0xA9-0x124.",
     }
 
 

@@ -1675,6 +1675,24 @@ class TextFixStringManagerTests(unittest.TestCase):
                 self.assertEqual(
                     patcher.custom_achievement_string_ids(0x7F)[1], 0xE41
                 )
+                self.assertEqual(
+                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE91
+                )
+                reserved = [
+                    row for row in manifest["theStringManager"]["strings"]
+                    if row.get("source")
+                    == "custom achievement reserved capacity"
+                ]
+                self.assertEqual(len(reserved), 80)
+                self.assertEqual(
+                    {int(row["achievement_id"], 16) for row in reserved},
+                    set(range(0x80, 0xA8)),
+                )
+                self.assertTrue(all(row["text"] == "" for row in reserved))
+                self.assertEqual(
+                    patcher.holiday_ornament_collection_footer_string_ids(),
+                    (0xE92, 0xE93, 0xE94),
+                )
             finally:
                 patcher.PATCHED = old_patched
 
@@ -1719,7 +1737,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xE42, 0xE43, 0xE44),
+                    (0xE92, 0xE93, 0xE94),
                 )
                 footer_rows = [
                     row
@@ -1737,11 +1755,11 @@ class TextFixStringManagerTests(unittest.TestCase):
                         for row in footer_rows
                     ],
                     [
-                        (0xE42, "common", "eSayCommonOrnaments",
+                        (0xE92, "common", "eSayCommonOrnaments",
                          " of 4 common ornaments found."),
-                        (0xE43, "uncommon", "eSayUncommonOrnaments",
+                        (0xE93, "uncommon", "eSayUncommonOrnaments",
                          " of 4 uncommon ornaments found."),
-                        (0xE44, "rare", "eSayRareOrnaments",
+                        (0xE94, "rare", "eSayRareOrnaments",
                          " of 4 rare ornaments found."),
                     ],
                 )
@@ -1891,8 +1909,15 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("for (int sellingGoal = 0x4E; sellingGoal <= 0x53; ++sellingGoal)", source)
         self.assertIn("Achievement.IsComplete((EAchievement)sellingGoal)", source)
         self.assertIn("Achievement.IncrementProgress((EAchievement)0x54, completedSellingGoals)", source)
-        self.assertIn("static void VF2CompleteAchievementOnce(int achievement)", source)
+        self.assertIn("static void VF2CompleteAchievementForCheat(int achievement)", source)
         self.assertIn("if (!Achievement.IsComplete(id))", source)
+        self.assertIn("static void VF2ClearAchievementNotificationQueueRaw()", source)
+        self.assertIn("(unsigned char *)&Achievement + 0xDBC", source)
+        self.assertIn("for (int index = 0; index < 0x5F; ++index)", source)
+        self.assertLess(
+            source.index("VF2ClearAchievementNotificationQueueRaw();"),
+            source.index("Achievement.SetComplete(id);"),
+        )
         self.assertIn("static void VF2CompleteAllAchievements()", source)
         self.assertIn("for (int achievement = 0x00; achievement <= 0x5E; ++achievement)", source)
         self.assertIn("if (kVF2IncludeOrnamentologistGoal)", source)
@@ -2445,7 +2470,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
                     self.assertIn(
                         f"case 0x{item_id:X}: return 0x{goal_id:X};", helper
                     )
-                self.assertIn("(unsigned char *)&Achievement + 0x80 * 12", helper)
+                self.assertIn("(unsigned char *)&Achievement + 0xA8 * 12", helper)
                 self.assertIn("if ((int)item == 0x2CF) purchaseBit = 0x1;", helper)
                 self.assertIn("if ((int)item == 0x2CC) purchaseBit = 0x2;", helper)
                 self.assertIn("if (oldMask != 0x3 && newMask == 0x3)", helper)
@@ -3373,9 +3398,9 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         table_sec = achievement.section(table.section)
                         self.assertEqual(
                             (table_sec.raw_size - table.value) // patcher.ACHIEVEMENT_ROW_SIZE,
-                            0x80,
+                            0xA8,
                         )
-                        for achievement_id, _group, _title, _description in patcher.CUSTOM_ACHIEVEMENT_ROW_SPECS:
+                        for achievement_id, _group, _title, _description in patcher.custom_achievement_capacity_row_specs():
                             title_id, description_id = patcher.custom_achievement_string_ids(achievement_id)
                             row = struct.unpack_from(
                                 "<7I",
@@ -3409,9 +3434,9 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         load = achievement.symbol("?LoadState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z")
                         load_sec = achievement.section(load.section)
                         load_data = bytes(achievement.buf[load_sec.raw_ptr + load.value : load_sec.raw_ptr + load.value + 0x8B])
-                        self.assertEqual(load_data[0x39:0x45], b"\x8D\x4E\x00\x8D\x83\x0C\x06\x00\x00\x80\x38\x00")
-                        self.assertEqual(load_data[0x51:0x57], b"\x81\xF9\xA4\x00\x00\x00")
-                        self.assertEqual(load_data[0x62:0x6D], b"\x8D\x83\x0C\x06\x00\x00\xB9\xA4\x00\x00\x00")
+                        self.assertEqual(load_data[0x39:0x45], b"\x8D\x4E\x00\x8D\x83\xEC\x07\x00\x00\x80\x38\x00")
+                        self.assertEqual(load_data[0x51:0x57], b"\x81\xF9\x7C\x00\x00\x00")
+                        self.assertEqual(load_data[0x62:0x6D], b"\x8D\x83\xEC\x07\x00\x00\xB9\x7C\x00\x00\x00")
 
                         for function_name, expected_size, count_offset in (
                             ("?SaveState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z", 0x30, 0x06),
@@ -3428,10 +3453,78 @@ class HolidayOrnamentGateTests(unittest.TestCase):
 
                         draw = achievement.symbol("?DrawAchievement@CAchievement@@QAEXHHH_NM@Z")
                         draw_sec = achievement.section(draw.section)
-                        draw_data = bytes(achievement.buf[draw_sec.raw_ptr + draw.value : draw_sec.raw_ptr + draw.value + 0x3EB])
-                        self.assertEqual(draw_data[0xD8:0xDC], b"\x83\xFF\x7F\x7F")
-                        self.assertEqual(draw_data[0x191:0x196], b"\x83\xFF\x7F\x0F\x8F")
-                        self.assertNotIn(b"\x83\xFF\x80", draw_data)
+                        draw_data = bytes(
+                            achievement.buf[
+                                draw_sec.raw_ptr + draw.value : draw_sec.raw_ptr
+                                + draw_sec.raw_size
+                            ]
+                        )
+                        self.assertEqual(draw_data[0xD8], 0xE9)
+                        self.assertEqual(
+                            0xD8 + 5 + struct.unpack_from("<i", draw_data, 0xD9)[0],
+                            0x3EB,
+                        )
+                        self.assertEqual(
+                            draw_data[0x3EB:0x3FE],
+                            b"\x81\xFF\xA7\x00\x00\x00\x77\x08"
+                            b"\x8D\x0C\x7F\x8A\x0C\x8E\xEB\x02\x32\xC9\xE9",
+                        )
+                        self.assertEqual(
+                            0x3FD + 5 + struct.unpack_from("<i", draw_data, 0x3FE)[0],
+                            0xE7,
+                        )
+                        self.assertEqual(draw_data[0x191], 0xE9)
+                        self.assertEqual(
+                            0x191 + 5 + struct.unpack_from("<i", draw_data, 0x192)[0],
+                            0x402,
+                        )
+                        self.assertEqual(draw_data[0x196:0x19A], b"\x90" * 4)
+                        self.assertEqual(
+                            draw_data[0x402:0x40A],
+                            b"\x81\xFF\xA7\x00\x00\x00\x0F\x87",
+                        )
+                        self.assertEqual(
+                            0x40E + struct.unpack_from("<i", draw_data, 0x40A)[0],
+                            0x3CD,
+                        )
+                        self.assertEqual(draw_data[0x40E], 0xE9)
+                        self.assertEqual(
+                            0x40E + 5 + struct.unpack_from("<i", draw_data, 0x40F)[0],
+                            0x19A,
+                        )
+                        draw_relocs = [
+                            struct.unpack_from(
+                                "<IIH",
+                                achievement.buf,
+                                draw_sec.reloc_ptr + index * 10,
+                            )
+                            for index in range(draw_sec.nreloc)
+                        ]
+                        self.assertFalse(
+                            any(
+                                draw.value + 0x3EB <= relocation[0] < draw.value + 0x413
+                                for relocation in draw_relocs
+                            )
+                        )
+                        self.assertEqual(
+                            manifest["CustomAchievements"]["draw_bounds"],
+                            {
+                                "last_visible_id": "0xa7",
+                                "comparison": "unsigned imm32",
+                                "short_guard": {
+                                    "source": "0xd8",
+                                    "cave": "0x3eb",
+                                    "return": "0xe7",
+                                },
+                                "near_guard": {
+                                    "source": "0x191",
+                                    "cave": "0x402",
+                                    "fallthrough": "0x19a",
+                                    "above_target": "0x3cd",
+                                },
+                                "coff_relocations_added": 0,
+                            },
+                        )
 
                         queue = achievement.symbol("?QueueAchievementNotify@CAchievement@@AAEXW4EAchievement@@@Z")
                         queue_sec = achievement.section(queue.section)
@@ -4130,7 +4223,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "collection_master_target": 6,
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
-                    "physical_row_count": 0x80,
+                    "physical_row_count": 0xA8,
                     "visible_count_flag_0": 102,
                     "visible_count_flag_1": 121,
                     "notify_queue_bound": 0x5F,

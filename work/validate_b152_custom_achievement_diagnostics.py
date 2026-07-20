@@ -8,9 +8,9 @@ import struct
 
 
 HOLIDAY_FOOTER_ROWS = (
-    (0xE42, "common", "eSayCommonOrnaments", " of 4 common ornaments found."),
-    (0xE43, "uncommon", "eSayUncommonOrnaments", " of 4 uncommon ornaments found."),
-    (0xE44, "rare", "eSayRareOrnaments", " of 4 rare ornaments found."),
+    (0xE92, "common", "eSayCommonOrnaments", " of 4 common ornaments found."),
+    (0xE93, "uncommon", "eSayUncommonOrnaments", " of 4 uncommon ornaments found."),
+    (0xE94, "rare", "eSayRareOrnaments", " of 4 rare ornaments found."),
 )
 B152_HOLIDAY_BACKGROUND_SIZE = (1024, 768)
 
@@ -114,7 +114,7 @@ def validate_executable(path: Path) -> dict:
     require(manifest_path.is_file(), f"{path}: sibling patch-manifest.json is missing")
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     custom = manifest.get("CustomAchievements", {})
-    require(custom.get("physical_row_count") == 0x80, f"{path}: manifest row count is not 128")
+    require(custom.get("physical_row_count") == 0xA8, f"{path}: manifest row count is not 168")
     award_contract = manifest.get("custom_achievement_award_hook_contract", {})
     require(
         award_contract.get("status") == "validated",
