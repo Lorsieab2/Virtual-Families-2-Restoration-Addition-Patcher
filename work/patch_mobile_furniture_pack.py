@@ -406,6 +406,13 @@ VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES = {0x12E: 0x124}
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
 PATCHER_CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "patcher_assets" / "optional_patches" / "cheat_upgrades"
+MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR = (
+    ROOT
+    / "patcher_assets"
+    / "optional_patches"
+    / "mobile_furniture_behaviors"
+    / "mobile_fmaps"
+)
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
 CHEAT_UPGRADE_ITEMS = [
     {
@@ -12180,6 +12187,71 @@ def sync_behavior_assets(manifest):
     }
 
 
+def seed_mobile_furniture_behavior_evidence(manifest):
+    """Preserve the APK furniture maps locally before making desktop-safe copies."""
+    mobile_items = [
+        item
+        for item in manifest["items"]
+        if item["mobile_data"].get("mobile_row") is not None
+    ]
+    mobile_ids = [int(item["item_id"], 16) for item in mobile_items]
+    expected_ids = list(range(0x2AA, 0x2E9))
+    if mobile_ids != expected_ids:
+        raise RuntimeError(
+            "Mobile furniture behavior evidence must cover exact IDs 0x2AA-0x2E8"
+        )
+
+    assets = OUT / "Assets"
+    assets.mkdir(parents=True, exist_ok=True)
+    records = []
+    copied = 0
+    for item in mobile_items:
+        filename = Path(item["path"]).name + ".fmap"
+        source = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+        record = {
+            "item_id": item["item_id"],
+            "name": item["name"],
+            "filename": filename,
+            "source_status": "missing from supplied mobile OBB",
+            "runtime_status": "rendered-only pending a proven desktop behavior route",
+        }
+        if source.is_file():
+            data = source.read_bytes()
+            if len(data) < 0x30 or data[:4] != b"QAMF":
+                raise RuntimeError(f"Unrecognized mobile furniture map: {source}")
+            destination = assets / filename
+            shutil.copy2(source, destination)
+            source_sha = hashlib.sha256(data).hexdigest()
+            if hashlib.sha256(destination.read_bytes()).hexdigest() != source_sha:
+                raise RuntimeError(f"Mobile furniture map copy mismatch: {filename}")
+            record.update({
+                "source_status": "preserved from supplied mobile OBB",
+                "source_sha256": source_sha,
+                "source_bytes": len(data),
+            })
+            copied += 1
+        records.append(record)
+
+    if copied != 41:
+        raise RuntimeError(
+            f"Expected 41 preserved mobile furniture maps, found {copied}"
+        )
+    manifest["MobileFurnitureBehaviorEvidence"] = {
+        "status": "source evidence preserved; runtime behavior routes remain gated until proven",
+        "mobile_item_range": "0x2aa-0x2e8",
+        "mobile_item_count": len(records),
+        "source_fmap_count": copied,
+        "missing_fmap_count": len(records) - copied,
+        "excluded_scope": [
+            "patcher-created Invisible furniture",
+            "custom colorful couches",
+            "LDW posters",
+            "VF3 imports",
+        ],
+        "items": records,
+    }
+
+
 def vf3_tv_fmap_cell_value(donor_value, fallback_value, occupied):
     if not occupied:
         return 0
@@ -15878,6 +15950,7 @@ def main():
         manifest["holiday_body_lookup"] = {
             "status": "not patched; stock animator body-row clamp retained",
         }
+    seed_mobile_furniture_behavior_evidence(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)

@@ -87,7 +87,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 | Snowy-weather actions | Needs source audit | Identify every ported/requested action and prove weather-only eligibility. |
 | Bathroom sink actions; jewelry for females 14+ | Needs source audit | Every sink route/variation must be Behavior-Patches gated. |
 | Manual `Play video games` on computer drop | Not started | Add beside Browsing web/verified computer routes without changing autonomous likelihoods. |
-| Experimental mobile-only furniture actions | Backlog / optional patch only | Audit recognition, routes, animation/location, and base parity. Disruptive group actions must require a manually dropped villager and must never autonomously gather the whole family. |
+| Mobile-only furniture actions | B156 source evidence preserved / runtime routes pending | Scope is exactly the 63 genuine mobile rows `0x2AA-0x2E8`; all Invisible/custom/VF3 items are excluded. Forty-one original QAMFs are tracked locally and 22 absent maps are explicit. Holiday, birthday, chaise, patio, umbrella, and picnic symbol families are audited in `B156-mobile-furniture-behavior-ledger.md`; mobile-only handlers and safe placed-item anchors still require exact ports. Disruptive group actions must remain manual-drop-only. |
 | Praise string-change bug | Needs source audit | Preserve exact action/variation text and let goals inspect it before praise changes state. |
 
 ## Cheats and house state

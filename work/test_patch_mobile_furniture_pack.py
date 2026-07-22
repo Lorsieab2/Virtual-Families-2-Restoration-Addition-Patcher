@@ -32,6 +32,46 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             "a8e965309016d0933f1577ad0865e103e58d5df9a24cb4012a39d8457f293b8c",
         )
 
+    def test_mobile_behavior_fmap_evidence_is_local_and_hash_pinned(self):
+        source_dir = patcher.MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR
+        self.assertEqual(
+            source_dir,
+            patcher.ROOT
+            / "patcher_assets"
+            / "optional_patches"
+            / "mobile_furniture_behaviors"
+            / "mobile_fmaps",
+        )
+        records = []
+        for path in sorted(source_dir.glob("*.fmap"), key=lambda item: item.name):
+            data = path.read_bytes()
+            self.assertGreaterEqual(len(data), 0x30)
+            self.assertEqual(data[:4], b"QAMF")
+            records.append(
+                path.name
+                + "\0"
+                + hashlib.sha256(data).hexdigest()
+            )
+        self.assertEqual(len(records), 41)
+        digest = hashlib.sha256(("\n".join(records) + "\n").encode("utf-8"))
+        self.assertEqual(
+            digest.hexdigest(),
+            "cb8c649c19a80b3c4ebe037218f96fa626ec2b07d2ef585fa8baf84a1a0b0c1c",
+        )
+
+    def test_mobile_behavior_evidence_scope_is_exact_and_excludes_invisible(self):
+        mobile_rows = [
+            (name, path, patcher.MOBILE_DATA_BY_PATH[path])
+            for name, _donor, _list_name, path in patcher.ITEMS
+            if patcher.MOBILE_DATA_BY_PATH[path].get("mobile_row") is not None
+        ]
+        self.assertEqual(len(mobile_rows), 63)
+        self.assertEqual(
+            [row[2]["mobile_item_id"] for row in mobile_rows],
+            list(range(0x2AA, 0x2E9)),
+        )
+        self.assertFalse(any("Invisible" in row[0] for row in mobile_rows))
+
 
 class DebuggerResearchTests(unittest.TestCase):
     def test_editor_selector_respects_native_interface_split(self):
