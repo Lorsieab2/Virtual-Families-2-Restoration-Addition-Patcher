@@ -583,14 +583,16 @@ def validate_exe(
     pregnancy = validate_older_pregnancy(path, expected_flag)
     image = LinkedPE(path)
     goal = validate_one_byte_flag(image, ".vf2goal", expected_flag)
+    behavior = validate_one_byte_flag(image, ".vf2beh", expected_flag)
     mortality = validate_older_mortality(path, expected_flag, build_label)
     original = bytes(image.data)
     flag_offsets = [
         int(goal["raw_offset"], 16),
+        int(behavior["raw_offset"], 16),
         int(pregnancy["flag_raw_offset"], 16),
         int(mortality["flag"]["raw_offset"], 16),
     ]
-    if len(set(flag_offsets)) != 3:
+    if len(set(flag_offsets)) != 4:
         raise ValueError(f"{path}: runtime flag offsets overlap")
     enabled = bytearray(original)
     for offset in flag_offsets:
@@ -609,6 +611,7 @@ def validate_exe(
         "size": len(image.data),
         "runtime_flags": {
             "holiday_furniture_goals": goal,
+            "mobile_furniture_behaviors": behavior,
             "allow_older_pregnancies": {
                 "section": ".vf2preg",
                 "raw_offset": pregnancy["flag_raw_offset"],
@@ -621,7 +624,7 @@ def validate_exe(
         "older_pregnancy": pregnancy,
         "older_mortality": mortality,
         "toggle_cycle": {
-            "three_nonoverlapping_offsets": True,
+            "four_nonoverlapping_offsets": True,
             "enable_sets_all_to_01": all(enabled_once[offset] == 1 for offset in flag_offsets),
             "repeated_enable_idempotent": repeated_enable_idempotent,
             "disable_after_enable_restores_exact_original": disable_restores_original,
@@ -642,6 +645,7 @@ def validate_post_asset_records(
         build_manifest_data=build_manifest,
     )
     expected = {
+        "mobile_furniture_behaviors": ("mobile_furniture_behaviors", ".vf2beh"),
         "holiday_furniture": ("holiday_furniture_goals", ".vf2goal"),
         "allow_older_pregnancies": ("allow_older_pregnancies", ".vf2preg"),
         "older_villager_mortality": ("older_villager_mortality", ".vf2mort"),

@@ -72,6 +72,111 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         )
         self.assertFalse(any("Invisible" in row[0] for row in mobile_rows))
 
+    def test_mobile_chaise_pc_fmaps_are_exact_eobject_only_payloads(self):
+        expected_hashes = {
+            "Chaise_blue.png.fmap": "370607425da5c8ceb6ebcb45323718df4630305089ce67f4cca3fe2ffbcc2b08",
+            "Chaise_brown.png.fmap": "3e4d0f11c728fa64db5e7ebe87c810809969f11b8f1a8fe72ceb1db8c28ae78e",
+            "Chaise_green.png.fmap": "e9751bbc5341319239b47ec3a975c96dd2224ff2511bc38956624dc9e0cf057a",
+            "Chaise_red.png.fmap": "2c4bfede0a9280faed66a5e9688c2e5574a954d58dc7f96b9085daf08631fb29",
+        }
+        manifest = {}
+        patcher.validate_mobile_chaise_pc_fmaps(manifest)
+        self.assertEqual(
+            [row["item_id"] for row in manifest["MobileChaisePCFmaps"]["records"]],
+            ["0x2de", "0x2df", "0x2e0", "0x2e1"],
+        )
+        for filename, expected_hash in expected_hashes.items():
+            data = (patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename).read_bytes()
+            self.assertEqual(len(data), 1112)
+            self.assertEqual(hashlib.sha256(data).hexdigest(), expected_hash)
+            width, height = struct.unpack_from("<ii", data, 24)
+            values = [
+                value
+                for (value,) in struct.iter_unpack(
+                    "<I", data[32 : 32 + width * height * 4]
+                )
+            ]
+            self.assertEqual((width, height), (19, 14))
+            self.assertEqual(
+                {(i % width, i // width) for i, value in enumerate(values) if value},
+                set(patcher.MOBILE_CHAISE_PC_CELLS),
+            )
+            self.assertEqual(
+                {value for value in values if value},
+                {patcher.MOBILE_CHAISE_PC_CELL_VALUE},
+            )
+            self.assertNotIn(0x01B09800, values)
+
+    def test_mobile_chaise_dispatch_retargets_only_stock_drop_hotspot_call(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                obj_path = patcher.PATCHED / "theMainScene.obj"
+                shutil.copy2(patcher.SRC_OBJS / "theMainScene.obj", obj_path)
+
+                def targets(obj, symbol):
+                    section = obj.section(symbol.section)
+                    result = {}
+                    for index in range(section.nreloc):
+                        vaddr, symbol_index, rtype = struct.unpack_from(
+                            "<IIH", obj.buf, section.reloc_ptr + index * 10
+                        )
+                        if symbol.value <= vaddr < symbol.value + 0x200:
+                            result[vaddr - symbol.value] = (
+                                obj.symbol_by_index[symbol_index].name,
+                                rtype,
+                            )
+                    return result
+
+                before = CoffObject(obj_path)
+                before_targets = targets(
+                    before, before.symbol("?DropVillager@theMainScene@@IAEXXZ")
+                )
+                manifest = {}
+                patcher.patch_mobile_furniture_behavior_dispatch(manifest)
+                after = CoffObject(obj_path)
+                after_targets = targets(
+                    after, after.symbol("?DropVillager@theMainScene@@IAEXXZ")
+                )
+                expected = dict(before_targets)
+                expected[0xCB] = (
+                    patcher.MOBILE_FURNITURE_BEHAVIOR_HELPER_SYMBOL,
+                    patcher.IMAGE_REL_I386_REL32,
+                )
+                self.assertEqual(after_targets, expected)
+                contract = manifest["MobileFurnitureBehaviors"]
+                self.assertEqual(
+                    contract["runtime_flag"],
+                    {
+                        "symbol": patcher.MOBILE_FURNITURE_BEHAVIOR_FLAG_SYMBOL,
+                        "source_section": ".vf2beh",
+                        "size": 1,
+                        "default": "00",
+                    },
+                )
+                self.assertTrue(contract["drop_hook"]["stock_first"])
+                self.assertTrue(contract["drop_hook"]["stock_false_fallthrough_preserved"])
+                self.assertEqual(
+                    contract["implemented_families"][0]["item_ids"],
+                    ["0x2de", "0x2df", "0x2e0", "0x2e1"],
+                )
+                self.assertFalse(contract["implemented_families"][0]["autonomous"])
+                helper = (patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp").read_text(
+                    encoding="ascii"
+                )
+                wrapper = helper.split(
+                    "bool const theMainScene::VF2HandleDropOnMobileFurniture", 1
+                )[1]
+                self.assertLess(
+                    wrapper.index("if (HandleDropOnHotSpot(villager)) return true;"),
+                    wrapper.index("if (gVF2MobileFurnitureBehaviors == 0) return false;"),
+                )
+                self.assertIn("sample.y -= 10;", wrapper)
+                self.assertIn("VF2IsMobileChaise(candidate)", wrapper)
+        finally:
+            patcher.PATCHED = old_patched
+
 
 class DebuggerResearchTests(unittest.TestCase):
     def test_editor_selector_respects_native_interface_split(self):

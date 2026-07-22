@@ -56,11 +56,21 @@ SOURCE_ONLY_PAYLOAD_DIRS = FULL_PAYLOAD_ALWAYS_INCLUDE_DIRS
 OPTIONAL_SONG_SOURCE_DIR = Path("OptionalSongMods")
 OPTIONAL_SONG_TARGET_DIR = Path("Sounds")
 DEFAULT_OPTIONAL_SONG_MODS_SOURCE = OPTIONAL_PATCH_ASSET_DIR / "optional_song_mods" / "OptionalSongMods"
+MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR = (
+    OPTIONAL_PATCH_ASSET_DIR / "mobile_furniture_behaviors" / "pc_fmaps"
+)
+MOBILE_CHAISE_FMAP_FILES = (
+    "Chaise_blue.png.fmap",
+    "Chaise_brown.png.fmap",
+    "Chaise_green.png.fmap",
+    "Chaise_red.png.fmap",
+)
 SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "allow_older_pregnancies",
     "older_villager_mortality",
     "invisible_upgrades_graphics",
     "optional_song_mods",
+    "mobile_furniture_behaviors",
     "white_birds",
     "transparent_menu_bar",
     "transparent_store_bar",
@@ -199,7 +209,7 @@ SETTINGS = [
     {
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
-        "description": "Optional patch: enables added villager behavior routes for mobile furniture where implemented.",
+        "description": "Optional patch: enables exact ported actions for genuine mobile furniture where implemented. B156 adds manual Relaxing on lounger behavior to the four mobile lounge chairs; Invisible/custom/VF3 furniture is excluded.",
         "default": False,
         "category": "optional",
     },
@@ -737,6 +747,30 @@ def holiday_furniture_goal_post_asset_patches(
     )
 
 
+def mobile_furniture_behavior_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("MobileFurnitureBehaviors")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError(
+            "Build manifest has an invalid MobileFurnitureBehaviors runtime flag contract."
+        )
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=".vf2beh",
+        setting_id="mobile_furniture_behaviors",
+        feature_label="Mobile Furniture Behaviors",
+    )
+
+
 def b152_runtime_flag_post_asset_patches(
     executable_sources: list[Path],
     *,
@@ -744,6 +778,11 @@ def b152_runtime_flag_post_asset_patches(
     build_manifest_data: dict[str, Any],
 ) -> list[dict[str, Any]]:
     return [
+        *mobile_furniture_behavior_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
         *holiday_furniture_goal_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
@@ -1522,6 +1561,64 @@ def optional_song_asset_patches(
             record["restore_source_sha256"] = sha256_file(restore_source)
             record["restore_source_size"] = restore_source.stat().st_size
         records.append(record)
+    return records
+
+
+def mobile_furniture_behavior_asset_patches(
+    bundle_dir: Path,
+    base_payload: Path,
+) -> list[dict[str, Any]]:
+    if not MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR.is_dir():
+        return []
+    base_maps = [
+        base_payload / "Assets" / filename
+        for filename in MOBILE_CHAISE_FMAP_FILES
+    ]
+    present_base_maps = [path for path in base_maps if path.is_file()]
+    if not present_base_maps:
+        return []
+    if len(present_base_maps) != len(base_maps):
+        missing = ", ".join(path.name for path in base_maps if not path.is_file())
+        raise ValueError(
+            f"Base payload has an incomplete mobile lounge-chair map set; missing: {missing}"
+        )
+    payload_root = bundle_dir / "payload"
+    enabled_dir = payload_root / "MobileFurnitureBehaviorFmaps"
+    restore_dir = payload_root / "OriginalMobileFurnitureBehaviorFmaps"
+    enabled_dir.mkdir(parents=True, exist_ok=True)
+    restore_dir.mkdir(parents=True, exist_ok=True)
+    records: list[dict[str, Any]] = []
+    for filename in MOBILE_CHAISE_FMAP_FILES:
+        source = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+        if not source.is_file():
+            raise ValueError(f"Missing mobile furniture behavior map: {source}")
+        target_rel = Path("Assets") / filename
+        original = base_payload / target_rel
+        if not original.is_file():
+            raise ValueError(
+                f"Base payload is missing sanitized mobile furniture map: {original}"
+            )
+        payload_source = enabled_dir / filename
+        payload_restore = restore_dir / filename
+        shutil.copy2(source, payload_source)
+        shutil.copy2(original, payload_restore)
+        records.append({
+            "file_path": relative_posix(target_rel),
+            "source_path": relative_posix(payload_source.relative_to(bundle_dir)),
+            "source_sha256": sha256_file(payload_source),
+            "source_size": payload_source.stat().st_size,
+            "expected_target_sha256": sha256_file(original),
+            "expected_target_size": original.stat().st_size,
+            "restore_source_path": relative_posix(payload_restore.relative_to(bundle_dir)),
+            "restore_source_sha256": sha256_file(payload_restore),
+            "restore_source_size": payload_restore.stat().st_size,
+            "overwrite_existing": True,
+            "requires": ["core_executable", "mobile_furniture_behaviors"],
+            "note": (
+                "Optional mobile lounge-chair EObject-only furniture map. "
+                "Disabling the setting restores the exact rendered-only map."
+            ),
+        })
     return records
 
 
@@ -2572,6 +2669,9 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         DEFAULT_OPTIONAL_SONG_MODS_SOURCE if DEFAULT_OPTIONAL_SONG_MODS_SOURCE.is_dir() else None
     )
     asset_patches.extend(optional_song_asset_patches(bundle_dir, base_payload, optional_song_source))
+    asset_patches.extend(
+        mobile_furniture_behavior_asset_patches(bundle_dir, base_payload)
+    )
     invisible_upgrades_source = Path(args.invisible_upgrades_dir).resolve() if args.invisible_upgrades_dir else None
     original_upgrades_source = Path(args.original_upgrades_dir).resolve() if args.original_upgrades_dir else None
     asset_patches.extend(invisible_upgrades_asset_patches(bundle_dir, invisible_upgrades_source, original_upgrades_source))

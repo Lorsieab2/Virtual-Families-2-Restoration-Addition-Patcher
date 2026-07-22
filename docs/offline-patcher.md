@@ -996,6 +996,13 @@ Mortality Curve, and mobile furniture behaviors are default-off Optional
 patches. Historical build notes above retain their original category wording
 to describe what those earlier bundles actually shipped.
 
+The first exact mobile-furniture behavior family is Lounge Chairs `0x2DE-0x2E1`.
+When enabled, a default-zero `.vf2beh` flag and four PC-safe furniture maps add
+the recovered manual `Relaxing on lounger` action. The wrapper preserves stock
+hotspot handling first, adds no autonomous behavior, and disabling the setting
+restores the exact rendered-only maps. Invisible/custom/VF3 furniture is outside
+this optional patch.
+
 B156 also preserves the exact Windows executable icon resources from the
 verified stock `Virtual Families 2.exe`. The patcher validates every icon-group
 reference and requires Windows to extract 16x16, 32x32, and 48x48 icons from

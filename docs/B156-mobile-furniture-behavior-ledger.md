@@ -18,9 +18,11 @@ mobile-exclusive VF2 furniture and do not count toward this patch.
 
 ## Current implementation boundary
 
-All 63 items currently receive a copied desktop donor click-table byte, but that
-does not establish the correct mobile action. The generator deliberately zeroes
-their unsupported furniture-map cells, leaving them rendered-only.
+All 63 items receive a copied desktop donor click-table byte, but that alone
+does not establish the correct mobile action. The base payload deliberately
+zeroes unsupported furniture-map cells, leaving unresolved families
+rendered-only. The optional patch now replaces only the four proven lounge-chair
+maps and enables their exact manual-drop behavior through a guarded dispatcher.
 
 The supplied mobile OBB contains original QAMF furniture maps for 41 of the 63
 items. Exact copies are now preserved under
@@ -60,7 +62,7 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2DB` | Birthday Banner | yes | `BirthdayBanner`; celebration family | handlers absent; rendered-only |
 | `0x2DC` | Birthday Cake | yes | `BirthdayCake`; poke/maybe poke | handlers absent; rendered-only |
 | `0x2DD` | Birthday Presents | yes | `BirthdayPresents`; poke/maybe poke | handlers absent; rendered-only |
-| `0x2DE-0x2E1` | Lounge Chairs | yes | `Chaise`; `LieOnChaiseNoLeadIn` | handlers absent; rendered-only |
+| `0x2DE-0x2E1` | Lounge Chairs | yes | `Chaise`; `LieOnChaiseNoLeadIn` | implemented as the first optional family; exact plan sequence and PC-safe placed-item maps |
 | `0x2E2-0x2E3` | Floor Lamps | no | no exclusive route proven | decorative |
 | `0x2E4-0x2E5` | Patio surfaces | yes | patio context only | no per-surface action assigned |
 | `0x2E6` | Patio Table | yes | `PatioChairs`; study/drink family | only `StudyingOnPatio` exists on desktop; placed-item anchoring unresolved |
@@ -79,14 +81,23 @@ but it uses fixed world coordinates. That does not make the mobile QAMF markers
 desktop-compatible and does not correctly anchor the action to an arbitrarily
 placed Patio Table.
 
-## Required implementation architecture
+## Implemented architecture
 
-The final optional patch must use a default-zero `.vf2beh` runtime byte and an
-external descriptor/dispatcher for added mobile IDs only. Stock items, all
-unresolved mobile descriptors, and the disabled path must fall through to the
-unchanged desktop logic. The fixed desktop behavior table (`0x19B` entries) and
-hotspot table (`0x5D` entries) must not grow.
+The optional patch uses a default-zero `.vf2beh` runtime byte and a single
+relocation-only wrapper at `theMainScene::DropVillager`. The wrapper calls the
+stock `HandleDropOnHotSpot` first. Only a stock miss, an enabled flag, and one of
+the four lounge-chair IDs can reach the added handler; every other path returns
+to the unchanged stock fallback. The fixed desktop behavior table (`0x19B`
+entries) and hotspot table (`0x5D` entries) do not grow.
 
-Disruptive household-wide celebration behavior must be manual-drop-only. It
-must not become an autonomous candidate.
+The lounge handler ports mobile `CBehavior::LieOnChaiseNoLeadIn`: it uses
+`LinkPeepToFurniture` object `0x95`, preserves the weather and unreachable
+refusals, selects the mobile wait/lie pose from furniture orientation, and
+applies the recovered dirtiness, happiness-trend, and energy changes. Its four
+optional QAMFs preserve the mobile dimensions/origin/trailer but retain only the
+11 proven EObject cells using the PC-safe value `0x2000A800`; the unsupported
+mobile marker is excluded. Disabling the patch restores the exact rendered-only
+base maps.
 
+No autonomous candidate was added. Future disruptive household-wide
+celebration behaviors must also remain manual-drop-only.

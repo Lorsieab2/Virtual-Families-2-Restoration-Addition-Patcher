@@ -22,6 +22,8 @@ def minimal_pe_bytes(
     mortality_marker=0,
     with_holiday_goal_flag=False,
     goal_marker=0,
+    with_mobile_furniture_behavior_flag=False,
+    behavior_marker=0,
 ):
     runtime_flags = []
     if with_older_pregnancy_flag:
@@ -30,9 +32,10 @@ def minimal_pe_bytes(
         runtime_flags.append((".vf2mort", mortality_marker))
     if with_holiday_goal_flag:
         runtime_flags.append((".vf2goal", goal_marker))
-    # Three runtime-flag sections extend the PE section table past 0x200, so
-    # keep the legacy fixture offsets for zero-to-two flags and shift only the
-    # three-flag B153 coexistence fixtures by one file-alignment block.
+    if with_mobile_furniture_behavior_flag:
+        runtime_flags.append((".vf2beh", behavior_marker))
+    # Three or more runtime-flag sections extend the PE section table past
+    # 0x200, so shift those coexistence fixtures by one file-alignment block.
     text_raw_offset = 0x400 if len(runtime_flags) > 2 else 0x200
     flag_raw_base = text_raw_offset + 0x200
     data = bytearray(flag_raw_base + 0x200 * len(runtime_flags))
@@ -74,7 +77,7 @@ def minimal_pe_bytes(
         flag_sect = sect + 40 * (index + 1)
         raw_offset = flag_raw_base + 0x200 * index
         rva = 0x2000 + 0x1000 * index
-        data[flag_sect:flag_sect + 8] = section_name.encode("ascii")
+        data[flag_sect:flag_sect + 8] = section_name.encode("ascii").ljust(8, b"\0")
         data[flag_sect + 8:flag_sect + 16] = (
             (1).to_bytes(4, "little") + rva.to_bytes(4, "little")
         )
@@ -338,6 +341,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                         with_older_pregnancy_flag=True,
                         with_older_mortality_flag=True,
                         with_holiday_goal_flag=True,
+                        with_mobile_furniture_behavior_flag=True,
                     )
                 )
                 data[0x400 + index] ^= index + 1
@@ -362,10 +366,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                         "runtime_flag": {
                             "source_section": ".vf2goal",
                         }
+                    },
+                    "MobileFurnitureBehaviors": {
+                        "runtime_flag": {
+                            "source_section": ".vf2beh",
+                        }
                     }
                 },
             )
-            self.assertEqual(len(records), 3)
+            self.assertEqual(len(records), 4)
             records_by_setting = {
                 row["requires"][-1]: row for row in records
             }
@@ -373,6 +382,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 "allow_older_pregnancies": "0x600",
                 "older_villager_mortality": "0x800",
                 "holiday_furniture": "0xa00",
+                "mobile_furniture_behaviors": "0xc00",
             }
             hashes_by_setting = {}
             for setting_id, offset in expected_offsets.items():
@@ -398,6 +408,73 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 hashes_by_setting["allow_older_pregnancies"],
                 hashes_by_setting["older_villager_mortality"],
             )
+            self.assertEqual(
+                hashes_by_setting["allow_older_pregnancies"],
+                hashes_by_setting["mobile_furniture_behaviors"],
+            )
+
+    def test_mobile_lounge_behavior_assets_export_and_restore_exact_maps(self):
+        expected_hashes = {
+            "Chaise_blue.png.fmap": "370607425da5c8ceb6ebcb45323718df4630305089ce67f4cca3fe2ffbcc2b08",
+            "Chaise_brown.png.fmap": "3e4d0f11c728fa64db5e7ebe87c810809969f11b8f1a8fe72ceb1db8c28ae78e",
+            "Chaise_green.png.fmap": "e9751bbc5341319239b47ec3a975c96dd2224ff2511bc38956624dc9e0cf057a",
+            "Chaise_red.png.fmap": "2c4bfede0a9280faed66a5e9688c2e5574a954d58dc7f96b9085daf08631fb29",
+        }
+        mobile_dir = (
+            ROOT / "patcher_assets" / "optional_patches"
+            / "mobile_furniture_behaviors" / "mobile_fmaps"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            bundle = root / "bundle"
+            empty_base = root / "empty-base"
+            empty_base.mkdir()
+            self.assertEqual(
+                exporter.mobile_furniture_behavior_asset_patches(bundle, empty_base),
+                [],
+            )
+
+            partial_base = root / "partial-base"
+            (partial_base / "Assets").mkdir(parents=True)
+            first = next(iter(expected_hashes))
+            (partial_base / "Assets" / first).write_bytes((mobile_dir / first).read_bytes())
+            with self.assertRaisesRegex(ValueError, "incomplete"):
+                exporter.mobile_furniture_behavior_asset_patches(bundle, partial_base)
+
+            base = root / "base"
+            (base / "Assets").mkdir(parents=True)
+            for filename in expected_hashes:
+                (base / "Assets" / filename).write_bytes((mobile_dir / filename).read_bytes())
+            records = exporter.mobile_furniture_behavior_asset_patches(bundle, base)
+            self.assertEqual(len(records), 4)
+            self.assertEqual(
+                [Path(row["file_path"]).name for row in records],
+                list(expected_hashes),
+            )
+            for record in records:
+                filename = Path(record["file_path"]).name
+                self.assertEqual(
+                    record["requires"],
+                    ["core_executable", "mobile_furniture_behaviors"],
+                )
+                self.assertTrue(record["overwrite_existing"])
+                self.assertEqual(record["source_sha256"], expected_hashes[filename])
+                enabled = bundle / Path(record["source_path"])
+                restored = bundle / Path(record["restore_source_path"])
+                original = base / "Assets" / filename
+                self.assertEqual(
+                    enabled.read_bytes(),
+                    (exporter.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename).read_bytes(),
+                )
+                self.assertEqual(restored.read_bytes(), original.read_bytes())
+                self.assertEqual(
+                    record["expected_target_sha256"],
+                    hashlib.sha256(original.read_bytes()).hexdigest(),
+                )
+                self.assertEqual(
+                    record["restore_source_sha256"],
+                    record["expected_target_sha256"],
+                )
 
     def test_exports_changed_assets_with_feature_settings(self):
         with tempfile.TemporaryDirectory() as tmp:

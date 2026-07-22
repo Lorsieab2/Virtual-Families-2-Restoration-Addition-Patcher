@@ -2648,3 +2648,21 @@
 - `work/build_b156_matrix.ps1` explicitly uses the 16 B155.5 layouts as its
   base. The shared matrix builder now accepts build/base labels so later builds
   cannot silently fall back to B155.
+
+## 2026-07-22 - B156 first exact mobile furniture behavior family
+
+- The optional Mobile Furniture Behaviors patch remains limited to genuine VF2
+  mobile rows `0x2AA-0x2E8`; Invisible, custom, and VF3 furniture is excluded.
+- Lounge Chairs `0x2DE-0x2E1` are the first implemented family. The recovered
+  mobile `LieOnChaiseNoLeadIn` plan sequence is ported behind a default-zero
+  writable `.vf2beh` byte and a stock-first `DropVillager` relocation wrapper.
+- The four optional Chaise QAMFs keep the mobile header, 19x14 grid geometry,
+  and trailer, but retain only the 11 proven EObject `0x95` cells using desktop
+  value `0x2000A800`. Mobile-only marker `0x01B09800` is not copied.
+- The patch does not extend the fixed behavior or hotspot tables and adds no
+  autonomous route. Disabling it restores the exact rendered-only base maps.
+- All 16 B156 executable layouts compile with unique hashes. Linked validation
+  proves four non-overlapping reversible runtime controls, including `.vf2beh`.
+- The remaining Holiday, birthday, patio, umbrella, picnic, and other mobile
+  families stay unported until their exact routing and placed-item anchors are
+  proven.

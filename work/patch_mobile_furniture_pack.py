@@ -38,6 +38,24 @@ ENABLE_CHEAT_UPGRADES = os.environ.get("VF2_ENABLE_CHEAT_UPGRADES", "0") == "1"
 # matching build made with VF2_ENABLE_BEHAVIOR_PATCHES=1.
 ENABLE_BEHAVIOR_PATCHES = os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "0") == "1"
 
+# Genuine mobile-furniture behaviors use a dormant exact-SHA byte toggle. The
+# first proven family is the four mobile lounge chairs; stock hotspot handling
+# still runs first, and every other item falls through unchanged.
+MOBILE_FURNITURE_BEHAVIOR_FLAG_SECTION = ".vf2beh"
+MOBILE_FURNITURE_BEHAVIOR_FLAG_SYMBOL = "_gVF2MobileFurnitureBehaviors"
+MOBILE_FURNITURE_BEHAVIOR_HELPER_SYMBOL = (
+    "?VF2HandleDropOnMobileFurniture@theMainScene@@IAE?B_NAAVCVillager@@@Z"
+)
+MOBILE_CHAISE_ITEM_IDS = tuple(range(0x2DE, 0x2E2))
+MOBILE_CHAISE_OBJECT = 0x95
+MOBILE_CHAISE_PC_CELL_VALUE = 0x2000A800
+MOBILE_CHAISE_PC_CELLS = (
+    (7, 8),
+    (5, 9), (6, 9), (7, 9), (8, 9), (9, 9),
+    (7, 10), (8, 10), (9, 10),
+    (8, 11), (9, 11),
+)
+
 # B152's Allow Older Pregnancies option is a post-link runtime byte toggle,
 # not another executable-matrix dimension. Every linked executable contains
 # the dormant hook and a default-zero byte in .vf2preg; the offline patcher
@@ -412,6 +430,9 @@ MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR = (
     / "optional_patches"
     / "mobile_furniture_behaviors"
     / "mobile_fmaps"
+)
+MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR = (
+    MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR.parent / "pc_fmaps"
 )
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
 CHEAT_UPGRADE_ITEMS = [
@@ -2502,10 +2523,10 @@ SAFE_EMPTY_FMAP_DONOR = 0x256
 EXPLICIT_SAFE_EMPTY_FMAP_PATHS = {
     "Furniture/ChristmasTree1.png": "mobile Christmas tree object-grid markers are decorative and should not dispatch desktop behavior",
     "Furniture/ChristmasTree2.png": "mobile Christmas tree object-grid markers are decorative and should not dispatch desktop behavior",
-    "Furniture/Chaise_blue.png": "mobile chaise object-grid markers are not mapped to a known desktop sitting behavior",
-    "Furniture/Chaise_brown.png": "mobile chaise object-grid markers are not mapped to a known desktop sitting behavior",
-    "Furniture/Chaise_green.png": "mobile chaise object-grid markers are not mapped to a known desktop sitting behavior",
-    "Furniture/Chaise_red.png": "mobile chaise object-grid markers are not mapped to a known desktop sitting behavior",
+    "Furniture/Chaise_blue.png": "base payload stays rendered-only; the optional mobile-behavior overlay supplies the proven PC-safe Chaise map",
+    "Furniture/Chaise_brown.png": "base payload stays rendered-only; the optional mobile-behavior overlay supplies the proven PC-safe Chaise map",
+    "Furniture/Chaise_green.png": "base payload stays rendered-only; the optional mobile-behavior overlay supplies the proven PC-safe Chaise map",
+    "Furniture/Chaise_red.png": "base payload stays rendered-only; the optional mobile-behavior overlay supplies the proven PC-safe Chaise map",
     "Furniture/Patio_table.png": "mobile patio table object-grid markers are decorative and should not dispatch desktop behavior",
     "Furniture/Patio_umbrella.png": "mobile patio umbrella uses object-grid markers unsupported by the desktop Palm donor",
     "Furniture/Picnic_table.png": "mobile picnic table object-grid markers are decorative and should not dispatch desktop behavior",
@@ -12252,6 +12273,267 @@ def seed_mobile_furniture_behavior_evidence(manifest):
     }
 
 
+def validate_mobile_chaise_pc_fmaps(manifest):
+    records = []
+    filenames = (
+        "Chaise_blue.png.fmap",
+        "Chaise_brown.png.fmap",
+        "Chaise_green.png.fmap",
+        "Chaise_red.png.fmap",
+    )
+    for item_id, filename in zip(MOBILE_CHAISE_ITEM_IDS, filenames):
+        mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+        pc_path = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+        mobile = mobile_path.read_bytes()
+        pc = pc_path.read_bytes()
+        if len(pc) != len(mobile) or pc[:4] != b"QAMF":
+            raise RuntimeError(f"Invalid PC chaise furniture map: {pc_path}")
+        width, height = struct.unpack_from("<ii", pc, 24)
+        if (width, height) != (19, 14):
+            raise RuntimeError(f"Unexpected PC chaise grid: {filename}")
+        grid_end = 32 + width * height * 4
+        if pc[:32] != mobile[:32] or pc[grid_end:] != mobile[grid_end:]:
+            raise RuntimeError(f"PC chaise header/trailer drifted: {filename}")
+        expected_offsets = {
+            32 + (y * width + x) * 4 for x, y in MOBILE_CHAISE_PC_CELLS
+        }
+        actual_offsets = set()
+        for offset in range(32, grid_end, 4):
+            value = struct.unpack_from("<I", pc, offset)[0]
+            if value:
+                if value != MOBILE_CHAISE_PC_CELL_VALUE:
+                    raise RuntimeError(
+                        f"PC chaise contains unsupported cell {value:#x}: {filename}"
+                    )
+                actual_offsets.add(offset)
+        if actual_offsets != expected_offsets:
+            raise RuntimeError(f"PC chaise EObject cells drifted: {filename}")
+        records.append({
+            "item_id": hex(item_id),
+            "filename": filename,
+            "source_sha256": hashlib.sha256(pc).hexdigest(),
+            "source_bytes": len(pc),
+            "object": hex(MOBILE_CHAISE_OBJECT),
+            "cell_value": hex(MOBILE_CHAISE_PC_CELL_VALUE),
+            "cell_count": len(actual_offsets),
+        })
+    manifest["MobileChaisePCFmaps"] = {
+        "status": "validated minimal EObject-only optional payloads",
+        "records": records,
+        "excluded_mobile_marker": "0x01b09800",
+    }
+
+
+def patch_mobile_furniture_behavior_dispatch(manifest):
+    helper_path = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
+    helper_path.write_text(r'''#pragma section(".vf2beh", read, write)
+extern "C" __declspec(allocate(".vf2beh")) volatile unsigned char gVF2MobileFurnitureBehaviors = 0;
+
+struct ldwPoint { int x; int y; };
+class CVillager;
+class CContentMap { public: enum EObject { eObjectChaise = 0x95 }; };
+enum ESpeed { eSpeedNormal = 0xC8 };
+enum EPriority { ePriorityNormal = 0 };
+enum EBodyPosition { eBodyPositionStanding = 0, eBodyPositionChaise = 0x17 };
+enum StringId { eStringBadWeather = 2, eStringCannotReachFurniture = 0xBF };
+
+struct sFurnitureInfo2 {
+    int unknown0;
+    int orientation;
+    ldwPoint point;
+    int object;
+    int padding[3];
+};
+
+class CVillagerPlans {
+public:
+    bool PlanToGo(CContentMap::EObject, ESpeed, EPriority, bool);
+    void PlanToGo(ldwPoint, ESpeed, EPriority);
+    void PlanToWait(int, EBodyPosition);
+    void PlanToLieDown(int);
+    void PlanToSay(StringId);
+    void PlanToShakeHead(int, EBodyPosition);
+    void PlanToIncDirtiness(int);
+    void PlanToIncHappinessTrend(int);
+    void PlanToIncEnergy(int);
+    void ForgetPlans(CVillager &, bool);
+    void StartNewBehavior(CVillager &);
+};
+
+class CVillager {
+public:
+    ldwPoint const FeetPos() const;
+};
+
+class CFurnitureManager;
+int __cdecl VF2PtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
+
+class CFurnitureManager {
+private:
+    int PtOnFurniture(ldwPoint);
+    friend int __cdecl VF2PtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
+public:
+    bool LinkPeepToFurniture(
+        CContentMap::EObject,
+        CVillager *,
+        sFurnitureInfo2 &,
+        bool,
+        int,
+        bool);
+};
+
+int __cdecl VF2PtOnFurnitureIndex(CFurnitureManager &manager, ldwPoint point)
+{
+    return manager.PtOnFurniture(point);
+}
+
+class CWeather { public: int currentType; };
+class ldwGameState { public: static int __cdecl GetRandom(int); };
+extern CFurnitureManager FurnitureManager;
+extern CWeather Weather;
+extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
+
+static int VF2FurnitureItemAtPoint(ldwPoint point)
+{
+    int index = VF2PtOnFurnitureIndex(FurnitureManager, point);
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (index < 0 || index >= count) return -1;
+    unsigned char *record = manager + 0x1008 + index * 0x40;
+    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return -1;
+    return *reinterpret_cast<int *>(record);
+}
+
+static bool VF2IsMobileChaise(int item)
+{
+    return item >= 0x2DE && item <= 0x2E1;
+}
+
+static void VF2SetLoungerLabel(CVillager &villager)
+{
+    char *label = reinterpret_cast<char *>(&villager) + 0x1BBA8;
+    strncpy(label, "Relaxing on lounger", 0x27);
+    label[0x27] = 0;
+}
+
+static void VF2PlanChaiseRefusal(CVillagerPlans *plans, CVillager &villager, StringId text)
+{
+    plans->PlanToSay(text);
+    plans->PlanToShakeHead(4, eBodyPositionStanding);
+    plans->StartNewBehavior(villager);
+}
+
+static bool VF2HandleMobileChaise(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    VF2SetLoungerLabel(villager);
+
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.LinkPeepToFurniture(
+            CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
+        plans->PlanToGo(
+            CContentMap::eObjectChaise, eSpeedNormal, ePriorityNormal, false);
+        VF2PlanChaiseRefusal(
+            plans, villager, eStringCannotReachFurniture);
+        return true;
+    }
+
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    if (static_cast<unsigned int>(Weather.currentType) >= 2) {
+        VF2PlanChaiseRefusal(plans, villager, eStringBadWeather);
+        return true;
+    }
+
+    int duration = ldwGameState::GetRandom(15) + 15;
+    if (info.orientation == 1) {
+        plans->PlanToWait(duration, eBodyPositionChaise);
+    } else {
+        plans->PlanToLieDown(duration);
+    }
+    plans->PlanToIncDirtiness(4);
+    plans->PlanToIncHappinessTrend(1);
+    plans->PlanToIncEnergy(2);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
+class theMainScene {
+protected:
+    bool const HandleDropOnHotSpot(CVillager &);
+    bool const VF2HandleDropOnMobileFurniture(CVillager &);
+};
+
+bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
+{
+    ldwPoint sample = villager.FeetPos();
+    sample.y -= 10;
+    int candidate = VF2FurnitureItemAtPoint(sample);
+    if (HandleDropOnHotSpot(villager)) return true;
+    if (gVF2MobileFurnitureBehaviors == 0) return false;
+    if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
+    return false;
+}
+''', encoding="ascii")
+
+    obj_path = PATCHED / "theMainScene.obj"
+    obj = CoffObject(obj_path)
+    drop = obj.symbol("?DropVillager@theMainScene@@IAEXXZ")
+    sec = obj.section(drop.section)
+    call_offset = drop.value + 0xCA
+    relocation_offset = drop.value + 0xCB
+    if bytes(obj.buf[sec.raw_ptr + call_offset : sec.raw_ptr + call_offset + 5]) != b"\xE8\0\0\0\0":
+        raise RuntimeError("DropVillager mobile-furniture callsite drifted")
+    relocation = None
+    pointer = sec.reloc_ptr
+    for _ in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from("<IIH", obj.buf, pointer)
+        if vaddr == relocation_offset:
+            relocation = (symbol_index, rtype)
+            break
+        pointer += 10
+    expected_original = "?HandleDropOnHotSpot@theMainScene@@IAE?B_NAAVCVillager@@@Z"
+    if relocation is None:
+        raise RuntimeError("DropVillager hotspot relocation is missing")
+    old_symbol, old_type = relocation
+    if obj.symbol_by_index[old_symbol].name != expected_original or old_type != IMAGE_REL_I386_REL32:
+        raise RuntimeError("DropVillager hotspot relocation target drifted")
+    helper = obj.append_undefined_symbol(MOBILE_FURNITURE_BEHAVIOR_HELPER_SYMBOL)
+    obj.retarget_relocation(sec.index, relocation_offset, helper, IMAGE_REL_I386_REL32)
+    obj.write(obj_path)
+
+    manifest["MobileFurnitureBehaviors"] = {
+        "status": "dormant stock-first dispatcher with first exact mobile family",
+        "runtime_flag": {
+            "symbol": MOBILE_FURNITURE_BEHAVIOR_FLAG_SYMBOL,
+            "source_section": MOBILE_FURNITURE_BEHAVIOR_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+        },
+        "drop_hook": {
+            "caller": "theMainScene::DropVillager",
+            "relocation_offset": hex(relocation_offset - drop.value),
+            "original_target": expected_original,
+            "replacement": MOBILE_FURNITURE_BEHAVIOR_HELPER_SYMBOL,
+            "relocation_only": True,
+            "stock_first": True,
+            "stock_false_fallthrough_preserved": True,
+        },
+        "implemented_families": [{
+            "name": "mobile lounge chairs",
+            "item_ids": [hex(item) for item in MOBILE_CHAISE_ITEM_IDS],
+            "label": "Relaxing on lounger",
+            "object": hex(MOBILE_CHAISE_OBJECT),
+            "manual_drop_only": True,
+            "autonomous": False,
+            "mobile_behavior": "CBehavior::LieOnChaiseNoLeadIn",
+            "desktop_implementation": "exact plan-sequence port using LinkPeepToFurniture",
+        }],
+        "stock_behavior_table_extended": False,
+        "stock_hotspot_table_extended": False,
+    }
+
+
 def vf3_tv_fmap_cell_value(donor_value, fallback_value, occupied):
     if not occupied:
         return 0
@@ -15840,6 +16122,7 @@ def main():
     # The optional mortality curve is another exact-SHA dormant-byte hook.
     # Its zero .vf2mort default resumes the untouched stock mortality block.
     patch_older_villager_mortality(manifest)
+    patch_mobile_furniture_behavior_dispatch(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:
         patch_collectable_item_holiday_ornaments(manifest)
         patch_collectable_holiday_ornament_observers(manifest)
@@ -15951,6 +16234,7 @@ def main():
             "status": "not patched; stock animator body-row clamp retained",
         }
     seed_mobile_furniture_behavior_evidence(manifest)
+    validate_mobile_chaise_pc_fmaps(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)
