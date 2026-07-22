@@ -996,6 +996,13 @@ Mortality Curve, and mobile furniture behaviors are default-off Optional
 patches. Historical build notes above retain their original category wording
 to describe what those earlier bundles actually shipped.
 
+B156 also preserves the exact Windows executable icon resources from the
+verified stock `Virtual Families 2.exe`. The patcher validates every icon-group
+reference and requires Windows to extract 16x16, 32x32, and 48x48 icons from
+the completed temporary EXE before atomically installing it. This covers the
+folder, desktop-shortcut, and taskbar/pinned-icon cases without substituting
+patcher branding for the base-game icon.
+
 ## Release Notes
 
 The patcher itself is source-only and uses Python's standard library. Release

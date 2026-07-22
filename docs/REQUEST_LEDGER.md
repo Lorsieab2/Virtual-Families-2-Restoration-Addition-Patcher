@@ -148,6 +148,7 @@ and reset only through their documented reset action.
 | Creator/passion-project/support message | Shipped / automated-verified | Exact requested copy is shared by exporter and GUI and covered by tests. |
 | Brokerage rate up to 11% message | Shipped / in-game QA pending | Exact native description is present; visible in-game wrapping remains. |
 | Smaller builds / remove redundant EXEs | Partial | B152 is manifest-pruned; 16 native overlays remain required by current architecture. Prefer exact-SHA toggles when safe. |
+| Preserve base-game EXE icon | Implemented / automated Windows verification | B156 copies exact stock RT_ICON and RT_GROUP_ICON resources after all EXE mutations, validates group references/sizes, and requires successful Windows extraction at 16x16, 32x32, and 48x48. Player confirmation of folder/desktop/taskbar display remains final live QA. |
 | Designated GitHub repository only | Shipped / automated-verified | B152 branch/release is in Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher. |
 | Complete changelog and Transparency Log | Ongoing invariant | Required before every release. |
 | GitHub publishing/latest release asset only | Ongoing invariant | Commit/push source, verify latest ZIP digest, delete obsolete local release archives. |

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import hashlib
 import json
+import struct
 import subprocess
 import sys
 import tempfile
@@ -51,6 +52,62 @@ def minimal_pe_bytes(overlay=b"", section_delta=0):
     data[sect + 36:sect + 40] = (0x60000020).to_bytes(4, "little")
     data[0x200:0x400] = bytes(((index + section_delta) % 251 for index in range(0x200)))
     return bytes(data) + overlay
+
+
+def resource_capable_pe_bytes():
+    """Small valid PE32 fixture that Windows UpdateResource can extend."""
+    data = bytearray(0x400)
+    data[:2] = b"MZ"
+    data[0x3C:0x40] = (0x80).to_bytes(4, "little")
+    pe = 0x80
+    data[pe:pe + 4] = b"PE\0\0"
+    coff = pe + 4
+    struct.pack_into("<HHIIIHH", data, coff, 0x14C, 1, 0, 0, 0, 0xE0, 0x0102)
+    opt = coff + 20
+    struct.pack_into("<H", data, opt, 0x10B)
+    struct.pack_into("<I", data, opt + 4, 0x200)
+    struct.pack_into("<I", data, opt + 16, 0x1000)
+    struct.pack_into("<I", data, opt + 20, 0x1000)
+    struct.pack_into("<I", data, opt + 28, 0x400000)
+    struct.pack_into("<I", data, opt + 32, 0x1000)
+    struct.pack_into("<I", data, opt + 36, 0x200)
+    struct.pack_into("<HH", data, opt + 40, 4, 0)
+    struct.pack_into("<HH", data, opt + 48, 4, 0)
+    struct.pack_into("<I", data, opt + 56, 0x2000)
+    struct.pack_into("<I", data, opt + 60, 0x200)
+    struct.pack_into("<H", data, opt + 68, 2)
+    struct.pack_into("<IIIIII", data, opt + 72, 0x100000, 0x1000, 0x100000, 0x1000, 0, 16)
+    section = opt + 0xE0
+    data[section:section + 8] = b".text\0\0\0"
+    struct.pack_into("<IIII", data, section + 8, 1, 0x1000, 0x200, 0x200)
+    struct.pack_into("<I", data, section + 36, 0x60000020)
+    data[0x200] = 0xC3
+    return bytes(data)
+
+
+def real_shell_icon_resources():
+    width = height = 32
+    pixels = b"\x20\x80\xE0\xFF" * (width * height)
+    and_mask = b"\x00" * (((width + 31) // 32) * 4 * height)
+    image = struct.pack(
+        "<IiiHHIIiiII",
+        40,
+        width,
+        height * 2,
+        1,
+        32,
+        0,
+        len(pixels),
+        0,
+        0,
+        0,
+        0,
+    ) + pixels + and_mask
+    group = struct.pack("<HHHBBBBHHIH", 0, 1, 1, width, height, 0, 0, 1, 32, len(image), 101)
+    return (
+        patcher_mod.IconResource(patcher_mod.RT_ICON, 101, 1033, image),
+        patcher_mod.IconResource(patcher_mod.RT_GROUP_ICON, 1, 1033, group),
+    )
 
 
 class OfflineVF2PatcherTests(unittest.TestCase):
@@ -211,6 +268,51 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             (output_dir / ".vf2_patch_backups").mkdir(parents=True)
             (output_dir / output_name).write_bytes(b"existing icon-bearing modded executable")
         return game_dir, game_file, manifest, output_dir, output_name
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows resource APIs are required")
+    def test_real_windows_icon_round_trip_is_shell_extractable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            source = tmp_path / "stock.exe"
+            target = tmp_path / "modded.exe"
+            source.write_bytes(resource_capable_pe_bytes())
+            target.write_bytes(resource_capable_pe_bytes())
+            expected = real_shell_icon_resources()
+
+            patcher_mod._update_executable_icon_resources(source, expected)
+            captured = patcher_mod.read_executable_icon_resources(source)
+            self.assertEqual(captured, expected)
+            self.assertEqual(patcher_mod.validate_executable_shell_icon(source), (16, 32, 48))
+
+            patcher_mod.write_executable_icon_resources_atomic(target, captured)
+            self.assertEqual(patcher_mod._enumerate_executable_icon_resources(target), expected)
+            self.assertEqual(patcher_mod.validate_executable_shell_icon(target), (16, 32, 48))
+
+    def test_icon_group_rejects_missing_referenced_image(self):
+        resources = list(real_shell_icon_resources())
+        group = bytearray(resources[1].data)
+        struct.pack_into("<H", group, 18, 999)
+        resources[1] = patcher_mod.IconResource(
+            patcher_mod.RT_GROUP_ICON,
+            resources[1].name,
+            resources[1].language,
+            bytes(group),
+        )
+        with self.assertRaisesRegex(patcher_mod.PatchError, "missing RT_ICON ID 999"):
+            patcher_mod._validate_group_icon_resources(tuple(resources))
+
+    def test_icon_group_rejects_wrong_image_size(self):
+        resources = list(real_shell_icon_resources())
+        group = bytearray(resources[1].data)
+        struct.pack_into("<I", group, 14, 123)
+        resources[1] = patcher_mod.IconResource(
+            patcher_mod.RT_GROUP_ICON,
+            resources[1].name,
+            resources[1].language,
+            bytes(group),
+        )
+        with self.assertRaisesRegex(patcher_mod.PatchError, "declares 123 bytes"):
+            patcher_mod._validate_group_icon_resources(tuple(resources))
 
     def test_preserves_stock_exe_icon_after_all_executable_mutations(self):
         with tempfile.TemporaryDirectory() as tmp:

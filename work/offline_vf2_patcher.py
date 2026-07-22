@@ -595,6 +595,106 @@ def _canonical_icon_resources(resources: tuple[IconResource, ...] | list[IconRes
     return canonical
 
 
+def _validate_group_icon_resources(resources: tuple[IconResource, ...]) -> None:
+    """Validate GRPICONDIR records and their referenced RT_ICON images."""
+    icon_sizes: dict[int, set[int]] = {}
+    for resource in resources:
+        if resource.resource_type == RT_ICON and isinstance(resource.name, int):
+            icon_sizes.setdefault(resource.name, set()).add(len(resource.data))
+
+    for resource in resources:
+        if resource.resource_type != RT_GROUP_ICON:
+            continue
+        if len(resource.data) < 6:
+            raise PatchError(f"Windows icon group {resource.name!r} has a truncated GRPICONDIR header.")
+        reserved, image_type, image_count = struct.unpack_from("<HHH", resource.data)
+        if reserved != 0 or image_type != 1 or image_count == 0:
+            raise PatchError(
+                f"Windows icon group {resource.name!r} has an invalid GRPICONDIR header "
+                f"(reserved={reserved}, type={image_type}, count={image_count})."
+            )
+        expected_size = 6 + (image_count * 14)
+        if len(resource.data) != expected_size:
+            raise PatchError(
+                f"Windows icon group {resource.name!r} has size {len(resource.data)}, "
+                f"but its {image_count} entries require {expected_size} bytes."
+            )
+        for entry_index in range(image_count):
+            entry_offset = 6 + (entry_index * 14)
+            _width, _height, _colors, entry_reserved, _planes, _bits, image_size, image_id = (
+                struct.unpack_from("<BBBBHHIH", resource.data, entry_offset)
+            )
+            if entry_reserved != 0:
+                raise PatchError(
+                    f"Windows icon group {resource.name!r} entry {entry_index} has a nonzero reserved byte."
+                )
+            available_sizes = icon_sizes.get(image_id)
+            if not available_sizes:
+                raise PatchError(
+                    f"Windows icon group {resource.name!r} entry {entry_index} references missing "
+                    f"RT_ICON ID {image_id}."
+                )
+            if image_size not in available_sizes:
+                raise PatchError(
+                    f"Windows icon group {resource.name!r} entry {entry_index} declares {image_size} bytes "
+                    f"for RT_ICON ID {image_id}, but the available resource sizes are "
+                    f"{sorted(available_sizes)}."
+                )
+
+
+def validate_executable_shell_icon(path: Path, sizes: tuple[int, ...] = (16, 32, 48)) -> tuple[int, ...]:
+    """Prove that Windows can extract the executable icon at shell/taskbar sizes."""
+    if os.name != "nt":
+        raise PatchError("Executable icon validation is supported only on Windows.")
+    if not path.is_file():
+        raise PatchError(f"Executable icon validation target does not exist: {path}")
+    if not sizes or any(not isinstance(size, int) or size <= 0 for size in sizes):
+        raise PatchError("Executable icon validation sizes must be positive integers.")
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)  # type: ignore[attr-defined]
+    user32.PrivateExtractIconsW.argtypes = [
+        ctypes.c_wchar_p,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.POINTER(ctypes.c_uint),
+        ctypes.c_uint,
+        ctypes.c_uint,
+    ]
+    user32.PrivateExtractIconsW.restype = ctypes.c_uint
+    user32.DestroyIcon.argtypes = [ctypes.c_void_p]
+    user32.DestroyIcon.restype = ctypes.c_int
+
+    validated: list[int] = []
+    for size in sizes:
+        icon_handle = ctypes.c_void_p()
+        icon_id = ctypes.c_uint()
+        ctypes.set_last_error(0)
+        extracted = user32.PrivateExtractIconsW(
+            str(path),
+            0,
+            size,
+            size,
+            ctypes.byref(icon_handle),
+            ctypes.byref(icon_id),
+            1,
+            0,
+        )
+        try:
+            if extracted != 1 or not icon_handle.value:
+                error_code = ctypes.get_last_error()
+                detail = f" Win32 error {error_code}." if error_code else ""
+                raise PatchError(
+                    f"Windows could not extract a {size}x{size} shell icon from {path}." + detail
+                )
+            validated.append(size)
+        finally:
+            if icon_handle.value:
+                user32.DestroyIcon(icon_handle)
+    return tuple(validated)
+
+
 def _enumerate_executable_icon_resources(path: Path) -> tuple[IconResource, ...]:
     if os.name != "nt":
         raise PatchError("Executable icon preservation is supported only on Windows.")
@@ -749,6 +849,8 @@ def read_executable_icon_resources(path: Path) -> tuple[IconResource, ...]:
             f"The stock executable does not contain a complete Windows icon resource set: {path} "
             f"(RT_ICON={icon_count}, RT_GROUP_ICON={group_count})."
         )
+    _validate_group_icon_resources(resources)
+    validate_executable_shell_icon(path)
     return resources
 
 
@@ -821,10 +923,11 @@ def write_executable_icon_resources_atomic(path: Path, resources: tuple[IconReso
         raise PatchError("Cannot write executable icon resources without at least one RT_ICON record.")
     if not any(resource.resource_type == RT_GROUP_ICON for resource in canonical):
         raise PatchError("Cannot write executable icon resources without at least one RT_GROUP_ICON record.")
+    _validate_group_icon_resources(canonical)
     if not path.is_file():
         raise PatchError(f"Generated modded executable does not exist: {path}")
 
-    descriptor, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".vf2icon.tmp", dir=path.parent)
+    descriptor, temp_name = tempfile.mkstemp(prefix=f".{path.stem}.", suffix=".vf2icon.exe", dir=path.parent)
     os.close(descriptor)
     temp = Path(temp_name)
     try:
@@ -834,6 +937,8 @@ def write_executable_icon_resources_atomic(path: Path, resources: tuple[IconReso
         written = _enumerate_executable_icon_resources(temp)
         if written != canonical:
             raise PatchError(f"Stock icon resource verification failed after updating {path}.")
+        _validate_group_icon_resources(written)
+        validate_executable_shell_icon(temp)
         path.chmod(path.stat().st_mode | 0o200)
         temp.replace(path)
     except PatchError:

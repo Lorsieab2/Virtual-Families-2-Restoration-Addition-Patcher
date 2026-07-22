@@ -2610,3 +2610,18 @@
 - The linked mortality helper requests `GetRandom(10000)`, clamps food groups with `min(activeFoodGroups, 4)`, preserves the 0-4 effective-age bonus, stays below the cap through effective age 130, and reaches the 9999/10000 cap at 131.
 - User live confirmation covers F5 without the former crash, Light Source Editor, ornament spawning and Ornamentologist, mortality, new purchase/behavior goals, Cheat Upgrades, and north-bathroom malfunctions. This does not replace the narrower persistence and edge-case audits in the request ledger.
 - Mobile-exclusive furniture behaviors remain future default-off optional work. Any disruptive group celebration must be manual-drop-only and cannot become an autonomous household-wide behavior.
+
+## 2026-07-21 - B156 stock executable icon preservation
+
+- The published B155.5 modded executable was inspected and contained zero
+  `RT_ICON` and zero `RT_GROUP_ICON` resources, matching the player's report of
+  a blank icon in folders and when pinned to the taskbar.
+- B156 captures the complete icon resource set from the verified stock
+  `Virtual Families 2.exe` before replacing the executable, then writes that
+  exact set only after every other executable mutation is complete.
+- Icon preservation now rejects malformed `GRPICONDIR` data, missing referenced
+  `RT_ICON` IDs, and declared image sizes that do not match the copied image.
+- The atomic temporary executable must also pass Windows
+  `PrivateExtractIconsW` extraction at 16x16, 32x32, and 48x48 before it can
+  replace the generated modded EXE. A real PE32 round-trip regression test—not
+  a mocked resource copy—passes all three shell/taskbar sizes.
