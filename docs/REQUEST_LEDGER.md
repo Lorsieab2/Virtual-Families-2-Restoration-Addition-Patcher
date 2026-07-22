@@ -113,11 +113,11 @@ and reset only through their documented reset action.
 | Pets in home | Not started | A Furry Companion; Cat's Meow; Man's Best Friend; Itsy Bitsy; Hampster Dance; Lovely Lizards. |
 | Longevity | Not started | Lucky 70's; Great 80's; Mighty 90's; Centenarian; Oldest Person in History (>122). |
 | Family-tree appearance | Not started | Return of the Rainbow (female head 48); Spiky! (male head 48). |
-| LDW paintings/posters | Not started | Portal to Paradise; LDW Fan; Palm Pioneer; Caring Soul; Spin-off Specialist; The Adventures Never End. |
-| Exact praise: web/games | Not started | Nyan Cat; Like and Subscribe; VF-Inception; Isolan Refugees; Memz; Sim-ling Rivalry; Blocky Business; Dovahkiin; Reshaping the World; Farming Fanatic; Forum Browser; Explore, Collect, Compete (Playing Poptropicals); Waddle On! (Playing Club Puffle); Pixel Pets (Playing PetKinz). |
+| LDW paintings/posters | Shipped / automated-verified | IDs 0x60-0x65 award after successful purchases of the six verified LDW art items. Live purchase/notification QA remains. |
+| Exact praise: web/games | Partial / linked validation | Nyan Cat, Like and Subscribe, VF-Inception, Isolan Refugees, and Memz are implemented at 0x66-0x6A. The remaining exact-action goals still require their behavior labels/routes. |
 | Exact scold: social/child | Not started | Fakebook Fakery; Dance Dunce; The Last Trend; Lazy Crazy. |
-| Pet interaction corrections | Not started | Good boy = praise someone praising pet; Bad dog = praise someone scolding pet; Pavlovian Association = praise someone training pet. |
-| Birthday purchases | Not started | Happy Birthday banner; Not a lie cake; Full of helium balloons. |
+| Pet interaction corrections | Partial / linked validation | Good boy 0x6B and Bad dog 0x6C inspect exact Praising pet/Scolding pet labels before native state clearing. Pavlovian Association remains pending. |
+| Birthday purchases | B156 source + 16-layout linked validation complete | Happy Birthday 0x80 maps Birthday Banner 0x2DB; Not a lie 0x81 maps Birthday Cake 0x2DC; Full of helium 0x82 maps Birthday Balloons 0x2DA. Awards occur only after AddToStorage succeeds; live purchase/save/notification QA remains. |
 | Discipline | Not started | No clothes-throwing; no toilet play; no bed jumping; no wall drawing; No messing with the light switch! (scold a child for switching the light on and off); Props to you after Tight Ship plus all five additional discipline goals. |
 | Holiday Furniture purchases | Shipped / core purchase goals user-confirmed | Coin awards and purchase-goal firing work in game; exhaustive ID aliases, persistence, and patch-off absence remain narrow QA. |
 | VF3 furniture | Not started | Furnishing the Future. |

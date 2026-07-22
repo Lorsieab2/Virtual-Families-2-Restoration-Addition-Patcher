@@ -548,13 +548,15 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
 CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x7F
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x82
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
 CUSTOM_ACHIEVEMENT_BEHAVIOR_END = 0x6C
 CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST = 0x6D
 CUSTOM_ACHIEVEMENT_HOLIDAY_LAST = 0x7F
+CUSTOM_ACHIEVEMENT_BIRTHDAY_FIRST = 0x80
+CUSTOM_ACHIEVEMENT_BIRTHDAY_LAST = 0x82
 CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
 CUSTOM_ACHIEVEMENT_TARGET = 1
 CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
@@ -591,6 +593,9 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0x7D, "holiday_furniture", "Ho Ho Ho!", "You set up a Santa Decoration."),
     (0x7E, "holiday_furniture", "Cookies for Santa", "You bought a Plate of Cookies! With milk!"),
     (0x7F, "holiday_furniture", "Gingerbread Man", "You bought a Christmas Cookie."),
+    (0x80, "birthday_furniture", "Happy Birthday", "You bought a Birthday Banner."),
+    (0x81, "birthday_furniture", "Not a lie", "You bought a Birthday Cake."),
+    (0x82, "birthday_furniture", "Full of helium", "You bought Birthday Balloons."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -599,6 +604,9 @@ CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2ED: 0x63,
     0x2EE: 0x64,
     0x2E9: 0x65,
+    0x2DB: 0x80,
+    0x2DC: 0x81,
+    0x2DA: 0x82,
 }
 CUSTOM_ACHIEVEMENT_HOLIDAY_PURCHASE_GOALS = {
     0x2B1: 0x6D,
@@ -8701,7 +8709,7 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 }
 
 static int VF2AchievementVisibleCountInternal() {
-    int count = 0x5F + 6;
+    int count = 0x5F + 6 + 3;
     if (kVF2IncludeOrnamentologistGoal) ++count;
     if (kVF2IncludeBehaviorGoals) count += 7;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
@@ -8744,6 +8752,7 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
     if (kVF2IncludeBehaviorGoals) {
         completed += VF2CountCompletedAchievements(achievement, 0x66, 0x6C);
     }
+    completed += VF2CountCompletedAchievements(achievement, 0x80, 0x82);
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
         completed += VF2CountCompletedAchievements(achievement, 0x6D, 0x7F);
     }
@@ -8920,6 +8929,9 @@ static void VF2CompleteAllAchievements() {
         for (int achievement = 0x66; achievement <= 0x6C; ++achievement) {
             VF2CompleteAchievementForCheat(achievement);
         }
+    }
+    for (int achievement = 0x80; achievement <= 0x82; ++achievement) {
+        VF2CompleteAchievementForCheat(achievement);
     }
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
         for (int achievement = 0x6D; achievement <= 0x7F; ++achievement) {
@@ -10797,6 +10809,9 @@ def patch_custom_achievements(manifest):
             range(CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST, CUSTOM_ACHIEVEMENT_BEHAVIOR_END + 1)
         )
     appended_order.extend(
+        range(CUSTOM_ACHIEVEMENT_BIRTHDAY_FIRST, CUSTOM_ACHIEVEMENT_BIRTHDAY_LAST + 1)
+    )
+    appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
     )
     order_sym = scene_obj.symbol("?achievementOrder@@3QBHB")
@@ -10925,6 +10940,7 @@ def patch_custom_achievements(manifest):
         + (1 if ENABLE_HOLIDAY_ORNAMENTS else 0)
         + 6
         + (7 if ENABLE_BEHAVIOR_PATCHES else 0)
+        + 3
     )
     manifest["CustomAchievements"] = {
         "status": "patched",

@@ -1,7 +1,9 @@
 param(
     [string]$Python = "",
     [ValidateRange(0, 15)]
-    [int]$StartMask = 0
+    [int]$StartMask = 0,
+    [string]$BuildLabel = "B155.5",
+    [string]$PreviousBuildLabel = "B155"
 )
 
 $ErrorActionPreference = "Stop"
@@ -74,8 +76,8 @@ try {
         if ($behavior) { $parts += "behavior_patches" }
         $variant = if ($parts.Count) { $parts -join "_" } else { "core" }
 
-        $previous = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-B155-$variant"
-        $out = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-B155.5-$variant"
+        $previous = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-$PreviousBuildLabel-$variant"
+        $out = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-$BuildLabel-$variant"
         if (-not (Test-Path -LiteralPath $previous -PathType Container)) {
             throw "Missing B155 base for ${variant}: $previous"
         }
@@ -91,8 +93,8 @@ try {
         $env:VF2_ENABLE_BEHAVIOR_PATCHES = if ($behavior) { "1" } else { "0" }
         $env:VF2_ENABLE_DEBUGGER_FEATURES = "1"
 
-        $patchLog = Join-Path $out "b155.5-patch.log"
-        $buildLog = Join-Path $out "b155.5-build.log"
+        $patchLog = Join-Path $out "$($BuildLabel.ToLowerInvariant())-patch.log"
+        $buildLog = Join-Path $out "$($BuildLabel.ToLowerInvariant())-build.log"
         Write-Host "[$($mask + 1)/16] Generating $variant"
         & $pythonExe @pythonArgs $patcher *> $patchLog
         if ($LASTEXITCODE -ne 0) {
@@ -128,7 +130,7 @@ try {
         if ($manifestData.native_array_contract.holiday_ornaments.enabled -ne $holiday) {
             throw "Holiday gate mismatch in $variant manifest"
         }
-        $debuggerReport = Join-Path $out "b155.5-debugger-validation.json"
+        $debuggerReport = Join-Path $out "$($BuildLabel.ToLowerInvariant())-debugger-validation.json"
         & $pythonExe @pythonArgs $debuggerValidator --exe $exe --manifest $manifest --output $debuggerReport *> $null
         if ($LASTEXITCODE -ne 0) {
             throw "Debugger validation failed for $variant with exit code $LASTEXITCODE"
@@ -140,17 +142,17 @@ finally {
     Pop-Location
 }
 
-Write-Host "Running B155.5 linked Holiday positive/negative validation"
-& $pythonExe @pythonArgs $holidayValidator --build-label B155.5
+Write-Host "Running $BuildLabel linked Holiday positive/negative validation"
+& $pythonExe @pythonArgs $holidayValidator --build-label $BuildLabel
 if ($LASTEXITCODE -ne 0) {
-    throw "B155.5 linked Holiday validation failed with exit code $LASTEXITCODE"
+    throw "$BuildLabel linked Holiday validation failed with exit code $LASTEXITCODE"
 }
 
-Write-Host "Running B155.5 linked runtime-flag validation"
-$runtimeReport = Join-Path $outputs "B155.5-Runtime-Flag-Validation.json"
-& $pythonExe @pythonArgs $runtimeValidator --build-label B155.5 --output $runtimeReport
+Write-Host "Running $BuildLabel linked runtime-flag validation"
+$runtimeReport = Join-Path $outputs "$BuildLabel-Runtime-Flag-Validation.json"
+& $pythonExe @pythonArgs $runtimeValidator --build-label $BuildLabel --output $runtimeReport
 if ($LASTEXITCODE -ne 0) {
-    throw "B155.5 linked runtime-flag validation failed with exit code $LASTEXITCODE"
+    throw "$BuildLabel linked runtime-flag validation failed with exit code $LASTEXITCODE"
 }
 
-Write-Host "B155.5 16-state executable matrix and linked validation completed successfully."
+Write-Host "$BuildLabel 16-state executable matrix and linked validation completed successfully."

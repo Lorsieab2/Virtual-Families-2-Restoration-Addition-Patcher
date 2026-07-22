@@ -2625,3 +2625,26 @@
   `PrivateExtractIconsW` extraction at 16x16, 32x32, and 48x48 before it can
   replace the generated modded EXE. A real PE32 round-trip regression test—not
   a mocked resource copy—passes all three shell/taskbar sizes.
+
+## 2026-07-21 - B156 birthday purchase goals
+
+- The first three formerly blank reserved achievement rows are now assigned in
+  the request-ledger order: Happy Birthday `0x80`, Not a lie `0x81`, and Full
+  of helium `0x82`. Remaining unassigned capacity is `0x83-0xA7`; hidden record
+  `0xA8` remains the Taters purchase mask.
+- Verified furniture mappings are Birthday Banner `0x2DB` -> `0x80`, Birthday
+  Cake `0x2DC` -> `0x81`, and Birthday Balloons `0x2DA` -> `0x82`.
+- The existing `CFurnitureManager::AddToStorageAndAward` wrapper dispatches the
+  goals only when native `AddToStorage` returns true. No new executable detour,
+  save sidecar, or counter was added.
+- The three always-visible rows are ordered before the runtime-gated Holiday
+  Furniture suffix. Visible counts/heights, completed-goal totals, and Complete
+  all Achievements include `0x80-0x82`; Holiday gating remains independent.
+- Generator validation passes 108 tests with one existing asset-dependent
+  skip. All 16 B156 Island/Cheat/Holiday/Behavior layouts compile with unique
+  hashes and debugger validation. Linked Holiday validation passes 8 positive
+  and 8 negative layouts; all three dormant runtime-flag toggle cycles pass.
+  Live purchase, notification, persistence, and reset testing remains pending.
+- `work/build_b156_matrix.ps1` explicitly uses the 16 B155.5 layouts as its
+  base. The shared matrix builder now accepts build/base labels so later builds
+  cannot silently fall back to B155.

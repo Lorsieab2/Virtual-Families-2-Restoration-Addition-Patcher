@@ -508,7 +508,7 @@ def validate_older_mortality(
         build_number = float(build_label.lstrip("Bb"))
     except ValueError as exc:
         raise ValueError(f"Invalid build label for mortality validation: {build_label}") from exc
-    if build_number == 155.5:
+    if build_number >= 155.5:
         if b"\x68\x40\x42\x0f\x00" not in helper_window:
             raise ValueError(f"{path}: mortality helper does not request GetRandom(1000000)")
         if bytes.fromhex("BE 3F 42 0F 00 81 FA 3D 01 00 00 7F") not in helper_window:

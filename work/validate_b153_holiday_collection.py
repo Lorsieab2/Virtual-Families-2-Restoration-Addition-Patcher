@@ -26,7 +26,7 @@ PAGE_STARTS = (0x4F, 0x5B, 0x67, 0x86, 0x92, HOLIDAY_START)
 COLLECTION_TABLE_60 = struct.pack("<60I", *STOCK_COLLECTION_IDS)
 COLLECTION_TABLE_72 = struct.pack("<72I", *(STOCK_COLLECTION_IDS + HOLIDAY_IDS))
 PAGE_START_TABLE = struct.pack("<6I", *PAGE_STARTS)
-TOOLTIP_LABELS = (0xE42, 0xE43, 0xE44)
+TOOLTIP_LABELS = (0xE92, 0xE93, 0xE94)
 RARITY_RANGES = {
     "?IsCommonCollectable@CCollectableItem@@QBE?B_NW4ECarrying@@@Z": (0x9E, 0xA1),
     "?IsUncommonCollectable@CCollectableItem@@QBE?B_NW4ECarrying@@@Z": (0xA2, 0xA5),
@@ -500,7 +500,7 @@ def validate_positive_scene_manifest(
         require(as_int(row.get("image_id"), f"item_images[{index}].image_id") == source.image_base + index, f"item descriptor {index} image ID drifted")
         require(int_list(row.get("position", []), f"item_images[{index}].position") == list(source.slot_positions[index]), f"item descriptor {index} position drifted")
 
-    require(int_list(scene.get("tooltip_rarity_label_ids", []), "tooltip labels") == list(TOOLTIP_LABELS), "tooltip labels must be 0xE42-0xE44")
+    require(int_list(scene.get("tooltip_rarity_label_ids", []), "tooltip labels") == list(TOOLTIP_LABELS), "tooltip labels must be 0xE92-0xE94")
     for key in ("page_count_route", "page_count_detour_offset"):
         require(key in scene, f"CollectionSceneHolidayOrnaments missing {key}")
     require(
@@ -542,7 +542,7 @@ def validate_positive_achievement_manifest(
     require(as_int(achievement.get("goal_collector_target"), "Goal Collector target") == 13, "Goal Collector target must be 13")
     require(as_int(achievement.get("notification_queue_count"), "achievement notification queue count") == 0x5F, "achievement notification queue count must be 0x5F")
     save_text = flattened_text(achievement.get("save_state_note", ""))
-    require("0x125" in save_text and "0x80" in save_text, "achievement metadata must preserve the 0x125-record save block and hidden 0x80 mask")
+    require("0x125" in save_text and "0xa8" in save_text, "achievement metadata must preserve the 0x125-record save block and hidden 0xA8 mask")
 
 
 def validate_positive_native_contract(
@@ -918,7 +918,7 @@ def validate_positive_achievement_pe(
     ):
         require(text in image.data, f"linked PE missing Holiday achievement string {text!r}")
     custom = nested(manifest, "CustomAchievements")
-    require(as_int(custom.get("physical_row_count"), "physical achievement row count") == 0x80, "physical achievement table must cover IDs 0x00-0x7F")
+    require(as_int(custom.get("physical_row_count"), "physical achievement row count") == 0xA8, "physical achievement table must cover IDs 0x00-0xA7")
     order = custom.get("ornamentologist_order")
     require(isinstance(order, dict), "Ornamentologist order contract missing")
     require(order.get("visible") is True, "Ornamentologist must be visible while Holiday Ornaments is enabled")
@@ -937,7 +937,7 @@ def validate_positive_achievement_pe(
     require(as_int(achievement_contract.get("collection_master_target"), "collection master target") == 6, "native achievement contract must record 0x4D target 6")
     require(as_int(achievement_contract.get("goal_collector_target"), "native Goal Collector target") == 13, "native achievement contract must record 0x54 target 13")
     require(as_int(achievement_contract.get("ornamentologist_target"), "native Ornamentologist target") == 12, "native achievement contract must record 0x5F target 12")
-    require(as_int(achievement_contract.get("physical_row_count"), "native physical row count") == 0x80, "native achievement contract must record 128 physical rows")
+    require(as_int(achievement_contract.get("physical_row_count"), "native physical row count") == 0xA8, "native achievement contract must record 168 physical rows")
     require(as_int(achievement_contract.get("visible_count_flag_0"), "native visible count flag 0") == as_int(nested(custom, "visible_counts").get("holiday_furniture_flag_0"), "visible count flag 0"), "native flag-0 visible count drifted")
     require(as_int(achievement_contract.get("visible_count_flag_1"), "native visible count flag 1") == as_int(nested(custom, "visible_counts").get("holiday_furniture_flag_1"), "visible count flag 1"), "native flag-1 visible count drifted")
     require(as_int(achievement_contract.get("notify_queue_bound"), "native notify queue bound") == 0x5F, "native notification bound must remain 95")

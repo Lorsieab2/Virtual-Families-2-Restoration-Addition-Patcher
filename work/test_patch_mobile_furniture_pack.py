@@ -1642,7 +1642,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                     row for row in manifest["theStringManager"]["strings"]
                     if row.get("source") == "custom achievement"
                 ]
-                self.assertEqual(len(rows), 64)
+                self.assertEqual(len(rows), len(patcher.CUSTOM_ACHIEVEMENT_ROW_SPECS) * 2)
                 by_id_role = {
                     (int(row["achievement_id"], 16), row["role"]): row
                     for row in rows
@@ -1683,10 +1683,10 @@ class TextFixStringManagerTests(unittest.TestCase):
                     if row.get("source")
                     == "custom achievement reserved capacity"
                 ]
-                self.assertEqual(len(reserved), 80)
+                self.assertEqual(len(reserved), 74)
                 self.assertEqual(
                     {int(row["achievement_id"], 16) for row in reserved},
-                    set(range(0x80, 0xA8)),
+                    set(range(0x83, 0xA8)),
                 )
                 self.assertTrue(all(row["text"] == "" for row in reserved))
                 self.assertEqual(
@@ -1922,6 +1922,10 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("for (int achievement = 0x00; achievement <= 0x5E; ++achievement)", source)
         self.assertIn("if (kVF2IncludeOrnamentologistGoal)", source)
         self.assertIn("if (kVF2IncludeBehaviorGoals)", source)
+        self.assertIn(
+            "for (int achievement = 0x80; achievement <= 0x82; ++achievement)",
+            source,
+        )
         self.assertIn("if (gVF2HolidayFurnitureGoalsEnabled != 0)", source)
         self.assertIn("case 0x12E:", source)
         self.assertIn("VF2CompleteAllAchievements();", source)
@@ -2505,6 +2509,32 @@ class HolidayBodyDrawHelperTests(unittest.TestCase):
 
 
 class CustomAchievementAwardDispatchTests(unittest.TestCase):
+    def test_birthday_purchase_goal_ids_and_item_ids_are_exact(self):
+        self.assertEqual(
+            {
+                item_id: goal_id
+                for item_id, goal_id in patcher.CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS.items()
+                if goal_id in range(0x80, 0x83)
+            },
+            {
+                0x2DB: 0x80,
+                0x2DC: 0x81,
+                0x2DA: 0x82,
+            },
+        )
+        rows = {
+            achievement_id: (group, title, description)
+            for achievement_id, group, title, description in patcher.CUSTOM_ACHIEVEMENT_ROW_SPECS
+        }
+        self.assertEqual(
+            {achievement_id: rows[achievement_id] for achievement_id in range(0x80, 0x83)},
+            {
+                0x80: ("birthday_furniture", "Happy Birthday", "You bought a Birthday Banner."),
+                0x81: ("birthday_furniture", "Not a lie", "You bought a Birthday Cake."),
+                0x82: ("birthday_furniture", "Full of helium", "You bought Birthday Balloons."),
+            },
+        )
+
     def test_general_purchase_aliases_require_success_but_not_holiday_flag(self):
         for item_id, goal_id in patcher.CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS.items():
             for holiday_enabled in (False, True):
@@ -3377,10 +3407,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         ))
         try:
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
-                (False, False, 101, 120, 5, 12),
-                (True, False, 102, 121, 6, 13),
-                (False, True, 108, 127, 5, 12),
-                (True, True, 109, 128, 6, 13),
+                (False, False, 104, 123, 5, 12),
+                (True, False, 105, 124, 6, 13),
+                (False, True, 111, 130, 5, 12),
+                (True, True, 112, 131, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
@@ -3559,8 +3589,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         expected.extend(range(0x60, 0x66))
                         if behavior:
                             expected.extend(range(0x66, 0x6D))
+                        expected.extend(range(0x80, 0x83))
                         expected.extend(range(0x6D, 0x80))
                         self.assertEqual(order, expected)
+                        self.assertEqual(order[-22:-19], list(range(0x80, 0x83)))
                         self.assertEqual(order[-19:], list(range(0x6D, 0x80)))
                         order_contract = manifest["CustomAchievements"][
                             "ornamentologist_order"
@@ -4224,8 +4256,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
                     "physical_row_count": 0xA8,
-                    "visible_count_flag_0": 102,
-                    "visible_count_flag_1": 121,
+                    "visible_count_flag_0": 105,
+                    "visible_count_flag_1": 124,
                     "notify_queue_bound": 0x5F,
                 },
             )
