@@ -1618,6 +1618,10 @@ def mobile_furniture_behavior_asset_patches(
             "restore_source_sha256": sha256_file(payload_restore),
             "restore_source_size": payload_restore.stat().st_size,
             "overwrite_existing": True,
+            # A clean vanilla install has no mobile-furniture fmap. The base
+            # mobile-furniture record creates the sanitized map earlier in the
+            # same apply operation before this optional overlay replaces it.
+            "allow_missing_target": True,
             "requires": ["core_executable", "mobile_furniture_behaviors"],
             "note": (
                 "Optional implemented mobile-furniture EObject-only map. "

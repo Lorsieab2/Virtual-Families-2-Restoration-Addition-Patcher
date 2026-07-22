@@ -459,6 +459,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                     ["core_executable", "mobile_furniture_behaviors"],
                 )
                 self.assertTrue(record["overwrite_existing"])
+                self.assertTrue(record["allow_missing_target"])
                 self.assertEqual(record["source_sha256"], expected_hashes[filename])
                 enabled = bundle / Path(record["source_path"])
                 restored = bundle / Path(record["restore_source_path"])
