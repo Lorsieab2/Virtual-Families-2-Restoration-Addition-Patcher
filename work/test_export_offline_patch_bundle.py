@@ -415,10 +415,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
 
     def test_mobile_furniture_behavior_assets_export_and_restore_exact_maps(self):
         expected_hashes = {
-            "Chaise_blue.png.fmap": "370607425da5c8ceb6ebcb45323718df4630305089ce67f4cca3fe2ffbcc2b08",
-            "Chaise_brown.png.fmap": "3e4d0f11c728fa64db5e7ebe87c810809969f11b8f1a8fe72ceb1db8c28ae78e",
-            "Chaise_green.png.fmap": "e9751bbc5341319239b47ec3a975c96dd2224ff2511bc38956624dc9e0cf057a",
-            "Chaise_red.png.fmap": "2c4bfede0a9280faed66a5e9688c2e5574a954d58dc7f96b9085daf08631fb29",
+            "Chaise_blue.png.fmap": "a92512d05b37824c234463c08076083349b12c5b0ef8d06cabdf4178415f26cf",
+            "Chaise_brown.png.fmap": "b0126fa4d05416af958f290262d5f2e20c9f3bb5fc3ab9058db6ae2674835948",
+            "Chaise_green.png.fmap": "d3b472fccd0ffb1daeee22e51208d2cb87cf2f957628bcdd6042b0f77c5b05af",
+            "Chaise_red.png.fmap": "ea914d7d2e7dc373f9a1dcf9cfdfca627ec9d826750ae2ab8d3d449399c9daaa",
             "Patio_umbrella.png.fmap": "c62d0320f781e57423b1b2dbfe4e474cf61e62b1dc36c7166d09041dbf7fed7d",
         }
         mobile_dir = (

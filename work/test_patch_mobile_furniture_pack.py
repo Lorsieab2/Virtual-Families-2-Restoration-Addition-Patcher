@@ -72,12 +72,12 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         )
         self.assertFalse(any("Invisible" in row[0] for row in mobile_rows))
 
-    def test_mobile_chaise_pc_fmaps_are_exact_eobject_only_payloads(self):
+    def test_mobile_chaise_pc_fmaps_have_exact_eobject_and_peep_slot_payloads(self):
         expected_hashes = {
-            "Chaise_blue.png.fmap": "370607425da5c8ceb6ebcb45323718df4630305089ce67f4cca3fe2ffbcc2b08",
-            "Chaise_brown.png.fmap": "3e4d0f11c728fa64db5e7ebe87c810809969f11b8f1a8fe72ceb1db8c28ae78e",
-            "Chaise_green.png.fmap": "e9751bbc5341319239b47ec3a975c96dd2224ff2511bc38956624dc9e0cf057a",
-            "Chaise_red.png.fmap": "2c4bfede0a9280faed66a5e9688c2e5574a954d58dc7f96b9085daf08631fb29",
+            "Chaise_blue.png.fmap": "a92512d05b37824c234463c08076083349b12c5b0ef8d06cabdf4178415f26cf",
+            "Chaise_brown.png.fmap": "b0126fa4d05416af958f290262d5f2e20c9f3bb5fc3ab9058db6ae2674835948",
+            "Chaise_green.png.fmap": "d3b472fccd0ffb1daeee22e51208d2cb87cf2f957628bcdd6042b0f77c5b05af",
+            "Chaise_red.png.fmap": "ea914d7d2e7dc373f9a1dcf9cfdfca627ec9d826750ae2ab8d3d449399c9daaa",
         }
         manifest = {}
         patcher.validate_mobile_chaise_pc_fmaps(manifest)
@@ -99,13 +99,22 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             self.assertEqual((width, height), (19, 14))
             self.assertEqual(
                 {(i % width, i // width) for i, value in enumerate(values) if value},
-                set(patcher.MOBILE_CHAISE_PC_CELLS),
+                set(patcher.MOBILE_CHAISE_PC_CELLS)
+                | {patcher.MOBILE_CHAISE_PC_SLOT_CELL},
             )
             self.assertEqual(
                 {value for value in values if value},
-                {patcher.MOBILE_CHAISE_PC_CELL_VALUE},
+                {
+                    patcher.MOBILE_CHAISE_PC_CELL_VALUE,
+                    patcher.MOBILE_CHAISE_PC_SLOT_CELL_VALUE,
+                },
             )
-            self.assertNotIn(0x01B09800, values)
+            slot_index = (
+                patcher.MOBILE_CHAISE_PC_SLOT_CELL[1] * width
+                + patcher.MOBILE_CHAISE_PC_SLOT_CELL[0]
+            )
+            self.assertEqual(values[slot_index], patcher.MOBILE_CHAISE_PC_SLOT_CELL_VALUE)
+            self.assertEqual(values.count(patcher.MOBILE_CHAISE_PC_SLOT_CELL_VALUE), 1)
 
     def test_mobile_patio_umbrella_pc_fmap_is_exact_eobject_only_payload(self):
         filename = "Patio_umbrella.png.fmap"
@@ -228,6 +237,13 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);",
                     wrapper,
                 )
+                self.assertIn(
+                    f"eStringBadWeather = {patcher.mobile_lounger_bad_weather_string_id()}",
+                    helper,
+                )
+                self.assertIn("eStringCannotReachFurniture = 0xB7", helper)
+                self.assertNotIn("eStringBadWeather = 2", helper)
+                self.assertNotIn("eStringCannotReachFurniture = 0xBF", helper)
                 umbrella_helper = helper.split(
                     "static bool VF2HandleMobilePatioUmbrella", 1
                 )[1].split("class theMainScene", 1)[0]
@@ -1910,6 +1926,16 @@ class TextFixStringManagerTests(unittest.TestCase):
                     patcher.holiday_ornament_collection_footer_string_ids(),
                     (0xE92, 0xE93, 0xE94),
                 )
+                lounger_rows = [
+                    row for row in manifest["theStringManager"]["strings"]
+                    if row.get("source") == "mobile lounge chair translated refusal"
+                ]
+                self.assertEqual(lounger_rows, [{
+                    "pc_string_id": hex(patcher.mobile_lounger_bad_weather_string_id()),
+                    "source": "mobile lounge chair translated refusal",
+                    "key": "eString_VF2LoungerBadWeather",
+                    "text": "Don't like the weather!",
+                }])
             finally:
                 patcher.PATCHED = old_patched
 

@@ -50,6 +50,8 @@ MOBILE_FURNITURE_BEHAVIOR_HELPER_SYMBOL = (
 MOBILE_CHAISE_ITEM_IDS = tuple(range(0x2DE, 0x2E2))
 MOBILE_CHAISE_OBJECT = 0x95
 MOBILE_CHAISE_PC_CELL_VALUE = 0x2000A800
+MOBILE_CHAISE_PC_SLOT_CELL_VALUE = 0x00009800
+MOBILE_CHAISE_PC_SLOT_CELL = (8, 6)
 MOBILE_CHAISE_PC_CELLS = (
     (7, 8),
     (5, 9), (6, 9), (7, 9), (8, 9), (9, 9),
@@ -6775,6 +6777,10 @@ def cheat_upgrade_string_ids_for_entry(entry_index):
     return base, base + 1
 
 
+def mobile_lounger_bad_weather_string_id():
+    return cheat_upgrade_string_ids_for_entry(len(CHEAT_UPGRADE_ITEMS) - 1)[1] + 1
+
+
 def outfit_string_ids_for_entry(entry_index):
     base = (
         ORIG_STRING_ONE_PAST_MAX
@@ -9388,6 +9394,27 @@ def patch_string_manager(manifest):
                 "key": key,
                 "text": text,
             })
+
+    lounger_weather_id = mobile_lounger_bad_weather_string_id()
+    lounger_weather_key = "eString_VF2LoungerBadWeather"
+    lounger_weather_text = "Don't like the weather!"
+    lounger_weather_key_sym = f"_vf2loungerweather_key_{lounger_weather_id:X}"
+    lounger_weather_text_sym = f"_vf2loungerweather_text_{lounger_weather_id:X}"
+    helper_lines.append(
+        f'const char {lounger_weather_key_sym[1:]}[] = "{c_string(lounger_weather_key)}";'
+    )
+    helper_lines.append(
+        f'const char {lounger_weather_text_sym[1:]}[] = "{c_string(lounger_weather_text)}";'
+    )
+    new_rows.append(
+        (lounger_weather_id, lounger_weather_key_sym, lounger_weather_text_sym)
+    )
+    string_manifest.append({
+        "pc_string_id": hex(lounger_weather_id),
+        "source": "mobile lounge chair translated refusal",
+        "key": lounger_weather_key,
+        "text": lounger_weather_text,
+    })
 
     for entry in outfit_store_entries():
         short_id, long_id = outfit_string_ids_for_entry(entry["entry_index"])
@@ -12299,20 +12326,28 @@ def validate_mobile_chaise_pc_fmaps(manifest):
         grid_end = 32 + width * height * 4
         if pc[:32] != mobile[:32] or pc[grid_end:] != mobile[grid_end:]:
             raise RuntimeError(f"PC chaise header/trailer drifted: {filename}")
-        expected_offsets = {
+        expected_object_offsets = {
             32 + (y * width + x) * 4 for x, y in MOBILE_CHAISE_PC_CELLS
         }
-        actual_offsets = set()
+        expected_slot_offset = 32 + (
+            MOBILE_CHAISE_PC_SLOT_CELL[1] * width + MOBILE_CHAISE_PC_SLOT_CELL[0]
+        ) * 4
+        actual_object_offsets = set()
+        actual_slot_offsets = set()
         for offset in range(32, grid_end, 4):
             value = struct.unpack_from("<I", pc, offset)[0]
-            if value:
-                if value != MOBILE_CHAISE_PC_CELL_VALUE:
-                    raise RuntimeError(
-                        f"PC chaise contains unsupported cell {value:#x}: {filename}"
-                    )
-                actual_offsets.add(offset)
-        if actual_offsets != expected_offsets:
+            if value == MOBILE_CHAISE_PC_CELL_VALUE:
+                actual_object_offsets.add(offset)
+            elif value == MOBILE_CHAISE_PC_SLOT_CELL_VALUE:
+                actual_slot_offsets.add(offset)
+            elif value:
+                raise RuntimeError(
+                    f"PC chaise contains unsupported cell {value:#x}: {filename}"
+                )
+        if actual_object_offsets != expected_object_offsets:
             raise RuntimeError(f"PC chaise EObject cells drifted: {filename}")
+        if actual_slot_offsets != {expected_slot_offset}:
+            raise RuntimeError(f"PC chaise peep-slot anchor drifted: {filename}")
         records.append({
             "item_id": hex(item_id),
             "filename": filename,
@@ -12320,12 +12355,18 @@ def validate_mobile_chaise_pc_fmaps(manifest):
             "source_bytes": len(pc),
             "object": hex(MOBILE_CHAISE_OBJECT),
             "cell_value": hex(MOBILE_CHAISE_PC_CELL_VALUE),
-            "cell_count": len(actual_offsets),
+            "cell_count": len(actual_object_offsets),
+            "peep_slot_cell_value": hex(MOBILE_CHAISE_PC_SLOT_CELL_VALUE),
+            "peep_slot_cell": list(MOBILE_CHAISE_PC_SLOT_CELL),
         })
     manifest["MobileChaisePCFmaps"] = {
-        "status": "validated minimal EObject-only optional payloads",
+        "status": "validated minimal EObject plus required peep-slot optional payloads",
         "records": records,
-        "excluded_mobile_marker": "0x01b09800",
+        "translated_mobile_peep_slot_marker": {
+            "mobile": "0x01b09800",
+            "desktop": hex(MOBILE_CHAISE_PC_SLOT_CELL_VALUE),
+            "object": "0x13",
+        },
     }
 
 
@@ -12373,7 +12414,7 @@ def validate_mobile_patio_umbrella_pc_fmap(manifest):
 
 def patch_mobile_furniture_behavior_dispatch(manifest):
     helper_path = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
-    helper_path.write_text(r'''#pragma section(".vf2beh", read, write)
+    helper_source = r'''#pragma section(".vf2beh", read, write)
 extern "C" __declspec(allocate(".vf2beh")) volatile unsigned char gVF2MobileFurnitureBehaviors = 0;
 
 struct ldwPoint { int x; int y; };
@@ -12391,7 +12432,10 @@ enum EBodyPosition {
 };
 enum EDirection { eDirectionUmbrella = 3 };
 enum EHeadDirection { eHeadDirectionUmbrella = 3 };
-enum StringId { eStringBadWeather = 2, eStringCannotReachFurniture = 0xBF };
+enum StringId {
+    eStringBadWeather = __VF2_LOUNGER_BAD_WEATHER_STRING_ID__,
+    eStringCannotReachFurniture = 0xB7
+};
 
 struct sFurnitureInfo2 {
     int unknown0;
@@ -12558,7 +12602,12 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     return false;
 }
-''', encoding="ascii")
+'''
+    helper_source = helper_source.replace(
+        "__VF2_LOUNGER_BAD_WEATHER_STRING_ID__",
+        str(mobile_lounger_bad_weather_string_id()),
+    )
+    helper_path.write_text(helper_source, encoding="ascii")
 
     obj_path = PATCHED / "theMainScene.obj"
     obj = CoffObject(obj_path)
@@ -12612,6 +12661,10 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
             "autonomous": False,
             "mobile_behavior": "CBehavior::LieOnChaiseNoLeadIn",
             "desktop_implementation": "exact plan-sequence port using LinkPeepToFurniture",
+            "translated_refusal_strings": {
+                "unreachable": "0xb7",
+                "bad_weather": hex(mobile_lounger_bad_weather_string_id()),
+            },
         }, {
             "name": "mobile patio umbrella",
             "item_ids": [hex(MOBILE_PATIO_UMBRELLA_ITEM_ID)],

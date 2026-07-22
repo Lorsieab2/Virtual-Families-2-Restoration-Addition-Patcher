@@ -2657,8 +2657,12 @@
   mobile `LieOnChaiseNoLeadIn` plan sequence is ported behind a default-zero
   writable `.vf2beh` byte and a stock-first `DropVillager` relocation wrapper.
 - The four optional Chaise QAMFs keep the mobile header, 19x14 grid geometry,
-  and trailer, but retain only the 11 proven EObject `0x95` cells using desktop
-  value `0x2000A800`. Mobile-only marker `0x01B09800` is not copied.
+  and trailer. They retain the 11 proven EObject `0x95` cells using desktop
+  value `0x2000A800` and translate the required peep-slot EObject `0x13` anchor
+  at `(8, 6)` from mobile `0x01B09800` to desktop `0x00009800`. Omitting that
+  anchor makes desktop `FindPeepSlot` reject every chair. Mobile string IDs are
+  not portable either: the unreachable-seat refusal maps to stock PC `0xB7`,
+  and the exact bad-weather text receives a new dedicated PC string ID.
 - The patch does not extend the fixed behavior or hotspot tables and adds no
   autonomous route. Disabling it restores the exact rendered-only base maps.
 - All 16 B156 executable layouts compile with unique hashes. Linked validation

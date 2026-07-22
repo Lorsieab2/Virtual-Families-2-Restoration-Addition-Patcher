@@ -96,9 +96,13 @@ The lounge handler ports mobile `CBehavior::LieOnChaiseNoLeadIn`: it uses
 refusals, selects the mobile wait/lie pose from furniture orientation, and
 applies the recovered dirtiness, happiness-trend, and energy changes. Its four
 optional QAMFs preserve the mobile dimensions/origin/trailer but retain only the
-11 proven EObject cells using the PC-safe value `0x2000A800`; the unsupported
-mobile marker is excluded. Disabling the patch restores the exact rendered-only
-base maps.
+11 proven chaise EObject cells using the PC-safe value `0x2000A800`, plus the
+required peep-slot EObject `0x13` anchor at `(8, 6)` translated from mobile
+`0x01B09800` to desktop `0x00009800`. Without that anchor the desktop
+`FindPeepSlot` path rejects every chair. Mobile refusal string IDs are also
+translated: unreachable-seat uses stock PC ID `0xB7`, while the exact mobile
+bad-weather text is appended as a dedicated PC string. Disabling the patch
+restores the exact rendered-only base maps.
 
 The Patio Umbrella handler ports mobile `CBehavior::AdjustingUmbrella` exactly:
 go to EObject `0x96`, wait once in body position `0x0D`, repeat the same go/wait,
