@@ -21,8 +21,9 @@ mobile-exclusive VF2 furniture and do not count toward this patch.
 All 63 items receive a copied desktop donor click-table byte, but that alone
 does not establish the correct mobile action. The base payload deliberately
 zeroes unsupported furniture-map cells, leaving unresolved families
-rendered-only. The optional patch now replaces only the four proven lounge-chair
-maps and enables their exact manual-drop behavior through a guarded dispatcher.
+rendered-only. The optional patch now replaces only the five proven maps for
+the four lounge chairs and Patio Umbrella, and enables their exact manual-drop
+behaviors through a guarded dispatcher.
 
 The supplied mobile OBB contains original QAMF furniture maps for 41 of the 63
 items. Exact copies are now preserved under
@@ -58,15 +59,15 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2D4-0x2D5` | Wreaths | yes | `InteractHouseXmasDecor` family | exact route unresolved |
 | `0x2D6-0x2D7` | Designer Soap | no | no exclusive route proven | existing soap donor only |
 | `0x2D8-0x2D9` | Towel Sets | no | `UsingWarmTowel` exists on mobile | item call chain unresolved |
-| `0x2DA` | Birthday Balloons | yes | `BirthdayBalloons`; play/maybe play | handlers absent; rendered-only |
-| `0x2DB` | Birthday Banner | yes | `BirthdayBanner`; celebration family | handlers absent; rendered-only |
-| `0x2DC` | Birthday Cake | yes | `BirthdayCake`; poke/maybe poke | handlers absent; rendered-only |
-| `0x2DD` | Birthday Presents | yes | `BirthdayPresents`; poke/maybe poke | handlers absent; rendered-only |
+| `0x2DA` | Birthday Balloons | yes | `BirthdayBalloons`; play/maybe play | exact hotspot proven; complete grouped family still blocked |
+| `0x2DB` | Birthday Banner | yes | `BirthdayBanner`; celebration family | exact hotspot proven; complete grouped family still blocked |
+| `0x2DC` | Birthday Cake | yes | `BirthdayCake`; poke/maybe poke | exact single-object plan proven; complete grouped family still blocked |
+| `0x2DD` | Birthday Presents | yes | `BirthdayPresents`; poke/maybe poke | exact single-object plan proven; complete grouped family still blocked |
 | `0x2DE-0x2E1` | Lounge Chairs | yes | `Chaise`; `LieOnChaiseNoLeadIn` | implemented as the first optional family; exact plan sequence and PC-safe placed-item maps |
 | `0x2E2-0x2E3` | Floor Lamps | no | no exclusive route proven | decorative |
 | `0x2E4-0x2E5` | Patio surfaces | yes | patio context only | no per-surface action assigned |
 | `0x2E6` | Patio Table | yes | `PatioChairs`; study/drink family | only `StudyingOnPatio` exists on desktop; placed-item anchoring unresolved |
-| `0x2E7` | Patio Umbrella | yes | `PatioUmbrella`; `AdjustingUmbrella` | handlers absent; rendered-only |
+| `0x2E7` | Patio Umbrella | yes | `PatioUmbrella`; `AdjustingUmbrella` | implemented as the second optional family; exact direct plan sequence and PC-safe placed-item map |
 | `0x2E8` | Picnic Table | yes | `PicnicTable`; prepare/eat picnic | handlers absent; rendered-only |
 
 ## Patio QAMF finding
@@ -98,6 +99,30 @@ optional QAMFs preserve the mobile dimensions/origin/trailer but retain only the
 11 proven EObject cells using the PC-safe value `0x2000A800`; the unsupported
 mobile marker is excluded. Disabling the patch restores the exact rendered-only
 base maps.
+
+The Patio Umbrella handler ports mobile `CBehavior::AdjustingUmbrella` exactly:
+go to EObject `0x96`, wait once in body position `0x0D`, repeat the same go/wait,
+then wait for three ticks in body position `0` with direction/head direction
+`3`, and start the next behavior. It has no mobile predicate, RNG, stat change,
+or autonomous route. Its 15 by 17 optional QAMF retains only the four proven
+EObject cells using PC-safe value `0x2000B000`; mobile-only markers
+`0x01B40000` and `0x01AC0000` are excluded.
+
+## Birthday family blocker
+
+The four birthday hotspots and their object IDs are proven: Banner `0x91`,
+Balloons `0x92`, Presents `0x93`, and Cake `0x94`. Balloons, Presents, and Cake
+all delegate through `AllPeepsCelebratingBirthday`; Banner is always a grouped
+celebration. When Banner exists or more than one birthday object is placed, the
+mobile build makes every villager run behavior `0x1AF`. That behavior and the
+other birthday IDs `0x1AD-0x1B3` are beyond the fixed desktop table ending at
+`0x19A`.
+
+Cake-only and Presents-only plan sequences are recovered, but shipping either
+alone would diverge whenever the other birthday decorations are present. The
+family therefore remains rendered-only until the complete grouped `0x1AF`
+sequence and all four PC-safe maps can be ported through the external dispatcher
+without indexing or growing the stock table.
 
 No autonomous candidate was added. Future disruptive household-wide
 celebration behaviors must also remain manual-drop-only.

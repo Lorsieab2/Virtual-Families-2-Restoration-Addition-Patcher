@@ -413,12 +413,13 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 hashes_by_setting["mobile_furniture_behaviors"],
             )
 
-    def test_mobile_lounge_behavior_assets_export_and_restore_exact_maps(self):
+    def test_mobile_furniture_behavior_assets_export_and_restore_exact_maps(self):
         expected_hashes = {
             "Chaise_blue.png.fmap": "370607425da5c8ceb6ebcb45323718df4630305089ce67f4cca3fe2ffbcc2b08",
             "Chaise_brown.png.fmap": "3e4d0f11c728fa64db5e7ebe87c810809969f11b8f1a8fe72ceb1db8c28ae78e",
             "Chaise_green.png.fmap": "e9751bbc5341319239b47ec3a975c96dd2224ff2511bc38956624dc9e0cf057a",
             "Chaise_red.png.fmap": "2c4bfede0a9280faed66a5e9688c2e5574a954d58dc7f96b9085daf08631fb29",
+            "Patio_umbrella.png.fmap": "c62d0320f781e57423b1b2dbfe4e474cf61e62b1dc36c7166d09041dbf7fed7d",
         }
         mobile_dir = (
             ROOT / "patcher_assets" / "optional_patches"
@@ -446,7 +447,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             for filename in expected_hashes:
                 (base / "Assets" / filename).write_bytes((mobile_dir / filename).read_bytes())
             records = exporter.mobile_furniture_behavior_asset_patches(bundle, base)
-            self.assertEqual(len(records), 4)
+            self.assertEqual(len(records), 5)
             self.assertEqual(
                 [Path(row["file_path"]).name for row in records],
                 list(expected_hashes),

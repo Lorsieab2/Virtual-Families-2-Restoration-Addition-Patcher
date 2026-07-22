@@ -65,6 +65,11 @@ MOBILE_CHAISE_FMAP_FILES = (
     "Chaise_green.png.fmap",
     "Chaise_red.png.fmap",
 )
+MOBILE_PATIO_UMBRELLA_FMAP_FILE = "Patio_umbrella.png.fmap"
+MOBILE_FURNITURE_BEHAVIOR_FMAP_FILES = (
+    *MOBILE_CHAISE_FMAP_FILES,
+    MOBILE_PATIO_UMBRELLA_FMAP_FILE,
+)
 SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "allow_older_pregnancies",
     "older_villager_mortality",
@@ -209,7 +214,7 @@ SETTINGS = [
     {
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
-        "description": "Optional patch: enables exact ported actions for genuine mobile furniture where implemented. B156 adds manual Relaxing on lounger behavior to the four mobile lounge chairs; Invisible/custom/VF3 furniture is excluded.",
+        "description": "Optional patch: enables exact ported actions for genuine mobile furniture where implemented. B156 adds manual Relaxing on lounger behavior to the four mobile lounge chairs and Adjusting umbrella to the Patio Umbrella; Invisible/custom/VF3 furniture is excluded.",
         "default": False,
         "category": "optional",
     },
@@ -1572,7 +1577,7 @@ def mobile_furniture_behavior_asset_patches(
         return []
     base_maps = [
         base_payload / "Assets" / filename
-        for filename in MOBILE_CHAISE_FMAP_FILES
+        for filename in MOBILE_FURNITURE_BEHAVIOR_FMAP_FILES
     ]
     present_base_maps = [path for path in base_maps if path.is_file()]
     if not present_base_maps:
@@ -1580,7 +1585,7 @@ def mobile_furniture_behavior_asset_patches(
     if len(present_base_maps) != len(base_maps):
         missing = ", ".join(path.name for path in base_maps if not path.is_file())
         raise ValueError(
-            f"Base payload has an incomplete mobile lounge-chair map set; missing: {missing}"
+            f"Base payload has an incomplete implemented mobile-furniture map set; missing: {missing}"
         )
     payload_root = bundle_dir / "payload"
     enabled_dir = payload_root / "MobileFurnitureBehaviorFmaps"
@@ -1588,7 +1593,7 @@ def mobile_furniture_behavior_asset_patches(
     enabled_dir.mkdir(parents=True, exist_ok=True)
     restore_dir.mkdir(parents=True, exist_ok=True)
     records: list[dict[str, Any]] = []
-    for filename in MOBILE_CHAISE_FMAP_FILES:
+    for filename in MOBILE_FURNITURE_BEHAVIOR_FMAP_FILES:
         source = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
         if not source.is_file():
             raise ValueError(f"Missing mobile furniture behavior map: {source}")
@@ -1615,7 +1620,7 @@ def mobile_furniture_behavior_asset_patches(
             "overwrite_existing": True,
             "requires": ["core_executable", "mobile_furniture_behaviors"],
             "note": (
-                "Optional mobile lounge-chair EObject-only furniture map. "
+                "Optional implemented mobile-furniture EObject-only map. "
                 "Disabling the setting restores the exact rendered-only map."
             ),
         })

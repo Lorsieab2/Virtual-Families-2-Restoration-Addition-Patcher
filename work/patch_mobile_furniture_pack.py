@@ -39,8 +39,9 @@ ENABLE_CHEAT_UPGRADES = os.environ.get("VF2_ENABLE_CHEAT_UPGRADES", "0") == "1"
 ENABLE_BEHAVIOR_PATCHES = os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "0") == "1"
 
 # Genuine mobile-furniture behaviors use a dormant exact-SHA byte toggle. The
-# first proven family is the four mobile lounge chairs; stock hotspot handling
-# still runs first, and every other item falls through unchanged.
+# first proven families are the four mobile lounge chairs and the patio
+# umbrella; stock hotspot handling still runs first, and every other item falls
+# through unchanged.
 MOBILE_FURNITURE_BEHAVIOR_FLAG_SECTION = ".vf2beh"
 MOBILE_FURNITURE_BEHAVIOR_FLAG_SYMBOL = "_gVF2MobileFurnitureBehaviors"
 MOBILE_FURNITURE_BEHAVIOR_HELPER_SYMBOL = (
@@ -55,6 +56,10 @@ MOBILE_CHAISE_PC_CELLS = (
     (7, 10), (8, 10), (9, 10),
     (8, 11), (9, 11),
 )
+MOBILE_PATIO_UMBRELLA_ITEM_ID = 0x2E7
+MOBILE_PATIO_UMBRELLA_OBJECT = 0x96
+MOBILE_PATIO_UMBRELLA_PC_CELL_VALUE = 0x2000B000
+MOBILE_PATIO_UMBRELLA_PC_CELLS = ((6, 16), (7, 16), (8, 16), (9, 16))
 
 # B152's Allow Older Pregnancies option is a post-link runtime byte toggle,
 # not another executable-matrix dimension. Every linked executable contains
@@ -2528,7 +2533,7 @@ EXPLICIT_SAFE_EMPTY_FMAP_PATHS = {
     "Furniture/Chaise_green.png": "base payload stays rendered-only; the optional mobile-behavior overlay supplies the proven PC-safe Chaise map",
     "Furniture/Chaise_red.png": "base payload stays rendered-only; the optional mobile-behavior overlay supplies the proven PC-safe Chaise map",
     "Furniture/Patio_table.png": "mobile patio table object-grid markers are decorative and should not dispatch desktop behavior",
-    "Furniture/Patio_umbrella.png": "mobile patio umbrella uses object-grid markers unsupported by the desktop Palm donor",
+    "Furniture/Patio_umbrella.png": "base payload stays rendered-only; the optional mobile-behavior overlay supplies the proven PC-safe Patio Umbrella map",
     "Furniture/Picnic_table.png": "mobile picnic table object-grid markers are decorative and should not dispatch desktop behavior",
 }
 
@@ -12324,6 +12329,48 @@ def validate_mobile_chaise_pc_fmaps(manifest):
     }
 
 
+def validate_mobile_patio_umbrella_pc_fmap(manifest):
+    filename = "Patio_umbrella.png.fmap"
+    mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+    pc_path = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+    mobile = mobile_path.read_bytes()
+    pc = pc_path.read_bytes()
+    if len(pc) != len(mobile) or pc[:4] != b"QAMF":
+        raise RuntimeError(f"Invalid PC patio umbrella furniture map: {pc_path}")
+    width, height = struct.unpack_from("<ii", pc, 24)
+    if (width, height) != (15, 17):
+        raise RuntimeError(f"Unexpected PC patio umbrella grid: {filename}")
+    grid_end = 32 + width * height * 4
+    if pc[:32] != mobile[:32] or pc[grid_end:] != mobile[grid_end:]:
+        raise RuntimeError(f"PC patio umbrella header/trailer drifted: {filename}")
+    expected_offsets = {
+        32 + (y * width + x) * 4
+        for x, y in MOBILE_PATIO_UMBRELLA_PC_CELLS
+    }
+    actual_offsets = set()
+    for offset in range(32, grid_end, 4):
+        value = struct.unpack_from("<I", pc, offset)[0]
+        if value:
+            if value != MOBILE_PATIO_UMBRELLA_PC_CELL_VALUE:
+                raise RuntimeError(
+                    f"PC patio umbrella contains unsupported cell {value:#x}"
+                )
+            actual_offsets.add(offset)
+    if actual_offsets != expected_offsets:
+        raise RuntimeError("PC patio umbrella EObject cells drifted")
+    manifest["MobilePatioUmbrellaPCFmap"] = {
+        "status": "validated minimal EObject-only optional payload",
+        "item_id": hex(MOBILE_PATIO_UMBRELLA_ITEM_ID),
+        "filename": filename,
+        "source_sha256": hashlib.sha256(pc).hexdigest(),
+        "source_bytes": len(pc),
+        "object": hex(MOBILE_PATIO_UMBRELLA_OBJECT),
+        "cell_value": hex(MOBILE_PATIO_UMBRELLA_PC_CELL_VALUE),
+        "cell_count": len(actual_offsets),
+        "excluded_mobile_markers": ["0x01b40000", "0x01ac0000"],
+    }
+
+
 def patch_mobile_furniture_behavior_dispatch(manifest):
     helper_path = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
     helper_path.write_text(r'''#pragma section(".vf2beh", read, write)
@@ -12331,10 +12378,19 @@ extern "C" __declspec(allocate(".vf2beh")) volatile unsigned char gVF2MobileFurn
 
 struct ldwPoint { int x; int y; };
 class CVillager;
-class CContentMap { public: enum EObject { eObjectChaise = 0x95 }; };
+class CContentMap { public: enum EObject {
+    eObjectChaise = 0x95,
+    eObjectPatioUmbrella = 0x96
+}; };
 enum ESpeed { eSpeedNormal = 0xC8 };
 enum EPriority { ePriorityNormal = 0 };
-enum EBodyPosition { eBodyPositionStanding = 0, eBodyPositionChaise = 0x17 };
+enum EBodyPosition {
+    eBodyPositionStanding = 0,
+    eBodyPositionUmbrella = 0x0D,
+    eBodyPositionChaise = 0x17
+};
+enum EDirection { eDirectionUmbrella = 3 };
+enum EHeadDirection { eHeadDirectionUmbrella = 3 };
 enum StringId { eStringBadWeather = 2, eStringCannotReachFurniture = 0xBF };
 
 struct sFurnitureInfo2 {
@@ -12350,6 +12406,7 @@ public:
     bool PlanToGo(CContentMap::EObject, ESpeed, EPriority, bool);
     void PlanToGo(ldwPoint, ESpeed, EPriority);
     void PlanToWait(int, EBodyPosition);
+    void PlanToWait(int, EBodyPosition, EDirection, EHeadDirection);
     void PlanToLieDown(int);
     void PlanToSay(StringId);
     void PlanToShakeHead(int, EBodyPosition);
@@ -12409,10 +12466,10 @@ static bool VF2IsMobileChaise(int item)
     return item >= 0x2DE && item <= 0x2E1;
 }
 
-static void VF2SetLoungerLabel(CVillager &villager)
+static void VF2SetActionLabel(CVillager &villager, char const *text)
 {
     char *label = reinterpret_cast<char *>(&villager) + 0x1BBA8;
-    strncpy(label, "Relaxing on lounger", 0x27);
+    strncpy(label, text, 0x27);
     label[0x27] = 0;
 }
 
@@ -12427,7 +12484,7 @@ static bool VF2HandleMobileChaise(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
     plans->ForgetPlans(villager, false);
-    VF2SetLoungerLabel(villager);
+    VF2SetActionLabel(villager, "Relaxing on lounger");
 
     sFurnitureInfo2 info = {};
     if (!FurnitureManager.LinkPeepToFurniture(
@@ -12458,6 +12515,32 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     return true;
 }
 
+static bool VF2HandleMobilePatioUmbrella(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    VF2SetActionLabel(villager, "Adjusting umbrella");
+    plans->PlanToGo(
+        CContentMap::eObjectPatioUmbrella,
+        eSpeedNormal,
+        ePriorityNormal,
+        false);
+    plans->PlanToWait(1, eBodyPositionUmbrella);
+    plans->PlanToGo(
+        CContentMap::eObjectPatioUmbrella,
+        eSpeedNormal,
+        ePriorityNormal,
+        false);
+    plans->PlanToWait(1, eBodyPositionUmbrella);
+    plans->PlanToWait(
+        3,
+        eBodyPositionStanding,
+        eDirectionUmbrella,
+        eHeadDirectionUmbrella);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
 class theMainScene {
 protected:
     bool const HandleDropOnHotSpot(CVillager &);
@@ -12472,6 +12555,7 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
     if (HandleDropOnHotSpot(villager)) return true;
     if (gVF2MobileFurnitureBehaviors == 0) return false;
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
+    if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     return false;
 }
 ''', encoding="ascii")
@@ -12528,6 +12612,15 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
             "autonomous": False,
             "mobile_behavior": "CBehavior::LieOnChaiseNoLeadIn",
             "desktop_implementation": "exact plan-sequence port using LinkPeepToFurniture",
+        }, {
+            "name": "mobile patio umbrella",
+            "item_ids": [hex(MOBILE_PATIO_UMBRELLA_ITEM_ID)],
+            "label": "Adjusting umbrella",
+            "object": hex(MOBILE_PATIO_UMBRELLA_OBJECT),
+            "manual_drop_only": True,
+            "autonomous": False,
+            "mobile_behavior": "CBehavior::AdjustingUmbrella",
+            "desktop_implementation": "exact direct plan-sequence port",
         }],
         "stock_behavior_table_extended": False,
         "stock_hotspot_table_extended": False,
@@ -16235,6 +16328,7 @@ def main():
         }
     seed_mobile_furniture_behavior_evidence(manifest)
     validate_mobile_chaise_pc_fmaps(manifest)
+    validate_mobile_patio_umbrella_pc_fmap(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)

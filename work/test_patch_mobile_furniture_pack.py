@@ -107,6 +107,45 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             )
             self.assertNotIn(0x01B09800, values)
 
+    def test_mobile_patio_umbrella_pc_fmap_is_exact_eobject_only_payload(self):
+        filename = "Patio_umbrella.png.fmap"
+        manifest = {}
+        patcher.validate_mobile_patio_umbrella_pc_fmap(manifest)
+        contract = manifest["MobilePatioUmbrellaPCFmap"]
+        self.assertEqual(contract["item_id"], "0x2e7")
+        self.assertEqual(contract["object"], "0x96")
+        self.assertEqual(contract["excluded_mobile_markers"], [
+            "0x01b40000",
+            "0x01ac0000",
+        ])
+
+        data = (
+            patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+        ).read_bytes()
+        self.assertEqual(len(data), 1068)
+        self.assertEqual(
+            hashlib.sha256(data).hexdigest(),
+            "c62d0320f781e57423b1b2dbfe4e474cf61e62b1dc36c7166d09041dbf7fed7d",
+        )
+        width, height = struct.unpack_from("<ii", data, 24)
+        values = [
+            value
+            for (value,) in struct.iter_unpack(
+                "<I", data[32 : 32 + width * height * 4]
+            )
+        ]
+        self.assertEqual((width, height), (15, 17))
+        self.assertEqual(
+            {(i % width, i // width) for i, value in enumerate(values) if value},
+            set(patcher.MOBILE_PATIO_UMBRELLA_PC_CELLS),
+        )
+        self.assertEqual(
+            {value for value in values if value},
+            {patcher.MOBILE_PATIO_UMBRELLA_PC_CELL_VALUE},
+        )
+        self.assertNotIn(0x01B40000, values)
+        self.assertNotIn(0x01AC0000, values)
+
     def test_mobile_chaise_dispatch_retargets_only_stock_drop_hotspot_call(self):
         old_patched = patcher.PATCHED
         try:
@@ -162,6 +201,17 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     ["0x2de", "0x2df", "0x2e0", "0x2e1"],
                 )
                 self.assertFalse(contract["implemented_families"][0]["autonomous"])
+                umbrella = contract["implemented_families"][1]
+                self.assertEqual(umbrella, {
+                    "name": "mobile patio umbrella",
+                    "item_ids": ["0x2e7"],
+                    "label": "Adjusting umbrella",
+                    "object": "0x96",
+                    "manual_drop_only": True,
+                    "autonomous": False,
+                    "mobile_behavior": "CBehavior::AdjustingUmbrella",
+                    "desktop_implementation": "exact direct plan-sequence port",
+                })
                 helper = (patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp").read_text(
                     encoding="ascii"
                 )
@@ -174,6 +224,28 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertIn("sample.y -= 10;", wrapper)
                 self.assertIn("VF2IsMobileChaise(candidate)", wrapper)
+                self.assertIn(
+                    "if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);",
+                    wrapper,
+                )
+                umbrella_helper = helper.split(
+                    "static bool VF2HandleMobilePatioUmbrella", 1
+                )[1].split("class theMainScene", 1)[0]
+                expected_steps = [
+                    "plans->ForgetPlans(villager, false);",
+                    'VF2SetActionLabel(villager, "Adjusting umbrella");',
+                    "CContentMap::eObjectPatioUmbrella,",
+                    "plans->PlanToWait(1, eBodyPositionUmbrella);",
+                    "CContentMap::eObjectPatioUmbrella,",
+                    "plans->PlanToWait(1, eBodyPositionUmbrella);",
+                    "plans->PlanToWait(\n        3,\n        eBodyPositionStanding,\n        eDirectionUmbrella,\n        eHeadDirectionUmbrella);",
+                    "plans->StartNewBehavior(villager);",
+                ]
+                cursor = 0
+                for step in expected_steps:
+                    cursor = umbrella_helper.index(step, cursor) + len(step)
+                self.assertNotIn("GetRandom", umbrella_helper)
+                self.assertNotIn("PlanToInc", umbrella_helper)
         finally:
             patcher.PATCHED = old_patched
 
