@@ -2721,3 +2721,25 @@
 - Focused source tests cover the route, map, manifest, optional export/restore,
   and computer exception boundaries. A Behavior-Patches executable compiled
   successfully; live Birthday Cake and computer-drop testing remains pending.
+
+## 2026-07-23 - Exact Christmas Stockings route and Birthday Balloons proof
+
+- Large Stocking `0x2C6` and Small Stocking `0x2C7` share mobile EObject
+  `0x90`. Their manual hotspot always consumes the drop and permits raw ages
+  through `0x167`; there is no weather or time predicate.
+- The exact `KidsCheckXmasStockings` plan is now emitted directly on desktop:
+  `Checking for stocking stuffers`, three randomized x-offset approach points,
+  age/gender voice selection, orientation-aware waits, work, four jumps, sound
+  stop, and behavior completion. Neither the mobile hotspot nor behavior table
+  is indexed.
+- The PC-safe Large map is `10x13`, retains `0x20008000` only at `(6,12)` and
+  `(7,12)`, and hashes to
+  `f467c400f7ae60efea0ab67ccb33d5ec9327a94383102f750e20dd29d70165a0`.
+  The Small map is `8x11`, retains the same value only at `(4,10)` and `(5,10)`,
+  and hashes to
+  `aa6eee69ecaedcaa03575d6bb916e4442cfc83efda41f6e3a8291371475e8003`.
+- Birthday Balloons `0x2DA` / EObject `0x92` is no longer blocked. Workspace
+  evidence proves desktop string parity for localized StringId `0xF0`
+  (`Playing`), the complete child-only plan, every animation/sound API, and the
+  safe `11x14` PC map (`f66e4dc4776962b32b68e069a133ca9b1a7f57306d7df357866dd2630c307fc3`).
+  It remains unimplemented in this increment and is the next exact port.

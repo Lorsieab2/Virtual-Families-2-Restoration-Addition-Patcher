@@ -70,10 +70,15 @@ MOBILE_BIRTHDAY_FMAP_FILES = (
     "Birthday_cake.png.fmap",
     "Birthday_presents.png.fmap",
 )
+MOBILE_HOLIDAY_FMAP_FILES = (
+    "StockingLarge.png.fmap",
+    "StockingSmall.png.fmap",
+)
 MOBILE_FURNITURE_BEHAVIOR_FMAP_FILES = (
     *MOBILE_CHAISE_FMAP_FILES,
     MOBILE_PATIO_UMBRELLA_FMAP_FILE,
     *MOBILE_BIRTHDAY_FMAP_FILES,
+    *MOBILE_HOLIDAY_FMAP_FILES,
 )
 SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "allow_older_pregnancies",

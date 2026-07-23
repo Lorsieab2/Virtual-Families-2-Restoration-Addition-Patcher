@@ -422,6 +422,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             "Patio_umbrella.png.fmap": "c62d0320f781e57423b1b2dbfe4e474cf61e62b1dc36c7166d09041dbf7fed7d",
             "Birthday_cake.png.fmap": "e1c55dc0d38b44003abe878cd9ccdfee3e49b5c7ed9e793d14b25c0fae57926d",
             "Birthday_presents.png.fmap": "63ef84177e87b4a4dd28c0a85c4aff2ee741423ca4ac34b3d273cb11fd4a18c5",
+            "StockingLarge.png.fmap": "f467c400f7ae60efea0ab67ccb33d5ec9327a94383102f750e20dd29d70165a0",
+            "StockingSmall.png.fmap": "aa6eee69ecaedcaa03575d6bb916e4442cfc83efda41f6e3a8291371475e8003",
         }
         mobile_dir = (
             ROOT / "patcher_assets" / "optional_patches"
@@ -449,7 +451,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             for filename in expected_hashes:
                 (base / "Assets" / filename).write_bytes((mobile_dir / filename).read_bytes())
             records = exporter.mobile_furniture_behavior_asset_patches(bundle, base)
-            self.assertEqual(len(records), 7)
+            self.assertEqual(len(records), 9)
             self.assertEqual(
                 [Path(row["file_path"]).name for row in records],
                 list(expected_hashes),

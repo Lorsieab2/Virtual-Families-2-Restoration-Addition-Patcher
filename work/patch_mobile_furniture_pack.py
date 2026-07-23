@@ -70,6 +70,21 @@ MOBILE_BIRTHDAY_PRESENTS_ITEM_ID = 0x2DD
 MOBILE_BIRTHDAY_PRESENTS_OBJECT = 0x93
 MOBILE_BIRTHDAY_PRESENTS_PC_CELL_VALUE = 0x20009800
 MOBILE_BIRTHDAY_PRESENTS_PC_CELLS = ((3, 9), (4, 9), (5, 9))
+MOBILE_XMAS_STOCKING_ITEM_IDS = (0x2C6, 0x2C7)
+MOBILE_XMAS_STOCKING_OBJECT = 0x90
+MOBILE_XMAS_STOCKING_PC_CELL_VALUE = 0x20008000
+MOBILE_XMAS_STOCKING_PC_SPECS = {
+    "StockingLarge.png.fmap": {
+        "grid": (10, 13),
+        "cells": ((6, 12), (7, 12)),
+        "item_id": 0x2C6,
+    },
+    "StockingSmall.png.fmap": {
+        "grid": (8, 11),
+        "cells": ((4, 10), (5, 10)),
+        "item_id": 0x2C7,
+    },
+}
 
 # B152's Allow Older Pregnancies option is a post-link runtime byte toggle,
 # not another executable-matrix dimension. Every linked executable contains
@@ -12500,6 +12515,55 @@ def validate_mobile_birthday_presents_pc_fmap(manifest):
     }
 
 
+def validate_mobile_xmas_stocking_pc_fmaps(manifest):
+    records = []
+    for filename, spec in MOBILE_XMAS_STOCKING_PC_SPECS.items():
+        mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+        pc_path = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+        mobile = mobile_path.read_bytes()
+        pc = pc_path.read_bytes()
+        if len(pc) != len(mobile) or pc[:4] != b"QAMF":
+            raise RuntimeError(f"Invalid PC Christmas Stocking map: {pc_path}")
+        width, height = struct.unpack_from("<ii", pc, 24)
+        grid_end = 32 + width * height * 4
+        if (width, height) != spec["grid"]:
+            raise RuntimeError(f"Unexpected PC Christmas Stocking grid: {filename}")
+        if pc[:32] != mobile[:32] or pc[grid_end:] != mobile[grid_end:]:
+            raise RuntimeError(
+                f"PC Christmas Stocking header/trailer drifted: {filename}"
+            )
+        expected_offsets = {
+            32 + (y * width + x) * 4 for x, y in spec["cells"]
+        }
+        actual_offsets = set()
+        for offset in range(32, grid_end, 4):
+            value = struct.unpack_from("<I", pc, offset)[0]
+            if value:
+                if value != MOBILE_XMAS_STOCKING_PC_CELL_VALUE:
+                    raise RuntimeError(
+                        f"PC Christmas Stocking contains unsupported cell {value:#x}"
+                    )
+                actual_offsets.add(offset)
+        if actual_offsets != expected_offsets:
+            raise RuntimeError(
+                f"PC Christmas Stocking EObject cells drifted: {filename}"
+            )
+        records.append({
+            "item_id": hex(spec["item_id"]),
+            "filename": filename,
+            "source_sha256": hashlib.sha256(pc).hexdigest(),
+            "source_bytes": len(pc),
+            "grid": [width, height],
+            "object": hex(MOBILE_XMAS_STOCKING_OBJECT),
+            "cell_value": hex(MOBILE_XMAS_STOCKING_PC_CELL_VALUE),
+            "cell_count": len(actual_offsets),
+        })
+    manifest["MobileXmasStockingsPCFmaps"] = {
+        "status": "validated minimal EObject-only optional payloads",
+        "records": records,
+    }
+
+
 def patch_mobile_furniture_behavior_dispatch(manifest):
     helper_path = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
     behavior_fallback_decls = ""
@@ -12555,6 +12619,7 @@ private:
     friend void __cdecl VF2MobileStudyingOnPatio(CVillager &);
 };
 class CContentMap { public: enum EObject {
+    eObjectXmasStockings = 0x90,
     eObjectChaise = 0x95,
     eObjectPatioUmbrella = 0x96,
     eObjectBirthdayCake = 0x94,
@@ -12606,6 +12671,7 @@ public:
     void PlanToJoyTwirlCW(int);
     void PlanToWork(int);
     void PlanToBend(int, EPriority);
+    void PlanToJump(int);
     void PlanToStopSound();
     void ForgetPlans(CVillager &, bool);
     void StartNewBehavior(CVillager &);
@@ -12893,6 +12959,89 @@ static bool VF2HandleMobileBirthdayPresents(CVillager &villager)
     return true;
 }
 
+static ldwPoint VF2XmasStockingApproachPoint(sFurnitureInfo2 const &info)
+{
+    ldwPoint point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    return point;
+}
+
+static bool VF2HandleMobileXmasStockings(CVillager &villager)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+
+    // The mobile hotspot verifies the stocking before starting behavior 0x1A9.
+    sFurnitureInfo2 hotspotInfo = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectXmasStockings,
+            villager.FeetPos(),
+            hotspotInfo,
+            true,
+            0,
+            false)) {
+        return true;
+    }
+    if (*reinterpret_cast<int *>(data + 0x6A54) > 0x167) return true;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+
+    // KidsCheckXmasStockings performs the same lookup again after NewBehavior.
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectXmasStockings,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return true;
+    }
+
+    VF2SetActionLabel(villager, "Checking for stocking stuffers");
+    plans->PlanToGo(
+        VF2XmasStockingApproachPoint(info),
+        eSpeedNormal,
+        ePriorityNormal);
+
+    int age = *reinterpret_cast<int *>(data + 0x6A54);
+    int gender = *reinterpret_cast<int *>(data + 0x6A58);
+    int sound = age <= 0x117 ? 0xC3 : (gender == 1 ? 0xF2 : 0xDC);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(sound), 1.0f, eSoundTypeEffects);
+
+    EBodyPosition nearBody = static_cast<EBodyPosition>(
+        info.orientation == 0 ? 0x0D : 0x0A);
+    EBodyPosition firstFinalBody = static_cast<EBodyPosition>(
+        info.orientation == 0 ? 0x0A : 0x0D);
+    EBodyPosition secondFinalBody = static_cast<EBodyPosition>(
+        info.orientation == 0 ? 0x0D : 0x0A);
+
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 2, nearBody);
+    plans->PlanToWork(ldwGameState::GetRandom(2) + 2);
+    plans->PlanToJump(10);
+    plans->PlanToJump(20);
+    plans->PlanToJump(10);
+    plans->PlanToJump(20);
+    plans->PlanToGo(
+        VF2XmasStockingApproachPoint(info),
+        eSpeedNormal,
+        ePriorityNormal);
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 2, nearBody);
+    plans->PlanToGo(
+        VF2XmasStockingApproachPoint(info),
+        eSpeedNormal,
+        ePriorityNormal);
+    plans->PlanToWork(ldwGameState::GetRandom(2) + 2);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 1, firstFinalBody);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 1, secondFinalBody);
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
 static bool VF2WeatherAllowsOutdoorFurniture()
 {
     // Mobile values: 0 sunny, 1 cloudy, 2 rain, 3 storm, 4 fog, 5 snow.
@@ -13039,6 +13188,9 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
     if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
+    if (candidate == 0x2C6 || candidate == 0x2C7) {
+        return VF2HandleMobileXmasStockings(villager);
+    }
     return false;
 }
 '''
@@ -13166,6 +13318,21 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "autonomous": False,
             "mobile_behavior": "CBehavior::PokingBirthdayPresents",
             "desktop_implementation": "exact direct plan-sequence port",
+        }, {
+            "name": "mobile Christmas Stockings",
+            "item_ids": [hex(item) for item in MOBILE_XMAS_STOCKING_ITEM_IDS],
+            "label": "Checking for stocking stuffers",
+            "object": hex(MOBILE_XMAS_STOCKING_OBJECT),
+            "manual_drop_only": True,
+            "raw_age_max": "0x167",
+            "displayed_age": "under 18",
+            "weather_restriction": None,
+            "autonomous": False,
+            "mobile_behavior": "CBehavior::KidsCheckXmasStockings",
+            "desktop_implementation": "exact direct plan-sequence port",
+            "mobile_behavior_id": "0x1a9",
+            "mobile_hotspot_id": "0x65",
+            "stock_tables_extended": False,
         }],
         "stock_behavior_table_extended": False,
         "stock_hotspot_table_extended": False,
@@ -17008,6 +17175,7 @@ def main():
     validate_mobile_patio_umbrella_pc_fmap(manifest)
     validate_mobile_birthday_cake_pc_fmap(manifest)
     validate_mobile_birthday_presents_pc_fmap(manifest)
+    validate_mobile_xmas_stocking_pc_fmaps(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)

@@ -217,6 +217,46 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             {patcher.MOBILE_BIRTHDAY_PRESENTS_PC_CELL_VALUE},
         )
 
+    def test_mobile_xmas_stocking_pc_fmaps_are_exact_eobject_only_payloads(self):
+        manifest = {}
+        patcher.validate_mobile_xmas_stocking_pc_fmaps(manifest)
+        records = {
+            row["filename"]: row
+            for row in manifest["MobileXmasStockingsPCFmaps"]["records"]
+        }
+        expected_hashes = {
+            "StockingLarge.png.fmap": "f467c400f7ae60efea0ab67ccb33d5ec9327a94383102f750e20dd29d70165a0",
+            "StockingSmall.png.fmap": "aa6eee69ecaedcaa03575d6bb916e4442cfc83efda41f6e3a8291371475e8003",
+        }
+        self.assertEqual(set(records), set(patcher.MOBILE_XMAS_STOCKING_PC_SPECS))
+        for filename, spec in patcher.MOBILE_XMAS_STOCKING_PC_SPECS.items():
+            data = (
+                patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+            ).read_bytes()
+            self.assertEqual(hashlib.sha256(data).hexdigest(), expected_hashes[filename])
+            width, height = struct.unpack_from("<ii", data, 24)
+            values = [
+                value
+                for (value,) in struct.iter_unpack(
+                    "<I", data[32 : 32 + width * height * 4]
+                )
+            ]
+            self.assertEqual((width, height), spec["grid"])
+            self.assertEqual(
+                {
+                    (i % width, i // width)
+                    for i, value in enumerate(values)
+                    if value
+                },
+                set(spec["cells"]),
+            )
+            self.assertEqual(
+                {value for value in values if value},
+                {patcher.MOBILE_XMAS_STOCKING_PC_CELL_VALUE},
+            )
+            self.assertEqual(records[filename]["item_id"], hex(spec["item_id"]))
+            self.assertEqual(records[filename]["object"], "0x90")
+
     def test_mobile_chaise_dispatch_retargets_only_stock_drop_hotspot_call(self):
         old_patched = patcher.PATCHED
         try:
@@ -346,6 +386,17 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         "desktop_implementation": "exact direct plan-sequence port",
                     },
                 )
+                stockings = contract["implemented_families"][4]
+                self.assertEqual(stockings["item_ids"], ["0x2c6", "0x2c7"])
+                self.assertEqual(stockings["label"], "Checking for stocking stuffers")
+                self.assertEqual(stockings["object"], "0x90")
+                self.assertEqual(stockings["raw_age_max"], "0x167")
+                self.assertEqual(
+                    stockings["mobile_behavior"],
+                    "CBehavior::KidsCheckXmasStockings",
+                )
+                self.assertTrue(stockings["manual_drop_only"])
+                self.assertFalse(stockings["autonomous"])
                 helper = (patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp").read_text(
                     encoding="ascii"
                 )
@@ -370,6 +421,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);",
                     wrapper,
                 )
+                self.assertIn(
+                    "if (candidate == 0x2C6 || candidate == 0x2C7)",
+                    wrapper,
+                )
                 self.assertIn('VF2SetActionLabel(villager, "Poking cake");', helper)
                 self.assertIn("VF2BirthdayOhSound(villager)", helper)
                 self.assertIn("ldwGameState::GetRandom(4) + 2", helper)
@@ -380,6 +435,17 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertIn("plans->PlanToBend(1, ePriorityNormal);", helper)
                 self.assertIn("plans->PlanToStopSound();", helper)
+                self.assertIn(
+                    'VF2SetActionLabel(villager, "Checking for stocking stuffers");',
+                    helper,
+                )
+                self.assertIn("point.x += ldwGameState::GetRandom(60) - 30;", helper)
+                self.assertEqual(
+                    helper.split("static bool VF2HandleMobileXmasStockings", 1)[1]
+                    .split("static bool VF2WeatherAllowsOutdoorFurniture", 1)[0]
+                    .count("plans->PlanToJump("),
+                    4,
+                )
                 self.assertIn(
                     f"eStringBadWeather = {patcher.mobile_lounger_bad_weather_string_id()}",
                     helper,

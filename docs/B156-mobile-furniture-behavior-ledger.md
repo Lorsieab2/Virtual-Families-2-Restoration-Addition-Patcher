@@ -52,14 +52,14 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2BD` | Penguin Decoration | yes | generic Christmas knickknack family only | exact route unresolved |
 | `0x2BE` | Plate of Cookies | yes | adult-save/kid-steal Santa-cookie family | handlers absent; rendered-only |
 | `0x2BF-0x2C5` | Poinsettia and Christmas decorations | yes | generic Christmas decor/knickknack family only | exact routes unresolved |
-| `0x2C6-0x2C7` | Stockings | yes | exact `XmasStockings` / `KidsCheckXmasStockings` | handlers absent; rendered-only |
+| `0x2C6-0x2C7` | Stockings | yes | exact `XmasStockings` / `KidsCheckXmasStockings` | exact under-18 manual route implemented with two PC-safe maps |
 | `0x2C8-0x2C9` | Garlands | yes | `InteractHouseXmasDecor` family | exact route unresolved |
 | `0x2CA-0x2D2` | Thanksgiving food | no | no Thanksgiving-specific hotspot or behavior recovered | decorative |
 | `0x2D3` | Holiday Welcome Mat | no | stock desktop Welcome Mat exists; no exclusive action proven | existing donor only |
 | `0x2D4-0x2D5` | Wreaths | yes | `InteractHouseXmasDecor` family | exact route unresolved |
 | `0x2D6-0x2D7` | Designer Soap | no | no exclusive route proven | existing soap donor only |
 | `0x2D8-0x2D9` | Towel Sets | no | `UsingWarmTowel` exists on mobile | item call chain unresolved |
-| `0x2DA` | Birthday Balloons | yes | `BirthdayBalloons`; play/maybe play | exact hotspot proven; complete grouped family still blocked |
+| `0x2DA` | Birthday Balloons | yes | `BirthdayBalloons`; play/maybe play | exact child-only manual route and PC-safe map fully proven; implementation next |
 | `0x2DB` | Birthday Banner | yes | `BirthdayBanner`; celebration family | exact hotspot proven; complete grouped family still blocked |
 | `0x2DC` | Birthday Cake | yes | `BirthdayCake`; poke/maybe poke | exact single-object plan proven; complete grouped family still blocked |
 | `0x2DD` | Birthday Presents | yes | `BirthdayPresents`; poke/maybe poke | exact single-object plan proven; complete grouped family still blocked |
@@ -86,10 +86,10 @@ placed Patio Table.
 
 The optional patch uses a default-zero `.vf2beh` runtime byte and a single
 relocation-only wrapper at `theMainScene::DropVillager`. The wrapper calls the
-stock `HandleDropOnHotSpot` first. Only a stock miss, an enabled flag, and one of
-the four lounge-chair IDs can reach the added handler; every other path returns
-to the unchanged stock fallback. The fixed desktop behavior table (`0x19B`
-entries) and hotspot table (`0x5D` entries) do not grow.
+stock `HandleDropOnHotSpot` first. Only a stock miss, an enabled flag, and an
+explicit implemented mobile item ID can reach an added handler; every other path
+returns to the unchanged stock fallback. The fixed desktop behavior table
+(`0x19B` entries) and hotspot table (`0x5D` entries) do not grow.
 
 The lounge handler ports mobile `CBehavior::LieOnChaiseNoLeadIn`: it uses
 `LinkPeepToFurniture` object `0x95`, preserves the weather and unreachable
@@ -141,6 +141,24 @@ orientation-aware waits, recovered random birthday sounds, work/bend phases,
 the final body waits, sound stop, and behavior completion. Banner/group celebration
 still requires guarded resident enumeration, and the autonomous-style Maybe
 callbacks remain excluded because their selector reachability is not proven.
+
+## Christmas Stockings subset
+
+Large Stocking `0x2C6` and Small Stocking `0x2C7` share EObject `0x90`.
+The exact mobile manual route consumes every drop, permits raw ages through
+`0x167` (displayed age under 18), and has no weather, time, or gender gate.
+It uses the exact label `Checking for stocking stuffers`, three randomized
+horizontal approach points, the recovered child/gender voice selection, the
+orientation-dependent wait poses, four jumps, work phases, sound stop, and
+behavior completion.
+
+The PC-safe maps preserve their mobile headers and trailers but keep only
+EObject value `0x20008000`: Large at `(6,12)` and `(7,12)`, SHA-256
+`f467c400f7ae60efea0ab67ccb33d5ec9327a94383102f750e20dd29d70165a0`;
+Small at `(4,10)` and `(5,10)`, SHA-256
+`aa6eee69ecaedcaa03575d6bb916e4442cfc83efda41f6e3a8291371475e8003`.
+The generated helper and executable link successfully. Live placement,
+orientation, age-boundary, and voice QA remain.
 
 Player testing on 2026-07-23 confirms the exact manual chaise pose/anchor works
 in good weather and the dedicated bad-weather refusal fires correctly. Manual
