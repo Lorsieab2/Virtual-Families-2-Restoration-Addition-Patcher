@@ -2763,3 +2763,25 @@
   `352ba4be943eae6a168a133430ccd6555c5feb41a630c118da2d24c019e39365`.
 - The behavior-enabled executable compiles and links. Live household filtering,
   simultaneous plan assignment, placement, and orientation QA remain.
+
+## 2026-07-23 - Exact Birthday Banner family and bounded trash/weed cheats
+
+- Birthday Banner `0x2DB` / EObject `0x91` now implements the full mobile
+  birthday-object scan in fixed order `0x91-0x94`. Banner presence or multiple
+  birthday objects runs the exact external whole-household celebration; a sole
+  Balloons, Presents, or Cake object uses its exact existing handler.
+- The celebration repeats the object scan per resident, selects the first
+  existing object, and preserves the mobile label, voice selection, sound
+  `0xFB`, twirls, four jumps, three approaches, orientation-aware waits, sound
+  stop, and all failure paths. Mobile IDs `0x1AE/0x1AF` never enter the desktop
+  behavior table.
+- The minimal Banner map is `14x16`, retains seven `0x20008800` cells, and
+  hashes to
+  `071c79932b55f382e3fe12be01a32f673ae9726339bd4295be3b35bf78456feb`.
+- Cheat Upgrade `0x12F` fills currently available collectable slots with native
+  house trash; `0x130` fills them with native yard weeds. Both pass `30` to the
+  stock bounded spawn APIs, which skip occupied slots and stop at the fixed
+  pool limit. Existing collectables are not overwritten.
+- A combined Cheat-Upgrades plus Behavior-Patches executable compiles and links.
+  Live purchase, persistence, mixed birthday furniture, and group-action QA
+  remain.

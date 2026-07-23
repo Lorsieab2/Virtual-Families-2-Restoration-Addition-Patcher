@@ -248,6 +248,37 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             {patcher.MOBILE_BIRTHDAY_BALLOONS_PC_CELL_VALUE},
         )
 
+    def test_mobile_birthday_banner_pc_fmap_is_exact_eobject_only_payload(self):
+        manifest = {}
+        patcher.validate_mobile_birthday_banner_pc_fmap(manifest)
+        contract = manifest["MobileBirthdayBannerPCFmap"]
+        self.assertEqual(contract["item_id"], "0x2db")
+        self.assertEqual(contract["object"], "0x91")
+        data = (
+            patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR
+            / "Birthday_banner.png.fmap"
+        ).read_bytes()
+        self.assertEqual(
+            hashlib.sha256(data).hexdigest(),
+            "071c79932b55f382e3fe12be01a32f673ae9726339bd4295be3b35bf78456feb",
+        )
+        width, height = struct.unpack_from("<ii", data, 24)
+        values = [
+            value
+            for (value,) in struct.iter_unpack(
+                "<I", data[32 : 32 + width * height * 4]
+            )
+        ]
+        self.assertEqual((width, height), (14, 16))
+        self.assertEqual(
+            {(i % width, i // width) for i, value in enumerate(values) if value},
+            set(patcher.MOBILE_BIRTHDAY_BANNER_PC_CELLS),
+        )
+        self.assertEqual(
+            {value for value in values if value},
+            {patcher.MOBILE_BIRTHDAY_BANNER_PC_CELL_VALUE},
+        )
+
     def test_mobile_group_holiday_pc_fmaps_are_exact_eobject_only_payloads(self):
         manifest = {}
         patcher.validate_mobile_group_holiday_pc_fmaps(manifest)
@@ -477,17 +508,22 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(balloons["mobile_behavior_id"], "0x1ad")
                 self.assertTrue(balloons["manual_drop_only"])
                 self.assertFalse(balloons["autonomous"])
-                dreidel = contract["implemented_families"][5]
+                banner = contract["implemented_families"][5]
+                self.assertEqual(banner["item_ids"], ["0x2db"])
+                self.assertEqual(banner["object"], "0x91")
+                self.assertEqual(banner["mobile_behavior_ids"], ["0x1ae", "0x1af"])
+                self.assertTrue(banner["whole_household"])
+                dreidel = contract["implemented_families"][6]
                 self.assertEqual(dreidel["item_ids"], ["0x2af"])
                 self.assertEqual(dreidel["object"], "0x8a")
                 self.assertEqual(dreidel["mobile_behavior_id"], "0x1a2")
                 self.assertTrue(dreidel["whole_household"])
-                menorah = contract["implemented_families"][6]
+                menorah = contract["implemented_families"][7]
                 self.assertEqual(menorah["item_ids"], ["0x2b8"])
                 self.assertEqual(menorah["object"], "0x8e")
                 self.assertEqual(menorah["mobile_behavior_id"], "0x1a3")
                 self.assertTrue(menorah["whole_household"])
-                stockings = contract["implemented_families"][7]
+                stockings = contract["implemented_families"][8]
                 self.assertEqual(stockings["item_ids"], ["0x2c6", "0x2c7"])
                 self.assertEqual(stockings["label"], "Checking for stocking stuffers")
                 self.assertEqual(stockings["object"], "0x90")
@@ -527,6 +563,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     wrapper,
                 )
                 self.assertIn(
+                    "if (candidate == 0x2DB) return VF2HandleMobileBirthdayBanner(villager);",
+                    wrapper,
+                )
+                self.assertIn(
                     "if (candidate == 0x2AF) return VF2HandleMobileDreidelGroup(villager);",
                     wrapper,
                 )
@@ -562,6 +602,17 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn('"StompingW", false, 0.02f', balloons_helper)
                 self.assertIn("plans->PlanToTwirlCCW", balloons_helper)
                 self.assertNotIn("NewBehavior(static_cast<EBehavior>(0x1AD)", balloons_helper)
+                banner_helper = helper.split(
+                    "static void VF2RunMobileBirthdayCelebration", 1
+                )[1].split("static void VF2RunMobileDreidel", 1)[0]
+                self.assertIn('VF2SetActionLabel(villager, "Celebrating birthday");', banner_helper)
+                self.assertIn("VF2BirthdayObjectScan(selected)", banner_helper)
+                self.assertIn("objectCount > 1", banner_helper)
+                self.assertIn("VF2HandleMobileBirthdayBalloons(villager)", banner_helper)
+                self.assertIn("VF2HandleMobileBirthdayPresents(villager)", banner_helper)
+                self.assertIn("VF2HandleMobileBirthdayCake(villager)", banner_helper)
+                self.assertNotIn("0x1AE", helper)
+                self.assertNotIn("0x1AF", helper)
                 self.assertIn("for (int index = 0; index < 30; ++index)", helper)
                 self.assertIn("VillagerManager.VillagerExists(index, false)", helper)
                 self.assertIn("data + 0x6B00", helper)
@@ -2597,6 +2648,10 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn(0x12D, patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
         self.assertEqual(rows[0x12E]["name"], "Complete all Achievements")
         self.assertIn("normal coin reward", rows[0x12E]["description"])
+        self.assertEqual(rows[0x12F]["name"], "Fill available house slots with trash")
+        self.assertIn("available collectable slot", rows[0x12F]["description"])
+        self.assertEqual(rows[0x130]["name"], "Fill available yard slots with weeds")
+        self.assertIn("Existing collectables are preserved", rows[0x130]["description"])
         self.assertEqual(patcher.CHEAT_UPGRADE_LEGACY_COUNT, 19)
         self.assertEqual(patcher.CHEAT_UPGRADE_STRING_COUNT, 38)
         self.assertEqual(
@@ -2608,6 +2663,8 @@ class OutfitStoreMappingTests(unittest.TestCase):
             "cheat_reset_achievements.png",
         )
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x12E], 0x124)
+        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x12F], 0x124)
+        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x130], 0x124)
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x12E),
             patcher.visible_special_upgrade_icon_id_for(0x124),
@@ -2620,7 +2677,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 0x11C, 0x120, 0x121, 0x122,
                 0x123, 0x124, 0x12E, 0x125, 0x126, 0x127,
                 0x128, 0x129, 0x12A, 0x12C,
-                0x12B, 0x12D,
+                0x12B, 0x12D, 0x12F, 0x130,
             ],
         )
         self.assertEqual(item_ids.index(0x12E), item_ids.index(0x124) + 1)
@@ -2661,7 +2718,11 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("if (gVF2HolidayFurnitureGoalsEnabled != 0)", source)
         self.assertIn("case 0x12E:", source)
         self.assertIn("VF2CompleteAllAchievements();", source)
-        self.assertIn("if (itemId == 0x12E) itemId = 0x124;", source)
+        self.assertIn("if (itemId >= 0x12E && itemId <= 0x130) itemId = 0x124;", source)
+        self.assertIn("case 0x12F:", source)
+        self.assertIn("CollectableItem.SpawnTrashInHouse(30);", source)
+        self.assertIn("case 0x130:", source)
+        self.assertIn("CollectableItem.SpawnWeedsInYard(30);", source)
 
     def test_trigger_all_malfunctions_uses_native_dryer_and_renovation_gates(self):
         old_patched = patcher.PATCHED

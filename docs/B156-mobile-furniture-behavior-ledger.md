@@ -60,7 +60,7 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2D6-0x2D7` | Designer Soap | no | no exclusive route proven | existing soap donor only |
 | `0x2D8-0x2D9` | Towel Sets | no | `UsingWarmTowel` exists on mobile | item call chain unresolved |
 | `0x2DA` | Birthday Balloons | yes | `BirthdayBalloons`; play/maybe play | exact child-only manual route implemented with PC-safe map |
-| `0x2DB` | Birthday Banner | yes | `BirthdayBanner`; celebration family | exact hotspot proven; complete grouped family still blocked |
+| `0x2DB` | Birthday Banner | yes | `BirthdayBanner`; celebration family | exact object scan, fallbacks, and whole-household external plan implemented |
 | `0x2DC` | Birthday Cake | yes | `BirthdayCake`; poke/maybe poke | exact single-object plan proven; complete grouped family still blocked |
 | `0x2DD` | Birthday Presents | yes | `BirthdayPresents`; poke/maybe poke | exact single-object plan proven; complete grouped family still blocked |
 | `0x2DE-0x2E1` | Lounge Chairs | yes | `Chaise`; `LieOnChaiseNoLeadIn` | implemented as the first optional family; exact plan sequence and PC-safe placed-item maps |
@@ -122,12 +122,6 @@ mobile build makes every villager run behavior `0x1AF`. That behavior and the
 other birthday IDs `0x1AD-0x1B3` are beyond the fixed desktop table ending at
 `0x19A`.
 
-Cake-only and Presents-only plan sequences are recovered, but shipping either
-alone would diverge whenever the other birthday decorations are present. The
-family therefore remains rendered-only until the complete grouped `0x1AF`
-sequence and all four PC-safe maps can be ported through the external dispatcher
-without indexing or growing the stock table.
-
 The child-only manual Birthday Cake and Birthday Presents subsets are now
 ported without using the
 out-of-range behavior table. Item `0x2DC` uses a minimal PC map containing only
@@ -138,9 +132,7 @@ sound calculation, random 2-5 cheer and wait durations, orientation-dependent
 body pose, and final two-count clockwise joy twirl. Item `0x2DD` uses a minimal
 EObject `0x93` map and the exact Checking out the presents sequence: alternating
 orientation-aware waits, recovered random birthday sounds, work/bend phases,
-the final body waits, sound stop, and behavior completion. Banner/group celebration
-still requires guarded resident enumeration, and the autonomous-style Maybe
-callbacks remain excluded because their selector reachability is not proven.
+the final body waits, sound stop, and behavior completion.
 
 The child-only Birthday Balloons route is now emitted directly without indexing
 mobile behavior `0x1AD`. It preserves localized desktop StringId `0xF0`,
@@ -153,6 +145,23 @@ approach. Its `11x14` PC-safe map keeps `0x20009000` only at `(5,13)`,
 `f66e4dc4776962b32b68e069a133ca9b1a7f57306d7df357866dd2630c307fc3`.
 The executable compiles and links; live child/age-boundary and six-branch QA
 remain.
+
+Birthday Banner now preserves the complete mobile
+`AllPeepsCelebratingBirthday` contract. It scans Banner, Balloons, Presents, and
+Cake in that fixed order. Banner presence or more than one birthday object sends
+every eligible permanent resident through the exact `Celebrating birthday`
+plan; exactly one non-banner object uses the existing exact Balloons, Presents,
+or Cake handler; zero objects forgets the triggering villager's plans. The
+family route uses guarded external plans and never indexes mobile behavior IDs
+`0x1AE` or `0x1AF`.
+
+The Banner's `14x16` PC-safe map keeps EObject value `0x20008800` only at
+`(7,14)`, `(8,14)`, `(9,14)`, `(7,15)`, `(8,15)`, `(9,15)`, and `(10,15)`;
+SHA-256 is
+`071c79932b55f382e3fe12be01a32f673ae9726339bd4295be3b35bf78456feb`.
+Live mixed-decoration precedence, family filtering, placement, and orientation
+QA remain. Autonomous-style Maybe callbacks remain excluded because their
+selector reachability is not proven.
 
 ## Whole-household Dreidel and Menorah
 

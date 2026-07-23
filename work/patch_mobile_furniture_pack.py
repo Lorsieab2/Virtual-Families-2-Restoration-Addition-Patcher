@@ -74,6 +74,13 @@ MOBILE_BIRTHDAY_BALLOONS_ITEM_ID = 0x2DA
 MOBILE_BIRTHDAY_BALLOONS_OBJECT = 0x92
 MOBILE_BIRTHDAY_BALLOONS_PC_CELL_VALUE = 0x20009000
 MOBILE_BIRTHDAY_BALLOONS_PC_CELLS = ((5, 13), (6, 13), (7, 13))
+MOBILE_BIRTHDAY_BANNER_ITEM_ID = 0x2DB
+MOBILE_BIRTHDAY_BANNER_OBJECT = 0x91
+MOBILE_BIRTHDAY_BANNER_PC_CELL_VALUE = 0x20008800
+MOBILE_BIRTHDAY_BANNER_PC_CELLS = (
+    (7, 14), (8, 14), (9, 14),
+    (7, 15), (8, 15), (9, 15), (10, 15),
+)
 MOBILE_DREIDEL_ITEM_ID = 0x2AF
 MOBILE_DREIDEL_OBJECT = 0x8A
 MOBILE_DREIDEL_PC_CELL_VALUE = 0x20005000
@@ -462,7 +469,11 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x12C: "cheat_add_coins.png",
     0x12D: "cheat_reset_achievements.png",
 }
-VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES = {0x12E: 0x124}
+VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES = {
+    0x12E: 0x124,
+    0x12F: 0x124,
+    0x130: 0x124,
+}
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
 PATCHER_CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "patcher_assets" / "optional_patches" / "cheat_upgrades"
@@ -596,6 +607,18 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": 0x12D,
         "name": "Fix all house malfunctions",
         "description": "Fixes every active house malfunction and brings the Router back online.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x12F,
+        "name": "Fill available house slots with trash",
+        "description": "Fills every available collectable slot with house trash. Existing collectables are preserved.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x130,
+        "name": "Fill available yard slots with weeds",
+        "description": "Fills every available collectable slot with yard weeds. Existing collectables are preserved.",
         "price": 0,
     },
 ]
@@ -7967,7 +7990,7 @@ extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
 static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
     // Post-B153 cheats reuse the trophy descriptor so adding a row never
     // shifts villager-body or Holiday Ornament image IDs.
-    if (itemId == 0x12E) itemId = 0x124;
+    if (itemId >= 0x12E && itemId <= 0x130) itemId = 0x124;
     int index = itemId - kVF2VisibleSpecialUpgradeFirstItem;
     return index < 0 || index >= kVF2VisibleSpecialUpgradeCount ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -8596,6 +8619,8 @@ public:
     int const CollectionCount(ECarrying item, bool common, bool uncommon, bool rare) const;
     int const CollectionCountWithHolidayOrnaments(ECarrying item, bool common, bool uncommon, bool rare) const;
     void ResetCollection();
+    void SpawnTrashInHouse(int count);
+    void SpawnWeedsInYard(int count);
 
     char pad0[0x8A8];
     unsigned char luckyRockActive;
@@ -9168,6 +9193,12 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x12E:
         VF2CompleteAllAchievements();
+        break;
+    case 0x12F:
+        CollectableItem.SpawnTrashInHouse(30);
+        break;
+    case 0x130:
+        CollectableItem.SpawnWeedsInYard(30);
         break;
     default:
         return;
@@ -12567,6 +12598,46 @@ def validate_mobile_birthday_balloons_pc_fmap(manifest):
     }
 
 
+def validate_mobile_birthday_banner_pc_fmap(manifest):
+    filename = "Birthday_banner.png.fmap"
+    mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+    pc_path = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+    mobile = mobile_path.read_bytes()
+    pc = pc_path.read_bytes()
+    if len(pc) != len(mobile) or pc[:4] != b"QAMF":
+        raise RuntimeError(f"Invalid PC Birthday Banner map: {pc_path}")
+    width, height = struct.unpack_from("<ii", pc, 24)
+    grid_end = 32 + width * height * 4
+    if (width, height) != (14, 16):
+        raise RuntimeError(f"Unexpected PC Birthday Banner grid: {filename}")
+    if pc[:32] != mobile[:32] or pc[grid_end:] != mobile[grid_end:]:
+        raise RuntimeError(f"PC Birthday Banner header/trailer drifted: {filename}")
+    expected_offsets = {
+        32 + (y * width + x) * 4 for x, y in MOBILE_BIRTHDAY_BANNER_PC_CELLS
+    }
+    actual_offsets = set()
+    for offset in range(32, grid_end, 4):
+        value = struct.unpack_from("<I", pc, offset)[0]
+        if value:
+            if value != MOBILE_BIRTHDAY_BANNER_PC_CELL_VALUE:
+                raise RuntimeError(
+                    f"PC Birthday Banner contains unsupported cell {value:#x}"
+                )
+            actual_offsets.add(offset)
+    if actual_offsets != expected_offsets:
+        raise RuntimeError("PC Birthday Banner EObject cells drifted")
+    manifest["MobileBirthdayBannerPCFmap"] = {
+        "status": "validated minimal EObject-only optional payload",
+        "item_id": hex(MOBILE_BIRTHDAY_BANNER_ITEM_ID),
+        "filename": filename,
+        "source_sha256": hashlib.sha256(pc).hexdigest(),
+        "source_bytes": len(pc),
+        "object": hex(MOBILE_BIRTHDAY_BANNER_OBJECT),
+        "cell_value": hex(MOBILE_BIRTHDAY_BANNER_PC_CELL_VALUE),
+        "cell_count": len(actual_offsets),
+    }
+
+
 def validate_mobile_group_holiday_pc_fmaps(manifest):
     specs = (
         (
@@ -12737,12 +12808,15 @@ class CContentMap { public: enum EObject {
     eObjectDreidel = 0x8A,
     eObjectMenorah = 0x8E,
     eObjectXmasStockings = 0x90,
+    eObjectBirthdayBanner = 0x91,
     eObjectBirthdayBalloons = 0x92,
     eObjectChaise = 0x95,
     eObjectPatioUmbrella = 0x96,
     eObjectBirthdayCake = 0x94,
     eObjectBirthdayPresents = 0x93
-}; };
+};
+    bool const ObjectExists(EObject);
+};
 enum ESound { eSoundDummy = 0 };
 enum ESoundType { eSoundTypeEffects = 2 };
 enum ESpeed { eSpeedNormal = 0xC8 };
@@ -12850,6 +12924,7 @@ class CNight { public: bool AIIsDayTime(); };
 class ldwGameState { public: static int __cdecl GetRandom(int); };
 extern CFurnitureManager FurnitureManager;
 extern CVillagerManager VillagerManager;
+extern CContentMap ContentMap;
 extern CWeather Weather;
 extern CNight Night;
 extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
@@ -13286,6 +13361,109 @@ static int VF2CollectEligibleHousehold(CVillager **eligible)
     return count;
 }
 
+static int VF2BirthdayObjectScan(CContentMap::EObject &first)
+{
+    static const CContentMap::EObject objects[] = {
+        CContentMap::eObjectBirthdayBanner,
+        CContentMap::eObjectBirthdayBalloons,
+        CContentMap::eObjectBirthdayPresents,
+        CContentMap::eObjectBirthdayCake,
+    };
+    int count = 0;
+    first = static_cast<CContentMap::EObject>(0);
+    for (int index = 0; index < 4; ++index) {
+        if (!ContentMap.ObjectExists(objects[index])) continue;
+        if (count == 0) first = objects[index];
+        ++count;
+    }
+    return count;
+}
+
+static void VF2RunMobileBirthdayCelebration(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    CContentMap::EObject selected;
+    int objectCount = VF2BirthdayObjectScan(selected);
+    if (!ContentMap.ObjectExists(CContentMap::eObjectBirthdayBanner) &&
+        objectCount <= 1) {
+        plans->ForgetPlans(villager, false);
+        return;
+    }
+
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            selected, villager.FeetPos(), info, true, 0, false)) {
+        return;
+    }
+    VF2SetActionLabel(villager, "Celebrating birthday");
+    ldwPoint point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    int age = *reinterpret_cast<int *>(data + 0x6A54);
+    int gender = *reinterpret_cast<int *>(data + 0x6A58);
+    VF2PlanBirthdaySound(
+        plans, age <= 0x117 ? 0xC3 : (gender == 1 ? 0xF2 : 0xDC));
+    VF2PlanBirthdaySound(plans, 0xFB);
+    plans->PlanToJoyTwirlCW(ldwGameState::GetRandom(3) + 4);
+    plans->PlanToJump(10);
+    plans->PlanToJump(20);
+    plans->PlanToJump(10);
+    plans->PlanToJump(20);
+
+    point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 2,
+        static_cast<EBodyPosition>(info.orientation != 0 ? 0x0A : 0x0D));
+
+    point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToJoyTwirlCW(ldwGameState::GetRandom(3) + 4);
+    EBodyPosition first = static_cast<EBodyPosition>(
+        info.orientation != 0 ? 0x0D : 0x0A);
+    EBodyPosition second = static_cast<EBodyPosition>(
+        info.orientation != 0 ? 0x0A : 0x0D);
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 1, first);
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 1, second);
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+}
+
+static bool VF2HandleMobileBirthdayBanner(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    CContentMap::EObject selected;
+    int objectCount = VF2BirthdayObjectScan(selected);
+    if (ContentMap.ObjectExists(CContentMap::eObjectBirthdayBanner) ||
+        objectCount > 1) {
+        CVillager *eligible[30] = {};
+        int count = VF2CollectEligibleHousehold(eligible);
+        for (int index = 0; index < count; ++index) {
+            VF2RunMobileBirthdayCelebration(*eligible[index]);
+        }
+        return true;
+    }
+    if (objectCount == 1) {
+        if (selected == CContentMap::eObjectBirthdayBalloons) {
+            return VF2HandleMobileBirthdayBalloons(villager);
+        }
+        if (selected == CContentMap::eObjectBirthdayPresents) {
+            return VF2HandleMobileBirthdayPresents(villager);
+        }
+        if (selected == CContentMap::eObjectBirthdayCake) {
+            return VF2HandleMobileBirthdayCake(villager);
+        }
+    }
+    plans->ForgetPlans(villager, false);
+    return true;
+}
+
 static void VF2RunMobileDreidel(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -13545,6 +13723,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
     if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
     if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
+    if (candidate == 0x2DB) return VF2HandleMobileBirthdayBanner(villager);
     if (candidate == 0x2AF) return VF2HandleMobileDreidelGroup(villager);
     if (candidate == 0x2B8) return VF2HandleMobileMenorahGroup(villager);
     if (candidate == 0x2C6 || candidate == 0x2C7) {
@@ -13690,6 +13869,21 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "mobile_behavior": "CBehavior::PlayingWithBalloons",
             "mobile_behavior_id": "0x1ad",
             "desktop_implementation": "exact direct plan-sequence port",
+            "stock_tables_extended": False,
+        }, {
+            "name": "mobile Birthday Banner",
+            "item_ids": [hex(MOBILE_BIRTHDAY_BANNER_ITEM_ID)],
+            "label": "Celebrating birthday",
+            "object": hex(MOBILE_BIRTHDAY_BANNER_OBJECT),
+            "manual_drop_only": True,
+            "whole_household": True,
+            "autonomous": False,
+            "mobile_behaviors": [
+                "CBehavior::AllPeepsCelebratingBirthday",
+                "CBehavior::CelebratingBirthday",
+            ],
+            "mobile_behavior_ids": ["0x1ae", "0x1af"],
+            "desktop_implementation": "exact guarded object-scan and 30-resident external plan port",
             "stock_tables_extended": False,
         }, {
             "name": "mobile Dreidel",
@@ -17573,6 +17767,7 @@ def main():
     validate_mobile_birthday_cake_pc_fmap(manifest)
     validate_mobile_birthday_presents_pc_fmap(manifest)
     validate_mobile_birthday_balloons_pc_fmap(manifest)
+    validate_mobile_birthday_banner_pc_fmap(manifest)
     validate_mobile_group_holiday_pc_fmaps(manifest)
     validate_mobile_xmas_stocking_pc_fmaps(manifest)
     sync_behavior_assets(manifest)
