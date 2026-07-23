@@ -186,6 +186,37 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             {patcher.MOBILE_BIRTHDAY_CAKE_PC_CELL_VALUE},
         )
 
+    def test_mobile_birthday_presents_pc_fmap_is_exact_eobject_only_payload(self):
+        manifest = {}
+        patcher.validate_mobile_birthday_presents_pc_fmap(manifest)
+        contract = manifest["MobileBirthdayPresentsPCFmap"]
+        self.assertEqual(contract["item_id"], "0x2dd")
+        self.assertEqual(contract["object"], "0x93")
+        data = (
+            patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR
+            / "Birthday_presents.png.fmap"
+        ).read_bytes()
+        self.assertEqual(
+            hashlib.sha256(data).hexdigest(),
+            "63ef84177e87b4a4dd28c0a85c4aff2ee741423ca4ac34b3d273cb11fd4a18c5",
+        )
+        width, height = struct.unpack_from("<ii", data, 24)
+        values = [
+            value
+            for (value,) in struct.iter_unpack(
+                "<I", data[32 : 32 + width * height * 4]
+            )
+        ]
+        self.assertEqual((width, height), (9, 10))
+        self.assertEqual(
+            {(i % width, i // width) for i, value in enumerate(values) if value},
+            set(patcher.MOBILE_BIRTHDAY_PRESENTS_PC_CELLS),
+        )
+        self.assertEqual(
+            {value for value in values if value},
+            {patcher.MOBILE_BIRTHDAY_PRESENTS_PC_CELL_VALUE},
+        )
+
     def test_mobile_chaise_dispatch_retargets_only_stock_drop_hotspot_call(self):
         old_patched = patcher.PATCHED
         try:
@@ -300,6 +331,21 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         "desktop_implementation": "exact direct plan-sequence port",
                     },
                 )
+                self.assertEqual(
+                    contract["implemented_families"][3],
+                    {
+                        "name": "mobile Birthday Presents",
+                        "item_ids": ["0x2dd"],
+                        "label": "Checking out the presents",
+                        "object": "0x93",
+                        "manual_drop_only": True,
+                        "child_only": True,
+                        "raw_age_max": "0x117",
+                        "autonomous": False,
+                        "mobile_behavior": "CBehavior::PokingBirthdayPresents",
+                        "desktop_implementation": "exact direct plan-sequence port",
+                    },
+                )
                 helper = (patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp").read_text(
                     encoding="ascii"
                 )
@@ -320,10 +366,20 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);",
                     wrapper,
                 )
+                self.assertIn(
+                    "if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);",
+                    wrapper,
+                )
                 self.assertIn('VF2SetActionLabel(villager, "Poking cake");', helper)
                 self.assertIn("VF2BirthdayOhSound(villager)", helper)
                 self.assertIn("ldwGameState::GetRandom(4) + 2", helper)
                 self.assertIn("plans->PlanToJoyTwirlCW(2);", helper)
+                self.assertIn(
+                    'VF2SetActionLabel(villager, "Checking out the presents");',
+                    helper,
+                )
+                self.assertIn("plans->PlanToBend(1, ePriorityNormal);", helper)
+                self.assertIn("plans->PlanToStopSound();", helper)
                 self.assertIn(
                     f"eStringBadWeather = {patcher.mobile_lounger_bad_weather_string_id()}",
                     helper,

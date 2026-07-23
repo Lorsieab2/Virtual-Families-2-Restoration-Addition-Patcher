@@ -66,6 +66,10 @@ MOBILE_BIRTHDAY_CAKE_ITEM_ID = 0x2DC
 MOBILE_BIRTHDAY_CAKE_OBJECT = 0x94
 MOBILE_BIRTHDAY_CAKE_PC_CELL_VALUE = 0x2000A000
 MOBILE_BIRTHDAY_CAKE_PC_CELLS = ((4, 7), (5, 7), (6, 7))
+MOBILE_BIRTHDAY_PRESENTS_ITEM_ID = 0x2DD
+MOBILE_BIRTHDAY_PRESENTS_OBJECT = 0x93
+MOBILE_BIRTHDAY_PRESENTS_PC_CELL_VALUE = 0x20009800
+MOBILE_BIRTHDAY_PRESENTS_PC_CELLS = ((3, 9), (4, 9), (5, 9))
 
 # B152's Allow Older Pregnancies option is a post-link runtime byte toggle,
 # not another executable-matrix dimension. Every linked executable contains
@@ -12456,6 +12460,46 @@ def validate_mobile_birthday_cake_pc_fmap(manifest):
     }
 
 
+def validate_mobile_birthday_presents_pc_fmap(manifest):
+    filename = "Birthday_presents.png.fmap"
+    mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+    pc_path = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+    mobile = mobile_path.read_bytes()
+    pc = pc_path.read_bytes()
+    if len(pc) != len(mobile) or pc[:4] != b"QAMF":
+        raise RuntimeError(f"Invalid PC Birthday Presents furniture map: {pc_path}")
+    width, height = struct.unpack_from("<ii", pc, 24)
+    grid_end = 32 + width * height * 4
+    if (width, height) != (9, 10):
+        raise RuntimeError(f"Unexpected PC Birthday Presents grid: {filename}")
+    if pc[:32] != mobile[:32] or pc[grid_end:] != mobile[grid_end:]:
+        raise RuntimeError(f"PC Birthday Presents header/trailer drifted: {filename}")
+    expected_offsets = {
+        32 + (y * width + x) * 4 for x, y in MOBILE_BIRTHDAY_PRESENTS_PC_CELLS
+    }
+    actual_offsets = set()
+    for offset in range(32, grid_end, 4):
+        value = struct.unpack_from("<I", pc, offset)[0]
+        if value:
+            if value != MOBILE_BIRTHDAY_PRESENTS_PC_CELL_VALUE:
+                raise RuntimeError(
+                    f"PC Birthday Presents contains unsupported cell {value:#x}"
+                )
+            actual_offsets.add(offset)
+    if actual_offsets != expected_offsets:
+        raise RuntimeError("PC Birthday Presents EObject cells drifted")
+    manifest["MobileBirthdayPresentsPCFmap"] = {
+        "status": "validated minimal EObject-only optional payload",
+        "item_id": hex(MOBILE_BIRTHDAY_PRESENTS_ITEM_ID),
+        "filename": filename,
+        "source_sha256": hashlib.sha256(pc).hexdigest(),
+        "source_bytes": len(pc),
+        "object": hex(MOBILE_BIRTHDAY_PRESENTS_OBJECT),
+        "cell_value": hex(MOBILE_BIRTHDAY_PRESENTS_PC_CELL_VALUE),
+        "cell_count": len(actual_offsets),
+    }
+
+
 def patch_mobile_furniture_behavior_dispatch(manifest):
     helper_path = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
     behavior_fallback_decls = ""
@@ -12513,7 +12557,8 @@ private:
 class CContentMap { public: enum EObject {
     eObjectChaise = 0x95,
     eObjectPatioUmbrella = 0x96,
-    eObjectBirthdayCake = 0x94
+    eObjectBirthdayCake = 0x94,
+    eObjectBirthdayPresents = 0x93
 }; };
 enum ESound { eSoundDummy = 0 };
 enum ESoundType { eSoundTypeEffects = 2 };
@@ -12559,6 +12604,9 @@ public:
     void PlanToPlaySound(ESound, float, ESoundType);
     void PlanToCheer(int);
     void PlanToJoyTwirlCW(int);
+    void PlanToWork(int);
+    void PlanToBend(int, EPriority);
+    void PlanToStopSound();
     void ForgetPlans(CVillager &, bool);
     void StartNewBehavior(CVillager &);
 };
@@ -12795,6 +12843,56 @@ static bool VF2HandleMobileBirthdayCake(CVillager &villager)
     return true;
 }
 
+static void VF2PlanBirthdaySound(CVillagerPlans *plans, int sound)
+{
+    plans->PlanToPlaySound(
+        static_cast<ESound>(sound), 1.0f, eSoundTypeEffects);
+}
+
+static bool VF2HandleMobileBirthdayPresents(CVillager &villager)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    if (*reinterpret_cast<int *>(data + 0x6A54) > 0x117) return true;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectBirthdayPresents,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        plans->StartNewBehavior(villager);
+        return true;
+    }
+    VF2SetActionLabel(villager, "Checking out the presents");
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    VF2PlanBirthdaySound(plans, 0x36);
+    EBodyPosition first = static_cast<EBodyPosition>(
+        info.orientation != 0 ? 0x0D : 0x0A);
+    EBodyPosition second = static_cast<EBodyPosition>(
+        info.orientation != 0 ? 0x0A : 0x0D);
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 1, first);
+    VF2PlanBirthdaySound(plans, ldwGameState::GetRandom(4) + 0xC2);
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 1, second);
+    VF2PlanBirthdaySound(plans, 0x37);
+    plans->PlanToWork(ldwGameState::GetRandom(3) + 3);
+    plans->PlanToBend(1, ePriorityNormal);
+    VF2PlanBirthdaySound(plans, ldwGameState::GetRandom(4) + 0xC2);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 2,
+        static_cast<EBodyPosition>(0x10));
+    VF2PlanBirthdaySound(plans, 0x3D);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(3) + 3,
+        static_cast<EBodyPosition>(2));
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
 static bool VF2WeatherAllowsOutdoorFurniture()
 {
     // Mobile values: 0 sunny, 1 cloudy, 2 rain, 3 storm, 4 fog, 5 snow.
@@ -12940,6 +13038,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
+    if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
     return false;
 }
 '''
@@ -13055,6 +13154,17 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "raw_age_max": "0x117",
             "autonomous": False,
             "mobile_behavior": "CBehavior::PokingCake",
+            "desktop_implementation": "exact direct plan-sequence port",
+        }, {
+            "name": "mobile Birthday Presents",
+            "item_ids": [hex(MOBILE_BIRTHDAY_PRESENTS_ITEM_ID)],
+            "label": "Checking out the presents",
+            "object": hex(MOBILE_BIRTHDAY_PRESENTS_OBJECT),
+            "manual_drop_only": True,
+            "child_only": True,
+            "raw_age_max": "0x117",
+            "autonomous": False,
+            "mobile_behavior": "CBehavior::PokingBirthdayPresents",
             "desktop_implementation": "exact direct plan-sequence port",
         }],
         "stock_behavior_table_extended": False,
@@ -16897,6 +17007,7 @@ def main():
     validate_mobile_chaise_pc_fmaps(manifest)
     validate_mobile_patio_umbrella_pc_fmap(manifest)
     validate_mobile_birthday_cake_pc_fmap(manifest)
+    validate_mobile_birthday_presents_pc_fmap(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)

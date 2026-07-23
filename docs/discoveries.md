@@ -2712,6 +2712,12 @@
 - The PC-safe Birthday Cake map is `9x8`, contains EObject cell value
   `0x2000A000` only at `(4,7)`, `(5,7)`, and `(6,7)`, and has SHA-256
   `e1c55dc0d38b44003abe878cd9ccdfee3e49b5c7ed9e793d14b25c0fae57926d`.
+- Mobile Birthday Presents item `0x2DD` maps to EObject `0x93` and shares the
+  same child-only raw-age boundary. Its exact direct plan is implemented without
+  indexing mobile behavior `0x1B1` into the stock desktop table. The PC-safe
+  `9x10` map contains `0x20009800` only at `(3,9)`, `(4,9)`, and `(5,9)`;
+  SHA-256 is
+  `63ef84177e87b4a4dd28c0a85c4aff2ee741423ca4ac34b3d273cb11fd4a18c5`.
 - Focused source tests cover the route, map, manifest, optional export/restore,
   and computer exception boundaries. A Behavior-Patches executable compiled
   successfully; live Birthday Cake and computer-drop testing remains pending.

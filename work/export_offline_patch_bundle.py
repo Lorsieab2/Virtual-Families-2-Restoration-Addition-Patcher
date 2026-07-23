@@ -66,7 +66,10 @@ MOBILE_CHAISE_FMAP_FILES = (
     "Chaise_red.png.fmap",
 )
 MOBILE_PATIO_UMBRELLA_FMAP_FILE = "Patio_umbrella.png.fmap"
-MOBILE_BIRTHDAY_FMAP_FILES = ("Birthday_cake.png.fmap",)
+MOBILE_BIRTHDAY_FMAP_FILES = (
+    "Birthday_cake.png.fmap",
+    "Birthday_presents.png.fmap",
+)
 MOBILE_FURNITURE_BEHAVIOR_FMAP_FILES = (
     *MOBILE_CHAISE_FMAP_FILES,
     MOBILE_PATIO_UMBRELLA_FMAP_FILE,

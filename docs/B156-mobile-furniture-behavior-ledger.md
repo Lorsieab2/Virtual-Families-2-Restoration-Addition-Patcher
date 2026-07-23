@@ -128,14 +128,17 @@ family therefore remains rendered-only until the complete grouped `0x1AF`
 sequence and all four PC-safe maps can be ported through the external dispatcher
 without indexing or growing the stock table.
 
-The child-only manual Birthday Cake subset is now ported without using the
+The child-only manual Birthday Cake and Birthday Presents subsets are now
+ported without using the
 out-of-range behavior table. Item `0x2DC` uses a minimal PC map containing only
 EObject `0x94`; raw age values through `0x117` run the exact recovered Poking
 cake plan, while older villagers consume the drop without starting the child
 action, matching mobile. The plan preserves the native voice-dependent `GetOh`
 sound calculation, random 2-5 cheer and wait durations, orientation-dependent
-body pose, and final two-count clockwise joy twirl. Manual Birthday Presents is
-also fully proven and remains the next bounded port. Banner/group celebration
+body pose, and final two-count clockwise joy twirl. Item `0x2DD` uses a minimal
+EObject `0x93` map and the exact Checking out the presents sequence: alternating
+orientation-aware waits, recovered random birthday sounds, work/bend phases,
+the final body waits, sound stop, and behavior completion. Banner/group celebration
 still requires guarded resident enumeration, and the autonomous-style Maybe
 callbacks remain excluded because their selector reachability is not proven.
 
