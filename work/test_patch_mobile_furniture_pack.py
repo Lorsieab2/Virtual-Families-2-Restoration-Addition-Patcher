@@ -155,6 +155,37 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         self.assertNotIn(0x01B40000, values)
         self.assertNotIn(0x01AC0000, values)
 
+    def test_mobile_birthday_cake_pc_fmap_is_exact_eobject_only_payload(self):
+        manifest = {}
+        patcher.validate_mobile_birthday_cake_pc_fmap(manifest)
+        contract = manifest["MobileBirthdayCakePCFmap"]
+        self.assertEqual(contract["item_id"], "0x2dc")
+        self.assertEqual(contract["object"], "0x94")
+        data = (
+            patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR
+            / "Birthday_cake.png.fmap"
+        ).read_bytes()
+        self.assertEqual(
+            hashlib.sha256(data).hexdigest(),
+            "e1c55dc0d38b44003abe878cd9ccdfee3e49b5c7ed9e793d14b25c0fae57926d",
+        )
+        width, height = struct.unpack_from("<ii", data, 24)
+        values = [
+            value
+            for (value,) in struct.iter_unpack(
+                "<I", data[32 : 32 + width * height * 4]
+            )
+        ]
+        self.assertEqual((width, height), (9, 8))
+        self.assertEqual(
+            {(i % width, i // width) for i, value in enumerate(values) if value},
+            set(patcher.MOBILE_BIRTHDAY_CAKE_PC_CELLS),
+        )
+        self.assertEqual(
+            {value for value in values if value},
+            {patcher.MOBILE_BIRTHDAY_CAKE_PC_CELL_VALUE},
+        )
+
     def test_mobile_chaise_dispatch_retargets_only_stock_drop_hotspot_call(self):
         old_patched = patcher.PATCHED
         try:
@@ -254,6 +285,21 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "mobile_behavior": "CBehavior::AdjustingUmbrella",
                     "desktop_implementation": "exact direct plan-sequence port",
                 })
+                self.assertEqual(
+                    contract["implemented_families"][2],
+                    {
+                        "name": "mobile Birthday Cake",
+                        "item_ids": ["0x2dc"],
+                        "label": "Poking cake",
+                        "object": "0x94",
+                        "manual_drop_only": True,
+                        "child_only": True,
+                        "raw_age_max": "0x117",
+                        "autonomous": False,
+                        "mobile_behavior": "CBehavior::PokingCake",
+                        "desktop_implementation": "exact direct plan-sequence port",
+                    },
+                )
                 helper = (patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp").read_text(
                     encoding="ascii"
                 )
@@ -270,6 +316,14 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);",
                     wrapper,
                 )
+                self.assertIn(
+                    "if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);",
+                    wrapper,
+                )
+                self.assertIn('VF2SetActionLabel(villager, "Poking cake");', helper)
+                self.assertIn("VF2BirthdayOhSound(villager)", helper)
+                self.assertIn("ldwGameState::GetRandom(4) + 2", helper)
+                self.assertIn("plans->PlanToJoyTwirlCW(2);", helper)
                 self.assertIn(
                     f"eStringBadWeather = {patcher.mobile_lounger_bad_weather_string_id()}",
                     helper,
@@ -300,7 +354,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     self.assertIn(label, helper)
                 umbrella_helper = helper.split(
                     "static bool VF2HandleMobilePatioUmbrella", 1
-                )[1].split("static bool VF2WeatherAllowsOutdoorFurniture", 1)[0]
+                )[1].split("static int VF2BirthdayOhSound", 1)[0]
                 self.assertIn(
                     "reinterpret_cast<unsigned char *>(&villager) + 0x6B28",
                     helper,
@@ -329,6 +383,50 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertNotIn("PlanToInc", umbrella_helper)
         finally:
             patcher.PATCHED = old_patched
+
+    def test_behavior_patch_computer_drop_adds_only_native_video_game_choice(self):
+        old_patched = patcher.PATCHED
+        old_behavior_patches = patcher.ENABLE_BEHAVIOR_PATCHES
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                patcher.ENABLE_BEHAVIOR_PATCHES = True
+                shutil.copy2(
+                    patcher.SRC_OBJS / "theMainScene.obj",
+                    patcher.PATCHED / "theMainScene.obj",
+                )
+                manifest = {}
+                patcher.patch_mobile_furniture_behavior_dispatch(manifest)
+                helper = (
+                    patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp"
+                ).read_text(encoding="ascii")
+                self.assertIn("behavior == 0x05A", helper)
+                self.assertIn("ldwGameState::GetRandom(2) != 0", helper)
+                self.assertIn("eBehaviorPlayingVideoGame", helper)
+                self.assertIn(
+                    "reinterpret_cast<unsigned char *>(&villager) + 0x6A54",
+                    helper,
+                )
+                self.assertNotIn("0x114 * 0xD0", helper)
+                self.assertEqual(
+                    manifest["ComputerDropVideoGame"],
+                    {
+                        "enabled": True,
+                        "gate": "behavior_patches",
+                        "hotspot": "0x12",
+                        "stock_normal_behavior": "0x5a",
+                        "added_manual_behavior": "0x114",
+                        "normal_drop_weights": {
+                            "Browsing web": 1,
+                            "Playing video games": 1,
+                        },
+                        "preserves_exceptional_stock_routes": True,
+                        "changes_autonomous_weights": False,
+                    },
+                )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_BEHAVIOR_PATCHES = old_behavior_patches
 
     def test_mobile_chaise_autonomous_macros_are_final_exact_retargets(self):
         old_patched = patcher.PATCHED

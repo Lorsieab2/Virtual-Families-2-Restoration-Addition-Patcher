@@ -2697,3 +2697,21 @@
 - The remaining Holiday, birthday, patio, umbrella, picnic, and other mobile
   families stay unported until their exact routing and placed-item anchors are
   proven.
+
+## 2026-07-23 - Exact computer-drop and Birthday Cake additions
+
+- Desktop `CHotSpot` registers Computers at hotspot `0x12`. Its handler checks
+  active repair state, pending email, computer career work, and sickness before
+  selecting ordinary BrowsingWeb behavior `0x5A`. Behavior Patches now changes
+  only that final ordinary result: a single 50/50 roll may select native
+  PlayingVideoGame `0x114`. No autonomous candidate weight is changed.
+- Mobile Birthday Cake item `0x2DC` maps to EObject `0x94`. Its manual hotspot
+  is child-only through raw age `0x117`; older villagers consume the drop.
+  The exact PokingCake plan is now direct-planned on desktop without indexing
+  mobile behavior `0x1B3` into the stock table.
+- The PC-safe Birthday Cake map is `9x8`, contains EObject cell value
+  `0x2000A000` only at `(4,7)`, `(5,7)`, and `(6,7)`, and has SHA-256
+  `e1c55dc0d38b44003abe878cd9ccdfee3e49b5c7ed9e793d14b25c0fae57926d`.
+- Focused source tests cover the route, map, manifest, optional export/restore,
+  and computer exception boundaries. A Behavior-Patches executable compiled
+  successfully; live Birthday Cake and computer-drop testing remains pending.

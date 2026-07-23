@@ -62,6 +62,10 @@ MOBILE_PATIO_UMBRELLA_ITEM_ID = 0x2E7
 MOBILE_PATIO_UMBRELLA_OBJECT = 0x96
 MOBILE_PATIO_UMBRELLA_PC_CELL_VALUE = 0x2000B000
 MOBILE_PATIO_UMBRELLA_PC_CELLS = ((6, 16), (7, 16), (8, 16), (9, 16))
+MOBILE_BIRTHDAY_CAKE_ITEM_ID = 0x2DC
+MOBILE_BIRTHDAY_CAKE_OBJECT = 0x94
+MOBILE_BIRTHDAY_CAKE_PC_CELL_VALUE = 0x2000A000
+MOBILE_BIRTHDAY_CAKE_PC_CELLS = ((4, 7), (5, 7), (6, 7))
 
 # B152's Allow Older Pregnancies option is a post-link runtime byte toggle,
 # not another executable-matrix dimension. Every linked executable contains
@@ -12412,11 +12416,52 @@ def validate_mobile_patio_umbrella_pc_fmap(manifest):
     }
 
 
+def validate_mobile_birthday_cake_pc_fmap(manifest):
+    filename = "Birthday_cake.png.fmap"
+    mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+    pc_path = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+    mobile = mobile_path.read_bytes()
+    pc = pc_path.read_bytes()
+    if len(pc) != len(mobile) or pc[:4] != b"QAMF":
+        raise RuntimeError(f"Invalid PC Birthday Cake furniture map: {pc_path}")
+    width, height = struct.unpack_from("<ii", pc, 24)
+    grid_end = 32 + width * height * 4
+    if (width, height) != (9, 8):
+        raise RuntimeError(f"Unexpected PC Birthday Cake grid: {filename}")
+    if pc[:32] != mobile[:32] or pc[grid_end:] != mobile[grid_end:]:
+        raise RuntimeError(f"PC Birthday Cake header/trailer drifted: {filename}")
+    expected_offsets = {
+        32 + (y * width + x) * 4 for x, y in MOBILE_BIRTHDAY_CAKE_PC_CELLS
+    }
+    actual_offsets = set()
+    for offset in range(32, grid_end, 4):
+        value = struct.unpack_from("<I", pc, offset)[0]
+        if value:
+            if value != MOBILE_BIRTHDAY_CAKE_PC_CELL_VALUE:
+                raise RuntimeError(
+                    f"PC Birthday Cake contains unsupported cell {value:#x}"
+                )
+            actual_offsets.add(offset)
+    if actual_offsets != expected_offsets:
+        raise RuntimeError("PC Birthday Cake EObject cells drifted")
+    manifest["MobileBirthdayCakePCFmap"] = {
+        "status": "validated minimal EObject-only optional payload",
+        "item_id": hex(MOBILE_BIRTHDAY_CAKE_ITEM_ID),
+        "filename": filename,
+        "source_sha256": hashlib.sha256(pc).hexdigest(),
+        "source_bytes": len(pc),
+        "object": hex(MOBILE_BIRTHDAY_CAKE_OBJECT),
+        "cell_value": hex(MOBILE_BIRTHDAY_CAKE_PC_CELL_VALUE),
+        "cell_count": len(actual_offsets),
+    }
+
+
 def patch_mobile_furniture_behavior_dispatch(manifest):
     helper_path = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
     behavior_fallback_decls = ""
     nap_fallback = "CBehavior::NappingCouch(villager);"
     rest_fallback = "CBehavior::RestingBody(villager);"
+    computer_drop_dispatch = "    if (HandleDropOnHotSpot(villager)) return true;"
     if ENABLE_BEHAVIOR_PATCHES:
         behavior_fallback_decls = r'''
 extern "C" void __cdecl VF2RandomNapDreamLabel(CVillager &);
@@ -12424,10 +12469,30 @@ extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &);
 '''.strip()
         nap_fallback = "VF2RandomNapDreamLabel(villager);"
         rest_fallback = "VF2RandomSitDownLabel(villager);"
+        computer_drop_dispatch = r'''
+    bool handled = HandleDropOnHotSpot(villager);
+    if (handled) {
+        // Stock CHotSpot::Computers reserves its email, repair, career-work,
+        // and sickness routes before choosing ordinary BrowsingWeb (0x5A).
+        // Replace only that ordinary manual-drop result; autonomous candidate
+        // weights and every exceptional computer route remain untouched.
+        int behavior = *reinterpret_cast<int *>(
+            reinterpret_cast<unsigned char *>(&villager) + 0x6A54);
+        if (behavior == 0x05A && ldwGameState::GetRandom(2) != 0) {
+            unsigned char behaviorData = 0;
+            villager.NewBehavior(
+                eBehaviorPlayingVideoGame,
+                *reinterpret_cast<SBehaviorData *>(&behaviorData));
+        }
+        return true;
+    }
+'''.strip("\n")
     helper_source = r'''#pragma section(".vf2beh", read, write)
 extern "C" __declspec(allocate(".vf2beh")) volatile unsigned char gVF2MobileFurnitureBehaviors = 0;
 
 struct ldwPoint { int x; int y; };
+struct SBehaviorData;
+enum EBehavior { eBehaviorPlayingVideoGame = 0x114 };
 class CVillager;
 extern "C" void __cdecl VF2MobileReadingBook(CVillager &);
 extern "C" void __cdecl VF2MobileNappingCouch(CVillager &);
@@ -12447,8 +12512,11 @@ private:
 };
 class CContentMap { public: enum EObject {
     eObjectChaise = 0x95,
-    eObjectPatioUmbrella = 0x96
+    eObjectPatioUmbrella = 0x96,
+    eObjectBirthdayCake = 0x94
 }; };
+enum ESound { eSoundDummy = 0 };
+enum ESoundType { eSoundTypeEffects = 2 };
 enum ESpeed { eSpeedNormal = 0xC8 };
 enum EPriority { ePriorityNormal = 0 };
 enum EBodyPosition {
@@ -12488,6 +12556,9 @@ public:
     void PlanToIncDirtiness(int);
     void PlanToIncHappinessTrend(int);
     void PlanToIncEnergy(int);
+    void PlanToPlaySound(ESound, float, ESoundType);
+    void PlanToCheer(int);
+    void PlanToJoyTwirlCW(int);
     void ForgetPlans(CVillager &, bool);
     void StartNewBehavior(CVillager &);
 };
@@ -12495,6 +12566,7 @@ public:
 class CVillager {
 public:
     ldwPoint const FeetPos() const;
+    void NewBehavior(EBehavior, SBehaviorData const &);
 };
 
 class CFurnitureManager;
@@ -12505,6 +12577,13 @@ private:
     int PtOnFurniture(ldwPoint);
     friend int __cdecl VF2PtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
 public:
+    bool FindFurniture(
+        CContentMap::EObject,
+        ldwPoint,
+        sFurnitureInfo2 &,
+        bool,
+        int,
+        bool);
     bool LinkPeepToFurniture(
         CContentMap::EObject,
         CVillager *,
@@ -12672,6 +12751,50 @@ static bool VF2HandleMobilePatioUmbrella(CVillager &villager)
     return true;
 }
 
+static int VF2BirthdayOhSound(CVillager &villager)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    int age = *reinterpret_cast<int *>(data + 0x6A54);
+    int gender = *reinterpret_cast<int *>(data + 0x6A58);
+    int voice = *reinterpret_cast<int *>(data + 0x6A60);
+    if (age < 0x118) return voice % 13 + 0x33;
+    if (gender == 0) return voice % 13 + 0x40;
+    if (gender == 1) return voice % 9 + 0x4D;
+    return gender;
+}
+
+static bool VF2HandleMobileBirthdayCake(CVillager &villager)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    if (*reinterpret_cast<int *>(data + 0x6A54) > 0x117) return true;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectBirthdayCake,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return true;
+    }
+    VF2SetActionLabel(villager, "Poking cake");
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(VF2BirthdayOhSound(villager)),
+        1.0f,
+        eSoundTypeEffects);
+    plans->PlanToCheer(ldwGameState::GetRandom(4) + 2);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(4) + 2,
+        static_cast<EBodyPosition>(info.orientation == 1 ? 0x0A : 0x0D));
+    plans->PlanToJoyTwirlCW(2);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
 static bool VF2WeatherAllowsOutdoorFurniture()
 {
     // Mobile values: 0 sunny, 1 cloudy, 2 rain, 3 storm, 4 fog, 5 snow.
@@ -12812,10 +12935,11 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
     ldwPoint sample = villager.FeetPos();
     sample.y -= 10;
     int candidate = VF2FurnitureItemAtPoint(sample);
-    if (HandleDropOnHotSpot(villager)) return true;
+__VF2_COMPUTER_DROP_DISPATCH__
     if (gVF2MobileFurnitureBehaviors == 0) return false;
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
+    if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
     return false;
 }
 '''
@@ -12825,6 +12949,9 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
     )
     helper_source = helper_source.replace(
         "__VF2_BEHAVIOR_FALLBACK_DECLS__", behavior_fallback_decls
+    )
+    helper_source = helper_source.replace(
+        "__VF2_COMPUTER_DROP_DISPATCH__", computer_drop_dispatch
     )
     helper_source = helper_source.replace("__VF2_NAP_FALLBACK__", nap_fallback)
     helper_source = helper_source.replace("__VF2_REST_FALLBACK__", rest_fallback)
@@ -12857,7 +12984,7 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
     obj.write(obj_path)
 
     manifest["MobileFurnitureBehaviors"] = {
-        "status": "dormant stock-first dispatcher with first exact mobile family",
+        "status": "dormant stock-first dispatcher with exact mobile families",
         "runtime_flag": {
             "symbol": MOBILE_FURNITURE_BEHAVIOR_FLAG_SYMBOL,
             "source_section": MOBILE_FURNITURE_BEHAVIOR_FLAG_SECTION,
@@ -12918,9 +13045,33 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
             "autonomous": False,
             "mobile_behavior": "CBehavior::AdjustingUmbrella",
             "desktop_implementation": "exact direct plan-sequence port",
+        }, {
+            "name": "mobile Birthday Cake",
+            "item_ids": [hex(MOBILE_BIRTHDAY_CAKE_ITEM_ID)],
+            "label": "Poking cake",
+            "object": hex(MOBILE_BIRTHDAY_CAKE_OBJECT),
+            "manual_drop_only": True,
+            "child_only": True,
+            "raw_age_max": "0x117",
+            "autonomous": False,
+            "mobile_behavior": "CBehavior::PokingCake",
+            "desktop_implementation": "exact direct plan-sequence port",
         }],
         "stock_behavior_table_extended": False,
         "stock_hotspot_table_extended": False,
+    }
+    manifest["ComputerDropVideoGame"] = {
+        "enabled": ENABLE_BEHAVIOR_PATCHES,
+        "gate": "behavior_patches",
+        "hotspot": "0x12",
+        "stock_normal_behavior": "0x5a",
+        "added_manual_behavior": "0x114",
+        "normal_drop_weights": {
+            "Browsing web": 1,
+            "Playing video games": 1,
+        },
+        "preserves_exceptional_stock_routes": True,
+        "changes_autonomous_weights": False,
     }
 
 
@@ -16745,6 +16896,7 @@ def main():
     seed_mobile_furniture_behavior_evidence(manifest)
     validate_mobile_chaise_pc_fmaps(manifest)
     validate_mobile_patio_umbrella_pc_fmap(manifest)
+    validate_mobile_birthday_cake_pc_fmap(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)

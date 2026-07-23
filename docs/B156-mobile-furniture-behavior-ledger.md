@@ -112,7 +112,7 @@ or autonomous route. Its 15 by 17 optional QAMF retains only the four proven
 EObject cells using PC-safe value `0x2000B000`; mobile-only markers
 `0x01B40000` and `0x01AC0000` are excluded.
 
-## Birthday family blocker
+## Birthday family status
 
 The four birthday hotspots and their object IDs are proven: Banner `0x91`,
 Balloons `0x92`, Presents `0x93`, and Cake `0x94`. Balloons, Presents, and Cake
@@ -127,6 +127,17 @@ alone would diverge whenever the other birthday decorations are present. The
 family therefore remains rendered-only until the complete grouped `0x1AF`
 sequence and all four PC-safe maps can be ported through the external dispatcher
 without indexing or growing the stock table.
+
+The child-only manual Birthday Cake subset is now ported without using the
+out-of-range behavior table. Item `0x2DC` uses a minimal PC map containing only
+EObject `0x94`; raw age values through `0x117` run the exact recovered Poking
+cake plan, while older villagers consume the drop without starting the child
+action, matching mobile. The plan preserves the native voice-dependent `GetOh`
+sound calculation, random 2-5 cheer and wait durations, orientation-dependent
+body pose, and final two-count clockwise joy twirl. Manual Birthday Presents is
+also fully proven and remains the next bounded port. Banner/group celebration
+still requires guarded resident enumeration, and the autonomous-style Maybe
+callbacks remain excluded because their selector reachability is not proven.
 
 Player testing on 2026-07-23 confirms the exact manual chaise pose/anchor works
 in good weather and the dedicated bad-weather refusal fires correctly. Manual
