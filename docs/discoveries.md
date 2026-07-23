@@ -2671,6 +2671,27 @@
   Studying-on-lounger extension uses `0xC2` at patch-chosen weight 450 and is not
   represented as an exact mobile route. Disabling the option restores stock
   behavior targets and the exact rendered-only base maps.
+
+## 2026-07-23 - B156 player-confirmed chaise and energy-weighted drop choices
+
+- Player testing confirms a good-weather manual drop reaches the chaise, uses
+  the correct lie/wait pose, and displays `Relaxing on lounger`. The same player
+  test confirms bad weather takes the dedicated refusal path.
+- Desktop `CVillager::Init` places `CVillagerState` at `CVillager+0x6AF4`.
+  Preserved `CVillagerState::SetEnergy` clamps the value to 1-100 and writes it
+  at state offset `+0x34`, proving native energy is `CVillager+0x6B28`.
+- The requested manual-drop chooser keeps four awake choices at weight 20 each.
+  Nap uses `max(0, 70-energy)` and Getting some sleep uses
+  `max(0, 45-energy)*3`; therefore high-energy villagers cannot select either,
+  while increasingly exhausted villagers progressively favor them.
+- The nap outcome retains native `NappingCouch` energy gain `GetRandom(5)+7`
+  and dirtiness +2. Getting some sleep retains native adult sleep energy +10,
+  dirtiness +2, and a 10-19 tick chaise lie/wait. Needs to sit down retains
+  native RestingBody energy +3 and a 15-29 tick chaise lie/wait.
+- The autonomous `NappingCouch` chaise branch also uses native energy. Its
+  chance scales from zero at energy 70 to the recovered mobile 30-percent
+  maximum at energy 1; the stock couch fallback remains in control when the
+  chaise branch is not selected.
 - All 16 B156 executable layouts compile with unique hashes. Linked validation
   proves four non-overlapping reversible runtime controls, including `.vf2beh`.
 - The remaining Holiday, birthday, patio, umbrella, picnic, and other mobile

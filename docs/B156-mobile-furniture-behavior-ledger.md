@@ -128,12 +128,27 @@ family therefore remains rendered-only until the complete grouped `0x1AF`
 sequence and all four PC-safe maps can be ported through the external dispatcher
 without indexing or growing the stock table.
 
-The optional lounge family also adds four runtime-gated autonomous choices without
-growing the fixed behavior table. `ReadingBook` (`0x12B`, weight 1500) and
-`NappingCouch` (`0x83`, weight 3000) preserve the recovered mobile 30-percent
-good-weather chaise branches. Desktop `RestingBody` (`0x127`, weight 2000) is the
-safe in-range carrier for the mobile Sunbathing plan and is additionally gated to
-daytime. `StudyingOnPatio` (`0xC2`, weight 450) carries the requested
+Player testing on 2026-07-23 confirms the exact manual chaise pose/anchor works
+in good weather and the dedicated bad-weather refusal fires correctly. Manual
+drops now choose randomly among Relaxing on lounger, Reading a book, Studying
+on the lounger, Needs to sit down, Taking a nap, and Getting some sleep. The
+four awake choices each have weight 20. Native energy is the clamped 1-100
+integer at `CVillager+0x6B28`; lower means more exhausted. Nap weight is
+`max(0, 70-energy)` and sleep weight is `max(0, 45-energy)*3`, so neither tired
+choice can occur at high energy and full sleep increasingly dominates severe
+exhaustion. Nap retains the native random 7-11 energy gain and dirtiness +2;
+sleep retains the native adult-sleep energy +10 and dirtiness +2. This weighted
+manual chooser is a requested desktop extension layered over the recovered
+mobile chaise anchor/pose, not a claim about mobile's drop dispatcher.
+
+The optional lounge family also adds four runtime-gated autonomous candidates
+without growing the fixed behavior table. `ReadingBook` (`0x12B`, weight 1500) and
+`NappingCouch` (`0x83`, weight 3000) retain their good-weather chaise branches.
+Reading preserves the recovered mobile 30-percent roll; nap scales from zero at
+energy 70 to that 30-percent maximum at energy 1. Desktop `RestingBody` (`0x127`, weight 2000) is the
+safe in-range carrier for the mobile Sunbathing plan and the native Needs to sit
+down outcome: daytime chooses between them, while nighttime permits only sitting.
+`StudyingOnPatio` (`0xC2`, weight 450) carries the requested
 `Studying on the lounger` extension; that label and weight are patch choices, not
 claims of an exact mobile chaise-study route. With `.vf2beh` zero, each constructor
 wrapper returns to its stock desktop target (or the existing Behavior Patches label

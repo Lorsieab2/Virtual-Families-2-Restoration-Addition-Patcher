@@ -214,7 +214,7 @@ SETTINGS = [
     {
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
-        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 adds manual Relaxing on lounger and good-weather spontaneous reading, naps, daytime sunbathing, and a clearly labeled studying extension to the four mobile lounge chairs, plus manual Adjusting umbrella for the Patio Umbrella. Invisible/custom/VF3 furniture is excluded.",
+        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes a good-weather manual lounger drop choose randomly among relaxing, reading, studying, sitting, napping, and sleeping; nap and sleep odds rise from the villager's native 1-100 energy value. Loungers also support spontaneous reading, naps, daytime sunbathing, sitting, and a clearly labeled studying extension. The Patio Umbrella keeps manual Adjusting umbrella. Invisible/custom/VF3 furniture is excluded.",
         "default": False,
         "category": "optional",
     },

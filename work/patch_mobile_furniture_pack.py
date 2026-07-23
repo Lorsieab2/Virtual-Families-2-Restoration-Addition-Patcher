@@ -12557,6 +12557,17 @@ static void VF2PlanChaiseRefusal(CVillagerPlans *plans, CVillager &villager, Str
     plans->StartNewBehavior(villager);
 }
 
+static int VF2CurrentEnergy(CVillager &villager)
+{
+    // CVillager owns CVillagerState at +0x6AF4.  Desktop
+    // CVillagerState::SetEnergy clamps and stores the 1..100 value at +0x34.
+    int value = *reinterpret_cast<int *>(
+        reinterpret_cast<unsigned char *>(&villager) + 0x6B28);
+    if (value < 1) return 1;
+    if (value > 100) return 100;
+    return value;
+}
+
 static bool VF2HandleMobileChaise(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -12573,21 +12584,64 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         return true;
     }
 
-    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
     if (static_cast<unsigned int>(Weather.currentType) >= 2) {
         VF2PlanChaiseRefusal(plans, villager, eStringBadWeather);
         return true;
     }
 
-    int duration = ldwGameState::GetRandom(15) + 15;
+    int energyValue = VF2CurrentEnergy(villager);
+
+    // Four awake choices always have equal base weight.  Low energy adds a
+    // nap below 70 and progressively favors full sleep below 45.
+    int napWeight = energyValue < 70 ? 70 - energyValue : 0;
+    int sleepWeight = energyValue < 45 ? (45 - energyValue) * 3 : 0;
+    int roll = ldwGameState::GetRandom(80 + napWeight + sleepWeight);
+    int duration = 0;
+    int dirtiness = 0;
+    int happiness = 0;
+    int energyGain = 0;
+    ECarrying carrying = static_cast<ECarrying>(0);
+    if (roll < 20) {
+        VF2SetActionLabel(villager, "Relaxing on lounger");
+        duration = ldwGameState::GetRandom(15) + 15;
+        dirtiness = 4;
+        happiness = 1;
+        energyGain = 2;
+    } else if (roll < 40) {
+        VF2SetActionLabel(villager, "Reading a book");
+        duration = ldwGameState::GetRandom(20) + 20;
+        carrying = eCarryingBook;
+    } else if (roll < 60) {
+        VF2SetActionLabel(villager, "Studying on the lounger");
+        duration = ldwGameState::GetRandom(15) + 15;
+        carrying = eCarryingStudyBook;
+        happiness = 1;
+    } else if (roll < 80) {
+        VF2SetActionLabel(villager, "Needs to sit down");
+        duration = ldwGameState::GetRandom(15) + 15;
+        energyGain = 3;
+    } else if (roll < 80 + napWeight) {
+        VF2SetActionLabel(villager, "Taking a nap");
+        duration = ldwGameState::GetRandom(5) + 5;
+        dirtiness = 2;
+        energyGain = ldwGameState::GetRandom(5) + 7;
+    } else {
+        VF2SetActionLabel(villager, "Getting some sleep");
+        duration = ldwGameState::GetRandom(10) + 10;
+        dirtiness = 2;
+        energyGain = 10;
+    }
+
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    if (carrying != static_cast<ECarrying>(0)) plans->PlanToCarry(carrying);
     if (info.orientation == 1) {
         plans->PlanToWait(duration, eBodyPositionChaise);
     } else {
         plans->PlanToLieDown(duration);
     }
-    plans->PlanToIncDirtiness(4);
-    plans->PlanToIncHappinessTrend(1);
-    plans->PlanToIncEnergy(2);
+    if (dirtiness) plans->PlanToIncDirtiness(dirtiness);
+    if (happiness) plans->PlanToIncHappinessTrend(happiness);
+    if (energyGain) plans->PlanToIncEnergy(energyGain);
     plans->StartNewBehavior(villager);
     return true;
 }
@@ -12673,10 +12727,12 @@ extern "C" void __cdecl VF2MobileReadingBook(CVillager &villager)
 
 extern "C" void __cdecl VF2MobileNappingCouch(CVillager &villager)
 {
+    int energyValue = VF2CurrentEnergy(villager);
+    int napChance = energyValue < 70 ? ((70 - energyValue) * 30 + 68) / 69 : 0;
     sFurnitureInfo2 info = {};
     if (gVF2MobileFurnitureBehaviors == 0 ||
         !VF2WeatherAllowsOutdoorFurniture() ||
-        ldwGameState::GetRandom(100) > 29 ||
+        napChance == 0 || ldwGameState::GetRandom(100) >= napChance ||
         !VF2TryLinkMobileChaise(villager, info)) {
         __VF2_NAP_FALLBACK__
         return;
@@ -12690,15 +12746,20 @@ extern "C" void __cdecl VF2MobileRestingBody(CVillager &villager)
 {
     sFurnitureInfo2 info = {};
     if (gVF2MobileFurnitureBehaviors == 0 ||
-        !Night.AIIsDayTime() ||
         !VF2WeatherAllowsOutdoorFurniture() ||
         !VF2TryLinkMobileChaise(villager, info)) {
         __VF2_REST_FALLBACK__
         return;
     }
-    VF2PlanLinkedChaiseAction(
-        villager, info, "Catching some rays", ldwGameState::GetRandom(10) + 10,
-        static_cast<ECarrying>(0), 4, 1, 2);
+    if (Night.AIIsDayTime() && ldwGameState::GetRandom(2) == 0) {
+        VF2PlanLinkedChaiseAction(
+            villager, info, "Catching some rays", ldwGameState::GetRandom(10) + 10,
+            static_cast<ECarrying>(0), 4, 1, 2);
+    } else {
+        VF2PlanLinkedChaiseAction(
+            villager, info, "Needs to sit down", ldwGameState::GetRandom(15) + 15,
+            static_cast<ECarrying>(0), 0, 0, 3);
+    }
 }
 
 extern "C" void __cdecl VF2MobileStudyingOnPatio(CVillager &villager)
@@ -12819,6 +12880,21 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
             "object": hex(MOBILE_CHAISE_OBJECT),
             "manual_drop_only": False,
             "manual_drop_supported": True,
+            "manual_drop_variants": [
+                "Relaxing on lounger",
+                "Reading a book",
+                "Studying on the lounger",
+                "Needs to sit down",
+                "Taking a nap",
+                "Getting some sleep",
+            ],
+            "manual_drop_energy_policy": {
+                "energy_field": "CVillager+0x6B28",
+                "energy_range": [1, 100],
+                "awake_choice_weight_each": 20,
+                "nap_weight": "max(0, 70-energy)",
+                "sleep_weight": "max(0, 45-energy)*3",
+            },
             "autonomous": True,
             "mobile_behavior": "CBehavior::LieOnChaiseNoLeadIn",
             "desktop_implementation": "exact plan-sequence port using LinkPeepToFurniture",
@@ -12827,6 +12903,7 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
                 "Reading a book",
                 "Taking a nap",
                 "Studying on the lounger",
+                "Needs to sit down",
             ],
             "translated_refusal_strings": {
                 "unreachable": "0xb7",

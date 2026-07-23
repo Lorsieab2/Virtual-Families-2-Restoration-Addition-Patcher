@@ -213,12 +213,34 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertFalse(contract["implemented_families"][0]["manual_drop_only"])
                 self.assertTrue(contract["implemented_families"][0]["manual_drop_supported"])
                 self.assertEqual(
+                    contract["implemented_families"][0]["manual_drop_variants"],
+                    [
+                        "Relaxing on lounger",
+                        "Reading a book",
+                        "Studying on the lounger",
+                        "Needs to sit down",
+                        "Taking a nap",
+                        "Getting some sleep",
+                    ],
+                )
+                self.assertEqual(
+                    contract["implemented_families"][0]["manual_drop_energy_policy"],
+                    {
+                        "energy_field": "CVillager+0x6B28",
+                        "energy_range": [1, 100],
+                        "awake_choice_weight_each": 20,
+                        "nap_weight": "max(0, 70-energy)",
+                        "sleep_weight": "max(0, 45-energy)*3",
+                    },
+                )
+                self.assertEqual(
                     contract["implemented_families"][0]["autonomous_variants"],
                     [
                         "Catching some rays",
                         "Reading a book",
                         "Taking a nap",
                         "Studying on the lounger",
+                        "Needs to sit down",
                     ],
                 )
                 umbrella = contract["implemented_families"][1]
@@ -259,7 +281,6 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "return static_cast<unsigned int>(Weather.currentType) < 2;",
                     helper,
                 )
-                self.assertIn("!Night.AIIsDayTime()", helper)
                 self.assertIn("CBehavior::StudyingOnPatio(villager);", helper)
                 self.assertIn("ldwGameState::GetRandom(100) > 29", helper)
                 self.assertIn('{ 0x12B, 1500, true  }', helper)
@@ -268,15 +289,29 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn('{ 0x0C2,  450, false }', helper)
                 self.assertNotIn("0x1B8", helper)
                 for label in (
+                    "Relaxing on lounger",
                     "Reading a book",
                     "Taking a nap",
                     "Catching some rays",
                     "Studying on the lounger",
+                    "Needs to sit down",
+                    "Getting some sleep",
                 ):
                     self.assertIn(label, helper)
                 umbrella_helper = helper.split(
                     "static bool VF2HandleMobilePatioUmbrella", 1
                 )[1].split("static bool VF2WeatherAllowsOutdoorFurniture", 1)[0]
+                self.assertIn(
+                    "reinterpret_cast<unsigned char *>(&villager) + 0x6B28",
+                    helper,
+                )
+                self.assertIn("energyValue < 70 ? 70 - energyValue : 0", helper)
+                self.assertIn("((70 - energyValue) * 30 + 68) / 69", helper)
+                self.assertIn("GetRandom(100) >= napChance", helper)
+                self.assertIn("int energyValue = VF2CurrentEnergy(villager);", helper)
+                self.assertIn("energyValue < 45 ? (45 - energyValue) * 3 : 0", helper)
+                self.assertIn("GetRandom(80 + napWeight + sleepWeight)", helper)
+                self.assertIn("Night.AIIsDayTime() && ldwGameState::GetRandom(2) == 0", helper)
                 expected_steps = [
                     "plans->ForgetPlans(villager, false);",
                     'VF2SetActionLabel(villager, "Adjusting umbrella");',
