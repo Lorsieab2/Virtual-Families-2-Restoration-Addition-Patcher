@@ -12414,11 +12414,37 @@ def validate_mobile_patio_umbrella_pc_fmap(manifest):
 
 def patch_mobile_furniture_behavior_dispatch(manifest):
     helper_path = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
+    behavior_fallback_decls = ""
+    nap_fallback = "CBehavior::NappingCouch(villager);"
+    rest_fallback = "CBehavior::RestingBody(villager);"
+    if ENABLE_BEHAVIOR_PATCHES:
+        behavior_fallback_decls = r'''
+extern "C" void __cdecl VF2RandomNapDreamLabel(CVillager &);
+extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &);
+'''.strip()
+        nap_fallback = "VF2RandomNapDreamLabel(villager);"
+        rest_fallback = "VF2RandomSitDownLabel(villager);"
     helper_source = r'''#pragma section(".vf2beh", read, write)
 extern "C" __declspec(allocate(".vf2beh")) volatile unsigned char gVF2MobileFurnitureBehaviors = 0;
 
 struct ldwPoint { int x; int y; };
 class CVillager;
+extern "C" void __cdecl VF2MobileReadingBook(CVillager &);
+extern "C" void __cdecl VF2MobileNappingCouch(CVillager &);
+extern "C" void __cdecl VF2MobileRestingBody(CVillager &);
+extern "C" void __cdecl VF2MobileStudyingOnPatio(CVillager &);
+__VF2_BEHAVIOR_FALLBACK_DECLS__
+class CBehavior {
+private:
+    static void __cdecl ReadingBook(CVillager &);
+    static void __cdecl NappingCouch(CVillager &);
+    static void __cdecl RestingBody(CVillager &);
+    static void __cdecl StudyingOnPatio(CVillager &);
+    friend void __cdecl VF2MobileReadingBook(CVillager &);
+    friend void __cdecl VF2MobileNappingCouch(CVillager &);
+    friend void __cdecl VF2MobileRestingBody(CVillager &);
+    friend void __cdecl VF2MobileStudyingOnPatio(CVillager &);
+};
 class CContentMap { public: enum EObject {
     eObjectChaise = 0x95,
     eObjectPatioUmbrella = 0x96
@@ -12432,6 +12458,10 @@ enum EBodyPosition {
 };
 enum EDirection { eDirectionUmbrella = 3 };
 enum EHeadDirection { eHeadDirectionUmbrella = 3 };
+enum ECarrying {
+    eCarryingBook = 0x31,
+    eCarryingStudyBook = 0x36
+};
 enum StringId {
     eStringBadWeather = __VF2_LOUNGER_BAD_WEATHER_STRING_ID__,
     eStringCannotReachFurniture = 0xB7
@@ -12452,6 +12482,7 @@ public:
     void PlanToWait(int, EBodyPosition);
     void PlanToWait(int, EBodyPosition, EDirection, EHeadDirection);
     void PlanToLieDown(int);
+    void PlanToCarry(ECarrying);
     void PlanToSay(StringId);
     void PlanToShakeHead(int, EBodyPosition);
     void PlanToIncDirtiness(int);
@@ -12489,9 +12520,11 @@ int __cdecl VF2PtOnFurnitureIndex(CFurnitureManager &manager, ldwPoint point)
 }
 
 class CWeather { public: int currentType; };
+class CNight { public: bool AIIsDayTime(); };
 class ldwGameState { public: static int __cdecl GetRandom(int); };
 extern CFurnitureManager FurnitureManager;
 extern CWeather Weather;
+extern CNight Night;
 extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
 
 static int VF2FurnitureItemAtPoint(ldwPoint point)
@@ -12585,6 +12618,128 @@ static bool VF2HandleMobilePatioUmbrella(CVillager &villager)
     return true;
 }
 
+static bool VF2WeatherAllowsOutdoorFurniture()
+{
+    // Mobile values: 0 sunny, 1 cloudy, 2 rain, 3 storm, 4 fog, 5 snow.
+    return static_cast<unsigned int>(Weather.currentType) < 2;
+}
+
+static bool VF2TryLinkMobileChaise(CVillager &villager, sFurnitureInfo2 &info)
+{
+    return FurnitureManager.LinkPeepToFurniture(
+        CContentMap::eObjectChaise, &villager, info, true, 0, false);
+}
+
+static void VF2PlanLinkedChaiseAction(
+    CVillager &villager,
+    sFurnitureInfo2 const &info,
+    char const *label,
+    int duration,
+    ECarrying carrying,
+    int dirtiness,
+    int happiness,
+    int energy)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    VF2SetActionLabel(villager, label);
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    if (carrying != static_cast<ECarrying>(0)) plans->PlanToCarry(carrying);
+    if (info.orientation == 1) {
+        plans->PlanToWait(duration, eBodyPositionChaise);
+    } else {
+        plans->PlanToLieDown(duration);
+    }
+    if (dirtiness) plans->PlanToIncDirtiness(dirtiness);
+    if (happiness) plans->PlanToIncHappinessTrend(happiness);
+    if (energy) plans->PlanToIncEnergy(energy);
+    plans->StartNewBehavior(villager);
+}
+
+extern "C" void __cdecl VF2MobileReadingBook(CVillager &villager)
+{
+    sFurnitureInfo2 info = {};
+    if (gVF2MobileFurnitureBehaviors == 0 ||
+        !VF2WeatherAllowsOutdoorFurniture() ||
+        ldwGameState::GetRandom(100) > 29 ||
+        !VF2TryLinkMobileChaise(villager, info)) {
+        CBehavior::ReadingBook(villager);
+        return;
+    }
+    VF2PlanLinkedChaiseAction(
+        villager, info, "Reading a book", ldwGameState::GetRandom(20) + 20,
+        eCarryingBook, 0, 0, 0);
+}
+
+extern "C" void __cdecl VF2MobileNappingCouch(CVillager &villager)
+{
+    sFurnitureInfo2 info = {};
+    if (gVF2MobileFurnitureBehaviors == 0 ||
+        !VF2WeatherAllowsOutdoorFurniture() ||
+        ldwGameState::GetRandom(100) > 29 ||
+        !VF2TryLinkMobileChaise(villager, info)) {
+        __VF2_NAP_FALLBACK__
+        return;
+    }
+    VF2PlanLinkedChaiseAction(
+        villager, info, "Taking a nap", ldwGameState::GetRandom(5) + 5,
+        static_cast<ECarrying>(0), 2, 0, ldwGameState::GetRandom(5) + 7);
+}
+
+extern "C" void __cdecl VF2MobileRestingBody(CVillager &villager)
+{
+    sFurnitureInfo2 info = {};
+    if (gVF2MobileFurnitureBehaviors == 0 ||
+        !Night.AIIsDayTime() ||
+        !VF2WeatherAllowsOutdoorFurniture() ||
+        !VF2TryLinkMobileChaise(villager, info)) {
+        __VF2_REST_FALLBACK__
+        return;
+    }
+    VF2PlanLinkedChaiseAction(
+        villager, info, "Catching some rays", ldwGameState::GetRandom(10) + 10,
+        static_cast<ECarrying>(0), 4, 1, 2);
+}
+
+extern "C" void __cdecl VF2MobileStudyingOnPatio(CVillager &villager)
+{
+    sFurnitureInfo2 info = {};
+    if (gVF2MobileFurnitureBehaviors == 0) {
+        CBehavior::StudyingOnPatio(villager);
+        return;
+    }
+    if (!VF2WeatherAllowsOutdoorFurniture() ||
+        !VF2TryLinkMobileChaise(villager, info)) {
+        CBehavior::ReadingBook(villager);
+        return;
+    }
+    VF2PlanLinkedChaiseAction(
+        villager, info, "Studying on the lounger", ldwGameState::GetRandom(15) + 15,
+        eCarryingStudyBook, 0, 1, 0);
+}
+
+extern "C" void __cdecl VF2EnableMobileFurnitureCandidates(void *villager)
+{
+    if (gVF2MobileFurnitureBehaviors == 0) return;
+    unsigned char *data = static_cast<unsigned char *>(villager);
+    struct Candidate { unsigned int behavior; unsigned int weight; bool allAges; };
+    Candidate rows[] = {
+        { 0x12B, 1500, true  }, // ReadingBook: exact mobile direct-candidate weight
+        { 0x083, 3000, true  }, // NappingCouch: exact mobile weight
+        { 0x127, 2000, true  }, // PC slot carrying exact mobile Sunbathing plans
+        { 0x0C2,  450, false }, // requested studying-on-lounger extension
+    };
+    for (unsigned int i = 0; i < sizeof(rows) / sizeof(rows[0]); ++i) {
+        unsigned char *candidate = data + 0x6BB8 + rows[i].behavior * 0xD0;
+        candidate[0xCD] = 1;
+        *reinterpret_cast<unsigned int *>(candidate + 0x0C) = rows[i].weight;
+        if (rows[i].allAges) {
+            *reinterpret_cast<unsigned int *>(candidate + 0x48) = 0;
+            *reinterpret_cast<unsigned int *>(candidate + 0x4C) = 0;
+        }
+    }
+}
+
 class theMainScene {
 protected:
     bool const HandleDropOnHotSpot(CVillager &);
@@ -12607,6 +12762,11 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
         "__VF2_LOUNGER_BAD_WEATHER_STRING_ID__",
         str(mobile_lounger_bad_weather_string_id()),
     )
+    helper_source = helper_source.replace(
+        "__VF2_BEHAVIOR_FALLBACK_DECLS__", behavior_fallback_decls
+    )
+    helper_source = helper_source.replace("__VF2_NAP_FALLBACK__", nap_fallback)
+    helper_source = helper_source.replace("__VF2_REST_FALLBACK__", rest_fallback)
     helper_path.write_text(helper_source, encoding="ascii")
 
     obj_path = PATCHED / "theMainScene.obj"
@@ -12657,10 +12817,17 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
             "item_ids": [hex(item) for item in MOBILE_CHAISE_ITEM_IDS],
             "label": "Relaxing on lounger",
             "object": hex(MOBILE_CHAISE_OBJECT),
-            "manual_drop_only": True,
-            "autonomous": False,
+            "manual_drop_only": False,
+            "manual_drop_supported": True,
+            "autonomous": True,
             "mobile_behavior": "CBehavior::LieOnChaiseNoLeadIn",
             "desktop_implementation": "exact plan-sequence port using LinkPeepToFurniture",
+            "autonomous_variants": [
+                "Catching some rays",
+                "Reading a book",
+                "Taking a nap",
+                "Studying on the lounger",
+            ],
             "translated_refusal_strings": {
                 "unreachable": "0xb7",
                 "bad_weather": hex(mobile_lounger_bad_weather_string_id()),
@@ -12677,6 +12844,116 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
         }],
         "stock_behavior_table_extended": False,
         "stock_hotspot_table_extended": False,
+    }
+
+
+def patch_mobile_furniture_behavior_macros(manifest):
+    obj = CoffObject(PATCHED / "Behavior.obj")
+    ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+    sec = obj.section(ctor.section)
+    specs = (
+        (0x10D0, 0x12B, "_VF2MobileReadingBook", "mobile chaise reading branch"),
+        (0x0721, 0x083, "_VF2MobileNappingCouch", "mobile chaise nap branch"),
+        (0x108C, 0x127, "_VF2MobileRestingBody", "mobile autonomous sunbathing plans"),
+        (0x0488, 0x0C2, "_VF2MobileStudyingOnPatio", "requested studying-on-lounger extension"),
+    )
+    changed = []
+    current_relocations = {
+        vaddr: (obj.symbol_by_index[symbol_index].name, rtype)
+        for vaddr, symbol_index, rtype in (
+            struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + index * 10)
+            for index in range(sec.nreloc)
+        )
+    }
+    allowed_targets = {
+        0x10D0: {"?ReadingBook@CBehavior@@CAXAAVCVillager@@@Z"},
+        0x0721: {"?NappingCouch@CBehavior@@CAXAAVCVillager@@@Z"},
+        0x108C: {"?RestingBody@CBehavior@@CAXAAVCVillager@@@Z"},
+        0x0488: {"?StudyingOnPatio@CBehavior@@CAXAAVCVillager@@@Z"},
+    }
+    if ENABLE_BEHAVIOR_PATCHES:
+        allowed_targets[0x0721].add("_VF2RandomNapDreamLabel")
+        allowed_targets[0x108C].add("_VF2RandomSitDownLabel")
+    for offset, behavior_id, helper_name, note in specs:
+        expected = b"\x68\0\0\0\0\x68" + struct.pack("<I", behavior_id)
+        raw = sec.raw_ptr + ctor.value + offset
+        if obj.buf[raw : raw + len(expected)] != expected:
+            raise RuntimeError(f"Mobile furniture behavior macro drifted: {note}")
+        relocation_vaddr = ctor.value + offset + 1
+        current_target = current_relocations.get(relocation_vaddr)
+        if (
+            current_target is None
+            or current_target[1] != IMAGE_REL_I386_DIR32
+            or current_target[0] not in allowed_targets[offset]
+        ):
+            raise RuntimeError(f"Mobile furniture fallback target drifted: {note}: {current_target}")
+        helper = obj.append_undefined_symbol(helper_name)
+        obj.retarget_relocation(sec.index, ctor.value + offset + 1, helper)
+        changed.append({
+            "behavior_id": hex(behavior_id),
+            "constructor_offset": hex(offset),
+            "helper": helper_name,
+            "note": note,
+        })
+    obj.write(PATCHED / "Behavior.obj")
+    manifest["MobileFurnitureBehaviorMacros"] = {
+        "status": "final runtime-gated constructor retargets",
+        "changed": changed,
+        "stock_fallback_preserved": True,
+    }
+
+
+def patch_mobile_furniture_autonomous_candidates(manifest):
+    """Hook stock InitAI/LoadAI only when the broader Behavior Patches hook is absent."""
+    obj = CoffObject(PATCHED / "Villager.obj")
+    init_ai = obj.symbol("?InitAI@CVillager@@QAEXXZ")
+    sec = obj.section(init_ai.section)
+    epilogue = init_ai.value + 0x4513
+    expected = b"\x5F\x5E\x5B\x8B\xE5\x5D\xC3"
+    raw = sec.raw_ptr + epilogue
+    if obj.buf[raw : raw + len(expected)] != expected:
+        raise RuntimeError("Unexpected CVillager::InitAI epilogue for mobile furniture")
+    helper_off = sec.raw_size
+    helper = bytes((
+        0xFF, 0x75, 0xFC, 0xE8, 0, 0, 0, 0, 0x83, 0xC4, 0x04,
+        0x5F, 0x5E, 0x5B, 0x8B, 0xE5, 0x5D, 0xC3,
+    ))
+    obj.insert_section_bytes(sec.index, helper_off, helper)
+    target = obj.append_undefined_symbol("_VF2EnableMobileFurnitureCandidates")
+    obj.append_relocation(sec.index, helper_off + 4, target, IMAGE_REL_I386_REL32)
+
+    load_ai = obj.symbol("?LoadAI@CVillager@@QAEXAAUSSaveState@1@@Z")
+    load_sec = obj.section(load_ai.section)
+    load_epilogues = (load_ai.value + 0x53, load_ai.value + 0x94)
+    load_expected = b"\x5F\x5E\x5D\xC2\x04\0"
+    for offset in load_epilogues:
+        raw = load_sec.raw_ptr + offset
+        if obj.buf[raw : raw + len(load_expected)] != load_expected:
+            raise RuntimeError("Unexpected CVillager::LoadAI epilogue for mobile furniture")
+    load_helper_off = load_sec.raw_size
+    load_helper = bytes((
+        0x57, 0xE8, 0, 0, 0, 0, 0x83, 0xC4, 0x04,
+        0x5F, 0x5E, 0x5D, 0xC2, 0x04, 0,
+    ))
+    obj.insert_section_bytes(load_sec.index, load_helper_off, load_helper)
+    obj.append_relocation(load_sec.index, load_helper_off + 2, target, IMAGE_REL_I386_REL32)
+
+    init_sec = obj.section(init_ai.section)
+    raw = init_sec.raw_ptr + epilogue
+    obj.buf[raw : raw + len(expected)] = (
+        b"\xE9" + struct.pack("<i", helper_off - (epilogue + 5)) + b"\x90\x90"
+    )
+    load_sec = obj.section(load_ai.section)
+    for offset in load_epilogues:
+        raw = load_sec.raw_ptr + offset
+        obj.buf[raw : raw + len(load_expected)] = (
+            b"\xE9" + struct.pack("<i", load_helper_off - (offset + 5)) + b"\x90"
+        )
+    obj.write(PATCHED / "Villager.obj")
+    manifest["MobileFurnitureAutonomousCandidates"] = {
+        "status": "runtime-gated InitAI and LoadAI candidate refresh",
+        "helper": "_VF2EnableMobileFurnitureCandidates",
+        "behavior_patches_hook_reused": False,
     }
 
 
@@ -13717,6 +13994,8 @@ def patch_spontaneous_behaviors(manifest):
 // is 0xD0 bytes; +0xCD is its enabled flag and +0x0C its random-choice weight.
 // These IDs are existing VF2 behavior macros, so their native object search,
 // walking, animation, sounds, and failure handling remain unchanged.
+extern "C" void __cdecl VF2EnableMobileFurnitureCandidates(void *);
+
 static void EnableAutonomousCandidateWithWeight(unsigned char *villager, unsigned int behavior, unsigned int weight)
 {
     unsigned char *candidate = villager + 0x6BB8 + behavior * 0xD0;
@@ -15273,6 +15552,9 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x02C, 450); // OfficeCarreerWork
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x04B, 450); // WorkWorkshop
     VF2RefreshHammockEligibility(data);
+    // Apply the runtime-gated mobile weights last so they win only when
+    // Mobile Furniture Behaviors is selected.
+    VF2EnableMobileFurnitureCandidates(villager);
 }
 '''.strip() + "\n"
     helper_cpp = helper_cpp.replace("__VF2_BEHAVIOR_LABEL_ARRAYS__", behavior_label_arrays)
@@ -16297,6 +16579,7 @@ def main():
             "offline_patcher_setting": "behavior_patches",
         }
     else:
+        patch_mobile_furniture_autonomous_candidates(manifest)
         (PATCHED / "vf2_invisible_hammock.cpp").write_text(
             "// Behavior Patches disabled: stock hammock behavior retained.\n",
             encoding="ascii",
@@ -16311,6 +16594,9 @@ def main():
             "offline_patcher_setting": "behavior_patches",
             "status": "stock behavior objects preserved for the behavior-disabled core executable",
         }
+    # This final pass intentionally runs after label wrappers so the mobile
+    # dispatchers can preserve those wrappers as their build-specific fallback.
+    patch_mobile_furniture_behavior_macros(manifest)
     validate_custom_achievement_award_hook_objects(manifest)
     if ENABLE_DEBUGGER_FEATURES:
         patch_debug_features(manifest)

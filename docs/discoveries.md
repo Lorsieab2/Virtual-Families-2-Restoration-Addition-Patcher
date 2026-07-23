@@ -2663,8 +2663,14 @@
   anchor makes desktop `FindPeepSlot` reject every chair. Mobile string IDs are
   not portable either: the unreachable-seat refusal maps to stock PC `0xB7`,
   and the exact bad-weather text receives a new dedicated PC string ID.
-- The patch does not extend the fixed behavior or hotspot tables and adds no
-  autonomous route. Disabling it restores the exact rendered-only base maps.
+- The patch does not extend the fixed behavior or hotspot tables. It runtime-gates
+  autonomous chaise branches through existing in-range desktop behaviors:
+  ReadingBook `0x12B` (mobile weight 1500 and 30-percent branch), NappingCouch
+  `0x83` (mobile weight 3000 and 30-percent branch), and RestingBody `0x127` as
+  the desktop carrier for daytime Sunbathing (mobile weight 2000). The requested
+  Studying-on-lounger extension uses `0xC2` at patch-chosen weight 450 and is not
+  represented as an exact mobile route. Disabling the option restores stock
+  behavior targets and the exact rendered-only base maps.
 - All 16 B156 executable layouts compile with unique hashes. Linked validation
   proves four non-overlapping reversible runtime controls, including `.vf2beh`.
 - The remaining Holiday, birthday, patio, umbrella, picnic, and other mobile

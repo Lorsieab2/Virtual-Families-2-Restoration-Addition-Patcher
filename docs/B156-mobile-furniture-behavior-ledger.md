@@ -128,5 +128,16 @@ family therefore remains rendered-only until the complete grouped `0x1AF`
 sequence and all four PC-safe maps can be ported through the external dispatcher
 without indexing or growing the stock table.
 
-No autonomous candidate was added. Future disruptive household-wide
-celebration behaviors must also remain manual-drop-only.
+The optional lounge family also adds four runtime-gated autonomous choices without
+growing the fixed behavior table. `ReadingBook` (`0x12B`, weight 1500) and
+`NappingCouch` (`0x83`, weight 3000) preserve the recovered mobile 30-percent
+good-weather chaise branches. Desktop `RestingBody` (`0x127`, weight 2000) is the
+safe in-range carrier for the mobile Sunbathing plan and is additionally gated to
+daytime. `StudyingOnPatio` (`0xC2`, weight 450) carries the requested
+`Studying on the lounger` extension; that label and weight are patch choices, not
+claims of an exact mobile chaise-study route. With `.vf2beh` zero, each constructor
+wrapper returns to its stock desktop target (or the existing Behavior Patches label
+wrapper for that build). Rain, storm, fog, and snow reject all outdoor-chair
+branches; the stock behavior then remains in control.
+
+Future disruptive household-wide celebration behaviors remain manual-drop-only.

@@ -209,7 +209,18 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     contract["implemented_families"][0]["item_ids"],
                     ["0x2de", "0x2df", "0x2e0", "0x2e1"],
                 )
-                self.assertFalse(contract["implemented_families"][0]["autonomous"])
+                self.assertTrue(contract["implemented_families"][0]["autonomous"])
+                self.assertFalse(contract["implemented_families"][0]["manual_drop_only"])
+                self.assertTrue(contract["implemented_families"][0]["manual_drop_supported"])
+                self.assertEqual(
+                    contract["implemented_families"][0]["autonomous_variants"],
+                    [
+                        "Catching some rays",
+                        "Reading a book",
+                        "Taking a nap",
+                        "Studying on the lounger",
+                    ],
+                )
                 umbrella = contract["implemented_families"][1]
                 self.assertEqual(umbrella, {
                     "name": "mobile patio umbrella",
@@ -244,9 +255,28 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("eStringCannotReachFurniture = 0xB7", helper)
                 self.assertNotIn("eStringBadWeather = 2", helper)
                 self.assertNotIn("eStringCannotReachFurniture = 0xBF", helper)
+                self.assertIn(
+                    "return static_cast<unsigned int>(Weather.currentType) < 2;",
+                    helper,
+                )
+                self.assertIn("!Night.AIIsDayTime()", helper)
+                self.assertIn("CBehavior::StudyingOnPatio(villager);", helper)
+                self.assertIn("ldwGameState::GetRandom(100) > 29", helper)
+                self.assertIn('{ 0x12B, 1500, true  }', helper)
+                self.assertIn('{ 0x083, 3000, true  }', helper)
+                self.assertIn('{ 0x127, 2000, true  }', helper)
+                self.assertIn('{ 0x0C2,  450, false }', helper)
+                self.assertNotIn("0x1B8", helper)
+                for label in (
+                    "Reading a book",
+                    "Taking a nap",
+                    "Catching some rays",
+                    "Studying on the lounger",
+                ):
+                    self.assertIn(label, helper)
                 umbrella_helper = helper.split(
                     "static bool VF2HandleMobilePatioUmbrella", 1
-                )[1].split("class theMainScene", 1)[0]
+                )[1].split("static bool VF2WeatherAllowsOutdoorFurniture", 1)[0]
                 expected_steps = [
                     "plans->ForgetPlans(villager, false);",
                     'VF2SetActionLabel(villager, "Adjusting umbrella");',
@@ -262,6 +292,66 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     cursor = umbrella_helper.index(step, cursor) + len(step)
                 self.assertNotIn("GetRandom", umbrella_helper)
                 self.assertNotIn("PlanToInc", umbrella_helper)
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_mobile_chaise_autonomous_macros_are_final_exact_retargets(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                obj_path = patcher.PATCHED / "Behavior.obj"
+                shutil.copy2(patcher.SRC_OBJS / "Behavior.obj", obj_path)
+                manifest = {}
+                patcher.patch_mobile_furniture_behavior_macros(manifest)
+                obj = CoffObject(obj_path)
+                ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+                sec = obj.section(ctor.section)
+                expected = {
+                    0x10D1: "_VF2MobileReadingBook",
+                    0x0722: "_VF2MobileNappingCouch",
+                    0x108D: "_VF2MobileRestingBody",
+                    0x0489: "_VF2MobileStudyingOnPatio",
+                }
+                actual = {}
+                for index in range(sec.nreloc):
+                    vaddr, symbol_index, _rtype = struct.unpack_from(
+                        "<IIH", obj.buf, sec.reloc_ptr + index * 10
+                    )
+                    relative = vaddr - ctor.value
+                    if relative in expected:
+                        actual[relative] = obj.symbol_by_index[symbol_index].name
+                self.assertEqual(actual, expected)
+                self.assertTrue(
+                    manifest["MobileFurnitureBehaviorMacros"][
+                        "stock_fallback_preserved"
+                    ]
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_mobile_chaise_autonomous_candidate_hook_is_runtime_gated(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                obj_path = patcher.PATCHED / "Villager.obj"
+                shutil.copy2(patcher.SRC_OBJS / "Villager.obj", obj_path)
+                manifest = {}
+                patcher.patch_mobile_furniture_autonomous_candidates(manifest)
+                obj = CoffObject(obj_path)
+                init_ai = obj.symbol("?InitAI@CVillager@@QAEXXZ")
+                init_sec = obj.section(init_ai.section)
+                init_raw = init_sec.raw_ptr + init_ai.value + 0x4513
+                self.assertEqual(obj.buf[init_raw], 0xE9)
+                load_ai = obj.symbol("?LoadAI@CVillager@@QAEXAAUSSaveState@1@@Z")
+                load_sec = obj.section(load_ai.section)
+                for relative in (0x53, 0x94):
+                    self.assertEqual(obj.buf[load_sec.raw_ptr + load_ai.value + relative], 0xE9)
+                self.assertEqual(
+                    manifest["MobileFurnitureAutonomousCandidates"]["helper"],
+                    "_VF2EnableMobileFurnitureCandidates",
+                )
         finally:
             patcher.PATCHED = old_patched
 

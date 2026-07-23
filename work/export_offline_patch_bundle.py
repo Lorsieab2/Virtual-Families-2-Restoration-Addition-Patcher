@@ -214,7 +214,7 @@ SETTINGS = [
     {
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
-        "description": "Optional patch: enables exact ported actions for genuine mobile furniture where implemented. B156 adds manual Relaxing on lounger behavior to the four mobile lounge chairs and Adjusting umbrella to the Patio Umbrella; Invisible/custom/VF3 furniture is excluded.",
+        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 adds manual Relaxing on lounger and good-weather spontaneous reading, naps, daytime sunbathing, and a clearly labeled studying extension to the four mobile lounge chairs, plus manual Adjusting umbrella for the Patio Umbrella. Invisible/custom/VF3 furniture is excluded.",
         "default": False,
         "category": "optional",
     },
