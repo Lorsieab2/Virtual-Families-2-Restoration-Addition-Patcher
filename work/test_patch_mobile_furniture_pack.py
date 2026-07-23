@@ -217,6 +217,37 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             {patcher.MOBILE_BIRTHDAY_PRESENTS_PC_CELL_VALUE},
         )
 
+    def test_mobile_birthday_balloons_pc_fmap_is_exact_eobject_only_payload(self):
+        manifest = {}
+        patcher.validate_mobile_birthday_balloons_pc_fmap(manifest)
+        contract = manifest["MobileBirthdayBalloonsPCFmap"]
+        self.assertEqual(contract["item_id"], "0x2da")
+        self.assertEqual(contract["object"], "0x92")
+        data = (
+            patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR
+            / "Balloons_birthday.png.fmap"
+        ).read_bytes()
+        self.assertEqual(
+            hashlib.sha256(data).hexdigest(),
+            "f66e4dc4776962b32b68e069a133ca9b1a7f57306d7df357866dd2630c307fc3",
+        )
+        width, height = struct.unpack_from("<ii", data, 24)
+        values = [
+            value
+            for (value,) in struct.iter_unpack(
+                "<I", data[32 : 32 + width * height * 4]
+            )
+        ]
+        self.assertEqual((width, height), (11, 14))
+        self.assertEqual(
+            {(i % width, i // width) for i, value in enumerate(values) if value},
+            set(patcher.MOBILE_BIRTHDAY_BALLOONS_PC_CELLS),
+        )
+        self.assertEqual(
+            {value for value in values if value},
+            {patcher.MOBILE_BIRTHDAY_BALLOONS_PC_CELL_VALUE},
+        )
+
     def test_mobile_xmas_stocking_pc_fmaps_are_exact_eobject_only_payloads(self):
         manifest = {}
         patcher.validate_mobile_xmas_stocking_pc_fmaps(manifest)
@@ -386,7 +417,20 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         "desktop_implementation": "exact direct plan-sequence port",
                     },
                 )
-                stockings = contract["implemented_families"][4]
+                balloons = contract["implemented_families"][4]
+                self.assertEqual(balloons["item_ids"], ["0x2da"])
+                self.assertEqual(balloons["label"], "Playing")
+                self.assertEqual(balloons["label_string_id"], "0xf0")
+                self.assertEqual(balloons["object"], "0x92")
+                self.assertEqual(balloons["raw_age_max"], "0x117")
+                self.assertEqual(
+                    balloons["mobile_behavior"],
+                    "CBehavior::PlayingWithBalloons",
+                )
+                self.assertEqual(balloons["mobile_behavior_id"], "0x1ad")
+                self.assertTrue(balloons["manual_drop_only"])
+                self.assertFalse(balloons["autonomous"])
+                stockings = contract["implemented_families"][5]
                 self.assertEqual(stockings["item_ids"], ["0x2c6", "0x2c7"])
                 self.assertEqual(stockings["label"], "Checking for stocking stuffers")
                 self.assertEqual(stockings["object"], "0x90")
@@ -422,6 +466,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     wrapper,
                 )
                 self.assertIn(
+                    "if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);",
+                    wrapper,
+                )
+                self.assertIn(
                     "if (candidate == 0x2C6 || candidate == 0x2C7)",
                     wrapper,
                 )
@@ -435,6 +483,20 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertIn("plans->PlanToBend(1, ePriorityNormal);", helper)
                 self.assertIn("plans->PlanToStopSound();", helper)
+                balloons_helper = helper.split(
+                    "static bool VF2HandleMobileBirthdayBalloons", 1
+                )[1].split("static bool VF2HandleMobileBirthdayPresents", 1)[0]
+                self.assertIn(
+                    "theStringManager::Get()->GetString(eStringPlayingWithToys)",
+                    balloons_helper,
+                )
+                self.assertIn("if (info.object != CContentMap::eObjectBirthdayBalloons)", balloons_helper)
+                self.assertIn("int extraBalloonGoes = ldwGameState::GetRandom(2) + 3;", balloons_helper)
+                self.assertIn("switch (ldwGameState::GetRandom(6))", balloons_helper)
+                self.assertIn('"StompingE", false, 0.02f', balloons_helper)
+                self.assertIn('"StompingW", false, 0.02f', balloons_helper)
+                self.assertIn("plans->PlanToTwirlCCW", balloons_helper)
+                self.assertNotIn("NewBehavior(static_cast<EBehavior>(0x1AD)", balloons_helper)
                 self.assertIn(
                     'VF2SetActionLabel(villager, "Checking for stocking stuffers");',
                     helper,

@@ -70,6 +70,10 @@ MOBILE_BIRTHDAY_PRESENTS_ITEM_ID = 0x2DD
 MOBILE_BIRTHDAY_PRESENTS_OBJECT = 0x93
 MOBILE_BIRTHDAY_PRESENTS_PC_CELL_VALUE = 0x20009800
 MOBILE_BIRTHDAY_PRESENTS_PC_CELLS = ((3, 9), (4, 9), (5, 9))
+MOBILE_BIRTHDAY_BALLOONS_ITEM_ID = 0x2DA
+MOBILE_BIRTHDAY_BALLOONS_OBJECT = 0x92
+MOBILE_BIRTHDAY_BALLOONS_PC_CELL_VALUE = 0x20009000
+MOBILE_BIRTHDAY_BALLOONS_PC_CELLS = ((5, 13), (6, 13), (7, 13))
 MOBILE_XMAS_STOCKING_ITEM_IDS = (0x2C6, 0x2C7)
 MOBILE_XMAS_STOCKING_OBJECT = 0x90
 MOBILE_XMAS_STOCKING_PC_CELL_VALUE = 0x20008000
@@ -12515,6 +12519,46 @@ def validate_mobile_birthday_presents_pc_fmap(manifest):
     }
 
 
+def validate_mobile_birthday_balloons_pc_fmap(manifest):
+    filename = "Balloons_birthday.png.fmap"
+    mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+    pc_path = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+    mobile = mobile_path.read_bytes()
+    pc = pc_path.read_bytes()
+    if len(pc) != len(mobile) or pc[:4] != b"QAMF":
+        raise RuntimeError(f"Invalid PC Birthday Balloons map: {pc_path}")
+    width, height = struct.unpack_from("<ii", pc, 24)
+    grid_end = 32 + width * height * 4
+    if (width, height) != (11, 14):
+        raise RuntimeError(f"Unexpected PC Birthday Balloons grid: {filename}")
+    if pc[:32] != mobile[:32] or pc[grid_end:] != mobile[grid_end:]:
+        raise RuntimeError(f"PC Birthday Balloons header/trailer drifted: {filename}")
+    expected_offsets = {
+        32 + (y * width + x) * 4 for x, y in MOBILE_BIRTHDAY_BALLOONS_PC_CELLS
+    }
+    actual_offsets = set()
+    for offset in range(32, grid_end, 4):
+        value = struct.unpack_from("<I", pc, offset)[0]
+        if value:
+            if value != MOBILE_BIRTHDAY_BALLOONS_PC_CELL_VALUE:
+                raise RuntimeError(
+                    f"PC Birthday Balloons contains unsupported cell {value:#x}"
+                )
+            actual_offsets.add(offset)
+    if actual_offsets != expected_offsets:
+        raise RuntimeError("PC Birthday Balloons EObject cells drifted")
+    manifest["MobileBirthdayBalloonsPCFmap"] = {
+        "status": "validated minimal EObject-only optional payload",
+        "item_id": hex(MOBILE_BIRTHDAY_BALLOONS_ITEM_ID),
+        "filename": filename,
+        "source_sha256": hashlib.sha256(pc).hexdigest(),
+        "source_bytes": len(pc),
+        "object": hex(MOBILE_BIRTHDAY_BALLOONS_OBJECT),
+        "cell_value": hex(MOBILE_BIRTHDAY_BALLOONS_PC_CELL_VALUE),
+        "cell_count": len(actual_offsets),
+    }
+
+
 def validate_mobile_xmas_stocking_pc_fmaps(manifest):
     records = []
     for filename, spec in MOBILE_XMAS_STOCKING_PC_SPECS.items():
@@ -12620,6 +12664,7 @@ private:
 };
 class CContentMap { public: enum EObject {
     eObjectXmasStockings = 0x90,
+    eObjectBirthdayBalloons = 0x92,
     eObjectChaise = 0x95,
     eObjectPatioUmbrella = 0x96,
     eObjectBirthdayCake = 0x94,
@@ -12641,8 +12686,15 @@ enum ECarrying {
     eCarryingStudyBook = 0x36
 };
 enum StringId {
+    eStringPlayingWithToys = 0xF0,
     eStringBadWeather = __VF2_LOUNGER_BAD_WEATHER_STRING_ID__,
     eStringCannotReachFurniture = 0xB7
+};
+
+class theStringManager {
+public:
+    static theStringManager *__cdecl Get();
+    char *__thiscall GetString(StringId);
 };
 
 struct sFurnitureInfo2 {
@@ -12669,6 +12721,8 @@ public:
     void PlanToPlaySound(ESound, float, ESoundType);
     void PlanToCheer(int);
     void PlanToJoyTwirlCW(int);
+    void PlanToTwirlCCW(int);
+    void PlanToPlayAnim(int, char const *, bool, float);
     void PlanToWork(int);
     void PlanToBend(int, EPriority);
     void PlanToJump(int);
@@ -12913,6 +12967,103 @@ static void VF2PlanBirthdaySound(CVillagerPlans *plans, int sound)
 {
     plans->PlanToPlaySound(
         static_cast<ESound>(sound), 1.0f, eSoundTypeEffects);
+}
+
+static bool VF2HandleMobileBirthdayBalloons(CVillager &villager)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    if (*reinterpret_cast<int *>(data + 0x6A54) > 0x117) return true;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    FurnitureManager.FindFurniture(
+        CContentMap::eObjectBirthdayBalloons,
+        villager.FeetPos(),
+        info,
+        true,
+        0,
+        false);
+    if (info.object != CContentMap::eObjectBirthdayBalloons) return true;
+
+    VF2SetActionLabel(
+        villager,
+        theStringManager::Get()->GetString(eStringPlayingWithToys));
+    plans->PlanToGo(
+        CContentMap::eObjectBirthdayBalloons,
+        eSpeedNormal,
+        ePriorityNormal,
+        false);
+    plans->PlanToBend(ldwGameState::GetRandom(10) + 4, ePriorityNormal);
+    VF2PlanBirthdaySound(plans, 0x73);
+    plans->PlanToJump(10);
+    plans->PlanToJump(20);
+    plans->PlanToJump(10);
+    int extraBalloonGoes = ldwGameState::GetRandom(2) + 3;
+    for (int i = 0; i < extraBalloonGoes; ++i) {
+        plans->PlanToGo(
+            CContentMap::eObjectBirthdayBalloons,
+            eSpeedNormal,
+            ePriorityNormal,
+            false);
+    }
+
+    switch (ldwGameState::GetRandom(6)) {
+    case 0:
+        plans->PlanToBend(ldwGameState::GetRandom(10) + 4, ePriorityNormal);
+        VF2PlanBirthdaySound(plans, 0x73);
+        plans->PlanToJoyTwirlCW(ldwGameState::GetRandom(5) + 3);
+        break;
+    case 1:
+        plans->PlanToBend(ldwGameState::GetRandom(10) + 4, ePriorityNormal);
+        VF2PlanBirthdaySound(plans, ldwGameState::GetRandom(13) + 0x33);
+        plans->PlanToBend(ldwGameState::GetRandom(6) + 4, ePriorityNormal);
+        plans->PlanToTwirlCCW(ldwGameState::GetRandom(3) + 3);
+        VF2PlanBirthdaySound(plans, 0x73);
+        break;
+    case 2:
+        VF2PlanBirthdaySound(plans, 0x73);
+        plans->PlanToBend(ldwGameState::GetRandom(4) + 5, ePriorityNormal);
+        plans->PlanToJump(10);
+        plans->PlanToJump(20);
+        plans->PlanToJump(10);
+        break;
+    case 3:
+        VF2PlanBirthdaySound(plans, 0x73);
+        plans->PlanToPlayAnim(
+            ldwGameState::GetRandom(4) + 2, "StompingE", false, 0.02f);
+        plans->PlanToJump(10);
+        plans->PlanToPlayAnim(
+            ldwGameState::GetRandom(4) + 2, "StompingW", false, 0.02f);
+        plans->PlanToJump(10);
+        break;
+    case 4:
+        VF2PlanBirthdaySound(plans, ldwGameState::GetRandom(13) + 0x33);
+        plans->PlanToWait(
+            ldwGameState::GetRandom(6) + 4,
+            static_cast<EBodyPosition>(0x11));
+        plans->PlanToGo(
+            static_cast<CContentMap::EObject>(0x1F),
+            eSpeedNormal,
+            ePriorityNormal,
+            false);
+        plans->PlanToWait(
+            ldwGameState::GetRandom(6) + 4,
+            static_cast<EBodyPosition>(0x12));
+        break;
+    case 5:
+        VF2PlanBirthdaySound(plans, ldwGameState::GetRandom(13) + 0x33);
+        plans->PlanToWait(
+            ldwGameState::GetRandom(6) + 4,
+            static_cast<EBodyPosition>(0x11));
+        VF2PlanBirthdaySound(plans, ldwGameState::GetRandom(13) + 0x33);
+        plans->PlanToWait(
+            ldwGameState::GetRandom(6) + 4,
+            static_cast<EBodyPosition>(0x11));
+        break;
+    }
+    plans->StartNewBehavior(villager);
+    return true;
 }
 
 static bool VF2HandleMobileBirthdayPresents(CVillager &villager)
@@ -13188,6 +13339,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
     if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
+    if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
     if (candidate == 0x2C6 || candidate == 0x2C7) {
         return VF2HandleMobileXmasStockings(villager);
     }
@@ -13318,6 +13470,20 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "autonomous": False,
             "mobile_behavior": "CBehavior::PokingBirthdayPresents",
             "desktop_implementation": "exact direct plan-sequence port",
+        }, {
+            "name": "mobile Birthday Balloons",
+            "item_ids": [hex(MOBILE_BIRTHDAY_BALLOONS_ITEM_ID)],
+            "label": "Playing",
+            "label_string_id": "0xf0",
+            "object": hex(MOBILE_BIRTHDAY_BALLOONS_OBJECT),
+            "manual_drop_only": True,
+            "child_only": True,
+            "raw_age_max": "0x117",
+            "autonomous": False,
+            "mobile_behavior": "CBehavior::PlayingWithBalloons",
+            "mobile_behavior_id": "0x1ad",
+            "desktop_implementation": "exact direct plan-sequence port",
+            "stock_tables_extended": False,
         }, {
             "name": "mobile Christmas Stockings",
             "item_ids": [hex(item) for item in MOBILE_XMAS_STOCKING_ITEM_IDS],
@@ -17175,6 +17341,7 @@ def main():
     validate_mobile_patio_umbrella_pc_fmap(manifest)
     validate_mobile_birthday_cake_pc_fmap(manifest)
     validate_mobile_birthday_presents_pc_fmap(manifest)
+    validate_mobile_birthday_balloons_pc_fmap(manifest)
     validate_mobile_xmas_stocking_pc_fmaps(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)

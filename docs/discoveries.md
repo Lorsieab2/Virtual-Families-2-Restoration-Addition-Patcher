@@ -2742,4 +2742,6 @@
   evidence proves desktop string parity for localized StringId `0xF0`
   (`Playing`), the complete child-only plan, every animation/sound API, and the
   safe `11x14` PC map (`f66e4dc4776962b32b68e069a133ca9b1a7f57306d7df357866dd2630c307fc3`).
-  It remains unimplemented in this increment and is the next exact port.
+  The exact direct plan is now implemented and linked without indexing mobile
+  behavior `0x1AD`; live child, age-boundary, placement, and random-branch QA
+  remain.

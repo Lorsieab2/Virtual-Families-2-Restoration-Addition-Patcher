@@ -16,6 +16,10 @@ SOURCE = (
 DESTINATION = SOURCE.parent / "pc_fmaps"
 
 SPECS = {
+    "Balloons_birthday.png.fmap": {
+        "value": 0x20009000,
+        "cells": ((5, 13), (6, 13), (7, 13)),
+    },
     "StockingLarge.png.fmap": {
         "value": 0x20008000,
         "cells": ((6, 12), (7, 12)),

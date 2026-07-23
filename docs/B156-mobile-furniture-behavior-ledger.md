@@ -59,7 +59,7 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2D4-0x2D5` | Wreaths | yes | `InteractHouseXmasDecor` family | exact route unresolved |
 | `0x2D6-0x2D7` | Designer Soap | no | no exclusive route proven | existing soap donor only |
 | `0x2D8-0x2D9` | Towel Sets | no | `UsingWarmTowel` exists on mobile | item call chain unresolved |
-| `0x2DA` | Birthday Balloons | yes | `BirthdayBalloons`; play/maybe play | exact child-only manual route and PC-safe map fully proven; implementation next |
+| `0x2DA` | Birthday Balloons | yes | `BirthdayBalloons`; play/maybe play | exact child-only manual route implemented with PC-safe map |
 | `0x2DB` | Birthday Banner | yes | `BirthdayBanner`; celebration family | exact hotspot proven; complete grouped family still blocked |
 | `0x2DC` | Birthday Cake | yes | `BirthdayCake`; poke/maybe poke | exact single-object plan proven; complete grouped family still blocked |
 | `0x2DD` | Birthday Presents | yes | `BirthdayPresents`; poke/maybe poke | exact single-object plan proven; complete grouped family still blocked |
@@ -141,6 +141,18 @@ orientation-aware waits, recovered random birthday sounds, work/bend phases,
 the final body waits, sound stop, and behavior completion. Banner/group celebration
 still requires guarded resident enumeration, and the autonomous-style Maybe
 callbacks remain excluded because their selector reachability is not proven.
+
+The child-only Birthday Balloons route is now emitted directly without indexing
+mobile behavior `0x1AD`. It preserves localized desktop StringId `0xF0`,
+the ignored `FindFurniture` return plus EObject `0x92` result check, the common
+three-jump lead-in, three or four repeated balloon approaches, and all six
+random mobile branches including `StompingE`/`StompingW`, clockwise and
+counterclockwise twirls, voice sounds, and the case-specific EObject `0x1F`
+approach. Its `11x14` PC-safe map keeps `0x20009000` only at `(5,13)`,
+`(6,13)`, and `(7,13)` and hashes to
+`f66e4dc4776962b32b68e069a133ca9b1a7f57306d7df357866dd2630c307fc3`.
+The executable compiles and links; live child/age-boundary and six-branch QA
+remain.
 
 ## Christmas Stockings subset
 
