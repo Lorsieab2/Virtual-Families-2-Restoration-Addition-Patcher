@@ -2745,3 +2745,21 @@
   The exact direct plan is now implemented and linked without indexing mobile
   behavior `0x1AD`; live child, age-boundary, placement, and random-branch QA
   remain.
+
+## 2026-07-23 - Exact whole-household Dreidel and Menorah routes
+
+- Mobile Dreidel `0x2AF` / EObject `0x8A` and Menorah `0x2B8` / EObject `0x8E`
+  both use the same 30-slot resident eligibility contract: present, at home,
+  and health greater than zero, with no age or gender restriction.
+- Their mobile behavior IDs `0x1A2` and `0x1A3` exceed the desktop behavior
+  table. B156 therefore collects eligible permanent residents through
+  `CVillagerManager::VillagerExists(index, false)` and `GetVillager(index)`,
+  then runs exact external plans. Temporary worker slots `30-36` are excluded.
+- Dreidel retains the seven-round randomized sound/wait sequence and uses a
+  minimal `12x8` map hashing to
+  `44f21fc628cd90090f3eaf8eb1925de8d890fa5239828f55d115ae37c453b36a`.
+- Menorah retains its voice selection, `0xFB` sound, twirls, four jumps, and
+  orientation-aware waits. Its minimal `10x11` map hashes to
+  `352ba4be943eae6a168a133430ccd6555c5feb41a630c118da2d24c019e39365`.
+- The behavior-enabled executable compiles and links. Live household filtering,
+  simultaneous plan assignment, placement, and orientation QA remain.

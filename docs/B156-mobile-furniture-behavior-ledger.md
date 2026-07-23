@@ -44,10 +44,10 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2AB` | Candy Canes | yes | generic Christmas decor/knickknack family only | exact route unresolved |
 | `0x2AC` | Christmas Cookie | yes | Santa-cookie family exists | exact single-cookie route unresolved |
 | `0x2AD-0x2AE` | Christmas Trees | yes | `XmasTree`; admire, water, celebrate | handlers absent; rendered-only |
-| `0x2AF` | Dreidel | yes | exact `Dreidel` hotspot/behavior | handlers absent; rendered-only |
+| `0x2AF` | Dreidel | yes | exact `Dreidel` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
 | `0x2B0-0x2B5` | Eggnog and holiday gnomes | yes | generic Christmas decor/knickknack family only | exact routes unresolved |
 | `0x2B6-0x2B7` | Large Angel and Large Star | no | no per-item route proven | decorative |
-| `0x2B8` | Menorah | yes | exact `Menorah` hotspot/behavior | handlers absent; rendered-only |
+| `0x2B8` | Menorah | yes | exact `Menorah` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
 | `0x2B9-0x2BC` | Ornaments | no | no per-item route proven | decorative |
 | `0x2BD` | Penguin Decoration | yes | generic Christmas knickknack family only | exact route unresolved |
 | `0x2BE` | Plate of Cookies | yes | adult-save/kid-steal Santa-cookie family | handlers absent; rendered-only |
@@ -153,6 +153,27 @@ approach. Its `11x14` PC-safe map keeps `0x20009000` only at `(5,13)`,
 `f66e4dc4776962b32b68e069a133ca9b1a7f57306d7df357866dd2630c307fc3`.
 The executable compiles and links; live child/age-boundary and six-branch QA
 remain.
+
+## Whole-household Dreidel and Menorah
+
+Dreidel `0x2AF` / EObject `0x8A` and Menorah `0x2B8` / EObject `0x8E`
+use the mobile whole-household contract. The desktop port collects exactly the
+30 permanent household slots first, excludes nonexistent, away, and zero-health
+residents, then applies each exact external plan. It does not pass mobile
+behavior IDs `0x1A2` or `0x1A3` through the desktop table ending at `0x19A`.
+
+Dreidel preserves the exact `Playing Dreidel` label, randomized approach point,
+seven two-way rounds, body poses, and sounds. Its `12x8` PC-safe map retains
+`0x20005000` only at `(5,5)`, `(6,6)`, `(7,6)`, and `(8,6)`; SHA-256 is
+`44f21fc628cd90090f3eaf8eb1925de8d890fa5239828f55d115ae37c453b36a`.
+
+Menorah preserves `Celebrating Hanukkah`, three randomized approaches,
+age/gender voice selection, sound `0xFB`, orientation-aware waits, twirls, four
+jumps, and sound stop. Its `10x11` PC-safe map retains `0x20007000` only at
+`(7,7)`, `(6,8)`, and `(4,9)`; SHA-256 is
+`352ba4be943eae6a168a133430ccd6555c5feb41a630c118da2d24c019e39365`.
+Both routes compile and link; live multi-resident, missing/away/dead resident,
+placement, and orientation QA remain.
 
 ## Christmas Stockings subset
 

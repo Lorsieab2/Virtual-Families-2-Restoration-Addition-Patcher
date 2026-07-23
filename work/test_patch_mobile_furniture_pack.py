@@ -248,6 +248,53 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             {patcher.MOBILE_BIRTHDAY_BALLOONS_PC_CELL_VALUE},
         )
 
+    def test_mobile_group_holiday_pc_fmaps_are_exact_eobject_only_payloads(self):
+        manifest = {}
+        patcher.validate_mobile_group_holiday_pc_fmaps(manifest)
+        records = {
+            row["filename"]: row
+            for row in manifest["MobileGroupHolidayPCFmaps"]["records"]
+        }
+        specs = {
+            "Dreidel.png.fmap": (
+                "44f21fc628cd90090f3eaf8eb1925de8d890fa5239828f55d115ae37c453b36a",
+                (12, 8),
+                patcher.MOBILE_DREIDEL_PC_CELLS,
+                patcher.MOBILE_DREIDEL_PC_CELL_VALUE,
+                "0x2af",
+                "0x8a",
+            ),
+            "Menorah.png.fmap": (
+                "352ba4be943eae6a168a133430ccd6555c5feb41a630c118da2d24c019e39365",
+                (10, 11),
+                patcher.MOBILE_MENORAH_PC_CELLS,
+                patcher.MOBILE_MENORAH_PC_CELL_VALUE,
+                "0x2b8",
+                "0x8e",
+            ),
+        }
+        self.assertEqual(set(records), set(specs))
+        for filename, (digest, grid, cells, cell_value, item_id, obj_id) in specs.items():
+            data = (
+                patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+            ).read_bytes()
+            self.assertEqual(hashlib.sha256(data).hexdigest(), digest)
+            width, height = struct.unpack_from("<ii", data, 24)
+            values = [
+                value
+                for (value,) in struct.iter_unpack(
+                    "<I", data[32 : 32 + width * height * 4]
+                )
+            ]
+            self.assertEqual((width, height), grid)
+            self.assertEqual(
+                {(i % width, i // width) for i, value in enumerate(values) if value},
+                set(cells),
+            )
+            self.assertEqual({value for value in values if value}, {cell_value})
+            self.assertEqual(records[filename]["item_id"], item_id)
+            self.assertEqual(records[filename]["object"], obj_id)
+
     def test_mobile_xmas_stocking_pc_fmaps_are_exact_eobject_only_payloads(self):
         manifest = {}
         patcher.validate_mobile_xmas_stocking_pc_fmaps(manifest)
@@ -430,7 +477,17 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(balloons["mobile_behavior_id"], "0x1ad")
                 self.assertTrue(balloons["manual_drop_only"])
                 self.assertFalse(balloons["autonomous"])
-                stockings = contract["implemented_families"][5]
+                dreidel = contract["implemented_families"][5]
+                self.assertEqual(dreidel["item_ids"], ["0x2af"])
+                self.assertEqual(dreidel["object"], "0x8a")
+                self.assertEqual(dreidel["mobile_behavior_id"], "0x1a2")
+                self.assertTrue(dreidel["whole_household"])
+                menorah = contract["implemented_families"][6]
+                self.assertEqual(menorah["item_ids"], ["0x2b8"])
+                self.assertEqual(menorah["object"], "0x8e")
+                self.assertEqual(menorah["mobile_behavior_id"], "0x1a3")
+                self.assertTrue(menorah["whole_household"])
+                stockings = contract["implemented_families"][7]
                 self.assertEqual(stockings["item_ids"], ["0x2c6", "0x2c7"])
                 self.assertEqual(stockings["label"], "Checking for stocking stuffers")
                 self.assertEqual(stockings["object"], "0x90")
@@ -470,6 +527,14 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     wrapper,
                 )
                 self.assertIn(
+                    "if (candidate == 0x2AF) return VF2HandleMobileDreidelGroup(villager);",
+                    wrapper,
+                )
+                self.assertIn(
+                    "if (candidate == 0x2B8) return VF2HandleMobileMenorahGroup(villager);",
+                    wrapper,
+                )
+                self.assertIn(
                     "if (candidate == 0x2C6 || candidate == 0x2C7)",
                     wrapper,
                 )
@@ -497,6 +562,23 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn('"StompingW", false, 0.02f', balloons_helper)
                 self.assertIn("plans->PlanToTwirlCCW", balloons_helper)
                 self.assertNotIn("NewBehavior(static_cast<EBehavior>(0x1AD)", balloons_helper)
+                self.assertIn("for (int index = 0; index < 30; ++index)", helper)
+                self.assertIn("VillagerManager.VillagerExists(index, false)", helper)
+                self.assertIn("data + 0x6B00", helper)
+                dreidel_helper = helper.split(
+                    "static void VF2RunMobileDreidel", 1
+                )[1].split("static void VF2RunMobileMenorah", 1)[0]
+                self.assertIn('VF2SetActionLabel(villager, "Playing Dreidel");', dreidel_helper)
+                self.assertIn("for (int round = 0; round < 7; ++round)", dreidel_helper)
+                self.assertIn("ldwGameState::GetRandom(100) > 49", dreidel_helper)
+                menorah_helper = helper.split(
+                    "static void VF2RunMobileMenorah", 1
+                )[1].split("static bool VF2HandleMobileDreidelGroup", 1)[0]
+                self.assertIn('VF2SetActionLabel(villager, "Celebrating Hanukkah");', menorah_helper)
+                self.assertEqual(menorah_helper.count("plans->PlanToJump("), 4)
+                self.assertIn("plans->PlanToStopSound();", menorah_helper)
+                self.assertNotIn("0x1A2", helper)
+                self.assertNotIn("0x1A3", helper)
                 self.assertIn(
                     'VF2SetActionLabel(villager, "Checking for stocking stuffers");',
                     helper,
@@ -504,7 +586,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("point.x += ldwGameState::GetRandom(60) - 30;", helper)
                 self.assertEqual(
                     helper.split("static bool VF2HandleMobileXmasStockings", 1)[1]
-                    .split("static bool VF2WeatherAllowsOutdoorFurniture", 1)[0]
+                    .split("static int VF2CollectEligibleHousehold", 1)[0]
                     .count("plans->PlanToJump("),
                     4,
                 )

@@ -20,6 +20,14 @@ SPECS = {
         "value": 0x20009000,
         "cells": ((5, 13), (6, 13), (7, 13)),
     },
+    "Dreidel.png.fmap": {
+        "value": 0x20005000,
+        "cells": ((5, 5), (6, 6), (7, 6), (8, 6)),
+    },
+    "Menorah.png.fmap": {
+        "value": 0x20007000,
+        "cells": ((7, 7), (6, 8), (4, 9)),
+    },
     "StockingLarge.png.fmap": {
         "value": 0x20008000,
         "cells": ((6, 12), (7, 12)),

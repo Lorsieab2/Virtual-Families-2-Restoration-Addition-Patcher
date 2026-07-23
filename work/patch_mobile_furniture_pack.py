@@ -74,6 +74,14 @@ MOBILE_BIRTHDAY_BALLOONS_ITEM_ID = 0x2DA
 MOBILE_BIRTHDAY_BALLOONS_OBJECT = 0x92
 MOBILE_BIRTHDAY_BALLOONS_PC_CELL_VALUE = 0x20009000
 MOBILE_BIRTHDAY_BALLOONS_PC_CELLS = ((5, 13), (6, 13), (7, 13))
+MOBILE_DREIDEL_ITEM_ID = 0x2AF
+MOBILE_DREIDEL_OBJECT = 0x8A
+MOBILE_DREIDEL_PC_CELL_VALUE = 0x20005000
+MOBILE_DREIDEL_PC_CELLS = ((5, 5), (6, 6), (7, 6), (8, 6))
+MOBILE_MENORAH_ITEM_ID = 0x2B8
+MOBILE_MENORAH_OBJECT = 0x8E
+MOBILE_MENORAH_PC_CELL_VALUE = 0x20007000
+MOBILE_MENORAH_PC_CELLS = ((7, 7), (6, 8), (4, 9))
 MOBILE_XMAS_STOCKING_ITEM_IDS = (0x2C6, 0x2C7)
 MOBILE_XMAS_STOCKING_OBJECT = 0x90
 MOBILE_XMAS_STOCKING_PC_CELL_VALUE = 0x20008000
@@ -12559,6 +12567,69 @@ def validate_mobile_birthday_balloons_pc_fmap(manifest):
     }
 
 
+def validate_mobile_group_holiday_pc_fmaps(manifest):
+    specs = (
+        (
+            "Dreidel.png.fmap",
+            MOBILE_DREIDEL_ITEM_ID,
+            MOBILE_DREIDEL_OBJECT,
+            (12, 8),
+            MOBILE_DREIDEL_PC_CELL_VALUE,
+            MOBILE_DREIDEL_PC_CELLS,
+        ),
+        (
+            "Menorah.png.fmap",
+            MOBILE_MENORAH_ITEM_ID,
+            MOBILE_MENORAH_OBJECT,
+            (10, 11),
+            MOBILE_MENORAH_PC_CELL_VALUE,
+            MOBILE_MENORAH_PC_CELLS,
+        ),
+    )
+    records = []
+    for filename, item_id, obj_id, grid, cell_value, cells in specs:
+        mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+        pc_path = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+        mobile = mobile_path.read_bytes()
+        pc = pc_path.read_bytes()
+        if len(pc) != len(mobile) or pc[:4] != b"QAMF":
+            raise RuntimeError(f"Invalid PC group Holiday map: {pc_path}")
+        width, height = struct.unpack_from("<ii", pc, 24)
+        grid_end = 32 + width * height * 4
+        if (width, height) != grid:
+            raise RuntimeError(f"Unexpected PC group Holiday grid: {filename}")
+        if pc[:32] != mobile[:32] or pc[grid_end:] != mobile[grid_end:]:
+            raise RuntimeError(f"PC group Holiday header/trailer drifted: {filename}")
+        expected_offsets = {
+            32 + (y * width + x) * 4 for x, y in cells
+        }
+        actual_offsets = set()
+        for offset in range(32, grid_end, 4):
+            value = struct.unpack_from("<I", pc, offset)[0]
+            if value:
+                if value != cell_value:
+                    raise RuntimeError(
+                        f"PC group Holiday map contains unsupported cell {value:#x}"
+                    )
+                actual_offsets.add(offset)
+        if actual_offsets != expected_offsets:
+            raise RuntimeError(f"PC group Holiday EObject cells drifted: {filename}")
+        records.append({
+            "item_id": hex(item_id),
+            "filename": filename,
+            "source_sha256": hashlib.sha256(pc).hexdigest(),
+            "source_bytes": len(pc),
+            "grid": [width, height],
+            "object": hex(obj_id),
+            "cell_value": hex(cell_value),
+            "cell_count": len(actual_offsets),
+        })
+    manifest["MobileGroupHolidayPCFmaps"] = {
+        "status": "validated minimal EObject-only optional payloads",
+        "records": records,
+    }
+
+
 def validate_mobile_xmas_stocking_pc_fmaps(manifest):
     records = []
     for filename, spec in MOBILE_XMAS_STOCKING_PC_SPECS.items():
@@ -12663,6 +12734,8 @@ private:
     friend void __cdecl VF2MobileStudyingOnPatio(CVillager &);
 };
 class CContentMap { public: enum EObject {
+    eObjectDreidel = 0x8A,
+    eObjectMenorah = 0x8E,
     eObjectXmasStockings = 0x90,
     eObjectBirthdayBalloons = 0x92,
     eObjectChaise = 0x95,
@@ -12737,6 +12810,12 @@ public:
     void NewBehavior(EBehavior, SBehaviorData const &);
 };
 
+class CVillagerManager {
+public:
+    bool VillagerExists(int, bool);
+    CVillager &GetVillager(int);
+};
+
 class CFurnitureManager;
 int __cdecl VF2PtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
 
@@ -12770,6 +12849,7 @@ class CWeather { public: int currentType; };
 class CNight { public: bool AIIsDayTime(); };
 class ldwGameState { public: static int __cdecl GetRandom(int); };
 extern CFurnitureManager FurnitureManager;
+extern CVillagerManager VillagerManager;
 extern CWeather Weather;
 extern CNight Night;
 extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
@@ -13193,6 +13273,131 @@ static bool VF2HandleMobileXmasStockings(CVillager &villager)
     return true;
 }
 
+static int VF2CollectEligibleHousehold(CVillager **eligible)
+{
+    int count = 0;
+    for (int index = 0; index < 30; ++index) {
+        if (!VillagerManager.VillagerExists(index, false)) continue;
+        CVillager &resident = VillagerManager.GetVillager(index);
+        unsigned char *data = reinterpret_cast<unsigned char *>(&resident);
+        if (*reinterpret_cast<int *>(data + 0x6B00) <= 0) continue;
+        eligible[count++] = &resident;
+    }
+    return count;
+}
+
+static void VF2RunMobileDreidel(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectDreidel,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return;
+    }
+    VF2SetActionLabel(villager, "Playing Dreidel");
+    ldwPoint point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 45;
+    point.y += ldwGameState::GetRandom(60) - 20;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+    for (int round = 0; round < 7; ++round) {
+        if (ldwGameState::GetRandom(100) > 49) {
+            plans->PlanToWait(
+                ldwGameState::GetRandom(3) + 4,
+                static_cast<EBodyPosition>(0x12));
+            VF2PlanBirthdaySound(plans, 0x63);
+            plans->PlanToWait(2, static_cast<EBodyPosition>(0x12));
+            VF2PlanBirthdaySound(plans, 0x108);
+        } else {
+            VF2PlanBirthdaySound(plans, 0x77);
+            plans->PlanToWait(
+                ldwGameState::GetRandom(3) + 6,
+                static_cast<EBodyPosition>(0x11));
+            VF2PlanBirthdaySound(plans, 0xBD);
+        }
+    }
+    plans->StartNewBehavior(villager);
+}
+
+static void VF2RunMobileMenorah(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectMenorah,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return;
+    }
+    VF2SetActionLabel(villager, "Celebrating Hanukkah");
+    ldwPoint point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    int age = *reinterpret_cast<int *>(data + 0x6A54);
+    int gender = *reinterpret_cast<int *>(data + 0x6A58);
+    VF2PlanBirthdaySound(
+        plans, age <= 0x117 ? 0xC3 : (gender == 1 ? 0xF2 : 0xDC));
+    VF2PlanBirthdaySound(plans, 0xFB);
+    plans->PlanToJoyTwirlCW(ldwGameState::GetRandom(3) + 4);
+    plans->PlanToJump(10);
+    plans->PlanToJump(20);
+    plans->PlanToJump(10);
+    plans->PlanToJump(20);
+
+    point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 2,
+        static_cast<EBodyPosition>(info.orientation != 0 ? 0x0A : 0x0D));
+
+    point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToJoyTwirlCW(ldwGameState::GetRandom(3) + 4);
+    EBodyPosition first = static_cast<EBodyPosition>(
+        info.orientation != 0 ? 0x0D : 0x0A);
+    EBodyPosition second = static_cast<EBodyPosition>(
+        info.orientation != 0 ? 0x0A : 0x0D);
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 1, first);
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 1, second);
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+}
+
+static bool VF2HandleMobileDreidelGroup(CVillager &villager)
+{
+    (void)villager;
+    CVillager *eligible[30] = {};
+    int count = VF2CollectEligibleHousehold(eligible);
+    for (int index = 0; index < count; ++index) {
+        VF2RunMobileDreidel(*eligible[index]);
+    }
+    return true;
+}
+
+static bool VF2HandleMobileMenorahGroup(CVillager &villager)
+{
+    (void)villager;
+    CVillager *eligible[30] = {};
+    int count = VF2CollectEligibleHousehold(eligible);
+    for (int index = 0; index < count; ++index) {
+        VF2RunMobileMenorah(*eligible[index]);
+    }
+    return true;
+}
+
 static bool VF2WeatherAllowsOutdoorFurniture()
 {
     // Mobile values: 0 sunny, 1 cloudy, 2 rain, 3 storm, 4 fog, 5 snow.
@@ -13340,6 +13545,8 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
     if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
     if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
+    if (candidate == 0x2AF) return VF2HandleMobileDreidelGroup(villager);
+    if (candidate == 0x2B8) return VF2HandleMobileMenorahGroup(villager);
     if (candidate == 0x2C6 || candidate == 0x2C7) {
         return VF2HandleMobileXmasStockings(villager);
     }
@@ -13483,6 +13690,30 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "mobile_behavior": "CBehavior::PlayingWithBalloons",
             "mobile_behavior_id": "0x1ad",
             "desktop_implementation": "exact direct plan-sequence port",
+            "stock_tables_extended": False,
+        }, {
+            "name": "mobile Dreidel",
+            "item_ids": [hex(MOBILE_DREIDEL_ITEM_ID)],
+            "label": "Playing Dreidel",
+            "object": hex(MOBILE_DREIDEL_OBJECT),
+            "manual_drop_only": True,
+            "whole_household": True,
+            "autonomous": False,
+            "mobile_behavior": "CBehavior::Dreidel",
+            "mobile_behavior_id": "0x1a2",
+            "desktop_implementation": "exact guarded 30-resident external plan port",
+            "stock_tables_extended": False,
+        }, {
+            "name": "mobile Menorah",
+            "item_ids": [hex(MOBILE_MENORAH_ITEM_ID)],
+            "label": "Celebrating Hanukkah",
+            "object": hex(MOBILE_MENORAH_OBJECT),
+            "manual_drop_only": True,
+            "whole_household": True,
+            "autonomous": False,
+            "mobile_behavior": "CBehavior::Menorah",
+            "mobile_behavior_id": "0x1a3",
+            "desktop_implementation": "exact guarded 30-resident external plan port",
             "stock_tables_extended": False,
         }, {
             "name": "mobile Christmas Stockings",
@@ -17342,6 +17573,7 @@ def main():
     validate_mobile_birthday_cake_pc_fmap(manifest)
     validate_mobile_birthday_presents_pc_fmap(manifest)
     validate_mobile_birthday_balloons_pc_fmap(manifest)
+    validate_mobile_group_holiday_pc_fmaps(manifest)
     validate_mobile_xmas_stocking_pc_fmaps(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
