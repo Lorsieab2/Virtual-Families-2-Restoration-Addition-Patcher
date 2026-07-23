@@ -85,6 +85,31 @@ MOBILE_DREIDEL_ITEM_ID = 0x2AF
 MOBILE_DREIDEL_OBJECT = 0x8A
 MOBILE_DREIDEL_PC_CELL_VALUE = 0x20005000
 MOBILE_DREIDEL_PC_CELLS = ((5, 5), (6, 6), (7, 6), (8, 6))
+MOBILE_XMAS_TREE_ITEM_IDS = (0x2AD, 0x2AE)
+MOBILE_XMAS_TREE_OBJECT = 0x88
+MOBILE_XMAS_TREE_PC_CELL_VALUE = 0x20004000
+MOBILE_XMAS_TREE_PC_SPECS = {
+    "ChristmasTree1.png.fmap": {
+        "grid": (15, 22),
+        "cells": (
+            (8, 18), (9, 18), (10, 18), (11, 18),
+            (6, 19), (8, 19), (9, 19), (10, 19), (11, 19), (12, 19),
+            (6, 20), (7, 20), (8, 20), (9, 20),
+        ),
+        "item_id": 0x2AD,
+    },
+    "ChristmasTree2.png.fmap": {
+        "grid": (16, 22),
+        "cells": (
+            (15, 17),
+            (14, 18), (15, 18),
+            (13, 19), (14, 19),
+            (6, 20), (7, 20), (8, 20), (9, 20), (10, 20),
+            (11, 20), (12, 20), (13, 20),
+        ),
+        "item_id": 0x2AE,
+    },
+}
 MOBILE_MENORAH_ITEM_ID = 0x2B8
 MOBILE_MENORAH_OBJECT = 0x8E
 MOBILE_MENORAH_PC_CELL_VALUE = 0x20007000
@@ -473,6 +498,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES = {
     0x12E: 0x124,
     0x12F: 0x124,
     0x130: 0x124,
+    0x131: 0x124,
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
@@ -619,6 +645,12 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": 0x130,
         "name": "Fill available yard slots with weeds",
         "description": "Fills every available collectable slot with yard weeds. Existing collectables are preserved.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x131,
+        "name": "Clean Garden",
+        "description": "Removes every weed from the yard without affecting other collectables.",
         "price": 0,
     },
 ]
@@ -7990,7 +8022,7 @@ extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
 static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
     // Post-B153 cheats reuse the trophy descriptor so adding a row never
     // shifts villager-body or Holiday Ornament image IDs.
-    if (itemId >= 0x12E && itemId <= 0x130) itemId = 0x124;
+    if (itemId >= 0x12E && itemId <= 0x131) itemId = 0x124;
     int index = itemId - kVF2VisibleSpecialUpgradeFirstItem;
     return index < 0 || index >= kVF2VisibleSpecialUpgradeCount ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -8621,6 +8653,7 @@ public:
     void ResetCollection();
     void SpawnTrashInHouse(int count);
     void SpawnWeedsInYard(int count);
+    void RemoveAll(ECarrying carrying);
 
     char pad0[0x8A8];
     unsigned char luckyRockActive;
@@ -9199,6 +9232,9 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x130:
         CollectableItem.SpawnWeedsInYard(30);
+        break;
+    case 0x131:
+        CollectableItem.RemoveAll((ECarrying)0x7D);
         break;
     default:
         return;
@@ -12639,7 +12675,7 @@ def validate_mobile_birthday_banner_pc_fmap(manifest):
 
 
 def validate_mobile_group_holiday_pc_fmaps(manifest):
-    specs = (
+    specs = [
         (
             "Dreidel.png.fmap",
             MOBILE_DREIDEL_ITEM_ID,
@@ -12656,7 +12692,16 @@ def validate_mobile_group_holiday_pc_fmaps(manifest):
             MOBILE_MENORAH_PC_CELL_VALUE,
             MOBILE_MENORAH_PC_CELLS,
         ),
-    )
+    ]
+    for filename, spec in MOBILE_XMAS_TREE_PC_SPECS.items():
+        specs.append((
+            filename,
+            spec["item_id"],
+            MOBILE_XMAS_TREE_OBJECT,
+            spec["grid"],
+            MOBILE_XMAS_TREE_PC_CELL_VALUE,
+            spec["cells"],
+        ))
     records = []
     for filename, item_id, obj_id, grid, cell_value, cells in specs:
         mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
@@ -12805,6 +12850,7 @@ private:
     friend void __cdecl VF2MobileStudyingOnPatio(CVillager &);
 };
 class CContentMap { public: enum EObject {
+    eObjectXmasTree = 0x88,
     eObjectDreidel = 0x8A,
     eObjectMenorah = 0x8E,
     eObjectXmasStockings = 0x90,
@@ -13502,6 +13548,58 @@ static void VF2RunMobileDreidel(CVillager &villager)
     plans->StartNewBehavior(villager);
 }
 
+static void VF2RunMobileXmasTree(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectXmasTree,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return;
+    }
+    VF2SetActionLabel(villager, "Celebrating around the tree");
+    ldwPoint point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    int age = *reinterpret_cast<int *>(data + 0x6A54);
+    int gender = *reinterpret_cast<int *>(data + 0x6A58);
+    VF2PlanBirthdaySound(
+        plans, age <= 0x117 ? 0xC3 : (gender == 1 ? 0xF2 : 0xDC));
+    VF2PlanBirthdaySound(plans, 0xFB);
+    plans->PlanToJoyTwirlCW(ldwGameState::GetRandom(3) + 4);
+    plans->PlanToJump(10);
+    plans->PlanToJump(20);
+    plans->PlanToJump(10);
+    plans->PlanToJump(20);
+
+    point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 2,
+        static_cast<EBodyPosition>(info.orientation != 0 ? 0x0A : 0x0D));
+
+    point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToJoyTwirlCW(ldwGameState::GetRandom(3) + 4);
+    EBodyPosition first = static_cast<EBodyPosition>(
+        info.orientation != 0 ? 0x0D : 0x0A);
+    EBodyPosition second = static_cast<EBodyPosition>(
+        info.orientation != 0 ? 0x0A : 0x0D);
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 1, first);
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 1, second);
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+}
+
 static void VF2RunMobileMenorah(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -13561,6 +13659,17 @@ static bool VF2HandleMobileDreidelGroup(CVillager &villager)
     int count = VF2CollectEligibleHousehold(eligible);
     for (int index = 0; index < count; ++index) {
         VF2RunMobileDreidel(*eligible[index]);
+    }
+    return true;
+}
+
+static bool VF2HandleMobileXmasTreeGroup(CVillager &villager)
+{
+    (void)villager;
+    CVillager *eligible[30] = {};
+    int count = VF2CollectEligibleHousehold(eligible);
+    for (int index = 0; index < count; ++index) {
+        VF2RunMobileXmasTree(*eligible[index]);
     }
     return true;
 }
@@ -13724,6 +13833,9 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
     if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
     if (candidate == 0x2DB) return VF2HandleMobileBirthdayBanner(villager);
+    if (candidate == 0x2AD || candidate == 0x2AE) {
+        return VF2HandleMobileXmasTreeGroup(villager);
+    }
     if (candidate == 0x2AF) return VF2HandleMobileDreidelGroup(villager);
     if (candidate == 0x2B8) return VF2HandleMobileMenorahGroup(villager);
     if (candidate == 0x2C6 || candidate == 0x2C7) {
@@ -13884,6 +13996,18 @@ __VF2_COMPUTER_DROP_DISPATCH__
             ],
             "mobile_behavior_ids": ["0x1ae", "0x1af"],
             "desktop_implementation": "exact guarded object-scan and 30-resident external plan port",
+            "stock_tables_extended": False,
+        }, {
+            "name": "mobile Christmas Trees",
+            "item_ids": [hex(item) for item in MOBILE_XMAS_TREE_ITEM_IDS],
+            "label": "Celebrating around the tree",
+            "object": hex(MOBILE_XMAS_TREE_OBJECT),
+            "manual_drop_only": True,
+            "whole_household": True,
+            "autonomous": False,
+            "mobile_behavior": "CBehavior::EachPeepCelebrateXMasTree",
+            "mobile_behavior_id": "0x1a0",
+            "desktop_implementation": "exact guarded 30-resident external plan port",
             "stock_tables_extended": False,
         }, {
             "name": "mobile Dreidel",

@@ -96,7 +96,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 |---|---|
 | Spawn max house trash / Spawn max weeds | B156 source + combined executable link complete | Cheat Upgrade items `0x12F-0x130` call the native bounded `SpawnTrashInHouse(30)` and `SpawnWeedsInYard(30)` methods. The UI states that only available collectable slots are filled; existing collectables are preserved. Live purchase/spawn/save QA remains. |
 | Max out sock pile / No sock pile | Not started |
-| Clean House / Clean Garden | Not started |
+| Clean House / Clean Garden | Clean Garden B156 source complete; Clean House not started | Clean Garden item `0x131` calls the exact stock Weed Bomb removal path `RemoveAll(0x7D)`, clearing only the full weed family while preserving every other collectable. Clean House still needs an explicit category boundary before implementation. Live purchase/remove/save QA remains. |
 | Spawn Marriage Email | Not started |
 | Function-sort every Cheat Upgrade | Partial |
 | Collector Sell All rarity payment and deliberate reset only | Shipped / in-game QA pending |

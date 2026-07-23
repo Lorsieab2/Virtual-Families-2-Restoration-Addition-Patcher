@@ -43,7 +43,7 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2AA` | Holiday Candles | yes | `KidExaminesCandles` | handler absent; rendered-only |
 | `0x2AB` | Candy Canes | yes | generic Christmas decor/knickknack family only | exact route unresolved |
 | `0x2AC` | Christmas Cookie | yes | Santa-cookie family exists | exact single-cookie route unresolved |
-| `0x2AD-0x2AE` | Christmas Trees | yes | `XmasTree`; admire, water, celebrate | handlers absent; rendered-only |
+| `0x2AD-0x2AE` | Christmas Trees | yes | `XmasTree`; admire, water, celebrate | exact whole-household manual celebration implemented with two PC-safe maps |
 | `0x2AF` | Dreidel | yes | exact `Dreidel` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
 | `0x2B0-0x2B5` | Eggnog and holiday gnomes | yes | generic Christmas decor/knickknack family only | exact routes unresolved |
 | `0x2B6-0x2B7` | Large Angel and Large Star | no | no per-item route proven | decorative |
@@ -164,6 +164,19 @@ QA remain. Autonomous-style Maybe callbacks remain excluded because their
 selector reachability is not proven.
 
 ## Whole-household Dreidel and Menorah
+
+Christmas Tree `0x2AD` and Lighted Christmas Tree `0x2AE` share EObject
+`0x88`. Their exact manual hotspot sends all eligible permanent residents
+through `Celebrating around the tree`. The external plan preserves three
+randomized approaches, age/gender voice selection, sound `0xFB`, two twirls,
+four jumps, orientation-aware waits, and sound stop without indexing mobile
+behavior `0x1A0`.
+
+The `15x22` Tree 1 map retains fourteen `0x20004000` EObject cells and hashes
+to `5907f7f60209d77d6c63b15b009243756c9f2c4d729134c41c105e0863b66926`.
+The `16x22` Tree 2 map retains thirteen matching EObject cells and hashes to
+`289e237d686f164dfd3e2293aeac248f5259e700125d963b4b578cefd642ccc8`.
+Live two-tree placement, group filtering, and orientation QA remain.
 
 Dreidel `0x2AF` / EObject `0x8A` and Menorah `0x2B8` / EObject `0x8E`
 use the mobile whole-household contract. The desktop port collects exactly the

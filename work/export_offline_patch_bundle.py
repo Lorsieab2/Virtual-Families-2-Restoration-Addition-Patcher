@@ -73,6 +73,8 @@ MOBILE_BIRTHDAY_FMAP_FILES = (
     "Birthday_presents.png.fmap",
 )
 MOBILE_HOLIDAY_FMAP_FILES = (
+    "ChristmasTree1.png.fmap",
+    "ChristmasTree2.png.fmap",
     "Dreidel.png.fmap",
     "Menorah.png.fmap",
     "StockingLarge.png.fmap",

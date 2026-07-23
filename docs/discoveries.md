@@ -2785,3 +2785,20 @@
 - A combined Cheat-Upgrades plus Behavior-Patches executable compiles and links.
   Live purchase, persistence, mixed birthday furniture, and group-action QA
   remain.
+
+## 2026-07-23 - Exact Christmas Tree celebration and Clean Garden
+
+- Christmas Tree `0x2AD` and Lighted Christmas Tree `0x2AE` share EObject
+  `0x88` and the exact whole-household `Celebrating around the tree` manual
+  route. The guarded external plan excludes absent, away, dead, and temporary
+  residents and never indexes mobile behavior `0x1A0`.
+- Tree 1's minimal `15x22` map hashes to
+  `5907f7f60209d77d6c63b15b009243756c9f2c4d729134c41c105e0863b66926`;
+  Tree 2's `16x22` map hashes to
+  `289e237d686f164dfd3e2293aeac248f5259e700125d963b4b578cefd642ccc8`.
+- Clean Garden Cheat Upgrade `0x131` calls the exact stock Weed Bomb path
+  `CollectableItem.RemoveAll((ECarrying)0x7D)`. It removes only weeds
+  `0x7D-0x80` through native removal and leaves all other collectables intact.
+- Plate of Cookies has no registered mobile manual hotspot. Its exact reachable
+  action is an autonomous under-14 kid candidate with an optional adult rescue,
+  so B156 does not invent a manual drop behavior for it.
