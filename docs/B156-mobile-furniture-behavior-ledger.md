@@ -21,7 +21,7 @@ mobile-exclusive VF2 furniture and do not count toward this patch.
 All 63 items receive a copied desktop donor click-table byte, but that alone
 does not establish the correct mobile action. The base payload deliberately
 zeroes unsupported furniture-map cells, leaving unresolved families
-rendered-only. The optional patch now replaces 19 proven PC-safe maps, including
+rendered-only. The optional patch now replaces 33 proven PC-safe maps, including
 the four lounge chairs, Patio Umbrella, Patio Table, Picnic Table, birthday
 family, and implemented Holiday families, and enables their exact guarded
 manual-drop behaviors.
@@ -46,15 +46,18 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2AC` | Christmas Cookie | yes | Santa-cookie family exists | exact single-cookie route unresolved |
 | `0x2AD-0x2AE` | Christmas Trees | yes | `XmasTree`; admire, water, celebrate | exact whole-household manual celebration implemented with two PC-safe maps |
 | `0x2AF` | Dreidel | yes | exact `Dreidel` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
-| `0x2B0-0x2B5` | Eggnog and holiday gnomes | yes | generic Christmas decor/knickknack family only | exact routes unresolved |
+| `0x2B0` | Eggnog | yes | exact `Eggnog` family exists | exact route unresolved |
+| `0x2B1-0x2B5` | Holiday gnomes | yes | `AdmiringXmasKnickKnacks` | exact raw-age-7+ manual route implemented with five PC-safe maps |
 | `0x2B6-0x2B7` | Large Angel and Large Star | no | no per-item route proven | decorative |
 | `0x2B8` | Menorah | yes | exact `Menorah` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
 | `0x2B9-0x2BC` | Ornaments | no | no per-item route proven | decorative |
-| `0x2BD` | Penguin Decoration | yes | generic Christmas knickknack family only | exact route unresolved |
+| `0x2BD` | Penguin Decoration | yes | `AdmiringXmasKnickKnacks` | exact raw-age-7+ manual route implemented with PC-safe map |
 | `0x2BE` | Plate of Cookies | yes | adult-save/kid-steal Santa-cookie family | exact age-routed manual pair implemented with PC-safe map; child autonomous candidate pending |
-| `0x2BF-0x2C5` | Poinsettia and Christmas decorations | yes | generic Christmas decor/knickknack family only | exact routes unresolved |
+| `0x2BF` | Poinsettia | yes | no exact functional marker found | exact route unresolved |
+| `0x2C0`, `0x2C2-0x2C3`, `0x2C5` | Polar bear, reindeer, garden Santa, and snowman | yes | `AdmiringXmasKnickKnacks` | exact raw-age-7+ manual route implemented with four PC-safe maps |
+| `0x2C1`, `0x2C4` | Red Bow and Santa Wall Decoration | yes | `InteractHouseXmasDecor` | exact adult-only manual route implemented with two PC-safe maps |
 | `0x2C6-0x2C7` | Stockings | yes | exact `XmasStockings` / `KidsCheckXmasStockings` | exact under-18 manual route implemented with two PC-safe maps |
-| `0x2C8-0x2C9` | Garlands | yes | `InteractHouseXmasDecor` family | exact route unresolved |
+| `0x2C8-0x2C9` | Garlands | yes | `InteractHouseXmasDecor` | exact adult-only manual route implemented with two PC-safe maps |
 | `0x2CA-0x2D2` | Thanksgiving food | no | no Thanksgiving-specific hotspot or behavior recovered | decorative |
 | `0x2D3` | Holiday Welcome Mat | no | stock desktop Welcome Mat exists; no exclusive action proven | existing donor only |
 | `0x2D4-0x2D5` | Wreaths | yes | `InteractHouseXmasDecor` family | exact route unresolved |
@@ -281,6 +284,32 @@ EObject value `0x20007800` at `(6,8)` and `(7,8)`. Its SHA-256 is
 `cb0bd7dfc1d1c32fed6c0219c52cc677e61375ad8146b5802c1efa1223a4d0d2`.
 Live child/adult boundary, orientation, rescuer-present/absent, sound, map
 placement, and disable-restoration QA remain.
+
+## Christmas figurines and house decorations
+
+The mobile QAMFs prove EObject `0x8C` on ten items: gnomes `0x2B1-0x2B5`,
+Penguin Decoration `0x2BD`, Polar Bear Decoration `0x2C0`, Reindeer
+Decoration `0x2C2`, Santa Decoration `0x2C3`, and Snowman `0x2C5`. Mobile
+behavior `0x1A4`, `AdmiringXmasKnickKnacks`, is enabled at weight `2000`,
+requires raw age `7+`, and uses the exact label `Enjoying the figurines`.
+The external PC plan preserves the object lookup, approach, villager Oh sound,
+random cheer and orientation-aware wait, two-count joy twirl, and behavior
+completion.
+
+EObject `0x8D` is present on Red Bow `0x2C1`, Santa Wall Decoration `0x2C4`,
+Holiday Garland `0x2C8`, and Lighted Garland `0x2C9`. Mobile behavior `0x1A7`,
+`InteractHouseXmasDecor`, is enabled at weight `2000` with adult minimum
+`0x118`. Its exact `Checking the decorations` plan preserves both approaches,
+gender sounds `0x8C/0x99` and `0xCC/0xD3`, sounds `0xB5` and `0xE8`, both
+random work phases, the orientation-aware wait, sound stop, and completion.
+
+All fourteen PC-safe maps preserve their mobile dimensions, headers, and
+trailers, zero every unsupported cell, and restore only the proven EObject
+anchors as `0x20006000` or `0x20006800`. Mobile behavior IDs `0x1A4` and
+`0x1A7` remain outside the fixed PC behavior table, so spontaneous selection
+remains pending rather than indexing an invalid slot. Wreaths `0x2D4-0x2D5`
+remain unresolved: their supplied QAMFs contain wall-mask cells only and no
+EObject `0x8D` anchor.
 
 Player testing on 2026-07-23 confirms the exact manual chaise pose/anchor works
 in good weather and the dedicated bad-weather refusal fires correctly. Manual

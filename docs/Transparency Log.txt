@@ -1022,3 +1022,27 @@ B156 Plate of Cookies behavior
   restoration checks.
 - Live child/adult boundary, orientation, rescuer-present/absent, sound, and
   patch-off testing remain.
+B156 Christmas figurine and house-decoration behaviors
+- Audited all 41 preserved mobile QAMFs by functional EObject bits. Ten maps
+  carry object 0x8C and four maps carry object 0x8D; no furniture was assigned
+  from its artwork name alone.
+- Ported exact guarded manual `AdmiringXmasKnickKnacks` behavior 0x1A4 for
+  gnomes 0x2B1-0x2B5, Penguin 0x2BD, Polar Bear 0x2C0, Reindeer 0x2C2,
+  garden Santa 0x2C3, and Snowman 0x2C5. The raw-age-7 minimum, weight-2000
+  candidate evidence, exact label, Oh sound, cheer, pose, and twirl are
+  recorded.
+- Ported exact guarded adult `InteractHouseXmasDecor` behavior 0x1A7 for Red
+  Bow 0x2C1, Santa Wall Decoration 0x2C4, and garlands 0x2C8-0x2C9. The
+  raw-age-0x118 minimum, weight 2000, gender sounds, work phases, pose, and
+  sound stop are preserved.
+- Added fourteen PC-safe QAMFs containing only the proven 0x8C/0x8D EObject
+  anchors. Mobile-only behavior IDs remain outside the fixed PC table.
+- Corrected the offline map overlay to include all 33 implemented maps,
+  including the previously missing Candle and Cookie enable/restore records.
+- Wreaths remain unresolved because their QAMFs contain wall-mask data but no
+  object 0x8D marker.
+- All 230 tests pass with one intentional skip. All 16 executable layouts
+  link uniquely, Holiday validation passes 8/8 positive and 8/8 negative, and
+  all five runtime flags pass exact toggle restoration.
+- The fully enabled executable is 1,774,080 bytes with SHA-256
+  7E7389620C19BAF1409332809EAB4BB9F26E19BE367C288116C0CA89CAF0DFA1.

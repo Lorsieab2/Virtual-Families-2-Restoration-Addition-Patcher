@@ -21,6 +21,8 @@ TARGETS = (
     "AdmiringXmasKnickKnacks",
     "AdultsSaveSantasCookies",
     "KidStealsSantasCookies",
+    "Knick",
+    "XmasDecor",
 )
 
 

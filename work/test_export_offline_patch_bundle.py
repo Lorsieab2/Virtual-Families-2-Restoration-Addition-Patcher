@@ -458,12 +458,28 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             "Balloons_birthday.png.fmap": "f66e4dc4776962b32b68e069a133ca9b1a7f57306d7df357866dd2630c307fc3",
             "Birthday_cake.png.fmap": "e1c55dc0d38b44003abe878cd9ccdfee3e49b5c7ed9e793d14b25c0fae57926d",
             "Birthday_presents.png.fmap": "63ef84177e87b4a4dd28c0a85c4aff2ee741423ca4ac34b3d273cb11fd4a18c5",
+            "CandleOnHolder.png.fmap": "80d3f61d48e59fd55684edfb205670289fa6b15ba9768624ae318849a9f0bc11",
             "ChristmasTree1.png.fmap": "5907f7f60209d77d6c63b15b009243756c9f2c4d729134c41c105e0863b66926",
             "ChristmasTree2.png.fmap": "289e237d686f164dfd3e2293aeac248f5259e700125d963b4b578cefd642ccc8",
             "Dreidel.png.fmap": "44f21fc628cd90090f3eaf8eb1925de8d890fa5239828f55d115ae37c453b36a",
+            "Gnome1.png.fmap": "239f7adcae51ac9a16de74df90af1fbf532238b61614fc82670b2500bcaa8455",
+            "Gnome2.png.fmap": "0b025200e7cb6c25a767bba703ae0ee8048769a69b1e18383e72b0ce2d6a6eb0",
+            "Gnome3.png.fmap": "6b34222939bcfc60408d7ff60e3a3a93bd271398c393d53f0a60b1b173504662",
+            "Gnome4.png.fmap": "37ed6f4e6b63a5b09a9bc82979535583038363efc8e44ca27af2a3d62abf8c93",
+            "Gnome5.png.fmap": "0ee4bb4e95d8409b4539b6a5320eca417bd61dd641f4f6bd8d40f9fc2452cafb",
             "Menorah.png.fmap": "352ba4be943eae6a168a133430ccd6555c5feb41a630c118da2d24c019e39365",
+            "PenguinDecoration.png.fmap": "12f2d782a2f570570f9126bb87cc3d9bb7bf4cd04881c6521d909ea7460277b8",
+            "PlateOfCookies.png.fmap": "cb0bd7dfc1d1c32fed6c0219c52cc677e61375ad8146b5802c1efa1223a4d0d2",
+            "PolarBearDecoration.png.fmap": "7640dc46d1769ce490f8032ae798203213600daaf13290acabc9252f6285d63a",
+            "RedBow.png.fmap": "85fdcb318bb1549844173c5c10bf669d4c0a3a0b6de7dd7e1ae8c4e29d94035b",
+            "ReindeerDecoration.png.fmap": "50f2d2293c64ad25b70cd0808b858af40f71156ffc816ae4512714e64b863e7c",
+            "SantaGardenDecoration.png.fmap": "03f0c7e5ffcaa57ccb0f46ade96b4397add658d51e7a2ee18970ad1353f7e775",
+            "SantaWallDecoration.png.fmap": "0cb058be3e24652008e20e0efaf1b101d6ddac6642aba1ce0d8b5ecf63a2eee1",
+            "Snowman.png.fmap": "098b79691ae4cd1e6d36e295c057a3b2740b3991986be1b62dd77d4e73c82f61",
             "StockingLarge.png.fmap": "f467c400f7ae60efea0ab67ccb33d5ec9327a94383102f750e20dd29d70165a0",
             "StockingSmall.png.fmap": "aa6eee69ecaedcaa03575d6bb916e4442cfc83efda41f6e3a8291371475e8003",
+            "StringOfLeaves.png.fmap": "c1268f8d827045e210854bb3bd70dec14f8991d18302219cd78f3c090366b174",
+            "StringOfLights.png.fmap": "ce35221e4a91a75ec2994e4a731db230fdd31ff55b59267a663192fe6f4ad113",
         }
         mobile_dir = (
             ROOT / "patcher_assets" / "optional_patches"
@@ -491,7 +507,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             for filename in expected_hashes:
                 (base / "Assets" / filename).write_bytes((mobile_dir / filename).read_bytes())
             records = exporter.mobile_furniture_behavior_asset_patches(bundle, base)
-            self.assertEqual(len(records), 17)
+            self.assertEqual(len(records), 33)
             self.assertEqual(
                 [Path(row["file_path"]).name for row in records],
                 list(expected_hashes),

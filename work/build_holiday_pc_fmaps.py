@@ -58,6 +58,62 @@ SPECS = {
         "value": 0x20007800,
         "cells": ((6, 8), (7, 8)),
     },
+    "Gnome1.png.fmap": {
+        "value": 0x20006000,
+        "cells": ((5, 10), (6, 10), (5, 11)),
+    },
+    "Gnome2.png.fmap": {
+        "value": 0x20006000,
+        "cells": ((4, 10), (5, 10), (6, 10)),
+    },
+    "Gnome3.png.fmap": {
+        "value": 0x20006000,
+        "cells": ((6, 11), (7, 11), (6, 12)),
+    },
+    "Gnome4.png.fmap": {
+        "value": 0x20006000,
+        "cells": ((4, 10), (5, 10), (6, 10)),
+    },
+    "Gnome5.png.fmap": {
+        "value": 0x20006000,
+        "cells": ((5, 10), (6, 10)),
+    },
+    "PenguinDecoration.png.fmap": {
+        "value": 0x20006000,
+        "cells": ((8, 7), (7, 8), (8, 8)),
+    },
+    "PolarBearDecoration.png.fmap": {
+        "value": 0x20006000,
+        "cells": ((6, 15), (7, 15), (8, 15)),
+    },
+    "ReindeerDecoration.png.fmap": {
+        "value": 0x20006000,
+        "cells": ((4, 13), (5, 13), (9, 13), (5, 14), (8, 14), (9, 14)),
+    },
+    "SantaGardenDecoration.png.fmap": {
+        "value": 0x20006000,
+        "cells": ((8, 15), (9, 15)),
+    },
+    "Snowman.png.fmap": {
+        "value": 0x20006000,
+        "cells": ((7, 12), (8, 12)),
+    },
+    "RedBow.png.fmap": {
+        "value": 0x20006800,
+        "cells": ((3, 10), (4, 10), (5, 10), (6, 10)),
+    },
+    "SantaWallDecoration.png.fmap": {
+        "value": 0x20006800,
+        "cells": ((4, 10), (5, 10)),
+    },
+    "StringOfLeaves.png.fmap": {
+        "value": 0x20006800,
+        "cells": ((9, 15), (10, 15)),
+    },
+    "StringOfLights.png.fmap": {
+        "value": 0x20006800,
+        "cells": ((9, 12), (10, 12)),
+    },
     "StockingLarge.png.fmap": {
         "value": 0x20008000,
         "cells": ((6, 12), (7, 12)),

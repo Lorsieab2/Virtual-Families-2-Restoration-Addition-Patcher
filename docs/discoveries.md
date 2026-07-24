@@ -3312,3 +3312,35 @@
   checks, and pass exact restoration for all five dormant runtime flags. The
   fully enabled layout is 1,773,568 bytes with SHA-256
   `A31601B316144E2FAE4B6BFE48CA4BD8E9B635DD68CA3590BF567BF0BFBA575F`.
+
+## 2026-07-24 - Mobile Christmas figurine and house-decoration object proof
+
+- Scanning all 41 preserved mobile QAMFs by encoded EObject bits finds object
+  `0x8C` only on Gnome1-5, Penguin Decoration, Polar Bear Decoration,
+  Reindeer Decoration, Santa Garden Decoration, and Snowman.
+- The same scan finds object `0x8D` only on Red Bow, Santa Wall Decoration,
+  String of Leaves, and String of Lights. Wreath1 and Wreath2 contain only
+  `0x01840000` wall-mask cells and therefore do not prove the house-decoration
+  route.
+- Mobile `CVillager::InitAI` case `0x1A4` enables weight `2000`, raw-age
+  minimum `7`, furniture-required byte `1`, and object `0x8C`. Case `0x1A7`
+  enables weight `2000`, raw-age minimum `0x118`, furniture-required byte `1`,
+  and object `0x8D`.
+- `AdmiringXmasKnickKnacks` labels `Enjoying the figurines`, approaches at
+  speed 200, plays the villager Oh sound, cheers for 2-5 ticks, waits for 2-5
+  ticks in an orientation-aware pose, and joy-twirls twice.
+- `InteractHouseXmasDecor` labels `Checking the decorations`, performs two
+  approaches, preserves gender sounds `0x8C/0x99` and `0xCC/0xD3`, sounds
+  `0xB5` and `0xE8`, random 3-5 and 2-3 work phases, an orientation-aware
+  wait, and sound stop.
+- B156 ports both manual plans externally and creates fourteen minimal QAMFs
+  with only `0x20006000` or `0x20006800` anchors. It does not index mobile
+  behavior slots beyond the desktop table.
+- The offline asset overlay now enumerates all 33 implemented behavior maps.
+  This also fixes the earlier omission of the already-implemented Candle and
+  Cookie maps from player-facing enable/restore records.
+- The complete 230-test run passes with one intentional skip. All 16 B156
+  layouts link uniquely, pass 8 Holiday-positive and 8 Holiday-negative
+  checks, and pass exact restoration for all five dormant runtime flags. The
+  fully enabled layout is 1,774,080 bytes with SHA-256
+  `7E7389620C19BAF1409332809EAB4BB9F26E19BE367C288116C0CA89CAF0DFA1`.

@@ -84,6 +84,16 @@ def main():
                     )
         rows.append("")
     dump_function(rows, 0x162900, "CBehavior constructor")
+    init_ai = [
+        function
+        for function in idautils.Functions()
+        if "CVillager6InitAIEv" in ida_name.get_name(function)
+    ]
+    if init_ai:
+        for function in init_ai:
+            dump_function(rows, function, "CVillager::InitAI")
+    else:
+        rows.append("===== CVillager::InitAI: symbol not found =====")
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(rows), encoding="utf-8")
     ida_pro.qexit(0)

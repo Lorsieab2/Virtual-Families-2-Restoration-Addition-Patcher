@@ -181,10 +181,13 @@ not just static sprites. B156 now ports `KidExaminesCandles` for Holiday
 Candles `0x2AA` as an exact child-only manual plan with a minimal PC-safe map.
 Plate of Cookies `0x2BE` now age-routes exact child-steal and adult-rescue
 manual plans on EObject `0x8F`, including the child route's optional adult
-rescuer. The remaining generic knickknack, single-cookie, garland, and wreath
-assignments still require exact item-to-hotspot proof; most unresolved Holiday
-decor rows continue to use donor behavior/placement records and the native
-clickable dispatch extension.
+rescuer. The knickknack, single-cookie, garland, and wreath candidates were
+then checked against every preserved QAMF. EObject `0x8C`
+proves the exact `AdmiringXmasKnickKnacks` route for ten gnome/yard figurines;
+EObject `0x8D` proves `InteractHouseXmasDecor` for Red Bow, Santa Wall
+Decoration, and both garlands. Those fourteen exact manual routes now use
+minimal PC-safe maps. Single Cookie, Eggnog, Poinsettia, and both wreaths
+remain unresolved; the wreath maps contain no `0x8D` EObject anchor.
 
 Low-level PC table work:
 

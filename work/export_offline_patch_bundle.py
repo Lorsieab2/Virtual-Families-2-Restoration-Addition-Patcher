@@ -73,12 +73,28 @@ MOBILE_BIRTHDAY_FMAP_FILES = (
     "Birthday_presents.png.fmap",
 )
 MOBILE_HOLIDAY_FMAP_FILES = (
+    "CandleOnHolder.png.fmap",
     "ChristmasTree1.png.fmap",
     "ChristmasTree2.png.fmap",
     "Dreidel.png.fmap",
+    "Gnome1.png.fmap",
+    "Gnome2.png.fmap",
+    "Gnome3.png.fmap",
+    "Gnome4.png.fmap",
+    "Gnome5.png.fmap",
     "Menorah.png.fmap",
+    "PenguinDecoration.png.fmap",
+    "PlateOfCookies.png.fmap",
+    "PolarBearDecoration.png.fmap",
+    "RedBow.png.fmap",
+    "ReindeerDecoration.png.fmap",
+    "SantaGardenDecoration.png.fmap",
+    "SantaWallDecoration.png.fmap",
+    "Snowman.png.fmap",
     "StockingLarge.png.fmap",
     "StockingSmall.png.fmap",
+    "StringOfLeaves.png.fmap",
+    "StringOfLights.png.fmap",
 )
 MOBILE_FURNITURE_BEHAVIOR_FMAP_FILES = (
     *MOBILE_CHAISE_FMAP_FILES,
@@ -240,7 +256,7 @@ SETTINGS = [
     {
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
-        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes a good-weather manual lounger drop choose randomly among relaxing, reading, studying, sitting, napping, and sleeping; nap and sleep odds rise from the villager's native 1-100 energy value. Loungers also support spontaneous reading, naps, daytime sunbathing, sitting, and a clearly labeled studying extension. The Patio Umbrella keeps manual Adjusting umbrella. Invisible/custom/VF3 furniture is excluded.",
+        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes good-weather loungers choose among relaxing, reading, studying, sitting, napping, and sleeping with exhaustion-sensitive rest odds, plus spontaneous supported variants. Exact guarded manual routes cover the Patio Umbrella and tables, Picnic Table, Birthday furniture, Christmas Trees, Dreidel, Menorah, Stockings, Holiday Candles, Santa's Cookie Plate, ten Holiday figurines, Red Bow, Santa Wall Decoration, and both garlands. Invisible/custom/VF3 furniture is excluded.",
         "default": False,
         "category": "optional",
     },

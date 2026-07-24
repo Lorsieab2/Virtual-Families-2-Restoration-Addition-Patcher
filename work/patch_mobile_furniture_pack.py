@@ -145,6 +145,84 @@ MOBILE_SANTA_COOKIE_PLATE_ITEM_ID = 0x2BE
 MOBILE_SANTA_COOKIE_PLATE_OBJECT = 0x8F
 MOBILE_SANTA_COOKIE_PLATE_PC_CELL_VALUE = 0x20007800
 MOBILE_SANTA_COOKIE_PLATE_PC_CELLS = ((6, 8), (7, 8))
+MOBILE_XMAS_KNICKKNACK_OBJECT = 0x8C
+MOBILE_XMAS_KNICKKNACK_PC_CELL_VALUE = 0x20006000
+MOBILE_XMAS_KNICKKNACK_PC_SPECS = {
+    "Gnome1.png.fmap": {
+        "grid": (10, 12),
+        "cells": ((5, 10), (6, 10), (5, 11)),
+        "item_id": 0x2B1,
+    },
+    "Gnome2.png.fmap": {
+        "grid": (10, 12),
+        "cells": ((4, 10), (5, 10), (6, 10)),
+        "item_id": 0x2B2,
+    },
+    "Gnome3.png.fmap": {
+        "grid": (10, 13),
+        "cells": ((6, 11), (7, 11), (6, 12)),
+        "item_id": 0x2B3,
+    },
+    "Gnome4.png.fmap": {
+        "grid": (9, 13),
+        "cells": ((4, 10), (5, 10), (6, 10)),
+        "item_id": 0x2B4,
+    },
+    "Gnome5.png.fmap": {
+        "grid": (8, 13),
+        "cells": ((5, 10), (6, 10)),
+        "item_id": 0x2B5,
+    },
+    "PenguinDecoration.png.fmap": {
+        "grid": (9, 11),
+        "cells": ((8, 7), (7, 8), (8, 8)),
+        "item_id": 0x2BD,
+    },
+    "PolarBearDecoration.png.fmap": {
+        "grid": (13, 18),
+        "cells": ((6, 15), (7, 15), (8, 15)),
+        "item_id": 0x2C0,
+    },
+    "ReindeerDecoration.png.fmap": {
+        "grid": (15, 16),
+        "cells": ((4, 13), (5, 13), (9, 13), (5, 14), (8, 14), (9, 14)),
+        "item_id": 0x2C2,
+    },
+    "SantaGardenDecoration.png.fmap": {
+        "grid": (15, 17),
+        "cells": ((8, 15), (9, 15)),
+        "item_id": 0x2C3,
+    },
+    "Snowman.png.fmap": {
+        "grid": (11, 15),
+        "cells": ((7, 12), (8, 12)),
+        "item_id": 0x2C5,
+    },
+}
+MOBILE_HOUSE_XMAS_DECOR_OBJECT = 0x8D
+MOBILE_HOUSE_XMAS_DECOR_PC_CELL_VALUE = 0x20006800
+MOBILE_HOUSE_XMAS_DECOR_PC_SPECS = {
+    "RedBow.png.fmap": {
+        "grid": (7, 11),
+        "cells": ((3, 10), (4, 10), (5, 10), (6, 10)),
+        "item_id": 0x2C1,
+    },
+    "SantaWallDecoration.png.fmap": {
+        "grid": (7, 11),
+        "cells": ((4, 10), (5, 10)),
+        "item_id": 0x2C4,
+    },
+    "StringOfLeaves.png.fmap": {
+        "grid": (16, 16),
+        "cells": ((9, 15), (10, 15)),
+        "item_id": 0x2C8,
+    },
+    "StringOfLights.png.fmap": {
+        "grid": (15, 13),
+        "cells": ((9, 12), (10, 12)),
+        "item_id": 0x2C9,
+    },
+}
 MOBILE_XMAS_STOCKING_ITEM_IDS = (0x2C6, 0x2C7)
 MOBILE_XMAS_STOCKING_OBJECT = 0x90
 MOBILE_XMAS_STOCKING_PC_CELL_VALUE = 0x20008000
@@ -15104,6 +15182,24 @@ def validate_mobile_group_holiday_pc_fmaps(manifest):
             MOBILE_XMAS_TREE_PC_CELL_VALUE,
             spec["cells"],
         ))
+    for filename, spec in MOBILE_XMAS_KNICKKNACK_PC_SPECS.items():
+        specs.append((
+            filename,
+            spec["item_id"],
+            MOBILE_XMAS_KNICKKNACK_OBJECT,
+            spec["grid"],
+            MOBILE_XMAS_KNICKKNACK_PC_CELL_VALUE,
+            spec["cells"],
+        ))
+    for filename, spec in MOBILE_HOUSE_XMAS_DECOR_PC_SPECS.items():
+        specs.append((
+            filename,
+            spec["item_id"],
+            MOBILE_HOUSE_XMAS_DECOR_OBJECT,
+            spec["grid"],
+            MOBILE_HOUSE_XMAS_DECOR_PC_CELL_VALUE,
+            spec["cells"],
+        ))
     records = []
     for filename, item_id, obj_id, grid, cell_value, cells in specs:
         mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
@@ -15260,6 +15356,8 @@ class CContentMap { public: enum EObject {
     eObjectXmasTree = 0x88,
     eObjectHolidayCandles = 0x89,
     eObjectDreidel = 0x8A,
+    eObjectXmasKnickknack = 0x8C,
+    eObjectHouseXmasDecor = 0x8D,
     eObjectMenorah = 0x8E,
     eObjectSantaCookiePlate = 0x8F,
     eObjectXmasStockings = 0x90,
@@ -16495,6 +16593,84 @@ static bool VF2HandleMobileSantaCookiePlate(CVillager &villager)
     return true;
 }
 
+static bool VF2HandleMobileXmasKnickknack(CVillager &villager)
+{
+    int age = *reinterpret_cast<int *>(
+        reinterpret_cast<unsigned char *>(&villager) + 0x6A54);
+    if (age < 7) return true;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectXmasKnickknack,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return true;
+    }
+
+    VF2SetActionLabel(villager, "Enjoying the figurines");
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(VF2BirthdayOhSound(villager)),
+        1.0f,
+        eSoundTypeEffects);
+    plans->PlanToCheer(ldwGameState::GetRandom(4) + 2);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(4) + 2,
+        static_cast<EBodyPosition>(info.orientation == 1 ? 0x0A : 0x0D));
+    plans->PlanToJoyTwirlCW(2);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
+static bool VF2HandleMobileHouseXmasDecor(CVillager &villager)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    if (*reinterpret_cast<int *>(data + 0x6A54) < 0x118) return true;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectHouseXmasDecor,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return true;
+    }
+
+    VF2SetActionLabel(villager, "Checking the decorations");
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    int gender = *reinterpret_cast<int *>(data + 0x6A58);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(gender == 1 ? 0x8C : 0x99),
+        1.0f,
+        eSoundTypeEffects);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0xB5), 1.0f, eSoundTypeEffects);
+    plans->PlanToWork(ldwGameState::GetRandom(3) + 3);
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(gender == 1 ? 0xCC : 0xD3),
+        1.0f,
+        eSoundTypeEffects);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(3) + 2,
+        static_cast<EBodyPosition>(info.orientation != 0 ? 0x0A : 0x0D));
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0xE8), 1.0f, eSoundTypeEffects);
+    plans->PlanToWork(ldwGameState::GetRandom(2) + 2);
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
 static void VF2RunMobileDreidel(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -16822,6 +16998,16 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (candidate == 0x2DB) return VF2HandleMobileBirthdayBanner(villager);
     if (candidate == 0x2AA) return VF2HandleMobileHolidayCandles(villager);
     if (candidate == 0x2BE) return VF2HandleMobileSantaCookiePlate(villager);
+    if ((candidate >= 0x2B1 && candidate <= 0x2B5) ||
+        candidate == 0x2BD || candidate == 0x2C0 ||
+        candidate == 0x2C2 || candidate == 0x2C3 ||
+        candidate == 0x2C5) {
+        return VF2HandleMobileXmasKnickknack(villager);
+    }
+    if (candidate == 0x2C1 || candidate == 0x2C4 ||
+        candidate == 0x2C8 || candidate == 0x2C9) {
+        return VF2HandleMobileHouseXmasDecor(villager);
+    }
     if (candidate == 0x2AD || candidate == 0x2AE) {
         return VF2HandleMobileXmasTreeGroup(villager);
     }
@@ -17147,6 +17333,47 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "mobile_behavior_ids": ["0x1a5", "0x1a6"],
             "mobile_child_candidate_weight": 2000,
             "desktop_implementation": "exact age-routed manual plan-sequence port",
+            "stock_tables_extended": False,
+        }, {
+            "name": "mobile Christmas figurines",
+            "item_ids": [
+                hex(spec["item_id"])
+                for spec in MOBILE_XMAS_KNICKKNACK_PC_SPECS.values()
+            ],
+            "label": "Enjoying the figurines",
+            "object": hex(MOBILE_XMAS_KNICKKNACK_OBJECT),
+            "manual_drop_only": True,
+            "raw_age_min": "0x7",
+            "autonomous": False,
+            "autonomous_status": (
+                "pending: mobile behavior 0x1a4 is beyond the desktop "
+                "behavior table and no regression-safe additive candidate is proven"
+            ),
+            "mobile_behavior": "CBehavior::AdmiringXmasKnickKnacks",
+            "mobile_behavior_id": "0x1a4",
+            "mobile_candidate_weight": 2000,
+            "desktop_implementation": "exact guarded manual plan-sequence port",
+            "stock_tables_extended": False,
+        }, {
+            "name": "mobile house Christmas decorations",
+            "item_ids": [
+                hex(spec["item_id"])
+                for spec in MOBILE_HOUSE_XMAS_DECOR_PC_SPECS.values()
+            ],
+            "label": "Checking the decorations",
+            "object": hex(MOBILE_HOUSE_XMAS_DECOR_OBJECT),
+            "manual_drop_only": True,
+            "adult_only": True,
+            "raw_age_min": "0x118",
+            "autonomous": False,
+            "autonomous_status": (
+                "pending: mobile behavior 0x1a7 is beyond the desktop "
+                "behavior table and no regression-safe additive candidate is proven"
+            ),
+            "mobile_behavior": "CBehavior::InteractHouseXmasDecor",
+            "mobile_behavior_id": "0x1a7",
+            "mobile_candidate_weight": 2000,
+            "desktop_implementation": "exact guarded manual plan-sequence port",
             "stock_tables_extended": False,
         }],
         "stock_behavior_table_extended": False,

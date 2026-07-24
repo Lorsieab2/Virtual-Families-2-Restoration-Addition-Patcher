@@ -1494,3 +1494,26 @@
 - The fully enabled executable is 1,773,568 bytes with SHA-256
   `A31601B316144E2FAE4B6BFE48CA4BD8E9B635DD68CA3590BF567BF0BFBA575F`.
   Live Cookie Plate child/adult/orientation/rescuer/patch-off QA remains.
+
+## B156 - Christmas figurine and house-decoration behavior checkpoint
+
+- Audits every preserved mobile QAMF for exact EObject payloads and maps ten
+  item IDs to object `0x8C` / `AdmiringXmasKnickKnacks` behavior `0x1A4`.
+- Adds the exact raw-age-7+ `Enjoying the figurines` manual plan for gnomes,
+  Penguin, Polar Bear, Reindeer, garden Santa, and Snowman.
+- Maps Red Bow, Santa Wall Decoration, Holiday Garland, and Lighted Garland to
+  object `0x8D` / `InteractHouseXmasDecor` behavior `0x1A7`, preserving the
+  exact adult `0x118+` plan and gender-specific sounds.
+- Adds fourteen PC-safe maps containing only proven EObject anchors. The
+  optional behavior payload now replaces 33 maps in total.
+- Corrects the offline exporter so Candle and Cookie maps, plus all fourteen
+  new maps, are included in the same exact enable/restore set.
+- Leaves spontaneous IDs `0x1A4` and `0x1A7` unindexed beyond the desktop
+  table. Wreath QAMFs contain no `0x8D` marker and remain unresolved.
+- All 230 project tests pass with one intentional skip. All 16 B156 layouts
+  link uniquely, Holiday validation passes 8/8 positive and 8/8 negative, and
+  all five runtime flags pass non-overlap, repeated-enable, disable, and exact
+  restoration checks.
+- The fully enabled executable is 1,774,080 bytes with SHA-256
+  `7E7389620C19BAF1409332809EAB4BB9F26E19BE367C288116C0CA89CAF0DFA1`.
+  Live item, age-boundary, orientation, sound, and patch-off QA remains.

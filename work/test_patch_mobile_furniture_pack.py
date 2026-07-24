@@ -417,6 +417,42 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 "0x8f",
             ),
         }
+        knickknack_hashes = {
+            "Gnome1.png.fmap": "239f7adcae51ac9a16de74df90af1fbf532238b61614fc82670b2500bcaa8455",
+            "Gnome2.png.fmap": "0b025200e7cb6c25a767bba703ae0ee8048769a69b1e18383e72b0ce2d6a6eb0",
+            "Gnome3.png.fmap": "6b34222939bcfc60408d7ff60e3a3a93bd271398c393d53f0a60b1b173504662",
+            "Gnome4.png.fmap": "37ed6f4e6b63a5b09a9bc82979535583038363efc8e44ca27af2a3d62abf8c93",
+            "Gnome5.png.fmap": "0ee4bb4e95d8409b4539b6a5320eca417bd61dd641f4f6bd8d40f9fc2452cafb",
+            "PenguinDecoration.png.fmap": "12f2d782a2f570570f9126bb87cc3d9bb7bf4cd04881c6521d909ea7460277b8",
+            "PolarBearDecoration.png.fmap": "7640dc46d1769ce490f8032ae798203213600daaf13290acabc9252f6285d63a",
+            "ReindeerDecoration.png.fmap": "50f2d2293c64ad25b70cd0808b858af40f71156ffc816ae4512714e64b863e7c",
+            "SantaGardenDecoration.png.fmap": "03f0c7e5ffcaa57ccb0f46ade96b4397add658d51e7a2ee18970ad1353f7e775",
+            "Snowman.png.fmap": "098b79691ae4cd1e6d36e295c057a3b2740b3991986be1b62dd77d4e73c82f61",
+        }
+        for filename, spec in patcher.MOBILE_XMAS_KNICKKNACK_PC_SPECS.items():
+            specs[filename] = (
+                knickknack_hashes[filename],
+                spec["grid"],
+                spec["cells"],
+                patcher.MOBILE_XMAS_KNICKKNACK_PC_CELL_VALUE,
+                hex(spec["item_id"]),
+                hex(patcher.MOBILE_XMAS_KNICKKNACK_OBJECT),
+            )
+        house_decor_hashes = {
+            "RedBow.png.fmap": "85fdcb318bb1549844173c5c10bf669d4c0a3a0b6de7dd7e1ae8c4e29d94035b",
+            "SantaWallDecoration.png.fmap": "0cb058be3e24652008e20e0efaf1b101d6ddac6642aba1ce0d8b5ecf63a2eee1",
+            "StringOfLeaves.png.fmap": "c1268f8d827045e210854bb3bd70dec14f8991d18302219cd78f3c090366b174",
+            "StringOfLights.png.fmap": "ce35221e4a91a75ec2994e4a731db230fdd31ff55b59267a663192fe6f4ad113",
+        }
+        for filename, spec in patcher.MOBILE_HOUSE_XMAS_DECOR_PC_SPECS.items():
+            specs[filename] = (
+                house_decor_hashes[filename],
+                spec["grid"],
+                spec["cells"],
+                patcher.MOBILE_HOUSE_XMAS_DECOR_PC_CELL_VALUE,
+                hex(spec["item_id"]),
+                hex(patcher.MOBILE_HOUSE_XMAS_DECOR_OBJECT),
+            )
         self.assertEqual(set(records), set(specs))
         for filename, (digest, grid, cells, cell_value, item_id, obj_id) in specs.items():
             data = (
@@ -708,6 +744,35 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(cookies["mobile_child_candidate_weight"], 2000)
                 self.assertTrue(cookies["manual_drop_only"])
                 self.assertFalse(cookies["autonomous"])
+                figurines = contract["implemented_families"][14]
+                self.assertEqual(
+                    figurines["item_ids"],
+                    [
+                        "0x2b1", "0x2b2", "0x2b3", "0x2b4", "0x2b5",
+                        "0x2bd", "0x2c0", "0x2c2", "0x2c3", "0x2c5",
+                    ],
+                )
+                self.assertEqual(figurines["label"], "Enjoying the figurines")
+                self.assertEqual(figurines["object"], "0x8c")
+                self.assertEqual(figurines["raw_age_min"], "0x7")
+                self.assertEqual(figurines["mobile_behavior_id"], "0x1a4")
+                self.assertEqual(figurines["mobile_candidate_weight"], 2000)
+                self.assertTrue(figurines["manual_drop_only"])
+                self.assertFalse(figurines["autonomous"])
+                house_decor = contract["implemented_families"][15]
+                self.assertEqual(
+                    house_decor["item_ids"],
+                    ["0x2c1", "0x2c4", "0x2c8", "0x2c9"],
+                )
+                self.assertEqual(
+                    house_decor["label"], "Checking the decorations"
+                )
+                self.assertEqual(house_decor["object"], "0x8d")
+                self.assertEqual(house_decor["raw_age_min"], "0x118")
+                self.assertEqual(house_decor["mobile_behavior_id"], "0x1a7")
+                self.assertEqual(house_decor["mobile_candidate_weight"], 2000)
+                self.assertTrue(house_decor["manual_drop_only"])
+                self.assertFalse(house_decor["autonomous"])
                 helper = (patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp").read_text(
                     encoding="ascii"
                 )
@@ -754,6 +819,22 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "if (candidate == 0x2BE) return VF2HandleMobileSantaCookiePlate(villager);",
+                    wrapper,
+                )
+                self.assertIn(
+                    "candidate == 0x2BD || candidate == 0x2C0",
+                    wrapper,
+                )
+                self.assertIn(
+                    "return VF2HandleMobileXmasKnickknack(villager);",
+                    wrapper,
+                )
+                self.assertIn(
+                    "candidate == 0x2C8 || candidate == 0x2C9",
+                    wrapper,
+                )
+                self.assertIn(
+                    "return VF2HandleMobileHouseXmasDecor(villager);",
                     wrapper,
                 )
                 self.assertIn(
@@ -876,6 +957,45 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("static_cast<ESound>(0x6A)", cookie_helper)
                 self.assertIn("if (age < 0x118)", cookie_helper)
                 self.assertIn("VF2RunMobileSaveSantasCookies(villager, info, false)", cookie_helper)
+                figurine_helper = helper.split(
+                    "static bool VF2HandleMobileXmasKnickknack", 1
+                )[1].split(
+                    "static bool VF2HandleMobileHouseXmasDecor", 1
+                )[0]
+                self.assertIn("if (age < 7) return true;", figurine_helper)
+                self.assertIn(
+                    'VF2SetActionLabel(villager, "Enjoying the figurines");',
+                    figurine_helper,
+                )
+                self.assertIn(
+                    "CContentMap::eObjectXmasKnickknack", figurine_helper
+                )
+                self.assertIn("VF2BirthdayOhSound(villager)", figurine_helper)
+                self.assertIn(
+                    "info.orientation == 1 ? 0x0A : 0x0D", figurine_helper
+                )
+                self.assertIn("plans->PlanToJoyTwirlCW(2);", figurine_helper)
+                house_decor_helper = helper.split(
+                    "static bool VF2HandleMobileHouseXmasDecor", 1
+                )[1].split("static void VF2RunMobileDreidel", 1)[0]
+                self.assertIn(
+                    "data + 0x6A54) < 0x118", house_decor_helper
+                )
+                self.assertIn(
+                    'VF2SetActionLabel(villager, "Checking the decorations");',
+                    house_decor_helper,
+                )
+                self.assertIn(
+                    "CContentMap::eObjectHouseXmasDecor", house_decor_helper
+                )
+                for sound in ("0x8C", "0x99", "0xB5", "0xCC", "0xD3", "0xE8"):
+                    self.assertIn(sound, house_decor_helper)
+                self.assertIn(
+                    "ldwGameState::GetRandom(3) + 3", house_decor_helper
+                )
+                self.assertIn(
+                    "ldwGameState::GetRandom(2) + 2", house_decor_helper
+                )
                 self.assertIn(
                     'VF2SetActionLabel(villager, "Checking for stocking stuffers");',
                     helper,
