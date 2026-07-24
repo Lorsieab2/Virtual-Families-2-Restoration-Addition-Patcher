@@ -2824,3 +2824,33 @@
 - The fully enabled B156 executable links and passes Holiday, runtime-flag, and
   debugger validation. Live natural-threshold, cheat-threshold, notification,
   reset, save, and reload QA remains.
+
+## 2026-07-23 - Exact manual Patio Table drink routes
+
+- Mobile Patio Table `0x2E6` uses EObject `0x98`. Its exact manual hotspot
+  forgets current plans, lets any age drink while the drinks state is active,
+  otherwise requires raw age `0x118+` and at least 31 food before preparing.
+  Both preparation and drinking refuse weather types 2 and above.
+- Preparing retains the mobile kitchen-source activation, carry `0x21`, Patio
+  work/drop sequence, prop `0x56`, random waits, energy -7, dirtiness +7,
+  happiness trend +5, and hunger +7. Drinking retains furniture linking,
+  literal `Sit In Chair NW` / `Sit In Chair NE` animations with three fresh
+  10-17 rolls, both exact sounds, hunger -10, dirtiness +4, and poo +6.
+- PC `CEnvironment` cannot safely index mobile prop `0x56`.
+  `CVillagerPlans::ProcessCurrentPlan+0x21B` therefore retargets only the native
+  `SetProp` relocation to an ABI-compatible wrapper. Every other prop calls the
+  stock method; `0x56` instead starts a guarded external 240-game-second state
+  using `CGameTime::Seconds`. Save/reload persistence for that short timer is
+  not yet proven.
+- The PC-safe `Patio_table.png.fmap` retains EObject cells across `(7..12,12)`
+  and both proven seat anchors `(3,8)` and `(13,8)`. Its SHA-256 is
+  `0a60f9c579554876c15ae416d20fc313947f73ce3fb2a3a4eeb222beac6aab5d`.
+- Mobile autonomous behaviors `0x1B6` and `0x1B7` exceed the PC table, and no
+  regression-safe paired surrogate is proven. B156 therefore implements the
+  exact manual routes without indexing those IDs or repurposing an unrelated
+  stock candidate. Autonomous Patio drinks remain pending.
+- The fully enabled executable links at 1,759,232 bytes with SHA-256
+  `a9b5b3ab98c8d3c7e0f78a1ef6bd582f82ac5d5569df99d964d1f7e6cfa2ec76`.
+  All 16 existing B156 layouts still pass linked Holiday and four-flag
+  validation. Live preparation, timer, both chairs, weather, age, food, and
+  save/reload QA remains.

@@ -155,6 +155,46 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         self.assertNotIn(0x01B40000, values)
         self.assertNotIn(0x01AC0000, values)
 
+    def test_mobile_patio_table_pc_fmap_keeps_both_seat_anchors(self):
+        manifest = {}
+        patcher.validate_mobile_patio_table_pc_fmap(manifest)
+        contract = manifest["MobilePatioTablePCFmap"]
+        self.assertEqual(contract["item_id"], "0x2e6")
+        self.assertEqual(contract["object"], "0x98")
+
+        data = (
+            patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR
+            / "Patio_table.png.fmap"
+        ).read_bytes()
+        self.assertEqual(len(data), 1340)
+        self.assertEqual(
+            hashlib.sha256(data).hexdigest(),
+            "0a60f9c579554876c15ae416d20fc313947f73ce3fb2a3a4eeb222beac6aab5d",
+        )
+        width, height = struct.unpack_from("<ii", data, 24)
+        values = [
+            value
+            for (value,) in struct.iter_unpack(
+                "<I", data[32 : 32 + width * height * 4]
+            )
+        ]
+        self.assertEqual((width, height), (19, 17))
+        self.assertEqual(
+            {
+                (i % width, i // width)
+                for i, value in enumerate(values)
+                if value == patcher.MOBILE_PATIO_TABLE_PC_CELL_VALUE
+            },
+            set(patcher.MOBILE_PATIO_TABLE_PC_CELLS),
+        )
+        for cell, value in patcher.MOBILE_PATIO_TABLE_PC_SEAT_CELLS.items():
+            self.assertEqual(values[cell[1] * width + cell[0]], value)
+        self.assertEqual(
+            sum(1 for value in values if value),
+            len(patcher.MOBILE_PATIO_TABLE_PC_CELLS)
+            + len(patcher.MOBILE_PATIO_TABLE_PC_SEAT_CELLS),
+        )
+
     def test_mobile_birthday_cake_pc_fmap_is_exact_eobject_only_payload(self):
         manifest = {}
         patcher.validate_mobile_birthday_cake_pc_fmap(manifest)
@@ -481,8 +521,24 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "mobile_behavior": "CBehavior::AdjustingUmbrella",
                     "desktop_implementation": "exact direct plan-sequence port",
                 })
+                patio = contract["implemented_families"][2]
+                self.assertEqual(patio["item_ids"], ["0x2e6"])
+                self.assertEqual(patio["object"], "0x98")
                 self.assertEqual(
-                    contract["implemented_families"][2],
+                    patio["mobile_behavior_ids"], ["0x1b6", "0x1b7"]
+                )
+                self.assertTrue(patio["manual_drop_supported"])
+                self.assertTrue(patio["children_can_drink_when_ready"])
+                self.assertFalse(patio["autonomous"])
+                self.assertEqual(
+                    patio["drink_ready_state"]["duration_game_seconds"], 240
+                )
+                self.assertEqual(
+                    patio["drink_ready_state"]["save_reload_persistence"],
+                    "unproven",
+                )
+                self.assertEqual(
+                    contract["implemented_families"][3],
                     {
                         "name": "mobile Birthday Cake",
                         "item_ids": ["0x2dc"],
@@ -497,7 +553,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(
-                    contract["implemented_families"][3],
+                    contract["implemented_families"][4],
                     {
                         "name": "mobile Birthday Presents",
                         "item_ids": ["0x2dd"],
@@ -511,7 +567,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         "desktop_implementation": "exact direct plan-sequence port",
                     },
                 )
-                balloons = contract["implemented_families"][4]
+                balloons = contract["implemented_families"][5]
                 self.assertEqual(balloons["item_ids"], ["0x2da"])
                 self.assertEqual(balloons["label"], "Playing")
                 self.assertEqual(balloons["label_string_id"], "0xf0")
@@ -524,27 +580,27 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(balloons["mobile_behavior_id"], "0x1ad")
                 self.assertTrue(balloons["manual_drop_only"])
                 self.assertFalse(balloons["autonomous"])
-                banner = contract["implemented_families"][5]
+                banner = contract["implemented_families"][6]
                 self.assertEqual(banner["item_ids"], ["0x2db"])
                 self.assertEqual(banner["object"], "0x91")
                 self.assertEqual(banner["mobile_behavior_ids"], ["0x1ae", "0x1af"])
                 self.assertTrue(banner["whole_household"])
-                trees = contract["implemented_families"][6]
+                trees = contract["implemented_families"][7]
                 self.assertEqual(trees["item_ids"], ["0x2ad", "0x2ae"])
                 self.assertEqual(trees["object"], "0x88")
                 self.assertEqual(trees["mobile_behavior_id"], "0x1a0")
                 self.assertTrue(trees["whole_household"])
-                dreidel = contract["implemented_families"][7]
+                dreidel = contract["implemented_families"][8]
                 self.assertEqual(dreidel["item_ids"], ["0x2af"])
                 self.assertEqual(dreidel["object"], "0x8a")
                 self.assertEqual(dreidel["mobile_behavior_id"], "0x1a2")
                 self.assertTrue(dreidel["whole_household"])
-                menorah = contract["implemented_families"][8]
+                menorah = contract["implemented_families"][9]
                 self.assertEqual(menorah["item_ids"], ["0x2b8"])
                 self.assertEqual(menorah["object"], "0x8e")
                 self.assertEqual(menorah["mobile_behavior_id"], "0x1a3")
                 self.assertTrue(menorah["whole_household"])
-                stockings = contract["implemented_families"][9]
+                stockings = contract["implemented_families"][10]
                 self.assertEqual(stockings["item_ids"], ["0x2c6", "0x2c7"])
                 self.assertEqual(stockings["label"], "Checking for stocking stuffers")
                 self.assertEqual(stockings["object"], "0x90")
@@ -569,6 +625,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("VF2IsMobileChaise(candidate)", wrapper)
                 self.assertIn(
                     "if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);",
+                    wrapper,
+                )
+                self.assertIn(
+                    "if (candidate == 0x2E6) return VF2HandleMobilePatioTable(villager);",
                     wrapper,
                 )
                 self.assertIn(
@@ -706,7 +766,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     self.assertIn(label, helper)
                 umbrella_helper = helper.split(
                     "static bool VF2HandleMobilePatioUmbrella", 1
-                )[1].split("static int VF2BirthdayOhSound", 1)[0]
+                )[1].split("static void VF2PlanPatioRefusal", 1)[0]
                 self.assertIn(
                     "reinterpret_cast<unsigned char *>(&villager) + 0x6B28",
                     helper,
@@ -733,6 +793,36 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     cursor = umbrella_helper.index(step, cursor) + len(step)
                 self.assertNotIn("GetRandom", umbrella_helper)
                 self.assertNotIn("PlanToInc", umbrella_helper)
+                patio_helper = helper.split(
+                    "static bool VF2RunMobilePreparingDrinks", 1
+                )[1].split("static int VF2BirthdayOhSound", 1)[0]
+                self.assertIn('"Getting some drinks"', patio_helper)
+                self.assertIn('"Having a refreshing drink"', patio_helper)
+                self.assertIn("FoodStore.food < 31", patio_helper)
+                self.assertIn("age < 0x118", patio_helper)
+                self.assertIn("VF2PatioDrinksActive()", patio_helper)
+                manual_refusal = helper.split(
+                    "static bool VF2ManualPatioRefusal", 1
+                )[1].split("static bool VF2RunMobilePreparingDrinks", 1)[0]
+                self.assertLess(
+                    manual_refusal.index("villager.NewBehavior("),
+                    manual_refusal.index("DealerSay.Say(text, -1);"),
+                )
+                self.assertIn("eBehaviorShakeHead = 0x175", helper)
+                self.assertIn("eStringTooYoung = 0x73D", helper)
+                self.assertIn("eStringWorriedAboutFood = 0xA41", helper)
+                self.assertIn("plans->PlanToActivateProp(ePropPatioDrinks);", patio_helper)
+                self.assertIn("plans->PlanToDecEnergy(7);", patio_helper)
+                self.assertIn("plans->PlanToIncHunger(7);", patio_helper)
+                self.assertIn("plans->PlanToDecHunger(10);", patio_helper)
+                self.assertIn("plans->PlanToIncPoo(6);", patio_helper)
+                self.assertIn('"Sit In Chair NW"', patio_helper)
+                self.assertIn('"Sit In Chair NE"', patio_helper)
+                self.assertEqual(
+                    patio_helper.count("ldwGameState::GetRandom(8) + 10"), 3
+                )
+                self.assertNotIn("0x1B6", patio_helper)
+                self.assertNotIn("0x1B7", patio_helper)
         finally:
             patcher.PATCHED = old_patched
 
@@ -811,6 +901,73 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     manifest["MobileFurnitureBehaviorMacros"][
                         "stock_fallback_preserved"
                     ]
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_mobile_patio_prop_hook_retargets_only_set_prop_call(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                obj_path = patcher.PATCHED / "VillagerPlans.obj"
+                shutil.copy2(patcher.SRC_OBJS / "VillagerPlans.obj", obj_path)
+                before = CoffObject(obj_path)
+                process_name = (
+                    "?ProcessCurrentPlan@CVillagerPlans@@QAEXAAVCVillager@@@Z"
+                )
+                process = before.symbol(process_name)
+                sec = before.section(process.section)
+                before_section_bytes = bytes(
+                    before.buf[sec.raw_ptr : sec.raw_ptr + sec.raw_size]
+                )
+                before_targets = {}
+                for index in range(sec.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH", before.buf, sec.reloc_ptr + index * 10
+                    )
+                    if process.value <= vaddr < process.value + 0x300:
+                        before_targets[vaddr] = (
+                            before.symbol_by_index[symbol_index].name,
+                            rtype,
+                        )
+
+                manifest = {}
+                patcher.patch_mobile_patio_prop_execution(manifest)
+                after = CoffObject(obj_path)
+                after_process = after.symbol(process_name)
+                after_sec = after.section(after_process.section)
+                after_targets = {}
+                for index in range(after_sec.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH", after.buf, after_sec.reloc_ptr + index * 10
+                    )
+                    if after_process.value <= vaddr < after_process.value + 0x300:
+                        after_targets[vaddr] = (
+                            after.symbol_by_index[symbol_index].name,
+                            rtype,
+                        )
+
+                expected = dict(before_targets)
+                expected[process.value + 0x21B] = (
+                    patcher.MOBILE_PATIO_PROP_HELPER_SYMBOL,
+                    patcher.IMAGE_REL_I386_REL32,
+                )
+                self.assertEqual(after_targets, expected)
+                self.assertEqual(
+                    bytes(
+                        after.buf[
+                            after_sec.raw_ptr :
+                            after_sec.raw_ptr + after_sec.raw_size
+                        ]
+                    ),
+                    before_section_bytes,
+                )
+                contract = manifest["MobilePatioPropExecution"]
+                self.assertEqual(contract["call_offset"], "0x21a")
+                self.assertTrue(contract["stock_prop_fallback_preserved"])
+                self.assertFalse(
+                    contract["pc_environment_array_access_for_patio_prop"]
                 )
         finally:
             patcher.PATCHED = old_patched

@@ -47,6 +47,7 @@ MOBILE_FURNITURE_BEHAVIOR_FLAG_SYMBOL = "_gVF2MobileFurnitureBehaviors"
 MOBILE_FURNITURE_BEHAVIOR_HELPER_SYMBOL = (
     "?VF2HandleDropOnMobileFurniture@theMainScene@@IAE?B_NAAVCVillager@@@Z"
 )
+MOBILE_PATIO_PROP_HELPER_SYMBOL = "@VF2PatioSetPropAndTrack@12"
 MOBILE_CHAISE_ITEM_IDS = tuple(range(0x2DE, 0x2E2))
 MOBILE_CHAISE_OBJECT = 0x95
 MOBILE_CHAISE_PC_CELL_VALUE = 0x2000A800
@@ -62,6 +63,16 @@ MOBILE_PATIO_UMBRELLA_ITEM_ID = 0x2E7
 MOBILE_PATIO_UMBRELLA_OBJECT = 0x96
 MOBILE_PATIO_UMBRELLA_PC_CELL_VALUE = 0x2000B000
 MOBILE_PATIO_UMBRELLA_PC_CELLS = ((6, 16), (7, 16), (8, 16), (9, 16))
+MOBILE_PATIO_TABLE_ITEM_ID = 0x2E6
+MOBILE_PATIO_TABLE_OBJECT = 0x98
+MOBILE_PATIO_TABLE_PC_CELL_VALUE = 0x2000C000
+MOBILE_PATIO_TABLE_PC_CELLS = (
+    (7, 12), (8, 12), (9, 12), (10, 12), (11, 12), (12, 12),
+)
+MOBILE_PATIO_TABLE_PC_SEAT_CELLS = {
+    (3, 8): 0x00049801,
+    (13, 8): 0x0004A001,
+}
 MOBILE_BIRTHDAY_CAKE_ITEM_ID = 0x2DC
 MOBILE_BIRTHDAY_CAKE_OBJECT = 0x94
 MOBILE_BIRTHDAY_CAKE_PC_CELL_VALUE = 0x2000A000
@@ -12574,6 +12585,60 @@ def validate_mobile_patio_umbrella_pc_fmap(manifest):
     }
 
 
+def validate_mobile_patio_table_pc_fmap(manifest):
+    filename = "Patio_table.png.fmap"
+    mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+    pc_path = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+    mobile = mobile_path.read_bytes()
+    pc = pc_path.read_bytes()
+    if len(pc) != len(mobile) or pc[:4] != b"QAMF":
+        raise RuntimeError(f"Invalid PC patio table furniture map: {pc_path}")
+    width, height = struct.unpack_from("<ii", pc, 24)
+    if (width, height) != (19, 17):
+        raise RuntimeError(f"Unexpected PC patio table grid: {filename}")
+    grid_end = 32 + width * height * 4
+    if pc[:32] != mobile[:32] or pc[grid_end:] != mobile[grid_end:]:
+        raise RuntimeError(f"PC patio table header/trailer drifted: {filename}")
+    expected_object_offsets = {
+        32 + (y * width + x) * 4 for x, y in MOBILE_PATIO_TABLE_PC_CELLS
+    }
+    expected_seat_offsets = {
+        32 + (y * width + x) * 4: value
+        for (x, y), value in MOBILE_PATIO_TABLE_PC_SEAT_CELLS.items()
+    }
+    actual_object_offsets = set()
+    actual_seat_offsets = {}
+    for offset in range(32, grid_end, 4):
+        value = struct.unpack_from("<I", pc, offset)[0]
+        if value == MOBILE_PATIO_TABLE_PC_CELL_VALUE:
+            actual_object_offsets.add(offset)
+        elif value in MOBILE_PATIO_TABLE_PC_SEAT_CELLS.values():
+            actual_seat_offsets[offset] = value
+        elif value:
+            raise RuntimeError(
+                f"PC patio table contains unsupported cell {value:#x}"
+            )
+    if actual_object_offsets != expected_object_offsets:
+        raise RuntimeError("PC patio table EObject cells drifted")
+    if actual_seat_offsets != expected_seat_offsets:
+        raise RuntimeError("PC patio table seat anchors drifted")
+    manifest["MobilePatioTablePCFmap"] = {
+        "status": "validated minimal EObject plus two seat-anchor optional payload",
+        "item_id": hex(MOBILE_PATIO_TABLE_ITEM_ID),
+        "filename": filename,
+        "source_sha256": hashlib.sha256(pc).hexdigest(),
+        "source_bytes": len(pc),
+        "grid": [width, height],
+        "object": hex(MOBILE_PATIO_TABLE_OBJECT),
+        "cell_value": hex(MOBILE_PATIO_TABLE_PC_CELL_VALUE),
+        "cell_count": len(actual_object_offsets),
+        "seat_cells": [
+            {"cell": list(cell), "value": hex(value)}
+            for cell, value in MOBILE_PATIO_TABLE_PC_SEAT_CELLS.items()
+        ],
+    }
+
+
 def validate_mobile_birthday_cake_pc_fmap(manifest):
     filename = "Birthday_cake.png.fmap"
     mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
@@ -12891,7 +12956,10 @@ extern "C" __declspec(allocate(".vf2beh")) volatile unsigned char gVF2MobileFurn
 
 struct ldwPoint { int x; int y; };
 struct SBehaviorData;
-enum EBehavior { eBehaviorPlayingVideoGame = 0x114 };
+enum EBehavior {
+    eBehaviorPlayingVideoGame = 0x114,
+    eBehaviorShakeHead = 0x175
+};
 class CVillager;
 extern "C" void __cdecl VF2MobileReadingBook(CVillager &);
 extern "C" void __cdecl VF2MobileNappingCouch(CVillager &);
@@ -12910,6 +12978,7 @@ private:
     friend void __cdecl VF2MobileStudyingOnPatio(CVillager &);
 };
 class CContentMap { public: enum EObject {
+    eObjectKitchenDrinkSource = 0x19,
     eObjectXmasTree = 0x88,
     eObjectDreidel = 0x8A,
     eObjectMenorah = 0x8E,
@@ -12918,6 +12987,8 @@ class CContentMap { public: enum EObject {
     eObjectBirthdayBalloons = 0x92,
     eObjectChaise = 0x95,
     eObjectPatioUmbrella = 0x96,
+    eObjectPicnicTable = 0x97,
+    eObjectPatioTable = 0x98,
     eObjectBirthdayCake = 0x94,
     eObjectBirthdayPresents = 0x93
 };
@@ -12935,19 +13006,31 @@ enum EBodyPosition {
 enum EDirection { eDirectionUmbrella = 3 };
 enum EHeadDirection { eHeadDirectionUmbrella = 3 };
 enum ECarrying {
+    eCarryingDrink = 0x21,
     eCarryingBook = 0x31,
     eCarryingStudyBook = 0x36
+};
+enum EPropEnum {
+    ePropKitchenDrinkSource = 0x03,
+    ePropPatioDrinks = 0x56
 };
 enum StringId {
     eStringPlayingWithToys = 0xF0,
     eStringBadWeather = __VF2_LOUNGER_BAD_WEATHER_STRING_ID__,
-    eStringCannotReachFurniture = 0xB7
+    eStringCannotReachFurniture = 0xB7,
+    eStringTooYoung = 0x73D,
+    eStringWorriedAboutFood = 0xA41
 };
 
 class theStringManager {
 public:
     static theStringManager *__cdecl Get();
     char *__thiscall GetString(StringId);
+};
+
+class CDealerSay {
+public:
+    void Say(StringId, int);
 };
 
 struct sFurnitureInfo2 {
@@ -12977,6 +13060,12 @@ public:
     void PlanToTwirlCCW(int);
     void PlanToPlayAnim(int, char const *, bool, float);
     void PlanToWork(int);
+    void PlanToDrop();
+    void PlanToActivateProp(EPropEnum);
+    void PlanToIncHunger(int);
+    void PlanToDecHunger(int);
+    void PlanToDecEnergy(int);
+    void PlanToIncPoo(int);
     void PlanToBend(int, EPriority);
     void PlanToJump(int);
     void PlanToStopSound();
@@ -13020,6 +13109,22 @@ public:
         bool);
 };
 
+class CFoodStore {
+public:
+    char pad0[0x78];
+    int food;
+};
+
+class CEnvironment {
+public:
+    void SetProp(EPropEnum);
+};
+
+class CGameTime {
+public:
+    unsigned int const Seconds();
+};
+
 int __cdecl VF2PtOnFurnitureIndex(CFurnitureManager &manager, ldwPoint point)
 {
     return manager.PtOnFurniture(point);
@@ -13029,11 +13134,53 @@ class CWeather { public: int currentType; };
 class CNight { public: bool AIIsDayTime(); };
 class ldwGameState { public: static int __cdecl GetRandom(int); };
 extern CFurnitureManager FurnitureManager;
+extern CFoodStore FoodStore;
+extern CEnvironment Environment;
+extern CGameTime GameTime;
 extern CVillagerManager VillagerManager;
 extern CContentMap ContentMap;
 extern CWeather Weather;
 extern CNight Night;
+extern CDealerSay DealerSay;
 extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
+
+static unsigned char gVF2PatioDrinksOn = 0;
+static unsigned int gVF2PatioDrinksDeadline = 0;
+
+static void VF2ClearPatioDrinks()
+{
+    gVF2PatioDrinksOn = 0;
+    gVF2PatioDrinksDeadline = 0;
+}
+
+static bool VF2PatioDrinksActive()
+{
+    if (gVF2MobileFurnitureBehaviors == 0 || gVF2PatioDrinksOn == 0) {
+        VF2ClearPatioDrinks();
+        return false;
+    }
+    unsigned int now = GameTime.Seconds();
+    if (static_cast<int>(now - gVF2PatioDrinksDeadline) < 0) return true;
+    VF2ClearPatioDrinks();
+    return false;
+}
+
+extern "C" void __fastcall VF2PatioSetPropAndTrack(
+    CEnvironment *environment,
+    void *,
+    EPropEnum prop)
+{
+    if (prop != ePropPatioDrinks) {
+        environment->SetProp(prop);
+        return;
+    }
+    if (gVF2MobileFurnitureBehaviors == 0) {
+        VF2ClearPatioDrinks();
+        return;
+    }
+    gVF2PatioDrinksOn = 1;
+    gVF2PatioDrinksDeadline = GameTime.Seconds() + 240;
+}
 
 static int VF2FurnitureItemAtPoint(ldwPoint point)
 {
@@ -13178,6 +13325,141 @@ static bool VF2HandleMobilePatioUmbrella(CVillager &villager)
         eHeadDirectionUmbrella);
     plans->StartNewBehavior(villager);
     return true;
+}
+
+static void VF2PlanPatioRefusal(
+    CVillagerPlans *plans,
+    CVillager &villager,
+    StringId text)
+{
+    plans->PlanToSay(text);
+    plans->PlanToShakeHead(4, eBodyPositionStanding);
+    plans->StartNewBehavior(villager);
+}
+
+static bool VF2ManualPatioRefusal(CVillager &villager, StringId text)
+{
+    unsigned char behaviorData = 0;
+    villager.NewBehavior(
+        eBehaviorShakeHead,
+        *reinterpret_cast<SBehaviorData *>(&behaviorData));
+    DealerSay.Say(text, -1);
+    return true;
+}
+
+static bool VF2RunMobilePreparingDrinks(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    VF2SetActionLabel(villager, "Getting some drinks");
+    if (static_cast<unsigned int>(Weather.currentType) >= 2) {
+        VF2PlanPatioRefusal(plans, villager, eStringBadWeather);
+        return true;
+    }
+
+    plans->PlanToGo(
+        CContentMap::eObjectKitchenDrinkSource,
+        eSpeedNormal,
+        ePriorityNormal,
+        false);
+    plans->PlanToActivateProp(ePropKitchenDrinkSource);
+    plans->PlanToWork(3);
+    plans->PlanToCarry(eCarryingDrink);
+    plans->PlanToGo(
+        CContentMap::eObjectPatioTable,
+        eSpeedNormal,
+        ePriorityNormal,
+        false);
+    plans->PlanToWork(ldwGameState::GetRandom(3) + 2);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 1,
+        static_cast<EBodyPosition>(0x0D));
+    plans->PlanToDrop();
+    plans->PlanToActivateProp(ePropPatioDrinks);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 1,
+        static_cast<EBodyPosition>(0x0A));
+    plans->PlanToStopSound();
+    plans->PlanToDecEnergy(7);
+    plans->PlanToIncDirtiness(7);
+    plans->PlanToIncHappinessTrend(5);
+    plans->PlanToIncHunger(7);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
+static bool VF2RunMobileDrinkAtPatioChair(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    VF2SetActionLabel(villager, "Having a refreshing drink");
+    if (static_cast<unsigned int>(Weather.currentType) >= 2) {
+        VF2PlanPatioRefusal(plans, villager, eStringBadWeather);
+        return true;
+    }
+
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.LinkPeepToFurniture(
+            CContentMap::eObjectPatioTable,
+            &villager,
+            info,
+            true,
+            0,
+            false)) {
+        plans->PlanToGo(
+            CContentMap::eObjectPicnicTable,
+            eSpeedNormal,
+            ePriorityNormal,
+            false);
+        VF2PlanPatioRefusal(
+            plans, villager, eStringCannotReachFurniture);
+        return true;
+    }
+
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    char const *chairAnim =
+        *reinterpret_cast<int *>(
+            reinterpret_cast<unsigned char *>(&info) + 0x14) == 0x14
+        ? "Sit In Chair NW"
+        : "Sit In Chair NE";
+    plans->PlanToPlayAnim(
+        ldwGameState::GetRandom(8) + 10, chairAnim, false, 0.02f);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x101), 1.0f, eSoundTypeEffects);
+    plans->PlanToPlayAnim(
+        ldwGameState::GetRandom(8) + 10, chairAnim, false, 0.02f);
+    int gender = *reinterpret_cast<int *>(
+        reinterpret_cast<unsigned char *>(&villager) + 0x6A58);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(gender == 1 ? 0x0C0 : 0x101),
+        1.0f,
+        eSoundTypeEffects);
+    plans->PlanToPlayAnim(
+        ldwGameState::GetRandom(8) + 10, chairAnim, false, 0.02f);
+    plans->PlanToStopSound();
+    plans->PlanToDecHunger(10);
+    plans->PlanToIncDirtiness(4);
+    plans->PlanToIncPoo(6);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
+static bool VF2HandleMobilePatioTable(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+
+    if (VF2PatioDrinksActive()) {
+        return VF2RunMobileDrinkAtPatioChair(villager);
+    }
+
+    int age = *reinterpret_cast<int *>(
+        reinterpret_cast<unsigned char *>(&villager) + 0x6A54);
+    if (age < 0x118) {
+        return VF2ManualPatioRefusal(villager, eStringTooYoung);
+    }
+    if (FoodStore.food < 31) {
+        return VF2ManualPatioRefusal(villager, eStringWorriedAboutFood);
+    }
+    return VF2RunMobilePreparingDrinks(villager);
 }
 
 static int VF2BirthdayOhSound(CVillager &villager)
@@ -13889,6 +14171,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (gVF2MobileFurnitureBehaviors == 0) return false;
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
+    if (candidate == 0x2E6) return VF2HandleMobilePatioTable(villager);
     if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
     if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
     if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
@@ -14006,6 +14289,40 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "autonomous": False,
             "mobile_behavior": "CBehavior::AdjustingUmbrella",
             "desktop_implementation": "exact direct plan-sequence port",
+        }, {
+            "name": "mobile Patio Table",
+            "item_ids": [hex(MOBILE_PATIO_TABLE_ITEM_ID)],
+            "labels": [
+                "Getting some drinks",
+                "Having a refreshing drink",
+            ],
+            "object": hex(MOBILE_PATIO_TABLE_OBJECT),
+            "manual_drop_only": True,
+            "manual_drop_supported": True,
+            "children_can_drink_when_ready": True,
+            "preparation_requirements": {
+                "raw_age_min": "0x118",
+                "food_min": 31,
+            },
+            "weather_restriction": "weather type must be below 2",
+            "drink_ready_state": {
+                "storage": "guarded external state; PC Environment prop 0x56 is never indexed",
+                "duration_game_seconds": 240,
+                "clock": "CGameTime::Seconds",
+                "save_reload_persistence": "unproven",
+            },
+            "autonomous": False,
+            "autonomous_status": (
+                "pending: mobile behaviors 0x1b6 and 0x1b7 exceed the PC "
+                "behavior table and no regression-safe surrogate pair is proven"
+            ),
+            "mobile_behaviors": [
+                "CBehavior::PreparingDrinks",
+                "CBehavior::DrinkAtPatioChair",
+            ],
+            "mobile_behavior_ids": ["0x1b6", "0x1b7"],
+            "desktop_implementation": "exact guarded manual plan-sequence port",
+            "stock_tables_extended": False,
         }, {
             "name": "mobile Birthday Cake",
             "item_ids": [hex(MOBILE_BIRTHDAY_CAKE_ITEM_ID)],
@@ -14180,6 +14497,65 @@ def patch_mobile_furniture_behavior_macros(manifest):
         "status": "final runtime-gated constructor retargets",
         "changed": changed,
         "stock_fallback_preserved": True,
+    }
+
+
+def patch_mobile_patio_prop_execution(manifest):
+    obj_path = PATCHED / "VillagerPlans.obj"
+    obj = CoffObject(obj_path)
+    process_name = "?ProcessCurrentPlan@CVillagerPlans@@QAEXAAVCVillager@@@Z"
+    process = obj.symbol(process_name)
+    sec = obj.section(process.section)
+    call_offset = process.value + 0x21A
+    relocation_offset = process.value + 0x21B
+    expected_bytes = bytes.fromhex(
+        "FF7728"          # push SActionPlan::prop
+        "B900000000"      # mov ecx, CEnvironment global
+        "C7473801000000"  # mark the plan complete
+        "E800000000"      # call CEnvironment::SetProp
+    )
+    expected_start = process.value + 0x20B
+    raw = sec.raw_ptr + expected_start
+    if bytes(obj.buf[raw : raw + len(expected_bytes)]) != expected_bytes:
+        raise RuntimeError("Patio prop execution block drifted")
+
+    relocation = None
+    for index in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+        )
+        if vaddr == relocation_offset:
+            relocation = (
+                obj.symbol_by_index[symbol_index].name,
+                rtype,
+            )
+            break
+    expected_target = "?SetProp@CEnvironment@@QAEXW4EPropEnum@@@Z"
+    if relocation != (expected_target, IMAGE_REL_I386_REL32):
+        raise RuntimeError(
+            f"Patio prop SetProp relocation drifted: {relocation}"
+        )
+
+    helper = obj.append_undefined_symbol(MOBILE_PATIO_PROP_HELPER_SYMBOL)
+    obj.retarget_relocation(
+        sec.index,
+        relocation_offset,
+        helper,
+        IMAGE_REL_I386_REL32,
+    )
+    obj.write(obj_path)
+    manifest["MobilePatioPropExecution"] = {
+        "status": "exact relocation-only wrapper",
+        "caller": "CVillagerPlans::ProcessCurrentPlan",
+        "call_offset": hex(call_offset - process.value),
+        "relocation_offset": hex(relocation_offset - process.value),
+        "original_target": expected_target,
+        "replacement": MOBILE_PATIO_PROP_HELPER_SYMBOL,
+        "abi": "__fastcall(CEnvironment *, void *, EPropEnum)",
+        "stock_prop_fallback_preserved": True,
+        "patio_prop": "0x56",
+        "pc_environment_array_access_for_patio_prop": False,
+        "external_duration_game_seconds": 240,
     }
 
 
@@ -17960,6 +18336,7 @@ def main():
     # This final pass intentionally runs after label wrappers so the mobile
     # dispatchers can preserve those wrappers as their build-specific fallback.
     patch_mobile_furniture_behavior_macros(manifest)
+    patch_mobile_patio_prop_execution(manifest)
     patch_maximum_resource_achievement_callsites(manifest)
     validate_custom_achievement_award_hook_objects(manifest)
     if ENABLE_DEBUGGER_FEATURES:
@@ -18032,6 +18409,7 @@ def main():
     seed_mobile_furniture_behavior_evidence(manifest)
     validate_mobile_chaise_pc_fmaps(manifest)
     validate_mobile_patio_umbrella_pc_fmap(manifest)
+    validate_mobile_patio_table_pc_fmap(manifest)
     validate_mobile_birthday_cake_pc_fmap(manifest)
     validate_mobile_birthday_presents_pc_fmap(manifest)
     validate_mobile_birthday_balloons_pc_fmap(manifest)
