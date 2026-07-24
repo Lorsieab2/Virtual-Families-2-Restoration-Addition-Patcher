@@ -101,9 +101,11 @@ must remain visible as Needs source audit; it must not be silently omitted.
   manually. Exact QAMF object bits now prove and enable ten
   `AdmiringXmasKnickKnacks` figurines and four adult
   `InteractHouseXmasDecor` wall/garland items. Eggnog now has its exact
-  child-only manual `Eggnog` plan and EObject `0x8B` map. The single-cookie,
-  Poinsettia, and wreath item-to-hotspot assignments still require proof;
-  do not assign them by artwork name alone.
+  child-only manual `Eggnog` plan and EObject `0x8B` map. The remaining
+  Single Cookie, Poinsettia, and two Wreath maps are now proven decorative
+  only: they decode to EObject `0`, their hotspots `0x60/0x61` have null
+  mobile handlers, and the mobile drop dispatcher has no item-ID fallback.
+  Do not invent behavior routes for them from their artwork names.
 - [x] Disassemble all 25 added mobile `CEvent*` firing, award, and impact
   methods and map their exact outcomes. Live event and patch-off QA remains.
 - [x] Confirm mobile special-upgrade save fields and effect math. Brokerage

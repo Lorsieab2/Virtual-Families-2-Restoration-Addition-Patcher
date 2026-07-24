@@ -1692,3 +1692,17 @@
   (one intentional skip).
 - The fully enabled executable is 1,777,664 bytes with SHA-256
   `E3DDB645D9228EF5252E6E636AED5D2A175965F6DA7E111F97531930DB43CE52`.
+
+## B156 - Decorative-only Holiday furniture audit
+
+- Closes the remaining Single Cookie, Poinsettia, and Wreath behavior question
+  from exact mobile content-map and drop-dispatch evidence.
+- Their preserved QAMFs decode to EObject 0 and only hotspots `0x60/0x61`.
+  Both hotspot handlers are null in the mobile constructor, and the mobile
+  drop route has no furniture-item-ID fallback.
+- Adds a generation-time and unit-test contract that rejects functional-cell
+  drift or an accidental PC behavior map for these decorative-only items.
+- The fully enabled generation/link, all linked cross-layout validators, and
+  all 235 repository tests pass (one intentional skip). The fully enabled
+  executable is 1,777,664 bytes with SHA-256
+  `4622BEEE234A36B731D4E947E1C3427C4ADC8BEE89A8B0D83E0DEB097DD237CF`.

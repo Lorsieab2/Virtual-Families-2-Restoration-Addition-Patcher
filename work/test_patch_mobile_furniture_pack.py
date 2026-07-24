@@ -523,6 +523,50 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             self.assertEqual(records[filename]["item_id"], hex(spec["item_id"]))
             self.assertEqual(records[filename]["object"], "0x90")
 
+    def test_unresolved_holiday_items_are_exact_mobile_decorative_only_routes(self):
+        manifest = {}
+        patcher.validate_mobile_decorative_only_fmaps(manifest)
+        records = {
+            row["filename"]: row
+            for row in manifest["MobileDecorativeOnlyFurniture"]["records"]
+        }
+        self.assertEqual(
+            set(records),
+            set(patcher.MOBILE_DECORATIVE_ONLY_FMAP_SPECS),
+        )
+        for filename, spec in patcher.MOBILE_DECORATIVE_ONLY_FMAP_SPECS.items():
+            data = (
+                patcher.MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+            ).read_bytes()
+            width, height = struct.unpack_from("<ii", data, 24)
+            values = [
+                value
+                for (value,) in struct.iter_unpack(
+                    "<I", data[32 : 32 + width * height * 4]
+                )
+                if value
+            ]
+            self.assertEqual((width, height), spec["grid"])
+            self.assertEqual(set(values), {spec["cell_value"]})
+            self.assertEqual(len(values), spec["cell_count"])
+            self.assertEqual(
+                {
+                    ((value >> 11) & 0x7F) | ((value >> 22) & 0x80)
+                    for value in values
+                },
+                {0},
+            )
+            self.assertEqual(
+                {(value >> 18) & 0x7F for value in values},
+                {spec["hotspot"]},
+            )
+            self.assertFalse(
+                (
+                    patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+                ).exists()
+            )
+            self.assertEqual(records[filename]["behavior_port"], False)
+
     def test_mobile_chaise_dispatch_retargets_only_stock_drop_hotspot_call(self):
         old_patched = patcher.PATCHED
         try:

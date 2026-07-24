@@ -188,8 +188,11 @@ EObject `0x8D` proves `InteractHouseXmasDecor` for Red Bow, Santa Wall
 Decoration, and both garlands. Those fourteen exact manual routes now use
 minimal PC-safe maps. Glass of Eggnog now uses its proven EObject `0x8B` and
 exact child-only `CBehavior::Eggnog` manual plan. Single Cookie, Poinsettia,
-and both wreaths remain unresolved; the wreath maps contain no `0x8D` EObject
-anchor.
+and both Wreaths are now proven decorative only. Their map cells decode to
+EObject `0`; their only hotspots are `0x60/0x61`, whose entries remain null in
+the mobile `CHotSpot` constructor. Mobile `DropVillager` dispatches only the
+map hotspot and has no furniture-item-ID fallback, so B156 correctly adds no
+invented behavior to those four items.
 
 Low-level PC table work:
 

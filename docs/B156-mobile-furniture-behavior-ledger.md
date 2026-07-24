@@ -43,7 +43,7 @@ mobile-only marker values do not have corresponding handlers in the desktop
 |---|---|---:|---|---|
 | `0x2AA` | Holiday Candles | yes | `KidExaminesCandles` | exact child-only manual route implemented with PC-safe map; autonomous candidate pending |
 | `0x2AB` | Candy Canes | yes | generic Christmas decor/knickknack family only | exact route unresolved |
-| `0x2AC` | Christmas Cookie | yes | Santa-cookie family exists | exact single-cookie route unresolved |
+| `0x2AC` | Christmas Cookie | yes | no mobile behavior | proven decorative only: EObject 0, unhandled hotspot 0x61 |
 | `0x2AD-0x2AE` | Christmas Trees | yes | `XmasTree`; admire, water, celebrate | exact whole-household manual celebration implemented with two PC-safe maps |
 | `0x2AF` | Dreidel | yes | exact `Dreidel` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
 | `0x2B0` | Eggnog | yes | exact `Eggnog` family | exact child-only manual route implemented with PC-safe map; autonomous candidate pending |
@@ -53,14 +53,14 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2B9-0x2BC` | Ornaments | no | no per-item route proven | decorative |
 | `0x2BD` | Penguin Decoration | yes | `AdmiringXmasKnickKnacks` | exact raw-age-7+ manual route implemented with PC-safe map |
 | `0x2BE` | Plate of Cookies | yes | adult-save/kid-steal Santa-cookie family | exact age-routed manual pair implemented with PC-safe map; child autonomous candidate pending |
-| `0x2BF` | Poinsettia | yes | no exact functional marker found | exact route unresolved |
+| `0x2BF` | Poinsettia | yes | no mobile behavior | proven decorative only: EObject 0, unhandled hotspot 0x60 |
 | `0x2C0`, `0x2C2-0x2C3`, `0x2C5` | Polar bear, reindeer, garden Santa, and snowman | yes | `AdmiringXmasKnickKnacks` | exact raw-age-7+ manual route implemented with four PC-safe maps |
 | `0x2C1`, `0x2C4` | Red Bow and Santa Wall Decoration | yes | `InteractHouseXmasDecor` | exact adult-only manual route implemented with two PC-safe maps |
 | `0x2C6-0x2C7` | Stockings | yes | exact `XmasStockings` / `KidsCheckXmasStockings` | exact under-18 manual route implemented with two PC-safe maps |
 | `0x2C8-0x2C9` | Garlands | yes | `InteractHouseXmasDecor` | exact adult-only manual route implemented with two PC-safe maps |
 | `0x2CA-0x2D2` | Thanksgiving food | no | no Thanksgiving-specific hotspot or behavior recovered | decorative |
 | `0x2D3` | Holiday Welcome Mat | no | stock desktop Welcome Mat exists; no exclusive action proven | existing donor only |
-| `0x2D4-0x2D5` | Wreaths | yes | `InteractHouseXmasDecor` family | exact route unresolved |
+| `0x2D4-0x2D5` | Wreaths | yes | no mobile behavior | proven decorative only: EObject 0, unhandled hotspot 0x61 |
 | `0x2D6-0x2D7` | Designer Soap | no | no exclusive route proven | existing soap donor only |
 | `0x2D8-0x2D9` | Towel Sets | no | `UsingWarmTowel` is already native on PC and mobile at behavior `0xE7` / EObject `0x50` | no towel-item binding exists; decorative, no added route |
 | `0x2DA` | Birthday Balloons | yes | `BirthdayBalloons`; play/maybe play | exact child-only manual route implemented with PC-safe map |
@@ -330,9 +330,24 @@ All fourteen PC-safe maps preserve their mobile dimensions, headers, and
 trailers, zero every unsupported cell, and restore only the proven EObject
 anchors as `0x20006000` or `0x20006800`. Mobile behavior IDs `0x1A4` and
 `0x1A7` remain outside the fixed PC behavior table, so spontaneous selection
-remains pending rather than indexing an invalid slot. Wreaths `0x2D4-0x2D5`
-remain unresolved: their supplied QAMFs contain wall-mask cells only and no
-EObject `0x8D` anchor.
+remains pending rather than indexing an invalid slot.
+
+## Decorative-only Holiday items
+
+Mobile `CContentMap::GetObject` decodes
+`((cell >> 11) & 0x7F) | ((cell >> 22) & 0x80)`, while `GetHotSpot` decodes
+`(cell >> 18) & 0x7F`. Every nonzero cell in Single Cookie `0x2AC`,
+Poinsettia `0x2BF`, and Wreaths `0x2D4-0x2D5` therefore has EObject `0`.
+Single Cookie and both Wreaths contain only `0x01840000`, which decodes to
+hotspot `0x61`; Poinsettia contains only `0x01800000`, which decodes to
+hotspot `0x60`.
+
+The exact mobile `CHotSpot` constructor leaves handlers `0x60` and `0x61`
+null. `theMainScene::DropVillager` obtains only the content-map hotspot and
+calls `CHotSpot::Dispatch`; it never checks the furniture item ID. A null
+handler returns false. These four items are thus source-proven decorative
+furniture on mobile, not missing villager behaviors. B156 deliberately creates
+no PC behavior map or invented action for them.
 
 Player testing on 2026-07-23 confirms the exact manual chaise pose/anchor works
 in good weather and the dedicated bad-weather refusal fires correctly. Manual

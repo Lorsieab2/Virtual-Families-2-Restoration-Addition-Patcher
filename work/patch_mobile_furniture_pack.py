@@ -664,6 +664,36 @@ MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR = (
 MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR = (
     MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR.parent / "pc_fmaps"
 )
+MOBILE_DECORATIVE_ONLY_FMAP_SPECS = {
+    "ChristmasCookie.png.fmap": {
+        "item_id": 0x2AC,
+        "grid": (6, 6),
+        "cell_value": 0x01840000,
+        "cell_count": 26,
+        "hotspot": 0x61,
+    },
+    "Poinsettia.png.fmap": {
+        "item_id": 0x2BF,
+        "grid": (9, 9),
+        "cell_value": 0x01800000,
+        "cell_count": 59,
+        "hotspot": 0x60,
+    },
+    "Wreath1.png.fmap": {
+        "item_id": 0x2D4,
+        "grid": (10, 11),
+        "cell_value": 0x01840000,
+        "cell_count": 75,
+        "hotspot": 0x61,
+    },
+    "Wreath2.png.fmap": {
+        "item_id": 0x2D5,
+        "grid": (9, 11),
+        "cell_value": 0x01840000,
+        "cell_count": 67,
+        "hotspot": 0x61,
+    },
+}
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
 CHEAT_UPGRADE_ITEMS = [
     {
@@ -15861,6 +15891,67 @@ def validate_mobile_xmas_stocking_pc_fmaps(manifest):
     }
 
 
+def validate_mobile_decorative_only_fmaps(manifest):
+    records = []
+    for filename, spec in MOBILE_DECORATIVE_ONLY_FMAP_SPECS.items():
+        mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+        pc_path = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+        data = mobile_path.read_bytes()
+        if len(data) < 0x30 or data[:4] != b"QAMF":
+            raise RuntimeError(f"Invalid decorative-only mobile map: {mobile_path}")
+        width, height = struct.unpack_from("<ii", data, 24)
+        grid_end = 32 + width * height * 4
+        if (width, height) != spec["grid"] or grid_end + 16 != len(data):
+            raise RuntimeError(f"Unexpected decorative-only grid: {filename}")
+        values = [
+            value
+            for (value,) in struct.iter_unpack("<I", data[32:grid_end])
+        ]
+        nonzero = [value for value in values if value]
+        if set(nonzero) != {spec["cell_value"]}:
+            raise RuntimeError(
+                f"Decorative-only map gained functional cells: {filename}"
+            )
+        if len(nonzero) != spec["cell_count"]:
+            raise RuntimeError(
+                f"Decorative-only map cell count drifted: {filename}"
+            )
+        objects = {
+            ((value >> 11) & 0x7F) | ((value >> 22) & 0x80)
+            for value in nonzero
+        }
+        hotspots = {(value >> 18) & 0x7F for value in nonzero}
+        if objects != {0} or hotspots != {spec["hotspot"]}:
+            raise RuntimeError(
+                f"Decorative-only object/hotspot contract drifted: {filename}"
+            )
+        if pc_path.exists():
+            raise RuntimeError(
+                f"Decorative-only item unexpectedly has a behavior map: {pc_path}"
+            )
+        records.append({
+            "item_id": hex(spec["item_id"]),
+            "filename": filename,
+            "source_sha256": hashlib.sha256(data).hexdigest(),
+            "source_bytes": len(data),
+            "grid": [width, height],
+            "object": "0x0",
+            "hotspot": hex(spec["hotspot"]),
+            "hotspot_handler": "unassigned in mobile CHotSpot constructor",
+            "cell_value": hex(spec["cell_value"]),
+            "cell_count": len(nonzero),
+            "behavior_port": False,
+        })
+    manifest["MobileDecorativeOnlyFurniture"] = {
+        "status": "validated exact mobile no-behavior routes",
+        "drop_dispatch": (
+            "mobile DropVillager dispatches only the QAMF hotspot; hotspots "
+            "0x60 and 0x61 have null handlers"
+        ),
+        "records": records,
+    }
+
+
 def patch_mobile_furniture_behavior_dispatch(manifest):
     helper_path = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
     behavior_fallback_decls = ""
@@ -22067,6 +22158,7 @@ def main():
     validate_mobile_birthday_banner_pc_fmap(manifest)
     validate_mobile_group_holiday_pc_fmaps(manifest)
     validate_mobile_xmas_stocking_pc_fmaps(manifest)
+    validate_mobile_decorative_only_fmaps(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)

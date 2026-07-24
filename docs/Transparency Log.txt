@@ -1219,3 +1219,15 @@ B156 exact mobile Special Upgrade mechanics and Health Plan persistence
   CMoney load. This is separate from the Taters, pregnancy-control, and
   generation-counter mask at record +0x04. Reset Achievements preserves the
   paid-upgrade field.
+B156 decorative-only Holiday furniture closure
+- Decoded the exact mobile content-map readers: EObject is assembled from
+  cell bits 11-17 and 29, while hotspot is cell bits 18-24.
+- Christmas Cookie 0x2AC and Wreaths 0x2D4-0x2D5 contain only 0x01840000:
+  EObject 0 and hotspot 0x61. Poinsettia 0x2BF contains only 0x01800000:
+  EObject 0 and hotspot 0x60.
+- The mobile CHotSpot constructor leaves 0x60 and 0x61 unassigned.
+  DropVillager reads and dispatches only the map hotspot; there is no
+  furniture-item-ID fallback. A null handler returns false.
+- These four items are therefore mobile decorative furniture, not missing
+  villager behaviors. B156 validates that exact negative contract and does
+  not create speculative PC behavior maps for them.
