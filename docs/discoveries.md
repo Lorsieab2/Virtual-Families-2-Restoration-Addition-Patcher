@@ -2939,3 +2939,27 @@
   `adf281867fbf395dddf6da33fe7fabd7c9364483ac22ecb91909a5dcab184777`.
   Existing Holiday and four-runtime-flag linked validation passes. Live
   placement, notification, reset, save, and reload QA remains.
+
+## 2026-07-23 - Persistent family-tree appearance achievements
+
+- Return of the Rainbow and Spiky! now occupy IDs `0x90` and `0x91`. The exact
+  qualifiers are persistent `CFamilyTree::SPeepRecord` fields: present byte
+  `+0x1A`, gender dword `+0x1C`, and head dword `+0x20`. Female is native value
+  `1`; male is `0`; both require head `48`.
+- All six native `CFamilyTree::UpdatePeepRecord` calls are retargeted through
+  one ABI-compatible wrapper: AddOffspring, StartNextGeneration, the three
+  UpdateCurrentFamilyRecord calls, and UpdateParents. The native update runs
+  before the qualifying record is checked, and no function bytes change.
+- `theGameState::Load(int)+0x16F` retains the native
+  `CFamilyTree::LoadState` call through a relocation-only wrapper. After a
+  successful load, reconciliation scans both parent records and up to six
+  children in each of at most 30 loaded generation records. The record-present
+  byte is the only membership filter, so dead and departed relatives continue
+  to qualify exactly as the persistent family-tree requirement specifies.
+- IDs `0x90-0x91` are included in the visible counts, ordered achievement
+  list, Complete all Achievements, and existing save/reset capacity. Reserved
+  custom capacity is now `0x92-0xA7`.
+- The fully enabled B156 executable links at 1,762,816 bytes with SHA-256
+  `16a622d702e6464f7b612badc5faee004911cfb66962845c37dc39356f4f3b8c`.
+  Existing Holiday and four-runtime-flag linked validation passes. Live
+  birth/adoption, notification, reset, save, and reload QA remains.

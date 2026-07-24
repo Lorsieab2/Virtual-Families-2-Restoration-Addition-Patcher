@@ -1271,3 +1271,16 @@
   `ADF281867FBF395DDDF6DA33FE7FABD7C9364483AC22ECB91909A5DCAB184777`.
 - All existing linked Holiday and four-runtime-flag validations pass. Live
   award/notification/reset/save/reload testing remains.
+
+## B156 - family-tree appearance achievement checkpoint
+
+- Adds Return of the Rainbow 0x90 and Spiky! 0x91 using the exact persistent
+  family-tree record-present, gender, and head fields.
+- Observes all six native record-update calls after their writes and reconciles
+  both parents plus up to six children across at most 30 loaded generations.
+- Dead and departed relatives remain eligible; no active-household or living
+  filter is applied.
+- The fully enabled executable is 1,762,816 bytes with SHA-256
+  `16A622D702E6464F7B612BADC5FAEE004911CFB66962845C37DC39356F4F3B8C`.
+- Existing linked Holiday and four-runtime-flag validations pass. Live
+  birth/adoption/notification/reset/save/reload testing remains.

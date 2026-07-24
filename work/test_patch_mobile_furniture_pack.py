@@ -2744,10 +2744,10 @@ class TextFixStringManagerTests(unittest.TestCase):
                     if row.get("source")
                     == "custom achievement reserved capacity"
                 ]
-                self.assertEqual(len(reserved), 48)
+                self.assertEqual(len(reserved), 44)
                 self.assertEqual(
                     {int(row["achievement_id"], 16) for row in reserved},
-                    set(range(0x90, 0xA8)),
+                    set(range(0x92, 0xA8)),
                 )
                 self.assertTrue(all(row["text"] == "" for row in reserved))
                 self.assertEqual(
@@ -3003,7 +3003,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("if (kVF2IncludeOrnamentologistGoal)", source)
         self.assertIn("if (kVF2IncludeBehaviorGoals)", source)
         self.assertIn(
-            "for (int achievement = 0x80; achievement <= 0x8F; ++achievement)",
+            "for (int achievement = 0x80; achievement <= 0x91; ++achievement)",
             source,
         )
         self.assertIn("if (gVF2HolidayFurnitureGoalsEnabled != 0)", source)
@@ -3804,6 +3804,143 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                 self.assertIn("for (int slot = 0; slot < 30; ++slot)", source)
                 self.assertIn("if (manager->PetExists(slot))", source)
                 self.assertIn("manager->GetPet(slot).KindOfPet() + 0x23B", source)
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_family_tree_appearance_rows_are_exact(self):
+        rows = {
+            achievement_id: (group, title, description)
+            for achievement_id, group, title, description
+            in patcher.CUSTOM_ACHIEVEMENT_ROW_SPECS
+        }
+        self.assertEqual(
+            {achievement_id: rows[achievement_id] for achievement_id in range(0x90, 0x92)},
+            {
+                0x90: (
+                    "family_tree",
+                    "Return of the Rainbow",
+                    "Have a female villager with head value 48 in the family tree.",
+                ),
+                0x91: (
+                    "family_tree",
+                    "Spiky!",
+                    "Have a male villager with head value 48 in the family tree.",
+                ),
+            },
+        )
+
+    def test_family_tree_appearance_hooks_are_relocation_only_and_persistent(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                patcher.PATCHED = temp_root
+                for filename in ("FamilyTree.obj", "theGameState.obj"):
+                    shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+
+                before = {}
+                for filename in ("FamilyTree.obj", "theGameState.obj"):
+                    obj = CoffObject(temp_root / filename)
+                    before[filename] = {
+                        section.index: bytes(
+                            obj.buf[
+                                section.raw_ptr :
+                                section.raw_ptr + section.raw_size
+                            ]
+                        )
+                        for section in obj.sections
+                    }
+
+                manifest = {}
+                patcher.patch_family_tree_appearance_achievement_callsites(
+                    manifest
+                )
+
+                family = CoffObject(temp_root / "FamilyTree.obj")
+                expected_calls = (
+                    ("?AddOffspring@CFamilyTree@@QAE_NABVCVillager@@@Z", 0x7C),
+                    ("?StartNextGeneration@CFamilyTree@@QAE_NAAVCVillager@@H@Z", 0xD1),
+                    ("?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ", 0x17),
+                    ("?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ", 0x25),
+                    ("?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ", 0x38),
+                    ("?UpdateParents@CFamilyTree@@QAE_NAAVCVillager@@0@Z", 0xDD),
+                )
+                for function_name, relative in expected_calls:
+                    function = family.symbol(function_name)
+                    section = family.section(function.section)
+                    self.assertEqual(
+                        bytes(
+                            family.buf[
+                                section.raw_ptr :
+                                section.raw_ptr + section.raw_size
+                            ]
+                        ),
+                        before["FamilyTree.obj"][section.index],
+                    )
+                    targets = []
+                    for index in range(section.nreloc):
+                        vaddr, symbol_index, rtype = struct.unpack_from(
+                            "<IIH", family.buf, section.reloc_ptr + index * 10
+                        )
+                        if vaddr == function.value + relative:
+                            targets.append((
+                                family.symbol_by_index[symbol_index].name,
+                                rtype,
+                            ))
+                    self.assertEqual(
+                        targets,
+                        [(
+                            patcher.APPEARANCE_UPDATE_HELPER_SYMBOL,
+                            patcher.IMAGE_REL_I386_REL32,
+                        )],
+                    )
+
+                game_state = CoffObject(temp_root / "theGameState.obj")
+                load = game_state.symbol("?Load@theGameState@@UAE_NH@Z")
+                section = game_state.section(load.section)
+                self.assertEqual(
+                    bytes(
+                        game_state.buf[
+                            section.raw_ptr :
+                            section.raw_ptr + section.raw_size
+                        ]
+                    ),
+                    before["theGameState.obj"][section.index],
+                )
+                load_targets = []
+                for index in range(section.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH", game_state.buf, section.reloc_ptr + index * 10
+                    )
+                    if vaddr == load.value + 0x170:
+                        load_targets.append((
+                            game_state.symbol_by_index[symbol_index].name,
+                            rtype,
+                        ))
+                self.assertEqual(
+                    load_targets,
+                    [(
+                        patcher.APPEARANCE_LOAD_HELPER_SYMBOL,
+                        patcher.IMAGE_REL_I386_REL32,
+                    )],
+                )
+
+                contract = manifest["FamilyTreeAppearanceAchievementHooks"]
+                self.assertTrue(
+                    contract["load_reconciliation"]["includes_dead_and_departed"]
+                )
+                self.assertEqual(
+                    len(contract["update_observers"]["callsites"]),
+                    6,
+                )
+                source = Path(patcher.__file__).read_text(encoding="utf-8")
+                self.assertIn("if (data == 0 || data[0x1A] == 0) return;", source)
+                self.assertIn("int gender = *(int *)(data + 0x1C);", source)
+                self.assertIn("int head = *(int *)(data + 0x20);", source)
+                self.assertIn("family + 0x1B8 + child * 0xD8", source)
+                self.assertNotIn("0x1BB88", source.split(
+                    "static void VF2CheckAppearanceAchievement", 1
+                )[1].split("extern \"C\" void __fastcall VF2MoneyAdjustAndAward", 1)[0])
         finally:
             patcher.PATCHED = old_patched
 
@@ -4796,10 +4933,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         ))
         try:
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
-                (False, False, 117, 136, 5, 12),
-                (True, False, 118, 137, 6, 13),
-                (False, True, 124, 143, 5, 12),
-                (True, True, 125, 144, 6, 13),
+                (False, False, 119, 138, 5, 12),
+                (True, False, 120, 139, 6, 13),
+                (False, True, 126, 145, 5, 12),
+                (True, True, 127, 146, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
@@ -4978,10 +5115,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         expected.extend(range(0x60, 0x66))
                         if behavior:
                             expected.extend(range(0x66, 0x6D))
-                        expected.extend(range(0x80, 0x90))
+                        expected.extend(range(0x80, 0x92))
                         expected.extend(range(0x6D, 0x80))
                         self.assertEqual(order, expected)
-                        self.assertEqual(order[-35:-19], list(range(0x80, 0x90)))
+                        self.assertEqual(order[-37:-19], list(range(0x80, 0x92)))
                         self.assertEqual(order[-19:], list(range(0x6D, 0x80)))
                         order_contract = manifest["CustomAchievements"][
                             "ornamentologist_order"
@@ -5645,8 +5782,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
                     "physical_row_count": 0xA8,
-                    "visible_count_flag_0": 118,
-                    "visible_count_flag_1": 137,
+                    "visible_count_flag_0": 120,
+                    "visible_count_flag_1": 139,
                     "notify_queue_bound": 0x5F,
                 },
             )

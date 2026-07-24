@@ -176,6 +176,10 @@ LONGEVITY_FOOD_GROUPS_HELPER_SYMBOL = (
 )
 PET_SPAWN_HELPER_SYMBOL = "@VF2SpawnPetAndAward@20"
 PET_LOAD_HELPER_SYMBOL = "@VF2PetManagerLoadStateAndReconcile@12"
+APPEARANCE_UPDATE_HELPER_SYMBOL = "@VF2UpdatePeepRecordAndAwardAppearance@12"
+APPEARANCE_LOAD_HELPER_SYMBOL = (
+    "@VF2FamilyTreeLoadStateAndReconcileAppearance@12"
+)
 OLDER_MORTALITY_TABLE_FIRST_AGE = 55
 OLDER_MORTALITY_RANDOM_LIMIT = 1_000_000
 OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS = 999_999
@@ -703,7 +707,7 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
 CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x8F
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x91
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -718,6 +722,8 @@ CUSTOM_ACHIEVEMENT_LONGEVITY_FIRST = 0x85
 CUSTOM_ACHIEVEMENT_LONGEVITY_LAST = 0x89
 CUSTOM_ACHIEVEMENT_PET_FIRST = 0x8A
 CUSTOM_ACHIEVEMENT_PET_LAST = 0x8F
+CUSTOM_ACHIEVEMENT_APPEARANCE_FIRST = 0x90
+CUSTOM_ACHIEVEMENT_APPEARANCE_LAST = 0x91
 CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
 CUSTOM_ACHIEVEMENT_TARGET = 1
 CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
@@ -770,6 +776,8 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0x8D, "pet", "Itsy Bitsy", "Have a tarantula in the home."),
     (0x8E, "pet", "Hampster Dance", "Have a hamster in the house."),
     (0x8F, "pet", "Lovely Lizards", "Have a lizard in the house."),
+    (0x90, "family_tree", "Return of the Rainbow", "Have a female villager with head value 48 in the family tree."),
+    (0x91, "family_tree", "Spiky!", "Have a male villager with head value 48 in the family tree."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -8727,6 +8735,14 @@ public:
     CPet &GetPet(int index);
 };
 
+class CFamilyTree {
+public:
+    struct SPeepRecord;
+    struct SSaveState;
+    void UpdatePeepRecord(SPeepRecord *record);
+    bool const LoadState(SSaveState const &state);
+};
+
 enum ECarrying {
     eCarryingDummy = 0
 };
@@ -8956,7 +8972,7 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 }
 
 static int VF2AchievementVisibleCountInternal() {
-    int count = 0x5F + 6 + 3 + 2 + 5 + 6;
+    int count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2;
     if (kVF2IncludeOrnamentologistGoal) ++count;
     if (kVF2IncludeBehaviorGoals) count += 7;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
@@ -8999,7 +9015,7 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
     if (kVF2IncludeBehaviorGoals) {
         completed += VF2CountCompletedAchievements(achievement, 0x66, 0x6C);
     }
-    completed += VF2CountCompletedAchievements(achievement, 0x80, 0x8F);
+    completed += VF2CountCompletedAchievements(achievement, 0x80, 0x91);
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
         completed += VF2CountCompletedAchievements(achievement, 0x6D, 0x7F);
     }
@@ -9116,6 +9132,68 @@ extern "C" bool __fastcall VF2PetManagerLoadStateAndReconcile(
             }
         }
     }
+    return loaded;
+}
+
+static void VF2CheckAppearanceAchievement(CFamilyTree::SPeepRecord *record) {
+    unsigned char *data = (unsigned char *)record;
+    if (data == 0 || data[0x1A] == 0) return;
+    int gender = *(int *)(data + 0x1C);
+    int head = *(int *)(data + 0x20);
+    if (head != 48) return;
+    EAchievement goal;
+    if (gender == 1) {
+        goal = (EAchievement)0x90;
+    } else if (gender == 0) {
+        goal = (EAchievement)0x91;
+    } else {
+        return;
+    }
+    if (!Achievement.IsComplete(goal)) Achievement.SetComplete(goal);
+}
+
+extern "C" void __fastcall VF2UpdatePeepRecordAndAwardAppearance(
+    CFamilyTree *tree,
+    void *,
+    CFamilyTree::SPeepRecord *record
+) {
+    tree->UpdatePeepRecord(record);
+    VF2CheckAppearanceAchievement(record);
+}
+
+static void VF2ReconcileFamilyTreeAppearance(CFamilyTree *tree) {
+    unsigned char *treeData = (unsigned char *)tree;
+    int generations = *(int *)(treeData + 0x04);
+    if (generations < 0) generations = 0;
+    if (generations > 30) generations = 30;
+    for (int generation = 0; generation < generations; ++generation) {
+        unsigned char *family = treeData + 0x08 + generation * 0x6C8;
+        VF2CheckAppearanceAchievement(
+            (CFamilyTree::SPeepRecord *)(family + 0x04)
+        );
+        VF2CheckAppearanceAchievement(
+            (CFamilyTree::SPeepRecord *)(family + 0xDC)
+        );
+        int children = *(int *)(family + 0x1B4);
+        if (children < 0) children = 0;
+        if (children > 6) children = 6;
+        for (int child = 0; child < children; ++child) {
+            VF2CheckAppearanceAchievement(
+                (CFamilyTree::SPeepRecord *)(
+                    family + 0x1B8 + child * 0xD8
+                )
+            );
+        }
+    }
+}
+
+extern "C" bool __fastcall VF2FamilyTreeLoadStateAndReconcileAppearance(
+    CFamilyTree *tree,
+    void *,
+    CFamilyTree::SSaveState const &state
+) {
+    bool loaded = tree->LoadState(state);
+    if (loaded) VF2ReconcileFamilyTreeAppearance(tree);
     return loaded;
 }
 
@@ -9328,7 +9406,7 @@ static void VF2CompleteAllAchievements() {
             VF2CompleteAchievementForCheat(achievement);
         }
     }
-    for (int achievement = 0x80; achievement <= 0x8F; ++achievement) {
+    for (int achievement = 0x80; achievement <= 0x91; ++achievement) {
         VF2CompleteAchievementForCheat(achievement);
     }
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
@@ -11249,6 +11327,12 @@ def patch_custom_achievements(manifest):
         range(CUSTOM_ACHIEVEMENT_PET_FIRST, CUSTOM_ACHIEVEMENT_PET_LAST + 1)
     )
     appended_order.extend(
+        range(
+            CUSTOM_ACHIEVEMENT_APPEARANCE_FIRST,
+            CUSTOM_ACHIEVEMENT_APPEARANCE_LAST + 1,
+        )
+    )
+    appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
     )
     order_sym = scene_obj.symbol("?achievementOrder@@3QBHB")
@@ -11381,6 +11465,7 @@ def patch_custom_achievements(manifest):
         + 2
         + 5
         + 6
+        + 2
     )
     manifest["CustomAchievements"] = {
         "status": "patched",
@@ -11956,6 +12041,140 @@ def patch_pet_achievement_callsites(manifest):
             "original_target": load_native,
             "replacement": PET_LOAD_HELPER_SYMBOL,
             "active_slots_scanned": 30,
+            "native_load_result_preserved": True,
+        },
+    }
+
+
+def patch_family_tree_appearance_achievement_callsites(manifest):
+    """Observe persistent family-tree writes and reconcile existing records."""
+    def target_at(obj, section, vaddr):
+        matches = []
+        for index in range(section.nreloc):
+            relocation = struct.unpack_from(
+                "<IIH", obj.buf, section.reloc_ptr + index * 10
+            )
+            if relocation[0] == vaddr:
+                matches.append((
+                    obj.symbol_by_index[relocation[1]].name,
+                    relocation[2],
+                ))
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"Expected one relocation at {vaddr:#x}, got {matches}"
+            )
+        return matches[0]
+
+    update_native = (
+        "?UpdatePeepRecord@CFamilyTree@@QAEX"
+        "PAUSPeepRecord@1@@Z"
+    )
+    update_calls = (
+        ("?AddOffspring@CFamilyTree@@QAE_NABVCVillager@@@Z", 0x7B),
+        ("?StartNextGeneration@CFamilyTree@@QAE_NAAVCVillager@@H@Z", 0xD0),
+        ("?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ", 0x16),
+        ("?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ", 0x24),
+        ("?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ", 0x37),
+        ("?UpdateParents@CFamilyTree@@QAE_NAAVCVillager@@0@Z", 0xDC),
+    )
+    family_path = PATCHED / "FamilyTree.obj"
+    family = CoffObject(family_path)
+    update_helper = family.append_undefined_symbol(
+        APPEARANCE_UPDATE_HELPER_SYMBOL
+    )
+    update_manifest = []
+    for function_name, call_relative in update_calls:
+        function = family.symbol(function_name)
+        section = family.section(function.section)
+        call = function.value + call_relative
+        relocation = call + 1
+        if bytes(
+            family.buf[
+                section.raw_ptr + call :
+                section.raw_ptr + call + 5
+            ]
+        ) != b"\xE8\0\0\0\0":
+            raise RuntimeError(
+                f"Family-tree appearance callsite drifted: "
+                f"{function_name}+{call_relative:#x}"
+            )
+        target = target_at(family, section, relocation)
+        if target != (update_native, IMAGE_REL_I386_REL32):
+            raise RuntimeError(
+                f"Family-tree appearance relocation drifted: "
+                f"{function_name}+{call_relative:#x}: {target}"
+            )
+        family.retarget_relocation(
+            section.index,
+            relocation,
+            update_helper,
+            IMAGE_REL_I386_REL32,
+        )
+        update_manifest.append({
+            "function": function_name,
+            "call_offset": hex(call_relative),
+            "relocation_offset": hex(call_relative + 1),
+        })
+    family.write(family_path)
+
+    load_native = "?LoadState@CFamilyTree@@QAE?B_NABUSSaveState@1@@Z"
+    game_state_path = PATCHED / "theGameState.obj"
+    game_state = CoffObject(game_state_path)
+    load_name = "?Load@theGameState@@UAE_NH@Z"
+    load = game_state.symbol(load_name)
+    section = game_state.section(load.section)
+    call = load.value + 0x16F
+    relocation = load.value + 0x170
+    if bytes(
+        game_state.buf[
+            section.raw_ptr + call :
+            section.raw_ptr + call + 5
+        ]
+    ) != b"\xE8\0\0\0\0":
+        raise RuntimeError("Family-tree appearance load callsite drifted")
+    target = target_at(game_state, section, relocation)
+    if target != (load_native, IMAGE_REL_I386_REL32):
+        raise RuntimeError(
+            f"Family-tree appearance load relocation drifted: {target}"
+        )
+    load_helper = game_state.append_undefined_symbol(
+        APPEARANCE_LOAD_HELPER_SYMBOL
+    )
+    game_state.retarget_relocation(
+        section.index,
+        relocation,
+        load_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    game_state.write(game_state_path)
+
+    manifest["FamilyTreeAppearanceAchievementHooks"] = {
+        "status": "persistent-record updates plus load reconciliation",
+        "achievement_ids": ["0x90", "0x91"],
+        "requirements": {
+            "Return of the Rainbow": {"gender": 1, "head": 48},
+            "Spiky!": {"gender": 0, "head": 48},
+        },
+        "record_layout": {
+            "present_byte": "0x1a",
+            "gender_dword": "0x1c",
+            "head_dword": "0x20",
+        },
+        "update_observers": {
+            "original_target": update_native,
+            "replacement": APPEARANCE_UPDATE_HELPER_SYMBOL,
+            "callsites": update_manifest,
+            "native_first": True,
+            "relocation_only": True,
+        },
+        "load_reconciliation": {
+            "caller": "theGameState::Load(int)",
+            "call_offset": "0x16f",
+            "original_target": load_native,
+            "replacement": APPEARANCE_LOAD_HELPER_SYMBOL,
+            "generation_cap": 30,
+            "children_per_generation_cap": 6,
+            "includes_dead_and_departed": True,
             "native_load_result_preserved": True,
         },
     }
@@ -18930,6 +19149,7 @@ def main():
     patch_older_villager_mortality(manifest)
     patch_longevity_achievement_load_reconciliation(manifest)
     patch_pet_achievement_callsites(manifest)
+    patch_family_tree_appearance_achievement_callsites(manifest)
     patch_mobile_furniture_behavior_dispatch(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:
         patch_collectable_item_holiday_ornaments(manifest)
