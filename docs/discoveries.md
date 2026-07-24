@@ -3603,24 +3603,24 @@
   1,777,664 bytes with SHA-256
   `E3DDB645D9228EF5252E6E636AED5D2A175965F6DA7E111F97531930DB43CE52`.
 
-## 2026-07-24 - Single Cookie, Poinsettia, and Wreath behavior closure
+## 2026-07-24 - Candy Cane, Single Cookie, Poinsettia, and Wreath behavior closure
 
 - Mobile `CContentMap::GetObject` decodes
   `((cell >> 11) & 0x7F) | ((cell >> 22) & 0x80)`.
   `CContentMap::GetHotSpot` decodes `(cell >> 18) & 0x7F`.
-- Every nonzero Single Cookie `0x2AC` and Wreath `0x2D4-0x2D5` map cell is
-  `0x01840000`, yielding EObject `0` and hotspot `0x61`. Every nonzero
-  Poinsettia `0x2BF` cell is `0x01800000`, yielding EObject `0` and hotspot
-  `0x60`.
+- Every nonzero Candy Cane `0x2AB`, Single Cookie `0x2AC`, and Wreath
+  `0x2D4-0x2D5` map cell is `0x01840000`, yielding EObject `0` and hotspot
+  `0x61`. Every nonzero Poinsettia `0x2BF` cell is `0x01800000`, yielding
+  EObject `0` and hotspot `0x60`.
 - The exact mobile `CHotSpot` constructor initializes its table to null and
   never assigns handlers `0x60` or `0x61`. `CHotSpot::Dispatch` returns false
   when the selected entry is null.
 - Mobile `theMainScene::DropVillager` reads a content-map hotspot and sends it
   to `CHotSpot::Dispatch`; it contains no furniture item-ID comparison or
-  fallback. These four items are thus decorative only in mobile. B156 should
+  fallback. These five items are thus decorative only in mobile. B156 should
   not invent behavior maps or attach nearby Holiday actions to them.
 - The new negative contract passes the fully enabled generation/link, all
   linked cross-layout validators, and all 235 repository tests (one
   intentional skip). The fully enabled executable is 1,777,664 bytes with
   SHA-256
-  `4622BEEE234A36B731D4E947E1C3427C4ADC8BEE89A8B0D83E0DEB097DD237CF`.
+  `2EF83392E11DE07CF52F45BF1F1FC6BEDF62F0742D7148AE4C702720867426E1`.

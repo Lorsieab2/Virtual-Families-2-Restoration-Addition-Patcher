@@ -1695,8 +1695,8 @@
 
 ## B156 - Decorative-only Holiday furniture audit
 
-- Closes the remaining Single Cookie, Poinsettia, and Wreath behavior question
-  from exact mobile content-map and drop-dispatch evidence.
+- Closes the remaining Candy Cane, Single Cookie, Poinsettia, and Wreath
+  behavior question from exact mobile content-map and drop-dispatch evidence.
 - Their preserved QAMFs decode to EObject 0 and only hotspots `0x60/0x61`.
   Both hotspot handlers are null in the mobile constructor, and the mobile
   drop route has no furniture-item-ID fallback.
@@ -1705,4 +1705,4 @@
 - The fully enabled generation/link, all linked cross-layout validators, and
   all 235 repository tests pass (one intentional skip). The fully enabled
   executable is 1,777,664 bytes with SHA-256
-  `4622BEEE234A36B731D4E947E1C3427C4ADC8BEE89A8B0D83E0DEB097DD237CF`.
+  `2EF83392E11DE07CF52F45BF1F1FC6BEDF62F0742D7148AE4C702720867426E1`.

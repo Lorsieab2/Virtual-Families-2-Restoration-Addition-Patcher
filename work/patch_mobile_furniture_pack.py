@@ -665,6 +665,13 @@ MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR = (
     MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR.parent / "pc_fmaps"
 )
 MOBILE_DECORATIVE_ONLY_FMAP_SPECS = {
+    "CandyCane.png.fmap": {
+        "item_id": 0x2AB,
+        "grid": (7, 6),
+        "cell_value": 0x01840000,
+        "cell_count": 29,
+        "hotspot": 0x61,
+    },
     "ChristmasCookie.png.fmap": {
         "item_id": 0x2AC,
         "grid": (6, 6),

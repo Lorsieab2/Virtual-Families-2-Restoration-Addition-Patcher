@@ -181,18 +181,18 @@ not just static sprites. B156 now ports `KidExaminesCandles` for Holiday
 Candles `0x2AA` as an exact child-only manual plan with a minimal PC-safe map.
 Plate of Cookies `0x2BE` now age-routes exact child-steal and adult-rescue
 manual plans on EObject `0x8F`, including the child route's optional adult
-rescuer. The knickknack, single-cookie, garland, and wreath candidates were
-then checked against every preserved QAMF. EObject `0x8C`
+rescuer. The knickknack, Candy Cane, single-cookie, garland, and wreath
+candidates were then checked against every preserved QAMF. EObject `0x8C`
 proves the exact `AdmiringXmasKnickKnacks` route for ten gnome/yard figurines;
 EObject `0x8D` proves `InteractHouseXmasDecor` for Red Bow, Santa Wall
 Decoration, and both garlands. Those fourteen exact manual routes now use
 minimal PC-safe maps. Glass of Eggnog now uses its proven EObject `0x8B` and
-exact child-only `CBehavior::Eggnog` manual plan. Single Cookie, Poinsettia,
-and both Wreaths are now proven decorative only. Their map cells decode to
-EObject `0`; their only hotspots are `0x60/0x61`, whose entries remain null in
-the mobile `CHotSpot` constructor. Mobile `DropVillager` dispatches only the
-map hotspot and has no furniture-item-ID fallback, so B156 correctly adds no
-invented behavior to those four items.
+exact child-only `CBehavior::Eggnog` manual plan. Candy Canes, Single Cookie,
+Poinsettia, and both Wreaths are now proven decorative only. Their map cells
+decode to EObject `0`; their only hotspots are `0x60/0x61`, whose entries
+remain null in the mobile `CHotSpot` constructor. Mobile `DropVillager`
+dispatches only the map hotspot and has no furniture-item-ID fallback, so B156
+correctly adds no invented behavior to those five items.
 
 Low-level PC table work:
 

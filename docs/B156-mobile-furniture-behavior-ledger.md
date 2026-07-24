@@ -42,7 +42,7 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | PC IDs | Mobile furniture | QAMF evidence | Recovered mobile action family | Desktop status |
 |---|---|---:|---|---|
 | `0x2AA` | Holiday Candles | yes | `KidExaminesCandles` | exact child-only manual route implemented with PC-safe map; autonomous candidate pending |
-| `0x2AB` | Candy Canes | yes | generic Christmas decor/knickknack family only | exact route unresolved |
+| `0x2AB` | Candy Canes | yes | no mobile behavior | proven decorative only: EObject 0, unhandled hotspot 0x61 |
 | `0x2AC` | Christmas Cookie | yes | no mobile behavior | proven decorative only: EObject 0, unhandled hotspot 0x61 |
 | `0x2AD-0x2AE` | Christmas Trees | yes | `XmasTree`; admire, water, celebrate | exact whole-household manual celebration implemented with two PC-safe maps |
 | `0x2AF` | Dreidel | yes | exact `Dreidel` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
@@ -336,16 +336,16 @@ remains pending rather than indexing an invalid slot.
 
 Mobile `CContentMap::GetObject` decodes
 `((cell >> 11) & 0x7F) | ((cell >> 22) & 0x80)`, while `GetHotSpot` decodes
-`(cell >> 18) & 0x7F`. Every nonzero cell in Single Cookie `0x2AC`,
-Poinsettia `0x2BF`, and Wreaths `0x2D4-0x2D5` therefore has EObject `0`.
-Single Cookie and both Wreaths contain only `0x01840000`, which decodes to
-hotspot `0x61`; Poinsettia contains only `0x01800000`, which decodes to
-hotspot `0x60`.
+`(cell >> 18) & 0x7F`. Every nonzero cell in Candy Canes `0x2AB`, Single
+Cookie `0x2AC`, Poinsettia `0x2BF`, and Wreaths `0x2D4-0x2D5` therefore has
+EObject `0`. Candy Canes, Single Cookie, and both Wreaths contain only
+`0x01840000`, which decodes to hotspot `0x61`; Poinsettia contains only
+`0x01800000`, which decodes to hotspot `0x60`.
 
 The exact mobile `CHotSpot` constructor leaves handlers `0x60` and `0x61`
 null. `theMainScene::DropVillager` obtains only the content-map hotspot and
 calls `CHotSpot::Dispatch`; it never checks the furniture item ID. A null
-handler returns false. These four items are thus source-proven decorative
+handler returns false. These five items are thus source-proven decorative
 furniture on mobile, not missing villager behaviors. B156 deliberately creates
 no PC behavior map or invented action for them.
 

@@ -102,10 +102,10 @@ must remain visible as Needs source audit; it must not be silently omitted.
   `AdmiringXmasKnickKnacks` figurines and four adult
   `InteractHouseXmasDecor` wall/garland items. Eggnog now has its exact
   child-only manual `Eggnog` plan and EObject `0x8B` map. The remaining
-  Single Cookie, Poinsettia, and two Wreath maps are now proven decorative
-  only: they decode to EObject `0`, their hotspots `0x60/0x61` have null
-  mobile handlers, and the mobile drop dispatcher has no item-ID fallback.
-  Do not invent behavior routes for them from their artwork names.
+  Candy Canes, Single Cookie, Poinsettia, and two Wreath maps are now proven
+  decorative only: they decode to EObject `0`, their hotspots `0x60/0x61`
+  have null mobile handlers, and the mobile drop dispatcher has no item-ID
+  fallback. Do not invent behavior routes for them from their artwork names.
 - [x] Disassemble all 25 added mobile `CEvent*` firing, award, and impact
   methods and map their exact outcomes. Live event and patch-off QA remains.
 - [x] Confirm mobile special-upgrade save fields and effect math. Brokerage
