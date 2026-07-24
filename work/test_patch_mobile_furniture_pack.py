@@ -195,6 +195,47 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             + len(patcher.MOBILE_PATIO_TABLE_PC_SEAT_CELLS),
         )
 
+    def test_mobile_picnic_table_pc_fmap_keeps_four_exact_seat_anchors(self):
+        manifest = {}
+        patcher.validate_mobile_picnic_table_pc_fmap(manifest)
+        contract = manifest["MobilePicnicTablePCFmap"]
+        self.assertEqual(contract["item_id"], "0x2e8")
+        self.assertEqual(contract["object"], "0x97")
+        self.assertEqual(contract["excluded_mobile_hotspot"], "0x6b")
+
+        data = (
+            patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR
+            / "Picnic_table.png.fmap"
+        ).read_bytes()
+        self.assertEqual(len(data), 1456)
+        self.assertEqual(
+            hashlib.sha256(data).hexdigest(),
+            "3d3aaeeeb77e7842cc20be211d8bcf415f85e6d8c6cd0e0f860a934c6cc45060",
+        )
+        width, height = struct.unpack_from("<ii", data, 24)
+        values = [
+            value
+            for (value,) in struct.iter_unpack(
+                "<I", data[32 : 32 + width * height * 4]
+            )
+        ]
+        self.assertEqual((width, height), (22, 16))
+        self.assertEqual(
+            {
+                (i % width, i // width)
+                for i, value in enumerate(values)
+                if value == patcher.MOBILE_PICNIC_TABLE_PC_CELL_VALUE
+            },
+            set(patcher.MOBILE_PICNIC_TABLE_PC_CELLS),
+        )
+        for cell, value in patcher.MOBILE_PICNIC_TABLE_PC_SEAT_CELLS.items():
+            self.assertEqual(values[cell[1] * width + cell[0]], value)
+        self.assertEqual(
+            sum(1 for value in values if value),
+            len(patcher.MOBILE_PICNIC_TABLE_PC_CELLS)
+            + len(patcher.MOBILE_PICNIC_TABLE_PC_SEAT_CELLS),
+        )
+
     def test_mobile_birthday_cake_pc_fmap_is_exact_eobject_only_payload(self):
         manifest = {}
         patcher.validate_mobile_birthday_cake_pc_fmap(manifest)
@@ -538,7 +579,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "unproven",
                 )
                 self.assertEqual(
-                    contract["implemented_families"][3],
+                    contract["implemented_families"][4],
                     {
                         "name": "mobile Birthday Cake",
                         "item_ids": ["0x2dc"],
@@ -553,7 +594,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     },
                 )
                 self.assertEqual(
-                    contract["implemented_families"][4],
+                    contract["implemented_families"][5],
                     {
                         "name": "mobile Birthday Presents",
                         "item_ids": ["0x2dd"],
@@ -567,7 +608,19 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         "desktop_implementation": "exact direct plan-sequence port",
                     },
                 )
-                balloons = contract["implemented_families"][5]
+                picnic = contract["implemented_families"][3]
+                self.assertEqual(picnic["item_ids"], ["0x2e8"])
+                self.assertEqual(picnic["object"], "0x97")
+                self.assertEqual(
+                    picnic["mobile_behavior_ids"], ["0x1b4", "0x1b5"]
+                )
+                self.assertTrue(picnic["manual_drop_supported"])
+                self.assertTrue(picnic["children_can_eat_when_ready"])
+                self.assertFalse(picnic["autonomous"])
+                self.assertEqual(
+                    picnic["picnic_ready_state"]["duration_game_seconds"], 240
+                )
+                balloons = contract["implemented_families"][6]
                 self.assertEqual(balloons["item_ids"], ["0x2da"])
                 self.assertEqual(balloons["label"], "Playing")
                 self.assertEqual(balloons["label_string_id"], "0xf0")
@@ -580,27 +633,27 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(balloons["mobile_behavior_id"], "0x1ad")
                 self.assertTrue(balloons["manual_drop_only"])
                 self.assertFalse(balloons["autonomous"])
-                banner = contract["implemented_families"][6]
+                banner = contract["implemented_families"][7]
                 self.assertEqual(banner["item_ids"], ["0x2db"])
                 self.assertEqual(banner["object"], "0x91")
                 self.assertEqual(banner["mobile_behavior_ids"], ["0x1ae", "0x1af"])
                 self.assertTrue(banner["whole_household"])
-                trees = contract["implemented_families"][7]
+                trees = contract["implemented_families"][8]
                 self.assertEqual(trees["item_ids"], ["0x2ad", "0x2ae"])
                 self.assertEqual(trees["object"], "0x88")
                 self.assertEqual(trees["mobile_behavior_id"], "0x1a0")
                 self.assertTrue(trees["whole_household"])
-                dreidel = contract["implemented_families"][8]
+                dreidel = contract["implemented_families"][9]
                 self.assertEqual(dreidel["item_ids"], ["0x2af"])
                 self.assertEqual(dreidel["object"], "0x8a")
                 self.assertEqual(dreidel["mobile_behavior_id"], "0x1a2")
                 self.assertTrue(dreidel["whole_household"])
-                menorah = contract["implemented_families"][9]
+                menorah = contract["implemented_families"][10]
                 self.assertEqual(menorah["item_ids"], ["0x2b8"])
                 self.assertEqual(menorah["object"], "0x8e")
                 self.assertEqual(menorah["mobile_behavior_id"], "0x1a3")
                 self.assertTrue(menorah["whole_household"])
-                stockings = contract["implemented_families"][10]
+                stockings = contract["implemented_families"][11]
                 self.assertEqual(stockings["item_ids"], ["0x2c6", "0x2c7"])
                 self.assertEqual(stockings["label"], "Checking for stocking stuffers")
                 self.assertEqual(stockings["object"], "0x90")
@@ -629,6 +682,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "if (candidate == 0x2E6) return VF2HandleMobilePatioTable(villager);",
+                    wrapper,
+                )
+                self.assertIn(
+                    "if (candidate == 0x2E8) return VF2HandleMobilePicnicTable(villager);",
                     wrapper,
                 )
                 self.assertIn(
@@ -795,7 +852,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertNotIn("PlanToInc", umbrella_helper)
                 patio_helper = helper.split(
                     "static bool VF2RunMobilePreparingDrinks", 1
-                )[1].split("static int VF2BirthdayOhSound", 1)[0]
+                )[1].split("static bool VF2RunMobilePreparingPicnic", 1)[0]
                 self.assertIn('"Getting some drinks"', patio_helper)
                 self.assertIn('"Having a refreshing drink"', patio_helper)
                 self.assertIn("FoodStore.food < 31", patio_helper)
@@ -823,6 +880,39 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertNotIn("0x1B6", patio_helper)
                 self.assertNotIn("0x1B7", patio_helper)
+                picnic_helper = helper.split(
+                    "static bool VF2RunMobilePreparingPicnic", 1
+                )[1].split("static int VF2BirthdayOhSound", 1)[0]
+                self.assertIn('"Preparing a picnic"', picnic_helper)
+                self.assertIn('"Having a picnic"', picnic_helper)
+                self.assertIn("VF2PicnicReadyActive()", picnic_helper)
+                self.assertIn("eStringPicnicTooYoung = 0x7E7", helper)
+                self.assertIn(
+                    "eStringPicnicWorriedAboutFood = 0xB67", helper
+                )
+                self.assertIn(
+                    "ldwGameState::GetRandom(7) + 0x0D", picnic_helper
+                )
+                self.assertIn(
+                    "CContentMap::eObjectKitchenFoodDrop", picnic_helper
+                )
+                self.assertIn(
+                    "static_cast<ESound>(0xC7)", picnic_helper
+                )
+                self.assertIn(
+                    "plans->PlanToActivateProp(ePropPicnicReady);",
+                    picnic_helper,
+                )
+                self.assertIn("for (int round = 0; round < 3; ++round)", picnic_helper)
+                self.assertIn(
+                    "ldwGameState::GetRandom(3) + 0x6A", picnic_helper
+                )
+                self.assertIn("marker == 0x13 || marker == 0x14", picnic_helper)
+                self.assertIn("marker == 0x53 || marker == 0x54", picnic_helper)
+                self.assertIn("plans->PlanToDecHunger(40);", picnic_helper)
+                self.assertIn("plans->PlanToIncPoo(6);", picnic_helper)
+                self.assertNotIn("0x1B4", picnic_helper)
+                self.assertNotIn("0x1B5", picnic_helper)
         finally:
             patcher.PATCHED = old_patched
 
@@ -966,8 +1056,14 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 contract = manifest["MobilePatioPropExecution"]
                 self.assertEqual(contract["call_offset"], "0x21a")
                 self.assertTrue(contract["stock_prop_fallback_preserved"])
+                self.assertEqual(
+                    contract["guarded_mobile_props"], ["0x55", "0x56"]
+                )
                 self.assertFalse(
                     contract["pc_environment_array_access_for_patio_prop"]
+                )
+                self.assertFalse(
+                    contract["pc_environment_array_access_for_picnic_prop"]
                 )
         finally:
             patcher.PATCHED = old_patched

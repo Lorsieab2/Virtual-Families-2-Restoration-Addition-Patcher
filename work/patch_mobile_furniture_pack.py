@@ -73,6 +73,18 @@ MOBILE_PATIO_TABLE_PC_SEAT_CELLS = {
     (3, 8): 0x00049801,
     (13, 8): 0x0004A001,
 }
+MOBILE_PICNIC_TABLE_ITEM_ID = 0x2E8
+MOBILE_PICNIC_TABLE_OBJECT = 0x97
+MOBILE_PICNIC_TABLE_PC_CELL_VALUE = 0x2000B800
+MOBILE_PICNIC_TABLE_PC_CELLS = (
+    (10, 15), (11, 15), (12, 15), (13, 15),
+)
+MOBILE_PICNIC_TABLE_PC_SEAT_CELLS = {
+    (5, 9): 0x00009800,
+    (8, 11): 0x0000A000,
+    (17, 10): 0x0002A000,
+    (15, 12): 0x00029800,
+}
 MOBILE_BIRTHDAY_CAKE_ITEM_ID = 0x2DC
 MOBILE_BIRTHDAY_CAKE_OBJECT = 0x94
 MOBILE_BIRTHDAY_CAKE_PC_CELL_VALUE = 0x2000A000
@@ -2666,9 +2678,9 @@ EXPLICIT_SAFE_EMPTY_FMAP_PATHS = {
     "Furniture/Chaise_brown.png": "base payload stays rendered-only; the optional mobile-behavior overlay supplies the proven PC-safe Chaise map",
     "Furniture/Chaise_green.png": "base payload stays rendered-only; the optional mobile-behavior overlay supplies the proven PC-safe Chaise map",
     "Furniture/Chaise_red.png": "base payload stays rendered-only; the optional mobile-behavior overlay supplies the proven PC-safe Chaise map",
-    "Furniture/Patio_table.png": "mobile patio table object-grid markers are decorative and should not dispatch desktop behavior",
+    "Furniture/Patio_table.png": "mobile patio table metadata is functional but incompatible with the smaller desktop hotspot and behavior tables; the optional patch supplies a PC-safe map",
     "Furniture/Patio_umbrella.png": "base payload stays rendered-only; the optional mobile-behavior overlay supplies the proven PC-safe Patio Umbrella map",
-    "Furniture/Picnic_table.png": "mobile picnic table object-grid markers are decorative and should not dispatch desktop behavior",
+    "Furniture/Picnic_table.png": "mobile picnic table metadata is functional but incompatible with the smaller desktop hotspot and behavior tables; the optional patch supplies a PC-safe map",
 }
 
 
@@ -12810,6 +12822,61 @@ def validate_mobile_patio_table_pc_fmap(manifest):
     }
 
 
+def validate_mobile_picnic_table_pc_fmap(manifest):
+    filename = "Picnic_table.png.fmap"
+    mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
+    pc_path = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename
+    mobile = mobile_path.read_bytes()
+    pc = pc_path.read_bytes()
+    if len(pc) != len(mobile) or pc[:4] != b"QAMF":
+        raise RuntimeError(f"Invalid PC picnic table furniture map: {pc_path}")
+    width, height = struct.unpack_from("<ii", pc, 24)
+    if (width, height) != (22, 16):
+        raise RuntimeError(f"Unexpected PC picnic table grid: {filename}")
+    grid_end = 32 + width * height * 4
+    if pc[:32] != mobile[:32] or pc[grid_end:] != mobile[grid_end:]:
+        raise RuntimeError(f"PC picnic table header/trailer drifted: {filename}")
+    expected_object_offsets = {
+        32 + (y * width + x) * 4 for x, y in MOBILE_PICNIC_TABLE_PC_CELLS
+    }
+    expected_seat_offsets = {
+        32 + (y * width + x) * 4: value
+        for (x, y), value in MOBILE_PICNIC_TABLE_PC_SEAT_CELLS.items()
+    }
+    actual_object_offsets = set()
+    actual_seat_offsets = {}
+    for offset in range(32, grid_end, 4):
+        value = struct.unpack_from("<I", pc, offset)[0]
+        if value == MOBILE_PICNIC_TABLE_PC_CELL_VALUE:
+            actual_object_offsets.add(offset)
+        elif value in MOBILE_PICNIC_TABLE_PC_SEAT_CELLS.values():
+            actual_seat_offsets[offset] = value
+        elif value:
+            raise RuntimeError(
+                f"PC picnic table contains unsupported cell {value:#x}"
+            )
+    if actual_object_offsets != expected_object_offsets:
+        raise RuntimeError("PC picnic table EObject cells drifted")
+    if actual_seat_offsets != expected_seat_offsets:
+        raise RuntimeError("PC picnic table seat anchors drifted")
+    manifest["MobilePicnicTablePCFmap"] = {
+        "status": "validated minimal EObject plus four seat-anchor optional payload",
+        "item_id": hex(MOBILE_PICNIC_TABLE_ITEM_ID),
+        "filename": filename,
+        "source_sha256": hashlib.sha256(pc).hexdigest(),
+        "source_bytes": len(pc),
+        "grid": [width, height],
+        "object": hex(MOBILE_PICNIC_TABLE_OBJECT),
+        "cell_value": hex(MOBILE_PICNIC_TABLE_PC_CELL_VALUE),
+        "cell_count": len(actual_object_offsets),
+        "seat_cells": [
+            {"cell": list(cell), "value": hex(value)}
+            for cell, value in MOBILE_PICNIC_TABLE_PC_SEAT_CELLS.items()
+        ],
+        "excluded_mobile_hotspot": "0x6b",
+    }
+
+
 def validate_mobile_birthday_cake_pc_fmap(manifest):
     filename = "Birthday_cake.png.fmap"
     mobile_path = MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR / filename
@@ -13149,6 +13216,7 @@ private:
     friend void __cdecl VF2MobileStudyingOnPatio(CVillager &);
 };
 class CContentMap { public: enum EObject {
+    eObjectKitchenFoodDrop = 0x18,
     eObjectKitchenDrinkSource = 0x19,
     eObjectXmasTree = 0x88,
     eObjectDreidel = 0x8A,
@@ -13179,18 +13247,23 @@ enum EHeadDirection { eHeadDirectionUmbrella = 3 };
 enum ECarrying {
     eCarryingDrink = 0x21,
     eCarryingBook = 0x31,
-    eCarryingStudyBook = 0x36
+    eCarryingStudyBook = 0x36,
+    eCarryingPicnicBasket = 0x40
 };
 enum EPropEnum {
     ePropKitchenDrinkSource = 0x03,
+    ePropPicnicReady = 0x55,
     ePropPatioDrinks = 0x56
 };
 enum StringId {
     eStringPlayingWithToys = 0xF0,
     eStringBadWeather = __VF2_LOUNGER_BAD_WEATHER_STRING_ID__,
+    eStringPicnicBadWeather = 0x02,
     eStringCannotReachFurniture = 0xB7,
     eStringTooYoung = 0x73D,
-    eStringWorriedAboutFood = 0xA41
+    eStringWorriedAboutFood = 0xA41,
+    eStringPicnicTooYoung = 0x7E7,
+    eStringPicnicWorriedAboutFood = 0xB67
 };
 
 class theStringManager {
@@ -13317,6 +13390,8 @@ extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
 
 static unsigned char gVF2PatioDrinksOn = 0;
 static unsigned int gVF2PatioDrinksDeadline = 0;
+static unsigned char gVF2PicnicReadyOn = 0;
+static unsigned int gVF2PicnicReadyDeadline = 0;
 
 static void VF2ClearPatioDrinks()
 {
@@ -13336,21 +13411,45 @@ static bool VF2PatioDrinksActive()
     return false;
 }
 
+static void VF2ClearPicnicReady()
+{
+    gVF2PicnicReadyOn = 0;
+    gVF2PicnicReadyDeadline = 0;
+}
+
+static bool VF2PicnicReadyActive()
+{
+    if (gVF2MobileFurnitureBehaviors == 0 || gVF2PicnicReadyOn == 0) {
+        VF2ClearPicnicReady();
+        return false;
+    }
+    unsigned int now = GameTime.Seconds();
+    if (static_cast<int>(now - gVF2PicnicReadyDeadline) < 0) return true;
+    VF2ClearPicnicReady();
+    return false;
+}
+
 extern "C" void __fastcall VF2PatioSetPropAndTrack(
     CEnvironment *environment,
     void *,
     EPropEnum prop)
 {
-    if (prop != ePropPatioDrinks) {
+    if (prop != ePropPicnicReady && prop != ePropPatioDrinks) {
         environment->SetProp(prop);
         return;
     }
     if (gVF2MobileFurnitureBehaviors == 0) {
-        VF2ClearPatioDrinks();
+        if (prop == ePropPicnicReady) VF2ClearPicnicReady();
+        else VF2ClearPatioDrinks();
         return;
     }
-    gVF2PatioDrinksOn = 1;
-    gVF2PatioDrinksDeadline = GameTime.Seconds() + 240;
+    if (prop == ePropPicnicReady) {
+        gVF2PicnicReadyOn = 1;
+        gVF2PicnicReadyDeadline = GameTime.Seconds() + 240;
+    } else {
+        gVF2PatioDrinksOn = 1;
+        gVF2PatioDrinksDeadline = GameTime.Seconds() + 240;
+    }
 }
 
 static int VF2FurnitureItemAtPoint(ldwPoint point)
@@ -13631,6 +13730,134 @@ static bool VF2HandleMobilePatioTable(CVillager &villager)
         return VF2ManualPatioRefusal(villager, eStringWorriedAboutFood);
     }
     return VF2RunMobilePreparingDrinks(villager);
+}
+
+static bool VF2RunMobilePreparingPicnic(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    VF2SetActionLabel(villager, "Preparing a picnic");
+    if (static_cast<unsigned int>(Weather.currentType) >= 2) {
+        VF2PlanPatioRefusal(plans, villager, eStringPicnicBadWeather);
+        return true;
+    }
+
+    plans->PlanToGo(
+        CContentMap::eObjectKitchenDrinkSource,
+        eSpeedNormal,
+        ePriorityNormal,
+        false);
+    plans->PlanToActivateProp(ePropKitchenDrinkSource);
+    plans->PlanToWork(3);
+    plans->PlanToCarry(
+        static_cast<ECarrying>(ldwGameState::GetRandom(7) + 0x0D));
+    plans->PlanToGo(
+        CContentMap::eObjectKitchenFoodDrop,
+        eSpeedNormal,
+        ePriorityNormal,
+        false);
+    plans->PlanToDrop();
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 1,
+        static_cast<EBodyPosition>(0x0D));
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0xC7), 1.0f, eSoundTypeEffects);
+    plans->PlanToWork(ldwGameState::GetRandom(3) + 2);
+    plans->PlanToCarry(eCarryingPicnicBasket);
+    plans->PlanToGo(
+        CContentMap::eObjectPicnicTable,
+        eSpeedNormal,
+        ePriorityNormal,
+        false);
+    plans->PlanToWork(ldwGameState::GetRandom(3) + 2);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 1,
+        static_cast<EBodyPosition>(0x0D));
+    plans->PlanToActivateProp(ePropPicnicReady);
+    plans->PlanToDrop();
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 1,
+        static_cast<EBodyPosition>(0x0A));
+    plans->PlanToStopSound();
+    plans->PlanToDecEnergy(7);
+    plans->PlanToIncDirtiness(7);
+    plans->PlanToIncHappinessTrend(5);
+    plans->PlanToIncHunger(7);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
+static bool VF2RunMobileEatAtPicnicTable(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    VF2SetActionLabel(villager, "Having a picnic");
+    if (static_cast<unsigned int>(Weather.currentType) >= 2) {
+        VF2PlanPatioRefusal(plans, villager, eStringPicnicBadWeather);
+        return true;
+    }
+
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.LinkPeepToFurniture(
+            CContentMap::eObjectPicnicTable,
+            &villager,
+            info,
+            true,
+            0,
+            false)) {
+        plans->PlanToGo(
+            CContentMap::eObjectPicnicTable,
+            eSpeedNormal,
+            ePriorityNormal,
+            false);
+        VF2PlanPatioRefusal(plans, villager, eStringCannotReachFurniture);
+        return true;
+    }
+
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    int marker = *reinterpret_cast<int *>(
+        reinterpret_cast<unsigned char *>(&info) + 0x14);
+    bool useNorthwest =
+        (info.orientation == 1 && (marker == 0x13 || marker == 0x14)) ||
+        (info.orientation == 0 && (marker == 0x53 || marker == 0x54));
+    char const *chairAnim =
+        useNorthwest ? "Sit In Chair NW" : "Sit In Chair NE";
+    for (int round = 0; round < 3; ++round) {
+        plans->PlanToPlaySound(
+            static_cast<ESound>(ldwGameState::GetRandom(3) + 0x6A),
+            1.0f,
+            eSoundTypeEffects);
+        plans->PlanToPlayAnim(
+            ldwGameState::GetRandom(8) + 10,
+            chairAnim,
+            false,
+            0.02f);
+    }
+    plans->PlanToStopSound();
+    plans->PlanToDecHunger(40);
+    plans->PlanToIncDirtiness(4);
+    plans->PlanToIncPoo(6);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
+static bool VF2HandleMobilePicnicTable(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+
+    if (VF2PicnicReadyActive()) {
+        return VF2RunMobileEatAtPicnicTable(villager);
+    }
+
+    int age = *reinterpret_cast<int *>(
+        reinterpret_cast<unsigned char *>(&villager) + 0x6A54);
+    if (age < 0x118) {
+        return VF2ManualPatioRefusal(villager, eStringPicnicTooYoung);
+    }
+    if (FoodStore.food < 31) {
+        return VF2ManualPatioRefusal(
+            villager, eStringPicnicWorriedAboutFood);
+    }
+    return VF2RunMobilePreparingPicnic(villager);
 }
 
 static int VF2BirthdayOhSound(CVillager &villager)
@@ -14343,6 +14570,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     if (candidate == 0x2E6) return VF2HandleMobilePatioTable(villager);
+    if (candidate == 0x2E8) return VF2HandleMobilePicnicTable(villager);
     if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
     if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
     if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
@@ -14492,6 +14720,40 @@ __VF2_COMPUTER_DROP_DISPATCH__
                 "CBehavior::DrinkAtPatioChair",
             ],
             "mobile_behavior_ids": ["0x1b6", "0x1b7"],
+            "desktop_implementation": "exact guarded manual plan-sequence port",
+            "stock_tables_extended": False,
+        }, {
+            "name": "mobile Picnic Table",
+            "item_ids": [hex(MOBILE_PICNIC_TABLE_ITEM_ID)],
+            "labels": [
+                "Preparing a picnic",
+                "Having a picnic",
+            ],
+            "object": hex(MOBILE_PICNIC_TABLE_OBJECT),
+            "manual_drop_only": True,
+            "manual_drop_supported": True,
+            "children_can_eat_when_ready": True,
+            "preparation_requirements": {
+                "raw_age_min": "0x118",
+                "food_min": 31,
+            },
+            "weather_restriction": "weather type must be below 2",
+            "picnic_ready_state": {
+                "storage": "guarded external state; PC Environment prop 0x55 is never indexed",
+                "duration_game_seconds": 240,
+                "clock": "CGameTime::Seconds",
+                "save_reload_persistence": "unproven",
+            },
+            "autonomous": False,
+            "autonomous_status": (
+                "pending: mobile behaviors 0x1b4 and 0x1b5 exceed the PC "
+                "behavior table and no dedicated additive candidate mechanism exists"
+            ),
+            "mobile_behaviors": [
+                "CBehavior::PreparingPicnic",
+                "CBehavior::EatAtPicnicTable",
+            ],
+            "mobile_behavior_ids": ["0x1b4", "0x1b5"],
             "desktop_implementation": "exact guarded manual plan-sequence port",
             "stock_tables_extended": False,
         }, {
@@ -14724,8 +14986,9 @@ def patch_mobile_patio_prop_execution(manifest):
         "replacement": MOBILE_PATIO_PROP_HELPER_SYMBOL,
         "abi": "__fastcall(CEnvironment *, void *, EPropEnum)",
         "stock_prop_fallback_preserved": True,
-        "patio_prop": "0x56",
+        "guarded_mobile_props": ["0x55", "0x56"],
         "pc_environment_array_access_for_patio_prop": False,
+        "pc_environment_array_access_for_picnic_prop": False,
         "external_duration_game_seconds": 240,
     }
 
@@ -18582,6 +18845,7 @@ def main():
     validate_mobile_chaise_pc_fmaps(manifest)
     validate_mobile_patio_umbrella_pc_fmap(manifest)
     validate_mobile_patio_table_pc_fmap(manifest)
+    validate_mobile_picnic_table_pc_fmap(manifest)
     validate_mobile_birthday_cake_pc_fmap(manifest)
     validate_mobile_birthday_presents_pc_fmap(manifest)
     validate_mobile_birthday_balloons_pc_fmap(manifest)

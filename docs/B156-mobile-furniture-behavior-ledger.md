@@ -21,9 +21,10 @@ mobile-exclusive VF2 furniture and do not count toward this patch.
 All 63 items receive a copied desktop donor click-table byte, but that alone
 does not establish the correct mobile action. The base payload deliberately
 zeroes unsupported furniture-map cells, leaving unresolved families
-rendered-only. The optional patch now replaces only the five proven maps for
-the four lounge chairs and Patio Umbrella, and enables their exact manual-drop
-behaviors through a guarded dispatcher.
+rendered-only. The optional patch now replaces 17 proven PC-safe maps, including
+the four lounge chairs, Patio Umbrella, Patio Table, Picnic Table, birthday
+family, and implemented Holiday families, and enables their exact guarded
+manual-drop behaviors.
 
 The supplied mobile OBB contains original QAMF furniture maps for 41 of the 63
 items. Exact copies are now preserved under
@@ -61,26 +62,44 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2D8-0x2D9` | Towel Sets | no | `UsingWarmTowel` exists on mobile | item call chain unresolved |
 | `0x2DA` | Birthday Balloons | yes | `BirthdayBalloons`; play/maybe play | exact child-only manual route implemented with PC-safe map |
 | `0x2DB` | Birthday Banner | yes | `BirthdayBanner`; celebration family | exact object scan, fallbacks, and whole-household external plan implemented |
-| `0x2DC` | Birthday Cake | yes | `BirthdayCake`; poke/maybe poke | exact single-object plan proven; complete grouped family still blocked |
-| `0x2DD` | Birthday Presents | yes | `BirthdayPresents`; poke/maybe poke | exact single-object plan proven; complete grouped family still blocked |
+| `0x2DC` | Birthday Cake | yes | `BirthdayCake`; poke/maybe poke | exact child-only manual route plus grouped fallback implemented |
+| `0x2DD` | Birthday Presents | yes | `BirthdayPresents`; poke/maybe poke | exact child-only manual route plus grouped fallback implemented |
 | `0x2DE-0x2E1` | Lounge Chairs | yes | `Chaise`; `LieOnChaiseNoLeadIn` | implemented as the first optional family; exact plan sequence and PC-safe placed-item maps |
 | `0x2E2-0x2E3` | Floor Lamps | no | no exclusive route proven | decorative |
 | `0x2E4-0x2E5` | Patio surfaces | yes | patio context only | no per-surface action assigned |
-| `0x2E6` | Patio Table | yes | `PatioChairs`; study/drink family | only `StudyingOnPatio` exists on desktop; placed-item anchoring unresolved |
+| `0x2E6` | Patio Table | yes | `PatioChairs`; prepare/drink family | exact guarded manual prepare/drink routes implemented with two seats and external prop `0x56` |
 | `0x2E7` | Patio Umbrella | yes | `PatioUmbrella`; `AdjustingUmbrella` | implemented as the second optional family; exact direct plan sequence and PC-safe placed-item map |
-| `0x2E8` | Picnic Table | yes | `PicnicTable`; prepare/eat picnic | handlers absent; rendered-only |
+| `0x2E8` | Picnic Table | yes | `PicnicTable`; prepare/eat picnic | exact guarded manual prepare/eat routes implemented with four seats and external prop `0x55` |
 
 ## Patio QAMF finding
 
-`Patio_table.png.fmap` is a 19 by 17 primary content block. Three distinctive
-cell values occur only in that map across the audited mobile corpus and never
-in the packaged desktop maps. The desktop build has no `PatioChairs` hotspot
-handler, so assigning meanings or directions to those values would be a guess.
+`Patio_table.png.fmap` is a 19 by 17 primary content block. Its functional
+mobile markers were translated into a PC-safe optional map containing EObject
+`0x98` plus two proven seat anchors. The raw mobile hotspot metadata remains
+excluded because the desktop hotspot table is smaller.
 
-The desktop `CBehavior::StudyingOnPatio` method is present as behavior `0xC2`,
-but it uses fixed world coordinates. That does not make the mobile QAMF markers
-desktop-compatible and does not correctly anchor the action to an arbitrarily
-placed Patio Table.
+The exact manual Preparing Drinks and Drink at Patio Chair plans are emitted
+outside the fixed desktop behavior table. Mobile prop `0x56` is held in an
+external 240-game-second state and is never indexed through the smaller PC
+environment array. Mobile autonomous IDs `0x1B6-0x1B7` remain unindexed.
+
+## Picnic Table implementation
+
+Picnic Table item `0x2E8` uses EObject `0x97`. Its `22x16` PC-safe optional
+QAMF retains anchors `(10..13,15)` and four translated seat markers at `(5,9)`,
+`(8,11)`, `(17,10)`, and `(15,12)` while removing mobile hotspot `0x6B`.
+The map hashes to
+`3d3aaeeeb77e7842cc20be211d8bcf415f85e6d8c6cd0e0f860a934c6cc45060`.
+
+The guarded manual port preserves the adult/raw-age `0x118` and food `31`
+preparation gates, child and low-food DealerSay refusals, bad-weather refusal,
+random food carry `0x0D-0x13`, kitchen and table work sequence, basket `0x40`,
+sound `0xC7`, exact stat changes, and external 240-game-second prop `0x55`.
+While ready, any age can eat. The linked-seat route performs three fresh random
+sounds `0x6A-0x6C` and three fresh 10-17 chair animations, with exact
+orientation/marker selection between `Sit In Chair NW` and `Sit In Chair NE`,
+then applies hunger -40, dirtiness +4, and poo +6. Mobile autonomous IDs
+`0x1B4-0x1B5` remain deliberately unindexed.
 
 ## Implemented architecture
 

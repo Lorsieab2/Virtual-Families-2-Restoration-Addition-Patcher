@@ -2880,3 +2880,35 @@
   Linked validation proves the mortality flag-off stock rejoin, enabled rejoin,
   all four dormant flag toggles, and all 16 existing feature layouts. Live
   birthday, notification, reset, save, and reload QA remains.
+
+## 2026-07-23 - Exact manual Picnic Table routes
+
+- Picnic Table item `0x2E8` uses EObject `0x97`. The exact mobile manual
+  handler always forgets current plans, lets any age eat while prop `0x55` is
+  ready, and otherwise requires raw age `0x118+` plus at least 31 food to
+  prepare. Younger and low-food villagers retain their separate Shake Head
+  plus DealerSay refusals.
+- Preparing a picnic preserves the kitchen source and prop `3`, random carry
+  `0x0D-0x13`, food-drop stop at EObject `0x18`, sound `0xC7`, basket `0x40`,
+  Picnic Table work/waits, external prop `0x55`, energy -7, dirtiness +7,
+  happiness trend +5, and hunger +7. Weather types 2 and above refuse.
+- Having a picnic links to one of four seats and performs three independent
+  sound rolls `0x6A-0x6C` plus three independent 10-17 animation rolls.
+  Orientation and seat markers `0x13`, `0x14`, `0x53`, and `0x54` select the
+  exact `Sit In Chair NW` or `Sit In Chair NE` label. Completion applies
+  hunger -40, dirtiness +4, and poo +6.
+- PC `CEnvironment` cannot safely index mobile prop `0x55`. The existing
+  relocation-only SetProp wrapper now maintains independent wrap-safe 240
+  game-second states for Picnic `0x55` and Patio `0x56`, preserving every stock
+  prop call. Save/reload persistence for the short external timers remains
+  unproven.
+- The `22x16` PC-safe QAMF retains EObject anchors `(10..13,15)` and four seat
+  anchors while excluding mobile hotspot `0x6B`. Its SHA-256 is
+  `3d3aaeeeb77e7842cc20be211d8bcf415f85e6d8c6cd0e0f860a934c6cc45060`.
+  Mobile autonomous behaviors `0x1B4-0x1B5` remain unindexed because they
+  exceed the PC behavior table.
+- The fully enabled B156 executable links at 1,760,768 bytes with SHA-256
+  `ad202293324ae2d9fb6a56089c63e56dd0ecfaac9d3e7a7abefb9ec4b471d0aa`.
+  Linked Holiday and four-runtime-flag validation passes across all 16 existing
+  layouts. Live preparation, eating, all four seats, refusals, weather, timer,
+  and save/reload QA remains.
