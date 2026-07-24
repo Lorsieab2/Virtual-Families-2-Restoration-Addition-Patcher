@@ -2744,10 +2744,10 @@ class TextFixStringManagerTests(unittest.TestCase):
                     if row.get("source")
                     == "custom achievement reserved capacity"
                 ]
-                self.assertEqual(len(reserved), 44)
+                self.assertEqual(len(reserved), 42)
                 self.assertEqual(
                     {int(row["achievement_id"], 16) for row in reserved},
-                    set(range(0x92, 0xA8)),
+                        set(range(0x93, 0xA8)),
                 )
                 self.assertTrue(all(row["text"] == "" for row in reserved))
                 self.assertEqual(
@@ -3640,6 +3640,98 @@ class HolidayBodyDrawHelperTests(unittest.TestCase):
 
 
 class CustomAchievementAwardDispatchTests(unittest.TestCase):
+    def test_achiever_extraordinaire_is_final_and_checks_selected_visible_order(self):
+        rows = {
+            achievement_id: (group, title, description)
+            for achievement_id, group, title, description
+            in patcher.CUSTOM_ACHIEVEMENT_ROW_SPECS
+        }
+        self.assertEqual(
+            rows[0x92],
+            (
+                "meta",
+                "Achiever Extraordinaire",
+                "Complete every enabled achievement.",
+            ),
+        )
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            "appended_order.append(CUSTOM_ACHIEVEMENT_ACHIEVER_ID)",
+            source,
+        )
+        self.assertIn(
+            "int achievementId = achievementOrder[index];",
+            source,
+        )
+        self.assertIn("if (achievementId == 0x92) continue;", source)
+        self.assertIn(
+            "if (!achievement->IsComplete((EAchievement)achievementId)) return;",
+            source,
+        )
+        self.assertIn("achievement->SetComplete(achiever);", source)
+
+    def test_achiever_load_reconciliation_is_relocation_only(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                patcher.PATCHED = temp_root
+                source_obj = patcher.SRC_OBJS / "theGameState.obj"
+                target_obj = temp_root / "theGameState.obj"
+                shutil.copy2(source_obj, target_obj)
+                before = CoffObject(target_obj)
+                load_before = before.symbol("?Load@theGameState@@UAE_NH@Z")
+                section_before = before.section(load_before.section)
+                section_bytes = bytes(
+                    before.buf[
+                        section_before.raw_ptr :
+                        section_before.raw_ptr + section_before.raw_size
+                    ]
+                )
+
+                manifest = {}
+                patcher.patch_achiever_load_reconciliation(manifest)
+
+                after = CoffObject(target_obj)
+                load = after.symbol("?Load@theGameState@@UAE_NH@Z")
+                section = after.section(load.section)
+                self.assertEqual(
+                    bytes(
+                        after.buf[
+                            section.raw_ptr :
+                            section.raw_ptr + section.raw_size
+                        ]
+                    ),
+                    section_bytes,
+                )
+                targets = []
+                for index in range(section.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH",
+                        after.buf,
+                        section.reloc_ptr + index * 10,
+                    )
+                    if vaddr == load.value + 0x134:
+                        targets.append(
+                            (after.symbol_by_index[symbol_index].name, rtype)
+                        )
+                self.assertEqual(
+                    targets,
+                    [(
+                        patcher.ACHIEVER_LOAD_HELPER_SYMBOL,
+                        patcher.IMAGE_REL_I386_REL32,
+                    )],
+                )
+                self.assertEqual(
+                    manifest["AchieverExtraordinaire"]["achievement_id"],
+                    "0x92",
+                )
+                self.assertTrue(
+                    manifest["AchieverExtraordinaire"]["must_be_last"]
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
     def test_birthday_purchase_goal_ids_and_item_ids_are_exact(self):
         self.assertEqual(
             {
@@ -4949,6 +5041,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 b"\xEB\x10\x83\xFE\x5F\x75\x0B\x6A\x01"
                 b"\x6A\x54\x8B\xCF\xE8\x00\x00\x00\x00",
             )
+            self.assertEqual(data[0xA7:0xAE], b"\x8B\xCF\xE8\x00\x00\x00\x00")
             relocs = [
                 struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + index * 10)
                 for index in range(sec.nreloc)
@@ -4957,6 +5050,14 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 (
                     sym.value + 0xA3,
                     obj.symbol("?IncrementProgress@CAchievement@@QAEXW4EAchievement@@H@Z").index,
+                    patcher.IMAGE_REL_I386_REL32,
+                ),
+                relocs,
+            )
+            self.assertIn(
+                (
+                    sym.value + 0xAA,
+                    obj.symbol(patcher.ACHIEVER_COMPLETION_HELPER_SYMBOL).index,
                     patcher.IMAGE_REL_I386_REL32,
                 ),
                 relocs,
@@ -4978,10 +5079,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         ))
         try:
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
-                (False, False, 119, 138, 5, 12),
-                (True, False, 120, 139, 6, 13),
-                (False, True, 126, 145, 5, 12),
-                (True, True, 127, 146, 6, 13),
+                (False, False, 120, 139, 5, 12),
+                (True, False, 121, 140, 6, 13),
+                (False, True, 127, 146, 5, 12),
+                (True, True, 128, 147, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
@@ -5038,6 +5139,44 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         self.assertEqual(load_data[0x39:0x45], b"\x8D\x4E\x00\x8D\x83\xEC\x07\x00\x00\x80\x38\x00")
                         self.assertEqual(load_data[0x51:0x57], b"\x81\xF9\x7C\x00\x00\x00")
                         self.assertEqual(load_data[0x62:0x6D], b"\x8D\x83\xEC\x07\x00\x00\xB9\x7C\x00\x00\x00")
+
+                        set_complete = achievement.symbol(
+                            "?SetComplete@CAchievement@@QAEXW4EAchievement@@@Z"
+                        )
+                        set_complete_sec = achievement.section(
+                            set_complete.section
+                        )
+                        achiever_hook = 0xA7 if ornaments else 0x95
+                        set_complete_data = bytes(
+                            achievement.buf[
+                                set_complete_sec.raw_ptr + set_complete.value :
+                                set_complete_sec.raw_ptr + set_complete_sec.raw_size
+                            ]
+                        )
+                        self.assertEqual(
+                            set_complete_data[
+                                achiever_hook : achiever_hook + 7
+                            ],
+                            b"\x8B\xCF\xE8\x00\x00\x00\x00",
+                        )
+                        set_complete_relocs = [
+                            struct.unpack_from(
+                                "<IIH",
+                                achievement.buf,
+                                set_complete_sec.reloc_ptr + index * 10,
+                            )
+                            for index in range(set_complete_sec.nreloc)
+                        ]
+                        self.assertIn(
+                            (
+                                set_complete.value + achiever_hook + 3,
+                                achievement.symbol(
+                                    patcher.ACHIEVER_COMPLETION_HELPER_SYMBOL
+                                ).index,
+                                patcher.IMAGE_REL_I386_REL32,
+                            ),
+                            set_complete_relocs,
+                        )
 
                         for function_name, expected_size, count_offset in (
                             ("?SaveState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z", 0x30, 0x06),
@@ -5162,9 +5301,11 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                             expected.extend(range(0x66, 0x6D))
                         expected.extend(range(0x80, 0x92))
                         expected.extend(range(0x6D, 0x80))
+                        expected.append(0x92)
                         self.assertEqual(order, expected)
-                        self.assertEqual(order[-37:-19], list(range(0x80, 0x92)))
-                        self.assertEqual(order[-19:], list(range(0x6D, 0x80)))
+                        self.assertEqual(order[-38:-20], list(range(0x80, 0x92)))
+                        self.assertEqual(order[-20:-1], list(range(0x6D, 0x80)))
+                        self.assertEqual(order[-1], 0x92)
                         order_contract = manifest["CustomAchievements"][
                             "ornamentologist_order"
                         ]
@@ -5827,8 +5968,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
                     "physical_row_count": 0xA8,
-                    "visible_count_flag_0": 120,
-                    "visible_count_flag_1": 139,
+                    "visible_count_flag_0": 121,
+                    "visible_count_flag_1": 140,
                     "notify_queue_bound": 0x5F,
                 },
             )

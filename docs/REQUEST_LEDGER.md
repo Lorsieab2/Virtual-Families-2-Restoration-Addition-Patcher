@@ -67,7 +67,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 | Force Successful Pregnancy | Not started | Next eligible attempt never argues and succeeds; clear after resulting birth. |
 | Next babies Male/Female | Not started | Saved mutually exclusive one-shot applying to every baby in next birth; clear after birth. |
 | Next pregnancy Singleton/Twins/Triplets | Not started | Saved mutually exclusive, cap-safe one-shot; clear after birth. |
-| Complete all Achievements cheat | Source + linked build validated | Cheat row 0x12E checks `IsComplete` before calling native `SetComplete` for every currently enabled base/modded row, preserving normal coin awards without duplicate payouts. Achiever Extraordinaire itself remains pending and must stay last. |
+| Complete all Achievements cheat | Source + linked build validated | Cheat row 0x12E checks `IsComplete` before calling native `SetComplete` for every currently enabled base/modded prerequisite row, preserving normal coin awards without duplicate payouts. Completing the final prerequisite then awards Achiever Extraordinaire through its normal last-goal observer. |
 | Trophy icon for Complete all collections and future cheats | Current rows source + linked build validated | Complete all collections 0x127 and Complete all Achievements 0x12E use the self-contained trophy descriptor. New future cheat rows should alias that descriptor unless given a dedicated asset. |
 | Restore F5 debugger selector and native editors | B154 automated + user live confirmed | F5 opens without the prior house-load crash. F4/F5/F6/F7 and Up/Down internal key maps pass all 16 linked layouts; specialized editor edge-case QA remains. |
 | Light editor: edit/place/remove sources | Core editor user-confirmed / hardening pending | Native add/delete/save/type-cycle/mouse-drag routes work in game; B154 corrects + and - direction. Persistence/export, cancel/reset, fault handling, and patch-off parity still need narrow QA. |
@@ -122,7 +122,7 @@ and reset only through their documented reset action.
 | Holiday Furniture purchases | Shipped / core purchase goals user-confirmed | Coin awards and purchase-goal firing work in game; exhaustive ID aliases, persistence, and patch-off absence remain narrow QA. |
 | VF3 furniture | Not started | Furnishing the Future. |
 | Ornamentologist/collection goals | Shipped / spawn and award user-confirmed | Ornaments spawn and Ornamentologist wiring works in game; persistence, Lucky Rock weighting, and every reset path remain narrow QA. |
-| Achiever Extraordinaire | Not started | Final visible goal; requires every enabled base/modded goal. |
+| Achiever Extraordinaire | B156 source + fully-enabled linked validation complete | ID `0x92` is always the final visible row. Every completion scans the exact selected `achievementOrder`, excluding only itself; compile-gated Ornament/Behavior goals and runtime-gated Holiday Furniture goals count only when visible. Successful save load performs the same reconciliation. Live final-award/popup/save QA remains. |
 
 ## Renovations, map, events, and family systems
 

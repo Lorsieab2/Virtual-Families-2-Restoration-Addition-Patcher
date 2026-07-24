@@ -1350,3 +1350,19 @@
 - Sock-pile max/clear, Clean House, and the function-sorted Cheat Upgrade rows
   are therefore present in the same linked B156 image. Live UI/effect/save
   testing remains.
+
+## B156 - Achiever Extraordinaire checkpoint
+
+- Defines persisted custom goal `0x92` as Achiever Extraordinaire and appends
+  it as the final visible row in every compile/runtime layout.
+- The completion observer checks the exact selected visible order, excluding
+  only itself. Ornamentologist, Behavior goals, and Holiday Furniture goals
+  are prerequisites only while their matching compile/runtime gates expose
+  them.
+- A relocation-only `theGameState::Load` wrapper reconciles older qualifying
+  saves after native achievement loading succeeds.
+- The fully enabled executable links at 1,758,208 bytes. Its refreshed PE
+  checksum is `0x001B5814` and SHA-256 is
+  `470494CF2DE84BC073744A05B85ACA3EC31DE24F33F3AE5594312EAE4DE37BE8`.
+  Holiday/Lucky Rock validation and the four runtime toggle/restoration checks
+  pass. Live final-award/popup/save QA remains.

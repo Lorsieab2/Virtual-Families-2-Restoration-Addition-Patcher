@@ -3044,3 +3044,26 @@
   player-facing icon writer validates the icon groups, writes them after all
   executable mutations, refreshes the PE checksum, verifies exact resource
   readback, and proves Windows shell extraction at 16x16, 32x32, and 48x48.
+
+## 2026-07-23 - Achiever Extraordinaire final-goal implementation
+
+- Custom achievement ID `0x92` is now `Achiever Extraordinaire`, with the
+  description `Complete every enabled achievement.` It uses the existing
+  trophy icon and persisted 12-byte achievement record.
+- `0x92` is appended after every other custom range, including the
+  runtime-filtered Holiday Furniture range, so it is the final visible
+  `achievementOrder` row in all four compile-time layouts and both `.vf2goal`
+  states.
+- A shared `CAchievement::SetComplete` exit observer scans the exact current
+  visible order, skips only `0x92`, and awards it through native
+  `SetComplete` only when every other visible row is complete. The completed
+  bit prevents recursion and duplicate payout.
+- `theGameState::Load` retargets only the existing `CAchievement::LoadState`
+  relocation to a wrapper that preserves the native load result and performs
+  the same reconciliation. Older saves that already satisfy the goal therefore
+  receive it after a successful load.
+- The fully enabled linked QA image is 1,758,208 bytes with checksum
+  `0x001B5814` and SHA-256
+  `470494cf2de84bc073744a05b85aca3ec31de24f33f3ae5594312eae4de37be8`.
+  Holiday/Lucky Rock linked validation and all four runtime-flag toggle cycles
+  pass on that exact image. Live final-popup and save/reload QA remains.

@@ -180,6 +180,8 @@ APPEARANCE_UPDATE_HELPER_SYMBOL = "@VF2UpdatePeepRecordAndAwardAppearance@12"
 APPEARANCE_LOAD_HELPER_SYMBOL = (
     "@VF2FamilyTreeLoadStateAndReconcileAppearance@12"
 )
+ACHIEVER_COMPLETION_HELPER_SYMBOL = "@VF2MaybeCompleteAchiever@8"
+ACHIEVER_LOAD_HELPER_SYMBOL = "@VF2AchievementLoadStateAndReconcile@12"
 OLDER_MORTALITY_TABLE_FIRST_AGE = 55
 OLDER_MORTALITY_RANDOM_LIMIT = 1_000_000
 OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS = 999_999
@@ -735,7 +737,7 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
 CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x91
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x92
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -752,6 +754,7 @@ CUSTOM_ACHIEVEMENT_PET_FIRST = 0x8A
 CUSTOM_ACHIEVEMENT_PET_LAST = 0x8F
 CUSTOM_ACHIEVEMENT_APPEARANCE_FIRST = 0x90
 CUSTOM_ACHIEVEMENT_APPEARANCE_LAST = 0x91
+CUSTOM_ACHIEVEMENT_ACHIEVER_ID = 0x92
 CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
 CUSTOM_ACHIEVEMENT_TARGET = 1
 CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
@@ -806,6 +809,7 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0x8F, "pet", "Lovely Lizards", "Have a lizard in the house."),
     (0x90, "family_tree", "Return of the Rainbow", "Have a female villager with head value 48 in the family tree."),
     (0x91, "family_tree", "Spiky!", "Have a male villager with head value 48 in the family tree."),
+    (0x92, "meta", "Achiever Extraordinaire", "Complete every enabled achievement."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -8819,7 +8823,9 @@ public:
 
 class CAchievement {
 public:
+    struct SSaveState;
     void Reset();
+    bool const LoadState(SSaveState &state);
     void ResetSingleAchievementProgress(EAchievement achievement);
     void ResetHolidayOrnamentCollectorProgress(EAchievement stockAchievement);
     void SetComplete(EAchievement achievement);
@@ -9005,7 +9011,7 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 }
 
 static int VF2AchievementVisibleCountInternal() {
-    int count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2;
+    int count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2 + 1;
     if (kVF2IncludeOrnamentologistGoal) ++count;
     if (kVF2IncludeBehaviorGoals) count += 7;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
@@ -9048,11 +9054,37 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
     if (kVF2IncludeBehaviorGoals) {
         completed += VF2CountCompletedAchievements(achievement, 0x66, 0x6C);
     }
-    completed += VF2CountCompletedAchievements(achievement, 0x80, 0x91);
+    completed += VF2CountCompletedAchievements(achievement, 0x80, 0x92);
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
         completed += VF2CountCompletedAchievements(achievement, 0x6D, 0x7F);
     }
     return completed;
+}
+
+extern "C" void __fastcall VF2MaybeCompleteAchiever(
+    CAchievement *achievement,
+    void *
+) {
+    EAchievement achiever = (EAchievement)0x92;
+    if (achievement->IsComplete(achiever)) return;
+
+    int visibleCount = VF2AchievementVisibleCountInternal();
+    for (int index = 0; index < visibleCount; ++index) {
+        int achievementId = achievementOrder[index];
+        if (achievementId == 0x92) continue;
+        if (!achievement->IsComplete((EAchievement)achievementId)) return;
+    }
+    achievement->SetComplete(achiever);
+}
+
+extern "C" bool __fastcall VF2AchievementLoadStateAndReconcile(
+    CAchievement *achievement,
+    void *,
+    CAchievement::SSaveState &state
+) {
+    bool loaded = achievement->LoadState(state);
+    if (loaded) VF2MaybeCompleteAchiever(achievement, 0);
+    return loaded;
 }
 
 static void VF2CheckMaximumResourceAchievements() {
@@ -11259,6 +11291,42 @@ def patch_custom_achievements(manifest):
             IMAGE_REL_I386_REL32,
         )
 
+    set_complete_sym = achievement_obj.symbol(
+        "?SetComplete@CAchievement@@QAEXW4EAchievement@@@Z"
+    )
+    set_complete_sec = achievement_obj.section(set_complete_sym.section)
+    set_complete_epilogue = (
+        set_complete_sym.value + 0x95
+        + (len(collection_meta_payload) if ENABLE_HOLIDAY_ORNAMENTS else 0)
+    )
+    expected_epilogue = b"\x5F\x5E\x5B\x5D\xC2\x04\x00"
+    epilogue_raw = set_complete_sec.raw_ptr + set_complete_epilogue
+    if (
+        achievement_obj.buf[
+            epilogue_raw : epilogue_raw + len(expected_epilogue)
+        ]
+        != expected_epilogue
+    ):
+        raise RuntimeError("Unexpected SetComplete final epilogue")
+    achiever_helper = achievement_obj.append_undefined_symbol(
+        ACHIEVER_COMPLETION_HELPER_SYMBOL
+    )
+    # EDI still owns the CAchievement instance on every SetComplete exit.
+    # Insert before the shared epilogue so both newly completed and
+    # already-complete calls can reconcile the final meta-goal.
+    achiever_payload = b"\x8B\xCF\xE8\x00\x00\x00\x00"
+    achievement_obj.insert_section_bytes(
+        set_complete_sym.section,
+        set_complete_epilogue,
+        achiever_payload,
+    )
+    achievement_obj.append_relocation(
+        set_complete_sym.section,
+        set_complete_epilogue + 3,
+        achiever_helper,
+        IMAGE_REL_I386_REL32,
+    )
+
     queue_sym = achievement_obj.symbol(
         "?QueueAchievementNotify@CAchievement@@AAEXW4EAchievement@@@Z"
     )
@@ -11395,6 +11463,9 @@ def patch_custom_achievements(manifest):
     appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
     )
+    # The meta-goal is always the final visible row and is awarded only after
+    # every other row currently exposed by the selected patch layout.
+    appended_order.append(CUSTOM_ACHIEVEMENT_ACHIEVER_ID)
     order_sym = scene_obj.symbol("?achievementOrder@@3QBHB")
     order_sec = scene_obj.section(order_sym.section)
     order_insert = (
@@ -11526,6 +11597,7 @@ def patch_custom_achievements(manifest):
         + 5
         + 6
         + 2
+        + 1
     )
     manifest["CustomAchievements"] = {
         "status": "patched",
@@ -11999,6 +12071,54 @@ def patch_longevity_achievement_load_reconciliation(manifest):
             "replacement": LONGEVITY_LOAD_HELPER_SYMBOL,
             "native_load_result_preserved": True,
         },
+    }
+
+
+def patch_achiever_load_reconciliation(manifest):
+    """Award the final meta-goal after loading an already-complete save."""
+    obj_path = PATCHED / "theGameState.obj"
+    obj = CoffObject(obj_path)
+    load_name = "?Load@theGameState@@UAE_NH@Z"
+    load = obj.symbol(load_name)
+    sec = obj.section(load.section)
+    call_offset = load.value + 0x133
+    relocation_offset = load.value + 0x134
+    raw = sec.raw_ptr + call_offset
+    if bytes(obj.buf[raw : raw + 5]) != b"\xE8\0\0\0\0":
+        raise RuntimeError("Achievement load-reconciliation callsite drifted")
+
+    relocation = None
+    for index in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+        )
+        if vaddr == relocation_offset:
+            relocation = (obj.symbol_by_index[symbol_index].name, rtype)
+            break
+    original = "?LoadState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z"
+    if relocation != (original, IMAGE_REL_I386_REL32):
+        raise RuntimeError(
+            f"Achievement load-reconciliation relocation drifted: {relocation}"
+        )
+
+    helper = obj.append_undefined_symbol(ACHIEVER_LOAD_HELPER_SYMBOL)
+    obj.retarget_relocation(
+        sec.index,
+        relocation_offset,
+        helper,
+        IMAGE_REL_I386_REL32,
+    )
+    obj.write(obj_path)
+    manifest["AchieverExtraordinaire"] = {
+        "status": "final visible meta-goal with completion and load reconciliation",
+        "achievement_id": hex(CUSTOM_ACHIEVEMENT_ACHIEVER_ID),
+        "must_be_last": True,
+        "completion_scope": "every other achievement visible in the selected executable/runtime-flag layout",
+        "set_complete_hook": ACHIEVER_COMPLETION_HELPER_SYMBOL,
+        "load_reconciliation_hook": ACHIEVER_LOAD_HELPER_SYMBOL,
+        "holiday_ornaments_compile_gate": ENABLE_HOLIDAY_ORNAMENTS,
+        "behavior_goals_compile_gate": ENABLE_BEHAVIOR_PATCHES,
+        "holiday_furniture_runtime_gate": ".vf2goal",
     }
 
 
@@ -19200,6 +19320,7 @@ def main():
     # The achievement table/strings/save layout are identical in every
     # executable; optional settings only filter order and completion routes.
     patch_custom_achievements(manifest)
+    patch_achiever_load_reconciliation(manifest)
     # Always link the dormant B152 hook. The offline patcher's exact-SHA
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
     # this feature adds no executable-matrix dimension.
