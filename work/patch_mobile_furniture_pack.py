@@ -141,6 +141,10 @@ MOBILE_MENORAH_ITEM_ID = 0x2B8
 MOBILE_MENORAH_OBJECT = 0x8E
 MOBILE_MENORAH_PC_CELL_VALUE = 0x20007000
 MOBILE_MENORAH_PC_CELLS = ((7, 7), (6, 8), (4, 9))
+MOBILE_SANTA_COOKIE_PLATE_ITEM_ID = 0x2BE
+MOBILE_SANTA_COOKIE_PLATE_OBJECT = 0x8F
+MOBILE_SANTA_COOKIE_PLATE_PC_CELL_VALUE = 0x20007800
+MOBILE_SANTA_COOKIE_PLATE_PC_CELLS = ((6, 8), (7, 8))
 MOBILE_XMAS_STOCKING_ITEM_IDS = (0x2C6, 0x2C7)
 MOBILE_XMAS_STOCKING_OBJECT = 0x90
 MOBILE_XMAS_STOCKING_PC_CELL_VALUE = 0x20008000
@@ -15082,6 +15086,14 @@ def validate_mobile_group_holiday_pc_fmaps(manifest):
             MOBILE_MENORAH_PC_CELL_VALUE,
             MOBILE_MENORAH_PC_CELLS,
         ),
+        (
+            "PlateOfCookies.png.fmap",
+            MOBILE_SANTA_COOKIE_PLATE_ITEM_ID,
+            MOBILE_SANTA_COOKIE_PLATE_OBJECT,
+            (9, 9),
+            MOBILE_SANTA_COOKIE_PLATE_PC_CELL_VALUE,
+            MOBILE_SANTA_COOKIE_PLATE_PC_CELLS,
+        ),
     ]
     for filename, spec in MOBILE_XMAS_TREE_PC_SPECS.items():
         specs.append((
@@ -15249,6 +15261,7 @@ class CContentMap { public: enum EObject {
     eObjectHolidayCandles = 0x89,
     eObjectDreidel = 0x8A,
     eObjectMenorah = 0x8E,
+    eObjectSantaCookiePlate = 0x8F,
     eObjectXmasStockings = 0x90,
     eObjectBirthdayBanner = 0x91,
     eObjectBirthdayBalloons = 0x92,
@@ -15321,6 +15334,7 @@ public:
     bool PlanToGo(CContentMap::EObject, ESpeed, EPriority, bool);
     void PlanToGo(ldwPoint, ESpeed, EPriority);
     void PlanToWait(int, EBodyPosition);
+    void PlanToWait(int, EBodyPosition, EHeadDirection);
     void PlanToWait(int, EBodyPosition, EDirection, EHeadDirection);
     void PlanToLieDown(int);
     void PlanToCarry(ECarrying);
@@ -16375,6 +16389,112 @@ static bool VF2HandleMobileHolidayCandles(CVillager &villager)
     return true;
 }
 
+static void VF2RunMobileSaveSantasCookies(
+    CVillager &villager,
+    sFurnitureInfo2 const &info,
+    bool inspectCookies)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    VF2SetActionLabel(villager, "Rescuing Santa's cookies");
+    int gender = *reinterpret_cast<int *>(
+        reinterpret_cast<unsigned char *>(&villager) + 0x6A58);
+    int rescueSound = gender == 1 ? 0x8C : 0x99;
+    int scoldSound = gender == 1 ? 0x23 : 0xDC;
+    plans->PlanToPlaySound(
+        static_cast<ESound>(rescueSound), 1.0f, eSoundTypeEffects);
+    plans->PlanToGo(
+        info.point, static_cast<ESpeed>(350), ePriorityNormal);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(scoldSound), 1.0f, eSoundTypeEffects);
+    if (inspectCookies) {
+        plans->PlanToWait(
+            ldwGameState::GetRandom(3) + 2,
+            static_cast<EBodyPosition>(info.orientation != 0 ? 0x0A : 0x0D));
+        plans->PlanToPlaySound(
+            static_cast<ESound>(scoldSound), 1.0f, eSoundTypeEffects);
+    }
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+}
+
+static void VF2RunMobileKidStealsSantasCookies(
+    CVillager &villager,
+    sFurnitureInfo2 const &info)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    VF2SetActionLabel(villager, "Stealing Santa's cookies");
+    plans->PlanToGo(
+        info.point, static_cast<ESpeed>(140), ePriorityNormal);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x36), 1.0f, eSoundTypeEffects);
+    EHeadDirection head = static_cast<EHeadDirection>(
+        info.orientation == 1 ? 0 : 3);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 2,
+        eBodyPositionStanding,
+        head);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 2,
+        static_cast<EBodyPosition>(0x10));
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 2,
+        eBodyPositionStanding,
+        head);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 2,
+        static_cast<EBodyPosition>(0x0D));
+
+    CVillager *adult = VillagerManager.GetRandomVillager(
+        static_cast<EAgeSelecter>(2), static_cast<EGender>(-1), 0);
+    if (adult != 0) {
+        CVillagerPlans *adultPlans =
+            reinterpret_cast<CVillagerPlans *>(adult);
+        adultPlans->ForgetPlans(*adult, false);
+        VF2RunMobileSaveSantasCookies(*adult, info, true);
+    }
+
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0xC5), 1.0f, eSoundTypeEffects);
+    plans->PlanToGo(
+        static_cast<CContentMap::EObject>(0x16),
+        static_cast<ESpeed>(350),
+        ePriorityNormal,
+        false);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x6A), 1.0f, eSoundTypeEffects);
+    plans->PlanToWork(ldwGameState::GetRandom(3) + 3);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x6A), 1.0f, eSoundTypeEffects);
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+}
+
+static bool VF2HandleMobileSantaCookiePlate(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectSantaCookiePlate,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        plans->StartNewBehavior(villager);
+        return true;
+    }
+
+    int age = *reinterpret_cast<int *>(
+        reinterpret_cast<unsigned char *>(&villager) + 0x6A54);
+    if (age < 0x118) {
+        VF2RunMobileKidStealsSantasCookies(villager, info);
+    } else {
+        VF2RunMobileSaveSantasCookies(villager, info, false);
+    }
+    return true;
+}
+
 static void VF2RunMobileDreidel(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -16701,6 +16821,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
     if (candidate == 0x2DB) return VF2HandleMobileBirthdayBanner(villager);
     if (candidate == 0x2AA) return VF2HandleMobileHolidayCandles(villager);
+    if (candidate == 0x2BE) return VF2HandleMobileSantaCookiePlate(villager);
     if (candidate == 0x2AD || candidate == 0x2AE) {
         return VF2HandleMobileXmasTreeGroup(villager);
     }
@@ -17002,6 +17123,30 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "mobile_candidate_weight": 2000,
             "mobile_candidate_raw_age_field": "0x118",
             "desktop_implementation": "exact guarded manual plan-sequence port",
+            "stock_tables_extended": False,
+        }, {
+            "name": "mobile Plate of Cookies",
+            "item_ids": [hex(MOBILE_SANTA_COOKIE_PLATE_ITEM_ID)],
+            "labels": [
+                "Stealing Santa's cookies",
+                "Rescuing Santa's cookies",
+            ],
+            "object": hex(MOBILE_SANTA_COOKIE_PLATE_OBJECT),
+            "manual_drop_only": True,
+            "child_behavior_raw_age_max": "0x117",
+            "adult_behavior_raw_age_min": "0x118",
+            "autonomous": False,
+            "autonomous_status": (
+                "pending: child behavior 0x1a5 is beyond the desktop "
+                "behavior table; adult behavior 0x1a6 is mobile-manual only"
+            ),
+            "mobile_behaviors": [
+                "CBehavior::KidStealsSantasCookies",
+                "CBehavior::AdultsSaveSantasCookies",
+            ],
+            "mobile_behavior_ids": ["0x1a5", "0x1a6"],
+            "mobile_child_candidate_weight": 2000,
+            "desktop_implementation": "exact age-routed manual plan-sequence port",
             "stock_tables_extended": False,
         }],
         "stock_behavior_table_extended": False,

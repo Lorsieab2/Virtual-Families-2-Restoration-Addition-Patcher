@@ -21,7 +21,7 @@ mobile-exclusive VF2 furniture and do not count toward this patch.
 All 63 items receive a copied desktop donor click-table byte, but that alone
 does not establish the correct mobile action. The base payload deliberately
 zeroes unsupported furniture-map cells, leaving unresolved families
-rendered-only. The optional patch now replaces 18 proven PC-safe maps, including
+rendered-only. The optional patch now replaces 19 proven PC-safe maps, including
 the four lounge chairs, Patio Umbrella, Patio Table, Picnic Table, birthday
 family, and implemented Holiday families, and enables their exact guarded
 manual-drop behaviors.
@@ -51,7 +51,7 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2B8` | Menorah | yes | exact `Menorah` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
 | `0x2B9-0x2BC` | Ornaments | no | no per-item route proven | decorative |
 | `0x2BD` | Penguin Decoration | yes | generic Christmas knickknack family only | exact route unresolved |
-| `0x2BE` | Plate of Cookies | yes | adult-save/kid-steal Santa-cookie family | handlers absent; rendered-only |
+| `0x2BE` | Plate of Cookies | yes | adult-save/kid-steal Santa-cookie family | exact age-routed manual pair implemented with PC-safe map; child autonomous candidate pending |
 | `0x2BF-0x2C5` | Poinsettia and Christmas decorations | yes | generic Christmas decor/knickknack family only | exact routes unresolved |
 | `0x2C6-0x2C7` | Stockings | yes | exact `XmasStockings` / `KidsCheckXmasStockings` | exact under-18 manual route implemented with two PC-safe maps |
 | `0x2C8-0x2C9` | Garlands | yes | `InteractHouseXmasDecor` family | exact route unresolved |
@@ -256,6 +256,31 @@ EObject value `0x20004800` at `(5,7)`, `(6,7)`, and `(5,8)`. Its SHA-256 is
 `80d3f61d48e59fd55684edfb205670289fa6b15ba9768624ae318849a9f0bc11`.
 Live placement, orientation, age-boundary, random-adult, no-adult fallback,
 and disable-restoration QA remain.
+
+## Plate of Cookies
+
+Plate of Cookies `0x2BE` use EObject `0x8F`. Mobile behavior `0x1A5`
+`KidStealsSantasCookies` is an enabled child candidate with weight `2000`,
+object `0x8F`, and boundary field `0x118`; behavior `0x1A6`
+`AdultsSaveSantasCookies` is not an autonomous candidate. B156 therefore
+chooses the exact child or adult plan by raw age on manual drop without
+indexing either mobile-only behavior ID through the desktop table.
+
+Children through raw age `0x117` use `Stealing Santa's cookies`, speed `140`,
+orientation-aware head turns, the exact random waits, and sounds `0x36`,
+`0xC5`, and `0x6A`. The route asks `GetRandomVillager(2,-1,0)` for an adult
+of either gender. When present, that adult switches to
+`Rescuing Santa's cookies`, uses gender-specific sounds `0x8C/0x99` and
+`0x23/0xDC`, approaches at speed `350`, inspects the plate, stops sound, and
+returns to normal behavior. The child then goes to EObject `0x16`, works for
+3-5 ticks, and completes the original plan. Adults dropped directly on the
+plate use the shorter exact rescue plan.
+
+The `9x9` PC-safe map preserves its mobile header/trailer and retains only
+EObject value `0x20007800` at `(6,8)` and `(7,8)`. Its SHA-256 is
+`cb0bd7dfc1d1c32fed6c0219c52cc677e61375ad8146b5802c1efa1223a4d0d2`.
+Live child/adult boundary, orientation, rescuer-present/absent, sound, map
+placement, and disable-restoration QA remain.
 
 Player testing on 2026-07-23 confirms the exact manual chaise pose/anchor works
 in good weather and the dedicated bad-weather refusal fires correctly. Manual

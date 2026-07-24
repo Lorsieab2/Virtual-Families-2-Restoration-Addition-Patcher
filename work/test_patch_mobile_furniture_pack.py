@@ -408,6 +408,14 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 "0x2b8",
                 "0x8e",
             ),
+            "PlateOfCookies.png.fmap": (
+                "cb0bd7dfc1d1c32fed6c0219c52cc677e61375ad8146b5802c1efa1223a4d0d2",
+                (9, 9),
+                patcher.MOBILE_SANTA_COOKIE_PLATE_PC_CELLS,
+                patcher.MOBILE_SANTA_COOKIE_PLATE_PC_CELL_VALUE,
+                "0x2be",
+                "0x8f",
+            ),
         }
         self.assertEqual(set(records), set(specs))
         for filename, (digest, grid, cells, cell_value, item_id, obj_id) in specs.items():
@@ -685,6 +693,21 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(candles["mobile_candidate_weight"], 2000)
                 self.assertTrue(candles["manual_drop_only"])
                 self.assertFalse(candles["autonomous"])
+                cookies = contract["implemented_families"][13]
+                self.assertEqual(cookies["item_ids"], ["0x2be"])
+                self.assertEqual(
+                    cookies["labels"],
+                    ["Stealing Santa's cookies", "Rescuing Santa's cookies"],
+                )
+                self.assertEqual(cookies["object"], "0x8f")
+                self.assertEqual(cookies["child_behavior_raw_age_max"], "0x117")
+                self.assertEqual(cookies["adult_behavior_raw_age_min"], "0x118")
+                self.assertEqual(
+                    cookies["mobile_behavior_ids"], ["0x1a5", "0x1a6"]
+                )
+                self.assertEqual(cookies["mobile_child_candidate_weight"], 2000)
+                self.assertTrue(cookies["manual_drop_only"])
+                self.assertFalse(cookies["autonomous"])
                 helper = (patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp").read_text(
                     encoding="ascii"
                 )
@@ -727,6 +750,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "if (candidate == 0x2AA) return VF2HandleMobileHolidayCandles(villager);",
+                    wrapper,
+                )
+                self.assertIn(
+                    "if (candidate == 0x2BE) return VF2HandleMobileSantaCookiePlate(villager);",
                     wrapper,
                 )
                 self.assertIn(
@@ -828,6 +855,27 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("static_cast<ESound>(0x12C)", candles_helper)
                 self.assertIn("static_cast<ESound>(0x37)", candles_helper)
                 self.assertIn("plans->PlanToStopSound();", candles_helper)
+                cookie_helper = helper.split(
+                    "static void VF2RunMobileSaveSantasCookies", 1
+                )[1].split("static void VF2RunMobileDreidel", 1)[0]
+                self.assertIn(
+                    'VF2SetActionLabel(villager, "Rescuing Santa\'s cookies");',
+                    cookie_helper,
+                )
+                self.assertIn(
+                    'VF2SetActionLabel(villager, "Stealing Santa\'s cookies");',
+                    cookie_helper,
+                )
+                self.assertIn("static_cast<ESpeed>(140)", cookie_helper)
+                self.assertIn("static_cast<EAgeSelecter>(2)", cookie_helper)
+                self.assertIn("static_cast<EGender>(-1)", cookie_helper)
+                self.assertIn("info.orientation == 1 ? 0 : 3", cookie_helper)
+                self.assertIn("info.orientation != 0 ? 0x0A : 0x0D", cookie_helper)
+                self.assertIn("static_cast<ESound>(0xC5)", cookie_helper)
+                self.assertIn("static_cast<CContentMap::EObject>(0x16)", cookie_helper)
+                self.assertIn("static_cast<ESound>(0x6A)", cookie_helper)
+                self.assertIn("if (age < 0x118)", cookie_helper)
+                self.assertIn("VF2RunMobileSaveSantasCookies(villager, info, false)", cookie_helper)
                 self.assertIn(
                     'VF2SetActionLabel(villager, "Checking for stocking stuffers");',
                     helper,

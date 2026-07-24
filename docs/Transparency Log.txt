@@ -1005,3 +1005,20 @@ B156 Holiday Candles behavior
   restoration checks.
 - Live placement, orientation, age-boundary, adult/no-adult branch, and
   patch-off testing remain.
+B156 Plate of Cookies behavior
+- Added the exact mobile child-steal and adult-rescue manual plans for Plate of
+  Cookies 0x2BE / EObject 0x8F.
+- Children use the mobile raw-age boundary, orientation/head-turn sequence,
+  sounds, and departure/work plan. When an adult is available, that villager
+  interrupts their current plans and performs the gender-specific rescue.
+  Adults dropped directly on the plate use the shorter exact rescue plan.
+- Added a minimal 9x9 desktop map containing only the two proven EObject
+  anchors. Unsupported mobile data is not copied.
+- Mobile behavior IDs 0x1A5 and 0x1A6 remain unindexed beyond the desktop
+  behavior table; this checkpoint does not claim spontaneous Cookie Plate use.
+- All 230 project tests pass with one intentional skip. All 16 B156 executable
+  layouts link uniquely, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass repeated enable, disable, and exact
+  restoration checks.
+- Live child/adult boundary, orientation, rescuer-present/absent, sound, and
+  patch-off testing remain.

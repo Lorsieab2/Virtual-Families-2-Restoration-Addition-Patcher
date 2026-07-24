@@ -97,9 +97,10 @@ must remain visible as Needs source audit; it must not be silently omitted.
   `AdultWaterXMasTree`, `InteractHouseXmasDecor`, `KidsCheckXmasStockings`,
   `AdmiringXmasKnickKnacks`, `AdultsSaveSantasCookies`, and
   `KidStealsSantasCookies` have code-level plans and object IDs recorded.
-  Holiday Candles are implemented manually. The knickknack, cookie, garland,
-  and wreath item-to-hotspot assignments still require proof before enabling
-  their routes; do not assign them by artwork name alone.
+  Holiday Candles and the Plate of Cookies child/adult pair are implemented
+  manually. The generic knickknack, single-cookie, garland, and wreath
+  item-to-hotspot assignments still require proof before enabling their
+  routes; do not assign them by artwork name alone.
 - Disassemble all added mobile `CEvent*::ImpactGame` methods and map exact
   outcomes before marking exclusive Island Events complete. The current PC
   event shell list preserves firing/dialog structure, but most mobile reward,

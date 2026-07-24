@@ -3288,3 +3288,27 @@
   checks, and pass exact restoration for all five dormant runtime flags. The
   fully enabled layout is 1,772,544 bytes with SHA-256
   `74BA49761CC2DDC1070AFBB1E6FC812D15C225113D5D37E589766F7B80A59859`.
+
+## 2026-07-24 - Mobile Santa-cookie behavior pair
+
+- Mobile behavior slots `0x1A5` and `0x1A6` are
+  `KidStealsSantasCookies` and `AdultsSaveSantasCookies`; both find EObject
+  `0x8F`.
+- Mobile `CVillager::InitAI` enables only child behavior `0x1A5`, with weight
+  `2000`, object `0x8F`, and boundary field `0x118`. Adult behavior `0x1A6`
+  uses the default disabled candidate record and is reached directly.
+- The child plan uses `Stealing Santa's cookies`, speed `140`, exact
+  orientation/head-direction waits, and then asks
+  `GetRandomVillager(2,-1,0)` for an adult of either gender. A found adult is
+  interrupted and given the exact `Rescuing Santa's cookies` response with
+  gender-specific sounds. The child then leaves for EObject `0x16`.
+- The direct adult plan is the shorter rescue sequence: gender-specific alert,
+  speed-350 approach, gender-specific scold, sound stop, and behavior restart.
+- Raw `PlateOfCookies.png.fmap` is `9x9`; its only functional anchors are
+  clean object cells `0x20007800` at `(6,8)` and `(7,8)`. The PC-safe
+  translation keeps only those two cells.
+- The complete 230-test run passes with one intentional skip. All 16 B156
+  layouts link uniquely, pass 8 Holiday-positive and 8 Holiday-negative
+  checks, and pass exact restoration for all five dormant runtime flags. The
+  fully enabled layout is 1,773,568 bytes with SHA-256
+  `A31601B316144E2FAE4B6BFE48CA4BD8E9B635DD68CA3590BF567BF0BFBA575F`.

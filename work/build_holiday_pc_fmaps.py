@@ -54,6 +54,10 @@ SPECS = {
         "value": 0x20007000,
         "cells": ((7, 7), (6, 8), (4, 9)),
     },
+    "PlateOfCookies.png.fmap": {
+        "value": 0x20007800,
+        "cells": ((6, 8), (7, 8)),
+    },
     "StockingLarge.png.fmap": {
         "value": 0x20008000,
         "cells": ((6, 12), (7, 12)),

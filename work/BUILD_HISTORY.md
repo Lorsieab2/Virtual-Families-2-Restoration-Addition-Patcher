@@ -1476,3 +1476,21 @@
 - The fully enabled executable is 1,772,544 bytes with SHA-256
   `74BA49761CC2DDC1070AFBB1E6FC812D15C225113D5D37E589766F7B80A59859`.
   Live Candle placement, orientation, age, branch, and patch-off QA remains.
+
+## B156 - Plate of Cookies behavior checkpoint
+
+- Adds an exact manual port of `KidStealsSantasCookies` / behavior `0x1A5`
+  for children and `AdultsSaveSantasCookies` / behavior `0x1A6` for adults.
+- Preserves the raw-age `0x118` boundary, child candidate weight `2000`,
+  EObject `0x8F`, orientation-aware child plan, optional adult rescuer,
+  gender-specific adult sounds, and exact departure/work sequence.
+- Adds a `9x9` PC-safe `PlateOfCookies.png.fmap` with only the two proven
+  EObject anchors. Mobile-only candidate IDs remain outside the fixed desktop
+  behavior table.
+- All 230 project tests pass with one intentional skip. All 16 B156 layouts
+  link uniquely, Holiday validation passes 8/8 positive and 8/8 negative, and
+  all five runtime flags pass non-overlap, repeated-enable, disable, and exact
+  restoration checks.
+- The fully enabled executable is 1,773,568 bytes with SHA-256
+  `A31601B316144E2FAE4B6BFE48CA4BD8E9B635DD68CA3590BF567BF0BFBA575F`.
+  Live Cookie Plate child/adult/orientation/rescuer/patch-off QA remains.

@@ -179,10 +179,12 @@ The mobile native behavior layer has direct holiday/furniture functions:
 These names confirm mobile has custom behavior routes for Holiday decorations,
 not just static sprites. B156 now ports `KidExaminesCandles` for Holiday
 Candles `0x2AA` as an exact child-only manual plan with a minimal PC-safe map.
-The remaining generic knickknack, cookie, garland, and wreath assignments still
-require exact item-to-hotspot proof; most unresolved Holiday decor rows continue
-to use donor behavior/placement records and the native clickable dispatch
-extension.
+Plate of Cookies `0x2BE` now age-routes exact child-steal and adult-rescue
+manual plans on EObject `0x8F`, including the child route's optional adult
+rescuer. The remaining generic knickknack, single-cookie, garland, and wreath
+assignments still require exact item-to-hotspot proof; most unresolved Holiday
+decor rows continue to use donor behavior/placement records and the native
+clickable dispatch extension.
 
 Low-level PC table work:
 
