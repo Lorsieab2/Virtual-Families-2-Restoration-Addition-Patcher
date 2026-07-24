@@ -1307,11 +1307,10 @@
 - All 213 tests pass with one intentional skip. The generated helper compiles,
   and its object-code readback contains the exact `+0x148 = 30` and
   `+0x148 = 0` writes followed by `SaveCurrentGame`.
-- A refreshed executable was not produced in this checkpoint: the restarted
-  Visual Studio Build Tools installation has no `atls.lib`, so the final link
-  stops on the five pre-existing ATL symbols used by `FlashPlayer.obj`. The
-  prior B156 executable was left unchanged. Linked and live
-  refresh/save/reload validation remains.
+- This source checkpoint initially stopped at the final link because the
+  Build Tools-only installation did not contain ATL. The later combined B156
+  link uses the installed Visual Studio Community x86 ATL library. Linked
+  readback is complete; live refresh/save/reload validation remains.
 
 ## B156 - Clean House source checkpoint
 
@@ -1322,7 +1321,8 @@
 - The row reuses the trophy icon descriptor and common post-cheat save path.
   The generated helper compiles, and object-code readback confirms the four
   native `RemoveAll` calls. All 213 tests pass with one intentional skip.
-  Linked and live removal/save/reload validation remains.
+  The later combined B156 executable links successfully. Live
+  removal/save/reload validation remains.
 
 ## B156 - Cheat Upgrade function-sort checkpoint
 
@@ -1331,3 +1331,22 @@
 - Reset/Complete Achievements, Reset/Complete Collections, malfunction
   trigger/fix, house-trash/Clean House, yard-weeds/Clean Garden, and sock-pile
   max/clear remain adjacent pairs.
+
+## B156 - combined Cheat Upgrade and executable-shell QA checkpoint
+
+- Visual Studio Community supplies the x86 ATL library required by the five
+  pre-existing `FlashPlayer.obj` references, so the fully enabled B156 layout
+  now links successfully.
+- The linked executable is 1,758,208 bytes. After writing its verified nonzero
+  Windows PE checksum it has SHA-256
+  `00F4DF3C3FC6302A73C3DBAAFEDC5FBB8ADD23BA3D623644E50F23DBF0D6FE25`
+  and checksum `0x001B4EF8`; ImageHlp independently computes the same value.
+- The exact Holiday Ornaments manifest and PE contract passes on this image.
+  The four writable default-zero runtime flags pass enable, idempotent
+  re-enable, disable, and byte-for-byte restoration validation.
+- The player-facing patcher now refreshes and verifies the PE checksum after
+  copying the stock executable's icon resources. Its real Windows resource
+  round-trip test proves shell extraction at 16x16, 32x32, and 48x48.
+- Sock-pile max/clear, Clean House, and the function-sorted Cheat Upgrade rows
+  are therefore present in the same linked B156 image. Live UI/effect/save
+  testing remains.

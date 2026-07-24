@@ -2994,10 +2994,9 @@
 - Cheat Upgrades `0x133` and `0x134` set the count to 30 and 0 respectively,
   then use the existing common `SaveCurrentGame` path.
 - The full 213-test suite passes with one intentional skip. Compiled helper
-  readback confirms both writes and the shared save call. Final executable
-  linking remains pending because the restarted local Visual Studio toolchain
-  does not currently provide `atls.lib`; the unchanged prior executable is not
-  claimed as containing these cheats.
+  readback confirms both writes and the shared save call. The later combined
+  B156 link uses the installed Visual Studio Community x86 ATL library and
+  includes both cheats; live UI/effect/save QA remains.
 
 ## 2026-07-23 - Exact Clean House scope
 
@@ -3010,8 +3009,9 @@
 - Cheat Upgrade `0x135` reproduces only the four Housekeeping Services
   removals, then uses the shared post-cheat save path.
 - The generated helper compiles, object-code readback retains all four exact
-  selectors, and all 213 tests pass with one intentional skip. Final executable
-  linking remains subject to the already-recorded missing `atls.lib`.
+  selectors, and all 213 tests pass with one intentional skip. The later
+  combined B156 executable links successfully and includes Clean House; live
+  removal/save QA remains.
 
 ## 2026-07-23 - Cheat Upgrade function ordering
 
@@ -3021,3 +3021,26 @@
   house trash/Clean House, yard weeds/Clean Garden, sock-pile max/clear, and
   Spawn Marriage Email.
 - Automated ordering assertions keep each paired inverse action adjacent.
+
+## 2026-07-23 - Combined B156 link, Holiday contract, and shell metadata
+
+- The installed Visual Studio Community toolchain contains the x86 ATL library
+  needed by the five pre-existing `FlashPlayer.obj` symbols. The fully enabled
+  layout links at 1,758,208 bytes.
+- After its PE checksum is refreshed, the executable SHA-256 is
+  `00f4df3c3fc6302a73c3dbaafedc5fbb8add23ba3d623644e50f23dbf0d6fe25`.
+  The stored checksum is `0x001B4EF8`, and Windows ImageHlp independently
+  computes the same value.
+- Single-image Holiday Ornaments validation passes the positive manifest and
+  linked-PE contracts, including Lucky Rock threshold routing, persistence,
+  six-page collection UI, spawning, observers, collector integration, and
+  achievement routing.
+- Runtime validation finds four separate writable default-zero sections:
+  `.vf2beh`, `.vf2goal`, `.vf2preg`, and `.vf2mort`. Enabling writes `01`,
+  repeated enabling is idempotent, and disabling restores the exact starting
+  executable.
+- The raw linker image intentionally has no stock icon because the patcher
+  receives the icon from the player's verified vanilla executable. The
+  player-facing icon writer validates the icon groups, writes them after all
+  executable mutations, refreshes the PE checksum, verifies exact resource
+  readback, and proves Windows shell extraction at 16x16, 32x32, and 48x48.

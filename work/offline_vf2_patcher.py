@@ -330,6 +330,60 @@ def pe_timestamp(path: Path) -> int | None:
         return None
 
 
+def pe_checksum_offset(data: bytes | bytearray) -> int:
+    if len(data) < 0x40 or data[:2] != b"MZ":
+        raise PatchError("Executable checksum target does not have a valid DOS header.")
+    pe_off = struct.unpack_from("<I", data, 0x3C)[0]
+    if pe_off + 0x18 > len(data) or data[pe_off:pe_off + 4] != b"PE\0\0":
+        raise PatchError("Executable checksum target does not have a valid PE header.")
+    optional_size = struct.unpack_from("<H", data, pe_off + 20)[0]
+    optional_offset = pe_off + 24
+    if optional_size < 68 or optional_offset + optional_size > len(data):
+        raise PatchError("Executable checksum target has a truncated optional header.")
+    magic = struct.unpack_from("<H", data, optional_offset)[0]
+    if magic not in {0x10B, 0x20B}:
+        raise PatchError(f"Executable checksum target has unsupported optional-header magic 0x{magic:x}.")
+    return optional_offset + 64
+
+
+def compute_pe_checksum(data: bytes | bytearray) -> int:
+    """Return the Windows PE checksum with the stored checksum field treated as zero."""
+    checksum_offset = pe_checksum_offset(data)
+    padded = bytes(data) + (b"\0" if len(data) & 1 else b"")
+    checksum = 0
+    for offset in range(0, len(padded), 2):
+        word = 0 if checksum_offset <= offset < checksum_offset + 4 else struct.unpack_from("<H", padded, offset)[0]
+        checksum = (checksum & 0xFFFF) + word + (checksum >> 16)
+    checksum = (checksum & 0xFFFF) + (checksum >> 16)
+    checksum = (checksum & 0xFFFF) + (checksum >> 16)
+    return (checksum + len(data)) & 0xFFFFFFFF
+
+
+def refresh_pe_checksum(path: Path) -> int:
+    """Write and verify the nonzero Windows PE checksum required by the final EXE."""
+    try:
+        data = bytearray(path.read_bytes())
+        checksum_offset = pe_checksum_offset(data)
+        checksum = compute_pe_checksum(data)
+        if checksum == 0:
+            raise PatchError(f"Computed a zero PE checksum for {path}.")
+        struct.pack_into("<I", data, checksum_offset, checksum)
+        path.write_bytes(data)
+        written = path.read_bytes()
+    except PatchError:
+        raise
+    except OSError as exc:
+        raise PatchError(f"Could not refresh the PE checksum in {path}: {exc}") from exc
+    stored = struct.unpack_from("<I", written, checksum_offset)[0]
+    expected = compute_pe_checksum(written)
+    if stored != checksum or stored != expected:
+        raise PatchError(
+            f"PE checksum verification failed for {path}: stored 0x{stored:08x}, "
+            f"expected 0x{expected:08x}."
+        )
+    return stored
+
+
 def pe_structure_fingerprint(path: Path) -> dict[str, Any] | None:
     try:
         data = path.read_bytes()
@@ -934,6 +988,7 @@ def write_executable_icon_resources_atomic(path: Path, resources: tuple[IconReso
         shutil.copy2(path, temp)
         temp.chmod(temp.stat().st_mode | 0o200)
         _update_executable_icon_resources(temp, canonical)
+        refresh_pe_checksum(temp)
         written = _enumerate_executable_icon_resources(temp)
         if written != canonical:
             raise PatchError(f"Stock icon resource verification failed after updating {path}.")

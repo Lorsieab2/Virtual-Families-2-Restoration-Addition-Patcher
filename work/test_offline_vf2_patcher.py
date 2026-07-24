@@ -287,6 +287,36 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             patcher_mod.write_executable_icon_resources_atomic(target, captured)
             self.assertEqual(patcher_mod._enumerate_executable_icon_resources(target), expected)
             self.assertEqual(patcher_mod.validate_executable_shell_icon(target), (16, 32, 48))
+            target_data = target.read_bytes()
+            checksum_offset = patcher_mod.pe_checksum_offset(target_data)
+            self.assertNotEqual(struct.unpack_from("<I", target_data, checksum_offset)[0], 0)
+            self.assertEqual(
+                struct.unpack_from("<I", target_data, checksum_offset)[0],
+                patcher_mod.compute_pe_checksum(target_data),
+            )
+
+    def test_refresh_pe_checksum_is_nonzero_verified_and_idempotent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "fixture.exe"
+            target.write_bytes(minimal_pe_bytes(overlay=b"odd"))
+            checksum_offset = patcher_mod.pe_checksum_offset(target.read_bytes())
+            self.assertEqual(struct.unpack_from("<I", target.read_bytes(), checksum_offset)[0], 0)
+
+            first = patcher_mod.refresh_pe_checksum(target)
+            first_bytes = target.read_bytes()
+            second = patcher_mod.refresh_pe_checksum(target)
+
+            self.assertNotEqual(first, 0)
+            self.assertEqual(first, second)
+            self.assertEqual(first_bytes, target.read_bytes())
+            self.assertEqual(first, patcher_mod.compute_pe_checksum(target.read_bytes()))
+
+    def test_refresh_pe_checksum_rejects_non_pe_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / "not-an-exe.bin"
+            target.write_bytes(b"not a PE file")
+            with self.assertRaisesRegex(patcher_mod.PatchError, "valid DOS header"):
+                patcher_mod.refresh_pe_checksum(target)
 
     def test_icon_group_rejects_missing_referenced_image(self):
         resources = list(real_shell_icon_resources())
