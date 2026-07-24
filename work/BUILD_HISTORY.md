@@ -1618,3 +1618,25 @@
   `A4059B461F52E3D8246FCC95D688CF3AB82DF2CB598E340DEA0395594DB53CF3`.
   Live parent selection, behavior/state effects, fossil spawn/pickup, and
   patch-off QA remain.
+
+## B156 - Fourth exact mobile Island Event outcome checkpoint
+
+- Adds Meteorite Falls in Yard 2's numeric selector-7 gate and exact
+  choice-zero 50-coin award/effect.
+- Adds Clown Holding Metal Rod's adult gate, furniture item `0x23C`,
+  like/dislike value `0x24`, +15 target happiness trend, and +15 happiness
+  for all children.
+- Uses the desktop-native `CLikeList` and `CDislikeList` offsets independently
+  verified as `0x1BC34` and `0x1BC40`; mobile villager offsets are not reused.
+- Adds Men in Black at Door's adult gate, behavior `0x171` on either choice,
+  and choice-zero furniture item `0x219`.
+- Adds Hear Strange Sound's numeric selector-7 gate, choice-zero furniture
+  item `0x242`, and +20 target happiness trend.
+- Preserves Metallic Knocking on Door's unconditional `CanFire=false` while
+  retaining its unreachable choice-zero 50-coin calculation/effect.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,776,640 bytes with SHA-256
+  `57D2161408891891E3D19BBC77D7D889A312A0FE43DF98D1E78C1E606F28C57F`.
+  Live event target/effect and patch-off QA remain.

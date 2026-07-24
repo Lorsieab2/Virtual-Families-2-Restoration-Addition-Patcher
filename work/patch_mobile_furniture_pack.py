@@ -7195,6 +7195,11 @@ MOBILE_EVENT_OUTCOME_KINDS = {
     "EmailFromAntonioGuildenstern": 11,
     "EmailFromSchool": 12,
     "InterestingArticleAboutFossils": 13,
+    "MeteoriteFallsInYard2": 14,
+    "ClownHoldingMetalRod": 15,
+    "MenInBlackAtDoor": 16,
+    "HearStrangeSound": 17,
+    "MetallicKnockingOnDoor": 18,
 }
 
 EVENT_CHOICE_OVERRIDES = {
@@ -11151,10 +11156,15 @@ def patch_island_events(manifest):
 
 enum StringId {{ eStringDummy = 0 }};
 enum EBodyPosition {{ eBodyPosition_Standing = 0 }};
-enum EAgeSelecter {{ eAgeSelecterChild = 1, eAgeSelecterAdult = 2 }};
+enum EAgeSelecter {{
+    eAgeSelecterChild = 1,
+    eAgeSelecterAdult = 2,
+    eAgeSelecterExactMobile7 = 7
+}};
 enum EGender {{ eGenderAny = -1, eGenderMale = 0 }};
 enum EBehavior {{ eBehaviorDummy = 0 }};
 enum ECarrying {{ eCarryingDummy = 0 }};
+enum ELike {{ eLikeDummy = 0 }};
 #ifndef VF2_EINVENTORYITEM_DEFINED
 #define VF2_EINVENTORYITEM_DEFINED
 enum EInventoryItem {{ eInventoryItemDummy = 0 }};
@@ -11180,6 +11190,16 @@ public:
 class CVillagerState {{
 public:
     void AdjustHappinessTrend(int amount);
+}};
+
+class CLikeList {{
+public:
+    const bool Add(ELike like);
+}};
+
+class CDislikeList {{
+public:
+    const bool Remove(ELike like);
 }};
 
 class CVillagerManager {{
@@ -11254,6 +11274,20 @@ static CVillagerState *VF2MobileEventVillagerState(CVillager *villager)
         reinterpret_cast<unsigned char *>(villager) + 0x6AF4);
 }}
 
+static CLikeList *VF2MobileEventVillagerLikes(CVillager *villager)
+{{
+    if (!villager) return 0;
+    return reinterpret_cast<CLikeList *>(
+        reinterpret_cast<unsigned char *>(villager) + 0x1BC34);
+}}
+
+static CDislikeList *VF2MobileEventVillagerDislikes(CVillager *villager)
+{{
+    if (!villager) return 0;
+    return reinterpret_cast<CDislikeList *>(
+        reinterpret_cast<unsigned char *>(villager) + 0x1BC40);
+}}
+
 // Vtable- and layout-compatible with CIslandEvent.  The first 0x10 bytes are
 // the stock base object: vptr, target villager, second target villager, award.
 // Keeping that prefix prevents dialog/scheduler code from interpreting title
@@ -11277,10 +11311,11 @@ struct CMobileIslandEvent {{
           has_choices_(has_choices), is_email_(is_email), outcome_kind_(outcome_kind) {{}}
     virtual ~CMobileIslandEvent() {{}}
     virtual bool CanFire() {{
-        // These five mobile classes return false unconditionally. Some retain
+        // These six mobile classes return false unconditionally. Some retain
         // unreachable award/effect methods, but the normal and email schedulers
         // both reject them at CanFire.
-        if (outcome_kind_ == 1 || (outcome_kind_ >= 5 && outcome_kind_ <= 8)) {{
+        if (outcome_kind_ == 1 || (outcome_kind_ >= 5 && outcome_kind_ <= 8)
+            || outcome_kind_ == 18) {{
             target1_ = 0;
             target2_ = 0;
             return false;
@@ -11320,6 +11355,12 @@ struct CMobileIslandEvent {{
             target1_ = parents[ldwGameState::GetRandom(parent_count)];
             target2_ = child;
             return true;
+        }}
+        if (outcome_kind_ == 14 || outcome_kind_ == 17) {{
+            target1_ = VillagerManager.GetRandomVillager(
+                eAgeSelecterExactMobile7, eGenderAny, 0);
+            target2_ = target1_;
+            return target1_ != 0;
         }}
         target1_ = outcome_kind_ == 3
             ? VF2PickMobileTeenEventVillager()
@@ -11408,6 +11449,50 @@ struct CMobileIslandEvent {{
                 VillagerManager.MakeAllVillagersDoIt(
                     (EBehavior)251, 7, 280, eGenderAny, 0, 0);
             }}
+            return;
+        }}
+        if (outcome_kind_ == 14 || outcome_kind_ == 18) {{
+            if (choice == 0) {{
+                Money.Adjust((float)award_, true);
+            }}
+            return;
+        }}
+        if (outcome_kind_ == 15) {{
+            if (choice == 0 && target1_) {{
+                FurnitureManager.AddToStorage((EInventoryItem)0x23C);
+                CLikeList *likes = VF2MobileEventVillagerLikes(target1_);
+                CDislikeList *dislikes =
+                    VF2MobileEventVillagerDislikes(target1_);
+                if (likes) likes->Add((ELike)0x24);
+                if (dislikes) dislikes->Remove((ELike)0x24);
+                CVillagerState *state =
+                    VF2MobileEventVillagerState(target1_);
+                if (state) state->AdjustHappinessTrend(15);
+                VillagerManager.AdjustAllChildrenHappiness(15);
+            }}
+            return;
+        }}
+        if (outcome_kind_ == 16) {{
+            if (!target1_) return;
+            if (choice == 0) {{
+                FurnitureManager.AddToStorage((EInventoryItem)0x219);
+            }}
+            unsigned char behavior_data = 0;
+            target1_->NewBehavior(
+                (EBehavior)0x171,
+                *reinterpret_cast<SBehaviorData *>(&behavior_data));
+            reinterpret_cast<CVillagerPlans *>(target1_)
+                ->StartNewBehavior(*target1_);
+            return;
+        }}
+        if (outcome_kind_ == 17) {{
+            if (choice == 0 && target1_) {{
+                FurnitureManager.AddToStorage((EInventoryItem)0x242);
+                CVillagerState *state =
+                    VF2MobileEventVillagerState(target1_);
+                if (state) state->AdjustHappinessTrend(20);
+            }}
+            return;
         }}
     }}
     virtual void CalcAward() {{
@@ -11440,6 +11525,8 @@ struct CMobileIslandEvent {{
             award_ = 0;
         }} else if (outcome_kind_ == 5) {{
             award_ = choice == 0 ? -25 : 0;
+        }} else if (outcome_kind_ == 14 || outcome_kind_ == 18) {{
+            award_ = choice == 0 ? 50 : 0;
         }} else {{
             award_ = 0;
         }}
@@ -11473,10 +11560,12 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
                 "outcome_kind": event["outcome_kind"],
                 "outcome_status": (
                     "exact mobile outcome"
-                    if event["outcome_kind"] in (2, 3, 4, 9, 10, 11, 12, 13)
+                    if event["outcome_kind"] in (
+                        2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17
+                    )
                     else (
                         "exact mobile dummied-out CanFire=false"
-                        if event["outcome_kind"] in (1, 5, 6, 7, 8)
+                        if event["outcome_kind"] in (1, 5, 6, 7, 8, 18)
                         else "text shell only; outcome pending"
                     )
                 ),

@@ -3479,3 +3479,32 @@
   checks, and passes exact toggle/restoration for all five runtime flags. The
   fully enabled executable is 1,776,640 bytes with SHA-256
   `A4059B461F52E3D8246FCC95D688CF3AB82DF2CB598E340DEA0395594DB53CF3`.
+
+## 2026-07-24 - Fourth exact mobile Island Event outcome group
+
+- `CEventMeteoriteFallsInYard2::CanFire` at mobile `0x119CD0` uses numeric
+  age selector `7` with any gender. `CalcAward(int)` at `0x119DD0` stores 50
+  for choice zero and zero otherwise; `ImpactGame(int)` at `0x119D80`
+  applies the choice-zero award.
+- `CEventClownHoldingMetalRod::CanFire` at `0x11A500` selects an adult.
+  Choice zero at `0x11A5B0` stores furniture item `0x23C`, adds like `0x24`,
+  removes dislike `0x24`, adds 15 target happiness trend, and adds 15
+  happiness to all children. Choice one has no effect.
+- The desktop villager layout was independently recovered from PC code before
+  porting the Clown outcome: `CLikeList` is at `CVillager+0x1BC34` and
+  `CDislikeList` is at `CVillager+0x1BC40`. The mobile object offsets were
+  not copied into the PC helper.
+- `CEventMenInBlackAtDoor::CanFire` at `0x11AE80` selects an adult. Both
+  choices at `0x11AF30` start behavior `0x171`; choice zero also stores
+  furniture item `0x219`.
+- `CEventHearStrangeSound::CanFire` at `0x11B390` uses numeric age selector
+  `7` with any gender. Choice zero at `0x11B440` stores furniture item
+  `0x242` and adds 20 target happiness trend; choice one has no effect.
+- `CEventMetallicKnockingOnDoor::CanFire` at `0x11B650` returns false
+  unconditionally. Its unreachable choice-zero calculation at `0x11B700`
+  stores 50 and its unreachable impact at `0x11B6B0` applies that award.
+- All 231 tests pass with one intentional skip. The complete 16-layout matrix
+  has 16 unique hashes, passes 8 Holiday-positive and 8 Holiday-negative
+  checks, and passes exact toggle/restoration for all five runtime flags. The
+  fully enabled executable is 1,776,640 bytes with SHA-256
+  `57D2161408891891E3D19BBC77D7D889A312A0FE43DF98D1E78C1E606F28C57F`.

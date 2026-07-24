@@ -2175,6 +2175,11 @@ class MobileIslandEventTextTests(unittest.TestCase):
             events["InterestingArticleAboutFossils"]["outcome_kind"],
             13,
         )
+        self.assertEqual(events["MeteoriteFallsInYard2"]["outcome_kind"], 14)
+        self.assertEqual(events["ClownHoldingMetalRod"]["outcome_kind"], 15)
+        self.assertEqual(events["MenInBlackAtDoor"]["outcome_kind"], 16)
+        self.assertEqual(events["HearStrangeSound"]["outcome_kind"], 17)
+        self.assertEqual(events["MetallicKnockingOnDoor"]["outcome_kind"], 18)
 
         old_patched = patcher.PATCHED
         try:
@@ -2211,6 +2216,10 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     "CEventEmailFromAntonioGuildenstern",
                     "CEventEmailFromSchool",
                     "CEventInterestingArticleAboutFossils",
+                    "CEventMeteoriteFallsInYard2",
+                    "CEventClownHoldingMetalRod",
+                    "CEventMenInBlackAtDoor",
+                    "CEventHearStrangeSound",
                 ):
                     self.assertEqual(
                         rows[event_class]["outcome_status"],
@@ -2221,6 +2230,7 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     "CEventGreatUncleElmer",
                     "CEventMarchingBandTripExpenses",
                     "CEventLoanReturned",
+                    "CEventMetallicKnockingOnDoor",
                 ):
                     self.assertEqual(
                         rows[event_class]["outcome_status"],
@@ -2352,6 +2362,43 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     "CollectableItem.Add(carrying, point, false);",
                     source,
                 )
+                self.assertIn(
+                    "eAgeSelecterExactMobile7, eGenderAny, 0",
+                    source,
+                )
+                self.assertIn(
+                    "reinterpret_cast<unsigned char *>(villager) + 0x1BC34",
+                    source,
+                )
+                self.assertIn(
+                    "reinterpret_cast<unsigned char *>(villager) + 0x1BC40",
+                    source,
+                )
+                self.assertIn(
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x23C);",
+                    source,
+                )
+                self.assertIn("likes->Add((ELike)0x24);", source)
+                self.assertIn("dislikes->Remove((ELike)0x24);", source)
+                self.assertIn(
+                    "VillagerManager.AdjustAllChildrenHappiness(15);",
+                    source,
+                )
+                self.assertIn(
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x219);",
+                    source,
+                )
+                self.assertIn("(EBehavior)0x171,", source)
+                self.assertIn(
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x242);",
+                    source,
+                )
+                self.assertIn("state->AdjustHappinessTrend(20);", source)
+                self.assertIn(
+                    "outcome_kind_ == 14 || outcome_kind_ == 18",
+                    source,
+                )
+                self.assertIn("award_ = choice == 0 ? 50 : 0;", source)
         finally:
             patcher.PATCHED = old_patched
 

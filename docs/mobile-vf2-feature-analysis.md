@@ -437,7 +437,7 @@ email classification. It does **not** yet reproduce every mobile `ImpactGame`
 effect. `docs/TODO.md` still correctly tracks the remaining events as
 unfinished.
 
-Thirteen function-level audits now replace earlier experimental approximations
+Eighteen function-level audits now replace earlier experimental approximations
 or generic firing rules:
 
 | Mobile event | Exact recovered result |
@@ -455,6 +455,11 @@ or generic firing rules:
 | `EmailFromAntonioGuildenstern` | Email event requiring a random adult; assigns behavior `424` to raw-age-7 villagers and adds 15 to the target adult's happiness trend. |
 | `EmailFromSchool` | Requires a random child and at least one parent, then randomly selects the available matriarch/patriarch. It calculates 75-174, starts behavior `88` on the parent, and writes the exact parent-state byte at `+0x6B74`. |
 | `InterestingArticleAboutFossils` | Requires a random adult, starts behavior `100`, adds 10 happiness trend, and spawns one random fossil carrying value `103..114` at mobile yard coordinates x `1212..1471`, y `1829..1954`. |
+| `MeteoriteFallsInYard2` | Requires numeric age selector `7` with any gender. Choice A awards exactly 50 coins; Choice B has no effect. |
+| `ClownHoldingMetalRod` | Requires a random adult. Choice A stores furniture item `0x23C`, adds like `0x24`, removes dislike `0x24`, adds 15 target happiness trend, and adds 15 happiness to all children; Choice B has no effect. |
+| `MenInBlackAtDoor` | Requires a random adult. Both choices start behavior `0x171`; Choice A also stores furniture item `0x219`. |
+| `HearStrangeSound` | Requires numeric age selector `7` with any gender. Choice A stores furniture item `0x242` and adds 20 target happiness trend; Choice B has no effect. |
+| `MetallicKnockingOnDoor` | Dummied out by unconditional `CanFire=false`. Its unreachable Choice A calculation/effect is 50 coins. |
 
 The mobile `.so` proves each mobile class has its own `ImpactGame`,
 `CalcAward`, and `CanFire` methods, but most exact outcome implementations

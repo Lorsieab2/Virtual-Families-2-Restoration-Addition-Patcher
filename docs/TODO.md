@@ -153,8 +153,12 @@ must remain visible as Needs source audit; it must not be silently omitted.
   award, money, happiness, and group-behavior routes. `EmailFromSchool` now
   preserves exact parent/child selection, behavior `88`, 75-174 calculation,
   and parent-state byte. `InterestingArticleAboutFossils` now preserves exact
-  behavior `100`, happiness, fossil-family, and yard-coordinate rolls. Other
-  added events still need function-level outcome audits.
+  behavior `100`, happiness, fossil-family, and yard-coordinate rolls.
+  `MeteoriteFallsInYard2`, `ClownHoldingMetalRod`, `MenInBlackAtDoor`, and
+  `HearStrangeSound` now preserve their exact firing gates and choice effects;
+  `MetallicKnockingOnDoor` preserves its exact dummied-out `CanFire=false`
+  state and unreachable 50-coin route. Other added events still need
+  function-level outcome audits.
 - In-game test B132 second-bathroom leaks: after buying the second-bathroom
   renovation, trigger Water Pressure Surge and confirm the north toilet,
   shower, and sink leaks appear and can be repaired through their native

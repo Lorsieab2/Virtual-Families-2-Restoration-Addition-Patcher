@@ -1146,3 +1146,24 @@ B156 School email and Fossils Island Event outcomes
   A4059B461F52E3D8246FCC95D688CF3AB82DF2CB598E340DEA0395594DB53CF3.
   Live parent selection, behavior/state effects, fossil spawn/pickup, and
   patch-off QA remain.
+B156 fourth exact mobile Island Event outcome group
+- Ported Meteorite Falls in Yard 2 with mobile numeric age selector 7,
+  choice-zero 50-coin calculation, and matching money adjustment.
+- Ported Clown Holding Metal Rod with adult targeting, furniture item 0x23C,
+  like/dislike value 0x24, +15 target happiness trend, and +15 happiness for
+  all children. The port uses separately verified PC villager offsets 0x1BC34
+  and 0x1BC40 rather than copying mobile object offsets.
+- Ported Men in Black at Door with adult targeting, behavior 0x171 for both
+  choices, and furniture item 0x219 for choice zero.
+- Ported Hear Strange Sound with mobile numeric age selector 7, furniture item
+  0x242, and +20 target happiness trend for choice zero.
+- Preserved Metallic Knocking on Door as dummied out by unconditional
+  CanFire=false. Its unreachable choice-zero 50-coin calculation/effect
+  remains represented.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,776,640 bytes with SHA-256
+  57D2161408891891E3D19BBC77D7D889A312A0FE43DF98D1E78C1E606F28C57F.
+  Live target selection, both-choice effects, storage/like/dislike writes,
+  behavior starts, happiness changes, and patch-off QA remain.
