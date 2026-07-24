@@ -7193,6 +7193,8 @@ MOBILE_EVENT_OUTCOME_KINDS = {
     "BlastFromThePast": 9,
     "EmailFromACME": 10,
     "EmailFromAntonioGuildenstern": 11,
+    "EmailFromSchool": 12,
+    "InterestingArticleAboutFossils": 13,
 }
 
 EVENT_CHOICE_OVERRIDES = {
@@ -11152,12 +11154,29 @@ enum EBodyPosition {{ eBodyPosition_Standing = 0 }};
 enum EAgeSelecter {{ eAgeSelecterChild = 1, eAgeSelecterAdult = 2 }};
 enum EGender {{ eGenderAny = -1, eGenderMale = 0 }};
 enum EBehavior {{ eBehaviorDummy = 0 }};
+enum ECarrying {{ eCarryingDummy = 0 }};
 #ifndef VF2_EINVENTORYITEM_DEFINED
 #define VF2_EINVENTORYITEM_DEFINED
 enum EInventoryItem {{ eInventoryItemDummy = 0 }};
 #endif
 
-class CVillager;
+struct ldwPoint {{
+    int x;
+    int y;
+}};
+
+struct SBehaviorData;
+
+class CVillager {{
+public:
+    void NewBehavior(EBehavior behavior, SBehaviorData const &data);
+}};
+
+class CVillagerPlans {{
+public:
+    void StartNewBehavior(CVillager &villager);
+}};
+
 class CVillagerState {{
 public:
     void AdjustHappinessTrend(int amount);
@@ -11168,6 +11187,8 @@ public:
     CVillager *GetRandomVillager(EAgeSelecter age_selector, EGender gender, int *out_id);
     bool VillagerExists(int index, bool include_away);
     CVillager &GetVillager(int index);
+    CVillager *GetMatriarch();
+    CVillager *GetPatriarch();
     void AdjustAllChildrenHappiness(int amount);
     void MakeAllVillagersDoIt(EBehavior behavior, int minimum_age, int maximum_age, EGender gender, int *ids, int id_count);
 }};
@@ -11186,6 +11207,7 @@ public:
 
 class CCollectableItem {{
 public:
+    void Add(ECarrying carrying, ldwPoint point, bool force);
     void SpawnSockInHouse(int count);
     void SpawnTrashInHouse(int count);
 }};
@@ -11276,6 +11298,29 @@ struct CMobileIslandEvent {{
             target2_ = target1_;
             return target1_ != 0;
         }}
+        if (outcome_kind_ == 12) {{
+            CVillager *child = VillagerManager.GetRandomVillager(
+                eAgeSelecterChild, eGenderAny, 0);
+            if (!child) {{
+                target1_ = 0;
+                target2_ = 0;
+                return false;
+            }}
+            CVillager *parents[2];
+            int parent_count = 0;
+            CVillager *matriarch = VillagerManager.GetMatriarch();
+            if (matriarch) parents[parent_count++] = matriarch;
+            CVillager *patriarch = VillagerManager.GetPatriarch();
+            if (patriarch) parents[parent_count++] = patriarch;
+            if (parent_count == 0) {{
+                target1_ = 0;
+                target2_ = child;
+                return false;
+            }}
+            target1_ = parents[ldwGameState::GetRandom(parent_count)];
+            target2_ = child;
+            return true;
+        }}
         target1_ = outcome_kind_ == 3
             ? VF2PickMobileTeenEventVillager()
             : VF2PickMobileAdultEventVillager();
@@ -11308,6 +11353,32 @@ struct CMobileIslandEvent {{
                 (EBehavior)424, 7, 7, eGenderAny, 0, 0);
             CVillagerState *state = VF2MobileEventVillagerState(target1_);
             if (state) state->AdjustHappinessTrend(15);
+        }} else if (outcome_kind_ == 12) {{
+            if (!target1_) return;
+            unsigned char behavior_data = 0;
+            target1_->NewBehavior(
+                (EBehavior)88,
+                *reinterpret_cast<SBehaviorData *>(&behavior_data));
+            reinterpret_cast<CVillagerPlans *>(target1_)
+                ->StartNewBehavior(*target1_);
+            *(reinterpret_cast<unsigned char *>(target1_) + 0x6B74) = 1;
+        }} else if (outcome_kind_ == 13) {{
+            if (!target1_) return;
+            unsigned char behavior_data = 0;
+            target1_->NewBehavior(
+                (EBehavior)100,
+                *reinterpret_cast<SBehaviorData *>(&behavior_data));
+            reinterpret_cast<CVillagerPlans *>(target1_)
+                ->StartNewBehavior(*target1_);
+            CVillagerState *state = VF2MobileEventVillagerState(target1_);
+            if (state) state->AdjustHappinessTrend(10);
+            ECarrying carrying = (ECarrying)(
+                ldwGameState::GetRandom(12) + 103);
+            ldwPoint point = {{
+                ldwGameState::GetRandom(260) + 1212,
+                ldwGameState::GetRandom(126) + 1829
+            }};
+            CollectableItem.Add(carrying, point, false);
         }}
     }}
     virtual void ImpactGame(int choice) {{
@@ -11351,6 +11422,10 @@ struct CMobileIslandEvent {{
         }} else if (outcome_kind_ == 10) {{
             award_ = 70;
         }} else if (outcome_kind_ == 11) {{
+            award_ = 0;
+        }} else if (outcome_kind_ == 12) {{
+            award_ = ldwGameState::GetRandom(100) + 75;
+        }} else if (outcome_kind_ == 13) {{
             award_ = 0;
         }} else {{
             award_ = 0;
@@ -11398,7 +11473,7 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
                 "outcome_kind": event["outcome_kind"],
                 "outcome_status": (
                     "exact mobile outcome"
-                    if event["outcome_kind"] in (2, 3, 4, 9, 10, 11)
+                    if event["outcome_kind"] in (2, 3, 4, 9, 10, 11, 12, 13)
                     else (
                         "exact mobile dummied-out CanFire=false"
                         if event["outcome_kind"] in (1, 5, 6, 7, 8)

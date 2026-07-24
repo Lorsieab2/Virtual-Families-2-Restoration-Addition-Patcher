@@ -150,10 +150,11 @@ must remain visible as Needs source audit; it must not be silently omitted.
   `LoanReturned` preserve their exact unconditional `CanFire=false` instead of
   being made reachable by the generic shell. `BlastFromThePast`,
   `EmailFromACME`, and `EmailFromAntonioGuildenstern` now have exact target,
-  award, money, happiness, and group-behavior routes. `EmailFromSchool` and
-  `InterestingArticleAboutFossils` are decoded but still need exact desktop
-  target/behavior/collectible ABI integration. Other added events still need
-  function-level outcome audits.
+  award, money, happiness, and group-behavior routes. `EmailFromSchool` now
+  preserves exact parent/child selection, behavior `88`, 75-174 calculation,
+  and parent-state byte. `InterestingArticleAboutFossils` now preserves exact
+  behavior `100`, happiness, fossil-family, and yard-coordinate rolls. Other
+  added events still need function-level outcome audits.
 - In-game test B132 second-bathroom leaks: after buying the second-bathroom
   renovation, trigger Water Pressure Surge and confirm the north toilet,
   shower, and sink leaks appear and can be repaired through their native

@@ -1600,3 +1600,21 @@
   `2FF43E7E5500E0AE22754F4D72384AC528800DDCD470A4CF7BA80CF6D849A36B`.
   Live email selection, award, happiness, group behavior, and patch-off QA
   remains.
+
+## B156 - School email and Fossils outcome checkpoint
+
+- Adds Email from School's exact random-child gate and random selection among
+  the available matriarch and patriarch.
+- Preserves its 75-174 calculation, behavior `88` restart on the selected
+  parent, and byte-1 write at parent offset `0x6B74`.
+- Adds Interesting Article About Fossils' behavior `100`, +10 target
+  happiness trend, fossil carrying roll `103..114`, and exact mobile yard
+  coordinate rolls x `1212..1471`, y `1829..1954`.
+- Reuses the verified desktop-native behavior and collectible ABIs.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,776,640 bytes with SHA-256
+  `A4059B461F52E3D8246FCC95D688CF3AB82DF2CB598E340DEA0395594DB53CF3`.
+  Live parent selection, behavior/state effects, fossil spawn/pickup, and
+  patch-off QA remain.

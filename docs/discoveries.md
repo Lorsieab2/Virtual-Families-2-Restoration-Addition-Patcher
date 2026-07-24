@@ -3448,15 +3448,34 @@
   chooses randomly among the available matriarch and patriarch for target 1.
   `CalcAward` at `0x11AC00` stores 75-174. `ImpactGame` at `0x11AB90`
   starts behavior `88` on the parent and writes byte 1 at parent offset
-  `0x6B74`. This route is decoded but not yet integrated.
+  `0x6B74`. B156 now ports this route through the desktop-native selectors,
+  `NewBehavior`, and `StartNewBehavior` symbols.
 - `CEventInterestingArticleAboutFossils::CanFire` at `0x11A360` selects an
   adult. `ImpactGame` at `0x11A3F0` starts behavior `100`, adds 10 happiness
   trend, chooses carrying `GetRandom(12)+103`, x
   `GetRandom(260)+1212`, and y `GetRandom(126)+1829`, then calls
-  `CCollectableItem::Add(..., false)`. This route is decoded but not yet
-  integrated.
+  `CCollectableItem::Add(..., false)`. B156 now ports this route through the
+  desktop-native by-value `ldwPoint` collectible ABI.
 - All 231 tests pass with one intentional skip. The complete 16-layout matrix
   has 16 unique hashes, passes 8 Holiday-positive and 8 Holiday-negative
   checks, and passes exact toggle/restoration for all five runtime flags. The
   fully enabled executable is 1,776,128 bytes with SHA-256
   `2FF43E7E5500E0AE22754F4D72384AC528800DDCD470A4CF7BA80CF6D849A36B`.
+
+## 2026-07-24 - School email and Fossils desktop integration
+
+- The existing desktop helper contract confirms `CVillagerPlans` begins at the
+  `CVillager` object, `CVillager::NewBehavior` accepts
+  `SBehaviorData const&`, and `CCollectableItem::Add` accepts
+  `(ECarrying, ldwPoint, bool)` with the two-int point passed by value.
+- Email from School stores the selected parent in target 1 and the selected
+  child in target 2, preserving dialog substitutions as well as the parent
+  behavior/state effect.
+- Interesting Article About Fossils uses carrying values `103..114`, which are
+  the twelve base fossil variants, and the exact mobile yard rectangle rather
+  than a generic collectible spawn helper.
+- All 231 tests pass with one intentional skip. The complete 16-layout matrix
+  has 16 unique hashes, passes 8 Holiday-positive and 8 Holiday-negative
+  checks, and passes exact toggle/restoration for all five runtime flags. The
+  fully enabled executable is 1,776,640 bytes with SHA-256
+  `A4059B461F52E3D8246FCC95D688CF3AB82DF2CB598E340DEA0395594DB53CF3`.

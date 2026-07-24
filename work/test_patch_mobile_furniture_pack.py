@@ -2170,6 +2170,11 @@ class MobileIslandEventTextTests(unittest.TestCase):
             events["EmailFromAntonioGuildenstern"]["outcome_kind"],
             11,
         )
+        self.assertEqual(events["EmailFromSchool"]["outcome_kind"], 12)
+        self.assertEqual(
+            events["InterestingArticleAboutFossils"]["outcome_kind"],
+            13,
+        )
 
         old_patched = patcher.PATCHED
         try:
@@ -2204,6 +2209,8 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     "CEventBlastFromThePast",
                     "CEventEmailFromACME",
                     "CEventEmailFromAntonioGuildenstern",
+                    "CEventEmailFromSchool",
+                    "CEventInterestingArticleAboutFossils",
                 ):
                     self.assertEqual(
                         rows[event_class]["outcome_status"],
@@ -2302,6 +2309,48 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 self.assertGreaterEqual(
                     source.count("state->AdjustHappinessTrend(15);"),
                     2,
+                )
+                self.assertIn(
+                    "CVillager *child = VillagerManager.GetRandomVillager(",
+                    source,
+                )
+                self.assertIn(
+                    "CVillager *matriarch = VillagerManager.GetMatriarch();",
+                    source,
+                )
+                self.assertIn(
+                    "CVillager *patriarch = VillagerManager.GetPatriarch();",
+                    source,
+                )
+                self.assertIn(
+                    "parents[ldwGameState::GetRandom(parent_count)]",
+                    source,
+                )
+                self.assertIn("(EBehavior)88,", source)
+                self.assertIn(
+                    "reinterpret_cast<unsigned char *>(target1_) + 0x6B74",
+                    source,
+                )
+                self.assertIn(
+                    "award_ = ldwGameState::GetRandom(100) + 75;",
+                    source,
+                )
+                self.assertIn("(EBehavior)100,", source)
+                self.assertIn(
+                    "ldwGameState::GetRandom(12) + 103",
+                    source,
+                )
+                self.assertIn(
+                    "ldwGameState::GetRandom(260) + 1212",
+                    source,
+                )
+                self.assertIn(
+                    "ldwGameState::GetRandom(126) + 1829",
+                    source,
+                )
+                self.assertIn(
+                    "CollectableItem.Add(carrying, point, false);",
+                    source,
                 )
         finally:
             patcher.PATCHED = old_patched
