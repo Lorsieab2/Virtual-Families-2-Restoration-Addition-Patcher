@@ -1583,3 +1583,20 @@
   `EE9433E810C62153168CEE44DDF1892DBBE42D546169D339CBD51C62A8EE9010`.
   Live Invitation targeting, both choices, child happiness/behavior, and
   patch-off QA remain.
+
+## B156 - Third exact mobile Island Event outcome checkpoint
+
+- Adds Blast from the Past's exact random-adult gate, 50-99 coin award, money
+  adjustment, and +15 target happiness trend.
+- Adds Email from ACME's exact adult-male-only gate and 70-coin award/effect.
+- Adds Email from Antonio Guildenstern's exact random-adult gate, raw-age-7
+  group behavior `424`, and +15 target happiness trend.
+- Records but does not approximate the decoded Email from School and
+  Interesting Article About Fossils behavior/state/collectible routes.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,776,128 bytes with SHA-256
+  `2FF43E7E5500E0AE22754F4D72384AC528800DDCD470A4CF7BA80CF6D849A36B`.
+  Live email selection, award, happiness, group behavior, and patch-off QA
+  remains.

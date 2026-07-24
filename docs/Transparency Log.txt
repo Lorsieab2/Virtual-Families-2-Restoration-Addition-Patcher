@@ -1112,3 +1112,20 @@ B156 second exact mobile Island Event outcome group
   EE9433E810C62153168CEE44DDF1892DBBE42D546169D339CBD51C62A8EE9010.
   Live Invitation targeting, both choices, child happiness/behavior, and
   patch-off QA remain.
+B156 third exact mobile Island Event outcome group
+- Ported Blast from the Past with its random-adult target, 50-99 coin award,
+  money adjustment, and +15 target happiness trend.
+- Ported Email from ACME with its adult-male-only target and exact 70-coin
+  award.
+- Ported Email from Antonio Guildenstern with its random-adult target,
+  behavior 424 for raw-age-7 villagers, and +15 target happiness trend.
+- Decoded Email from School and Interesting Article About Fossils, but left
+  them pending because they require exact parent/child behavior-state and
+  collectible-point ABI integration. No approximation was installed.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,776,128 bytes with SHA-256
+  2FF43E7E5500E0AE22754F4D72384AC528800DDCD470A4CF7BA80CF6D849A36B.
+  Live email selection, award, happiness, group behavior, and patch-off QA
+  remains.

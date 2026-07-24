@@ -2164,6 +2164,12 @@ class MobileIslandEventTextTests(unittest.TestCase):
         self.assertEqual(events["GreatUncleElmer"]["outcome_kind"], 6)
         self.assertEqual(events["MarchingBandTripExpenses"]["outcome_kind"], 7)
         self.assertEqual(events["LoanReturned"]["outcome_kind"], 8)
+        self.assertEqual(events["BlastFromThePast"]["outcome_kind"], 9)
+        self.assertEqual(events["EmailFromACME"]["outcome_kind"], 10)
+        self.assertEqual(
+            events["EmailFromAntonioGuildenstern"]["outcome_kind"],
+            11,
+        )
 
         old_patched = patcher.PATCHED
         try:
@@ -2194,6 +2200,15 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     rows["CEventInvitation"]["outcome_status"],
                     "exact mobile outcome",
                 )
+                for event_class in (
+                    "CEventBlastFromThePast",
+                    "CEventEmailFromACME",
+                    "CEventEmailFromAntonioGuildenstern",
+                ):
+                    self.assertEqual(
+                        rows[event_class]["outcome_status"],
+                        "exact mobile outcome",
+                    )
                 for event_class in (
                     "CEventFruitcakes",
                     "CEventGreatUncleElmer",
@@ -2267,6 +2282,27 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 self.assertIn("award_ = -50;", source)
                 self.assertIn("award_ = 20;", source)
                 self.assertIn("award_ = choice == 0 ? -25 : 0;", source)
+                self.assertIn(
+                    "eAgeSelecterAdult, eGenderMale, 0",
+                    source,
+                )
+                self.assertIn(
+                    "reinterpret_cast<unsigned char *>(villager) + 0x6AF4",
+                    source,
+                )
+                self.assertIn(
+                    "award_ = ldwGameState::GetRandom(50) + 50;",
+                    source,
+                )
+                self.assertIn("award_ = 70;", source)
+                self.assertIn(
+                    "(EBehavior)424, 7, 7, eGenderAny, 0, 0",
+                    source,
+                )
+                self.assertGreaterEqual(
+                    source.count("state->AdjustHappinessTrend(15);"),
+                    2,
+                )
         finally:
             patcher.PATCHED = old_patched
 

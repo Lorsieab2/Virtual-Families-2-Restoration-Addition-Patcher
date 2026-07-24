@@ -148,7 +148,11 @@ must remain visible as Needs source audit; it must not be silently omitted.
   exact adult-plus-child gate, happiness effects, and group behaviors.
   `Fruitcakes`, `GreatUncleElmer`, `MarchingBandTripExpenses`, and
   `LoanReturned` preserve their exact unconditional `CanFire=false` instead of
-  being made reachable by the generic shell. Other added events still need
+  being made reachable by the generic shell. `BlastFromThePast`,
+  `EmailFromACME`, and `EmailFromAntonioGuildenstern` now have exact target,
+  award, money, happiness, and group-behavior routes. `EmailFromSchool` and
+  `InterestingArticleAboutFossils` are decoded but still need exact desktop
+  target/behavior/collectible ABI integration. Other added events still need
   function-level outcome audits.
 - In-game test B132 second-bathroom leaks: after buying the second-bathroom
   renovation, trigger Water Pressure Surge and confirm the north toilet,

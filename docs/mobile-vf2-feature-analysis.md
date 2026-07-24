@@ -437,8 +437,8 @@ email classification. It does **not** yet reproduce every mobile `ImpactGame`
 effect. `docs/TODO.md` still correctly tracks the remaining events as
 unfinished.
 
-The first eight function-level audits now replace earlier experimental
-approximations or generic firing rules:
+Eleven function-level audits now replace earlier experimental approximations
+or generic firing rules:
 
 | Mobile event | Exact recovered result |
 | --- | --- |
@@ -450,6 +450,17 @@ approximations or generic firing rules:
 | `GreatUncleElmer` | Dummied out by unconditional `CanFire=false` despite being email-marked. Its unreachable effect stores furniture item `0x24B`. |
 | `MarchingBandTripExpenses` | Dummied out by unconditional `CanFire=false` despite being email-marked. Its unreachable award/effect is `-50` coins. |
 | `LoanReturned` | Dummied out by unconditional `CanFire=false`. Its unreachable award/effect is `+20` coins. |
+| `BlastFromThePast` | Requires a random adult, awards 50-99 coins, and adds 15 to that adult's happiness trend. |
+| `EmailFromACME` | Email event requiring a random adult male; awards exactly 70 coins. |
+| `EmailFromAntonioGuildenstern` | Email event requiring a random adult; assigns behavior `424` to raw-age-7 villagers and adds 15 to the target adult's happiness trend. |
+
+Two additional event functions are decoded but not yet integrated:
+`EmailFromSchool` selects a random child plus a random available parent, starts
+behavior `88` on the parent, writes the parent flag at `+0x6B74`, and
+calculates 75-174; `InterestingArticleAboutFossils` starts behavior `100`,
+adds 10 happiness trend, and spawns a random fossil at a random point. Their
+target/behavior/collectible ABI routes remain pending rather than being
+approximated.
 
 The mobile `.so` proves each mobile class has its own `ImpactGame`,
 `CalcAward`, and `CanFire` methods, but most exact outcome implementations

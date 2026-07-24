@@ -13,11 +13,11 @@ import idc
 
 
 TARGET_CLASSES = (
-    "CEventFruitcakes",
-    "CEventGreatUncleElmer",
-    "CEventInvitation",
-    "CEventLoanReturned",
-    "CEventMarchingBandTripExpenses",
+    "CEventBlastFromThePast",
+    "CEventEmailFromACME",
+    "CEventEmailFromAntonioGuildenstern",
+    "CEventEmailFromSchool",
+    "CEventInterestingArticleAboutFossils",
 )
 
 

@@ -3430,3 +3430,33 @@
   passes exact toggle/restoration for all five runtime flags. The fully
   enabled executable is 1,775,616 bytes with SHA-256
   `EE9433E810C62153168CEE44DDF1892DBBE42D546169D339CBD51C62A8EE9010`.
+
+## 2026-07-24 - Third exact mobile Island Event outcome group
+
+- `CEventBlastFromThePast::CanFire` at mobile `0x11A960` selects any-gender
+  adult. `CalcAward` at `0x11AA40` stores `GetRandom(50)+50`, and
+  `ImpactGame` at `0x11A9E0` applies that 50-99 coin award plus 15 target
+  happiness trend.
+- `CEventEmailFromACME::CanFire` at `0x11B160` selects an adult male.
+  `CalcAward` at `0x11B230` stores 70 and `ImpactGame` at `0x11B1F0`
+  applies it through `CMoney::Adjust`.
+- `CEventEmailFromAntonioGuildenstern::CanFire` at `0x11B270` selects an
+  any-gender adult. `CalcAward` at `0x11B350` stores zero. `ImpactGame` at
+  `0x11B300` calls `MakeAllVillagersDoIt(424,7,7,-1,null,0)` and adds 15 to
+  the target adult's happiness trend.
+- `CEventEmailFromSchool::CanFire` at `0x11AAA0` requires a random child and
+  chooses randomly among the available matriarch and patriarch for target 1.
+  `CalcAward` at `0x11AC00` stores 75-174. `ImpactGame` at `0x11AB90`
+  starts behavior `88` on the parent and writes byte 1 at parent offset
+  `0x6B74`. This route is decoded but not yet integrated.
+- `CEventInterestingArticleAboutFossils::CanFire` at `0x11A360` selects an
+  adult. `ImpactGame` at `0x11A3F0` starts behavior `100`, adds 10 happiness
+  trend, chooses carrying `GetRandom(12)+103`, x
+  `GetRandom(260)+1212`, and y `GetRandom(126)+1829`, then calls
+  `CCollectableItem::Add(..., false)`. This route is decoded but not yet
+  integrated.
+- All 231 tests pass with one intentional skip. The complete 16-layout matrix
+  has 16 unique hashes, passes 8 Holiday-positive and 8 Holiday-negative
+  checks, and passes exact toggle/restoration for all five runtime flags. The
+  fully enabled executable is 1,776,128 bytes with SHA-256
+  `2FF43E7E5500E0AE22754F4D72384AC528800DDCD470A4CF7BA80CF6D849A36B`.

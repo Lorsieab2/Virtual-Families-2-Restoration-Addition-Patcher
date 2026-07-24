@@ -7190,6 +7190,9 @@ MOBILE_EVENT_OUTCOME_KINDS = {
     "GreatUncleElmer": 6,
     "MarchingBandTripExpenses": 7,
     "LoanReturned": 8,
+    "BlastFromThePast": 9,
+    "EmailFromACME": 10,
+    "EmailFromAntonioGuildenstern": 11,
 }
 
 EVENT_CHOICE_OVERRIDES = {
@@ -11147,7 +11150,7 @@ def patch_island_events(manifest):
 enum StringId {{ eStringDummy = 0 }};
 enum EBodyPosition {{ eBodyPosition_Standing = 0 }};
 enum EAgeSelecter {{ eAgeSelecterChild = 1, eAgeSelecterAdult = 2 }};
-enum EGender {{ eGenderAny = -1 }};
+enum EGender {{ eGenderAny = -1, eGenderMale = 0 }};
 enum EBehavior {{ eBehaviorDummy = 0 }};
 #ifndef VF2_EINVENTORYITEM_DEFINED
 #define VF2_EINVENTORYITEM_DEFINED
@@ -11155,6 +11158,11 @@ enum EInventoryItem {{ eInventoryItemDummy = 0 }};
 #endif
 
 class CVillager;
+class CVillagerState {{
+public:
+    void AdjustHappinessTrend(int amount);
+}};
+
 class CVillagerManager {{
 public:
     CVillager *GetRandomVillager(EAgeSelecter age_selector, EGender gender, int *out_id);
@@ -11217,6 +11225,13 @@ static CVillager *VF2PickMobileTeenEventVillager()
     return eligible[ldwGameState::GetRandom(count)];
 }}
 
+static CVillagerState *VF2MobileEventVillagerState(CVillager *villager)
+{{
+    if (!villager) return 0;
+    return reinterpret_cast<CVillagerState *>(
+        reinterpret_cast<unsigned char *>(villager) + 0x6AF4);
+}}
+
 // Vtable- and layout-compatible with CIslandEvent.  The first 0x10 bytes are
 // the stock base object: vptr, target villager, second target villager, award.
 // Keeping that prefix prevents dialog/scheduler code from interpreting title
@@ -11255,6 +11270,12 @@ struct CMobileIslandEvent {{
                 eAgeSelecterChild, eGenderAny, 0);
             return target1_ != 0 && target2_ != 0;
         }}
+        if (outcome_kind_ == 10) {{
+            target1_ = VillagerManager.GetRandomVillager(
+                eAgeSelecterAdult, eGenderMale, 0);
+            target2_ = target1_;
+            return target1_ != 0;
+        }}
         target1_ = outcome_kind_ == 3
             ? VF2PickMobileTeenEventVillager()
             : VF2PickMobileAdultEventVillager();
@@ -11276,6 +11297,17 @@ struct CMobileIslandEvent {{
             FurnitureManager.AddToStorage((EInventoryItem)0x24B);
         }} else if (outcome_kind_ == 7 || outcome_kind_ == 8) {{
             Money.Adjust((float)award_, true);
+        }} else if (outcome_kind_ == 9) {{
+            Money.Adjust((float)award_, true);
+            CVillagerState *state = VF2MobileEventVillagerState(target1_);
+            if (state) state->AdjustHappinessTrend(15);
+        }} else if (outcome_kind_ == 10) {{
+            Money.Adjust((float)award_, true);
+        }} else if (outcome_kind_ == 11) {{
+            VillagerManager.MakeAllVillagersDoIt(
+                (EBehavior)424, 7, 7, eGenderAny, 0, 0);
+            CVillagerState *state = VF2MobileEventVillagerState(target1_);
+            if (state) state->AdjustHappinessTrend(15);
         }}
     }}
     virtual void ImpactGame(int choice) {{
@@ -11314,6 +11346,12 @@ struct CMobileIslandEvent {{
             award_ = -50;
         }} else if (outcome_kind_ == 8) {{
             award_ = 20;
+        }} else if (outcome_kind_ == 9) {{
+            award_ = ldwGameState::GetRandom(50) + 50;
+        }} else if (outcome_kind_ == 10) {{
+            award_ = 70;
+        }} else if (outcome_kind_ == 11) {{
+            award_ = 0;
         }} else {{
             award_ = 0;
         }}
@@ -11360,7 +11398,7 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
                 "outcome_kind": event["outcome_kind"],
                 "outcome_status": (
                     "exact mobile outcome"
-                    if event["outcome_kind"] in (2, 3, 4)
+                    if event["outcome_kind"] in (2, 3, 4, 9, 10, 11)
                     else (
                         "exact mobile dummied-out CanFire=false"
                         if event["outcome_kind"] in (1, 5, 6, 7, 8)
