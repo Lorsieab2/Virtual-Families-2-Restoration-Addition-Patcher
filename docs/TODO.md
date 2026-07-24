@@ -92,13 +92,14 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - Use `docs/mobile-vf2-feature-analysis.md` as the current coding-level map for
   mobile-only features. Fill remaining low-level gaps from mobile disassembly
   instead of inferring behavior from PC store rows or screenshots alone.
-- Disassemble mobile Holiday behavior methods:
-  `CBehavior::AdmiringXmasTree`, `AdultWaterXMasTree`,
-  `InteractHouseXmasDecor`, `KidsCheckXmasStockings`,
-  `EachPeepCelebrateXMasTree`, `AdmiringXmasKnickKnacks`,
-  `AdultsSaveSantasCookies`, and `KidStealsSantasCookies`. Record object IDs,
-  required `CHotSpot` routes, carried items, animation IDs, sounds, and
-  achievement/goal hooks.
+- Continue routing the now-disassembled mobile Holiday methods to exact
+  furniture items. `KidExaminesCandles`, `AdmiringXmasTree`,
+  `AdultWaterXMasTree`, `InteractHouseXmasDecor`, `KidsCheckXmasStockings`,
+  `AdmiringXmasKnickKnacks`, `AdultsSaveSantasCookies`, and
+  `KidStealsSantasCookies` have code-level plans and object IDs recorded.
+  Holiday Candles are implemented manually. The knickknack, cookie, garland,
+  and wreath item-to-hotspot assignments still require proof before enabling
+  their routes; do not assign them by artwork name alone.
 - Disassemble all added mobile `CEvent*::ImpactGame` methods and map exact
   outcomes before marking exclusive Island Events complete. The current PC
   event shell list preserves firing/dialog structure, but most mobile reward,

@@ -1457,3 +1457,22 @@
 - The fully enabled executable is 1,772,032 bytes with SHA-256
   `D7DE86665C84C69C860E45A982851030DD01848895F86D594597F14FD842DA76`.
   Live purchase, notification, persistence, reset, and patch-off QA remains.
+
+## B156 - Holiday Candles behavior checkpoint
+
+- Adds an exact child-only manual port of mobile
+  `CBehavior::KidExaminesCandles` for Holiday Candles item `0x2AA`.
+- Preserves mobile behavior ID `0x19B`, candidate weight `2000`, EObject
+  `0x89`, raw child boundary, orientation-aware inspections, and the
+  30-percent random-adult/no-adult fallback sequence.
+- Adds an `8x9` PC-safe `CandleOnHolder.png.fmap` containing only three
+  translated EObject cells. Raw mobile hotspot metadata is not installed.
+- Leaves autonomous behavior `0x19B` unindexed because the fixed desktop
+  behavior table ends at `0x19A`.
+- All 230 project tests pass with one intentional skip. All 16 B156 layouts
+  link uniquely, Holiday validation passes 8/8 positive and 8/8 negative, and
+  all five runtime flags pass non-overlap, repeated-enable, disable, and exact
+  restoration checks.
+- The fully enabled executable is 1,772,544 bytes with SHA-256
+  `74BA49761CC2DDC1070AFBB1E6FC812D15C225113D5D37E589766F7B80A59859`.
+  Live Candle placement, orientation, age, branch, and patch-off QA remains.

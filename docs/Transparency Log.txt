@@ -987,3 +987,21 @@ B156 Furnishing the Future
   executable layouts have unique hashes and pass Holiday-positive/negative
   plus five-flag exact-restoration validation.
 - Live purchase/notification/save/reset QA remains.
+B156 Holiday Candles behavior
+- Disassembled the exact mobile KidExaminesCandles plan and its InitAI
+  candidate. Mobile identifies it as behavior 0x19B, weight 2000, child-gated,
+  and bound to EObject 0x89.
+- Added the exact guarded manual child action for Holiday Candles 0x2AA,
+  including the two candle inspections and the 30-percent random-adult or
+  no-adult fallback sequence.
+- Added a minimal translated CandleOnHolder QAMF with three EObject-only cells.
+  Unsupported mobile hotspot metadata is not copied to the PC map.
+- The mobile autonomous candidate remains unavailable because 0x19B is beyond
+  the fixed desktop behavior table ending at 0x19A. This checkpoint does not
+  claim spontaneous Candle use.
+- All 230 project tests pass with one intentional skip. All 16 B156 executable
+  layouts link uniquely, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass repeated enable, disable, and exact
+  restoration checks.
+- Live placement, orientation, age-boundary, adult/no-adult branch, and
+  patch-off testing remain.

@@ -104,6 +104,10 @@ MOBILE_BIRTHDAY_BANNER_PC_CELLS = (
     (7, 14), (8, 14), (9, 14),
     (7, 15), (8, 15), (9, 15), (10, 15),
 )
+MOBILE_HOLIDAY_CANDLES_ITEM_ID = 0x2AA
+MOBILE_HOLIDAY_CANDLES_OBJECT = 0x89
+MOBILE_HOLIDAY_CANDLES_PC_CELL_VALUE = 0x20004800
+MOBILE_HOLIDAY_CANDLES_PC_CELLS = ((5, 7), (6, 7), (5, 8))
 MOBILE_DREIDEL_ITEM_ID = 0x2AF
 MOBILE_DREIDEL_OBJECT = 0x8A
 MOBILE_DREIDEL_PC_CELL_VALUE = 0x20005000
@@ -15055,6 +15059,14 @@ def validate_mobile_birthday_banner_pc_fmap(manifest):
 def validate_mobile_group_holiday_pc_fmaps(manifest):
     specs = [
         (
+            "CandleOnHolder.png.fmap",
+            MOBILE_HOLIDAY_CANDLES_ITEM_ID,
+            MOBILE_HOLIDAY_CANDLES_OBJECT,
+            (8, 9),
+            MOBILE_HOLIDAY_CANDLES_PC_CELL_VALUE,
+            MOBILE_HOLIDAY_CANDLES_PC_CELLS,
+        ),
+        (
             "Dreidel.png.fmap",
             MOBILE_DREIDEL_ITEM_ID,
             MOBILE_DREIDEL_OBJECT,
@@ -15234,6 +15246,7 @@ class CContentMap { public: enum EObject {
     eObjectKitchenFoodDrop = 0x18,
     eObjectKitchenDrinkSource = 0x19,
     eObjectXmasTree = 0x88,
+    eObjectHolidayCandles = 0x89,
     eObjectDreidel = 0x8A,
     eObjectMenorah = 0x8E,
     eObjectXmasStockings = 0x90,
@@ -15252,6 +15265,8 @@ enum ESound { eSoundDummy = 0 };
 enum ESoundType { eSoundTypeEffects = 2 };
 enum ESpeed { eSpeedNormal = 0xC8 };
 enum EPriority { ePriorityNormal = 0 };
+enum EAgeSelecter { eAgeSelecterDummy = 0 };
+enum EGender { eGenderDummy = 0 };
 enum EBodyPosition {
     eBodyPositionStanding = 0,
     eBodyPositionUmbrella = 0x0D,
@@ -15267,6 +15282,7 @@ enum ECarrying {
 };
 enum EPropEnum {
     ePropKitchenDrinkSource = 0x03,
+    ePropHolidayCandlesFallback = 0x10,
     ePropPicnicReady = 0x55,
     ePropPatioDrinks = 0x56
 };
@@ -15342,6 +15358,7 @@ class CVillagerManager {
 public:
     bool VillagerExists(int, bool);
     CVillager &GetVillager(int);
+    CVillager *GetRandomVillager(EAgeSelecter, EGender, int *);
 };
 
 class CFurnitureManager;
@@ -16265,6 +16282,99 @@ static bool VF2HandleMobileBirthdayBanner(CVillager &villager)
     return true;
 }
 
+static bool VF2HandleMobileHolidayCandles(CVillager &villager)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    if (*reinterpret_cast<int *>(data + 0x6A54) > 0x117) return true;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectHolidayCandles,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        plans->StartNewBehavior(villager);
+        return true;
+    }
+
+    VF2SetActionLabel(villager, "Playing with holiday candles");
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x3D), 1.0f, eSoundTypeEffects);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(3) + 2,
+        static_cast<EBodyPosition>(info.orientation == 2 ? 0x0A : 0x0D));
+    plans->PlanToWait(
+        ldwGameState::GetRandom(5) + 2,
+        static_cast<EBodyPosition>(0x10));
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x3D), 1.0f, eSoundTypeEffects);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(3) + 2,
+        static_cast<EBodyPosition>(info.orientation == 2 ? 0x0A : 0x0D));
+
+    if (ldwGameState::GetRandom(100) <= 29) {
+        CVillager *adult = VillagerManager.GetRandomVillager(
+            static_cast<EAgeSelecter>(2), static_cast<EGender>(1), 0);
+        if (adult != 0) {
+            CVillagerPlans *adultPlans =
+                reinterpret_cast<CVillagerPlans *>(adult);
+            adultPlans->ForgetPlans(*adult, false);
+            adultPlans->PlanToWait(30, static_cast<EBodyPosition>(0x10));
+            adultPlans->StartNewBehavior(*adult);
+
+            plans->PlanToPlaySound(
+                static_cast<ESound>(0x3C), 1.0f, eSoundTypeEffects);
+            ldwPoint point = adult->FeetPos();
+            point.x += 20;
+            point.y += 75;
+            plans->PlanToGo(
+                point, static_cast<ESpeed>(350), ePriorityNormal);
+            plans->PlanToWait(
+                ldwGameState::GetRandom(5) + 3,
+                static_cast<EBodyPosition>(0x0D));
+            plans->PlanToPlaySound(
+                static_cast<ESound>(0x12C), 1.0f, eSoundTypeEffects);
+            plans->PlanToWait(
+                ldwGameState::GetRandom(3) + 4,
+                static_cast<EBodyPosition>(2));
+            plans->PlanToWait(
+                ldwGameState::GetRandom(5) + 3,
+                static_cast<EBodyPosition>(0x0D));
+        } else {
+            plans->PlanToPlaySound(
+                static_cast<ESound>(0x3C), 1.0f, eSoundTypeEffects);
+            plans->PlanToGo(
+                static_cast<CContentMap::EObject>(0x1A),
+                static_cast<ESpeed>(350),
+                ePriorityNormal,
+                false);
+            plans->PlanToActivateProp(ePropHolidayCandlesFallback);
+            plans->PlanToWork(2);
+            plans->PlanToPlaySound(
+                static_cast<ESound>(0x12C), 1.0f, eSoundTypeEffects);
+            plans->PlanToWait(
+                ldwGameState::GetRandom(3) + 4,
+                static_cast<EBodyPosition>(2));
+        }
+        plans->PlanToWork(2);
+        plans->PlanToPlaySound(
+            static_cast<ESound>(0x37), 1.0f, eSoundTypeEffects);
+        plans->PlanToGo(
+            static_cast<CContentMap::EObject>(0x1A),
+            static_cast<ESpeed>(350),
+            ePriorityNormal,
+            false);
+    }
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
 static void VF2RunMobileDreidel(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -16590,6 +16700,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
     if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
     if (candidate == 0x2DB) return VF2HandleMobileBirthdayBanner(villager);
+    if (candidate == 0x2AA) return VF2HandleMobileHolidayCandles(villager);
     if (candidate == 0x2AD || candidate == 0x2AE) {
         return VF2HandleMobileXmasTreeGroup(villager);
     }
@@ -16872,6 +16983,25 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "desktop_implementation": "exact direct plan-sequence port",
             "mobile_behavior_id": "0x1a9",
             "mobile_hotspot_id": "0x65",
+            "stock_tables_extended": False,
+        }, {
+            "name": "mobile Holiday Candles",
+            "item_ids": [hex(MOBILE_HOLIDAY_CANDLES_ITEM_ID)],
+            "label": "Playing with holiday candles",
+            "object": hex(MOBILE_HOLIDAY_CANDLES_OBJECT),
+            "manual_drop_only": True,
+            "child_only": True,
+            "raw_age_max": "0x117",
+            "autonomous": False,
+            "autonomous_status": (
+                "pending: mobile behavior 0x19b is beyond the desktop "
+                "behavior table and no regression-safe additive candidate is proven"
+            ),
+            "mobile_behavior": "CBehavior::KidExaminesCandles",
+            "mobile_behavior_id": "0x19b",
+            "mobile_candidate_weight": 2000,
+            "mobile_candidate_raw_age_field": "0x118",
+            "desktop_implementation": "exact guarded manual plan-sequence port",
             "stock_tables_extended": False,
         }],
         "stock_behavior_table_extended": False,

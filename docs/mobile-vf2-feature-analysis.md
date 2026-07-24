@@ -177,9 +177,12 @@ The mobile native behavior layer has direct holiday/furniture functions:
 - `CBehavior::KidStealsSantasCookies`
 
 These names confirm mobile has custom behavior routes for Holiday decorations,
-not just static sprites. The current PC port does not yet fully recreate every
-holiday-specific behavior; most Holiday decor rows use donor behavior/placement
-records and the native clickable dispatch extension.
+not just static sprites. B156 now ports `KidExaminesCandles` for Holiday
+Candles `0x2AA` as an exact child-only manual plan with a minimal PC-safe map.
+The remaining generic knickknack, cookie, garland, and wreath assignments still
+require exact item-to-hotspot proof; most unresolved Holiday decor rows continue
+to use donor behavior/placement records and the native clickable dispatch
+extension.
 
 Low-level PC table work:
 

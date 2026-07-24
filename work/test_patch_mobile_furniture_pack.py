@@ -368,6 +368,14 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             for row in manifest["MobileGroupHolidayPCFmaps"]["records"]
         }
         specs = {
+            "CandleOnHolder.png.fmap": (
+                "80d3f61d48e59fd55684edfb205670289fa6b15ba9768624ae318849a9f0bc11",
+                (8, 9),
+                patcher.MOBILE_HOLIDAY_CANDLES_PC_CELLS,
+                patcher.MOBILE_HOLIDAY_CANDLES_PC_CELL_VALUE,
+                "0x2aa",
+                "0x89",
+            ),
             "ChristmasTree1.png.fmap": (
                 "5907f7f60209d77d6c63b15b009243756c9f2c4d729134c41c105e0863b66926",
                 (15, 22),
@@ -664,6 +672,19 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertTrue(stockings["manual_drop_only"])
                 self.assertFalse(stockings["autonomous"])
+                candles = contract["implemented_families"][12]
+                self.assertEqual(candles["item_ids"], ["0x2aa"])
+                self.assertEqual(candles["label"], "Playing with holiday candles")
+                self.assertEqual(candles["object"], "0x89")
+                self.assertEqual(candles["raw_age_max"], "0x117")
+                self.assertEqual(
+                    candles["mobile_behavior"],
+                    "CBehavior::KidExaminesCandles",
+                )
+                self.assertEqual(candles["mobile_behavior_id"], "0x19b")
+                self.assertEqual(candles["mobile_candidate_weight"], 2000)
+                self.assertTrue(candles["manual_drop_only"])
+                self.assertFalse(candles["autonomous"])
                 helper = (patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp").read_text(
                     encoding="ascii"
                 )
@@ -702,6 +723,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "if (candidate == 0x2DB) return VF2HandleMobileBirthdayBanner(villager);",
+                    wrapper,
+                )
+                self.assertIn(
+                    "if (candidate == 0x2AA) return VF2HandleMobileHolidayCandles(villager);",
                     wrapper,
                 )
                 self.assertIn(
@@ -782,6 +807,27 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertNotIn("0x1A2", helper)
                 self.assertNotIn("0x1A3", helper)
                 self.assertNotIn("0x1A0", helper)
+                candles_helper = helper.split(
+                    "static bool VF2HandleMobileHolidayCandles", 1
+                )[1].split("static void VF2RunMobileDreidel", 1)[0]
+                self.assertIn(
+                    'VF2SetActionLabel(villager, "Playing with holiday candles");',
+                    candles_helper,
+                )
+                self.assertIn("data + 0x6A54) > 0x117", candles_helper)
+                self.assertIn("CContentMap::eObjectHolidayCandles", candles_helper)
+                self.assertIn("ldwGameState::GetRandom(100) <= 29", candles_helper)
+                self.assertIn("static_cast<EAgeSelecter>(2)", candles_helper)
+                self.assertIn("static_cast<EGender>(1)", candles_helper)
+                self.assertIn("point.x += 20;", candles_helper)
+                self.assertIn("point.y += 75;", candles_helper)
+                self.assertIn(
+                    "plans->PlanToActivateProp(ePropHolidayCandlesFallback);",
+                    candles_helper,
+                )
+                self.assertIn("static_cast<ESound>(0x12C)", candles_helper)
+                self.assertIn("static_cast<ESound>(0x37)", candles_helper)
+                self.assertIn("plans->PlanToStopSound();", candles_helper)
                 self.assertIn(
                     'VF2SetActionLabel(villager, "Checking for stocking stuffers");',
                     helper,

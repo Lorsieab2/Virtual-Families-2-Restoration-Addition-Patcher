@@ -21,7 +21,7 @@ mobile-exclusive VF2 furniture and do not count toward this patch.
 All 63 items receive a copied desktop donor click-table byte, but that alone
 does not establish the correct mobile action. The base payload deliberately
 zeroes unsupported furniture-map cells, leaving unresolved families
-rendered-only. The optional patch now replaces 17 proven PC-safe maps, including
+rendered-only. The optional patch now replaces 18 proven PC-safe maps, including
 the four lounge chairs, Patio Umbrella, Patio Table, Picnic Table, birthday
 family, and implemented Holiday families, and enables their exact guarded
 manual-drop behaviors.
@@ -41,7 +41,7 @@ mobile-only marker values do not have corresponding handlers in the desktop
 
 | PC IDs | Mobile furniture | QAMF evidence | Recovered mobile action family | Desktop status |
 |---|---|---:|---|---|
-| `0x2AA` | Holiday Candles | yes | `KidExaminesCandles` | handler absent; rendered-only |
+| `0x2AA` | Holiday Candles | yes | `KidExaminesCandles` | exact child-only manual route implemented with PC-safe map; autonomous candidate pending |
 | `0x2AB` | Candy Canes | yes | generic Christmas decor/knickknack family only | exact route unresolved |
 | `0x2AC` | Christmas Cookie | yes | Santa-cookie family exists | exact single-cookie route unresolved |
 | `0x2AD-0x2AE` | Christmas Trees | yes | `XmasTree`; admire, water, celebrate | exact whole-household manual celebration implemented with two PC-safe maps |
@@ -233,6 +233,29 @@ Small at `(4,10)` and `(5,10)`, SHA-256
 `aa6eee69ecaedcaa03575d6bb916e4442cfc83efda41f6e3a8291371475e8003`.
 The generated helper and executable link successfully. Live placement,
 orientation, age-boundary, and voice QA remain.
+
+## Holiday Candles
+
+Holiday Candles `0x2AA` use mobile EObject `0x89`. Mobile
+`CVillager::InitAI` identifies `KidExaminesCandles` as behavior `0x19B`, with
+weight `2000`, object `0x89`, and the child boundary field `0x118`. Because
+`0x19B` lies beyond the desktop behavior table ending at `0x19A`, B156 ports
+the exact manual action externally and does not index the mobile autonomous
+candidate.
+
+The guarded route accepts raw ages through `0x117`, uses the exact
+`Playing with holiday candles` label, two orientation-aware candle inspections,
+sounds `0x3D`, and the exact 30-percent follow-up. That branch selects the
+mobile `(age selector 2, gender 1)` random villager, pauses that villager,
+approaches at offset `(20,75)`, and preserves sounds `0x3C`, `0x12C`, and
+`0x37`. If no matching villager exists, the original EObject `0x1A` / prop
+`0x10` fallback is retained.
+
+The `8x9` PC-safe map preserves the mobile header and trailer and retains only
+EObject value `0x20004800` at `(5,7)`, `(6,7)`, and `(5,8)`. Its SHA-256 is
+`80d3f61d48e59fd55684edfb205670289fa6b15ba9768624ae318849a9f0bc11`.
+Live placement, orientation, age-boundary, random-adult, no-adult fallback,
+and disable-restoration QA remain.
 
 Player testing on 2026-07-23 confirms the exact manual chaise pose/anchor works
 in good weather and the dedicated bad-weather refusal fires correctly. Manual

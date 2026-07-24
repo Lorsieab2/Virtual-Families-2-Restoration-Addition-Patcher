@@ -3261,3 +3261,30 @@
 - The general purchase observer is the correct route because it awards only
   after native AddToStorage succeeds and is independent of Holiday Furniture
   goal visibility.
+
+## 2026-07-24 - Mobile Holiday Candles exact behavior record
+
+- Mobile x86 `CBehavior::CBehavior` installs `KidExaminesCandles` at behavior
+  slot `0x19B`; the function pointer is `0x1B7130`.
+- Mobile `CVillager::InitAI` switch entry `0x19B` enables the candidate, assigns
+  weight `0x7D0` (2000), object `0x89`, and age field `0x118`. This is direct
+  candidate evidence for the child gate rather than an inference from the
+  method name.
+- `KidExaminesCandles` finds EObject `0x89`, labels the action
+  `Playing with holiday candles`, and performs two orientation-aware
+  inspections. Its 30-percent branch asks `GetRandomVillager(2, 1, 0)` for
+  another villager, pauses that villager, approaches at offset `(20,75)`, and
+  completes the recovered sound/wait/work sequence. With no matching villager,
+  it uses EObject `0x1A` and prop `0x10`.
+- Raw `CandleOnHolder.png.fmap` cells `(5,7)` and `(6,7)` combine the same
+  object bits with unsupported mobile metadata; `(5,8)` carries the bare
+  object payload. The desktop-safe translation retains only `0x20004800` at
+  those three cells.
+- Desktop behavior slot `0x19B` does not exist. B156 therefore implements the
+  exact guarded manual plan externally and leaves spontaneous candidate
+  selection unresolved rather than indexing beyond the fixed table.
+- The complete 230-test run passes with one intentional skip. All 16 B156
+  layouts link uniquely, pass 8 Holiday-positive and 8 Holiday-negative
+  checks, and pass exact restoration for all five dormant runtime flags. The
+  fully enabled layout is 1,772,544 bytes with SHA-256
+  `74BA49761CC2DDC1070AFBB1E6FC812D15C225113D5D37E589766F7B80A59859`.
