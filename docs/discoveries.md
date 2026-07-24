@@ -3508,3 +3508,42 @@
   checks, and passes exact toggle/restoration for all five runtime flags. The
   fully enabled executable is 1,776,640 bytes with SHA-256
   `57D2161408891891E3D19BBC77D7D889A312A0FE43DF98D1E78C1E606F28C57F`.
+
+## 2026-07-24 - Final seven mobile Island Event outcomes
+
+- `CEventGroupOfKidsAtTheDoor::CanFire` at mobile `0x11AD10` selects an
+  adult. Choice zero at `0x11ADC0` stores item `0x23C` and adds 20 target
+  happiness trend. `CalcAward(int)` at `0x11AE10` calculates 50-149 for
+  choice zero, but the mobile impact does not apply that value to Money.
+- `CEventMissionFromGod::CanFire` at `0x11B750` returns false
+  unconditionally. Its unreachable choice-zero route calculates -20, applies
+  it to Money, and calls `CVillagerManager::CureAllVillagers`.
+- `CEventOddOldWomanAtDoor::CanFire` at `0x11A120` requires an adult and a
+  post-interest Money balance greater than 20. Choice zero calculates 5-14,
+  subtracts that amount, sets symptom `6`, starts behavior `175`, and adds 10
+  happiness trend. Choice one sets the same symptom/behavior and subtracts 10
+  happiness trend without changing Money.
+- The PC Money layout was verified before porting the gate: `CMoney` stores
+  its balance as the leading double, and the private desktop
+  `UpdateInterest()` method is called before comparing it to 20.
+- `CEventRIPUncleAlpert::CanFire` at `0x11A680` selects an adult.
+  `CalcAward()` at `0x11A790` calculates 75-174. `ImpactGame()` at
+  `0x11A6F0` applies it, stores item `0x1F5`, and starts behavior `23`.
+- `CEventResurrectionOfAgatha::CanFire` at `0x11AC60` returns false
+  unconditionally. Its unreachable calculation stores -100 and its
+  unreachable impact applies that amount to Money.
+- `CEventSurpriseVisitFromUnclePhineas::CanFire` at `0x11B000` uses numeric
+  selector `7`. Its impact stores item `0x207`, adds like `0x6D`, removes
+  dislike `0x6D`, forgets current plans with `false`, and assigns behavior
+  `23` without calling `StartNewBehavior`.
+- `CEventVolunteer::CanFire` at `0x119FB0` selects an adult. Choice zero
+  applies the negation of its zero award, runs behavior `100` for raw age
+  exactly `7`, and advances the target's career with `(false, true)`.
+- These routes complete function-level firing, award, and impact coverage for
+  all 25 added mobile Island Events. Live in-game dialog, targeting, effect,
+  persistence, and patch-off validation remains.
+- All 231 tests pass with one intentional skip. The complete 16-layout matrix
+  has 16 unique hashes, passes 8 Holiday-positive and 8 Holiday-negative
+  checks, and passes exact toggle/restoration for all five runtime flags. The
+  fully enabled executable is 1,777,664 bytes with SHA-256
+  `D85E067CBB3B7A4F647B693F946810CA5209B1454CCBEA5BD78AB2B9EBD6FA3B`.

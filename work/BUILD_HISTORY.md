@@ -1640,3 +1640,21 @@
 - The fully enabled executable is 1,776,640 bytes with SHA-256
   `57D2161408891891E3D19BBC77D7D889A312A0FE43DF98D1E78C1E606F28C57F`.
   Live event target/effect and patch-off QA remain.
+
+## B156 - Complete mobile Island Event outcome checkpoint
+
+- Adds the final seven exact outcome routes: Group of Kids at the Door,
+  Mission from God, Odd Old Woman at Door, RIP Uncle Alpert, Resurrection of
+  Agatha, Surprise Visit from Uncle Phineas, and Volunteer.
+- Preserves unconditional mobile `CanFire=false` for Mission from God and
+  Resurrection of Agatha while retaining their unreachable award/effect
+  methods.
+- Reuses verified desktop-native Money, symptom, behavior, plan, career,
+  cure-all, furniture-storage, like, and dislike calls and PC object offsets.
+- Completes function-level firing, award, and impact coverage for all 25 added
+  mobile Island Events. Live gameplay and patch-off QA remains.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,777,664 bytes with SHA-256
+  `D85E067CBB3B7A4F647B693F946810CA5209B1454CCBEA5BD78AB2B9EBD6FA3B`.

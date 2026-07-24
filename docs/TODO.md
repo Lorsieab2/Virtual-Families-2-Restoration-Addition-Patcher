@@ -141,24 +141,15 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - Add an optional setting for mobile-exclusive furniture behavior support on
   added mobile-exclusive furniture in the PC build, then implement the correct
   villager behavior routes for those furniture items.
-- Implement the remaining correct outcomes for added mobile-exclusive Island
-  Events. `MeteoriteFallsInYard1` now preserves its exact dummied-out
-  `CanFire=false`; `StrangePackageOnPorch` and `Teens` now have their exact
-  native award/effect and target-selection routes. `Invitation` now has its
-  exact adult-plus-child gate, happiness effects, and group behaviors.
-  `Fruitcakes`, `GreatUncleElmer`, `MarchingBandTripExpenses`, and
-  `LoanReturned` preserve their exact unconditional `CanFire=false` instead of
-  being made reachable by the generic shell. `BlastFromThePast`,
-  `EmailFromACME`, and `EmailFromAntonioGuildenstern` now have exact target,
-  award, money, happiness, and group-behavior routes. `EmailFromSchool` now
-  preserves exact parent/child selection, behavior `88`, 75-174 calculation,
-  and parent-state byte. `InterestingArticleAboutFossils` now preserves exact
-  behavior `100`, happiness, fossil-family, and yard-coordinate rolls.
-  `MeteoriteFallsInYard2`, `ClownHoldingMetalRod`, `MenInBlackAtDoor`, and
-  `HearStrangeSound` now preserve their exact firing gates and choice effects;
-  `MetallicKnockingOnDoor` preserves its exact dummied-out `CanFire=false`
-  state and unreachable 50-coin route. Other added events still need
-  function-level outcome audits.
+- [x] Implement function-level firing, award, and impact routes for all 25
+  added mobile-exclusive Island Events. Eight exact mobile classes remain
+  deliberately dummied out by `CanFire=false`; their unreachable methods are
+  retained only where recovered. No generic firing rule remains for an added
+  event.
+- In-game test all 25 added mobile Island Events: verify dialog substitutions,
+  reachable-event target gates, both choice outcomes, inventory/collectible/
+  behavior/happiness/money/career effects, dummied-event nonappearance,
+  persistence where applicable, and byte-identical patch-off behavior.
 - In-game test B132 second-bathroom leaks: after buying the second-bathroom
   renovation, trigger Water Pressure Surge and confirm the north toilet,
   shower, and sink leaks appear and can be repaired through their native

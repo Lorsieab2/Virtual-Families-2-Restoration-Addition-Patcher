@@ -1167,3 +1167,26 @@ B156 fourth exact mobile Island Event outcome group
   57D2161408891891E3D19BBC77D7D889A312A0FE43DF98D1E78C1E606F28C57F.
   Live target selection, both-choice effects, storage/like/dislike writes,
   behavior starts, happiness changes, and patch-off QA remain.
+B156 final seven mobile Island Event outcomes
+- Ported Group of Kids at the Door's adult gate, choice-zero item 0x23C,
+  +20 target happiness, and 50-149 calculation. The exact mobile impact does
+  not apply that calculated value to Money.
+- Preserved Mission from God as dummied out by CanFire=false, including its
+  unreachable -20-coin and Cure All Villagers route.
+- Ported Odd Old Woman at Door with an adult and post-interest Money-balance
+  gate, exact 5-14 choice-zero cost, symptom 6, behavior 175, and opposite
+  +10/-10 happiness effects.
+- Ported RIP Uncle Alpert with a 75-174 award, item 0x1F5, and behavior 23.
+- Preserved Resurrection of Agatha as dummied out by CanFire=false, including
+  its unreachable -100-coin route.
+- Ported Surprise Visit from Uncle Phineas with selector 7, item 0x207,
+  like/dislike 0x6D, plan cancellation, and behavior 23.
+- Ported Volunteer with adult targeting, raw-age-7 behavior 100, and guaranteed
+  career advancement. Its mobile award is zero.
+- All 25 added mobile Island Events now have exact function-level firing,
+  award, and impact routes. Live event and patch-off QA remains.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,777,664 bytes with SHA-256
+  D85E067CBB3B7A4F647B693F946810CA5209B1454CCBEA5BD78AB2B9EBD6FA3B.

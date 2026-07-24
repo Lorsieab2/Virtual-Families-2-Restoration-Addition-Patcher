@@ -7200,6 +7200,13 @@ MOBILE_EVENT_OUTCOME_KINDS = {
     "MenInBlackAtDoor": 16,
     "HearStrangeSound": 17,
     "MetallicKnockingOnDoor": 18,
+    "GroupOfKidsAtTheDoor": 19,
+    "MissionFromGod": 20,
+    "OddOldWomanAtDoor": 21,
+    "RIPUncleAlpert": 22,
+    "ResurrectionOfAgatha": 23,
+    "SurpriseVisitFromUnclePhineas": 24,
+    "Volunteer": 25,
 }
 
 EVENT_CHOICE_OVERRIDES = {
@@ -11165,6 +11172,7 @@ enum EGender {{ eGenderAny = -1, eGenderMale = 0 }};
 enum EBehavior {{ eBehaviorDummy = 0 }};
 enum ECarrying {{ eCarryingDummy = 0 }};
 enum ELike {{ eLikeDummy = 0 }};
+enum ESymptom {{ eSymptomDummy = 0 }};
 #ifndef VF2_EINVENTORYITEM_DEFINED
 #define VF2_EINVENTORYITEM_DEFINED
 enum EInventoryItem {{ eInventoryItemDummy = 0 }};
@@ -11185,11 +11193,18 @@ public:
 class CVillagerPlans {{
 public:
     void StartNewBehavior(CVillager &villager);
+    void ForgetPlans(CVillager &villager, bool keep_current);
 }};
 
 class CVillagerState {{
 public:
     void AdjustHappinessTrend(int amount);
+    void SetSymptom(ESymptom symptom);
+}};
+
+class CVillagerSkills {{
+public:
+    void AdvanceCareer(CVillager &villager, bool announce, bool guaranteed);
 }};
 
 class CLikeList {{
@@ -11211,6 +11226,7 @@ public:
     CVillager *GetPatriarch();
     void AdjustAllChildrenHappiness(int amount);
     void MakeAllVillagersDoIt(EBehavior behavior, int minimum_age, int maximum_age, EGender gender, int *ids, int id_count);
+    void CureAllVillagers();
 }};
 
 extern CVillagerManager VillagerManager;
@@ -11223,6 +11239,12 @@ public:
 class CMoney {{
 public:
     void Adjust(float amount, bool notify);
+    bool VF2HasMoreThan20() {{
+        UpdateInterest();
+        return *reinterpret_cast<double *>(this) > 20.0;
+    }}
+private:
+    void UpdateInterest();
 }};
 
 class CCollectableItem {{
@@ -11288,6 +11310,13 @@ static CDislikeList *VF2MobileEventVillagerDislikes(CVillager *villager)
         reinterpret_cast<unsigned char *>(villager) + 0x1BC40);
 }}
 
+static CVillagerSkills *VF2MobileEventVillagerSkills(CVillager *villager)
+{{
+    if (!villager) return 0;
+    return reinterpret_cast<CVillagerSkills *>(
+        reinterpret_cast<unsigned char *>(villager) + 0x6B8C);
+}}
+
 // Vtable- and layout-compatible with CIslandEvent.  The first 0x10 bytes are
 // the stock base object: vptr, target villager, second target villager, award.
 // Keeping that prefix prevents dialog/scheduler code from interpreting title
@@ -11311,11 +11340,12 @@ struct CMobileIslandEvent {{
           has_choices_(has_choices), is_email_(is_email), outcome_kind_(outcome_kind) {{}}
     virtual ~CMobileIslandEvent() {{}}
     virtual bool CanFire() {{
-        // These six mobile classes return false unconditionally. Some retain
+        // These eight mobile classes return false unconditionally. Some retain
         // unreachable award/effect methods, but the normal and email schedulers
         // both reject them at CanFire.
         if (outcome_kind_ == 1 || (outcome_kind_ >= 5 && outcome_kind_ <= 8)
-            || outcome_kind_ == 18) {{
+            || outcome_kind_ == 18 || outcome_kind_ == 20
+            || outcome_kind_ == 23) {{
             target1_ = 0;
             target2_ = 0;
             return false;
@@ -11356,11 +11386,18 @@ struct CMobileIslandEvent {{
             target2_ = child;
             return true;
         }}
-        if (outcome_kind_ == 14 || outcome_kind_ == 17) {{
+        if (outcome_kind_ == 14 || outcome_kind_ == 17
+            || outcome_kind_ == 24) {{
             target1_ = VillagerManager.GetRandomVillager(
                 eAgeSelecterExactMobile7, eGenderAny, 0);
             target2_ = target1_;
             return target1_ != 0;
+        }}
+        if (outcome_kind_ == 21) {{
+            target1_ = VillagerManager.GetRandomVillager(
+                eAgeSelecterAdult, eGenderAny, 0);
+            target2_ = target1_;
+            return target1_ != 0 && Money.VF2HasMoreThan20();
         }}
         target1_ = outcome_kind_ == 3
             ? VF2PickMobileTeenEventVillager()
@@ -11420,6 +11457,35 @@ struct CMobileIslandEvent {{
                 ldwGameState::GetRandom(126) + 1829
             }};
             CollectableItem.Add(carrying, point, false);
+        }} else if (outcome_kind_ == 20) {{
+            Money.Adjust((float)award_, true);
+            VillagerManager.CureAllVillagers();
+        }} else if (outcome_kind_ == 22) {{
+            if (!target1_) return;
+            Money.Adjust((float)award_, true);
+            FurnitureManager.AddToStorage((EInventoryItem)0x1F5);
+            unsigned char behavior_data = 0;
+            target1_->NewBehavior(
+                (EBehavior)23,
+                *reinterpret_cast<SBehaviorData *>(&behavior_data));
+            reinterpret_cast<CVillagerPlans *>(target1_)
+                ->StartNewBehavior(*target1_);
+        }} else if (outcome_kind_ == 23) {{
+            Money.Adjust((float)award_, true);
+        }} else if (outcome_kind_ == 24) {{
+            if (!target1_) return;
+            FurnitureManager.AddToStorage((EInventoryItem)0x207);
+            CLikeList *likes = VF2MobileEventVillagerLikes(target1_);
+            CDislikeList *dislikes =
+                VF2MobileEventVillagerDislikes(target1_);
+            if (likes) likes->Add((ELike)0x6D);
+            if (dislikes) dislikes->Remove((ELike)0x6D);
+            reinterpret_cast<CVillagerPlans *>(target1_)
+                ->ForgetPlans(*target1_, false);
+            unsigned char behavior_data = 0;
+            target1_->NewBehavior(
+                (EBehavior)23,
+                *reinterpret_cast<SBehaviorData *>(&behavior_data));
         }}
     }}
     virtual void ImpactGame(int choice) {{
@@ -11494,6 +11560,59 @@ struct CMobileIslandEvent {{
             }}
             return;
         }}
+        if (outcome_kind_ == 19) {{
+            if (choice == 0 && target1_) {{
+                FurnitureManager.AddToStorage((EInventoryItem)0x23C);
+                CVillagerState *state =
+                    VF2MobileEventVillagerState(target1_);
+                if (state) state->AdjustHappinessTrend(20);
+            }}
+            return;
+        }}
+        if (outcome_kind_ == 20) {{
+            if (choice == 0) {{
+                Money.Adjust((float)award_, true);
+                VillagerManager.CureAllVillagers();
+            }}
+            return;
+        }}
+        if (outcome_kind_ == 21) {{
+            if (!target1_) return;
+            CVillagerState *state =
+                VF2MobileEventVillagerState(target1_);
+            if (choice == 0) {{
+                Money.Adjust((float)-award_, true);
+            }}
+            if (state) state->SetSymptom((ESymptom)6);
+            unsigned char behavior_data = 0;
+            target1_->NewBehavior(
+                (EBehavior)175,
+                *reinterpret_cast<SBehaviorData *>(&behavior_data));
+            reinterpret_cast<CVillagerPlans *>(target1_)
+                ->StartNewBehavior(*target1_);
+            if (state) {{
+                state->AdjustHappinessTrend(choice == 0 ? 10 : -10);
+            }}
+            return;
+        }}
+        if (outcome_kind_ == 23) {{
+            if (choice == 0) {{
+                Money.Adjust((float)award_, true);
+            }}
+            return;
+        }}
+        if (outcome_kind_ == 25) {{
+            if (choice == 0 && target1_) {{
+                Money.Adjust((float)-award_, true);
+                VillagerManager.MakeAllVillagersDoIt(
+                    (EBehavior)100, 7, 7, eGenderAny, 0, 0);
+                CVillagerSkills *skills =
+                    VF2MobileEventVillagerSkills(target1_);
+                if (skills) skills->AdvanceCareer(
+                    *target1_, false, true);
+            }}
+            return;
+        }}
     }}
     virtual void CalcAward() {{
         if (outcome_kind_ == 6) {{
@@ -11512,6 +11631,12 @@ struct CMobileIslandEvent {{
             award_ = ldwGameState::GetRandom(100) + 75;
         }} else if (outcome_kind_ == 13) {{
             award_ = 0;
+        }} else if (outcome_kind_ == 22) {{
+            award_ = ldwGameState::GetRandom(100) + 75;
+        }} else if (outcome_kind_ == 23) {{
+            award_ = -100;
+        }} else if (outcome_kind_ == 24) {{
+            award_ = 0;
         }} else {{
             award_ = 0;
         }}
@@ -11527,6 +11652,14 @@ struct CMobileIslandEvent {{
             award_ = choice == 0 ? -25 : 0;
         }} else if (outcome_kind_ == 14 || outcome_kind_ == 18) {{
             award_ = choice == 0 ? 50 : 0;
+        }} else if (outcome_kind_ == 19) {{
+            award_ = choice == 0 ? ldwGameState::GetRandom(100) + 50 : 0;
+        }} else if (outcome_kind_ == 20) {{
+            award_ = choice == 0 ? -20 : 0;
+        }} else if (outcome_kind_ == 21) {{
+            award_ = choice == 0 ? ldwGameState::GetRandom(10) + 5 : 0;
+        }} else if (outcome_kind_ == 25) {{
+            award_ = 0;
         }} else {{
             award_ = 0;
         }}
@@ -11561,11 +11694,14 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
                 "outcome_status": (
                     "exact mobile outcome"
                     if event["outcome_kind"] in (
-                        2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17
+                        2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17,
+                        19, 21, 22, 24, 25
                     )
                     else (
                         "exact mobile dummied-out CanFire=false"
-                        if event["outcome_kind"] in (1, 5, 6, 7, 8, 18)
+                        if event["outcome_kind"] in (
+                            1, 5, 6, 7, 8, 18, 20, 23
+                        )
                         else "text shell only; outcome pending"
                     )
                 ),

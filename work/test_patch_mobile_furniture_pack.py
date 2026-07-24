@@ -2156,6 +2156,10 @@ class MobileIslandEventTextTests(unittest.TestCase):
         events = {
             event["name"]: event for event in patcher.load_mobile_island_events()
         }
+        self.assertEqual(len(events), 25)
+        self.assertFalse(
+            [name for name, event in events.items() if not event["outcome_kind"]]
+        )
         self.assertEqual(events["MeteoriteFallsInYard1"]["outcome_kind"], 1)
         self.assertEqual(events["StrangePackageOnPorch"]["outcome_kind"], 2)
         self.assertEqual(events["Teens"]["outcome_kind"], 3)
@@ -2180,6 +2184,16 @@ class MobileIslandEventTextTests(unittest.TestCase):
         self.assertEqual(events["MenInBlackAtDoor"]["outcome_kind"], 16)
         self.assertEqual(events["HearStrangeSound"]["outcome_kind"], 17)
         self.assertEqual(events["MetallicKnockingOnDoor"]["outcome_kind"], 18)
+        self.assertEqual(events["GroupOfKidsAtTheDoor"]["outcome_kind"], 19)
+        self.assertEqual(events["MissionFromGod"]["outcome_kind"], 20)
+        self.assertEqual(events["OddOldWomanAtDoor"]["outcome_kind"], 21)
+        self.assertEqual(events["RIPUncleAlpert"]["outcome_kind"], 22)
+        self.assertEqual(events["ResurrectionOfAgatha"]["outcome_kind"], 23)
+        self.assertEqual(
+            events["SurpriseVisitFromUnclePhineas"]["outcome_kind"],
+            24,
+        )
+        self.assertEqual(events["Volunteer"]["outcome_kind"], 25)
 
         old_patched = patcher.PATCHED
         try:
@@ -2220,6 +2234,11 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     "CEventClownHoldingMetalRod",
                     "CEventMenInBlackAtDoor",
                     "CEventHearStrangeSound",
+                    "CEventGroupOfKidsAtTheDoor",
+                    "CEventOddOldWomanAtDoor",
+                    "CEventRIPUncleAlpert",
+                    "CEventSurpriseVisitFromUnclePhineas",
+                    "CEventVolunteer",
                 ):
                     self.assertEqual(
                         rows[event_class]["outcome_status"],
@@ -2231,6 +2250,8 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     "CEventMarchingBandTripExpenses",
                     "CEventLoanReturned",
                     "CEventMetallicKnockingOnDoor",
+                    "CEventMissionFromGod",
+                    "CEventResurrectionOfAgatha",
                 ):
                     self.assertEqual(
                         rows[event_class]["outcome_status"],
@@ -2399,6 +2420,49 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn("award_ = choice == 0 ? 50 : 0;", source)
+                self.assertIn("return *reinterpret_cast<double *>(this) > 20.0;", source)
+                self.assertIn("void SetSymptom(ESymptom symptom);", source)
+                self.assertIn(
+                    "reinterpret_cast<unsigned char *>(villager) + 0x6B8C",
+                    source,
+                )
+                self.assertIn(
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x1F5);",
+                    source,
+                )
+                self.assertIn(
+                    "award_ = ldwGameState::GetRandom(100) + 75;",
+                    source,
+                )
+                self.assertIn("award_ = -100;", source)
+                self.assertIn(
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x207);",
+                    source,
+                )
+                self.assertIn("likes->Add((ELike)0x6D);", source)
+                self.assertIn("dislikes->Remove((ELike)0x6D);", source)
+                self.assertIn("->ForgetPlans(*target1_, false);", source)
+                self.assertIn(
+                    "award_ = choice == 0 ? ldwGameState::GetRandom(100) + 50 : 0;",
+                    source,
+                )
+                self.assertIn(
+                    "award_ = choice == 0 ? ldwGameState::GetRandom(10) + 5 : 0;",
+                    source,
+                )
+                self.assertIn("state->SetSymptom((ESymptom)6);", source)
+                self.assertIn(
+                    "state->AdjustHappinessTrend(choice == 0 ? 10 : -10);",
+                    source,
+                )
+                self.assertIn(
+                    "(EBehavior)100, 7, 7, eGenderAny, 0, 0",
+                    source,
+                )
+                self.assertIn(
+                    "skills->AdvanceCareer(",
+                    source,
+                )
         finally:
             patcher.PATCHED = old_patched
 

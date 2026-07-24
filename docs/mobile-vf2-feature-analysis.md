@@ -432,12 +432,11 @@ Current appended mapping:
 
 ### Current Outcome Status
 
-The current B156 implementation appends event objects, text, choice labels, and
-email classification. It does **not** yet reproduce every mobile `ImpactGame`
-effect. `docs/TODO.md` still correctly tracks the remaining events as
-unfinished.
+The current B156 implementation appends event objects, text, choice labels,
+email classification, and the recovered firing/award/impact routes. Live
+gameplay validation remains tracked in `docs/TODO.md`.
 
-Eighteen function-level audits now replace earlier experimental approximations
+All 25 function-level audits now replace earlier experimental approximations
 or generic firing rules:
 
 | Mobile event | Exact recovered result |
@@ -460,13 +459,18 @@ or generic firing rules:
 | `MenInBlackAtDoor` | Requires a random adult. Both choices start behavior `0x171`; Choice A also stores furniture item `0x219`. |
 | `HearStrangeSound` | Requires numeric age selector `7` with any gender. Choice A stores furniture item `0x242` and adds 20 target happiness trend; Choice B has no effect. |
 | `MetallicKnockingOnDoor` | Dummied out by unconditional `CanFire=false`. Its unreachable Choice A calculation/effect is 50 coins. |
+| `GroupOfKidsAtTheDoor` | Requires a random adult. Choice A stores item `0x23C` and adds 20 target happiness trend. It calculates 50-149, but its exact impact does not apply that value to Money. |
+| `MissionFromGod` | Dummied out by unconditional `CanFire=false`. Its unreachable Choice A route deducts 20 coins and cures all villagers. |
+| `OddOldWomanAtDoor` | Requires a random adult and post-interest Money balance above 20. Choice A costs 5-14, sets symptom `6`, starts behavior `175`, and adds 10 happiness; Choice B sets the same symptom/behavior and subtracts 10 happiness. |
+| `RIPUncleAlpert` | Requires a random adult, awards 75-174 coins, stores item `0x1F5`, and starts behavior `23`. |
+| `ResurrectionOfAgatha` | Dummied out by unconditional `CanFire=false`. Its unreachable award/effect is `-100` coins. |
+| `SurpriseVisitFromUnclePhineas` | Requires numeric age selector `7`, stores item `0x207`, adds like `0x6D`, removes dislike `0x6D`, forgets current plans, and assigns behavior `23` without starting it. |
+| `Volunteer` | Requires a random adult. Choice A runs behavior `100` for raw-age-7 villagers and advances the target's career with `(false,true)`; its award is zero. |
 
-The mobile `.so` proves each mobile class has its own `ImpactGame`,
-`CalcAward`, and `CanFire` methods, but most exact outcome implementations
-still need function-level disassembly before they should be ported. The safe
-implementation rule is: map one event at a time from mobile disassembly, then
-patch only the corresponding generated or donor shell's `ImpactGame`, keeping
-target selection and string rendering stable.
+Every added class now follows its recovered mobile `CanFire`, `CalcAward`, and
+`ImpactGame` methods. This is source- and link-validated coverage; live
+in-game dialog, targeting, outcomes, persistence, and patch-off behavior still
+require player QA.
 
 ## Villager Behaviors Related to Mobile Content
 
