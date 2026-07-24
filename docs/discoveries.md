@@ -2854,3 +2854,29 @@
   All 16 existing B156 layouts still pass linked Holiday and four-flag
   validation. Live preparation, timer, both chairs, weather, age, food, and
   save/reload QA remains.
+
+## 2026-07-23 - Exact longevity goals and load reconciliation
+
+- Five always-visible achievements now occupy IDs `0x85-0x89`: Lucky 70's,
+  Great 80's, Mighty 90's, Centenarian, and Oldest Person in History. Their
+  exact raw-age thresholds are `1400`, `1600`, `1800`, `2000`, and `2441`;
+  the final goal therefore requires surpassing displayed age 122.
+- The proven annual old-age path still uses the B155.5 55-byte mortality
+  trampoline. Its existing `FoodGroupsActive(false)` call is retargeted to an
+  ABI-compatible wrapper which first preserves the native result, then observes
+  the processed raw-age cursor at `CVillagerState+0x08` before either the stock
+  or optional mortality roll. The longevity awards therefore do not depend on
+  the `.vf2mort` setting.
+- `CVillagerManager::LoadState+0x33` retains its sole native villager-load call
+  through a fastcall wrapper. After a successful load, reconciliation awards
+  from bio age `+0x6A54` only when active `+0x1BB84` is nonzero, left-home
+  `+0x1BB88` is zero, and health `+0x6B00` is positive. The manager's exact
+  30-record save span is unchanged.
+- IDs `0x85-0x89` are included in the visible counts, ordered achievement list,
+  Complete all Achievements, and Reset all Achievements persistence capacity.
+  The reserved custom range remains `0x8A-0xA7`.
+- The fully enabled B156 executable links at 1,759,744 bytes with SHA-256
+  `e0c66aeb3ffecde13b2cc697a608e24bc76d738e58593bb44369881a757804cc`.
+  Linked validation proves the mortality flag-off stock rejoin, enabled rejoin,
+  all four dormant flag toggles, and all 16 existing feature layouts. Live
+  birthday, notification, reset, save, and reload QA remains.

@@ -157,6 +157,11 @@ OLDER_PREGNANCY_INTERNAL_AGE_50 = 50 * 20
 OLDER_MORTALITY_FLAG_SECTION = ".vf2mort"
 OLDER_MORTALITY_FLAG_SYMBOL = "_gVF2OlderVillagerMortality"
 OLDER_MORTALITY_HELPER_SYMBOL = "_VF2RollOlderVillagerMortality"
+LONGEVITY_AGE_HELPER_SYMBOL = "_VF2AwardLongevityGoals"
+LONGEVITY_LOAD_HELPER_SYMBOL = "@VF2VillagerLoadStateAndReconcileLongevity@12"
+LONGEVITY_FOOD_GROUPS_HELPER_SYMBOL = (
+    "@VF2FoodGroupsActiveAndAwardLongevity@12"
+)
 OLDER_MORTALITY_TABLE_FIRST_AGE = 55
 OLDER_MORTALITY_RANDOM_LIMIT = 1_000_000
 OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS = 999_999
@@ -684,7 +689,7 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
 CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x84
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x89
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -695,6 +700,8 @@ CUSTOM_ACHIEVEMENT_BIRTHDAY_FIRST = 0x80
 CUSTOM_ACHIEVEMENT_BIRTHDAY_LAST = 0x82
 CUSTOM_ACHIEVEMENT_RESOURCE_FIRST = 0x83
 CUSTOM_ACHIEVEMENT_RESOURCE_LAST = 0x84
+CUSTOM_ACHIEVEMENT_LONGEVITY_FIRST = 0x85
+CUSTOM_ACHIEVEMENT_LONGEVITY_LAST = 0x89
 CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
 CUSTOM_ACHIEVEMENT_TARGET = 1
 CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
@@ -736,6 +743,11 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0x82, "birthday_furniture", "Full of helium", "You bought Birthday Balloons."),
     (0x83, "resource", "No More Worries", "Have the maximum amount of coins in the bank account."),
     (0x84, "resource", "Solving World Hunger", "Have the maximum amount of food in the fridge."),
+    (0x85, "longevity", "Lucky 70's", "Have a person reach age 70."),
+    (0x86, "longevity", "Great 80's", "Have a person reach age 80."),
+    (0x87, "longevity", "Mighty 90's", "Have a person reach age 90."),
+    (0x88, "longevity", "Centenarian", "Have a person reach age 100 or more."),
+    (0x89, "longevity", "Oldest Person in History", "Have a person surpass age 122."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -826,6 +838,21 @@ def custom_achievement_praise_label_dispatch(label):
 
 def custom_achievement_scold_label_dispatch(label):
     return CUSTOM_ACHIEVEMENT_SCOLD_LABEL_GOALS.get(label)
+
+
+def longevity_achievement_ids_for_internal_age(internal_age):
+    """Return every sequential longevity goal satisfied by one raw age."""
+    age = int(internal_age)
+    rows = (
+        (70 * 20, 0x85),
+        (80 * 20, 0x86),
+        (90 * 20, 0x87),
+        (100 * 20, 0x88),
+        (122 * 20 + 1, 0x89),
+    )
+    return [achievement_id for threshold, achievement_id in rows if age >= threshold]
+
+
 COLLECTABLE_SMALL_FRAME_WIDTH = 40
 COLLECTABLE_SMALL_FRAME_HEIGHT = 40
 COLLECTABLE_SMALL_COLUMNS = 6
@@ -7673,6 +7700,9 @@ public:
         sFurnitureInfo2 &info, bool a, int b, bool c);
 };
 """
+    villager_type_preamble = (
+        "" if "class CVillager" in existing_helper else "class CVillager {};\n"
+    )
     helper_path.write_text(
         existing_helper
         + shared_type_preamble
@@ -7702,7 +7732,7 @@ public:
     int femaleOutfitBody;
 }};
 
-class CVillager {{}};
+{villager_type_preamble}
 class CVillagerManager {{
 public:
     CVillager* GetVillagerPtr(int id);
@@ -8631,6 +8661,17 @@ public:
     void Set(double amount);
 };
 
+class CVillager {
+public:
+    struct SSaveState;
+    bool const LoadState(SSaveState &state);
+};
+
+class CVillagerState {
+public:
+    int FoodGroupsActive(bool includeOrganic);
+};
+
 enum ECarrying {
     eCarryingDummy = 0
 };
@@ -8859,7 +8900,7 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 }
 
 static int VF2AchievementVisibleCountInternal() {
-    int count = 0x5F + 6 + 3 + 2;
+    int count = 0x5F + 6 + 3 + 2 + 5;
     if (kVF2IncludeOrnamentologistGoal) ++count;
     if (kVF2IncludeBehaviorGoals) count += 7;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
@@ -8902,7 +8943,7 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
     if (kVF2IncludeBehaviorGoals) {
         completed += VF2CountCompletedAchievements(achievement, 0x66, 0x6C);
     }
-    completed += VF2CountCompletedAchievements(achievement, 0x80, 0x84);
+    completed += VF2CountCompletedAchievements(achievement, 0x80, 0x89);
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
         completed += VF2CountCompletedAchievements(achievement, 0x6D, 0x7F);
     }
@@ -8918,6 +8959,55 @@ static void VF2CheckMaximumResourceAchievements() {
         !Achievement.IsComplete((EAchievement)0x84)) {
         Achievement.SetComplete((EAchievement)0x84);
     }
+}
+
+static void VF2CheckLongevityAchievements(int internalAge) {
+    static const int thresholds[5] = {
+        70 * 20,
+        80 * 20,
+        90 * 20,
+        100 * 20,
+        122 * 20 + 1
+    };
+    for (int index = 0; index < 5; ++index) {
+        EAchievement achievement = (EAchievement)(0x85 + index);
+        if (internalAge >= thresholds[index] &&
+            !Achievement.IsComplete(achievement)) {
+            Achievement.SetComplete(achievement);
+        }
+    }
+}
+
+extern "C" void __cdecl VF2AwardLongevityGoals(int internalAge) {
+    VF2CheckLongevityAchievements(internalAge);
+}
+
+extern "C" int __fastcall VF2FoodGroupsActiveAndAwardLongevity(
+    CVillagerState *state,
+    void *,
+    bool includeOrganic
+) {
+    int foodGroups = state->FoodGroupsActive(includeOrganic);
+    VF2CheckLongevityAchievements(*(int *)((unsigned char *)state + 0x08));
+    return foodGroups;
+}
+
+extern "C" bool __fastcall VF2VillagerLoadStateAndReconcileLongevity(
+    CVillager *villager,
+    void *,
+    CVillager::SSaveState &state
+) {
+    bool loaded = villager->LoadState(state);
+    if (loaded) {
+        unsigned char *data = (unsigned char *)villager;
+        bool active = data[0x1BB84] != 0;
+        bool leftHome = data[0x1BB88] != 0;
+        int health = *(int *)(data + 0x6B00);
+        if (active && !leftHome && health > 0) {
+            VF2CheckLongevityAchievements(*(int *)(data + 0x6A54));
+        }
+    }
+    return loaded;
 }
 
 extern "C" void __fastcall VF2MoneyAdjustAndAward(
@@ -9129,7 +9219,7 @@ static void VF2CompleteAllAchievements() {
             VF2CompleteAchievementForCheat(achievement);
         }
     }
-    for (int achievement = 0x80; achievement <= 0x84; ++achievement) {
+    for (int achievement = 0x80; achievement <= 0x89; ++achievement) {
         VF2CompleteAchievementForCheat(achievement);
     }
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
@@ -11044,6 +11134,9 @@ def patch_custom_achievements(manifest):
         range(CUSTOM_ACHIEVEMENT_RESOURCE_FIRST, CUSTOM_ACHIEVEMENT_RESOURCE_LAST + 1)
     )
     appended_order.extend(
+        range(CUSTOM_ACHIEVEMENT_LONGEVITY_FIRST, CUSTOM_ACHIEVEMENT_LONGEVITY_LAST + 1)
+    )
+    appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
     )
     order_sym = scene_obj.symbol("?achievementOrder@@3QBHB")
@@ -11174,6 +11267,7 @@ def patch_custom_achievements(manifest):
         + (7 if ENABLE_BEHAVIOR_PATCHES else 0)
         + 3
         + 2
+        + 5
     )
     manifest["CustomAchievements"] = {
         "status": "patched",
@@ -11476,7 +11570,7 @@ def patch_older_villager_mortality(manifest):
     trampoline = bytearray([
         0x6A, 0x00,                         # push 0
         0x8B, 0xCB,                         # mov ecx,ebx
-        0xE8, 0, 0, 0, 0,                  # call FoodGroupsActive
+        0xE8, 0, 0, 0, 0,                  # call FoodGroupsActive observer
         0x80, 0x3D, 0, 0, 0, 0, 0x00,     # cmp byte ptr [flag],0
         0x74, 0x20,                         # je stock continuation
         0x50,                               # push eax ; food groups
@@ -11498,18 +11592,24 @@ def patch_older_villager_mortality(manifest):
     struct.pack_into("<i", trampoline, 51, stock_continue - (cave + 55))
     obj.insert_section_bytes(sec.index, cave, bytes(trampoline))
 
-    food_symbol = obj.symbol(
-        "?FoodGroupsActive@CVillagerState@@QAEH_N@Z"
-    ).index
     set_health_symbol = obj.symbol(
         "?SetHealth@CVillagerState@@QAEXHW4ECauseOfDeath@@@Z"
     ).index
+    food_observer_symbol = obj.append_undefined_symbol(
+        LONGEVITY_FOOD_GROUPS_HELPER_SYMBOL
+    )
+    obj.retarget_relocation(
+        sec.index,
+        hook + 5,
+        food_observer_symbol,
+        IMAGE_REL_I386_REL32,
+    )
     move_relocation(
         obj,
         sec.index,
         hook + 5,
         cave + 5,
-        food_symbol,
+        food_observer_symbol,
         IMAGE_REL_I386_REL32,
     )
     flag_symbol = obj.append_undefined_symbol(OLDER_MORTALITY_FLAG_SYMBOL)
@@ -11570,6 +11670,77 @@ def patch_older_villager_mortality(manifest):
             "all sickness, healing, productivity, and non-old-age physiology paths",
             "stock mortality when the option is disabled",
         ],
+        "longevity_goal_observer": {
+            "helper": LONGEVITY_FOOD_GROUPS_HELPER_SYMBOL,
+            "internal_age_source": "CVillagerState+0x8",
+            "runs_after": "native FoodGroupsActive",
+            "runs_before": "old-age mortality roll",
+            "mortality_flag_independent": True,
+        },
+    }
+
+
+def patch_longevity_achievement_load_reconciliation(manifest):
+    obj_path = PATCHED / "VillagerManager.obj"
+    obj = CoffObject(obj_path)
+    load_name = (
+        "?LoadState@CVillagerManager@@QAE?B_N"
+        "AAUSSaveState@CVillager@@@Z"
+    )
+    load = obj.symbol(load_name)
+    sec = obj.section(load.section)
+    call_offset = load.value + 0x33
+    relocation_offset = load.value + 0x34
+    raw = sec.raw_ptr + call_offset
+    if bytes(obj.buf[raw : raw + 5]) != b"\xE8\0\0\0\0":
+        raise RuntimeError("VillagerManager longevity load callsite drifted")
+
+    relocation = None
+    for index in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+        )
+        if vaddr == relocation_offset:
+            relocation = (
+                obj.symbol_by_index[symbol_index].name,
+                rtype,
+            )
+            break
+    original = "?LoadState@CVillager@@QAE?B_NAAUSSaveState@1@@Z"
+    if relocation != (original, IMAGE_REL_I386_REL32):
+        raise RuntimeError(
+            f"VillagerManager longevity load relocation drifted: {relocation}"
+        )
+
+    helper = obj.append_undefined_symbol(LONGEVITY_LOAD_HELPER_SYMBOL)
+    obj.retarget_relocation(
+        sec.index,
+        relocation_offset,
+        helper,
+        IMAGE_REL_I386_REL32,
+    )
+    obj.write(obj_path)
+    manifest["LongevityAchievementHooks"] = {
+        "status": "birthday observer plus load reconciliation",
+        "achievement_ids": [hex(value) for value in range(0x85, 0x8A)],
+        "internal_age_thresholds": [1400, 1600, 1800, 2000, 2441],
+        "displayed_age_requirements": [70, 80, 90, 100, ">122"],
+        "birthday_hook": {
+            "function": (
+                "CVillagerManager::"
+                "AllVillagersRealtimePhysiologyAndProductivityUpkeep"
+            ),
+            "observer": LONGEVITY_AGE_HELPER_SYMBOL,
+            "before_old_age_death_roll": True,
+            "optional_mortality_independent": True,
+        },
+        "load_reconciliation": {
+            "caller": "CVillagerManager::LoadState",
+            "call_offset": hex(call_offset - load.value),
+            "original_target": original,
+            "replacement": LONGEVITY_LOAD_HELPER_SYMBOL,
+            "native_load_result_preserved": True,
+        },
     }
 
 
@@ -18289,6 +18460,7 @@ def main():
     # The optional mortality curve is another exact-SHA dormant-byte hook.
     # Its zero .vf2mort default resumes the untouched stock mortality block.
     patch_older_villager_mortality(manifest)
+    patch_longevity_achievement_load_reconciliation(manifest)
     patch_mobile_furniture_behavior_dispatch(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:
         patch_collectable_item_holiday_ornaments(manifest)

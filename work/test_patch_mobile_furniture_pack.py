@@ -2648,10 +2648,10 @@ class TextFixStringManagerTests(unittest.TestCase):
                     if row.get("source")
                     == "custom achievement reserved capacity"
                 ]
-                self.assertEqual(len(reserved), 70)
+                self.assertEqual(len(reserved), 60)
                 self.assertEqual(
                     {int(row["achievement_id"], 16) for row in reserved},
-                    set(range(0x85, 0xA8)),
+                    set(range(0x8A, 0xA8)),
                 )
                 self.assertTrue(all(row["text"] == "" for row in reserved))
                 self.assertEqual(
@@ -2907,7 +2907,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("if (kVF2IncludeOrnamentologistGoal)", source)
         self.assertIn("if (kVF2IncludeBehaviorGoals)", source)
         self.assertIn(
-            "for (int achievement = 0x80; achievement <= 0x84; ++achievement)",
+            "for (int achievement = 0x80; achievement <= 0x89; ++achievement)",
             source,
         )
         self.assertIn("if (gVF2HolidayFurnitureGoalsEnabled != 0)", source)
@@ -3559,6 +3559,44 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
             source,
         )
 
+    def test_longevity_goal_rows_and_raw_age_boundaries(self):
+        rows = {
+            achievement_id: (group, title, description)
+            for achievement_id, group, title, description
+            in patcher.CUSTOM_ACHIEVEMENT_ROW_SPECS
+        }
+        self.assertEqual(
+            {achievement_id: rows[achievement_id] for achievement_id in range(0x85, 0x8A)},
+            {
+                0x85: ("longevity", "Lucky 70's", "Have a person reach age 70."),
+                0x86: ("longevity", "Great 80's", "Have a person reach age 80."),
+                0x87: ("longevity", "Mighty 90's", "Have a person reach age 90."),
+                0x88: ("longevity", "Centenarian", "Have a person reach age 100 or more."),
+                0x89: (
+                    "longevity",
+                    "Oldest Person in History",
+                    "Have a person surpass age 122.",
+                ),
+            },
+        )
+        expected = {
+            1399: [],
+            1400: [0x85],
+            1599: [0x85],
+            1600: [0x85, 0x86],
+            1800: [0x85, 0x86, 0x87],
+            2000: [0x85, 0x86, 0x87, 0x88],
+            2440: [0x85, 0x86, 0x87, 0x88],
+            2441: [0x85, 0x86, 0x87, 0x88, 0x89],
+        }
+        self.assertEqual(
+            {
+                age: patcher.longevity_achievement_ids_for_internal_age(age)
+                for age in expected
+            },
+            expected,
+        )
+
     def test_maximum_resource_callsites_are_relocation_only_wrappers(self):
         old_patched = patcher.PATCHED
         try:
@@ -4065,17 +4103,21 @@ class OlderMortalityPatchTests(unittest.TestCase):
                     )
                 }
                 self.assertIn(
+                    (
+                        cave + 5,
+                        patcher.LONGEVITY_FOOD_GROUPS_HELPER_SYMBOL,
+                        0x0014,
+                    ),
+                    relocs,
+                )
+                self.assertIn(
                     (cave + 11, patcher.OLDER_MORTALITY_FLAG_SYMBOL, 0x0006),
                     relocs,
                 )
                 self.assertIn(
-                    (cave + 23, patcher.OLDER_MORTALITY_HELPER_SYMBOL, 0x0014),
-                    relocs,
-                )
-                self.assertIn(
                     (
-                        cave + 5,
-                        "?FoodGroupsActive@CVillagerState@@QAEH_N@Z",
+                        cave + 23,
+                        patcher.OLDER_MORTALITY_HELPER_SYMBOL,
                         0x0014,
                     ),
                     relocs,
@@ -4084,6 +4126,76 @@ class OlderMortalityPatchTests(unittest.TestCase):
                 self.assertFalse(contract["default"])
                 self.assertEqual(contract["runtime_flag"]["source_section"], ".vf2mort")
                 self.assertIsNone(contract["curve"]["hard_maximum"])
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_longevity_load_reconciliation_is_relocation_only_and_filtered(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                patcher.PATCHED = temp_root
+                obj_path = temp_root / "VillagerManager.obj"
+                shutil.copy2(patcher.SRC_OBJS / "VillagerManager.obj", obj_path)
+                patcher.patch_older_villager_mortality({})
+
+                before = CoffObject(obj_path)
+                load_name = (
+                    "?LoadState@CVillagerManager@@QAE?B_N"
+                    "AAUSSaveState@CVillager@@@Z"
+                )
+                load = before.symbol(load_name)
+                sec = before.section(load.section)
+                before_bytes = bytes(
+                    before.buf[sec.raw_ptr : sec.raw_ptr + sec.raw_size]
+                )
+                manifest = {}
+                patcher.patch_longevity_achievement_load_reconciliation(manifest)
+
+                after = CoffObject(obj_path)
+                after_load = after.symbol(load_name)
+                after_sec = after.section(after_load.section)
+                self.assertEqual(
+                    bytes(
+                        after.buf[
+                            after_sec.raw_ptr :
+                            after_sec.raw_ptr + after_sec.raw_size
+                        ]
+                    ),
+                    before_bytes,
+                )
+                matches = []
+                for index in range(after_sec.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH", after.buf, after_sec.reloc_ptr + index * 10
+                    )
+                    if vaddr == after_load.value + 0x34:
+                        matches.append(
+                            (
+                                after.symbol_by_index[symbol_index].name,
+                                rtype,
+                            )
+                        )
+                self.assertEqual(
+                    matches,
+                    [
+                        (
+                            patcher.LONGEVITY_LOAD_HELPER_SYMBOL,
+                            patcher.IMAGE_REL_I386_REL32,
+                        )
+                    ],
+                )
+                self.assertEqual(
+                    manifest["LongevityAchievementHooks"][
+                        "internal_age_thresholds"
+                    ],
+                    [1400, 1600, 1800, 2000, 2441],
+                )
+                source = Path(patcher.__file__).read_text(encoding="utf-8")
+                self.assertIn("data[0x1BB84] != 0", source)
+                self.assertIn("data[0x1BB88] != 0", source)
+                self.assertIn("*(int *)(data + 0x6B00)", source)
+                self.assertIn("*(int *)(data + 0x6A54)", source)
         finally:
             patcher.PATCHED = old_patched
 
@@ -4474,10 +4586,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         ))
         try:
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
-                (False, False, 106, 125, 5, 12),
-                (True, False, 107, 126, 6, 13),
-                (False, True, 113, 132, 5, 12),
-                (True, True, 114, 133, 6, 13),
+                (False, False, 111, 130, 5, 12),
+                (True, False, 112, 131, 6, 13),
+                (False, True, 118, 137, 5, 12),
+                (True, True, 119, 138, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
@@ -4656,10 +4768,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         expected.extend(range(0x60, 0x66))
                         if behavior:
                             expected.extend(range(0x66, 0x6D))
-                        expected.extend(range(0x80, 0x85))
+                        expected.extend(range(0x80, 0x8A))
                         expected.extend(range(0x6D, 0x80))
                         self.assertEqual(order, expected)
-                        self.assertEqual(order[-24:-19], list(range(0x80, 0x85)))
+                        self.assertEqual(order[-29:-19], list(range(0x80, 0x8A)))
                         self.assertEqual(order[-19:], list(range(0x6D, 0x80)))
                         order_contract = manifest["CustomAchievements"][
                             "ornamentologist_order"
@@ -5323,8 +5435,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
                     "physical_row_count": 0xA8,
-                    "visible_count_flag_0": 107,
-                    "visible_count_flag_1": 126,
+                    "visible_count_flag_0": 112,
+                    "visible_count_flag_1": 131,
                     "notify_queue_bound": 0x5F,
                 },
             )
