@@ -906,3 +906,13 @@ B156 optional Same-Sex Marriage implementation
 - All 16 B156 layouts linked with unique hashes. The Holiday 8-positive and
   8-negative checks passed, and all five runtime bytes are non-overlapping,
   idempotent on repeated enable, and restore exactly when disabled.
+B156 multiple marriage candidates
+- Rejecting a candidate now keeps the active proposal scene open and calls the
+  stock GeneratePeepCandidate method. That method deactivates the rejected
+  temporary villager, spawns exactly one replacement, and refreshes the same
+  controls.
+- The rejection reroll does not clear or rewrite the stock proposal timestamp
+  fields. Accept remains on its byte-identical native route.
+- With Same-Sex Marriage disabled, replacements retain the stock opposite-sex
+  calculation. With it enabled, every replacement independently uses the
+  native GetRandom(2) gender helper.

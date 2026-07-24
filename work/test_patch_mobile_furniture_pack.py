@@ -4768,6 +4768,86 @@ class OlderPregnancyPatchTests(unittest.TestCase):
         self.assertNotIn("VF2_ENABLE_ALLOW_OLDER_PREGNANCIES", source)
 
 
+class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
+    def test_reject_rerolls_in_place_and_preserves_email_state_route(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                patcher.PATCHED = temp_root
+                shutil.copy2(
+                    patcher.SRC_OBJS / "DatingScene.obj",
+                    temp_root / "DatingScene.obj",
+                )
+                manifest = {}
+                patcher.patch_multiple_marriage_candidates(manifest)
+
+                dating = CoffObject(temp_root / "DatingScene.obj")
+                handle = dating.symbol(
+                    "?HandleMessage@CDatingScene@@UAE_NHJ@Z"
+                )
+                section = dating.section(handle.section)
+                raw = section.raw_ptr + handle.value + 0x85
+                self.assertEqual(
+                    bytes(dating.buf[raw:raw + 19]),
+                    bytes.fromhex(
+                        "8B CB 90 90 90 90 90 E8 00 00 00 00 "
+                        "5F 5E 5B B0 01 EB 14"
+                    ),
+                )
+                relocation = []
+                for index in range(section.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH",
+                        dating.buf,
+                        section.reloc_ptr + index * 10,
+                    )
+                    if vaddr == handle.value + 0x8D:
+                        relocation.append((
+                            dating.symbol_by_index[symbol_index].name,
+                            rtype,
+                        ))
+                self.assertEqual(
+                    relocation,
+                    [(
+                        "?GeneratePeepCandidate@CDatingScene@@AAEXXZ",
+                        patcher.IMAGE_REL_I386_REL32,
+                    )],
+                )
+                contract = manifest["MultipleMarriageCandidates"]
+                self.assertEqual(contract["scope"], "core executable")
+                self.assertIn("not cleared", contract["email_state"])
+                self.assertIn("byte-identical", contract["accept_path"])
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_reroll_precedes_same_sex_candidate_hook_in_every_layout(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        main = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "main"
+        )
+        calls = [
+            node.value.func.id
+            for node in main.body
+            if isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id in {
+                "patch_multiple_marriage_candidates",
+                "patch_same_sex_marriage",
+            }
+        ]
+        self.assertEqual(
+            calls,
+            [
+                "patch_multiple_marriage_candidates",
+                "patch_same_sex_marriage",
+            ],
+        )
+
+
 class SameSexMarriagePatchTests(unittest.TestCase):
     def test_dormant_hooks_cover_candidate_roles_drop_and_pregnancy(self):
         old_patched = patcher.PATCHED

@@ -12340,6 +12340,62 @@ def patch_allow_older_pregnancies(manifest):
     }
 
 
+def patch_multiple_marriage_candidates(manifest):
+    """Keep the proposal scene open and generate a new candidate on Reject."""
+    dating_path = PATCHED / "DatingScene.obj"
+    dating = CoffObject(dating_path)
+    handle_name = "?HandleMessage@CDatingScene@@UAE_NHJ@Z"
+    generate_name = "?GeneratePeepCandidate@CDatingScene@@AAEXXZ"
+    handle = dating.symbol(handle_name)
+    section = dating.section(handle.section)
+    reject_hook = handle.value + 0x85
+    reject_raw = section.raw_ptr + reject_hook
+    expected = bytes.fromhex(
+        "C7 43 10 FF FF FF FF E8 00 00 00 00 5F 5E 5B "
+        "8B 88 B8 5C 02 00"
+    )
+    if bytes(dating.buf[reject_raw:reject_raw + len(expected)]) != expected:
+        raise RuntimeError("Dating Reject candidate-clear route drifted")
+
+    generate = dating.symbol(generate_name)
+    dating.buf[reject_raw:reject_raw + len(expected)] = (
+        b"\x8B\xCB"              # mov ecx,ebx: this
+        + b"\x90" * 5
+        + b"\xE8\0\0\0\0"       # call GeneratePeepCandidate
+        + b"\x5F\x5E\x5B"        # restore edi, esi, ebx
+        + b"\xB0\x01"            # handled = true
+        + b"\xEB\x14"            # common security-cookie epilogue
+        + b"\x90" * 2
+    )
+    dating.retarget_relocation(
+        section.index,
+        handle.value + 0x8D,
+        generate.index,
+        IMAGE_REL_I386_REL32,
+    )
+    dating.write(dating_path)
+
+    manifest["MultipleMarriageCandidates"] = {
+        "status": "patched",
+        "scope": "core executable",
+        "trigger": "Reject button in the active marriage-proposal scene",
+        "candidate_lifecycle": (
+            "GeneratePeepCandidate deactivates the rejected temporary villager "
+            "before spawning and displaying exactly one replacement"
+        ),
+        "email_state": (
+            "the scene remains open and the stock proposal timestamp fields "
+            "at theGameState+0x25CB8/+0x25CBC are not cleared or rewritten"
+        ),
+        "same_sex_interaction": (
+            "each replacement passes through the optional .vf2same candidate-"
+            "gender helper, so flag-off remains opposite-sex and flag-on may "
+            "produce either gender"
+        ),
+        "accept_path": "byte-identical stock HandleMessage parameter-1 route",
+    }
+
+
 def patch_same_sex_marriage(manifest):
     """Install dormant gender-neutral marriage and romantic-action routing."""
     dating_path = PATCHED / "DatingScene.obj"
@@ -20318,6 +20374,7 @@ def main():
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
     # this feature adds no executable-matrix dimension.
     patch_allow_older_pregnancies(manifest)
+    patch_multiple_marriage_candidates(manifest)
     patch_same_sex_marriage(manifest)
     patch_force_successful_pregnancy_callsites(manifest)
     # The optional mortality curve is another exact-SHA dormant-byte hook.

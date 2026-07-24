@@ -3164,5 +3164,17 @@
   controls (`.vf2beh`, `.vf2goal`, `.vf2preg`, `.vf2same`, `.vf2mort`) are
   non-overlapping and restore exactly after enable/re-enable/disable cycles.
   The fully enabled raw layout is 1,767,936 bytes with SHA-256
-  `CE4736D62F2F67063D214D59DAE12C48855321708A8579D1F084D2BF05617A21`;
+  `3910A0F2FC67B25D6A86A44F64676507B1F75BFAF2A9D6A607BA86F13E53E61E`;
   its `.vf2same` byte is raw `0x19FA00`, RVA `0x771000`.
+- `CDatingScene::HandleMessage(8, 2)` is the stock Reject route. It previously
+  deactivated the current candidate, cleared the scene candidate ID, copied
+  and cleared the proposal timestamp fields at `theGameState+0x25CB8` and
+  `+0x25CBC`, and returned from the scene. B156 now retargets that route's
+  existing call relocation to `GeneratePeepCandidate`.
+- The native generator already deactivates any current temporary candidate
+  before spawning one replacement and refreshing every proposal control.
+  Reject therefore rerolls in place without changing the email/timestamp
+  fields. `HandleMessage(8, 1)` remains the byte-identical stock Accept route.
+  The replacement traverses the `.vf2same` gender helper, preserving the stock
+  opposite-sex result when disabled and independently choosing either gender
+  when enabled.
