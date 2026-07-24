@@ -81,10 +81,15 @@ mobile markers were translated into a PC-safe optional map containing EObject
 `0x98` plus two proven seat anchors. The raw mobile hotspot metadata remains
 excluded because the desktop hotspot table is smaller.
 
-The exact manual Preparing Drinks and Drink at Patio Chair plans are emitted
-outside the fixed desktop behavior table. Mobile prop `0x56` is held in an
-external 240-game-second state and is never indexed through the smaller PC
-environment array. Mobile autonomous IDs `0x1B6-0x1B7` remain unindexed.
+The exact Preparing Drinks and Drink at Patio Chair plans are emitted outside
+the fixed desktop behavior table. Mobile prop `0x56` is held in an external
+240-game-second state and is never indexed through the smaller PC environment
+array. Autonomous IDs `0x1B6-0x1B7` are represented by the additive external
+selector: both require sunny daytime, the matching object, and their exact
+mobile state/need gates. Preparation has base weight 3000 and use has base
+weight 12000; per-villager InitAI applies the recovered random +/-20% jitter,
+then the recovered need thresholds apply the mobile 3x modifier. The stock
+`0x19B`-entry desktop candidate table remains unchanged.
 
 ## Picnic Table implementation
 
@@ -101,8 +106,17 @@ sound `0xC7`, exact stat changes, and external 240-game-second prop `0x55`.
 While ready, any age can eat. The linked-seat route performs three fresh random
 sounds `0x6A-0x6C` and three fresh 10-17 chair animations, with exact
 orientation/marker selection between `Sit In Chair NW` and `Sit In Chair NE`,
-then applies hunger -40, dirtiness +4, and poo +6. Mobile autonomous IDs
-`0x1B4-0x1B5` remain deliberately unindexed.
+then applies hunger -40, dirtiness +4, and poo +6.
+
+Autonomous IDs `0x1B4-0x1B5` are represented outside the fixed desktop table.
+Both require sunny daytime, EObject `0x97`, and the exact recovered need and
+ready-state gates. Preparation additionally requires raw age `0x118+`, healthy
+status, no carried/nursed baby, and no other tracked picnic preparer. Its base
+weight is 3000; eating uses 12000. The mobile 3x need/like and 1/4 dislike
+modifiers are reproduced for Picnic preference IDs 39 and 40 after the mobile
+per-villager random +/-20% InitAI adjustment. The manual-only food-store warning
+is intentionally not added to autonomous selection because the APK candidate
+record and behavior do not test food.
 
 ## Implemented architecture
 

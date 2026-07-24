@@ -48,7 +48,7 @@ MOBILE_FURNITURE_BEHAVIOR_HELPER_SYMBOL = (
     "?VF2HandleDropOnMobileFurniture@theMainScene@@IAE?B_NAAVCVillager@@@Z"
 )
 MOBILE_FURNITURE_AUTONOMOUS_SELECTOR_SYMBOL = (
-    "_VF2TryStartMobileHolidayAutonomous"
+    "_VF2TryStartMobileFurnitureAutonomous"
 )
 MOBILE_PATIO_PROP_HELPER_SYMBOL = "@VF2PatioSetPropAndTrack@12"
 MOBILE_CHAISE_ITEM_IDS = tuple(range(0x2DE, 0x2E2))
@@ -16048,6 +16048,7 @@ enum ESpeed { eSpeedNormal = 0xC8 };
 enum EPriority { ePriorityNormal = 0 };
 enum EAgeSelecter { eAgeSelecterDummy = 0 };
 enum EGender { eGenderDummy = 0 };
+enum ELike { eLikeDummy = 0 };
 enum EBodyPosition {
     eBodyPositionStanding = 0,
     eBodyPositionUmbrella = 0x0D,
@@ -16137,6 +16138,21 @@ public:
     void NewBehavior(EBehavior, SBehaviorData const &);
 };
 
+class CVillagerState {
+public:
+    bool IsSick();
+};
+
+class CLikeList {
+public:
+    bool const Contains(ELike) const;
+};
+
+class CDislikeList {
+public:
+    bool const Contains(ELike) const;
+};
+
 class CVillagerManager {
 public:
     bool VillagerExists(int, bool);
@@ -16202,16 +16218,40 @@ extern CWeather Weather;
 extern CNight Night;
 extern CDealerSay DealerSay;
 extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
+extern "C" int __cdecl strncmp(char const *, char const *, unsigned int);
+static void VF2InitializeMobileExternalWeights(void *villager);
 
 static unsigned char gVF2PatioDrinksOn = 0;
 static unsigned int gVF2PatioDrinksDeadline = 0;
 static unsigned char gVF2PicnicReadyOn = 0;
 static unsigned int gVF2PicnicReadyDeadline = 0;
+static CVillager *gVF2PatioDrinksPreparer = 0;
+static CVillager *gVF2PicnicPreparer = 0;
 
 static void VF2ClearPatioDrinks()
 {
     gVF2PatioDrinksOn = 0;
     gVF2PatioDrinksDeadline = 0;
+}
+
+static bool VF2VillagerStillPreparing(
+    CVillager *villager,
+    char const *label)
+{
+    if (!villager) return false;
+    char const *current = reinterpret_cast<char const *>(villager) + 0x1BBA8;
+    return strncmp(current, label, 0x27) == 0;
+}
+
+static bool VF2PatioDrinksPreparationActive()
+{
+    if (!VF2VillagerStillPreparing(
+            gVF2PatioDrinksPreparer,
+            "Getting some drinks")) {
+        gVF2PatioDrinksPreparer = 0;
+        return false;
+    }
+    return true;
 }
 
 static bool VF2PatioDrinksActive()
@@ -16230,6 +16270,17 @@ static void VF2ClearPicnicReady()
 {
     gVF2PicnicReadyOn = 0;
     gVF2PicnicReadyDeadline = 0;
+}
+
+static bool VF2PicnicPreparationActive()
+{
+    if (!VF2VillagerStillPreparing(
+            gVF2PicnicPreparer,
+            "Preparing a picnic")) {
+        gVF2PicnicPreparer = 0;
+        return false;
+    }
+    return true;
 }
 
 static bool VF2PicnicReadyActive()
@@ -16259,9 +16310,11 @@ extern "C" void __fastcall VF2PatioSetPropAndTrack(
         return;
     }
     if (prop == ePropPicnicReady) {
+        gVF2PicnicPreparer = 0;
         gVF2PicnicReadyOn = 1;
         gVF2PicnicReadyDeadline = GameTime.Seconds() + 240;
     } else {
+        gVF2PatioDrinksPreparer = 0;
         gVF2PatioDrinksOn = 1;
         gVF2PatioDrinksDeadline = GameTime.Seconds() + 240;
     }
@@ -16440,6 +16493,7 @@ static bool VF2RunMobilePreparingDrinks(CVillager &villager)
         VF2PlanPatioRefusal(plans, villager, eStringBadWeather);
         return true;
     }
+    gVF2PatioDrinksPreparer = &villager;
 
     plans->PlanToGo(
         CContentMap::eObjectKitchenDrinkSource,
@@ -16555,6 +16609,7 @@ static bool VF2RunMobilePreparingPicnic(CVillager &villager)
         VF2PlanPatioRefusal(plans, villager, eStringPicnicBadWeather);
         return true;
     }
+    gVF2PicnicPreparer = &villager;
 
     plans->PlanToGo(
         CContentMap::eObjectKitchenDrinkSource,
@@ -17592,12 +17647,138 @@ static bool VF2HandleMobileMenorahGroup(CVillager &villager)
     return true;
 }
 
-extern "C" bool __cdecl VF2TryStartMobileHolidayAutonomous(
+static int VF2VillagerValue(CVillager &villager, int offset)
+{
+    return *reinterpret_cast<int *>(
+        reinterpret_cast<unsigned char *>(&villager) + offset);
+}
+
+static bool VF2VillagerIsSick(CVillager &villager)
+{
+    CVillagerState *state = reinterpret_cast<CVillagerState *>(
+        reinterpret_cast<unsigned char *>(&villager) + 0x6AF4);
+    return state->IsSick();
+}
+
+static bool VF2VillagerLikes(CVillager &villager, int like)
+{
+    CLikeList *likes = reinterpret_cast<CLikeList *>(
+        reinterpret_cast<unsigned char *>(&villager) + 0x1BC34);
+    return likes->Contains(static_cast<ELike>(like));
+}
+
+static bool VF2VillagerDislikes(CVillager &villager, int like)
+{
+    CDislikeList *dislikes = reinterpret_cast<CDislikeList *>(
+        reinterpret_cast<unsigned char *>(&villager) + 0x1BC40);
+    return dislikes->Contains(static_cast<ELike>(like));
+}
+
+struct VF2MobileExternalWeights {
+    void *villager;
+    unsigned int weights[9];
+};
+
+static VF2MobileExternalWeights gVF2MobileExternalWeights[30] = {};
+
+static unsigned int VF2RandomizeMobileCandidateWeight(unsigned int baseWeight)
+{
+    int delta = ldwGameState::GetRandom(static_cast<int>(baseWeight / 5));
+    if (ldwGameState::GetRandom(100) < 50) return baseWeight - delta;
+    return baseWeight + delta;
+}
+
+static VF2MobileExternalWeights *VF2FindMobileExternalWeights(void *villager)
+{
+    VF2MobileExternalWeights *empty = 0;
+    for (int index = 0; index < 30; ++index) {
+        if (gVF2MobileExternalWeights[index].villager == villager) {
+            return &gVF2MobileExternalWeights[index];
+        }
+        if (!empty && !gVF2MobileExternalWeights[index].villager) {
+            empty = &gVF2MobileExternalWeights[index];
+        }
+    }
+    return empty ? empty : &gVF2MobileExternalWeights[0];
+}
+
+static void VF2InitializeMobileExternalWeights(void *villager)
+{
+    VF2MobileExternalWeights *record = VF2FindMobileExternalWeights(villager);
+    record->villager = villager;
+    unsigned int bases[9] = {
+        2000, 2000, 2000, 2000, 2000,
+        3000, 12000, 3000, 12000
+    };
+    for (int index = 0; index < 9; ++index) {
+        record->weights[index] =
+            VF2RandomizeMobileCandidateWeight(bases[index]);
+    }
+}
+
+static VF2MobileExternalWeights *VF2GetMobileExternalWeights(
+    CVillager &villager)
+{
+    VF2MobileExternalWeights *record =
+        VF2FindMobileExternalWeights(&villager);
+    if (record->villager != &villager) {
+        VF2InitializeMobileExternalWeights(&villager);
+        record = VF2FindMobileExternalWeights(&villager);
+    }
+    return record;
+}
+
+static unsigned int VF2MobilePicnicWeight(
+    CVillager &villager,
+    unsigned int baseWeight,
+    int like,
+    int highNeed)
+{
+    if (highNeed || (like >= 0 && VF2VillagerLikes(villager, like))) {
+        return baseWeight * 3;
+    }
+    if (like >= 0 && VF2VillagerDislikes(villager, like)) {
+        return baseWeight / 4;
+    }
+    return baseWeight;
+}
+
+static bool VF2StartAutonomousPreparingDrinks(CVillager &villager)
+{
+    reinterpret_cast<CVillagerPlans *>(&villager)->ForgetPlans(
+        villager, false);
+    return VF2RunMobilePreparingDrinks(villager);
+}
+
+static bool VF2StartAutonomousDrinkAtPatioChair(CVillager &villager)
+{
+    reinterpret_cast<CVillagerPlans *>(&villager)->ForgetPlans(
+        villager, false);
+    return VF2RunMobileDrinkAtPatioChair(villager);
+}
+
+static bool VF2StartAutonomousPreparingPicnic(CVillager &villager)
+{
+    reinterpret_cast<CVillagerPlans *>(&villager)->ForgetPlans(
+        villager, false);
+    return VF2RunMobilePreparingPicnic(villager);
+}
+
+static bool VF2StartAutonomousEatAtPicnicTable(CVillager &villager)
+{
+    reinterpret_cast<CVillagerPlans *>(&villager)->ForgetPlans(
+        villager, false);
+    return VF2RunMobileEatAtPicnicTable(villager);
+}
+
+extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
     CVillager &villager,
     unsigned int stockWeight)
 {
     if (gVF2MobileFurnitureBehaviors == 0) return false;
 
+    VF2MobileExternalWeights *mobileWeights =
+        VF2GetMobileExternalWeights(villager);
     int age = *reinterpret_cast<int *>(
         reinterpret_cast<unsigned char *>(&villager) + 0x6A54);
     typedef bool (*Handler)(CVillager &);
@@ -17607,42 +17788,48 @@ extern "C" bool __cdecl VF2TryStartMobileHolidayAutonomous(
         int maximumAge;
         unsigned int weight;
         Handler handler;
+        bool eligible;
     };
     Candidate candidates[] = {
         {
             CContentMap::eObjectHolidayCandles,
             0,
             0x117,
-            2000,
-            VF2HandleMobileHolidayCandles
+            mobileWeights->weights[0],
+            VF2HandleMobileHolidayCandles,
+            true
         },
         {
             CContentMap::eObjectEggnog,
             0,
             0x117,
-            2000,
-            VF2HandleMobileEggnog
+            mobileWeights->weights[1],
+            VF2HandleMobileEggnog,
+            true
         },
         {
             CContentMap::eObjectSantaCookiePlate,
             0,
             0x117,
-            2000,
-            VF2HandleMobileSantaCookiePlate
+            mobileWeights->weights[2],
+            VF2HandleMobileSantaCookiePlate,
+            true
         },
         {
             CContentMap::eObjectXmasKnickknack,
             7,
             0x7FFFFFFF,
-            2000,
-            VF2HandleMobileXmasKnickknack
+            mobileWeights->weights[3],
+            VF2HandleMobileXmasKnickknack,
+            true
         },
         {
             CContentMap::eObjectHouseXmasDecor,
             0x118,
             0x7FFFFFFF,
-            2000,
-            VF2HandleMobileHouseXmasDecor
+            mobileWeights->weights[4],
+            VF2HandleMobileHouseXmasDecor,
+            true
         },
     };
 
@@ -17653,11 +17840,74 @@ extern "C" bool __cdecl VF2TryStartMobileHolidayAutonomous(
          ++index) {
         Candidate const &candidate = candidates[index];
         eligible[index] =
+            candidate.eligible &&
             age >= candidate.minimumAge &&
             age <= candidate.maximumAge &&
             ContentMap.ObjectExists(candidate.object);
         if (eligible[index]) externalWeight += candidate.weight;
     }
+
+    // Mobile InitAI records 0x1B4-0x1B7. These remain outside the desktop
+    // build's fixed 0x19B-entry candidate array, so reproduce their exact
+    // eligibility and dynamic weighting in this additive selector.
+    bool sunnyDay =
+        Weather.currentType == 0 && Night.AIIsDayTime();
+    int state0C = VF2VillagerValue(villager, 0x6B00);
+    int energy = VF2VillagerValue(villager, 0x6B28);
+    int happiness = VF2VillagerValue(villager, 0x6B2C);
+    int hunger = VF2VillagerValue(villager, 0x6B34);
+    bool adultCanPrepare =
+        age >= 0x118 &&
+        state0C >= 10 &&
+        happiness >= 15 &&
+        hunger >= 40 &&
+        VF2VillagerValue(villager, 0x6B18) == 0 &&
+        !VF2VillagerIsSick(villager);
+
+    bool picnicPrepare =
+        sunnyDay &&
+        adultCanPrepare &&
+        !VF2PicnicReadyActive() &&
+        !VF2PicnicPreparationActive() &&
+        ContentMap.ObjectExists(CContentMap::eObjectPicnicTable);
+    unsigned int picnicPrepareWeight = VF2MobilePicnicWeight(
+        villager,
+        mobileWeights->weights[5],
+        39,
+        energy > 50 || hunger > 60 || happiness > 70);
+
+    bool picnicEat =
+        sunnyDay &&
+        hunger >= 30 &&
+        VF2PicnicReadyActive() &&
+        ContentMap.ObjectExists(CContentMap::eObjectPicnicTable);
+    unsigned int picnicEatWeight = VF2MobilePicnicWeight(
+        villager, mobileWeights->weights[6], 40, hunger > 70);
+
+    bool patioPrepare =
+        sunnyDay &&
+        adultCanPrepare &&
+        !VF2PatioDrinksActive() &&
+        !VF2PatioDrinksPreparationActive() &&
+        ContentMap.ObjectExists(CContentMap::eObjectPatioTable);
+    unsigned int patioPrepareWeight = VF2MobilePicnicWeight(
+        villager,
+        mobileWeights->weights[7],
+        -1,
+        energy > 50 || hunger > 60 || happiness > 70);
+
+    bool patioDrink =
+        sunnyDay &&
+        hunger >= 30 &&
+        VF2PatioDrinksActive() &&
+        ContentMap.ObjectExists(CContentMap::eObjectPatioTable);
+    unsigned int patioDrinkWeight = VF2MobilePicnicWeight(
+        villager, mobileWeights->weights[8], -1, hunger > 70);
+
+    if (picnicPrepare) externalWeight += picnicPrepareWeight;
+    if (picnicEat) externalWeight += picnicEatWeight;
+    if (patioPrepare) externalWeight += patioPrepareWeight;
+    if (patioDrink) externalWeight += patioDrinkWeight;
     if (externalWeight == 0) return false;
 
     unsigned int roll = static_cast<unsigned int>(
@@ -17673,6 +17923,27 @@ extern "C" bool __cdecl VF2TryStartMobileHolidayAutonomous(
             return candidates[index].handler(villager);
         }
         roll -= candidates[index].weight;
+    }
+    if (picnicPrepare) {
+        if (roll < picnicPrepareWeight) {
+            return VF2StartAutonomousPreparingPicnic(villager);
+        }
+        roll -= picnicPrepareWeight;
+    }
+    if (picnicEat) {
+        if (roll < picnicEatWeight) {
+            return VF2StartAutonomousEatAtPicnicTable(villager);
+        }
+        roll -= picnicEatWeight;
+    }
+    if (patioPrepare) {
+        if (roll < patioPrepareWeight) {
+            return VF2StartAutonomousPreparingDrinks(villager);
+        }
+        roll -= patioPrepareWeight;
+    }
+    if (patioDrink && roll < patioDrinkWeight) {
+        return VF2StartAutonomousDrinkAtPatioChair(villager);
     }
     return false;
 }
@@ -17804,6 +18075,7 @@ extern "C" void __cdecl VF2EnableMobileFurnitureCandidates(void *villager)
             *reinterpret_cast<unsigned int *>(candidate + 0x4C) = 0;
         }
     }
+    VF2InitializeMobileExternalWeights(villager);
 }
 
 class theMainScene {
@@ -17961,7 +18233,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
                 "Having a refreshing drink",
             ],
             "object": hex(MOBILE_PATIO_TABLE_OBJECT),
-            "manual_drop_only": True,
+            "manual_drop_only": False,
             "manual_drop_supported": True,
             "children_can_drink_when_ready": True,
             "preparation_requirements": {
@@ -17975,17 +18247,23 @@ __VF2_COMPUTER_DROP_DISPATCH__
                 "clock": "CGameTime::Seconds",
                 "save_reload_persistence": "unproven",
             },
-            "autonomous": False,
+            "autonomous": True,
             "autonomous_status": (
-                "pending: mobile behaviors 0x1b6 and 0x1b7 exceed the PC "
-                "behavior table and no regression-safe surrogate pair is proven"
+                "external additive selector ports exact mobile candidate "
+                "predicates and dynamic weights without extending the PC table"
             ),
+            "autonomous_base_weights": {
+                "0x1b6": 3000,
+                "0x1b7": 12000,
+            },
             "mobile_behaviors": [
                 "CBehavior::PreparingDrinks",
                 "CBehavior::DrinkAtPatioChair",
             ],
             "mobile_behavior_ids": ["0x1b6", "0x1b7"],
-            "desktop_implementation": "exact guarded manual plan-sequence port",
+            "desktop_implementation": (
+                "exact guarded plan-sequence port with external autonomous selector"
+            ),
             "stock_tables_extended": False,
         }, {
             "name": "mobile Picnic Table",
@@ -17995,7 +18273,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
                 "Having a picnic",
             ],
             "object": hex(MOBILE_PICNIC_TABLE_OBJECT),
-            "manual_drop_only": True,
+            "manual_drop_only": False,
             "manual_drop_supported": True,
             "children_can_eat_when_ready": True,
             "preparation_requirements": {
@@ -18009,17 +18287,23 @@ __VF2_COMPUTER_DROP_DISPATCH__
                 "clock": "CGameTime::Seconds",
                 "save_reload_persistence": "unproven",
             },
-            "autonomous": False,
+            "autonomous": True,
             "autonomous_status": (
-                "pending: mobile behaviors 0x1b4 and 0x1b5 exceed the PC "
-                "behavior table and no dedicated additive candidate mechanism exists"
+                "external additive selector ports exact mobile candidate "
+                "predicates and dynamic weights without extending the PC table"
             ),
+            "autonomous_base_weights": {
+                "0x1b4": 3000,
+                "0x1b5": 12000,
+            },
             "mobile_behaviors": [
                 "CBehavior::PreparingPicnic",
                 "CBehavior::EatAtPicnicTable",
             ],
             "mobile_behavior_ids": ["0x1b4", "0x1b5"],
-            "desktop_implementation": "exact guarded manual plan-sequence port",
+            "desktop_implementation": (
+                "exact guarded plan-sequence port with external autonomous selector"
+            ),
             "stock_tables_extended": False,
         }, {
             "name": "mobile Birthday Cake",
@@ -18133,7 +18417,10 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "child_only": True,
             "raw_age_max": "0x117",
             "autonomous": True,
-            "autonomous_status": "external additive candidate with exact mobile weight",
+            "autonomous_status": (
+                "external additive candidate with exact mobile base weight "
+                "and per-villager InitAI randomization"
+            ),
             "mobile_behavior": "CBehavior::KidExaminesCandles",
             "mobile_behavior_id": "0x19b",
             "mobile_candidate_weight": 2000,
@@ -18150,7 +18437,10 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "child_only": True,
             "raw_age_max": "0x117",
             "autonomous": True,
-            "autonomous_status": "external additive candidate with exact mobile weight",
+            "autonomous_status": (
+                "external additive candidate with exact mobile base weight "
+                "and per-villager InitAI randomization"
+            ),
             "mobile_behavior": "CBehavior::Eggnog",
             "mobile_behavior_id": "0x1a1",
             "mobile_candidate_weight": 2000,
@@ -18171,7 +18461,8 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "autonomous": True,
             "autonomous_status": (
                 "child behavior uses an external additive candidate with exact "
-                "mobile weight; adult behavior remains manual as on mobile"
+                "mobile base weight and per-villager InitAI randomization; "
+                "adult behavior remains manual as on mobile"
             ),
             "mobile_behaviors": [
                 "CBehavior::KidStealsSantasCookies",
@@ -18193,7 +18484,10 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "manual_drop_supported": True,
             "raw_age_min": "0x7",
             "autonomous": True,
-            "autonomous_status": "external additive candidate with exact mobile weight",
+            "autonomous_status": (
+                "external additive candidate with exact mobile base weight "
+                "and per-villager InitAI randomization"
+            ),
             "mobile_behavior": "CBehavior::AdmiringXmasKnickKnacks",
             "mobile_behavior_id": "0x1a4",
             "mobile_candidate_weight": 2000,
@@ -18212,7 +18506,10 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "adult_only": True,
             "raw_age_min": "0x118",
             "autonomous": True,
-            "autonomous_status": "external additive candidate with exact mobile weight",
+            "autonomous_status": (
+                "external additive candidate with exact mobile base weight "
+                "and per-villager InitAI randomization"
+            ),
             "mobile_behavior": "CBehavior::InteractHouseXmasDecor",
             "mobile_behavior_id": "0x1a7",
             "mobile_candidate_weight": 2000,
@@ -18484,6 +18781,12 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
         "stock_table_entries": "0x19b",
         "stock_table_extended": False,
         "stock_conditional_distribution_preserved": True,
+        "per_villager_base_randomization": {
+            "delta": "GetRandom(base_weight / 5)",
+            "sign": "subtract when GetRandom(100) < 50; add otherwise",
+            "initialization": "shared CVillager::InitAI and LoadAI hook",
+            "disabled_path_consumes_rng": False,
+        },
         "external_candidates": [
             {
                 "behavior": "KidExaminesCandles",
@@ -18519,6 +18822,34 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
                 "object": "0x8d",
                 "weight": 2000,
                 "raw_age_min": "0x118",
+            },
+            {
+                "behavior": "PreparingPicnic",
+                "mobile_id": "0x1b4",
+                "object": "0x97",
+                "base_weight": 3000,
+                "dynamic_weight": "triple from exact need or like 39; quarter from dislike 39",
+            },
+            {
+                "behavior": "EatAtPicnicTable",
+                "mobile_id": "0x1b5",
+                "object": "0x97",
+                "base_weight": 12000,
+                "dynamic_weight": "triple from exact hunger threshold or like 40; quarter from dislike 40",
+            },
+            {
+                "behavior": "PreparingDrinks",
+                "mobile_id": "0x1b6",
+                "object": "0x98",
+                "base_weight": 3000,
+                "dynamic_weight": "triple from exact need thresholds",
+            },
+            {
+                "behavior": "DrinkAtPatioChair",
+                "mobile_id": "0x1b7",
+                "object": "0x98",
+                "base_weight": 12000,
+                "dynamic_weight": "triple from exact hunger threshold",
             },
         ],
     }

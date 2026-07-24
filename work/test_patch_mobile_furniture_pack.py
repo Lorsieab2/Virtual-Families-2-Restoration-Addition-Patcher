@@ -674,7 +674,12 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertTrue(patio["manual_drop_supported"])
                 self.assertTrue(patio["children_can_drink_when_ready"])
-                self.assertFalse(patio["autonomous"])
+                self.assertFalse(patio["manual_drop_only"])
+                self.assertTrue(patio["autonomous"])
+                self.assertEqual(
+                    patio["autonomous_base_weights"],
+                    {"0x1b6": 3000, "0x1b7": 12000},
+                )
                 self.assertEqual(
                     patio["drink_ready_state"]["duration_game_seconds"], 240
                 )
@@ -720,7 +725,12 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertTrue(picnic["manual_drop_supported"])
                 self.assertTrue(picnic["children_can_eat_when_ready"])
-                self.assertFalse(picnic["autonomous"])
+                self.assertFalse(picnic["manual_drop_only"])
+                self.assertTrue(picnic["autonomous"])
+                self.assertEqual(
+                    picnic["autonomous_base_weights"],
+                    {"0x1b4": 3000, "0x1b5": 12000},
+                )
                 self.assertEqual(
                     picnic["picnic_ready_state"]["duration_game_seconds"], 240
                 )
@@ -1229,13 +1239,56 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertNotIn("0x1B4", picnic_helper)
                 self.assertNotIn("0x1B5", picnic_helper)
                 selector = helper.split(
-                    'extern "C" bool __cdecl VF2TryStartMobileHolidayAutonomous',
+                    'extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous',
                     1,
                 )[1].split("static bool VF2WeatherAllowsOutdoorFurniture", 1)[0]
                 self.assertIn("ldwGameState::GetRandom(", selector)
                 self.assertIn("stockWeight + externalWeight", selector)
                 self.assertIn("if (roll < stockWeight) return false;", selector)
-                self.assertEqual(selector.count("2000,"), 5)
+                self.assertIn(
+                    "2000, 2000, 2000, 2000, 2000,\n"
+                    "        3000, 12000, 3000, 12000",
+                    helper,
+                )
+                self.assertIn(
+                    "GetRandom(static_cast<int>(baseWeight / 5))",
+                    helper,
+                )
+                self.assertIn("GetRandom(100) < 50", helper)
+                self.assertIn(
+                    "VF2InitializeMobileExternalWeights(villager);",
+                    helper,
+                )
+                self.assertLess(
+                    selector.index(
+                        "if (gVF2MobileFurnitureBehaviors == 0) return false;"
+                    ),
+                    selector.index("VF2GetMobileExternalWeights(villager)"),
+                )
+                self.assertIn("Weather.currentType == 0", selector)
+                self.assertIn("Night.AIIsDayTime()", selector)
+                self.assertIn("age >= 0x118", selector)
+                self.assertIn("state0C >= 10", selector)
+                self.assertIn("happiness >= 15", selector)
+                self.assertIn("hunger >= 40", selector)
+                self.assertIn("VF2VillagerValue(villager, 0x6B18) == 0", selector)
+                self.assertIn("!VF2VillagerIsSick(villager)", selector)
+                self.assertIn("VF2PicnicPreparationActive()", selector)
+                self.assertIn("VF2PatioDrinksPreparationActive()", selector)
+                for index in range(9):
+                    self.assertIn(
+                        f"mobileWeights->weights[{index}]",
+                        selector,
+                    )
+                self.assertIn("energy > 50 || hunger > 60 || happiness > 70", selector)
+                self.assertIn(
+                    "villager, mobileWeights->weights[6], 40, hunger > 70",
+                    selector,
+                )
+                self.assertIn("VF2StartAutonomousPreparingPicnic", selector)
+                self.assertIn("VF2StartAutonomousEatAtPicnicTable", selector)
+                self.assertIn("VF2StartAutonomousPreparingDrinks", selector)
+                self.assertIn("VF2StartAutonomousDrinkAtPatioChair", selector)
                 for object_name in (
                     "eObjectHolidayCandles",
                     "eObjectEggnog",
@@ -1469,8 +1522,31 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     contract["stock_conditional_distribution_preserved"]
                 )
                 self.assertEqual(
-                    [row["weight"] for row in contract["external_candidates"]],
+                    contract["per_villager_base_randomization"],
+                    {
+                        "delta": "GetRandom(base_weight / 5)",
+                        "sign": (
+                            "subtract when GetRandom(100) < 50; add otherwise"
+                        ),
+                        "initialization": (
+                            "shared CVillager::InitAI and LoadAI hook"
+                        ),
+                        "disabled_path_consumes_rng": False,
+                    },
+                )
+                self.assertEqual(
+                    [
+                        row["weight"]
+                        for row in contract["external_candidates"][:5]
+                    ],
                     [2000] * 5,
+                )
+                self.assertEqual(
+                    [
+                        row["base_weight"]
+                        for row in contract["external_candidates"][5:]
+                    ],
+                    [3000, 12000, 3000, 12000],
                 )
         finally:
             patcher.PATCHED = old_patched

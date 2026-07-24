@@ -2845,10 +2845,11 @@
 - The PC-safe `Patio_table.png.fmap` retains EObject cells across `(7..12,12)`
   and both proven seat anchors `(3,8)` and `(13,8)`. Its SHA-256 is
   `0a60f9c579554876c15ae416d20fc313947f73ce3fb2a3a4eeb222beac6aab5d`.
-- Mobile autonomous behaviors `0x1B6` and `0x1B7` exceed the PC table, and no
-  regression-safe paired surrogate is proven. B156 therefore implements the
-  exact manual routes without indexing those IDs or repurposing an unrelated
-  stock candidate. Autonomous Patio drinks remain pending.
+- At this checkpoint, mobile autonomous behaviors `0x1B6` and `0x1B7`
+  exceeded the PC table and no regression-safe paired surrogate was proven.
+  The exact manual routes therefore landed first without indexing those IDs
+  or repurposing an unrelated stock candidate. The later external-selector
+  entry supersedes this pending status.
 - The fully enabled executable links at 1,759,232 bytes with SHA-256
   `a9b5b3ab98c8d3c7e0f78a1ef6bd582f82ac5d5569df99d964d1f7e6cfa2ec76`.
   All 16 existing B156 layouts still pass linked Holiday and four-flag
@@ -2905,8 +2906,9 @@
 - The `22x16` PC-safe QAMF retains EObject anchors `(10..13,15)` and four seat
   anchors while excluding mobile hotspot `0x6B`. Its SHA-256 is
   `3d3aaeeeb77e7842cc20be211d8bcf415f85e6d8c6cd0e0f860a934c6cc45060`.
-  Mobile autonomous behaviors `0x1B4-0x1B5` remain unindexed because they
-  exceed the PC behavior table.
+  At this checkpoint, mobile autonomous behaviors `0x1B4-0x1B5` remained
+  unindexed because they exceed the PC behavior table. The later
+  external-selector entry supersedes this pending status.
 - The fully enabled B156 executable links at 1,760,768 bytes with SHA-256
   `ad202293324ae2d9fb6a56089c63e56dd0ecfaac9d3e7a7abefb9ec4b471d0aa`.
   Linked Holiday and four-runtime-flag validation passes across all 16 existing
@@ -3645,8 +3647,8 @@
   drawing and the native selector runs unchanged. No stock candidate is
   replaced, and the behavior table remains `0x19B` entries.
 - Adult Santa-cookie rescue remains direct/manual only, matching the mobile
-  candidate table. Patio and Picnic autonomous pairs `0x1B4-0x1B7` remain
-  pending until their exact eligibility and weights are represented.
+  candidate table. Patio and Picnic autonomous pairs `0x1B4-0x1B7` were the
+  next external-selector tranche and are documented in the following entry.
 - All 236 repository tests pass with one intentional skip. Both the
   behavior-disabled core and fully enabled layouts compile and link with the
   new selector. The core executable is 1,708,032 bytes with SHA-256
@@ -3656,3 +3658,46 @@
 - The linked 16-layout Holiday validator still passes 8/8 positive and 8/8
   negative layouts. Runtime validation confirms 16 unique hashes and exact
   enable/idempotence/disable restoration for all five dormant flags.
+
+## 2026-07-24 - Exact Patio and Picnic autonomous candidate records
+
+- IDA recovered the complete mobile `CVillager::InitAI` records for behaviors
+  `0x1B4-0x1B7` and the corresponding `CVillagerAI::DecideWhatToDo` predicate
+  and dynamic-weight passes.
+- Preparing Picnic (`0x1B4`) and Preparing Drinks (`0x1B6`) are sunny-day
+  candidates with base weight 3000. They require raw age `0x118+`, EObject
+  `0x97` or `0x98`, healthy status, no carried/nursed baby, exact minimum need
+  values 10/15/40, the matching ready prop inactive, and no villager already
+  doing the same preparation. Need values above 50/60/70 triple the weight.
+- Eat at Picnic Table (`0x1B5`) and Drink at Patio Chair (`0x1B7`) are
+  sunny-day candidates with base weight 12000. They require the matching ready
+  prop active, the matching object, and the recovered minimum hunger value 30;
+  hunger above 70 triples the weight.
+- Picnic candidates additionally use like IDs 39 and 40. A matching like
+  triples weight, and a matching dislike quarters it unless a 3x condition
+  already won the mobile branch order. Patio candidates have no like field.
+- Neither autonomous preparation record nor its behavior body checks
+  `CFoodStore.food`. The food-31 warning belongs only to the manual hotspot
+  route and is therefore not added to spontaneous selection.
+- The desktop port keeps all four IDs outside the fixed `0x19B` candidate
+  array. The external selector evaluates their predicates, combines eligible
+  weight with the native total, and starts the already ported plan sequence.
+  External preparer pointers reproduce the mobile
+  `GetVillagerDoing(0x1B4/0x1B6)` exclusion and clear when the action label
+  changes or the matching ready state activates.
+- Mobile InitAI adjusts each base weight once per villager by
+  `GetRandom(base/5)`, subtracting when a fresh `GetRandom(100)` is below 50
+  and adding otherwise. The external cache now performs that same
+  initialization for all nine external Holiday/Patio/Picnic candidates from
+  the shared InitAI/LoadAI hook. The disabled patch still returns before any
+  added random draw.
+- All 236 repository tests pass with one intentional skip. The fully enabled
+  layout regenerates, compiles, links, and passes the debugger-hook validator
+  at 1,779,712 bytes with SHA-256
+  `2976615E909C510FC5ABBEB6E3B45A576773F7EBEC2E2B897396B7EA19E074D8`.
+  Focused linked runtime validation confirms all five dormant flag sections,
+  exact enable bytes, repeated-enable idempotence, and byte-perfect restore.
+- A current-source 16-layout claim is intentionally withheld: the older
+  `cheat_upgrades_holiday_ornaments` output is a stale partial-matrix remnant
+  without `.vf2beh`. The current fully enabled layout itself passes the linked
+  Holiday positive check.

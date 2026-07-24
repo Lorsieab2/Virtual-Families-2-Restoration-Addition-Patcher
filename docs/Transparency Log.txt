@@ -1234,7 +1234,7 @@ B156 decorative-only Holiday furniture closure
 B156 additive autonomous mobile Holiday behavior selector
 - Added spontaneous Holiday Candles, Eggnog, child Santa-cookie stealing,
   Christmas figurine admiration, and adult house-decoration checking using
-  each exact mobile weight of 2000 plus its proven EObject and raw-age gate.
+  each mobile base weight of 2000 plus its proven EObject and raw-age gate.
 - The new selector adds eligible external weight before the stock final draw.
   Stock results still use the unchanged native selector, preserving stock
   conditional probabilities. External results run the already-ported exact
@@ -1242,9 +1242,36 @@ B156 additive autonomous mobile Holiday behavior selector
 - The fixed PC behavior table remains 0x19B entries. No stock behavior is
   overwritten, and disabling Mobile Furniture Behaviors bypasses the added
   selection without consuming a random roll.
-- Adult Santa-cookie rescue remains manual, matching mobile. Patio and Picnic
-  autonomous behaviors remain pending.
+- Adult Santa-cookie rescue remains manual, matching mobile. At this
+  checkpoint Patio and Picnic autonomy remained pending; the later
+  Patio/Picnic selector entry supersedes that status.
 - All 236 tests pass with one intentional skip. Core and fully enabled layouts
   both compile and link. The 16-layout Holiday and five-flag restoration
   validators pass; the fully enabled EXE SHA-256 is
   8D6E731B7966212A2BA03569B87AE3035A48582363C2DD85DE7491BDB2557F8E.
+
+B156 additive autonomous mobile Patio and Picnic behavior selector
+- Recovered mobile InitAI candidate records 0x1B4-0x1B7 and the full
+  DecideWhatToDo eligibility/dynamic-weight logic from the local APK database.
+- Added Preparing Picnic, Eat at Picnic Table, Preparing Drinks, and Drink at
+  Patio Chair to the external additive selector without extending the desktop
+  0x19B-entry behavior table.
+- Preserved the recovered sunny-day, object, raw-age, health, carried-baby,
+  ready/preparing-state, and need gates; base weights are 3000 for preparation
+  and 12000 for eating/drinking.
+- Preserved the mobile 3x need modifier and Picnic like/dislike modifiers for
+  preference IDs 39 and 40. The manual food-31 warning was not copied into
+  autonomous selection because the APK autonomous route does not test food.
+- Added the recovered per-villager InitAI weight variation: each of the nine
+  external candidates starts from its documented base, then adds or subtracts
+  a fresh value below one fifth of that base. Disabled-mode initialization and
+  selection both return before consuming added RNG.
+- Validation: 236 tests pass with one intentional skip. The fully enabled EXE
+  compiles/links at 1,779,712 bytes, SHA-256
+  2976615E909C510FC5ABBEB6E3B45A576773F7EBEC2E2B897396B7EA19E074D8,
+  passes debugger-hook validation, and passes focused five-flag exact-SHA
+  enable/idempotence/restore validation.
+- No current-source 16-layout result is claimed. The older
+  cheat_upgrades_holiday_ornaments output remains a stale partial-matrix
+  artifact without .vf2beh; the current fully enabled layout passes its linked
+  Holiday positive check.
