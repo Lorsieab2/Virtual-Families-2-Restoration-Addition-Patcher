@@ -892,3 +892,17 @@ B155.5 full-game mortality calibration
   passes full CRC validation, and contains no duplicate names or forbidden
   logs/caches/object files. SHA-256:
   14ADD32A067848F10BA992FBF41CB2D0CE15FC22505AD6277A7C623E9E7F481C.
+B156 optional Same-Sex Marriage implementation
+- Added a default-off Allow Same-Sex Marriage setting backed by a writable
+  one-byte .vf2same section present in every executable layout.
+- Disabled preserves the desktop opposite-sex proposal calculation and stock
+  spouse, romantic-action cooldown, and pregnancy routes.
+- Enabled proposal candidates use the game's GetRandom(2), so either gender
+  can be offered. The native two-parent family-tree record format is unchanged.
+- Same-sex spouses resolve through guarded first/second parent-role selectors,
+  can repeat the private romantic action when manually dropped on each other,
+  and have 0% pregnancy even when the Force Successful Pregnancy cheat is
+  armed. The guard returns before CVillager::Impregnate.
+- All 16 B156 layouts linked with unique hashes. The Holiday 8-positive and
+  8-negative checks passed, and all five runtime bytes are non-overlapping,
+  idempotent on repeated enable, and restore exactly when disabled.

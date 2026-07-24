@@ -4768,6 +4768,111 @@ class OlderPregnancyPatchTests(unittest.TestCase):
         self.assertNotIn("VF2_ENABLE_ALLOW_OLDER_PREGNANCIES", source)
 
 
+class SameSexMarriagePatchTests(unittest.TestCase):
+    def test_dormant_hooks_cover_candidate_roles_drop_and_pregnancy(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                patcher.PATCHED = temp_root
+                for filename in (
+                    "DatingScene.obj",
+                    "VillagerManager.obj",
+                    "theMainScene.obj",
+                ):
+                    shutil.copy2(
+                        patcher.SRC_OBJS / filename,
+                        temp_root / filename,
+                    )
+                manifest = {}
+                patcher.patch_same_sex_marriage(manifest)
+
+                dating = CoffObject(temp_root / "DatingScene.obj")
+                generate = dating.symbol(
+                    "?GeneratePeepCandidate@CDatingScene@@AAEXXZ"
+                )
+                generate_sec = dating.section(generate.section)
+                generate_raw = generate_sec.raw_ptr + generate.value + 0x7B
+                self.assertEqual(
+                    bytes(dating.buf[generate_raw:generate_raw + 3]),
+                    b"\x8B\xD7\xE8",
+                )
+
+                manager = CoffObject(temp_root / "VillagerManager.obj")
+                for function_name in (
+                    "?GetMatriarch@CVillagerManager@@QAEPAVCVillager@@XZ",
+                    "?GetPatriarch@CVillagerManager@@QAEPAVCVillager@@XZ",
+                ):
+                    function = manager.symbol(function_name)
+                    section = manager.section(function.section)
+                    raw = section.raw_ptr + function.value
+                    self.assertEqual(manager.buf[raw], 0xE9)
+                    self.assertEqual(section.raw_size, 0x58 + 27)
+
+                main_obj = CoffObject(temp_root / "theMainScene.obj")
+                drop = main_obj.symbol(
+                    "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
+                )
+                drop_sec = main_obj.section(drop.section)
+                self.assertEqual(
+                    main_obj.buf[drop_sec.raw_ptr + drop.value + 0x256],
+                    0xE9,
+                )
+                try_func = main_obj.symbol(
+                    "?TryToMakeBaby@theMainScene@@IAEXXZ"
+                )
+                try_sec = main_obj.section(try_func.section)
+                matches = []
+                for index in range(try_sec.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH",
+                        main_obj.buf,
+                        try_sec.reloc_ptr + index * 10,
+                    )
+                    if vaddr == try_func.value + 0x42:
+                        matches.append((
+                            main_obj.symbol_by_index[symbol_index].name,
+                            rtype,
+                        ))
+                self.assertEqual(
+                    matches,
+                    [(
+                        patcher.FORCE_PREGNANCY_CHANCE_HELPER_SYMBOL,
+                        patcher.IMAGE_REL_I386_REL32,
+                    )],
+                )
+
+                contract = manifest["SameSexMarriage"]
+                self.assertFalse(contract["default"])
+                self.assertEqual(
+                    contract["runtime_flag"]["source_section"],
+                    ".vf2same",
+                )
+                self.assertIn("0%", contract["pregnancy"])
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_hook_is_installed_in_all_compile_time_layouts(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        main = next(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "main"
+        )
+        calls = [
+            node for node in main.body
+            if isinstance(node, ast.Expr)
+            and isinstance(node.value, ast.Call)
+            and isinstance(node.value.func, ast.Name)
+            and node.value.func.id == "patch_same_sex_marriage"
+        ]
+        self.assertEqual(len(calls), 1)
+        self.assertIn(
+            "if (VF2IsSameSexMarriage())",
+            source,
+        )
+
+
 class OlderMortalityPatchTests(unittest.TestCase):
     def test_curve_is_monotonic_full_game_calibration_with_rare_tail(self):
         expected = {

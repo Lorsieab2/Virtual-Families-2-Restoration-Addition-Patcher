@@ -117,7 +117,7 @@ no active Experimental/Not Working section:
 | Category | GUI color | Intended settings |
 | --- | --- | --- |
 | `main` | Green | Core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits. |
-| `optional` | Black | Holiday Ornaments, Settings Evict, Island Events, Allow Older Pregnancies, Older Villager Mortality Curve, mobile furniture behaviors, Invisible Furniture graphics modes, optional visual swaps, custom maps, LDW Posters/Paintings, and Colorful Couches. |
+| `optional` | Black | Holiday Ornaments, Settings Evict, Island Events, Allow Older Pregnancies, Allow Same-Sex Marriage, Older Villager Mortality Curve, mobile furniture behaviors, Invisible Furniture graphics modes, optional visual swaps, custom maps, LDW Posters/Paintings, and Colorful Couches. |
 
 Bundles can include `patcher_icon.png` and `patcher_icon.ico`. The GUI uses the
 PNG as the literal picture beside the bold title and uses the ICO/PNG for the

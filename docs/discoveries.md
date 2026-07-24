@@ -3144,3 +3144,25 @@
   The focused generation-hook/Goals-draw contract test passes. Live
   transition, persistence, visual-placement, 30-to-31 rollover, and new-game
   reset QA remains.
+- B156 same-sex marriage support uses a separate default-zero writable
+  `.vf2same` byte rather than another executable-matrix dimension. Candidate
+  generation keeps the stock opposite-sex calculation when disabled and uses
+  native `GetRandom(2)` for a female-or-male candidate when enabled.
+- `CFamilyTree::UpdateParents` was confirmed to write two gender-neutral parent
+  records. The desktop restriction was instead in the post-acceptance
+  `GetMatriarch`/`GetPatriarch` lookups. Guarded selector detours now recover
+  the two current parent records and assign stable first/second spouse roles
+  when both genders match; mixed-gender and flag-off behavior remains native.
+- A manual drop is repeatable only when the dropped villager and target are the
+  two established same-sex spouses. Both `theMainScene::TryToMakeBaby` and the
+  `CVillagerPlans::ProcessCurrentPlan` pregnancy route pass through the shared
+  guard, which returns false before normal or cheat-forced chance and prevents
+  every `Impregnate` call for same-sex couples. The failed-attempt cooldown
+  write is skipped for those couples.
+- The complete B156 matrix links 16 unique executable layouts. Holiday
+  positive/negative validation passes 8/8, and the five default-zero runtime
+  controls (`.vf2beh`, `.vf2goal`, `.vf2preg`, `.vf2same`, `.vf2mort`) are
+  non-overlapping and restore exactly after enable/re-enable/disable cycles.
+  The fully enabled raw layout is 1,767,936 bytes with SHA-256
+  `CE4736D62F2F67063D214D59DAE12C48855321708A8579D1F084D2BF05617A21`;
+  its `.vf2same` byte is raw `0x19FA00`, RVA `0x771000`.

@@ -90,6 +90,7 @@ MOBILE_FURNITURE_BEHAVIOR_FMAP_FILES = (
 )
 SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "allow_older_pregnancies",
+    "same_sex_marriage",
     "older_villager_mortality",
     "invisible_upgrades_graphics",
     "optional_song_mods",
@@ -219,6 +220,13 @@ SETTINGS = [
         "id": "allow_older_pregnancies",
         "label": "Allow Older Pregnancies",
         "description": "Optional patch: preserves normal fertility behavior below age 50, then allows a small pregnancy chance when either parent is 50 or older. The older parent caps the chance from 10.0% at age 50 down to a permanent 0.1% floor at age 69+. Failed attempts involving an age-50+ parent do not start the stock try-for-baby cooldown.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "same_sex_marriage",
+        "label": "Allow Same-Sex Marriage",
+        "description": "Optional patch: marriage proposals may offer either women or men. Same-sex spouses are stored in the native two-parent family tree, can repeat the private romantic action when dropped on each other, and have a 0% pregnancy chance. Disabling this restores the stock opposite-sex candidate and spouse behavior.",
         "default": False,
         "category": "optional",
     },
@@ -746,6 +754,30 @@ def older_mortality_post_asset_patches(
     )
 
 
+def same_sex_marriage_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+) -> list[dict[str, Any]]:
+    contract = build_manifest_data.get("SameSexMarriage")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError(
+            "Build manifest has an invalid SameSexMarriage contract."
+        )
+    return setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=".vf2same",
+        setting_id="same_sex_marriage",
+        feature_label="Same-Sex Marriage",
+    )
+
+
 def holiday_furniture_goal_post_asset_patches(
     executable_sources: list[Path],
     *,
@@ -812,6 +844,11 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *older_pregnancy_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+        ),
+        *same_sex_marriage_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
@@ -2365,6 +2402,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- The six-page/72-item collection and Holiday-aware count require holiday_ornaments_collection. Brokerage 11% wording follows mobile_purchases.",
         "- Holiday Furniture goals 0x6D-0x7F use an exact-SHA .vf2goal post-asset byte enabled only with core_executable plus holiday_furniture.",
         "- Allow Older Pregnancies is a default-off exact-SHA post-asset toggle of the dormant .vf2preg byte; age-50+ failed attempts skip the stock cooldown deadline write, and the setting does not add another executable overlay dimension.",
+        "- Allow Same-Sex Marriage is a default-off exact-SHA post-asset toggle of the dormant .vf2same byte. Proposals may offer either gender; the native two-parent family-tree records are preserved, same-sex spouses can repeat the private romantic action, and normal or cheat-forced pregnancy remains 0%.",
         "- Older Villager Mortality Curve is a default-off exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
         "- F5 enables and toggles the native debugger overlay; Up/Down change pages, F6 selects Waypoint Editor, F7 selects Light Source Editor, and F4 exits an editor. B153 recognizes VF2's internal key codes as well as Win32/SDL fallbacks.",
     ]

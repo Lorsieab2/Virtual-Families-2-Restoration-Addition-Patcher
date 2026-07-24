@@ -163,6 +163,16 @@ OLDER_PREGNANCY_HELPER_SYMBOL = "_VF2RollOlderPregnancy"
 OLDER_PREGNANCY_COOLDOWN_HELPER_SYMBOL = "_VF2StoreTryForBabyCooldownMaybe"
 OLDER_PREGNANCY_INTERNAL_AGE_50 = 50 * 20
 
+# B156 same-sex marriage support is a separate default-off runtime byte.  The
+# family tree already stores two gender-neutral parent records; these hooks
+# replace only the desktop assumptions that the records must resolve through
+# one female and one male selector.
+SAME_SEX_MARRIAGE_FLAG_SECTION = ".vf2same"
+SAME_SEX_MARRIAGE_FLAG_SYMBOL = "_gVF2SameSexMarriage"
+SAME_SEX_CANDIDATE_GENDER_HELPER_SYMBOL = "@VF2MarriageCandidateGender@8"
+SAME_SEX_ROLE_HELPER_SYMBOL = "@VF2GetMarriageRole@12"
+SAME_SEX_DROP_HELPER_SYMBOL = "@VF2IsSameSexSpouseDrop@12"
+
 # B153 mortality research uses the same dormant-byte architecture as older
 # pregnancies. Every executable contains the hook with a zero byte; the
 # offline patcher flips only .vf2mort for the selected exact-SHA payload.
@@ -7851,6 +7861,27 @@ public:
     villager_type_preamble = (
         "" if "class CVillager" in existing_helper else "class CVillager {};\n"
     )
+    gender_type_preamble = (
+        ""
+        if "enum EGender" in existing_helper
+        else "enum EGender { eGenderMale = 0, eGenderFemale = 1 };\n"
+    )
+    manager_type_preamble = (
+        ""
+        if "class CVillagerManager" in existing_helper
+        else """
+class CVillagerManager {
+public:
+    CVillager* GetVillagerPtr(int id);
+    CVillager& GetVillager(int id);
+    int const SpawnSpecificPeep(
+        int age, EGender gender, int body, const char *name,
+        const char *surname, int motherBody, int fatherBody, int hair,
+        int skin, int x, int y, bool adopted
+    );
+};
+"""
+    )
     helper_path.write_text(
         existing_helper
         + shared_type_preamble
@@ -7881,30 +7912,8 @@ public:
 }};
 
 {villager_type_preamble}
-enum EGender {{
-    eGenderMale = 0,
-    eGenderFemale = 1
-}};
-
-class CVillagerManager {{
-public:
-    CVillager* GetVillagerPtr(int id);
-    CVillager& GetVillager(int id);
-    int const SpawnSpecificPeep(
-        int age,
-        EGender gender,
-        int body,
-        const char *name,
-        const char *surname,
-        int motherBody,
-        int fatherBody,
-        int hair,
-        int skin,
-        int x,
-        int y,
-        bool adopted
-    );
-}};
+{gender_type_preamble}
+{manager_type_preamble}
 
 extern CToolTray ToolTray;
 extern CInventoryManager InventoryManager;
@@ -8866,6 +8875,42 @@ public:
     bool ChanceOfPregnancy(int motherAge, int fatherAge, int fatherFertility);
 };
 
+enum ECareerType {
+    eCareerNone = 0
+};
+
+class CVillagerSkills {
+public:
+    ECareerType const CareerType();
+};
+
+enum EGender {
+    eGenderMale = 0,
+    eGenderFemale = 1
+};
+
+class CVillagerManager {
+public:
+    CVillager *GetMatriarch();
+    CVillager *GetPatriarch();
+    CVillager *GetVillagerPtr(int id);
+    CVillager &GetVillager(int id);
+    int const SpawnSpecificPeep(
+        int age,
+        EGender gender,
+        int body,
+        const char *name,
+        const char *surname,
+        int motherBody,
+        int fatherBody,
+        int hair,
+        int skin,
+        int x,
+        int y,
+        bool adopted
+    );
+};
+
 class CPet {
 public:
     struct SSaveState;
@@ -9004,6 +9049,7 @@ extern CEnvironment Environment;
 extern CTutorialTip TutorialTip;
 extern CPetManager PetManager;
 extern CFamilyTree FamilyTree;
+extern CVillagerManager VillagerManager;
 
 extern "C" int __cdecl VF2GetB150UpgradePrice(int itemId);
 extern "C" void __cdecl VF2ToggleB150PriceMode(int itemId);
@@ -9020,6 +9066,10 @@ volatile unsigned char gVF2HolidayFurnitureGoalsEnabled = 0;
 #pragma section(".vf2preg", read, write)
 extern "C" __declspec(allocate(".vf2preg"))
 volatile unsigned char gVF2AllowOlderPregnancies = 0;
+
+#pragma section(".vf2same", read, write)
+extern "C" __declspec(allocate(".vf2same"))
+volatile unsigned char gVF2SameSexMarriage = 0;
 
 #pragma section(".vf2mort", read, write)
 extern "C" __declspec(allocate(".vf2mort"))
@@ -9059,12 +9109,135 @@ static int VF2StockPregnancyChanceWithoutCutoff(
     return chance;
 }
 
+static CVillager *VF2VillagerByIndex(int index) {
+    if (index < 0 || index >= 30) return 0;
+    return (CVillager *)(
+        (unsigned char *)&VillagerManager + 0x1CC70 + index * 0x1CC0C
+    );
+}
+
+static bool VF2MarriageAdult(CVillager *villager) {
+    if (!villager) return false;
+    unsigned char *raw = (unsigned char *)villager;
+    if (raw[0x1BB84] == 0 || raw[0x1BB88] != 0) return false;
+    if (*(int *)(raw + 0x6B00) <= 0) return false;
+    return ((CVillagerSkills *)(raw + 0x6B8C))->CareerType() != 0;
+}
+
+static CVillager *VF2VillagerByPersistentId(int peepId) {
+    for (int index = 0; index < 30; ++index) {
+        CVillager *villager = VF2VillagerByIndex(index);
+        if (VF2MarriageAdult(villager) &&
+            *(int *)((unsigned char *)villager + 0x1BB48) == peepId) {
+            return villager;
+        }
+    }
+    return 0;
+}
+
+static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {
+    first = 0;
+    second = 0;
+
+    int generation = *(int *)((unsigned char *)&FamilyTree + 4);
+    if (generation > 0) {
+        unsigned char *record =
+            (unsigned char *)&FamilyTree + generation * 0x6C8 - 0x6C0;
+        if (record[0x1E] && record[0xF6]) {
+            first = VF2VillagerByPersistentId(*(int *)(record + 0x2C));
+            second = VF2VillagerByPersistentId(*(int *)(record + 0x104));
+            if (first && second && first != second) return true;
+            // Both parent records exist, so a dead/absent spouse must not be
+            // replaced by an adult child from the live villager array.
+            return false;
+        }
+    }
+
+    for (int index = 0; index < 30; ++index) {
+        CVillager *villager = VF2VillagerByIndex(index);
+        if (!VF2MarriageAdult(villager)) continue;
+        if (!first) {
+            first = villager;
+        } else if (villager != first) {
+            second = villager;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool VF2IsSameSexMarriage() {
+    if (gVF2SameSexMarriage == 0) return false;
+    CVillager *first;
+    CVillager *second;
+    if (!VF2MarriagePair(first, second)) return false;
+    return *(int *)((unsigned char *)first + 0x6A58) ==
+        *(int *)((unsigned char *)second + 0x6A58);
+}
+
+extern "C" int __fastcall VF2MarriageCandidateGender(
+    void *,
+    int currentGender
+) {
+    if (gVF2SameSexMarriage == 0) {
+        return currentGender == 1 ? 0 : 1;
+    }
+    return ldwGameState::GetRandom(2);
+}
+
+extern "C" CVillager *__fastcall VF2GetMarriageRole(
+    CVillagerManager *,
+    void *,
+    int matriarchRole
+) {
+    CVillager *first;
+    CVillager *second;
+    if (!VF2MarriagePair(first, second)) {
+        // Before a proposal is accepted there is only one parent record.
+        // Preserve the stock selector so GeneratePeepCandidate can find that
+        // unmarried adult and create the candidate.
+        int wantedGender = matriarchRole ? 1 : 0;
+        for (int index = 0; index < 30; ++index) {
+            CVillager *villager = VF2VillagerByIndex(index);
+            if (VF2MarriageAdult(villager) &&
+                *(int *)((unsigned char *)villager + 0x6A58) ==
+                    wantedGender) {
+                return villager;
+            }
+        }
+        return 0;
+    }
+    int firstGender = *(int *)((unsigned char *)first + 0x6A58);
+    int secondGender = *(int *)((unsigned char *)second + 0x6A58);
+    if (firstGender == secondGender) {
+        return matriarchRole ? first : second;
+    }
+    int wantedGender = matriarchRole ? 1 : 0;
+    return firstGender == wantedGender ? first : second;
+}
+
+extern "C" bool __fastcall VF2IsSameSexSpouseDrop(
+    CVillager *dropped,
+    void *,
+    CVillager *target
+) {
+    if (!dropped || !target || !VF2IsSameSexMarriage()) return false;
+    CVillager *first;
+    CVillager *second;
+    if (!VF2MarriagePair(first, second)) return false;
+    return (dropped == first && target == second) ||
+        (dropped == second && target == first);
+}
+
 extern "C" void __cdecl VF2StoreTryForBabyCooldownMaybe(
     void *gameState,
     unsigned int deadline,
     int motherInternalAge,
     int fatherInternalAge
 ) {
+    if (VF2IsSameSexMarriage()) {
+        return;
+    }
     bool olderCouple =
         motherInternalAge >= 50 * 20 || fatherInternalAge >= 50 * 20;
     if (gVF2AllowOlderPregnancies == 0 || !olderCouple) {
@@ -9537,6 +9710,9 @@ extern "C" bool __fastcall VF2ChanceOfPregnancyForced(
     int fatherAge,
     int fatherFertility
 ) {
+    if (VF2IsSameSexMarriage()) {
+        return false;
+    }
     if (VF2PersistentCheatAndPurchaseMask() & 0x4) {
         return true;
     }
@@ -12161,6 +12337,197 @@ def patch_allow_older_pregnancies(manifest):
             "helper": OLDER_PREGNANCY_COOLDOWN_HELPER_SYMBOL,
         },
         "multiples": "native pregnancy/birth logic remains unmodified",
+    }
+
+
+def patch_same_sex_marriage(manifest):
+    """Install dormant gender-neutral marriage and romantic-action routing."""
+    dating_path = PATCHED / "DatingScene.obj"
+    dating = CoffObject(dating_path)
+    generate_name = "?GeneratePeepCandidate@CDatingScene@@AAEXXZ"
+    generate = dating.symbol(generate_name)
+    generate_sec = dating.section(generate.section)
+    gender_hook = generate.value + 0x7B
+    gender_raw = generate_sec.raw_ptr + gender_hook
+    expected_gender = b"\x33\xC0\x83\xFF\x01\x0F\x95\xC0"
+    if bytes(dating.buf[gender_raw:gender_raw + 8]) != expected_gender:
+        raise RuntimeError("Dating candidate gender hook drifted")
+    gender_helper = dating.append_undefined_symbol(
+        SAME_SEX_CANDIDATE_GENDER_HELPER_SYMBOL
+    )
+    dating.buf[gender_raw:gender_raw + 8] = (
+        b"\x8B\xD7"             # mov edx,edi: current gender
+        b"\xE8\0\0\0\0"       # call candidate-gender helper
+        b"\x90"
+    )
+    dating.append_relocation(
+        generate_sec.index,
+        gender_hook + 3,
+        gender_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    dating.write(dating_path)
+
+    manager_path = PATCHED / "VillagerManager.obj"
+    manager = CoffObject(manager_path)
+    role_helper = manager.append_undefined_symbol(SAME_SEX_ROLE_HELPER_SYMBOL)
+    flag_symbol = manager.append_undefined_symbol(SAME_SEX_MARRIAGE_FLAG_SYMBOL)
+    selector_layouts = (
+        ("?GetMatriarch@CVillagerManager@@QAEPAVCVillager@@XZ", 1),
+        ("?GetPatriarch@CVillagerManager@@QAEPAVCVillager@@XZ", 0),
+    )
+    selector_hooks = []
+    for function_name, role in selector_layouts:
+        function = manager.symbol(function_name)
+        section = manager.section(function.section)
+        if function.value != 0 or section.raw_size != 0x58:
+            raise RuntimeError(f"Marriage selector layout drifted: {function_name}")
+        raw = section.raw_ptr
+        expected = b"\x53\x56\x57\x33\xFF"
+        if bytes(manager.buf[raw:raw + 5]) != expected:
+            raise RuntimeError(f"Marriage selector prologue drifted: {function_name}")
+
+        cave = section.raw_size
+        trampoline = bytearray(
+            b"\x80\x3D\0\0\0\0\x00"       # cmp byte ptr [flag],0
+            b"\x75\x0A"                    # jne enabled
+            b"\x53\x56\x57\x33\xFF"       # stock prologue
+            b"\xE9\0\0\0\0"               # jmp stock +5
+            + bytes((0x6A, role))           # push role
+            + b"\xE8\0\0\0\0"             # call role helper
+            + b"\xC3"
+        )
+        if len(trampoline) != 27:
+            raise AssertionError("Marriage selector trampoline size drifted")
+        struct.pack_into("<i", trampoline, 15, 5 - (cave + 19))
+        manager.insert_section_bytes(section.index, cave, bytes(trampoline))
+        manager.append_relocation(
+            section.index,
+            cave + 2,
+            flag_symbol,
+            IMAGE_REL_I386_DIR32,
+        )
+        manager.append_relocation(
+            section.index,
+            cave + 22,
+            role_helper,
+            IMAGE_REL_I386_REL32,
+        )
+        function = manager.symbol(function_name)
+        section = manager.section(function.section)
+        raw = section.raw_ptr + function.value
+        manager.buf[raw:raw + 5] = (
+            b"\xE9" + struct.pack("<i", cave - 5)
+        )
+        selector_hooks.append({
+            "function": function_name,
+            "trampoline": hex(cave),
+            "role": "first parent" if role else "second parent",
+        })
+    manager.write(manager_path)
+
+    main_path = PATCHED / "theMainScene.obj"
+    main_obj = CoffObject(main_path)
+    drop_name = "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
+    drop = main_obj.symbol(drop_name)
+    drop_sec = main_obj.section(drop.section)
+    drop_hook = drop.value + 0x256
+    drop_raw = drop_sec.raw_ptr + drop_hook
+    expected_drop = b"\x8B\x43\x14\x8B\xC8"
+    if bytes(main_obj.buf[drop_raw:drop_raw + 5]) != expected_drop:
+        raise RuntimeError("Same-sex spouse drop hook drifted")
+    drop_cave = drop_sec.raw_size
+    drop_trampoline = bytearray(
+        b"\x56"                         # push target
+        b"\x8B\xCF"                    # mov ecx,dropped
+        b"\xE8\0\0\0\0"              # call spouse-drop helper
+        b"\x84\xC0"                    # test al,al
+        b"\x0F\x85\0\0\0\0"          # jne private action
+        b"\x8B\x43\x14\x8B\xC8"      # stock overwritten bytes
+        b"\xE9\0\0\0\0"              # jmp stock +25B
+    )
+    if len(drop_trampoline) != 26:
+        raise AssertionError("Same-sex spouse-drop trampoline size drifted")
+    struct.pack_into(
+        "<i", drop_trampoline, 12,
+        (drop.value + 0x26E) - (drop_cave + 16),
+    )
+    struct.pack_into(
+        "<i", drop_trampoline, 22,
+        (drop.value + 0x25B) - (drop_cave + 26),
+    )
+    main_obj.insert_section_bytes(
+        drop_sec.index, drop_cave, bytes(drop_trampoline)
+    )
+    drop_helper = main_obj.append_undefined_symbol(
+        SAME_SEX_DROP_HELPER_SYMBOL
+    )
+    main_obj.append_relocation(
+        drop_sec.index,
+        drop_cave + 4,
+        drop_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    drop = main_obj.symbol(drop_name)
+    drop_sec = main_obj.section(drop.section)
+    drop_raw = drop_sec.raw_ptr + drop_hook
+    main_obj.buf[drop_raw:drop_raw + 5] = (
+        b"\xE9" + struct.pack("<i", drop_cave - (drop_hook + 5))
+    )
+
+    try_name = "?TryToMakeBaby@theMainScene@@IAEXXZ"
+    try_func = main_obj.symbol(try_name)
+    try_sec = main_obj.section(try_func.section)
+    chance_call = try_func.value + 0x41
+    chance_relocation = try_func.value + 0x42
+    chance_raw = try_sec.raw_ptr + chance_call
+    if bytes(main_obj.buf[chance_raw:chance_raw + 5]) != b"\xE8\0\0\0\0":
+        raise RuntimeError("TryToMakeBaby chance callsite drifted")
+    chance_helper = main_obj.append_undefined_symbol(
+        FORCE_PREGNANCY_CHANCE_HELPER_SYMBOL
+    )
+    main_obj.retarget_relocation(
+        try_sec.index,
+        chance_relocation,
+        chance_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    main_obj.write(main_path)
+
+    manifest["SameSexMarriage"] = {
+        "status": "dormant native hooks installed in every executable",
+        "offline_patcher_setting": "same_sex_marriage",
+        "category": "optional",
+        "default": False,
+        "runtime_flag": {
+            "symbol": SAME_SEX_MARRIAGE_FLAG_SYMBOL,
+            "source_section": SAME_SEX_MARRIAGE_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "candidate_gender": (
+            "flag off preserves opposite-sex candidates; flag on chooses "
+            "female or male with equal native RNG probability"
+        ),
+        "parent_storage": (
+            "native CFamilyTree::UpdateParents remains unchanged because its "
+            "two parent records are already gender-neutral"
+        ),
+        "selectors": selector_hooks,
+        "romantic_action": (
+            "manual spouse-on-spouse drops bypass the stock conception "
+            "cooldown only for an established same-sex marriage"
+        ),
+        "pregnancy": (
+            "same-sex marriages have 0% pregnancy: return false before normal or forced "
+            "pregnancy chance; no Impregnate call is reached"
+        ),
+        "stock_off_state": (
+            "candidate, selector, drop cooldown, and pregnancy paths rejoin "
+            "their original desktop instructions while the flag is zero"
+        ),
     }
 
 
@@ -19951,6 +20318,7 @@ def main():
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
     # this feature adds no executable-matrix dimension.
     patch_allow_older_pregnancies(manifest)
+    patch_same_sex_marriage(manifest)
     patch_force_successful_pregnancy_callsites(manifest)
     # The optional mortality curve is another exact-SHA dormant-byte hook.
     # Its zero .vf2mort default resumes the untouched stock mortality block.

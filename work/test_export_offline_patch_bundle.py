@@ -24,6 +24,8 @@ def minimal_pe_bytes(
     goal_marker=0,
     with_mobile_furniture_behavior_flag=False,
     behavior_marker=0,
+    with_same_sex_marriage_flag=False,
+    same_sex_marker=0,
 ):
     runtime_flags = []
     if with_older_pregnancy_flag:
@@ -34,6 +36,8 @@ def minimal_pe_bytes(
         runtime_flags.append((".vf2goal", goal_marker))
     if with_mobile_furniture_behavior_flag:
         runtime_flags.append((".vf2beh", behavior_marker))
+    if with_same_sex_marriage_flag:
+        runtime_flags.append((".vf2same", same_sex_marker))
     # Three or more runtime-flag sections extend the PE section table past
     # 0x200, so shift those coexistence fixtures by one file-alignment block.
     text_raw_offset = 0x400 if len(runtime_flags) > 2 else 0x200
@@ -112,6 +116,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         )
         for setting_id in (
             "allow_older_pregnancies",
+            "same_sex_marriage",
             "older_villager_mortality",
             "mobile_furniture_behaviors",
         ):
@@ -179,6 +184,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 mortality_marker=0,
                 with_holiday_goal_flag=True,
                 goal_marker=0,
+                with_same_sex_marriage_flag=True,
+                same_sex_marker=0,
             )
             (build / patched_name).write_bytes(patched_data)
             (build / "patch-manifest.json").write_text(
@@ -194,6 +201,13 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                         "OlderVillagerMortality": {
                             "runtime_flag": {
                                 "source_section": ".vf2mort",
+                                "size": 1,
+                                "default": "00",
+                            }
+                        },
+                        "SameSexMarriage": {
+                            "runtime_flag": {
+                                "source_section": ".vf2same",
                                 "size": 1,
                                 "default": "00",
                             }
@@ -236,7 +250,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             }["allow_older_pregnancies"]
             self.assertFalse(setting["default"])
             self.assertEqual(setting["category"], "optional")
-            self.assertEqual(len(manifest["post_asset_patches"]), 3)
+            self.assertEqual(len(manifest["post_asset_patches"]), 4)
             records = {
                 row["requires"][-1]: row
                 for row in manifest["post_asset_patches"]
@@ -263,8 +277,14 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             )
             self.assertEqual(
                 manifest["export_summary"]["post_asset_patch_count"],
-                3,
+                4,
             )
+            same_sex_record = records["same_sex_marriage"]
+            self.assertEqual(
+                same_sex_record["requires"],
+                ["core_executable", "same_sex_marriage"],
+            )
+            self.assertEqual(same_sex_record["variants"][0]["offset"], "0xc00")
             mortality_record = records["older_villager_mortality"]
             self.assertEqual(
                 mortality_record["requires"],
@@ -330,6 +350,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(all_disabled[0x600], 0)
             self.assertEqual(all_disabled[0x800], 0)
             self.assertEqual(all_disabled[0xA00], 0)
+            self.assertEqual(all_disabled[0xC00], 0)
 
     def test_b152_runtime_records_cover_sixteen_unique_layout_hashes(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -342,6 +363,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                         with_older_mortality_flag=True,
                         with_holiday_goal_flag=True,
                         with_mobile_furniture_behavior_flag=True,
+                        with_same_sex_marriage_flag=True,
                     )
                 )
                 data[0x400 + index] ^= index + 1
@@ -371,10 +393,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                         "runtime_flag": {
                             "source_section": ".vf2beh",
                         }
+                    },
+                    "SameSexMarriage": {
+                        "runtime_flag": {
+                            "source_section": ".vf2same",
+                        }
                     }
                 },
             )
-            self.assertEqual(len(records), 4)
+            self.assertEqual(len(records), 5)
             records_by_setting = {
                 row["requires"][-1]: row for row in records
             }
@@ -383,6 +410,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 "older_villager_mortality": "0x800",
                 "holiday_furniture": "0xa00",
                 "mobile_furniture_behaviors": "0xc00",
+                "same_sex_marriage": "0xe00",
             }
             hashes_by_setting = {}
             for setting_id, offset in expected_offsets.items():
@@ -411,6 +439,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(
                 hashes_by_setting["allow_older_pregnancies"],
                 hashes_by_setting["mobile_furniture_behaviors"],
+            )
+            self.assertEqual(
+                hashes_by_setting["allow_older_pregnancies"],
+                hashes_by_setting["same_sex_marriage"],
             )
 
     def test_mobile_furniture_behavior_assets_export_and_restore_exact_maps(self):

@@ -316,7 +316,7 @@ def validate_older_pregnancy(path: Path, expected_flag: int) -> dict:
         raise ValueError(f"{path}: pregnancy cooldown does not resume at +0xb")
 
     cooldown_helper_raw = image.rva_to_raw(cooldown_helper_rva)
-    cooldown_helper = image.data[cooldown_helper_raw:cooldown_helper_raw + 55]
+    cooldown_helper = image.data[cooldown_helper_raw:cooldown_helper_raw + 120]
     helper_prefix = bytes.fromhex(
         "81 7C 24 0C E8 03 00 00 7D 0E "
         "81 7C 24 10 E8 03 00 00 7D 04 32 C0 EB 02 B0 01 80 3D"
@@ -325,13 +325,40 @@ def validate_older_pregnancy(path: Path, expected_flag: int) -> dict:
         "00 74 04 84 C0 75 0E 8B 44 24 04 8B 4C 24 08 "
         "89 88 E0 5A 02 00 C3"
     )
-    if cooldown_helper[:28] != helper_prefix:
-        raise ValueError(f"{path}: pregnancy cooldown age-50 gate drifted")
-    cooldown_flag_va = struct.unpack_from("<I", cooldown_helper, 28)[0]
-    if cooldown_flag_va != expected_flag_va:
-        raise ValueError(f"{path}: pregnancy cooldown flag VA drifted")
-    if cooldown_helper[32:54] != helper_suffix:
-        raise ValueError(f"{path}: pregnancy cooldown conditional write drifted")
+    if cooldown_helper[:28] == helper_prefix:
+        cooldown_flag_va = struct.unpack_from("<I", cooldown_helper, 28)[0]
+        if cooldown_flag_va != expected_flag_va:
+            raise ValueError(f"{path}: pregnancy cooldown flag VA drifted")
+        if cooldown_helper[32:54] != helper_suffix:
+            raise ValueError(f"{path}: pregnancy cooldown conditional write drifted")
+    else:
+        same_flag = image.section(".vf2same")
+        same_flag_va = image.image_base + same_flag["rva"]
+        if cooldown_helper[:5] != b"\x83\xEC\x08\x80\x3D":
+            raise ValueError(f"{path}: same-sex cooldown guard prologue drifted")
+        if struct.unpack_from("<I", cooldown_helper, 5)[0] != same_flag_va:
+            raise ValueError(f"{path}: same-sex cooldown flag VA drifted")
+        shifted_prefix = bytes.fromhex(
+            "81 7C 24 14 E8 03 00 00 7D 0E "
+            "81 7C 24 18 E8 03 00 00 7D 04 32 C0 EB 02 B0 01 80 3D"
+        )
+        shifted_suffix = bytes.fromhex(
+            "00 74 04 84 C0 75 0E 8B 44 24 0C 8B 4C 24 10 "
+            "89 88 E0 5A 02 00 83 C4 08 C3"
+        )
+        shifted = cooldown_helper.find(shifted_prefix)
+        if shifted < 0:
+            raise ValueError(f"{path}: pregnancy cooldown age-50 gate drifted")
+        cooldown_flag_va = struct.unpack_from(
+            "<I", cooldown_helper, shifted + len(shifted_prefix)
+        )[0]
+        if cooldown_flag_va != expected_flag_va:
+            raise ValueError(f"{path}: pregnancy cooldown flag VA drifted")
+        suffix_start = shifted + len(shifted_prefix) + 4
+        if cooldown_helper[
+            suffix_start:suffix_start + len(shifted_suffix)
+        ] != shifted_suffix:
+            raise ValueError(f"{path}: pregnancy cooldown conditional write drifted")
 
     return {
         "path": str(path),
@@ -584,15 +611,17 @@ def validate_exe(
     image = LinkedPE(path)
     goal = validate_one_byte_flag(image, ".vf2goal", expected_flag)
     behavior = validate_one_byte_flag(image, ".vf2beh", expected_flag)
+    same_sex = validate_one_byte_flag(image, ".vf2same", expected_flag)
     mortality = validate_older_mortality(path, expected_flag, build_label)
     original = bytes(image.data)
     flag_offsets = [
         int(goal["raw_offset"], 16),
         int(behavior["raw_offset"], 16),
         int(pregnancy["flag_raw_offset"], 16),
+        int(same_sex["raw_offset"], 16),
         int(mortality["flag"]["raw_offset"], 16),
     ]
-    if len(set(flag_offsets)) != 4:
+    if len(set(flag_offsets)) != 5:
         raise ValueError(f"{path}: runtime flag offsets overlap")
     enabled = bytearray(original)
     for offset in flag_offsets:
@@ -619,12 +648,13 @@ def validate_exe(
                 "value": pregnancy["flag_value"],
                 "writable": True,
             },
+            "same_sex_marriage": same_sex,
             "older_villager_mortality": mortality["flag"],
         },
         "older_pregnancy": pregnancy,
         "older_mortality": mortality,
         "toggle_cycle": {
-            "four_nonoverlapping_offsets": True,
+            "five_nonoverlapping_offsets": True,
             "enable_sets_all_to_01": all(enabled_once[offset] == 1 for offset in flag_offsets),
             "repeated_enable_idempotent": repeated_enable_idempotent,
             "disable_after_enable_restores_exact_original": disable_restores_original,
@@ -648,6 +678,7 @@ def validate_post_asset_records(
         "mobile_furniture_behaviors": ("mobile_furniture_behaviors", ".vf2beh"),
         "holiday_furniture": ("holiday_furniture_goals", ".vf2goal"),
         "allow_older_pregnancies": ("allow_older_pregnancies", ".vf2preg"),
+        "same_sex_marriage": ("same_sex_marriage", ".vf2same"),
         "older_villager_mortality": ("older_villager_mortality", ".vf2mort"),
     }
     if len(records) != len(expected):
