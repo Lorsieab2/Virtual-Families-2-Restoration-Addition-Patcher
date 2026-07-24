@@ -3067,3 +3067,25 @@
   `470494cf2de84bc073744a05b85aca3ec31de24f33f3ae5594312eae4de37be8`.
   Holiday/Lucky Rock linked validation and all four runtime-flag toggle cycles
   pass on that exact image. Live final-popup and save/reload QA remains.
+
+## 2026-07-24 - Force Successful Pregnancy one-shot
+
+- Cheat Upgrade `0x136` arms bit `0x4` in the already-persisted hidden
+  achievement record `0xA8`. The existing Taters purchase goal continues to
+  use only bits `0x1-0x2`; its writeback now explicitly preserves every higher
+  bit so buying either Taters item cannot disarm the pregnancy cheat.
+- In `CVillagerPlans::ProcessCurrentPlan`, only the two existing `REL32`
+  targets change. The five-byte calls at `+0x955` and `+0x979` remain
+  byte-identical. The first wrapper returns true while armed instead of calling
+  `CVillagerState::ChanceOfPregnancy`; the second calls native
+  `CVillager::Impregnate` and clears bit `0x4` only when that call succeeds.
+- Native partner/gender eligibility, empty-offspring-slot enforcement,
+  multiplicity, baby naming, Family Tree writes, achievements, and the
+  resulting birth remain unchanged. A capacity failure leaves the one-shot
+  armed for the next eligible attempt.
+- The fully enabled linked QA image is 1,763,840 bytes with checksum
+  `0x001B2A7A` and SHA-256
+  `a28ab64bd29f3186e6aeff2522e288d80c3a98a2a893dc3472557d532342585a`.
+  All four dormant runtime toggles pass B156 enable/idempotence/restore
+  validation, and all 219 tests pass with one intentional skip. Live purchase,
+  full-family, birth, and save/reload QA remains.

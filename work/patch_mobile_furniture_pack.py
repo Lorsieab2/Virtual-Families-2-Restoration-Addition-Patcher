@@ -539,6 +539,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES = {
     0x133: 0x124,
     0x134: 0x124,
     0x135: 0x124,
+    0x136: 0x124,
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
@@ -717,6 +718,12 @@ CHEAT_UPGRADE_ITEMS = [
         "description": "Queues an incoming marriage proposal email.",
         "price": 0,
     },
+    {
+        "item_id": 0x136,
+        "name": "Force Successful Pregnancy",
+        "description": "Makes the next eligible try-for-baby attempt pass its pregnancy roll. The one-shot remains armed until the native birth routine succeeds.",
+        "price": 0,
+    },
 ]
 CHEAT_UPGRADE_LEGACY_COUNT = 19
 CHEAT_UPGRADE_STRING_COUNT = CHEAT_UPGRADE_LEGACY_COUNT * 2
@@ -856,6 +863,9 @@ CUSTOM_ACHIEVEMENT_TATERS_PURCHASE_BITS = {
 }
 CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID = 0xA8
 CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL = 0x3
+FORCE_SUCCESSFUL_PREGNANCY_MASK = 0x4
+FORCE_PREGNANCY_CHANCE_HELPER_SYMBOL = "@VF2ChanceOfPregnancyForced@20"
+FORCE_PREGNANCY_BIRTH_HELPER_SYMBOL = "@VF2ImpregnateAndClearForce@28"
 CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS = {
     "Watching cat videos": 0x66,
     "Posting on VideoTube": 0x67,
@@ -876,7 +886,7 @@ def custom_achievement_purchase_dispatch(
     persisted_mask=0,
 ):
     """Pure model for the native purchase wrapper and hidden 0xA8 mask."""
-    mask = int(persisted_mask) & CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL
+    mask = int(persisted_mask)
     if not purchase_succeeded:
         return None, mask
     if item_id in CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS:
@@ -885,10 +895,14 @@ def custom_achievement_purchase_dispatch(
         return None, mask
     purchase_bit = CUSTOM_ACHIEVEMENT_TATERS_PURCHASE_BITS.get(item_id)
     if purchase_bit is not None:
-        updated_mask = mask | purchase_bit
+        old_purchase_mask = mask & CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL
+        updated_purchase_mask = old_purchase_mask | purchase_bit
+        updated_mask = (
+            mask & ~CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL
+        ) | updated_purchase_mask
         completed_now = (
-            mask != CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL
-            and updated_mask == CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL
+            old_purchase_mask != CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL
+            and updated_purchase_mask == CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL
         )
         return (0x74 if completed_now else None), updated_mask
     return CUSTOM_ACHIEVEMENT_HOLIDAY_PURCHASE_GOALS.get(item_id), mask
@@ -8148,7 +8162,7 @@ extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
 static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
     // Post-B153 cheats reuse the trophy descriptor so adding a row never
     // shifts villager-body or Holiday Ornament image IDs.
-    if (itemId >= 0x12E && itemId <= 0x135) itemId = 0x124;
+    if (itemId >= 0x12E && itemId <= 0x136) itemId = 0x124;
     int index = itemId - kVF2VisibleSpecialUpgradeFirstItem;
     return index < 0 || index >= kVF2VisibleSpecialUpgradeCount ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -8746,11 +8760,13 @@ class CVillager {
 public:
     struct SSaveState;
     bool const LoadState(SSaveState &state);
+    bool Impregnate(int count, const char *name, int motherBody, int fatherBody, bool adopted);
 };
 
 class CVillagerState {
 public:
     int FoodGroupsActive(bool includeOrganic);
+    bool ChanceOfPregnancy(int motherAge, int fatherAge, int fatherFertility);
 };
 
 class CPet {
@@ -9314,10 +9330,45 @@ __VF2_HOLIDAY_PURCHASE_GOAL_CASES__
     }
 }
 
-static unsigned int &VF2TatersPurchaseMask() {
+static unsigned int &VF2PersistentCheatAndPurchaseMask() {
     unsigned char *record =
         (unsigned char *)&Achievement + 0xA8 * 12;
     return *(unsigned int *)(record + 4);
+}
+
+static unsigned int &VF2TatersPurchaseMask() {
+    return VF2PersistentCheatAndPurchaseMask();
+}
+
+extern "C" bool __fastcall VF2ChanceOfPregnancyForced(
+    CVillagerState *state,
+    void *,
+    int motherAge,
+    int fatherAge,
+    int fatherFertility
+) {
+    if (VF2PersistentCheatAndPurchaseMask() & 0x4) {
+        return true;
+    }
+    return state->ChanceOfPregnancy(motherAge, fatherAge, fatherFertility);
+}
+
+extern "C" bool __fastcall VF2ImpregnateAndClearForce(
+    CVillager *villager,
+    void *,
+    int count,
+    const char *name,
+    int motherBody,
+    int fatherBody,
+    bool adopted
+) {
+    bool succeeded = villager->Impregnate(
+        count, name, motherBody, fatherBody, adopted
+    );
+    if (succeeded) {
+        VF2PersistentCheatAndPurchaseMask() &= ~0x4u;
+    }
+    return succeeded;
 }
 
 static void VF2DispatchSuccessfulFurniturePurchase(EInventoryItem item) {
@@ -9337,7 +9388,7 @@ static void VF2DispatchSuccessfulFurniturePurchase(EInventoryItem item) {
         unsigned int &storedMask = VF2TatersPurchaseMask();
         unsigned int oldMask = storedMask & 0x3;
         unsigned int newMask = oldMask | purchaseBit;
-        storedMask = newMask;
+        storedMask = (storedMask & ~0x3u) | newMask;
         if (oldMask != 0x3 && newMask == 0x3) {
             Achievement.SetComplete((EAchievement)0x74);
         }
@@ -9671,6 +9722,9 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x135:
         VF2CleanHouse();
+        break;
+    case 0x136:
+        VF2PersistentCheatAndPurchaseMask() |= 0x4;
         break;
     default:
         return;
@@ -11868,6 +11922,86 @@ def patch_allow_older_pregnancies(manifest):
             "helper": OLDER_PREGNANCY_COOLDOWN_HELPER_SYMBOL,
         },
         "multiples": "native pregnancy/birth logic remains unmodified",
+    }
+
+
+def patch_force_successful_pregnancy_callsites(manifest):
+    """Route only the try-for-baby roll and successful birth result through one-shot wrappers."""
+    obj_path = PATCHED / "VillagerPlans.obj"
+    obj = CoffObject(obj_path)
+    process_name = "?ProcessCurrentPlan@CVillagerPlans@@QAEXAAVCVillager@@@Z"
+    process = obj.symbol(process_name)
+    section = obj.section(process.section)
+
+    callsites = (
+        (
+            0x955,
+            0x956,
+            "?ChanceOfPregnancy@CVillagerState@@QAE_NHHH@Z",
+            FORCE_PREGNANCY_CHANCE_HELPER_SYMBOL,
+        ),
+        (
+            0x979,
+            0x97A,
+            "?Impregnate@CVillager@@QAE_NHPBDHH_N@Z",
+            FORCE_PREGNANCY_BIRTH_HELPER_SYMBOL,
+        ),
+    )
+    patched = []
+    for call_relative, relocation_relative, native, helper_name in callsites:
+        call = process.value + call_relative
+        relocation = process.value + relocation_relative
+        raw = section.raw_ptr + call
+        if bytes(obj.buf[raw : raw + 5]) != b"\xE8\0\0\0\0":
+            raise RuntimeError(
+                f"Force-pregnancy callsite drifted: {process_name}+{call_relative:#x}"
+            )
+
+        matches = []
+        for index in range(section.nreloc):
+            vaddr, symbol_index, relocation_type = struct.unpack_from(
+                "<IIH", obj.buf, section.reloc_ptr + index * 10
+            )
+            if vaddr == relocation:
+                matches.append((
+                    obj.symbol_by_index[symbol_index].name,
+                    relocation_type,
+                ))
+        expected = [(native, IMAGE_REL_I386_REL32)]
+        if matches != expected:
+            raise RuntimeError(
+                f"Force-pregnancy relocation drifted at "
+                f"{process_name}+{relocation_relative:#x}: {matches}"
+            )
+
+        helper = obj.append_undefined_symbol(helper_name)
+        obj.retarget_relocation(
+            section.index,
+            relocation,
+            helper,
+            IMAGE_REL_I386_REL32,
+        )
+        patched.append({
+            "call_offset": hex(call_relative),
+            "relocation_offset": hex(relocation_relative),
+            "original_target": native,
+            "replacement": helper_name,
+        })
+
+    obj.write(obj_path)
+    manifest["ForceSuccessfulPregnancy"] = {
+        "status": "implemented as a persisted one-shot cheat upgrade",
+        "store_item_id": "0x136",
+        "persistent_record_id": hex(CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID),
+        "persistent_mask": hex(FORCE_SUCCESSFUL_PREGNANCY_MASK),
+        "callsites": patched,
+        "eligibility": "native ProcessCurrentPlan partner and gender checks remain unchanged",
+        "chance": "armed flag bypasses only CVillagerState::ChanceOfPregnancy",
+        "capacity": "native CVillager::Impregnate empty-offspring-slot check remains unchanged",
+        "clear_condition": "flag clears only when native CVillager::Impregnate returns true",
+        "failed_birth": "flag remains armed when native CVillager::Impregnate returns false",
+        "multiples": "native count, naming, family-tree, achievement, and birth logic remain unchanged",
+        "machine_code": "both five-byte call instructions are byte-identical; only REL32 symbol targets changed",
     }
 
 
@@ -19325,6 +19459,7 @@ def main():
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
     # this feature adds no executable-matrix dimension.
     patch_allow_older_pregnancies(manifest)
+    patch_force_successful_pregnancy_callsites(manifest)
     # The optional mortality curve is another exact-SHA dormant-byte hook.
     # Its zero .vf2mort default resumes the untouched stock mortality block.
     patch_older_villager_mortality(manifest)

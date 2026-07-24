@@ -1366,3 +1366,20 @@
   `470494CF2DE84BC073744A05B85ACA3EC31DE24F33F3AE5594312EAE4DE37BE8`.
   Holiday/Lucky Rock validation and the four runtime toggle/restoration checks
   pass. Live final-award/popup/save QA remains.
+
+## B156 - Force Successful Pregnancy checkpoint
+
+- Adds Cheat Upgrade `0x136`, Force Successful Pregnancy, as a persisted
+  one-shot using hidden achievement record `0xA8` bit `0x4`.
+- Retargets only the existing `ChanceOfPregnancy` and `Impregnate` call
+  relocations in `CVillagerPlans::ProcessCurrentPlan`; surrounding machine
+  code and every native eligibility, capacity, multiples, birth, and
+  Family Tree route remain unchanged.
+- The flag clears only after native `Impregnate` succeeds. It remains armed
+  after a capacity failure, and the Taters-goal low-bit writeback now preserves
+  the pregnancy bit.
+- The fully enabled executable links at 1,763,840 bytes. Its refreshed PE
+  checksum is `0x001B2A7A` and SHA-256 is
+  `A28AB64BD29F3186E6AEFF2522E288D80C3A98A2A893DC3472557D532342585A`.
+  B156 runtime-toggle/restoration validation passes, as do all 219 tests with
+  one intentional skip. Live purchase/conception/birth/save QA remains.

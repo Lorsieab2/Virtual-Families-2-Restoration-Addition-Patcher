@@ -2955,6 +2955,9 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("stock Housekeeping Services event", rows[0x135]["description"])
         self.assertIn("Yard weeds", rows[0x135]["description"])
         self.assertIn("laundry-room sock pile", rows[0x135]["description"])
+        self.assertEqual(rows[0x136]["name"], "Force Successful Pregnancy")
+        self.assertIn("next eligible try-for-baby attempt", rows[0x136]["description"])
+        self.assertIn("until the native birth routine succeeds", rows[0x136]["description"])
         self.assertEqual(patcher.CHEAT_UPGRADE_LEGACY_COUNT, 19)
         self.assertEqual(patcher.CHEAT_UPGRADE_STRING_COUNT, 38)
         self.assertEqual(
@@ -2973,6 +2976,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x133], 0x124)
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x134], 0x124)
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x135], 0x124)
+        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x136], 0x124)
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x12E),
             patcher.visible_special_upgrade_icon_id_for(0x124),
@@ -2990,6 +2994,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 0x130, 0x131,
                 0x133, 0x134,
                 0x132,
+                0x136,
             ],
         )
         self.assertEqual(item_ids.index(0x12E), item_ids.index(0x124) + 1)
@@ -3033,7 +3038,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("if (gVF2HolidayFurnitureGoalsEnabled != 0)", source)
         self.assertIn("case 0x12E:", source)
         self.assertIn("VF2CompleteAllAchievements();", source)
-        self.assertIn("if (itemId >= 0x12E && itemId <= 0x135) itemId = 0x124;", source)
+        self.assertIn("if (itemId >= 0x12E && itemId <= 0x136) itemId = 0x124;", source)
         self.assertIn("case 0x12F:", source)
         self.assertIn("CollectableItem.SpawnTrashInHouse(30);", source)
         self.assertIn("case 0x130:", source)
@@ -3061,6 +3066,8 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("CollectableItem.RemoveAll((ECarrying)0x83);", source)
         self.assertIn("case 0x135:", source)
         self.assertIn("VF2CleanHouse();", source)
+        self.assertIn("case 0x136:", source)
+        self.assertIn("VF2PersistentCheatAndPurchaseMask() |= 0x4;", source)
 
     def test_trigger_all_malfunctions_uses_native_dryer_and_renovation_gates(self):
         old_patched = patcher.PATCHED
@@ -4202,6 +4209,15 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
             patcher.custom_achievement_purchase_dispatch(0x2CF, True, True, 0),
             (None, 0x1),
         )
+        self.assertEqual(
+            patcher.custom_achievement_purchase_dispatch(
+                0x2CC,
+                True,
+                True,
+                patcher.FORCE_SUCCESSFUL_PREGNANCY_MASK | 0x1,
+            ),
+            (0x74, patcher.FORCE_SUCCESSFUL_PREGNANCY_MASK | 0x3),
+        )
 
     def test_praise_and_scold_dispatch_require_exact_full_labels(self):
         for label, goal_id in patcher.CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS.items():
@@ -4442,6 +4458,88 @@ class OlderPregnancyPatchTests(unittest.TestCase):
             self.assertEqual(contract["multiples"], "native pregnancy/birth logic remains unmodified")
 
         self.with_temp_villager_state(run)
+
+    def test_force_successful_pregnancy_is_relocation_only_and_clears_after_birth(self):
+        def run(temp_root):
+            manifest = {}
+            patcher.patch_allow_older_pregnancies(manifest)
+
+            before = CoffObject(temp_root / "VillagerPlans.obj")
+            process_name = "?ProcessCurrentPlan@CVillagerPlans@@QAEXAAVCVillager@@@Z"
+            before_process = before.symbol(process_name)
+            before_section = before.section(before_process.section)
+            before_bytes = bytes(
+                before.buf[
+                    before_section.raw_ptr :
+                    before_section.raw_ptr + before_section.raw_size
+                ]
+            )
+
+            patcher.patch_force_successful_pregnancy_callsites(manifest)
+            after = CoffObject(temp_root / "VillagerPlans.obj")
+            process = after.symbol(process_name)
+            section = after.section(process.section)
+            after_bytes = bytes(
+                after.buf[section.raw_ptr : section.raw_ptr + section.raw_size]
+            )
+            self.assertEqual(after_bytes, before_bytes)
+            self.assertEqual(
+                after_bytes[process.value + 0x955 : process.value + 0x95A],
+                b"\xE8\0\0\0\0",
+            )
+            self.assertEqual(
+                after_bytes[process.value + 0x979 : process.value + 0x97E],
+                b"\xE8\0\0\0\0",
+            )
+
+            targets = {}
+            for index in range(section.nreloc):
+                vaddr, symbol_index, relocation_type = struct.unpack_from(
+                    "<IIH", after.buf, section.reloc_ptr + index * 10
+                )
+                if vaddr in (process.value + 0x956, process.value + 0x97A):
+                    targets[vaddr - process.value] = (
+                        after.symbol_by_index[symbol_index].name,
+                        relocation_type,
+                    )
+            self.assertEqual(
+                targets,
+                {
+                    0x956: (
+                        patcher.FORCE_PREGNANCY_CHANCE_HELPER_SYMBOL,
+                        0x0014,
+                    ),
+                    0x97A: (
+                        patcher.FORCE_PREGNANCY_BIRTH_HELPER_SYMBOL,
+                        0x0014,
+                    ),
+                },
+            )
+
+            contract = manifest["ForceSuccessfulPregnancy"]
+            self.assertEqual(contract["store_item_id"], "0x136")
+            self.assertEqual(contract["persistent_record_id"], "0xa8")
+            self.assertEqual(contract["persistent_mask"], "0x4")
+            self.assertIn("native ProcessCurrentPlan", contract["eligibility"])
+            self.assertIn("returns true", contract["clear_condition"])
+            self.assertIn("remains armed", contract["failed_birth"])
+
+        self.with_temp_villager_state(run)
+
+    def test_force_successful_pregnancy_helper_preserves_other_persistent_bits(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertEqual(patcher.FORCE_SUCCESSFUL_PREGNANCY_MASK, 0x4)
+        self.assertIn("return VF2PersistentCheatAndPurchaseMask();", source)
+        self.assertIn("VF2PersistentCheatAndPurchaseMask() & 0x4", source)
+        self.assertIn(
+            "return state->ChanceOfPregnancy(motherAge, fatherAge, fatherFertility);",
+            source,
+        )
+        self.assertIn("bool succeeded = villager->Impregnate(", source)
+        self.assertIn("if (succeeded) {", source)
+        self.assertIn("VF2PersistentCheatAndPurchaseMask() &= ~0x4u;", source)
+        self.assertIn("storedMask = (storedMask & ~0x3u) | newMask;", source)
+        self.assertNotIn("VF2PersistentCheatAndPurchaseMask() = 0;", source)
 
     def test_helper_uses_thousand_roll_and_never_checks_tutorial_on_failure(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
