@@ -1402,3 +1402,25 @@
   B156 runtime-toggle/restoration validation and all 219 tests pass; one test
   remains intentionally skipped. Live pregnancy boundary/persistence QA
   remains.
+
+## B156 - age-60 Next Generation checkpoint
+
+- The original request was recovered as: show Next Generation when the oldest
+  person reaches around age 60 under the allow-older-ages patch. The concrete
+  threshold is displayed age 60, or internal age 1200.
+- All four desktop `CFamilyTree::CanStartNextGeneration` call relocations in
+  `FamilyTreeScene.obj` and `theMainScene.obj` now target one ABI-compatible
+  wrapper. The wrapper calls and returns native eligibility first.
+- Only when `.vf2preg` is enabled and native eligibility is false does the
+  wrapper scan the 30 live villager slots for the oldest active, living,
+  non-departed person. It additionally requires at least one surviving child.
+  Native `StartNextGeneration` and its 30-record `MakeRoomInTree` rollover are
+  unchanged.
+- All 228 tests pass with one intentional skip. All 16 B156 layouts link with
+  unique hashes, pass the 8 Holiday-positive/8 Holiday-negative checks, and
+  pass five-flag enable, repeated-enable, disable, and exact-restoration
+  validation.
+- The fully enabled executable is 1,768,448 bytes with SHA-256
+  `85EFD04714A0243E7F34881EE04344B5A517575674E2396C8474F2CBBD474AA0`.
+  Live age-59/60, transition, no-child, generation-30 rollover, save/reload, and
+  patch-off QA remains.

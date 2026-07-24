@@ -4775,6 +4775,114 @@ class OlderPregnancyPatchTests(unittest.TestCase):
         self.assertEqual(len(direct_calls), 1)
         self.assertNotIn("VF2_ENABLE_ALLOW_OLDER_PREGNANCIES", source)
 
+    def test_next_generation_age_gate_retargets_all_native_queries_only(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                patcher.PATCHED = temp_root
+                object_names = ("FamilyTreeScene.obj", "theMainScene.obj")
+                for object_name in object_names:
+                    source_path = patcher.SRC_OBJS / object_name
+                    shutil.copy2(source_path, temp_root / object_name)
+
+                manifest = {}
+                patcher.patch_next_generation_age_gate(manifest)
+
+                found = []
+                for object_name in object_names:
+                    obj = CoffObject(temp_root / object_name)
+                    for section in obj.sections:
+                        for index in range(section.nreloc):
+                            vaddr, symbol_index, relocation_type = (
+                                struct.unpack_from(
+                                    "<IIH",
+                                    obj.buf,
+                                    section.reloc_ptr + index * 10,
+                                )
+                            )
+                            symbol = obj.symbol_by_index.get(symbol_index)
+                            if (
+                                symbol is not None
+                                and symbol.name
+                                == patcher.NEXT_GENERATION_AGE_HELPER_SYMBOL
+                            ):
+                                found.append(
+                                    (
+                                        object_name,
+                                        section.index,
+                                        vaddr,
+                                        relocation_type,
+                                    )
+                                )
+                                self.assertEqual(
+                                    obj.buf[section.raw_ptr + vaddr - 1],
+                                    0xE8,
+                                )
+
+                self.assertEqual(
+                    [
+                        (name, section, hex(vaddr), kind)
+                        for name, section, vaddr, kind in found
+                    ],
+                    [
+                        ("FamilyTreeScene.obj", 15, "0xb0", 0x0014),
+                        ("FamilyTreeScene.obj", 51, "0x43", 0x0014),
+                        ("theMainScene.obj", 76, "0x1d2", 0x0014),
+                        ("theMainScene.obj", 100, "0x6f9", 0x0014),
+                    ],
+                )
+                contract = manifest["NextGenerationOlderAgeGate"]
+                self.assertEqual(
+                    contract["offline_patcher_setting"],
+                    "allow_older_pregnancies",
+                )
+                self.assertEqual(
+                    contract["runtime_flag"]["source_section"],
+                    ".vf2preg",
+                )
+                self.assertEqual(
+                    contract["age_threshold"]["displayed_years"],
+                    60,
+                )
+                self.assertEqual(
+                    contract["age_threshold"]["controller"],
+                    "oldest active living non-departed villager",
+                )
+                self.assertTrue(
+                    contract["safety_gates"]["surviving_child_required"]
+                )
+                self.assertTrue(
+                    contract["safety_gates"]["stock_make_room_rollover_retained"]
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_next_generation_helper_preserves_stock_and_uses_live_oldest_age(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        helper = source.split(
+            'extern "C" bool __fastcall '
+            "VF2CanStartNextGenerationAtOlderAge(", 1
+        )[1].split(
+            'extern "C" int __cdecl VF2RollOlderVillagerMortality(', 1
+        )[0]
+        self.assertIn(
+            "bool stockEligible = tree->CanStartNextGeneration(force);",
+            helper,
+        )
+        self.assertIn(
+            "stockEligible || gVF2AllowOlderPregnancies == 0",
+            helper,
+        )
+        self.assertIn("tree->CountSurvivingChildren() <= 0", helper)
+        self.assertIn("stock MakeRoomInTree rollover", helper)
+        self.assertIn("for (int index = 0; index < 30; ++index)", helper)
+        self.assertIn("data[0x1BB84] != 0", helper)
+        self.assertIn("data[0x1BB88] != 0", helper)
+        self.assertIn("health <= 0", helper)
+        self.assertIn("*(int *)(data + 0x6A54)", helper)
+        self.assertIn("oldestInternalAge >= 60 * 20", helper)
+
 
 class VF3StyleChildAdoptionChooserPatchTests(unittest.TestCase):
     def test_adoption_service_detours_to_guarded_singleton_chooser(self):

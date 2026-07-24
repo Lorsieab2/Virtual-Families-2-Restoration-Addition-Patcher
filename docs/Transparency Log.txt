@@ -941,3 +941,16 @@ B156 Pavlovian Association
   ID 0x92 and remains the final visible row.
 - All 16 layouts, Holiday checks, five runtime-toggle restoration cycles, and
   all 226 tests pass. Live gameplay QA remains.
+B156 age-60 Next Generation gate
+- The original request specifies the oldest person. Displayed age 60 is used
+  as the exact threshold.
+- The patch retargets all four native CanStartNextGeneration queries through
+  one ABI-compatible wrapper. Native eligibility always has precedence.
+- The additional route exists only while Allow Older Pregnancies (.vf2preg)
+  is enabled. It scans active living non-departed villagers, requires a
+  surviving child, and leaves native StartNextGeneration plus its 30-record
+  MakeRoomInTree rollover unchanged.
+- With .vf2preg disabled, the wrapper returns the native result unchanged.
+- All 228 tests pass with one intentional skip. All 16 linked B156 layouts,
+  Holiday-positive/negative checks, and five exact runtime-toggle restoration
+  cycles pass. Live age-59/60 and generation-transition QA remains.

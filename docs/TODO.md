@@ -744,9 +744,18 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - [x] Detour the failed-attempt cooldown store and skip only the
   `theGameState+0x25AE0` deadline write when the patch is enabled and either
   parent is age 50+; linked validation proves flag-off/both-under-50 parity.
+- [x] Route all four Family Tree/main-scene `CanStartNextGeneration` queries
+  through one ABI-compatible wrapper. When `.vf2preg` is enabled, displayed
+  age 60 for the oldest active living non-departed villager additionally
+  enables the native flow, provided a surviving child exists. Native
+  `StartNextGeneration` and its 30-record `MakeRoomInTree` rollover remain
+  unchanged. Flag-off returns the native result.
 - [ ] Manually test ages 49, 50, 59, 60, 68, 69, and an extreme old-age save;
   confirm normal under-50 attempts, late-age failures, successful births,
   save/reload, and native singleton/twin/triplet outcomes.
+- [ ] In game, check the Family Tree at oldest-villager ages 59 and 60, start
+  the next generation at 60, and verify no-child, generation-30, save/reload,
+  and `.vf2preg`-off behavior.
 
 ## B152 Upright Holiday Ornament Payload
 

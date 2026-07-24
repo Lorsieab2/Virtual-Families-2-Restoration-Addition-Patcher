@@ -161,7 +161,11 @@ OLDER_PREGNANCY_FLAG_SECTION = ".vf2preg"
 OLDER_PREGNANCY_FLAG_SYMBOL = "_gVF2AllowOlderPregnancies"
 OLDER_PREGNANCY_HELPER_SYMBOL = "_VF2RollOlderPregnancy"
 OLDER_PREGNANCY_COOLDOWN_HELPER_SYMBOL = "_VF2StoreTryForBabyCooldownMaybe"
+NEXT_GENERATION_AGE_HELPER_SYMBOL = (
+    "@VF2CanStartNextGenerationAtOlderAge@12"
+)
 OLDER_PREGNANCY_INTERNAL_AGE_50 = 50 * 20
+NEXT_GENERATION_INTERNAL_AGE_60 = 60 * 20
 
 # B156 same-sex marriage support is a separate default-off runtime byte.  The
 # family tree already stores two gender-neutral parent records; these hooks
@@ -8938,6 +8942,8 @@ public:
     bool const LoadState(SSaveState const &state);
     bool AddOffspring(CVillager const &villager);
     int EmptyOffspringSlots();
+    int CountSurvivingChildren();
+    bool CanStartNextGeneration(bool force);
     bool StartNextGeneration(CVillager &villager, int peepId);
 };
 
@@ -9303,6 +9309,42 @@ extern "C" int __cdecl VF2RollOlderPregnancy(
     }
     TutorialTip.Queue(eStringPregnancyTutorial, eGameSceneNone, false);
     return 1;
+}
+
+extern "C" bool __fastcall VF2CanStartNextGenerationAtOlderAge(
+    CFamilyTree *tree,
+    void *,
+    bool force
+) {
+    // Preserve every stock eligibility route first, including the generation
+    // 30 no-living-villager fallback used by the main scene.
+    bool stockEligible = tree->CanStartNextGeneration(force);
+    if (stockEligible || gVF2AllowOlderPregnancies == 0) {
+        return stockEligible;
+    }
+
+    // A generation transition still needs a surviving child candidate.
+    // StartNextGeneration retains the stock MakeRoomInTree rollover used
+    // after the 30-record Family Tree history is full.
+    if (tree->CountSurvivingChildren() <= 0) {
+        return false;
+    }
+
+    int oldestInternalAge = -1;
+    for (int index = 0; index < 30; ++index) {
+        unsigned char *data =
+            (unsigned char *)VF2VillagerByIndex(index);
+        bool active = data[0x1BB84] != 0;
+        bool leftHome = data[0x1BB88] != 0;
+        int health = *(int *)(data + 0x6B00);
+        if (!active || leftHome || health <= 0) continue;
+
+        int internalAge = *(int *)(data + 0x6A54);
+        if (internalAge > oldestInternalAge) {
+            oldestInternalAge = internalAge;
+        }
+    }
+    return oldestInternalAge >= 60 * 20;
 }
 
 extern "C" int __cdecl VF2RollOlderVillagerMortality(
@@ -12402,6 +12444,85 @@ def patch_allow_older_pregnancies(manifest):
             "helper": OLDER_PREGNANCY_COOLDOWN_HELPER_SYMBOL,
         },
         "multiples": "native pregnancy/birth logic remains unmodified",
+    }
+
+
+def patch_next_generation_age_gate(manifest):
+    """Expose the native Next Generation flow when the oldest villager is 60+."""
+    native_name = "?CanStartNextGeneration@CFamilyTree@@QAE_N_N@Z"
+    expected_counts = {
+        "FamilyTreeScene.obj": 2,
+        "theMainScene.obj": 2,
+    }
+    patched_callsites = []
+
+    for object_name, expected_count in expected_counts.items():
+        path = PATCHED / object_name
+        obj = CoffObject(path)
+        native_symbol = obj.symbol(native_name).index
+        matches = []
+        for section in obj.sections:
+            for index in range(section.nreloc):
+                entry = section.reloc_ptr + index * 10
+                vaddr, symbol_index, relocation_type = struct.unpack_from(
+                    "<IIH", obj.buf, entry
+                )
+                if (
+                    symbol_index == native_symbol
+                    and relocation_type == IMAGE_REL_I386_REL32
+                ):
+                    matches.append((section, vaddr))
+
+        if len(matches) != expected_count:
+            raise RuntimeError(
+                f"{object_name} expected {expected_count} "
+                f"CanStartNextGeneration calls, found {len(matches)}"
+            )
+
+        helper_symbol = obj.append_undefined_symbol(
+            NEXT_GENERATION_AGE_HELPER_SYMBOL
+        )
+        for section, vaddr in matches:
+            if obj.buf[section.raw_ptr + vaddr - 1] != 0xE8:
+                raise RuntimeError(
+                    f"{object_name} CanStartNextGeneration relocation "
+                    f"at {vaddr:#x} is not a call"
+                )
+            obj.retarget_relocation(
+                section.index,
+                vaddr,
+                helper_symbol,
+                IMAGE_REL_I386_REL32,
+            )
+            patched_callsites.append({
+                "object": object_name,
+                "section": section.index,
+                "relocation_vaddr": hex(vaddr),
+            })
+        obj.write(path)
+
+    manifest["NextGenerationOlderAgeGate"] = {
+        "status": "dormant ABI-compatible wrapper installed in every executable",
+        "offline_patcher_setting": "allow_older_pregnancies",
+        "runtime_flag": {
+            "symbol": OLDER_PREGNANCY_FLAG_SYMBOL,
+            "source_section": OLDER_PREGNANCY_FLAG_SECTION,
+            "default": "00",
+            "enabled": "01",
+        },
+        "stock_precedence": (
+            "native CFamilyTree::CanStartNextGeneration result is returned first"
+        ),
+        "age_threshold": {
+            "displayed_years": 60,
+            "internal_age": NEXT_GENERATION_INTERNAL_AGE_60,
+            "controller": "oldest active living non-departed villager",
+        },
+        "safety_gates": {
+            "surviving_child_required": True,
+            "stock_make_room_rollover_retained": True,
+        },
+        "callsites": patched_callsites,
     }
 
 
@@ -20508,6 +20629,7 @@ def main():
     # post-asset phase changes .vf2preg from 00 to 01 only when selected, so
     # this feature adds no executable-matrix dimension.
     patch_allow_older_pregnancies(manifest)
+    patch_next_generation_age_gate(manifest)
     patch_multiple_marriage_candidates(manifest)
     patch_vf3_style_child_adoption_chooser(manifest)
     patch_same_sex_marriage(manifest)
