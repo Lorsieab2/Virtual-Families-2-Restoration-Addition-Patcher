@@ -55,6 +55,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 | B150 behavior variations and gates | Needs source audit | Audit the whole age/weather/nursing/gender/manual/autonomous matrix. |
 | Compatibility/creator GUI messages | Shipped / automated-verified | Exact constants exist in exporter and GUI and are covered by GUI/exporter tests. |
 | Brokerage Account 11% message | Shipped / in-game QA pending | Exact native store description exists; verify its visible wrapping/layout in game. |
+| Mobile Special Upgrade mechanics and persistence | Source-complete / linked QA passed | Brokerage `+2%` and 11% cap, Food Club immediate/daily 500-food delivery and 16-byte save state, and Health Plan quarter-price medicine route are source-proven. Desktop Health Plan ownership now survives reload through hidden achievement record `0xA8+0x08`, separate from the Taters/pregnancy/generation mask at `+0x04`; live buy/reload/remove QA remains. |
 
 ## B153 priority
 

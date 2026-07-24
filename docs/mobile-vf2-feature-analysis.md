@@ -642,8 +642,17 @@ existing control and preserving the stock handler.
   `KidsCheckXmasStockings`, `AdultsSaveSantasCookies`,
   `KidStealsSantasCookies`) and identify required furniture object IDs,
   carried items, floating animations, and achievement hooks.
-- Confirm the exact mobile save-state fields for Brokerage Account, Food Club,
-  and Health Plan, then map them to PC fields or explicit helper state.
+- [Complete in source] Brokerage Account adds `0.02` to
+  `CMoney::bankingInterest` at `CMoney+0x08`; the money save stores the
+  percentage in `SSaveState+0x04` and clamps loaded values above `0.11`.
+  Food Club stores food at `+0x78`, active at `+0x7C`, and its last-delivery
+  time at `+0x80`; all are covered by the 16-byte `CFoodStore::SSaveState`.
+  Joining delivers 500 food immediately and `Update` repeats 500 per 86,400
+  elapsed game-time seconds. Health Plan's mobile byte at
+  `theGameState+0x25B35` quarters prices for medicine IDs `0x18-0x21`; mobile
+  purchase entitlement reapplies that non-base-save byte. The PC equivalent
+  at `+0x25B1D` is now restored from hidden achievement record
+  `0xA8+0x08`, separate from the existing mask at record `+0x04`.
 - [Complete in source] Mobile and PC `CCollectableItem::Update/Add` use the
   same Lucky Rock byte and arithmetic. The spawn gate is `3/6600` per Update
   without the rock and `3/3300` with it. Normal common/uncommon/rare odds are

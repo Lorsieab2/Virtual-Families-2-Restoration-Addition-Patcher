@@ -3444,6 +3444,82 @@ class TextFixStringManagerTests(unittest.TestCase):
                 patcher.PATCHED = old_patched
                 patcher.ENABLE_HOLIDAY_ORNAMENTS = old_ornaments
 
+class MobileSpecialUpgradeContractTests(unittest.TestCase):
+    def test_exact_effect_math_and_health_plan_persistence(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn("Money.bankingInterest + 0.02f", source)
+        self.assertIn("if (next > 0.11f)", source)
+        self.assertIn("FoodStore.JoinFoodClub();", source)
+        self.assertIn(
+            "VF2PersistentHealthPlanEntitlement() = 1;",
+            source,
+        )
+        self.assertIn(
+            "VF2PersistentHealthPlanEntitlement() = 0;",
+            source,
+        )
+        self.assertIn(
+            "theGameState::Get()->healthPlanActive =\n"
+            "            healthPlanEntitlement != 0;",
+            source,
+        )
+        self.assertIn(
+            "VF2PersistentCheatAndPurchaseMask() = generation;",
+            source,
+        )
+        self.assertIn(
+            "VF2PersistentHealthPlanEntitlement() = healthPlan;",
+            source,
+        )
+        self.assertIn(
+            "return *(unsigned int *)(record + 8);",
+            source,
+        )
+        self.assertNotIn(
+            "VF2PersistentCheatAndPurchaseMask() & 0x1u",
+            source,
+        )
+        self.assertEqual(
+            patcher.CUSTOM_ACHIEVEMENT_TATERS_PURCHASE_BITS,
+            {0x2CF: 0x1, 0x2CC: 0x2},
+        )
+        self.assertIn('"purchase_increment": "0.02"', source)
+        self.assertIn('"load_cap": "0.11"', source)
+        self.assertIn('"join_delivery_food": 500', source)
+        self.assertIn('"repeat_interval_game_seconds": 86400', source)
+        self.assertIn('"medicine_item_range": "0x18-0x21"', source)
+        self.assertIn('"price_divisor": 4', source)
+
+    def test_stock_pc_food_and_health_consumers_match_mobile_layout(self):
+        food = CoffObject(patcher.SRC_OBJS / "FoodStore.obj")
+        join = food.symbol("?JoinFoodClub@CFoodStore@@QAEXXZ")
+        join_section = food.section(join.section)
+        join_data = bytes(
+            food.buf[
+                join_section.raw_ptr + join.value :
+                join_section.raw_ptr + join_section.raw_size
+            ]
+        )
+        self.assertIn(b"\xC6\x46\x7C\x01", join_data)
+        self.assertIn(b"\x6A\x01", join_data)
+        self.assertIn(b"\x89\x86\x80\x00\x00\x00", join_data)
+
+        inventory = CoffObject(patcher.SRC_OBJS / "InventoryManager.obj")
+        price = inventory.symbol(
+            "?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z"
+        )
+        price_section = inventory.section(price.section)
+        price_data = bytes(
+            inventory.buf[
+                price_section.raw_ptr + price.value :
+                price_section.raw_ptr + price_section.raw_size
+            ]
+        )
+        self.assertIn(b"\x8D\x41\xE8\x83\xF8\x09", price_data)
+        self.assertIn(b"\x80\xB8\x1D\x5B\x02\x00\x00", price_data)
+        self.assertIn(b"\xC1\xFA\x05", price_data)
+
+
 class OutfitStoreMappingTests(unittest.TestCase):
     def test_behavior_patch_mutations_are_all_inside_compile_time_gate(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")

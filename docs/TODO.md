@@ -106,11 +106,15 @@ must remain visible as Needs source audit; it must not be silently omitted.
   do not assign them by artwork name alone.
 - [x] Disassemble all 25 added mobile `CEvent*` firing, award, and impact
   methods and map their exact outcomes. Live event and patch-off QA remains.
-- Confirm mobile special-upgrade save fields and effect math for Brokerage
-  Account, Food Club, and Health Plan. Lucky Rock's exact mobile/PC
-  `CCollectableItem::Update/Add` arithmetic is now proven and byte-locked:
-  spawn attempts double from `3/6600` to `3/3300`, while common/uncommon/rare
-  odds change from `83/13/4` to `66/26/8`.
+- [x] Confirm mobile special-upgrade save fields and effect math. Brokerage
+  adds `0.02` to `CMoney+0x08`, whose serialized load caps at `0.11`. Food
+  Club persists its active flag and delivery timestamp in its 16-byte save
+  block, delivers 500 food immediately, and repeats every 86,400 game-time
+  seconds. Health Plan divides medicine IDs `0x18-0x21` by four; mobile
+  restores its runtime byte from purchase entitlement, so the desktop port
+  now persists ownership in hidden achievement record `0xA8+0x08`, separate
+  from the existing Taters/pregnancy/generation mask at record `+0x04`.
+  Lucky Rock's exact `Update/Add` arithmetic remains byte-locked.
 - Extend offline patcher feature toggles around the report's feature groups:
   Holiday outfits, Holiday furniture, mobile furniture/behavior routes, Holiday
   Ornaments, Island Events/outcomes, visible mobile purchases, and VF3 TV

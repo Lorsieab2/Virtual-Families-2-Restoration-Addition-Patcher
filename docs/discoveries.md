@@ -3571,3 +3571,34 @@
   Holiday-negative layouts. The fully enabled executable is 1,777,664 bytes
   with SHA-256
   `F3EE7955D59380C5B9259C88BA494C6F5737BA36CF03AB3F4BE7C899994229AE`.
+
+## 2026-07-24 - Exact mobile Special Upgrade state and effects
+
+- Mobile Brokerage Account case 29 adds the exact float constant `0.02` to
+  `CMoney+0x08`. `CMoney::SaveState` writes the rounded percentage encoding
+  at `SSaveState+0x04`; `LoadState` accepts values through `0.11` and restores
+  the stock `0.01` rate for out-of-range values. The PC visible upgrade keeps
+  the requested immediate 11% ceiling and removable reset to 1%.
+- Mobile `CFoodStore::JoinFoodClub` sets active byte `+0x7C`, records current
+  game seconds at `+0x80`, and calls `DoFoodClubDelivery(1)`. Each delivery
+  adds `500 * count` food, refreshes all four nutrition groups, and advances
+  achievement `0x1D`. `Update` repeats delivery for each elapsed 86,400
+  game-time seconds. Save/load copies food `+0x78`, active `+0x7C`, timestamp
+  `+0x80`, and organic bytes `+0x84-0x87` through a 16-byte save structure.
+- Mobile Health Plan uses `theGameState+0x25B35`. Stock
+  `CInventoryManager::GetPrice` applies it only to item IDs `0x18-0x21` and
+  divides their price by four. That byte lies outside the base save copy and
+  is reapplied by `CPurchaseManagerImpl::Gift` from mobile purchase
+  entitlement.
+- Desktop has the same hidden price route at `theGameState+0x25B1D`, but no
+  mobile entitlement restorer. B156 now stores Health Plan ownership in the
+  otherwise-unused dword at hidden achievement record `0xA8+0x08`,
+  synchronizes the stock byte during the existing money-load reconciliation,
+  and preserves the paid-upgrade field when Reset Achievements runs. The
+  Taters/pregnancy/generation mask remains independently stored at record
+  `+0x04`.
+- Clean verification passed all 16 executable layouts, the linked Holiday
+  positive/negative validator, runtime-toggle validation, and all 234
+  repository tests (one intentional skip). The fully enabled executable is
+  1,777,664 bytes with SHA-256
+  `E3DDB645D9228EF5252E6E636AED5D2A175965F6DA7E111F97531930DB43CE52`.

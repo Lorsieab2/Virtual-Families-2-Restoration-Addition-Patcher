@@ -1674,3 +1674,21 @@
   eight Holiday-negative layouts.
 - The fully enabled executable is 1,777,664 bytes with SHA-256
   `F3EE7955D59380C5B9259C88BA494C6F5737BA36CF03AB3F4BE7C899994229AE`.
+
+## B156 - Exact mobile Special Upgrades checkpoint
+
+- Recovers Brokerage Account's exact `+0.02` interest increment, serialized
+  money field, and stock 11% load ceiling.
+- Recovers Food Club's immediate 500-food delivery, 86,400-game-second repeat
+  interval, exact runtime fields, nutrition refresh, and 16-byte save block.
+- Recovers Health Plan's exact medicine range `0x18-0x21`, divide-by-four
+  price effect, and mobile entitlement-based restoration.
+- Fixes the desktop coin-purchase port so Health Plan ownership persists in
+  hidden achievement record `0xA8+0x08`, restores the stock desktop discount
+  byte during load, and survives Reset Achievements without sharing the
+  Taters/pregnancy/generation mask at record `+0x04`.
+- The clean 16-layout executable matrix, linked Holiday positive/negative
+  validator, runtime-toggle validator, and all 234 repository tests pass
+  (one intentional skip).
+- The fully enabled executable is 1,777,664 bytes with SHA-256
+  `E3DDB645D9228EF5252E6E636AED5D2A175965F6DA7E111F97531930DB43CE52`.

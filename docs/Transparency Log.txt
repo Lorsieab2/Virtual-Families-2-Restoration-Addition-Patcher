@@ -1202,3 +1202,20 @@ B156 exact Lucky Rock and Holiday Ornament odds audit
   ornaments and receive both Lucky Rock bonuses.
 - Strengthened the native contract so the complete stock Update and Add
   functions must remain byte-identical in ornament-enabled builds.
+B156 exact mobile Special Upgrade mechanics and Health Plan persistence
+- Brokerage Account adds 0.02 to CMoney banking interest at +0x08. The saved
+  percentage is stored at CMoney::SSaveState+0x04 and loaded values above
+  0.11 are clamped by the stock money loader.
+- Food Club sets CFoodStore+0x7C, records game time at +0x80, delivers 500
+  food immediately, then adds 500 for every 86,400 elapsed game-time seconds.
+  Food, active state, delivery time, and four organic flags occupy the exact
+  16-byte CFoodStore save block.
+- Health Plan sets the mobile theGameState+0x25B35 byte and divides medicine
+  item prices 0x18-0x21 by four. Mobile restores this non-base-save byte from
+  its purchase entitlement system.
+- The PC coin-purchase port has no mobile entitlement service, so Health Plan
+  ownership now uses the otherwise-unused dword at hidden achievement record
+  0xA8+0x08 and restores the stock desktop +0x25B1D discount byte during
+  CMoney load. This is separate from the Taters, pregnancy-control, and
+  generation-counter mask at record +0x04. Reset Achievements preserves the
+  paid-upgrade field.

@@ -9893,7 +9893,15 @@ extern "C" bool __fastcall VF2MoneyLoadStateAndReconcile(
     CMoney::SSaveState const &state
 ) {
     bool loaded = money->LoadState(state);
-    if (loaded) VF2CheckMaximumResourceAchievements();
+    if (loaded) {
+        unsigned char *record =
+            (unsigned char *)&Achievement + 0xA8 * 12;
+        unsigned int healthPlanEntitlement =
+            *(unsigned int *)(record + 8);
+        theGameState::Get()->healthPlanActive =
+            healthPlanEntitlement != 0;
+        VF2CheckMaximumResourceAchievements();
+    }
     return loaded;
 }
 
@@ -9915,6 +9923,12 @@ static unsigned int &VF2PersistentCheatAndPurchaseMask() {
     unsigned char *record =
         (unsigned char *)&Achievement + 0xA8 * 12;
     return *(unsigned int *)(record + 4);
+}
+
+static unsigned int &VF2PersistentHealthPlanEntitlement() {
+    unsigned char *record =
+        (unsigned char *)&Achievement + 0xA8 * 12;
+    return *(unsigned int *)(record + 8);
 }
 
 struct ldwColor {
@@ -10320,7 +10334,7 @@ extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
     case 0x118:
         return FoodStore.haveFoodClub ? 0 : -1;
     case 0x119:
-        return theGameState::Get()->healthPlanActive ? 0 : -1;
+        return VF2PersistentHealthPlanEntitlement() ? 0 : -1;
     case 0x11A:
         return CollectableItem.luckyRockActive ? 0 : -1;
     case 0x123:
@@ -10357,10 +10371,12 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         FoodStore.JoinFoodClub();
         break;
     case 0x119:
-        if (theGameState::Get()->healthPlanActive) {
+        if (VF2PersistentHealthPlanEntitlement()) {
+            VF2PersistentHealthPlanEntitlement() = 0;
             theGameState::Get()->healthPlanActive = 0;
             break;
         }
+        VF2PersistentHealthPlanEntitlement() = 1;
         theGameState::Get()->healthPlanActive = 1;
         break;
     case 0x11A:
@@ -10405,8 +10421,11 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         {
         unsigned int generation =
             VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u;
+        unsigned int healthPlan =
+            VF2PersistentHealthPlanEntitlement();
         Achievement.Reset();
         VF2PersistentCheatAndPurchaseMask() = generation;
+        VF2PersistentHealthPlanEntitlement() = healthPlan;
         }
         break;
     case 0x125:
@@ -10569,10 +10588,37 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
             "native_iap_rows": [7, 8, 9, 10],
             "purchase_hook": "?HandlePurchaseItem@CScrollingStoreScene@@AAEXXZ + 0x1AD",
             "effects": {
-                "0x117": "Brokerage Account helper increments banking interest; active reset sets interest to 1%",
-                "0x118": "Food Club helper calls JoinFoodClub",
-                "0x119": "Health Plan helper sets the health-plan discount flag",
+                "0x117": "Brokerage Account adds 0.02 to CMoney+0x08, capped at 0.11; active reset sets interest to 0.01",
+                "0x118": "Food Club calls stock JoinFoodClub: immediate 500 food, then 500 per 86400 game-time seconds",
+                "0x119": "Health Plan sets the stock price flag and persists entitlement in hidden achievement 0xA8 record+0x08",
                 "0x11a": "Lucky Rock helper sets the collectible boost flag",
+            },
+            "mobile_exact_contract": {
+                "brokerage": {
+                    "runtime_field": "CMoney+0x08 bankingInterest",
+                    "purchase_increment": "0.02",
+                    "load_cap": "0.11",
+                    "serialized_field": "CMoney::SSaveState+0x04",
+                },
+                "food_club": {
+                    "runtime_fields": {
+                        "food": "CFoodStore+0x78",
+                        "active": "CFoodStore+0x7C",
+                        "last_delivery": "CFoodStore+0x80",
+                    },
+                    "join_delivery_food": 500,
+                    "repeat_interval_game_seconds": 86400,
+                    "repeat_delivery_food": 500,
+                    "serialized_state_size": 16,
+                },
+                "health_plan": {
+                    "mobile_runtime_field": "theGameState+0x25B35",
+                    "desktop_runtime_field": "theGameState+0x25B1D",
+                    "medicine_item_range": "0x18-0x21",
+                    "price_divisor": 4,
+                    "mobile_persistence": "purchase entitlement reapplies the runtime byte",
+                    "desktop_persistence": "hidden achievement 0xA8 record+0x08 reapplies the runtime byte during CMoney load",
+                },
             },
             "dialog": "disabled for stability; the native hidden-IAP message box path produced blank/crashing dialogs when called from visible Store rows",
             "icons": {
@@ -12944,6 +12990,7 @@ def patch_custom_achievements(manifest):
                 "bits 8-31 lifetime generation counter"
             ),
             "purchase_mask_meaning": {"0x1": "item 0x2cf", "0x2": "item 0x2cc"},
+            "health_plan_entitlement_field": "record+0x8 nonzero",
             "reserved_tail_first_id": "0xa9",
             "reserved_tail_record_count": 0x7C,
             "signed_imm8_0x80_used": False,
