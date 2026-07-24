@@ -500,7 +500,11 @@ def validate_positive_scene_manifest(
         require(as_int(row.get("image_id"), f"item_images[{index}].image_id") == source.image_base + index, f"item descriptor {index} image ID drifted")
         require(int_list(row.get("position", []), f"item_images[{index}].position") == list(source.slot_positions[index]), f"item descriptor {index} position drifted")
 
-    require(int_list(scene.get("tooltip_rarity_label_ids", []), "tooltip labels") == list(TOOLTIP_LABELS), "tooltip labels must be 0xE92-0xE94")
+    require(
+        int_list(scene.get("tooltip_rarity_label_ids", []), "tooltip labels")
+        == list(TOOLTIP_LABELS),
+        f"tooltip labels must be {TOOLTIP_LABELS!r}",
+    )
     for key in ("page_count_route", "page_count_detour_offset"):
         require(key in scene, f"CollectionSceneHolidayOrnaments missing {key}")
     require(
@@ -1357,7 +1361,7 @@ def validate_matrix(outputs_root: Path, exe_name: str) -> list[VariantResult]:
 
 
 def main() -> int:
-    global BUILD_LABEL, BUILD_PREFIX
+    global BUILD_LABEL, BUILD_PREFIX, TOOLTIP_LABELS
 
     parser = argparse.ArgumentParser(
         description=(
@@ -1381,9 +1385,16 @@ def main() -> int:
         default=BUILD_LABEL,
         help="Build label used in variant folder names (default: B153).",
     )
+    parser.add_argument(
+        "--tooltip-label-start",
+        type=lambda value: int(value, 0),
+        default=TOOLTIP_LABELS[0],
+        help="First of the three contiguous ornament tooltip string IDs.",
+    )
     args = parser.parse_args()
     BUILD_LABEL = args.build_label
     BUILD_PREFIX = f"VF2-Mobile-Furniture-With-Island-Events-{BUILD_LABEL}-"
+    TOOLTIP_LABELS = tuple(range(args.tooltip_label_start, args.tooltip_label_start + 3))
     try:
         results = validate_matrix(args.outputs_root.resolve(), args.exe_name)
     except ValidationError as exc:

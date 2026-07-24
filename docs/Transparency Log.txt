@@ -954,3 +954,23 @@ B156 age-60 Next Generation gate
 - All 228 tests pass with one intentional skip. All 16 linked B156 layouts,
   Holiday-positive/negative checks, and five exact runtime-toggle restoration
   cycles pass. Live age-59/60 and generation-transition QA remains.
+B156 comprehensive exact-action and discipline goals
+- Added nine exact praise goals at 0x98-0xA0 and four exact social/child scold
+  goals at 0x94-0x97. Poptropicals, Club Puffle, and PetKinz are now reachable
+  video-game variations.
+- Added child-only discipline goals at 0xA1-0xA4 for clothes throwing, toilet
+  play, wall drawing, and light-switch play. The stock No jumping on the bed
+  achievement remains unchanged.
+- Props to you 0xA5 requires stock Tight Ship 0x30 plus all four new discipline
+  goals. Tight Ship already proves the stock bed-jumping goal and the other two
+  stock discipline goals; qualifying saves reconcile after achievement load.
+- Exact scold matches now award before continuing to exactly one native
+  ForgetPlans call. A matching goal never bypasses normal scolding cleanup.
+- The requested Last Trend description says Clipstagram, while the exact
+  reachable action label in the current behavior table is Picstagram. The
+  implementation deliberately matches the reachable label and retains the
+  requested description.
+- All 229 automated tests pass with one intentional skip. All 16 executable
+  layouts have unique hashes and pass Holiday-positive/negative plus five-flag
+  enable, repeated-enable, disable, and exact-restoration validation.
+- Live praise/scold, popup, persistence, reset, and patch-off QA remains.

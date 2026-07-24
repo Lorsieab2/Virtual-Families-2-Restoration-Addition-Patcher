@@ -794,7 +794,7 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
 CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x93
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xA5
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -813,6 +813,14 @@ CUSTOM_ACHIEVEMENT_APPEARANCE_FIRST = 0x90
 CUSTOM_ACHIEVEMENT_APPEARANCE_LAST = 0x91
 CUSTOM_ACHIEVEMENT_ACHIEVER_ID = 0x92
 CUSTOM_ACHIEVEMENT_PAVLOVIAN_ID = 0x93
+CUSTOM_ACHIEVEMENT_SCOLD_FIRST_ID = 0x94
+CUSTOM_ACHIEVEMENT_SCOLD_LAST_ID = 0x97
+CUSTOM_ACHIEVEMENT_EXTRA_PRAISE_FIRST_ID = 0x98
+CUSTOM_ACHIEVEMENT_EXTRA_PRAISE_LAST_ID = 0xA0
+CUSTOM_ACHIEVEMENT_DISCIPLINE_FIRST_ID = 0xA1
+CUSTOM_ACHIEVEMENT_DISCIPLINE_LAST_ID = 0xA4
+CUSTOM_ACHIEVEMENT_PROPS_ID = 0xA5
+CUSTOM_ACHIEVEMENT_TIGHT_SHIP_ID = 0x30
 CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
 CUSTOM_ACHIEVEMENT_TARGET = 1
 CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
@@ -869,6 +877,24 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0x91, "family_tree", "Spiky!", "Have a male villager with head value 48 in the family tree."),
     (0x92, "meta", "Achiever Extraordinaire", "Complete every enabled achievement."),
     (0x93, "pet_behavior", "Pavlovian Association", "You praised someone for training a pet."),
+    (0x94, "behavior", "Fakebook Fakery", "You scolded someone for posting on Fakebook."),
+    (0x95, "behavior", "Dance Dunce", "You scolded someone for posting on ClipTok."),
+    (0x96, "behavior", "The Last Trend", "You scolded someone for posting on Clipstagram."),
+    (0x97, "behavior", "Lazy Crazy", "You scolded a child for procrastinating."),
+    (0x98, "behavior", "Sim-ling Rivalry", "You praised someone for playing the Sims."),
+    (0x99, "behavior", "Blocky Business", "You praised someone for playing BlockCraft."),
+    (0x9A, "behavior", "Dovahkiin", "You praised someone for playing The Older Scrolls."),
+    (0x9B, "behavior", "Reshaping the World", "You praised someone for playing Earth-rarria."),
+    (0x9C, "behavior", "Farming Fanatic", "You praised someone for playing Farmdew Valley."),
+    (0x9D, "behavior", "Forum Browser", "You praised someone for browsing LDWForums."),
+    (0x9E, "behavior", "Explore, Collect, Compete", "You praised someone for playing Poptropicals."),
+    (0x9F, "behavior", "Waddle On!", "You praised someone for playing Club Puffle."),
+    (0xA0, "behavior", "Pixel Pets", "You praised someone for playing PetKinz."),
+    (0xA1, "behavior", "No clothes-throwing!", "You scolded a child for throwing clothes on the floor."),
+    (0xA2, "behavior", "No playing in the toilet!", "You scolded a child for playing in the toilet."),
+    (0xA3, "behavior", "No drawing on the wall!", "You scolded a child for drawing on the wall."),
+    (0xA4, "behavior", "No messing with the light switch!", "You scolded a child for switching the light on and off."),
+    (0xA5, "behavior", "Props to you", "You completed Tight Ship and all five additional discipline goals."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -944,9 +970,35 @@ CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS = {
     "Posting memes online": 0x6A,
     "Praising pet": 0x6B,
     "Training pet": CUSTOM_ACHIEVEMENT_PAVLOVIAN_ID,
+    "Playing the Sims": 0x98,
+    "Playing BlockCraft": 0x99,
+    "Playing The Older Scrolls": 0x9A,
+    "Playing Earth-rarria": 0x9B,
+    "Playing Farmdew Valley": 0x9C,
+    "Browsing LDWForums": 0x9D,
+    "Playing Poptropicals": 0x9E,
+    "Playing Club Puffle": 0x9F,
+    "Playing PetKinz": 0xA0,
 }
 CUSTOM_ACHIEVEMENT_SCOLD_LABEL_GOALS = {
     "Scolding pet": 0x6C,
+    "Posting on Fakebook": 0x94,
+    "Posting on ClipTok": 0x95,
+    # The reachable behavior label is Picstagram; the requested achievement
+    # description uses the user's original Clipstagram wording.
+    "Posting on Picstagram": 0x96,
+    "Procrastinating": 0x97,
+    "Throwing clothes on the floor": 0xA1,
+    "Playing in the toilet": 0xA2,
+    "Drawing on the wall": 0xA3,
+    "Switching light on and off": 0xA4,
+}
+CUSTOM_ACHIEVEMENT_CHILD_SCOLD_LABELS = {
+    "Procrastinating",
+    "Throwing clothes on the floor",
+    "Playing in the toilet",
+    "Drawing on the wall",
+    "Switching light on and off",
 }
 
 
@@ -983,8 +1035,26 @@ def custom_achievement_praise_label_dispatch(label):
     return CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS.get(label)
 
 
-def custom_achievement_scold_label_dispatch(label):
-    return CUSTOM_ACHIEVEMENT_SCOLD_LABEL_GOALS.get(label)
+def custom_achievement_scold_label_dispatch(label, internal_age=None):
+    goal_id = CUSTOM_ACHIEVEMENT_SCOLD_LABEL_GOALS.get(label)
+    if label in CUSTOM_ACHIEVEMENT_CHILD_SCOLD_LABELS:
+        if internal_age is None or int(internal_age) >= 0x118:
+            return None
+    return goal_id
+
+
+def custom_achievement_props_is_satisfied(completed_ids):
+    completed = {int(achievement_id) for achievement_id in completed_ids}
+    return (
+        CUSTOM_ACHIEVEMENT_TIGHT_SHIP_ID in completed
+        and all(
+            achievement_id in completed
+            for achievement_id in range(
+                CUSTOM_ACHIEVEMENT_DISCIPLINE_FIRST_ID,
+                CUSTOM_ACHIEVEMENT_DISCIPLINE_LAST_ID + 1,
+            )
+        )
+    )
 
 
 def longevity_achievement_ids_for_internal_age(internal_age):
@@ -1279,6 +1349,9 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_PlayingBlockCraft", "Playing BlockCraft"),
             ("eString_PlayingEarthRarria", "Playing Earth-rarria"),
             ("eString_PlayingFarmdewValley", "Playing Farmdew Valley"),
+            ("eString_PlayingPoptropicals", "Playing Poptropicals"),
+            ("eString_PlayingClubPuffle", "Playing Club Puffle"),
+            ("eString_PlayingPetKinz", "Playing PetKinz"),
         ],
     ),
     (
@@ -9372,7 +9445,7 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 static int VF2AchievementVisibleCountInternal() {
     int count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2 + 1;
     if (kVF2IncludeOrnamentologistGoal) ++count;
-    if (kVF2IncludeBehaviorGoals) count += 8;
+    if (kVF2IncludeBehaviorGoals) count += 26;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
     return count;
 }
@@ -9412,7 +9485,7 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
     completed += VF2CountCompletedAchievements(achievement, 0x60, 0x65);
     if (kVF2IncludeBehaviorGoals) {
         completed += VF2CountCompletedAchievements(achievement, 0x66, 0x6C);
-        if (achievement->IsComplete((EAchievement)0x93)) ++completed;
+        completed += VF2CountCompletedAchievements(achievement, 0x93, 0xA5);
     }
     completed += VF2CountCompletedAchievements(achievement, 0x80, 0x92);
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
@@ -9437,13 +9510,28 @@ extern "C" void __fastcall VF2MaybeCompleteAchiever(
     achievement->SetComplete(achiever);
 }
 
+static void VF2MaybeCompleteDisciplineProps(CAchievement *achievement) {
+    if (!kVF2IncludeBehaviorGoals ||
+        achievement->IsComplete((EAchievement)0xA5) ||
+        !achievement->IsComplete((EAchievement)0x30)) {
+        return;
+    }
+    for (int id = 0xA1; id <= 0xA4; ++id) {
+        if (!achievement->IsComplete((EAchievement)id)) return;
+    }
+    achievement->SetComplete((EAchievement)0xA5);
+}
+
 extern "C" bool __fastcall VF2AchievementLoadStateAndReconcile(
     CAchievement *achievement,
     void *,
     CAchievement::SSaveState &state
 ) {
     bool loaded = achievement->LoadState(state);
-    if (loaded) VF2MaybeCompleteAchiever(achievement, 0);
+    if (loaded) {
+        VF2MaybeCompleteDisciplineProps(achievement);
+        VF2MaybeCompleteAchiever(achievement, 0);
+    }
     return loaded;
 }
 
@@ -12014,7 +12102,12 @@ def patch_custom_achievements(manifest):
         appended_order.extend(
             range(CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST, CUSTOM_ACHIEVEMENT_BEHAVIOR_END + 1)
         )
-        appended_order.append(CUSTOM_ACHIEVEMENT_PAVLOVIAN_ID)
+        appended_order.extend(
+            range(
+                CUSTOM_ACHIEVEMENT_PAVLOVIAN_ID,
+                CUSTOM_ACHIEVEMENT_PROPS_ID + 1,
+            )
+        )
     appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_BIRTHDAY_FIRST, CUSTOM_ACHIEVEMENT_BIRTHDAY_LAST + 1)
     )
@@ -12164,7 +12257,7 @@ def patch_custom_achievements(manifest):
         stock_visible_count
         + (1 if ENABLE_HOLIDAY_ORNAMENTS else 0)
         + 6
-        + (7 if ENABLE_BEHAVIOR_PATCHES else 0)
+        + (26 if ENABLE_BEHAVIOR_PATCHES else 0)
         + 3
         + 2
         + 5
@@ -17986,6 +18079,18 @@ def patch_spontaneous_behaviors(manifest):
         )
         for label, goal_id in CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS.items()
     )
+    scold_award_cases_cpp = "\n".join(
+        (
+            f'    if (VF2RawBehaviorLabelEquals(label, "{c_string(label)}")) {{ '
+            + (
+                "if (*(int *)((unsigned char *)&villager + 0x6A54) < 0x118) "
+                if label in CUSTOM_ACHIEVEMENT_CHILD_SCOLD_LABELS
+                else ""
+            )
+            + f'Achievement.SetComplete((EAchievement)0x{goal_id:X}); }}'
+        )
+        for label, goal_id in CUSTOM_ACHIEVEMENT_SCOLD_LABEL_GOALS.items()
+    )
 
     helper_cpp = r'''
 // CVillager::InitAI owns the real autonomous candidate table. Each candidate
@@ -18086,6 +18191,7 @@ enum EAchievement { eAchievementPlaceholder = 0 };
 class CAchievement {
 public:
     void SetComplete(EAchievement achievement);
+    bool IsComplete(EAchievement achievement);
 };
 
 extern CAchievement Achievement;
@@ -18156,6 +18262,18 @@ static bool VF2RawBehaviorLabelEquals(const char *label, const char *expected)
     return false;
 }
 
+static void VF2MaybeCompleteDisciplineProps()
+{
+    if (Achievement.IsComplete((EAchievement)0xA5) ||
+        !Achievement.IsComplete((EAchievement)0x30)) {
+        return;
+    }
+    for (int id = 0xA1; id <= 0xA4; ++id) {
+        if (!Achievement.IsComplete((EAchievement)id)) return;
+    }
+    Achievement.SetComplete((EAchievement)0xA5);
+}
+
 static void VF2AwardExactPraiseLabel(const char *label)
 {
 __VF2_PRAISE_AWARD_CASES__
@@ -18190,9 +18308,8 @@ extern "C" void __stdcall VF2ScoldAwardAndForget(CVillager &villager, bool force
 {
     char label[0x28];
     VF2CopyRawPraiseLabel(villager, label);
-    if (VF2RawBehaviorLabelEquals(label, "Scolding pet")) {
-        Achievement.SetComplete((EAchievement)0x6C);
-    }
+__VF2_SCOLD_AWARD_CASES__
+    VF2MaybeCompleteDisciplineProps();
     CVillagerPlans *plans = (CVillagerPlans *)&villager;
     plans->ForgetPlans(villager, force);
 }
@@ -19557,6 +19674,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
 '''.strip() + "\n"
     helper_cpp = helper_cpp.replace("__VF2_BEHAVIOR_LABEL_ARRAYS__", behavior_label_arrays)
     helper_cpp = helper_cpp.replace("__VF2_PRAISE_AWARD_CASES__", praise_award_cases_cpp)
+    helper_cpp = helper_cpp.replace("__VF2_SCOLD_AWARD_CASES__", scold_award_cases_cpp)
     (PATCHED / "vf2_spontaneous_behaviors.cpp").write_text(helper_cpp, encoding="ascii")
     manifest["spontaneous_behaviors"] = {
         "status": "enabled through the autonomous AI candidate table",

@@ -143,7 +143,11 @@ finally {
 }
 
 Write-Host "Running $BuildLabel linked Holiday positive/negative validation"
-& $pythonExe @pythonArgs $holidayValidator --build-label $BuildLabel
+$holidayValidatorArgs = @("--build-label", $BuildLabel)
+if ($BuildLabel -eq "B156") {
+    $holidayValidatorArgs += @("--tooltip-label-start", "0xE95")
+}
+& $pythonExe @pythonArgs $holidayValidator @holidayValidatorArgs
 if ($LASTEXITCODE -ne 0) {
     throw "$BuildLabel linked Holiday validation failed with exit code $LASTEXITCODE"
 }

@@ -3232,3 +3232,20 @@
   bytes with SHA-256
   `4939C32A1A6907193984F0B0AA2A1763224A379D579B2A6683E088879E8F107B`.
   Live praise, notification, persistence, reset, and patch-off QA remains.
+
+## 2026-07-24 - B156 Exact-Action and Discipline Goal Completion
+
+- Desktop `theMainScene::InvokeScolding` checks stock achievements `0x2D`,
+  `0x2E`, and `0x2F` for three exact behavior IDs and increments aggregate
+  achievement `0x30` after each qualifying scold. Therefore stock Tight Ship
+  `0x30` is sufficient evidence that all three stock discipline goals,
+  including No jumping on the bed, are complete.
+- The four genuinely new child-discipline rows use `0xA1-0xA4`. Props to you
+  uses `0xA5` and requires Tight Ship plus those four rows; no unverified stock
+  sub-achievement ID is duplicated.
+- The exact reachable social action is `Posting on Picstagram`, although the
+  requested Last Trend achievement text says Clipstagram. Matching uses the
+  reachable action label and preserves the requested player-facing text.
+- Exact scold awards must not return from the outer wrapper before the original
+  ForgetPlans call. The generated cases now complete a goal, check Props, and
+  then execute the native cleanup exactly once.

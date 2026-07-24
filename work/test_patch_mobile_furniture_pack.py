@@ -2305,7 +2305,21 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     'extern "C" void __stdcall VF2ScoldAwardAndForget', 1
                 )[1].split("class CFurnitureManager", 1)[0]
                 self.assertIn('VF2RawBehaviorLabelEquals(label, "Scolding pet")', scold_wrapper)
+                self.assertIn('VF2RawBehaviorLabelEquals(label, "Posting on Fakebook")', scold_wrapper)
+                self.assertIn('VF2RawBehaviorLabelEquals(label, "Posting on ClipTok")', scold_wrapper)
+                self.assertIn('VF2RawBehaviorLabelEquals(label, "Posting on Picstagram")', scold_wrapper)
+                self.assertIn('VF2RawBehaviorLabelEquals(label, "Procrastinating")', scold_wrapper)
+                self.assertIn('VF2RawBehaviorLabelEquals(label, "Throwing clothes on the floor")', scold_wrapper)
+                self.assertIn('VF2RawBehaviorLabelEquals(label, "Playing in the toilet")', scold_wrapper)
+                self.assertIn('VF2RawBehaviorLabelEquals(label, "Drawing on the wall")', scold_wrapper)
+                self.assertIn('VF2RawBehaviorLabelEquals(label, "Switching light on and off")', scold_wrapper)
+                self.assertIn(
+                    "*(int *)((unsigned char *)&villager + 0x6A54) < 0x118",
+                    scold_wrapper,
+                )
+                self.assertIn("VF2MaybeCompleteDisciplineProps();", scold_wrapper)
                 self.assertEqual(scold_wrapper.count("plans->ForgetPlans"), 1)
+                self.assertNotIn("return;", scold_wrapper)
                 self.assertNotIn("VF2RestoreRawPraiseLabel", scold_wrapper)
                 self.assertIn("VF2CopyBehaviorLabel(villager, before);", helper)
                 self.assertIn("VF2CopyBehaviorLabel(villager, gVF2BehaviorLabelBeforeNative);", helper)
@@ -2732,27 +2746,27 @@ class TextFixStringManagerTests(unittest.TestCase):
                         by_id_role[(achievement_id, "description")]["text"],
                         description,
                     )
-                self.assertEqual(patcher.custom_achievement_string_base(), 0xE02)
+                self.assertEqual(patcher.custom_achievement_string_base(), 0xE05)
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE41
+                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE44
                 )
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE91
+                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE94
                 )
                 reserved = [
                     row for row in manifest["theStringManager"]["strings"]
                     if row.get("source")
                     == "custom achievement reserved capacity"
                 ]
-                self.assertEqual(len(reserved), 40)
+                self.assertEqual(len(reserved), 4)
                 self.assertEqual(
                     {int(row["achievement_id"], 16) for row in reserved},
-                        set(range(0x94, 0xA8)),
+                        set(range(0xA6, 0xA8)),
                 )
                 self.assertTrue(all(row["text"] == "" for row in reserved))
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xE92, 0xE93, 0xE94),
+                    (0xE95, 0xE96, 0xE97),
                 )
                 lounger_rows = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -2808,7 +2822,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xE92, 0xE93, 0xE94),
+                    (0xE95, 0xE96, 0xE97),
                 )
                 footer_rows = [
                     row
@@ -2826,11 +2840,11 @@ class TextFixStringManagerTests(unittest.TestCase):
                         for row in footer_rows
                     ],
                     [
-                        (0xE92, "common", "eSayCommonOrnaments",
+                        (0xE95, "common", "eSayCommonOrnaments",
                          " of 4 common ornaments found."),
-                        (0xE93, "uncommon", "eSayUncommonOrnaments",
+                        (0xE96, "uncommon", "eSayUncommonOrnaments",
                          " of 4 uncommon ornaments found."),
-                        (0xE94, "rare", "eSayRareOrnaments",
+                        (0xE97, "rare", "eSayRareOrnaments",
                          " of 4 rare ornaments found."),
                     ],
                 )
@@ -3685,6 +3699,64 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                 "You praised someone for training a pet.",
             ),
         )
+        self.assertEqual(
+            {
+                achievement_id: rows[achievement_id]
+                for achievement_id in range(0x94, 0x98)
+            },
+            {
+                0x94: (
+                    "behavior",
+                    "Fakebook Fakery",
+                    "You scolded someone for posting on Fakebook.",
+                ),
+                0x95: (
+                    "behavior",
+                    "Dance Dunce",
+                    "You scolded someone for posting on ClipTok.",
+                ),
+                0x96: (
+                    "behavior",
+                    "The Last Trend",
+                    "You scolded someone for posting on Clipstagram.",
+                ),
+                0x97: (
+                    "behavior",
+                    "Lazy Crazy",
+                    "You scolded a child for procrastinating.",
+                ),
+            },
+        )
+        self.assertEqual(
+            {
+                achievement_id: rows[achievement_id][1]
+                for achievement_id in range(0x98, 0xA1)
+            },
+            {
+                0x98: "Sim-ling Rivalry",
+                0x99: "Blocky Business",
+                0x9A: "Dovahkiin",
+                0x9B: "Reshaping the World",
+                0x9C: "Farming Fanatic",
+                0x9D: "Forum Browser",
+                0x9E: "Explore, Collect, Compete",
+                0x9F: "Waddle On!",
+                0xA0: "Pixel Pets",
+            },
+        )
+        self.assertEqual(
+            {
+                achievement_id: rows[achievement_id][1]
+                for achievement_id in range(0xA1, 0xA6)
+            },
+            {
+                0xA1: "No clothes-throwing!",
+                0xA2: "No playing in the toilet!",
+                0xA3: "No drawing on the wall!",
+                0xA4: "No messing with the light switch!",
+                0xA5: "Props to you",
+            },
+        )
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         self.assertIn(
             "appended_order.append(CUSTOM_ACHIEVEMENT_ACHIEVER_ID)",
@@ -4367,15 +4439,57 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
         ):
             self.assertIsNone(patcher.custom_achievement_praise_label_dispatch(negative))
 
-        self.assertEqual(patcher.custom_achievement_scold_label_dispatch("Scolding pet"), 0x6C)
+        for label, goal_id in patcher.CUSTOM_ACHIEVEMENT_SCOLD_LABEL_GOALS.items():
+            if label in patcher.CUSTOM_ACHIEVEMENT_CHILD_SCOLD_LABELS:
+                self.assertEqual(
+                    patcher.custom_achievement_scold_label_dispatch(label, 0x117),
+                    goal_id,
+                )
+                self.assertIsNone(
+                    patcher.custom_achievement_scold_label_dispatch(label)
+                )
+                self.assertIsNone(
+                    patcher.custom_achievement_scold_label_dispatch(label, 0x118)
+                )
+            else:
+                self.assertEqual(
+                    patcher.custom_achievement_scold_label_dispatch(label),
+                    goal_id,
+                )
+            for near_match in (
+                label + "!",
+                label + " extra",
+                label[:-1],
+                label.lower(),
+            ):
+                if near_match != label:
+                    self.assertIsNone(
+                        patcher.custom_achievement_scold_label_dispatch(
+                            near_match,
+                            0x117,
+                        )
+                    )
         for negative in (
             "Scolding",
             "Scolding pet!",
             "Scolding pets",
             "Praising pet",
             "Petting",
+            "Posting on Clipstagram",
         ):
             self.assertIsNone(patcher.custom_achievement_scold_label_dispatch(negative))
+
+    def test_props_requires_tight_ship_and_all_four_new_discipline_goals(self):
+        complete = {0x30, 0xA1, 0xA2, 0xA3, 0xA4}
+        self.assertTrue(patcher.custom_achievement_props_is_satisfied(complete))
+        for missing in complete:
+            with self.subTest(missing=hex(missing)):
+                self.assertFalse(
+                    patcher.custom_achievement_props_is_satisfied(complete - {missing})
+                )
+        self.assertTrue(
+            patcher.custom_achievement_props_is_satisfied(complete | {0x2D, 0xA5})
+        )
 
 
 class B153LinkedRuntimeValidatorTests(unittest.TestCase):
@@ -5766,8 +5880,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
                 (False, False, 120, 139, 5, 12),
                 (True, False, 121, 140, 6, 13),
-                (False, True, 127, 146, 5, 12),
-                (True, True, 128, 147, 6, 13),
+                (False, True, 146, 165, 5, 12),
+                (True, True, 147, 166, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
@@ -5984,7 +6098,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         expected.extend(range(0x60, 0x66))
                         if behavior:
                             expected.extend(range(0x66, 0x6D))
-                            expected.append(0x93)
+                            expected.extend(range(0x93, 0xA6))
                         expected.extend(range(0x80, 0x92))
                         expected.extend(range(0x6D, 0x80))
                         expected.append(0x92)

@@ -1424,3 +1424,20 @@
   `85EFD04714A0243E7F34881EE04344B5A517575674E2396C8474F2CBBD474AA0`.
   Live age-59/60, transition, no-child, generation-30 rollover, save/reload, and
   patch-off QA remains.
+
+## B156 - comprehensive exact-action and discipline goals checkpoint
+
+- Adds exact social/game praise and scold achievements `0x94-0xA0`, including
+  reachable Poptropicals, Club Puffle, and PetKinz video-game variations.
+- Adds four child-only discipline achievements `0xA1-0xA4`. Stock No jumping
+  on the bed is retained rather than duplicated.
+- Adds Props to you `0xA5`, requiring stock Tight Ship `0x30` plus all four new
+  discipline achievements, with successful-load reconciliation.
+- Fixes the exact-scold award wrapper so a matching label still continues
+  through exactly one native ForgetPlans call.
+- All 229 automated tests pass with one intentional skip. All 16 linked layouts
+  have unique hashes and pass Holiday-positive/negative validation plus
+  five-flag enable, repeated-enable, disable, and exact-restoration cycles.
+- The fully enabled executable is 1,772,032 bytes with SHA-256
+  `3B2C57C7BF96BB6FA94EE7F35580DF0DEB23E327DFD3985DD9F1ADBC7B4EF7AA`.
+  Live exact-action, popup, persistence, reset, and patch-off QA remains.

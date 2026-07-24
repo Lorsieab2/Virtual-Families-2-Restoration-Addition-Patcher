@@ -637,10 +637,13 @@ must remain visible as Needs source audit; it must not be silently omitted.
   bool; award only on success before stock SaveCurrentGame; gate Holiday
   Furniture mappings on `.vf2goal == 1`; and make Taters `0x74`
   order/duplicate/save safe through hidden record `0x80`.
-- [x] Phase B2 behavior awards: exact pre-ForgetPlans praise labels complete
-  `0x66-0x6B` while preserving both restorations and over-praise; exact
-  `Scolding pet` completes `0x6C` before one native ForgetPlans call with
-  no restoration.
+- [x] Phase B2 behavior awards: exact pre-ForgetPlans praise/scold labels cover
+  `0x66-0x6C`, Pavlovian `0x93`, social/child goals `0x94-0x97`, nine
+  additional praise goals `0x98-0xA0`, and four child-discipline goals
+  `0xA1-0xA4`. Props to you `0xA5` requires stock Tight Ship `0x30` plus all
+  four new discipline goals. Praise preserves the native restoration and
+  over-praise routes; every matching scold still reaches exactly one native
+  ForgetPlans call with no label restoration.
 - [x] Validate B2 source, object, and linked contracts in core/off-off and
   Holiday+Behavior/on-on diagnostics. This is structural verification only;
   no manual runtime result is claimed.
@@ -685,8 +688,8 @@ must remain visible as Needs source audit; it must not be silently omitted.
   SHA-256/file-offset pair for all 16 executable variants and emit one
   unambiguous manifest variant per SHA. Automated toggle cycles verify disabled,
   enabled, repeated-enable, and disable-after-enable bytes for every layout.
-- In a future build, implement the resource, pet, longevity, and family-tree
-  appearance goals specified in `docs/B151-design.md`.
+- [x] Implement the resource, pet, longevity, family-tree appearance,
+  exact-action praise/scold, and discipline goals specified for B156.
 - [x] Add a separately gated dormant `.vf2mort` hook that replaces only the
   birthday old-age decision, preserves the entire stock block when disabled,
   uses a normal survival curve centered at effective age 75 (sigma 3), grants
