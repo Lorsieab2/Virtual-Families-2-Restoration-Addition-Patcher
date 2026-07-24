@@ -1441,3 +1441,19 @@
 - The fully enabled executable is 1,772,032 bytes with SHA-256
   `3B2C57C7BF96BB6FA94EE7F35580DF0DEB23E327DFD3985DD9F1ADBC7B4EF7AA`.
   Live exact-action, popup, persistence, reset, and patch-off QA remains.
+
+## B156 - Furnishing the Future checkpoint
+
+- Adds Furnishing the Future at `0xA6`, awarding after any successful purchase
+  from the complete active nine-item VF3 furniture-patch catalog.
+- Qualifying IDs are couches/loveseats `0x2F6-0x2FB` and televisions
+  `0x324-0x326`; the source contract cross-checks the purchase mapping against
+  the active item definitions.
+- The shared purchase wrapper preserves native AddToStorage success/failure
+  semantics.
+- All 230 automated tests pass with one intentional skip. All 16 linked layouts
+  have unique hashes and pass Holiday-positive/negative plus five-flag
+  exact-restoration validation.
+- The fully enabled executable is 1,772,032 bytes with SHA-256
+  `D7DE86665C84C69C860E45A982851030DD01848895F86D594597F14FD842DA76`.
+  Live purchase, notification, persistence, reset, and patch-off QA remains.

@@ -690,6 +690,8 @@ must remain visible as Needs source audit; it must not be silently omitted.
   enabled, repeated-enable, and disable-after-enable bytes for every layout.
 - [x] Implement the resource, pet, longevity, family-tree appearance,
   exact-action praise/scold, and discipline goals specified for B156.
+- [x] Implement Furnishing the Future for a successful purchase of any active
+  VF3 furniture-patch item: six couches/loveseats and three televisions.
 - [x] Add a separately gated dormant `.vf2mort` hook that replaces only the
   birthday old-age decision, preserves the entire stock block when disabled,
   uses a normal survival curve centered at effective age 75 (sigma 3), grants

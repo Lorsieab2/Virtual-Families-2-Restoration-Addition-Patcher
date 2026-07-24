@@ -794,7 +794,7 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
 CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xA5
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xA6
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -820,6 +820,7 @@ CUSTOM_ACHIEVEMENT_EXTRA_PRAISE_LAST_ID = 0xA0
 CUSTOM_ACHIEVEMENT_DISCIPLINE_FIRST_ID = 0xA1
 CUSTOM_ACHIEVEMENT_DISCIPLINE_LAST_ID = 0xA4
 CUSTOM_ACHIEVEMENT_PROPS_ID = 0xA5
+CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID = 0xA6
 CUSTOM_ACHIEVEMENT_TIGHT_SHIP_ID = 0x30
 CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
 CUSTOM_ACHIEVEMENT_TARGET = 1
@@ -895,6 +896,7 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0xA3, "behavior", "No drawing on the wall!", "You scolded a child for drawing on the wall."),
     (0xA4, "behavior", "No messing with the light switch!", "You scolded a child for switching the light on and off."),
     (0xA5, "behavior", "Props to you", "You completed Tight Ship and all five additional discipline goals."),
+    (0xA6, "vf3_furniture", "Furnishing the Future", "You bought a Virtual Families 3 furniture item."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -903,6 +905,15 @@ CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2ED: 0x63,
     0x2EE: 0x64,
     0x2E9: 0x65,
+    0x2F6: CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID,
+    0x2F7: CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID,
+    0x2F8: CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID,
+    0x2F9: CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID,
+    0x2FA: CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID,
+    0x2FB: CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID,
+    0x324: CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID,
+    0x325: CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID,
+    0x326: CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID,
     0x2DB: 0x80,
     0x2DC: 0x81,
     0x2DA: 0x82,
@@ -9443,7 +9454,7 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 }
 
 static int VF2AchievementVisibleCountInternal() {
-    int count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2 + 1;
+    int count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2 + 1 + 1;
     if (kVF2IncludeOrnamentologistGoal) ++count;
     if (kVF2IncludeBehaviorGoals) count += 26;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
@@ -9488,6 +9499,7 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
         completed += VF2CountCompletedAchievements(achievement, 0x93, 0xA5);
     }
     completed += VF2CountCompletedAchievements(achievement, 0x80, 0x92);
+    if (achievement->IsComplete((EAchievement)0xA6)) ++completed;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
         completed += VF2CountCompletedAchievements(achievement, 0x6D, 0x7F);
     }
@@ -12126,6 +12138,7 @@ def patch_custom_achievements(manifest):
             CUSTOM_ACHIEVEMENT_APPEARANCE_LAST + 1,
         )
     )
+    appended_order.append(CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID)
     appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
     )
@@ -12263,6 +12276,7 @@ def patch_custom_achievements(manifest):
         + 5
         + 6
         + 2
+        + 1
         + 1
     )
     manifest["CustomAchievements"] = {

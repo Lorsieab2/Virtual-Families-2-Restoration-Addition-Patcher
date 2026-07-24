@@ -974,3 +974,16 @@ B156 comprehensive exact-action and discipline goals
   layouts have unique hashes and pass Holiday-positive/negative plus five-flag
   enable, repeated-enable, disable, and exact-restoration validation.
 - Live praise/scold, popup, persistence, reset, and patch-off QA remains.
+B156 Furnishing the Future
+- Added achievement 0xA6 using the archived exact requirement: buy any item
+  added by the Virtual Families 3 furniture patch.
+- The qualifying set is the complete active nine-item VF3 catalog: item IDs
+  0x2F6-0x2FB and 0x324-0x326. The source test derives the same set from the
+  active VF3 furniture definitions so catalog drift fails validation.
+- The existing purchase observer calls native AddToStorage first. Failed or
+  full-storage purchases do not award; successful purchases work regardless
+  of the Holiday Furniture goal flag.
+- All 230 automated tests pass with one intentional skip. All 16 linked
+  executable layouts have unique hashes and pass Holiday-positive/negative
+  plus five-flag exact-restoration validation.
+- Live purchase/notification/save/reset QA remains.

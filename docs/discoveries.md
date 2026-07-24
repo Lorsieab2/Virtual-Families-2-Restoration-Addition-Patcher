@@ -3249,3 +3249,15 @@
 - Exact scold awards must not return from the outer wrapper before the original
   ForgetPlans call. The generated cases now complete a goal, check Props, and
   then execute the native cleanup exactly once.
+
+## 2026-07-24 - B156 Furnishing the Future Scope
+
+- The archived requirement is exact: “Buy any Virtual Families 3 furniture
+  item (Anything added by the Virtual Families 3 furniture patch).”
+- The currently active imported VF3 catalog contains nine items: six
+  couches/loveseats at `0x2F6-0x2FB` and three televisions at `0x324-0x326`.
+  The earlier batch-01 list is intentionally empty and therefore contributes
+  no qualifying IDs.
+- The general purchase observer is the correct route because it awards only
+  after native AddToStorage succeeds and is independent of Holiday Furniture
+  goal visibility.

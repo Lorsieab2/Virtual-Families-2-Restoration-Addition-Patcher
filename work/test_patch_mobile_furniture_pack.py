@@ -2758,10 +2758,10 @@ class TextFixStringManagerTests(unittest.TestCase):
                     if row.get("source")
                     == "custom achievement reserved capacity"
                 ]
-                self.assertEqual(len(reserved), 4)
+                self.assertEqual(len(reserved), 2)
                 self.assertEqual(
                     {int(row["achievement_id"], 16) for row in reserved},
-                        set(range(0xA6, 0xA8)),
+                        {0xA7},
                 )
                 self.assertTrue(all(row["text"] == "" for row in reserved))
                 self.assertEqual(
@@ -3757,6 +3757,14 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                 0xA5: "Props to you",
             },
         )
+        self.assertEqual(
+            rows[0xA6],
+            (
+                "vf3_furniture",
+                "Furnishing the Future",
+                "You bought a Virtual Families 3 furniture item.",
+            ),
+        )
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         self.assertIn(
             "appended_order.append(CUSTOM_ACHIEVEMENT_ACHIEVER_ID)",
@@ -4348,6 +4356,26 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                         ),
                         (None, 0x2),
                     )
+
+    def test_furnishing_the_future_covers_every_active_vf3_furniture_item(self):
+        active_vf3_ids = {
+            item["item_id"]
+            for item in (
+                patcher.VF3_LIVING_ROOM_BATCH_02_ITEMS
+                + patcher.VF3_TV_ITEMS
+            )
+        }
+        mapped_vf3_ids = {
+            item_id
+            for item_id, goal_id
+            in patcher.CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS.items()
+            if goal_id == patcher.CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID
+        }
+        self.assertEqual(active_vf3_ids, mapped_vf3_ids)
+        self.assertEqual(
+            active_vf3_ids,
+            set(range(0x2F6, 0x2FC)) | set(range(0x324, 0x327)),
+        )
 
     def test_holiday_purchase_aliases_are_flag_gated_and_failed_safe(self):
         for item_id, goal_id in patcher.CUSTOM_ACHIEVEMENT_HOLIDAY_PURCHASE_GOALS.items():
@@ -5878,10 +5906,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         ))
         try:
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
-                (False, False, 120, 139, 5, 12),
-                (True, False, 121, 140, 6, 13),
-                (False, True, 146, 165, 5, 12),
-                (True, True, 147, 166, 6, 13),
+                (False, False, 121, 140, 5, 12),
+                (True, False, 122, 141, 6, 13),
+                (False, True, 147, 166, 5, 12),
+                (True, True, 148, 167, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
@@ -6100,10 +6128,12 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                             expected.extend(range(0x66, 0x6D))
                             expected.extend(range(0x93, 0xA6))
                         expected.extend(range(0x80, 0x92))
+                        expected.append(0xA6)
                         expected.extend(range(0x6D, 0x80))
                         expected.append(0x92)
                         self.assertEqual(order, expected)
-                        self.assertEqual(order[-38:-20], list(range(0x80, 0x92)))
+                        self.assertEqual(order[-39:-21], list(range(0x80, 0x92)))
+                        self.assertEqual(order[-21], 0xA6)
                         self.assertEqual(order[-20:-1], list(range(0x6D, 0x80)))
                         self.assertEqual(order[-1], 0x92)
                         order_contract = manifest["CustomAchievements"][
@@ -6768,8 +6798,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
                     "physical_row_count": 0xA8,
-                    "visible_count_flag_0": 121,
-                    "visible_count_flag_1": 140,
+                    "visible_count_flag_0": 122,
+                    "visible_count_flag_1": 141,
                     "notify_queue_bound": 0x5F,
                 },
             )
