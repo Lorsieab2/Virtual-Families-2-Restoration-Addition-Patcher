@@ -2802,3 +2802,25 @@
 - Plate of Cookies has no registered mobile manual hotspot. Its exact reachable
   action is an autonomous under-14 kid candidate with an optional adult rescue,
   so B156 does not invent a manual drop behavior for it.
+
+## 2026-07-23 - Exact maximum-resource goals
+
+- `No More Worries` is assigned visible achievement `0x83` and completes only
+  when `CMoney.balance` equals the native maximum `4,000,000,000.0`.
+  `CMoney::Set` and positive `CMoney::Adjust` both use the exact double clamp
+  constant `0x41EDCD6500000000`. The Max Coins cheat now uses that ceiling
+  instead of the provisional `3,999,999,999`.
+- `Solving World Hunger` is assigned visible achievement `0x84` and completes
+  only when `CFoodStore.food` equals the native positive-overflow saturation
+  value `0x7FFFFFFF` (`2,147,483,647`).
+- All native REL32 callsites for `CMoney::Adjust`, `CMoney::Set`, and
+  `CFoodStore::Adjust` are redirected to ABI-compatible observers. The sole
+  `CMoney::LoadState` call is also wrapped after Achievement and FoodStore load,
+  so already-maxed saves reconcile without a per-frame poll.
+- The event-driven design leaves Reset Achievements cleared until the next
+  resource mutation or successful reload. IDs `0x83-0x84` are always visible
+  before the runtime-gated Holiday suffix and are included in visible completion
+  totals and Complete all Achievements.
+- The fully enabled B156 executable links and passes Holiday, runtime-flag, and
+  debugger validation. Live natural-threshold, cheat-threshold, notification,
+  reset, save, and reload QA remains.

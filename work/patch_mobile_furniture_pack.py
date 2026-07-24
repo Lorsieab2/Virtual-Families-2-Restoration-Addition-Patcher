@@ -673,7 +673,7 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
 CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x82
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x84
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -682,6 +682,8 @@ CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST = 0x6D
 CUSTOM_ACHIEVEMENT_HOLIDAY_LAST = 0x7F
 CUSTOM_ACHIEVEMENT_BIRTHDAY_FIRST = 0x80
 CUSTOM_ACHIEVEMENT_BIRTHDAY_LAST = 0x82
+CUSTOM_ACHIEVEMENT_RESOURCE_FIRST = 0x83
+CUSTOM_ACHIEVEMENT_RESOURCE_LAST = 0x84
 CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
 CUSTOM_ACHIEVEMENT_TARGET = 1
 CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
@@ -721,6 +723,8 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0x80, "birthday_furniture", "Happy Birthday", "You bought a Birthday Banner."),
     (0x81, "birthday_furniture", "Not a lie", "You bought a Birthday Cake."),
     (0x82, "birthday_furniture", "Full of helium", "You bought Birthday Balloons."),
+    (0x83, "resource", "No More Worries", "Have the maximum amount of coins in the bank account."),
+    (0x84, "resource", "Solving World Hunger", "Have the maximum amount of food in the fridge."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -8606,10 +8610,13 @@ public:
 
 class CMoney {
 public:
+    struct SSaveState;
+
     double balance;
     float bankingInterest;
 
     void Adjust(float amount, bool advanceAchievements);
+    bool const LoadState(SSaveState const &state);
     void Set(double amount);
 };
 
@@ -8841,7 +8848,7 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 }
 
 static int VF2AchievementVisibleCountInternal() {
-    int count = 0x5F + 6 + 3;
+    int count = 0x5F + 6 + 3 + 2;
     if (kVF2IncludeOrnamentologistGoal) ++count;
     if (kVF2IncludeBehaviorGoals) count += 7;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
@@ -8884,11 +8891,60 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
     if (kVF2IncludeBehaviorGoals) {
         completed += VF2CountCompletedAchievements(achievement, 0x66, 0x6C);
     }
-    completed += VF2CountCompletedAchievements(achievement, 0x80, 0x82);
+    completed += VF2CountCompletedAchievements(achievement, 0x80, 0x84);
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
         completed += VF2CountCompletedAchievements(achievement, 0x6D, 0x7F);
     }
     return completed;
+}
+
+static void VF2CheckMaximumResourceAchievements() {
+    if (Money.balance == 4000000000.0 &&
+        !Achievement.IsComplete((EAchievement)0x83)) {
+        Achievement.SetComplete((EAchievement)0x83);
+    }
+    if (FoodStore.food == 0x7FFFFFFF &&
+        !Achievement.IsComplete((EAchievement)0x84)) {
+        Achievement.SetComplete((EAchievement)0x84);
+    }
+}
+
+extern "C" void __fastcall VF2MoneyAdjustAndAward(
+    CMoney *money,
+    void *,
+    float amount,
+    bool advanceAchievements
+) {
+    money->Adjust(amount, advanceAchievements);
+    VF2CheckMaximumResourceAchievements();
+}
+
+extern "C" void __fastcall VF2MoneySetAndAward(
+    CMoney *money,
+    void *,
+    double amount
+) {
+    money->Set(amount);
+    VF2CheckMaximumResourceAchievements();
+}
+
+extern "C" void __fastcall VF2FoodAdjustAndAward(
+    CFoodStore *foodStore,
+    void *,
+    int amount
+) {
+    foodStore->Adjust(amount);
+    VF2CheckMaximumResourceAchievements();
+}
+
+extern "C" bool __fastcall VF2MoneyLoadStateAndReconcile(
+    CMoney *money,
+    void *,
+    CMoney::SSaveState const &state
+) {
+    bool loaded = money->LoadState(state);
+    if (loaded) VF2CheckMaximumResourceAchievements();
+    return loaded;
 }
 
 static int VF2GeneralPurchaseAchievement(EInventoryItem item) {
@@ -9062,7 +9118,7 @@ static void VF2CompleteAllAchievements() {
             VF2CompleteAchievementForCheat(achievement);
         }
     }
-    for (int achievement = 0x80; achievement <= 0x82; ++achievement) {
+    for (int achievement = 0x80; achievement <= 0x84; ++achievement) {
         VF2CompleteAchievementForCheat(achievement);
     }
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
@@ -9168,28 +9224,28 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         CollectableItem.luckyRockActive = 1;
         break;
     case 0x11B:
-        Money.Set(0.0);
+        VF2MoneySetAndAward(&Money, 0, 0.0);
         break;
     case 0x11C:
         FoodStore.food = 0;
         break;
     case 0x11D:
-        Money.Adjust(100.0f, true);
+        VF2MoneyAdjustAndAward(&Money, 0, 100.0f, true);
         break;
     case 0x11E:
-        Money.Adjust(10000.0f, true);
+        VF2MoneyAdjustAndAward(&Money, 0, 10000.0f, true);
         break;
     case 0x11F:
-        Money.Set(3999999999.0);
+        VF2MoneySetAndAward(&Money, 0, 4000000000.0);
         break;
     case 0x120:
-        FoodStore.Adjust(100);
+        VF2FoodAdjustAndAward(&FoodStore, 0, 100);
         break;
     case 0x121:
-        FoodStore.Adjust(10000);
+        VF2FoodAdjustAndAward(&FoodStore, 0, 10000);
         break;
     case 0x122:
-        FoodStore.Adjust(0x7FFFFFFF);
+        VF2FoodAdjustAndAward(&FoodStore, 0, 0x7FFFFFFF);
         break;
     case 0x123:
         if (VF2AllFurnitureLocksUnlocked()) {
@@ -10974,6 +11030,9 @@ def patch_custom_achievements(manifest):
         range(CUSTOM_ACHIEVEMENT_BIRTHDAY_FIRST, CUSTOM_ACHIEVEMENT_BIRTHDAY_LAST + 1)
     )
     appended_order.extend(
+        range(CUSTOM_ACHIEVEMENT_RESOURCE_FIRST, CUSTOM_ACHIEVEMENT_RESOURCE_LAST + 1)
+    )
+    appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
     )
     order_sym = scene_obj.symbol("?achievementOrder@@3QBHB")
@@ -11103,6 +11162,7 @@ def patch_custom_achievements(manifest):
         + 6
         + (7 if ENABLE_BEHAVIOR_PATCHES else 0)
         + 3
+        + 2
     )
     manifest["CustomAchievements"] = {
         "status": "patched",
@@ -17723,6 +17783,89 @@ def validate_custom_achievement_award_hook_objects(manifest):
     }
 
 
+def patch_maximum_resource_achievement_callsites(manifest):
+    """Route native resource mutations through ABI-compatible goal observers."""
+    wrappers = {
+        "?Adjust@CMoney@@QAEXM_N@Z": "@VF2MoneyAdjustAndAward@16",
+        "?Set@CMoney@@QAEXN@Z": "@VF2MoneySetAndAward@16",
+        "?Adjust@CFoodStore@@QAEXH@Z": "@VF2FoodAdjustAndAward@12",
+        "?LoadState@CMoney@@QAE?B_NABUSSaveState@1@@Z": (
+            "@VF2MoneyLoadStateAndReconcile@12"
+        ),
+    }
+    patched = {native: [] for native in wrappers}
+
+    for path in sorted(PATCHED.glob("*.obj")):
+        obj = CoffObject(path)
+        matches = []
+        for section in obj.sections:
+            for index in range(section.nreloc):
+                vaddr, symbol_index, relocation_type = struct.unpack_from(
+                    "<IIH", obj.buf, section.reloc_ptr + index * 10
+                )
+                symbol = obj.symbol_by_index.get(symbol_index)
+                if (
+                    symbol is not None
+                    and symbol.name in wrappers
+                    and relocation_type == IMAGE_REL_I386_REL32
+                ):
+                    matches.append(
+                        (section.index, vaddr, symbol.name, relocation_type)
+                    )
+        if not matches:
+            continue
+
+        wrapper_symbols = {
+            native: obj.append_undefined_symbol(wrappers[native])
+            for _section, _vaddr, native, _relocation_type in matches
+        }
+        for section, vaddr, native, relocation_type in matches:
+            obj.retarget_relocation(
+                section,
+                vaddr,
+                wrapper_symbols[native],
+                relocation_type,
+            )
+            patched[native].append(
+                {
+                    "object": path.name,
+                    "section": section,
+                    "offset": hex(vaddr),
+                    "wrapper": wrappers[native],
+                }
+            )
+        obj.write(path)
+
+    missing = [native for native, callsites in patched.items() if not callsites]
+    if missing:
+        raise RuntimeError(
+            "Maximum-resource achievement observers found no native calls for: "
+            + ", ".join(missing)
+        )
+    if len(patched["?LoadState@CMoney@@QAE?B_NABUSSaveState@1@@Z"]) != 1:
+        raise RuntimeError(
+            "Expected exactly one CMoney::LoadState reconciliation callsite"
+        )
+
+    manifest["maximum_resource_achievement_hooks"] = {
+        "status": "patched",
+        "money_goal": {
+            "achievement_id": "0x83",
+            "threshold": "4000000000.0",
+        },
+        "food_goal": {
+            "achievement_id": "0x84",
+            "threshold": "0x7fffffff",
+        },
+        "callsites": patched,
+        "load_reconciliation": "CMoney::LoadState after FoodStore and achievements",
+        "reset_semantics": (
+            "event-driven; reset remains cleared until a resource mutation "
+            "or successful load-state reconciliation"
+        ),
+    }
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     copy_obj_tree()
@@ -17817,6 +17960,7 @@ def main():
     # This final pass intentionally runs after label wrappers so the mobile
     # dispatchers can preserve those wrappers as their build-specific fallback.
     patch_mobile_furniture_behavior_macros(manifest)
+    patch_maximum_resource_achievement_callsites(manifest)
     validate_custom_achievement_award_hook_objects(manifest)
     if ENABLE_DEBUGGER_FEATURES:
         patch_debug_features(manifest)

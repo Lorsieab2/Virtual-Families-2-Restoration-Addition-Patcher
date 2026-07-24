@@ -2491,10 +2491,10 @@ class TextFixStringManagerTests(unittest.TestCase):
                     if row.get("source")
                     == "custom achievement reserved capacity"
                 ]
-                self.assertEqual(len(reserved), 74)
+                self.assertEqual(len(reserved), 70)
                 self.assertEqual(
                     {int(row["achievement_id"], 16) for row in reserved},
-                    set(range(0x83, 0xA8)),
+                    set(range(0x85, 0xA8)),
                 )
                 self.assertTrue(all(row["text"] == "" for row in reserved))
                 self.assertEqual(
@@ -2750,7 +2750,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("if (kVF2IncludeOrnamentologistGoal)", source)
         self.assertIn("if (kVF2IncludeBehaviorGoals)", source)
         self.assertIn(
-            "for (int achievement = 0x80; achievement <= 0x82; ++achievement)",
+            "for (int achievement = 0x80; achievement <= 0x84; ++achievement)",
             source,
         )
         self.assertIn("if (gVF2HolidayFurnitureGoalsEnabled != 0)", source)
@@ -3367,6 +3367,83 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                 0x82: ("birthday_furniture", "Full of helium", "You bought Birthday Balloons."),
             },
         )
+
+    def test_maximum_resource_goal_rows_and_exact_thresholds(self):
+        rows = {
+            achievement_id: (group, title, description)
+            for achievement_id, group, title, description
+            in patcher.CUSTOM_ACHIEVEMENT_ROW_SPECS
+        }
+        self.assertEqual(
+            {achievement_id: rows[achievement_id] for achievement_id in range(0x83, 0x85)},
+            {
+                0x83: (
+                    "resource",
+                    "No More Worries",
+                    "Have the maximum amount of coins in the bank account.",
+                ),
+                0x84: (
+                    "resource",
+                    "Solving World Hunger",
+                    "Have the maximum amount of food in the fridge.",
+                ),
+            },
+        )
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn("Money.balance == 4000000000.0", source)
+        self.assertIn("FoodStore.food == 0x7FFFFFFF", source)
+        self.assertIn(
+            "VF2MoneySetAndAward(&Money, 0, 4000000000.0);",
+            source,
+        )
+        self.assertNotIn("3999999999.0", source)
+        self.assertIn(
+            "patch_maximum_resource_achievement_callsites(manifest)",
+            source,
+        )
+
+    def test_maximum_resource_callsites_are_relocation_only_wrappers(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                for filename in ("Money.obj", "FoodStore.obj", "theGameState.obj"):
+                    shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+                patcher.PATCHED = temp_root
+                manifest = {}
+                patcher.patch_maximum_resource_achievement_callsites(manifest)
+
+                hooks = manifest["maximum_resource_achievement_hooks"]
+                self.assertEqual(hooks["money_goal"]["achievement_id"], "0x83")
+                self.assertEqual(hooks["food_goal"]["achievement_id"], "0x84")
+                for native, callsites in hooks["callsites"].items():
+                    self.assertTrue(callsites, native)
+                    for callsite in callsites:
+                        obj = CoffObject(temp_root / callsite["object"])
+                        section = obj.section(callsite["section"])
+                        relocation = next(
+                            struct.unpack_from(
+                                "<IIH",
+                                obj.buf,
+                                section.reloc_ptr + index * 10,
+                            )
+                            for index in range(section.nreloc)
+                            if struct.unpack_from(
+                                "<I",
+                                obj.buf,
+                                section.reloc_ptr + index * 10,
+                            )[0] == int(callsite["offset"], 16)
+                        )
+                        self.assertEqual(
+                            obj.symbol_by_index[relocation[1]].name,
+                            callsite["wrapper"],
+                        )
+                        self.assertEqual(
+                            relocation[2],
+                            patcher.IMAGE_REL_I386_REL32,
+                        )
+        finally:
+            patcher.PATCHED = old_patched
 
     def test_general_purchase_aliases_require_success_but_not_holiday_flag(self):
         for item_id, goal_id in patcher.CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS.items():
@@ -4240,10 +4317,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         ))
         try:
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
-                (False, False, 104, 123, 5, 12),
-                (True, False, 105, 124, 6, 13),
-                (False, True, 111, 130, 5, 12),
-                (True, True, 112, 131, 6, 13),
+                (False, False, 106, 125, 5, 12),
+                (True, False, 107, 126, 6, 13),
+                (False, True, 113, 132, 5, 12),
+                (True, True, 114, 133, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
@@ -4422,10 +4499,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         expected.extend(range(0x60, 0x66))
                         if behavior:
                             expected.extend(range(0x66, 0x6D))
-                        expected.extend(range(0x80, 0x83))
+                        expected.extend(range(0x80, 0x85))
                         expected.extend(range(0x6D, 0x80))
                         self.assertEqual(order, expected)
-                        self.assertEqual(order[-22:-19], list(range(0x80, 0x83)))
+                        self.assertEqual(order[-24:-19], list(range(0x80, 0x85)))
                         self.assertEqual(order[-19:], list(range(0x6D, 0x80)))
                         order_contract = manifest["CustomAchievements"][
                             "ornamentologist_order"
@@ -5089,8 +5166,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
                     "physical_row_count": 0xA8,
-                    "visible_count_flag_0": 105,
-                    "visible_count_flag_1": 124,
+                    "visible_count_flag_0": 107,
+                    "visible_count_flag_1": 126,
                     "notify_queue_bound": 0x5F,
                 },
             )

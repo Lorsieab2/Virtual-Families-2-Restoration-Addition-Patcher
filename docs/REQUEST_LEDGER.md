@@ -109,7 +109,7 @@ and reset only through their documented reset action.
 
 | Group | Status | Requests |
 |---|---|---|
-| Wealth/food | Not started | No More Worries; Solving World Hunger. |
+| Wealth/food | B156 source + fully-enabled linked validation complete | No More Worries 0x83 awards at the exact native coin ceiling of 4,000,000,000; Solving World Hunger 0x84 awards at the exact food ceiling of 2,147,483,647. All native Set/Adjust callsites are observed, old maxed saves reconcile after load, and Reset Achievements stays cleared until a later resource mutation or reload. Live award/notification/save QA remains. |
 | Pets in home | Not started | A Furry Companion; Cat's Meow; Man's Best Friend; Itsy Bitsy; Hampster Dance; Lovely Lizards. |
 | Longevity | Not started | Lucky 70's; Great 80's; Mighty 90's; Centenarian; Oldest Person in History (>122). |
 | Family-tree appearance | Not started | Return of the Rainbow (female head 48); Spiky! (male head 48). |
