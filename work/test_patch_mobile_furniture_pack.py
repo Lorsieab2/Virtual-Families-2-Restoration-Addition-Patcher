@@ -2951,6 +2951,10 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("largest visible size of 30 socks", rows[0x133]["description"])
         self.assertEqual(rows[0x134]["name"], "No sock pile")
         self.assertIn("without awarding sock-laundering progress", rows[0x134]["description"])
+        self.assertEqual(rows[0x135]["name"], "Clean House")
+        self.assertIn("stock Housekeeping Services event", rows[0x135]["description"])
+        self.assertIn("Yard weeds", rows[0x135]["description"])
+        self.assertIn("laundry-room sock pile", rows[0x135]["description"])
         self.assertEqual(patcher.CHEAT_UPGRADE_LEGACY_COUNT, 19)
         self.assertEqual(patcher.CHEAT_UPGRADE_STRING_COUNT, 38)
         self.assertEqual(
@@ -2968,6 +2972,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x132], 0x124)
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x133], 0x124)
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x134], 0x124)
+        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x135], 0x124)
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x12E),
             patcher.visible_special_upgrade_icon_id_for(0x124),
@@ -2980,7 +2985,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 0x11C, 0x120, 0x121, 0x122,
                 0x123, 0x124, 0x12E, 0x125, 0x126, 0x127,
                 0x128, 0x129, 0x12A, 0x12C,
-                0x12B, 0x12D, 0x12F, 0x130, 0x131, 0x132, 0x133, 0x134,
+                0x12B, 0x12D, 0x12F, 0x130, 0x131, 0x132, 0x133, 0x134, 0x135,
             ],
         )
         self.assertEqual(item_ids.index(0x12E), item_ids.index(0x124) + 1)
@@ -3021,7 +3026,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("if (gVF2HolidayFurnitureGoalsEnabled != 0)", source)
         self.assertIn("case 0x12E:", source)
         self.assertIn("VF2CompleteAllAchievements();", source)
-        self.assertIn("if (itemId >= 0x12E && itemId <= 0x134) itemId = 0x124;", source)
+        self.assertIn("if (itemId >= 0x12E && itemId <= 0x135) itemId = 0x124;", source)
         self.assertIn("case 0x12F:", source)
         self.assertIn("CollectableItem.SpawnTrashInHouse(30);", source)
         self.assertIn("case 0x130:", source)
@@ -3042,6 +3047,13 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("VF2SetSockPileCount(30);", source)
         self.assertIn("case 0x134:", source)
         self.assertIn("VF2SetSockPileCount(0);", source)
+        self.assertIn("static void VF2CleanHouse()", source)
+        self.assertIn("CollectableItem.RemoveAll((ECarrying)0x73);", source)
+        self.assertIn("CollectableItem.RemoveAll((ECarrying)0x79);", source)
+        self.assertIn("CollectableItem.RemoveAll((ECarrying)0x81);", source)
+        self.assertIn("CollectableItem.RemoveAll((ECarrying)0x83);", source)
+        self.assertIn("case 0x135:", source)
+        self.assertIn("VF2CleanHouse();", source)
 
     def test_trigger_all_malfunctions_uses_native_dryer_and_renovation_gates(self):
         old_patched = patcher.PATCHED

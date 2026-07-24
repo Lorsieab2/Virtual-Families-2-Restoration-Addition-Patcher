@@ -1312,3 +1312,14 @@
   stops on the five pre-existing ATL symbols used by `FlashPlayer.obj`. The
   prior B156 executable was left unchanged. Linked and live
   refresh/save/reload validation remains.
+
+## B156 - Clean House source checkpoint
+
+- Adds Clean House 0x135 with the exact four selectors used by the stock
+  Housekeeping Services event: `0x73`, `0x79`, `0x81`, and `0x83`.
+- It deliberately excludes Landscaping Services selector `0x7D` and does not
+  alter the separate laundry-room sock-pile counter.
+- The row reuses the trophy icon descriptor and common post-cheat save path.
+  The generated helper compiles, and object-code readback confirms the four
+  native `RemoveAll` calls. All 213 tests pass with one intentional skip.
+  Linked and live removal/save/reload validation remains.

@@ -2998,3 +2998,17 @@
   linking remains pending because the restarted local Visual Studio toolchain
   does not currently provide `atls.lib`; the unchanged prior executable is not
   claimed as containing these cheats.
+
+## 2026-07-23 - Exact Clean House scope
+
+- Stock `CEventHouseKeepingServices::ImpactGame(int)` defines the native
+  indoor-cleaning boundary with four `CCollectableItem::RemoveAll` calls:
+  selectors `0x73`, `0x79`, `0x81`, and `0x83`.
+- The separate stock Landscaping Services event uses selector `0x7D`.
+  Housekeeping therefore leaves yard weeds alone. It also never writes the
+  separate sock-pile count at `theGameState+0x148`.
+- Cheat Upgrade `0x135` reproduces only the four Housekeeping Services
+  removals, then uses the shared post-cheat save path.
+- The generated helper compiles, object-code readback retains all four exact
+  selectors, and all 213 tests pass with one intentional skip. Final executable
+  linking remains subject to the already-recorded missing `atls.lib`.
