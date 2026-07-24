@@ -2963,3 +2963,18 @@
   `16a622d702e6464f7b612badc5faee004911cfb66962845c37dc39356f4f3b8c`.
   Existing Holiday and four-runtime-flag linked validation passes. Live
   birth/adoption, notification, reset, save, and reload QA remains.
+
+## 2026-07-23 - Spawn Marriage Email cheat
+
+- Cheat Upgrade `0x132` is Spawn Marriage Email. It calls the stock
+  `theGameState::QueueEmailMessage` method with exact `EEmailMessage` value
+  `2`, the same value used by the native eligible-single-adult proposal path.
+- The stock queue retains duplicate suppression and its ten-message capacity.
+  The common cheat-upgrade path then calls `SaveCurrentGame`; no queue storage,
+  timer, marriage-eligibility, or proposal UI code is replaced.
+- The row reuses the existing trophy icon descriptor and is present only when
+  Cheat Upgrades are compiled into the selected executable layout.
+- The fully enabled B156 executable remains 1,762,816 bytes and hashes to
+  `ac850ace342515e5da097cff362568d9bc060e9070c5ad8ef21a34e81ea73eda`.
+  Existing Holiday and four-runtime-flag linked validation passes. Live
+  queue-full, duplicate, eligible-family, UI, and save/reload QA remains.

@@ -1284,3 +1284,14 @@
   `16A622D702E6464F7B612BADC5FAEE004911CFB66962845C37DC39356F4F3B8C`.
 - Existing linked Holiday and four-runtime-flag validations pass. Live
   birth/adoption/notification/reset/save/reload testing remains.
+
+## B156 - Spawn Marriage Email checkpoint
+
+- Adds Cheat Upgrade 0x132 and queues native email message 2 through
+  `theGameState::QueueEmailMessage`.
+- Preserves the stock ten-slot queue, duplicate suppression, proposal UI, and
+  common post-cheat save path.
+- The fully enabled executable remains 1,762,816 bytes with SHA-256
+  `AC850ACE342515E5DA097CFF362568D9BC060E9070C5AD8EF21A34E81EA73EDA`.
+- Existing linked Holiday and four-runtime-flag validations pass. Live
+  duplicate/full-queue/proposal/save-reload testing remains.

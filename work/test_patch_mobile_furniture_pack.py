@@ -2942,6 +2942,11 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("Existing collectables are preserved", rows[0x130]["description"])
         self.assertEqual(rows[0x131]["name"], "Clean Garden")
         self.assertIn("without affecting other collectables", rows[0x131]["description"])
+        self.assertEqual(rows[0x132]["name"], "Spawn Marriage Email")
+        self.assertEqual(
+            rows[0x132]["description"],
+            "Queues an incoming marriage proposal email.",
+        )
         self.assertEqual(patcher.CHEAT_UPGRADE_LEGACY_COUNT, 19)
         self.assertEqual(patcher.CHEAT_UPGRADE_STRING_COUNT, 38)
         self.assertEqual(
@@ -2956,6 +2961,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x12F], 0x124)
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x130], 0x124)
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x131], 0x124)
+        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x132], 0x124)
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x12E),
             patcher.visible_special_upgrade_icon_id_for(0x124),
@@ -2968,7 +2974,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 0x11C, 0x120, 0x121, 0x122,
                 0x123, 0x124, 0x12E, 0x125, 0x126, 0x127,
                 0x128, 0x129, 0x12A, 0x12C,
-                0x12B, 0x12D, 0x12F, 0x130, 0x131,
+                0x12B, 0x12D, 0x12F, 0x130, 0x131, 0x132,
             ],
         )
         self.assertEqual(item_ids.index(0x12E), item_ids.index(0x124) + 1)
@@ -3009,13 +3015,21 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("if (gVF2HolidayFurnitureGoalsEnabled != 0)", source)
         self.assertIn("case 0x12E:", source)
         self.assertIn("VF2CompleteAllAchievements();", source)
-        self.assertIn("if (itemId >= 0x12E && itemId <= 0x131) itemId = 0x124;", source)
+        self.assertIn("if (itemId >= 0x12E && itemId <= 0x132) itemId = 0x124;", source)
         self.assertIn("case 0x12F:", source)
         self.assertIn("CollectableItem.SpawnTrashInHouse(30);", source)
         self.assertIn("case 0x130:", source)
         self.assertIn("CollectableItem.SpawnWeedsInYard(30);", source)
         self.assertIn("case 0x131:", source)
         self.assertIn("CollectableItem.RemoveAll((ECarrying)0x7D);", source)
+        self.assertIn("case 0x132:", source)
+        self.assertIn("eEmailMessageMarriageProposal = 2", source)
+        self.assertIn(
+            "theGameState::Get()->QueueEmailMessage(\n"
+            "            eEmailMessageMarriageProposal\n"
+            "        );",
+            source,
+        )
 
     def test_trigger_all_malfunctions_uses_native_dryer_and_renovation_gates(self):
         old_patched = patcher.PATCHED

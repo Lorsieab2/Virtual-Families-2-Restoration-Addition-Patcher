@@ -533,6 +533,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES = {
     0x12F: 0x124,
     0x130: 0x124,
     0x131: 0x124,
+    0x132: 0x124,
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
@@ -685,6 +686,12 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": 0x131,
         "name": "Clean Garden",
         "description": "Removes every weed from the yard without affecting other collectables.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x132,
+        "name": "Spawn Marriage Email",
+        "description": "Queues an incoming marriage proposal email.",
         "price": 0,
     },
 ]
@@ -8116,7 +8123,7 @@ extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
 static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
     // Post-B153 cheats reuse the trophy descriptor so adding a row never
     // shifts villager-body or Holiday Ornament image IDs.
-    if (itemId >= 0x12E && itemId <= 0x131) itemId = 0x124;
+    if (itemId >= 0x12E && itemId <= 0x132) itemId = 0x124;
     int index = itemId - kVF2VisibleSpecialUpgradeFirstItem;
     return index < 0 || index >= kVF2VisibleSpecialUpgradeCount ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -8827,6 +8834,10 @@ enum EGameScene {
     eGameSceneNone = 0
 };
 
+enum EEmailMessage {
+    eEmailMessageMarriageProposal = 2
+};
+
 class CTutorialTip {
 public:
     void Queue(StringId stringId, EGameScene scene, bool immediate);
@@ -8837,6 +8848,7 @@ public:
     static theGameState *Get();
     bool SaveCurrentGame();
     void ResetWorldState(int worldState);
+    void QueueEmailMessage(EEmailMessage message);
 
     char pad0[0x25B1D];
     unsigned char healthPlanActive;
@@ -9579,6 +9591,11 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x131:
         CollectableItem.RemoveAll((ECarrying)0x7D);
+        break;
+    case 0x132:
+        theGameState::Get()->QueueEmailMessage(
+            eEmailMessageMarriageProposal
+        );
         break;
     default:
         return;
