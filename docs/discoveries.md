@@ -3624,3 +3624,35 @@
   intentional skip). The fully enabled executable is 1,777,664 bytes with
   SHA-256
   `2EF83392E11DE07CF52F45BF1F1FC6BEDF62F0742D7148AE4C702720867426E1`.
+
+## 2026-07-24 - Additive autonomous mobile Holiday behavior selector
+
+- Desktop `CVillagerAI::DecideWhatToDo` scans exactly `0x19B` fixed-size
+  candidate records, ending at behavior `0x19A`, then performs one weighted
+  random selection. Extending or indexing that array remains unsafe.
+- B156 now inserts a guarded external weighted draw immediately before the
+  native final draw. It includes only the five mobile candidates with exact
+  recovered weights and predicates: Holiday Candles `0x19B`, Eggnog `0x1A1`,
+  Santa-cookie stealing `0x1A5`, Christmas figurines `0x1A4`, and house
+  decorations `0x1A7`. Each has weight `2000`, its proven EObject gate, and
+  its exact raw-age boundary.
+- The combined range is `stockWeight + eligibleExternalWeight`. A stock result
+  falls through to the unchanged native weighted draw, preserving the
+  conditional distribution of every stock candidate. An external result
+  starts the already-ported exact plan and exits through the native function
+  epilogue.
+- When Mobile Furniture Behaviors is disabled, the helper returns false before
+  drawing and the native selector runs unchanged. No stock candidate is
+  replaced, and the behavior table remains `0x19B` entries.
+- Adult Santa-cookie rescue remains direct/manual only, matching the mobile
+  candidate table. Patio and Picnic autonomous pairs `0x1B4-0x1B7` remain
+  pending until their exact eligibility and weights are represented.
+- All 236 repository tests pass with one intentional skip. Both the
+  behavior-disabled core and fully enabled layouts compile and link with the
+  new selector. The core executable is 1,708,032 bytes with SHA-256
+  `F5BF187D620C1560252842A7AFB01A93859DEAFD7046374F486BC6A172FBB4D7`;
+  the fully enabled executable is 1,778,176 bytes with SHA-256
+  `8D6E731B7966212A2BA03569B87AE3035A48582363C2DD85DE7491BDB2557F8E`.
+- The linked 16-layout Holiday validator still passes 8/8 positive and 8/8
+  negative layouts. Runtime validation confirms 16 unique hashes and exact
+  enable/idempotence/disable restoration for all five dormant flags.

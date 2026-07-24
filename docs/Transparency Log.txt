@@ -1231,3 +1231,20 @@ B156 decorative-only Holiday furniture closure
 - These five items are therefore mobile decorative furniture, not missing
   villager behaviors. B156 validates that exact negative contract and does
   not create speculative PC behavior maps for them.
+B156 additive autonomous mobile Holiday behavior selector
+- Added spontaneous Holiday Candles, Eggnog, child Santa-cookie stealing,
+  Christmas figurine admiration, and adult house-decoration checking using
+  each exact mobile weight of 2000 plus its proven EObject and raw-age gate.
+- The new selector adds eligible external weight before the stock final draw.
+  Stock results still use the unchanged native selector, preserving stock
+  conditional probabilities. External results run the already-ported exact
+  plans.
+- The fixed PC behavior table remains 0x19B entries. No stock behavior is
+  overwritten, and disabling Mobile Furniture Behaviors bypasses the added
+  selection without consuming a random roll.
+- Adult Santa-cookie rescue remains manual, matching mobile. Patio and Picnic
+  autonomous behaviors remain pending.
+- All 236 tests pass with one intentional skip. Core and fully enabled layouts
+  both compile and link. The 16-layout Holiday and five-flag restoration
+  validators pass; the fully enabled EXE SHA-256 is
+  8D6E731B7966212A2BA03569B87AE3035A48582363C2DD85DE7491BDB2557F8E.

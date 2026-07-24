@@ -47,6 +47,9 @@ MOBILE_FURNITURE_BEHAVIOR_FLAG_SYMBOL = "_gVF2MobileFurnitureBehaviors"
 MOBILE_FURNITURE_BEHAVIOR_HELPER_SYMBOL = (
     "?VF2HandleDropOnMobileFurniture@theMainScene@@IAE?B_NAAVCVillager@@@Z"
 )
+MOBILE_FURNITURE_AUTONOMOUS_SELECTOR_SYMBOL = (
+    "_VF2TryStartMobileHolidayAutonomous"
+)
 MOBILE_PATIO_PROP_HELPER_SYMBOL = "@VF2PatioSetPropAndTrack@12"
 MOBILE_CHAISE_ITEM_IDS = tuple(range(0x2DE, 0x2E2))
 MOBILE_CHAISE_OBJECT = 0x95
@@ -17589,6 +17592,91 @@ static bool VF2HandleMobileMenorahGroup(CVillager &villager)
     return true;
 }
 
+extern "C" bool __cdecl VF2TryStartMobileHolidayAutonomous(
+    CVillager &villager,
+    unsigned int stockWeight)
+{
+    if (gVF2MobileFurnitureBehaviors == 0) return false;
+
+    int age = *reinterpret_cast<int *>(
+        reinterpret_cast<unsigned char *>(&villager) + 0x6A54);
+    typedef bool (*Handler)(CVillager &);
+    struct Candidate {
+        CContentMap::EObject object;
+        int minimumAge;
+        int maximumAge;
+        unsigned int weight;
+        Handler handler;
+    };
+    Candidate candidates[] = {
+        {
+            CContentMap::eObjectHolidayCandles,
+            0,
+            0x117,
+            2000,
+            VF2HandleMobileHolidayCandles
+        },
+        {
+            CContentMap::eObjectEggnog,
+            0,
+            0x117,
+            2000,
+            VF2HandleMobileEggnog
+        },
+        {
+            CContentMap::eObjectSantaCookiePlate,
+            0,
+            0x117,
+            2000,
+            VF2HandleMobileSantaCookiePlate
+        },
+        {
+            CContentMap::eObjectXmasKnickknack,
+            7,
+            0x7FFFFFFF,
+            2000,
+            VF2HandleMobileXmasKnickknack
+        },
+        {
+            CContentMap::eObjectHouseXmasDecor,
+            0x118,
+            0x7FFFFFFF,
+            2000,
+            VF2HandleMobileHouseXmasDecor
+        },
+    };
+
+    unsigned int externalWeight = 0;
+    bool eligible[sizeof(candidates) / sizeof(candidates[0])] = {};
+    for (unsigned int index = 0;
+         index < sizeof(candidates) / sizeof(candidates[0]);
+         ++index) {
+        Candidate const &candidate = candidates[index];
+        eligible[index] =
+            age >= candidate.minimumAge &&
+            age <= candidate.maximumAge &&
+            ContentMap.ObjectExists(candidate.object);
+        if (eligible[index]) externalWeight += candidate.weight;
+    }
+    if (externalWeight == 0) return false;
+
+    unsigned int roll = static_cast<unsigned int>(
+        ldwGameState::GetRandom(
+            static_cast<int>(stockWeight + externalWeight)));
+    if (roll < stockWeight) return false;
+    roll -= stockWeight;
+    for (unsigned int index = 0;
+         index < sizeof(candidates) / sizeof(candidates[0]);
+         ++index) {
+        if (!eligible[index]) continue;
+        if (roll < candidates[index].weight) {
+            return candidates[index].handler(villager);
+        }
+        roll -= candidates[index].weight;
+    }
+    return false;
+}
+
 static bool VF2WeatherAllowsOutdoorFurniture()
 {
     // Mobile values: 0 sunny, 1 cloudy, 2 rain, 3 storm, 4 fog, 5 snow.
@@ -18040,14 +18128,12 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "item_ids": [hex(MOBILE_HOLIDAY_CANDLES_ITEM_ID)],
             "label": "Playing with holiday candles",
             "object": hex(MOBILE_HOLIDAY_CANDLES_OBJECT),
-            "manual_drop_only": True,
+            "manual_drop_only": False,
+            "manual_drop_supported": True,
             "child_only": True,
             "raw_age_max": "0x117",
-            "autonomous": False,
-            "autonomous_status": (
-                "pending: mobile behavior 0x19b is beyond the desktop "
-                "behavior table and no regression-safe additive candidate is proven"
-            ),
+            "autonomous": True,
+            "autonomous_status": "external additive candidate with exact mobile weight",
             "mobile_behavior": "CBehavior::KidExaminesCandles",
             "mobile_behavior_id": "0x19b",
             "mobile_candidate_weight": 2000,
@@ -18059,14 +18145,12 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "item_ids": [hex(MOBILE_EGGNOG_ITEM_ID)],
             "label": "Stealing egg nog",
             "object": hex(MOBILE_EGGNOG_OBJECT),
-            "manual_drop_only": True,
+            "manual_drop_only": False,
+            "manual_drop_supported": True,
             "child_only": True,
             "raw_age_max": "0x117",
-            "autonomous": False,
-            "autonomous_status": (
-                "pending: mobile behavior 0x1a1 is beyond the desktop "
-                "behavior table and no regression-safe additive candidate is proven"
-            ),
+            "autonomous": True,
+            "autonomous_status": "external additive candidate with exact mobile weight",
             "mobile_behavior": "CBehavior::Eggnog",
             "mobile_behavior_id": "0x1a1",
             "mobile_candidate_weight": 2000,
@@ -18080,13 +18164,14 @@ __VF2_COMPUTER_DROP_DISPATCH__
                 "Rescuing Santa's cookies",
             ],
             "object": hex(MOBILE_SANTA_COOKIE_PLATE_OBJECT),
-            "manual_drop_only": True,
+            "manual_drop_only": False,
+            "manual_drop_supported": True,
             "child_behavior_raw_age_max": "0x117",
             "adult_behavior_raw_age_min": "0x118",
-            "autonomous": False,
+            "autonomous": True,
             "autonomous_status": (
-                "pending: child behavior 0x1a5 is beyond the desktop "
-                "behavior table; adult behavior 0x1a6 is mobile-manual only"
+                "child behavior uses an external additive candidate with exact "
+                "mobile weight; adult behavior remains manual as on mobile"
             ),
             "mobile_behaviors": [
                 "CBehavior::KidStealsSantasCookies",
@@ -18104,13 +18189,11 @@ __VF2_COMPUTER_DROP_DISPATCH__
             ],
             "label": "Enjoying the figurines",
             "object": hex(MOBILE_XMAS_KNICKKNACK_OBJECT),
-            "manual_drop_only": True,
+            "manual_drop_only": False,
+            "manual_drop_supported": True,
             "raw_age_min": "0x7",
-            "autonomous": False,
-            "autonomous_status": (
-                "pending: mobile behavior 0x1a4 is beyond the desktop "
-                "behavior table and no regression-safe additive candidate is proven"
-            ),
+            "autonomous": True,
+            "autonomous_status": "external additive candidate with exact mobile weight",
             "mobile_behavior": "CBehavior::AdmiringXmasKnickKnacks",
             "mobile_behavior_id": "0x1a4",
             "mobile_candidate_weight": 2000,
@@ -18124,14 +18207,12 @@ __VF2_COMPUTER_DROP_DISPATCH__
             ],
             "label": "Checking the decorations",
             "object": hex(MOBILE_HOUSE_XMAS_DECOR_OBJECT),
-            "manual_drop_only": True,
+            "manual_drop_only": False,
+            "manual_drop_supported": True,
             "adult_only": True,
             "raw_age_min": "0x118",
-            "autonomous": False,
-            "autonomous_status": (
-                "pending: mobile behavior 0x1a7 is beyond the desktop "
-                "behavior table and no regression-safe additive candidate is proven"
-            ),
+            "autonomous": True,
+            "autonomous_status": "external additive candidate with exact mobile weight",
             "mobile_behavior": "CBehavior::InteractHouseXmasDecor",
             "mobile_behavior_id": "0x1a7",
             "mobile_candidate_weight": 2000,
@@ -18323,6 +18404,123 @@ def patch_mobile_furniture_autonomous_candidates(manifest):
         "status": "runtime-gated InitAI and LoadAI candidate refresh",
         "helper": "_VF2EnableMobileFurnitureCandidates",
         "behavior_patches_hook_reused": False,
+    }
+
+
+def patch_mobile_furniture_external_autonomous_selection(manifest):
+    """Add weighted mobile-only choices without extending the fixed PC table."""
+    obj_path = PATCHED / "VillagerAI.obj"
+    obj = CoffObject(obj_path)
+    decide = obj.symbol("?DecideWhatToDo@CVillagerAI@@AAEXAAVCVillager@@@Z")
+    sec = obj.section(decide.section)
+    random_name = "?GetRandom@ldwGameState@@SAHH@Z"
+    selection_sites = []
+    for index in range(sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+        )
+        relative = vaddr - decide.value
+        if (
+            0x900 <= relative <= 0x980
+            and obj.symbol_by_index[symbol_index].name == random_name
+            and rtype == IMAGE_REL_I386_REL32
+        ):
+            call_raw = sec.raw_ptr + vaddr - 1
+            if obj.buf[call_raw - 1 : call_raw + 5] == b"\x51\xE8\0\0\0\0":
+                selection_sites.append(vaddr - 2)
+    if len(selection_sites) != 1:
+        raise RuntimeError(
+            "Expected exactly one final weighted GetRandom selection site"
+        )
+    selection = selection_sites[0]
+
+    section_bytes = bytes(
+        obj.buf[sec.raw_ptr : sec.raw_ptr + sec.raw_size]
+    )
+    epilogue_pattern = b"\x8B\x4D\xFC\x5F\x33\xCD\x5E\xE8"
+    epilogue = section_bytes.find(
+        epilogue_pattern,
+        decide.value + 0x940,
+        decide.value + 0x9C0,
+    )
+    if epilogue < 0:
+        raise RuntimeError("CVillagerAI::DecideWhatToDo epilogue drifted")
+
+    # Preserve the native weighted distribution exactly. The helper draws once
+    # from stockWeight + eligibleExternalWeight. A stock result falls through
+    # to the unchanged native draw; an external result starts its exact plan
+    # and exits through the stock function epilogue.
+    payload = bytearray([
+        0x51,                         # push ecx ; preserve stock total
+        0x51,                         # push ecx ; stockWeight
+        0x56,                         # push esi ; CVillager&
+        0xE8, 0, 0, 0, 0,             # call external selector
+        0x83, 0xC4, 0x08,             # add esp, 8
+        0x84, 0xC0,                   # test al, al
+        0x59,                         # pop ecx ; restore stock total
+        0x0F, 0x85, 0, 0, 0, 0,       # jne stock epilogue
+    ])
+    struct.pack_into(
+        "<i",
+        payload,
+        16,
+        epilogue - selection,
+    )
+    obj.insert_section_bytes(sec.index, selection, bytes(payload))
+    helper = obj.append_undefined_symbol(
+        MOBILE_FURNITURE_AUTONOMOUS_SELECTOR_SYMBOL
+    )
+    obj.append_relocation(
+        sec.index,
+        selection + 4,
+        helper,
+        IMAGE_REL_I386_REL32,
+    )
+    obj.write(obj_path)
+    manifest["MobileFurnitureExternalAutonomousSelection"] = {
+        "status": "runtime-gated additive weighted selection",
+        "caller": "CVillagerAI::DecideWhatToDo",
+        "helper": MOBILE_FURNITURE_AUTONOMOUS_SELECTOR_SYMBOL,
+        "stock_table_entries": "0x19b",
+        "stock_table_extended": False,
+        "stock_conditional_distribution_preserved": True,
+        "external_candidates": [
+            {
+                "behavior": "KidExaminesCandles",
+                "mobile_id": "0x19b",
+                "object": "0x89",
+                "weight": 2000,
+                "raw_age_max": "0x117",
+            },
+            {
+                "behavior": "Eggnog",
+                "mobile_id": "0x1a1",
+                "object": "0x8b",
+                "weight": 2000,
+                "raw_age_max": "0x117",
+            },
+            {
+                "behavior": "KidStealsSantasCookies",
+                "mobile_id": "0x1a5",
+                "object": "0x8f",
+                "weight": 2000,
+                "raw_age_max": "0x117",
+            },
+            {
+                "behavior": "AdmiringXmasKnickKnacks",
+                "mobile_id": "0x1a4",
+                "object": "0x8c",
+                "weight": 2000,
+                "raw_age_min": "0x7",
+            },
+            {
+                "behavior": "InteractHouseXmasDecor",
+                "mobile_id": "0x1a7",
+                "object": "0x8d",
+                "weight": 2000,
+                "raw_age_min": "0x118",
+            },
+        ],
     }
 
 
@@ -22081,6 +22279,7 @@ def main():
             "offline_patcher_setting": "behavior_patches",
             "status": "stock behavior objects preserved for the behavior-disabled core executable",
         }
+    patch_mobile_furniture_external_autonomous_selection(manifest)
     # This final pass intentionally runs after label wrappers so the mobile
     # dispatchers can preserve those wrappers as their build-specific fallback.
     patch_mobile_furniture_behavior_macros(manifest)

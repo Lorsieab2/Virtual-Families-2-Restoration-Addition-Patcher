@@ -779,8 +779,9 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertEqual(candles["mobile_behavior_id"], "0x19b")
                 self.assertEqual(candles["mobile_candidate_weight"], 2000)
-                self.assertTrue(candles["manual_drop_only"])
-                self.assertFalse(candles["autonomous"])
+                self.assertFalse(candles["manual_drop_only"])
+                self.assertTrue(candles["manual_drop_supported"])
+                self.assertTrue(candles["autonomous"])
                 eggnog = contract["implemented_families"][13]
                 self.assertEqual(eggnog["item_ids"], ["0x2b0"])
                 self.assertEqual(eggnog["label"], "Stealing egg nog")
@@ -789,8 +790,9 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(eggnog["mobile_behavior"], "CBehavior::Eggnog")
                 self.assertEqual(eggnog["mobile_behavior_id"], "0x1a1")
                 self.assertEqual(eggnog["mobile_candidate_weight"], 2000)
-                self.assertTrue(eggnog["manual_drop_only"])
-                self.assertFalse(eggnog["autonomous"])
+                self.assertFalse(eggnog["manual_drop_only"])
+                self.assertTrue(eggnog["manual_drop_supported"])
+                self.assertTrue(eggnog["autonomous"])
                 cookies = contract["implemented_families"][14]
                 self.assertEqual(cookies["item_ids"], ["0x2be"])
                 self.assertEqual(
@@ -804,8 +806,9 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     cookies["mobile_behavior_ids"], ["0x1a5", "0x1a6"]
                 )
                 self.assertEqual(cookies["mobile_child_candidate_weight"], 2000)
-                self.assertTrue(cookies["manual_drop_only"])
-                self.assertFalse(cookies["autonomous"])
+                self.assertFalse(cookies["manual_drop_only"])
+                self.assertTrue(cookies["manual_drop_supported"])
+                self.assertTrue(cookies["autonomous"])
                 figurines = contract["implemented_families"][15]
                 self.assertEqual(
                     figurines["item_ids"],
@@ -819,8 +822,9 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(figurines["raw_age_min"], "0x7")
                 self.assertEqual(figurines["mobile_behavior_id"], "0x1a4")
                 self.assertEqual(figurines["mobile_candidate_weight"], 2000)
-                self.assertTrue(figurines["manual_drop_only"])
-                self.assertFalse(figurines["autonomous"])
+                self.assertFalse(figurines["manual_drop_only"])
+                self.assertTrue(figurines["manual_drop_supported"])
+                self.assertTrue(figurines["autonomous"])
                 house_decor = contract["implemented_families"][16]
                 self.assertEqual(
                     house_decor["item_ids"],
@@ -833,8 +837,9 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(house_decor["raw_age_min"], "0x118")
                 self.assertEqual(house_decor["mobile_behavior_id"], "0x1a7")
                 self.assertEqual(house_decor["mobile_candidate_weight"], 2000)
-                self.assertTrue(house_decor["manual_drop_only"])
-                self.assertFalse(house_decor["autonomous"])
+                self.assertFalse(house_decor["manual_drop_only"])
+                self.assertTrue(house_decor["manual_drop_supported"])
+                self.assertTrue(house_decor["autonomous"])
                 helper = (patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp").read_text(
                     encoding="ascii"
                 )
@@ -1223,6 +1228,22 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("plans->PlanToIncPoo(6);", picnic_helper)
                 self.assertNotIn("0x1B4", picnic_helper)
                 self.assertNotIn("0x1B5", picnic_helper)
+                selector = helper.split(
+                    'extern "C" bool __cdecl VF2TryStartMobileHolidayAutonomous',
+                    1,
+                )[1].split("static bool VF2WeatherAllowsOutdoorFurniture", 1)[0]
+                self.assertIn("ldwGameState::GetRandom(", selector)
+                self.assertIn("stockWeight + externalWeight", selector)
+                self.assertIn("if (roll < stockWeight) return false;", selector)
+                self.assertEqual(selector.count("2000,"), 5)
+                for object_name in (
+                    "eObjectHolidayCandles",
+                    "eObjectEggnog",
+                    "eObjectSantaCookiePlate",
+                    "eObjectXmasKnickknack",
+                    "eObjectHouseXmasDecor",
+                ):
+                    self.assertIn(object_name, selector)
         finally:
             patcher.PATCHED = old_patched
 
@@ -1399,6 +1420,57 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(
                     manifest["MobileFurnitureAutonomousCandidates"]["helper"],
                     "_VF2EnableMobileFurnitureCandidates",
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_mobile_holiday_external_autonomous_selector_preserves_stock_table(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                obj_path = patcher.PATCHED / "VillagerAI.obj"
+                shutil.copy2(patcher.SRC_OBJS / "VillagerAI.obj", obj_path)
+                manifest = {}
+                patcher.patch_mobile_furniture_external_autonomous_selection(
+                    manifest
+                )
+                obj = CoffObject(obj_path)
+                decide = obj.symbol(
+                    "?DecideWhatToDo@CVillagerAI@@AAEXAAVCVillager@@@Z"
+                )
+                sec = obj.section(decide.section)
+                helper_relocations = []
+                for index in range(sec.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH", obj.buf, sec.reloc_ptr + index * 10
+                    )
+                    if (
+                        obj.symbol_by_index[symbol_index].name
+                        == patcher.MOBILE_FURNITURE_AUTONOMOUS_SELECTOR_SYMBOL
+                    ):
+                        helper_relocations.append((vaddr, rtype))
+                self.assertEqual(len(helper_relocations), 1)
+                helper_vaddr, helper_type = helper_relocations[0]
+                self.assertEqual(helper_type, patcher.IMAGE_REL_I386_REL32)
+                raw = sec.raw_ptr + helper_vaddr - 4
+                self.assertEqual(
+                    bytes(obj.buf[raw : raw + 16]),
+                    bytes([
+                        0x51, 0x51, 0x56, 0xE8, 0, 0, 0, 0,
+                        0x83, 0xC4, 0x08, 0x84, 0xC0, 0x59, 0x0F, 0x85,
+                    ]),
+                )
+                contract = manifest[
+                    "MobileFurnitureExternalAutonomousSelection"
+                ]
+                self.assertFalse(contract["stock_table_extended"])
+                self.assertTrue(
+                    contract["stock_conditional_distribution_preserved"]
+                )
+                self.assertEqual(
+                    [row["weight"] for row in contract["external_candidates"]],
+                    [2000] * 5,
                 )
         finally:
             patcher.PATCHED = old_patched

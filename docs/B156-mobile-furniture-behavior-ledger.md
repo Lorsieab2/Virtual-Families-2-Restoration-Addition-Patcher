@@ -41,18 +41,18 @@ mobile-only marker values do not have corresponding handlers in the desktop
 
 | PC IDs | Mobile furniture | QAMF evidence | Recovered mobile action family | Desktop status |
 |---|---|---:|---|---|
-| `0x2AA` | Holiday Candles | yes | `KidExaminesCandles` | exact child-only manual route implemented with PC-safe map; autonomous candidate pending |
+| `0x2AA` | Holiday Candles | yes | `KidExaminesCandles` | exact child-only manual and autonomous routes implemented with PC-safe map |
 | `0x2AB` | Candy Canes | yes | no mobile behavior | proven decorative only: EObject 0, unhandled hotspot 0x61 |
 | `0x2AC` | Christmas Cookie | yes | no mobile behavior | proven decorative only: EObject 0, unhandled hotspot 0x61 |
 | `0x2AD-0x2AE` | Christmas Trees | yes | `XmasTree`; admire, water, celebrate | exact whole-household manual celebration implemented with two PC-safe maps |
 | `0x2AF` | Dreidel | yes | exact `Dreidel` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
-| `0x2B0` | Eggnog | yes | exact `Eggnog` family | exact child-only manual route implemented with PC-safe map; autonomous candidate pending |
+| `0x2B0` | Eggnog | yes | exact `Eggnog` family | exact child-only manual and autonomous routes implemented with PC-safe map |
 | `0x2B1-0x2B5` | Holiday gnomes | yes | `AdmiringXmasKnickKnacks` | exact raw-age-7+ manual route implemented with five PC-safe maps |
 | `0x2B6-0x2B7` | Large Angel and Large Star | no | no per-item route proven | decorative |
 | `0x2B8` | Menorah | yes | exact `Menorah` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
 | `0x2B9-0x2BC` | Ornaments | no | no per-item route proven | decorative |
 | `0x2BD` | Penguin Decoration | yes | `AdmiringXmasKnickKnacks` | exact raw-age-7+ manual route implemented with PC-safe map |
-| `0x2BE` | Plate of Cookies | yes | adult-save/kid-steal Santa-cookie family | exact age-routed manual pair implemented with PC-safe map; child autonomous candidate pending |
+| `0x2BE` | Plate of Cookies | yes | adult-save/kid-steal Santa-cookie family | exact age-routed manual pair plus mobile child autonomous route implemented with PC-safe map |
 | `0x2BF` | Poinsettia | yes | no mobile behavior | proven decorative only: EObject 0, unhandled hotspot 0x60 |
 | `0x2C0`, `0x2C2-0x2C3`, `0x2C5` | Polar bear, reindeer, garden Santa, and snowman | yes | `AdmiringXmasKnickKnacks` | exact raw-age-7+ manual route implemented with four PC-safe maps |
 | `0x2C1`, `0x2C4` | Red Bow and Santa Wall Decoration | yes | `InteractHouseXmasDecor` | exact adult-only manual route implemented with two PC-safe maps |
@@ -242,9 +242,9 @@ orientation, age-boundary, and voice QA remain.
 Holiday Candles `0x2AA` use mobile EObject `0x89`. Mobile
 `CVillager::InitAI` identifies `KidExaminesCandles` as behavior `0x19B`, with
 weight `2000`, object `0x89`, and the child boundary field `0x118`. Because
-`0x19B` lies beyond the desktop behavior table ending at `0x19A`, B156 ports
-the exact manual action externally and does not index the mobile autonomous
-candidate.
+`0x19B` lies beyond the desktop behavior table ending at `0x19A`, so B156
+keeps both the exact manual action and its weight-2000 autonomous route in the
+external selector rather than indexing the invalid desktop slot.
 
 The guarded route accepts raw ages through `0x117`, uses the exact
 `Playing with holiday candles` label, two orientation-aware candle inspections,
@@ -265,9 +265,10 @@ and disable-restoration QA remain.
 Plate of Cookies `0x2BE` use EObject `0x8F`. Mobile behavior `0x1A5`
 `KidStealsSantasCookies` is an enabled child candidate with weight `2000`,
 object `0x8F`, and boundary field `0x118`; behavior `0x1A6`
-`AdultsSaveSantasCookies` is not an autonomous candidate. B156 therefore
-chooses the exact child or adult plan by raw age on manual drop without
-indexing either mobile-only behavior ID through the desktop table.
+`AdultsSaveSantasCookies` is not an autonomous candidate. B156 chooses the
+exact child or adult plan by raw age on manual drop and adds only the proven
+weight-2000 child route to the external autonomous selector, without indexing
+either mobile-only behavior ID through the desktop table.
 
 Children through raw age `0x117` use `Stealing Santa's cookies`, speed `140`,
 orientation-aware head turns, the exact random waits, and sounds `0x36`,
@@ -291,8 +292,8 @@ Glass of Eggnog `0x2B0` uses mobile EObject `0x8B`. Mobile
 `CVillager::InitAI` enables `CBehavior::Eggnog` as behavior `0x1A1`, with
 weight `2000`, object `0x8B`, furniture required, and the child boundary field
 `0x118`. Because `0x1A1` lies beyond the desktop behavior table, B156 ports
-the exact manual child action externally and leaves spontaneous selection
-pending.
+both the exact manual child action and its weight-2000 spontaneous route
+through the external selector.
 
 Raw ages through `0x117` use the exact label `Stealing egg nog`. The plan
 preserves the orientation-aware inspection, sounds `0x6D` and `0x3D`, random
@@ -329,8 +330,27 @@ random work phases, the orientation-aware wait, sound stop, and completion.
 All fourteen PC-safe maps preserve their mobile dimensions, headers, and
 trailers, zero every unsupported cell, and restore only the proven EObject
 anchors as `0x20006000` or `0x20006800`. Mobile behavior IDs `0x1A4` and
-`0x1A7` remain outside the fixed PC behavior table, so spontaneous selection
-remains pending rather than indexing an invalid slot.
+`0x1A7` remain outside the fixed PC behavior table. B156 adds them through the
+external weighted selector described below, without indexing either invalid PC
+slot.
+
+## External mobile autonomous selector
+
+The stock desktop selector still scans exactly `0x19B` records (`0x000` through
+`0x19A`). Immediately before its final weighted draw, B156 adds a guarded
+external draw for the five mobile candidates whose exact weights and predicates
+are proven: Holiday Candles `0x19B`, Eggnog `0x1A1`, Santa-cookie stealing
+`0x1A5`, Christmas figurines `0x1A4`, and house decorations `0x1A7`. Each uses
+its mobile weight of `2000`, requires its mapped EObject to exist, and retains
+its exact raw-age boundary.
+
+The combined draw uses `stockWeight + eligibleExternalWeight`. A stock result
+falls through to the unchanged native stock draw, preserving every stock
+candidate's conditional distribution. An external result starts the already
+ported exact plan and exits through the native decision-function epilogue.
+When the optional mobile-furniture flag is disabled, the helper returns
+immediately and the original selector runs unchanged. No desktop behavior-table
+entry is extended or repurposed.
 
 ## Decorative-only Holiday items
 
