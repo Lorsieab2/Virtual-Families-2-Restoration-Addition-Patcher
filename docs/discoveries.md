@@ -3178,3 +3178,39 @@
   The replacement traverses the `.vf2same` gender helper, preserving the stock
   opposite-sex result when disabled and independently choosing either gender
   when enabled.
+
+## 2026-07-24 - Adoption Services baby-or-child chooser
+
+- The desktop Adoption Services fulfillment route is
+  `CScrollingStoreScene::HandleUpgrade+0x57A`. Stock pushes internal age
+  `0x3C` (displayed age 3), body `-1`, and gender 1, then calls the
+  three-argument `CVillagerManager::SpawnSpecificPeep` overload. That overload
+  continues through the full native `CVillager::Init` path.
+- B156 replaces only that fulfillment block with a guarded helper. The helper
+  first requires `CFamilyTree::EmptyOffspringSlots()>0`, then displays native
+  two-button choices for Baby and Child (Age 2-8). Baby supplies internal age
+  0. Child uniformly supplies `(GetRandom(7)+2)*20`, corresponding to displayed
+  ages 2 through 8. Both choices independently select female or male with
+  native `GetRandom(2)`.
+- Exactly one native three-argument spawn call occurs per fulfilled purchase.
+  The returned villager goes through native `CFamilyTree::AddOffspring`, and
+  stock adoption achievements `0x0C` and `0x0D` are incremented only after the
+  tree accepts the villager. Invalid spawn and tree-add failures skip the stock
+  completion message; a failed tree add also deactivates the just-created
+  villager.
+- The stock message box returns 0 for its first button and -1 for its second.
+  Escape follows the second-button route, so after the player has confirmed
+  the Adoption Services purchase, this chooser treats Escape as Older Child
+  rather than as a third cancel outcome.
+- Local desktop disassembly establishes the PC route and the safety contracts
+  above. No preserved VF3 binary/source evidence in this workspace establishes
+  that the exact dialog, random-age formula, or button semantics match VF3;
+  B156 therefore documents this as the requested VF3-style desktop behavior,
+  not a byte-for-byte VF3 code port.
+- All 16 B156 executable layouts link with unique hashes. Holiday
+  positive/negative validation passes 8/8, and the five dormant runtime
+  controls remain non-overlapping, idempotent on repeated enable, and exactly
+  restorable. The fully enabled executable is 1,767,936 bytes with SHA-256
+  `02894926C99A4080F76B1E8CA36F6746471985F77FA8EFDD4E3F6B87A24B9181`.
+  All 226 tests pass with one intentional skip. Live
+  purchase/save/family-tree QA remains.

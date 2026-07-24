@@ -4768,6 +4768,94 @@ class OlderPregnancyPatchTests(unittest.TestCase):
         self.assertNotIn("VF2_ENABLE_ALLOW_OLDER_PREGNANCIES", source)
 
 
+class VF3StyleChildAdoptionChooserPatchTests(unittest.TestCase):
+    def test_adoption_service_detours_to_guarded_singleton_chooser(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                patcher.PATCHED = temp_root
+                source = patcher.SRC_OBJS / "ScrollingStoreScene.obj"
+                shutil.copy2(source, temp_root / source.name)
+                original = CoffObject(source)
+                original_function = original.symbol(
+                    "?HandleUpgrade@CScrollingStoreScene@@AAEXXZ"
+                )
+                original_section = original.section(original_function.section)
+                original_size = original_section.raw_size
+                original_raw = (
+                    original_section.raw_ptr + original_function.value
+                )
+                self.assertEqual(
+                    bytes(original.buf[original_raw + 0x28:original_raw + 0x2A]),
+                    bytes.fromhex("8B D9"),
+                    "HandleUpgrade must retain CScrollingStoreScene this in EBX",
+                )
+
+                manifest = {}
+                patcher.patch_vf3_style_child_adoption_chooser(manifest)
+                obj = CoffObject(temp_root / source.name)
+                function = obj.symbol(
+                    "?HandleUpgrade@CScrollingStoreScene@@AAEXXZ"
+                )
+                section = obj.section(function.section)
+                raw = section.raw_ptr + function.value + 0x57A
+                self.assertEqual(obj.buf[raw], 0xE9)
+                self.assertEqual(section.raw_size, original_size + 22)
+                cave_raw = section.raw_ptr + original_size
+                self.assertEqual(
+                    bytes(obj.buf[cave_raw:cave_raw + 11]),
+                    bytes.fromhex("53 E8 00 00 00 00 83 C4 04 84 C0"),
+                )
+
+                relocations = []
+                for index in range(section.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH",
+                        obj.buf,
+                        section.reloc_ptr + index * 10,
+                    )
+                    if vaddr == original_size + 2:
+                        relocations.append((
+                            obj.symbol_by_index[symbol_index].name,
+                            rtype,
+                        ))
+                self.assertEqual(
+                    relocations,
+                    [(
+                        patcher.ADOPTION_CHOOSER_HELPER_SYMBOL,
+                        patcher.IMAGE_REL_I386_REL32,
+                    )],
+                )
+                contract = manifest["VF3StyleChildAdoptionChooser"]
+                self.assertIn("GetRandom(7)+2", contract["choices"]["older_child"])
+                self.assertIn(
+                    "exactly one",
+                    contract["singleton"],
+                )
+                self.assertIn(
+                    "EmptyOffspringSlots()>0",
+                    contract["capacity"],
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_helper_uses_native_initializer_tree_and_achievement_routes(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        helper = source.split(
+            'extern "C" bool __cdecl VF2AdoptRandomChildChoice', 1
+        )[1].split(
+            'extern "C" void __cdecl VF2ApplyForcedBirthCount', 1
+        )[0]
+        self.assertIn("FamilyTree.EmptyOffspringSlots() <= 0", helper)
+        self.assertIn("ldwGameState::GetRandom(7) + 2", helper)
+        self.assertIn("ldwGameState::GetRandom(2)", helper)
+        self.assertIn("VillagerManager.SpawnSpecificPeep(age, gender, -1)", helper)
+        self.assertIn("FamilyTree.AddOffspring(villager)", helper)
+        self.assertIn("(EAchievement)0x0C", helper)
+        self.assertIn("(EAchievement)0x0D", helper)
+
+
 class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
     def test_reject_rerolls_in_place_and_preserves_email_state_route(self):
         old_patched = patcher.PATCHED

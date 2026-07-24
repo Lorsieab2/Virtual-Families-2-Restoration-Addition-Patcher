@@ -172,6 +172,7 @@ SAME_SEX_MARRIAGE_FLAG_SYMBOL = "_gVF2SameSexMarriage"
 SAME_SEX_CANDIDATE_GENDER_HELPER_SYMBOL = "@VF2MarriageCandidateGender@8"
 SAME_SEX_ROLE_HELPER_SYMBOL = "@VF2GetMarriageRole@12"
 SAME_SEX_DROP_HELPER_SYMBOL = "@VF2IsSameSexSpouseDrop@12"
+ADOPTION_CHOOSER_HELPER_SYMBOL = "_VF2AdoptRandomChildChoice"
 
 # B153 mortality research uses the same dormant-byte architecture as older
 # pregnancies. Every executable contains the hook with a zero byte; the
@@ -8895,6 +8896,7 @@ public:
     CVillager *GetPatriarch();
     CVillager *GetVillagerPtr(int id);
     CVillager &GetVillager(int id);
+    int const SpawnSpecificPeep(int age, EGender gender, int body);
     int const SpawnSpecificPeep(
         int age,
         EGender gender,
@@ -8931,7 +8933,30 @@ public:
     struct SSaveState;
     void UpdatePeepRecord(SPeepRecord *record);
     bool const LoadState(SSaveState const &state);
+    bool AddOffspring(CVillager const &villager);
+    int EmptyOffspringSlots();
     bool StartNextGeneration(CVillager &villager, int peepId);
+};
+
+class ldwScene {};
+
+class ldwDialog {
+public:
+    int DoModal(ldwScene *scene, bool fade);
+};
+
+class theMessageBoxDlg : public ldwDialog {
+private:
+    unsigned char opaqueStorage[0x300];
+public:
+    theMessageBoxDlg(
+        const char *message,
+        int image,
+        bool twoButtons,
+        char *firstButton,
+        char *secondButton
+    );
+    virtual ~theMessageBoxDlg();
 };
 
 enum ECarrying {
@@ -9717,6 +9742,41 @@ extern "C" bool __fastcall VF2ChanceOfPregnancyForced(
         return true;
     }
     return state->ChanceOfPregnancy(motherAge, fatherAge, fatherFertility);
+}
+
+extern "C" bool __cdecl VF2AdoptRandomChildChoice(void *scene) {
+    if (!scene || FamilyTree.EmptyOffspringSlots() <= 0) {
+        return false;
+    }
+
+    char babyButton[] = "Adopt Baby";
+    char childButton[] = "Adopt Child (Age 2-8)";
+    theMessageBoxDlg choice(
+        "Would you like to adopt a baby or an older child?",
+        0,
+        true,
+        babyButton,
+        childButton
+    );
+    int result = choice.DoModal((ldwScene *)scene, false);
+    int age = 0;
+    if (result != 0) {
+        age = (ldwGameState::GetRandom(7) + 2) * 20;
+    }
+    EGender gender = (EGender)ldwGameState::GetRandom(2);
+    int index = VillagerManager.SpawnSpecificPeep(age, gender, -1);
+    if (index < 0) {
+        return false;
+    }
+
+    CVillager &villager = VillagerManager.GetVillager(index);
+    if (!FamilyTree.AddOffspring(villager)) {
+        ((unsigned char *)&villager)[0x1BB84] = 0;
+        return false;
+    }
+    Achievement.IncrementProgress((EAchievement)0x0C, 1);
+    Achievement.IncrementProgress((EAchievement)0x0D, 1);
+    return true;
 }
 
 extern "C" void __cdecl VF2ApplyForcedBirthCount(
@@ -12393,6 +12453,75 @@ def patch_multiple_marriage_candidates(manifest):
             "produce either gender"
         ),
         "accept_path": "byte-identical stock HandleMessage parameter-1 route",
+    }
+
+
+def patch_vf3_style_child_adoption_chooser(manifest):
+    """Choose a random newborn or a random age-2-through-8 adoptee."""
+    path = PATCHED / "ScrollingStoreScene.obj"
+    obj = CoffObject(path)
+    function_name = "?HandleUpgrade@CScrollingStoreScene@@AAEXXZ"
+    function = obj.symbol(function_name)
+    section = obj.section(function.section)
+    hook = function.value + 0x57A
+    raw = section.raw_ptr + hook
+    expected = bytes.fromhex("6A 3C 6A FF 6A")
+    if bytes(obj.buf[raw:raw + len(expected)]) != expected:
+        raise RuntimeError("Adoption Services spawn route drifted")
+
+    helper = obj.append_undefined_symbol(ADOPTION_CHOOSER_HELPER_SYMBOL)
+    section = obj.section(function.section)
+    cave = section.raw_size
+    failure_target = function.value + 0x83B
+    success_target = function.value + 0x5BC
+    payload = bytearray(
+        b"\x53"                  # push ebx: CScrollingStoreScene/ldwScene
+        b"\xE8\0\0\0\0"         # call chooser and complete adoption
+        b"\x83\xC4\x04"          # caller cleanup
+        b"\x84\xC0"              # test success
+        b"\x0F\x84\0\0\0\0"     # failure: skip completion message
+        b"\xE9\0\0\0\0"         # success: stock completion message
+    )
+    struct.pack_into("<i", payload, 13, failure_target - (cave + 17))
+    struct.pack_into("<i", payload, 18, success_target - (cave + 22))
+    obj.insert_section_bytes(section.index, cave, bytes(payload))
+    obj.append_relocation(
+        section.index,
+        cave + 2,
+        helper,
+        IMAGE_REL_I386_REL32,
+    )
+
+    section = obj.section(function.section)
+    raw = section.raw_ptr + hook
+    obj.buf[raw:raw + 5] = (
+        b"\xE9" + struct.pack("<i", cave - (hook + 5))
+    )
+    obj.write(path)
+
+    manifest["VF3StyleChildAdoptionChooser"] = {
+        "status": "patched",
+        "scope": "core Adoption Services purchase",
+        "choices": {
+            "baby": "internal age 0",
+            "older_child": (
+                "uniform displayed age 2-8; internal age "
+                "(GetRandom(7)+2)*20"
+            ),
+        },
+        "gender": "native GetRandom(2), female or male",
+        "traits": (
+            "native three-argument SpawnSpecificPeep initializer retained; "
+            "names, appearance, likes, dislikes, career and personality state "
+            "continue through CVillager::Init"
+        ),
+        "singleton": "exactly one SpawnSpecificPeep call per purchase",
+        "capacity": (
+            "requires EmptyOffspringSlots()>0; failed spawn or AddOffspring "
+            "returns without dereferencing an invalid villager index"
+        ),
+        "family_tree": "native CFamilyTree::AddOffspring retained",
+        "achievements": "native adoption achievements 0x0C and 0x0D retained",
     }
 
 
@@ -20375,6 +20504,7 @@ def main():
     # this feature adds no executable-matrix dimension.
     patch_allow_older_pregnancies(manifest)
     patch_multiple_marriage_candidates(manifest)
+    patch_vf3_style_child_adoption_chooser(manifest)
     patch_same_sex_marriage(manifest)
     patch_force_successful_pregnancy_callsites(manifest)
     # The optional mortality curve is another exact-SHA dormant-byte hook.

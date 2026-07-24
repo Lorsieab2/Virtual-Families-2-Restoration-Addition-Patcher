@@ -916,3 +916,19 @@ B156 multiple marriage candidates
 - With Same-Sex Marriage disabled, replacements retain the stock opposite-sex
   calculation. With it enabled, every replacement independently uses the
   native GetRandom(2) gender helper.
+B156 VF3-style child adoption chooser
+- Adoption Services asks the player to choose Baby or Child (Age 2-8) after
+  the stock purchase confirmation.
+- Baby uses internal age 0. Child uniformly uses displayed age 2 through 8.
+  Both independently choose female or male through the native random helper.
+- The patch keeps the native villager initializer, Family Tree insertion,
+  adoption achievements, and completion message. It performs a capacity check
+  before spawning and guards spawn/tree failures. Each purchase creates
+  exactly one villager.
+- The native two-button dialog treats Escape as its second choice, so Escape
+  selects Child rather than cancelling the already-confirmed purchase.
+- The PC implementation is backed by desktop disassembly. An exact match to
+  VF3's internal implementation has not been independently established.
+- All 16 B156 executable layouts link uniquely. Holiday-positive/negative and
+  five dormant-toggle enable/idempotence/exact-restore validation pass, and
+  all 226 tests pass with one intentional skip. Live gameplay QA remains.
