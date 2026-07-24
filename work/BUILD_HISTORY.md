@@ -1538,3 +1538,26 @@
   `CC46BA5FA861928AD1DEE58335C0F6A3AA1F24B4758C38B5A3E42A0DB6CD2332`.
   Live Eggnog child/age-boundary/orientation/movement/sound/patch-off QA
   remains.
+
+## B156 - First exact mobile Island Event outcomes checkpoint
+
+- Replaces experimental outcome approximations for Meteorite Falls in Yard 1,
+  Strange Package on Porch, and Teens with exact mobile-derived routes.
+- Preserves Meteorite Falls in Yard 1 as a dummied-out shell whose `CanFire`
+  always returns false and whose award and impact methods are empty.
+- Gives Strange Package on Porch exactly 50-149 coins for choice zero.
+- Gives Teens its exact raw-age 260-340 gate, 10-sock plus 10-trash first
+  outcome, and -75-coin second outcome. No unsupported stains are spawned.
+- Uses a guarded external scan of the 30 desktop resident slots because the
+  mobile age-range selector has no desktop export.
+- Removes the obsolete experimental event-outcome batch script.
+- Confirms that Using Warm Towel already exists as behavior `0xE7` / EObject
+  `0x50` in both builds; no unproven Towel Set furniture binding is added.
+- All 231 project tests pass with one intentional skip. All 16 B156 layouts
+  rebuild with unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass non-overlap, repeated-enable,
+  disable, and exact-restoration checks.
+- The fully enabled executable is 1,775,616 bytes with SHA-256
+  `FE659A21E475CE4EED652BF647437928738BB91AAC4483A5F884BD723383FD6D`.
+  Live event choice, award, world-effect, age-boundary, and patch-off QA
+  remains.

@@ -62,7 +62,7 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2D3` | Holiday Welcome Mat | no | stock desktop Welcome Mat exists; no exclusive action proven | existing donor only |
 | `0x2D4-0x2D5` | Wreaths | yes | `InteractHouseXmasDecor` family | exact route unresolved |
 | `0x2D6-0x2D7` | Designer Soap | no | no exclusive route proven | existing soap donor only |
-| `0x2D8-0x2D9` | Towel Sets | no | `UsingWarmTowel` exists on mobile | item call chain unresolved |
+| `0x2D8-0x2D9` | Towel Sets | no | `UsingWarmTowel` is already native on PC and mobile at behavior `0xE7` / EObject `0x50` | no towel-item binding exists; decorative, no added route |
 | `0x2DA` | Birthday Balloons | yes | `BirthdayBalloons`; play/maybe play | exact child-only manual route implemented with PC-safe map |
 | `0x2DB` | Birthday Banner | yes | `BirthdayBanner`; celebration family | exact object scan, fallbacks, and whole-household external plan implemented |
 | `0x2DC` | Birthday Cake | yes | `BirthdayCake`; poke/maybe poke | exact child-only manual route plus grouped fallback implemented |

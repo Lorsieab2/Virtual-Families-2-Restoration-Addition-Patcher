@@ -25,6 +25,7 @@ TARGETS = (
     "AdultsSaveSantasCookies",
     "InteractHouseXmasDecor",
     "KidsCheckXmasStockings",
+    "UsingWarmTowel",
 )
 
 

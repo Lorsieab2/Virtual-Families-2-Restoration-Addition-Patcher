@@ -141,8 +141,11 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - Add an optional setting for mobile-exclusive furniture behavior support on
   added mobile-exclusive furniture in the PC build, then implement the correct
   villager behavior routes for those furniture items.
-- Implement the correct outcomes for added mobile-exclusive Island Events.
-  Current added events can fire but do not yet perform their mobile outcomes.
+- Implement the remaining correct outcomes for added mobile-exclusive Island
+  Events. `MeteoriteFallsInYard1` now preserves its exact dummied-out
+  `CanFire=false`; `StrangePackageOnPorch` and `Teens` now have their exact
+  native award/effect and target-selection routes. Other added events still
+  need function-level outcome audits.
 - In-game test B132 second-bathroom leaks: after buying the second-bathroom
   renovation, trigger Water Pressure Surge and confirm the north toilet,
   shower, and sink leaks appear and can be repaired through their native

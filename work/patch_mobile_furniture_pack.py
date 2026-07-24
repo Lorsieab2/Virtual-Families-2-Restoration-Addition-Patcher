@@ -7181,6 +7181,12 @@ EVENT_KIND_SUFFIX = {
 
 EVENT_KIND_ORDER = ["Title", "Desc", "ChoiceA", "ChoiceB", "ResultA", "ResultB"]
 
+MOBILE_EVENT_OUTCOME_KINDS = {
+    "MeteoriteFallsInYard1": 1,
+    "StrangePackageOnPorch": 2,
+    "Teens": 3,
+}
+
 EVENT_CHOICE_OVERRIDES = {
     ("GroupOfKidsAtTheDoor", "ChoiceA"): "Take one",
     ("GroupOfKidsAtTheDoor", "ChoiceB"): "No thanks",
@@ -7368,6 +7374,7 @@ def load_mobile_island_events():
             "ids": ids,
             "has_choices": has_choices,
             "is_email_event": is_email,
+            "outcome_kind": MOBILE_EVENT_OUTCOME_KINDS.get(event_name, 0),
         })
     return events
 
@@ -11115,7 +11122,7 @@ def patch_island_events(manifest):
     for idx, event in enumerate(mobile_events):
         ids = event["ids"]
         registrations.append(
-            "    slots[{idx}] = (void *)new CMobileIslandEvent({title}, {desc}, {choice_a}, {choice_b}, {result_a}, {result_b}, {has_choices}, {is_email});".format(
+            "    slots[{idx}] = (void *)new CMobileIslandEvent({title}, {desc}, {choice_a}, {choice_b}, {result_a}, {result_b}, {has_choices}, {is_email}, {outcome_kind});".format(
                 idx=idx,
                 title=ids.get("Title", 0),
                 desc=ids.get("Desc", 0),
@@ -11125,6 +11132,7 @@ def patch_island_events(manifest):
                 result_b=ids.get("ResultB", 0),
                 has_choices="true" if event["has_choices"] else "false",
                 is_email="true" if event["is_email_event"] else "false",
+                outcome_kind=event["outcome_kind"],
             )
         )
 
@@ -11140,15 +11148,55 @@ class CVillager;
 class CVillagerManager {{
 public:
     CVillager *GetRandomVillager(EAgeSelecter age_selector, EGender gender, int *out_id);
+    bool VillagerExists(int index, bool include_away);
+    CVillager &GetVillager(int index);
 }};
 
 extern CVillagerManager VillagerManager;
+
+class ldwGameState {{
+public:
+    static int GetRandom(int maximum);
+}};
+
+class CMoney {{
+public:
+    void Adjust(float amount, bool notify);
+}};
+
+class CCollectableItem {{
+public:
+    void SpawnSockInHouse(int count);
+    void SpawnTrashInHouse(int count);
+}};
+
+extern CMoney Money;
+extern CCollectableItem CollectableItem;
 
 static CVillager *VF2PickMobileEventVillager()
 {{
     // Mirrors CEventBoring::CanFire: choose a villager only when the event is
     // considered for firing, never while CIslandEvents is being constructed.
     return VillagerManager.GetRandomVillager(eAgeSelecterAny, eGenderAny, 0);
+}}
+
+static CVillager *VF2PickMobileTeenEventVillager()
+{{
+    // Mobile calls GetRandomVillagerByAges(260,340,-1). The PC build does not
+    // export that method, so reproduce its proven range over the 30 resident
+    // slots without weakening the predicate.
+    CVillager *eligible[30] = {{}};
+    int count = 0;
+    for (int index = 0; index < 30; ++index) {{
+        if (!VillagerManager.VillagerExists(index, false)) continue;
+        CVillager &resident = VillagerManager.GetVillager(index);
+        int age = *reinterpret_cast<int *>(
+            reinterpret_cast<unsigned char *>(&resident) + 0x6A54);
+        if (age < 260 || age > 340) continue;
+        eligible[count++] = &resident;
+    }}
+    if (count == 0) return 0;
+    return eligible[ldwGameState::GetRandom(count)];
 }}
 
 // Vtable- and layout-compatible with CIslandEvent.  The first 0x10 bytes are
@@ -11167,13 +11215,23 @@ struct CMobileIslandEvent {{
     int result_b_;
     bool has_choices_;
     bool is_email_;
+    int outcome_kind_;
 
-    CMobileIslandEvent(int title, int desc, int choice_a, int choice_b, int result_a, int result_b, bool has_choices, bool is_email)
+    CMobileIslandEvent(int title, int desc, int choice_a, int choice_b, int result_a, int result_b, bool has_choices, bool is_email, int outcome_kind)
         : target1_(0), target2_(0), award_(0), title_(title), desc_(desc), choice_a_(choice_a), choice_b_(choice_b), result_a_(result_a), result_b_(result_b),
-          has_choices_(has_choices), is_email_(is_email) {{}}
+          has_choices_(has_choices), is_email_(is_email), outcome_kind_(outcome_kind) {{}}
     virtual ~CMobileIslandEvent() {{}}
     virtual bool CanFire() {{
-        target1_ = VF2PickMobileEventVillager();
+        // MeteoriteFallsInYard1 is a dummied-out mobile event: its exact
+        // CanFire returns false, and both outcome methods are empty.
+        if (outcome_kind_ == 1) {{
+            target1_ = 0;
+            target2_ = 0;
+            return false;
+        }}
+        target1_ = outcome_kind_ == 3
+            ? VF2PickMobileTeenEventVillager()
+            : VF2PickMobileEventVillager();
         target2_ = target1_;
         return target1_ != 0;
     }}
@@ -11188,9 +11246,32 @@ struct CMobileIslandEvent {{
     virtual EBodyPosition GetVillagerPose() {{ return eBodyPosition_Standing; }}
     virtual StringId GetResultDescription(int choice) {{ return (StringId)(choice == 0 ? result_a_ : result_b_); }}
     virtual void ImpactGame() {{}}
-    virtual void ImpactGame(int choice) {{ (void)choice; }}
+    virtual void ImpactGame(int choice) {{
+        if (outcome_kind_ == 2) {{
+            if (choice == 0) {{
+                Money.Adjust((float)award_, true);
+            }}
+            return;
+        }}
+        if (outcome_kind_ == 3) {{
+            if (choice != 0) {{
+                Money.Adjust((float)award_, true);
+            }} else {{
+                CollectableItem.SpawnSockInHouse(10);
+                CollectableItem.SpawnTrashInHouse(10);
+            }}
+        }}
+    }}
     virtual void CalcAward() {{}}
-    virtual void CalcAward(int choice) {{ (void)choice; }}
+    virtual void CalcAward(int choice) {{
+        if (outcome_kind_ == 2) {{
+            award_ = choice == 0 ? ldwGameState::GetRandom(100) + 50 : 0;
+        }} else if (outcome_kind_ == 3) {{
+            award_ = choice == 0 ? 0 : -75;
+        }} else {{
+            award_ = 0;
+        }}
+    }}
     virtual int GetAwardAmount() {{ return award_; }}
 }};
 
@@ -11217,6 +11298,16 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
                 "is_email_event": event["is_email_event"],
                 "has_choices": event["has_choices"],
                 "strings": [hex(row["string_id"]) for row in event["strings"]],
+                "outcome_kind": event["outcome_kind"],
+                "outcome_status": (
+                    "exact mobile outcome"
+                    if event["outcome_kind"] in (2, 3)
+                    else (
+                        "exact mobile dummied-out CanFire=false"
+                        if event["outcome_kind"] == 1
+                        else "text shell only; outcome pending"
+                    )
+                ),
             }
             for event in mobile_events
         ],

@@ -24,6 +24,7 @@ TARGETS = (
     "Knick",
     "XmasDecor",
     "Eggnog",
+    "UsingWarmTowel",
 )
 
 

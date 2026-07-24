@@ -2152,6 +2152,70 @@ def valid_invisible_kids_table_manifest():
 
 
 class MobileIslandEventTextTests(unittest.TestCase):
+    def test_proven_mobile_event_outcomes_are_exact_generated_routes(self):
+        events = {
+            event["name"]: event for event in patcher.load_mobile_island_events()
+        }
+        self.assertEqual(events["MeteoriteFallsInYard1"]["outcome_kind"], 1)
+        self.assertEqual(events["StrangePackageOnPorch"]["outcome_kind"], 2)
+        self.assertEqual(events["Teens"]["outcome_kind"], 3)
+
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                shutil.copy2(
+                    patcher.SRC_OBJS / "IslandEvents.obj",
+                    patcher.PATCHED / "IslandEvents.obj",
+                )
+                manifest = {}
+                patcher.patch_island_events(manifest)
+                rows = {
+                    row["class"]: row for row in manifest["IslandEvents"]["added"]
+                }
+                self.assertEqual(
+                    rows["CEventMeteoriteFallsInYard1"]["outcome_status"],
+                    "exact mobile dummied-out CanFire=false",
+                )
+                self.assertEqual(
+                    rows["CEventStrangePackageOnPorch"]["outcome_status"],
+                    "exact mobile outcome",
+                )
+                self.assertEqual(
+                    rows["CEventTeens"]["outcome_status"],
+                    "exact mobile outcome",
+                )
+
+                source = (
+                    patcher.PATCHED / "vf2_island_events.cpp"
+                ).read_text(encoding="ascii")
+                self.assertIn("if (outcome_kind_ == 1)", source)
+                self.assertIn("return false;", source)
+                self.assertIn("for (int index = 0; index < 30; ++index)", source)
+                self.assertIn(
+                    "VillagerManager.VillagerExists(index, false)",
+                    source,
+                )
+                self.assertIn(
+                    "reinterpret_cast<unsigned char *>(&resident) + 0x6A54",
+                    source,
+                )
+                self.assertIn("if (age < 260 || age > 340) continue;", source)
+                self.assertIn(
+                    "eligible[ldwGameState::GetRandom(count)]",
+                    source,
+                )
+                self.assertIn(
+                    "ldwGameState::GetRandom(100) + 50",
+                    source,
+                )
+                self.assertIn("award_ = choice == 0 ? 0 : -75;", source)
+                self.assertIn("CollectableItem.SpawnSockInHouse(10);", source)
+                self.assertIn("CollectableItem.SpawnTrashInHouse(10);", source)
+                self.assertNotIn("SpawnStainInHouse", source)
+        finally:
+            patcher.PATCHED = old_patched
+
     def test_meteorite_followup_uses_short_dialog_title(self):
         events = {event["name"]: event for event in patcher.load_mobile_island_events()}
 

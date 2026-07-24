@@ -1064,3 +1064,30 @@ B156 Eggnog behavior
   restoration checks.
 - The fully enabled executable is 1,775,104 bytes with SHA-256
   CC46BA5FA861928AD1DEE58335C0F6A3AA1F24B4758C38B5A3E42A0DB6CD2332.
+B156 first exact mobile Island Event outcomes
+- Replaced the earlier experimental outcome approximations for three events
+  with outcomes read directly from the mobile executable.
+- Meteorite Falls in Yard 1 is deliberately dummied out on mobile:
+  CanFire always returns false and its award and impact methods are empty.
+- Strange Package on Porch now gives exactly 50-149 coins for the accept
+  choice and nothing for the other choice.
+- Teens now requires an existing villager whose raw age is 260-340. Its first
+  choice spawns exactly 10 socks and 10 trash; its second choice deducts
+  exactly 75 coins. It does not create stains.
+- The desktop executable has no exported GetRandomVillagerByAges method, so
+  the external event code performs the same guarded resident scan and random
+  eligible-villager selection itself.
+- Removed the superseded experimental batch script so its inaccurate
+  meteorite collectible, broad random ranges, stains, and 99-item effects
+  cannot be mistaken for supported mobile behavior.
+- Audited UsingWarmTowel separately. Mobile and desktop already share behavior
+  0xE7 and EObject 0x50 with matching action semantics. The mobile towel-set
+  maps do not prove an EObject 0x50 binding, so those items remain decorative.
+- All 231 project tests pass with one intentional skip. All 16 B156 layouts
+  rebuild with unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass non-overlap, repeated-enable,
+  disable, and exact-restoration checks.
+- The fully enabled executable is 1,775,616 bytes with SHA-256
+  FE659A21E475CE4EED652BF647437928738BB91AAC4483A5F884BD723383FD6D.
+  Live event choice, award, world-effect, age-boundary, and patch-off QA
+  remains.

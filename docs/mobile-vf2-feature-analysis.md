@@ -432,18 +432,19 @@ Current appended mapping:
 
 ### Current Outcome Status
 
-Current B93 implementation appends event shells, text, choice labels, and email
-classification. It does **not** fully reproduce every mobile `ImpactGame`
-effect. `docs/TODO.md` still correctly tracks this as unfinished.
+The current B156 implementation appends event objects, text, choice labels, and
+email classification. It does **not** yet reproduce every mobile `ImpactGame`
+effect. `docs/TODO.md` still correctly tracks the remaining events as
+unfinished.
 
-An experimental script, `work/patch_event_outcome_effects_batch.py`, maps three
-outcomes at the desktop-object level:
+The first three function-level audits now replace earlier experimental
+approximations:
 
-| Mobile event | Desktop shell | Experimental effect |
-| --- | --- | --- |
-| `MeteoriteFallsInYard1` | `CEventTheNAS::ImpactGame()` | Replaces payment/invoice logic with one random rare collectible spawned in the yard. |
-| `Teens` | `CEventCareerChangeCouncelor::ImpactGame(int choice)` | Choice A spawns trash, stains, and socks in the house; choice B no-ops. |
-| `StrangePackageOnPorch` | `CEventBoySellingCupcakes::ImpactGame(int choice)` | Choice A awards a random 10-100 coin amount. |
+| Mobile event | Exact recovered result |
+| --- | --- |
+| `MeteoriteFallsInYard1` | Dummied out on mobile: `CanFire()` is always false; `CalcAward()` and `ImpactGame()` are empty. |
+| `Teens` | Choice A spawns exactly 10 socks and 10 trash; Choice B sets award `-75` and applies that money adjustment. It fires only with a raw-age `260..340` villager. |
+| `StrangePackageOnPorch` | Choice A calculates `GetRandom(100)+50` and awards 50-149 coins; Choice B awards zero. It requires a random adult target. |
 
 The mobile `.so` proves each mobile class has its own `ImpactGame`,
 `CalcAward`, and `CanFire` methods, but most exact outcome implementations
@@ -490,6 +491,13 @@ Enabled B93 spontaneous candidates:
 - playhouse, children only, max age `0x117`
 - listen/dance to radio
 - drawing
+
+`UsingWarmTowel` is not a missing mobile behavior. Both binaries already carry
+it at behavior `0xE7`, using EObject `0x50`; the plan goes to that object,
+plays `Work`, a random 1-3 count `SwingArm`, then `Work`, and reduces dirtiness
+by 2. The Brown and Pink mobile towel-set items have no supplied QAMF and no
+proven EObject `0x50` binding, so they remain decorative instead of being
+assigned this behavior by description alone.
 
 Drop-action behavior and spontaneous eligibility are separate. Invisible or
 mobile furniture should inherit stock clickable/drop behavior by extending

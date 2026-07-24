@@ -3368,3 +3368,34 @@
   checks, and pass exact restoration for all five dormant runtime flags. The
   fully enabled layout is 1,775,104 bytes with SHA-256
   `CC46BA5FA861928AD1DEE58335C0F6A3AA1F24B4758C38B5A3E42A0DB6CD2332`.
+
+## 2026-07-24 - First exact mobile Island Event outcomes
+
+- `CEventMeteoriteFallsInYard1::CanFire` at mobile `0x119C50` returns false
+  unconditionally. `ImpactGame` at `0x119C80` and `CalcAward` at `0x119C90`
+  are empty. The event is a dummied-out shell, not a rare-collectible event.
+- `CEventStrangePackageOnPorch::CanFire` at `0x11A7F0` requests a random
+  adult. `CalcAward` at `0x11A8F0` returns `GetRandom(100) + 50` for choice
+  zero and zero otherwise. `ImpactGame` at `0x11A8A0` applies that award
+  through `CMoney::Adjust(..., true)`.
+- `CEventTeens::CanFire` at `0x11B4D0` selects any-gender villagers in the
+  inclusive raw-age interval 260-340. `CalcAward` at `0x11B600` returns zero
+  for choice zero and -75 for choice one. `ImpactGame` at `0x11B590` spawns
+  exactly 10 socks and 10 trash for choice zero, or applies the -75 award for
+  choice one. No stain-spawn call occurs.
+- The desktop binary does not export `GetRandomVillagerByAges`. The external
+  implementation therefore scans the 30 resident slots with
+  `VillagerExists`, reads raw age at `CVillager+0x6A54`, keeps values 260-340,
+  and selects one eligible entry using `GetRandom(count)`.
+- The previous experimental event-outcome batch encoded unsupported effects
+  and was removed after the exact routes replaced it.
+- `CBehavior::UsingWarmTowel` at mobile `0x18FAD0` is behavior `0xE7` using
+  EObject `0x50`. The desktop behavior has the same object, approach/work/
+  arm-swing plan, and dirtiness reduction. Brown and Pink Towel Set maps do
+  not contain a proven EObject `0x50` binding, so no furniture route was
+  invented from their names or descriptions.
+- All 231 tests pass with one intentional skip. All 16 B156 layouts link
+  uniquely, pass 8 Holiday-positive and 8 Holiday-negative checks, and pass
+  exact restoration for all five dormant runtime flags. The fully enabled
+  layout is 1,775,616 bytes with SHA-256
+  `FE659A21E475CE4EED652BF647437928738BB91AAC4483A5F884BD723383FD6D`.
