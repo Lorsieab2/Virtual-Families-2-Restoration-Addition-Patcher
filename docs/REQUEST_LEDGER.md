@@ -95,7 +95,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 | Request | Status |
 |---|---|
 | Spawn max house trash / Spawn max weeds | B156 source + combined executable link complete | Cheat Upgrade items `0x12F-0x130` call the native bounded `SpawnTrashInHouse(30)` and `SpawnWeedsInYard(30)` methods. The UI states that only available collectable slots are filled; existing collectables are preserved. Live purchase/spawn/save QA remains. |
-| Max out sock pile / No sock pile | Not started |
+| Max out sock pile / No sock pile | B156 source complete; linked/runtime QA pending | Cheat Upgrades 0x133 and 0x134 write the stock sock-pile counter at `theGameState+0x148`. Max uses 30, the threshold for the sixth and largest stock `sockPileStrip.png` frame; No sock pile uses 0 and deliberately does not award sock-laundering achievement progress. |
 | Clean House / Clean Garden | Clean Garden B156 source complete; Clean House not started | Clean Garden item `0x131` calls the exact stock Weed Bomb removal path `RemoveAll(0x7D)`, clearing only the full weed family while preserving every other collectable. Clean House still needs an explicit category boundary before implementation. Live purchase/remove/save QA remains. |
 | Spawn Marriage Email | B156 source + fully-enabled linked validation complete | Cheat Upgrade 0x132 queues the stock marriage-proposal email enum 2 through `theGameState::QueueEmailMessage`, preserving native duplicate suppression and the ten-slot queue limit, then saves through the common cheat path. Live queue-full, duplicate, eligible-family, proposal UI, and save/reload QA remains. |
 | Function-sort every Cheat Upgrade | Partial |

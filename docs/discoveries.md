@@ -2978,3 +2978,23 @@
   `ac850ace342515e5da097cff362568d9bc060e9070c5ad8ef21a34e81ea73eda`.
   Existing Holiday and four-runtime-flag linked validation passes. Live
   queue-full, duplicate, eligible-family, UI, and save/reload QA remains.
+
+## 2026-07-23 - Exact sock-pile state and cheat controls
+
+- The persistent sock-pile count is the dword at `theGameState+0x148`.
+  `CVillagerPlans::ProcessCurrentPlan` increments it when action `0x4C`
+  deposits a carried sock, then removes that exact collectable.
+- Action `0x4D` reads the same count into achievements `0x3B`, `0x3C`, and
+  `0x3D`, clears the count, and sets the stock post-laundry byte at `+0x14C`.
+  The cheat clear deliberately writes only the count so it cannot counterfeit
+  laundry achievement progress or post-laundry state.
+- `CDecal::RefreshDecals` selects the six stock sock-pile frames at counts
+  `1`, `5`, `10`, `15`, `25`, and `30`. Counts above 30 use the same last
+  frame, so 30 is the exact smallest value that visually maxes the pile.
+- Cheat Upgrades `0x133` and `0x134` set the count to 30 and 0 respectively,
+  then use the existing common `SaveCurrentGame` path.
+- The full 213-test suite passes with one intentional skip. Compiled helper
+  readback confirms both writes and the shared save call. Final executable
+  linking remains pending because the restarted local Visual Studio toolchain
+  does not currently provide `atls.lib`; the unchanged prior executable is not
+  claimed as containing these cheats.

@@ -1295,3 +1295,20 @@
   `AC850ACE342515E5DA097CFF362568D9BC060E9070C5AD8EF21A34E81EA73EDA`.
 - Existing linked Holiday and four-runtime-flag validations pass. Live
   duplicate/full-queue/proposal/save-reload testing remains.
+
+## B156 - sock-pile cheat checkpoint
+
+- Adds Max out sock pile 0x133 and No sock pile 0x134 using the exact stock
+  `theGameState+0x148` counter.
+- Max uses 30, the first count that selects the sixth and largest stock decal
+  frame. Clear uses 0 without invoking the native laundry-achievement transfer.
+- Both rows reuse the trophy icon descriptor and the common post-cheat save
+  path.
+- All 213 tests pass with one intentional skip. The generated helper compiles,
+  and its object-code readback contains the exact `+0x148 = 30` and
+  `+0x148 = 0` writes followed by `SaveCurrentGame`.
+- A refreshed executable was not produced in this checkpoint: the restarted
+  Visual Studio Build Tools installation has no `atls.lib`, so the final link
+  stops on the five pre-existing ATL symbols used by `FlashPlayer.obj`. The
+  prior B156 executable was left unchanged. Linked and live
+  refresh/save/reload validation remains.

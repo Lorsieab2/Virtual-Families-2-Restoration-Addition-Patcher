@@ -534,6 +534,8 @@ VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES = {
     0x130: 0x124,
     0x131: 0x124,
     0x132: 0x124,
+    0x133: 0x124,
+    0x134: 0x124,
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
@@ -692,6 +694,18 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": 0x132,
         "name": "Spawn Marriage Email",
         "description": "Queues an incoming marriage proposal email.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x133,
+        "name": "Max out sock pile",
+        "description": "Sets the laundry-room sock pile to its largest visible size of 30 socks.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x134,
+        "name": "No sock pile",
+        "description": "Clears the laundry-room sock pile without awarding sock-laundering progress.",
         "price": 0,
     },
 ]
@@ -8123,7 +8137,7 @@ extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
 static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
     // Post-B153 cheats reuse the trophy descriptor so adding a row never
     // shifts villager-body or Holiday Ornament image IDs.
-    if (itemId >= 0x12E && itemId <= 0x132) itemId = 0x124;
+    if (itemId >= 0x12E && itemId <= 0x134) itemId = 0x124;
     int index = itemId - kVF2VisibleSpecialUpgradeFirstItem;
     return index < 0 || index >= kVF2VisibleSpecialUpgradeCount ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -9427,6 +9441,12 @@ static void VF2CompleteAllAchievements() {
         }
     }
 }
+
+static void VF2SetSockPileCount(int count) {
+    unsigned char *gameState = (unsigned char *)theGameState::Get();
+    *(int *)(gameState + 0x148) = count;
+}
+
 static void VF2ResetAntPuzzle() {
     theGameState::Get()->ResetWorldState(0x13);
     for (int prop = 0x4D; prop <= 0x54; ++prop) {
@@ -9596,6 +9616,12 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         theGameState::Get()->QueueEmailMessage(
             eEmailMessageMarriageProposal
         );
+        break;
+    case 0x133:
+        VF2SetSockPileCount(30);
+        break;
+    case 0x134:
+        VF2SetSockPileCount(0);
         break;
     default:
         return;
