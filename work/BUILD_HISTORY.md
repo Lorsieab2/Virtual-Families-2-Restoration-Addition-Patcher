@@ -1383,3 +1383,22 @@
   `A28AB64BD29F3186E6AEFF2522E288D80C3A98A2A893DC3472557D532342585A`.
   B156 runtime-toggle/restoration validation passes, as do all 219 tests with
   one intentional skip. Live purchase/conception/birth/save QA remains.
+
+## B156 - baby gender and multiplicity controls checkpoint
+
+- Adds Next Babies Male/Female as Cheat Upgrades `0x137-0x138` using
+  mutually exclusive persisted bits `0x8/0x10`.
+- Adds Next Pregnancy Singleton/Twins/Triplets as `0x139-0x13B` using
+  mutually exclusive bits `0x20/0x40/0x80`.
+- The first baby receives the forced gender through an ABI-compatible
+  long-form `SpawnSpecificPeep` wrapper; native `InitTwin` cloning carries it
+  to every additional baby.
+- The requested birth count is applied after the native roll and clamped to
+  the stock `EmptyOffspringSlots` result. All one-shot pregnancy bits clear
+  only after native `Impregnate` succeeds.
+- The fully enabled executable links at 1,765,888 bytes with checksum
+  `0x001B0712` and SHA-256
+  `4EC5142F74E6A37F55ECC30E1D232E54D553D85275F4113FD5D1192E6F12E344`.
+  B156 runtime-toggle/restoration validation and all 219 tests pass; one test
+  remains intentionally skipped. Live pregnancy boundary/persistence QA
+  remains.

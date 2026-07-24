@@ -3089,3 +3089,27 @@
   All four dormant runtime toggles pass B156 enable/idempotence/restore
   validation, and all 219 tests pass with one intentional skip. Live purchase,
   full-family, birth, and save/reload QA remains.
+
+## 2026-07-24 - Saved baby-gender and multiplicity one-shots
+
+- Cheat Upgrades `0x137-0x138` select Male/Female with mutually exclusive
+  persisted bits `0x8/0x10`. The first long-form
+  `CVillagerManager::SpawnSpecificPeep` call in `CVillager::Impregnate`
+  receives gender 0 or 1. Native twins and triplets use `InitTwin` from that
+  first baby, so the selected gender applies to every baby without patching
+  the clone path.
+- Cheat Upgrades `0x139-0x13B` select Singleton/Twins/Triplets with mutually
+  exclusive bits `0x20/0x40/0x80`. A guarded `Impregnate+0xE3` trampoline
+  applies 1/2/3 after the stock roll and clamps it to the already-computed
+  native `EmptyOffspringSlots` result.
+- Native baby spawning, names, appearances, multiple-birth achievements,
+  Family Tree writes, and statistics remain in place. Bits `0x4-0x80` clear
+  together only after native `Impregnate` succeeds; the Taters bits `0x1-0x2`
+  remain untouched.
+- The fully enabled linked QA image is 1,765,888 bytes with checksum
+  `0x001B0712` and SHA-256
+  `4ec5142f74e6a37f55ecc30e1d232e54d553d85275f4113fd5d1192e6f12e344`.
+  The three new x86 symbols resolve with the expected decorations, B156
+  runtime-toggle/restoration validation passes, and all 219 tests pass with
+  one intentional skip. Live 1/2/3-slot, gender, persistence, and reset QA
+  remains.

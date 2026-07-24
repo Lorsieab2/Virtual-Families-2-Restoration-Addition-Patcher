@@ -540,6 +540,11 @@ VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES = {
     0x134: 0x124,
     0x135: 0x124,
     0x136: 0x124,
+    0x137: 0x124,
+    0x138: 0x124,
+    0x139: 0x124,
+    0x13A: 0x124,
+    0x13B: 0x124,
 }
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
@@ -724,6 +729,36 @@ CHEAT_UPGRADE_ITEMS = [
         "description": "Makes the next eligible try-for-baby attempt pass its pregnancy roll. The one-shot remains armed until the native birth routine succeeds.",
         "price": 0,
     },
+    {
+        "item_id": 0x137,
+        "name": "Next Babies Male",
+        "description": "Makes every baby in the next successful birth male. Replaces the Female one-shot and clears after birth.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x138,
+        "name": "Next Babies Female",
+        "description": "Makes every baby in the next successful birth female. Replaces the Male one-shot and clears after birth.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x139,
+        "name": "Next Pregnancy Singleton",
+        "description": "Makes the next successful birth one baby. Replaces the Twins or Triplets one-shot and clears after birth.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x13A,
+        "name": "Next Pregnancy Twins",
+        "description": "Makes the next successful birth twins when two child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Triplets one-shot and clears after birth.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x13B,
+        "name": "Next Pregnancy Triplets",
+        "description": "Makes the next successful birth triplets when three child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Twins one-shot and clears after birth.",
+        "price": 0,
+    },
 ]
 CHEAT_UPGRADE_LEGACY_COUNT = 19
 CHEAT_UPGRADE_STRING_COUNT = CHEAT_UPGRADE_LEGACY_COUNT * 2
@@ -864,8 +899,26 @@ CUSTOM_ACHIEVEMENT_TATERS_PURCHASE_BITS = {
 CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID = 0xA8
 CUSTOM_ACHIEVEMENT_PURCHASE_MASK_ALL = 0x3
 FORCE_SUCCESSFUL_PREGNANCY_MASK = 0x4
+FORCED_BABY_MALE_MASK = 0x8
+FORCED_BABY_FEMALE_MASK = 0x10
+FORCED_BABY_GENDER_MASK = FORCED_BABY_MALE_MASK | FORCED_BABY_FEMALE_MASK
+FORCED_BIRTH_SINGLETON_MASK = 0x20
+FORCED_BIRTH_TWINS_MASK = 0x40
+FORCED_BIRTH_TRIPLETS_MASK = 0x80
+FORCED_BIRTH_COUNT_MASK = (
+    FORCED_BIRTH_SINGLETON_MASK
+    | FORCED_BIRTH_TWINS_MASK
+    | FORCED_BIRTH_TRIPLETS_MASK
+)
+PREGNANCY_ONE_SHOT_MASK = (
+    FORCE_SUCCESSFUL_PREGNANCY_MASK
+    | FORCED_BABY_GENDER_MASK
+    | FORCED_BIRTH_COUNT_MASK
+)
 FORCE_PREGNANCY_CHANCE_HELPER_SYMBOL = "@VF2ChanceOfPregnancyForced@20"
 FORCE_PREGNANCY_BIRTH_HELPER_SYMBOL = "@VF2ImpregnateAndClearForce@28"
+FORCED_BIRTH_COUNT_HELPER_SYMBOL = "_VF2ApplyForcedBirthCount"
+FORCED_BABY_GENDER_HELPER_SYMBOL = "@VF2SpawnBirthPeepWithForcedGender@56"
 CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS = {
     "Watching cat videos": 0x66,
     "Posting on VideoTube": 0x67,
@@ -7828,10 +7881,29 @@ public:
 }};
 
 {villager_type_preamble}
+enum EGender {{
+    eGenderMale = 0,
+    eGenderFemale = 1
+}};
+
 class CVillagerManager {{
 public:
     CVillager* GetVillagerPtr(int id);
     CVillager& GetVillager(int id);
+    int const SpawnSpecificPeep(
+        int age,
+        EGender gender,
+        int body,
+        const char *name,
+        const char *surname,
+        int motherBody,
+        int fatherBody,
+        int hair,
+        int skin,
+        int x,
+        int y,
+        bool adopted
+    );
 }};
 
 extern CToolTray ToolTray;
@@ -7840,6 +7912,31 @@ extern CFurnitureManager FurnitureManager;
 extern CVillagerManager VillagerManager;
 extern EInventoryItem gGoodiesList[];
 static const bool kVF2EnableB150CheatUpgrades = {"true" if ENABLE_CHEAT_UPGRADES else "false"};
+
+extern "C" int __fastcall VF2SpawnBirthPeepWithForcedGender(
+    CVillagerManager *manager,
+    void *,
+    int age,
+    EGender gender,
+    int body,
+    const char *name,
+    const char *surname,
+    int motherBody,
+    int fatherBody,
+    int hair,
+    int skin,
+    int x,
+    int y,
+    bool adopted
+) {{
+    unsigned int mask = VF2PersistentCheatAndPurchaseMask();
+    if (mask & 0x8) gender = eGenderMale;
+    if (mask & 0x10) gender = eGenderFemale;
+    return manager->SpawnSpecificPeep(
+        age, gender, body, name, surname, motherBody, fatherBody,
+        hair, skin, x, y, adopted
+    );
+}}
 
 extern "C" void __cdecl VF2TriggerAllHouseMalfunctions() {{
     if (!kVF2EnableB150CheatUpgrades) return;
@@ -8162,7 +8259,7 @@ extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
 static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
     // Post-B153 cheats reuse the trophy descriptor so adding a row never
     // shifts villager-body or Holiday Ornament image IDs.
-    if (itemId >= 0x12E && itemId <= 0x136) itemId = 0x124;
+    if (itemId >= 0x12E && itemId <= 0x13B) itemId = 0x124;
     int index = itemId - kVF2VisibleSpecialUpgradeFirstItem;
     return index < 0 || index >= kVF2VisibleSpecialUpgradeCount ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -9353,6 +9450,27 @@ extern "C" bool __fastcall VF2ChanceOfPregnancyForced(
     return state->ChanceOfPregnancy(motherAge, fatherAge, fatherFertility);
 }
 
+extern "C" void __cdecl VF2ApplyForcedBirthCount(
+    CVillager *mother,
+    int availableSlots
+) {
+    if (!mother || availableSlots <= 0) {
+        return;
+    }
+    unsigned int mask = VF2PersistentCheatAndPurchaseMask();
+    int requested = 0;
+    if (mask & 0x20) requested = 1;
+    if (mask & 0x40) requested = 2;
+    if (mask & 0x80) requested = 3;
+    if (requested <= 0) {
+        return;
+    }
+    if (requested > availableSlots) {
+        requested = availableSlots;
+    }
+    *(int *)((unsigned char *)mother + 0x6B1C) = requested;
+}
+
 extern "C" bool __fastcall VF2ImpregnateAndClearForce(
     CVillager *villager,
     void *,
@@ -9366,7 +9484,7 @@ extern "C" bool __fastcall VF2ImpregnateAndClearForce(
         count, name, motherBody, fatherBody, adopted
     );
     if (succeeded) {
-        VF2PersistentCheatAndPurchaseMask() &= ~0x4u;
+        VF2PersistentCheatAndPurchaseMask() &= ~0xFCu;
     }
     return succeeded;
 }
@@ -9725,6 +9843,26 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x136:
         VF2PersistentCheatAndPurchaseMask() |= 0x4;
+        break;
+    case 0x137:
+        VF2PersistentCheatAndPurchaseMask() =
+            (VF2PersistentCheatAndPurchaseMask() & ~0x18u) | 0x8u;
+        break;
+    case 0x138:
+        VF2PersistentCheatAndPurchaseMask() =
+            (VF2PersistentCheatAndPurchaseMask() & ~0x18u) | 0x10u;
+        break;
+    case 0x139:
+        VF2PersistentCheatAndPurchaseMask() =
+            (VF2PersistentCheatAndPurchaseMask() & ~0xE0u) | 0x20u;
+        break;
+    case 0x13A:
+        VF2PersistentCheatAndPurchaseMask() =
+            (VF2PersistentCheatAndPurchaseMask() & ~0xE0u) | 0x40u;
+        break;
+    case 0x13B:
+        VF2PersistentCheatAndPurchaseMask() =
+            (VF2PersistentCheatAndPurchaseMask() & ~0xE0u) | 0x80u;
         break;
     default:
         return;
@@ -11926,7 +12064,7 @@ def patch_allow_older_pregnancies(manifest):
 
 
 def patch_force_successful_pregnancy_callsites(manifest):
-    """Route only the try-for-baby roll and successful birth result through one-shot wrappers."""
+    """Install the persisted success, gender, and multiplicity pregnancy one-shots."""
     obj_path = PATCHED / "VillagerPlans.obj"
     obj = CoffObject(obj_path)
     process_name = "?ProcessCurrentPlan@CVillagerPlans@@QAEXAAVCVillager@@@Z"
@@ -11989,8 +12127,123 @@ def patch_force_successful_pregnancy_callsites(manifest):
         })
 
     obj.write(obj_path)
+
+    villager_path = PATCHED / "Villager.obj"
+    villager = CoffObject(villager_path)
+    impregnate_name = "?Impregnate@CVillager@@QAE_NHPBDHH_N@Z"
+    impregnate = villager.symbol(impregnate_name)
+    impregnate_section = villager.section(impregnate.section)
+    if impregnate.value != 0 or impregnate_section.raw_size != 0x2D7:
+        raise RuntimeError("Native CVillager::Impregnate layout drifted")
+
+    count_hook = impregnate.value + 0xE3
+    count_hook_raw = impregnate_section.raw_ptr + count_hook
+    if bytes(villager.buf[count_hook_raw : count_hook_raw + 5]) != b"\xE8\0\0\0\0":
+        raise RuntimeError("Forced birth-count hook callsite drifted")
+    original_get_relocation = impregnate.value + 0xE4
+    original_get_matches = []
+    for index in range(impregnate_section.nreloc):
+        vaddr, symbol_index, relocation_type = struct.unpack_from(
+            "<IIH",
+            villager.buf,
+            impregnate_section.reloc_ptr + index * 10,
+        )
+        if vaddr == original_get_relocation:
+            original_get_matches.append((
+                villager.symbol_by_index[symbol_index].name,
+                relocation_type,
+            ))
+    if original_get_matches != [
+        ("?Get@theGameState@@SAPAV1@XZ", IMAGE_REL_I386_REL32)
+    ]:
+        raise RuntimeError(
+            f"Forced birth-count native Get relocation drifted: "
+            f"{original_get_matches}"
+        )
+
+    count_cave = impregnate_section.raw_size
+    count_cave_code = bytearray(
+        b"\x53"                              # push ebx: available slots
+        b"\x57"                              # push edi: mother
+        b"\xE8\0\0\0\0"                    # call count helper
+        b"\x83\xC4\x08"                    # add esp,8
+        b"\xE8\0\0\0\0"                    # original theGameState::Get
+        b"\xE9\0\0\0\0"                    # resume at Impregnate+0xE8
+    )
+    struct.pack_into(
+        "<i",
+        count_cave_code,
+        16,
+        (impregnate.value + 0xE8) - (count_cave + len(count_cave_code)),
+    )
+    villager.insert_section_bytes(
+        impregnate_section.index,
+        count_cave,
+        bytes(count_cave_code),
+    )
+    count_helper = villager.append_undefined_symbol(
+        FORCED_BIRTH_COUNT_HELPER_SYMBOL
+    )
+    move_relocation(
+        villager,
+        impregnate_section.index,
+        original_get_relocation,
+        count_cave + 11,
+        rtype=IMAGE_REL_I386_REL32,
+    )
+    villager.append_relocation(
+        impregnate_section.index,
+        count_cave + 3,
+        count_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    impregnate = villager.symbol(impregnate_name)
+    impregnate_section = villager.section(impregnate.section)
+    count_hook_raw = impregnate_section.raw_ptr + count_hook
+    villager.buf[count_hook_raw : count_hook_raw + 5] = (
+        b"\xE9"
+        + struct.pack("<i", count_cave - (count_hook + 5))
+    )
+
+    gender_call = impregnate.value + 0x14D
+    gender_relocation = impregnate.value + 0x14E
+    gender_call_raw = impregnate_section.raw_ptr + gender_call
+    if bytes(villager.buf[gender_call_raw : gender_call_raw + 5]) != b"\xE8\0\0\0\0":
+        raise RuntimeError("Forced baby-gender spawn callsite drifted")
+    gender_native = (
+        "?SpawnSpecificPeep@CVillagerManager@@QAE?B"
+        "HHW4EGender@@HPBD1HHHHHH_N@Z"
+    )
+    gender_matches = []
+    for index in range(impregnate_section.nreloc):
+        vaddr, symbol_index, relocation_type = struct.unpack_from(
+            "<IIH",
+            villager.buf,
+            impregnate_section.reloc_ptr + index * 10,
+        )
+        if vaddr == gender_relocation:
+            gender_matches.append((
+                villager.symbol_by_index[symbol_index].name,
+                relocation_type,
+            ))
+    if gender_matches != [(gender_native, IMAGE_REL_I386_REL32)]:
+        raise RuntimeError(
+            f"Forced baby-gender native spawn relocation drifted: "
+            f"{gender_matches}"
+        )
+    gender_helper = villager.append_undefined_symbol(
+        FORCED_BABY_GENDER_HELPER_SYMBOL
+    )
+    villager.retarget_relocation(
+        impregnate_section.index,
+        gender_relocation,
+        gender_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    villager.write(villager_path)
+
     manifest["ForceSuccessfulPregnancy"] = {
-        "status": "implemented as a persisted one-shot cheat upgrade",
+        "status": "implemented with persisted success, gender, and multiplicity one-shots",
         "store_item_id": "0x136",
         "persistent_record_id": hex(CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID),
         "persistent_mask": hex(FORCE_SUCCESSFUL_PREGNANCY_MASK),
@@ -12000,8 +12253,34 @@ def patch_force_successful_pregnancy_callsites(manifest):
         "capacity": "native CVillager::Impregnate empty-offspring-slot check remains unchanged",
         "clear_condition": "flag clears only when native CVillager::Impregnate returns true",
         "failed_birth": "flag remains armed when native CVillager::Impregnate returns false",
-        "multiples": "native count, naming, family-tree, achievement, and birth logic remain unchanged",
-        "machine_code": "both five-byte call instructions are byte-identical; only REL32 symbol targets changed",
+        "multiples": "stock count roll remains the fallback; an armed count one-shot replaces only its result before native spawning",
+        "native_birth_routes": "naming, spawning, InitTwin, family-tree, achievement, statistics, and birth logic remain native",
+        "machine_code": "the two ProcessCurrentPlan calls and first-baby spawn call remain byte-identical with REL32 retargets; the count-result hook uses one guarded near-jump trampoline",
+        "gender_controls": {
+            "store_item_ids": {"male": "0x137", "female": "0x138"},
+            "persistent_masks": {"male": "0x8", "female": "0x10"},
+            "mutually_exclusive_mask": "0x18",
+            "first_baby_spawn_relocation": "CVillager::Impregnate+0x14E",
+            "twins_and_triplets": "native InitTwin clones the forced first baby, including gender",
+        },
+        "multiplicity_controls": {
+            "store_item_ids": {
+                "singleton": "0x139",
+                "twins": "0x13a",
+                "triplets": "0x13b",
+            },
+            "persistent_masks": {
+                "singleton": "0x20",
+                "twins": "0x40",
+                "triplets": "0x80",
+            },
+            "mutually_exclusive_mask": "0xe0",
+            "count_field": "CVillager+0x6B1C",
+            "count_hook": "CVillager::Impregnate+0xE3",
+            "count_trampoline": hex(count_cave),
+            "capacity_rule": "requested 1/2/3 clamped to native EmptyOffspringSlots result",
+        },
+        "one_shot_clear_mask": "0xfc",
     }
 
 
