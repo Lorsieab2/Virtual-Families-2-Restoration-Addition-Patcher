@@ -1259,3 +1259,15 @@
   object files, duplicate ZIP names, or other forbidden build artifacts. The
   CRC-clean ZIP is 85,791,142 bytes with SHA-256
   `14ADD32A067848F10BA992FBF41CB2D0CE15FC22505AD6277A7C623E9E7F481C`.
+
+## B156 - live-pet achievement checkpoint
+
+- Adds six exact live-pet achievements at IDs 0x8A-0x8F.
+- Awards from successful in-house placement, never purchase or Tool Tray
+  storage, and reconciles active pets after successful save loading.
+- Preserves native pet-spawn/load results and changes only the two exact REL32
+  targets in FurnitureManager and theGameState.
+- The fully enabled executable is 1,761,792 bytes with SHA-256
+  `ADF281867FBF395DDDF6DA33FE7FABD7C9364483AC22ECB91909A5DCAB184777`.
+- All existing linked Holiday and four-runtime-flag validations pass. Live
+  award/notification/reset/save/reload testing remains.

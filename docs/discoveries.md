@@ -2912,3 +2912,30 @@
   Linked Holiday and four-runtime-flag validation passes across all 16 existing
   layouts. Live preparation, eating, all four seats, refusals, weather, timer,
   and save/reload QA remains.
+
+## 2026-07-23 - Exact live-pet achievements
+
+- Six always-visible pet achievements now occupy IDs `0x8A-0x8F`: A Furry
+  Companion, The Cat's Meow, Man's Best Friend, Itsy Bitsy, Hampster Dance,
+  and Lovely Lizards. The title's requested `Hampster` spelling is retained.
+- The complete placed-pet inventory range is `0x23B-0x248`: cats
+  `0x23B-0x23F`, dogs `0x240-0x244`, Turtle `0x245`, Lizard `0x246`, Hamster
+  `0x247`, and Tarantula `0x248`. A Furry Companion accepts every item in that
+  range, including Turtle; the five species goals use their exact subsets.
+- `CFurnitureManager::DropFurniture+0x21D` retains the sole real inventory
+  placement call through an ABI-compatible fastcall wrapper. It awards only
+  when native `CPetManager::SpawnPet` returns a nonnegative slot, so purchase,
+  Tool Tray storage, invalid items, and full-capacity failures do not qualify.
+  The native return value and all machine-code bytes remain unchanged.
+- `theGameState::Load(int)+0x250` retains the native
+  `CPetManager::LoadState` call through a second relocation-only wrapper. After
+  a successful load, it scans all 30 native slots, requires `PetExists`, and
+  derives the stored item through `GetPet(slot).KindOfPet()+0x23B`.
+  Achievement state loads earlier in the stock sequence.
+- IDs `0x8A-0x8F` are included in the visible counts, ordered achievement
+  list, Complete all Achievements, and the existing save/reset capacity. The
+  reserved custom range is now `0x90-0xA7`.
+- The fully enabled B156 executable links at 1,761,792 bytes with SHA-256
+  `adf281867fbf395dddf6da33fe7fabd7c9364483ac22ecb91909a5dcab184777`.
+  Existing Holiday and four-runtime-flag linked validation passes. Live
+  placement, notification, reset, save, and reload QA remains.

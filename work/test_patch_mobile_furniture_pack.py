@@ -2744,10 +2744,10 @@ class TextFixStringManagerTests(unittest.TestCase):
                     if row.get("source")
                     == "custom achievement reserved capacity"
                 ]
-                self.assertEqual(len(reserved), 60)
+                self.assertEqual(len(reserved), 48)
                 self.assertEqual(
                     {int(row["achievement_id"], 16) for row in reserved},
-                    set(range(0x8A, 0xA8)),
+                    set(range(0x90, 0xA8)),
                 )
                 self.assertTrue(all(row["text"] == "" for row in reserved))
                 self.assertEqual(
@@ -3003,7 +3003,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("if (kVF2IncludeOrnamentologistGoal)", source)
         self.assertIn("if (kVF2IncludeBehaviorGoals)", source)
         self.assertIn(
-            "for (int achievement = 0x80; achievement <= 0x89; ++achievement)",
+            "for (int achievement = 0x80; achievement <= 0x8F; ++achievement)",
             source,
         )
         self.assertIn("if (gVF2HolidayFurnitureGoalsEnabled != 0)", source)
@@ -3692,6 +3692,120 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
             },
             expected,
         )
+
+    def test_pet_goal_rows_and_exact_live_item_predicates(self):
+        rows = {
+            achievement_id: (group, title, description)
+            for achievement_id, group, title, description
+            in patcher.CUSTOM_ACHIEVEMENT_ROW_SPECS
+        }
+        self.assertEqual(
+            {achievement_id: rows[achievement_id] for achievement_id in range(0x8A, 0x90)},
+            {
+                0x8A: ("pet", "A Furry Companion", "Buy a pet and place it in the house."),
+                0x8B: ("pet", "The Cat's Meow", "Welcome a black kitten, snow white cat, tabby cat, hairless cat, or fluffy grey cat into the home."),
+                0x8C: ("pet", "Man's Best Friend", "Welcome a beagle, yellow lab, black lab, longhair puppy, or chihuahua into the home."),
+                0x8D: ("pet", "Itsy Bitsy", "Have a tarantula in the home."),
+                0x8E: ("pet", "Hampster Dance", "Have a hamster in the house."),
+                0x8F: ("pet", "Lovely Lizards", "Have a lizard in the house."),
+            },
+        )
+        self.assertEqual(patcher.pet_achievement_ids_for_item(0x23A), [])
+        self.assertEqual(patcher.pet_achievement_ids_for_item(0x23B), [0x8A, 0x8B])
+        self.assertEqual(patcher.pet_achievement_ids_for_item(0x23F), [0x8A, 0x8B])
+        self.assertEqual(patcher.pet_achievement_ids_for_item(0x240), [0x8A, 0x8C])
+        self.assertEqual(patcher.pet_achievement_ids_for_item(0x244), [0x8A, 0x8C])
+        self.assertEqual(patcher.pet_achievement_ids_for_item(0x245), [0x8A])
+        self.assertEqual(patcher.pet_achievement_ids_for_item(0x246), [0x8A, 0x8F])
+        self.assertEqual(patcher.pet_achievement_ids_for_item(0x247), [0x8A, 0x8E])
+        self.assertEqual(patcher.pet_achievement_ids_for_item(0x248), [0x8A, 0x8D])
+        self.assertEqual(patcher.pet_achievement_ids_for_item(0x249), [])
+        self.assertEqual(
+            patcher.pet_achievement_ids_for_item(0x23B, active=False),
+            [],
+        )
+
+    def test_pet_goal_hooks_are_relocation_only_and_success_filtered(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                patcher.PATCHED = temp_root
+                for filename in ("FurnitureManager.obj", "theGameState.obj"):
+                    shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+
+                before = {}
+                for filename in ("FurnitureManager.obj", "theGameState.obj"):
+                    obj = CoffObject(temp_root / filename)
+                    before[filename] = {
+                        section.index: bytes(
+                            obj.buf[
+                                section.raw_ptr :
+                                section.raw_ptr + section.raw_size
+                            ]
+                        )
+                        for section in obj.sections
+                    }
+
+                manifest = {}
+                patcher.patch_pet_achievement_callsites(manifest)
+
+                expected = {
+                    "FurnitureManager.obj": (
+                        "?DropFurniture@CFurnitureManager@@QAEX_N@Z",
+                        0x21E,
+                        patcher.PET_SPAWN_HELPER_SYMBOL,
+                    ),
+                    "theGameState.obj": (
+                        "?Load@theGameState@@UAE_NH@Z",
+                        0x251,
+                        patcher.PET_LOAD_HELPER_SYMBOL,
+                    ),
+                }
+                for filename, (function, relative, helper) in expected.items():
+                    obj = CoffObject(temp_root / filename)
+                    symbol = obj.symbol(function)
+                    section = obj.section(symbol.section)
+                    self.assertEqual(
+                        bytes(
+                            obj.buf[
+                                section.raw_ptr :
+                                section.raw_ptr + section.raw_size
+                            ]
+                        ),
+                        before[filename][section.index],
+                    )
+                    targets = []
+                    for index in range(section.nreloc):
+                        vaddr, symbol_index, rtype = struct.unpack_from(
+                            "<IIH", obj.buf, section.reloc_ptr + index * 10
+                        )
+                        if vaddr == symbol.value + relative:
+                            targets.append((
+                                obj.symbol_by_index[symbol_index].name,
+                                rtype,
+                            ))
+                    self.assertEqual(
+                        targets,
+                        [(helper, patcher.IMAGE_REL_I386_REL32)],
+                    )
+
+                contract = manifest["PetAchievementHooks"]
+                self.assertEqual(
+                    contract["achievement_ids"],
+                    ["0x8a", "0x8b", "0x8c", "0x8d", "0x8e", "0x8f"],
+                )
+                self.assertEqual(
+                    contract["placement"]["award_condition"],
+                    "native SpawnPet return >= 0",
+                )
+                source = Path(patcher.__file__).read_text(encoding="utf-8")
+                self.assertIn("if (slot >= 0) VF2CheckPetAchievements(item);", source)
+                self.assertIn("for (int slot = 0; slot < 30; ++slot)", source)
+                self.assertIn("if (manager->PetExists(slot))", source)
+                self.assertIn("manager->GetPet(slot).KindOfPet() + 0x23B", source)
+        finally:
+            patcher.PATCHED = old_patched
 
     def test_maximum_resource_callsites_are_relocation_only_wrappers(self):
         old_patched = patcher.PATCHED
@@ -4682,10 +4796,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         ))
         try:
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
-                (False, False, 111, 130, 5, 12),
-                (True, False, 112, 131, 6, 13),
-                (False, True, 118, 137, 5, 12),
-                (True, True, 119, 138, 6, 13),
+                (False, False, 117, 136, 5, 12),
+                (True, False, 118, 137, 6, 13),
+                (False, True, 124, 143, 5, 12),
+                (True, True, 125, 144, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
@@ -4864,10 +4978,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         expected.extend(range(0x60, 0x66))
                         if behavior:
                             expected.extend(range(0x66, 0x6D))
-                        expected.extend(range(0x80, 0x8A))
+                        expected.extend(range(0x80, 0x90))
                         expected.extend(range(0x6D, 0x80))
                         self.assertEqual(order, expected)
-                        self.assertEqual(order[-29:-19], list(range(0x80, 0x8A)))
+                        self.assertEqual(order[-35:-19], list(range(0x80, 0x90)))
                         self.assertEqual(order[-19:], list(range(0x6D, 0x80)))
                         order_contract = manifest["CustomAchievements"][
                             "ornamentologist_order"
@@ -5531,8 +5645,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
                     "physical_row_count": 0xA8,
-                    "visible_count_flag_0": 112,
-                    "visible_count_flag_1": 131,
+                    "visible_count_flag_0": 118,
+                    "visible_count_flag_1": 137,
                     "notify_queue_bound": 0x5F,
                 },
             )

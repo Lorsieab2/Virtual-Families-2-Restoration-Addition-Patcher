@@ -174,6 +174,8 @@ LONGEVITY_LOAD_HELPER_SYMBOL = "@VF2VillagerLoadStateAndReconcileLongevity@12"
 LONGEVITY_FOOD_GROUPS_HELPER_SYMBOL = (
     "@VF2FoodGroupsActiveAndAwardLongevity@12"
 )
+PET_SPAWN_HELPER_SYMBOL = "@VF2SpawnPetAndAward@20"
+PET_LOAD_HELPER_SYMBOL = "@VF2PetManagerLoadStateAndReconcile@12"
 OLDER_MORTALITY_TABLE_FIRST_AGE = 55
 OLDER_MORTALITY_RANDOM_LIMIT = 1_000_000
 OLDER_MORTALITY_HAZARD_CAP_MILLIONTHS = 999_999
@@ -701,7 +703,7 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
 CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x89
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x8F
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -714,6 +716,8 @@ CUSTOM_ACHIEVEMENT_RESOURCE_FIRST = 0x83
 CUSTOM_ACHIEVEMENT_RESOURCE_LAST = 0x84
 CUSTOM_ACHIEVEMENT_LONGEVITY_FIRST = 0x85
 CUSTOM_ACHIEVEMENT_LONGEVITY_LAST = 0x89
+CUSTOM_ACHIEVEMENT_PET_FIRST = 0x8A
+CUSTOM_ACHIEVEMENT_PET_LAST = 0x8F
 CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
 CUSTOM_ACHIEVEMENT_TARGET = 1
 CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
@@ -760,6 +764,12 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0x87, "longevity", "Mighty 90's", "Have a person reach age 90."),
     (0x88, "longevity", "Centenarian", "Have a person reach age 100 or more."),
     (0x89, "longevity", "Oldest Person in History", "Have a person surpass age 122."),
+    (0x8A, "pet", "A Furry Companion", "Buy a pet and place it in the house."),
+    (0x8B, "pet", "The Cat's Meow", "Welcome a black kitten, snow white cat, tabby cat, hairless cat, or fluffy grey cat into the home."),
+    (0x8C, "pet", "Man's Best Friend", "Welcome a beagle, yellow lab, black lab, longhair puppy, or chihuahua into the home."),
+    (0x8D, "pet", "Itsy Bitsy", "Have a tarantula in the home."),
+    (0x8E, "pet", "Hampster Dance", "Have a hamster in the house."),
+    (0x8F, "pet", "Lovely Lizards", "Have a lizard in the house."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -863,6 +873,25 @@ def longevity_achievement_ids_for_internal_age(internal_age):
         (122 * 20 + 1, 0x89),
     )
     return [achievement_id for threshold, achievement_id in rows if age >= threshold]
+
+
+def pet_achievement_ids_for_item(item_id, active=True):
+    """Return the pet goals earned by one active, placed pet item."""
+    item = int(item_id)
+    if not active or item < 0x23B or item > 0x248:
+        return []
+    goals = [0x8A]
+    if item <= 0x23F:
+        goals.append(0x8B)
+    elif item <= 0x244:
+        goals.append(0x8C)
+    elif item == 0x246:
+        goals.append(0x8F)
+    elif item == 0x247:
+        goals.append(0x8E)
+    elif item == 0x248:
+        goals.append(0x8D)
+    return goals
 
 
 COLLECTABLE_SMALL_FRAME_WIDTH = 40
@@ -8684,6 +8713,20 @@ public:
     int FoodGroupsActive(bool includeOrganic);
 };
 
+class CPet {
+public:
+    struct SSaveState;
+    int KindOfPet();
+};
+
+class CPetManager {
+public:
+    int const SpawnPet(int item, int x, int y);
+    bool const LoadState(CPet::SSaveState &state);
+    bool PetExists(int index);
+    CPet &GetPet(int index);
+};
+
 enum ECarrying {
     eCarryingDummy = 0
 };
@@ -8789,6 +8832,7 @@ extern CCollectableItem CollectableItem;
 extern CAchievement Achievement;
 extern CEnvironment Environment;
 extern CTutorialTip TutorialTip;
+extern CPetManager PetManager;
 
 extern "C" int __cdecl VF2GetB150UpgradePrice(int itemId);
 extern "C" void __cdecl VF2ToggleB150PriceMode(int itemId);
@@ -8912,7 +8956,7 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 }
 
 static int VF2AchievementVisibleCountInternal() {
-    int count = 0x5F + 6 + 3 + 2 + 5;
+    int count = 0x5F + 6 + 3 + 2 + 5 + 6;
     if (kVF2IncludeOrnamentologistGoal) ++count;
     if (kVF2IncludeBehaviorGoals) count += 7;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
@@ -8955,7 +8999,7 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
     if (kVF2IncludeBehaviorGoals) {
         completed += VF2CountCompletedAchievements(achievement, 0x66, 0x6C);
     }
-    completed += VF2CountCompletedAchievements(achievement, 0x80, 0x89);
+    completed += VF2CountCompletedAchievements(achievement, 0x80, 0x8F);
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
         completed += VF2CountCompletedAchievements(achievement, 0x6D, 0x7F);
     }
@@ -9017,6 +9061,59 @@ extern "C" bool __fastcall VF2VillagerLoadStateAndReconcileLongevity(
         int health = *(int *)(data + 0x6B00);
         if (active && !leftHome && health > 0) {
             VF2CheckLongevityAchievements(*(int *)(data + 0x6A54));
+        }
+    }
+    return loaded;
+}
+
+static void VF2CheckPetAchievements(int item) {
+    if (item < 0x23B || item > 0x248) return;
+    EAchievement goals[2];
+    int count = 1;
+    goals[0] = (EAchievement)0x8A;
+    if (item <= 0x23F) {
+        goals[count++] = (EAchievement)0x8B;
+    } else if (item <= 0x244) {
+        goals[count++] = (EAchievement)0x8C;
+    } else if (item == 0x246) {
+        goals[count++] = (EAchievement)0x8F;
+    } else if (item == 0x247) {
+        goals[count++] = (EAchievement)0x8E;
+    } else if (item == 0x248) {
+        goals[count++] = (EAchievement)0x8D;
+    }
+    for (int index = 0; index < count; ++index) {
+        if (!Achievement.IsComplete(goals[index])) {
+            Achievement.SetComplete(goals[index]);
+        }
+    }
+}
+
+extern "C" int __fastcall VF2SpawnPetAndAward(
+    CPetManager *manager,
+    void *,
+    int item,
+    int x,
+    int y
+) {
+    int slot = manager->SpawnPet(item, x, y);
+    if (slot >= 0) VF2CheckPetAchievements(item);
+    return slot;
+}
+
+extern "C" bool __fastcall VF2PetManagerLoadStateAndReconcile(
+    CPetManager *manager,
+    void *,
+    CPet::SSaveState &state
+) {
+    bool loaded = manager->LoadState(state);
+    if (loaded) {
+        for (int slot = 0; slot < 30; ++slot) {
+            if (manager->PetExists(slot)) {
+                VF2CheckPetAchievements(
+                    manager->GetPet(slot).KindOfPet() + 0x23B
+                );
+            }
         }
     }
     return loaded;
@@ -9231,7 +9328,7 @@ static void VF2CompleteAllAchievements() {
             VF2CompleteAchievementForCheat(achievement);
         }
     }
-    for (int achievement = 0x80; achievement <= 0x89; ++achievement) {
+    for (int achievement = 0x80; achievement <= 0x8F; ++achievement) {
         VF2CompleteAchievementForCheat(achievement);
     }
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
@@ -11149,6 +11246,9 @@ def patch_custom_achievements(manifest):
         range(CUSTOM_ACHIEVEMENT_LONGEVITY_FIRST, CUSTOM_ACHIEVEMENT_LONGEVITY_LAST + 1)
     )
     appended_order.extend(
+        range(CUSTOM_ACHIEVEMENT_PET_FIRST, CUSTOM_ACHIEVEMENT_PET_LAST + 1)
+    )
+    appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
     )
     order_sym = scene_obj.symbol("?achievementOrder@@3QBHB")
@@ -11280,6 +11380,7 @@ def patch_custom_achievements(manifest):
         + 3
         + 2
         + 5
+        + 6
     )
     manifest["CustomAchievements"] = {
         "status": "patched",
@@ -11751,6 +11852,110 @@ def patch_longevity_achievement_load_reconciliation(manifest):
             "call_offset": hex(call_offset - load.value),
             "original_target": original,
             "replacement": LONGEVITY_LOAD_HELPER_SYMBOL,
+            "native_load_result_preserved": True,
+        },
+    }
+
+
+def patch_pet_achievement_callsites(manifest):
+    """Award pet goals only for successful placement and active loaded pets."""
+    def target_at(obj, section, vaddr):
+        matches = []
+        for index in range(section.nreloc):
+            relocation = struct.unpack_from(
+                "<IIH", obj.buf, section.reloc_ptr + index * 10
+            )
+            if relocation[0] == vaddr:
+                matches.append((
+                    obj.symbol_by_index[relocation[1]].name,
+                    relocation[2],
+                ))
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"Expected one relocation at {vaddr:#x}, got {matches}"
+            )
+        return matches[0]
+
+    spawn_native = "?SpawnPet@CPetManager@@QAE?BHHHH@Z"
+    load_native = (
+        "?LoadState@CPetManager@@QAE?B_N"
+        "AAUSSaveState@CPet@@@Z"
+    )
+
+    furniture_path = PATCHED / "FurnitureManager.obj"
+    furniture = CoffObject(furniture_path)
+    drop_name = "?DropFurniture@CFurnitureManager@@QAEX_N@Z"
+    drop = furniture.symbol(drop_name)
+    drop_sec = furniture.section(drop.section)
+    spawn_call = drop.value + 0x21D
+    spawn_relocation = drop.value + 0x21E
+    if bytes(
+        furniture.buf[
+            drop_sec.raw_ptr + spawn_call :
+            drop_sec.raw_ptr + spawn_call + 5
+        ]
+    ) != b"\xE8\0\0\0\0":
+        raise RuntimeError("Pet achievement placement callsite drifted")
+    spawn_target = target_at(furniture, drop_sec, spawn_relocation)
+    if spawn_target != (spawn_native, IMAGE_REL_I386_REL32):
+        raise RuntimeError(
+            f"Pet achievement placement relocation drifted: {spawn_target}"
+        )
+    spawn_helper = furniture.append_undefined_symbol(PET_SPAWN_HELPER_SYMBOL)
+    furniture.retarget_relocation(
+        drop_sec.index,
+        spawn_relocation,
+        spawn_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    furniture.write(furniture_path)
+
+    game_state_path = PATCHED / "theGameState.obj"
+    game_state = CoffObject(game_state_path)
+    load_name = "?Load@theGameState@@UAE_NH@Z"
+    load = game_state.symbol(load_name)
+    load_sec = game_state.section(load.section)
+    load_call = load.value + 0x250
+    load_relocation = load.value + 0x251
+    if bytes(
+        game_state.buf[
+            load_sec.raw_ptr + load_call :
+            load_sec.raw_ptr + load_call + 5
+        ]
+    ) != b"\xE8\0\0\0\0":
+        raise RuntimeError("Pet achievement load callsite drifted")
+    load_target = target_at(game_state, load_sec, load_relocation)
+    if load_target != (load_native, IMAGE_REL_I386_REL32):
+        raise RuntimeError(
+            f"Pet achievement load relocation drifted: {load_target}"
+        )
+    load_helper = game_state.append_undefined_symbol(PET_LOAD_HELPER_SYMBOL)
+    game_state.retarget_relocation(
+        load_sec.index,
+        load_relocation,
+        load_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    game_state.write(game_state_path)
+
+    manifest["PetAchievementHooks"] = {
+        "status": "successful placement observer plus active-pet load reconciliation",
+        "achievement_ids": [hex(value) for value in range(0x8A, 0x90)],
+        "placed_pet_item_range": ["0x23b", "0x248"],
+        "placement": {
+            "caller": "CFurnitureManager::DropFurniture",
+            "call_offset": hex(spawn_call - drop.value),
+            "original_target": spawn_native,
+            "replacement": PET_SPAWN_HELPER_SYMBOL,
+            "award_condition": "native SpawnPet return >= 0",
+            "native_return_preserved": True,
+        },
+        "load_reconciliation": {
+            "caller": "theGameState::Load(int)",
+            "call_offset": hex(load_call - load.value),
+            "original_target": load_native,
+            "replacement": PET_LOAD_HELPER_SYMBOL,
+            "active_slots_scanned": 30,
             "native_load_result_preserved": True,
         },
     }
@@ -18724,6 +18929,7 @@ def main():
     # Its zero .vf2mort default resumes the untouched stock mortality block.
     patch_older_villager_mortality(manifest)
     patch_longevity_achievement_load_reconciliation(manifest)
+    patch_pet_achievement_callsites(manifest)
     patch_mobile_furniture_behavior_dispatch(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:
         patch_collectable_item_holiday_ornaments(manifest)
