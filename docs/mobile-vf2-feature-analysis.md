@@ -636,18 +636,18 @@ existing control and preserving the stock handler.
 
 ## Open Low-Level Research Tasks
 
-- Disassemble mobile `CEvent*::ImpactGame` methods for every appended Island
-  Event and map exact rewards, penalties, spawned items, pets, emails, and
-  villager-state changes.
+- [Complete in source] All 25 appended Island Events now map their recovered
+  mobile firing, award, and impact methods. Live gameplay QA remains.
 - Disassemble mobile Holiday behavior methods (`InteractHouseXmasDecor`,
   `KidsCheckXmasStockings`, `AdultsSaveSantasCookies`,
   `KidStealsSantasCookies`) and identify required furniture object IDs,
   carried items, floating animations, and achievement hooks.
 - Confirm the exact mobile save-state fields for Brokerage Account, Food Club,
-  Health Plan, and Lucky Rock, then map them to PC fields or explicit helper
-  state.
-- Verify mobile Lucky Rock's collectible odds arithmetic in
-  `CCollectableItem::Update/Add` instead of assuming the desktop boost flag
-  matches.
+  and Health Plan, then map them to PC fields or explicit helper state.
+- [Complete in source] Mobile and PC `CCollectableItem::Update/Add` use the
+  same Lucky Rock byte and arithmetic. The spawn gate is `3/6600` per Update
+  without the rock and `3/3300` with it. Normal common/uncommon/rare odds are
+  `83/13/4`; Lucky Rock changes them to `66/26/8`. Holiday base `0x9E` enters
+  the same spawn-area and rarity route, so ornaments receive both bonuses.
 - Finish behavior support for every added mobile furniture row that has a
   named mobile `CHotSpot`/`CBehavior` route.

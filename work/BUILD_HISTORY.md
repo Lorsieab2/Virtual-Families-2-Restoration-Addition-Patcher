@@ -1658,3 +1658,19 @@
   negative, and all five runtime flags pass exact toggle/restoration checks.
 - The fully enabled executable is 1,777,664 bytes with SHA-256
   `D85E067CBB3B7A4F647B693F946810CA5209B1454CCBEA5BD78AB2B9EBD6FA3B`.
+
+## B156 - Exact Lucky Rock odds checkpoint
+
+- Confirms the mobile and PC collectible implementations use the same Lucky
+  Rock byte and exact `Update/Add` odds.
+- Lucky Rock doubles spawn attempts from `3/6600` to `3/3300` per Update and
+  changes common/uncommon/rare rarity from `83/13/4` to `66/26/8`.
+- Confirms Holiday base `0x9E` uses the same spawn-area selection and generic
+  `+0/+4/+8` rarity offsets, so Holiday Ornaments receive both bonuses.
+- Extends the Holiday native contract to require both `Update` and `Add` to
+  remain byte-identical to stock.
+- All 232 repository tests pass with one intentional skip. The complete
+  16-layout B156 matrix passes, including all eight Holiday-positive and all
+  eight Holiday-negative layouts.
+- The fully enabled executable is 1,777,664 bytes with SHA-256
+  `F3EE7955D59380C5B9259C88BA494C6F5737BA36CF03AB3F4BE7C899994229AE`.

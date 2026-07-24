@@ -104,14 +104,13 @@ must remain visible as Needs source audit; it must not be silently omitted.
   child-only manual `Eggnog` plan and EObject `0x8B` map. The single-cookie,
   Poinsettia, and wreath item-to-hotspot assignments still require proof;
   do not assign them by artwork name alone.
-- Disassemble all added mobile `CEvent*::ImpactGame` methods and map exact
-  outcomes before marking exclusive Island Events complete. The current PC
-  event shell list preserves firing/dialog structure, but most mobile reward,
-  penalty, spawn, pet, and villager-state effects are still unmapped.
+- [x] Disassemble all 25 added mobile `CEvent*` firing, award, and impact
+  methods and map their exact outcomes. Live event and patch-off QA remains.
 - Confirm mobile special-upgrade save fields and effect math for Brokerage
-  Account, Food Club, Health Plan, and Lucky Rock. Lucky Rock especially needs
-  exact `CCollectableItem::Update/Add` odds arithmetic before the new Holiday
-  Ornament collection can be considered parity-complete.
+  Account, Food Club, and Health Plan. Lucky Rock's exact mobile/PC
+  `CCollectableItem::Update/Add` arithmetic is now proven and byte-locked:
+  spawn attempts double from `3/6600` to `3/3300`, while common/uncommon/rare
+  odds change from `83/13/4` to `66/26/8`.
 - Extend offline patcher feature toggles around the report's feature groups:
   Holiday outfits, Holiday furniture, mobile furniture/behavior routes, Holiday
   Ornaments, Island Events/outcomes, visible mobile purchases, and VF3 TV

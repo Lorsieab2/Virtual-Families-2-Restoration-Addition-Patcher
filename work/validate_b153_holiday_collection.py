@@ -646,9 +646,29 @@ def validate_positive_native_contract(
         )
     )
     require(
-        ("4 percent" in lucky and "13 percent" in lucky and "double" in lucky)
-        or ("0x11" in lucky and "0x22" in lucky),
-        "native contract must preserve the stock Lucky Rock threshold/Add route",
+        all(
+            token in lucky
+            for token in ("3/6600", "3/3300", "83", "13", "4", "66", "26", "8")
+        ),
+        "native contract must preserve the exact stock Lucky Rock Update/Add odds",
+    )
+    require(
+        spawning.get("normal_spawn_attempt_per_update") == "3/6600 (1/2200)",
+        "normal collectible spawn-attempt odds drifted",
+    )
+    require(
+        spawning.get("lucky_rock_spawn_attempt_per_update") == "3/3300 (1/1100)",
+        "Lucky Rock collectible spawn-attempt odds drifted",
+    )
+    require(
+        spawning.get("normal_rarity_percent")
+        == {"common": 83, "uncommon": 13, "rare": 4},
+        "normal collectible rarity odds drifted",
+    )
+    require(
+        spawning.get("lucky_rock_rarity_percent")
+        == {"common": 66, "uncommon": 26, "rare": 8},
+        "Lucky Rock collectible rarity odds drifted",
     )
 
     control = nested(contract, "control_flow")

@@ -1190,3 +1190,15 @@ B156 final seven mobile Island Event outcomes
   negative, and all five runtime flags pass exact toggle/restoration checks.
 - The fully enabled executable is 1,777,664 bytes with SHA-256
   D85E067CBB3B7A4F647B693F946810CA5209B1454CCBEA5BD78AB2B9EBD6FA3B.
+B156 exact Lucky Rock and Holiday Ornament odds audit
+- Confirmed mobile and PC use the same Lucky Rock byte at
+  CCollectableItem+0x8A8 and the same Update/Add arithmetic.
+- Lucky Rock doubles the random collectible spawn-attempt rate from 3/6600
+  (1/2200) to 3/3300 (1/1100) per Update.
+- Normal rarity is 83% common, 13% uncommon, and 4% rare. Lucky Rock changes
+  it to 66% common, 26% uncommon, and 8% rare.
+- Holiday Ornament base 0x9E is selected through the same registered
+  spawn-area array, so the generic +0/+4/+8 rarity offsets produce all twelve
+  ornaments and receive both Lucky Rock bonuses.
+- Strengthened the native contract so the complete stock Update and Add
+  functions must remain byte-identical in ornament-enabled builds.

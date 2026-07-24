@@ -3547,3 +3547,27 @@
   checks, and passes exact toggle/restoration for all five runtime flags. The
   fully enabled executable is 1,777,664 bytes with SHA-256
   `D85E067CBB3B7A4F647B693F946810CA5209B1454CCBEA5BD78AB2B9EBD6FA3B`.
+
+## 2026-07-24 - Exact Lucky Rock and Holiday Ornament odds
+
+- Mobile `CCollectableItem::Update` at `0x104A30` reads the Lucky Rock byte at
+  `CCollectableItem+0x8A8`. Without it, the random gate accepts values 0-2
+  from `GetRandom(6600)`, or `3/6600 = 1/2200` per Update. With it, the same
+  gate uses `GetRandom(3300)`, or `3/3300 = 1/1100`.
+- Mobile `CCollectableItem::Add` at `0x1044A0` selects one registered spawn
+  area, then a value in `base..base+3`, then applies rarity offsets from a
+  100-way roll. Without Lucky Rock, rolls 0-3 add 8 (4% rare), rolls 4-16 add
+  4 (13% uncommon), and 17-99 remain common (83%). With Lucky Rock, rolls 0-7
+  are rare (8%), 8-33 uncommon (26%), and 34-99 common (66%).
+- Holiday Ornament base `0x9E` is one of the normal registered spawn-area
+  entries. The same generic offsets therefore produce common `0x9E-0xA1`,
+  uncommon `0xA2-0xA5`, and rare `0xA6-0xA9`; there is no separate ornament
+  scheduler that could bypass Lucky Rock.
+- The PC stock functions use the same byte, limits, thresholds, and offsets.
+  The Holiday validator now requires both complete `Update` and `Add` function
+  bodies to remain byte-identical to the stock PC objects.
+- All 232 repository tests pass with one intentional skip. The complete
+  16-layout B156 matrix passes, including eight Holiday-positive and eight
+  Holiday-negative layouts. The fully enabled executable is 1,777,664 bytes
+  with SHA-256
+  `F3EE7955D59380C5B9259C88BA494C6F5737BA36CF03AB3F4BE7C899994229AE`.

@@ -5553,6 +5553,10 @@ def validate_holiday_ornament_native_contract(manifest):
     stock_collectable_obj = CoffObject(SRC_OBJS / "CollectableItem.obj")
     for function_name, purpose in (
         (
+            "?Update@CCollectableItem@@QAEXXZ",
+            "spawn cadence and Lucky Rock frequency threshold",
+        ),
+        (
             "?Add@CCollectableItem@@QAEXW4ECarrying@@UldwPoint@@_N@Z",
             "variant selection and Lucky Rock rarity thresholds",
         ),
@@ -6291,9 +6295,23 @@ def validate_holiday_ornament_native_contract(manifest):
                 for _symbol, rect in HOLIDAY_ORNAMENT_SPAWN_RECTS
             ],
             "add_and_lucky_rock_route": (
-                "stock/mobile-parity Add retained: 4 percent rare and "
-                "13 percent uncommon normally; Lucky Rock doubles both"
+                "stock/mobile-parity Update/Add retained: spawn attempt "
+                "3/6600 normally or 3/3300 with Lucky Rock; rarity is "
+                "83 percent common, 13 percent uncommon, 4 percent rare "
+                "normally and 66/26/8 percent with Lucky Rock"
             ),
+            "normal_spawn_attempt_per_update": "3/6600 (1/2200)",
+            "lucky_rock_spawn_attempt_per_update": "3/3300 (1/1100)",
+            "normal_rarity_percent": {
+                "common": 83,
+                "uncommon": 13,
+                "rare": 4,
+            },
+            "lucky_rock_rarity_percent": {
+                "common": 66,
+                "uncommon": 26,
+                "rare": 8,
+            },
         },
         "count_total_collectables": {
             "stock_scan_range": "0x4f-0xfd",

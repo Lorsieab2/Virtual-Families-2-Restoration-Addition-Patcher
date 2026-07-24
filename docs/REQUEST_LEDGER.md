@@ -43,7 +43,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 
 | Request | Status | Evidence / remaining gate |
 |---|---|---|
-| Holiday Ornaments: 12 mobile IDs, rarity, spawns, sixth page, 72 total, persistence, pickup/drop, Collector integration | Shipped / automated-verified | Linked validators and 16-state matrix; user confirmed spawns. Full save/load and Lucky Rock frequency QA remain. |
+| Holiday Ornaments: 12 mobile IDs, rarity, spawns, sixth page, 72 total, persistence, pickup/drop, Collector integration | Shipped / automated-verified | Linked validators and 16-state matrix; user confirmed spawns. Exact mobile/PC Lucky Rock math is proven and both `Update` and `Add` are byte-locked: spawn attempts double from 3/6600 to 3/3300 and rarity changes from 83/13/4 to 66/26/8. Full save/load and live frequency QA remain. |
 | Upright Ornament art and corrected lower-right Candy Cane | Shipped / automated-verified | Canonical sources copied into payload and hash-validated. |
 | Page label `Ornaments`, footer strings, Ornamentologist after Bottlologist | Shipped / automated-verified | B152 string/order validator. |
 | Holiday Furniture achievement runtime gate | Shipped / in-game QA pending | Exact-SHA `.vf2goal` gate; purchase, award, persistence, and off-state QA remain. |
@@ -121,7 +121,7 @@ and reset only through their documented reset action.
 | Discipline | B156 source + 16-layout linked validation complete; live QA pending | Child-only exact scolds award No clothes-throwing 0xA1, No playing in the toilet 0xA2, No drawing on the wall 0xA3, and No messing with the light switch 0xA4. The stock game already supplies No jumping on the bed. Props to you 0xA5 requires stock Tight Ship 0x30—which itself proves all three stock discipline goals including bed-jumping—plus all four new goals; qualifying saves reconcile on load. |
 | Holiday Furniture purchases | Shipped / core purchase goals user-confirmed | Coin awards and purchase-goal firing work in game; exhaustive ID aliases, persistence, and patch-off absence remain narrow QA. |
 | VF3 furniture | B156 source + 16-layout linked validation complete; live QA pending | Furnishing the Future 0xA6 awards after a successful purchase of any active VF3 furniture-patch item: six couches/loveseats 0x2F6-0x2FB or three televisions 0x324-0x326. Failed storage purchases do not award. |
-| Ornamentologist/collection goals | Shipped / spawn and award user-confirmed | Ornaments spawn and Ornamentologist wiring works in game; persistence, Lucky Rock weighting, and every reset path remain narrow QA. |
+| Ornamentologist/collection goals | Shipped / spawn and award user-confirmed | Ornaments spawn and Ornamentologist wiring works in game; exact Lucky Rock weighting is source/link proven. Persistence, live frequency, and every reset path remain narrow QA. |
 | Achiever Extraordinaire | B156 source + fully-enabled linked validation complete | ID `0x92` is always the final visible row. Every completion scans the exact selected `achievementOrder`, excluding only itself; compile-gated Ornament/Behavior goals and runtime-gated Holiday Furniture goals count only when visible. Successful save load performs the same reconciliation. Live final-award/popup/save QA remains. |
 
 ## Renovations, map, events, and family systems

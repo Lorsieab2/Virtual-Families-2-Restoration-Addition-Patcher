@@ -6854,6 +6854,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                 patcher.SRC_OBJS / "CollectableItem.obj"
             )
             for function_name in (
+                "?Update@CCollectableItem@@QAEXXZ",
                 "?Add@CCollectableItem@@QAEXW4ECarrying@@UldwPoint@@_N@Z",
                 "?Find@CCollectableItem@@QAE?B_NAAVCVillager@@W4ECarrying@@AAUldwPoint@@@Z",
                 "?WasItemSpawned@CCollectableItem@@QBE?B_NW4ECarrying@@@Z",
@@ -6945,6 +6946,23 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             b"\x84\xD2\xC7\x45\x14\x11\x00\x00\x00"
             b"\xB8\x22\x00\x00\x00\x0F\x44\x45\x14",
         )
+
+    def test_stock_collectable_update_keeps_lucky_rock_spawn_frequency(self):
+        obj = CoffObject(patcher.SRC_OBJS / "CollectableItem.obj")
+        sym = obj.symbol("?Update@CCollectableItem@@QAEXXZ")
+        sec = obj.section(sym.section)
+        data = bytes(
+            obj.buf[sec.raw_ptr + sym.value : sec.raw_ptr + sec.raw_size]
+        )
+
+        self.assertEqual(
+            data[0x16E : 0x182],
+            b"\x80\xBF\xA8\x08\x00\x00\x00"
+            b"\xB9\xC8\x19\x00\x00"
+            b"\xB8\xE4\x0C\x00\x00"
+            b"\x0F\x44\xC1",
+        )
+        self.assertEqual(data[0x18B : 0x18F], b"\x83\xF8\x03\x7D")
 
     def test_workspace_collection_art_maps_to_twelve_collectibles(self):
         self.assertEqual(
