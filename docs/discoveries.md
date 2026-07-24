@@ -3113,3 +3113,34 @@
   runtime-toggle/restoration validation passes, and all 219 tests pass with
   one intentional skip. Live 1/2/3-slot, gender, persistence, and reset QA
   remains.
+
+## 2026-07-24 - Lifetime generation counter beyond the rolling tree
+
+- Stock `CFamilyTree::StartNextGeneration` calls `MakeRoomInTree` when
+  `CFamilyTree+4` is 30. `MakeRoomInTree` shifts the 29 newer records over the
+  oldest record and decrements the stock count to 29; the unchanged native
+  start routine then increments it back to 30. The persistent family-tree
+  layout therefore remains a rolling 30-generation window.
+- B156 retargets the only two native `StartNextGeneration` callers
+  (`CFamilyTree::StartFamilyTree` and `CAdoptionScene`) through a same-ABI
+  wrapper. The wrapper calls native first and increments only when native
+  returns true.
+- The lifetime count uses hidden achievement record `0xA8`, field `+4`, bits
+  8-31. Existing Taters and pregnancy-control bits remain in bits 0-7. An
+  existing save whose lifetime field is zero seeds from the current stock
+  `CFamilyTree+4` value, so its next successful generation continues from the
+  best count the old save can supply.
+- The Goals scene calls a dedicated draw helper after resetting the
+  achievement-list clipping rectangle and displays `Generation: N`. This is
+  not an achievement row and does not alter visible-goal counts or Achiever
+  Extraordinaire.
+- Reset Achievements preserves bits 8-31 around the native achievement reset.
+  A real new-game reset still clears the achievement block and therefore
+  starts the lifetime counter over.
+- All 16 B156 executable layouts link uniquely and pass Holiday plus four-flag
+  enable/idempotence/restore validation. The fully enabled raw linked image is
+  1,766,400 bytes with SHA-256
+  `e4064ef91c8a55a33a73fcc06d2bec5dcd5b736ff4c1fcf8c812ad5e215bcf1f`.
+  The focused generation-hook/Goals-draw contract test passes. Live
+  transition, persistence, visual-placement, 30-to-31 rollover, and new-game
+  reset QA remains.

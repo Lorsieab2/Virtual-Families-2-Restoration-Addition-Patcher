@@ -138,7 +138,7 @@ and reset only through their documented reset action.
 | Same-sex marriage | Not started | Same-sex candidates and repeatable private romantic action with 0% pregnancy; stock/off-state preserved. |
 | Multiple candidates per marriage email | Not started | Reject rerolls; same-sex patch may choose same/opposite sex; preserve email state. |
 | VF3-style child adoption chooser | Not started | Choose random baby or age 2-8 child with full traits; singleton; capacity/save/tree safe. |
-| Generation counter beyond 30 | Not started | Increment every Start New Generation and show on Goals screen while tree keeps rolling behavior. |
+| Generation counter beyond 30 | B156 source + 16-layout linked validation complete | Every successful native `StartNextGeneration` call increments a separate 24-bit lifetime counter persisted in hidden achievement record `0xA8` bits 8-31. Existing saves with no counter seed from the current stock generation; failed starts do not increment. The stock 30-record `MakeRoomInTree` rollover is unchanged. The Goals screen draws `Generation: N`, and Reset Achievements preserves the counter while a true new-game achievement reset still clears it. Live generation transition, save/reload, Goals placement, generation 30-to-31 rollover, and new-game reset QA remains. |
 
 ## UI, packaging, and documentation
 

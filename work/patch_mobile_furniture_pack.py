@@ -8886,6 +8886,7 @@ public:
     struct SSaveState;
     void UpdatePeepRecord(SPeepRecord *record);
     bool const LoadState(SSaveState const &state);
+    bool StartNextGeneration(CVillager &villager, int peepId);
 };
 
 enum ECarrying {
@@ -8987,6 +8988,7 @@ class theGameState {
 public:
     static theGameState *Get();
     bool SaveCurrentGame();
+    int GetWideScreenOffsetX();
     void ResetWorldState(int worldState);
     void QueueEmailMessage(EEmailMessage message);
 
@@ -9001,6 +9003,7 @@ extern CAchievement Achievement;
 extern CEnvironment Environment;
 extern CTutorialTip TutorialTip;
 extern CPetManager PetManager;
+extern CFamilyTree FamilyTree;
 
 extern "C" int __cdecl VF2GetB150UpgradePrice(int itemId);
 extern "C" void __cdecl VF2ToggleB150PriceMode(int itemId);
@@ -9433,6 +9436,96 @@ static unsigned int &VF2PersistentCheatAndPurchaseMask() {
     return *(unsigned int *)(record + 4);
 }
 
+struct ldwColor {
+    unsigned int value;
+};
+
+enum FontId {
+    eFontGenerationCounter = 3
+};
+
+class ldwFont;
+
+class ldwGameWindow {
+public:
+    static ldwGameWindow *__cdecl Get();
+    void DrawString(
+        const char *text,
+        int x,
+        int y,
+        ldwColor color,
+        ldwFont *font
+    );
+};
+
+class theStringManager {
+public:
+    static theStringManager *__cdecl Get();
+    ldwFont *GetFont(FontId font);
+};
+
+static unsigned int VF2LifetimeGenerationCount() {
+    unsigned int saved = VF2PersistentCheatAndPurchaseMask() >> 8;
+    if (saved != 0) {
+        return saved;
+    }
+    int nativeCount = *(int *)((unsigned char *)&FamilyTree + 4);
+    return nativeCount > 0 ? (unsigned int)nativeCount : 0;
+}
+
+extern "C" bool __fastcall VF2StartNextGenerationAndCount(
+    CFamilyTree *tree,
+    void *,
+    CVillager &villager,
+    int peepId
+) {
+    int nativeCount = *(int *)((unsigned char *)tree + 4);
+    unsigned int generation = VF2PersistentCheatAndPurchaseMask() >> 8;
+    if (generation == 0 && nativeCount > 0) {
+        generation = (unsigned int)nativeCount;
+    }
+    bool started = tree->StartNextGeneration(villager, peepId);
+    if (!started) {
+        return false;
+    }
+    if (generation < 0xFFFFFFu) {
+        ++generation;
+    }
+    VF2PersistentCheatAndPurchaseMask() =
+        (VF2PersistentCheatAndPurchaseMask() & 0xFFu)
+        | (generation << 8);
+    return true;
+}
+
+extern "C" void __cdecl VF2DrawLifetimeGenerationCounter() {
+    unsigned int generation = VF2LifetimeGenerationCount();
+    if (generation == 0) {
+        return;
+    }
+
+    char label[32] = "Generation: ";
+    char digits[8];
+    int digitCount = 0;
+    do {
+        digits[digitCount++] = (char)('0' + generation % 10);
+        generation /= 10;
+    } while (generation != 0 && digitCount < 8);
+    int labelLength = 12;
+    while (digitCount > 0) {
+        label[labelLength++] = digits[--digitCount];
+    }
+    label[labelLength] = '\0';
+
+    ldwColor white = {0xFFFFFFFFu};
+    ldwGameWindow::Get()->DrawString(
+        label,
+        theGameState::Get()->GetWideScreenOffsetX() + 760,
+        42,
+        white,
+        theStringManager::Get()->GetFont(eFontGenerationCounter)
+    );
+}
+
 static unsigned int &VF2TatersPurchaseMask() {
     return VF2PersistentCheatAndPurchaseMask();
 }
@@ -9790,7 +9883,12 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         VF2UnlockAllFurnitureGenerationLocks();
         break;
     case 0x124:
+        {
+        unsigned int generation =
+            VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u;
         Achievement.Reset();
+        VF2PersistentCheatAndPurchaseMask() = generation;
+        }
         break;
     case 0x125:
         VF2ResetAntPuzzle();
@@ -11852,7 +11950,10 @@ def patch_custom_achievements(manifest):
             "record_size": 12,
             "highest_custom_id": hex(CUSTOM_ACHIEVEMENT_LAST_ID),
             "purchase_mask_record_id": hex(CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID),
-            "purchase_mask_field": "record+0x4 low two bits",
+            "purchase_mask_field": (
+                "record+0x4 bits 0-1 Taters, bits 2-7 pregnancy controls, "
+                "bits 8-31 lifetime generation counter"
+            ),
             "purchase_mask_meaning": {"0x1": "item 0x2cf", "0x2": "item 0x2cc"},
             "reserved_tail_first_id": "0xa9",
             "reserved_tail_record_count": 0x7C,
@@ -12770,6 +12871,118 @@ def patch_family_tree_appearance_achievement_callsites(manifest):
             "includes_dead_and_departed": True,
             "native_load_result_preserved": True,
         },
+    }
+
+
+def patch_lifetime_generation_counter(manifest):
+    native_name = "?StartNextGeneration@CFamilyTree@@QAE_NAAVCVillager@@H@Z"
+    helper_name = "@VF2StartNextGenerationAndCount@16"
+    callsites = []
+    for object_name in ("FamilyTree.obj", "AdoptionScene.obj"):
+        obj = CoffObject(PATCHED / object_name)
+        native_symbol = obj.symbol(native_name).index
+        helper_symbol = obj.append_undefined_symbol(helper_name)
+        matches = []
+        for section in obj.sections:
+            for index in range(section.nreloc):
+                entry = section.reloc_ptr + index * 10
+                vaddr, symbol_index, relocation_type = struct.unpack_from(
+                    "<IIH", obj.buf, entry
+                )
+                if (
+                    symbol_index == native_symbol
+                    and relocation_type == IMAGE_REL_I386_REL32
+                ):
+                    matches.append((section, vaddr))
+        if len(matches) != 1:
+            raise RuntimeError(
+                f"{object_name} expected one StartNextGeneration call, "
+                f"found {len(matches)}"
+            )
+        section, vaddr = matches[0]
+        if obj.buf[section.raw_ptr + vaddr - 1] != 0xE8:
+            raise RuntimeError(
+                f"{object_name} StartNextGeneration relocation is not a call"
+            )
+        obj.retarget_relocation(
+            section.index,
+            vaddr,
+            helper_symbol,
+            IMAGE_REL_I386_REL32,
+        )
+        obj.write(PATCHED / object_name)
+        callsites.append({
+            "object": object_name,
+            "section": section.index,
+            "relocation_vaddr": hex(vaddr),
+        })
+
+    scene = CoffObject(PATCHED / "AchievementsScene.obj")
+    draw = scene.symbol("?DrawScene@CAchievementsScene@@MAEXXZ")
+    draw_section = scene.section(draw.section)
+    draw_raw = draw_section.raw_ptr + draw.value
+    hook_offset = 0x105
+    overwritten = b"\x6A\x64\x51\x8B\x4D\xF8"
+    if (
+        scene.buf[
+            draw_raw + hook_offset :
+            draw_raw + hook_offset + len(overwritten)
+        ]
+        != overwritten
+    ):
+        raise RuntimeError("Unexpected Goals-screen post-clipping draw bytes")
+    draw_helper = scene.append_undefined_symbol(
+        "_VF2DrawLifetimeGenerationCounter"
+    )
+    draw = scene.symbol("?DrawScene@CAchievementsScene@@MAEXXZ")
+    draw_section = scene.section(draw.section)
+    cave = draw_section.raw_size
+    return_offset = draw.value + hook_offset + len(overwritten)
+    cave_payload = (
+        b"\x60"
+        b"\xE8\x00\x00\x00\x00"
+        b"\x61"
+        + overwritten
+        + b"\xE9"
+        + section_rel32(cave + 13, 5, return_offset)
+    )
+    scene.insert_section_bytes(draw.section, cave, cave_payload)
+    scene.append_relocation(
+        draw.section,
+        cave + 2,
+        draw_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    patch_section_near_jump(
+        scene,
+        draw.section,
+        draw.value + hook_offset,
+        cave,
+        len(overwritten),
+        overwritten,
+    )
+    scene.write(PATCHED / "AchievementsScene.obj")
+
+    manifest["LifetimeGenerationCounter"] = {
+        "status": "patched",
+        "storage": "CAchievement hidden record 0xA8 record+4 bits 8-31",
+        "maximum": 0xFFFFFF,
+        "migration": (
+            "when the saved lifetime field is zero, seed from the current "
+            "stock FamilyTree generation count"
+        ),
+        "increment": (
+            "only after native StartNextGeneration returns success; the "
+            "stock 30-record rollover remains unchanged"
+        ),
+        "reset_achievements": "preserves lifetime-generation bits",
+        "goals_screen": {
+            "label": "Generation: N",
+            "helper": "_VF2DrawLifetimeGenerationCounter",
+            "position": [760, 42],
+            "widescreen_x_offset": True,
+        },
+        "callsites": callsites,
     }
 
 
@@ -19745,6 +19958,7 @@ def main():
     patch_longevity_achievement_load_reconciliation(manifest)
     patch_pet_achievement_callsites(manifest)
     patch_family_tree_appearance_achievement_callsites(manifest)
+    patch_lifetime_generation_counter(manifest)
     patch_mobile_furniture_behavior_dispatch(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:
         patch_collectable_item_holiday_ornaments(manifest)

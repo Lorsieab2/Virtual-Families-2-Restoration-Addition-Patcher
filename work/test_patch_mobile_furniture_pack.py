@@ -3989,6 +3989,111 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
             },
         )
 
+    def test_lifetime_generation_counter_preserves_tree_rollover_and_draws_on_goals(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                for filename in (
+                    "FamilyTree.obj",
+                    "AdoptionScene.obj",
+                    "Achievement.obj",
+                    "AchievementsScene.obj",
+                ):
+                    shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+                patcher.PATCHED = temp_root
+                manifest = {}
+                patcher.patch_custom_achievements(manifest)
+                patcher.patch_lifetime_generation_counter(manifest)
+
+                native_name = (
+                    "?StartNextGeneration@CFamilyTree@@"
+                    "QAE_NAAVCVillager@@H@Z"
+                )
+                for filename in ("FamilyTree.obj", "AdoptionScene.obj"):
+                    obj = CoffObject(temp_root / filename)
+                    native_index = obj.symbol(native_name).index
+                    helper_index = obj.symbol(
+                        "@VF2StartNextGenerationAndCount@16"
+                    ).index
+                    native_calls = []
+                    helper_calls = []
+                    for section in obj.sections:
+                        for index in range(section.nreloc):
+                            vaddr, symbol_index, rtype = struct.unpack_from(
+                                "<IIH",
+                                obj.buf,
+                                section.reloc_ptr + index * 10,
+                            )
+                            if rtype != patcher.IMAGE_REL_I386_REL32:
+                                continue
+                            if symbol_index == native_index:
+                                native_calls.append((section.index, vaddr))
+                            if symbol_index == helper_index:
+                                helper_calls.append((section.index, vaddr))
+                    self.assertEqual(native_calls, [])
+                    self.assertEqual(len(helper_calls), 1)
+
+                scene = CoffObject(temp_root / "AchievementsScene.obj")
+                draw = scene.symbol("?DrawScene@CAchievementsScene@@MAEXXZ")
+                section = scene.section(draw.section)
+                raw = section.raw_ptr + draw.value
+                self.assertEqual(scene.buf[raw + 0x105], 0xE9)
+                cave = draw.value + 0x10A + struct.unpack_from(
+                    "<i", scene.buf, raw + 0x106
+                )[0]
+                cave_raw = section.raw_ptr + cave
+                self.assertEqual(
+                    scene.buf[cave_raw : cave_raw + 13],
+                    (
+                        b"\x60\xE8\0\0\0\0\x61"
+                        b"\x6A\x64\x51\x8B\x4D\xF8"
+                    ),
+                )
+                draw_relocations = [
+                    struct.unpack_from(
+                        "<IIH",
+                        scene.buf,
+                        section.reloc_ptr + index * 10,
+                    )
+                    for index in range(section.nreloc)
+                ]
+                self.assertIn(
+                    (
+                        cave + 2,
+                        scene.symbol(
+                            "_VF2DrawLifetimeGenerationCounter"
+                        ).index,
+                        patcher.IMAGE_REL_I386_REL32,
+                    ),
+                    draw_relocations,
+                )
+
+                contract = manifest["LifetimeGenerationCounter"]
+                self.assertEqual(contract["maximum"], 0xFFFFFF)
+                self.assertIn("stock 30-record rollover", contract["increment"])
+                self.assertEqual(
+                    contract["reset_achievements"],
+                    "preserves lifetime-generation bits",
+                )
+                source = Path(patcher.__file__).read_text(encoding="utf-8")
+                self.assertIn(
+                    "if (!started) {\n        return false;\n    }",
+                    source,
+                )
+                self.assertIn(
+                    "VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u",
+                    source,
+                )
+                self.assertIn(
+                    "(VF2PersistentCheatAndPurchaseMask() & 0xFFu)",
+                    source,
+                )
+                self.assertIn("digitCount < 8", source)
+                self.assertIn('"Generation: "', source)
+        finally:
+            patcher.PATCHED = old_patched
+
     def test_family_tree_appearance_hooks_are_relocation_only_and_persistent(self):
         old_patched = patcher.PATCHED
         try:
