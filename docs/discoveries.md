@@ -3399,3 +3399,34 @@
   exact restoration for all five dormant runtime flags. The fully enabled
   layout is 1,775,616 bytes with SHA-256
   `FE659A21E475CE4EED652BF647437928738BB91AAC4483A5F884BD723383FD6D`.
+
+## 2026-07-24 - Second exact mobile Island Event outcome group
+
+- `CEventInvitation::CanFire` at mobile `0x119E20` stores a random adult from
+  selector `2` in target 1 and a random child from selector `1` in target 2,
+  and succeeds only when both exist.
+- `CEventInvitation::CalcAward(int)` at `0x119F70` always stores zero.
+  `ImpactGame(int)` at `0x119EF0` gives all children +20 happiness and runs
+  behavior `100` over raw ages `7..280` for choice zero; choice one gives all
+  children -20 happiness and runs behavior `251` over the same range.
+- `CEventFruitcakes::CanFire` at `0x119B00` returns false unconditionally.
+  Its unreachable `CalcAward(int)` at `0x119C00` stores -25 for choice zero
+  and zero otherwise. Its mobile target-dependent impact at `0x119B60`
+  adjusts money, adds inventory item `42`, starts behavior `26`, and sets
+  symptom `5`; B156 does not execute that route because exact scheduling
+  never supplies its target.
+- `CEventGreatUncleElmer::CanFire` at `0x11B850` returns false even though
+  `IsEmailEvent` at `0x11B880` returns true. Its unreachable impact at
+  `0x11B890` adds furniture item `0x24B` to storage.
+- `CEventMarchingBandTripExpenses::CanFire` at `0x11B900` returns false even
+  though `IsEmailEvent` at `0x11B930` returns true. `CalcAward` at `0x11B980`
+  stores -50 and `ImpactGame` at `0x11B940` applies it.
+- `CEventLoanReturned::CanFire` at `0x11B9C0` returns false. `CalcAward` at
+  `0x11BA30` stores +20 and `ImpactGame` at `0x11B9F0` applies it.
+- Desktop `CIslandEvents::FireEvent` first requires `CanFire`, then filters on
+  `IsEmailEvent`; email classification does not bypass a false firing gate.
+- All 231 tests pass with one intentional skip. The 16-layout matrix has 16
+  unique hashes, passes 8 Holiday-positive and 8 Holiday-negative checks, and
+  passes exact toggle/restoration for all five runtime flags. The fully
+  enabled executable is 1,775,616 bytes with SHA-256
+  `EE9433E810C62153168CEE44DDF1892DBBE42D546169D339CBD51C62A8EE9010`.

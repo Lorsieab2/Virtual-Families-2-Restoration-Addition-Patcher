@@ -13,16 +13,11 @@ import idc
 
 
 TARGET_CLASSES = (
-    "CEventMeteoriteFallsInYard1",
-    "CEventTeens",
-    "CEventStrangePackageOnPorch",
-)
-
-TARGET_METHODS = (
-    "CanFire",
-    "CalcAward",
-    "ImpactGame",
-    "GetResultDescription",
+    "CEventFruitcakes",
+    "CEventGreatUncleElmer",
+    "CEventInvitation",
+    "CEventLoanReturned",
+    "CEventMarchingBandTripExpenses",
 )
 
 
@@ -36,9 +31,8 @@ def main():
     matches = []
     for address in idautils.Functions():
         name = ida_name.get_name(address)
-        if "CVillagerManager23GetRandomVillagerByAges" in name or (
-            any(class_name in name for class_name in TARGET_CLASSES)
-            and any(method in name for method in TARGET_METHODS)
+        if "CVillagerManager23GetRandomVillagerByAges" in name or any(
+            class_name in name for class_name in TARGET_CLASSES
         ):
             matches.append((address, name))
 

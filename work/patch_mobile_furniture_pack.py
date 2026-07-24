@@ -7185,6 +7185,11 @@ MOBILE_EVENT_OUTCOME_KINDS = {
     "MeteoriteFallsInYard1": 1,
     "StrangePackageOnPorch": 2,
     "Teens": 3,
+    "Invitation": 4,
+    "Fruitcakes": 5,
+    "GreatUncleElmer": 6,
+    "MarchingBandTripExpenses": 7,
+    "LoanReturned": 8,
 }
 
 EVENT_CHOICE_OVERRIDES = {
@@ -11141,8 +11146,13 @@ def patch_island_events(manifest):
 
 enum StringId {{ eStringDummy = 0 }};
 enum EBodyPosition {{ eBodyPosition_Standing = 0 }};
-enum EAgeSelecter {{ eAgeSelecterAny = 2 }};
+enum EAgeSelecter {{ eAgeSelecterChild = 1, eAgeSelecterAdult = 2 }};
 enum EGender {{ eGenderAny = -1 }};
+enum EBehavior {{ eBehaviorDummy = 0 }};
+#ifndef VF2_EINVENTORYITEM_DEFINED
+#define VF2_EINVENTORYITEM_DEFINED
+enum EInventoryItem {{ eInventoryItemDummy = 0 }};
+#endif
 
 class CVillager;
 class CVillagerManager {{
@@ -11150,6 +11160,8 @@ public:
     CVillager *GetRandomVillager(EAgeSelecter age_selector, EGender gender, int *out_id);
     bool VillagerExists(int index, bool include_away);
     CVillager &GetVillager(int index);
+    void AdjustAllChildrenHappiness(int amount);
+    void MakeAllVillagersDoIt(EBehavior behavior, int minimum_age, int maximum_age, EGender gender, int *ids, int id_count);
 }};
 
 extern CVillagerManager VillagerManager;
@@ -11170,14 +11182,20 @@ public:
     void SpawnTrashInHouse(int count);
 }};
 
+class CFurnitureManager {{
+public:
+    bool AddToStorage(EInventoryItem item);
+}};
+
 extern CMoney Money;
 extern CCollectableItem CollectableItem;
+extern CFurnitureManager FurnitureManager;
 
-static CVillager *VF2PickMobileEventVillager()
+static CVillager *VF2PickMobileAdultEventVillager()
 {{
     // Mirrors CEventBoring::CanFire: choose a villager only when the event is
     // considered for firing, never while CIslandEvents is being constructed.
-    return VillagerManager.GetRandomVillager(eAgeSelecterAny, eGenderAny, 0);
+    return VillagerManager.GetRandomVillager(eAgeSelecterAdult, eGenderAny, 0);
 }}
 
 static CVillager *VF2PickMobileTeenEventVillager()
@@ -11222,16 +11240,24 @@ struct CMobileIslandEvent {{
           has_choices_(has_choices), is_email_(is_email), outcome_kind_(outcome_kind) {{}}
     virtual ~CMobileIslandEvent() {{}}
     virtual bool CanFire() {{
-        // MeteoriteFallsInYard1 is a dummied-out mobile event: its exact
-        // CanFire returns false, and both outcome methods are empty.
-        if (outcome_kind_ == 1) {{
+        // These five mobile classes return false unconditionally. Some retain
+        // unreachable award/effect methods, but the normal and email schedulers
+        // both reject them at CanFire.
+        if (outcome_kind_ == 1 || (outcome_kind_ >= 5 && outcome_kind_ <= 8)) {{
             target1_ = 0;
             target2_ = 0;
             return false;
         }}
+        if (outcome_kind_ == 4) {{
+            target1_ = VillagerManager.GetRandomVillager(
+                eAgeSelecterAdult, eGenderAny, 0);
+            target2_ = VillagerManager.GetRandomVillager(
+                eAgeSelecterChild, eGenderAny, 0);
+            return target1_ != 0 && target2_ != 0;
+        }}
         target1_ = outcome_kind_ == 3
             ? VF2PickMobileTeenEventVillager()
-            : VF2PickMobileEventVillager();
+            : VF2PickMobileAdultEventVillager();
         target2_ = target1_;
         return target1_ != 0;
     }}
@@ -11245,7 +11271,13 @@ struct CMobileIslandEvent {{
     virtual CVillager *GetTargetVillager2() {{ return target2_ ? target2_ : target1_; }}
     virtual EBodyPosition GetVillagerPose() {{ return eBodyPosition_Standing; }}
     virtual StringId GetResultDescription(int choice) {{ return (StringId)(choice == 0 ? result_a_ : result_b_); }}
-    virtual void ImpactGame() {{}}
+    virtual void ImpactGame() {{
+        if (outcome_kind_ == 6) {{
+            FurnitureManager.AddToStorage((EInventoryItem)0x24B);
+        }} else if (outcome_kind_ == 7 || outcome_kind_ == 8) {{
+            Money.Adjust((float)award_, true);
+        }}
+    }}
     virtual void ImpactGame(int choice) {{
         if (outcome_kind_ == 2) {{
             if (choice == 0) {{
@@ -11260,14 +11292,41 @@ struct CMobileIslandEvent {{
                 CollectableItem.SpawnSockInHouse(10);
                 CollectableItem.SpawnTrashInHouse(10);
             }}
+            return;
+        }}
+        if (outcome_kind_ == 4) {{
+            if (choice == 0) {{
+                Money.Adjust(0.0f, true);
+                VillagerManager.AdjustAllChildrenHappiness(20);
+                VillagerManager.MakeAllVillagersDoIt(
+                    (EBehavior)100, 7, 280, eGenderAny, 0, 0);
+            }} else {{
+                VillagerManager.AdjustAllChildrenHappiness(-20);
+                VillagerManager.MakeAllVillagersDoIt(
+                    (EBehavior)251, 7, 280, eGenderAny, 0, 0);
+            }}
         }}
     }}
-    virtual void CalcAward() {{}}
+    virtual void CalcAward() {{
+        if (outcome_kind_ == 6) {{
+            award_ = 0;
+        }} else if (outcome_kind_ == 7) {{
+            award_ = -50;
+        }} else if (outcome_kind_ == 8) {{
+            award_ = 20;
+        }} else {{
+            award_ = 0;
+        }}
+    }}
     virtual void CalcAward(int choice) {{
         if (outcome_kind_ == 2) {{
             award_ = choice == 0 ? ldwGameState::GetRandom(100) + 50 : 0;
         }} else if (outcome_kind_ == 3) {{
             award_ = choice == 0 ? 0 : -75;
+        }} else if (outcome_kind_ == 4) {{
+            award_ = 0;
+        }} else if (outcome_kind_ == 5) {{
+            award_ = choice == 0 ? -25 : 0;
         }} else {{
             award_ = 0;
         }}
@@ -11301,10 +11360,10 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
                 "outcome_kind": event["outcome_kind"],
                 "outcome_status": (
                     "exact mobile outcome"
-                    if event["outcome_kind"] in (2, 3)
+                    if event["outcome_kind"] in (2, 3, 4)
                     else (
                         "exact mobile dummied-out CanFire=false"
-                        if event["outcome_kind"] == 1
+                        if event["outcome_kind"] in (1, 5, 6, 7, 8)
                         else "text shell only; outcome pending"
                     )
                 ),
@@ -11329,7 +11388,10 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
 
 SECOND_BATHROOM_LEAK_HELPER_CPP = r'''
 
+#ifndef VF2_EINVENTORYITEM_DEFINED
+#define VF2_EINVENTORYITEM_DEFINED
 enum EInventoryItem { eInventoryItemDummy = 0 };
+#endif
 enum EPropEnum { ePropDummy = 0 };
 
 class CInventoryManager {

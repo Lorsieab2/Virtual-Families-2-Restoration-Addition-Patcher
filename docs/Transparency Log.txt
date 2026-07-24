@@ -1091,3 +1091,24 @@ B156 first exact mobile Island Event outcomes
   FE659A21E475CE4EED652BF647437928738BB91AAC4483A5F884BD723383FD6D.
   Live event choice, award, world-effect, age-boundary, and patch-off QA
   remains.
+B156 second exact mobile Island Event outcome group
+- Ported The Invitation's exact firing gate: one random adult and one random
+  child must both exist.
+- Allowing the invitation adds 20 happiness to all children and assigns mobile
+  behavior 100 to villagers in raw-age range 7-280. Disallowing subtracts 20
+  happiness and assigns behavior 251 over the same range.
+- Fruitcakes, Great Uncle Elmer, Marching Band Trip Expenses, and Loan
+  Returned all return false unconditionally from mobile CanFire. B156 now
+  preserves that inactive state instead of letting the generic event shell
+  make them appear.
+- Preserved the unreachable no-choice effects for the last three events:
+  furniture item 0x24B, -50 coins, and +20 coins. Fruitcakes retains its
+  unreachable -25/0 award calculation, but its target-dependent effect is not
+  executed because the exact event cannot fire.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,775,616 bytes with SHA-256
+  EE9433E810C62153168CEE44DDF1892DBBE42D546169D339CBD51C62A8EE9010.
+  Live Invitation targeting, both choices, child happiness/behavior, and
+  patch-off QA remain.

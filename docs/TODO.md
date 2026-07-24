@@ -144,8 +144,12 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - Implement the remaining correct outcomes for added mobile-exclusive Island
   Events. `MeteoriteFallsInYard1` now preserves its exact dummied-out
   `CanFire=false`; `StrangePackageOnPorch` and `Teens` now have their exact
-  native award/effect and target-selection routes. Other added events still
-  need function-level outcome audits.
+  native award/effect and target-selection routes. `Invitation` now has its
+  exact adult-plus-child gate, happiness effects, and group behaviors.
+  `Fruitcakes`, `GreatUncleElmer`, `MarchingBandTripExpenses`, and
+  `LoanReturned` preserve their exact unconditional `CanFire=false` instead of
+  being made reachable by the generic shell. Other added events still need
+  function-level outcome audits.
 - In-game test B132 second-bathroom leaks: after buying the second-bathroom
   renovation, trigger Water Pressure Surge and confirm the north toilet,
   shower, and sink leaks appear and can be repaired through their native

@@ -2159,6 +2159,11 @@ class MobileIslandEventTextTests(unittest.TestCase):
         self.assertEqual(events["MeteoriteFallsInYard1"]["outcome_kind"], 1)
         self.assertEqual(events["StrangePackageOnPorch"]["outcome_kind"], 2)
         self.assertEqual(events["Teens"]["outcome_kind"], 3)
+        self.assertEqual(events["Invitation"]["outcome_kind"], 4)
+        self.assertEqual(events["Fruitcakes"]["outcome_kind"], 5)
+        self.assertEqual(events["GreatUncleElmer"]["outcome_kind"], 6)
+        self.assertEqual(events["MarchingBandTripExpenses"]["outcome_kind"], 7)
+        self.assertEqual(events["LoanReturned"]["outcome_kind"], 8)
 
         old_patched = patcher.PATCHED
         try:
@@ -2185,11 +2190,25 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     rows["CEventTeens"]["outcome_status"],
                     "exact mobile outcome",
                 )
+                self.assertEqual(
+                    rows["CEventInvitation"]["outcome_status"],
+                    "exact mobile outcome",
+                )
+                for event_class in (
+                    "CEventFruitcakes",
+                    "CEventGreatUncleElmer",
+                    "CEventMarchingBandTripExpenses",
+                    "CEventLoanReturned",
+                ):
+                    self.assertEqual(
+                        rows[event_class]["outcome_status"],
+                        "exact mobile dummied-out CanFire=false",
+                    )
 
                 source = (
                     patcher.PATCHED / "vf2_island_events.cpp"
                 ).read_text(encoding="ascii")
-                self.assertIn("if (outcome_kind_ == 1)", source)
+                self.assertIn("if (outcome_kind_ == 1 ||", source)
                 self.assertIn("return false;", source)
                 self.assertIn("for (int index = 0; index < 30; ++index)", source)
                 self.assertIn(
@@ -2213,6 +2232,41 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 self.assertIn("CollectableItem.SpawnSockInHouse(10);", source)
                 self.assertIn("CollectableItem.SpawnTrashInHouse(10);", source)
                 self.assertNotIn("SpawnStainInHouse", source)
+                self.assertIn(
+                    "outcome_kind_ >= 5 && outcome_kind_ <= 8",
+                    source,
+                )
+                self.assertIn(
+                    "eAgeSelecterAdult, eGenderAny, 0",
+                    source,
+                )
+                self.assertIn(
+                    "eAgeSelecterChild, eGenderAny, 0",
+                    source,
+                )
+                self.assertIn(
+                    "VillagerManager.AdjustAllChildrenHappiness(20);",
+                    source,
+                )
+                self.assertIn(
+                    "VillagerManager.AdjustAllChildrenHappiness(-20);",
+                    source,
+                )
+                self.assertIn(
+                    "(EBehavior)100, 7, 280, eGenderAny, 0, 0",
+                    source,
+                )
+                self.assertIn(
+                    "(EBehavior)251, 7, 280, eGenderAny, 0, 0",
+                    source,
+                )
+                self.assertIn(
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x24B);",
+                    source,
+                )
+                self.assertIn("award_ = -50;", source)
+                self.assertIn("award_ = 20;", source)
+                self.assertIn("award_ = choice == 0 ? -25 : 0;", source)
         finally:
             patcher.PATCHED = old_patched
 

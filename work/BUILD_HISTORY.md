@@ -1561,3 +1561,25 @@
   `FE659A21E475CE4EED652BF647437928738BB91AAC4483A5F884BD723383FD6D`.
   Live event choice, award, world-effect, age-boundary, and patch-off QA
   remains.
+
+## B156 - Second exact mobile Island Event outcome checkpoint
+
+- Adds The Invitation's exact random-adult plus random-child firing gate.
+- Ports both exact choices: Allow adds 20 happiness to all children and runs
+  behavior `100` for raw ages `7..280`; Disallow subtracts 20 happiness and
+  runs behavior `251` over the same range.
+- Preserves unconditional mobile `CanFire=false` for Fruitcakes, Great Uncle
+  Elmer, Marching Band Trip Expenses, and Loan Returned instead of exposing
+  them through the generic shell.
+- Retains the unreachable mobile award/effect records where they are safe and
+  target-independent: item `0x24B`, -50 coins, +20 coins, and Fruitcakes'
+  -25/0 award calculation.
+- Adds duplicate-safe shared enum generation after the combined build caught
+  the Island Events and second-bathroom helpers defining the same type.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,775,616 bytes with SHA-256
+  `EE9433E810C62153168CEE44DDF1892DBBE42D546169D339CBD51C62A8EE9010`.
+  Live Invitation targeting, both choices, child happiness/behavior, and
+  patch-off QA remain.

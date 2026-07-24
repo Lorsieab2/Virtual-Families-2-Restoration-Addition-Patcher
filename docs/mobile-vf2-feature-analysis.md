@@ -437,14 +437,19 @@ email classification. It does **not** yet reproduce every mobile `ImpactGame`
 effect. `docs/TODO.md` still correctly tracks the remaining events as
 unfinished.
 
-The first three function-level audits now replace earlier experimental
-approximations:
+The first eight function-level audits now replace earlier experimental
+approximations or generic firing rules:
 
 | Mobile event | Exact recovered result |
 | --- | --- |
 | `MeteoriteFallsInYard1` | Dummied out on mobile: `CanFire()` is always false; `CalcAward()` and `ImpactGame()` are empty. |
 | `Teens` | Choice A spawns exactly 10 socks and 10 trash; Choice B sets award `-75` and applies that money adjustment. It fires only with a raw-age `260..340` villager. |
 | `StrangePackageOnPorch` | Choice A calculates `GetRandom(100)+50` and awards 50-149 coins; Choice B awards zero. It requires a random adult target. |
+| `Invitation` | Requires both a random adult and a random child. Allow adds 20 happiness to every child and assigns behavior `100` to villagers aged `7..280`; Disallow subtracts 20 child happiness and assigns behavior `251` over the same range. |
+| `Fruitcakes` | Dummied out by unconditional `CanFire=false`. Its unreachable choice award is still `-25` or zero; the mobile effect also gives inventory item `42` and symptom `5` to a target that normal scheduling never supplies. |
+| `GreatUncleElmer` | Dummied out by unconditional `CanFire=false` despite being email-marked. Its unreachable effect stores furniture item `0x24B`. |
+| `MarchingBandTripExpenses` | Dummied out by unconditional `CanFire=false` despite being email-marked. Its unreachable award/effect is `-50` coins. |
+| `LoanReturned` | Dummied out by unconditional `CanFire=false`. Its unreachable award/effect is `+20` coins. |
 
 The mobile `.so` proves each mobile class has its own `ImpactGame`,
 `CalcAward`, and `CanFire` methods, but most exact outcome implementations
