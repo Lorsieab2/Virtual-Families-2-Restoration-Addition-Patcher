@@ -2985,10 +2985,17 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 0x11C, 0x120, 0x121, 0x122,
                 0x123, 0x124, 0x12E, 0x125, 0x126, 0x127,
                 0x128, 0x129, 0x12A, 0x12C,
-                0x12B, 0x12D, 0x12F, 0x130, 0x131, 0x132, 0x133, 0x134, 0x135,
+                0x12B, 0x12D,
+                0x12F, 0x135,
+                0x130, 0x131,
+                0x133, 0x134,
+                0x132,
             ],
         )
         self.assertEqual(item_ids.index(0x12E), item_ids.index(0x124) + 1)
+        self.assertEqual(item_ids.index(0x135), item_ids.index(0x12F) + 1)
+        self.assertEqual(item_ids.index(0x131), item_ids.index(0x130) + 1)
+        self.assertEqual(item_ids.index(0x134), item_ids.index(0x133) + 1)
 
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         self.assertIn("theGameState::Get()->ResetWorldState(0x13)", source)

@@ -3012,3 +3012,12 @@
 - The generated helper compiles, object-code readback retains all four exact
   selectors, and all 213 tests pass with one intentional skip. Final executable
   linking remains subject to the already-recorded missing `atls.lib`.
+
+## 2026-07-23 - Cheat Upgrade function ordering
+
+- The B156 Cheat Upgrade rows are now ordered by function without changing any
+  item ID or effect: money, food, furniture locks, Reset/Complete Achievements,
+  Reset/Complete Collections, price modes/reset, trigger/fix malfunctions,
+  house trash/Clean House, yard weeds/Clean Garden, sock-pile max/clear, and
+  Spawn Marriage Email.
+- Automated ordering assertions keep each paired inverse action adjacent.

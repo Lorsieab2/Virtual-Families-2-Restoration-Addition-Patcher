@@ -1323,3 +1323,11 @@
   The generated helper compiles, and object-code readback confirms the four
   native `RemoveAll` calls. All 213 tests pass with one intentional skip.
   Linked and live removal/save/reload validation remains.
+
+## B156 - Cheat Upgrade function-sort checkpoint
+
+- Reorders the store rows into functional groups and keeps every established
+  item ID and implementation unchanged.
+- Reset/Complete Achievements, Reset/Complete Collections, malfunction
+  trigger/fix, house-trash/Clean House, yard-weeds/Clean Garden, and sock-pile
+  max/clear remain adjacent pairs.

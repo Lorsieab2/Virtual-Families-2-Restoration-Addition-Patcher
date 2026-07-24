@@ -680,6 +680,12 @@ CHEAT_UPGRADE_ITEMS = [
         "price": 0,
     },
     {
+        "item_id": 0x135,
+        "name": "Clean House",
+        "description": "Removes the same four indoor mess categories as the stock Housekeeping Services event. Yard weeds and the laundry-room sock pile are preserved.",
+        "price": 0,
+    },
+    {
         "item_id": 0x130,
         "name": "Fill available yard slots with weeds",
         "description": "Fills every available collectable slot with yard weeds. Existing collectables are preserved.",
@@ -689,12 +695,6 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": 0x131,
         "name": "Clean Garden",
         "description": "Removes every weed from the yard without affecting other collectables.",
-        "price": 0,
-    },
-    {
-        "item_id": 0x132,
-        "name": "Spawn Marriage Email",
-        "description": "Queues an incoming marriage proposal email.",
         "price": 0,
     },
     {
@@ -710,9 +710,9 @@ CHEAT_UPGRADE_ITEMS = [
         "price": 0,
     },
     {
-        "item_id": 0x135,
-        "name": "Clean House",
-        "description": "Removes the same four indoor mess categories as the stock Housekeeping Services event. Yard weeds and the laundry-room sock pile are preserved.",
+        "item_id": 0x132,
+        "name": "Spawn Marriage Email",
+        "description": "Queues an incoming marriage proposal email.",
         "price": 0,
     },
 ]
