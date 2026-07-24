@@ -23,6 +23,7 @@ TARGETS = (
     "KidStealsSantasCookies",
     "Knick",
     "XmasDecor",
+    "Eggnog",
 )
 
 

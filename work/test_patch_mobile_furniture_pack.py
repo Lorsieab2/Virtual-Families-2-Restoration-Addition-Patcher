@@ -400,6 +400,14 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 "0x2af",
                 "0x8a",
             ),
+            "GlassOfEggnog.png.fmap": (
+                "22562ac31d52fcf4bb6b786423653566483166091c87255ca5e304d623a9b792",
+                (7, 6),
+                patcher.MOBILE_EGGNOG_PC_CELLS,
+                patcher.MOBILE_EGGNOG_PC_CELL_VALUE,
+                "0x2b0",
+                "0x8b",
+            ),
             "Menorah.png.fmap": (
                 "352ba4be943eae6a168a133430ccd6555c5feb41a630c118da2d24c019e39365",
                 (10, 11),
@@ -729,7 +737,17 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(candles["mobile_candidate_weight"], 2000)
                 self.assertTrue(candles["manual_drop_only"])
                 self.assertFalse(candles["autonomous"])
-                cookies = contract["implemented_families"][13]
+                eggnog = contract["implemented_families"][13]
+                self.assertEqual(eggnog["item_ids"], ["0x2b0"])
+                self.assertEqual(eggnog["label"], "Stealing egg nog")
+                self.assertEqual(eggnog["object"], "0x8b")
+                self.assertEqual(eggnog["raw_age_max"], "0x117")
+                self.assertEqual(eggnog["mobile_behavior"], "CBehavior::Eggnog")
+                self.assertEqual(eggnog["mobile_behavior_id"], "0x1a1")
+                self.assertEqual(eggnog["mobile_candidate_weight"], 2000)
+                self.assertTrue(eggnog["manual_drop_only"])
+                self.assertFalse(eggnog["autonomous"])
+                cookies = contract["implemented_families"][14]
                 self.assertEqual(cookies["item_ids"], ["0x2be"])
                 self.assertEqual(
                     cookies["labels"],
@@ -744,7 +762,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(cookies["mobile_child_candidate_weight"], 2000)
                 self.assertTrue(cookies["manual_drop_only"])
                 self.assertFalse(cookies["autonomous"])
-                figurines = contract["implemented_families"][14]
+                figurines = contract["implemented_families"][15]
                 self.assertEqual(
                     figurines["item_ids"],
                     [
@@ -759,7 +777,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(figurines["mobile_candidate_weight"], 2000)
                 self.assertTrue(figurines["manual_drop_only"])
                 self.assertFalse(figurines["autonomous"])
-                house_decor = contract["implemented_families"][15]
+                house_decor = contract["implemented_families"][16]
                 self.assertEqual(
                     house_decor["item_ids"],
                     ["0x2c1", "0x2c4", "0x2c8", "0x2c9"],
@@ -815,6 +833,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "if (candidate == 0x2AA) return VF2HandleMobileHolidayCandles(villager);",
+                    wrapper,
+                )
+                self.assertIn(
+                    "if (candidate == 0x2B0) return VF2HandleMobileEggnog(villager);",
                     wrapper,
                 )
                 self.assertIn(
@@ -936,6 +958,36 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("static_cast<ESound>(0x12C)", candles_helper)
                 self.assertIn("static_cast<ESound>(0x37)", candles_helper)
                 self.assertIn("plans->PlanToStopSound();", candles_helper)
+                eggnog_helper = helper.split(
+                    "static bool VF2HandleMobileEggnog", 1
+                )[1].split("static void VF2RunMobileSaveSantasCookies", 1)[0]
+                self.assertIn(
+                    'VF2SetActionLabel(villager, "Stealing egg nog");',
+                    eggnog_helper,
+                )
+                self.assertIn("data + 0x6A54) > 0x117", eggnog_helper)
+                self.assertIn("CContentMap::eObjectEggnog", eggnog_helper)
+                self.assertIn("static_cast<ESound>(0x6D)", eggnog_helper)
+                self.assertEqual(eggnog_helper.count("plans->PlanToJump("), 12)
+                for target in ("0x70", "0x15", "0x59"):
+                    self.assertIn(
+                        f"static_cast<CContentMap::EObject>({target})",
+                        eggnog_helper,
+                    )
+                self.assertIn(
+                    "plans->PlanToJoyTwirlCW(ldwGameState::GetRandom(5) + 2);",
+                    eggnog_helper,
+                )
+                self.assertIn(
+                    "plans->PlanToTwirlCW(ldwGameState::GetRandom(3) + 2);",
+                    eggnog_helper,
+                )
+                self.assertIn(
+                    "plans->PlanToTwirlCCW(ldwGameState::GetRandom(3) + 2);",
+                    eggnog_helper,
+                )
+                self.assertIn("ldwGameState::GetRandom(10) + 4", eggnog_helper)
+                self.assertNotIn("PlanToStopSound", eggnog_helper)
                 cookie_helper = helper.split(
                     "static void VF2RunMobileSaveSantasCookies", 1
                 )[1].split("static void VF2RunMobileDreidel", 1)[0]

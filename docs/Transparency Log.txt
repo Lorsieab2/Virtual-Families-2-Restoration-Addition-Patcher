@@ -1046,3 +1046,21 @@ B156 Christmas figurine and house-decoration behaviors
   all five runtime flags pass exact toggle restoration.
 - The fully enabled executable is 1,774,080 bytes with SHA-256
   7E7389620C19BAF1409332809EAB4BB9F26E19BE367C288116C0CA89CAF0DFA1.
+B156 Eggnog behavior
+- Disassembled the exact mobile Eggnog plan and its InitAI candidate. Mobile
+  identifies it as behavior 0x1A1, weight 2000, child-gated, and bound to
+  EObject 0x8B.
+- Added the exact guarded manual child action for Glass of Eggnog 0x2B0,
+  including the orientation-aware inspection, sounds, three movement targets,
+  twelve jumps, clockwise and counterclockwise twirls, and random waits.
+- Added a minimal translated 7x6 GlassOfEggnog QAMF with two EObject-only
+  cells. Unsupported mobile metadata is not copied to the PC map.
+- The mobile autonomous candidate remains unavailable because 0x1A1 is beyond
+  the fixed desktop behavior table ending at 0x19A. This checkpoint does not
+  claim spontaneous Eggnog use.
+- All 230 project tests pass with one intentional skip. All 16 B156 executable
+  layouts rebuild uniquely, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass repeated enable, disable, and exact
+  restoration checks.
+- The fully enabled executable is 1,775,104 bytes with SHA-256
+  CC46BA5FA861928AD1DEE58335C0F6A3AA1F24B4758C38B5A3E42A0DB6CD2332.

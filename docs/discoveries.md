@@ -3344,3 +3344,27 @@
   checks, and pass exact restoration for all five dormant runtime flags. The
   fully enabled layout is 1,774,080 bytes with SHA-256
   `7E7389620C19BAF1409332809EAB4BB9F26E19BE367C288116C0CA89CAF0DFA1`.
+
+## 2026-07-24 - Mobile Eggnog exact behavior record
+
+- Mobile `CVillager::InitAI` case `0x1A1` enables `CBehavior::Eggnog` with
+  weight `2000`, furniture-required byte `1`, object `0x8B`, and maximum-age
+  boundary field `0x118`.
+- `CBehavior::Eggnog` labels the action `Stealing egg nog`, approaches the
+  selected furniture, performs an orientation-aware inspection, then visits
+  EObjects `0x70`, `0x15`, and `0x59` at speed `350`.
+- The exact plan contains sound `0x6D`, three sound `0x3D` calls, twelve jumps,
+  a 2-6 count joy twirl, 2-4 count clockwise and counterclockwise plan twirls,
+  and a final 4-13 tick wait. It has no stat writes and no stop-sound call.
+- Raw `GlassOfEggnog.png.fmap` is `7x6`; cells `(3,5)` and `(4,5)` carry the
+  only functional object bits. The PC-safe translation keeps only
+  `0x20005800` at those cells and hashes to
+  `22562ac31d52fcf4bb6b786423653566483166091c87255ca5e304d623a9b792`.
+- B156 ports the raw-age-through-`0x117` manual plan externally and leaves
+  spontaneous behavior `0x1A1` unindexed beyond the fixed desktop table.
+  The offline behavior overlay now contains 34 exact enable/restore maps.
+- The complete 230-test run passes with one intentional skip. All 16 B156
+  layouts rebuild uniquely, pass 8 Holiday-positive and 8 Holiday-negative
+  checks, and pass exact restoration for all five dormant runtime flags. The
+  fully enabled layout is 1,775,104 bytes with SHA-256
+  `CC46BA5FA861928AD1DEE58335C0F6A3AA1F24B4758C38B5A3E42A0DB6CD2332`.

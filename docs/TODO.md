@@ -100,7 +100,8 @@ must remain visible as Needs source audit; it must not be silently omitted.
   Holiday Candles and the Plate of Cookies child/adult pair are implemented
   manually. Exact QAMF object bits now prove and enable ten
   `AdmiringXmasKnickKnacks` figurines and four adult
-  `InteractHouseXmasDecor` wall/garland items. The single-cookie, Eggnog,
+  `InteractHouseXmasDecor` wall/garland items. Eggnog now has its exact
+  child-only manual `Eggnog` plan and EObject `0x8B` map. The single-cookie,
   Poinsettia, and wreath item-to-hotspot assignments still require proof;
   do not assign them by artwork name alone.
 - Disassemble all added mobile `CEvent*::ImpactGame` methods and map exact

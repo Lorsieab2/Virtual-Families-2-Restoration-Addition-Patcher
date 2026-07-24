@@ -112,6 +112,10 @@ MOBILE_DREIDEL_ITEM_ID = 0x2AF
 MOBILE_DREIDEL_OBJECT = 0x8A
 MOBILE_DREIDEL_PC_CELL_VALUE = 0x20005000
 MOBILE_DREIDEL_PC_CELLS = ((5, 5), (6, 6), (7, 6), (8, 6))
+MOBILE_EGGNOG_ITEM_ID = 0x2B0
+MOBILE_EGGNOG_OBJECT = 0x8B
+MOBILE_EGGNOG_PC_CELL_VALUE = 0x20005800
+MOBILE_EGGNOG_PC_CELLS = ((3, 5), (4, 5))
 MOBILE_XMAS_TREE_ITEM_IDS = (0x2AD, 0x2AE)
 MOBILE_XMAS_TREE_OBJECT = 0x88
 MOBILE_XMAS_TREE_PC_CELL_VALUE = 0x20004000
@@ -15157,6 +15161,14 @@ def validate_mobile_group_holiday_pc_fmaps(manifest):
             MOBILE_DREIDEL_PC_CELLS,
         ),
         (
+            "GlassOfEggnog.png.fmap",
+            MOBILE_EGGNOG_ITEM_ID,
+            MOBILE_EGGNOG_OBJECT,
+            (7, 6),
+            MOBILE_EGGNOG_PC_CELL_VALUE,
+            MOBILE_EGGNOG_PC_CELLS,
+        ),
+        (
             "Menorah.png.fmap",
             MOBILE_MENORAH_ITEM_ID,
             MOBILE_MENORAH_OBJECT,
@@ -15356,6 +15368,7 @@ class CContentMap { public: enum EObject {
     eObjectXmasTree = 0x88,
     eObjectHolidayCandles = 0x89,
     eObjectDreidel = 0x8A,
+    eObjectEggnog = 0x8B,
     eObjectXmasKnickknack = 0x8C,
     eObjectHouseXmasDecor = 0x8D,
     eObjectMenorah = 0x8E,
@@ -15444,6 +15457,7 @@ public:
     void PlanToPlaySound(ESound, float, ESoundType);
     void PlanToCheer(int);
     void PlanToJoyTwirlCW(int);
+    void PlanToTwirlCW(int);
     void PlanToTwirlCCW(int);
     void PlanToPlayAnim(int, char const *, bool, float);
     void PlanToWork(int);
@@ -16487,6 +16501,81 @@ static bool VF2HandleMobileHolidayCandles(CVillager &villager)
     return true;
 }
 
+static bool VF2HandleMobileEggnog(CVillager &villager)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    if (*reinterpret_cast<int *>(data + 0x6A54) > 0x117) return true;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectEggnog,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        plans->StartNewBehavior(villager);
+        return true;
+    }
+
+    VF2SetActionLabel(villager, "Stealing egg nog");
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToWait(
+        2,
+        static_cast<EBodyPosition>(info.orientation != 0 ? 0x0A : 0x0D));
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x6D), 1.0f, eSoundTypeEffects);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(4) + 1,
+        static_cast<EBodyPosition>(2));
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x3D), 1.0f, eSoundTypeEffects);
+
+    plans->PlanToGo(
+        static_cast<CContentMap::EObject>(0x70),
+        static_cast<ESpeed>(350),
+        ePriorityNormal,
+        false);
+    plans->PlanToJoyTwirlCW(ldwGameState::GetRandom(5) + 2);
+    plans->PlanToJump(15);
+    plans->PlanToJump(25);
+    plans->PlanToJump(15);
+    plans->PlanToJump(25);
+
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x3D), 1.0f, eSoundTypeEffects);
+    plans->PlanToGo(
+        static_cast<CContentMap::EObject>(0x15),
+        static_cast<ESpeed>(350),
+        ePriorityNormal,
+        false);
+    plans->PlanToJump(15);
+    plans->PlanToJump(25);
+    plans->PlanToJump(15);
+    plans->PlanToJump(25);
+    plans->PlanToTwirlCW(ldwGameState::GetRandom(3) + 2);
+
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x3D), 1.0f, eSoundTypeEffects);
+    plans->PlanToGo(
+        static_cast<CContentMap::EObject>(0x59),
+        static_cast<ESpeed>(350),
+        ePriorityNormal,
+        false);
+    plans->PlanToTwirlCCW(ldwGameState::GetRandom(3) + 2);
+    plans->PlanToJump(15);
+    plans->PlanToJump(25);
+    plans->PlanToJump(15);
+    plans->PlanToJump(25);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(10) + 4,
+        static_cast<EBodyPosition>(2));
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
 static void VF2RunMobileSaveSantasCookies(
     CVillager &villager,
     sFurnitureInfo2 const &info,
@@ -16997,6 +17086,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
     if (candidate == 0x2DB) return VF2HandleMobileBirthdayBanner(villager);
     if (candidate == 0x2AA) return VF2HandleMobileHolidayCandles(villager);
+    if (candidate == 0x2B0) return VF2HandleMobileEggnog(villager);
     if (candidate == 0x2BE) return VF2HandleMobileSantaCookiePlate(villager);
     if ((candidate >= 0x2B1 && candidate <= 0x2B5) ||
         candidate == 0x2BD || candidate == 0x2C0 ||
@@ -17308,6 +17398,24 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "mobile_behavior_id": "0x19b",
             "mobile_candidate_weight": 2000,
             "mobile_candidate_raw_age_field": "0x118",
+            "desktop_implementation": "exact guarded manual plan-sequence port",
+            "stock_tables_extended": False,
+        }, {
+            "name": "mobile Eggnog",
+            "item_ids": [hex(MOBILE_EGGNOG_ITEM_ID)],
+            "label": "Stealing egg nog",
+            "object": hex(MOBILE_EGGNOG_OBJECT),
+            "manual_drop_only": True,
+            "child_only": True,
+            "raw_age_max": "0x117",
+            "autonomous": False,
+            "autonomous_status": (
+                "pending: mobile behavior 0x1a1 is beyond the desktop "
+                "behavior table and no regression-safe additive candidate is proven"
+            ),
+            "mobile_behavior": "CBehavior::Eggnog",
+            "mobile_behavior_id": "0x1a1",
+            "mobile_candidate_weight": 2000,
             "desktop_implementation": "exact guarded manual plan-sequence port",
             "stock_tables_extended": False,
         }, {

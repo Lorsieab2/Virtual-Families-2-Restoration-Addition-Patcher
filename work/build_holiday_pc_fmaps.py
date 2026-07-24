@@ -32,6 +32,10 @@ SPECS = {
         "value": 0x20005000,
         "cells": ((5, 5), (6, 6), (7, 6), (8, 6)),
     },
+    "GlassOfEggnog.png.fmap": {
+        "value": 0x20005800,
+        "cells": ((3, 5), (4, 5)),
+    },
     "ChristmasTree1.png.fmap": {
         "value": 0x20004000,
         "cells": (

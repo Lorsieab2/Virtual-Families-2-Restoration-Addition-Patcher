@@ -77,6 +77,7 @@ MOBILE_HOLIDAY_FMAP_FILES = (
     "ChristmasTree1.png.fmap",
     "ChristmasTree2.png.fmap",
     "Dreidel.png.fmap",
+    "GlassOfEggnog.png.fmap",
     "Gnome1.png.fmap",
     "Gnome2.png.fmap",
     "Gnome3.png.fmap",

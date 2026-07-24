@@ -462,6 +462,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             "ChristmasTree1.png.fmap": "5907f7f60209d77d6c63b15b009243756c9f2c4d729134c41c105e0863b66926",
             "ChristmasTree2.png.fmap": "289e237d686f164dfd3e2293aeac248f5259e700125d963b4b578cefd642ccc8",
             "Dreidel.png.fmap": "44f21fc628cd90090f3eaf8eb1925de8d890fa5239828f55d115ae37c453b36a",
+            "GlassOfEggnog.png.fmap": "22562ac31d52fcf4bb6b786423653566483166091c87255ca5e304d623a9b792",
             "Gnome1.png.fmap": "239f7adcae51ac9a16de74df90af1fbf532238b61614fc82670b2500bcaa8455",
             "Gnome2.png.fmap": "0b025200e7cb6c25a767bba703ae0ee8048769a69b1e18383e72b0ce2d6a6eb0",
             "Gnome3.png.fmap": "6b34222939bcfc60408d7ff60e3a3a93bd271398c393d53f0a60b1b173504662",
@@ -507,7 +508,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             for filename in expected_hashes:
                 (base / "Assets" / filename).write_bytes((mobile_dir / filename).read_bytes())
             records = exporter.mobile_furniture_behavior_asset_patches(bundle, base)
-            self.assertEqual(len(records), 33)
+            self.assertEqual(len(records), 34)
             self.assertEqual(
                 [Path(row["file_path"]).name for row in records],
                 list(expected_hashes),

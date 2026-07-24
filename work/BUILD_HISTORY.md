@@ -1517,3 +1517,24 @@
 - The fully enabled executable is 1,774,080 bytes with SHA-256
   `7E7389620C19BAF1409332809EAB4BB9F26E19BE367C288116C0CA89CAF0DFA1`.
   Live item, age-boundary, orientation, sound, and patch-off QA remains.
+
+## B156 - Eggnog behavior checkpoint
+
+- Adds the exact child-only manual port of mobile `CBehavior::Eggnog`,
+  behavior `0x1A1`, for Glass of Eggnog item `0x2B0`.
+- Preserves candidate weight `2000`, EObject `0x8B`, raw child boundary
+  `0x118`, label `Stealing egg nog`, orientation-aware inspection, sounds,
+  all three movement targets, twelve jumps, both twirl directions, and exact
+  random waits.
+- Adds a `7x6` PC-safe `GlassOfEggnog.png.fmap` containing only the two proven
+  EObject cells. The optional behavior payload now replaces 34 maps.
+- Leaves autonomous behavior `0x1A1` unindexed because the fixed desktop
+  behavior table ends at `0x19A`.
+- All 230 project tests pass with one intentional skip. All 16 B156 layouts
+  rebuild with unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass non-overlap, repeated-enable,
+  disable, and exact-restoration checks.
+- The fully enabled executable is 1,775,104 bytes with SHA-256
+  `CC46BA5FA861928AD1DEE58335C0F6A3AA1F24B4758C38B5A3E42A0DB6CD2332`.
+  Live Eggnog child/age-boundary/orientation/movement/sound/patch-off QA
+  remains.

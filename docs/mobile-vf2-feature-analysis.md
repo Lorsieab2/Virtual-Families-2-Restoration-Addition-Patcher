@@ -186,8 +186,10 @@ then checked against every preserved QAMF. EObject `0x8C`
 proves the exact `AdmiringXmasKnickKnacks` route for ten gnome/yard figurines;
 EObject `0x8D` proves `InteractHouseXmasDecor` for Red Bow, Santa Wall
 Decoration, and both garlands. Those fourteen exact manual routes now use
-minimal PC-safe maps. Single Cookie, Eggnog, Poinsettia, and both wreaths
-remain unresolved; the wreath maps contain no `0x8D` EObject anchor.
+minimal PC-safe maps. Glass of Eggnog now uses its proven EObject `0x8B` and
+exact child-only `CBehavior::Eggnog` manual plan. Single Cookie, Poinsettia,
+and both wreaths remain unresolved; the wreath maps contain no `0x8D` EObject
+anchor.
 
 Low-level PC table work:
 

@@ -21,7 +21,7 @@ mobile-exclusive VF2 furniture and do not count toward this patch.
 All 63 items receive a copied desktop donor click-table byte, but that alone
 does not establish the correct mobile action. The base payload deliberately
 zeroes unsupported furniture-map cells, leaving unresolved families
-rendered-only. The optional patch now replaces 33 proven PC-safe maps, including
+rendered-only. The optional patch now replaces 34 proven PC-safe maps, including
 the four lounge chairs, Patio Umbrella, Patio Table, Picnic Table, birthday
 family, and implemented Holiday families, and enables their exact guarded
 manual-drop behaviors.
@@ -46,7 +46,7 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2AC` | Christmas Cookie | yes | Santa-cookie family exists | exact single-cookie route unresolved |
 | `0x2AD-0x2AE` | Christmas Trees | yes | `XmasTree`; admire, water, celebrate | exact whole-household manual celebration implemented with two PC-safe maps |
 | `0x2AF` | Dreidel | yes | exact `Dreidel` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
-| `0x2B0` | Eggnog | yes | exact `Eggnog` family exists | exact route unresolved |
+| `0x2B0` | Eggnog | yes | exact `Eggnog` family | exact child-only manual route implemented with PC-safe map; autonomous candidate pending |
 | `0x2B1-0x2B5` | Holiday gnomes | yes | `AdmiringXmasKnickKnacks` | exact raw-age-7+ manual route implemented with five PC-safe maps |
 | `0x2B6-0x2B7` | Large Angel and Large Star | no | no per-item route proven | decorative |
 | `0x2B8` | Menorah | yes | exact `Menorah` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
@@ -284,6 +284,29 @@ EObject value `0x20007800` at `(6,8)` and `(7,8)`. Its SHA-256 is
 `cb0bd7dfc1d1c32fed6c0219c52cc677e61375ad8146b5802c1efa1223a4d0d2`.
 Live child/adult boundary, orientation, rescuer-present/absent, sound, map
 placement, and disable-restoration QA remain.
+
+## Eggnog
+
+Glass of Eggnog `0x2B0` uses mobile EObject `0x8B`. Mobile
+`CVillager::InitAI` enables `CBehavior::Eggnog` as behavior `0x1A1`, with
+weight `2000`, object `0x8B`, furniture required, and the child boundary field
+`0x118`. Because `0x1A1` lies beyond the desktop behavior table, B156 ports
+the exact manual child action externally and leaves spontaneous selection
+pending.
+
+Raw ages through `0x117` use the exact label `Stealing egg nog`. The plan
+preserves the orientation-aware inspection, sounds `0x6D` and `0x3D`, random
+waits, three speed-350 trips to EObjects `0x70`, `0x15`, and `0x59`, twelve
+jumps, clockwise joy twirl, clockwise and counterclockwise plan twirls, and
+the final 4-13 tick wait. It makes no stat changes and does not stop a sound.
+Older manual drops are consumed without starting the child action, matching
+the mobile age gate.
+
+The `7x6` PC-safe map preserves its mobile header and trailer and retains only
+EObject value `0x20005800` at `(3,5)` and `(4,5)`. Its SHA-256 is
+`22562ac31d52fcf4bb6b786423653566483166091c87255ca5e304d623a9b792`.
+Live child/age-boundary, orientation, movement-target, sound, placement, and
+disable-restoration QA remain.
 
 ## Christmas figurines and house decorations
 
