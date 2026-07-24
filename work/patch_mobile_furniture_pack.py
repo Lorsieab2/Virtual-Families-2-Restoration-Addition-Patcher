@@ -790,7 +790,7 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
 CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x92
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0x93
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -808,6 +808,7 @@ CUSTOM_ACHIEVEMENT_PET_LAST = 0x8F
 CUSTOM_ACHIEVEMENT_APPEARANCE_FIRST = 0x90
 CUSTOM_ACHIEVEMENT_APPEARANCE_LAST = 0x91
 CUSTOM_ACHIEVEMENT_ACHIEVER_ID = 0x92
+CUSTOM_ACHIEVEMENT_PAVLOVIAN_ID = 0x93
 CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
 CUSTOM_ACHIEVEMENT_TARGET = 1
 CUSTOM_ACHIEVEMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
@@ -863,6 +864,7 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0x90, "family_tree", "Return of the Rainbow", "Have a female villager with head value 48 in the family tree."),
     (0x91, "family_tree", "Spiky!", "Have a male villager with head value 48 in the family tree."),
     (0x92, "meta", "Achiever Extraordinaire", "Complete every enabled achievement."),
+    (0x93, "pet_behavior", "Pavlovian Association", "You praised someone for training a pet."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -937,6 +939,7 @@ CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS = {
     "Playing Virtual Villagers": 0x69,
     "Posting memes online": 0x6A,
     "Praising pet": 0x6B,
+    "Training pet": CUSTOM_ACHIEVEMENT_PAVLOVIAN_ID,
 }
 CUSTOM_ACHIEVEMENT_SCOLD_LABEL_GOALS = {
     "Scolding pet": 0x6C,
@@ -9327,7 +9330,7 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 static int VF2AchievementVisibleCountInternal() {
     int count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2 + 1;
     if (kVF2IncludeOrnamentologistGoal) ++count;
-    if (kVF2IncludeBehaviorGoals) count += 7;
+    if (kVF2IncludeBehaviorGoals) count += 8;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
     return count;
 }
@@ -9367,6 +9370,7 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
     completed += VF2CountCompletedAchievements(achievement, 0x60, 0x65);
     if (kVF2IncludeBehaviorGoals) {
         completed += VF2CountCompletedAchievements(achievement, 0x66, 0x6C);
+        if (achievement->IsComplete((EAchievement)0x93)) ++completed;
     }
     completed += VF2CountCompletedAchievements(achievement, 0x80, 0x92);
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
@@ -11968,6 +11972,7 @@ def patch_custom_achievements(manifest):
         appended_order.extend(
             range(CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST, CUSTOM_ACHIEVEMENT_BEHAVIOR_END + 1)
         )
+        appended_order.append(CUSTOM_ACHIEVEMENT_PAVLOVIAN_ID)
     appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_BIRTHDAY_FIRST, CUSTOM_ACHIEVEMENT_BIRTHDAY_LAST + 1)
     )

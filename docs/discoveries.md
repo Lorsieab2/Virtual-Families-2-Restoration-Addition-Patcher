@@ -3214,3 +3214,21 @@
   `02894926C99A4080F76B1E8CA36F6746471985F77FA8EFDD4E3F6B87A24B9181`.
   All 226 tests pass with one intentional skip. Live
   purchase/save/family-tree QA remains.
+
+## 2026-07-24 - Pavlovian Association exact praise goal
+
+- Preserved project history defines Pavlovian Association as praising someone
+  while they are training a pet. B156 materializes reserved achievement row
+  `0x93` with target 1 and requires the exact current label `Training pet`.
+- The existing praise hook copies the complete 0x28-byte action label before
+  native `ForgetPlans` clears it. The new goal reuses that route; near matches
+  do not award it, and no additional gameplay detour is installed.
+- Row `0x93` is added to `achievementOrder` only in Behavior-enabled layouts.
+  Achiever Extraordinaire retains ID `0x92`, remains the final visible row,
+  and includes Pavlovian only when the goal is visible.
+- All 16 B156 layouts link uniquely. Holiday validation passes 8/8 positive
+  and 8/8 negative, all five runtime flags restore exactly, and all 226 tests
+  pass with one intentional skip. The fully enabled executable is 1,767,936
+  bytes with SHA-256
+  `4939C32A1A6907193984F0B0AA2A1763224A379D579B2A6683E088879E8F107B`.
+  Live praise, notification, persistence, reset, and patch-off QA remains.

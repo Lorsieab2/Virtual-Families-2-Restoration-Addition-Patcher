@@ -2744,10 +2744,10 @@ class TextFixStringManagerTests(unittest.TestCase):
                     if row.get("source")
                     == "custom achievement reserved capacity"
                 ]
-                self.assertEqual(len(reserved), 42)
+                self.assertEqual(len(reserved), 40)
                 self.assertEqual(
                     {int(row["achievement_id"], 16) for row in reserved},
-                        set(range(0x93, 0xA8)),
+                        set(range(0x94, 0xA8)),
                 )
                 self.assertTrue(all(row["text"] == "" for row in reserved))
                 self.assertEqual(
@@ -3675,6 +3675,14 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                 "meta",
                 "Achiever Extraordinaire",
                 "Complete every enabled achievement.",
+            ),
+        )
+        self.assertEqual(
+            rows[0x93],
+            (
+                "pet_behavior",
+                "Pavlovian Association",
+                "You praised someone for training a pet.",
             ),
         )
         source = Path(patcher.__file__).read_text(encoding="utf-8")
@@ -5868,6 +5876,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         expected.extend(range(0x60, 0x66))
                         if behavior:
                             expected.extend(range(0x66, 0x6D))
+                            expected.append(0x93)
                         expected.extend(range(0x80, 0x92))
                         expected.extend(range(0x6D, 0x80))
                         expected.append(0x92)

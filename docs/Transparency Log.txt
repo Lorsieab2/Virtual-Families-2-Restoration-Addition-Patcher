@@ -932,3 +932,12 @@ B156 VF3-style child adoption chooser
 - All 16 B156 executable layouts link uniquely. Holiday-positive/negative and
   five dormant-toggle enable/idempotence/exact-restore validation pass, and
   all 226 tests pass with one intentional skip. Live gameplay QA remains.
+B156 Pavlovian Association
+- Added achievement 0x93. It awards only when the player praises a villager
+  whose exact current action label is "Training pet".
+- The existing pre-praise 0x28-byte label capture is reused; no new gameplay
+  detour is installed. Near matches do not award the goal.
+- The row is visible only with Behavior Patches. Achiever Extraordinaire keeps
+  ID 0x92 and remains the final visible row.
+- All 16 layouts, Holiday checks, five runtime-toggle restoration cycles, and
+  all 226 tests pass. Live gameplay QA remains.
