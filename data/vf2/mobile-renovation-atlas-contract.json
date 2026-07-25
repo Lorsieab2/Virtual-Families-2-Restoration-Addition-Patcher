@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "build": "B156",
+  "source": "Virtual Families 2 mobile 1.7.16 Android asset bundles",
+  "native_item_range": "0xE1-0xEA",
+  "runtime_policy": {
+    "copy_into_pc_images": false,
+    "reason": "The PC per-item room-image selector has not been identified and proven.",
+    "staged_target": "OptionalVisualMods/Mobile Renovations",
+    "bathroom2": "Reuse corrected Bathroom 1 art only after a native second-bathroom render route is verified."
+  },
+  "bundles": [
+    {"bundle": "tp233.dat", "room_assets": ["sw_bathroom_black.png", "sw_bathroom_blue_marble.png"], "support_assets": ["shower_curtain_closed_black.png", "shower_curtain_closed_blue.png", "soapblackstd.png"], "curated_outputs": ["tp233_sw_bathroom_black.png", "tp233_sw_bathroom_blue_marble.png"]},
+    {"bundle": "tp234.dat", "room_assets": ["sw_bathroom_brown.png", "sw_bathroom_green.png"], "support_assets": ["shower_curtain_closed_brown.png", "shower_curtain_closed_green.png", "soapgreenstd.png", "towelrackbathroombrownstd.png"], "curated_outputs": ["tp234_sw_bathroom_brown.png", "tp234_sw_bathroom_green.png"]},
+    {"bundle": "tp235.dat", "room_assets": ["sw_bathroom_pink.png"], "support_assets": ["shower_curtain_closed_pink.png", "towelrackbathroompinkstd.png"], "curated_outputs": ["tp235_sw_bathroom_pink.png"]},
+    {"bundle": "tp238.dat", "room_assets": ["beige_kitchen.png", "beige_workshop.png"], "support_assets": [], "curated_outputs": ["tp238_beige_kitchen.png", "tp238_beige_workshop.png"]},
+    {"bundle": "tp239.dat", "room_assets": ["red_office.png", "yellow_kitchen.png"], "support_assets": [], "curated_outputs": ["tp239_red_office.png", "tp239_yellow_kitchen.png"]},
+    {"bundle": "tp240.dat", "room_assets": ["country_kitchen.png", "dark_office.png"], "support_assets": [], "curated_outputs": ["tp240_country_kitchen.png", "tp240_dark_office.png"]},
+    {"bundle": "tp241.dat", "room_assets": ["green_office.png", "modern_office.png"], "support_assets": [], "curated_outputs": ["tp241_green_office.png", "tp241_modern_office.png"]},
+    {"bundle": "tp242.dat", "room_assets": ["blue_office.png", "checkered_workshop.png"], "support_assets": [], "curated_outputs": ["tp242_blue_office.png", "tp242_checkered_workshop.png"]}
+  ],
+  "curated_art": {
+    "source_dir": "work/assets/mobile_renovations",
+    "orientation": "upright",
+    "transform": "decoded RGBA row reversal from the Android extraction",
+    "files": [
+      {"name": "tp233_sw_bathroom_black.png", "room": "bathroom", "size": [603, 363]},
+      {"name": "tp233_sw_bathroom_blue_marble.png", "room": "bathroom", "size": [603, 363]},
+      {"name": "tp234_sw_bathroom_brown.png", "room": "bathroom", "size": [603, 363]},
+      {"name": "tp234_sw_bathroom_green.png", "room": "bathroom", "size": [603, 363]},
+      {"name": "tp235_sw_bathroom_pink.png", "room": "bathroom", "size": [603, 363]},
+      {"name": "tp238_beige_kitchen.png", "room": "kitchen", "size": [717, 464]},
+      {"name": "tp238_beige_workshop.png", "room": "workshop", "size": [518, 326]},
+      {"name": "tp239_red_office.png", "room": "office", "size": [585, 413]},
+      {"name": "tp239_yellow_kitchen.png", "room": "kitchen", "size": [717, 464]},
+      {"name": "tp240_country_kitchen.png", "room": "kitchen", "size": [717, 464]},
+      {"name": "tp240_dark_office.png", "room": "office", "size": [585, 413]},
+      {"name": "tp241_green_office.png", "room": "office", "size": [585, 413]},
+      {"name": "tp241_modern_office.png", "room": "office", "size": [585, 413]},
+      {"name": "tp242_blue_office.png", "room": "office", "size": [585, 413]},
+      {"name": "tp242_checkered_workshop.png", "room": "workshop", "size": [518, 326]}
+    ]
+  }
+}

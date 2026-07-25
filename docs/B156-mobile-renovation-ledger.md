@@ -43,6 +43,13 @@ activating these files without that binding would be an unsupported native
 render change. The optional Bathroom 2 plan remains to reuse the corrected
 Bathroom 1 files once a native second-bathroom render route is verified.
 
+The bundle-level extraction record is tracked in
+`data/vf2/mobile-renovation-atlas-contract.json`. It records the eight mobile
+texture bundles that supplied the 15 staged room overlays, the extracted
+bathroom support textures that are intentionally not staged, and the current
+runtime-copy/selector boundary. This is metadata only; it does not claim that
+the PC executable can yet select these overlays at runtime.
+
 ## Remaining native work
 
 1. Recover the PC `EImage`/room-render selector and bind each `0xE1-0xEA`
@@ -51,4 +58,3 @@ Bathroom 1 files once a native second-bathroom render route is verified.
    against the mobile inventory semantics.
 3. Add Bathroom 2 as a separate optional route only after its overlay anchor
    and state writes are proven.
-

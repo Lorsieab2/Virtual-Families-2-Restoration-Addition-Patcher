@@ -668,6 +668,9 @@ MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR = (
     MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR.parent / "pc_fmaps"
 )
 MOBILE_RENOVATION_ART_SOURCE_DIR = ROOT / "work" / "assets" / "mobile_renovations"
+MOBILE_RENOVATION_ATLAS_CONTRACT = (
+    ROOT / "data" / "vf2" / "mobile-renovation-atlas-contract.json"
+)
 MOBILE_RENOVATION_ART_FILES = (
     "tp233_sw_bathroom_black.png",
     "tp233_sw_bathroom_blue_marble.png",

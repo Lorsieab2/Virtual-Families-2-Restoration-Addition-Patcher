@@ -1554,6 +1554,25 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
 
 
 class MobileRenovationArtTests(unittest.TestCase):
+    def test_mobile_renovation_atlas_contract_matches_staged_art(self):
+        contract_path = patcher.MOBILE_RENOVATION_ATLAS_CONTRACT
+        self.assertTrue(contract_path.is_file())
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        self.assertEqual(contract["native_item_range"], "0xE1-0xEA")
+        self.assertFalse(contract["runtime_policy"]["copy_into_pc_images"])
+        bundles = contract["bundles"]
+        self.assertEqual([row["bundle"] for row in bundles], [
+            "tp233.dat", "tp234.dat", "tp235.dat", "tp238.dat",
+            "tp239.dat", "tp240.dat", "tp241.dat", "tp242.dat",
+        ])
+        curated = contract["curated_art"]["files"]
+        self.assertEqual([row["name"] for row in curated], list(patcher.MOBILE_RENOVATION_ART_FILES))
+        self.assertEqual(sum(len(row["curated_outputs"]) for row in bundles), 15)
+        self.assertEqual({row["name"] for row in curated}, {
+            name for row in bundles for name in row["curated_outputs"]
+        })
+        self.assertTrue(all(len(row["size"]) == 2 for row in curated))
+
     def test_upright_mobile_renovation_art_is_local_and_staged_only(self):
         source = patcher.MOBILE_RENOVATION_ART_SOURCE_DIR
         self.assertEqual(source, patcher.ROOT / "work" / "assets" / "mobile_renovations")
