@@ -72,6 +72,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         )
         self.assertFalse(any("Invisible" in row[0] for row in mobile_rows))
 
+
     def test_mobile_chaise_pc_fmaps_have_exact_eobject_and_peep_slot_payloads(self):
         expected_hashes = {
             "Chaise_blue.png.fmap": "a92512d05b37824c234463c08076083349b12c5b0ef8d06cabdf4178415f26cf",
@@ -1550,6 +1551,58 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
         finally:
             patcher.PATCHED = old_patched
+
+
+class MobileRenovationArtTests(unittest.TestCase):
+    def test_upright_mobile_renovation_art_is_local_and_staged_only(self):
+        source = patcher.MOBILE_RENOVATION_ART_SOURCE_DIR
+        self.assertEqual(source, patcher.ROOT / "work" / "assets" / "mobile_renovations")
+        self.assertEqual(len(patcher.MOBILE_RENOVATION_ART_FILES), 15)
+        expected_sizes = {
+            "tp233_sw_bathroom_black.png": (603, 363),
+            "tp233_sw_bathroom_blue_marble.png": (603, 363),
+            "tp234_sw_bathroom_brown.png": (603, 363),
+            "tp234_sw_bathroom_green.png": (603, 363),
+            "tp235_sw_bathroom_pink.png": (603, 363),
+            "tp238_beige_kitchen.png": (717, 464),
+            "tp238_beige_workshop.png": (518, 326),
+            "tp239_red_office.png": (585, 413),
+            "tp239_yellow_kitchen.png": (717, 464),
+            "tp240_country_kitchen.png": (717, 464),
+            "tp240_dark_office.png": (585, 413),
+            "tp241_green_office.png": (585, 413),
+            "tp241_modern_office.png": (585, 413),
+            "tp242_blue_office.png": (585, 413),
+            "tp242_checkered_workshop.png": (518, 326),
+        }
+        from PIL import Image
+
+        for filename in patcher.MOBILE_RENOVATION_ART_FILES:
+            path = source / filename
+            self.assertTrue(path.is_file(), filename)
+            self.assertEqual(path.read_bytes()[:8], b"\x89PNG\r\n\x1a\n")
+            with Image.open(path) as image:
+                self.assertEqual(image.size, expected_sizes[filename])
+
+        with tempfile.TemporaryDirectory() as tmp:
+            old_out = patcher.OUT
+            try:
+                patcher.OUT = Path(tmp)
+                manifest = {}
+                patcher.sync_mobile_renovation_art_sources(manifest)
+            finally:
+                patcher.OUT = old_out
+            record = manifest["mobile_renovation_art_sources"]
+            self.assertEqual(record["status"], "staged_optional_payload_native_selector_pending")
+            self.assertEqual(record["native_item_range"], "0xE1-0xEA")
+            self.assertEqual(record["runtime_copy"], "disabled until exact PC room-image selector bindings are proven")
+            self.assertEqual(len(record["copied"]), 15)
+            self.assertEqual(record["missing"], [])
+            self.assertFalse((Path(tmp) / "Images").exists())
+            self.assertEqual(
+                len(list((Path(tmp) / "OptionalVisualMods" / "Mobile Renovations").glob("*.png"))),
+                15,
+            )
 
 
 class DebuggerResearchTests(unittest.TestCase):

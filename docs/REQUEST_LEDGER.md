@@ -129,8 +129,8 @@ and reset only through their documented reset action.
 
 | Request | Status | Completion contract |
 |---|---|---|
-| Mobile Kitchen/Office/Workshop/first Bathroom renovations | Not started | Curate owned art into workspace; store rows/icons/prices, exact overlays, saved choice, switching/removal, off-state. |
-| Same remodels for second Bathroom | Blocked on owned asset/native evidence | Blue mockup is reference; generate self-contained north-room assets for every shipped theme while preserving malfunction routes. |
+| Mobile Kitchen/Office/Workshop/first Bathroom renovations | B156 art staged; native selector not yet implemented | Fifteen upright, hash-verified mobile room PNGs are local under `work/assets/mobile_renovations/` and staged into the optional payload. Mobile `0xE1-0xEA` load/activation records and map anchors are documented in `docs/B156-mobile-renovation-ledger.md`; store bindings, exact PC overlays, saved choice, switching/removal, and off-state remain pending native selector evidence. |
+| Same remodels for second Bathroom | Blocked on native render evidence | The optional route must reuse the corrected Bathroom 1 art only after a native north-room overlay anchor and state write are proven; the existing `0xE6` malfunction gate remains untouched. |
 | Every renovation reversible | Not started | Clear active flags, allow remove/switch/rebuy, persist safely. |
 | Expanded map X-1Y0..3 and X4Y0..3 | Removed from B156 scope by user request | No expanded-map patch is exposed. The inactive placeholder and Experimental/Not Working section were removed; no camera, pathing, placement, spawn, or save bounds are changed. |
 | VF3 Phone | Not started | Optional phone with independent verified island-style event delivery; email remains. |

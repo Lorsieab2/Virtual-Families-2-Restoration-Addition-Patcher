@@ -667,6 +667,24 @@ MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR = (
 MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR = (
     MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR.parent / "pc_fmaps"
 )
+MOBILE_RENOVATION_ART_SOURCE_DIR = ROOT / "work" / "assets" / "mobile_renovations"
+MOBILE_RENOVATION_ART_FILES = (
+    "tp233_sw_bathroom_black.png",
+    "tp233_sw_bathroom_blue_marble.png",
+    "tp234_sw_bathroom_brown.png",
+    "tp234_sw_bathroom_green.png",
+    "tp235_sw_bathroom_pink.png",
+    "tp238_beige_kitchen.png",
+    "tp238_beige_workshop.png",
+    "tp239_red_office.png",
+    "tp239_yellow_kitchen.png",
+    "tp240_country_kitchen.png",
+    "tp240_dark_office.png",
+    "tp241_green_office.png",
+    "tp241_modern_office.png",
+    "tp242_blue_office.png",
+    "tp242_checkered_workshop.png",
+)
 MOBILE_DECORATIVE_ONLY_FMAP_SPECS = {
     "CandyCane.png.fmap": {
         "item_id": 0x2AB,
@@ -7220,6 +7238,44 @@ def sync_optional_visual_mod_sources(manifest):
             "patcher_setting": "transparent_store_bar",
             "credit": "Corylea on LDWForums",
         }
+    }
+
+
+def sync_mobile_renovation_art_sources(manifest):
+    """Stage verified mobile room art for the optional bundle.
+
+    These PNGs are intentionally kept under OptionalVisualMods rather than
+    copied into the live Images tree.  The PC executable's native room-image
+    selector still needs an exact per-item binding; staging the payload now
+    makes the asset side self-contained without changing stock rendering.
+    """
+    target = OUT / "OptionalVisualMods" / "Mobile Renovations"
+    copied = []
+    missing = []
+    if MOBILE_RENOVATION_ART_SOURCE_DIR.is_dir():
+        target.mkdir(parents=True, exist_ok=True)
+    for filename in MOBILE_RENOVATION_ART_FILES:
+        source = MOBILE_RENOVATION_ART_SOURCE_DIR / filename
+        destination = target / filename
+        if not source.is_file():
+            missing.append(str(source))
+            continue
+        shutil.copy2(source, destination)
+        copied.append({
+            "name": filename,
+            "source": str(source),
+            "target": str(destination),
+            "bytes": destination.stat().st_size,
+        })
+    manifest["mobile_renovation_art_sources"] = {
+        "status": "staged_optional_payload_native_selector_pending" if not missing else "missing_sources",
+        "source": str(MOBILE_RENOVATION_ART_SOURCE_DIR),
+        "target": str(target),
+        "copied": copied,
+        "missing": missing,
+        "native_item_range": "0xE1-0xEA",
+        "runtime_copy": "disabled until exact PC room-image selector bindings are proven",
+        "bathroom2_policy": "reuse the corrected Bathroom 1 art only after a native second-bathroom render route is verified",
     }
 
 
@@ -22648,6 +22704,7 @@ def main():
     sync_desktop_runtime_dlls(manifest)
     sync_invisible_furniture_reference_sets(manifest)
     sync_optional_visual_mod_sources(manifest)
+    sync_mobile_renovation_art_sources(manifest)
     sync_outfit_store_icon_art(manifest)
     sync_visible_special_upgrade_icon_art(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:
