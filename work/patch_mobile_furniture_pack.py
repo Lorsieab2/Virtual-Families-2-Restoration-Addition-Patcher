@@ -19503,6 +19503,16 @@ extern "C" bool __cdecl VF2PatchedDebuggerKeyCharacter(int key)
     if (!VF2CanUseDebugger()) {
         return false;
     }
+    // Some desktop input paths deliver the navigation keys through the
+    // character callback instead of HandleKeyDown.  Give the native debugger
+    // the same normalized page-navigation event before forwarding printable
+    // characters to an active editor.  Printable characters are unchanged,
+    // so editor commands retain their existing route.
+    int translated = VF2TranslateDebugKey(key);
+    if (translated != key && VF2SafeDebuggerHandleKeyDown(translated)) {
+        VF2WriteDirectDebug("debugger character navigation raw=%d translated=%d", key, translated);
+        return true;
+    }
     IEditor *editor = VF2ActiveDebugEditor();
     if (!editor) {
         return false;

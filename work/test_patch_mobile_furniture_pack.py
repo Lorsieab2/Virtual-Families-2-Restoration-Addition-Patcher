@@ -1963,6 +1963,25 @@ class DebuggerResearchTests(unittest.TestCase):
         self.assertIn("key == VF2_KEY_F6", source)
         self.assertIn("key == VF2_KEY_F7", source)
 
+    def test_debugger_character_bridge_retries_normalized_navigation_keys(self):
+        source = (patcher.ROOT / "work" / "patch_mobile_furniture_pack.py").read_text(
+            encoding="utf-8"
+        )
+        marker = 'extern "C" bool __cdecl VF2PatchedDebuggerKeyCharacter(int key)'
+        self.assertIn(marker, source)
+        character_route = source.split(marker, 1)[1].split(
+            'extern "C" bool __cdecl VF2PatchedDebuggerKeyUp', 1
+        )[0]
+        self.assertIn("int translated = VF2TranslateDebugKey(key);", character_route)
+        self.assertIn(
+            "VF2SafeDebuggerHandleKeyDown(translated)",
+            character_route,
+        )
+        self.assertIn(
+            'debugger character navigation raw=%d translated=%d',
+            character_route,
+        )
+
     def test_debugger_provider_offsets_match_native_objects(self):
         def relocation_target(obj, section, vaddr):
             cursor = section.reloc_ptr
