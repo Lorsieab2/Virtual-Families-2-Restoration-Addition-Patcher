@@ -9,6 +9,13 @@
     "staged_target": "OptionalVisualMods/Mobile Renovations",
     "bathroom2": "Reuse corrected Bathroom 1 art only after a native second-bathroom render route is verified."
   },
+  "pc_render_target": {
+    "renderer": "CWorldMap::Draw",
+    "asset_pattern": "Images/MapX##Y##.jpg",
+    "tile_size": [512, 512],
+    "stitched_size": [2048, 2048],
+    "compositing": "not implemented; map anchors and renovation-state selector pending"
+  },
   "bundles": [
     {"bundle": "tp233.dat", "room_assets": ["sw_bathroom_black.png", "sw_bathroom_blue_marble.png"], "support_assets": ["shower_curtain_closed_black.png", "shower_curtain_closed_blue.png", "soapblackstd.png"], "curated_outputs": ["tp233_sw_bathroom_black.png", "tp233_sw_bathroom_blue_marble.png"]},
     {"bundle": "tp234.dat", "room_assets": ["sw_bathroom_brown.png", "sw_bathroom_green.png"], "support_assets": ["shower_curtain_closed_brown.png", "shower_curtain_closed_green.png", "soapgreenstd.png", "towelrackbathroombrownstd.png"], "curated_outputs": ["tp234_sw_bathroom_brown.png", "tp234_sw_bathroom_green.png"]},

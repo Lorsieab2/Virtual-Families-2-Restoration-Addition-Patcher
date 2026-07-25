@@ -1560,6 +1560,10 @@ class MobileRenovationArtTests(unittest.TestCase):
         contract = json.loads(contract_path.read_text(encoding="utf-8"))
         self.assertEqual(contract["native_item_range"], "0xE1-0xEA")
         self.assertFalse(contract["runtime_policy"]["copy_into_pc_images"])
+        self.assertEqual(contract["pc_render_target"]["renderer"], "CWorldMap::Draw")
+        self.assertEqual(contract["pc_render_target"]["tile_size"], [512, 512])
+        self.assertEqual(contract["pc_render_target"]["stitched_size"], [2048, 2048])
+        self.assertIn("not implemented", contract["pc_render_target"]["compositing"])
         bundles = contract["bundles"]
         self.assertEqual([row["bundle"] for row in bundles], [
             "tp233.dat", "tp234.dat", "tp235.dat", "tp238.dat",
