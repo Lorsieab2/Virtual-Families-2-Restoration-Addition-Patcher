@@ -19,6 +19,9 @@ paths inspected for B156:
 - `CContentMap::ActivateCondemnedArea` changes the 256x256 content grid's
   material, hotspot, and object fields. It does not select or replace a map
   background image.
+- The mobile `0xE1-0xEA` handler also calls `CEnvironment::SetProp` for each
+  renovation. The inspected PC `CEnvironment::Draw` is an immediate return,
+  so porting those state writes alone cannot display the mobile room art.
 - `theMainScene::DrawScene` invokes the world map, environment, and furniture
   manager in that order; no per-renovation image argument is visible at this
   call site.
