@@ -48,11 +48,12 @@ folder to a separate modded sibling folder and writes changed files there:
   --manifest patches\vf2-b103-full-payload\manifest.json
 ```
 
-Use `--output-dir` to override the manifest's default modded output folder. For
-B105 bundles, the default output folder is `VF2-B105-Modded`, and the modded
-executable is named `Virtual Families 2 - Modded B105.exe` so it is obvious
-that it is not a vanilla executable. The modded save folder follows that
-executable name under `Documents/LDW/Virtual Families 2 - Modded B105`.
+Use `--output-dir` to choose the exact modded output folder. Alternatively,
+use `--output-parent-dir` to choose where the manifest-named folder is created;
+`--output-dir` takes precedence when both are supplied. B156 uses the stable
+folder and executable names `Virtual Families 2 - Modded` and
+`Virtual Families 2 - Modded.exe`. Its save folder is exactly
+`Documents/LDW/Virtual Families 2 - Modded`.
 
 Use `--dry-run` to validate target hashes, expected bytes, and asset payload
 hashes without writing files. Use `--backup-dir` and `--log` to control where
@@ -101,8 +102,10 @@ picker automatically. The user selects their own vanilla Virtual Families 2
 installation folder manually, and the patcher does not look for or assume a
 hardcoded local install path.
 
-The GUI auto-populates the modded output folder from the selected vanilla game
-folder and manifest `output.default_folder_name`. The Enable/Disable Patches
+The GUI provides a separate **Save modified folders under** picker for choosing
+the parent directory of the manifest-named modded folder. It auto-populates the
+modded output folder from that parent (or the selected vanilla folder's parent)
+and manifest `output.default_folder_name`. The Enable/Disable Patches
 button uses green bold text, manifest descriptions support `**bold**` markup,
 and description blocks resize to keep their full text visible. The completion
 popup separates enabled patches from disabled/restored patches and keeps

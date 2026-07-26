@@ -1182,6 +1182,9 @@ def resolve_apply_output_dir(
         return Path(explicit).resolve()
     folder_name = manifest_output_folder_name(manifest)
     if folder_name:
+        parent = getattr(args, "output_parent_dir", None)
+        if parent:
+            return (Path(parent).resolve() / folder_name).resolve()
         return (game_dir.parent / folder_name).resolve()
     return game_dir
 
@@ -3083,6 +3086,7 @@ def build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--exe", help=f"Path to {DEFAULT_EXE_NAME}; the game directory is inferred from its parent.")
     apply_cmd.add_argument("--manifest", required=True, help="Path to the JSON patch manifest.")
     apply_cmd.add_argument("--output-dir", help="Optional modded game output folder. Defaults to the manifest output folder when a vanilla game folder is supplied. If --game-dir is omitted, this must be an existing modded folder to reconfigure.")
+    apply_cmd.add_argument("--output-parent-dir", help="Optional parent folder for the manifest-named modded output folder. Ignored when --output-dir is supplied.")
     apply_cmd.add_argument("--backup-dir", help="Backup output directory. Defaults under the game directory.")
     apply_cmd.add_argument("--log", help="Patch log JSON path. Defaults inside the backup directory.")
     apply_cmd.add_argument("--dry-run", action="store_true", help="Validate only; do not back up or modify files.")

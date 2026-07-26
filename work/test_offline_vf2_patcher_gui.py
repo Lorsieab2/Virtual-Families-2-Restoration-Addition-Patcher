@@ -118,6 +118,7 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
             game_dir="C:\\Games\\VF2",
             manifest="patches\\vf2.json",
             output_dir="",
+            output_parent_dir="D:\\VF2 Builds",
             backup_dir="",
             log=None,
             dry_run=True,
@@ -128,6 +129,7 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
         self.assertEqual(args.game_dir, "C:\\Games\\VF2")
         self.assertEqual(args.manifest, "patches\\vf2.json")
         self.assertIsNone(args.output_dir)
+        self.assertEqual(args.output_parent_dir, "D:\\VF2 Builds")
         self.assertIsNone(args.backup_dir)
         self.assertIsNone(args.log)
         self.assertTrue(args.dry_run)
@@ -201,6 +203,22 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
                 {
                     "vanilla_game_dir": "C:\\Games\\Virtual Families 2",
                     "modded_output_dir": "C:\\Games\\VF2-B120-Modded",
+                },
+            )
+
+    def test_saved_output_parent_path_round_trips_and_drives_namespace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = Path(tmp) / "patcher_local_settings.json"
+            gui.save_saved_paths(
+                modded_output_parent_dir="D:\\VF2 Builds",
+                modded_output_dir="D:\\VF2 Builds\\Virtual Families 2 - Modded",
+                settings_path=settings_path,
+            )
+            self.assertEqual(
+                gui.load_saved_paths(settings_path),
+                {
+                    "modded_output_parent_dir": "D:\\VF2 Builds",
+                    "modded_output_dir": "D:\\VF2 Builds\\Virtual Families 2 - Modded",
                 },
             )
 

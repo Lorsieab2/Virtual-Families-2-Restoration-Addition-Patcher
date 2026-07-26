@@ -1997,11 +1997,15 @@ def prune_unreferenced_payload_files(
 
 def modded_exe_output_name(build_label: str) -> str:
     label = re.sub(r"[^A-Za-z0-9_.-]+", "_", build_label).strip("._") or "Modded"
+    if label.upper() == "B156":
+        return "Virtual Families 2 - Modded.exe"
     return MODDED_EXE_OUTPUT_TEMPLATE.format(build_label=label)
 
 
 def modded_output_folder_name(build_label: str) -> str:
     label = re.sub(r"[^A-Za-z0-9_.-]+", "_", build_label).strip("._") or "Modded"
+    if label.upper() == "B156":
+        return "Virtual Families 2 - Modded"
     return MODDED_OUTPUT_FOLDER_TEMPLATE.format(build_label=label)
 
 

@@ -75,7 +75,7 @@ def load_saved_paths(settings_path: Path | None = None) -> dict[str, str]:
     if not isinstance(data, dict):
         return {}
     saved: dict[str, str] = {}
-    for key in ("vanilla_game_dir", "modded_output_dir"):
+    for key in ("vanilla_game_dir", "modded_output_parent_dir", "modded_output_dir"):
         value = data.get(key)
         if isinstance(value, str) and value.strip():
             saved[key] = value.strip()
@@ -85,15 +85,19 @@ def load_saved_paths(settings_path: Path | None = None) -> dict[str, str]:
 def save_saved_paths(
     *,
     vanilla_game_dir: str | None = None,
+    modded_output_parent_dir: str | None = None,
     modded_output_dir: str | None = None,
     settings_path: Path | None = None,
 ) -> None:
     path = settings_path or local_settings_path()
     data = load_saved_paths(path)
     vanilla = clean_path_text(vanilla_game_dir)
+    parent = clean_path_text(modded_output_parent_dir)
     output = clean_path_text(modded_output_dir)
     if vanilla:
         data["vanilla_game_dir"] = vanilla
+    if parent:
+        data["modded_output_parent_dir"] = parent
     if output:
         data["modded_output_dir"] = output
     path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
@@ -200,6 +204,7 @@ def build_apply_namespace(
     backup_dir: str | None = None,
     log: str | None = None,
     output_dir: str | None = None,
+    output_parent_dir: str | None = None,
     dry_run: bool = False,
     settings: dict[str, patcher.PatchSetting] | None = None,
     selected_settings: set[str] | None = None,
@@ -213,6 +218,7 @@ def build_apply_namespace(
         game_dir=optional_path(game_dir),
         manifest=required_path(manifest, "Patch manifest"),
         output_dir=optional_path(output_dir),
+        output_parent_dir=optional_path(output_parent_dir),
         backup_dir=optional_path(backup_dir),
         log=optional_path(log),
         dry_run=bool(dry_run),
@@ -242,6 +248,7 @@ class VF2PatcherGUI:
         self.game_dir_var = tk.StringVar()
         self.manifest_var = tk.StringVar()
         self.backup_dir_var = tk.StringVar()
+        self.output_parent_dir_var = tk.StringVar()
         self.output_dir_var = tk.StringVar()
         self.log_path_var = tk.StringVar()
         self.restore_backup_var = tk.StringVar()
@@ -290,6 +297,8 @@ class VF2PatcherGUI:
             self.game_dir_var.set(saved["vanilla_game_dir"])
         if saved.get("modded_output_dir"):
             self.output_dir_var.set(saved["modded_output_dir"])
+        if saved.get("modded_output_parent_dir"):
+            self.output_parent_dir_var.set(saved["modded_output_parent_dir"])
 
         for path in self._asset_path_candidates(PATCHER_ICON_PNG):
             if path.is_file():
@@ -366,9 +375,10 @@ class VF2PatcherGUI:
 
         self._path_row(frame, 0, "Vanilla game folder (optional if reconfiguring an existing modded folder)", self.game_dir_var, self._browse_game_dir)
         self._path_row(frame, 1, "Patch manifest", self.manifest_var, self._browse_manifest)
-        self._path_row(frame, 2, "Modded output folder", self.output_dir_var, self._browse_output_dir, optional=True)
-        self._path_row(frame, 3, "Backup folder", self.backup_dir_var, self._browse_backup_dir, optional=True)
-        self._path_row(frame, 4, "Patch log", self.log_path_var, self._browse_log_path, optional=True)
+        self._path_row(frame, 2, "Save modified folders under", self.output_parent_dir_var, self._browse_output_parent_dir, optional=True)
+        self._path_row(frame, 3, "Modded output folder", self.output_dir_var, self._browse_output_dir, optional=True)
+        self._path_row(frame, 4, "Backup folder", self.backup_dir_var, self._browse_backup_dir, optional=True)
+        self._path_row(frame, 5, "Patch log", self.log_path_var, self._browse_log_path, optional=True)
         return frame
 
     def _build_settings_section(self, parent: tk.Widget) -> ttk.LabelFrame:
@@ -504,6 +514,16 @@ class VF2PatcherGUI:
         path = filedialog.askdirectory(title="Select the modded output folder")
         if path:
             self.output_dir_var.set(path)
+            self.output_parent_dir_var.set(str(Path(path).resolve().parent))
+            self._save_current_paths()
+
+    def _browse_output_parent_dir(self) -> None:
+        path = filedialog.askdirectory(title="Select where to save the modified VF2 folder")
+        if path:
+            self.output_parent_dir_var.set(path)
+            self.output_dir_var.set("")
+            self.last_auto_output_dir = ""
+            self._auto_populate_output_dir()
             self._save_current_paths()
 
     def _browse_log_path(self) -> None:
@@ -676,6 +696,7 @@ class VF2PatcherGUI:
                 game_dir=self.game_dir_var.get(),
                 manifest=self.manifest_var.get(),
                 output_dir=self.output_dir_var.get(),
+                output_parent_dir=self.output_parent_dir_var.get(),
                 backup_dir=self.backup_dir_var.get(),
                 log=self.log_path_var.get(),
                 dry_run=dry_run,
@@ -737,7 +758,9 @@ class VF2PatcherGUI:
                 if isinstance(raw_folder, str) and raw_folder.strip():
                     folder_name = raw_folder.strip()
         game_dir = Path(game_dir_text)
-        default_output = str((game_dir.parent / folder_name).resolve()) if folder_name else str(game_dir.resolve())
+        parent_text = clean_path_text(self.output_parent_dir_var.get())
+        parent_dir = Path(parent_text).resolve() if parent_text else game_dir.parent.resolve()
+        default_output = str((parent_dir / folder_name).resolve()) if folder_name else str(game_dir.resolve())
         current = clean_path_text(self.output_dir_var.get())
         if not current or current == self.last_auto_output_dir:
             self.output_dir_var.set(default_output)
@@ -747,6 +770,7 @@ class VF2PatcherGUI:
         try:
             save_saved_paths(
                 vanilla_game_dir=self.game_dir_var.get(),
+                modded_output_parent_dir=self.output_parent_dir_var.get(),
                 modded_output_dir=self.output_dir_var.get(),
             )
         except OSError as exc:

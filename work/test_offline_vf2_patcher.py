@@ -111,6 +111,15 @@ def real_shell_icon_resources():
 
 
 class OfflineVF2PatcherTests(unittest.TestCase):
+    def test_manifest_output_parent_dir_selects_named_modded_folder(self):
+        args = patcher_mod.argparse.Namespace(
+            output_dir=None,
+            output_parent_dir="C:\\VF2 Builds",
+        )
+        manifest = {"output": {"default_folder_name": "Virtual Families 2 - Modded"}}
+        output = patcher_mod.resolve_apply_output_dir(args, Path("C:\\Games\\VF2"), manifest)
+        self.assertEqual(output, Path("C:\\VF2 Builds\\Virtual Families 2 - Modded"))
+
     def run_patcher(self, *args, expect=0):
         result = subprocess.run(
             [sys.executable, str(PATCHER), *args],

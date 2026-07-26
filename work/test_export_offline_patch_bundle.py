@@ -96,6 +96,11 @@ def minimal_pe_bytes(
 
 
 class ExportOfflinePatchBundleTests(unittest.TestCase):
+    def test_b156_uses_stable_modded_folder_exe_and_save_names(self):
+        self.assertEqual(exporter.modded_output_folder_name("B156"), "Virtual Families 2 - Modded")
+        self.assertEqual(exporter.modded_exe_output_name("B156"), "Virtual Families 2 - Modded.exe")
+        self.assertEqual(exporter.modded_save_folder_name("B156"), "Virtual Families 2 - Modded")
+
     def test_decimal_build_label_is_preserved(self):
         self.assertEqual(
             exporter.infer_build_label(Path("VF2-Patcher-B155.5")),
