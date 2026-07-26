@@ -38,7 +38,7 @@ redraw, or recoloring was applied. The groups are:
 The patch build now stages these files under
 `OptionalVisualMods/Mobile Renovations` and records the exact source/target
 list in its build manifest. They are not copied into the live `Images` tree:
-the PC executable’s per-item room-image selector has not yet been proven, so
+the PC executable's room-background selector has not yet been proven, so
 activating these files without that binding would be an unsupported native
 render change. The optional Bathroom 2 plan remains to reuse the corrected
 Bathroom 1 files once a native second-bathroom render route is verified.
@@ -52,8 +52,14 @@ the PC executable can yet select these overlays at runtime.
 
 ## Remaining native work
 
-1. Recover the PC `EImage`/room-render selector and bind each `0xE1-0xEA`
-   state to the correct staged atlas/variant.
+1. Recover the PC map-tile compositing and renovation-state selector. The
+   inspected PC path renders the static house background through
+   `CWorldMap::Draw` from `Images/MapX##Y##.jpg` (16 512x512 tiles), not a
+   proven per-item `EImage` room selector. The mobile activation coordinates
+   above are condemned-area/content-map coordinates; they must not be treated
+   as pixel anchors until the corresponding PC map geometry is verified.
+   Bind each `0xE1-0xEA` state to the correct staged atlas/variant only after
+   its scale and tile anchor are measured against the stitched map.
 2. Verify purchase, save/load, switching/removal, and re-purchase behavior
    against the mobile inventory semantics.
 3. Add Bathroom 2 as a separate optional route only after its overlay anchor
