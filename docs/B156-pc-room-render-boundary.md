@@ -13,6 +13,12 @@ paths inspected for B156:
 - `CWorldMap::Draw` draws the four-by-four static house background loaded as
   `MapX##Y##.jpg`. The stitched 2048x2048 reference is preserved in the
   ignored file `outputs/B156-PC-house-map-stitch.png`.
+- `CWorldMap::LoadAssets` formats those sixteen filenames once and has no
+  inventory, upgrade, or renovation-state dependency. Its draw loop only
+  culls the tile rectangles and calls `ldwGameWindow::Draw`.
+- `CContentMap::ActivateCondemnedArea` changes the 256x256 content grid's
+  material, hotspot, and object fields. It does not select or replace a map
+  background image.
 - `theMainScene::DrawScene` invokes the world map, environment, and furniture
   manager in that order; no per-renovation image argument is visible at this
   call site.
@@ -31,8 +37,10 @@ pieces are recovered together.
 
 ## Next native target
 
-Trace the map-tile load/draw path and identify the PC room-state data that
-selects or replaces the affected `MapX##Y##.jpg` regions. Establish the atlas
-scale and anchor against the stitched map, then prove purchase, save/load,
-switching/removal, and second-bathroom behavior before any mobile atlas is
-bound to live rendering.
+Add a guarded map-variant path only after establishing the atlas scale and
+anchor against the stitched map. The native build currently has no existing
+room-state image selector: a safe implementation will need to introduce one,
+choose the active variant from persisted renovation state, and preserve the
+stock tile path when the optional patch is disabled. Then prove purchase,
+save/load, switching/removal, and second-bathroom behavior before any mobile
+atlas is bound to live rendering.
