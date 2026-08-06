@@ -9478,10 +9478,15 @@ extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
     return index < 0 ? -1 : kVF2OutfitStoreIconImageBase + index;
 }}
 
-static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
+static int VF2VisibleSpecialUpgradeIconSourceItem(int itemId) {{
     // Post-B153 cheats reuse the trophy descriptor so adding a row never
     // shifts villager-body or Holiday Ornament image IDs.
     if (itemId >= 0x12E && itemId <= 0x13B) itemId = 0x124;
+    return itemId;
+}}
+
+static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
+    itemId = VF2VisibleSpecialUpgradeIconSourceItem(itemId);
     int index = itemId - kVF2VisibleSpecialUpgradeFirstItem;
     return index < 0 || index >= kVF2VisibleSpecialUpgradeCount ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -9885,7 +9890,9 @@ extern "C" void __cdecl VF2DrawVisibleSpecialUpgradeIcon(theGraphicsManager* gra
         return;
     }}
 
-    int frame = item - 0x117;
+    int sourceItem = item;
+    if (sourceItem >= 0x12E && sourceItem <= 0x13B) sourceItem = 0x124;
+    int frame = sourceItem - 0x117;
     if (frame < 0 || frame >= {len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)}) {{
         return;
     }}
@@ -10240,6 +10247,7 @@ public:
     int const CollectionCount(ECarrying item, bool common, bool uncommon, bool rare) const;
     int const CollectionCountWithHolidayOrnaments(ECarrying item, bool common, bool uncommon, bool rare) const;
     void ResetCollection();
+    void SpawnSockInHouse(int count);
     void SpawnTrashInHouse(int count);
     void SpawnWeedsInYard(int count);
     void RemoveAll(ECarrying carrying);
@@ -11489,6 +11497,7 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         );
         break;
     case 0x133:
+        CollectableItem.SpawnSockInHouse(30);
         VF2SetSockPileCount(30);
         break;
     case 0x134:

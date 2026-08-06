@@ -2994,7 +2994,9 @@
   `1`, `5`, `10`, `15`, `25`, and `30`. Counts above 30 use the same last
   frame, so 30 is the exact smallest value that visually maxes the pile.
 - Cheat Upgrades `0x133` and `0x134` set the count to 30 and 0 respectively,
-  then use the existing common `SaveCurrentGame` path.
+  then use the existing common `SaveCurrentGame` path. Max now also calls the
+  native bounded `CCollectableItem::SpawnSockInHouse(30)` route so the maximum
+  available socks are spawned instead of only changing the decal counter.
 - The full 213-test suite passes with one intentional skip. Compiled helper
   readback confirms both writes and the shared save call. The later combined
   B156 link uses the installed Visual Studio Community x86 ATL library and
