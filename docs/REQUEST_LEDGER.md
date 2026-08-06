@@ -72,7 +72,7 @@ dormant hook, or successful link is not proof that a feature is finished.
 | Trophy icon for Complete all collections and future cheats | Current rows source + linked build validated | Complete all collections 0x127 and Complete all Achievements 0x12E use the self-contained trophy descriptor. New future cheat rows should alias that descriptor unless given a dedicated asset. |
 | Restore F5 debugger selector and native editors | B154 automated + user live confirmed | F5 opens without the prior house-load crash. F4/F5/F6/F7 and Up/Down internal key maps pass all 16 linked layouts; specialized editor edge-case QA remains. |
 | Light editor: edit/place/remove sources | Core editor user-confirmed / hardening pending | Native add/delete/save/type-cycle/mouse-drag routes work in game; B154 corrects + and - direction. Persistence/export, cancel/reset, fault handling, and patch-off parity still need narrow QA. |
-| Recreate dummied debug tools | Needs source audit | Behavior/Content Map editors are absent in checked binaries; replacements require verified engine contracts. |
+| Recreate dummied debug tools | Source audit complete; no native route found | `docs/mobile-debug-editor-check.md` records the checked mobile ABIs and desktop objects: no `BehaviorEditor`/`ContentMapEditor` implementation or usable class methods were found. No replacement editor is added without a recovered native contract. |
 
 ## Behaviors and variations
 
