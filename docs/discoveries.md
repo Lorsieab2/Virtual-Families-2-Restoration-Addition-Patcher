@@ -3701,3 +3701,26 @@
   `cheat_upgrades_holiday_ornaments` output is a stale partial-matrix remnant
   without `.vf2beh`. The current fully enabled layout itself passes the linked
   Holiday positive check.
+
+## 2026-08-06 - Patio and Picnic readiness persistence boundary
+
+- The desktop port's Patio `0x56` and Picnic `0x55` readiness states remain
+  external guarded timers. They use `CGameTime::Seconds()` and the recovered
+  240-game-second duration, but they are not part of a native component
+  `SSaveState` record.
+- The recovered `theGameState::Load(int)` path loads `0x25B18` bytes into a
+  temporary `theGameData` object and copies them to `theGameState+0x08`.
+  `theGameState::Save(int)` serializes the same `0x25B18`-byte span. This is
+  the only proven fixed-size game-state save route in the checked desktop
+  evidence.
+- The nearby state offsets are not a safe arbitrary extension: `+0x25B1C` is
+  used by the night state and `+0x25B1D` is used by the desktop Health Plan
+  price route. `+0x25B1E` and `+0x25B1F` have no current disassembly references,
+  but they have no version marker or independently proven field ownership and
+  sit at the end of the copied region next to the final villager record tail.
+- No native-compatible way to encode both active states and their deadlines,
+  validate old saves, and rehydrate the external pointers/timers after
+  `LoadCurrentGame` was proven. Therefore no persistence patch is shipped;
+  the source remains fail-closed until a safe ABI or explicitly versioned
+  sidecar is evidenced. This does not change the separate B157 room-overlay
+  renderer or its exact 1:1 image placement.
