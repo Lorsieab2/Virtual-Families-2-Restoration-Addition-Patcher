@@ -127,6 +127,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         ):
             with self.subTest(setting_id=setting_id):
                 self.assertEqual(settings_by_id[setting_id]["category"], "optional")
+        cheat_description = settings_by_id["cheat_upgrades"]["description"]
+        self.assertIn("0xE1-0xEA", cheat_description)
+        self.assertIn("rebuilds the native content map", cheat_description)
 
     def run_exporter(self, *args):
         result = subprocess.run(
