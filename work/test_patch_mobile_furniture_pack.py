@@ -72,6 +72,97 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         )
         self.assertFalse(any("Invisible" in row[0] for row in mobile_rows))
 
+    def _build_mobile_route_manifest(self):
+        evidence_items = []
+        for name, _donor, _list_name, path in patcher.ITEMS:
+            data = patcher.MOBILE_DATA_BY_PATH[path]
+            if data.get("mobile_row") is None:
+                continue
+            evidence_items.append({
+                "item_id": hex(data["mobile_item_id"]),
+                "name": name,
+                "filename": Path(path).name + ".fmap",
+                "runtime_status": (
+                    "rendered-only pending a proven desktop behavior route"
+                ),
+            })
+        manifest = {
+            "MobileFurnitureBehaviorEvidence": {
+                "items": evidence_items,
+            },
+        }
+        validators = (
+            patcher.validate_mobile_chaise_pc_fmaps,
+            patcher.validate_mobile_patio_umbrella_pc_fmap,
+            patcher.validate_mobile_patio_table_pc_fmap,
+            patcher.validate_mobile_picnic_table_pc_fmap,
+            patcher.validate_mobile_birthday_cake_pc_fmap,
+            patcher.validate_mobile_birthday_presents_pc_fmap,
+            patcher.validate_mobile_birthday_balloons_pc_fmap,
+            patcher.validate_mobile_birthday_banner_pc_fmap,
+            patcher.validate_mobile_group_holiday_pc_fmaps,
+            patcher.validate_mobile_xmas_stocking_pc_fmaps,
+            patcher.validate_mobile_decorative_only_fmaps,
+        )
+        for validator in validators:
+            validator(manifest)
+        return manifest
+
+    def test_mobile_furniture_route_partition_is_exhaustive_and_disjoint(self):
+        manifest = self._build_mobile_route_manifest()
+        patcher.validate_mobile_furniture_route_classification(manifest)
+        contract = manifest["MobileFurnitureRouteClassification"]
+        self.assertEqual(contract["mobile_item_count"], 63)
+        self.assertEqual(
+            contract["partition_counts"],
+            {
+                "implemented_behavior": 34,
+                "decorative_only": 5,
+                "rendered_only_unproven": 24,
+            },
+        )
+        expected_implemented = [
+            item_id
+            for spec in patcher.MOBILE_FURNITURE_IMPLEMENTED_ROUTE_SPECS
+            for item_id in spec["item_ids"]
+        ]
+        expected_implemented.sort()
+        self.assertEqual(
+            [
+                int(record["item_id"], 0)
+                for record in contract["records"]
+                if record["classification"] == "implemented_behavior"
+            ],
+            expected_implemented,
+        )
+        self.assertEqual(
+            [
+                int(record["item_id"], 0)
+                for record in contract["records"]
+                if record["classification"] == "decorative_only"
+            ],
+            [spec["item_id"] for spec in patcher.MOBILE_DECORATIVE_ONLY_FMAP_SPECS.values()],
+        )
+        self.assertEqual(
+            len({record["item_id"] for record in contract["records"]}),
+            63,
+        )
+
+    def test_mobile_furniture_route_partition_rejects_duplicate_route_id(self):
+        manifest = self._build_mobile_route_manifest()
+        records = manifest["MobileChaisePCFmaps"]["records"]
+        records[1]["item_id"] = records[0]["item_id"]
+        with self.assertRaisesRegex(RuntimeError, "duplicate item IDs"):
+            patcher.validate_mobile_furniture_route_classification(manifest)
+
+    def test_mobile_furniture_route_partition_rejects_unsupported_advertisement(self):
+        manifest = self._build_mobile_route_manifest()
+        manifest["MobileFurnitureBehaviorEvidence"]["items"][0]["route"] = (
+            "unsupported_route"
+        )
+        with self.assertRaisesRegex(RuntimeError, "advertises unsupported route"):
+            patcher.validate_mobile_furniture_route_classification(manifest)
+
 
     def test_mobile_chaise_pc_fmaps_have_exact_eobject_and_peep_slot_payloads(self):
         expected_hashes = {

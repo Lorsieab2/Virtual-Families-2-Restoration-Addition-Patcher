@@ -771,6 +771,69 @@ MOBILE_DECORATIVE_ONLY_FMAP_SPECS = {
         "hotspot": 0x61,
     },
 }
+MOBILE_FURNITURE_IMPLEMENTED_ROUTE_SPECS = (
+    {
+        "route": "chaise",
+        "manifest_key": "MobileChaisePCFmaps",
+        "item_ids": MOBILE_CHAISE_ITEM_IDS,
+    },
+    {
+        "route": "patio_umbrella",
+        "manifest_key": "MobilePatioUmbrellaPCFmap",
+        "item_ids": (MOBILE_PATIO_UMBRELLA_ITEM_ID,),
+    },
+    {
+        "route": "patio_table",
+        "manifest_key": "MobilePatioTablePCFmap",
+        "item_ids": (MOBILE_PATIO_TABLE_ITEM_ID,),
+    },
+    {
+        "route": "picnic_table",
+        "manifest_key": "MobilePicnicTablePCFmap",
+        "item_ids": (MOBILE_PICNIC_TABLE_ITEM_ID,),
+    },
+    {
+        "route": "birthday_cake",
+        "manifest_key": "MobileBirthdayCakePCFmap",
+        "item_ids": (MOBILE_BIRTHDAY_CAKE_ITEM_ID,),
+    },
+    {
+        "route": "birthday_presents",
+        "manifest_key": "MobileBirthdayPresentsPCFmap",
+        "item_ids": (MOBILE_BIRTHDAY_PRESENTS_ITEM_ID,),
+    },
+    {
+        "route": "birthday_balloons",
+        "manifest_key": "MobileBirthdayBalloonsPCFmap",
+        "item_ids": (MOBILE_BIRTHDAY_BALLOONS_ITEM_ID,),
+    },
+    {
+        "route": "birthday_banner",
+        "manifest_key": "MobileBirthdayBannerPCFmap",
+        "item_ids": (MOBILE_BIRTHDAY_BANNER_ITEM_ID,),
+    },
+    {
+        "route": "holiday_group_objects",
+        "manifest_key": "MobileGroupHolidayPCFmaps",
+        "item_ids": (
+            MOBILE_HOLIDAY_CANDLES_ITEM_ID,
+            MOBILE_DREIDEL_ITEM_ID,
+            MOBILE_EGGNOG_ITEM_ID,
+            MOBILE_MENORAH_ITEM_ID,
+            MOBILE_SANTA_COOKIE_PLATE_ITEM_ID,
+            *(spec["item_id"] for spec in MOBILE_XMAS_TREE_PC_SPECS.values()),
+            *(spec["item_id"] for spec in MOBILE_XMAS_KNICKKNACK_PC_SPECS.values()),
+            *(spec["item_id"] for spec in MOBILE_HOUSE_XMAS_DECOR_PC_SPECS.values()),
+        ),
+    },
+    {
+        "route": "holiday_stockings",
+        "manifest_key": "MobileXmasStockingsPCFmaps",
+        "item_ids": tuple(
+            spec["item_id"] for spec in MOBILE_XMAS_STOCKING_PC_SPECS.values()
+        ),
+    },
+)
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
 CHEAT_UPGRADE_ITEMS = [
     {
@@ -16772,6 +16835,194 @@ def validate_mobile_decorative_only_fmaps(manifest):
     }
 
 
+def _parse_mobile_route_item_id(value, context):
+    try:
+        item_id = value if isinstance(value, int) else int(str(value), 0)
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError(f"{context} has an invalid item ID: {value!r}") from exc
+    if not 0x2AA <= item_id <= 0x2E8:
+        raise RuntimeError(f"{context} has out-of-scope item ID {item_id:#x}")
+    return item_id
+
+
+def _manifest_route_item_ids(entry, context):
+    if not isinstance(entry, dict):
+        raise RuntimeError(f"{context} evidence is not an object")
+    records = entry.get("records")
+    if records is None:
+        records = [entry]
+    if not isinstance(records, list) or not records:
+        raise RuntimeError(f"{context} evidence has no records")
+    item_ids = [
+        _parse_mobile_route_item_id(
+            record.get("item_id"),
+            f"{context} record {index}",
+        )
+        for index, record in enumerate(records)
+        if isinstance(record, dict)
+    ]
+    if len(item_ids) != len(records):
+        raise RuntimeError(f"{context} contains a non-object record")
+    if len(item_ids) != len(set(item_ids)):
+        raise RuntimeError(f"{context} contains duplicate item IDs")
+    return item_ids
+
+
+def validate_mobile_furniture_route_classification(manifest):
+    """Prove that every genuine mobile furniture row has one safe disposition."""
+    evidence = manifest.get("MobileFurnitureBehaviorEvidence")
+    if not isinstance(evidence, dict):
+        raise RuntimeError("Mobile furniture route evidence is missing")
+    evidence_records = evidence.get("items")
+    if not isinstance(evidence_records, list) or not evidence_records:
+        raise RuntimeError("Mobile furniture route evidence has no item records")
+    expected_ids = list(range(0x2AA, 0x2E9))
+    evidence_ids = [
+        _parse_mobile_route_item_id(
+            record.get("item_id"),
+            f"MobileFurnitureBehaviorEvidence record {index}",
+        )
+        for index, record in enumerate(evidence_records)
+        if isinstance(record, dict)
+    ]
+    if len(evidence_ids) != len(evidence_records):
+        raise RuntimeError("Mobile furniture route evidence contains a non-object record")
+    if evidence_ids != expected_ids:
+        raise RuntimeError(
+            "Mobile furniture route evidence must contain each ID 0x2AA-0x2E8 once"
+        )
+    if len(evidence_ids) != len(set(evidence_ids)):
+        raise RuntimeError("Mobile furniture route evidence contains duplicate item IDs")
+
+    allowed_routes = {
+        spec["route"] for spec in MOBILE_FURNITURE_IMPLEMENTED_ROUTE_SPECS
+    }
+    allowed_advertisements = allowed_routes | {
+        "implemented_behavior",
+        "decorative_only",
+        "rendered_only_unproven",
+    }
+    for index, record in enumerate(evidence_records):
+        for field in ("route", "behavior_route", "classification"):
+            advertised = record.get(field)
+            if advertised is not None and advertised not in allowed_advertisements:
+                raise RuntimeError(
+                    f"Mobile furniture evidence record {index} advertises unsupported "
+                    f"{field} {advertised!r}"
+                )
+
+    route_by_id = {}
+    route_records = []
+    for spec in MOBILE_FURNITURE_IMPLEMENTED_ROUTE_SPECS:
+        route = spec["route"]
+        manifest_key = spec["manifest_key"]
+        if manifest_key not in manifest:
+            raise RuntimeError(
+                f"Mobile furniture route {route} is missing {manifest_key} evidence"
+            )
+        entry = manifest[manifest_key]
+        if not str(entry.get("status", "")).startswith("validated"):
+            raise RuntimeError(
+                f"Mobile furniture route {route} does not have validated evidence"
+            )
+        actual_ids = _manifest_route_item_ids(entry, manifest_key)
+        expected_route_ids = list(spec["item_ids"])
+        if actual_ids != expected_route_ids:
+            raise RuntimeError(
+                f"Mobile furniture route {route} IDs drifted: "
+                f"expected {[hex(item_id) for item_id in expected_route_ids]}, "
+                f"found {[hex(item_id) for item_id in actual_ids]}"
+            )
+        for item_id in actual_ids:
+            if item_id in route_by_id:
+                raise RuntimeError(
+                    f"Mobile furniture item {item_id:#x} is assigned to multiple routes"
+                )
+            route_by_id[item_id] = route
+        route_records.append({
+            "route": route,
+            "manifest_key": manifest_key,
+            "item_ids": [hex(item_id) for item_id in actual_ids],
+        })
+
+    decorative_entry = manifest.get("MobileDecorativeOnlyFurniture")
+    if not isinstance(decorative_entry, dict):
+        raise RuntimeError("Mobile decorative-only route evidence is missing")
+    if not str(decorative_entry.get("status", "")).startswith("validated"):
+        raise RuntimeError("Mobile decorative-only route evidence is not validated")
+    decorative_ids = _manifest_route_item_ids(
+        decorative_entry,
+        "MobileDecorativeOnlyFurniture",
+    )
+    expected_decorative_ids = [
+        spec["item_id"] for spec in MOBILE_DECORATIVE_ONLY_FMAP_SPECS.values()
+    ]
+    if decorative_ids != expected_decorative_ids:
+        raise RuntimeError(
+            "Mobile decorative-only IDs drifted: "
+            f"expected {[hex(item_id) for item_id in expected_decorative_ids]}, "
+            f"found {[hex(item_id) for item_id in decorative_ids]}"
+        )
+    if set(route_by_id).intersection(decorative_ids):
+        raise RuntimeError("Mobile behavior and decorative-only route sets overlap")
+
+    rendered_only_ids = [
+        item_id
+        for item_id in expected_ids
+        if item_id not in route_by_id and item_id not in decorative_ids
+    ]
+    if len(route_by_id) + len(decorative_ids) + len(rendered_only_ids) != len(expected_ids):
+        raise RuntimeError("Mobile furniture route partition is not exhaustive")
+
+    evidence_by_id = dict(zip(evidence_ids, evidence_records))
+    records = []
+    for item_id in expected_ids:
+        evidence_record = evidence_by_id[item_id]
+        if item_id in route_by_id:
+            classification = "implemented_behavior"
+            route = route_by_id[item_id]
+            evidence_ref = next(
+                record["manifest_key"]
+                for record in route_records
+                if record["route"] == route
+            )
+        elif item_id in decorative_ids:
+            classification = "decorative_only"
+            route = None
+            evidence_ref = "MobileDecorativeOnlyFurniture"
+        else:
+            classification = "rendered_only_unproven"
+            route = None
+            evidence_ref = "MobileFurnitureBehaviorEvidence"
+            if evidence_record.get("runtime_status") != (
+                "rendered-only pending a proven desktop behavior route"
+            ):
+                raise RuntimeError(
+                    f"Mobile item {item_id:#x} advertises an unsupported runtime route"
+                )
+        records.append({
+            "item_id": hex(item_id),
+            "name": evidence_record["name"],
+            "filename": evidence_record["filename"],
+            "classification": classification,
+            "route": route,
+            "evidence": evidence_ref,
+        })
+
+    manifest["MobileFurnitureRouteClassification"] = {
+        "status": "validated exhaustive 63-row route partition",
+        "mobile_item_range": "0x2aa-0x2e8",
+        "mobile_item_count": len(expected_ids),
+        "partition_counts": {
+            "implemented_behavior": len(route_by_id),
+            "decorative_only": len(decorative_ids),
+            "rendered_only_unproven": len(rendered_only_ids),
+        },
+        "routes": route_records,
+        "records": records,
+    }
+
+
 def patch_mobile_furniture_behavior_dispatch(manifest):
     helper_path = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
     behavior_fallback_decls = ""
@@ -23737,6 +23988,7 @@ def main():
     validate_mobile_group_holiday_pc_fmaps(manifest)
     validate_mobile_xmas_stocking_pc_fmaps(manifest)
     validate_mobile_decorative_only_fmaps(manifest)
+    validate_mobile_furniture_route_classification(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)

@@ -163,6 +163,10 @@ must remain visible as Needs source audit; it must not be silently omitted.
   renovation variants, including 1:1 map overlap, camera movement, purchase,
   switching/removal, save/load, and patch-off behavior. The static renderer
   and native route implementation are complete; player confirmation remains.
+- [x] Add an exhaustive fail-closed static partition for all 63 genuine mobile
+  furniture rows: 34 validated behavior-map routes, 5 proven decorative-only
+  routes, and 24 explicitly rendered-only/unproven rows. Runtime behavior and
+  player confirmation remain separate gates.
 - [x] Add a default-off Cheat Upgrades route that removes owned native house
   renovations `0xE1-0xEA`, rebuilds the content map from the exact native load
   activation records, preserves other owned renovations, and saves. Live

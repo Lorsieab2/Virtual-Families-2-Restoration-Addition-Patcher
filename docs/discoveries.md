@@ -3743,3 +3743,21 @@
   toggle disabled. It does not implement twelve-child persistence; that still
   requires a versioned sidecar plus matched Family Tree, rollover, draw,
   hit-test, candidate-array, adoption, and save/reload routes.
+
+## 2026-08-06 - Exhaustive mobile furniture route partition
+
+- The genuine mobile furniture scope is exactly 63 rows, IDs `0x2AA-0x2E8`.
+  The patcher now requires that evidence to be ordered, complete, and unique
+  before it can classify any route.
+- Existing validated PC-safe behavior-map evidence covers 34 rows: Chaise
+  `0x2DE-0x2E1`, Patio/Picnic/Umbrella, Birthday Cake/ Presents/ Balloons/
+  Banner, and the validated Holiday groups. The five exact decorative-only
+  rows are Candy Cane `0x2AB`, Christmas Cookie `0x2AC`, Poinsettia `0x2BF`,
+  and Wreaths `0x2D4-0x2D5`.
+- The remaining 24 rows are explicitly classified
+  `rendered_only_unproven`; preserved source QAMFs do not advertise a desktop
+  behavior route. The validator rejects missing, duplicate, overlapping, or
+  unsupported route advertisements and records all 63 dispositions in
+  `MobileFurnitureRouteClassification`.
+- This is a static evidence partition only. It does not grant runtime
+  behavior to the 24 unresolved rows and does not replace player QA.
