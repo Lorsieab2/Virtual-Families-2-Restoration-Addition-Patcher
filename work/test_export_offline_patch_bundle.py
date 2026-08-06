@@ -741,6 +741,54 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertFalse((out / "payload" / "Images" / "Furniture" / "CandyCane.png").exists())
             self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_ornaments_collection"], 3)
 
+    def test_mobile_renovations_exe_overlay_is_exported_when_requested(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            vanilla = tmp_path / "Virtual Families 2.exe"
+            vanilla.write_bytes(minimal_pe_bytes())
+            patched_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
+            patched_exe.write_bytes(b"core executable")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            mobile_overlay = tmp_path / "Virtual Families 2 - Mobile Renovations.exe"
+            mobile_overlay.write_bytes(b"mobile renovations executable")
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+                "--name",
+                "B157",
+                "--vanilla-exe",
+                str(vanilla),
+                "--include-exe-replacement",
+                "--mobile-renovations-exe",
+                str(mobile_overlay),
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            overlay = next(
+                row
+                for row in manifest["asset_patches"]
+                if row["file_path"] == "Virtual Families 2.exe"
+                and row["requires"] == ["core_executable", "mobile_renovations"]
+            )
+            payload = out / overlay["source_path"]
+            self.assertEqual(payload.name, "Virtual Families 2 - Modded B157 - Mobile Room Renovations.exe")
+            self.assertEqual(payload.read_bytes(), mobile_overlay.read_bytes())
+            self.assertEqual(
+                manifest["source_build"]["mobile_renovations_exe"],
+                mobile_overlay.name,
+            )
+            self.assertIn("mobile_renovations", {row["id"] for row in manifest["settings"]})
+
     def test_exports_byte_patches_when_vanilla_exe_is_supplied(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
