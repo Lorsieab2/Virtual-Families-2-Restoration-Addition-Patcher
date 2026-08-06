@@ -3780,3 +3780,20 @@
 - The normal gate and the Behavior-Patches shared autonomous hook both pass
   the real patcher entry point. This remains static/link validation; no game
   launch, save access, or player runtime confirmation was performed.
+
+## 2026-08-06 - Gate B132 second-bathroom detours with Island Events
+
+- Player runtime testing reported a crash when entering the house and when
+  selecting the second-bathroom toilet-door area in the B157 mobile-renovation
+  build. A renderer-off diagnostic also crashed at house entry, so B157's room
+  image hook is not sufficient to explain the failure.
+- The generated manifest exposed an unsafe feature boundary: `IslandEvents`
+  was disabled, but `patch_second_bathroom_leaks()` still modified
+  `CEventTheWaterPressureSurge::ImpactGame` and `CVillager::NewBehavior`.
+  The native E6 purchase/load activation records are a separate route and must
+  remain intact.
+- `apply_second_bathroom_leaks()` now applies the B132 event and behavior
+  detours only when Island Events is enabled. Island-Events-off builds record
+  `disabled_with_island_events` and preserve native E6 activation. A new
+  renderer-off, no-B132 diagnostic links with this manifest boundary; runtime
+  confirmation and final root-cause attribution remain pending.

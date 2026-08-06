@@ -5158,6 +5158,23 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
+    def test_second_bathroom_leak_detours_stay_inside_island_events_gate(self):
+        old_island_events = patcher.ENABLE_ISLAND_EVENTS
+        try:
+            patcher.ENABLE_ISLAND_EVENTS = False
+            manifest = {}
+            patcher.apply_second_bathroom_leaks(manifest)
+            self.assertEqual(
+                manifest["SecondBathroomLeaks"]["status"],
+                "disabled_with_island_events",
+            )
+            self.assertEqual(
+                manifest["SecondBathroomLeaks"]["native_e6_activation"],
+                "preserved",
+            )
+        finally:
+            patcher.ENABLE_ISLAND_EVENTS = old_island_events
+
     def test_birthday_purchase_goal_ids_and_item_ids_are_exact(self):
         self.assertEqual(
             {

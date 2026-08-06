@@ -12995,6 +12995,23 @@ def patch_second_bathroom_leaks(manifest):
     }
 
 
+def apply_second_bathroom_leaks(manifest):
+    """Keep B132's event/behavior detours inside the Island Events overlay."""
+    if not ENABLE_ISLAND_EVENTS:
+        manifest["SecondBathroomLeaks"] = {
+            "status": "disabled_with_island_events",
+            "reason": (
+                "B132 modifies CEventTheWaterPressureSurge and "
+                "CVillager::NewBehavior; preserve native E6 purchase/load "
+                "activation without patching those objects when Island Events "
+                "is disabled."
+            ),
+            "native_e6_activation": "preserved",
+        }
+        return
+    patch_second_bathroom_leaks(manifest)
+
+
 def patch_graphics_manager(manifest):
     obj = CoffObject(PATCHED / "theGraphicsManager.obj")
     image_records = image_records_by_id()
@@ -24430,7 +24447,7 @@ def main():
             "added": [],
             "status": "disabled because the additive event object graft crashes the game",
         }
-    patch_second_bathroom_leaks(manifest)
+    apply_second_bathroom_leaks(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
         sync_original_villager_sprite_sheets(manifest)
         sync_holiday_body_runtime_frames(manifest)
