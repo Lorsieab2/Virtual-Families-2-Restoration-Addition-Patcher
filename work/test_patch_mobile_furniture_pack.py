@@ -1613,6 +1613,12 @@ class MobileRenovationArtTests(unittest.TestCase):
         })
         self.assertTrue(all(len(row["size"]) == 2 for row in curated))
 
+    def test_mobile_renovation_style_catalog_matches_pinned_contract(self):
+        validation = patcher.validate_mobile_renovation_style_catalog()
+        self.assertEqual(validation["status"], "passed")
+        self.assertEqual(validation["count"], 15)
+        self.assertEqual(validation["pc_item_range"], "0x13C-0x14A")
+
     def test_upright_mobile_renovation_art_is_local_and_staged_only(self):
         source = patcher.MOBILE_RENOVATION_ART_SOURCE_DIR
         self.assertEqual(source, patcher.ROOT / "work" / "assets" / "mobile_renovations")

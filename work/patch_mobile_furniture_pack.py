@@ -716,21 +716,21 @@ MOBILE_RENOVATION_PC_ITEM_IDS = tuple(
     for index in range(MOBILE_RENOVATION_IMAGE_COUNT)
 )
 MOBILE_RENOVATION_STYLE_CATALOG = (
-    {"room": "bathroom", "name": "Bathroom Remodel in Black", "file": "tp233_sw_bathroom_black.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Black", "long": "For a stunning, bold look, remodel the southwest bathroom with patterned wallpaper, ceramic flooring, and a new shower curtain!"},
-    {"room": "bathroom", "name": "Bathroom Remodel in Blue", "file": "tp233_sw_bathroom_blue_marble.png", "price": 0x3E8, "lock": 0, "short": "Bathroom Remodel in Blue", "long": "For a fresh, updated look, remodel the southwest bathroom with patterned wallpaper, marble flooring, and a new shower curtain!"},
-    {"room": "bathroom", "name": "Bathroom Remodel in Beige", "file": "tp234_sw_bathroom_brown.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Beige", "long": "For a fresh, updated look, remodel the southwest bathroom with new wallpaper, tile flooring, and a striped shower curtain!"},
-    {"room": "bathroom", "name": "Bathroom Remodel in Green", "file": "tp234_sw_bathroom_green.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Green", "long": "For a fresh, updated look, remodel the southwest bathroom with striped wallpaper, tile flooring, and a new shower curtain!"},
-    {"room": "bathroom", "name": "Bathroom Remodel in Pink", "file": "tp235_sw_bathroom_pink.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Pink", "long": "For a fresh, updated look, remodel the southwest bathroom with new wallpaper, tile flooring, and a striped shower curtain!"},
-    {"room": "kitchen", "name": "Kitchen Remodel in Beige", "file": "tp238_beige_kitchen.png", "price": 0x898, "lock": 4, "short": "Kitchen Remodel in Beige", "long": "Remodel the walls and floors with a fresh coat of paint and ceramic tile!"},
-    {"room": "workshop", "name": "Wood Paneled Workshop Remodel", "file": "tp238_beige_workshop.png", "price": 0x834, "lock": 3, "short": "Wood Paneled Workshop Remodel", "long": "Update the workshop with wood paneled walls and faux cork flooring!"},
-    {"room": "office", "name": "Office Remodel in Red", "file": "tp239_red_office.png", "price": 0xABE, "lock": 3, "short": "Office Remodel in Red", "long": "Remodel the office in red! Your family will enjoy bright red walls and chairs, with coordinating neutral desks, carpet and chairs!"},
-    {"room": "kitchen", "name": "Kitchen Remodel in Yellow", "file": "tp239_yellow_kitchen.png", "price": 0xDAC, "lock": 3, "short": "Kitchen Remodel in Yellow", "long": "Remodel the kitchen with a yellow gingham wallpaper and a bright, lemony ceramic tile!"},
-    {"room": "kitchen", "name": "Country Kitchen Remodel", "file": "tp240_country_kitchen.png", "price": 0x73A, "lock": 3, "short": "Country Kitchen Remodel", "long": "Remodel the walls and floors with wood and stone to create a charming country kitchen!"},
-    {"room": "office", "name": "Dark Office Remodel", "file": "tp240_dark_office.png", "price": 0x834, "lock": 3, "short": "Dark Office Remodel", "long": "Remodel the office with striking black-and-white tiled walls and coordinating neutral desks, carpet and chairs!"},
-    {"room": "office", "name": "Office Remodel in Green", "file": "tp241_green_office.png", "price": 0xAF0, "lock": 3, "short": "Office Remodel in Green", "long": "Remodel the office in a lush green color with coordinating walls, carpet and chairs!"},
-    {"room": "office", "name": "Modern Office Remodel", "file": "tp241_modern_office.png", "price": 0x834, "lock": 3, "short": "Modern Office Remodel", "long": "Remodel the office with white paneled walls, coordinating neutral desks, carpet and chairs!"},
-    {"room": "office", "name": "Office Remodel in Blue", "file": "tp242_blue_office.png", "price": 0x992, "lock": 3, "short": "Office Remodel in Blue", "long": "Remodel the office in a calming blue color with coordinating walls, carpet and chairs!"},
-    {"room": "workshop", "name": "Checkered Workshop Remodel", "file": "tp242_checkered_workshop.png", "price": 0x76C, "lock": 3, "short": "Checkered Workshop Remodel", "long": "Remodel the workshop to look just like workshops enjoyed by famous car collectors, complete with checkerboard floor!"},
+    {"room": "bathroom", "name": "Bathroom Remodel in Black", "mobile_item": 0x119, "file": "tp233_sw_bathroom_black.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Black", "long": "For a stunning, bold look, remodel the southwest bathroom with patterned wallpaper, ceramic flooring, and a new shower curtain!"},
+    {"room": "bathroom", "name": "Bathroom Remodel in Blue", "mobile_item": 0x118, "file": "tp233_sw_bathroom_blue_marble.png", "price": 0x3E8, "lock": 0, "short": "Bathroom Remodel in Blue", "long": "For a fresh, updated look, remodel the southwest bathroom with patterned wallpaper, marble flooring, and a new shower curtain!"},
+    {"room": "bathroom", "name": "Bathroom Remodel in Beige", "mobile_item": 0x11A, "file": "tp234_sw_bathroom_brown.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Beige", "long": "For a fresh, updated look, remodel the southwest bathroom with new wallpaper, tile flooring, and a striped shower curtain!"},
+    {"room": "bathroom", "name": "Bathroom Remodel in Green", "mobile_item": 0x11B, "file": "tp234_sw_bathroom_green.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Green", "long": "For a fresh, updated look, remodel the southwest bathroom with striped wallpaper, tile flooring, and a new shower curtain!"},
+    {"room": "bathroom", "name": "Bathroom Remodel in Pink", "mobile_item": 0x11C, "file": "tp235_sw_bathroom_pink.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Pink", "long": "For a fresh, updated look, remodel the southwest bathroom with new wallpaper, tile flooring, and a striped shower curtain!"},
+    {"room": "kitchen", "name": "Kitchen Remodel in Beige", "mobile_item": 0x11D, "file": "tp238_beige_kitchen.png", "price": 0x898, "lock": 4, "short": "Kitchen Remodel in Beige", "long": "Remodel the walls and floors with a fresh coat of paint and ceramic tile!"},
+    {"room": "workshop", "name": "Wood Paneled Workshop Remodel", "mobile_item": 0x125, "file": "tp238_beige_workshop.png", "price": 0x834, "lock": 3, "short": "Wood Paneled Workshop Remodel", "long": "Update the workshop with wood paneled walls and faux cork flooring!"},
+    {"room": "office", "name": "Office Remodel in Red", "mobile_item": 0x124, "file": "tp239_red_office.png", "price": 0xABE, "lock": 3, "short": "Office Remodel in Red", "long": "Remodel the office in red! Your family will enjoy bright red walls and chairs, with coordinating neutral desks, carpet and chairs!"},
+    {"room": "kitchen", "name": "Kitchen Remodel in Yellow", "mobile_item": 0x11F, "file": "tp239_yellow_kitchen.png", "price": 0xDAC, "lock": 3, "short": "Kitchen Remodel in Yellow", "long": "Remodel the kitchen with a yellow gingham wallpaper and a bright, lemony ceramic tile!"},
+    {"room": "kitchen", "name": "Country Kitchen Remodel", "mobile_item": 0x11E, "file": "tp240_country_kitchen.png", "price": 0x73A, "lock": 3, "short": "Country Kitchen Remodel", "long": "Remodel the walls and floors with wood and stone to create a charming country kitchen!"},
+    {"room": "office", "name": "Dark Office Remodel", "mobile_item": 0x121, "file": "tp240_dark_office.png", "price": 0x834, "lock": 3, "short": "Dark Office Remodel", "long": "Remodel the office with striking black-and-white tiled walls and coordinating neutral desks, carpet and chairs!"},
+    {"room": "office", "name": "Office Remodel in Green", "mobile_item": 0x122, "file": "tp241_green_office.png", "price": 0xAF0, "lock": 3, "short": "Office Remodel in Green", "long": "Remodel the office in a lush green color with coordinating walls, carpet and chairs!"},
+    {"room": "office", "name": "Modern Office Remodel", "mobile_item": 0x123, "file": "tp241_modern_office.png", "price": 0x834, "lock": 3, "short": "Modern Office Remodel", "long": "Remodel the office with white paneled walls, coordinating neutral desks, carpet and chairs!"},
+    {"room": "office", "name": "Office Remodel in Blue", "mobile_item": 0x120, "file": "tp242_blue_office.png", "price": 0x992, "lock": 3, "short": "Office Remodel in Blue", "long": "Remodel the office in a calming blue color with coordinating walls, carpet and chairs!"},
+    {"room": "workshop", "name": "Checkered Workshop Remodel", "mobile_item": 0x126, "file": "tp242_checkered_workshop.png", "price": 0x76C, "lock": 3, "short": "Checkered Workshop Remodel", "long": "Remodel the workshop to look just like workshops enjoyed by famous car collectors, complete with checkerboard floor!"},
 )
 if len(MOBILE_RENOVATION_STYLE_CATALOG) != MOBILE_RENOVATION_IMAGE_COUNT:
     raise RuntimeError("Mobile renovation style catalog/art count mismatch")
@@ -20409,11 +20409,46 @@ extern "C" void __cdecl VF2DrawMobileRenovations() {{
     }
 
 
+def validate_mobile_renovation_style_catalog():
+    """Fail closed if the generated PC catalog drifts from the pinned mobile table."""
+    try:
+        contract = json.loads(MOBILE_RENOVATION_ATLAS_CONTRACT.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Unable to read mobile renovation style catalog contract") from exc
+
+    rows = contract.get("pc_style_catalog")
+    if not isinstance(rows, list) or len(rows) != MOBILE_RENOVATION_IMAGE_COUNT:
+        raise RuntimeError("Mobile renovation style contract must contain exactly 15 rows")
+
+    for index, (style, row) in enumerate(zip(MOBILE_RENOVATION_STYLE_CATALOG, rows)):
+        expected = {
+            "pc_item": f"0x{MOBILE_RENOVATION_PC_ITEM_IDS[index]:X}",
+            "mobile_item": f"0x{style['mobile_item']:X}",
+            "room": style["room"],
+            "file": style["file"],
+            "price": style["price"],
+            "lock": style["lock"],
+        }
+        actual = {key: row.get(key) for key in expected}
+        if actual != expected:
+            raise RuntimeError(
+                f"Mobile renovation style catalog drifted at index {index}: "
+                f"expected {expected!r}, found {actual!r}"
+            )
+
+    return {
+        "status": "passed",
+        "count": MOBILE_RENOVATION_IMAGE_COUNT,
+        "pc_item_range": f"0x{MOBILE_RENOVATION_PC_ITEM_IDS[0]:X}-0x{MOBILE_RENOVATION_PC_ITEM_IDS[-1]:X}",
+    }
+
+
 def validate_mobile_renovation_renderer_contract(manifest):
     """Fail closed if the enabled overlay loses its 1:1 map contract."""
     renderer = manifest.get("mobile_renovation_renderer")
     if not isinstance(renderer, dict):
         raise RuntimeError("Missing mobile renovation renderer manifest")
+    style_catalog_validation = validate_mobile_renovation_style_catalog()
     expected_anchors = {room: list(origin) for room, origin in MOBILE_RENOVATION_ANCHORS.items()}
     if renderer.get("anchors") != expected_anchors:
         raise RuntimeError("Mobile renovation renderer anchors drifted")
@@ -20452,6 +20487,7 @@ def validate_mobile_renovation_renderer_contract(manifest):
         "scale": 1.0,
         "anchors": expected_anchors,
         "validated_image_count": MOBILE_RENOVATION_IMAGE_COUNT if ENABLE_MOBILE_RENOVATIONS else 0,
+        "style_catalog": style_catalog_validation,
     }
 
 
