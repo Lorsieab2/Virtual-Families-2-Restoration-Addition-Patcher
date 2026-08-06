@@ -38,12 +38,20 @@ camera transform, and renovation-state selector would risk covering furniture
 or villagers. B156 therefore keeps runtime copying disabled until those three
 pieces are recovered together.
 
+The native purchase and save-load state routes are a separate, proven layer:
+the PC `HandleUpgrade` and `theGameState::Load(int)` paths already carry the
+same ten mobile `0xE1-0xEA` condemned-area activations. The patcher now checks
+those routes against `data/vf2/mobile-renovation-atlas-contract.json` and
+fails closed on drift. This does not change the renderer or imply that the
+staged PNGs are selected in-game.
+
 ## Next native target
 
 Add a guarded map-variant path only after establishing the atlas scale and
 anchor against the stitched map. The native build currently has no existing
 room-state image selector: a safe implementation will need to introduce one,
 choose the active variant from persisted renovation state, and preserve the
-stock tile path when the optional patch is disabled. Then prove purchase,
-save/load, switching/removal, and second-bathroom behavior before any mobile
-atlas is bound to live rendering.
+stock tile path when the optional patch is disabled. Purchase and save/load
+state parity plus the Cheat Upgrades removal source route are now statically
+validated; live remove/rebuy/switch QA and second-bathroom behavior still need
+to be proven before any mobile atlas is bound to live rendering.

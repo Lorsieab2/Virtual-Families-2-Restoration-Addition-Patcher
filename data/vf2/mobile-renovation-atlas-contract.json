@@ -9,6 +9,19 @@
     "staged_target": "OptionalVisualMods/Mobile Renovations",
     "bathroom2": "Reuse corrected Bathroom 1 art only after a native second-bathroom render route is verified."
   },
+  "native_activation": [
+    {"item": "0xE1", "map_area": [16, 6], "materials": [0, 1], "hotspot": 61, "object": 51, "environment_prop": 61},
+    {"item": "0xE2", "map_area": [8, 7], "materials": [0, 1], "hotspot": 55, "object": 107, "environment_prop": 68},
+    {"item": "0xE3", "map_area": [10, 7], "materials": [0, 1], "hotspot": 52, "object": 108, "environment_prop": 69},
+    {"item": "0xE4", "map_area": [15, 7], "materials": [0, 1], "hotspot": 53, "object": 49, "environment_prop": 65},
+    {"item": "0xE5", "map_area": [14, 7], "materials": [0, 1], "hotspot": 59, "object": 105, "environment_prop": 66},
+    {"item": "0xE6", "map_area": [13, 7], "materials": [0, 1], "hotspot": 58, "object": 106, "environment_prop": 67},
+    {"item": "0xE7", "map_area": [12, 7], "materials": [0, 1], "hotspot": 57, "object": 48, "environment_prop": 64},
+    {"item": "0xE8", "map_area": [9, 7], "materials": [0, 1], "hotspot": 54, "object": 53, "environment_prop": 63},
+    {"item": "0xE9", "map_area": [11, 7], "materials": [0, 1], "hotspot": 56, "object": 52, "environment_prop": 62},
+    {"item": "0xEA", "map_area": [17, 6], "materials": [0, 1], "hotspot": 62, "object": 109, "environment_prop": 70}
+  ],
+  "native_load_order": ["0xE9", "0xE7", "0xE4", "0xE8", "0xE3", "0xE5", "0xE2", "0xE1", "0xEA", "0xE6"],
   "pc_render_target": {
     "renderer": "CWorldMap::Draw",
     "asset_pattern": "Images/MapX##Y##.jpg",

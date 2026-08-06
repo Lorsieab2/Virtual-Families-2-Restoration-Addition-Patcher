@@ -161,8 +161,11 @@ must remain visible as Needs source audit; it must not be silently omitted.
   second-bathroom repair routes.
 - Allow the Kitchen, Workshop, and Office to be renovated with their exclusive
   mobile renovation variants.
-- Make all house renovations and upgrades removable and purchasable again after
-  removal.
+- [x] Add a default-off Cheat Upgrades route that removes owned native house
+  renovations `0xE1-0xEA`, rebuilds the content map from the exact native load
+  activation records, preserves other owned renovations, and saves. Live
+  remove/rebuy/switch/save-load QA remains; mobile room-art compositing is a
+  separate evidence-gated task.
 - Continue B63 in-game validation after the confirmed save-load crash fix:
   click normal gameplay/furniture UI, open General Appliances, place the VF3
   TVs, and verify base TV behavior is unchanged.

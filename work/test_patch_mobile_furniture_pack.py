@@ -1554,11 +1554,44 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
 
 
 class MobileRenovationArtTests(unittest.TestCase):
+    def test_native_mobile_renovation_purchase_and_load_routes_match_contract(self):
+        manifest = {}
+        patcher.validate_native_mobile_renovation_contract(manifest)
+        contract = manifest["mobile_renovation_native_behavior"]
+        self.assertEqual(contract["status"], "validated_and_preserved")
+        self.assertEqual(contract["item_range"], "0xE1-0xEA")
+        self.assertEqual(len(contract["purchase_route"]["rows"]), 10)
+        self.assertEqual(len(contract["load_route"]["rows"]), 10)
+        self.assertEqual(
+            [row["item"] for row in contract["purchase_route"]["rows"]],
+            [f"0x{item:x}" for item in range(0xE1, 0xEB)],
+        )
+        self.assertEqual(
+            [row["item"] for row in contract["load_route"]["rows"]],
+            ["0xe9", "0xe7", "0xe4", "0xe8", "0xe3", "0xe5", "0xe2", "0xe1", "0xea", "0xe6"],
+        )
+        self.assertEqual(
+            [row["environment_prop"] for row in contract["purchase_route"]["rows"]],
+            ["0x3d", "0x44", "0x45", "0x41", "0x42", "0x43", "0x40", "0x3f", "0x3e", "0x46"],
+        )
+        self.assertEqual(contract["renderer"], "not changed; room-background selector/compositing remains unproven")
+        self.assertEqual(contract["reversible_removal"]["status"], "source_validated")
+        self.assertEqual(contract["reversible_removal"]["enabled_by"], "cheat_upgrades")
+        self.assertIn("ContentMap.Load", contract["reversible_removal"]["rebuild_route"])
+
     def test_mobile_renovation_atlas_contract_matches_staged_art(self):
         contract_path = patcher.MOBILE_RENOVATION_ATLAS_CONTRACT
         self.assertTrue(contract_path.is_file())
         contract = json.loads(contract_path.read_text(encoding="utf-8"))
         self.assertEqual(contract["native_item_range"], "0xE1-0xEA")
+        self.assertEqual(
+            [row["item"] for row in contract["native_activation"]],
+            [f"0x{item:X}" for item in range(0xE1, 0xEB)],
+        )
+        self.assertEqual(
+            contract["native_load_order"],
+            ["0xE9", "0xE7", "0xE4", "0xE8", "0xE3", "0xE5", "0xE2", "0xE1", "0xEA", "0xE6"],
+        )
         self.assertFalse(contract["runtime_policy"]["copy_into_pc_images"])
         self.assertEqual(contract["pc_render_target"]["renderer"], "CWorldMap::Draw")
         self.assertEqual(contract["pc_render_target"]["tile_size"], [512, 512])
@@ -4203,6 +4236,40 @@ class OutfitStoreMappingTests(unittest.TestCase):
                     self.assertIn("VF2DeactivateWorker(0x24, 0x25AFC)", source)
                     self.assertIn("((unsigned char*)&worker)[0x1BB84] = 0", source)
                     self.assertIn("gameState + 0x25CC4", source)
+                    self.assertIn("void Load();", source)
+                    self.assertIn("void ActivateCondemnedArea(", source)
+                    self.assertIn("extern CContentMap ContentMap;", source)
+                    self.assertIn("static void VF2ActivateNativeRenovation(int itemId)", source)
+                    self.assertIn("static void VF2RebuildOwnedRenovations()", source)
+                    self.assertIn("ContentMap.Load();", source)
+                    self.assertIn(
+                        "ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x0B, (CContentMap::EMaterial)7, false, true, (CContentMap::EHotSpot)0x38, (CContentMap::EObject)0x34);",
+                        source,
+                    )
+                    self.assertIn(
+                        "ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x11, (CContentMap::EMaterial)6, false, true, (CContentMap::EHotSpot)0x3E, (CContentMap::EObject)0x6D);",
+                        source,
+                    )
+                    self.assertIn(
+                        "if (itemId >= 0xE1 && itemId <= 0xEA)",
+                        source,
+                    )
+                    self.assertIn(
+                        "VF2RebuildOwnedRenovations();",
+                        source,
+                    )
+                    self.assertEqual(
+                        manifest["outfit_store_helpers"]["renovation_reversible"],
+                        {
+                            "enabled": enabled,
+                            "setting": "cheat_upgrades",
+                            "item_range": "0xE1-0xEA",
+                            "remove_route": "VF2RemoveOwnedUpgrade",
+                            "rebuild_route": "ContentMap.Load followed by the native ten-record activation table",
+                            "native_activation_source": "theGameState::Load",
+                            "visual_scope": "native PC content-map materials, hotspots, and objects only; mobile room-art compositing remains disabled",
+                        },
+                    )
                     self.assertEqual(
                         manifest["outfit_store_helpers"]["b150_cheat_upgrade_gate"]["enabled"],
                         enabled,

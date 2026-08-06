@@ -7282,6 +7282,301 @@ def sync_mobile_renovation_art_sources(manifest):
     }
 
 
+def _mobile_renovation_native_contract():
+    """Load the locally pinned mobile activation table used by B156."""
+    try:
+        contract = json.loads(
+            MOBILE_RENOVATION_ATLAS_CONTRACT.read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"Unable to read mobile renovation contract: {MOBILE_RENOVATION_ATLAS_CONTRACT}"
+        ) from exc
+
+    rows = contract.get("native_activation")
+    if not isinstance(rows, list) or len(rows) != 10:
+        raise RuntimeError("Mobile renovation native activation table must contain exactly 10 rows")
+    normalized = []
+    seen = set()
+    for row in rows:
+        if not isinstance(row, dict):
+            raise RuntimeError("Mobile renovation native activation row is not an object")
+        try:
+            item = int(row["item"], 0) if isinstance(row["item"], str) else int(row["item"])
+            map_area = tuple(int(value) for value in row["map_area"])
+            materials = tuple(int(value) for value in row["materials"])
+            hotspot = int(row["hotspot"])
+            object_id = int(row["object"])
+            environment_prop = int(row["environment_prop"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(f"Malformed mobile renovation native activation row: {row!r}") from exc
+        if item in seen or len(map_area) != 2 or len(materials) != 2:
+            raise RuntimeError(f"Malformed or duplicate mobile renovation item row: {row!r}")
+        if not 0xE1 <= item <= 0xEA:
+            raise RuntimeError(f"Mobile renovation item outside 0xE1-0xEA: {item:#x}")
+        seen.add(item)
+        normalized.append({
+            "item": item,
+            "map_area": map_area,
+            "materials": materials,
+            "hotspot": hotspot,
+            "object": object_id,
+            "environment_prop": environment_prop,
+        })
+    if seen != set(range(0xE1, 0xEB)):
+        raise RuntimeError("Mobile renovation native activation table does not cover 0xE1-0xEA")
+    load_order = contract.get("native_load_order")
+    if not isinstance(load_order, list) or len(load_order) != len(normalized):
+        raise RuntimeError("Mobile renovation native load order must contain all 10 items")
+    try:
+        normalized_order = [
+            int(value, 0) if isinstance(value, str) else int(value)
+            for value in load_order
+        ]
+    except (TypeError, ValueError) as exc:
+        raise RuntimeError("Malformed mobile renovation native load order") from exc
+    if normalized_order != [0xE9, 0xE7, 0xE4, 0xE8, 0xE3, 0xE5, 0xE2, 0xE1, 0xEA, 0xE6]:
+        raise RuntimeError("Mobile renovation native load order drifted from the mobile evidence")
+    return normalized, normalized_order
+
+
+def _coff_relocation_target_name(obj, section, vaddr):
+    for index in range(section.nreloc):
+        reloc_off = section.reloc_ptr + index * 10
+        reloc_vaddr, symbol_index, _relocation_type = struct.unpack_from(
+            "<IIH", obj.buf, reloc_off
+        )
+        if reloc_vaddr == vaddr:
+            return obj.symbol_by_index[symbol_index].name
+    return None
+
+
+def _mobile_renovation_push_sequence(row):
+    """Return the PC stack bytes for ActivateCondemnedArea's six arguments."""
+    x, y = row["map_area"]
+    material, replacement_material = row["materials"]
+    return bytes(
+        [
+            0x6A, row["object"],
+            0x6A, row["hotspot"],
+            0x6A, replacement_material,
+            0x6A, material,
+            0x6A, y,
+            0x6A, x,
+        ]
+    )
+
+
+def _mobile_renovation_load_push_sequence(row):
+    """Return the PC load-path stack bytes for the activation call."""
+    return _mobile_renovation_push_sequence(row)
+
+
+def validate_native_mobile_renovation_contract(manifest):
+    """Prove the PC stock renovation purchase/load routes match mobile 1.7.16.
+
+    The PC executable already owns the native store and save/load paths. This
+    validator binds those existing routes to the locally pinned mobile table;
+    it intentionally does not claim the unresolved room-background renderer.
+    The separate Cheat Upgrades helper owns the reversible removal route.
+    """
+    rows, expected_load_order = _mobile_renovation_native_contract()
+    errors = []
+    activation_name = (
+        "?ActivateCondemnedArea@CContentMap@@QAEXW4EMaterial@1@0_N1W4EHotSpot@1@W4EObject@1@@Z"
+    )
+    have_upgrade_name = "?HaveUpgrade@CInventoryManager@@QAE_NW4EInventoryItem@@@Z"
+    set_prop_name = "?SetProp@CEnvironment@@QAEXW4EPropEnum@@@Z"
+
+    store_obj = CoffObject(PATCHED / "ScrollingStoreScene.obj")
+    store_symbol = store_obj.symbol("?HandleUpgrade@CScrollingStoreScene@@AAEXXZ")
+    store_section = store_obj.section(store_symbol.section)
+    store_data = bytes(
+        store_obj.buf[
+            store_section.raw_ptr + store_symbol.value :
+            store_section.raw_ptr + store_section.raw_size
+        ]
+    )
+    dispatch_prefix = bytes.fromhex(
+        "8B 8B 60 01 00 00 81 C1 1F FF FF FF 83 F9 35 "
+        "0F 87 0F 08 00 00 0F B6 81 00 00 00 00 FF 24 85"
+    )
+    if store_data[0x58 : 0x58 + len(dispatch_prefix)] != dispatch_prefix:
+        errors.append("HandleUpgrade renovation item dispatch prefix drifted")
+
+    try:
+        switch_bytes_symbol = store_obj.symbol(chr(36) + "LN92")
+        switch_table_symbol = store_obj.symbol(chr(36) + "LN99")
+    except KeyError:
+        errors.append("HandleUpgrade renovation switch table symbols are missing")
+        switch_bytes_symbol = switch_table_symbol = None
+
+    purchase_rows = []
+    if switch_bytes_symbol is not None:
+        selector_bytes = bytes(
+            store_obj.buf[
+                store_section.raw_ptr + switch_bytes_symbol.value :
+                store_section.raw_ptr + switch_bytes_symbol.value + 10
+            ]
+        )
+        if selector_bytes != bytes(range(10)):
+            errors.append(
+                "HandleUpgrade 0xE1-0xEA selectors drifted: "
+                + selector_bytes.hex(" ")
+            )
+        for row in rows:
+            item = row["item"]
+            selector = item - 0xE1
+            table_vaddr = switch_table_symbol.value + selector * 4
+            target_name = _coff_relocation_target_name(
+                store_obj, store_section, table_vaddr
+            )
+            if not target_name:
+                errors.append(f"HandleUpgrade switch target missing for {item:#x}")
+                continue
+            target = store_obj.symbol_by_name.get(target_name)
+            if target is None or target.section != store_symbol.section:
+                errors.append(f"HandleUpgrade switch target invalid for {item:#x}: {target_name}")
+                continue
+            push_sequence = _mobile_renovation_push_sequence(row)
+            activation_call = store_data.find(
+                push_sequence + b"\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00",
+                target.value,
+                min(len(store_data), target.value + 0x100),
+            )
+            if activation_call < 0:
+                errors.append(f"HandleUpgrade activation arguments drifted for {item:#x}")
+                continue
+            call_offset = activation_call + len(push_sequence) + 5
+            if _coff_relocation_target_name(store_obj, store_section, store_symbol.value + call_offset + 1) != activation_name:
+                errors.append(f"HandleUpgrade activation call target drifted for {item:#x}")
+                continue
+            prop_start = call_offset + 5
+            expected_prop_bytes = bytes([0x6A, row["environment_prop"]]) + b"\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00"
+            if store_data[prop_start : prop_start + len(expected_prop_bytes)] != expected_prop_bytes:
+                errors.append(f"HandleUpgrade environment prop drifted for {item:#x}")
+                continue
+            prop_call_offset = prop_start + 2 + 5
+            if _coff_relocation_target_name(store_obj, store_section, store_symbol.value + prop_call_offset + 1) != set_prop_name:
+                errors.append(f"HandleUpgrade SetProp call target drifted for {item:#x}")
+                continue
+            purchase_rows.append({
+                "item": hex(item),
+                "switch_target": target_name,
+                "activation_call": hex(call_offset),
+                "environment_prop": hex(row["environment_prop"]),
+            })
+
+    game_state_obj = CoffObject(PATCHED / "theGameState.obj")
+    load_symbol = game_state_obj.symbol("?Load@theGameState@@UAE_NH@Z")
+    load_section = game_state_obj.section(load_symbol.section)
+    load_data = bytes(
+        game_state_obj.buf[
+            load_section.raw_ptr + load_symbol.value :
+            load_section.raw_ptr + load_section.raw_size
+        ]
+    )
+    load_rows = []
+    load_positions = []
+    for item in expected_load_order:
+        row = next(row for row in rows if row["item"] == item)
+        item_push = b"\x68" + struct.pack("<I", item)
+        item_offset = load_data.find(item_push)
+        if item_offset < 0:
+            errors.append(f"theGameState::Load missing HaveUpgrade check for {item:#x}")
+            continue
+        have_call_offset = item_offset + 10
+        if _coff_relocation_target_name(game_state_obj, load_section, load_symbol.value + have_call_offset + 1) != have_upgrade_name:
+            errors.append(f"theGameState::Load HaveUpgrade target drifted for {item:#x}")
+            continue
+        activation_start = item_offset + 19
+        push_sequence = _mobile_renovation_load_push_sequence(row)
+        if load_data[activation_start : activation_start + len(push_sequence)] != push_sequence:
+            errors.append(f"theGameState::Load activation arguments drifted for {item:#x}")
+            continue
+        activation_call_offset = activation_start + len(push_sequence) + 5
+        if _coff_relocation_target_name(game_state_obj, load_section, load_symbol.value + activation_call_offset + 1) != activation_name:
+            errors.append(f"theGameState::Load activation call target drifted for {item:#x}")
+            continue
+        load_positions.append(item_offset)
+        load_rows.append({
+            "item": hex(item),
+            "have_upgrade_check": hex(item_offset),
+            "activation_call": hex(activation_call_offset),
+        })
+    if load_positions != sorted(load_positions):
+        errors.append("theGameState::Load renovation checks are not in the mobile order")
+
+    if len(purchase_rows) != len(rows):
+        errors.append(f"HandleUpgrade validated {len(purchase_rows)}/10 renovation routes")
+    if len(load_rows) != len(rows):
+        errors.append(f"theGameState::Load validated {len(load_rows)}/10 renovation routes")
+
+    helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
+    helper_text = helper_path.read_text(encoding="ascii") if helper_path.is_file() else ""
+    if not helper_text:
+        errors.append("missing generated renovation removal helper source")
+    else:
+        helper_normalized = re.sub(
+            r"\s+", " ",
+            helper_text
+            .replace("(CContentMap::EMaterial)", "")
+            .replace("(CContentMap::EHotSpot)", "")
+            .replace("(CContentMap::EObject)", ""),
+        )
+        if "static void VF2RebuildOwnedRenovations()" not in helper_text:
+            errors.append("renovation removal helper is missing its content-map rebuild route")
+        if "ContentMap.Load();" not in helper_text:
+            errors.append("renovation removal helper does not reload the base content map")
+        for row in rows:
+            item = row["item"]
+            x, y = row["map_area"]
+            hotspot = row["hotspot"]
+            object_id = row["object"]
+            expected_call = (
+                "ContentMap.ActivateCondemnedArea("
+                f"0x{x:02X}, {y}, false, true, "
+                f"0x{hotspot:02X}, 0x{object_id:02X});"
+            )
+            if helper_normalized.count(expected_call) != 1:
+                errors.append(
+                    f"renovation removal helper activation drifted for {item:#x}: "
+                    f"expected one {expected_call!r}"
+                )
+        if "if (itemId >= 0xE1 && itemId <= 0xEA)" not in helper_text:
+            errors.append("renovation removal helper is not gated to 0xE1-0xEA")
+        if "VF2RebuildOwnedRenovations();" not in helper_text:
+            errors.append("renovation removal helper does not rebuild after ReturnOne")
+
+    if errors:
+        raise RuntimeError("Native mobile renovation contract failed:\n- " + "\n- ".join(errors))
+
+    manifest["mobile_renovation_native_behavior"] = {
+        "status": "validated_and_preserved",
+        "mobile_reference": "Virtual Families 2 mobile 1.7.16",
+        "item_range": "0xE1-0xEA",
+        "purchase_route": {
+            "function": "?HandleUpgrade@CScrollingStoreScene@@AAEXXZ",
+            "dispatch": "item - 0xE1 selects the ten native renovation cases",
+            "rows": purchase_rows,
+        },
+        "load_route": {
+            "function": "?Load@theGameState@@UAE_NH@Z",
+            "checks_in_mobile_order": True,
+            "rows": load_rows,
+        },
+        "semantics": "PC stock condemned-area activation, purchase-time Environment::SetProp, and save-load ownership gates match the mobile activation table.",
+        "renderer": "not changed; room-background selector/compositing remains unproven",
+        "reversible_removal": {
+            "status": "source_validated",
+            "enabled_by": "cheat_upgrades",
+            "remove_route": "VF2RemoveOwnedUpgrade returns one owned renovation and rebuilds ContentMap",
+            "rebuild_route": "ContentMap.Load plus exact native ten-record activation table",
+            "runtime_art": "mobile room-art compositing remains disabled",
+        },
+    }
+
+
 def item_string_ids(idx):
     base = ORIG_STRING_ONE_PAST_MAX + idx * 2
     return base, base + 1
@@ -8168,7 +8463,18 @@ def write_outfit_store_helpers(manifest):
 enum EInventoryItem { eInventoryItemDummy = 0 };
 class CContentMap {
 public:
+    enum EMaterial { eMaterialDummy = 0 };
+    enum EHotSpot { eHotSpotDummy = 0 };
     enum EObject { eObjectDryer = 0x48 };
+    void Load();
+    void ActivateCondemnedArea(
+        EMaterial material,
+        EMaterial replacementMaterial,
+        bool replaceFloor,
+        bool replaceWall,
+        EHotSpot hotspot,
+        EObject object
+    );
 };
 struct ldwPoint { int x; int y; };
 struct sFurnitureInfo2 {
@@ -8185,6 +8491,7 @@ public:
     bool FindFurniture(CContentMap::EObject object, ldwPoint point,
         sFurnitureInfo2 &info, bool a, int b, bool c);
 };
+extern CContentMap ContentMap;
 """
     villager_type_preamble = (
         "" if "class CVillager" in existing_helper else "class CVillager {};\n"
@@ -8331,6 +8638,9 @@ static bool VF2B150UpgradeIsActive(int itemId) {{
     if (!kVF2EnableB150CheatUpgrades) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
     if (itemId == 0x33) return gameState && gameState[0x6C] != 0;
+    if (itemId >= 0xE1 && itemId <= 0xEA) {{
+        return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
+    }}
     if (itemId == 0x10A || itemId == 0x115 || itemId == 0x116 ||
         itemId == 0x128 || itemId == 0x129 || itemId == 0x12A) {{
         return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
@@ -8358,6 +8668,56 @@ extern "C" void __cdecl VF2ToggleB150PriceMode(int itemId) {{
     if (!disable) InventoryManager.TakeOne((EInventoryItem)itemId);
 }}
 
+static void VF2ActivateNativeRenovation(int itemId) {{
+    switch (itemId) {{
+    case 0xE9:
+        ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x0B, (CContentMap::EMaterial)7, false, true, (CContentMap::EHotSpot)0x38, (CContentMap::EObject)0x34);
+        break;
+    case 0xE7:
+        ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x0C, (CContentMap::EMaterial)7, false, true, (CContentMap::EHotSpot)0x39, (CContentMap::EObject)0x30);
+        break;
+    case 0xE4:
+        ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x0F, (CContentMap::EMaterial)7, false, true, (CContentMap::EHotSpot)0x35, (CContentMap::EObject)0x31);
+        break;
+    case 0xE8:
+        ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x09, (CContentMap::EMaterial)7, false, true, (CContentMap::EHotSpot)0x36, (CContentMap::EObject)0x35);
+        break;
+    case 0xE3:
+        ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x0A, (CContentMap::EMaterial)7, false, true, (CContentMap::EHotSpot)0x34, (CContentMap::EObject)0x6C);
+        break;
+    case 0xE5:
+        ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x0E, (CContentMap::EMaterial)7, false, true, (CContentMap::EHotSpot)0x3B, (CContentMap::EObject)0x69);
+        break;
+    case 0xE2:
+        ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x08, (CContentMap::EMaterial)7, false, true, (CContentMap::EHotSpot)0x37, (CContentMap::EObject)0x6B);
+        break;
+    case 0xE1:
+        ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x10, (CContentMap::EMaterial)6, false, true, (CContentMap::EHotSpot)0x3D, (CContentMap::EObject)0x33);
+        break;
+    case 0xEA:
+        ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x11, (CContentMap::EMaterial)6, false, true, (CContentMap::EHotSpot)0x3E, (CContentMap::EObject)0x6D);
+        break;
+    case 0xE6:
+        ContentMap.ActivateCondemnedArea((CContentMap::EMaterial)0x0D, (CContentMap::EMaterial)7, false, true, (CContentMap::EHotSpot)0x3A, (CContentMap::EObject)0x6A);
+        break;
+    default:
+        break;
+    }}
+}}
+
+static void VF2RebuildOwnedRenovations() {{
+    // This is the same base-map load followed by the exact ten activation
+    // records used by native theGameState::Load. It removes one renovation
+    // without leaving its material, hotspot, or object state in ContentMap,
+    // while preserving any other owned renovation.
+    ContentMap.Load();
+    for (int itemId = 0xE1; itemId <= 0xEA; ++itemId) {{
+        if (InventoryManager.HaveUpgrade((EInventoryItem)itemId)) {{
+            VF2ActivateNativeRenovation(itemId);
+        }}
+    }}
+}}
+
 extern "C" int __cdecl VF2ApplyPriceMultiplier(int price) {{
     if (!kVF2EnableB150CheatUpgrades) return price;
     int multiplier = 1;
@@ -8383,7 +8743,10 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
     if (!kVF2EnableB150CheatUpgrades) return false;
     if (!VF2B150UpgradeIsActive(itemId)) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
-    if (itemId == 0x33) {{
+    if (itemId >= 0xE1 && itemId <= 0xEA) {{
+        InventoryManager.ReturnOne((EInventoryItem)itemId);
+        VF2RebuildOwnedRenovations();
+    }} else if (itemId == 0x33) {{
         if (gameState) gameState[0x6C] = 0;
     }} else {{
         InventoryManager.ReturnOne((EInventoryItem)itemId);
@@ -8669,7 +9032,17 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
                 "Router offline/online malfunction state",
                 "repurchase Maid/Gardener to fire",
                 "repurchase Rockhound/Anti-Spam to remove",
+                "remove and repurchase owned house renovations 0xE1-0xEA",
             ],
+        },
+        "renovation_reversible": {
+            "enabled": ENABLE_CHEAT_UPGRADES,
+            "setting": "cheat_upgrades",
+            "item_range": "0xE1-0xEA",
+            "remove_route": "VF2RemoveOwnedUpgrade",
+            "rebuild_route": "ContentMap.Load followed by the native ten-record activation table",
+            "native_activation_source": "theGameState::Load",
+            "visual_scope": "native PC content-map materials, hotspots, and objects only; mobile room-art compositing remains disabled",
         },
         "purchase_route": {
             "male_stock_tray_item": "0x49",
@@ -9302,7 +9675,18 @@ enum EInventoryItem {
 
 class CContentMap {
 public:
+    enum EMaterial { eMaterialDummy = 0 };
+    enum EHotSpot { eHotSpotDummy = 0 };
     enum EObject { eObjectDryer = 0x48 };
+    void Load();
+    void ActivateCondemnedArea(
+        EMaterial material,
+        EMaterial replacementMaterial,
+        bool replaceFloor,
+        bool replaceWall,
+        EHotSpot hotspot,
+        EObject object
+    );
 };
 
 struct ldwPoint {
@@ -9399,6 +9783,7 @@ extern CFoodStore FoodStore;
 extern CMoney Money;
 extern CCollectableItem CollectableItem;
 extern CAchievement Achievement;
+extern CContentMap ContentMap;
 extern CEnvironment Environment;
 extern CTutorialTip TutorialTip;
 extern CPetManager PetManager;
@@ -22775,6 +23160,7 @@ def main():
     validate_vf3_tv_behavior_contract(manifest)
     validate_native_north_bathroom_malfunction_selection(manifest)
     validate_native_dryer_lint_fire_contract(manifest)
+    validate_native_mobile_renovation_contract(manifest)
     if ENABLE_BEHAVIOR_PATCHES:
         validate_invisible_hammock_behavior_contract(manifest)
     else:
