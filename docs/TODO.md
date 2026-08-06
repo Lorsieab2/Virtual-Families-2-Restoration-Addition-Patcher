@@ -167,6 +167,10 @@ must remain visible as Needs source audit; it must not be silently omitted.
   furniture rows: 34 validated behavior-map routes, 5 proven decorative-only
   routes, and 24 explicitly rendered-only/unproven rows. Runtime behavior and
   player confirmation remain separate gates.
+- [x] Cross-check all 34 behavior-routed rows against the generated manual
+  dispatcher, stock-first/false-fallthrough gate, applicable autonomous
+  candidates, and `.vf2beh` default-off byte. Validate both the normal
+  autonomous hook and the Behavior-Patches shared hook.
 - [x] Add a default-off Cheat Upgrades route that removes owned native house
   renovations `0xE1-0xEA`, rebuilds the content map from the exact native load
   activation records, preserves other owned renovations, and saves. Live

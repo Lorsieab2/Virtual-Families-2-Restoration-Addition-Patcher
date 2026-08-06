@@ -9,6 +9,7 @@ import re
 import shutil
 import struct
 import sys
+from collections import Counter
 from io import BytesIO
 from zipfile import ZipFile
 
@@ -832,6 +833,181 @@ MOBILE_FURNITURE_IMPLEMENTED_ROUTE_SPECS = (
         "item_ids": tuple(
             spec["item_id"] for spec in MOBILE_XMAS_STOCKING_PC_SPECS.values()
         ),
+    },
+)
+MOBILE_FURNITURE_MANUAL_BINDING_SPECS = (
+    {
+        "name": "chaise",
+        "item_ids": MOBILE_CHAISE_ITEM_IDS,
+        "handler": "VF2HandleMobileChaise",
+        "condition_marker": "VF2IsMobileChaise(candidate)",
+        "literal_ids": (),
+    },
+    {
+        "name": "patio_umbrella",
+        "item_ids": (MOBILE_PATIO_UMBRELLA_ITEM_ID,),
+        "handler": "VF2HandleMobilePatioUmbrella",
+        "literal_ids": (MOBILE_PATIO_UMBRELLA_ITEM_ID,),
+    },
+    {
+        "name": "patio_table",
+        "item_ids": (MOBILE_PATIO_TABLE_ITEM_ID,),
+        "handler": "VF2HandleMobilePatioTable",
+        "literal_ids": (MOBILE_PATIO_TABLE_ITEM_ID,),
+    },
+    {
+        "name": "picnic_table",
+        "item_ids": (MOBILE_PICNIC_TABLE_ITEM_ID,),
+        "handler": "VF2HandleMobilePicnicTable",
+        "literal_ids": (MOBILE_PICNIC_TABLE_ITEM_ID,),
+    },
+    {
+        "name": "birthday_cake",
+        "item_ids": (MOBILE_BIRTHDAY_CAKE_ITEM_ID,),
+        "handler": "VF2HandleMobileBirthdayCake",
+        "literal_ids": (MOBILE_BIRTHDAY_CAKE_ITEM_ID,),
+    },
+    {
+        "name": "birthday_presents",
+        "item_ids": (MOBILE_BIRTHDAY_PRESENTS_ITEM_ID,),
+        "handler": "VF2HandleMobileBirthdayPresents",
+        "literal_ids": (MOBILE_BIRTHDAY_PRESENTS_ITEM_ID,),
+    },
+    {
+        "name": "birthday_balloons",
+        "item_ids": (MOBILE_BIRTHDAY_BALLOONS_ITEM_ID,),
+        "handler": "VF2HandleMobileBirthdayBalloons",
+        "literal_ids": (MOBILE_BIRTHDAY_BALLOONS_ITEM_ID,),
+    },
+    {
+        "name": "birthday_banner",
+        "item_ids": (MOBILE_BIRTHDAY_BANNER_ITEM_ID,),
+        "handler": "VF2HandleMobileBirthdayBanner",
+        "literal_ids": (MOBILE_BIRTHDAY_BANNER_ITEM_ID,),
+    },
+    {
+        "name": "holiday_candles",
+        "item_ids": (MOBILE_HOLIDAY_CANDLES_ITEM_ID,),
+        "handler": "VF2HandleMobileHolidayCandles",
+        "literal_ids": (MOBILE_HOLIDAY_CANDLES_ITEM_ID,),
+    },
+    {
+        "name": "holiday_eggnog",
+        "item_ids": (MOBILE_EGGNOG_ITEM_ID,),
+        "handler": "VF2HandleMobileEggnog",
+        "literal_ids": (MOBILE_EGGNOG_ITEM_ID,),
+    },
+    {
+        "name": "holiday_cookie_plate",
+        "item_ids": (MOBILE_SANTA_COOKIE_PLATE_ITEM_ID,),
+        "handler": "VF2HandleMobileSantaCookiePlate",
+        "literal_ids": (MOBILE_SANTA_COOKIE_PLATE_ITEM_ID,),
+    },
+    {
+        "name": "holiday_knickknacks",
+        "item_ids": tuple(
+            spec["item_id"] for spec in MOBILE_XMAS_KNICKKNACK_PC_SPECS.values()
+        ),
+        "handler": "VF2HandleMobileXmasKnickknack",
+        "literal_ids": (0x2BD, 0x2C0, 0x2C2, 0x2C3, 0x2C5),
+        "range": (0x2B1, 0x2B5),
+    },
+    {
+        "name": "holiday_house_decor",
+        "item_ids": tuple(
+            spec["item_id"] for spec in MOBILE_HOUSE_XMAS_DECOR_PC_SPECS.values()
+        ),
+        "handler": "VF2HandleMobileHouseXmasDecor",
+        "literal_ids": (0x2C1, 0x2C4, 0x2C8, 0x2C9),
+    },
+    {
+        "name": "holiday_trees",
+        "item_ids": MOBILE_XMAS_TREE_ITEM_IDS,
+        "handler": "VF2HandleMobileXmasTreeGroup",
+        "literal_ids": MOBILE_XMAS_TREE_ITEM_IDS,
+    },
+    {
+        "name": "holiday_dreidel",
+        "item_ids": (MOBILE_DREIDEL_ITEM_ID,),
+        "handler": "VF2HandleMobileDreidelGroup",
+        "literal_ids": (MOBILE_DREIDEL_ITEM_ID,),
+    },
+    {
+        "name": "holiday_menorah",
+        "item_ids": (MOBILE_MENORAH_ITEM_ID,),
+        "handler": "VF2HandleMobileMenorahGroup",
+        "literal_ids": (MOBILE_MENORAH_ITEM_ID,),
+    },
+    {
+        "name": "holiday_stockings",
+        "item_ids": MOBILE_XMAS_STOCKING_ITEM_IDS,
+        "handler": "VF2HandleMobileXmasStockings",
+        "literal_ids": MOBILE_XMAS_STOCKING_ITEM_IDS,
+    },
+)
+MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = (
+    {
+        "mobile_id": 0x19B,
+        "object": MOBILE_HOLIDAY_CANDLES_OBJECT,
+        "weight": 2000,
+        "object_enum": "eObjectHolidayCandles",
+        "handler": "VF2HandleMobileHolidayCandles",
+    },
+    {
+        "mobile_id": 0x1A1,
+        "object": MOBILE_EGGNOG_OBJECT,
+        "weight": 2000,
+        "object_enum": "eObjectEggnog",
+        "handler": "VF2HandleMobileEggnog",
+    },
+    {
+        "mobile_id": 0x1A5,
+        "object": MOBILE_SANTA_COOKIE_PLATE_OBJECT,
+        "weight": 2000,
+        "object_enum": "eObjectSantaCookiePlate",
+        "handler": "VF2HandleMobileSantaCookiePlate",
+    },
+    {
+        "mobile_id": 0x1A4,
+        "object": MOBILE_XMAS_KNICKKNACK_OBJECT,
+        "weight": 2000,
+        "object_enum": "eObjectXmasKnickknack",
+        "handler": "VF2HandleMobileXmasKnickknack",
+    },
+    {
+        "mobile_id": 0x1A7,
+        "object": MOBILE_HOUSE_XMAS_DECOR_OBJECT,
+        "weight": 2000,
+        "object_enum": "eObjectHouseXmasDecor",
+        "handler": "VF2HandleMobileHouseXmasDecor",
+    },
+    {
+        "mobile_id": 0x1B4,
+        "object": MOBILE_PICNIC_TABLE_OBJECT,
+        "weight": 3000,
+        "object_enum": "eObjectPicnicTable",
+        "selector_marker": "VF2StartAutonomousPreparingPicnic",
+    },
+    {
+        "mobile_id": 0x1B5,
+        "object": MOBILE_PICNIC_TABLE_OBJECT,
+        "weight": 12000,
+        "object_enum": "eObjectPicnicTable",
+        "selector_marker": "VF2StartAutonomousEatAtPicnicTable",
+    },
+    {
+        "mobile_id": 0x1B6,
+        "object": MOBILE_PATIO_TABLE_OBJECT,
+        "weight": 3000,
+        "object_enum": "eObjectPatioTable",
+        "selector_marker": "VF2StartAutonomousPreparingDrinks",
+    },
+    {
+        "mobile_id": 0x1B7,
+        "object": MOBILE_PATIO_TABLE_OBJECT,
+        "weight": 12000,
+        "object_enum": "eObjectPatioTable",
+        "selector_marker": "VF2StartAutonomousDrinkAtPatioChair",
     },
 )
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
@@ -19916,6 +20092,335 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
     }
 
 
+def validate_mobile_furniture_runtime_bindings(manifest):
+    """Cross-check every classified behavior row against generated bindings."""
+    classification = manifest.get("MobileFurnitureRouteClassification")
+    if not isinstance(classification, dict):
+        raise RuntimeError("Mobile furniture route classification is missing")
+    classified_records = classification.get("records")
+    if not isinstance(classified_records, list):
+        raise RuntimeError("Mobile furniture route classification has no records")
+    implemented_ids = {
+        _parse_mobile_route_item_id(record.get("item_id"), "classified mobile item")
+        for record in classified_records
+        if record.get("classification") == "implemented_behavior"
+    }
+    if len(implemented_ids) != classification.get("partition_counts", {}).get(
+        "implemented_behavior"
+    ):
+        raise RuntimeError("Classified mobile behavior IDs are not unique")
+
+    helper_path = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
+    if not helper_path.is_file():
+        raise RuntimeError("Missing generated mobile furniture behavior helper")
+    helper_text = helper_path.read_text(encoding="ascii")
+    flag_declaration = (
+        "volatile unsigned char gVF2MobileFurnitureBehaviors = 0;"
+    )
+    if helper_text.count(flag_declaration) != 1:
+        raise RuntimeError("Mobile furniture behavior flag declaration drifted")
+
+    dispatcher_start = helper_text.find(
+        "bool const theMainScene::VF2HandleDropOnMobileFurniture"
+    )
+    if dispatcher_start < 0:
+        raise RuntimeError("Generated mobile furniture dispatcher is missing")
+    dispatcher = helper_text[dispatcher_start:]
+    stock_drop_markers = (
+        "if (HandleDropOnHotSpot(villager)) return true;",
+        "bool handled = HandleDropOnHotSpot(villager);",
+    )
+    stock_gate = "if (gVF2MobileFurnitureBehaviors == 0) return false;"
+    stock_drop_positions = [
+        dispatcher.find(marker)
+        for marker in stock_drop_markers
+        if dispatcher.find(marker) >= 0
+    ]
+    if len(stock_drop_positions) != 1:
+        raise RuntimeError("Mobile furniture dispatcher lost stock hotspot handling")
+    stock_drop_position = stock_drop_positions[0]
+    if dispatcher.find(stock_gate) < 0 or stock_drop_position > dispatcher.find(stock_gate):
+        raise RuntimeError("Mobile furniture dispatcher lost stock-first ordering")
+    if dispatcher.find(stock_gate) < 0 or not dispatcher.rstrip().endswith(
+        "return false;\n}"
+    ):
+        raise RuntimeError("Mobile furniture dispatcher lost gated false fallthrough")
+
+    literal_ids = {
+        int(value, 16)
+        for value in re.findall(r"candidate\s*==\s*0x([0-9A-Fa-f]+)", dispatcher)
+    }
+    range_ids = set()
+    for low, high in re.findall(
+        r"candidate\s*>=\s*0x([0-9A-Fa-f]+)\s*&&\s*candidate\s*<=\s*0x([0-9A-Fa-f]+)",
+        dispatcher,
+    ):
+        range_ids.update(range(int(low, 16), int(high, 16) + 1))
+    expected_manual_ids = {
+        item_id
+        for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS
+        for item_id in spec["item_ids"]
+    }
+    actual_manual_ids = set(literal_ids) | range_ids
+    chaise_spec = next(
+        spec
+        for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS
+        if spec["name"] == "chaise"
+    )
+    if dispatcher.count(chaise_spec["condition_marker"]) != 1:
+        raise RuntimeError("Mobile chaise manual binding drifted")
+    actual_manual_ids.update(chaise_spec["item_ids"])
+    if actual_manual_ids != expected_manual_ids:
+        raise RuntimeError(
+            "Manual mobile furniture bindings do not cover exactly the 34 "
+            f"implemented IDs: {[hex(item_id) for item_id in sorted(actual_manual_ids)]}"
+        )
+    expected_handlers = Counter(
+        spec["handler"] for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS
+    )
+    actual_handlers = Counter(
+        re.findall(r"return\s+(VF2HandleMobile\w+)\(villager\);", dispatcher)
+    )
+    if actual_handlers != expected_handlers:
+        raise RuntimeError(
+            f"Manual mobile furniture handler bindings drifted: {actual_handlers}"
+        )
+    for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS:
+        handler_position = dispatcher.find(
+            f"return {spec['handler']}(villager);"
+        )
+        if handler_position < 0:
+            raise RuntimeError(f"Missing manual handler: {spec['name']}")
+        for item_id in spec.get("literal_ids", ()):
+            marker = f"candidate == 0x{item_id:X}"
+            marker_position = dispatcher.find(marker)
+            if marker_position < 0 or not (
+                marker_position < handler_position < marker_position + 320
+            ):
+                raise RuntimeError(
+                    f"Manual literal binding drifted for {spec['name']}: {marker}"
+                )
+        if "range" in spec:
+            low, high = spec["range"]
+            marker = f"candidate >= 0x{low:X} && candidate <= 0x{high:X}"
+            marker_position = dispatcher.find(marker)
+            if marker_position < 0 or not (
+                marker_position < handler_position < marker_position + 320
+            ):
+                raise RuntimeError(
+                    f"Manual range binding drifted for {spec['name']}: {marker}"
+                )
+
+    behavior_contract = manifest.get("MobileFurnitureBehaviors")
+    if not isinstance(behavior_contract, dict):
+        raise RuntimeError("Mobile furniture behavior manifest is missing")
+    runtime_flag = behavior_contract.get("runtime_flag", {})
+    if runtime_flag.get("symbol") != MOBILE_FURNITURE_BEHAVIOR_FLAG_SYMBOL:
+        raise RuntimeError("Mobile furniture behavior flag symbol drifted")
+    if runtime_flag.get("default") != "00" or runtime_flag.get("size") != 1:
+        raise RuntimeError("Mobile furniture behavior flag is not default-off")
+    drop_hook = behavior_contract.get("drop_hook", {})
+    if not drop_hook.get("stock_first") or not drop_hook.get(
+        "stock_false_fallthrough_preserved"
+    ):
+        raise RuntimeError("Mobile furniture stock-first drop contract drifted")
+
+    families = behavior_contract.get("implemented_families")
+    if not isinstance(families, list) or not families:
+        raise RuntimeError("Mobile furniture implemented-family manifest is missing")
+    family_ids = []
+    for family_index, family in enumerate(families):
+        item_ids = [
+            _parse_mobile_route_item_id(
+                value,
+                f"mobile behavior family {family_index} item",
+            )
+            for value in family.get("item_ids", [])
+        ]
+        if not item_ids or len(item_ids) != len(set(item_ids)):
+            raise RuntimeError(
+                f"Mobile behavior family {family_index} has invalid or duplicate IDs"
+            )
+        family_ids.extend(item_ids)
+        if not (
+            family.get("manual_drop_only")
+            or family.get("manual_drop_supported")
+        ):
+            raise RuntimeError(
+                f"Mobile behavior family {family_index} has no manual binding"
+            )
+    if len(family_ids) != len(set(family_ids)) or set(family_ids) != expected_manual_ids:
+        raise RuntimeError(
+            "Mobile behavior families advertise an unsupported, missing, or duplicate ID"
+        )
+    decorative_ids = {
+        _parse_mobile_route_item_id(record["item_id"], "decorative mobile item")
+        for record in classified_records
+        if record.get("classification") == "decorative_only"
+    }
+    rendered_ids = {
+        _parse_mobile_route_item_id(record["item_id"], "rendered-only mobile item")
+        for record in classified_records
+        if record.get("classification") == "rendered_only_unproven"
+    }
+    if set(family_ids).intersection(decorative_ids | rendered_ids):
+        raise RuntimeError("Unsupported mobile rows entered implemented behavior families")
+
+    external_contract = manifest.get("MobileFurnitureExternalAutonomousSelection")
+    if not isinstance(external_contract, dict):
+        raise RuntimeError("Mobile external autonomous selector manifest is missing")
+    external_rows = external_contract.get("external_candidates")
+    if not isinstance(external_rows, list):
+        raise RuntimeError("Mobile external autonomous candidate list is missing")
+    actual_external = []
+    for index, row in enumerate(external_rows):
+        try:
+            mobile_id = int(str(row["mobile_id"]), 0)
+            object_id = int(str(row["object"]), 0)
+            weight_value = row.get("weight")
+            if weight_value is None:
+                weight_value = row["base_weight"]
+            weight = int(weight_value)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RuntimeError(
+                f"Mobile external autonomous row {index} is malformed"
+            ) from exc
+        actual_external.append((mobile_id, object_id, weight))
+    expected_external = [
+        (spec["mobile_id"], spec["object"], spec["weight"])
+        for spec in MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS
+    ]
+    if actual_external != expected_external:
+        raise RuntimeError(
+            f"Mobile external autonomous bindings drifted: {actual_external}"
+        )
+    if not external_contract.get("stock_conditional_distribution_preserved"):
+        raise RuntimeError("Mobile external selector lost stock distribution preservation")
+
+    selector_start = helper_text.find(
+        'extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous'
+    )
+    selector_end = helper_text.find(
+        "static bool VF2WeatherAllowsOutdoorFurniture", selector_start
+    )
+    if selector_start < 0 or selector_end < 0:
+        raise RuntimeError("Mobile external autonomous selector source is missing")
+    selector = helper_text[selector_start:selector_end]
+    selector_gate = selector.find(stock_gate)
+    selector_weights = selector.find("VF2GetMobileExternalWeights(villager)")
+    if selector_gate < 0 or selector_gate > selector_weights:
+        raise RuntimeError("Mobile autonomous selector lost its stock-off gate")
+    if "if (roll < stockWeight) return false;" not in selector:
+        raise RuntimeError("Mobile autonomous selector lost stock-first fallthrough")
+    if "if (externalWeight == 0) return false;" not in selector:
+        raise RuntimeError("Mobile autonomous selector lost empty-candidate fallthrough")
+    expected_object_enums = {
+        spec["object_enum"]
+        for spec in MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS
+    }
+    actual_object_enums = set(re.findall(r"eObject[A-Za-z0-9_]+", selector))
+    if actual_object_enums != expected_object_enums:
+        raise RuntimeError(
+            "Mobile autonomous selector object bindings drifted: "
+            f"{sorted(actual_object_enums)}"
+        )
+    for index in range(len(MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS)):
+        if selector.count(f"mobileWeights->weights[{index}]") != 1:
+            raise RuntimeError(
+                f"Mobile autonomous weight binding {index} drifted"
+            )
+    for spec in MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS:
+        if spec["object_enum"] not in selector:
+            raise RuntimeError(
+                f"Mobile autonomous object binding missing: {spec['object_enum']}"
+            )
+        marker = spec.get("handler") or spec.get("selector_marker")
+        if marker not in selector:
+            raise RuntimeError(f"Mobile autonomous handler binding missing: {marker}")
+
+    activation_kind = None
+    candidate_manifest = manifest.get("MobileFurnitureAutonomousCandidates")
+    if isinstance(candidate_manifest, dict):
+        if not str(candidate_manifest.get("status", "")).startswith("runtime-gated"):
+            raise RuntimeError("Mobile stock autonomous candidate hook is not gated")
+        if candidate_manifest.get("helper") != "_VF2EnableMobileFurnitureCandidates":
+            raise RuntimeError("Mobile stock autonomous candidate helper drifted")
+        activation_kind = "stock InitAI/LoadAI"
+    elif manifest.get("BehaviorPatchesGate", {}).get("enabled"):
+        spontaneous = PATCHED / "vf2_spontaneous_behaviors.cpp"
+        if not spontaneous.is_file() or "VF2EnableMobileFurnitureCandidates(villager);" not in spontaneous.read_text(encoding="ascii"):
+            raise RuntimeError("Behavior-Patches autonomous candidate binding is missing")
+        activation_kind = "Behavior Patches autonomous hook"
+    else:
+        raise RuntimeError("No mobile autonomous candidate activation binding is present")
+
+    autonomous_item_ids = set()
+    for family in families:
+        if not family.get("autonomous"):
+            continue
+        item_ids = {
+            _parse_mobile_route_item_id(value, "autonomous mobile family item")
+            for value in family["item_ids"]
+        }
+        autonomous_item_ids.update(item_ids)
+        if item_ids == set(MOBILE_CHAISE_ITEM_IDS):
+            continue
+        object_id = int(str(family["object"]), 0)
+        behavior_ids = family.get("mobile_behavior_ids")
+        if behavior_ids is None:
+            behavior_ids = [family.get("mobile_behavior_id")]
+        if family.get("autonomous_base_weights"):
+            required_behavior_ids = [int(str(value), 0) for value in behavior_ids]
+        else:
+            required_behavior_ids = [int(str(behavior_ids[0]), 0)]
+        for behavior_id in required_behavior_ids:
+            if not any(
+                row[0] == behavior_id and row[1] == object_id
+                for row in actual_external
+            ):
+                raise RuntimeError(
+                    f"Autonomous family {family.get('name')} lacks external binding "
+                    f"for {behavior_id:#x}/{object_id:#x}"
+                )
+
+    if not autonomous_item_ids.issubset(expected_manual_ids):
+        raise RuntimeError("Autonomous mobile bindings include an unsupported item")
+    if not manifest.get("MobileFurnitureBehaviorMacros", {}).get(
+        "stock_fallback_preserved"
+    ):
+        raise RuntimeError("Mobile behavior macro stock fallbacks are not preserved")
+
+    manifest["MobileFurnitureRuntimeBindings"] = {
+        "status": "validated exact 34-row manual and applicable autonomous bindings",
+        "manual_dispatch": {
+            "item_count": len(expected_manual_ids),
+            "item_ids": [hex(item_id) for item_id in sorted(expected_manual_ids)],
+            "family_count": len(MOBILE_FURNITURE_MANUAL_BINDING_SPECS),
+            "stock_first": True,
+            "stock_false_fallthrough": True,
+        },
+        "autonomous": {
+            "item_count": len(autonomous_item_ids),
+            "item_ids": [hex(item_id) for item_id in sorted(autonomous_item_ids)],
+            "external_candidate_count": len(actual_external),
+            "activation": activation_kind,
+            "stock_table_extended": False,
+        },
+        "stock_off_gate": {
+            "section": MOBILE_FURNITURE_BEHAVIOR_FLAG_SECTION,
+            "symbol": MOBILE_FURNITURE_BEHAVIOR_FLAG_SYMBOL,
+            "default": "00",
+            "manual_dispatch": True,
+            "autonomous_selector": True,
+        },
+        "rejected_scope": {
+            "decorative_only": [hex(item_id) for item_id in sorted(decorative_ids)],
+            "rendered_only_unproven": [hex(item_id) for item_id in sorted(rendered_ids)],
+        },
+        "source": str(helper_path),
+    }
+
+
 def vf3_tv_fmap_cell_value(donor_value, fallback_value, occupied):
     if not occupied:
         return 0
@@ -23989,6 +24494,7 @@ def main():
     validate_mobile_xmas_stocking_pc_fmaps(manifest)
     validate_mobile_decorative_only_fmaps(manifest)
     validate_mobile_furniture_route_classification(manifest)
+    validate_mobile_furniture_runtime_bindings(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)

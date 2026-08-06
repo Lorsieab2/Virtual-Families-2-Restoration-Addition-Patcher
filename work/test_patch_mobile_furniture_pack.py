@@ -108,6 +108,99 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             validator(manifest)
         return manifest
 
+    def _build_mobile_runtime_binding_sources(self, temp):
+        old_patched = patcher.PATCHED
+        patcher.PATCHED = temp
+        for filename in (
+            "theMainScene.obj",
+            "Villager.obj",
+            "VillagerAI.obj",
+            "Behavior.obj",
+            "VillagerPlans.obj",
+        ):
+            shutil.copy2(patcher.SRC_OBJS / filename, temp / filename)
+        manifest = self._build_mobile_route_manifest()
+        patcher.validate_mobile_furniture_route_classification(manifest)
+        patcher.patch_mobile_furniture_behavior_dispatch(manifest)
+        patcher.patch_mobile_furniture_autonomous_candidates(manifest)
+        patcher.patch_mobile_furniture_external_autonomous_selection(manifest)
+        patcher.patch_mobile_furniture_behavior_macros(manifest)
+        patcher.patch_mobile_patio_prop_execution(manifest)
+        manifest["BehaviorPatchesGate"] = {"enabled": False}
+        return manifest, old_patched
+
+    def test_mobile_furniture_runtime_bindings_cover_every_behavior_row(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp = Path(tmp)
+            manifest, old_patched = self._build_mobile_runtime_binding_sources(temp)
+            try:
+                patcher.validate_mobile_furniture_runtime_bindings(manifest)
+            finally:
+                patcher.PATCHED = old_patched
+        contract = manifest["MobileFurnitureRuntimeBindings"]
+        self.assertEqual(
+            contract["status"],
+            "validated exact 34-row manual and applicable autonomous bindings",
+        )
+        self.assertEqual(contract["manual_dispatch"]["item_count"], 34)
+        self.assertEqual(contract["manual_dispatch"]["family_count"], 17)
+        self.assertEqual(contract["autonomous"]["item_count"], 23)
+        self.assertEqual(contract["autonomous"]["external_candidate_count"], 9)
+        self.assertEqual(
+            contract["rejected_scope"]["decorative_only"],
+            ["0x2ab", "0x2ac", "0x2bf", "0x2d4", "0x2d5"],
+        )
+        self.assertEqual(len(contract["rejected_scope"]["rendered_only_unproven"]), 24)
+        self.assertTrue(contract["stock_off_gate"]["manual_dispatch"])
+        self.assertTrue(contract["stock_off_gate"]["autonomous_selector"])
+
+    def test_mobile_furniture_runtime_bindings_reject_decorative_dispatch_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp = Path(tmp)
+            manifest, old_patched = self._build_mobile_runtime_binding_sources(temp)
+            try:
+                helper_path = temp / "vf2_mobile_furniture_behaviors.cpp"
+                helper = helper_path.read_text(encoding="ascii")
+                helper = helper.replace(
+                    "if (candidate == 0x2AA) return VF2HandleMobileHolidayCandles(villager);",
+                    "if (candidate == 0x2AB) return VF2HandleMobileHolidayCandles(villager);",
+                    1,
+                )
+                helper_path.write_text(helper, encoding="ascii")
+                with self.assertRaisesRegex(RuntimeError, "exactly the 34 implemented IDs"):
+                    patcher.validate_mobile_furniture_runtime_bindings(manifest)
+            finally:
+                patcher.PATCHED = old_patched
+
+    def test_mobile_furniture_runtime_bindings_reject_unclassified_family_id(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp = Path(tmp)
+            manifest, old_patched = self._build_mobile_runtime_binding_sources(temp)
+            try:
+                manifest["MobileFurnitureBehaviors"]["implemented_families"][0]["item_ids"][0] = "0x2ab"
+                with self.assertRaisesRegex(RuntimeError, "unsupported, missing, or duplicate ID"):
+                    patcher.validate_mobile_furniture_runtime_bindings(manifest)
+            finally:
+                patcher.PATCHED = old_patched
+
+    def test_mobile_furniture_runtime_bindings_require_stock_first_dispatch(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            temp = Path(tmp)
+            manifest, old_patched = self._build_mobile_runtime_binding_sources(temp)
+            try:
+                helper_path = temp / "vf2_mobile_furniture_behaviors.cpp"
+                helper = helper_path.read_text(encoding="ascii")
+                helper = helper.replace(
+                    "    if (HandleDropOnHotSpot(villager)) return true;\n",
+                    "",
+                    1,
+                )
+                helper_path.write_text(helper, encoding="ascii")
+                with self.assertRaisesRegex(RuntimeError, "stock hotspot handling"):
+                    patcher.validate_mobile_furniture_runtime_bindings(manifest)
+            finally:
+                patcher.PATCHED = old_patched
+
     def test_mobile_furniture_route_partition_is_exhaustive_and_disjoint(self):
         manifest = self._build_mobile_route_manifest()
         patcher.validate_mobile_furniture_route_classification(manifest)

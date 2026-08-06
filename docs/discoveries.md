@@ -3761,3 +3761,22 @@
   `MobileFurnitureRouteClassification`.
 - This is a static evidence partition only. It does not grant runtime
   behavior to the 24 unresolved rows and does not replace player QA.
+
+## 2026-08-06 - Mobile furniture generated-binding audit
+
+- The 34 classified behavior rows are now cross-checked against generated
+  source, not only family metadata. The validator parses the manual
+  `theMainScene` dispatcher and requires exactly the supported ID set and
+  exactly one handler binding per family.
+- The dispatcher must call stock `HandleDropOnHotSpot` first, retain false
+  fallthrough, and stop at the default-zero `.vf2beh` gate. Both proven source
+  forms are accepted: the normal direct return and the Behavior-Patches
+  `handled` branch; no third form is accepted.
+- Autonomous validation covers the four chaise stock-candidate rows, the five
+  Holiday external candidates, and the four Patio/Picnic candidates. Their
+  nine mobile IDs, objects, weights, selectors, and stock-table preservation
+  are checked. Decorative-only and rendered-only/unproven IDs are rejected if
+  they enter the manual family or autonomous bindings.
+- The normal gate and the Behavior-Patches shared autonomous hook both pass
+  the real patcher entry point. This remains static/link validation; no game
+  launch, save access, or player runtime confirmation was performed.
