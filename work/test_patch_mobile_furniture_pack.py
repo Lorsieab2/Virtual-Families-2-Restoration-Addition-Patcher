@@ -1719,6 +1719,68 @@ class MobileRenovationArtTests(unittest.TestCase):
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
 
+    def test_renderer_selector_covers_each_style_once_in_catalog_order(self):
+        catalog_indices_by_room = {}
+        for index, style in enumerate(patcher.MOBILE_RENOVATION_STYLE_CATALOG):
+            catalog_indices_by_room.setdefault(style["room"], []).append(index)
+
+        self.assertEqual(
+            set(catalog_indices_by_room),
+            set(patcher.MOBILE_RENOVATION_ROOM_ORDER),
+        )
+        self.assertEqual(
+            sorted(index for indices in catalog_indices_by_room.values() for index in indices),
+            list(range(patcher.MOBILE_RENOVATION_IMAGE_COUNT)),
+        )
+
+        expected_rooms = {
+            room: [
+                hex(patcher.MOBILE_RENOVATION_PC_ITEM_IDS[index])
+                for index in indices
+            ]
+            for room, indices in catalog_indices_by_room.items()
+        }
+        self.assertEqual(
+            expected_rooms,
+            {
+                room: [hex(patcher.MOBILE_RENOVATION_PC_ITEM_IDS[index]) for index in indices]
+                for room, indices in patcher.MOBILE_RENOVATION_VARIANT_INDICES.items()
+            },
+        )
+
+        old_patched = patcher.PATCHED
+        old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(patcher.SRC_OBJS / "theMainScene.obj", temp / "theMainScene.obj")
+                patcher.PATCHED = temp
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                manifest = {}
+                patcher.patch_mobile_renovation_renderer(manifest)
+                helper = (temp / "vf2_mobile_renovations.cpp").read_text(encoding="ascii")
+                selector = manifest["mobile_renovation_renderer"]["selector"]["rooms"]
+                self.assertEqual(selector, expected_rooms)
+
+                for room, indices in catalog_indices_by_room.items():
+                    positions = []
+                    descriptor_count = (
+                        patcher.holiday_body_descriptor_count()
+                        if patcher.ENABLE_HOLIDAY_BODY_TYPES
+                        else 0
+                    )
+                    for index in indices:
+                        marker = (
+                            f"if (InventoryManager.HaveUpgrade((EInventoryItem)"
+                            f"{patcher.MOBILE_RENOVATION_PC_ITEM_IDS[index]})) return "
+                            f"{patcher.mobile_renovation_image_id(index, descriptor_count)};"
+                        )
+                        positions.append(helper.index(marker))
+                    self.assertEqual(positions, sorted(positions), room)
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+
 
 class DebuggerResearchTests(unittest.TestCase):
     def test_editor_selector_respects_native_interface_split(self):
