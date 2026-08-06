@@ -23,8 +23,9 @@ native achievement trigger before assigning goal IDs.
 | Goal | Requirement |
 | --- | --- |
 | A Furry Companion | Buy a pet and place it in the house. |
-| The Cat's Meow | Welcome a black kitten, snow white cat, tabby cat, hairless cat, or fluffy grey cat into the home. |
-| Man's Best Friend | Welcome a beagle, yellow lab, black lab, longhair puppy, or chihuahua into the home. |
+| The Cat's Meow | Have a cat in the house. |
+| Man's Best Friend | Have a dog in the house. |
+| Slow and Steady | Have a turtle in the house. |
 | Itsy Bitsy | Have a tarantula in the home. |
 | Hampster Dance | Have a hamster in the house. |
 | Lovely Lizards | Have a lizard in the house. |

@@ -1230,7 +1230,7 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
 CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xA6
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xA7
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -1257,6 +1257,7 @@ CUSTOM_ACHIEVEMENT_DISCIPLINE_FIRST_ID = 0xA1
 CUSTOM_ACHIEVEMENT_DISCIPLINE_LAST_ID = 0xA4
 CUSTOM_ACHIEVEMENT_PROPS_ID = 0xA5
 CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID = 0xA6
+CUSTOM_ACHIEVEMENT_TURTLE_ID = 0xA7
 CUSTOM_ACHIEVEMENT_TIGHT_SHIP_ID = 0x30
 CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
 CUSTOM_ACHIEVEMENT_TARGET = 1
@@ -1305,8 +1306,8 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0x88, "longevity", "Centenarian", "Have a person reach age 100 or more."),
     (0x89, "longevity", "Oldest Person in History", "Have a person surpass age 122."),
     (0x8A, "pet", "A Furry Companion", "Buy a pet and place it in the house."),
-    (0x8B, "pet", "The Cat's Meow", "Welcome a black kitten, snow white cat, tabby cat, hairless cat, or fluffy grey cat into the home."),
-    (0x8C, "pet", "Man's Best Friend", "Welcome a beagle, yellow lab, black lab, longhair puppy, or chihuahua into the home."),
+    (0x8B, "pet", "The Cat's Meow", "Have a cat in the house."),
+    (0x8C, "pet", "Man's Best Friend", "Have a dog in the house."),
     (0x8D, "pet", "Itsy Bitsy", "Have a tarantula in the home."),
     (0x8E, "pet", "Hampster Dance", "Have a hamster in the house."),
     (0x8F, "pet", "Lovely Lizards", "Have a lizard in the house."),
@@ -1333,6 +1334,7 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0xA4, "behavior", "No messing with the light switch!", "You scolded a child for switching the light on and off."),
     (0xA5, "behavior", "Props to you", "You completed Tight Ship and all five additional discipline goals."),
     (0xA6, "vf3_furniture", "Furnishing the Future", "You bought a Virtual Families 3 furniture item."),
+    (0xA7, "pet", "Slow and Steady", "Have a turtle in the house."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -1527,6 +1529,8 @@ def pet_achievement_ids_for_item(item_id, active=True):
         goals.append(0x8B)
     elif item <= 0x244:
         goals.append(0x8C)
+    elif item == 0x245:
+        goals.append(CUSTOM_ACHIEVEMENT_TURTLE_ID)
     elif item == 0x246:
         goals.append(0x8F)
     elif item == 0x247:
@@ -10601,7 +10605,7 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 }
 
 static int VF2AchievementVisibleCountInternal() {
-    int count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2 + 1 + 1;
+    int count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2 + 1 + 1 + 1;
     if (kVF2IncludeOrnamentologistGoal) ++count;
     if (kVF2IncludeBehaviorGoals) count += 26;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
@@ -10647,6 +10651,7 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
     }
     completed += VF2CountCompletedAchievements(achievement, 0x80, 0x92);
     if (achievement->IsComplete((EAchievement)0xA6)) ++completed;
+    if (achievement->IsComplete((EAchievement)0xA7)) ++completed;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) {
         completed += VF2CountCompletedAchievements(achievement, 0x6D, 0x7F);
     }
@@ -10763,6 +10768,8 @@ static void VF2CheckPetAchievements(int item) {
         goals[count++] = (EAchievement)0x8B;
     } else if (item <= 0x244) {
         goals[count++] = (EAchievement)0x8C;
+    } else if (item == 0x245) {
+        goals[count++] = (EAchievement)0xA7;
     } else if (item == 0x246) {
         goals[count++] = (EAchievement)0x8F;
     } else if (item == 0x247) {
@@ -13562,9 +13569,9 @@ def patch_custom_achievements(manifest):
     if row_insert != list_sec.raw_size:
         raise RuntimeError("Unexpected achievementList append site")
     # Keep every native variant layout-identical through the full B156 visible
-    # capacity at ID 0xA7. Undefined future rows receive empty strings and are
-    # omitted from achievementOrder, so direct ID * sizeof(row) indexing stays
-    # safe without exposing or inventing goal definitions.
+    # capacity at ID 0xA7. Remaining reserved capacity receives empty strings
+    # and is omitted from achievementOrder, so direct ID * sizeof(row) indexing
+    # stays safe without exposing or inventing goal definitions.
     rows = [(
         HOLIDAY_ORNAMENT_ACHIEVEMENT_ID,
         HOLIDAY_ORNAMENT_ACHIEVEMENT_TARGET,
@@ -13890,6 +13897,7 @@ def patch_custom_achievements(manifest):
         )
     )
     appended_order.append(CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID)
+    appended_order.append(CUSTOM_ACHIEVEMENT_TURTLE_ID)
     appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
     )
@@ -14027,6 +14035,7 @@ def patch_custom_achievements(manifest):
         + 5
         + 6
         + 2
+        + 1
         + 1
         + 1
     )
@@ -15256,7 +15265,7 @@ def patch_pet_achievement_callsites(manifest):
 
     manifest["PetAchievementHooks"] = {
         "status": "successful placement observer plus active-pet load reconciliation",
-        "achievement_ids": [hex(value) for value in range(0x8A, 0x90)],
+        "achievement_ids": [hex(value) for value in range(0x8A, 0x90)] + [hex(CUSTOM_ACHIEVEMENT_TURTLE_ID)],
         "placed_pet_item_range": ["0x23b", "0x248"],
         "placement": {
             "caller": "CFurnitureManager::DropFurniture",

@@ -1,7 +1,8 @@
 param(
     [string]$Python = "",
     [string]$PreviousBuildDir = "",
-    [string]$OutputDir = ""
+    [string]$OutputDir = "",
+    [switch]$EnableCheatUpgrades
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,13 +17,15 @@ $builder = Join-Path $root "work\build_b119.bat"
 $exeName = "Virtual Families 2 - Mobile Renovations.exe"
 
 if ([string]::IsNullOrWhiteSpace($PreviousBuildDir)) {
-    $PreviousBuildDir = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-B156-core"
+    $previousVariant = if ($EnableCheatUpgrades) { "cheat_upgrades" } else { "core" }
+    $PreviousBuildDir = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-B156-$previousVariant"
 }
 else {
     $PreviousBuildDir = [IO.Path]::GetFullPath($PreviousBuildDir)
 }
 if ([string]::IsNullOrWhiteSpace($OutputDir)) {
-    $OutputDir = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-B157-mobile_renovations"
+    $outputVariant = if ($EnableCheatUpgrades) { "mobile_renovations-cheat_upgrades" } else { "mobile_renovations" }
+    $OutputDir = Join-Path $outputs "VF2-Mobile-Furniture-With-Island-Events-B157-$outputVariant"
 }
 else {
     $OutputDir = [IO.Path]::GetFullPath($OutputDir)
@@ -101,7 +104,7 @@ try {
     $env:VF2_PREVIOUS_BUILD_DIR = $PreviousBuildDir
     $env:VF2_ENABLE_MOBILE_RENOVATIONS = "1"
     $env:VF2_ENABLE_ISLAND_EVENTS = "0"
-    $env:VF2_ENABLE_CHEAT_UPGRADES = "0"
+    $env:VF2_ENABLE_CHEAT_UPGRADES = if ($EnableCheatUpgrades) { "1" } else { "0" }
     $env:VF2_ENABLE_HOLIDAY_ORNAMENTS = "0"
     $env:VF2_ENABLE_BEHAVIOR_PATCHES = "0"
     $env:VF2_ENABLE_DEBUGGER_FEATURES = "0"
@@ -131,6 +134,14 @@ try {
     if ($runtimeCount -ne 15) {
         throw "Expected 15 runtime renovation PNGs, found $runtimeCount"
     }
+    if ($manifest.ScrollingStoreScene.price_multiplier.enabled -ne [bool]$EnableCheatUpgrades) {
+        throw "Generated Cheat Upgrades gate does not match -EnableCheatUpgrades"
+    }
+
+    # The previous build is a complete runtime seed and can contain older
+    # executable variants. Remove only those copied executable files from the
+    # new output so the player cannot launch a stale variant by accident.
+    Get-ChildItem -LiteralPath $OutputDir -Filter "*.exe" -File | Remove-Item -Force
 
     & cmd.exe /d /c $builder *> $buildLog
     if ($LASTEXITCODE -ne 0) {

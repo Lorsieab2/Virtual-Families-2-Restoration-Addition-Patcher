@@ -3984,12 +3984,12 @@ class TextFixStringManagerTests(unittest.TestCase):
                     if row.get("source")
                     == "custom achievement reserved capacity"
                 ]
-                self.assertEqual(len(reserved), 2)
+                self.assertEqual(len(reserved), 0)
                 self.assertEqual(
                     {int(row["achievement_id"], 16) for row in reserved},
-                        {0xA7},
+                        set(),
                 )
-                self.assertTrue(all(row["text"] == "" for row in reserved))
+                self.assertEqual(reserved, [])
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
                     (0xE95, 0xE96, 0xE97),
@@ -5304,19 +5304,23 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
             {achievement_id: rows[achievement_id] for achievement_id in range(0x8A, 0x90)},
             {
                 0x8A: ("pet", "A Furry Companion", "Buy a pet and place it in the house."),
-                0x8B: ("pet", "The Cat's Meow", "Welcome a black kitten, snow white cat, tabby cat, hairless cat, or fluffy grey cat into the home."),
-                0x8C: ("pet", "Man's Best Friend", "Welcome a beagle, yellow lab, black lab, longhair puppy, or chihuahua into the home."),
+                0x8B: ("pet", "The Cat's Meow", "Have a cat in the house."),
+                0x8C: ("pet", "Man's Best Friend", "Have a dog in the house."),
                 0x8D: ("pet", "Itsy Bitsy", "Have a tarantula in the home."),
                 0x8E: ("pet", "Hampster Dance", "Have a hamster in the house."),
                 0x8F: ("pet", "Lovely Lizards", "Have a lizard in the house."),
             },
+        )
+        self.assertEqual(
+            rows[0xA7],
+            ("pet", "Slow and Steady", "Have a turtle in the house."),
         )
         self.assertEqual(patcher.pet_achievement_ids_for_item(0x23A), [])
         self.assertEqual(patcher.pet_achievement_ids_for_item(0x23B), [0x8A, 0x8B])
         self.assertEqual(patcher.pet_achievement_ids_for_item(0x23F), [0x8A, 0x8B])
         self.assertEqual(patcher.pet_achievement_ids_for_item(0x240), [0x8A, 0x8C])
         self.assertEqual(patcher.pet_achievement_ids_for_item(0x244), [0x8A, 0x8C])
-        self.assertEqual(patcher.pet_achievement_ids_for_item(0x245), [0x8A])
+        self.assertEqual(patcher.pet_achievement_ids_for_item(0x245), [0x8A, 0xA7])
         self.assertEqual(patcher.pet_achievement_ids_for_item(0x246), [0x8A, 0x8F])
         self.assertEqual(patcher.pet_achievement_ids_for_item(0x247), [0x8A, 0x8E])
         self.assertEqual(patcher.pet_achievement_ids_for_item(0x248), [0x8A, 0x8D])
@@ -5394,7 +5398,7 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                 contract = manifest["PetAchievementHooks"]
                 self.assertEqual(
                     contract["achievement_ids"],
-                    ["0x8a", "0x8b", "0x8c", "0x8d", "0x8e", "0x8f"],
+                    ["0x8a", "0x8b", "0x8c", "0x8d", "0x8e", "0x8f", "0xa7"],
                 )
                 self.assertEqual(
                     contract["placement"]["award_condition"],
@@ -7302,10 +7306,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
         ))
         try:
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
-                (False, False, 121, 140, 5, 12),
-                (True, False, 122, 141, 6, 13),
-                (False, True, 147, 166, 5, 12),
-                (True, True, 148, 167, 6, 13),
+                (False, False, 122, 141, 5, 12),
+                (True, False, 123, 142, 6, 13),
+                (False, True, 148, 167, 5, 12),
+                (True, True, 149, 168, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
@@ -7525,11 +7529,13 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                             expected.extend(range(0x93, 0xA6))
                         expected.extend(range(0x80, 0x92))
                         expected.append(0xA6)
+                        expected.append(0xA7)
                         expected.extend(range(0x6D, 0x80))
                         expected.append(0x92)
                         self.assertEqual(order, expected)
-                        self.assertEqual(order[-39:-21], list(range(0x80, 0x92)))
-                        self.assertEqual(order[-21], 0xA6)
+                        self.assertEqual(order[-40:-22], list(range(0x80, 0x92)))
+                        self.assertEqual(order[-22], 0xA6)
+                        self.assertEqual(order[-21], 0xA7)
                         self.assertEqual(order[-20:-1], list(range(0x6D, 0x80)))
                         self.assertEqual(order[-1], 0x92)
                         order_contract = manifest["CustomAchievements"][
@@ -8212,8 +8218,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
                     "physical_row_count": 0xA8,
-                    "visible_count_flag_0": 122,
-                    "visible_count_flag_1": 141,
+                    "visible_count_flag_0": 123,
+                    "visible_count_flag_1": 142,
                     "notify_queue_bound": 0x5F,
                 },
             )
