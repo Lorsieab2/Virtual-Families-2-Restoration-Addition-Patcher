@@ -19997,6 +19997,22 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
     if epilogue < 0:
         raise RuntimeError("CVillagerAI::DecideWhatToDo epilogue drifted")
 
+    # This stock jump is inside DecideWhatToDo and lands after the insertion
+    # point.  The COFF inserter shifts symbols and relocations, but this is an
+    # already-linked internal rel32 branch with no relocation record, so its
+    # displacement must be repaired explicitly after the payload is inserted.
+    stock_branch = decide.value + 0xAB
+    stock_continuation = decide.value + 0x96A
+    if section_bytes[stock_branch] != 0xE9:
+        raise RuntimeError("CVillagerAI stock continuation branch opcode drifted")
+    stock_target = stock_branch + 5 + struct.unpack_from(
+        "<i", section_bytes, stock_branch + 1
+    )[0]
+    if stock_target != stock_continuation or stock_continuation < selection:
+        raise RuntimeError(
+            "CVillagerAI stock continuation branch target drifted"
+        )
+
     # Preserve the native weighted distribution exactly. The helper draws once
     # from stockWeight + eligibleExternalWeight. A stock result falls through
     # to the unchanged native draw; an external result starts its exact plan
@@ -20018,6 +20034,15 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
         epilogue - selection,
     )
     obj.insert_section_bytes(sec.index, selection, bytes(payload))
+    patched_sec = obj.section(decide.section)
+    patched_stock_target = stock_continuation + len(payload)
+    patched_stock_raw = patched_sec.raw_ptr + stock_branch
+    struct.pack_into(
+        "<i",
+        obj.buf,
+        patched_stock_raw + 1,
+        patched_stock_target - (stock_branch + 5),
+    )
     helper = obj.append_undefined_symbol(
         MOBILE_FURNITURE_AUTONOMOUS_SELECTOR_SYMBOL
     )
@@ -20035,6 +20060,12 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
         "stock_table_entries": "0x19b",
         "stock_table_extended": False,
         "stock_conditional_distribution_preserved": True,
+        "stock_internal_branch_retargeted": {
+            "branch_offset": hex(stock_branch - decide.value),
+            "original_target": hex(stock_continuation - decide.value),
+            "patched_target": hex(patched_stock_target - decide.value),
+            "inserted_bytes": len(payload),
+        },
         "per_villager_base_randomization": {
             "delta": "GetRandom(base_weight / 5)",
             "sign": "subtract when GetRandom(100) < 50; add otherwise",

@@ -1699,12 +1699,33 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         0x83, 0xC4, 0x08, 0x84, 0xC0, 0x59, 0x0F, 0x85,
                     ]),
                 )
+                stock_branch = decide.value + 0xAB
+                stock_branch_raw = sec.raw_ptr + stock_branch
+                self.assertEqual(obj.buf[stock_branch_raw], 0xE9)
+                stock_target = stock_branch + 5 + struct.unpack_from(
+                    "<i", obj.buf, stock_branch_raw + 1
+                )[0]
+                self.assertEqual(stock_target, decide.value + 0x97E)
+                target_raw = sec.raw_ptr + stock_target
+                self.assertEqual(
+                    bytes(obj.buf[target_raw : target_raw + 3]),
+                    b"\x8B\xCE\xE8",
+                )
                 contract = manifest[
                     "MobileFurnitureExternalAutonomousSelection"
                 ]
                 self.assertFalse(contract["stock_table_extended"])
                 self.assertTrue(
                     contract["stock_conditional_distribution_preserved"]
+                )
+                self.assertEqual(
+                    contract["stock_internal_branch_retargeted"],
+                    {
+                        "branch_offset": "0xab",
+                        "original_target": "0x96a",
+                        "patched_target": "0x97e",
+                        "inserted_bytes": 20,
+                    },
                 )
                 self.assertEqual(
                     contract["per_villager_base_randomization"],
