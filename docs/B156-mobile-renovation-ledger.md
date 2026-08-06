@@ -91,6 +91,12 @@ stock decals. The disabled build has no hook and does not copy these PNGs into
 the runtime image tree. Static contract validation and compilation/linking
 pass; player visual QA is still required.
 
+The reproducible enabled overlay build is driven by
+`work/build_b157_mobile_renovations.ps1`. It starts from the B156 core output,
+sets only `VF2_ENABLE_MOBILE_RENOVATIONS=1`, refuses to overwrite an existing
+destination, validates the 15-image manifest, and compiles/links the optional
+EXE separately from the existing 16-state B156 matrix.
+
 ## Remaining native work
 
 1. Verify the B157 overlay visually in-game against the staged mobile atlases,
