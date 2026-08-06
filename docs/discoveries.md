@@ -3724,3 +3724,22 @@
   the source remains fail-closed until a safe ABI or explicitly versioned
   sidecar is evidenced. This does not change the separate B157 room-overlay
   renderer or its exact 1:1 image placement.
+
+## 2026-08-06 - Increase Child Limit fail-closed ABI contract
+
+- The stock `CFamilyTree` object remains six-child by construction: the child
+  count is at `+0x1B4`, the child array begins at `+0x1B8`, each child record is
+  `0xD8` bytes, and six records terminate exactly at the `0x6C8` generation
+  record boundary.
+- Native `AddOffspring`, `EmptyOffspringSlots`,
+  `UpdateCurrentFamilyRecord`, `SaveState`, `Reset`, and `MakeRoomInTree` are
+  now checked for their stock six-child, `0xD8`, `0x6C8`, `0xCB70`, and
+  `0xCB74` boundary bytes before a build can publish a manifest.
+- The persistent Family Tree block remains `0xCB74` bytes from `theGameData`
+  `+0x1840` to the next component at `+0xE3B4`; no unused serialized tail is
+  claimed. The adoption scene's two six-dword candidate arrays remain
+  documented at `this+0x20` and `this+0x38`, with count at `this+0x50`.
+- The validator records `fail_closed_static_audit` and keeps the capacity
+  toggle disabled. It does not implement twelve-child persistence; that still
+  requires a versioned sidecar plus matched Family Tree, rollover, draw,
+  hit-test, candidate-array, adoption, and save/reload routes.

@@ -6245,6 +6245,49 @@ class VF3StyleChildAdoptionChooserPatchTests(unittest.TestCase):
         self.assertIn("(EAchievement)0x0D", helper)
 
 
+class IncreaseChildLimitContractTests(unittest.TestCase):
+    def test_contract_is_fail_closed_and_preserves_stock_geometry(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                shutil.copy2(patcher.SRC_OBJS / "FamilyTree.obj", temp_root / "FamilyTree.obj")
+                patcher.PATCHED = temp_root
+                manifest = {}
+                patcher.validate_increase_child_limit_contract(manifest)
+                contract = manifest["IncreaseChildLimitContract"]
+                self.assertEqual(contract["status"], "fail_closed_static_audit")
+                self.assertFalse(contract["enabled"])
+                self.assertEqual(contract["native_geometry"]["stock_child_count"], 6)
+                self.assertEqual(contract["native_geometry"]["child_record_size"], "0xd8")
+                self.assertEqual(contract["native_geometry"]["family_record_size"], "0x6c8")
+                self.assertEqual(contract["native_geometry"]["serialized_family_tree_span"], "0xcb74")
+                self.assertEqual(contract["adoption_scene_geometry"]["stock_candidate_count"], 6)
+                self.assertTrue(contract["patch_off"]["stock_family_tree_capacity_preserved"])
+                self.assertTrue(contract["patch_off"]["stock_save_span_preserved"])
+                self.assertTrue(contract["patch_off"]["stock_candidate_storage_preserved"])
+                self.assertEqual(len(contract["required_detours"]), 4)
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_contract_rejects_a_drifted_native_child_capacity_check(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                target = temp_root / "FamilyTree.obj"
+                shutil.copy2(patcher.SRC_OBJS / "FamilyTree.obj", target)
+                original = target.read_bytes()
+                drifted = original.replace(b"\x83\xFA\x06", b"\x83\xFA\x07", 1)
+                self.assertNotEqual(original, drifted)
+                target.write_bytes(drifted)
+                patcher.PATCHED = temp_root
+                with self.assertRaisesRegex(RuntimeError, "stock boundary pattern missing"):
+                    patcher.validate_increase_child_limit_contract({})
+        finally:
+            patcher.PATCHED = old_patched
+
+
 class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
     def test_reject_rerolls_in_place_and_preserves_email_state_route(self):
         old_patched = patcher.PATCHED

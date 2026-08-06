@@ -7660,6 +7660,144 @@ def validate_native_mobile_renovation_contract(manifest):
     }
 
 
+def validate_increase_child_limit_contract(manifest):
+    """Fail closed while the native six-child ABI remains unexpanded.
+
+    This is a source/link contract, not an implementation of twelve-child
+    persistence.  It proves the exact stock boundaries that an eventual
+    sidecar must route around before the setting can be exposed.
+    """
+    stock_child_count = 6
+    child_count_offset = 0x1B4
+    child_array_offset = 0x1B8
+    child_record_size = 0xD8
+    family_record_size = 0x6C8
+    family_tree_records = 30
+    family_tree_state_offset = 0x1840
+    next_state_component_offset = 0xE3B4
+    adoption_candidate_count = 6
+    adoption_villager_array_offset = 0x20
+    adoption_peep_id_array_offset = 0x38
+    adoption_candidate_count_offset = 0x50
+
+    errors = []
+    if child_array_offset + stock_child_count * child_record_size != family_record_size:
+        errors.append("stock child array does not terminate at the family-record boundary")
+    if family_tree_records * family_record_size != 0xCB70:
+        errors.append("30-generation Family Tree record span drifted from 0xCB70")
+    if next_state_component_offset - family_tree_state_offset != 0xCB74:
+        errors.append("serialized Family Tree block no longer ends at the next save component")
+    if adoption_candidate_count != stock_child_count:
+        errors.append("adoption candidate capacity is no longer tied to the stock six-child limit")
+
+    def function_bytes(obj, name):
+        try:
+            symbol = obj.symbol(name)
+            section = obj.section(symbol.section)
+        except KeyError:
+            errors.append(f"FamilyTree native symbol missing: {name}")
+            return b""
+        return bytes(
+            obj.buf[
+                section.raw_ptr + symbol.value :
+                section.raw_ptr + section.raw_size
+            ]
+        )
+
+    try:
+        family_tree = CoffObject(PATCHED / "FamilyTree.obj")
+    except (OSError, KeyError) as exc:
+        errors.append(f"FamilyTree native object unavailable: {exc}")
+        family_tree = None
+
+    native_patterns = {
+        "AddOffspring": (
+            "?AddOffspring@CFamilyTree@@QAE_NABVCVillager@@@Z",
+            (b"\x83\xFA\x06", b"\x69\xC2\xD8\x00\x00\x00"),
+        ),
+        "EmptyOffspringSlots": (
+            "?EmptyOffspringSlots@CFamilyTree@@QAEHXZ",
+            (b"\xB8\x06\x00\x00\x00", b"\x69\xC8\xC8\x06\x00\x00"),
+        ),
+        "UpdateCurrentFamilyRecord": (
+            "?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ",
+            (b"\xBF\x06\x00\x00\x00", b"\x81\xC6\xD8\x00\x00\x00"),
+        ),
+        "SaveState": (
+            "?SaveState@CFamilyTree@@QAE?B_NAAUSSaveState@1@@Z",
+            (b"\xBB\x1E\x00\x00\x00", b"\xB9\xB2\x01\x00\x00", b"\x81\xC2\xC8\x06\x00\x00"),
+        ),
+        "Reset": (
+            "?Reset@CFamilyTree@@QAEXXZ",
+            (b"\x68\x70\xCB\x00\x00", b"\x8D\x46\x08"),
+        ),
+        "MakeRoomInTree": (
+            "?MakeRoomInTree@CFamilyTree@@QAEXXZ",
+            (b"\x68\xC8\x06\x00\x00", b"\x8D\x7A\x08", b"\x8D\xB2\xD0\x06\x00\x00"),
+        ),
+    }
+    if family_tree is not None:
+        for label, (symbol_name, patterns) in native_patterns.items():
+            data = function_bytes(family_tree, symbol_name)
+            for pattern in patterns:
+                if pattern not in data:
+                    errors.append(
+                        f"FamilyTree {label} stock boundary pattern missing: {pattern.hex(' ')}"
+                    )
+
+    evidence_path = ROOT / "docs" / "discoveries.md"
+    try:
+        evidence = evidence_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        errors.append(f"child-limit native audit evidence unavailable: {exc}")
+        evidence = ""
+    for snippet in (
+        "is at `+0x1B4`, its child array begins at `+0x1B8`",
+        "CFamilyTreeScene::DrawFamily` and `CheckForFamilyPeepHit` both loop the",
+        "CAdoptionScene::CreateNextGenerationCandidates` does iterate every recorded",
+        "only six dwords",
+    ):
+        if snippet not in evidence:
+            errors.append(f"child-limit audit evidence missing: {snippet}")
+
+    if errors:
+        raise RuntimeError(
+            "Increase Child Limit contract failed:\n- " + "\n- ".join(errors)
+        )
+
+    manifest["IncreaseChildLimitContract"] = {
+        "status": "fail_closed_static_audit",
+        "enabled": False,
+        "implementation": "not exposed until versioned sidecar persistence and all dependent detours are proven",
+        "native_geometry": {
+            "child_count_offset": hex(child_count_offset),
+            "child_array_offset": hex(child_array_offset),
+            "stock_child_count": stock_child_count,
+            "child_record_size": hex(child_record_size),
+            "family_record_size": hex(family_record_size),
+            "family_tree_records": family_tree_records,
+            "serialized_family_tree_span": hex(0xCB74),
+        },
+        "required_detours": [
+            "versioned sidecar persistence for six extra SPeepRecord values per generation",
+            "Family Tree count/add/find/death/update/reset/MakeRoomInTree/StartNextGeneration",
+            "FamilyTreeScene DrawFamily and CheckForFamilyPeepHit",
+            "CAdoptionScene candidate arrays and GetNextCandidate cycling",
+        ],
+        "adoption_scene_geometry": {
+            "villager_candidate_array_offset": hex(adoption_villager_array_offset),
+            "peep_id_candidate_array_offset": hex(adoption_peep_id_array_offset),
+            "candidate_count_offset": hex(adoption_candidate_count_offset),
+            "stock_candidate_count": adoption_candidate_count,
+        },
+        "patch_off": {
+            "stock_family_tree_capacity_preserved": True,
+            "stock_save_span_preserved": True,
+            "stock_candidate_storage_preserved": True,
+        },
+    }
+
+
 def item_string_ids(idx):
     base = ORIG_STRING_ONE_PAST_MAX + idx * 2
     return base, base + 1
@@ -23609,6 +23747,7 @@ def main():
     validate_native_north_bathroom_malfunction_selection(manifest)
     validate_native_dryer_lint_fire_contract(manifest)
     validate_native_mobile_renovation_contract(manifest)
+    validate_increase_child_limit_contract(manifest)
     validate_mobile_renovation_renderer_contract(manifest)
     if ENABLE_BEHAVIOR_PATCHES:
         validate_invisible_hammock_behavior_contract(manifest)

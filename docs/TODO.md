@@ -800,6 +800,8 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - [x] Audit live villager capacity, conception allocation, Family Tree record
   geometry, save-block boundaries, Family Tree draw/hit testing, and Next
   Generation candidate arrays from the desktop COFF objects.
+- [x] Add a fail-closed static ABI/geometry validator for the stock six-child
+  Family Tree save, draw/hit-test, rollover, and candidate-array boundaries.
 - [ ] Design and prove a vanilla-save-compatible, versioned persistence
   extension for six extra `SPeepRecord`s per generation. Do not raise
   `EmptyOffspringSlots` before this exists: the stock record has room for only
