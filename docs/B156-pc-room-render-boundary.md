@@ -29,29 +29,37 @@ paths inspected for B156:
 The complete `dumpbin /DISASM /SYMBOLS` capture is preserved in the ignored
 file `outputs/B156-PC-Room-Render-Dumpbin.txt`.
 
-## Consequence for the mobile renovation art
+## B157 1:1 overlay implementation
 
-The 15 corrected mobile room atlases remain staged under the optional visual
-payload. Adding them to the PC image registry alone would not make them render,
-and drawing them from the main-scene hook without the native map-tile anchors,
-camera transform, and renovation-state selector would risk covering furniture
-or villagers. B156 therefore keeps runtime copying disabled until those three
-pieces are recovered together.
+B157 adds the guarded renderer and keeps it disabled by default. With
+`VF2_ENABLE_MOBILE_RENOVATIONS=1`, the patcher registers all 15 complete PNG
+overlays under `Images/MobileRenovations` with a `[1,1]` descriptor and no
+resampling. It inserts the helper at `theMainScene::DrawScene +0x39`, directly
+after `CWorldMap::Draw` and before the stock decal draw.
+
+The helper reads the world-view origin, selects the first owned style for each
+room from PC style IDs `0x13C-0x14A`, and draws each selected image at its
+absolute map anchor minus the camera origin. The encoded anchors are Bathroom
+`(255,1435)`, Kitchen `(930,995)`, Office `(1354,792)`, and Workshop
+`(500,1400)`. The PNG dimensions are preserved exactly; no scale or crop is
+applied.
+
+The disabled build has no main-scene hook and no runtime
+`Images/MobileRenovations` directory. This preserves the stock map path while
+leaving the same art in the optional staged payload. Static generation,
+contract validation, compilation, and linking pass for the enabled route;
+live visual/player confirmation is still pending.
 
 The native purchase and save-load state routes are a separate, proven layer:
 the PC `HandleUpgrade` and `theGameState::Load(int)` paths already carry the
 same ten mobile `0xE1-0xEA` condemned-area activations. The patcher now checks
 those routes against `data/vf2/mobile-renovation-atlas-contract.json` and
-fails closed on drift. This does not change the renderer or imply that the
-staged PNGs are selected in-game.
+fails closed on drift. This native-state validation is independent of the
+optional B157 renderer; it does not by itself prove live visual selection.
 
-## Next native target
+## Remaining validation
 
-Add a guarded map-variant path only after establishing the atlas scale and
-anchor against the stitched map. The native build currently has no existing
-room-state image selector: a safe implementation will need to introduce one,
-choose the active variant from persisted renovation state, and preserve the
-stock tile path when the optional patch is disabled. Purchase and save/load
-state parity plus the Cheat Upgrades removal source route are now statically
-validated; live remove/rebuy/switch QA and second-bathroom behavior still need
-to be proven before any mobile atlas is bound to live rendering.
+The PC style catalog and first-owned-per-room selector are now statically
+linked. Live purchase, removal, switching, save/load, camera movement, and
+patch-off visual QA remain. Bathroom 2 remains deferred because no separate
+second-bathroom overlay/state route has been proven.

@@ -37,6 +37,11 @@ ENABLE_CHEAT_UPGRADES = os.environ.get("VF2_ENABLE_CHEAT_UPGRADES", "0") == "1"
 # Unflagged builds retain stock behavior; the checked patcher setting selects a
 # matching build made with VF2_ENABLE_BEHAVIOR_PATCHES=1.
 ENABLE_BEHAVIOR_PATCHES = os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "0") == "1"
+# Mobile room-background overlays are deliberately dormant until the player
+# selects the matching optional renderer payload.  The static renderer
+# contract is still generated and linked in every build so the map-return ABI
+# remains independently checkable.
+ENABLE_MOBILE_RENOVATIONS = os.environ.get("VF2_ENABLE_MOBILE_RENOVATIONS", "0") == "1"
 
 # Genuine mobile-furniture behaviors use a dormant exact-SHA byte toggle. The
 # first proven families are the four mobile lounge chairs and the patio
@@ -688,6 +693,47 @@ MOBILE_RENOVATION_ART_FILES = (
     "tp242_blue_office.png",
     "tp242_checkered_workshop.png",
 )
+MOBILE_RENOVATION_IMAGE_COUNT = len(MOBILE_RENOVATION_ART_FILES)
+MOBILE_RENOVATION_ROOM_ORDER = ("bathroom", "kitchen", "office", "workshop")
+MOBILE_RENOVATION_ANCHORS = {
+    "bathroom": (255, 1435),
+    "kitchen": (930, 995),
+    "office": (1354, 792),
+    "workshop": (500, 1400),
+}
+MOBILE_RENOVATION_VARIANT_INDICES = {
+    "bathroom": (0, 1, 2, 3, 4),
+    "kitchen": (5, 8, 9),
+    "office": (7, 10, 11, 12, 13),
+    "workshop": (6, 14),
+}
+MOBILE_RENOVATION_DEFAULT_SELECTION = {
+    room: -1 for room in MOBILE_RENOVATION_ROOM_ORDER
+}
+MOBILE_RENOVATION_PC_ITEM_BASE = 0x13C
+MOBILE_RENOVATION_PC_ITEM_IDS = tuple(
+    MOBILE_RENOVATION_PC_ITEM_BASE + index
+    for index in range(MOBILE_RENOVATION_IMAGE_COUNT)
+)
+MOBILE_RENOVATION_STYLE_CATALOG = (
+    {"room": "bathroom", "name": "Bathroom Remodel in Black", "file": "tp233_sw_bathroom_black.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Black", "long": "For a stunning, bold look, remodel the southwest bathroom with patterned wallpaper, ceramic flooring, and a new shower curtain!"},
+    {"room": "bathroom", "name": "Bathroom Remodel in Blue", "file": "tp233_sw_bathroom_blue_marble.png", "price": 0x3E8, "lock": 0, "short": "Bathroom Remodel in Blue", "long": "For a fresh, updated look, remodel the southwest bathroom with patterned wallpaper, marble flooring, and a new shower curtain!"},
+    {"room": "bathroom", "name": "Bathroom Remodel in Beige", "file": "tp234_sw_bathroom_brown.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Beige", "long": "For a fresh, updated look, remodel the southwest bathroom with new wallpaper, tile flooring, and a striped shower curtain!"},
+    {"room": "bathroom", "name": "Bathroom Remodel in Green", "file": "tp234_sw_bathroom_green.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Green", "long": "For a fresh, updated look, remodel the southwest bathroom with striped wallpaper, tile flooring, and a new shower curtain!"},
+    {"room": "bathroom", "name": "Bathroom Remodel in Pink", "file": "tp235_sw_bathroom_pink.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Pink", "long": "For a fresh, updated look, remodel the southwest bathroom with new wallpaper, tile flooring, and a striped shower curtain!"},
+    {"room": "kitchen", "name": "Kitchen Remodel in Beige", "file": "tp238_beige_kitchen.png", "price": 0x898, "lock": 4, "short": "Kitchen Remodel in Beige", "long": "Remodel the walls and floors with a fresh coat of paint and ceramic tile!"},
+    {"room": "workshop", "name": "Wood Paneled Workshop Remodel", "file": "tp238_beige_workshop.png", "price": 0x834, "lock": 3, "short": "Wood Paneled Workshop Remodel", "long": "Update the workshop with wood paneled walls and faux cork flooring!"},
+    {"room": "office", "name": "Office Remodel in Red", "file": "tp239_red_office.png", "price": 0xABE, "lock": 3, "short": "Office Remodel in Red", "long": "Remodel the office in red! Your family will enjoy bright red walls and chairs, with coordinating neutral desks, carpet and chairs!"},
+    {"room": "kitchen", "name": "Kitchen Remodel in Yellow", "file": "tp239_yellow_kitchen.png", "price": 0xDAC, "lock": 3, "short": "Kitchen Remodel in Yellow", "long": "Remodel the kitchen with a yellow gingham wallpaper and a bright, lemony ceramic tile!"},
+    {"room": "kitchen", "name": "Country Kitchen Remodel", "file": "tp240_country_kitchen.png", "price": 0x73A, "lock": 3, "short": "Country Kitchen Remodel", "long": "Remodel the walls and floors with wood and stone to create a charming country kitchen!"},
+    {"room": "office", "name": "Dark Office Remodel", "file": "tp240_dark_office.png", "price": 0x834, "lock": 3, "short": "Dark Office Remodel", "long": "Remodel the office with striking black-and-white tiled walls and coordinating neutral desks, carpet and chairs!"},
+    {"room": "office", "name": "Office Remodel in Green", "file": "tp241_green_office.png", "price": 0xAF0, "lock": 3, "short": "Office Remodel in Green", "long": "Remodel the office in a lush green color with coordinating walls, carpet and chairs!"},
+    {"room": "office", "name": "Modern Office Remodel", "file": "tp241_modern_office.png", "price": 0x834, "lock": 3, "short": "Modern Office Remodel", "long": "Remodel the office with white paneled walls, coordinating neutral desks, carpet and chairs!"},
+    {"room": "office", "name": "Office Remodel in Blue", "file": "tp242_blue_office.png", "price": 0x992, "lock": 3, "short": "Office Remodel in Blue", "long": "Remodel the office in a calming blue color with coordinating walls, carpet and chairs!"},
+    {"room": "workshop", "name": "Checkered Workshop Remodel", "file": "tp242_checkered_workshop.png", "price": 0x76C, "lock": 3, "short": "Checkered Workshop Remodel", "long": "Remodel the workshop to look just like workshops enjoyed by famous car collectors, complete with checkerboard floor!"},
+)
+if len(MOBILE_RENOVATION_STYLE_CATALOG) != MOBILE_RENOVATION_IMAGE_COUNT:
+    raise RuntimeError("Mobile renovation style catalog/art count mismatch")
 MOBILE_DECORATIVE_ONLY_FMAP_SPECS = {
     "CandyCane.png.fmap": {
         "item_id": 0x2AB,
@@ -3830,12 +3876,25 @@ def outfit_icon_image_id(gender, body_value, holiday_body_descriptor_count=0):
     return outfit_icon_image_base(holiday_body_descriptor_count) + outfit_store_entry_index(gender, body_value)
 
 
+def mobile_renovation_image_base(holiday_body_descriptor_count=0):
+    return outfit_icon_image_base(holiday_body_descriptor_count) + OUTFIT_STORE_ENTRY_COUNT
+
+
+def mobile_renovation_image_id(index, holiday_body_descriptor_count=0):
+    if index < 0 or index >= MOBILE_RENOVATION_IMAGE_COUNT:
+        raise IndexError(f"mobile renovation image index out of range: {index}")
+    return mobile_renovation_image_base(holiday_body_descriptor_count) + index
+
+
 def outfit_icon_path(gender, body_value):
     return f"OutfitIcons/{gender.title()}_Body_{body_value:02d}.png"
 
 
 def holiday_ornament_collection_image_base(holiday_body_descriptor_count=0):
-    return outfit_icon_image_base(holiday_body_descriptor_count) + OUTFIT_STORE_ENTRY_COUNT
+    return (
+        mobile_renovation_image_base(holiday_body_descriptor_count)
+        + (MOBILE_RENOVATION_IMAGE_COUNT if ENABLE_MOBILE_RENOVATIONS else 0)
+    )
 
 
 def holiday_ornament_collection_item_image_id(index, holiday_body_descriptor_count=0):
@@ -3906,6 +3965,19 @@ def holiday_ornament_collection_footer_string_ids():
             first_id,
             first_id + len(HOLIDAY_ORNAMENT_COLLECTION_FOOTER_ROWS),
         )
+    )
+
+
+def mobile_renovation_string_ids_for(index):
+    if index < 0 or index >= MOBILE_RENOVATION_IMAGE_COUNT:
+        raise IndexError(f"mobile renovation string index is out of range: {index}")
+    return (
+        holiday_ornament_collection_footer_string_ids()[-1]
+        + 1
+        + index * 2,
+        holiday_ornament_collection_footer_string_ids()[-1]
+        + 2
+        + index * 2,
     )
 
 
@@ -7245,14 +7317,17 @@ def sync_optional_visual_mod_sources(manifest):
 
 
 def sync_mobile_renovation_art_sources(manifest):
-    """Stage verified mobile room art for the optional bundle.
-
-    These PNGs are intentionally kept under OptionalVisualMods rather than
-    copied into the live Images tree.  The PC executable's native room-image
-    selector still needs an exact per-item binding; staging the payload now
-    makes the asset side self-contained without changing stock rendering.
-    """
-    target = OUT / "OptionalVisualMods" / "Mobile Renovations"
+    """Copy verified 1:1 room overlays to the enabled renderer payload."""
+    runtime_target = OUT / "Images" / "MobileRenovations"
+    optional_target = OUT / "OptionalVisualMods" / "Mobile Renovations"
+    if ENABLE_MOBILE_RENOVATIONS:
+        target = runtime_target
+        if optional_target.exists():
+            shutil.rmtree(optional_target)
+    else:
+        target = optional_target
+        if runtime_target.exists():
+            shutil.rmtree(runtime_target)
     copied = []
     missing = []
     if MOBILE_RENOVATION_ART_SOURCE_DIR.is_dir():
@@ -7271,13 +7346,21 @@ def sync_mobile_renovation_art_sources(manifest):
             "bytes": destination.stat().st_size,
         })
     manifest["mobile_renovation_art_sources"] = {
-        "status": "staged_optional_payload_native_selector_pending" if not missing else "missing_sources",
+        "status": (
+            "runtime_1_to_1_overlay_payload"
+            if ENABLE_MOBILE_RENOVATIONS and not missing
+            else "staged_optional_payload_renderer_disabled"
+            if not ENABLE_MOBILE_RENOVATIONS and not missing
+            else "missing_sources"
+        ),
         "source": str(MOBILE_RENOVATION_ART_SOURCE_DIR),
         "target": str(target),
         "copied": copied,
         "missing": missing,
         "native_item_range": "0xE1-0xEA",
-        "runtime_copy": "disabled until exact PC room-image selector bindings are proven",
+        "runtime_copy": ENABLE_MOBILE_RENOVATIONS,
+        "overlay_contract": "Images/MobileRenovations/*.png are drawn at 1:1 scale after CWorldMap::Draw and before decals",
+        "anchors": {room: list(origin) for room, origin in MOBILE_RENOVATION_ANCHORS.items()},
         "bathroom2_policy": "reuse the corrected Bathroom 1 art only after a native second-bathroom render route is verified",
     }
 
@@ -8337,6 +8420,8 @@ def patch_visible_special_upgrades(manifest):
     added_service_ids = MOBILE_SPECIAL_UPGRADE_ITEM_IDS + (
         [item["item_id"] for item in CHEAT_UPGRADE_ITEMS] if ENABLE_CHEAT_UPGRADES else []
     )
+    if ENABLE_MOBILE_RENOVATIONS:
+        added_service_ids += list(MOBILE_RENOVATION_PC_ITEM_IDS)
     insert_off = services_sym.value + len(original_visible_ids) * 4
     existing_after = list(struct.unpack_from(f"<{len(added_service_ids)}I", obj.buf, services_sec.raw_ptr + insert_off))
     inserted = False
@@ -8363,6 +8448,22 @@ def patch_visible_special_upgrades(manifest):
                 1,
                 item["price"],
                 0,
+                short_id,
+                long_id,
+                0,
+                0,
+            ]
+    if ENABLE_MOBILE_RENOVATIONS:
+        renovation_desc_count = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
+        for index, style in enumerate(MOBILE_RENOVATION_STYLE_CATALOG):
+            short_id, long_id = mobile_renovation_string_ids_for(index)
+            item_id = MOBILE_RENOVATION_PC_ITEM_IDS[index]
+            special_upgrade_records[item_id] = [
+                item_id,
+                mobile_renovation_image_id(index, renovation_desc_count),
+                1,
+                style["price"],
+                style["lock"],
                 short_id,
                 long_id,
                 0,
@@ -8433,6 +8534,22 @@ def patch_visible_special_upgrades(manifest):
                 for index, item in enumerate(CHEAT_UPGRADE_ITEMS)
             ]
             if ENABLE_CHEAT_UPGRADES
+            else []
+        ) + (
+            [
+                {
+                    "item_id": hex(MOBILE_RENOVATION_PC_ITEM_IDS[index]),
+                    "name": style["name"],
+                    "price": style["price"],
+                    "icon": hex(mobile_renovation_image_id(index, holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)),
+                    "icon_file": style["file"],
+                    "room": style["room"],
+                    "title_string": hex(mobile_renovation_string_ids_for(index)[0]),
+                    "description_string": hex(mobile_renovation_string_ids_for(index)[1]),
+                }
+                for index, style in enumerate(MOBILE_RENOVATION_STYLE_CATALOG)
+            ]
+            if ENABLE_MOBILE_RENOVATIONS
             else []
         ),
         "active_reset_price": {
@@ -8556,6 +8673,30 @@ extern CFurnitureManager FurnitureManager;
 extern CVillagerManager VillagerManager;
 extern EInventoryItem gGoodiesList[];
 static const bool kVF2EnableB150CheatUpgrades = {"true" if ENABLE_CHEAT_UPGRADES else "false"};
+static const bool kVF2EnableMobileRenovations = {"true" if ENABLE_MOBILE_RENOVATIONS else "false"};
+static const int kVF2MobileRenovationItemBase = {MOBILE_RENOVATION_PC_ITEM_BASE};
+static const int kVF2MobileRenovationItemCount = {MOBILE_RENOVATION_IMAGE_COUNT};
+
+static bool VF2IsMobileRenovationStyle(int itemId) {{
+    return kVF2EnableMobileRenovations &&
+        itemId >= kVF2MobileRenovationItemBase &&
+        itemId < kVF2MobileRenovationItemBase + kVF2MobileRenovationItemCount;
+}}
+
+extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId) {{
+    if (!VF2IsMobileRenovationStyle(itemId)) return -1;
+    return InventoryManager.HaveUpgrade((EInventoryItem)itemId) ? 0 : -1;
+}}
+
+extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
+    if (!VF2IsMobileRenovationStyle(itemId)) return false;
+    if (InventoryManager.HaveUpgrade((EInventoryItem)itemId))
+        InventoryManager.ReturnOne((EInventoryItem)itemId);
+    else
+        InventoryManager.TakeOne((EInventoryItem)itemId);
+    theGameState::Get()->SaveCurrentGame();
+    return true;
+}}
 
 extern "C" int __fastcall VF2SpawnBirthPeepWithForcedGender(
     CVillagerManager *manager,
@@ -9235,6 +9376,11 @@ def patch_scrolling_store_scene(manifest):
         if ENABLE_CHEAT_UPGRADES
         else MOBILE_SPECIAL_UPGRADE_ITEM_IDS[-1]
     ) - MOBILE_SPECIAL_UPGRADE_ITEM_IDS[0]
+    if ENABLE_MOBILE_RENOVATIONS:
+        max_visible_special_index = max(
+            max_visible_special_index,
+            MOBILE_RENOVATION_PC_ITEM_IDS[-1] - MOBILE_SPECIAL_UPGRADE_ITEM_IDS[0],
+        )
     purchase_payload += b"\x2D\x17\x01\x00\x00"                      # sub eax,117h
     purchase_payload += b"\x83\xF8" + bytes([max_visible_special_index])  # cmp eax,last added Special Upgrade index
     purchase_payload += b"\x77\x0E"                                  # ja normal visible purchase
@@ -9672,6 +9818,9 @@ enum EAchievement {
 enum EInventoryItem {
     eInventoryItemDummy = 0
 };
+
+extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId);
+extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId);
 
 class CContentMap {
 public:
@@ -10808,6 +10957,8 @@ extern "C" int __stdcall VF2CollectionPageCount(int page) {
 }
 
 extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
+    int mobileRenovationPrice = VF2GetMobileRenovationStylePrice(itemId);
+    if (mobileRenovationPrice != -1) return mobileRenovationPrice;
     int b150Price = VF2GetB150UpgradePrice(itemId);
     if (b150Price != -1) {
         return b150Price;
@@ -10829,6 +10980,7 @@ extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
 }
 
 extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
+    if (VF2ApplyMobileRenovationStyle(itemId)) return;
     switch (itemId) {
     case 0x117: {
         if (Money.bankingInterest > 0.1001f) {
@@ -11014,6 +11166,18 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_INCLUDE_BEHAVIOR_GOALS__",
         "true" if ENABLE_BEHAVIOR_PATCHES else "false",
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_MOBILE_RENOVATION_ENABLED__",
+        "true" if ENABLE_MOBILE_RENOVATIONS else "false",
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_MOBILE_RENOVATION_ITEM_BASE__",
+        str(MOBILE_RENOVATION_PC_ITEM_BASE),
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        "__VF2_MOBILE_RENOVATION_ITEM_COUNT__",
+        str(MOBILE_RENOVATION_IMAGE_COUNT),
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_GENERAL_PURCHASE_GOAL_CASES__",
@@ -11438,6 +11602,29 @@ def patch_string_manager(manifest):
                 "key": key,
                 "text": text,
             })
+
+    if ENABLE_MOBILE_RENOVATIONS:
+        for index, style in enumerate(MOBILE_RENOVATION_STYLE_CATALOG):
+            short_id, long_id = mobile_renovation_string_ids_for(index)
+            for string_id, role, text in (
+                (short_id, "short", style["short"]),
+                (long_id, "long", style["long"]),
+            ):
+                key = f"eString_MobileRenovation{index:02d}{role.title()}Desc"
+                key_sym = f"_vf2renovationstr_key_{index:02d}_{role}"
+                text_sym = f"_vf2renovationstr_text_{index:02d}_{role}"
+                helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+                helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+                new_rows.append((string_id, key_sym, text_sym))
+                string_manifest.append({
+                    "pc_string_id": hex(string_id),
+                    "source": "mobile renovation style",
+                    "room": style["room"],
+                    "item_id": hex(MOBILE_RENOVATION_PC_ITEM_IDS[index]),
+                    "role": role,
+                    "key": key,
+                    "text": text,
+                })
 
     def find_literal_symbol(candidates):
         for symbol in obj.symbols:
@@ -12492,6 +12679,7 @@ def patch_graphics_manager(manifest):
         + holiday_desc_count
         + len(VF3_TV_FLOATING_ANIMS)
         + OUTFIT_STORE_ENTRY_COUNT
+        + (MOBILE_RENOVATION_IMAGE_COUNT if ENABLE_MOBILE_RENOVATIONS else 0)
         + (HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT if ENABLE_HOLIDAY_ORNAMENTS else 0)
     )
     if append_count:
@@ -12709,6 +12897,35 @@ def patch_graphics_manager(manifest):
             "grid": [1, 1],
         })
 
+    mobile_renovation_desc_manifest = []
+    if ENABLE_MOBILE_RENOVATIONS:
+        for index, filename in enumerate(MOBILE_RENOVATION_ART_FILES):
+            image_id = mobile_renovation_image_id(index, holiday_desc_count)
+            path = f"MobileRenovations/{filename}"
+            vals = plain_image_donor[:]
+            vals[0] = image_id
+            vals[1] = 0
+            vals[2] = 1
+            vals[3] = 1
+            desc_off = img_sym.value + image_id * DESC_SIZE
+            img_sec = obj.section(img_sym.section)
+            obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack(
+                "<" + "I" * (DESC_SIZE // 4),
+                *vals,
+            )
+            sym = "_vf2renovation_" + filename.replace(".", "_").replace("-", "_")
+            helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+            symidx = obj.append_undefined_symbol(sym)
+            obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+            mobile_renovation_desc_manifest.append({
+                "image_id": hex(image_id),
+                "name": filename,
+                "path": path,
+                "symbol": sym,
+                "grid": [1, 1],
+                "scale": [1.0, 1.0],
+            })
+
     ornament_desc_manifest = []
     if ENABLE_HOLIDAY_ORNAMENTS:
         for index, (filename, _source_name, _placeholder_name) in enumerate(HOLIDAY_ORNAMENT_COLLECTION_FILES):
@@ -12799,6 +13016,17 @@ def patch_graphics_manager(manifest):
             "image_base": hex(outfit_icon_image_base(holiday_desc_count)),
             "image_count": OUTFIT_STORE_ENTRY_COUNT,
             "descriptors": outfit_icon_desc_manifest,
+        },
+        "mobile_renovation_images": {
+            "enabled": ENABLE_MOBILE_RENOVATIONS,
+            "image_base": hex(mobile_renovation_image_base(holiday_desc_count))
+            if ENABLE_MOBILE_RENOVATIONS
+            else None,
+            "image_count": MOBILE_RENOVATION_IMAGE_COUNT
+            if ENABLE_MOBILE_RENOVATIONS
+            else 0,
+            "descriptors": mobile_renovation_desc_manifest,
+            "runtime_asset_export": "coordinator-owned; descriptors use Images/MobileRenovations/*.png",
         },
         "holiday_ornament_collection_images": {
             "enabled": ENABLE_HOLIDAY_ORNAMENTS,
@@ -20044,6 +20272,189 @@ extern "C" void __cdecl VF2PatchedDrawOverlaysAndDebugger()
     }
 
 
+def patch_mobile_renovation_renderer(manifest):
+    """Bind the exact-size mobile room images to the post-map draw boundary."""
+    obj = CoffObject(PATCHED / "theMainScene.obj")
+    draw_sym = obj.symbol("?DrawScene@theMainScene@@MAEXXZ")
+    section = obj.section(draw_sym.section)
+    raw = section.raw_ptr + draw_sym.value
+    map_call_offset = draw_sym.value + 0x35
+    map_call_target = _coff_relocation_target_name(obj, section, map_call_offset)
+    if map_call_target != "?Draw@CWorldMap@@QBEXUldwPoint@@UldwRect@@@Z":
+        raise RuntimeError(
+            "theMainScene::DrawScene map call drifted before mobile renovation injection: "
+            f"{map_call_target!r}"
+        )
+    if obj.buf[raw + 0x39 : raw + 0x3E] != b"\xB9\x00\x00\x00\x00":
+        raise RuntimeError("theMainScene::DrawScene decal boundary drifted")
+
+    hook = None
+    if ENABLE_MOBILE_RENOVATIONS:
+        helper_sym = obj.append_undefined_symbol("_VF2DrawMobileRenovations")
+        insert_off = draw_sym.value + 0x39
+        obj.insert_section_bytes(
+            draw_sym.section,
+            insert_off,
+            b"\xE8\x00\x00\x00\x00",
+        )
+        obj.append_relocation(
+            draw_sym.section,
+            insert_off + 1,
+            helper_sym,
+            IMAGE_REL_I386_REL32,
+        )
+        hook = {
+            "function": "?DrawScene@theMainScene@@MAEXXZ",
+            "insert_offset": hex(insert_off),
+            "boundary": "after CWorldMap::Draw and before CDecal::DrawDecals",
+            "helper": "_VF2DrawMobileRenovations",
+            "preserves_scale": 1.0,
+        }
+
+    selector_cases = []
+    for room_index, room in enumerate(MOBILE_RENOVATION_ROOM_ORDER):
+        selector_cases.append(f"    case {room_index}:")
+        for variant_index in MOBILE_RENOVATION_VARIANT_INDICES[room]:
+            item_id = MOBILE_RENOVATION_PC_ITEM_IDS[variant_index]
+            selector_cases.append(
+                f"        if (InventoryManager.HaveUpgrade((EInventoryItem){item_id})) return {mobile_renovation_image_id(variant_index, holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};"
+            )
+        selector_cases.append("        break;")
+
+    draw_lines = []
+    for room_index, room in enumerate(MOBILE_RENOVATION_ROOM_ORDER):
+        x, y = MOBILE_RENOVATION_ANCHORS[room]
+        draw_lines.append(
+            f"    VF2DrawMobileRenovationRoom({room_index}, {x}, {y}, graphics, worldX, worldY);"
+        )
+
+    helper_cpp = f"""
+enum EImage {{ eImageDummy = 0 }};
+enum EInventoryItem {{ eInventoryItemDummy = 0 }};
+
+class theGraphicsManager {{
+public:
+    static theGraphicsManager* Get();
+    void Draw(EImage image, int x, int y, float scale, int alpha);
+}};
+
+class CWorldView {{
+public:
+    int x;
+    int y;
+}};
+
+class CInventoryManager {{
+public:
+    bool HaveUpgrade(EInventoryItem item);
+}};
+
+extern CWorldView WorldView;
+extern CInventoryManager InventoryManager;
+
+static const bool kVF2EnableMobileRenovations = {"true" if ENABLE_MOBILE_RENOVATIONS else "false"};
+static const int kVF2MobileRenovationImageBase = {mobile_renovation_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
+static const int kVF2MobileRenovationItemBase = {MOBILE_RENOVATION_PC_ITEM_BASE};
+
+static int VF2SelectedMobileRenovationImage(int room) {{
+    switch (room) {{
+{chr(10).join(selector_cases)}
+    default:
+        break;
+    }}
+    return -1;
+}}
+
+static void VF2DrawMobileRenovationRoom(
+    int room,
+    int anchorX,
+    int anchorY,
+    theGraphicsManager* graphics,
+    int worldX,
+    int worldY
+) {{
+    int image = VF2SelectedMobileRenovationImage(room);
+    if (image < 0 || !graphics) return;
+    graphics->Draw((EImage)image, anchorX - worldX, anchorY - worldY, 1.0f, 100);
+}}
+
+extern "C" void __cdecl VF2DrawMobileRenovations() {{
+    if (!kVF2EnableMobileRenovations) return;
+    theGraphicsManager* graphics = theGraphicsManager::Get();
+    if (!graphics) return;
+    const int worldX = WorldView.x;
+    const int worldY = WorldView.y;
+{chr(10).join(draw_lines)}
+}}
+""".lstrip()
+    (PATCHED / "vf2_mobile_renovations.cpp").write_text(helper_cpp, encoding="ascii")
+    obj.write(PATCHED / "theMainScene.obj")
+    manifest["mobile_renovation_renderer"] = {
+        "enabled": ENABLE_MOBILE_RENOVATIONS,
+        "status": "linked_post_world_map_1_to_1_overlay" if ENABLE_MOBILE_RENOVATIONS else "disabled_stock_map_path",
+        "hook": hook,
+        "map_call": {
+            "function": "?Draw@CWorldMap@@QBEXUldwPoint@@UldwRect@@@Z",
+            "draw_scene_offset": "0x35",
+            "verified_decal_boundary": "0x39",
+        },
+        "image_scale": 1.0,
+        "anchors": {room: list(origin) for room, origin in MOBILE_RENOVATION_ANCHORS.items()},
+        "selector": {
+            "mode": "first_owned_style_per_room",
+            "item_ids": [hex(item_id) for item_id in MOBILE_RENOVATION_PC_ITEM_IDS],
+            "rooms": {room: [hex(MOBILE_RENOVATION_PC_ITEM_IDS[index]) for index in indices] for room, indices in MOBILE_RENOVATION_VARIANT_INDICES.items()},
+        },
+        "source": str(PATCHED / "vf2_mobile_renovations.cpp"),
+    }
+
+
+def validate_mobile_renovation_renderer_contract(manifest):
+    """Fail closed if the enabled overlay loses its 1:1 map contract."""
+    renderer = manifest.get("mobile_renovation_renderer")
+    if not isinstance(renderer, dict):
+        raise RuntimeError("Missing mobile renovation renderer manifest")
+    expected_anchors = {room: list(origin) for room, origin in MOBILE_RENOVATION_ANCHORS.items()}
+    if renderer.get("anchors") != expected_anchors:
+        raise RuntimeError("Mobile renovation renderer anchors drifted")
+    helper_path = PATCHED / "vf2_mobile_renovations.cpp"
+    if not helper_path.is_file():
+        raise RuntimeError("Missing generated mobile renovation renderer helper")
+    helper_text = helper_path.read_text(encoding="ascii")
+    if "1.0f" not in helper_text or "anchorX - worldX" not in helper_text:
+        raise RuntimeError("Mobile renovation renderer is not a 1:1 camera-relative overlay")
+    if ENABLE_MOBILE_RENOVATIONS:
+        hook = renderer.get("hook") or {}
+        if hook.get("insert_offset") != "0x39":
+            raise RuntimeError("Mobile renovation renderer was not injected at the post-map boundary")
+        descriptors = manifest.get("theGraphicsManager", {}).get("mobile_renovation_images", {})
+        if descriptors.get("image_count") != MOBILE_RENOVATION_IMAGE_COUNT:
+            raise RuntimeError("Mobile renovation image descriptor count drifted")
+        if len(descriptors.get("descriptors", [])) != MOBILE_RENOVATION_IMAGE_COUNT:
+            raise RuntimeError("Mobile renovation image descriptors are incomplete")
+        runtime_dir = OUT / "Images" / "MobileRenovations"
+        missing = [name for name in MOBILE_RENOVATION_ART_FILES if not (runtime_dir / name).is_file()]
+        if missing:
+            raise RuntimeError("Missing enabled mobile renovation runtime art: " + ", ".join(missing))
+        sizes = {name: read_png_size(runtime_dir / name) for name in MOBILE_RENOVATION_ART_FILES}
+        contract = json.loads(MOBILE_RENOVATION_ATLAS_CONTRACT.read_text(encoding="utf-8"))
+        expected_sizes = {row["name"]: tuple(row["size"]) for row in contract["curated_art"]["files"]}
+        if sizes != expected_sizes:
+            raise RuntimeError(f"Mobile renovation runtime art dimensions drifted: {sizes!r}")
+    else:
+        if renderer.get("hook") is not None:
+            raise RuntimeError("Disabled mobile renovation build still patches DrawScene")
+        if (OUT / "Images" / "MobileRenovations").exists():
+            raise RuntimeError("Disabled mobile renovation build retained runtime room art")
+    manifest["mobile_renovation_renderer_validation"] = {
+        "status": "passed",
+        "enabled": ENABLE_MOBILE_RENOVATIONS,
+        "scale": 1.0,
+        "anchors": expected_anchors,
+        "validated_image_count": MOBILE_RENOVATION_IMAGE_COUNT if ENABLE_MOBILE_RENOVATIONS else 0,
+    }
+
+
 def write_disabled_debug_features(manifest):
     (PATCHED / "vf2_debug_features.cpp").write_text(
         "/* Debugger hooks are disabled for normal builds. */\n",
@@ -23075,6 +23486,7 @@ def main():
         patch_debug_features(manifest)
     else:
         write_disabled_debug_features(manifest)
+    patch_mobile_renovation_renderer(manifest)
     if ENABLE_ISLAND_EVENTS:
         patch_island_events(manifest)
     else:
@@ -23161,6 +23573,7 @@ def main():
     validate_native_north_bathroom_malfunction_selection(manifest)
     validate_native_dryer_lint_fire_contract(manifest)
     validate_native_mobile_renovation_contract(manifest)
+    validate_mobile_renovation_renderer_contract(manifest)
     if ENABLE_BEHAVIOR_PATCHES:
         validate_invisible_hammock_behavior_contract(manifest)
     else:

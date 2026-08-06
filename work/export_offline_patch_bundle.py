@@ -118,6 +118,7 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "transparent_decor_tab",
     "custom_lorsieab2_map_images",
     "optional_visual_mod_graphics",
+    "mobile_renovations",
 }
 
 SETTINGS = [
@@ -258,6 +259,13 @@ SETTINGS = [
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
         "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes good-weather loungers choose among relaxing, reading, studying, sitting, napping, and sleeping with exhaustion-sensitive rest odds, plus spontaneous supported variants. Exact guarded manual routes cover the Patio Umbrella and tables, Picnic Table, Birthday furniture, Christmas Trees, Dreidel, Menorah, Stockings, Holiday Candles, Santa's Cookie Plate, ten Holiday figurines, Red Bow, Santa Wall Decoration, and both garlands. Invisible/custom/VF3 furniture is excluded.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "mobile_renovations",
+        "label": "Add mobile room renovations",
+        "description": "Optional patch: overlays the 15 verified mobile kitchen, bathroom, office, and workshop renovation images at their exact 1:1 room-map positions. The stock map remains unchanged when this setting is disabled.",
         "default": False,
         "category": "optional",
     },
@@ -1280,6 +1288,8 @@ def setting_for_asset(rel_path: Path) -> str:
         or stem == "collectables_small"
     ):
         return "holiday_ornaments_collection"
+    if text.startswith("Images/MobileRenovations/"):
+        return "mobile_renovations"
     if text in {
         "Images/familytree_scrollknob_btm.png",
         "Images/familytree_scrollknob_mid.png",
@@ -1312,7 +1322,7 @@ def setting_for_asset(rel_path: Path) -> str:
 
 
 def asset_requires_for_setting(setting: str) -> list[str]:
-    if setting in {"vf3_tv_assets_recognition", "vf3_furniture", "behavior_patches"}:
+    if setting in {"vf3_tv_assets_recognition", "vf3_furniture", "behavior_patches", "mobile_renovations"}:
         return ["core_executable", setting]
     return [setting]
 
@@ -2591,6 +2601,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     cheat_upgrades_exe = Path(args.cheat_upgrades_exe).resolve() if args.cheat_upgrades_exe else None
     holiday_ornaments_exe = Path(args.holiday_ornaments_exe).resolve() if args.holiday_ornaments_exe else None
     behavior_patches_exe = Path(args.behavior_patches_exe).resolve() if args.behavior_patches_exe else None
+    mobile_renovations_exe = Path(args.mobile_renovations_exe).resolve() if args.mobile_renovations_exe else None
     island_events_cheat_upgrades_exe = (
         Path(args.island_events_cheat_upgrades_exe).resolve()
         if args.island_events_cheat_upgrades_exe
@@ -2805,6 +2816,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 "Optional Behavior Patches executable overlay. Applied only when core_executable and behavior_patches are enabled.",
             ),
             (
+                mobile_renovations_exe,
+                "Mobile Room Renovations",
+                ["core_executable", "mobile_renovations"],
+                "Optional mobile room-renovation executable overlay. Applied only when core_executable and mobile_renovations are enabled.",
+            ),
+            (
                 island_events_cheat_upgrades_exe,
                 "Island Events + Cheat Upgrades",
                 ["core_executable", "island_events", "cheat_upgrades"],
@@ -2932,6 +2949,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "cheat_upgrades_exe": cheat_upgrades_exe.name if cheat_upgrades_exe else None,
             "holiday_ornaments_exe": holiday_ornaments_exe.name if holiday_ornaments_exe else None,
             "behavior_patches_exe": behavior_patches_exe.name if behavior_patches_exe else None,
+            "mobile_renovations_exe": mobile_renovations_exe.name if mobile_renovations_exe else None,
             "island_events_cheat_upgrades_exe": island_events_cheat_upgrades_exe.name if island_events_cheat_upgrades_exe else None,
             "island_events_holiday_ornaments_exe": island_events_holiday_ornaments_exe.name if island_events_holiday_ornaments_exe else None,
             "cheat_upgrades_holiday_ornaments_exe": cheat_upgrades_holiday_ornaments_exe.name if cheat_upgrades_holiday_ornaments_exe else None,
@@ -3000,6 +3018,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--cheat-upgrades-exe", help="Optional EXE overlay to apply when cheat_upgrades is enabled.")
     parser.add_argument("--holiday-ornaments-exe", help="Optional fully linked EXE overlay to apply when holiday_ornaments_collection is enabled.")
     parser.add_argument("--behavior-patches-exe", help="Optional EXE overlay to apply when behavior_patches is enabled.")
+    parser.add_argument("--mobile-renovations-exe", help="Optional EXE overlay to apply when mobile_renovations is enabled.")
     parser.add_argument("--island-events-cheat-upgrades-exe", help="Combined optional EXE overlay to apply when island_events and cheat_upgrades are both enabled.")
     parser.add_argument("--island-events-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when island_events and holiday_ornaments_collection are both enabled.")
     parser.add_argument("--cheat-upgrades-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when cheat_upgrades and holiday_ornaments_collection are both enabled.")

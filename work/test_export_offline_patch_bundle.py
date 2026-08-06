@@ -124,12 +124,23 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             "same_sex_marriage",
             "older_villager_mortality",
             "mobile_furniture_behaviors",
+            "mobile_renovations",
         ):
             with self.subTest(setting_id=setting_id):
                 self.assertEqual(settings_by_id[setting_id]["category"], "optional")
         cheat_description = settings_by_id["cheat_upgrades"]["description"]
         self.assertIn("0xE1-0xEA", cheat_description)
         self.assertIn("rebuilds the native content map", cheat_description)
+
+    def test_mobile_renovation_assets_require_the_toggle_and_core_executable(self):
+        self.assertEqual(
+            exporter.setting_for_asset(Path("Images/MobileRenovations/tp238_beige_kitchen.png")),
+            "mobile_renovations",
+        )
+        self.assertEqual(
+            exporter.asset_requires_for_setting("mobile_renovations"),
+            ["core_executable", "mobile_renovations"],
+        )
 
     def run_exporter(self, *args):
         result = subprocess.run(

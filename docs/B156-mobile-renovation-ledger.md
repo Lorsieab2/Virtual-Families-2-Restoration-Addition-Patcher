@@ -35,13 +35,13 @@ redraw, or recoloring was applied. The groups are:
 - Office: five `tp239`-`tp242` variants.
 - Workshop: two `tp238`/`tp242` variants.
 
-The patch build now stages these files under
+The default-off patch build stages these files under
 `OptionalVisualMods/Mobile Renovations` and records the exact source/target
-list in its build manifest. They are not copied into the live `Images` tree:
-the PC executable's room-background selector has not yet been proven, so
-activating these files without that binding would be an unsupported native
-render change. The optional Bathroom 2 plan remains to reuse the corrected
-Bathroom 1 files once a native second-bathroom render route is verified.
+list in its build manifest. When the optional mobile-renovations toggle is
+enabled, the same files are copied into `Images/MobileRenovations` and linked
+through the B157 post-map overlay renderer. The optional Bathroom 2 plan
+remains to reuse the corrected Bathroom 1 files only after a native
+second-bathroom render route is verified.
 
 The bundle-level extraction record is tracked in
 `data/vf2/mobile-renovation-atlas-contract.json`. It records the eight mobile
@@ -49,8 +49,8 @@ texture bundles that supplied the 15 staged room overlays, the extracted
 bathroom support textures that are intentionally not staged, and the current
 runtime-copy/selector boundary. It now also pins the ten native activation
 records and the mobile save-load order used by the static PC parity validator.
-This is still metadata plus static route validation; it does not claim that
-the PC executable can yet select these overlays at runtime.
+The enabled and disabled renderer states are separately recorded in each
+generated build manifest; live visual selection still requires player QA.
 
 ## Native PC route parity
 
@@ -68,24 +68,36 @@ The build manifest records this as
 validator is deliberately fail-closed: if a call target, switch entry,
 activation argument, prop, or load-order record drifts, the build stops.
 This proves the native purchase and save-load state path. It does not solve
-room-background compositing or Bathroom 2 art selection; the Cheat Upgrades
-removal route is source-validated separately and still needs live QA.
+Bathroom 2 art selection; the Cheat Upgrades removal route is source-validated
+separately and still needs live QA.
+
+## B157 room-overlay route
+
+The optional renderer registers the 15 mobile styles as PC store items
+`0x13C-0x14A`, retaining the mobile price and unlock-level records. The
+purchase/removal helper uses the PC inventory path, and the renderer selects
+the first owned style in each room group. It draws the complete source PNG at
+1:1 using these camera-relative world anchors:
+
+| Room | Anchor | Variants |
+| --- | --- | --- |
+| Bathroom | `(255,1435)` | 5 |
+| Kitchen | `(930,995)` | 3 |
+| Office | `(1354,792)` | 5 |
+| Workshop | `(500,1400)` | 2 |
+
+The hook is `theMainScene::DrawScene +0x39`, after `CWorldMap::Draw` and before
+stock decals. The disabled build has no hook and does not copy these PNGs into
+the runtime image tree. Static contract validation and compilation/linking
+pass; player visual QA is still required.
 
 ## Remaining native work
 
-1. Recover the PC map-tile compositing and renovation-state selector. The
-   inspected PC path renders the static house background through
-   `CWorldMap::Draw` from `Images/MapX##Y##.jpg` (16 512x512 tiles), not a
-   proven per-item `EImage` room selector. The mobile activation coordinates
-   above are condemned-area/content-map coordinates; they must not be treated
-   as pixel anchors until the corresponding PC map geometry is verified.
-   Bind each `0xE1-0xEA` state to the correct staged atlas/variant only after
-   its scale and tile anchor are measured against the stitched map.
-2. Recover the PC map-tile compositing and renovation-state selector, then
-   verify the visual result in-game against the staged mobile atlases.
-3. Live-verify the Cheat Upgrades removal/re-purchase route, switching, and
+1. Verify the B157 overlay visually in-game against the staged mobile atlases,
+   including camera movement and the selected-room boundaries.
+2. Live-verify the Cheat Upgrades removal/re-purchase route, switching, and
    save/load behavior against the mobile inventory semantics. The source route
    rebuilds `CContentMap` from the native ten-record table and is guarded by
    the Cheat Upgrades overlay; no generic renderer reset is used.
-4. Add Bathroom 2 as a separate optional route only after its overlay anchor
+3. Add Bathroom 2 as a separate optional route only after its overlay anchor
    and state writes are proven.

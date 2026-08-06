@@ -159,8 +159,10 @@ must remain visible as Needs source audit; it must not be silently omitted.
   renovation, trigger Water Pressure Surge and confirm the north toilet,
   shower, and sink leaks appear and can be repaired through their native
   second-bathroom repair routes.
-- Allow the Kitchen, Workshop, and Office to be renovated with their exclusive
-  mobile renovation variants.
+- In-game test B157's Kitchen, Workshop, Office, and first-Bathroom mobile
+  renovation variants, including 1:1 map overlap, camera movement, purchase,
+  switching/removal, save/load, and patch-off behavior. The static renderer
+  and native route implementation are complete; player confirmation remains.
 - [x] Add a default-off Cheat Upgrades route that removes owned native house
   renovations `0xE1-0xEA`, rebuilds the content map from the exact native load
   activation records, preserves other owned renovations, and saves. Live

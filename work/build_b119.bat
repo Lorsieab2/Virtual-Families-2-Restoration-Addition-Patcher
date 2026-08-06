@@ -14,5 +14,5 @@ set "LINK_RSP=%TEMP%\vf2_link_b119_no_out.rsp"
 findstr /B /V /C:"/OUT:" work\vf2_link_b27_arcade_behavior_restore.rsp > "%LINK_RSP%"
 if errorlevel 1 exit /b %errorlevel%
 
-link @"%LINK_RSP%" "work\patched_mobile_furniture_pack_objs\vf2_debug_features.obj" /OUT:"%VF2_BUILD_OUT%\%VF2_OUTPUT_EXE%"
+link @"%LINK_RSP%" "work\patched_mobile_furniture_pack_objs\vf2_debug_features.obj" "work\patched_mobile_furniture_pack_objs\vf2_mobile_renovations.obj" /OUT:"%VF2_BUILD_OUT%\%VF2_OUTPUT_EXE%"
 exit /b %errorlevel%

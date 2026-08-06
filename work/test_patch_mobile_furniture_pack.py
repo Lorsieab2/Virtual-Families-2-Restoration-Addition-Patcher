@@ -1592,11 +1592,14 @@ class MobileRenovationArtTests(unittest.TestCase):
             contract["native_load_order"],
             ["0xE9", "0xE7", "0xE4", "0xE8", "0xE3", "0xE5", "0xE2", "0xE1", "0xEA", "0xE6"],
         )
-        self.assertFalse(contract["runtime_policy"]["copy_into_pc_images"])
+        self.assertEqual(contract["runtime_policy"]["copy_into_pc_images"], "when mobile_renovations is enabled")
         self.assertEqual(contract["pc_render_target"]["renderer"], "CWorldMap::Draw")
         self.assertEqual(contract["pc_render_target"]["tile_size"], [512, 512])
         self.assertEqual(contract["pc_render_target"]["stitched_size"], [2048, 2048])
-        self.assertIn("not implemented", contract["pc_render_target"]["compositing"])
+        self.assertIn("post-map/pre-decal", contract["pc_render_target"]["compositing"])
+        self.assertEqual(contract["pc_render_target"]["hook"]["draw_scene_offset"], "0x39")
+        self.assertEqual(contract["pc_render_target"]["hook"]["scale"], 1.0)
+        self.assertEqual(contract["pc_render_target"]["anchors"]["kitchen"], [930, 995])
         bundles = contract["bundles"]
         self.assertEqual([row["bundle"] for row in bundles], [
             "tp233.dat", "tp234.dat", "tp235.dat", "tp238.dat",
@@ -1649,9 +1652,9 @@ class MobileRenovationArtTests(unittest.TestCase):
             finally:
                 patcher.OUT = old_out
             record = manifest["mobile_renovation_art_sources"]
-            self.assertEqual(record["status"], "staged_optional_payload_native_selector_pending")
+            self.assertEqual(record["status"], "staged_optional_payload_renderer_disabled")
             self.assertEqual(record["native_item_range"], "0xE1-0xEA")
-            self.assertEqual(record["runtime_copy"], "disabled until exact PC room-image selector bindings are proven")
+            self.assertFalse(record["runtime_copy"])
             self.assertEqual(len(record["copied"]), 15)
             self.assertEqual(record["missing"], [])
             self.assertFalse((Path(tmp) / "Images").exists())
@@ -1659,6 +1662,56 @@ class MobileRenovationArtTests(unittest.TestCase):
                 len(list((Path(tmp) / "OptionalVisualMods" / "Mobile Renovations").glob("*.png"))),
                 15,
             )
+
+    def test_enabled_mobile_renovation_art_is_copied_to_runtime_images(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            old_out = patcher.OUT
+            old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
+            try:
+                patcher.OUT = Path(tmp)
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                manifest = {}
+                patcher.sync_mobile_renovation_art_sources(manifest)
+            finally:
+                patcher.OUT = old_out
+                patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+            record = manifest["mobile_renovation_art_sources"]
+            self.assertEqual(record["status"], "runtime_1_to_1_overlay_payload")
+            self.assertTrue(record["runtime_copy"])
+            self.assertEqual(
+                len(list((Path(tmp) / "Images" / "MobileRenovations").glob("*.png"))),
+                15,
+            )
+            self.assertFalse((Path(tmp) / "OptionalVisualMods" / "Mobile Renovations").exists())
+
+    def test_renderer_injects_after_world_map_at_1_to_1_anchors(self):
+        old_patched = patcher.PATCHED
+        old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(patcher.SRC_OBJS / "theMainScene.obj", temp / "theMainScene.obj")
+                patcher.PATCHED = temp
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                manifest = {}
+                patcher.patch_mobile_renovation_renderer(manifest)
+                renderer = manifest["mobile_renovation_renderer"]
+                self.assertEqual(renderer["hook"]["insert_offset"], "0x39")
+                self.assertEqual(renderer["image_scale"], 1.0)
+                self.assertEqual(renderer["anchors"], {
+                    "bathroom": [255, 1435],
+                    "kitchen": [930, 995],
+                    "office": [1354, 792],
+                    "workshop": [500, 1400],
+                })
+                helper = (temp / "vf2_mobile_renovations.cpp").read_text(encoding="ascii")
+                self.assertIn("anchorX - worldX", helper)
+                self.assertIn("1.0f", helper)
+                self.assertEqual(patcher.MOBILE_RENOVATION_PC_ITEM_IDS[0], 0x13C)
+                self.assertEqual(len(patcher.MOBILE_RENOVATION_PC_ITEM_IDS), 15)
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
 
 
 class DebuggerResearchTests(unittest.TestCase):

@@ -4,9 +4,9 @@
   "source": "Virtual Families 2 mobile 1.7.16 Android asset bundles",
   "native_item_range": "0xE1-0xEA",
   "runtime_policy": {
-    "copy_into_pc_images": false,
-    "reason": "The PC per-item room-image selector has not been identified and proven.",
-    "staged_target": "OptionalVisualMods/Mobile Renovations",
+    "copy_into_pc_images": "when mobile_renovations is enabled",
+    "reason": "The optional PC renderer draws these complete PNGs at 1:1 scale after CWorldMap::Draw; the stock map path remains unchanged when disabled.",
+    "staged_target": "Images/MobileRenovations when enabled; OptionalVisualMods/Mobile Renovations otherwise",
     "bathroom2": "Reuse corrected Bathroom 1 art only after a native second-bathroom render route is verified."
   },
   "native_activation": [
@@ -22,12 +22,41 @@
     {"item": "0xEA", "map_area": [17, 6], "materials": [0, 1], "hotspot": 62, "object": 109, "environment_prop": 70}
   ],
   "native_load_order": ["0xE9", "0xE7", "0xE4", "0xE8", "0xE3", "0xE5", "0xE2", "0xE1", "0xEA", "0xE6"],
+  "pc_style_catalog": [
+    {"pc_item": "0x13C", "mobile_item": "0x119", "room": "bathroom", "file": "tp233_sw_bathroom_black.png", "price": 2200, "lock": 4},
+    {"pc_item": "0x13D", "mobile_item": "0x118", "room": "bathroom", "file": "tp233_sw_bathroom_blue_marble.png", "price": 1000, "lock": 0},
+    {"pc_item": "0x13E", "mobile_item": "0x11A", "room": "bathroom", "file": "tp234_sw_bathroom_brown.png", "price": 2200, "lock": 4},
+    {"pc_item": "0x13F", "mobile_item": "0x11B", "room": "bathroom", "file": "tp234_sw_bathroom_green.png", "price": 2200, "lock": 4},
+    {"pc_item": "0x140", "mobile_item": "0x11C", "room": "bathroom", "file": "tp235_sw_bathroom_pink.png", "price": 2200, "lock": 4},
+    {"pc_item": "0x141", "mobile_item": "0x11D", "room": "kitchen", "file": "tp238_beige_kitchen.png", "price": 2200, "lock": 4},
+    {"pc_item": "0x142", "mobile_item": "0x125", "room": "workshop", "file": "tp238_beige_workshop.png", "price": 2100, "lock": 3},
+    {"pc_item": "0x143", "mobile_item": "0x124", "room": "office", "file": "tp239_red_office.png", "price": 2750, "lock": 3},
+    {"pc_item": "0x144", "mobile_item": "0x11F", "room": "kitchen", "file": "tp239_yellow_kitchen.png", "price": 3500, "lock": 3},
+    {"pc_item": "0x145", "mobile_item": "0x11E", "room": "kitchen", "file": "tp240_country_kitchen.png", "price": 1850, "lock": 3},
+    {"pc_item": "0x146", "mobile_item": "0x121", "room": "office", "file": "tp240_dark_office.png", "price": 2100, "lock": 3},
+    {"pc_item": "0x147", "mobile_item": "0x122", "room": "office", "file": "tp241_green_office.png", "price": 2800, "lock": 3},
+    {"pc_item": "0x148", "mobile_item": "0x123", "room": "office", "file": "tp241_modern_office.png", "price": 2100, "lock": 3},
+    {"pc_item": "0x149", "mobile_item": "0x120", "room": "office", "file": "tp242_blue_office.png", "price": 2450, "lock": 3},
+    {"pc_item": "0x14A", "mobile_item": "0x126", "room": "workshop", "file": "tp242_checkered_workshop.png", "price": 1900, "lock": 3}
+  ],
   "pc_render_target": {
     "renderer": "CWorldMap::Draw",
     "asset_pattern": "Images/MapX##Y##.jpg",
     "tile_size": [512, 512],
     "stitched_size": [2048, 2048],
-    "compositing": "not implemented; map anchors and renovation-state selector pending"
+    "compositing": "theMainScene::DrawScene +0x39 post-map/pre-decal hook; complete PNGs are drawn 1:1 with camera-relative origins",
+    "hook": {
+      "draw_scene_offset": "0x39",
+      "boundary": "after CWorldMap::Draw and before CDecal::DrawDecals",
+      "scale": 1.0
+    },
+    "anchors": {
+      "bathroom": [255, 1435],
+      "kitchen": [930, 995],
+      "office": [1354, 792],
+      "workshop": [500, 1400]
+    },
+    "selector": "first owned PC style item per room; IDs 0x13C-0x14A in the optional renderer build"
   },
   "bundles": [
     {"bundle": "tp233.dat", "room_assets": ["sw_bathroom_black.png", "sw_bathroom_blue_marble.png"], "support_assets": ["shower_curtain_closed_black.png", "shower_curtain_closed_blue.png", "soapblackstd.png"], "curated_outputs": ["tp233_sw_bathroom_black.png", "tp233_sw_bathroom_blue_marble.png"]},
