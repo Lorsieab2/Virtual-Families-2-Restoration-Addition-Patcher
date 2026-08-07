@@ -645,25 +645,24 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x12B: "cheat_reset_achievements.png",
     0x12C: "cheat_add_coins.png",
     0x12D: "cheat_reset_achievements.png",
-    # Give every late Special Upgrade its own image descriptor.  The art is
-    # intentionally reused where no dedicated source art exists, but the
-    # descriptor must not be aliased through the item id: the store's native
-    # image lookup and the added-item draw hook can otherwise resolve the
-    # row to an empty cell.
+    # Give every late Special Upgrade its own image descriptor and semantic
+    # artwork.  The descriptor must not be aliased through the item id: the
+    # store's native image lookup and the added-item draw hook can otherwise
+    # resolve the row to an empty cell.
     0x12E: "cheat_reset_achievements.png",
-    0x12F: "cheat_reset_achievements.png",
-    0x130: "cheat_reset_achievements.png",
-    0x131: "cheat_reset_achievements.png",
-    0x132: "cheat_reset_achievements.png",
-    0x133: "cheat_reset_achievements.png",
-    0x134: "cheat_reset_achievements.png",
-    0x135: "cheat_reset_achievements.png",
-    0x136: "cheat_reset_achievements.png",
-    0x137: "cheat_reset_achievements.png",
-    0x138: "cheat_reset_achievements.png",
-    0x139: "cheat_reset_achievements.png",
-    0x13A: "cheat_reset_achievements.png",
-    0x13B: "cheat_reset_achievements.png",
+    0x12F: "cheat_fill_house_messes.png",
+    0x130: "cheat_fill_yard_weeds.png",
+    0x131: "cheat_clean_garden.png",
+    0x132: "cheat_marriage_email.png",
+    0x133: "cheat_max_sock_pile.png",
+    0x134: "cheat_no_sock_pile.png",
+    0x135: "cheat_clean_house.png",
+    0x136: "cheat_force_pregnancy.png",
+    0x137: "cheat_next_babies_male.png",
+    0x138: "cheat_next_babies_female.png",
+    0x139: "cheat_next_pregnancy_singleton.png",
+    0x13A: "cheat_next_pregnancy_twins.png",
+    0x13B: "cheat_next_pregnancy_triplets.png",
 }
 # Kept as a named contract for manifests and downstream validators.  Late
 # rows now use concrete descriptors instead of an item-id alias.

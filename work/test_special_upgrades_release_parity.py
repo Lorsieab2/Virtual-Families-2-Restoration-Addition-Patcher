@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import shutil
 import struct
 import tempfile
@@ -102,6 +103,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         )
 
         late_icons = []
+        late_icon_files = []
         for item_id in LATE_CHEAT_IDS:
             self.assertIn(item_id, rows)
             row = rows[item_id]
@@ -113,7 +115,9 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             )
             self.assertNotEqual(row["icon"], rows[0x124]["icon"])
             late_icons.append(row["icon"])
+            late_icon_files.append(row["icon_file"])
         self.assertEqual(len(late_icons), len(set(late_icons)))
+        self.assertEqual(len(late_icon_files), len(set(late_icon_files)))
 
         art = self.manifest["visible_special_upgrade_icon_art"]
         self.assertEqual(art["status"], "available")
@@ -134,6 +138,12 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             self.assertTrue(Path(art_row["source"]).is_file())
             self.assertEqual(art_row["size"], [patcher.VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE] * 2)
             self.assertNotEqual(art_row["status"], "missing")
+
+        late_source_hashes = {
+            hashlib.sha256(Path(art_rows[item_id]["source"]).read_bytes()).hexdigest()
+            for item_id in LATE_CHEAT_IDS
+        }
+        self.assertEqual(len(late_source_hashes), len(LATE_CHEAT_IDS))
 
     def test_every_cheat_row_reaches_purchase_dispatch_effect_and_save(self):
         cheat_ids = EXPECTED_CHEAT_IDS

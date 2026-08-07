@@ -69,6 +69,18 @@ ask, "Would this patch work?" before actually applying it. If no custom `--log`
 path is selected, dry-run and pre-write failure logs are written beside
 `manifest.json` so the vanilla game folder stays untouched.
 
+## Optional crash-capture QA
+
+Exported bundles ship `vf2_crash_capture.py` and an unfilled
+`crash-capture-manifest.template.json`. Keep this exact-build manifest separate
+from the portable patch `manifest.json`: copy the template, then record the
+selected modded EXE's absolute path, positive byte size, and SHA-256. Run
+`verify-exe` before generating a WER plan. The helper only writes reviewable
+state and instruction files; it does not change the registry or launch VF2.
+After a crash, record the dump and log identities, run `validate-bundle`, and
+emit IDA JSON only from the successfully revalidated bundle report. See
+`docs/crash-capture-readiness.md` for the exact commands and fail-closed gates.
+
 List the settings exposed by a manifest:
 
 ```powershell

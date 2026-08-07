@@ -15,6 +15,13 @@ Stop testing immediately if loading a save, moving the mouse, or pressing F5
 causes a crash. Preserve `vf2_additive_debug.txt`, `ldwLog.txt`, and the exact
 last action.
 
+For a crash handoff, do not restart or retry the scenario until the evidence is
+copied. Record the disposable save identity, exact EXE path/size/SHA-256, last
+action and timestamp, selected patch settings, dump/log hashes, exception
+address, module base/RVA, registers, and stack frames using
+`docs/crash-capture-readiness.md`. Static validation alone is never a runtime
+pass.
+
 ## Files
 
 - `Virtual Families 2 - Additive Mobile Furniture Pack.exe`: untouched B152

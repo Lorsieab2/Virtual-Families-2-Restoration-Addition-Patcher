@@ -4725,11 +4725,27 @@ class OutfitStoreMappingTests(unittest.TestCase):
             "cheat_reset_achievements.png",
         )
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES, {})
+        expected_late_icons = {
+            0x12E: "cheat_reset_achievements.png",
+            0x12F: "cheat_fill_house_messes.png",
+            0x130: "cheat_fill_yard_weeds.png",
+            0x131: "cheat_clean_garden.png",
+            0x132: "cheat_marriage_email.png",
+            0x133: "cheat_max_sock_pile.png",
+            0x134: "cheat_no_sock_pile.png",
+            0x135: "cheat_clean_house.png",
+            0x136: "cheat_force_pregnancy.png",
+            0x137: "cheat_next_babies_male.png",
+            0x138: "cheat_next_babies_female.png",
+            0x139: "cheat_next_pregnancy_singleton.png",
+            0x13A: "cheat_next_pregnancy_twins.png",
+            0x13B: "cheat_next_pregnancy_triplets.png",
+        }
         for item_id in range(0x12E, 0x13C):
             self.assertIn(item_id, patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
             self.assertEqual(
                 patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[item_id],
-                "cheat_reset_achievements.png",
+                expected_late_icons[item_id],
             )
             self.assertGreater(
                 patcher.visible_special_upgrade_icon_id_for(item_id),

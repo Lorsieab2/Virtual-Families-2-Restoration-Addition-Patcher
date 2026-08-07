@@ -119,6 +119,11 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "custom_lorsieab2_map_images",
     "optional_visual_mod_graphics",
     "mobile_renovations",
+    "cheat_upgrades",
+}
+EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
+    "cheat_upgrades",
+    "mobile_renovations",
 }
 
 SETTINGS = [
@@ -1322,6 +1327,8 @@ def setting_for_asset(rel_path: Path) -> str:
         return "vf3_furniture"
     if is_invisible_runtime_asset(rel_path):
         return "invisible_furniture_visible_graphics"
+    if stem.startswith("cheat_"):
+        return "cheat_upgrades"
     if stem in MOBILE_PURCHASE_ICON_FILES:
         return "mobile_purchases"
     if text.startswith("Images/OutfitIcons/") or text.startswith("Images/OutfitStoreIcons/") or stem.startswith(("female_", "male_")):
@@ -1332,7 +1339,13 @@ def setting_for_asset(rel_path: Path) -> str:
 
 
 def asset_requires_for_setting(setting: str) -> list[str]:
-    if setting in {"vf3_tv_assets_recognition", "vf3_furniture", "behavior_patches", "mobile_renovations"}:
+    if setting in {
+        "vf3_tv_assets_recognition",
+        "vf3_furniture",
+        "behavior_patches",
+        "mobile_renovations",
+        "cheat_upgrades",
+    }:
         return ["core_executable", setting]
     return [setting]
 
@@ -2166,6 +2179,22 @@ def write_bundle_runner_files(bundle_dir: Path, build_label: str) -> list[str]:
     icon_files = copy_patcher_icon_assets(bundle_dir)
     shutil.copy2(SOURCE_DIR / "offline_vf2_patcher.py", bundle_dir / "offline_vf2_patcher.py")
     shutil.copy2(SOURCE_DIR / "offline_vf2_patcher_gui.py", bundle_dir / "offline_vf2_patcher_gui.py")
+    shutil.copy2(SOURCE_DIR / "vf2_crash_capture.py", bundle_dir / "vf2_crash_capture.py")
+    (bundle_dir / "crash-capture-manifest.template.json").write_text(
+        json.dumps(
+            {
+                "schema": "vf2-crash-capture/v1",
+                "executable": {"path": "", "size": 0, "sha256": ""},
+                "capture": {
+                    "dump": {"path": "crash.dmp", "size": 0, "sha256": ""},
+                    "logs": [{"path": "ldwLog.txt", "size": 0, "sha256": ""}],
+                },
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="ascii",
+    )
     apply_name = f"Apply_{build_label}_Patcher.bat"
     readme_name = f"README-{build_label}-PATCHER.txt"
     (bundle_dir / apply_name).write_text(
@@ -2292,6 +2321,17 @@ Check for updates:
 
 10. Run the clearly named modded EXE inside the new modded folder.
 
+Crash capture QA only (optional):
+The patcher never changes Windows Error Reporting settings or launches the
+game. If a test build crashes, copy crash-capture-manifest.template.json to a
+new file and fill in the absolute path, byte size, and SHA-256 of the exact
+modded EXE. Run vf2_crash_capture.py verify-exe first, then use its
+emit-wer-plan command to generate reviewable setup/restore instructions. Those
+instructions are inert until you choose to run them manually. After a crash,
+record the dump/log sizes and hashes in the separate capture manifest, run
+validate-bundle, and only then emit the IDA JSON. Never substitute manifest.json
+for this exact-build crash manifest.
+
 Existing saves:
 {SAVE_COMPATIBILITY_NOTE}
 The modded game uses its own save folder under Documents/LDW using the modded
@@ -2311,6 +2351,8 @@ Have fun! -Lorsieab2 :)
     files = [
         "offline_vf2_patcher.py",
         "offline_vf2_patcher_gui.py",
+        "vf2_crash_capture.py",
+        "crash-capture-manifest.template.json",
         *icon_files,
         apply_name,
         "Launch_GUI.bat",
@@ -2338,6 +2380,8 @@ def clear_generated_runner_files(bundle_dir: Path) -> None:
         TRANSPARENCY_LOG_NAME,
         "offline_vf2_patcher.py",
         "offline_vf2_patcher_gui.py",
+        "vf2_crash_capture.py",
+        "crash-capture-manifest.template.json",
     ):
         for path in bundle_dir.glob(pattern):
             if path.is_file():
@@ -2932,6 +2976,26 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 target_identity_fields=overlay_target_identity,
             ))
         asset_patches[1:1] = overlay_records
+    overlay_settings = {
+        setting
+        for row in asset_patches
+        if str(row.get("source_path", "")).lower().endswith(".exe")
+        for setting in row.get("requires", [])
+        if setting in EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS
+    }
+    # The renderer/code for these features lives in their executable overlays.
+    # Do not expose a checkbox or leave loose assets behind when an exporter
+    # invocation omitted the matching overlay; that would make a diagnostic
+    # core build look selectable while remaining behaviorally inert.
+    if EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS - overlay_settings:
+        asset_patches = [
+            row
+            for row in asset_patches
+            if not (
+                set(row.get("requires", []))
+                & (EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS - overlay_settings)
+            )
+        ]
     validate_bundle_asset_sources(bundle_dir, asset_patches)
     payload_pruning = prune_unreferenced_payload_files(bundle_dir, asset_patches)
     validate_bundle_asset_sources(bundle_dir, asset_patches)

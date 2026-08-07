@@ -393,6 +393,14 @@ record indices are the raw mobile IDs; there is no N+1 translation. The complete
 mapping, OBB presence/hash pins, and fail-closed status are maintained in
 `data/vf2/mobile-sound-parity-contract.json`.
 
+Exact byte comparison found `0/67` identical payloads: all 63 OGG-to-OGG routes
+differ, and four PC WAV routes (`0x01`, `0x35`, `0x39`, `0x3A`) map to mobile
+OGG assets. No PC or mobile route is missing and every pinned mobile hash
+matches, but hash differences do not prove an audible difference. A future
+mobile-sound asset toggle must remain default-off and all-or-nothing; the four
+WAV-to-OGG filename/format routes require an evidence-backed alias or conversion
+path before such a toggle can be shipped.
+
 `VF2BirthdayOhSound` preserves the native `CVillager::GetOh` branch at
 `0x001CE4C0`: child voices use `0x33-0x3F`, adult gender `0` uses `0x40-0x4C`,
 and adult gender `1` uses `0x4D-0x55`. Defined `EGender_Unknown=-1` maps to the

@@ -142,6 +142,87 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             ["core_executable", "mobile_renovations"],
         )
 
+    def test_late_special_upgrade_icons_are_gated_by_cheat_overlay(self):
+        for filename in (
+            "cheat_no_coins.png",
+            "cheat_no_food.png",
+            "cheat_add_coins.png",
+            "cheat_add_food.png",
+            "cheat_no_generation_locks.png",
+            "cheat_reset_achievements.png",
+            "cheat_fill_house_messes.png",
+            "cheat_marriage_email.png",
+            "cheat_next_pregnancy_triplets.png",
+        ):
+            with self.subTest(filename=filename):
+                self.assertEqual(
+                    exporter.setting_for_asset(Path("Images") / filename),
+                    "cheat_upgrades",
+                )
+        self.assertEqual(
+            exporter.asset_requires_for_setting("cheat_upgrades"),
+            ["core_executable", "cheat_upgrades"],
+        )
+
+        without_cheat = {
+            row["id"]
+            for row in exporter.default_settings(
+                include_byte_patches=False,
+                include_exe_replacement=True,
+                available_settings={"core_executable", "mobile_renovations"},
+            )
+        }
+        self.assertNotIn("cheat_upgrades", without_cheat)
+        with_cheat = {
+            row["id"]
+            for row in exporter.default_settings(
+                include_byte_patches=False,
+                include_exe_replacement=True,
+                available_settings={"core_executable", "cheat_upgrades"},
+            )
+        }
+        self.assertIn("cheat_upgrades", with_cheat)
+
+    def test_overlay_backed_assets_are_not_exposed_without_their_executable(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            (build / "Images" / "MobileRenovations").mkdir(parents=True)
+            (build / "Images" / "MobileRenovations" / "tp238_beige_kitchen.png").write_bytes(b"renovation")
+            (build / "Images" / "cheat_reset_achievements.png").write_bytes(b"cheat icon")
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "generated_assets": [
+                            {"path": "Images/MobileRenovations/tp238_beige_kitchen.png"},
+                            {"path": "Images/cheat_reset_achievements.png"},
+                        ]
+                    }
+                ),
+                encoding="ascii",
+            )
+
+            self.run_exporter(
+                "--build-dir",
+                str(build),
+                "--base-payload",
+                str(base),
+                "--out-dir",
+                str(out),
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            records = {row["file_path"]: row for row in manifest["asset_patches"]}
+            self.assertNotIn("Images/MobileRenovations/tp238_beige_kitchen.png", records)
+            self.assertNotIn("Images/cheat_reset_achievements.png", records)
+            setting_ids = {row["id"] for row in manifest["settings"]}
+            self.assertNotIn("mobile_renovations", setting_ids)
+            self.assertNotIn("cheat_upgrades", setting_ids)
+
     def run_exporter(self, *args):
         result = subprocess.run(
             [sys.executable, str(EXPORTER), *args],
@@ -1038,6 +1119,13 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertTrue((out / "README-B103-PATCHER.txt").is_file())
             self.assertTrue((out / "Transparency Log.txt").is_file())
             self.assertTrue((out / "offline_vf2_patcher.py").is_file())
+            self.assertTrue((out / "vf2_crash_capture.py").is_file())
+            crash_template = json.loads(
+                (out / "crash-capture-manifest.template.json").read_text(encoding="ascii")
+            )
+            self.assertEqual(crash_template["schema"], "vf2-crash-capture/v1")
+            self.assertEqual(crash_template["executable"]["path"], "")
+            self.assertNotIn(str(tmp_path), json.dumps(crash_template))
             self.assertTrue((out / "patcher_icon.png").is_file())
             self.assertTrue((out / "patcher_icon.ico").is_file())
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
@@ -1055,6 +1143,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn(creator_message, (out / "README-B103-PATCHER.txt").read_text(encoding="ascii"))
             self.assertIn(compatibility_note, (out / "README-B103-PATCHER.txt").read_text(encoding="ascii"))
             self.assertIn(compatibility_note, (out / "How to Use.txt").read_text(encoding="ascii"))
+            help_text = (out / "How to Use.txt").read_text(encoding="ascii")
+            self.assertIn("Crash capture QA only", help_text)
+            self.assertIn("never changes Windows Error Reporting", help_text)
+            self.assertIn("Never substitute manifest.json", help_text)
             gui_source = (out / "offline_vf2_patcher_gui.py").read_text(encoding="utf-8")
             self.assertIn("PROJECT_CREATOR_MESSAGE", gui_source)
             self.assertIn("SAVE_COMPATIBILITY_NOTE", gui_source)
@@ -1065,6 +1157,11 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("Prebuilt Launch GUI.lnk is intentionally omitted", (out / "Transparency Log.txt").read_text(encoding="utf-8"))
             self.assertNotIn("Apply_B99_Patcher.bat", manifest["export_summary"]["runner_files"])
             self.assertIn("Launch_GUI.bat", manifest["export_summary"]["runner_files"])
+            self.assertIn("vf2_crash_capture.py", manifest["export_summary"]["runner_files"])
+            self.assertIn(
+                "crash-capture-manifest.template.json",
+                manifest["export_summary"]["runner_files"],
+            )
             self.assertNotIn("Launch GUI.lnk", manifest["export_summary"]["runner_files"])
             self.assertNotIn("launch_gui_shortcut.json", manifest["export_summary"]["runner_files"])
             self.assertIn("patcher_icon.png", manifest["export_summary"]["runner_files"])

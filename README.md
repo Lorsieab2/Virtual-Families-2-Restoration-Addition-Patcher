@@ -19,12 +19,17 @@ Vanilla *Virtual Families 2* saves are compatible with the modded version. The p
 - Uses offline file patching; it does not inject into a running process.
 
 After extracting a release, run `Launch_GUI.bat`. The exported bundle also contains `How to Use.txt` with player-facing instructions.
+Release bundles include the instruction-only `vf2_crash_capture.py` helper and
+an unfilled exact-build manifest template for optional crash QA. Neither the
+patcher nor that helper changes the registry or launches VF2; any generated WER
+instructions must be reviewed and run manually by the player.
 
 ## Source layout
 
 - `work/offline_vf2_patcher.py` - command-line patcher and validation/apply/restore engine.
 - `work/offline_vf2_patcher_gui.py` - Tkinter GUI.
 - `work/export_offline_patch_bundle.py` - self-contained release-bundle exporter.
+- `work/vf2_crash_capture.py` - exact-build dump/log validation and IDA handoff helper.
 - `work/patch_mobile_furniture_pack.py` - native VF2 build/patch pipeline.
 - `work/test_*.py` - source, binary-contract, exporter, runner, and GUI tests.
 - `work/assets/holiday_collectibles/` - curated Holiday Ornament source art and reproducible runtime assets.
