@@ -710,16 +710,16 @@ MOBILE_RENOVATION_ANCHORS = {
     "office": (1354, 792),
     "workshop": (500, 1400),
 }
-MOBILE_RENOVATION_VARIANT_INDICES = {
-    "bathroom": (0, 1, 2, 3, 4),
-    "kitchen": (5, 8, 9),
-    "office": (7, 10, 11, 12, 13),
-    "workshop": (6, 14),
-}
 MOBILE_RENOVATION_DEFAULT_SELECTION = {
     room: -1 for room in MOBILE_RENOVATION_ROOM_ORDER
 }
 MOBILE_RENOVATION_PC_ITEM_BASE = 0x13C
+MOBILE_RENOVATION_NATIVE_ITEM_BASE = 0x118
+MOBILE_RENOVATION_NATIVE_ITEM_COUNT = 15
+MOBILE_RENOVATION_PERSISTENT_RECORD_ID = 0xA8
+MOBILE_RENOVATION_PERSISTENT_MASK_OFFSET = 0x08
+MOBILE_RENOVATION_HEALTH_PLAN_BIT = 0x1
+MOBILE_RENOVATION_PERSISTENT_SHIFT = 1
 MOBILE_RENOVATION_PC_ITEM_IDS = tuple(
     MOBILE_RENOVATION_PC_ITEM_BASE + index
     for index in range(MOBILE_RENOVATION_IMAGE_COUNT)
@@ -745,6 +745,30 @@ MOBILE_RENOVATION_STYLE_CATALOG = (
 )
 if len(MOBILE_RENOVATION_STYLE_CATALOG) != MOBILE_RENOVATION_IMAGE_COUNT:
     raise RuntimeError("Mobile renovation style catalog/art count mismatch")
+MOBILE_RENOVATION_VARIANT_INDICES = {
+    room: tuple(
+        index
+        for index in sorted(
+            range(MOBILE_RENOVATION_IMAGE_COUNT),
+            key=lambda value: MOBILE_RENOVATION_STYLE_CATALOG[value]["mobile_item"],
+        )
+        if MOBILE_RENOVATION_STYLE_CATALOG[index]["room"] == room
+    )
+    for room in MOBILE_RENOVATION_ROOM_ORDER
+}
+MOBILE_RENOVATION_NATIVE_ORDER = tuple(
+    index
+    for room in MOBILE_RENOVATION_ROOM_ORDER
+    for index in MOBILE_RENOVATION_VARIANT_INDICES[room]
+)
+MOBILE_RENOVATION_NATIVE_ITEM_IDS = tuple(
+    MOBILE_RENOVATION_STYLE_CATALOG[index]["mobile_item"]
+    for index in MOBILE_RENOVATION_NATIVE_ORDER
+)
+if MOBILE_RENOVATION_NATIVE_ITEM_IDS != tuple(
+    range(MOBILE_RENOVATION_NATIVE_ITEM_BASE, MOBILE_RENOVATION_NATIVE_ITEM_BASE + MOBILE_RENOVATION_NATIVE_ITEM_COUNT)
+):
+    raise RuntimeError("Mobile renovation native item order drifted")
 MOBILE_DECORATIVE_ONLY_FMAP_SPECS = {
     "CandyCane.png.fmap": {
         "item_id": 0x2AB,
@@ -9151,6 +9175,25 @@ public:
 };
 """
     )
+    mobile_renovation_mobile_items_cpp = cpp_int_array(
+        "kVF2MobileRenovationMobileItems",
+        [style["mobile_item"] for style in MOBILE_RENOVATION_STYLE_CATALOG],
+    )
+    mobile_renovation_prices_cpp = cpp_int_array(
+        "kVF2MobileRenovationPrices",
+        [style["price"] for style in MOBILE_RENOVATION_STYLE_CATALOG],
+    )
+    mobile_renovation_native_order_cpp = cpp_int_array(
+        "kVF2MobileRenovationNativeOrder",
+        list(MOBILE_RENOVATION_NATIVE_ORDER),
+    )
+    mobile_renovation_room_indices_cpp = cpp_int_array(
+        "kVF2MobileRenovationRoomForStyle",
+        [
+            MOBILE_RENOVATION_ROOM_ORDER.index(style["room"])
+            for style in MOBILE_RENOVATION_STYLE_CATALOG
+        ],
+    )
     helper_path.write_text(
         existing_helper
         + shared_type_preamble
@@ -9193,6 +9236,16 @@ static const bool kVF2EnableB150CheatUpgrades = {"true" if ENABLE_CHEAT_UPGRADES
 static const bool kVF2EnableMobileRenovations = {"true" if ENABLE_MOBILE_RENOVATIONS else "false"};
 static const int kVF2MobileRenovationItemBase = {MOBILE_RENOVATION_PC_ITEM_BASE};
 static const int kVF2MobileRenovationItemCount = {MOBILE_RENOVATION_IMAGE_COUNT};
+static const int kVF2MobileRenovationNativeItemBase = 0x118;
+static const int kVF2MobileRenovationNativeItemCount = 15;
+static const int kVF2MobileRenovationPersistentRecordId = 0xA8;
+static const int kVF2MobileRenovationPersistentMaskOffset = 0x08;
+static const unsigned int kVF2MobileRenovationHealthPlanBit = 0x1u;
+static const int kVF2MobileRenovationPersistentShift = 1;
+{mobile_renovation_mobile_items_cpp}
+{mobile_renovation_prices_cpp}
+{mobile_renovation_native_order_cpp}
+{mobile_renovation_room_indices_cpp}
 
 static bool VF2IsMobileRenovationStyle(int itemId) {{
     return kVF2EnableMobileRenovations &&
@@ -9200,17 +9253,103 @@ static bool VF2IsMobileRenovationStyle(int itemId) {{
         itemId < kVF2MobileRenovationItemBase + kVF2MobileRenovationItemCount;
 }}
 
-extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId) {{
+static int VF2MobileRenovationStyleIndex(int itemId) {{
     if (!VF2IsMobileRenovationStyle(itemId)) return -1;
-    return InventoryManager.HaveUpgrade((EInventoryItem)itemId) ? 0 : -1;
+    return itemId - kVF2MobileRenovationItemBase;
+}}
+
+static int VF2MobileRenovationMobileItem(int styleIndex) {{
+    if (styleIndex < 0 || styleIndex >= kVF2MobileRenovationItemCount) return -1;
+    return kVF2MobileRenovationMobileItems[styleIndex];
+}}
+
+static unsigned int &VF2PersistentHealthPlanAndRenovationMask() {{
+    unsigned char *record =
+        (unsigned char *)&Achievement + kVF2MobileRenovationPersistentRecordId * 12;
+    return *(unsigned int *)(record + kVF2MobileRenovationPersistentMaskOffset);
+}}
+
+static bool VF2PersistentHealthPlanEntitlement() {{
+    return (VF2PersistentHealthPlanAndRenovationMask() &
+        kVF2MobileRenovationHealthPlanBit) != 0;
+}}
+
+static void VF2SetPersistentHealthPlanEntitlement(bool enabled) {{
+    unsigned int &mask = VF2PersistentHealthPlanAndRenovationMask();
+    mask = (mask & ~kVF2MobileRenovationHealthPlanBit) |
+        (enabled ? kVF2MobileRenovationHealthPlanBit : 0u);
+}}
+
+static bool VF2MobileRenovationEverPurchased(int styleIndex) {{
+    int mobileItem = VF2MobileRenovationMobileItem(styleIndex);
+    if (mobileItem < kVF2MobileRenovationNativeItemBase ||
+        mobileItem >= kVF2MobileRenovationNativeItemBase + kVF2MobileRenovationNativeItemCount) {{
+        return false;
+    }}
+    return (VF2PersistentHealthPlanAndRenovationMask() &
+        (1u << (mobileItem - kVF2MobileRenovationNativeItemBase +
+            kVF2MobileRenovationPersistentShift))) != 0;
+}}
+
+static void VF2MarkMobileRenovationEverPurchased(int styleIndex) {{
+    int mobileItem = VF2MobileRenovationMobileItem(styleIndex);
+    if (mobileItem < kVF2MobileRenovationNativeItemBase ||
+        mobileItem >= kVF2MobileRenovationNativeItemBase + kVF2MobileRenovationNativeItemCount) {{
+        return;
+    }}
+    VF2PersistentHealthPlanAndRenovationMask() |=
+        (1u << (mobileItem - kVF2MobileRenovationNativeItemBase +
+            kVF2MobileRenovationPersistentShift));
+}}
+
+static bool VF2NormalizeMobileRenovationActives() {{
+    bool changed = false;
+    for (int room = 0; room < 4; ++room) {{
+        bool kept = false;
+        for (int order = 0; order < kVF2MobileRenovationItemCount; ++order) {{
+            int styleIndex = kVF2MobileRenovationNativeOrder[order];
+            if (kVF2MobileRenovationRoomForStyle[styleIndex] != room) continue;
+            int itemId = kVF2MobileRenovationItemBase + styleIndex;
+            if (!InventoryManager.HaveUpgrade((EInventoryItem)itemId)) continue;
+            if (!kept) {{
+                kept = true;
+            }} else {{
+                InventoryManager.ReturnOne((EInventoryItem)itemId);
+                changed = true;
+            }}
+        }}
+    }}
+    return changed;
+}}
+
+extern "C" void __cdecl VF2NormalizeMobileRenovationActivesAndSave() {{
+    if (VF2NormalizeMobileRenovationActives()) {{
+        theGameState::Get()->SaveCurrentGame();
+    }}
+}}
+
+extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId) {{
+    int styleIndex = VF2MobileRenovationStyleIndex(itemId);
+    if (styleIndex < 0) return -1;
+    return VF2MobileRenovationEverPurchased(styleIndex)
+        ? 0
+        : kVF2MobileRenovationPrices[styleIndex];
 }}
 
 extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
-    if (!VF2IsMobileRenovationStyle(itemId)) return false;
-    if (InventoryManager.HaveUpgrade((EInventoryItem)itemId))
-        InventoryManager.ReturnOne((EInventoryItem)itemId);
-    else
-        InventoryManager.TakeOne((EInventoryItem)itemId);
+    int styleIndex = VF2MobileRenovationStyleIndex(itemId);
+    if (styleIndex < 0) return false;
+    int room = kVF2MobileRenovationRoomForStyle[styleIndex];
+    for (int order = 0; order < kVF2MobileRenovationItemCount; ++order) {{
+        int otherIndex = kVF2MobileRenovationNativeOrder[order];
+        if (kVF2MobileRenovationRoomForStyle[otherIndex] != room) continue;
+        int otherItemId = kVF2MobileRenovationItemBase + otherIndex;
+        if (InventoryManager.HaveUpgrade((EInventoryItem)otherItemId)) {{
+            InventoryManager.ReturnOne((EInventoryItem)otherItemId);
+        }}
+    }}
+    InventoryManager.TakeOne((EInventoryItem)itemId);
+    VF2MarkMobileRenovationEverPurchased(styleIndex);
     theGameState::Get()->SaveCurrentGame();
     return true;
 }}
@@ -10215,7 +10354,6 @@ extern "C" void __cdecl VF2HandleStoreScrollbarMouse(void *scene, int message, i
         f"    case 0x{item_id:X}: return 0x{goal_id:X};"
         for item_id, goal_id in CUSTOM_ACHIEVEMENT_HOLIDAY_PURCHASE_GOALS.items()
     )
-
     mortality_hazards_cpp = cpp_int_array(
         "kVF2OlderMortalityHazardsMillionths",
         [
@@ -11081,12 +11219,8 @@ extern "C" bool __fastcall VF2MoneyLoadStateAndReconcile(
 ) {
     bool loaded = money->LoadState(state);
     if (loaded) {
-        unsigned char *record =
-            (unsigned char *)&Achievement + 0xA8 * 12;
-        unsigned int healthPlanEntitlement =
-            *(unsigned int *)(record + 8);
         theGameState::Get()->healthPlanActive =
-            healthPlanEntitlement != 0;
+            VF2PersistentHealthPlanEntitlement();
         VF2CheckMaximumResourceAchievements();
     }
     return loaded;
@@ -11110,12 +11244,6 @@ static unsigned int &VF2PersistentCheatAndPurchaseMask() {
     unsigned char *record =
         (unsigned char *)&Achievement + 0xA8 * 12;
     return *(unsigned int *)(record + 4);
-}
-
-static unsigned int &VF2PersistentHealthPlanEntitlement() {
-    unsigned char *record =
-        (unsigned char *)&Achievement + 0xA8 * 12;
-    return *(unsigned int *)(record + 8);
 }
 
 struct ldwColor {
@@ -11566,11 +11694,11 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x119:
         if (VF2PersistentHealthPlanEntitlement()) {
-            VF2PersistentHealthPlanEntitlement() = 0;
+            VF2SetPersistentHealthPlanEntitlement(false);
             theGameState::Get()->healthPlanActive = 0;
             break;
         }
-        VF2PersistentHealthPlanEntitlement() = 1;
+        VF2SetPersistentHealthPlanEntitlement(true);
         theGameState::Get()->healthPlanActive = 1;
         break;
     case 0x11A:
@@ -11615,11 +11743,11 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         {
         unsigned int generation =
             VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u;
-        unsigned int healthPlan =
-            VF2PersistentHealthPlanEntitlement();
+        unsigned int healthPlanAndRenovations =
+            VF2PersistentHealthPlanAndRenovationMask();
         Achievement.Reset();
         VF2PersistentCheatAndPurchaseMask() = generation;
-        VF2PersistentHealthPlanEntitlement() = healthPlan;
+        VF2PersistentHealthPlanAndRenovationMask() = healthPlanAndRenovations;
         }
         break;
     case 0x125:
@@ -21693,12 +21821,14 @@ public:
 
 extern CWorldView WorldView;
 extern CInventoryManager InventoryManager;
+extern "C" void __cdecl VF2NormalizeMobileRenovationActivesAndSave();
 
 static const bool kVF2EnableMobileRenovations = {"true" if ENABLE_MOBILE_RENOVATIONS else "false"};
 static const int kVF2MobileRenovationImageBase = {mobile_renovation_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
 static const int kVF2MobileRenovationItemBase = {MOBILE_RENOVATION_PC_ITEM_BASE};
 
 static int VF2SelectedMobileRenovationImage(int room) {{
+    VF2NormalizeMobileRenovationActivesAndSave();
     switch (room) {{
 {chr(10).join(selector_cases)}
     default:
@@ -21743,9 +21873,10 @@ extern "C" void __cdecl VF2DrawMobileRenovations() {{
         "image_scale": 1.0,
         "anchors": {room: list(origin) for room, origin in MOBILE_RENOVATION_ANCHORS.items()},
         "selector": {
-            "mode": "first_owned_style_per_room",
+            "mode": "first_active_style_per_room_native_order",
             "item_ids": [hex(item_id) for item_id in MOBILE_RENOVATION_PC_ITEM_IDS],
             "rooms": {room: [hex(MOBILE_RENOVATION_PC_ITEM_IDS[index]) for index in indices] for room, indices in MOBILE_RENOVATION_VARIANT_INDICES.items()},
+            "native_mobile_order": [hex(item_id) for item_id in MOBILE_RENOVATION_NATIVE_ITEM_IDS],
         },
         "source": str(PATCHED / "vf2_mobile_renovations.cpp"),
     }
@@ -21781,6 +21912,57 @@ def validate_mobile_renovation_style_catalog():
     return {
         "status": "passed",
         "count": MOBILE_RENOVATION_IMAGE_COUNT,
+        "pc_item_range": f"0x{MOBILE_RENOVATION_PC_ITEM_IDS[0]:X}-0x{MOBILE_RENOVATION_PC_ITEM_IDS[-1]:X}",
+    }
+
+
+def validate_mobile_renovation_style_state_contract(manifest):
+    """Fail closed if the generated helper loses mobile TakeOne/GetPrice state semantics."""
+    expected_native_order = tuple(range(MOBILE_RENOVATION_NATIVE_ITEM_BASE, MOBILE_RENOVATION_NATIVE_ITEM_BASE + MOBILE_RENOVATION_NATIVE_ITEM_COUNT))
+    if MOBILE_RENOVATION_NATIVE_ITEM_IDS != expected_native_order:
+        raise RuntimeError("Mobile renovation native selector order drifted")
+    helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
+    if not helper_path.is_file():
+        raise RuntimeError("Missing generated mobile renovation state helper")
+    helper_text = helper_path.read_text(encoding="ascii")
+    required_tokens = (
+        "VF2PersistentHealthPlanAndRenovationMask",
+        "kVF2MobileRenovationPersistentRecordId = 0xA8",
+        "kVF2MobileRenovationPersistentMaskOffset = 0x08",
+        "kVF2MobileRenovationHealthPlanBit = 0x1u",
+        "kVF2MobileRenovationPersistentShift = 1",
+        "VF2NormalizeMobileRenovationActives",
+        "InventoryManager.ReturnOne",
+        "InventoryManager.TakeOne",
+        "VF2MarkMobileRenovationEverPurchased",
+        "kVF2MobileRenovationPrices",
+    )
+    missing = [token for token in required_tokens if token not in helper_text]
+    if missing:
+        raise RuntimeError("Mobile renovation style-state helper is missing: " + ", ".join(missing))
+    manifest["mobile_renovation_style_state"] = {
+        "status": "validated_mobile_takeone_semantics",
+        "active_layer": {
+            "storage": "existing PC InventoryManager active bytes",
+            "exclusive_by_room": True,
+            "normalization": "first active style in native mobile item order is retained; later active styles are cleared",
+        },
+        "ever_purchased_layer": {
+            "storage": "CAchievement hidden persisted record 0xA8 + 0x08 shared dword",
+            "mask_bits": "mobile item 0x118-0x126 map to bits 1-15; Health Plan retains bit 0",
+            "free_repurchase": True,
+        },
+        "health_plan_coexistence": {
+            "health_plan_bit": "bit 0",
+            "renovation_bits": "bits 1-15",
+            "shared_field": "CAchievement hidden persisted record 0xA8 + 0x08",
+            "health_plan_toggle_preserves_renovation_bits": True,
+            "reset_achievements_preserves_shared_dword": True,
+            "new_game": "no mod-specific reset hook; stock new-game initialization remains authoritative",
+        },
+        "price_semantics": "catalog price until ever-purchased; zero thereafter",
+        "purchase_semantics": "clear active room group, activate selected style, set ever-purchased marker, save immediately",
+        "native_mobile_order": [hex(item_id) for item_id in MOBILE_RENOVATION_NATIVE_ITEM_IDS],
         "pc_item_range": f"0x{MOBILE_RENOVATION_PC_ITEM_IDS[0]:X}-0x{MOBILE_RENOVATION_PC_ITEM_IDS[-1]:X}",
     }
 
@@ -24963,6 +25145,7 @@ def main():
     validate_native_dryer_lint_fire_contract(manifest)
     validate_native_mobile_renovation_contract(manifest)
     validate_increase_child_limit_contract(manifest)
+    validate_mobile_renovation_style_state_contract(manifest)
     validate_mobile_renovation_renderer_contract(manifest)
     if ENABLE_BEHAVIOR_PATCHES:
         validate_invisible_hammock_behavior_contract(manifest)

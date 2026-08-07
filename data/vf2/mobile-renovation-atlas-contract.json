@@ -56,7 +56,7 @@
       "office": [1354, 792],
       "workshop": [500, 1400]
     },
-    "selector": "first owned PC style item per room; IDs 0x13C-0x14A in the optional renderer build"
+    "selector": "first active PC style item in native mobile item order per room; IDs 0x13C-0x14A in the optional renderer build"
   },
   "bundles": [
     {"bundle": "tp233.dat", "room_assets": ["sw_bathroom_black.png", "sw_bathroom_blue_marble.png"], "support_assets": ["shower_curtain_closed_black.png", "shower_curtain_closed_blue.png", "soapblackstd.png"], "curated_outputs": ["tp233_sw_bathroom_black.png", "tp233_sw_bathroom_blue_marble.png"]},

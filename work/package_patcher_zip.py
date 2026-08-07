@@ -38,12 +38,29 @@ def require_pe32_x86(path: Path) -> None:
     if len(data) < 0x40 or data[:2] != b"MZ":
         raise ValueError(f"Executable payload is not a valid PE file: {path}")
     pe_offset = struct.unpack_from("<I", data, 0x3C)[0]
-    if pe_offset + 26 > len(data) or data[pe_offset:pe_offset + 4] != b"PE\0\0":
+    if pe_offset + 24 > len(data) or data[pe_offset:pe_offset + 4] != b"PE\0\0":
         raise ValueError(f"Executable payload is not a valid PE file: {path}")
-    machine = struct.unpack_from("<H", data, pe_offset + 4)[0]
-    optional_magic = struct.unpack_from("<H", data, pe_offset + 24)[0]
+    coff_offset = pe_offset + 4
+    machine, section_count, _timestamp, _symptr, _nsyms, optional_size, _characteristics = struct.unpack_from(
+        "<HHIIIHH", data, coff_offset
+    )
+    optional_offset = coff_offset + 20
+    if optional_size < 2 or optional_offset + optional_size > len(data):
+        raise ValueError(f"Executable payload has a truncated PE optional header: {path}")
+    optional_magic = struct.unpack_from("<H", data, optional_offset)[0]
     if machine != 0x14C or optional_magic != 0x10B:
         raise ValueError(f"Executable payload is not PE32 x86: {path}")
+    if section_count == 0:
+        raise ValueError(f"Executable payload has no PE sections: {path}")
+    section_table = optional_offset + optional_size
+    section_table_size = section_count * 40
+    if section_table + section_table_size > len(data):
+        raise ValueError(f"Executable payload has a truncated PE section table: {path}")
+    for index in range(section_count):
+        section_offset = section_table + index * 40
+        raw_size, raw_pointer = struct.unpack_from("<II", data, section_offset + 16)
+        if raw_pointer > len(data) or raw_size > len(data) - raw_pointer:
+            raise ValueError(f"Executable payload has an out-of-bounds PE section: {path}")
 
 
 def validate_executable_inventory(source_dir: Path, files: list[Path]) -> None:
@@ -78,6 +95,12 @@ def validate_executable_inventory(source_dir: Path, files: list[Path]) -> None:
         normalized_relative(path).casefold()
         for path in manifest.get("export_summary", {}).get("runner_files", [])
     }
+    launcher_output = normalized_relative(launcher.get("output", "")) if launcher.get("output") else ""
+    launcher_key = launcher_output.casefold()
+    if launcher_key and launcher_key in asset_records:
+        raise ValueError(f"Launcher executable cannot also be an asset payload: {launcher_output}")
+    if launcher_output and Path(launcher_output).parent != Path("."):
+        raise ValueError(f"Patcher launcher executable must be at bundle root: {launcher_output}")
 
     for key, (relative, path) in exe_paths.items():
         require_pe32_x86(path)
@@ -109,7 +132,6 @@ def validate_executable_inventory(source_dir: Path, files: list[Path]) -> None:
                 raise ValueError(f"Executable asset target identity disagrees with target_files: {relative}")
             continue
 
-        launcher_output = normalized_relative(launcher.get("output", "")) if launcher.get("output") else ""
         if (
             launcher.get("status") != "built"
             or key != launcher_output.casefold()

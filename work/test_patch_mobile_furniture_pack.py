@@ -2092,7 +2092,7 @@ class MobileRenovationArtTests(unittest.TestCase):
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
 
-    def test_renderer_selector_covers_each_style_once_in_catalog_order(self):
+    def test_renderer_selector_covers_each_style_once_in_native_order(self):
         catalog_indices_by_room = {}
         for index, style in enumerate(patcher.MOBILE_RENOVATION_STYLE_CATALOG):
             catalog_indices_by_room.setdefault(style["room"], []).append(index)
@@ -2107,11 +2107,8 @@ class MobileRenovationArtTests(unittest.TestCase):
         )
 
         expected_rooms = {
-            room: [
-                hex(patcher.MOBILE_RENOVATION_PC_ITEM_IDS[index])
-                for index in indices
-            ]
-            for room, indices in catalog_indices_by_room.items()
+            room: [hex(patcher.MOBILE_RENOVATION_PC_ITEM_IDS[index]) for index in indices]
+            for room, indices in patcher.MOBILE_RENOVATION_VARIANT_INDICES.items()
         }
         self.assertEqual(
             expected_rooms,
@@ -2132,10 +2129,11 @@ class MobileRenovationArtTests(unittest.TestCase):
                 manifest = {}
                 patcher.patch_mobile_renovation_renderer(manifest)
                 helper = (temp / "vf2_mobile_renovations.cpp").read_text(encoding="ascii")
+                self.assertIn("VF2NormalizeMobileRenovationActivesAndSave();", helper)
                 selector = manifest["mobile_renovation_renderer"]["selector"]["rooms"]
                 self.assertEqual(selector, expected_rooms)
 
-                for room, indices in catalog_indices_by_room.items():
+                for room, indices in patcher.MOBILE_RENOVATION_VARIANT_INDICES.items():
                     positions = []
                     descriptor_count = (
                         patcher.holiday_body_descriptor_count()
@@ -2150,9 +2148,79 @@ class MobileRenovationArtTests(unittest.TestCase):
                         )
                         positions.append(helper.index(marker))
                     self.assertEqual(positions, sorted(positions), room)
+
         finally:
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+
+    def test_mobile_renovation_style_state_contract_uses_persisted_two_layer_semantics(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                helper = temp / "vf2_special_upgrade_effects.cpp"
+                helper.write_text(
+                    "\n".join(
+                        [
+                            "VF2PersistentHealthPlanAndRenovationMask",
+                            "kVF2MobileRenovationPersistentRecordId = 0xA8",
+                            "kVF2MobileRenovationPersistentMaskOffset = 0x08",
+                            "kVF2MobileRenovationHealthPlanBit = 0x1u",
+                            "kVF2MobileRenovationPersistentShift = 1",
+                            "VF2NormalizeMobileRenovationActives",
+                            "InventoryManager.ReturnOne",
+                            "InventoryManager.TakeOne",
+                            "VF2MarkMobileRenovationEverPurchased",
+                            "kVF2MobileRenovationPrices",
+                        ]
+                    ),
+                    encoding="ascii",
+                )
+                patcher.PATCHED = temp
+                manifest = {}
+                patcher.validate_mobile_renovation_style_state_contract(manifest)
+                state = manifest["mobile_renovation_style_state"]
+                self.assertEqual(state["status"], "validated_mobile_takeone_semantics")
+                self.assertEqual(state["ever_purchased_layer"]["storage"], "CAchievement hidden persisted record 0xA8 + 0x08 shared dword")
+                self.assertTrue(state["ever_purchased_layer"]["free_repurchase"])
+                self.assertTrue(state["active_layer"]["exclusive_by_room"])
+                coexistence = state["health_plan_coexistence"]
+                self.assertEqual(coexistence["health_plan_bit"], "bit 0")
+                self.assertEqual(coexistence["renovation_bits"], "bits 1-15")
+                self.assertTrue(coexistence["health_plan_toggle_preserves_renovation_bits"])
+                self.assertTrue(coexistence["reset_achievements_preserves_shared_dword"])
+                self.assertEqual(
+                    coexistence["new_game"],
+                    "no mod-specific reset hook; stock new-game initialization remains authoritative",
+                )
+                self.assertEqual(
+                    state["native_mobile_order"],
+                    [f"0x{item:x}" for item in range(0x118, 0x127)],
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_mobile_renovation_price_lookup_is_read_only(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                helper = temp / "vf2_special_upgrade_effects.cpp"
+                helper.write_text("", encoding="ascii")
+                patcher.PATCHED = temp
+                patcher.write_outfit_store_helpers({})
+                source = helper.read_text(encoding="ascii")
+                price_helper = source.split(
+                    'extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId)',
+                    1,
+                )[1].split(
+                    'extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId)',
+                    1,
+                )[0]
+                self.assertNotIn("VF2NormalizeMobileRenovationActivesAndSave", price_helper)
+                self.assertIn("VF2MobileRenovationEverPurchased(styleIndex)", price_helper)
+        finally:
+            patcher.PATCHED = old_patched
 
 
 class DebuggerResearchTests(unittest.TestCase):
@@ -4265,16 +4333,16 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
         self.assertIn("if (next > 0.11f)", source)
         self.assertIn("FoodStore.JoinFoodClub();", source)
         self.assertIn(
-            "VF2PersistentHealthPlanEntitlement() = 1;",
+            "VF2SetPersistentHealthPlanEntitlement(true);",
             source,
         )
         self.assertIn(
-            "VF2PersistentHealthPlanEntitlement() = 0;",
+            "VF2SetPersistentHealthPlanEntitlement(false);",
             source,
         )
         self.assertIn(
             "theGameState::Get()->healthPlanActive =\n"
-            "            healthPlanEntitlement != 0;",
+            "            VF2PersistentHealthPlanEntitlement();",
             source,
         )
         self.assertIn(
@@ -4282,13 +4350,22 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "VF2PersistentHealthPlanEntitlement() = healthPlan;",
+            "kVF2MobileRenovationHealthPlanBit = 0x1u;",
             source,
         )
         self.assertIn(
-            "return *(unsigned int *)(record + 8);",
+            "VF2PersistentHealthPlanAndRenovationMask() = healthPlanAndRenovations;",
             source,
         )
+        self.assertIn(
+            "mask = (mask & ~kVF2MobileRenovationHealthPlanBit) |",
+            source,
+        )
+        health_plan_helper = source.split(
+            "static unsigned int &VF2PersistentHealthPlanAndRenovationMask()",
+            1,
+        )[1].split("static bool VF2MobileRenovationEverPurchased", 1)[0]
+        self.assertNotIn("record + 0x0C", health_plan_helper)
         self.assertNotIn(
             "VF2PersistentCheatAndPurchaseMask() & 0x1u",
             source,
@@ -4303,6 +4380,57 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
         self.assertIn('"repeat_interval_game_seconds": 86400', source)
         self.assertIn('"medicine_item_range": "0x18-0x21"', source)
         self.assertIn('"price_divisor": 4', source)
+
+    def test_renovation_bits_coexist_with_health_plan_and_other_persistent_fields(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertEqual(patcher.MOBILE_RENOVATION_PERSISTENT_RECORD_ID, 0xA8)
+        self.assertEqual(patcher.MOBILE_RENOVATION_PERSISTENT_MASK_OFFSET, 0x08)
+        self.assertEqual(
+            patcher.MOBILE_RENOVATION_PERSISTENT_RECORD_ID,
+            patcher.CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID,
+        )
+        self.assertNotEqual(patcher.MOBILE_RENOVATION_PERSISTENT_MASK_OFFSET, 0x04)
+        self.assertNotEqual(patcher.MOBILE_RENOVATION_PERSISTENT_MASK_OFFSET, 0x0C)
+        self.assertEqual(patcher.MOBILE_RENOVATION_HEALTH_PLAN_BIT, 0x1)
+        self.assertEqual(patcher.MOBILE_RENOVATION_PERSISTENT_SHIFT, 1)
+        self.assertEqual(patcher.PREGNANCY_ONE_SHOT_MASK, 0xFC)
+        self.assertEqual(patcher.FORCE_SUCCESSFUL_PREGNANCY_MASK, 0x4)
+
+        renovation_bits = sum(
+            1 << (mobile_item - patcher.MOBILE_RENOVATION_NATIVE_ITEM_BASE + 1)
+            for mobile_item in patcher.MOBILE_RENOVATION_NATIVE_ITEM_IDS
+        )
+        self.assertEqual(renovation_bits, 0xFFFE)
+        self.assertEqual(renovation_bits & patcher.MOBILE_RENOVATION_HEALTH_PLAN_BIT, 0)
+
+        # Health Plan toggles must preserve all renovation ever-purchased bits.
+        shared_mask = renovation_bits | patcher.MOBILE_RENOVATION_HEALTH_PLAN_BIT
+        disabled = (shared_mask & ~patcher.MOBILE_RENOVATION_HEALTH_PLAN_BIT) | 0
+        enabled = (disabled & ~patcher.MOBILE_RENOVATION_HEALTH_PLAN_BIT) | patcher.MOBILE_RENOVATION_HEALTH_PLAN_BIT
+        self.assertEqual(disabled, renovation_bits)
+        self.assertEqual(enabled, shared_mask)
+
+        self.assertIn("VF2MoneyLoadStateAndReconcile", source)
+        self.assertIn(
+            "theGameState::Get()->healthPlanActive =\n"
+            "            VF2PersistentHealthPlanEntitlement();",
+            source,
+        )
+        reset_case = source.split("case 0x124:", 1)[1].split("case 0x125:", 1)[0]
+        self.assertIn("Achievement.Reset();", reset_case)
+        self.assertIn(
+            "VF2PersistentHealthPlanAndRenovationMask() = healthPlanAndRenovations;",
+            reset_case,
+        )
+        self.assertIn("VF2PersistentCheatAndPurchaseMask() = generation;", reset_case)
+        self.assertIn("record + 4", source)
+        self.assertIn("VF2PersistentCheatAndPurchaseMask() >> 8", source)
+        self.assertIn("VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u", source)
+        health_plan_helper = source.split(
+            "static unsigned int &VF2PersistentHealthPlanAndRenovationMask()",
+            1,
+        )[1].split("static bool VF2MobileRenovationEverPurchased", 1)[0]
+        self.assertNotIn("record + 0x0C", health_plan_helper)
 
     def test_stock_pc_food_and_health_consumers_match_mobile_layout(self):
         food = CoffObject(patcher.SRC_OBJS / "FoodStore.obj")

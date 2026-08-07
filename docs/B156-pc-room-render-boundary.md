@@ -37,8 +37,8 @@ overlays under `Images/MobileRenovations` with a `[1,1]` descriptor and no
 resampling. It inserts the helper at `theMainScene::DrawScene +0x39`, directly
 after `CWorldMap::Draw` and before the stock decal draw.
 
-The helper reads the world-view origin, selects the first owned style for each
-room from PC style IDs `0x13C-0x14A`, and draws each selected image at its
+The helper reads the world-view origin, selects the first active style for each
+room in native mobile item order from PC style IDs `0x13C-0x14A`, and draws each selected image at its
 absolute map anchor minus the camera origin. The encoded anchors are Bathroom
 `(255,1435)`, Kitchen `(930,995)`, Office `(1354,792)`, and Workshop
 `(500,1400)`. The PNG dimensions are preserved exactly; no scale or crop is
@@ -60,6 +60,6 @@ optional B157 renderer; it does not by itself prove live visual selection.
 ## Remaining validation
 
 The PC style catalog and first-owned-per-room selector are now statically
-linked. Live purchase, removal, switching, save/load, camera movement, and
+linked. Live purchase, switching/free reactivation, save/load, camera movement, and
 patch-off visual QA remain. Bathroom 2 remains deferred because no separate
 second-bathroom overlay/state route has been proven.

@@ -77,9 +77,13 @@ The optional renderer registers the 15 mobile styles as PC store items
 `0x13C-0x14A`, retaining the mobile price and unlock-level records. They are
 appended only to the native House Renovations category (`0x11`,
 `gHomeList`/`gHomeListSorted`), expanding it from 10 to 25 rows; they are not
-added to Special Upgrades (`gServicesList`). The purchase/removal helper uses
-the PC inventory path, and the renderer selects
-the first owned style in each room group. It draws the complete source PNG at
+added to Special Upgrades (`gServicesList`). The purchase/activation helper
+uses the PC inventory path, and the renderer selects
+the first active style in native mobile item order in each room group. Active
+style state remains exclusive per room in the PC inventory bytes, while a
+separate persisted purchase mask keeps previously bought styles free to
+reactivate, matching mobile `TakeOne`/`HaveUpgrade`/`GetPrice` semantics. It
+draws the complete source PNG at
 1:1 using these camera-relative world anchors:
 
 | Room | Anchor | Variants |
@@ -104,7 +108,7 @@ EXE separately from the existing 16-state B156 matrix.
 
 1. Verify the B157 overlay visually in-game against the staged mobile atlases,
    including camera movement and the selected-room boundaries.
-2. Live-verify the Cheat Upgrades removal/re-purchase route, switching, and
+2. Live-verify style purchase, switching/free reactivation, and
    save/load behavior against the mobile inventory semantics. The source route
    rebuilds `CContentMap` from the native ten-record table and is guarded by
    the Cheat Upgrades overlay; no generic renderer reset is used.
