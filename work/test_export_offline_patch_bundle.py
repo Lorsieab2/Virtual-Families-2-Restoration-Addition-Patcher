@@ -829,17 +829,17 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             settings = self.run_patcher("settings", "--manifest", str(out / "manifest.json"))
             self.assertIn("holiday_furniture [default on]", settings.stdout)
             self.assertIn("vf3_tv_assets_recognition [default on]", settings.stdout)
-            self.assertIn("behavior_patches [default on]", settings.stdout)
+            self.assertNotIn("behavior_patches", settings.stdout)
             self.assertIn("text_fixes [default on]", settings.stdout)
             self.assertIn("store_scroll_bar [default off]", settings.stdout)
             self.assertIn("custom_couches_ldw_posters [default off]", settings.stdout)
             self.assertIn("vf3_furniture [default off]", settings.stdout)
             self.assertIn("misc_graphics_fixes [default off]", settings.stdout)
             self.assertIn("glowing_collectibles [default off]", settings.stdout)
-            self.assertIn("holiday_ornaments_collection [default off]", settings.stdout)
+            self.assertNotIn("holiday_ornaments_collection", settings.stdout)
             self.assertIn("settings_evict_button [default off]", settings.stdout)
             self.assertIn("unused_pets [default on]", settings.stdout)
-            self.assertIn("island_events [default off]", settings.stdout)
+            self.assertNotIn("island_events", settings.stdout)
             self.assertIn("body field sync", settings.stdout)
             self.assertNotIn("transparent_store_bar [default off]", settings.stdout)
             self.assertIn("optional_song_mods [default off]", settings.stdout)
@@ -851,18 +851,14 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(settings_by_id["misc_graphics_fixes"]["category"], "optional")
             self.assertEqual(settings_by_id["glowing_collectibles"]["category"], "optional")
             self.assertEqual(settings_by_id["settings_evict_button"]["category"], "optional")
-            self.assertEqual(settings_by_id["island_events"]["category"], "optional")
-            self.assertEqual(settings_by_id["holiday_ornaments_collection"]["category"], "optional")
+            self.assertNotIn("island_events", settings_by_id)
+            self.assertNotIn("holiday_ornaments_collection", settings_by_id)
+            self.assertNotIn("behavior_patches", settings_by_id)
             self.assertNotIn("expand_game_map", settings_by_id)
             self.assertNotIn(
                 "experimental",
                 {row["category"] for row in manifest["settings"]},
             )
-            self.assertIn(
-                "fully linked mobile Holiday Ornament collection",
-                settings_by_id["holiday_ornaments_collection"]["description"],
-            )
-            self.assertEqual(settings_by_id["behavior_patches"]["category"], "main")
             self.assertEqual(settings_by_id["text_fixes"]["category"], "main")
             self.assertEqual(settings_by_id["optional_song_mods"]["category"], "optional")
 
