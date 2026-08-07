@@ -14,10 +14,25 @@ CANONICAL = ROOT / "outputs" / "VF2-B158-1b01c94-Toggle-Corrected-Playtest-Final
 
 
 class OfflineBundleZipVerifierTests(unittest.TestCase):
+    def test_summary_zip_field_uses_archive_input_not_asset_path(self):
+        source = (ROOT / "work" / "verify_offline_bundle_zip.py").read_text(encoding="utf-8")
+        self.assertIn('"zip": str(archive_path)', source)
+
+    def test_sound_routes_count_unique_authenticated_executable_identities(self):
+        source = (ROOT / "work" / "verify_offline_bundle_zip.py").read_text(encoding="utf-8")
+        self.assertIn("len(variants) != len(exe_hashes)", source)
+        self.assertNotIn("len(variants) != len(EXECUTABLE_VARIANTS)", source)
+
+    def test_candidate_zero_record_contract_matches_present_feature_records(self):
+        self.assertNotIn("island_events", verifier.ABSENT_ZERO_RECORD_SETTINGS)
+        self.assertNotIn("holiday_ornaments_collection", verifier.ABSENT_ZERO_RECORD_SETTINGS)
+        self.assertNotIn("behavior_patches", verifier.ABSENT_ZERO_RECORD_SETTINGS)
+        self.assertNotIn("store_scroll_bar", verifier.ABSENT_ZERO_RECORD_SETTINGS)
+
     def test_canonical_archive_passes_all_contract_gates(self):
         self.assertTrue(CANONICAL.is_file(), CANONICAL)
         result = verifier.verify_archive(CANONICAL)
-        self.assertEqual(result["executable_variants"], 4)
+        self.assertEqual(result["executable_variants"], 7)
         self.assertEqual(result["renovation_assets"], 15)
         self.assertEqual(result["sound_assets"], 67)
         self.assertEqual(result["sound_restores"], 63)

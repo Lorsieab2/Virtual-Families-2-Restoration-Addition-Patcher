@@ -40,8 +40,8 @@ after `CWorldMap::Draw` and before the stock decal draw.
 The helper reads the world-view origin, selects the first active style for each
 room in native mobile item order from PC style IDs `0x13C-0x14A`, and draws each selected image at its
 absolute map anchor minus the camera origin. The encoded anchors are Bathroom
-`(255,1435)`, Kitchen `(930,995)`, Office `(1354,792)`, and Workshop
-`(500,1400)`. The PNG dimensions are preserved exactly; no scale or crop is
+`(535,1263)`, Kitchen `(930,995)`, Office `(1357,792)`, and Workshop
+`(900,1475)`. The PNG dimensions are preserved exactly; no scale or crop is
 applied.
 
 The disabled build has no main-scene hook and no runtime

@@ -17,6 +17,58 @@ from coff_patch import CoffObject
 
 
 class MobileFurnitureCatalogTests(unittest.TestCase):
+    def test_random_tip_targets_baked_house_overlay_and_native_range(self):
+        """The house hit is additive to HandleMouseDown, never portrait ID1."""
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(patcher.SRC_OBJS / "theMainScene.obj", temp / "theMainScene.obj")
+                helper_source = patcher.PATCHED / "vf2_special_upgrade_effects.cpp"
+                self.assertTrue(helper_source.is_file())
+                shutil.copy2(helper_source, temp / "vf2_special_upgrade_effects.cpp")
+                patcher.PATCHED = temp
+                manifest = {}
+                patcher.patch_main_scene_random_tip_click(manifest)
+
+                contract = manifest["random_tip_bottom_house"]
+                self.assertEqual(contract["route"].split("::", 1)[0], "theMainScene")
+                self.assertEqual(contract["image_id"], "0x174")
+                self.assertEqual(contract["image_size"], [1024, 163])
+                self.assertEqual(contract["relative_rect"], {
+                    "left": 184, "top": 58, "right": 218, "bottom": 99,
+                })
+                self.assertEqual(contract["string_id_first"], "0x09E3")
+                self.assertEqual(contract["string_id_last"], "0x0A14")
+                self.assertEqual(0x09E3 + 49, 0x0A14)
+                self.assertEqual(contract["string_id_count"], 50)
+                self.assertTrue(contract["stock_control_id1_untouched"])
+
+                helper = (temp / "vf2_special_upgrade_effects.cpp").read_text(encoding="ascii")
+                self.assertIn("VF2TryRandomTipHouseHit", helper)
+                self.assertIn("ldwGameState::GetRandom(0x32) + 0x09E3", helper)
+                self.assertIn("DealerSay.Say((StringId)stringId, -1)", helper)
+                self.assertIn("raw + 0xA8", helper)
+                self.assertIn("raw + 0x94", helper)
+                self.assertIn("raw + 0x8C", helper)
+                self.assertNotIn("invisiblePortraitButton", helper)
+
+                obj = CoffObject(temp / "theMainScene.obj")
+                sym = obj.symbol("?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z")
+                sec = obj.section(sym.section)
+                patched = bytes(obj.buf[sec.raw_ptr + sym.value + 0x79 : sec.raw_ptr + sym.value + 0x79 + 24])
+                self.assertEqual(patched[:7], bytes.fromhex("FF 75 0C FF 75 08 56"))
+                self.assertEqual(patched[7], 0xE8)
+                self.assertEqual(patched[15:19], bytes.fromhex("84 C0 74 05"))
+                self.assertEqual(patched[19], 0xE9)
+                self.assertIn("_VF2TryRandomTipHouseHit", obj.symbol_by_name)
+
+            generator_source = Path(patcher.__file__).read_text(encoding="utf-8")
+            self.assertIn("write_outfit_store_helpers(manifest)\n    # The tiny house", generator_source)
+            self.assertIn("patch_main_scene_random_tip_click(manifest)", generator_source)
+        finally:
+            patcher.PATCHED = old_patched
+
     def test_mobile_sound_assets_are_local_and_hash_pinned(self):
         source_dir = patcher.MOBILE_SOUND_ASSET_SOURCE_DIR
         self.assertTrue(source_dir.is_dir())
@@ -3892,6 +3944,36 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     "(EBehavior)251, 7, 280, eGenderAny, 0, 0",
                     source,
                 )
+                # CIslandEvent's native vtable is ABI-sensitive: the choice
+                # overloads are ordered ImpactGame(int), ImpactGame(), then
+                # CalcAward(int), CalcAward().  Keep the implementation bodies
+                # non-virtual and expose wrappers in that exact order.
+                self.assertLess(
+                    source.index("virtual void ImpactGame(int choice)"),
+                    source.index("virtual void ImpactGame()"),
+                )
+                self.assertLess(
+                    source.index("virtual void CalcAward(int choice)"),
+                    source.index("virtual void CalcAward()"),
+                )
+                self.assertIn("void VF2ImpactGameNoChoice()", source)
+                self.assertIn("void VF2CalcAwardNoChoice()", source)
+                self.assertIn(
+                    'static_assert(offsetof(CMobileIslandEvent, award_) == 12',
+                    source,
+                )
+                self.assertIn(
+                    'static_assert(offsetof(CMobileIslandEvent, choice_layer_slot_) == 8',
+                    source,
+                )
+                self.assertIn(
+                    'static_assert(offsetof(CMobileIslandEvent, target2_) == 16',
+                    source,
+                )
+                self.assertIn(
+                    'virtual CVillager *GetTargetVillager2() { return target2_; }',
+                    source,
+                )
                 self.assertIn(
                     "FurnitureManager.AddToStorage((EInventoryItem)0x24B);",
                     source,
@@ -4044,6 +4126,62 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 )
         finally:
             patcher.PATCHED = old_patched
+
+    def test_power_failure_patch_uses_event_keyed_state_and_exact_rel32_caves(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(patcher.SRC_OBJS / "IslandEvents.obj", temp / "IslandEvents.obj")
+                patcher.PATCHED = temp
+                manifest = {}
+                patcher.patch_power_failure_event(manifest)
+
+                contract = manifest["PowerFailure"]
+                self.assertEqual(contract["status"], "enabled")
+                self.assertEqual(len(contract["routes"]), 3)
+                self.assertEqual(contract["forbidden_event_offsets"], ["0x0C", "0x14"])
+                self.assertIn("dialog +0x830", contract["lifecycle_evidence"])
+                self.assertEqual(contract["result_ids"]["b2"], "0x9BE")
+                helper = (temp / "vf2_island_events.cpp").read_text(encoding="ascii")
+                helper_tail = helper[helper.index("struct VF2PowerFailureState") :]
+                self.assertIn("gVF2PowerFailureStates[4]", helper_tail)
+                self.assertIn("VF2FindPowerFailureState", helper_tail)
+                self.assertIn("VF2ClearPowerFailureState", helper_tail)
+                self.assertIn("ldwGameState::GetRandom(2)", helper_tail)
+                self.assertIn("GiveAllVillagersSymptom((ESymptom)2, 100)", helper_tail)
+                self.assertIn("second argument is a percentage", helper_tail)
+                self.assertNotIn("+ 0x0C", helper_tail)
+                self.assertNotIn("+ 0x14", helper_tail)
+
+                obj = patcher.CoffObject(temp / "IslandEvents.obj")
+                for route in contract["routes"]:
+                    sym = obj.symbol(route["function"])
+                    sec = obj.section(sym.section)
+                    raw = sec.raw_ptr + sym.value
+                    self.assertEqual(bytes(obj.buf[raw : raw + 1]), b"\xE9")
+                    self.assertGreaterEqual(int(route["cave_offset"], 16), 5)
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_power_failure_patch_off_preserves_stock_bytes(self):
+        obj = patcher.CoffObject(patcher.SRC_OBJS / "IslandEvents.obj")
+        for name, expected in (
+            (
+                "?CalcAward@CEventThePowerFailure@@UAEXH@Z",
+                b"\xC2\x04\x00",
+            ),
+            (
+                "?GetResultDescription@CEventThePowerFailure@@UAE?AW4StringId@@H@Z",
+                b"\x55\x8B\xEC\x33\xC0\x39\x45\x08\x0F\x95\xC0\x05\xBC\x09\x00\x00\x5D\xC2\x04\x00",
+            ),
+        ):
+            sym = obj.symbol(name)
+            sec = obj.section(sym.section)
+            self.assertEqual(
+                bytes(obj.buf[sec.raw_ptr + sym.value : sec.raw_ptr + sym.value + len(expected)]),
+                expected,
+            )
 
     def test_meteorite_followup_uses_short_dialog_title(self):
         events = {event["name"]: event for event in patcher.load_mobile_island_events()}
@@ -5254,10 +5392,15 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertLessEqual(len(rows[0x130]["description"]), 90)
         self.assertEqual(rows[0x131]["name"], "Clean Garden")
         self.assertIn("without affecting other collectables", rows[0x131]["description"])
-        self.assertEqual(rows[0x132]["name"], "Spawn Marriage Email")
+        self.assertEqual(rows[0x132]["name"], "Force Marriage Email (Female)")
         self.assertEqual(
             rows[0x132]["description"],
-            "Queues an incoming marriage proposal email.",
+            "Spawns a marriage email with female spouse options.",
+        )
+        self.assertEqual(rows[0x14C]["name"], "Force Marriage Email (Male)")
+        self.assertEqual(
+            rows[0x14C]["description"],
+            "Spawns a marriage email with male spouse options.",
         )
         self.assertEqual(rows[0x133]["name"], "Max out sock pile")
         self.assertIn("maximum signed integer", rows[0x133]["description"])
@@ -5308,6 +5451,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
             0x139: "cheat_next_pregnancy_singleton.png",
             0x13A: "cheat_next_pregnancy_twins.png",
             0x13B: "cheat_next_pregnancy_triplets.png",
+            0x14C: "cheat_marriage_email.png",
         }
         for item_id in range(0x12E, 0x13C):
             self.assertIn(item_id, patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
@@ -5331,17 +5475,18 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 0x12F, 0x135,
                 0x130, 0x131,
                 0x133, 0x134,
-                0x132,
+                0x132, 0x14C, 0x14B,
                 0x136,
                 0x137, 0x138,
             0x139, 0x13A, 0x13B,
-            0x14B,
         ],
         )
         self.assertEqual(item_ids.index(0x12E), item_ids.index(0x124) + 1)
         self.assertEqual(item_ids.index(0x135), item_ids.index(0x12F) + 1)
         self.assertEqual(item_ids.index(0x131), item_ids.index(0x130) + 1)
         self.assertEqual(item_ids.index(0x134), item_ids.index(0x133) + 1)
+        female_index = item_ids.index(0x132)
+        self.assertEqual(item_ids[female_index + 1 : female_index + 3], [0x14C, 0x14B])
 
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         self.assertIn("theGameState::Get()->ResetWorldState(0x13)", source)
@@ -5396,9 +5541,13 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("case 0x132:", source)
         self.assertIn("if (VF2MarriageEmailUnavailable())", source)
         self.assertIn("eEmailMessageMarriageProposal = 2", source)
-        self.assertIn("VF2QueueCheatMarriageProposal();", source)
+        self.assertIn("VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalFemale);", source)
+        self.assertIn("case 0x14C:", source)
+        self.assertIn("VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalMale);", source)
         self.assertIn("state->EmailMessageInQueue(eEmailMessageMarriageProposal)", source)
-        self.assertIn("gVF2CheatMarriageProposalScene = 1;", source)
+        self.assertIn("gVF2CheatMarriageProposalScene = mode;", source)
+        self.assertIn("kVF2CheatMarriageProposalFemale = 1", source)
+        self.assertIn("kVF2CheatMarriageProposalMale = 2", source)
         self.assertIn("case 0x14B:", source)
         self.assertIn("if (!VF2DivorceSpouse()) return;", source)
         self.assertIn("WARNING: Permanently removes spouse from the Family Tree and House!", source)
@@ -5407,7 +5556,13 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("record[0xF6]", source)
         self.assertIn("record + 0x104", source)
         self.assertIn("VillagerManager.VillagerExists(index, false)", source)
-        self.assertIn("spouse->Reset();", source)
+        self.assertIn("if (*(int *)((unsigned char *)resident + 0x6B00) <= 0)", source)
+        self.assertIn("enum ECauseOfDeath", source)
+        self.assertIn("eCauseOfDeathOldAge = 2", source)
+        self.assertIn("state->SetHealth(0, eCauseOfDeathOldAge);", source)
+        self.assertIn("FamilyTree.ReportDeath(*spouse);", source)
+        self.assertNotIn("spouse->Reset();", source)
+        self.assertNotIn("for (int offset = 0; offset < 0xD8; ++offset)", source)
         self.assertIn("static void VF2SetSockPileCount(int count)", source)
         self.assertIn("*(int *)(gameState + 0x148) = count;", source)
         self.assertIn("case 0x133:", source)
@@ -7756,6 +7911,48 @@ class DivorceSpouseContractTests(unittest.TestCase):
         self.assertIn("availability must fail closed", row)
         self.assertIn("historical/retired generations", row)
 
+    def test_native_health_death_and_parent_overwrite_evidence_is_exact(self):
+        state = CoffObject(patcher.SRC_OBJS / "VillagerState.obj")
+        set_health = state.symbol(
+            "?SetHealth@CVillagerState@@QAEXHW4ECauseOfDeath@@@Z"
+        )
+        set_health_section = state.section(set_health.section)
+        set_health_bytes = bytes(
+            state.buf[
+                set_health_section.raw_ptr + set_health.value:
+                set_health_section.raw_ptr + set_health.value + set_health_section.raw_size
+            ]
+        )
+        self.assertEqual(
+            set_health_bytes,
+            bytes.fromhex(
+                "55 8B EC 8B 45 08 89 41 0C 85 C0 7F 11 "
+                "8B 45 0C C7 41 0C 00 00 00 00 89 41 10 5D C2 08 00 "
+                "83 F8 64 7E 07 C7 41 0C 64 00 00 00 "
+                "C7 41 10 FF FF FF FF 5D C2 08 00"
+            ),
+        )
+
+        family_tree = (
+            Path(__file__).resolve().parents[1] / "work" / "FamilyTree_disasm.txt"
+        ).read_text(encoding="utf-8")
+        report_death = family_tree.split(
+            "?ReportDeath@CFamilyTree@@QAEXAAVCVillager@@@Z", 1
+        )[1].split("?Reset@CFamilyTree@@QAEXXZ", 1)[0]
+        self.assertIn(
+            "dword ptr [ebx-5BCh],0FFFFFFFFh",
+            report_death,
+        )
+        self.assertIn("call        ?CountSurvivingChildren@CFamilyTree", report_death)
+
+        update_parents = family_tree.split(
+            "?UpdateParents@CFamilyTree@@QAE_NAAVCVillager@@0@Z", 1
+        )[1].split("?UpdatePeepRecord@CFamilyTree", 1)[0]
+        self.assertIn("[esi+0DCh]", update_parents)
+        self.assertIn("[esi+0F6h]", update_parents)
+        self.assertIn("[esi+104h]", update_parents)
+        self.assertIn("000000DC:", update_parents)
+
 
 class SameSexMarriagePatchTests(unittest.TestCase):
     def test_dormant_hooks_cover_candidate_roles_drop_and_pregnancy(self):
@@ -7866,6 +8063,85 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                     destroy.value + 0x10,
                 )
 
+                constructor = dating.symbol("??0CDatingScene@@AAE@XZ")
+                constructor_sec = dating.section(constructor.section)
+                constructor_data = bytes(
+                    dating.buf[
+                        constructor_sec.raw_ptr:
+                        constructor_sec.raw_ptr + constructor_sec.raw_size
+                    ]
+                )
+                cleanup = bytes.fromhex(
+                    "C7 47 10 FF FF FF FF 8B C7 8B 4D F4 64 89 0D 00 00 00 00 "
+                    "59 5F 5E 5B 8B E5 5D C3"
+                )
+                cleanup_offset = constructor_data.find(cleanup)
+                self.assertGreater(cleanup_offset, 0)
+                self.assertEqual(
+                    constructor_data[cleanup_offset - 9 : cleanup_offset],
+                    b"\x57\xE8\x00\x00\x00\x00\x83\xC4\x04",
+                )
+                constructor_relocations = []
+                for index in range(constructor_sec.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH",
+                        dating.buf,
+                        constructor_sec.reloc_ptr + index * 10,
+                    )
+                    if vaddr == cleanup_offset - 7:
+                        constructor_relocations.append(
+                            (dating.symbol_by_index[symbol_index].name, rtype)
+                        )
+                self.assertEqual(
+                    constructor_relocations,
+                    [(patcher.CHEAT_MARRIAGE_PROPOSAL_EXIT_CONSTRUCTOR_SYMBOL,
+                      patcher.IMAGE_REL_I386_REL32)],
+                )
+
+                handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
+                handle_sec = dating.section(handle.section)
+                handle_raw = handle_sec.raw_ptr + handle.value
+                self.assertEqual(dating.buf[handle_raw], 0xE9)
+                self.assertEqual(dating.buf[handle_raw + 5], 0x90)
+                # The handler now has a complete true-return epilogue (including
+                # the security-cookie check and ret 8), so its generated cave is
+                # 51 bytes.  Keep the assertion anchored to the payload length;
+                # using the old 35-byte offset starts 16 bytes into the cave.
+                exit_cave = handle_sec.raw_size - 51
+                self.assertEqual(
+                    bytes(
+                        dating.buf[
+                            handle_sec.raw_ptr + exit_cave:
+                            handle_sec.raw_ptr + exit_cave + 51
+                        ]
+                    )[0:23],
+                    bytes.fromhex(
+                        "55 8B EC 83 EC 28 FF 75 0C FF 75 08 51 E8 00 00 00 00 "
+                        "83 C4 0C 84 C0"
+                    ),
+                )
+                self.assertEqual(
+                    dating.buf[handle_sec.raw_ptr + exit_cave + 23 :
+                               handle_sec.raw_ptr + exit_cave + 25],
+                    b"\x75\x05",
+                )
+                exit_relocations = []
+                for index in range(handle_sec.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH",
+                        dating.buf,
+                        handle_sec.reloc_ptr + index * 10,
+                    )
+                    if vaddr == exit_cave + 14:
+                        exit_relocations.append(
+                            (dating.symbol_by_index[symbol_index].name, rtype)
+                        )
+                self.assertEqual(
+                    exit_relocations,
+                    [(patcher.CHEAT_MARRIAGE_PROPOSAL_EXIT_HANDLER_SYMBOL,
+                      patcher.IMAGE_REL_I386_REL32)],
+                )
+
                 manager = CoffObject(temp_root / "VillagerManager.obj")
                 for function_name in (
                     "?GetMatriarch@CVillagerManager@@QAEPAVCVillager@@XZ",
@@ -7920,9 +8196,24 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                     contract["cheat_proposal"]["runtime_flag"]["source_section"],
                     ".vf2proposal",
                 )
-                self.assertIn(
-                    "regardless of .vf2same",
-                    contract["cheat_proposal"]["candidate_gender"],
+                exit_contract = contract["cheat_proposal"]["exit_button"]
+                self.assertEqual(exit_contract["control_id"], 3)
+                self.assertEqual(exit_contract["image_id"], "0x129")
+                self.assertEqual(exit_contract["text_id"], "0x76C")
+                self.assertEqual(
+                    exit_contract["position"],
+                    "theGameState::GetWideScreenOffsetX() + 4, y 0x2DD",
+                )
+                self.assertEqual(exit_contract["message"], 8)
+                self.assertEqual(exit_contract["action"], 3)
+                self.assertEqual(exit_contract["sound_id"], "0x8A")
+                self.assertIn("+0x25CB8", exit_contract["timestamp_route"])
+                self.assertIn("arms mode 0x01", contract["cheat_proposal"]["candidate_gender"])
+                self.assertIn("arms mode 0x02", contract["cheat_proposal"]["candidate_gender"])
+                self.assertIn("No RNG", contract["cheat_proposal"]["candidate_gender"])
+                self.assertEqual(
+                    contract["cheat_proposal"]["mode_values"],
+                    {"off": "0x00", "female": "0x01", "male": "0x02"},
                 )
                 self.assertIn(
                     "remains open",
@@ -7951,7 +8242,9 @@ class SameSexMarriagePatchTests(unittest.TestCase):
             "if (VF2IsSameSexMarriage())",
             source,
         )
-        self.assertIn("gVF2CheatMarriageProposalScene == 0", source)
+        self.assertIn("gVF2CheatMarriageProposalScene = kVF2CheatMarriageProposalOff", source)
+        self.assertIn("gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalFemale", source)
+        self.assertIn("gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalMale", source)
         self.assertIn("CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL", source)
 
 

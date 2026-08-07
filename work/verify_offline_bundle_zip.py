@@ -14,35 +14,51 @@ from pathlib import Path, PurePosixPath
 TARGET_SHA256 = "1582d9e84e1c32f51475be17335c5137c592cebf809748d401ccef99a32b73c3"
 TARGET_SIZE = 1_511_424
 ABSENT_ZERO_RECORD_SETTINGS = {
-    "island_events",
-    "holiday_ornaments_collection",
-    "behavior_patches",
+    # The current authenticated candidate carries executable/asset records
+    # for Island Events, Holiday Ornaments, and Behavior Patches.  Keep only
+    # settings that genuinely have no reachable record in this package shape.
     "unused_pets",
     "text_fixes",
     "mobile_purchases",
+}
+CORE_ONLY_SETTINGS = {
     "settings_evict_button",
-    "store_scroll_bar",
 }
 EXECUTABLE_VARIANTS = {
     frozenset({"core_executable"}): (
         "payload/Virtual Families 2 - Modded B158.exe",
-        "bca3bd8a797eec59a324e38c947f1418633f867a937e7d4295acebda2a99d793",
-        1_708_032,
+        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        1_790_976,
+    ),
+    frozenset({"core_executable", "island_events"}): (
+        "payload/Virtual Families 2 - Modded B158 - Island Events.exe",
+        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        1_790_976,
     ),
     frozenset({"core_executable", "cheat_upgrades"}): (
         "payload/Virtual Families 2 - Modded B158 - Cheat Upgrades.exe",
-        "45b57b84931e6887f44b0d5ba579b201405a9b1d744185011f6eca33450c5d44",
-        1_709_056,
+        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        1_790_976,
+    ),
+    frozenset({"core_executable", "holiday_ornaments_collection"}): (
+        "payload/Virtual Families 2 - Modded B158 - Holiday Ornaments.exe",
+        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        1_790_976,
+    ),
+    frozenset({"core_executable", "behavior_patches"}): (
+        "payload/Virtual Families 2 - Modded B158 - Behavior Patches.exe",
+        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        1_790_976,
     ),
     frozenset({"core_executable", "mobile_renovations"}): (
         "payload/Virtual Families 2 - Modded B158 - Mobile Room Renovations.exe",
-        "e116f3c19ab5e89c08794a4e0cfbd61105237cd2cbf198d22ef6ee344b3da57f",
-        1_714_688,
+        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        1_790_976,
     ),
     frozenset({"core_executable", "cheat_upgrades", "mobile_renovations"}): (
         "payload/Virtual Families 2 - Modded B158 - Cheat Upgrades + Mobile Room Renovations.exe",
-        "bc1bafe734e5c9973a66586f45acd686f21e9307508adef193b8e862708389e8",
-        1_716_224,
+        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        1_790_976,
     ),
 }
 SOUND_ROUTE_NAMES = {"beaker", "Child3", "Child7", "Child8"}
@@ -152,6 +168,7 @@ def _verify_zip_inventory(zipped: zipfile.ZipFile, zip_path: Path) -> tuple[str,
 def verify_archive(zip_path: Path | str) -> dict:
     """Verify one explicit archive and return a compact evidence summary."""
     path = Path(zip_path)
+    archive_path = path
     if not path.is_file():
         _fail(f"ZIP does not exist: {path}")
     with zipfile.ZipFile(path) as zipped:
@@ -176,6 +193,8 @@ def verify_archive(zip_path: Path | str) -> dict:
         setting_ids = set(setting_id_values)
         if len(setting_ids) != len(settings):
             _fail("manifest settings contain duplicate IDs")
+        if CORE_ONLY_SETTINGS & setting_ids:
+            _fail(f"core-only settings are incorrectly advertised as toggles: {sorted(CORE_ONLY_SETTINGS & setting_ids)}")
         if ABSENT_ZERO_RECORD_SETTINGS & setting_ids:
             _fail(f"zero-record settings are incorrectly advertised: {sorted(ABSENT_ZERO_RECORD_SETTINGS & setting_ids)}")
 
@@ -189,6 +208,8 @@ def verify_archive(zip_path: Path | str) -> dict:
         }
         if not ABSENT_ZERO_RECORD_SETTINGS.isdisjoint(record_settings):
             _fail("zero-record setting appears in an asset or post record")
+        if CORE_ONLY_SETTINGS & record_settings:
+            _fail(f"core-only setting appears in an asset or post record: {sorted(CORE_ONLY_SETTINGS & record_settings)}")
         if setting_ids - {"core_assets"} - record_settings:
             _fail(f"advertised setting has no reachable asset/post record: {sorted(setting_ids - {'core_assets'} - record_settings)}")
         if record_settings - setting_ids:
@@ -196,7 +217,7 @@ def verify_archive(zip_path: Path | str) -> dict:
 
         exe_records = [record for record in assets if str(record.get("source_path", "")).lower().endswith(".exe")]
         if len(exe_records) != len(EXECUTABLE_VARIANTS):
-            _fail(f"expected four executable variants, found {len(exe_records)}")
+            _fail(f"expected {len(EXECUTABLE_VARIANTS)} executable variants, found {len(exe_records)}")
         exe_hashes: set[str] = set()
         for requires, (source, expected_sha, expected_size) in EXECUTABLE_VARIANTS.items():
             matching = [record for record in exe_records if frozenset(_requires(record, "executable record")) == requires]
@@ -217,6 +238,40 @@ def verify_archive(zip_path: Path | str) -> dict:
             if not str(record.get("file_path", "")).startswith("Images/MobileRenovations/") or record.get("remove_when_disabled") is not True:
                 _fail("mobile renovation record has the wrong destination or removal policy")
             _verify_file_record(zipped, names, root, record, "mobile renovation")
+
+        no_ai_records = [
+            record
+            for record in assets
+            if "no_ai_icons" in _requires(record, "asset record")
+        ]
+        if "no_ai_icons" in setting_ids:
+            if len(no_ai_records) != 14:
+                _fail(f"expected 14 No AI Icons records, found {len(no_ai_records)}")
+            for record in no_ai_records:
+                requires = frozenset(_requires(record, "No AI Icons record"))
+                if requires != frozenset({"core_executable", "cheat_upgrades", "no_ai_icons"}):
+                    _fail("No AI Icons record has the wrong dependency set")
+                path = str(record.get("file_path", ""))
+                if not path.startswith("Images/cheat_") or not path.endswith(".png"):
+                    _fail("No AI Icons record has the wrong destination")
+                if not record.get("restore_source_path") or record.get("restore_requires") != [
+                    "core_executable", "cheat_upgrades"
+                ]:
+                    _fail("No AI Icons record is missing its Cheat Upgrades restore gate")
+                _verify_file_record(zipped, names, root, record, "No AI Icons replacement")
+                _verify_file_record(
+                    zipped,
+                    names,
+                    root,
+                    {
+                        "source_path": record["restore_source_path"],
+                        "source_sha256": record["restore_source_sha256"],
+                        "source_size": record["restore_source_size"],
+                    },
+                    "No AI Icons restore",
+                )
+        elif no_ai_records:
+            _fail("No AI Icons records exist without the No AI Icons setting")
 
         sound_records = [record for record in assets if "mobile_sound_assets" in _requires(record, "asset record")]
         if len(sound_records) != 67:
@@ -257,7 +312,7 @@ def verify_archive(zip_path: Path | str) -> dict:
             if route is None or route in seen_routes:
                 _fail("mobile sound post routes are missing or duplicated")
             seen_routes.add(route)
-            if len(variants) != 4 or {str(v.get("asset_sha256", "")).lower() for v in variants} != exe_hashes:
+            if len(variants) != len(exe_hashes) or {str(v.get("asset_sha256", "")).lower() for v in variants} != exe_hashes:
                 _fail(f"mobile sound route {route} does not cover all executable variants")
             expected = (route + ".wav").encode("ascii")
             replacement = (route + ".ogg").encode("ascii")
@@ -277,7 +332,7 @@ def verify_archive(zip_path: Path | str) -> dict:
         if not REQUIRED_RUNNERS <= runner_files:
             _fail(f"required patcher/crash-capture runners are missing: {sorted(REQUIRED_RUNNERS - runner_files)}")
         return {
-            "zip": str(path),
+            "zip": str(archive_path),
             "root": root,
             "members": len(names),
             "target_sha256": TARGET_SHA256,

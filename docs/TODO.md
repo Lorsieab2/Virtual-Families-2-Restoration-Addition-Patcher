@@ -129,9 +129,9 @@ must remain visible as Needs source audit; it must not be silently omitted.
   Holiday outfits, Holiday furniture, mobile furniture/behavior routes, Holiday
   Ornaments, Island Events/outcomes, visible mobile purchases, and VF3 TV
   assets/recognition.
-- Translate B93 `settings_menu.evict.constructor_patches` from object/function-
-  relative offsets into final vanilla EXE file offsets before moving them from
-  `native_patch_sources` into applyable offline patcher `patches[]` records.
+- Settings Evict is compiled into the core executable. Keep its
+  `settings_menu.evict.constructor_patches` entries as provenance metadata;
+  do not present them as an optional or independently applyable toggle.
 - In-game test B149 Holiday Ornaments: open Collections, verify six pages/72
   collectibles with the Ornaments page last, confirm yard ornaments can be
   picked up and removed, confirm collection counts and the Ornamentologist goal

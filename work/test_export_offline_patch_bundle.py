@@ -101,6 +101,39 @@ def minimal_pe_bytes(
 
 
 class ExportOfflinePatchBundleTests(unittest.TestCase):
+    def test_no_ai_icon_generator_uses_tracked_source_art(self):
+        generator = (ROOT / "work" / "build_no_ai_icons.py").read_text(encoding="utf-8")
+        self.assertIn('ROOT / "patcher_assets" / "optional_patches" / "no_ai_icons" / "source_art"', generator)
+        self.assertNotIn('ROOT / "work" / "assets" / "no_ai_icons" / "raw"', generator)
+        source_art = ROOT / "patcher_assets" / "optional_patches" / "no_ai_icons" / "source_art"
+        self.assertEqual(len(list(source_art.glob("*.png"))), 14)
+        self.assertEqual(
+            exporter.NO_AI_ICON_REPLACEMENT_PROVENANCE["cheat_reset_achievements.png"],
+            "patcher_assets/optional_patches/no_ai_icons/source_art/Icon_Resort_Improvement.png",
+        )
+
+    def test_final_playtest_profile_is_manifest_local_and_keeps_no_ai_off(self):
+        original_defaults = {row["id"]: row["default"] for row in exporter.SETTINGS}
+        available = set(exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS) | {"core_executable"}
+        settings = [dict(row) for row in exporter.SETTINGS]
+        updated = exporter.apply_final_playtest_defaults(settings, available)
+        updated_by_id = {row["id"]: row for row in updated}
+        for setting_id in exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS:
+            self.assertTrue(updated_by_id[setting_id]["default"], setting_id)
+        self.assertFalse(updated_by_id["no_ai_icons"]["default"])
+        self.assertEqual(
+            original_defaults,
+            {row["id"]: row["default"] for row in exporter.SETTINGS},
+        )
+
+    def test_final_playtest_profile_fails_closed_when_feature_record_is_missing(self):
+        settings = [dict(row) for row in exporter.SETTINGS]
+        with self.assertRaisesRegex(ValueError, "missing required feature records"):
+            exporter.apply_final_playtest_defaults(
+                settings,
+                set(exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS) - {"mobile_sound_assets"},
+            )
+
     def test_b156_uses_stable_modded_folder_exe_and_save_names(self):
         self.assertEqual(exporter.modded_output_folder_name("B156"), "Virtual Families 2 - Modded")
         self.assertEqual(exporter.modded_exe_output_name("B156"), "Virtual Families 2 - Modded.exe")
@@ -160,6 +193,84 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 exporter.setting_for_asset(Path("Sounds") / filename),
                 "mobile_sound_assets",
             )
+
+    def test_no_ai_icons_setting_is_default_off_and_cheat_gated(self):
+        settings_by_id = {row["id"]: row for row in exporter.SETTINGS}
+        setting = settings_by_id["no_ai_icons"]
+        self.assertEqual(setting["label"], "No AI Icons")
+        self.assertFalse(setting["default"])
+        self.assertEqual(setting["category"], "optional")
+        self.assertIn("other LDW games", setting["description"])
+        self.assertIn("online art sources", setting["description"])
+        self.assertIn("custom-made", setting["description"])
+        self.assertIn("late Special Upgrade icon PNGs", setting["description"])
+        self.assertIn("Disabling restores", setting["description"])
+        self.assertEqual(
+            exporter.asset_requires_for_setting("no_ai_icons"),
+            ["core_executable", "cheat_upgrades", "no_ai_icons"],
+        )
+        self.assertEqual(
+            exporter.setting_for_asset(
+                Path("OptionalVisualMods") / "No AI Icons" / "cheat_marriage_email.png"
+            ),
+            "no_ai_icons",
+        )
+
+    def test_no_ai_icon_records_are_complete_and_have_current_icon_restores(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            build = root / "build"
+            base = root / "base"
+            bundle = root / "bundle"
+            (build / "Images").mkdir(parents=True)
+            (base / "Images").mkdir(parents=True)
+            for filename in exporter.NO_AI_ICON_TARGETS:
+                (build / "Images" / filename).write_bytes(f"current-{filename}".encode("ascii"))
+
+            records = exporter.no_ai_icon_asset_patches(bundle, build, base)
+            self.assertEqual(
+                [row["file_path"] for row in records],
+                [f"Images/{filename}" for filename in exporter.NO_AI_ICON_TARGETS],
+            )
+            self.assertEqual(len(records), 14)
+            for record in records:
+                self.assertEqual(
+                    record["requires"],
+                    ["core_executable", "cheat_upgrades", "no_ai_icons"],
+                )
+                self.assertEqual(
+                    record["restore_requires"],
+                    ["core_executable", "cheat_upgrades"],
+                )
+                self.assertEqual(
+                    (bundle / record["restore_source_path"]).read_bytes(),
+                    (build / record["file_path"]).read_bytes(),
+                )
+                replacement_name = exporter.NO_AI_ICON_REPLACEMENT_FILES.get(
+                    Path(record["file_path"]).name,
+                    Path(record["file_path"]).name,
+                )
+                self.assertEqual(
+                    (bundle / record["source_path"]).read_bytes(),
+                    (exporter.NO_AI_ICON_SOURCE_DIR / replacement_name).read_bytes(),
+                )
+
+    def test_no_ai_icon_generation_fails_closed_when_source_is_missing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "no_ai_icons"
+            source.mkdir()
+            build = root / "build"
+            base = root / "base"
+            bundle = root / "bundle"
+            old_source = exporter.NO_AI_ICON_SOURCE_DIR
+            try:
+                exporter.NO_AI_ICON_SOURCE_DIR = source
+                with self.assertRaisesRegex(ValueError, "source set is incomplete"):
+                    exporter.no_ai_icon_asset_patches(bundle, build, base)
+                self.assertFalse((bundle / "payload").exists())
+            finally:
+                exporter.NO_AI_ICON_SOURCE_DIR = old_source
 
     def test_mobile_sound_routes_emit_four_exact_sha_atomic_records(self):
         routes = [
@@ -924,6 +1035,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(manifest["export_summary"]["post_asset_patch_count"], 0)
             self.assertEqual(manifest["export_summary"]["base_payload"], base.name)
             self.assertNotIn(str(tmp_path), json.dumps(manifest))
+            transparency = (out / "Transparency Log.txt").read_text(encoding="utf-8")
+            self.assertIn("Settings Evict is compiled into the core executable patch and is not an independent optional setting.", transparency)
+            self.assertNotIn("Optional Patches (black): Holiday Ornaments, Settings Evict,", transparency)
             self.assertTrue((out / "payload" / "Images" / "Furniture" / "CandyCane.png").is_file())
             self.assertNotIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
             self.assertIn({"path": "Images", "min_files": 600}, manifest["runtime_requirements"]["required_dirs"])
@@ -1905,7 +2019,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(manifest["export_summary"]["native_patch_source_count"], 1)
             source = manifest["native_patch_sources"][0]
             self.assertEqual(source["source_path"], "settings_menu/evict/constructor_patches/0")
-            self.assertEqual(source["requires"], ["settings_evict_button"])
+            self.assertEqual(source["requires"], ["core_native_patch"])
             self.assertEqual(source["scope"], "object_relative")
             self.assertEqual(source["apply_status"], "not_file_offset")
             self.assertEqual(source["offset"], "0x2DA")

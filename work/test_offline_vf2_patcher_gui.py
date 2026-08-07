@@ -45,9 +45,9 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
                 default=False,
                 category="optional",
             ),
-            "settings_evict_button": patcher.PatchSetting(
-                id="settings_evict_button",
-                label="Settings Evict",
+            "experimental_feature": patcher.PatchSetting(
+                id="experimental_feature",
+                label="Experimental feature",
                 description="",
                 default=False,
                 category="experimental",
@@ -67,7 +67,7 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
         self.assertEqual(rows[2][1:3], ("Other Patches", "#000000"))
         self.assertEqual([setting.id for setting in rows[0][3]], ["core_executable"])
         self.assertEqual([setting.id for setting in rows[1][3]], ["custom_map"])
-        self.assertEqual([setting.id for setting in rows[2][3]], ["settings_evict_button"])
+        self.assertEqual([setting.id for setting in rows[2][3]], ["experimental_feature"])
 
     def test_setting_ids_for_category_handles_defaults(self):
         settings = {

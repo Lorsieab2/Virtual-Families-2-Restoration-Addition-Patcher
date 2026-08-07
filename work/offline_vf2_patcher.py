@@ -1550,6 +1550,18 @@ def manifest_asset_patches(
         requires = record_requires(raw, f"asset patch #{index}")
         ensure_known_settings(requires, settings, f"Asset patch #{index}")
         active = record_is_active(requires, enabled_settings)
+        restore_requires_raw = raw.get("restore_requires")
+        restore_requires = ()
+        if restore_requires_raw is not None:
+            restore_requires = record_requires(
+                {"requires": restore_requires_raw},
+                f"asset patch #{index} restore_requires",
+            )
+            ensure_known_settings(
+                restore_requires,
+                settings,
+                f"Asset patch #{index} restore_requires",
+            )
         if restore_inactive and active:
             continue
         restore = False
@@ -1557,7 +1569,8 @@ def manifest_asset_patches(
         if not active:
             if not restore_inactive:
                 continue
-            if restore_source_value is not None:
+            restore_allowed = not restore_requires or record_is_active(restore_requires, enabled_settings)
+            if restore_source_value is not None and restore_allowed:
                 source_value = restore_source_value
                 restore = True
             elif bool(raw.get("remove_when_disabled", False)):
@@ -1730,6 +1743,32 @@ def validate_asset_target_plan(assets: list[AssetPatch]) -> None:
             )
 
 
+def suppress_active_assets_replaced_by_restore(
+    active_assets: list[AssetPatch],
+    restore_assets: list[AssetPatch],
+) -> list[AssetPatch]:
+    """Prefer a selected restore/remove record for a duplicate output path.
+
+    Optional visual layers can share the same target as their normal feature
+    asset. During output-only reconfiguration, the selected restore must be the
+    sole writer for that path; otherwise the normal active record would make the
+    target plan fail closed before the restore can run.
+    """
+
+    restore_targets = {
+        canonical_rel_path_key(asset.output_file_path or asset.file_path)
+        for asset in restore_assets
+        if asset.restore or asset.remove_when_disabled
+    }
+    if not restore_targets:
+        return active_assets
+    return [
+        asset
+        for asset in active_assets
+        if canonical_rel_path_key(asset.output_file_path or asset.file_path) not in restore_targets
+    ]
+
+
 def verify_reconfigure_executable_identity(
     manifest: dict[str, Any],
     manifest_dir: Path,
@@ -1755,6 +1794,7 @@ def verify_reconfigure_executable_identity(
         # cheat/mobile overlay switch boundary.
         return
     candidates: dict[str, set[str]] = {}
+    base_candidates: dict[str, set[str]] = {}
     for index, raw in enumerate(raw_assets):
         if not isinstance(raw, dict):
             continue
@@ -1780,7 +1820,9 @@ def verify_reconfigure_executable_identity(
                 f"SHA-256 mismatch for executable source {source_value}: "
                 f"expected {declared_source_sha}, got {actual_source_sha}"
             )
-        candidates.setdefault(canonical_rel_path_key(output_path), set()).add(actual_source_sha)
+        output_key = canonical_rel_path_key(output_path)
+        candidates.setdefault(output_key, set()).add(actual_source_sha)
+        base_candidates.setdefault(output_key, set()).add(actual_source_sha)
 
     raw_post_patches = manifest.get("post_asset_patches", [])
     if isinstance(raw_post_patches, list):
@@ -1821,7 +1863,71 @@ def verify_reconfigure_executable_identity(
         if not target.is_file():
             raise PatchError(f"Output-only executable target is missing: {output_path}")
         current_sha = sha256_file(target)
+        composed_toggle_match = False
         if current_sha not in allowed_hashes:
+            current_data = target.read_bytes()
+            for base_sha in base_candidates.get(output_key, set()):
+                normalized = bytearray(current_data)
+                recognized_ranges = 0
+                valid = True
+                for post_index, raw in enumerate(raw_post_patches if isinstance(raw_post_patches, list) else []):
+                    if not isinstance(raw, dict):
+                        continue
+                    file_value = raw.get("file_path", raw.get("file", raw.get("path")))
+                    if not isinstance(file_value, str) or canonical_rel_path_key(normalize_rel_path(
+                        file_value, f"post-asset patch #{post_index} file path"
+                    )) != output_key:
+                        continue
+                    selected = None
+                    for variant_index, variant in enumerate(raw.get("variants", [])):
+                        if not isinstance(variant, dict):
+                            continue
+                        variant_sha = normalize_sha256(
+                            variant.get("asset_sha256", variant.get("expected_asset_sha256", variant.get("source_sha256"))),
+                            f"post-asset patch #{post_index} variant #{variant_index} asset_sha256",
+                            required=True,
+                        )
+                        if variant_sha == base_sha:
+                            selected = (variant_index, variant)
+                            break
+                    if selected is None:
+                        continue
+                    variant_index, variant = selected
+                    expected = parse_hex_bytes(
+                        variant.get("expected_asset_bytes", variant.get("expected_bytes", variant.get("expected"))),
+                        f"post-asset patch #{post_index} variant #{variant_index} expected bytes",
+                    )
+                    replacement = parse_hex_bytes(
+                        variant.get("replacement_bytes", variant.get("replacement", variant.get("new"))),
+                        f"post-asset patch #{post_index} variant #{variant_index} replacement bytes",
+                    )
+                    offset = parse_int(
+                        variant.get("offset"),
+                        f"post-asset patch #{post_index} variant #{variant_index} offset",
+                    )
+                    end = offset + len(expected)
+                    if (
+                        not expected
+                        or len(expected) != len(replacement)
+                        or offset < 0
+                        or end > len(normalized)
+                    ):
+                        valid = False
+                        break
+                    current_bytes = bytes(current_data[offset:end])
+                    if current_bytes not in (expected, replacement):
+                        valid = False
+                        break
+                    normalized[offset:end] = expected
+                    recognized_ranges += 1
+                if (
+                    valid
+                    and recognized_ranges > 0
+                    and hashlib.sha256(normalized).hexdigest() == base_sha
+                ):
+                    composed_toggle_match = True
+                    break
+        if current_sha not in allowed_hashes and not composed_toggle_match:
             raise PatchError(
                 f"Refusing output-only executable replacement for {output_path}: "
                 f"unknown current SHA-256 {current_sha}."
@@ -3012,6 +3118,8 @@ def apply_manifest(args: argparse.Namespace) -> int:
         assets = manifest_asset_patches(manifest, settings, enabled_settings)
         post_asset_patches = manifest_post_asset_patches(manifest, settings, enabled_settings)
         restore_assets = manifest_asset_patches(manifest, settings, enabled_settings, restore_inactive=True) if reconfigure_output else []
+        if reconfigure_output:
+            assets = suppress_active_assets_replaced_by_restore(assets, restore_assets)
         all_assets = [
             *(asset for asset in [*assets, *restore_assets] if not asset.remove_when_disabled),
             *(asset for asset in [*assets, *restore_assets] if asset.remove_when_disabled),

@@ -134,7 +134,7 @@ no active Experimental/Not Working section:
 | Category | GUI color | Intended settings |
 | --- | --- | --- |
 | `main` | Green | Core patches, mobile-exclusive furniture, Holiday furniture, and Holiday outfits. |
-| `optional` | Black | Holiday Ornaments, Settings Evict, Island Events, Allow Older Pregnancies, Allow Same-Sex Marriage, Older Villager Mortality Curve, mobile furniture behaviors, Invisible Furniture graphics modes, optional visual swaps, custom maps, LDW Posters/Paintings, and Colorful Couches. |
+| `optional` | Black | Holiday Ornaments, Island Events, Allow Older Pregnancies, Allow Same-Sex Marriage, Older Villager Mortality Curve, mobile furniture behaviors, Invisible Furniture graphics modes, optional visual swaps, custom maps, LDW Posters/Paintings, and Colorful Couches. |
 
 Bundles can include `patcher_icon.png` and `patcher_icon.ico`. The GUI uses the
 PNG as the literal picture beside the bold title and uses the ICO/PNG for the
@@ -332,10 +332,11 @@ asset records, but has zero byte records and
 The exporter also preserves explicit native patch byte triples found in build
 metadata under `native_patch_sources`. These are source records only, not
 applyable patch records, unless they have been translated to final file offsets
-and moved into `patches[]`. B93 currently exposes three Settings Evict
-constructor records from `settings_menu.evict.constructor_patches`; their
-offsets are object/function-relative, so their `scope` is `object_relative` and
-their `apply_status` is `not_file_offset`.
+and moved into `patches[]`. Settings Evict constructor records from
+`settings_menu.evict.constructor_patches` are core-native provenance metadata,
+not independent optional patch records. Their offsets are object/function-
+relative, so their `scope` is `object_relative` and their `apply_status` is
+`not_file_offset`.
 
 ## Restore
 
@@ -432,7 +433,7 @@ when the original target did not exist.
       "offset": "0x2DA",
       "expected_original_bytes": "0f8580000000",
       "replacement_bytes": "909090909090",
-      "requires": ["settings_evict_button"],
+      "requires": ["core_native_patch"],
       "scope": "object_relative",
       "apply_status": "not_file_offset",
       "next_step": "Translate object/function-relative offset to final EXE file offset before moving into patches[].",
@@ -548,8 +549,9 @@ as:
   graphics to transparent versions. Default off, and requires the visible
   invisible-furniture setting for active replacements.
 - `vf3_tv_animation_graphics` - Fix VF3 TV animation graphics.
-- `settings_evict_button` - Re-enable the Settings menu Evict button. Default
-  off Optional patch.
+- Settings Evict is part of the core executable patch. It has no independent
+  optional toggle; its native confirmation and family-tree reset path remain
+  unchanged.
 - `holiday_ornaments_collection` - Mobile Holiday Ornament yard collectibles,
   collection screen art, and Goals entries. Current manifest conversion must
   include the B86 `CCollectableItem::Find()` and `WasItemSpawned()`
@@ -583,6 +585,19 @@ as:
   images target `Images`. Default off.
 - `optional_song_mods` - Optional song swap that copies
   `payload/OptionalSongMods/*.ogg` into `Sounds/*.ogg`. Default off.
+- `no_ai_icons` - **No AI Icons**, default off and dependent on
+  `cheat_upgrades`. Replaces only the late Special Upgrade icon PNGs with
+  replacement images sourced from other LDW games, online art sources, or
+  custom-made artwork. The bundled current Cheat Upgrades icon is recorded as
+  the restore source, so disabling the setting restores the current icon set;
+  disabling Cheat Upgrades still removes its late icon payloads.
+
+For the final all-working playtest bundle, the exporter supports
+`--final-playtest-all-enabled`. This is an export-only profile: it marks
+Island Events, Holiday Ornaments, Behavior Patches, Mobile Renovations,
+Mobile Sound Assets, Mobile Furniture Behaviors, and Cheat Upgrades default-on
+in that bundle manifest. It does not change the general `SETTINGS` defaults;
+No AI Icons and unrelated visual options remain default-off.
 
 Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings
@@ -619,6 +634,13 @@ behavior sound payloads. Four PC sound-table filename routes are changed from
 WAV names to their mobile OGG names; disabling the setting removes those four
 additive files and restores the other 63 same-name PC payloads from the bundled
 base. Static hash and routing checks do not constitute audible runtime QA.
+
+No AI Icons uses the same manifest-relative, hash-checked asset path. Its
+replacement record is layered after the normal Cheat Upgrades icon record when
+both settings are enabled. During output-only reconfiguration, a selected
+restore record takes precedence over the active normal layer for that target;
+when Cheat Upgrades is disabled, the restore gate is inactive and the normal
+Cheat Upgrades removal record removes the late icon instead.
 
 B111 also makes EXE identity path-independent for both `target_files` and EXE
 replacement `asset_patches`: `resolve_expected_exe_target()` scans the selected
@@ -805,10 +827,9 @@ B132 build-specific notes:
 
 B133 patcher-specific notes:
 
-- `settings_evict_button` and `island_events` are categorized as default-off
-  Optional patches instead of Experimental/Not Working. Island Events still
-  needs in-game outcome validation, but the patcher setting is no longer a
-  placeholder.
+- Settings Evict is compiled into the core executable and is not exposed as an
+  optional checkbox. Island Events remains a default-off Optional patch and
+  still needs in-game outcome validation.
 - Experimental/Not Working remains reserved for Holiday Ornaments, mobile
   furniture behaviors, Expand game map, and future unstable features.
 
@@ -1010,7 +1031,7 @@ flags can override those defaults:
 ```powershell
 --enable holiday_furniture
 --disable holiday_outfits
---enable holiday_furniture,mobile_furniture,vf3_tv_animation_graphics,settings_evict_button
+--enable holiday_furniture,mobile_furniture,vf3_tv_animation_graphics
 --enable holiday_ornaments_collection
 --enable allow_older_pregnancies
 --enable-all

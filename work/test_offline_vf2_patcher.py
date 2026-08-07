@@ -2480,6 +2480,89 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(log["mode"], "existing_modded_output")
             self.assertTrue(any(row["action"] == "replace" for row in log["asset_files"]))
 
+    def test_no_ai_icons_restore_wins_over_default_layer_and_cheat_disable_removes_both(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            modded = root / "VF2-BUnit-Modded"
+            (modded / ".vf2_patch_backups").mkdir(parents=True)
+            (modded / "Virtual Families 2 - Modded BUnit.exe").write_bytes(b"modded exe")
+            target = modded / "Images" / "cheat_fill_house_messes.png"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"current icon")
+
+            payload = root / "payload"
+            default = payload / "Images" / target.name
+            replacement = payload / "OptionalVisualMods" / "No AI Icons" / target.name
+            default.parent.mkdir(parents=True)
+            replacement.parent.mkdir(parents=True)
+            default.write_bytes(b"current icon")
+            replacement.write_bytes(b"no ai icon")
+            manifest = root / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "output": {
+                            "default_folder_name": modded.name,
+                            "default_exe_name": "Virtual Families 2 - Modded BUnit.exe",
+                        },
+                        "settings": [
+                            {"id": "core_executable", "default": True},
+                            {"id": "cheat_upgrades", "default": True},
+                            {"id": "no_ai_icons", "default": False},
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Images/cheat_fill_house_messes.png",
+                                "source_path": "payload/Images/cheat_fill_house_messes.png",
+                                "source_sha256": sha256_bytes(default.read_bytes()),
+                                "source_size": default.stat().st_size,
+                                "overwrite_existing": True,
+                                "remove_when_disabled": True,
+                                "requires": ["core_executable", "cheat_upgrades"],
+                            },
+                            {
+                                "file_path": "Images/cheat_fill_house_messes.png",
+                                "source_path": "payload/OptionalVisualMods/No AI Icons/cheat_fill_house_messes.png",
+                                "source_sha256": sha256_bytes(replacement.read_bytes()),
+                                "source_size": replacement.stat().st_size,
+                                "restore_source_path": "payload/Images/cheat_fill_house_messes.png",
+                                "restore_source_sha256": sha256_bytes(default.read_bytes()),
+                                "restore_source_size": default.stat().st_size,
+                                "restore_requires": ["core_executable", "cheat_upgrades"],
+                                "overwrite_existing": True,
+                                "requires": ["core_executable", "cheat_upgrades", "no_ai_icons"],
+                            },
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_patcher(
+                "apply",
+                "--output-dir", str(modded),
+                "--manifest", str(manifest),
+                "--enable", "no_ai_icons",
+            )
+            self.assertEqual(target.read_bytes(), b"no ai icon")
+
+            self.run_patcher(
+                "apply",
+                "--output-dir", str(modded),
+                "--manifest", str(manifest),
+            )
+            self.assertEqual(target.read_bytes(), b"current icon")
+
+            self.run_patcher(
+                "apply",
+                "--output-dir", str(modded),
+                "--manifest", str(manifest),
+                "--disable", "cheat_upgrades",
+            )
+            self.assertFalse(target.exists())
+
     def test_output_only_removes_hash_authenticated_overlay_asset_and_refuses_unknown_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -2725,6 +2808,79 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             )
             self.assertIn("unknown current SHA-256", result.stderr)
             self.assertEqual(output_exe.read_bytes(), b"unknown current executable")
+
+    def test_output_only_accepts_composed_authenticated_runtime_toggles(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            output_dir = root / "VF2-BUnit-Modded"
+            output_dir.mkdir()
+            exe_name = "Virtual Families 2 - Modded BUnit.exe"
+            base = b"BASE-TOGGLE-A-TOGGLE-B-END"
+            composed = bytearray(base)
+            offset_a = base.index(b"A")
+            offset_b = base.index(b"B")
+            composed[offset_a] = ord("1")
+            composed[offset_b] = ord("1")
+            (output_dir / exe_name).write_bytes(composed)
+            payload = root / "payload"
+            payload.mkdir()
+            source = payload / "core.exe"
+            source.write_bytes(base)
+            base_sha = sha256_bytes(base)
+            manifest = {
+                "settings": [
+                    {"id": "core_executable", "default": True},
+                    {"id": "mobile_renovations", "default": True},
+                    {"id": "toggle_a", "default": True},
+                    {"id": "toggle_b", "default": True},
+                ],
+                "asset_patches": [
+                    {
+                        "file_path": "Virtual Families 2.exe",
+                        "output_file_path": exe_name,
+                        "source_path": "payload/core.exe",
+                        "source_sha256": base_sha,
+                        "expected_target_sha256": "1" * 64,
+                        "overwrite_existing": True,
+                        "requires": ["core_executable", "mobile_renovations"],
+                    }
+                ],
+                "post_asset_patches": [
+                    {
+                        "file_path": exe_name,
+                        "requires": ["toggle_a"],
+                        "variants": [{
+                            "asset_sha256": base_sha,
+                            "offset": offset_a,
+                            "expected_asset_bytes": "41",
+                            "replacement_bytes": "31",
+                        }],
+                    },
+                    {
+                        "file_path": exe_name,
+                        "requires": ["toggle_b"],
+                        "variants": [{
+                            "asset_sha256": base_sha,
+                            "offset": offset_b,
+                            "expected_asset_bytes": "42",
+                            "replacement_bytes": "31",
+                        }],
+                    },
+                ],
+            }
+            active = patcher_mod.manifest_asset_patches(
+                manifest,
+                patcher_mod.manifest_settings(manifest),
+                {"core_executable", "mobile_renovations", "toggle_a", "toggle_b"},
+            )
+
+            patcher_mod.verify_reconfigure_executable_identity(manifest, root, output_dir, active)
+
+            tampered = bytearray(composed)
+            tampered[-1] ^= 1
+            (output_dir / exe_name).write_bytes(tampered)
+            with self.assertRaisesRegex(patcher_mod.PatchError, "unknown current SHA-256"):
+                patcher_mod.verify_reconfigure_executable_identity(manifest, root, output_dir, active)
 
     def test_mobile_sound_enable_then_disable_restores_exe_before_removing_oggs(self):
         with tempfile.TemporaryDirectory() as tmp:

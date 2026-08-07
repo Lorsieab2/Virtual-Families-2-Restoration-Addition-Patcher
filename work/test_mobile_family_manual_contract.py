@@ -85,6 +85,24 @@ class MobileFamilyManualContractTests(unittest.TestCase):
             self.assertIn(f"{plan}(*eligible[index]);", group)
             self.assertIn("return true;", group)
 
+    def test_whole_family_handlers_are_not_autonomous_callbacks(self):
+        autonomous = _between(
+            self.source,
+            "MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = (",
+            "MOBILE_SPECIAL_UPGRADE_ITEM_IDS =",
+        )
+        for handler in (
+            "VF2HandleMobileBirthdayBanner",
+            "VF2HandleMobileXmasTreeGroup",
+            "VF2HandleMobileDreidelGroup",
+            "VF2HandleMobileMenorahGroup",
+        ):
+            self.assertNotIn(handler, autonomous)
+
+        self.assertIn("VF2HandleMobileAdmiringXmasTree", autonomous)
+        self.assertIn("VF2HandleMobileAdultWaterXmasTree", autonomous)
+        self.assertIn("VF2HandleMobileKidBreakingTreeDecor", autonomous)
+
     def test_birthday_banner_group_plan_invariants(self):
         scan = _between(
             self.helper,

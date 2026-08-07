@@ -17,10 +17,9 @@ EXPECTED_CHEAT_IDS = (
     0x128, 0x129, 0x12A, 0x12C,
     0x12B, 0x12D,
     0x12F, 0x135, 0x130, 0x131,
-    0x133, 0x134, 0x132,
+    0x133, 0x134, 0x132, 0x14C, 0x14B,
     0x136, 0x137, 0x138,
     0x139, 0x13A, 0x13B,
-    0x14B,
 )
 LATE_CHEAT_IDS = tuple(range(0x12E, 0x13C))
 WEATHER_REFUSAL_TEXT = "Don't like the weather!"
@@ -131,12 +130,40 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             int(divorce["description_string"], 16),
             patcher.divorce_spouse_string_ids()[1],
         )
+        female = rows[0x132]
+        male = rows[0x14C]
+        self.assertEqual(female["name"], "Force Marriage Email (Female)")
+        self.assertEqual(male["name"], "Force Marriage Email (Male)")
+        marriage_strings = {
+            (row["item_id"], row["role"]): row["text"]
+            for row in self.manifest["theStringManager"]["strings"]
+            if row.get("item_id") in {"0x132", "0x14c"}
+        }
+        self.assertEqual(
+            marriage_strings[("0x132", "long")],
+            "Spawns a marriage email with female spouse options.",
+        )
+        self.assertEqual(
+            marriage_strings[("0x14c", "long")],
+            "Spawns a marriage email with male spouse options.",
+        )
+        self.assertEqual(male["icon_file"], "cheat_marriage_email.png")
+        self.assertEqual(
+            int(male["description_string"], 16),
+            patcher.marriage_email_male_string_ids()[1],
+        )
+        self.assertNotEqual(female["icon"], male["icon"])
+        self.assertNotEqual(male["icon"], divorce["icon"])
+        item_ids = [item["item_id"] for item in patcher.CHEAT_UPGRADE_ITEMS]
+        female_index = item_ids.index(0x132)
+        self.assertEqual(item_ids[female_index + 1 : female_index + 3], [0x14C, 0x14B])
 
         self.assertIn(
             "static int VF2VisibleSpecialUpgradeIconFrame(int itemId)",
             self.helper,
         )
         self.assertIn("case 0x14B: return 37;", self.helper)
+        self.assertIn("case 0x14C: return 38;", self.helper)
         self.assertNotIn(
             "int index = itemId - kVF2VisibleSpecialUpgradeFirstItem",
             self.helper,
@@ -145,6 +172,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             patcher.PATCHED / "vf2_generation_locks.cpp"
         ).read_text(encoding="ascii")
         self.assertIn("case 0x14B: frame = 37; break;", draw_helper)
+        self.assertIn("case 0x14C: frame = 38; break;", draw_helper)
         self.assertNotIn("int frame = item - 0x117;", draw_helper)
 
         divorce_strings = [
@@ -169,7 +197,23 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         )
         self.assertEqual(
             divorce_contract["availability"],
-            "zero unless the current second-parent slot is present and its persistent ID maps to exactly one active, non-away manager slot 0..29",
+            "zero unless the current second-parent slot is present and its persistent ID maps to exactly one active, non-away, live-health manager slot 0..29",
+        )
+        self.assertEqual(
+            divorce_contract["native_evidence"]["villager_state_base"],
+            "CVillager+0x6AF4",
+        )
+        self.assertEqual(
+            divorce_contract["native_evidence"]["health_field"],
+            "CVillager+0x6B00 (CVillagerState+0x0C)",
+        )
+        self.assertIn(
+            "SetHealth(0, OldAge)",
+            divorce_contract["apply"],
+        )
+        self.assertIn(
+            "ReportDeath",
+            divorce_contract["apply"],
         )
         self.assertEqual(
             divorce_contract["warning"],
@@ -308,7 +352,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "extern \"C\" bool __cdecl VF2PurchaseOutfitStoreItem",
         )
         self.assertIn(
-            "if (itemId == 0x132 && VF2MarriageEmailUnavailable()) {\n"
+            "if ((itemId == 0x132 || itemId == 0x14C) && VF2MarriageEmailUnavailable()) {\n"
             "        // A second resident adult means the stock proposal path has no valid\n"
             "        // candidate state.  Hide the purchase instead of queueing the email\n"
             "        // into the crash-prone path.\n"
@@ -347,7 +391,35 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         apply_source = self.helper[apply_start:]
         marriage = self._case_block(self.helper[apply_start:], 0x132)
         self.assertIn("if (VF2MarriageEmailUnavailable())", marriage)
-        self.assertIn("VF2QueueCheatMarriageProposal();", marriage)
+        self.assertIn("VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalFemale);", marriage)
+        male_marriage = self._case_block(self.helper[apply_start:], 0x14C)
+        self.assertIn("if (VF2MarriageEmailUnavailable())", male_marriage)
+        self.assertIn("VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalMale);", male_marriage)
+        self.assertIn("kVF2CheatMarriageProposalOff = 0", self.helper)
+        self.assertIn("return 0;", self._function_block(self.helper, "extern \"C\" int __fastcall VF2MarriageCandidateGender", "extern \"C\" CVillager *__fastcall VF2GetMarriageRole"))
+        self.assertIn("return 1;", self._function_block(self.helper, "extern \"C\" int __fastcall VF2MarriageCandidateGender", "extern \"C\" CVillager *__fastcall VF2GetMarriageRole"))
+        exit_add = self._function_block(
+            self.helper,
+            "extern \"C\" void __cdecl VF2MaybeAddCheatMarriageExit",
+            "extern \"C\" bool __cdecl VF2HandleCheatMarriageProposalExit",
+        )
+        self.assertIn("gVF2CheatMarriageProposalScene != kVF2CheatMarriageProposalFemale", exit_add)
+        self.assertIn("new ldwButton", exit_add)
+        self.assertIn("\n        3,", exit_add)
+        self.assertIn("(EImage)0x129", exit_add)
+        self.assertIn("GetString((StringId)0x76C)", exit_add)
+        self.assertIn("GetWideScreenOffsetX() + 4", exit_add)
+        exit_handler = self._function_block(
+            self.helper,
+            "extern \"C\" bool __cdecl VF2HandleCheatMarriageProposalExit",
+            "static CVillager *VF2ActiveVillagerByPersistentIdUnique",
+        )
+        self.assertIn("message != 8", exit_handler)
+        self.assertIn("action == 1", exit_handler)
+        self.assertIn("action != 3", exit_handler)
+        self.assertIn("Sound.Play((ESound)0x8A)", exit_handler)
+        self.assertIn("raw + 0x25CBC", exit_handler)
+        self.assertIn("raw + 0x25CB8", exit_handler)
         self.assertIn("eEmailMessageMarriageProposal", self.helper)
         self.assertIn("eEmailMessageMarriageProposal = 2", self.helper)
 
@@ -377,12 +449,16 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "record + 0x104",
             "VillagerManager.VillagerExists(index, false)",
             "0x1BB48",
+            "0x6B00) <= 0",
             "VillagerManager.GetVillagerInFocus() == spouse",
             "VillagerManager.SetNoFocus();",
-            "spouse->Reset();",
-            "for (int offset = 0; offset < 0xD8; ++offset)",
+            "state->SetHealth(0, eCauseOfDeathOldAge);",
+            "FamilyTree.ReportDeath(*spouse);",
+            "retain the current second-parent SPeepRecord",
         ):
             self.assertIn(evidence, divorce_helpers)
+        self.assertNotIn("spouse->Reset();", divorce_helpers)
+        self.assertNotIn("for (int offset = 0; offset < 0xD8; ++offset)", divorce_helpers)
         self.assertNotIn("GetFamilyRecord(", divorce_helpers)
         self.assertNotIn("VF2MarriageAdult", divorce_helpers)
 

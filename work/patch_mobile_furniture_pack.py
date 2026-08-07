@@ -283,11 +283,15 @@ SAME_SEX_MARRIAGE_FLAG_SYMBOL = "_gVF2SameSexMarriage"
 CHEAT_MARRIAGE_PROPOSAL_FLAG_SECTION = ".vf2proposal"
 CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL = "_gVF2CheatMarriageProposalScene"
 CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL = "_VF2ClearCheatMarriageProposalMode"
+CHEAT_MARRIAGE_PROPOSAL_EXIT_CONSTRUCTOR_SYMBOL = "_VF2MaybeAddCheatMarriageExit"
+CHEAT_MARRIAGE_PROPOSAL_EXIT_HANDLER_SYMBOL = "_VF2HandleCheatMarriageProposalExit"
 SAME_SEX_CANDIDATE_GENDER_HELPER_SYMBOL = "@VF2MarriageCandidateGender@8"
 SAME_SEX_ROLE_HELPER_SYMBOL = "@VF2GetMarriageRole@12"
 SAME_SEX_DROP_HELPER_SYMBOL = "@VF2IsSameSexSpouseDrop@12"
 ADOPTION_CHOOSER_HELPER_SYMBOL = "_VF2AdoptRandomChildChoice"
 
+MARRIAGE_EMAIL_FEMALE_ITEM_ID = 0x132
+MARRIAGE_EMAIL_MALE_ITEM_ID = 0x14C
 DIVORCE_SPOUSE_ITEM_ID = 0x14B
 DIVORCE_SPOUSE_WARNING = "WARNING: Permanently removes spouse from the Family Tree and House!"
 DIVORCE_SPOUSE_ICON_FILE = "cheat_marriage_email.png"
@@ -682,6 +686,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     # Reuse the existing marriage-email descriptor while keeping Divorce on
     # its own item and image descriptor slots.
     DIVORCE_SPOUSE_ITEM_ID: DIVORCE_SPOUSE_ICON_FILE,
+    MARRIAGE_EMAIL_MALE_ITEM_ID: "cheat_marriage_email.png",
 }
 # Kept as a named contract for manifests and downstream validators.  Late
 # rows now use concrete descriptors instead of an item-id alias.
@@ -1327,9 +1332,21 @@ CHEAT_UPGRADE_ITEMS = [
         "price": 0,
     },
     {
-        "item_id": 0x132,
-        "name": "Spawn Marriage Email",
-        "description": "Queues an incoming marriage proposal email.",
+        "item_id": MARRIAGE_EMAIL_FEMALE_ITEM_ID,
+        "name": "Force Marriage Email (Female)",
+        "description": "Spawns a marriage email with female spouse options.",
+        "price": 0,
+    },
+    {
+        "item_id": MARRIAGE_EMAIL_MALE_ITEM_ID,
+        "name": "Force Marriage Email (Male)",
+        "description": "Spawns a marriage email with male spouse options.",
+        "price": 0,
+    },
+    {
+        "item_id": DIVORCE_SPOUSE_ITEM_ID,
+        "name": "Divorce Spouse",
+        "description": DIVORCE_SPOUSE_WARNING,
         "price": 0,
     },
     {
@@ -1368,15 +1385,16 @@ CHEAT_UPGRADE_ITEMS = [
         "description": "Makes the next successful birth triplets when three child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Twins one-shot and clears after birth.",
         "price": 0,
     },
-    {
-        "item_id": DIVORCE_SPOUSE_ITEM_ID,
-        "name": "Divorce Spouse",
-        "description": DIVORCE_SPOUSE_WARNING,
-        "price": 0,
-    },
 ]
 CHEAT_UPGRADE_LEGACY_COUNT = 19
 CHEAT_UPGRADE_STRING_COUNT = CHEAT_UPGRADE_LEGACY_COUNT * 2
+# Keep the established post-legacy string slots keyed by item id rather than
+# display order. Special Upgrades are intentionally grouped for the player,
+# but moving a row must not move the translated lounger/renovation ranges.
+CHEAT_UPGRADE_EXTRA_STRING_ORDER = (
+    0x12D, 0x12F, 0x135, 0x130, 0x131, 0x133, 0x134, 0x132,
+    0x136, 0x137, 0x138, 0x139, 0x13A, 0x13B,
+)
 HOLIDAY_ORNAMENT_COLLECTABLE_START = 0x9E
 HOLIDAY_ORNAMENT_COLLECTABLE_END = 0xA9
 HOLIDAY_ORNAMENT_COLLECTION_PAGE = 5
@@ -4500,6 +4518,11 @@ def divorce_spouse_string_ids():
     # the 15 renovation rows. Keep this explicit so adding a late cheat row
     # cannot move the weather refusal or renovation IDs.
     first_id = mobile_renovation_string_ids_for(MOBILE_RENOVATION_IMAGE_COUNT - 1)[1] + 1
+    return first_id, first_id + 1
+
+
+def marriage_email_male_string_ids():
+    first_id = divorce_spouse_string_ids()[1] + 1
     return first_id, first_id + 1
 
 
@@ -8504,8 +8527,14 @@ def visible_special_upgrade_desc_id_for(index):
 def cheat_upgrade_string_ids_for_entry(entry_index):
     if entry_index < 0 or entry_index >= len(CHEAT_UPGRADE_ITEMS):
         raise ValueError(f"Cheat upgrade string index is out of range: {entry_index}")
-    if CHEAT_UPGRADE_ITEMS[entry_index]["item_id"] == DIVORCE_SPOUSE_ITEM_ID:
+    item_id = CHEAT_UPGRADE_ITEMS[entry_index]["item_id"]
+    if item_id == DIVORCE_SPOUSE_ITEM_ID:
         return divorce_spouse_string_ids()
+    if item_id == MARRIAGE_EMAIL_MALE_ITEM_ID:
+        # Allocate the new deterministic male row after the existing
+        # renovation/Divorce block. This keeps pre-existing IDs stable and
+        # avoids colliding with the fixed renovation string range.
+        return marriage_email_male_string_ids()
     if entry_index < CHEAT_UPGRADE_LEGACY_COUNT:
         base = (
             ORIG_STRING_ONE_PAST_MAX
@@ -8515,10 +8544,13 @@ def cheat_upgrade_string_ids_for_entry(entry_index):
             + entry_index * 2
         )
     else:
-        # Keep every pre-B154 outfit/behavior/Holiday string ID stable. New
-        # cheat rows live after the fixed Holiday footer range instead of
-        # shifting the Holiday collection's native constants.
-        extra_index = entry_index - CHEAT_UPGRADE_LEGACY_COUNT
+        # Keep every established post-legacy string ID stable even when the
+        # display table is regrouped. The new male row is handled above and
+        # receives the first free pair after Divorce/renovations.
+        try:
+            extra_index = CHEAT_UPGRADE_EXTRA_STRING_ORDER.index(item_id)
+        except ValueError as exc:
+            raise ValueError(f"Unallocated extra cheat row: {item_id:#x}") from exc
         base = holiday_ornament_collection_footer_string_ids()[-1] + 1 + extra_index * 2
     return base, base + 1
 
@@ -9317,17 +9349,29 @@ def patch_visible_special_upgrades(manifest):
         },
         "availability": (
             "zero unless the current second-parent slot is present and its "
-            "persistent ID maps to exactly one active, non-away manager slot 0..29"
+            "persistent ID maps to exactly one active, non-away, live-health manager "
+            "slot 0..29"
         ),
         "resolver": (
             "exact persistent ID match at CVillager+0x1BB48; no gender, role, "
             "household order, selected-villager, or adult heuristic"
         ),
         "apply": (
-            "clear exact focus if it is this spouse, call CVillager::Reset for "
-            "native plan/prop/active cleanup, clear only the current second "
-            "parent record, then use the common SaveCurrentGame path"
+            "call native CVillagerState::SetHealth(0, OldAge) at CVillager+0x6AF4, "
+            "call native CFamilyTree::ReportDeath, clear exact focus if it is "
+            "this spouse, retain the current second-parent record, then use the "
+            "common SaveCurrentGame path"
         ),
+        "native_evidence": {
+            "villager_state_base": "CVillager+0x6AF4",
+            "health_field": "CVillager+0x6B00 (CVillagerState+0x0C)",
+            "cause_field": "CVillagerState+0x10",
+            "set_health_symbol": "?SetHealth@CVillagerState@@QAEXHW4ECauseOfDeath@@@Z",
+            "set_health_behavior": "native setter writes zero health and cause; it does not call ReportDeath",
+            "death_symbol": "?ReportDeath@CFamilyTree@@QAEXAAVCVillager@@@Z",
+            "report_death_behavior": "native handler retains the current parent record but may mark the matching parent ID -1",
+            "update_parents_second_slot": "CFamilyTree::UpdateParents writes SPeepRecord+0xDC, valid +0xF6, ID +0x104",
+        },
         "historical_generations": "never iterated or modified",
         "warning": DIVORCE_SPOUSE_WARNING,
         "strings": {
@@ -9558,13 +9602,6 @@ public:
         existing_helper
         + shared_type_preamble
         + f"""
-
-enum EImage {{ eImageDummy = 0 }};
-class theGraphicsManager {{
-public:
-    static theGraphicsManager* Get();
-    void Draw(EImage image, int x, int y, float scale, int alpha);
-}};
 
 class CToolTray {{
 public:
@@ -10047,7 +10084,7 @@ extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
-    if (itemId == 0x132 && VF2MarriageEmailUnavailable()) {{
+    if ((itemId == 0x132 || itemId == 0x14C) && VF2MarriageEmailUnavailable()) {{
         // A second resident adult means the stock proposal path has no valid
         // candidate state.  Hide the purchase instead of queueing the email
         // into the crash-prone path.
@@ -10404,6 +10441,106 @@ def patch_main_scene_outfit_body_apply(manifest):
         "villager_body_offset": "0x6a84",
         "patches": patches,
         "note": "Stock outfit tools still fall back to InventoryManager male/female outfit body fields.",
+    }
+
+
+def patch_main_scene_random_tip_click(manifest):
+    """Add the mobile random-tip click to the baked bottom-nav house image.
+
+    The house is part of main_BG_ws.png (image 0x174), not a native control.
+    HandleMouseDown therefore gets a small additive screen-coordinate test;
+    all other stock mouse handling and the portrait/details control remain
+    untouched.  Coordinates are relative to the native 1024x163 DrawUI strip.
+    """
+    obj = CoffObject(PATCHED / "theMainScene.obj")
+    sym = obj.symbol("?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z")
+    sec = obj.section(sym.section)
+    insert_off = sym.value + 0x79
+    raw = sec.raw_ptr + insert_off
+    expected = b"\xE8\x00\x00\x00\x00"
+    if bytes(obj.buf[raw : raw + len(expected)]) != expected:
+        raise RuntimeError("theMainScene HandleMouseDown house-hit anchor drifted")
+
+    helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
+    if not helper_path.exists():
+        raise RuntimeError("vf2_special_upgrade_effects.cpp missing before random-tip helper")
+    helper_text = helper_path.read_text(encoding="ascii")
+    helper_token = "VF2TryRandomTipHouseHit"
+    if helper_token not in helper_text:
+        helper_text += r'''
+
+#ifndef VF2_RANDOM_TIP_HOUSE_HELPER_DEFINED
+#define VF2_RANDOM_TIP_HOUSE_HELPER_DEFINED
+class CDealerSay {
+public:
+    void Say(StringId stringId, int gender);
+};
+extern CDealerSay DealerSay;
+
+extern "C" bool __cdecl VF2TryRandomTipHouseHit(
+    void *scene,
+    int screenX,
+    int screenY
+)
+{
+    if (!scene) return false;
+    unsigned char *raw = reinterpret_cast<unsigned char *>(scene);
+    const int stripX = *reinterpret_cast<int *>(raw + 0xA8);
+    const int stripY = *reinterpret_cast<int *>(raw + 0x94)
+        - *reinterpret_cast<int *>(raw + 0x8C) - 163;
+    const int localX = screenX - stripX;
+    const int localY = screenY - stripY;
+    // Tiny house in the baked main_BG_ws.png 1024x163 bottom-navigation strip.
+    if (localX < 184 || localX >= 218 || localY < 58 || localY >= 99) {
+        return false;
+    }
+    const int stringId = ldwGameState::GetRandom(0x32) + 0x09E3;
+    DealerSay.Say((StringId)stringId, -1);
+    return true;
+}
+#endif
+'''
+        helper_path.write_text(helper_text.rstrip() + "\n", encoding="ascii")
+
+    helper_sym = obj.append_undefined_symbol("_VF2TryRandomTipHouseHit")
+    # push y, x, this; call helper; consume the arguments.  A true result
+    # jumps to the existing stock "return true" epilogue at +0xB2.
+    payload = bytearray(
+        b"\xFF\x75\x0C"       # push [ebp+0C] (screen y)
+        b"\xFF\x75\x08"       # push [ebp+08] (screen x)
+        b"\x56"               # push esi (this)
+        b"\xE8\x00\x00\x00\x00"
+        b"\x83\xC4\x0C"
+        b"\x84\xC0"
+        b"\x74\x05"           # false: continue stock path
+        b"\xE9\x00\x00\x00\x00"  # true: stock return-true epilogue
+    )
+    obj.insert_section_bytes(sym.section, insert_off, bytes(payload))
+    obj.append_relocation(sym.section, insert_off + 8, helper_sym, IMAGE_REL_I386_REL32)
+    # The insertion shifts the old +0xB2 target by len(payload), so the
+    # relative displacement remains old_return - insertion_site.
+    jmp_disp = sym.value + 0xB2 - insert_off
+    struct.pack_into("<i", obj.buf, sec.raw_ptr + insert_off + 20, jmp_disp)
+    obj.write(PATCHED / "theMainScene.obj")
+    manifest["random_tip_bottom_house"] = {
+        "status": "patched",
+        "route": "theMainScene::HandleMouseDown additive coordinate overlay over baked main_BG_ws.png",
+        "image_id": "0x174",
+        "image_size": [1024, 163],
+        "relative_rect": {"left": 184, "top": 58, "right": 218, "bottom": 99},
+        "screen_rect_formula": "x=[this+0xA8]+relative; y=[this+0x94]-[this+0x8C]-163+relative",
+        "function": "?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z",
+        "insert_offset": "0x79",
+        "stock_continuation": "false falls through to native HandleMouseDown; true jumps to its existing return-true epilogue",
+        "portrait_control_id1_untouched": True,
+        "stock_control_id1_untouched": True,
+        "string_id_first": "0x09E3",
+        "string_id_last": "0x0A14",
+        "string_id_count": 50,
+        "selection": "GetRandom(0x32) + 0x09E3",
+        "dealer_say": "CDealerSay::Say(StringId, -1) general notification channel",
+        "helper": "_VF2TryRandomTipHouseHit",
+        "evidence": "additive PC overlay over baked main_BG_ws.png; no stock house control exists",
     }
 
 
@@ -10846,15 +10983,19 @@ public:
 class CVillager {
 public:
     struct SSaveState;
-    void Reset();
     bool const LoadState(SSaveState &state);
     bool Impregnate(int count, const char *name, int motherBody, int fatherBody, bool adopted);
+};
+
+enum ECauseOfDeath {
+    eCauseOfDeathOldAge = 2
 };
 
 class CVillagerState {
 public:
     int FoodGroupsActive(bool includeOrganic);
     bool ChanceOfPregnancy(int motherAge, int fatherAge, int fatherFertility);
+    void SetHealth(int health, ECauseOfDeath cause);
 };
 
 enum ECareerType {
@@ -10917,6 +11058,7 @@ public:
     struct SPeepRecord;
     struct SSaveState;
     SFamilyRecord *GetCurrentFamily();
+    void ReportDeath(CVillager &villager);
     void UpdatePeepRecord(SPeepRecord *record);
     bool const LoadState(SSaveState const &state);
     bool AddOffspring(CVillager const &villager);
@@ -10926,7 +11068,56 @@ public:
     bool StartNextGeneration(CVillager &villager, int peepId);
 };
 
-class ldwScene {};
+enum StringId {
+    eStringPregnancyTutorial = 0x868
+};
+
+enum FontId {
+    eFontGenerationCounter = 3
+};
+
+class ldwControl {};
+class ldwImageGrid {};
+struct ldwColor {
+    unsigned int value;
+};
+struct ldwPoint {
+    int x;
+    int y;
+};
+class ldwFont;
+
+enum EImage {
+    eImageDummy = 0
+};
+
+class ldwScene {
+protected:
+    void AddControl(ldwControl *control);
+public:
+    void VF2AddControl(ldwControl *control) { AddControl(control); }
+};
+
+class ldwButton : public ldwControl {
+public:
+    ldwButton(int id, ldwImageGrid *image, ldwPoint point, ldwScene *scene, bool enabled);
+    void SetText(const char *text, ldwColor normal, ldwColor selected, ldwColor disabled, ldwFont *font);
+};
+
+class theGraphicsManager {
+public:
+    static theGraphicsManager *__cdecl Get();
+    ldwImageGrid *GetImageGrid(EImage image);
+    void Draw(EImage image, int x, int y, float scale, int alpha);
+};
+
+class theStringManager {
+public:
+    static theStringManager *__cdecl Get();
+    char *GetString(StringId stringId);
+    ldwFont *GetLargeFont();
+    ldwFont *GetFont(FontId font);
+};
 
 class ldwDialog {
 public:
@@ -10979,11 +11170,6 @@ public:
         EHotSpot hotspot,
         EObject object
     );
-};
-
-struct ldwPoint {
-    int x;
-    int y;
 };
 
 struct sFurnitureInfo2 {
@@ -11044,10 +11230,6 @@ public:
     static int __cdecl GetRandom(int limit);
 };
 
-enum StringId {
-    eStringPregnancyTutorial = 0x868
-};
-
 enum EGameScene {
     eGameSceneNone = 0
 };
@@ -11055,6 +11237,17 @@ enum EGameScene {
 enum EEmailMessage {
     eEmailMessageMarriageProposal = 2
 };
+
+enum ESound {
+    eSoundDummy = 0
+};
+
+class CSound {
+public:
+    void Play(ESound sound);
+};
+
+extern CSound Sound;
 
 class CTutorialTip {
 public:
@@ -11210,7 +11403,11 @@ static bool VF2MarriageEmailUnavailable() {
     return VF2MarriagePair(first, second);
 }
 
-static void VF2QueueCheatMarriageProposal() {
+static const unsigned char kVF2CheatMarriageProposalOff = 0;
+static const unsigned char kVF2CheatMarriageProposalFemale = 1;
+static const unsigned char kVF2CheatMarriageProposalMale = 2;
+
+static void VF2QueueCheatMarriageProposal(unsigned char mode) {
     theGameState *state = theGameState::Get();
     if (!state ||
         state->EmailMessageInQueue(eEmailMessageMarriageProposal)) {
@@ -11220,12 +11417,74 @@ static void VF2QueueCheatMarriageProposal() {
     // QueueEmailMessage is a no-op when the native queue is full.  Arm the
     // one-scene gender mode only after a new enum-2 entry is observable.
     if (state->EmailMessageInQueue(eEmailMessageMarriageProposal)) {
-        gVF2CheatMarriageProposalScene = 1;
+        gVF2CheatMarriageProposalScene = mode;
     }
 }
 
 extern "C" void __cdecl VF2ClearCheatMarriageProposalMode() {
-    gVF2CheatMarriageProposalScene = 0;
+  gVF2CheatMarriageProposalScene = kVF2CheatMarriageProposalOff;
+}
+
+extern "C" void __cdecl VF2MaybeAddCheatMarriageExit(ldwScene *scene) {
+    if (!scene ||
+        (gVF2CheatMarriageProposalScene != kVF2CheatMarriageProposalFemale &&
+         gVF2CheatMarriageProposalScene != kVF2CheatMarriageProposalMale)) {
+        return;
+    }
+
+    ldwPoint point = {
+        theGameState::Get()->GetWideScreenOffsetX() + 4,
+        0x2DD,
+    };
+    ldwColor white = {0xFFFFFFFFu};
+    ldwButton *exitButton = new ldwButton(
+        3,
+        theGraphicsManager::Get()->GetImageGrid((EImage)0x129),
+        point,
+        scene,
+        true
+    );
+    exitButton->SetText(
+        theStringManager::Get()->GetString((StringId)0x76C),
+        white,
+        white,
+        white,
+        theStringManager::Get()->GetLargeFont()
+    );
+    scene->VF2AddControl(exitButton);
+}
+
+extern "C" bool __cdecl VF2HandleCheatMarriageProposalExit(
+    void *scene,
+    int message,
+    int action
+) {
+    if (gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalOff ||
+        message != 8) {
+        return false;
+    }
+
+    // Accept follows the native close path; clear the one-scene mode before
+    // it can be destroyed so a subsequent ordinary proposal cannot inherit it.
+    if (action == 1) {
+        VF2ClearCheatMarriageProposalMode();
+        return false;
+    }
+    if (action != 3) {
+        return false;
+    }
+
+    Sound.Play((ESound)0x8A);
+    theGameState *state = theGameState::Get();
+    if (!state) {
+        return false;
+    }
+    unsigned char *raw = (unsigned char *)state;
+    *(unsigned int *)(raw + 0x25CBC) = *(unsigned int *)(raw + 0x25CB8);
+    *(unsigned int *)(raw + 0x25CB8) = 0;
+    VF2ClearCheatMarriageProposalMode();
+    (void)scene;
+    return true;
 }
 
 static CVillager *VF2ActiveVillagerByPersistentIdUnique(
@@ -11241,6 +11500,9 @@ static CVillager *VF2ActiveVillagerByPersistentIdUnique(
         if (!VillagerManager.VillagerExists(index, false)) continue;
         CVillager *resident = &VillagerManager.GetVillager(index);
         if (*(int *)((unsigned char *)resident + 0x1BB48) != peepId) {
+            continue;
+        }
+        if (*(int *)((unsigned char *)resident + 0x6B00) <= 0) {
             continue;
         }
         ++matches;
@@ -11277,16 +11539,21 @@ static bool VF2DivorceSpouse() {
         VF2ActiveVillagerByPersistentIdUnique(peepId, &index);
     if (!spouse) return false;
 
+    // CVillagerState is embedded at CVillager+0x6AF4 and native SetHealth
+    // stores zero health plus the stock OldAge death cause.  SetHealth does
+    // not report the death itself; the stock death behavior calls the native
+    // FamilyTree::ReportDeath path separately.
+    CVillagerState *state =
+        (CVillagerState *)((unsigned char *)spouse + 0x6AF4);
+    state->SetHealth(0, eCauseOfDeathOldAge);
+    FamilyTree.ReportDeath(*spouse);
     if (VillagerManager.GetVillagerInFocus() == spouse) {
         VillagerManager.SetNoFocus();
     }
-    spouse->Reset();
-    // SPeepRecord is exactly 0xD8 bytes.  Clearing only the current record's
-    // second-parent slot removes the spouse from the live Family Tree while
-    // leaving every historical generation untouched.
-    for (int offset = 0; offset < 0xD8; ++offset) {
-        record[0xDC + offset] = 0;
-    }
+    // Do not clear: retain the current second-parent SPeepRecord.  Native
+    // ReportDeath may mark its matching parent ID invalid, but does not zero
+    // the record; UpdateParents overwrites that exact +0xDC slot when a newly
+    // accepted spouse is recorded, and children remain in their records.
     return true;
 }
 
@@ -11303,11 +11570,16 @@ extern "C" int __fastcall VF2MarriageCandidateGender(
     void *,
     int currentGender
 ) {
-    if (gVF2SameSexMarriage == 0 &&
-        gVF2CheatMarriageProposalScene == 0) {
-        return currentGender == 1 ? 0 : 1;
+    if (gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalFemale) {
+        return 0;
     }
-    return ldwGameState::GetRandom(2);
+    if (gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalMale) {
+        return 1;
+    }
+    if (gVF2SameSexMarriage != 0) {
+        return ldwGameState::GetRandom(2);
+    }
+    return currentGender == 1 ? 0 : 1;
 }
 
 extern "C" CVillager *__fastcall VF2GetMarriageRole(
@@ -11811,14 +12083,6 @@ static unsigned int &VF2PersistentCheatAndPurchaseMask() {
     return *(unsigned int *)(record + 4);
 }
 
-struct ldwColor {
-    unsigned int value;
-};
-
-enum FontId {
-    eFontGenerationCounter = 3
-};
-
 class ldwFont;
 
 class ldwGameWindow {
@@ -11831,12 +12095,6 @@ public:
         ldwColor color,
         ldwFont *font
     );
-};
-
-class theStringManager {
-public:
-    static theStringManager *__cdecl Get();
-    ldwFont *GetFont(FontId font);
 };
 
 static unsigned int VF2LifetimeGenerationCount() {
@@ -12409,7 +12667,13 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         if (VF2MarriageEmailUnavailable()) {
             break;
         }
-        VF2QueueCheatMarriageProposal();
+        VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalFemale);
+        break;
+    case 0x14C:
+        if (VF2MarriageEmailUnavailable()) {
+            break;
+        }
+        VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalMale);
         break;
     case 0x133:
         VF2SetSockPileCount(kVF2MaximumSockPileCount);
@@ -13334,6 +13598,7 @@ public:
     void AdjustAllChildrenHappiness(int amount);
     void MakeAllVillagersDoIt(EBehavior behavior, int minimum_age, int maximum_age, EGender gender, int *ids, int id_count);
     void CureAllVillagers();
+    void GiveAllVillagersSymptom(ESymptom symptom, int duration);
 }};
 
 extern CVillagerManager VillagerManager;
@@ -13424,14 +13689,19 @@ static CVillagerSkills *VF2MobileEventVillagerSkills(CVillager *villager)
         reinterpret_cast<unsigned char *>(villager) + 0x6B8C);
 }}
 
-// Vtable- and layout-compatible with CIslandEvent.  The first 0x10 bytes are
-// the stock base object: vptr, target villager, second target villager, award.
-// Keeping that prefix prevents dialog/scheduler code from interpreting title
-// and description IDs as pointers.
+// Vtable- and layout-compatible with the native CIslandEventChoiceAB path.
+// The stock prefix is vptr, target1 (+0x04), choice-layer slot (+0x08), award
+// (+0x0C), target2 (+0x10). Keeping that prefix prevents dialog/scheduler code
+// from interpreting title and description IDs as pointers.
 struct CMobileIslandEvent {{
     CVillager *target1_;
-    CVillager *target2_;
+    // CIslandEventChoiceAB keeps its second target at +0x10; +0x08 is a
+    // native choice-layer slot and must not be used for the target or custom
+    // state.  The mobile graft uses the choice-compatible prefix because its
+    // dialog path dispatches through the ChoiceAB vtable.
+    int choice_layer_slot_;
     int award_;
+    CVillager *target2_;
     int title_;
     int desc_;
     int choice_a_;
@@ -13443,7 +13713,7 @@ struct CMobileIslandEvent {{
     int outcome_kind_;
 
     CMobileIslandEvent(int title, int desc, int choice_a, int choice_b, int result_a, int result_b, bool has_choices, bool is_email, int outcome_kind)
-        : target1_(0), target2_(0), award_(0), title_(title), desc_(desc), choice_a_(choice_a), choice_b_(choice_b), result_a_(result_a), result_b_(result_b),
+        : target1_(0), choice_layer_slot_(0), award_(0), target2_(0), title_(title), desc_(desc), choice_a_(choice_a), choice_b_(choice_b), result_a_(result_a), result_b_(result_b),
           has_choices_(has_choices), is_email_(is_email), outcome_kind_(outcome_kind) {{}}
     virtual ~CMobileIslandEvent() {{}}
     virtual bool CanFire() {{
@@ -13519,10 +13789,14 @@ struct CMobileIslandEvent {{
     virtual StringId GetChoiceAText() {{ return (StringId)choice_a_; }}
     virtual StringId GetChoiceBText() {{ return (StringId)choice_b_; }}
     virtual CVillager *GetTargetVillager() {{ return target1_; }}
-    virtual CVillager *GetTargetVillager2() {{ return target2_ ? target2_ : target1_; }}
+    virtual CVillager *GetTargetVillager2() {{ return target2_; }}
     virtual EBodyPosition GetVillagerPose() {{ return eBodyPosition_Standing; }}
     virtual StringId GetResultDescription(int choice) {{ return (StringId)(choice == 0 ? result_a_ : result_b_); }}
-    virtual void ImpactGame() {{
+    // Keep the declaration order identical to CIslandEvent's native vtable:
+    // ImpactGame(int) precedes the no-argument ImpactGame().  The implementation
+    // body is non-virtual so the generated helper cannot accidentally swap the
+    // two overloaded slots when the compiler lays out the vtable.
+    void VF2ImpactGameNoChoice() {{
         if (outcome_kind_ == 6) {{
             FurnitureManager.AddToStorage((EInventoryItem)0x24B);
         }} else if (outcome_kind_ == 7 || outcome_kind_ == 8) {{
@@ -13721,7 +13995,8 @@ struct CMobileIslandEvent {{
             return;
         }}
     }}
-    virtual void CalcAward() {{
+    // As above, the native vtable has CalcAward(int) before CalcAward().
+    void VF2CalcAwardNoChoice() {{
         if (outcome_kind_ == 6) {{
             award_ = 0;
         }} else if (outcome_kind_ == 7) {{
@@ -13771,12 +14046,15 @@ struct CMobileIslandEvent {{
             award_ = 0;
         }}
     }}
+    virtual void ImpactGame() {{ VF2ImpactGameNoChoice(); }}
+    virtual void CalcAward() {{ VF2CalcAwardNoChoice(); }}
     virtual int GetAwardAmount() {{ return award_; }}
 }};
 
-static_assert(offsetof(CMobileIslandEvent, target1_) == 4, "CIslandEvent target1 layout");
-static_assert(offsetof(CMobileIslandEvent, target2_) == 8, "CIslandEvent target2 layout");
+static_assert(offsetof(CMobileIslandEvent, target1_) == 4, "CIslandEventChoiceAB target1 layout");
+static_assert(offsetof(CMobileIslandEvent, choice_layer_slot_) == 8, "CIslandEventChoiceAB choice slot layout");
 static_assert(offsetof(CMobileIslandEvent, award_) == 12, "CIslandEvent award layout");
+static_assert(offsetof(CMobileIslandEvent, target2_) == 16, "CIslandEventChoiceAB target2 layout");
 
 extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
 {{
@@ -13828,6 +14106,216 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
         "mEventHasFired_new_offset": hex(event_has_fired_sym.value),
         "event_bound_patches": bound_patches,
         "destructor_bound_patches": destructor_bound_patches,
+        "abi_layout": {
+            "base": "CIslandEventChoiceAB",
+            "target1_offset": "0x04",
+            "choice_layer_slot_offset": "0x08",
+            "award_offset": "0x0C",
+            "target2_offset": "0x10",
+            "vtable_order": [
+                "ImpactGame(int)",
+                "ImpactGame()",
+                "CalcAward(int)",
+                "CalcAward()",
+            ],
+            "native_evidence": "IslandEvents_dump.txt CIslandEventChoiceAB GetTargetVillager2 reads [ecx+0x10]; vtable #60B",
+        },
+    }
+
+
+def append_power_failure_helper_cpp():
+    """Append the stock Power Failure choice lifecycle helper.
+
+    The native dialog keeps the event pointer and calls CalcAward(choice),
+    GetResultDescription(choice), then ImpactGame(choice) on that same event.
+    Keep the one-shot B1/B2 result in a bounded, non-persisted helper slot keyed
+    by that pointer; never borrow CIslandEvent +0x0C/+0x14 for custom state.
+    """
+    helper_path = PATCHED / "vf2_island_events.cpp"
+    text = helper_path.read_text(encoding="ascii") if helper_path.exists() else ""
+    if "VF2PowerFailureCalcAward" in text:
+        return
+    helper = r'''
+
+class CFoodStore {
+public:
+    void Reset(bool notify);
+};
+
+#ifndef VF2_ENVIRONMENT_DECLARED
+#define VF2_ENVIRONMENT_DECLARED
+enum EPropEnum { ePropDummy = 0 };
+
+class CEnvironment {
+public:
+    void SetProp(EPropEnum prop);
+    bool PropIsActive(EPropEnum prop);
+};
+#endif
+
+extern CFoodStore FoodStore;
+extern CEnvironment Environment;
+extern CVillagerManager VillagerManager;
+
+struct VF2PowerFailureState {
+    void *event;
+    int b2;
+};
+
+static VF2PowerFailureState gVF2PowerFailureStates[4] = {};
+static unsigned int gVF2PowerFailureReplacement = 0;
+
+static VF2PowerFailureState *VF2FindPowerFailureState(void *event, bool create)
+{
+    if (!event) return 0;
+    VF2PowerFailureState *empty = 0;
+    for (int i = 0; i < 4; ++i) {
+        if (gVF2PowerFailureStates[i].event == event) {
+            return &gVF2PowerFailureStates[i];
+        }
+        if (!empty && !gVF2PowerFailureStates[i].event) {
+            empty = &gVF2PowerFailureStates[i];
+        }
+    }
+    if (!create) return 0;
+    if (empty) return empty;
+    VF2PowerFailureState *slot =
+        &gVF2PowerFailureStates[gVF2PowerFailureReplacement++ % 4];
+    slot->event = event;
+    slot->b2 = 0;
+    return slot;
+}
+
+static void VF2ClearPowerFailureState(void *event)
+{
+    VF2PowerFailureState *state = VF2FindPowerFailureState(event, false);
+    if (state) {
+        state->event = 0;
+        state->b2 = 0;
+    }
+}
+
+extern "C" void __cdecl VF2PowerFailureCalcAward(void *event, int choice)
+{
+    VF2PowerFailureState *state = VF2FindPowerFailureState(event, true);
+    if (!state) return;
+    // Choice A remains the stock food-reset result. Choice B rolls once and
+    // records only the B1/B2 description/effect branch for this event.
+    state->b2 = (choice != 0) && (ldwGameState::GetRandom(2) != 0);
+}
+
+extern "C" int __cdecl VF2PowerFailureGetResultDescription(void *event, int choice)
+{
+    if (choice == 0) return 0x9BC; // stock ResultA
+    VF2PowerFailureState *state = VF2FindPowerFailureState(event, false);
+    if (state && state->b2) {
+        return 0x9BE; // eEventThePowerFailureResultB2
+    }
+    return 0x9BD; // eEventThePowerFailureResultB1
+}
+
+extern "C" void __cdecl VF2PowerFailureImpactGame(void *event, int choice)
+{
+    if (choice == 0) {
+        Environment.SetProp((EPropEnum)0x17);
+        FoodStore.Reset(true);
+    } else {
+        VF2PowerFailureState *state = VF2FindPowerFailureState(event, false);
+        if (state && state->b2) {
+            // Native GiveAllVillagersSymptom filters out away/dead villagers;
+            // its second argument is a percentage, and 100 is intentional.
+            VillagerManager.GiveAllVillagersSymptom((ESymptom)2, 100);
+        }
+    }
+    VF2ClearPowerFailureState(event);
+}
+'''
+    helper_path.write_text(text.rstrip() + helper, encoding="ascii")
+
+
+def patch_power_failure_event(manifest):
+    """Patch only stock CEventThePowerFailure's choice lifecycle."""
+    obj = CoffObject(PATCHED / "IslandEvents.obj")
+    routes = (
+        (
+            "calc_award",
+            "?CalcAward@CEventThePowerFailure@@UAEXH@Z",
+            b"\xC2\x04\x00",
+            "_VF2PowerFailureCalcAward",
+            True,
+        ),
+        (
+            "result_description",
+            "?GetResultDescription@CEventThePowerFailure@@UAE?AW4StringId@@H@Z",
+            b"\x55\x8B\xEC\x33\xC0\x39\x45\x08\x0F\x95\xC0\x05\xBC\x09\x00\x00\x5D\xC2\x04\x00",
+            "_VF2PowerFailureGetResultDescription",
+            False,
+        ),
+        (
+            "impact_game",
+            "?ImpactGame@CEventThePowerFailure@@UAEXH@Z",
+            bytes.fromhex(
+                "55 8B EC 6A 17 B9 00 00 00 00 E8 00 00 00 00 83 "
+                "7D 08 00 75 12 C7 45 08 01 00 00 00 B9 00 00 00 "
+                "00 5D E9 00 00 00 00 56 6A 04 E8 00 00 00 00 50 "
+                "E8 00 00 00 00 8B F0 83 C4 08 85 F6 7E 2B 66 90 "
+                "6A 00 B9 00 00 00 00 E8 00 00 00 00 50 B9 00 00 "
+                "00 00 E8 00 00 00 00 6A 02 8D 88 F4 6A 00 00 E8 "
+                "00 00 00 00 83 EE 01 75 D7 5E 5D C2 04 00"
+            ),
+            "_VF2PowerFailureImpactGame",
+            False,
+        ),
+    )
+    applied = []
+    for route, symbol_name, expected, helper_name, tiny in routes:
+        sym = obj.symbol(symbol_name)
+        sec = obj.section(sym.section)
+        raw = sec.raw_ptr + sym.value
+        if bytes(obj.buf[raw : raw + len(expected)]) != expected:
+            raise ValueError(f"Unexpected Power Failure {route} preimage")
+        helper = obj.append_undefined_symbol(helper_name)
+        if tiny:
+            # CalcAward is a three-byte stock stub. Grow that private section by
+            # two bytes, then place the helper cave after the five-byte detour.
+            obj.insert_section_bytes(sym.section, sym.value + len(expected), b"\x90\x90")
+            sec = obj.section(sym.section)
+            cave_off = sec.raw_size
+            cave = bytearray(bytes.fromhex("FF 74 24 04 51 E8 00 00 00 00 83 C4 08 C2 04 00"))
+            obj.insert_section_bytes(sym.section, cave_off, cave)
+            sec = obj.section(sym.section)
+            disp = cave_off - (sym.value + 5)
+            obj.buf[sec.raw_ptr + sym.value : sec.raw_ptr + sym.value + 5] = b"\xE9" + struct.pack("<i", disp)
+            obj.append_relocation(sym.section, cave_off + 6, helper, IMAGE_REL_I386_REL32)
+        else:
+            cave_off = sec.raw_size
+            cave = bytearray(bytes.fromhex("FF 74 24 04 51 E8 00 00 00 00 83 C4 08 C2 04 00"))
+            obj.insert_section_bytes(sym.section, cave_off, cave)
+            sec = obj.section(sym.section)
+            disp = cave_off - (sym.value + 5)
+            obj.buf[sec.raw_ptr + sym.value : sec.raw_ptr + sym.value + 5] = b"\xE9" + struct.pack("<i", disp)
+            obj.append_relocation(sym.section, cave_off + 6, helper, IMAGE_REL_I386_REL32)
+        applied.append({
+            "route": route,
+            "function": symbol_name,
+            "helper": helper_name,
+            "stock_preimage": expected.hex(" "),
+            "detour_opcode": "E9",
+            "cave_offset": hex(cave_off),
+            "state": "event-pointer keyed, one-shot, non-persisted",
+        })
+    obj.write(PATCHED / "IslandEvents.obj")
+    append_power_failure_helper_cpp()
+    manifest["PowerFailure"] = {
+        "status": "enabled",
+        "choice_a": "stock food reset: Environment.SetProp(0x17), FoodStore.Reset(true)",
+        "choice_b": "one GetRandom(2) roll; B1 no illness, B2 ResultB2 + GiveAllVillagersSymptom(2,100)",
+        "result_ids": {"a": "0x9BC", "b1": "0x9BD", "b2": "0x9BE"},
+        "state_storage": "four bounded helper slots keyed by stock event pointer; overwritten on CalcAward and cleared by ImpactGame",
+        "forbidden_event_offsets": ["0x0C", "0x14"],
+        "routes": applied,
+        "lifecycle_evidence": "FireEvent -> dialog +0x830 -> CalcAward(choice) -> GetResultDescription(choice) -> ImpactGame(choice)",
+        "native_symptom_route": "CVillagerManager::GiveAllVillagersSymptom(ESymptom,int); symptom 2, duration 100",
     }
 
 
@@ -13837,18 +14325,22 @@ SECOND_BATHROOM_LEAK_HELPER_CPP = r'''
 #define VF2_EINVENTORYITEM_DEFINED
 enum EInventoryItem { eInventoryItemDummy = 0 };
 #endif
-enum EPropEnum { ePropDummy = 0 };
 
 class CInventoryManager {
 public:
     bool HaveUpgrade(EInventoryItem item);
 };
 
+#ifndef VF2_ENVIRONMENT_DECLARED
+#define VF2_ENVIRONMENT_DECLARED
+enum EPropEnum { ePropDummy = 0 };
+
 class CEnvironment {
 public:
     void SetProp(EPropEnum prop);
     bool PropIsActive(EPropEnum prop);
 };
+#endif
 
 extern CInventoryManager InventoryManager;
 extern CEnvironment Environment;
@@ -15601,6 +16093,103 @@ def patch_same_sex_marriage(manifest):
         b"\xE9" + struct.pack("<i", destroy_cave - (destroy_hook + 5))
         + b"\x90"
     )
+
+    exit_constructor_helper = dating.append_undefined_symbol(
+        CHEAT_MARRIAGE_PROPOSAL_EXIT_CONSTRUCTOR_SYMBOL
+    )
+    exit_handler_helper = dating.append_undefined_symbol(
+        CHEAT_MARRIAGE_PROPOSAL_EXIT_HANDLER_SYMBOL
+    )
+
+    # IDA: the stock constructor's final field cleanup is a stable anchor.
+    # Insert the armed-only control before that cleanup so ordinary scenes
+    # execute the untouched constructor body and epilogue.
+    constructor_name = "??0CDatingScene@@AAE@XZ"
+    constructor = dating.symbol(constructor_name)
+    constructor_sec = dating.section(constructor.section)
+    constructor_epilogue_pattern = bytes.fromhex(
+        "C7 47 10 FF FF FF FF 8B C7 8B 4D F4 64 89 0D 00 00 00 00 "
+        "59 5F 5E 5B 8B E5 5D C3"
+    )
+    constructor_raw = constructor_sec.raw_ptr + constructor.value
+    constructor_bytes = bytes(
+        dating.buf[constructor_raw:constructor_raw + constructor_sec.raw_size]
+    )
+    constructor_epilogue = constructor_bytes.find(constructor_epilogue_pattern)
+    if constructor_epilogue < 0 or constructor_bytes.find(
+        constructor_epilogue_pattern, constructor_epilogue + 1
+    ) >= 0:
+        raise RuntimeError("Dating constructor cleanup anchor drifted")
+    constructor_payload = b"\x57\xE8\x00\x00\x00\x00\x83\xC4\x04"
+    dating.insert_section_bytes(
+        constructor_sec.index,
+        constructor_epilogue,
+        constructor_payload,
+    )
+    dating.append_relocation(
+        constructor_sec.index,
+        constructor_epilogue + 2,
+        exit_constructor_helper,
+        IMAGE_REL_I386_REL32,
+    )
+
+    # IDA: HandleMessage starts with a normal frame and dispatches message 8
+    # actions 1/2. Preserve the complete prologue, then fail through to the
+    # stock body when the armed-only action-3 helper returns false.
+    handle_name = "?HandleMessage@CDatingScene@@UAE_NHJ@Z"
+    handle = dating.symbol(handle_name)
+    handle_sec = dating.section(handle.section)
+    handle_hook = handle.value
+    handle_raw = handle_sec.raw_ptr + handle_hook
+    expected_handle_prefix = bytes.fromhex("55 8B EC 83 EC 28")
+    if bytes(dating.buf[handle_raw:handle_raw + len(expected_handle_prefix)]) != expected_handle_prefix:
+        raise RuntimeError("Dating HandleMessage prologue drifted")
+    handle_cave = handle_sec.raw_size
+    handle_payload = bytearray(
+        expected_handle_prefix
+        + b"\xFF\x75\x0C"       # action
+        + b"\xFF\x75\x08"       # message
+        + b"\x51"                # this
+        + b"\xE8\x00\x00\x00\x00"
+        + b"\x83\xC4\x0C"
+        + b"\x84\xC0"
+        + b"\x75\x00"
+        + b"\xE9\x00\x00\x00\x00"  # stock continuation
+        + b"\xB0\x01"              # return true
+        + b"\x8B\x4D\xFC"
+        + b"\x33\xCD"
+        + b"\x5F\x5E\x5B"
+        + b"\xE8\x00\x00\x00\x00"  # security cookie
+        + b"\x8B\xE5\x5D\xC2\x08\x00"
+    )
+    if len(handle_payload) != 51:
+        raise AssertionError("Dating Exit handler trampoline size drifted")
+    struct.pack_into("<b", handle_payload, 24, 5)
+    struct.pack_into(
+        "<i",
+        handle_payload,
+        26,
+        (handle.value + 6) - (handle_cave + 30),
+    )
+    dating.insert_section_bytes(handle_sec.index, handle_cave, bytes(handle_payload))
+    dating.append_relocation(
+        handle_sec.index,
+        handle_cave + 14,
+        exit_handler_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    dating.append_relocation(
+        handle_sec.index,
+        handle_cave + 41,
+        dating.symbol("@__security_check_cookie@4").index,
+        IMAGE_REL_I386_REL32,
+    )
+    handle = dating.symbol(handle_name)
+    handle_sec = dating.section(handle.section)
+    handle_raw = handle_sec.raw_ptr + handle.value
+    dating.buf[handle_raw:handle_raw + 6] = (
+        b"\xE9" + struct.pack("<i", handle_cave - (handle_hook + 5)) + b"\x90"
+    )
     dating.write(dating_path)
 
     manager_path = PATCHED / "VillagerManager.obj"
@@ -15758,10 +16347,17 @@ def patch_same_sex_marriage(manifest):
                 "makes a new enum-2 queue entry observable"
             ),
             "candidate_gender": (
-                "random female or male while armed, regardless of .vf2same; "
-                "ordinary proposal emails retain opposite-sex behavior when "
-                ".vf2same is disabled"
+                "Force Marriage Email (Female) arms mode 0x01 and returns "
+                "gender 0; Force Marriage Email (Male) arms mode 0x02 and "
+                "returns gender 1. No RNG is used for either cheat row; "
+                "ordinary proposal emails retain the existing .vf2same-gated "
+                "behavior"
             ),
+            "mode_values": {
+                "off": "0x00",
+                "female": "0x01",
+                "male": "0x02",
+            },
             "reject_replacement": (
                 "inherits the scene-scoped mode because Reject calls "
                 "GeneratePeepCandidate while CDatingScene remains open"
@@ -15772,6 +16368,21 @@ def patch_same_sex_marriage(manifest):
                 "resume_offset": "+0x10",
                 "helper": CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL,
                 "trampoline": hex(destroy_cave),
+            },
+            "exit_button": {
+                "status": "armed-only; ordinary DatingScene construction is unchanged",
+                "control_id": 3,
+                "image_id": "0x129",
+                "text_id": "0x76C",
+                "position": "theGameState::GetWideScreenOffsetX() + 4, y 0x2DD",
+                "constructor_helper": CHEAT_MARRIAGE_PROPOSAL_EXIT_CONSTRUCTOR_SYMBOL,
+                "handler_helper": CHEAT_MARRIAGE_PROPOSAL_EXIT_HANDLER_SYMBOL,
+                "message": 8,
+                "action": 3,
+                "sound_id": "0x8A",
+                "timestamp_route": "copy GameState+0x25CB8 to +0x25CBC, then clear +0x25CB8",
+                "accept_clear": "action 1 clears the scene mode before stock Accept continues",
+                "destroy_clear": "existing CDatingScene::Destroy hook remains defensive cleanup",
             },
         },
         "parent_storage": (
@@ -25828,6 +26439,10 @@ def main():
     patch_purchase_dialog(manifest)
     patch_options_dialog(manifest)
     write_outfit_store_helpers(manifest)
+    # The tiny house is baked into main_BG_ws.png, so install the additive
+    # coordinate overlay after the helper source exists and before later
+    # main-scene edits can change its anchor.
+    patch_main_scene_random_tip_click(manifest)
     patch_tool_tray_outfit_normalization(manifest)
     manifest["outfit_apply_body_resolver"] = {
         "status": "disabled for B97 stability; stock theMainScene GetOutfit callsites retained",
@@ -25914,6 +26529,7 @@ def main():
     patch_mobile_renovation_renderer(manifest)
     if ENABLE_ISLAND_EVENTS:
         patch_island_events(manifest)
+        patch_power_failure_event(manifest)
     else:
         # The legacy linker response contains the event helper object even
         # while grafted mobile events are disabled for stability.
@@ -25924,6 +26540,10 @@ def main():
         manifest["IslandEvents"] = {
             "added": [],
             "status": "disabled because the additive event object graft crashes the game",
+        }
+        manifest["PowerFailure"] = {
+            "status": "disabled with Island Events",
+            "reason": "Power Failure lifecycle detours are held out with the ABI-sensitive Island Events overlay.",
         }
     apply_second_bathroom_leaks(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:

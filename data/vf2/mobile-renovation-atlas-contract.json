@@ -51,10 +51,10 @@
       "scale": 1.0
     },
     "anchors": {
-      "bathroom": [255, 1435],
+      "bathroom": [535, 1263],
       "kitchen": [930, 995],
-      "office": [1354, 792],
-      "workshop": [500, 1400]
+      "office": [1357, 792],
+      "workshop": [900, 1475]
     },
     "selector": "first active PC style item in native mobile item order per room; IDs 0x13C-0x14A in the optional renderer build"
   },

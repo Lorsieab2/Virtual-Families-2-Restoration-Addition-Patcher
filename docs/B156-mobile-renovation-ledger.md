@@ -88,10 +88,10 @@ draws the complete source PNG at
 
 | Room | Anchor | Variants |
 | --- | --- | --- |
-| Bathroom | `(255,1435)` | 5 |
+| Bathroom | `(535,1263)` | 5 |
 | Kitchen | `(930,995)` | 3 |
-| Office | `(1354,792)` | 5 |
-| Workshop | `(500,1400)` | 2 |
+| Office | `(1357,792)` | 5 |
+| Workshop | `(900,1475)` | 2 |
 
 The hook is `theMainScene::DrawScene +0x39`, after `CWorldMap::Draw` and before
 stock decals. The disabled build has no hook and does not copy these PNGs into
