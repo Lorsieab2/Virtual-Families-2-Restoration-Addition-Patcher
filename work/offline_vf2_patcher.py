@@ -2500,11 +2500,23 @@ def create_backup(
     backup_dir.mkdir(parents=True, exist_ok=False)
     backup_targets: dict[str, bool] = {rel_path: True for rel_path in grouped}
     output_backup_paths: set[str] = set()
+    if output_dir.resolve() != game_dir.resolve() and output_dir.is_dir():
+        for existing in output_dir.rglob("*"):
+            if not existing.is_file():
+                continue
+            rel_path = str(existing.relative_to(output_dir)).replace("\\", "/")
+            if rel_path == DEFAULT_BACKUP_ROOT or rel_path.startswith(DEFAULT_BACKUP_ROOT + "/"):
+                continue
+            backup_targets[rel_path] = True
+            output_backup_paths.add(rel_path)
     for check in asset_checks:
         if check["action"] == "up_to_date":
             continue
         output_file_path = str(check.get("output_file_path") or check["file_path"])
-        if output_file_path == str(check["file_path"]):
+        if output_file_path == str(check["file_path"]) and output_dir.resolve() != game_dir.resolve():
+            backup_targets.setdefault(output_file_path, bool(check.get("output_existed", False)))
+            output_backup_paths.add(output_file_path)
+        elif output_file_path == str(check["file_path"]):
             backup_targets.setdefault(str(check["file_path"]), bool(check["target_existed"]))
         else:
             backup_targets.setdefault(output_file_path, bool(check.get("output_existed", False)))
@@ -2530,10 +2542,17 @@ def create_backup(
             destination = backup_dir / backup_rel
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
+            backup_sha = sha256_file(destination)
+            source_sha = sha256_file(source)
+            if backup_sha != source_sha:
+                raise PatchError(
+                    f"Backup verification failed for {rel_path}: "
+                    f"source {source_sha}, backup {backup_sha}"
+                )
             row.update(
                 {
                     "backup_path": str(backup_rel).replace("\\", "/"),
-                    "sha256": sha256_file(source),
+                    "sha256": source_sha,
                     "size": source.stat().st_size,
                 }
             )
@@ -2754,8 +2773,6 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 for check in asset_checks
                 if str(check.get("output_file_path") or check["file_path"]) != str(check["file_path"])
             }
-            if not reconfigure_output:
-                prepare_output_dir(game_dir, output_dir, skip_copy_paths, args)
             if args.backup_dir:
                 backup_dir = Path(args.backup_dir).resolve()
             else:
@@ -2770,6 +2787,8 @@ def apply_manifest(args: argparse.Namespace) -> int:
                 post_asset_checks,
                 manifest_path,
             )
+            if not reconfigure_output:
+                prepare_output_dir(game_dir, output_dir, skip_copy_paths, args)
             total_byte_patches = sum(len(patches_for_file) for patches_for_file in grouped.values())
             current_byte_patch = 0
             for rel_path, patches_for_file in grouped.items():
@@ -3020,8 +3039,12 @@ def restore_backup(args: argparse.Namespace) -> int:
     if not game_dir.is_dir():
         raise PatchError(f"Game directory does not exist: {game_dir}")
 
-    restored = []
-    for raw in backup_manifest.get("files", []):
+    rows = backup_manifest.get("files", [])
+    if not isinstance(rows, list):
+        raise PatchError("Backup manifest files must be an array.")
+
+    validated_rows = []
+    for raw in rows:
         if not isinstance(raw, dict):
             raise PatchError("Backup manifest contains an invalid file row.")
         rel_path = normalize_rel_path(raw.get("file_path"), "backup file path")
@@ -3031,14 +3054,38 @@ def restore_backup(args: argparse.Namespace) -> int:
             source = (backup_dir / backup_rel).resolve()
             if not source.is_file():
                 raise PatchError(f"Backed-up file is missing: {source}")
+            data = source.read_bytes()
+            actual_sha = hashlib.sha256(data).hexdigest()
+            expected_sha = normalize_sha256(
+                raw.get("sha256"),
+                f"backup file {rel_path} sha256",
+                required=True,
+            )
+            if actual_sha != expected_sha:
+                raise PatchError(
+                    f"Backup SHA-256 mismatch for {rel_path}: expected {expected_sha}, got {actual_sha}"
+                )
+            expected_size = raw.get("size")
+            if expected_size is not None and len(data) != parse_int(expected_size, f"backup file {rel_path} size"):
+                raise PatchError(
+                    f"Backup size mismatch for {rel_path}: expected {expected_size}, got {len(data)}"
+                )
+            validated_rows.append((rel_path, target, True, data))
+        else:
+            if target.exists():
+                if not target.is_file():
+                    raise PatchError(f"Restore target is not a regular file: {rel_path}")
+            validated_rows.append((rel_path, target, False, None))
+
+    restored = []
+    for rel_path, target, existed, data in validated_rows:
+        if existed:
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, target)
+            atomic_write(target, data)
             restored.append({"file_path": rel_path, "sha256": sha256_file(target), "size": target.stat().st_size})
         else:
             removed = False
             if target.exists():
-                if not target.is_file():
-                    raise PatchError(f"Restore target is not a regular file: {rel_path}")
                 target.unlink()
                 removed = True
             restored.append({"file_path": rel_path, "removed": removed, "existed": False})

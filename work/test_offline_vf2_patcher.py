@@ -578,6 +578,37 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(game_file.read_bytes(), original)
             self.assertTrue((backup / "restore_log.json").is_file())
 
+    def test_restore_refuses_tampered_backup_before_mutation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = bytes([1, 2, 3, 4, 5, 6])
+            game_file.write_bytes(original)
+            manifest = tmp_path / "patch.json"
+            backup = tmp_path / "backup"
+            self.write_manifest(manifest, game_file, original)
+
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                "--backup-dir",
+                str(backup),
+            )
+            backup_manifest = json.loads((backup / "vf2_patch_backup_manifest.json").read_text(encoding="utf-8"))
+            backup_file = backup / backup_manifest["files"][0]["backup_path"]
+            backup_file.write_bytes(b"tampered backup bytes")
+
+            result = self.run_patcher("restore", "--backup-dir", str(backup), expect=2)
+
+            self.assertIn("Backup SHA-256 mismatch", result.stderr)
+            self.assertEqual(game_file.read_bytes(), bytes([1, 2, 0xAA, 0xBB, 5, 6]))
+            self.assertFalse((backup / "restore_log.json").exists())
+
     def test_manifest_output_folder_creates_modded_sibling_and_preserves_vanilla(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -732,6 +763,12 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 any(row.get("action") == "up_to_date_recheck_failed" for row in log["process_log"])
             )
             self.assertEqual(log["modded_exe_name"], output_exe.name)
+            backup_manifest = json.loads(
+                (backups[0].parent / "vf2_patch_backup_manifest.json").read_text(encoding="utf-8")
+            )
+            backup_row = next(row for row in backup_manifest["files"] if row["file_path"] == output_exe.name)
+            self.assertTrue(backup_row["existed"])
+            self.assertEqual((backups[0].parent / backup_row["backup_path"]).read_bytes(), patched)
 
     def test_post_asset_patch_selects_last_asset_sha_and_runs_after_copy(self):
         with tempfile.TemporaryDirectory() as tmp:
