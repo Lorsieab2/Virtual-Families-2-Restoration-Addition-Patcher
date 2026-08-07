@@ -20,6 +20,7 @@ EXPECTED_CHEAT_IDS = (
     0x133, 0x134, 0x132,
     0x136, 0x137, 0x138,
     0x139, 0x13A, 0x13B,
+    0x14B,
 )
 LATE_CHEAT_IDS = tuple(range(0x12E, 0x13C))
 WEATHER_REFUSAL_TEXT = "Don't like the weather!"
@@ -118,6 +119,62 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             late_icon_files.append(row["icon_file"])
         self.assertEqual(len(late_icons), len(set(late_icons)))
         self.assertEqual(len(late_icon_files), len(set(late_icon_files)))
+
+        divorce = rows[0x14B]
+        self.assertEqual(divorce["name"], "Divorce Spouse")
+        self.assertEqual(divorce["icon_file"], "cheat_marriage_email.png")
+        self.assertEqual(
+            int(divorce["icon"], 16),
+            patcher.visible_special_upgrade_icon_id_for(0x14B),
+        )
+        self.assertEqual(
+            int(divorce["description_string"], 16),
+            patcher.divorce_spouse_string_ids()[1],
+        )
+
+        self.assertIn(
+            "static int VF2VisibleSpecialUpgradeIconFrame(int itemId)",
+            self.helper,
+        )
+        self.assertIn("case 0x14B: return 37;", self.helper)
+        self.assertNotIn(
+            "int index = itemId - kVF2VisibleSpecialUpgradeFirstItem",
+            self.helper,
+        )
+        draw_helper = (
+            patcher.PATCHED / "vf2_generation_locks.cpp"
+        ).read_text(encoding="ascii")
+        self.assertIn("case 0x14B: frame = 37; break;", draw_helper)
+        self.assertNotIn("int frame = item - 0x117;", draw_helper)
+
+        divorce_strings = [
+            row for row in self.manifest["theStringManager"]["strings"]
+            if row.get("item_id") == "0x14b"
+        ]
+        self.assertEqual(
+            {(row["pc_string_id"], row["text"]) for row in divorce_strings},
+            {
+                ("0xed3", "Divorce Spouse"),
+                (
+                    "0xed4",
+                    "WARNING: Permanently removes spouse from the Family Tree and House!",
+                ),
+            },
+        )
+        divorce_contract = self.manifest["DivorceSpouse"]
+        self.assertEqual(divorce_contract["store_item_id"], "0x14b")
+        self.assertEqual(
+            divorce_contract["target_slot"]["persistent_id_offset"],
+            "+0x104",
+        )
+        self.assertEqual(
+            divorce_contract["availability"],
+            "zero unless the current second-parent slot is present and its persistent ID maps to exactly one active, non-away manager slot 0..29",
+        )
+        self.assertEqual(
+            divorce_contract["warning"],
+            "WARNING: Permanently removes spouse from the Family Tree and House!",
+        )
 
         art = self.manifest["visible_special_upgrade_icon_art"]
         self.assertEqual(art["status"], "available")
@@ -235,10 +292,10 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertIn("CollectableItem.SpawnSockInHouse(1);", fill_house)
 
         fill_garden = self._case_block(self.helper, 0x130)
-        self.assertIn("CollectableItem.SpawnWeedsInYard(30);", fill_garden)
+        self.assertIn("if (weeds < 15) CollectableItem.SpawnWeedsInYard(15 - weeds);", fill_garden)
 
         max_sock = self._case_block(self.helper, 0x133)
-        self.assertIn(
+        self.assertNotIn(
             "CollectableItem.SpawnSockInHouse(kVF2MaximumSockPileCount);",
             max_sock,
         )
@@ -264,7 +321,8 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "extern \"C\" int __cdecl VF2GetVisibleSpecialUpgradePrice",
             "extern \"C\" void __cdecl VF2ApplyVisibleSpecialUpgrade",
         )
-        self.assertIn("return VF2MarriageEmailUnavailable() ? 0x7FFFFFFF : -1;", price)
+        self.assertNotIn("VF2MarriageEmailUnavailable", price)
+        self.assertNotIn("0x7FFFFFFF", price)
 
         adult = self._function_block(
             self.helper,
@@ -286,11 +344,47 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         apply_start = self.helper.index(
             "extern \"C\" void __cdecl VF2ApplyVisibleSpecialUpgrade"
         )
+        apply_source = self.helper[apply_start:]
         marriage = self._case_block(self.helper[apply_start:], 0x132)
         self.assertIn("if (VF2MarriageEmailUnavailable())", marriage)
-        self.assertIn("theGameState::Get()->QueueEmailMessage(", marriage)
-        self.assertIn("eEmailMessageMarriageProposal", marriage)
+        self.assertIn("VF2QueueCheatMarriageProposal();", marriage)
+        self.assertIn("eEmailMessageMarriageProposal", self.helper)
         self.assertIn("eEmailMessageMarriageProposal = 2", self.helper)
+
+        divorce = self._case_block(self.helper[apply_start:], 0x14B)
+        self.assertIn("if (!VF2DivorceSpouse()) return;", divorce)
+        self.assertIn("theGameState::Get()->SaveCurrentGame();", apply_source)
+
+        availability = self._function_block(
+            self.helper,
+            "extern \"C\" int __cdecl VF2GetOutfitStoreNumAvailable",
+            "extern \"C\" bool __cdecl VF2PurchaseOutfitStoreItem",
+        )
+        self.assertIn(
+            "if (itemId == 0x14B) {\n"
+            "        return VF2DivorceSpouseAvailable() ? 1 : 0;\n"
+            "    }",
+            availability,
+        )
+        divorce_helpers = self._function_block(
+            self.helper,
+            "static CVillager *VF2ActiveVillagerByPersistentIdUnique",
+            "static bool VF2IsSameSexMarriage",
+        )
+        for evidence in (
+            "FamilyTree.GetCurrentFamily()",
+            "record[0xF6]",
+            "record + 0x104",
+            "VillagerManager.VillagerExists(index, false)",
+            "0x1BB48",
+            "VillagerManager.GetVillagerInFocus() == spouse",
+            "VillagerManager.SetNoFocus();",
+            "spouse->Reset();",
+            "for (int offset = 0; offset < 0xD8; ++offset)",
+        ):
+            self.assertIn(evidence, divorce_helpers)
+        self.assertNotIn("GetFamilyRecord(", divorce_helpers)
+        self.assertNotIn("VF2MarriageAdult", divorce_helpers)
 
         draw_point = self._function_block(
             self.helper,

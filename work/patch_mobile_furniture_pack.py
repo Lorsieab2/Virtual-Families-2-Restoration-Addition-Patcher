@@ -280,10 +280,17 @@ NEXT_GENERATION_INTERNAL_AGE_60 = 60 * 20
 # one female and one male selector.
 SAME_SEX_MARRIAGE_FLAG_SECTION = ".vf2same"
 SAME_SEX_MARRIAGE_FLAG_SYMBOL = "_gVF2SameSexMarriage"
+CHEAT_MARRIAGE_PROPOSAL_FLAG_SECTION = ".vf2proposal"
+CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL = "_gVF2CheatMarriageProposalScene"
+CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL = "_VF2ClearCheatMarriageProposalMode"
 SAME_SEX_CANDIDATE_GENDER_HELPER_SYMBOL = "@VF2MarriageCandidateGender@8"
 SAME_SEX_ROLE_HELPER_SYMBOL = "@VF2GetMarriageRole@12"
 SAME_SEX_DROP_HELPER_SYMBOL = "@VF2IsSameSexSpouseDrop@12"
 ADOPTION_CHOOSER_HELPER_SYMBOL = "_VF2AdoptRandomChildChoice"
+
+DIVORCE_SPOUSE_ITEM_ID = 0x14B
+DIVORCE_SPOUSE_WARNING = "WARNING: Permanently removes spouse from the Family Tree and House!"
+DIVORCE_SPOUSE_ICON_FILE = "cheat_marriage_email.png"
 
 # B153 mortality research uses the same dormant-byte architecture as older
 # pregnancies. Every executable contains the hook with a zero byte; the
@@ -671,6 +678,10 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x139: "cheat_next_pregnancy_singleton.png",
     0x13A: "cheat_next_pregnancy_twins.png",
     0x13B: "cheat_next_pregnancy_triplets.png",
+    # No dedicated Divorce artwork exists in the registered source assets.
+    # Reuse the existing marriage-email descriptor while keeping Divorce on
+    # its own item and image descriptor slots.
+    DIVORCE_SPOUSE_ITEM_ID: DIVORCE_SPOUSE_ICON_FILE,
 }
 # Kept as a named contract for manifests and downstream validators.  Late
 # rows now use concrete descriptors instead of an item-id alias.
@@ -797,10 +808,10 @@ MOBILE_RENOVATION_ART_FILES = (
 MOBILE_RENOVATION_IMAGE_COUNT = len(MOBILE_RENOVATION_ART_FILES)
 MOBILE_RENOVATION_ROOM_ORDER = ("bathroom", "kitchen", "office", "workshop")
 MOBILE_RENOVATION_ANCHORS = {
-    "bathroom": (255, 1435),
+    "bathroom": (535, 1263),
     "kitchen": (930, 995),
-    "office": (1354, 792),
-    "workshop": (500, 1400),
+    "office": (1357, 792),
+    "workshop": (900, 1475),
 }
 MOBILE_RENOVATION_DEFAULT_SELECTION = {
     room: -1 for room in MOBILE_RENOVATION_ROOM_ORDER
@@ -1306,7 +1317,7 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x133,
         "name": "Max out sock pile",
-        "description": "Sets the laundry-room sock pile to the maximum signed integer value and fills every available sock slot.",
+        "description": "Sets only the laundry-room sock pile to the maximum signed integer value.",
         "price": 0,
     },
     {
@@ -1355,6 +1366,12 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": 0x13B,
         "name": "Next Pregnancy Triplets",
         "description": "Makes the next successful birth triplets when three child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Twins one-shot and clears after birth.",
+        "price": 0,
+    },
+    {
+        "item_id": DIVORCE_SPOUSE_ITEM_ID,
+        "name": "Divorce Spouse",
+        "description": DIVORCE_SPOUSE_WARNING,
         "price": 0,
     },
 ]
@@ -4476,6 +4493,14 @@ def mobile_renovation_string_ids_for(index):
         first_id + index * 2,
         first_id + 1 + index * 2,
     )
+
+
+def divorce_spouse_string_ids():
+    # The current generated manifest leaves 0xED3/0xED4 immediately after
+    # the 15 renovation rows. Keep this explicit so adding a late cheat row
+    # cannot move the weather refusal or renovation IDs.
+    first_id = mobile_renovation_string_ids_for(MOBILE_RENOVATION_IMAGE_COUNT - 1)[1] + 1
+    return first_id, first_id + 1
 
 
 def villager_body_image_base():
@@ -8479,6 +8504,8 @@ def visible_special_upgrade_desc_id_for(index):
 def cheat_upgrade_string_ids_for_entry(entry_index):
     if entry_index < 0 or entry_index >= len(CHEAT_UPGRADE_ITEMS):
         raise ValueError(f"Cheat upgrade string index is out of range: {entry_index}")
+    if CHEAT_UPGRADE_ITEMS[entry_index]["item_id"] == DIVORCE_SPOUSE_ITEM_ID:
+        return divorce_spouse_string_ids()
     if entry_index < CHEAT_UPGRADE_LEGACY_COUNT:
         base = (
             ORIG_STRING_ONE_PAST_MAX
@@ -8497,7 +8524,15 @@ def cheat_upgrade_string_ids_for_entry(entry_index):
 
 
 def mobile_lounger_bad_weather_string_id():
-    return cheat_upgrade_string_ids_for_entry(len(CHEAT_UPGRADE_ITEMS) - 1)[1] + 1
+    # Keep the translated refusal anchored after the existing late pregnancy
+    # row. Divorce is allocated after the renovation strings and must not
+    # shift this long-standing ID.
+    pregnancy_index = next(
+        index
+        for index, item in enumerate(CHEAT_UPGRADE_ITEMS)
+        if item["item_id"] == 0x13B
+    )
+    return cheat_upgrade_string_ids_for_entry(pregnancy_index)[1] + 1
 
 
 def outfit_string_ids_for_entry(entry_index):
@@ -9269,6 +9304,43 @@ def patch_visible_special_upgrades(manifest):
             "image_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
         },
     }
+    manifest["DivorceSpouse"] = {
+        "status": "implemented; native structure and fail-closed source contract installed; runtime/player QA pending",
+        "store_item_id": hex(DIVORCE_SPOUSE_ITEM_ID),
+        "current_generation_record": "CFamilyTree::GetCurrentFamily() only",
+        "target_slot": {
+            "meaning": "second-listed adult in the current active generation Family Tree",
+            "record_offset": "+0xDC",
+            "valid_offset": "+0xF6",
+            "persistent_id_offset": "+0x104",
+            "record_size": "0xD8",
+        },
+        "availability": (
+            "zero unless the current second-parent slot is present and its "
+            "persistent ID maps to exactly one active, non-away manager slot 0..29"
+        ),
+        "resolver": (
+            "exact persistent ID match at CVillager+0x1BB48; no gender, role, "
+            "household order, selected-villager, or adult heuristic"
+        ),
+        "apply": (
+            "clear exact focus if it is this spouse, call CVillager::Reset for "
+            "native plan/prop/active cleanup, clear only the current second "
+            "parent record, then use the common SaveCurrentGame path"
+        ),
+        "historical_generations": "never iterated or modified",
+        "warning": DIVORCE_SPOUSE_WARNING,
+        "strings": {
+            "short": hex(divorce_spouse_string_ids()[0]),
+            "long": hex(divorce_spouse_string_ids()[1]),
+        },
+        "icon": {
+            "image_id": hex(visible_special_upgrade_icon_id_for(DIVORCE_SPOUSE_ITEM_ID)),
+            "file": DIVORCE_SPOUSE_ICON_FILE,
+            "status": "reuses existing marriage-email artwork; dedicated Divorce artwork is absent",
+        },
+        "runtime_qa": "pending",
+    }
 
 
 def patch_house_renovations(manifest):
@@ -9299,7 +9371,12 @@ def patch_house_renovations(manifest):
             f"Unexpected native House Renovations list: {[hex(x) for x in native_ids]}"
         )
 
-    append_ids = list(MOBILE_RENOVATION_PC_ITEM_IDS)
+    # Keep item identities stable while presenting the added styles as four
+    # contiguous room groups: Bathroom, Kitchen, Office, Workshop.
+    append_ids = [
+        MOBILE_RENOVATION_PC_ITEM_IDS[index]
+        for index in MOBILE_RENOVATION_NATIVE_ORDER
+    ]
     append_off = home_sym.value + NATIVE_HOME_RENOVATION_COUNT * 4
     existing_after = list(
         struct.unpack_from(
@@ -9373,7 +9450,8 @@ def patch_house_renovations(manifest):
                 "title_string": hex(mobile_renovation_string_ids_for(index)[0]),
                 "description_string": hex(mobile_renovation_string_ids_for(index)[1]),
             }
-            for index, style in enumerate(MOBILE_RENOVATION_STYLE_CATALOG)
+            for index in MOBILE_RENOVATION_NATIVE_ORDER
+            for style in (MOBILE_RENOVATION_STYLE_CATALOG[index],)
         ],
         "native_patches": {
             "sort_count": "0x0A -> 0x19",
@@ -9471,6 +9549,10 @@ public:
             MOBILE_RENOVATION_ROOM_ORDER.index(style["room"])
             for style in MOBILE_RENOVATION_STYLE_CATALOG
         ],
+    )
+    visible_special_upgrade_icon_cases = "\n".join(
+        f"    case 0x{item_id:X}: return {index};"
+        for index, item_id in enumerate(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
     )
     helper_path.write_text(
         existing_helper
@@ -9650,6 +9732,11 @@ extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId) {{
 extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
     int styleIndex = VF2MobileRenovationStyleIndex(itemId);
     if (styleIndex < 0) return false;
+    if (VF2MobileRenovationIsActive(itemId)) {{
+        VF2SetMobileRenovationActive(itemId, false);
+        theGameState::Get()->SaveCurrentGame();
+        return true;
+    }}
     int room = kVF2MobileRenovationRoomForStyle[styleIndex];
     for (int order = 0; order < kVF2MobileRenovationItemCount; ++order) {{
         int otherIndex = kVF2MobileRenovationNativeOrder[order];
@@ -9966,6 +10053,23 @@ extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
         // into the crash-prone path.
         return 0;
     }}
+    if (itemId == 0x14B) {{
+        return VF2DivorceSpouseAvailable() ? 1 : 0;
+    }}
+    if (kVF2EnableMobileRenovations &&
+        itemId >= kVF2MobileRenovationItemBase &&
+        itemId < kVF2MobileRenovationItemBase + kVF2MobileRenovationItemCount) {{
+        // Keep active styles available so the normal Store modal can reach
+        // VF2ApplyMobileRenovationStyle and perform a zero-price removal.
+        return 1;
+    }}
+    if (kVF2EnableB150CheatUpgrades && itemId == 0x136 &&
+        (VF2PersistentCheatAndPurchaseMask() & 0x4u)) {{
+        // The checkmark means the one-shot is already armed.  Keep the row
+        // visible but report no available purchase until a successful birth
+        // consumes and clears the flag.
+        return 0;
+    }}
     if (kVF2EnableB150CheatUpgrades &&
         (itemId == 0x33 || itemId == 0x10A || itemId == 0x115 || itemId == 0x116 ||
         itemId == 0x128 || itemId == 0x129 || itemId == 0x12A)) {{
@@ -10084,10 +10188,17 @@ static int VF2VisibleSpecialUpgradeIconSourceItem(int itemId) {{
     return itemId;
 }}
 
-static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
+static int VF2VisibleSpecialUpgradeIconFrame(int itemId) {{
     itemId = VF2VisibleSpecialUpgradeIconSourceItem(itemId);
-    int index = itemId - kVF2VisibleSpecialUpgradeFirstItem;
-    return index < 0 || index >= kVF2VisibleSpecialUpgradeCount ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
+    switch (itemId) {{
+__VF2_VISIBLE_SPECIAL_UPGRADE_ICON_CASES__
+    default: return -1;
+    }}
+}}
+
+static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
+    int index = VF2VisibleSpecialUpgradeIconFrame(itemId);
+    return index < 0 ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
 
 static int VF2GetMobileRenovationIconImage(int itemId) {{
@@ -10148,7 +10259,10 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
     }}
     return true;
 }}
-""",
+""".replace(
+            "__VF2_VISIBLE_SPECIAL_UPGRADE_ICON_CASES__",
+            visible_special_upgrade_icon_cases,
+        ),
         encoding="ascii",
     )
     manifest["outfit_store_helpers"] = {
@@ -10482,6 +10596,10 @@ def patch_scrolling_store_scene(manifest):
 
     obj.write(PATCHED / "ScrollingStoreScene.obj")
     lock_base = lock_image_id_for(0)
+    visible_special_upgrade_icon_draw_cases = "\n".join(
+        f"        case 0x{item_id:X}: frame = {index}; break;"
+        for index, item_id in enumerate(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
+    )
     (PATCHED / "vf2_generation_locks.cpp").write_text(
         f"""
 enum EImage {{ eImageDummy = 0 }};
@@ -10505,8 +10623,10 @@ extern "C" void __cdecl VF2DrawVisibleSpecialUpgradeIcon(theGraphicsManager* gra
         return;
     }}
 
-    int frame = item - 0x117;
-    if (frame < 0 || frame >= {len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)}) {{
+    int frame = -1;
+    switch (item) {{
+__VF2_VISIBLE_SPECIAL_UPGRADE_ICON_DRAW_CASES__
+    default:
         return;
     }}
 
@@ -10529,7 +10649,10 @@ extern "C" __declspec(naked) void VF2DrawGenerationLock() {{
         ret 18h
     }}
 }}
-""".lstrip(),
+""".replace(
+            "__VF2_VISIBLE_SPECIAL_UPGRADE_ICON_DRAW_CASES__",
+            visible_special_upgrade_icon_draw_cases,
+        ).lstrip(),
         encoding="ascii",
     )
     (PATCHED / "vf2_store_scrollbar.cpp").write_text(
@@ -10723,6 +10846,7 @@ public:
 class CVillager {
 public:
     struct SSaveState;
+    void Reset();
     bool const LoadState(SSaveState &state);
     bool Impregnate(int count, const char *name, int motherBody, int fatherBody, bool adopted);
 };
@@ -10753,6 +10877,9 @@ public:
     CVillager *GetPatriarch();
     CVillager *GetVillagerPtr(int id);
     CVillager &GetVillager(int id);
+    bool VillagerExists(int id, bool include_away);
+    CVillager *GetVillagerInFocus();
+    void SetNoFocus();
     int const SpawnSpecificPeep(int age, EGender gender, int body);
     int const SpawnSpecificPeep(
         int age,
@@ -10786,8 +10913,10 @@ public:
 
 class CFamilyTree {
 public:
+    struct SFamilyRecord;
     struct SPeepRecord;
     struct SSaveState;
+    SFamilyRecord *GetCurrentFamily();
     void UpdatePeepRecord(SPeepRecord *record);
     bool const LoadState(SSaveState const &state);
     bool AddOffspring(CVillager const &villager);
@@ -10936,6 +11065,7 @@ class theGameState {
 public:
     static theGameState *Get();
     bool SaveCurrentGame();
+    bool EmailMessageInQueue(EEmailMessage message);
     int GetWideScreenOffsetX();
     void ResetWorldState(int worldState);
     void QueueEmailMessage(EEmailMessage message);
@@ -10974,6 +11104,10 @@ volatile unsigned char gVF2AllowOlderPregnancies = 0;
 #pragma section(".vf2same", read, write)
 extern "C" __declspec(allocate(".vf2same"))
 volatile unsigned char gVF2SameSexMarriage = 0;
+
+#pragma section(".vf2proposal", read, write)
+extern "C" __declspec(allocate(".vf2proposal"))
+volatile unsigned char gVF2CheatMarriageProposalScene = 0;
 
 #pragma section(".vf2mort", read, write)
 extern "C" __declspec(allocate(".vf2mort"))
@@ -11076,6 +11210,86 @@ static bool VF2MarriageEmailUnavailable() {
     return VF2MarriagePair(first, second);
 }
 
+static void VF2QueueCheatMarriageProposal() {
+    theGameState *state = theGameState::Get();
+    if (!state ||
+        state->EmailMessageInQueue(eEmailMessageMarriageProposal)) {
+        return;
+    }
+    state->QueueEmailMessage(eEmailMessageMarriageProposal);
+    // QueueEmailMessage is a no-op when the native queue is full.  Arm the
+    // one-scene gender mode only after a new enum-2 entry is observable.
+    if (state->EmailMessageInQueue(eEmailMessageMarriageProposal)) {
+        gVF2CheatMarriageProposalScene = 1;
+    }
+}
+
+extern "C" void __cdecl VF2ClearCheatMarriageProposalMode() {
+    gVF2CheatMarriageProposalScene = 0;
+}
+
+static CVillager *VF2ActiveVillagerByPersistentIdUnique(
+    int peepId,
+    int *outIndex
+) {
+    if (peepId <= 0) return 0;
+
+    CVillager *match = 0;
+    int matchIndex = -1;
+    int matches = 0;
+    for (int index = 0; index < 30; ++index) {
+        if (!VillagerManager.VillagerExists(index, false)) continue;
+        CVillager *resident = &VillagerManager.GetVillager(index);
+        if (*(int *)((unsigned char *)resident + 0x1BB48) != peepId) {
+            continue;
+        }
+        ++matches;
+        if (matches != 1) return 0;
+        match = resident;
+        matchIndex = index;
+    }
+    if (matches != 1) return 0;
+    if (outIndex) *outIndex = matchIndex;
+    return match;
+}
+
+static unsigned char *VF2CurrentGenerationSecondAdultRecord() {
+    unsigned char *record =
+        (unsigned char *)FamilyTree.GetCurrentFamily();
+    if (!record || record[0] == 0 || record[0xF6] == 0) return 0;
+    return record;
+}
+
+static bool VF2DivorceSpouseAvailable() {
+    unsigned char *record = VF2CurrentGenerationSecondAdultRecord();
+    if (!record) return false;
+    int peepId = *(int *)(record + 0x104);
+    return VF2ActiveVillagerByPersistentIdUnique(peepId, 0) != 0;
+}
+
+static bool VF2DivorceSpouse() {
+    unsigned char *record = VF2CurrentGenerationSecondAdultRecord();
+    if (!record) return false;
+
+    int peepId = *(int *)(record + 0x104);
+    int index = -1;
+    CVillager *spouse =
+        VF2ActiveVillagerByPersistentIdUnique(peepId, &index);
+    if (!spouse) return false;
+
+    if (VillagerManager.GetVillagerInFocus() == spouse) {
+        VillagerManager.SetNoFocus();
+    }
+    spouse->Reset();
+    // SPeepRecord is exactly 0xD8 bytes.  Clearing only the current record's
+    // second-parent slot removes the spouse from the live Family Tree while
+    // leaving every historical generation untouched.
+    for (int offset = 0; offset < 0xD8; ++offset) {
+        record[0xDC + offset] = 0;
+    }
+    return true;
+}
+
 static bool VF2IsSameSexMarriage() {
     if (gVF2SameSexMarriage == 0) return false;
     CVillager *first;
@@ -11089,7 +11303,8 @@ extern "C" int __fastcall VF2MarriageCandidateGender(
     void *,
     int currentGender
 ) {
-    if (gVF2SameSexMarriage == 0) {
+    if (gVF2SameSexMarriage == 0 &&
+        gVF2CheatMarriageProposalScene == 0) {
         return currentGender == 1 ? 0 : 1;
     }
     return ldwGameState::GetRandom(2);
@@ -11351,7 +11566,24 @@ static void VF2CheckMaximumResourceAchievements() {
     }
 }
 
+static const unsigned int kVF2OldestPersonAgeUnitsPerDisplayedYear = 20u;
+static const unsigned int kVF2OldestPersonMaxInternalAge = 0xFFFFu;
+
+static void VF2RecordOldestPersonAge(int internalAge) {
+    if (internalAge <= 0) return;
+    unsigned int &history = VF2PersistentHealthPlanAndRenovationMask();
+    unsigned int savedAge = history >> 16;
+    unsigned int boundedAge =
+        internalAge > (int)kVF2OldestPersonMaxInternalAge
+        ? kVF2OldestPersonMaxInternalAge
+        : (unsigned int)internalAge;
+    if (boundedAge > savedAge) {
+        history = (history & 0xFFFFu) | (boundedAge << 16);
+    }
+}
+
 static void VF2CheckLongevityAchievements(int internalAge) {
+    VF2RecordOldestPersonAge(internalAge);
     static const int thresholds[5] = {
         70 * 20,
         80 * 20,
@@ -11616,6 +11848,37 @@ static unsigned int VF2LifetimeGenerationCount() {
     return nativeCount > 0 ? (unsigned int)nativeCount : 0;
 }
 
+static void VF2DrawOldestPersonCounter() {
+    unsigned int internalAge =
+        VF2PersistentHealthPlanAndRenovationMask() >> 16;
+    if (internalAge == 0) {
+        return;
+    }
+    unsigned int age =
+        internalAge / kVF2OldestPersonAgeUnitsPerDisplayedYear;
+    char label[32] = "Oldest: ";
+    char digits[8];
+    int digitCount = 0;
+    do {
+        digits[digitCount++] = (char)('0' + age % 10);
+        age /= 10;
+    } while (age != 0 && digitCount < 8);
+    int labelLength = 8;
+    while (digitCount > 0) {
+        label[labelLength++] = digits[--digitCount];
+    }
+    label[labelLength] = '\0';
+
+    ldwColor white = {0xFFFFFFFFu};
+    ldwGameWindow::Get()->DrawString(
+        label,
+        theGameState::Get()->GetWideScreenOffsetX() + 100,
+        42,
+        white,
+        theStringManager::Get()->GetFont(eFontGenerationCounter)
+    );
+}
+
 extern "C" bool __fastcall VF2StartNextGenerationAndCount(
     CFamilyTree *tree,
     void *,
@@ -11641,6 +11904,7 @@ extern "C" bool __fastcall VF2StartNextGenerationAndCount(
 }
 
 extern "C" void __cdecl VF2DrawLifetimeGenerationCounter() {
+    VF2DrawOldestPersonCounter();
     unsigned int generation = VF2LifetimeGenerationCount();
     if (generation == 0) {
         return;
@@ -11938,6 +12202,21 @@ static void VF2CleanHouse() {
     CollectableItem.RemoveAll((ECarrying)0x83);
 }
 
+static int VF2CountMessRecords(bool weeds) {
+    int count = 0;
+    unsigned char *record = (unsigned char *)&CollectableItem + 4;
+    for (int index = 0; index < 30; ++index, record += 0x1C) {
+        if (!record[0]) continue;
+        int carrying = *(int *)(record + 4);
+        bool isWeed = carrying >= 0x7D && carrying <= 0x80;
+        bool isRequestedHouseMess =
+            (carrying >= 0x73 && carrying <= 0x7C) ||
+            (carrying >= 0x83 && carrying <= 0x85);
+        if ((weeds && isWeed) || (!weeds && isRequestedHouseMess)) ++count;
+    }
+    return count;
+}
+
 static void VF2ResetAntPuzzle() {
     theGameState::Get()->ResetWorldState(0x13);
     for (int prop = 0x4D; prop <= 0x54; ++prop) {
@@ -11991,8 +12270,6 @@ extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
         return CollectableItem.luckyRockActive ? 0 : -1;
     case 0x123:
         return VF2AllFurnitureLocksUnlocked() ? 0 : -1;
-    case 0x132:
-        return VF2MarriageEmailUnavailable() ? 0x7FFFFFFF : -1;
     default:
         return -1;
     }
@@ -12110,18 +12387,20 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         VF2CompleteAllAchievements();
         break;
     case 0x12F:
-        // The native collectable pool has 30 total slots, not 30 slots per
-        // carrying type.  Interleave the three house-mess spawners so an
-        // empty house receives all three requested categories while existing
-        // collectables remain untouched.
-        for (int i = 0; i < 10; ++i) {
-            CollectableItem.SpawnTrashInHouse(1);
-            CollectableItem.SpawnStainInHouse(1);
-            CollectableItem.SpawnSockInHouse(1);
+        // Reserve half of the native 30-record mess pool for the house.  Five
+        // rounds produce 15 combined wrappers, smudges, and loose socks,
+        // leaving 15 records available for garden weeds regardless of order.
+        for (int count = VF2CountMessRecords(false); count < 15; ++count) {
+            if (count % 3 == 0) CollectableItem.SpawnTrashInHouse(1);
+            else if (count % 3 == 1) CollectableItem.SpawnStainInHouse(1);
+            else CollectableItem.SpawnSockInHouse(1);
         }
         break;
     case 0x130:
-        CollectableItem.SpawnWeedsInYard(30);
+        {
+        int weeds = VF2CountMessRecords(true);
+        if (weeds < 15) CollectableItem.SpawnWeedsInYard(15 - weeds);
+        }
         break;
     case 0x131:
         CollectableItem.RemoveAll((ECarrying)0x7D);
@@ -12130,9 +12409,7 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         if (VF2MarriageEmailUnavailable()) {
             break;
         }
-        theGameState::Get()->QueueEmailMessage(
-            eEmailMessageMarriageProposal
-        );
+        VF2QueueCheatMarriageProposal();
         break;
     case 0x133:
         VF2SetSockPileCount(kVF2MaximumSockPileCount);
@@ -12165,6 +12442,9 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     case 0x13B:
         VF2PersistentCheatAndPurchaseMask() =
             (VF2PersistentCheatAndPurchaseMask() & ~0xE0u) | 0x80u;
+        break;
+    case 0x14B:
+        if (!VF2DivorceSpouse()) return;
         break;
     default:
         return;
@@ -12472,6 +12752,8 @@ def patch_string_manager(manifest):
         })
 
     for index, item in enumerate(CHEAT_UPGRADE_ITEMS):
+        if item["item_id"] == DIVORCE_SPOUSE_ITEM_ID:
+            continue
         short_id, long_id = cheat_upgrade_string_ids_for_entry(index)
         rows = [
             (short_id, f"eString_CheatUpgrade{item['item_id']:03X}ShortDesc", item["name"], "short"),
@@ -12664,7 +12946,7 @@ def patch_string_manager(manifest):
             short_id, long_id = mobile_renovation_string_ids_for(index)
             for string_id, role, text in (
                 (short_id, "short", style["short"]),
-                (long_id, "long", style["long"]),
+                (long_id, "long", f'{style["long"]} Buy again to remove.'),
             ):
                 key = f"eString_MobileRenovation{index:02d}{role.title()}Desc"
                 key_sym = f"_vf2renovationstr_key_{index:02d}_{role}"
@@ -12681,6 +12963,40 @@ def patch_string_manager(manifest):
                     "key": key,
                     "text": text,
                 })
+
+    if ENABLE_CHEAT_UPGRADES:
+        divorce_item = next(
+            item for item in CHEAT_UPGRADE_ITEMS
+            if item["item_id"] == DIVORCE_SPOUSE_ITEM_ID
+        )
+        short_id, long_id = divorce_spouse_string_ids()
+        for string_id, key, text, role in (
+            (
+                short_id,
+                f"eString_CheatUpgrade{DIVORCE_SPOUSE_ITEM_ID:03X}ShortDesc",
+                divorce_item["name"],
+                "short",
+            ),
+            (
+                long_id,
+                f"eString_CheatUpgrade{DIVORCE_SPOUSE_ITEM_ID:03X}LongDesc",
+                divorce_item["description"],
+                "long",
+            ),
+        ):
+            key_sym = f"_vf2cheatstr_key_{string_id:X}"
+            text_sym = f"_vf2cheatstr_text_{string_id:X}"
+            helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+            helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+            new_rows.append((string_id, key_sym, text_sym))
+            string_manifest.append({
+                "pc_string_id": hex(string_id),
+                "source": "cheat upgrade entry",
+                "item_id": hex(DIVORCE_SPOUSE_ITEM_ID),
+                "role": role,
+                "key": key,
+                "text": text,
+            })
 
     def find_literal_symbol(candidates):
         for symbol in obj.symbols:
@@ -15206,16 +15522,84 @@ def patch_same_sex_marriage(manifest):
     gender_helper = dating.append_undefined_symbol(
         SAME_SEX_CANDIDATE_GENDER_HELPER_SYMBOL
     )
-    dating.buf[gender_raw:gender_raw + 8] = (
+    # GeneratePeepCandidate keeps the villager-manager pointer in ECX for the
+    # SpawnSpecificPeep call immediately after this hook.  The enabled helper
+    # path calls native GetRandom(2), which is allowed to clobber ECX, so use a
+    # local trampoline to preserve the native this-pointer across the helper.
+    gender_cave = generate_sec.raw_size
+    gender_trampoline = bytearray(
         b"\x8B\xD7"             # mov edx,edi: current gender
+        b"\x51"                  # push ecx: preserve manager this-pointer
         b"\xE8\0\0\0\0"       # call candidate-gender helper
-        b"\x90"
+        b"\x59"                  # pop ecx: restore manager this-pointer
+        b"\x90"                  # keep the overwritten span explicit
+        b"\xE9\0\0\0\0"       # continue after the stock 8-byte span
+    )
+    if len(gender_trampoline) != 15:
+        raise AssertionError("Marriage gender trampoline size drifted")
+    struct.pack_into(
+        "<i", gender_trampoline, 11,
+        (gender_hook + 8) - (gender_cave + len(gender_trampoline)),
+    )
+    dating.insert_section_bytes(
+        generate_sec.index, gender_cave, bytes(gender_trampoline)
     )
     dating.append_relocation(
         generate_sec.index,
-        gender_hook + 3,
+        gender_cave + 4,
         gender_helper,
         IMAGE_REL_I386_REL32,
+    )
+    dating.buf[gender_raw:gender_raw + 8] = (
+        b"\xE9" + struct.pack("<i", gender_cave - (gender_hook + 5))
+        + b"\x90\x90\x90"
+    )
+
+    clear_helper = dating.append_undefined_symbol(
+        CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL
+    )
+    destroy_name = "?Destroy@CDatingScene@@SAXXZ"
+    destroy = dating.symbol(destroy_name)
+    destroy_sec = dating.section(destroy.section)
+    destroy_hook = destroy.value + 0x0A
+    destroy_raw = destroy_sec.raw_ptr + destroy_hook
+    expected_destroy = b"\x8B\x01\x6A\x01\xFF\x10"
+    if bytes(dating.buf[destroy_raw:destroy_raw + 6]) != expected_destroy:
+        raise RuntimeError("Dating Destroy hook bytes drifted")
+
+    # Destroy is a six-byte stock call sequence.  Preserve it in the cave,
+    # clear the one-scene proposal mode, then resume at Destroy+0x10.
+    destroy_cave = destroy_sec.raw_size
+    destroy_trampoline = bytearray(
+        expected_destroy
+        + b"\xE8\0\0\0\0"
+        + b"\xE9\0\0\0\0"
+    )
+    if len(destroy_trampoline) != 16:
+        raise AssertionError("Dating Destroy trampoline size drifted")
+    struct.pack_into(
+        "<i",
+        destroy_trampoline,
+        12,
+        (destroy.value + 0x10) - (destroy_cave + len(destroy_trampoline)),
+    )
+    dating.insert_section_bytes(
+        destroy_sec.index,
+        destroy_cave,
+        bytes(destroy_trampoline),
+    )
+    dating.append_relocation(
+        destroy_sec.index,
+        destroy_cave + 7,
+        clear_helper,
+        IMAGE_REL_I386_REL32,
+    )
+    destroy = dating.symbol(destroy_name)
+    destroy_sec = dating.section(destroy.section)
+    destroy_raw = destroy_sec.raw_ptr + destroy_hook
+    dating.buf[destroy_raw:destroy_raw + 6] = (
+        b"\xE9" + struct.pack("<i", destroy_cave - (destroy_hook + 5))
+        + b"\x90"
     )
     dating.write(dating_path)
 
@@ -15362,6 +15746,34 @@ def patch_same_sex_marriage(manifest):
             "flag off preserves opposite-sex candidates; flag on chooses "
             "female or male with equal native RNG probability"
         ),
+        "cheat_proposal": {
+            "runtime_flag": {
+                "symbol": CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL,
+                "source_section": CHEAT_MARRIAGE_PROPOSAL_FLAG_SECTION,
+                "size": 1,
+                "default": "00",
+            },
+            "arm": (
+                "only VF2QueueCheatMarriageProposal arms after QueueEmailMessage "
+                "makes a new enum-2 queue entry observable"
+            ),
+            "candidate_gender": (
+                "random female or male while armed, regardless of .vf2same; "
+                "ordinary proposal emails retain opposite-sex behavior when "
+                ".vf2same is disabled"
+            ),
+            "reject_replacement": (
+                "inherits the scene-scoped mode because Reject calls "
+                "GeneratePeepCandidate while CDatingScene remains open"
+            ),
+            "clear": {
+                "function": destroy_name,
+                "hook_offset": "+0x0A",
+                "resume_offset": "+0x10",
+                "helper": CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL,
+                "trampoline": hex(destroy_cave),
+            },
+        },
         "parent_storage": (
             "native CFamilyTree::UpdateParents remains unchanged because its "
             "two parent records are already gender-neutral"
@@ -16201,6 +16613,25 @@ def patch_lifetime_generation_counter(manifest):
             "widescreen_x_offset": True,
         },
         "callsites": callsites,
+    }
+    manifest["OldestPersonCounter"] = {
+        "status": "patched",
+        "storage": "CAchievement hidden record 0xA8 record+8 bits 16-31",
+        "maximum_internal_age": 0xFFFF,
+        "age_units_per_displayed_year": 20,
+        "native_age_fields": [
+            "CVillager+0x6A54 bio age",
+            "CVillagerState+0x08 processed raw-age cursor",
+        ],
+        "update": "records the highest raw age observed by longevity award and load reconciliation routes",
+        "legacy_migration": "existing saves seed from the oldest currently loaded qualifying villager; deceased history before this build cannot be reconstructed",
+        "goals_screen": {
+            "label": "Oldest: N",
+            "helper": "_VF2DrawLifetimeGenerationCounter",
+            "position": [100, 42],
+            "opposite": "Generation: N at x=760",
+            "widescreen_x_offset": True,
+        },
     }
 
 
@@ -20863,20 +21294,28 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
         raise RuntimeError("CVillagerAI::DecideWhatToDo epilogue drifted")
 
     # This stock jump is inside DecideWhatToDo and lands after the insertion
-    # point.  The COFF inserter shifts symbols and relocations, but this is an
-    # already-linked internal rel32 branch with no relocation record, so its
-    # displacement must be repaired explicitly after the payload is inserted.
-    stock_branch = decide.value + 0xAB
-    stock_continuation = decide.value + 0x96A
-    if section_bytes[stock_branch] != 0xE9:
-        raise RuntimeError("CVillagerAI stock continuation branch opcode drifted")
-    stock_target = stock_branch + 5 + struct.unpack_from(
-        "<i", section_bytes, stock_branch + 1
-    )[0]
-    if stock_target != stock_continuation or stock_continuation < selection:
+    # point.  Earlier passes may already have inserted bytes before it (the
+    # enabled Behavior Patches pass inserts a 9-byte hammock refresh), so the
+    # clean-object +0xAB/+0x96A offsets are not stable.  The verified epilogue
+    # pattern is immediately after the continuation target; derive the target
+    # from that anchor and locate the unique internal rel32 branch that lands
+    # there.  This preserves fail-closed behavior while supporting both clean
+    # and already-augmented VillagerAI objects.
+    stock_continuation = epilogue - 7
+    branch_candidates = []
+    for branch in range(decide.value + 0xA0, stock_continuation):
+        if section_bytes[branch] != 0xE9 or branch + 5 > len(section_bytes):
+            continue
+        target = branch + 5 + struct.unpack_from(
+            "<i", section_bytes, branch + 1
+        )[0]
+        if target == stock_continuation:
+            branch_candidates.append(branch)
+    if len(branch_candidates) != 1 or stock_continuation < selection:
         raise RuntimeError(
-            "CVillagerAI stock continuation branch target drifted"
+            "CVillagerAI stock continuation branch opcode/target drifted"
         )
+    stock_branch = branch_candidates[0]
 
     # Preserve the native weighted distribution exactly. The helper draws once
     # from stockWeight + eligibleExternalWeight. A stock result falls through
