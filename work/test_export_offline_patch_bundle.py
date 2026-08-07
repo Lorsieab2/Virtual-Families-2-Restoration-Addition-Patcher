@@ -979,6 +979,133 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             )
             self.assertIn("mobile_renovations", {row["id"] for row in manifest["settings"]})
 
+    def test_cheat_upgrades_mobile_renovations_combined_overlay_is_exported(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            vanilla = tmp_path / "Virtual Families 2.exe"
+            vanilla.write_bytes(minimal_pe_bytes())
+            patched_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
+            patched_exe.write_bytes(minimal_pe_bytes(marker=1))
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            cheat_overlay = tmp_path / "cheat.exe"
+            cheat_overlay.write_bytes(minimal_pe_bytes(marker=2))
+            mobile_overlay = tmp_path / "renovations.exe"
+            mobile_overlay.write_bytes(minimal_pe_bytes(marker=3))
+            combined_overlay = tmp_path / "cheat-renovations.exe"
+            combined_overlay.write_bytes(minimal_pe_bytes(marker=4))
+
+            self.run_exporter(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(out),
+                "--name", "B158",
+                "--vanilla-exe", str(vanilla),
+                "--include-exe-replacement",
+                "--cheat-upgrades-exe", str(cheat_overlay),
+                "--mobile-renovations-exe", str(mobile_overlay),
+                "--cheat-upgrades-mobile-renovations-exe", str(combined_overlay),
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            requires = ["core_executable", "cheat_upgrades", "mobile_renovations"]
+            overlay = next(
+                row for row in manifest["asset_patches"]
+                if row["file_path"] == "Virtual Families 2.exe"
+                and row["requires"] == requires
+            )
+            self.assertEqual((out / overlay["source_path"]).read_bytes(), combined_overlay.read_bytes())
+            self.assertEqual(
+                manifest["source_build"]["cheat_upgrades_mobile_renovations_exe"],
+                combined_overlay.name,
+            )
+            setting_ids = {row["id"] for row in manifest["settings"]}
+            self.assertIn("cheat_upgrades", setting_ids)
+            self.assertIn("mobile_renovations", setting_ids)
+            exe_records = [
+                row for row in manifest["asset_patches"]
+                if row["file_path"] == "Virtual Families 2.exe"
+            ]
+            self.assertEqual(
+                [row["requires"] for row in exe_records],
+                [
+                    ["core_executable"],
+                    ["core_executable", "cheat_upgrades"],
+                    ["core_executable", "mobile_renovations"],
+                    ["core_executable", "cheat_upgrades", "mobile_renovations"],
+                ],
+            )
+
+            game = tmp_path / "game"
+            game.mkdir()
+            (game / "Virtual Families 2.exe").write_bytes(vanilla.read_bytes())
+            manifest["runtime_requirements"] = {}
+            manifest["output"]["preserve_stock_exe_icon"] = False
+            manifest_path = out / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            applied = tmp_path / "applied"
+            self.run_patcher(
+                "apply",
+                "--game-dir", str(game),
+                "--manifest", str(manifest_path),
+                "--output-dir", str(applied),
+                "--disable-all",
+                "--enable", "core_executable,cheat_upgrades,mobile_renovations",
+            )
+            self.assertEqual(
+                (applied / "Virtual Families 2 - Modded B158.exe").read_bytes(),
+                combined_overlay.read_bytes(),
+            )
+
+    def test_cheat_upgrades_mobile_renovations_matrix_must_be_complete(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            base.mkdir()
+            build.mkdir()
+            vanilla = tmp_path / "Virtual Families 2.exe"
+            vanilla.write_bytes(minimal_pe_bytes())
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(
+                minimal_pe_bytes(marker=1)
+            )
+            cheat_overlay = tmp_path / "cheat.exe"
+            cheat_overlay.write_bytes(minimal_pe_bytes(marker=2))
+            mobile_overlay = tmp_path / "renovations.exe"
+            mobile_overlay.write_bytes(minimal_pe_bytes(marker=3))
+            combined_overlay = tmp_path / "combined.exe"
+            combined_overlay.write_bytes(minimal_pe_bytes(marker=4))
+
+            missing_combined = self.run_exporter_expect(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(tmp_path / "missing-combined"),
+                "--vanilla-exe", str(vanilla),
+                "--include-exe-replacement",
+                "--cheat-upgrades-exe", str(cheat_overlay),
+                "--mobile-renovations-exe", str(mobile_overlay),
+                expect=1,
+            )
+            self.assertIn("requires --cheat-upgrades-mobile-renovations-exe", missing_combined.stderr)
+            self.assertFalse((tmp_path / "missing-combined").exists())
+
+            missing_single = self.run_exporter_expect(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(tmp_path / "missing-single"),
+                "--vanilla-exe", str(vanilla),
+                "--include-exe-replacement",
+                "--cheat-upgrades-exe", str(cheat_overlay),
+                "--cheat-upgrades-mobile-renovations-exe", str(combined_overlay),
+                expect=1,
+            )
+            self.assertIn("requires both", missing_single.stderr)
+            self.assertFalse((tmp_path / "missing-single").exists())
+
     def test_overlay_backed_loose_assets_mark_output_only_removal(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -1008,6 +1135,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             mobile_overlay.write_bytes(minimal_pe_bytes(marker=2))
             cheat_overlay = tmp_path / "cheat.exe"
             cheat_overlay.write_bytes(minimal_pe_bytes(marker=3))
+            combined_overlay = tmp_path / "combined.exe"
+            combined_overlay.write_bytes(minimal_pe_bytes(marker=4))
 
             self.run_exporter(
                 "--build-dir", str(build),
@@ -1017,6 +1146,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 "--include-exe-replacement",
                 "--mobile-renovations-exe", str(mobile_overlay),
                 "--cheat-upgrades-exe", str(cheat_overlay),
+                "--cheat-upgrades-mobile-renovations-exe", str(combined_overlay),
             )
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             records = {

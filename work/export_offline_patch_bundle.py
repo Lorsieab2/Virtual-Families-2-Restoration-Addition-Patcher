@@ -2891,6 +2891,27 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     holiday_ornaments_exe = Path(args.holiday_ornaments_exe).resolve() if args.holiday_ornaments_exe else None
     behavior_patches_exe = Path(args.behavior_patches_exe).resolve() if args.behavior_patches_exe else None
     mobile_renovations_exe = Path(args.mobile_renovations_exe).resolve() if args.mobile_renovations_exe else None
+    cheat_upgrades_mobile_renovations_exe = (
+        Path(args.cheat_upgrades_mobile_renovations_exe).resolve()
+        if args.cheat_upgrades_mobile_renovations_exe
+        else None
+    )
+    if cheat_upgrades_mobile_renovations_exe is not None and (
+        cheat_upgrades_exe is None or mobile_renovations_exe is None
+    ):
+        raise ValueError(
+            "--cheat-upgrades-mobile-renovations-exe requires both "
+            "--cheat-upgrades-exe and --mobile-renovations-exe."
+        )
+    if (
+        cheat_upgrades_exe is not None
+        and mobile_renovations_exe is not None
+        and cheat_upgrades_mobile_renovations_exe is None
+    ):
+        raise ValueError(
+            "Exporting both cheat_upgrades and mobile_renovations requires "
+            "--cheat-upgrades-mobile-renovations-exe."
+        )
     island_events_cheat_upgrades_exe = (
         Path(args.island_events_cheat_upgrades_exe).resolve()
         if args.island_events_cheat_upgrades_exe
@@ -3120,6 +3141,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 "Optional mobile room-renovation executable overlay. Applied only when core_executable and mobile_renovations are enabled.",
             ),
             (
+                cheat_upgrades_mobile_renovations_exe,
+                "Cheat Upgrades + Mobile Room Renovations",
+                ["core_executable", "cheat_upgrades", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, cheat_upgrades, and mobile_renovations are enabled.",
+            ),
+            (
                 island_events_cheat_upgrades_exe,
                 "Island Events + Cheat Upgrades",
                 ["core_executable", "island_events", "cheat_upgrades"],
@@ -3284,6 +3311,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "holiday_ornaments_exe": holiday_ornaments_exe.name if holiday_ornaments_exe else None,
             "behavior_patches_exe": behavior_patches_exe.name if behavior_patches_exe else None,
             "mobile_renovations_exe": mobile_renovations_exe.name if mobile_renovations_exe else None,
+            "cheat_upgrades_mobile_renovations_exe": cheat_upgrades_mobile_renovations_exe.name if cheat_upgrades_mobile_renovations_exe else None,
             "island_events_cheat_upgrades_exe": island_events_cheat_upgrades_exe.name if island_events_cheat_upgrades_exe else None,
             "island_events_holiday_ornaments_exe": island_events_holiday_ornaments_exe.name if island_events_holiday_ornaments_exe else None,
             "cheat_upgrades_holiday_ornaments_exe": cheat_upgrades_holiday_ornaments_exe.name if cheat_upgrades_holiday_ornaments_exe else None,
@@ -3353,6 +3381,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--holiday-ornaments-exe", help="Optional fully linked EXE overlay to apply when holiday_ornaments_collection is enabled.")
     parser.add_argument("--behavior-patches-exe", help="Optional EXE overlay to apply when behavior_patches is enabled.")
     parser.add_argument("--mobile-renovations-exe", help="Optional EXE overlay to apply when mobile_renovations is enabled.")
+    parser.add_argument("--cheat-upgrades-mobile-renovations-exe", help="Combined optional EXE overlay to apply when cheat_upgrades and mobile_renovations are both enabled.")
     parser.add_argument("--island-events-cheat-upgrades-exe", help="Combined optional EXE overlay to apply when island_events and cheat_upgrades are both enabled.")
     parser.add_argument("--island-events-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when island_events and holiday_ornaments_collection are both enabled.")
     parser.add_argument("--cheat-upgrades-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when cheat_upgrades and holiday_ornaments_collection are both enabled.")
