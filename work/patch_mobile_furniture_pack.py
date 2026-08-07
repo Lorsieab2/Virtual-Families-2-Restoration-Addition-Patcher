@@ -399,6 +399,8 @@ STRINGLOOKUP = "?lookupTable@@3PAPAUStringItem@@A"
 INVENTORY_ITEMINFO = "?itemInfo@@3PAUsInventoryItemInfo@@A"
 GSERVICESLIST = "?gServicesList@@3PAW4EInventoryItem@@A"
 GCLOTHINGLIST = "?gClothingList@@3PAW4EInventoryItem@@A"
+GHOMELIST = "?gHomeList@@3PAW4EInventoryItem@@A"
+GHOMELISTSORTED = "?gHomeListSorted@@3PAW4EInventoryItem@@A"
 GET_CATEGORY_ITEM = "?GetCategoryItem@CInventoryManager@@QAE?AW4EInventoryItem@@W4EInventoryCategory@@H@Z"
 GET_CATEGORY_ITEM_COUNT = "?GetCategoryItemCount@CInventoryManager@@QAEHW4EInventoryCategory@@@Z"
 IMAGE_REL_I386_REL32 = 0x0014
@@ -643,23 +645,29 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x12B: "cheat_reset_achievements.png",
     0x12C: "cheat_add_coins.png",
     0x12D: "cheat_reset_achievements.png",
+    # Give every late Special Upgrade its own image descriptor.  The art is
+    # intentionally reused where no dedicated source art exists, but the
+    # descriptor must not be aliased through the item id: the store's native
+    # image lookup and the added-item draw hook can otherwise resolve the
+    # row to an empty cell.
+    0x12E: "cheat_reset_achievements.png",
+    0x12F: "cheat_reset_achievements.png",
+    0x130: "cheat_reset_achievements.png",
+    0x131: "cheat_reset_achievements.png",
+    0x132: "cheat_reset_achievements.png",
+    0x133: "cheat_reset_achievements.png",
+    0x134: "cheat_reset_achievements.png",
+    0x135: "cheat_reset_achievements.png",
+    0x136: "cheat_reset_achievements.png",
+    0x137: "cheat_reset_achievements.png",
+    0x138: "cheat_reset_achievements.png",
+    0x139: "cheat_reset_achievements.png",
+    0x13A: "cheat_reset_achievements.png",
+    0x13B: "cheat_reset_achievements.png",
 }
-VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES = {
-    0x12E: 0x124,
-    0x12F: 0x124,
-    0x130: 0x124,
-    0x131: 0x124,
-    0x132: 0x124,
-    0x133: 0x124,
-    0x134: 0x124,
-    0x135: 0x124,
-    0x136: 0x124,
-    0x137: 0x124,
-    0x138: 0x124,
-    0x139: 0x124,
-    0x13A: 0x124,
-    0x13B: 0x124,
-}
+# Kept as a named contract for manifests and downstream validators.  Late
+# rows now use concrete descriptors instead of an item-id alias.
+VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES = {}
 VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE = 90
 CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "work" / "assets" / "cheat_upgrades"
 PATCHER_CHEAT_UPGRADE_ICON_SOURCE_DIR = ROOT / "patcher_assets" / "optional_patches" / "cheat_upgrades"
@@ -716,6 +724,8 @@ MOBILE_RENOVATION_PC_ITEM_IDS = tuple(
     MOBILE_RENOVATION_PC_ITEM_BASE + index
     for index in range(MOBILE_RENOVATION_IMAGE_COUNT)
 )
+HOME_RENOVATION_CATEGORY = 0x11
+NATIVE_HOME_RENOVATION_COUNT = 10
 MOBILE_RENOVATION_STYLE_CATALOG = (
     {"room": "bathroom", "name": "Bathroom Remodel in Black", "mobile_item": 0x119, "file": "tp233_sw_bathroom_black.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Black", "long": "For a stunning, bold look, remodel the southwest bathroom with patterned wallpaper, ceramic flooring, and a new shower curtain!"},
     {"room": "bathroom", "name": "Bathroom Remodel in Blue", "mobile_item": 0x118, "file": "tp233_sw_bathroom_blue_marble.png", "price": 0x3E8, "lock": 0, "short": "Bathroom Remodel in Blue", "long": "For a fresh, updated look, remodel the southwest bathroom with patterned wallpaper, marble flooring, and a new shower curtain!"},
@@ -1135,7 +1145,7 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x12F,
         "name": "Fill available house slots with trash",
-        "description": "Fills every available collectable slot with house trash. Existing collectables are preserved.",
+        "description": "Fills available house collectable slots with a mix of trash, dirt smudges, and socks. Existing collectables are preserved.",
         "price": 0,
     },
     {
@@ -1159,7 +1169,7 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x133,
         "name": "Max out sock pile",
-        "description": "Sets the laundry-room sock pile to its largest visible size of 30 socks.",
+        "description": "Sets the laundry-room sock pile to the maximum signed integer value and fills every available sock slot.",
         "price": 0,
     },
     {
@@ -4214,13 +4224,15 @@ def holiday_ornament_collection_footer_string_ids():
 def mobile_renovation_string_ids_for(index):
     if index < 0 or index >= MOBILE_RENOVATION_IMAGE_COUNT:
         raise IndexError(f"mobile renovation string index is out of range: {index}")
+    # The post-legacy cheat rows and the translated lounge-chair refusal are
+    # allocated after the Holiday footer.  Renovation titles/descriptions must
+    # begin after that refusal string; otherwise the last renovation title
+    # shares 0xEB4 with "Don't like the weather!" and displays the refusal as
+    # a phantom Special Upgrade row.
+    first_id = mobile_lounger_bad_weather_string_id() + 1
     return (
-        holiday_ornament_collection_footer_string_ids()[-1]
-        + 1
-        + index * 2,
-        holiday_ornament_collection_footer_string_ids()[-1]
-        + 2
-        + index * 2,
+        first_id + index * 2,
+        first_id + 1 + index * 2,
     )
 
 
@@ -8801,8 +8813,6 @@ def patch_visible_special_upgrades(manifest):
     added_service_ids = MOBILE_SPECIAL_UPGRADE_ITEM_IDS + (
         [item["item_id"] for item in CHEAT_UPGRADE_ITEMS] if ENABLE_CHEAT_UPGRADES else []
     )
-    if ENABLE_MOBILE_RENOVATIONS:
-        added_service_ids += list(MOBILE_RENOVATION_PC_ITEM_IDS)
     insert_off = services_sym.value + len(original_visible_ids) * 4
     existing_after = list(struct.unpack_from(f"<{len(added_service_ids)}I", obj.buf, services_sec.raw_ptr + insert_off))
     inserted = False
@@ -8916,22 +8926,6 @@ def patch_visible_special_upgrades(manifest):
             ]
             if ENABLE_CHEAT_UPGRADES
             else []
-        ) + (
-            [
-                {
-                    "item_id": hex(MOBILE_RENOVATION_PC_ITEM_IDS[index]),
-                    "name": style["name"],
-                    "price": style["price"],
-                    "icon": hex(mobile_renovation_image_id(index, holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)),
-                    "icon_file": style["file"],
-                    "room": style["room"],
-                    "title_string": hex(mobile_renovation_string_ids_for(index)[0]),
-                    "description_string": hex(mobile_renovation_string_ids_for(index)[1]),
-                }
-                for index, style in enumerate(MOBILE_RENOVATION_STYLE_CATALOG)
-            ]
-            if ENABLE_MOBILE_RENOVATIONS
-            else []
         ),
         "active_reset_price": {
             "status": "GetPrice hook returns 0 coins when one of the added Special Upgrades is already active",
@@ -8943,6 +8937,119 @@ def patch_visible_special_upgrades(manifest):
             "image_base": hex(visible_special_upgrade_icon_id_for(0x117)),
             "image_count": len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES),
         },
+    }
+
+
+def patch_house_renovations(manifest):
+    """Expose the optional mobile renovation styles only in House Renovations.
+
+    Native category 0x11 is backed by gHomeList/gHomeListSorted.  The base
+    desktop object has ten entries and GetCategoryItem's category-0x11 branch
+    sorts and bounds-checks exactly those ten entries.  The optional PC item
+    records are appended to that native list and the three native count sites
+    are widened to 25.  They are deliberately not added to gServicesList.
+    """
+    if not ENABLE_MOBILE_RENOVATIONS:
+        manifest["HouseRenovations"] = {
+            "status": "disabled",
+            "category": hex(HOME_RENOVATION_CATEGORY),
+            "source_list": "gHomeList",
+        }
+        return
+
+    obj = CoffObject(PATCHED / "InventoryManager.obj")
+    home_sym = obj.symbol(GHOMELIST)
+    home_sec = obj.section(home_sym.section)
+    home_raw = home_sec.raw_ptr + home_sym.value
+    native_ids = list(struct.unpack_from(f"<{NATIVE_HOME_RENOVATION_COUNT}I", obj.buf, home_raw))
+    expected_native_ids = list(range(0xE1, 0xEB))
+    if native_ids != expected_native_ids:
+        raise RuntimeError(
+            f"Unexpected native House Renovations list: {[hex(x) for x in native_ids]}"
+        )
+
+    append_ids = list(MOBILE_RENOVATION_PC_ITEM_IDS)
+    append_off = home_sym.value + NATIVE_HOME_RENOVATION_COUNT * 4
+    existing_after = list(
+        struct.unpack_from(
+            f"<{len(append_ids)}I",
+            obj.buf,
+            home_sec.raw_ptr + append_off,
+        )
+    )
+    inserted = existing_after != append_ids
+    if inserted:
+        obj.insert_section_bytes(
+            home_sym.section,
+            append_off,
+            struct.pack(f"<{len(append_ids)}I", *append_ids),
+        )
+
+    sorted_sym = obj.symbol(GHOMELISTSORTED)
+    sorted_sec = obj.section(sorted_sym.section)
+    sorted_append_off = sorted_sym.value + NATIVE_HOME_RENOVATION_COUNT * 4
+    obj.grow_bss_section(sorted_sym.section, sorted_append_off, len(append_ids) * 4)
+
+    item_sym = obj.symbol(GET_CATEGORY_ITEM)
+    item_sec = obj.section(item_sym.section)
+    item_start = item_sec.raw_ptr + item_sym.value
+    # patch_inventory_manager inserts one 25-byte helper at +3 in this
+    # function.  Search for the native bytes rather than depending on that
+    # wrapper's exact insertion count so this remains anchored to the IDA
+    # disassembly contract.
+    sort_push = item_start + 0x300
+    sort_push = obj.buf.find(b"\x6A\x0A", sort_push, item_start + item_sec.raw_size)
+    if sort_push < 0:
+        raise RuntimeError("Could not find House Renovations sort-count push")
+    obj.buf[sort_push : sort_push + 2] = b"\x6A\x19"
+
+    bounds = obj.buf.find(b"\x83\xFE\x09", item_start, item_start + item_sec.raw_size)
+    if bounds < 0:
+        raise RuntimeError("Could not find House Renovations item bounds")
+    obj.buf[bounds : bounds + 3] = b"\x83\xFE\x18"
+
+    count_sym = obj.symbol(GET_CATEGORY_ITEM_COUNT)
+    count_sec = obj.section(count_sym.section)
+    count_start = count_sec.raw_ptr + count_sym.value
+    count_return = obj.buf.find(
+        b"\xB8\x0A\x00\x00\x00\x5E\x5D\xC2\x04\x00",
+        count_start,
+        count_start + count_sec.raw_size,
+    )
+    if count_return < 0:
+        raise RuntimeError("Could not find House Renovations category count return")
+    obj.buf[count_return : count_return + 5] = b"\xB8" + struct.pack("<I", NATIVE_HOME_RENOVATION_COUNT + len(append_ids))
+
+    obj.write(PATCHED / "InventoryManager.obj")
+    descriptor_count = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
+    manifest["HouseRenovations"] = {
+        "status": "native House Renovations category extended additively",
+        "category": hex(HOME_RENOVATION_CATEGORY),
+        "title": "Home Renovation",
+        "source_list": "gHomeList",
+        "sorted_list": "gHomeListSorted",
+        "old_count": NATIVE_HOME_RENOVATION_COUNT,
+        "new_count": NATIVE_HOME_RENOVATION_COUNT + len(append_ids),
+        "base_items_preserved": [hex(x) for x in native_ids],
+        "added_items": [
+            {
+                "item_id": hex(MOBILE_RENOVATION_PC_ITEM_IDS[index]),
+                "name": style["name"],
+                "price": style["price"],
+                "icon": hex(mobile_renovation_image_id(index, descriptor_count)),
+                "icon_file": style["file"],
+                "room": style["room"],
+                "title_string": hex(mobile_renovation_string_ids_for(index)[0]),
+                "description_string": hex(mobile_renovation_string_ids_for(index)[1]),
+            }
+            for index, style in enumerate(MOBILE_RENOVATION_STYLE_CATALOG)
+        ],
+        "native_patches": {
+            "sort_count": "0x0A -> 0x19",
+            "max_index": "0x09 -> 0x18",
+            "category_count": "10 -> 25",
+        },
+        "inserted_list_entries": inserted,
     }
 
 
@@ -9150,6 +9257,8 @@ static const int kVF2VisibleSpecialUpgradeFirstItem = {min(VISIBLE_SPECIAL_UPGRA
 static const int kVF2VisibleSpecialUpgradeCount = {len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)};
 static const int kVF2VisibleSpecialUpgradeIconImageBase = {visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))};
 static const int kVF2VisibleSpecialUpgradeIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
+static const int kVF2MobileRenovationImageBase = {mobile_renovation_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
+static const int kVF2MobileRenovationIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
 static const int kVF2FleaMarketCategory = 0x0F;
 static const int kVF2FleaMarketGoodiesCount = 0x24;
 static int gVF2SyntheticOutfitToolInHand = 0;
@@ -9364,6 +9473,12 @@ extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
+    if (itemId == 0x132 && VF2MarriageEmailUnavailable()) {{
+        // A second resident adult means the stock proposal path has no valid
+        // candidate state.  Hide the purchase instead of queueing the email
+        // into the crash-prone path.
+        return 0;
+    }}
     if (kVF2EnableB150CheatUpgrades &&
         (itemId == 0x33 || itemId == 0x10A || itemId == 0x115 || itemId == 0x116 ||
         itemId == 0x128 || itemId == 0x129 || itemId == 0x12A)) {{
@@ -9479,9 +9594,6 @@ extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
 }}
 
 static int VF2VisibleSpecialUpgradeIconSourceItem(int itemId) {{
-    // Post-B153 cheats reuse the trophy descriptor so adding a row never
-    // shifts villager-body or Holiday Ornament image IDs.
-    if (itemId >= 0x12E && itemId <= 0x13B) itemId = 0x124;
     return itemId;
 }}
 
@@ -9491,16 +9603,32 @@ static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
     return index < 0 || index >= kVF2VisibleSpecialUpgradeCount ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
 
+static int VF2GetMobileRenovationIconImage(int itemId) {{
+    if (!kVF2EnableMobileRenovations) return -1;
+    int index = itemId - kVF2MobileRenovationItemBase;
+    return index < 0 || index >= kVF2MobileRenovationItemCount
+        ? -1
+        : kVF2MobileRenovationImageBase + index;
+}}
+
 static int VF2GetAddedStoreIconImage(int itemId) {{
     int image = VF2GetOutfitStoreIconImage(itemId);
     if (image >= 0) return image;
-    return VF2GetVisibleSpecialUpgradeIconImage(itemId);
+    image = VF2GetVisibleSpecialUpgradeIconImage(itemId);
+    if (image >= 0) return image;
+    return VF2GetMobileRenovationIconImage(itemId);
 }}
 
 static int VF2GetAddedStoreIconCellSize(int itemId) {{
+    if (VF2GetMobileRenovationIconImage(itemId) >= 0)
+        return kVF2MobileRenovationIconCellSize;
     return VF2GetVisibleSpecialUpgradeIconImage(itemId) >= 0
         ? kVF2VisibleSpecialUpgradeIconCellSize
         : kVF2OutfitStoreIconCellSize;
+}}
+
+static float VF2GetAddedStoreIconScale(int itemId) {{
+    return VF2GetMobileRenovationIconImage(itemId) >= 0 ? 0.12f : 1.0f;
 }}
 
 extern "C" bool __cdecl VF2DrawOutfitStoreIconPoint(int x, int y, int itemId, int state, int position, int selected) {{
@@ -9508,7 +9636,7 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconPoint(int x, int y, int itemId, in
     if (image < 0) return false;
     int cellSize = VF2GetAddedStoreIconCellSize(itemId);
     theGraphicsManager* graphics = theGraphicsManager::Get();
-    if (graphics) graphics->Draw((EImage)image, x - cellSize / 2, y - cellSize / 2, 1.0f, 100);
+    if (graphics) graphics->Draw((EImage)image, x - cellSize / 2, y - cellSize / 2, VF2GetAddedStoreIconScale(itemId), 100);
     return true;
 }}
 
@@ -9529,7 +9657,7 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
     if (graphics) {{
         int x = left + ((right - left) - cellSize) / 2;
         int y = top + ((bottom - top) - cellSize) / 2;
-        graphics->Draw((EImage)image, x, y, 1.0f, 100);
+        graphics->Draw((EImage)image, x, y, VF2GetAddedStoreIconScale(itemId), 100);
     }}
     return true;
 }}
@@ -9890,9 +10018,7 @@ extern "C" void __cdecl VF2DrawVisibleSpecialUpgradeIcon(theGraphicsManager* gra
         return;
     }}
 
-    int sourceItem = item;
-    if (sourceItem >= 0x12E && sourceItem <= 0x13B) sourceItem = 0x124;
-    int frame = sourceItem - 0x117;
+    int frame = item - 0x117;
     if (frame < 0 || frame >= {len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)}) {{
         return;
     }}
@@ -10248,6 +10374,7 @@ public:
     int const CollectionCountWithHolidayOrnaments(ECarrying item, bool common, bool uncommon, bool rare) const;
     void ResetCollection();
     void SpawnSockInHouse(int count);
+    void SpawnStainInHouse(int count);
     void SpawnTrashInHouse(int count);
     void SpawnWeedsInYard(int count);
     void RemoveAll(ECarrying carrying);
@@ -10441,6 +10568,12 @@ static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {
         }
     }
     return false;
+}
+
+static bool VF2MarriageEmailUnavailable() {
+    CVillager *first;
+    CVillager *second;
+    return VF2MarriagePair(first, second);
 }
 
 static bool VF2IsSameSexMarriage() {
@@ -11301,6 +11434,8 @@ static void VF2CompleteAllAchievements() {
     }
 }
 
+static const int kVF2MaximumSockPileCount = 0x7FFFFFFF;
+
 static void VF2SetSockPileCount(int count) {
     unsigned char *gameState = (unsigned char *)theGameState::Get();
     *(int *)(gameState + 0x148) = count;
@@ -11366,6 +11501,8 @@ extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
         return CollectableItem.luckyRockActive ? 0 : -1;
     case 0x123:
         return VF2AllFurnitureLocksUnlocked() ? 0 : -1;
+    case 0x132:
+        return VF2MarriageEmailUnavailable() ? 0x7FFFFFFF : -1;
     default:
         return -1;
     }
@@ -11483,7 +11620,15 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         VF2CompleteAllAchievements();
         break;
     case 0x12F:
-        CollectableItem.SpawnTrashInHouse(30);
+        // The native collectable pool has 30 total slots, not 30 slots per
+        // carrying type.  Interleave the three house-mess spawners so an
+        // empty house receives all three requested categories while existing
+        // collectables remain untouched.
+        for (int i = 0; i < 10; ++i) {
+            CollectableItem.SpawnTrashInHouse(1);
+            CollectableItem.SpawnStainInHouse(1);
+            CollectableItem.SpawnSockInHouse(1);
+        }
         break;
     case 0x130:
         CollectableItem.SpawnWeedsInYard(30);
@@ -11492,13 +11637,16 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         CollectableItem.RemoveAll((ECarrying)0x7D);
         break;
     case 0x132:
+        if (VF2MarriageEmailUnavailable()) {
+            break;
+        }
         theGameState::Get()->QueueEmailMessage(
             eEmailMessageMarriageProposal
         );
         break;
     case 0x133:
-        CollectableItem.SpawnSockInHouse(30);
-        VF2SetSockPileCount(30);
+        CollectableItem.SpawnSockInHouse(kVF2MaximumSockPileCount);
+        VF2SetSockPileCount(kVF2MaximumSockPileCount);
         break;
     case 0x134:
         VF2SetSockPileCount(0);
@@ -12379,6 +12527,7 @@ class CCollectableItem {{
 public:
     void Add(ECarrying carrying, ldwPoint point, bool force);
     void SpawnSockInHouse(int count);
+    void SpawnStainInHouse(int count);
     void SpawnTrashInHouse(int count);
 }};
 
@@ -24395,6 +24544,7 @@ def main():
     patch_added_furniture_click_aliases(manifest)
     patch_visible_special_upgrades(manifest)
     patch_inventory_manager(manifest)
+    patch_house_renovations(manifest)
     patch_scrolling_store_scene(manifest)
     patch_purchase_dialog(manifest)
     patch_options_dialog(manifest)

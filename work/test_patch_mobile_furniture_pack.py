@@ -1759,6 +1759,68 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
 
 
 class MobileRenovationArtTests(unittest.TestCase):
+    def test_mobile_renovations_are_only_in_native_house_renovation_category(self):
+        old_patched = patcher.PATCHED
+        old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(
+                    patcher.SRC_OBJS / "InventoryManager.obj",
+                    temp / "InventoryManager.obj",
+                )
+                patcher.PATCHED = temp
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                manifest = {}
+
+                patcher.patch_visible_special_upgrades(manifest)
+                patcher.patch_inventory_manager(manifest)
+                patcher.patch_house_renovations(manifest)
+
+                services = manifest["VisibleSpecialUpgrades"]
+                home = manifest["HouseRenovations"]
+                renovation_ids = {
+                    hex(item_id) for item_id in patcher.MOBILE_RENOVATION_PC_ITEM_IDS
+                }
+                self.assertEqual(home["category"], "0x11")
+                self.assertEqual(home["source_list"], "gHomeList")
+                self.assertEqual(home["old_count"], 10)
+                self.assertEqual(home["new_count"], 25)
+                self.assertEqual(
+                    [row["item_id"] for row in home["added_items"]],
+                    sorted(renovation_ids, key=lambda value: int(value, 16)),
+                )
+                self.assertFalse(
+                    renovation_ids
+                    & {row["item_id"] for row in services["added_items"]}
+                )
+                self.assertEqual(
+                    services["new_count"],
+                    6
+                    + len(patcher.MOBILE_SPECIAL_UPGRADE_ITEM_IDS)
+                    + (
+                        len(patcher.CHEAT_UPGRADE_ITEMS)
+                        if patcher.ENABLE_CHEAT_UPGRADES
+                        else 0
+                    ),
+                )
+
+                obj = CoffObject(temp / "InventoryManager.obj")
+                home_sym = obj.symbol(patcher.GHOMELIST)
+                home_sec = obj.section(home_sym.section)
+                home_ids = list(
+                    struct.unpack_from(
+                        "<25I", obj.buf, home_sec.raw_ptr + home_sym.value
+                    )
+                )
+                self.assertEqual(home_ids[:10], list(range(0xE1, 0xEB)))
+                self.assertEqual(
+                    home_ids[10:], list(patcher.MOBILE_RENOVATION_PC_ITEM_IDS)
+                )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+
     def test_native_mobile_renovation_purchase_and_load_routes_match_contract(self):
         manifest = {}
         patcher.validate_native_mobile_renovation_contract(manifest)
@@ -4253,7 +4315,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(rows[0x12E]["name"], "Complete all Achievements")
         self.assertIn("normal coin reward", rows[0x12E]["description"])
         self.assertEqual(rows[0x12F]["name"], "Fill available house slots with trash")
-        self.assertIn("available collectable slot", rows[0x12F]["description"])
+        self.assertIn("dirt smudges", rows[0x12F]["description"])
         self.assertEqual(rows[0x130]["name"], "Fill available yard slots with weeds")
         self.assertIn("Existing collectables are preserved", rows[0x130]["description"])
         self.assertEqual(rows[0x131]["name"], "Clean Garden")
@@ -4264,7 +4326,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
             "Queues an incoming marriage proposal email.",
         )
         self.assertEqual(rows[0x133]["name"], "Max out sock pile")
-        self.assertIn("largest visible size of 30 socks", rows[0x133]["description"])
+        self.assertIn("maximum signed integer", rows[0x133]["description"])
         self.assertEqual(rows[0x134]["name"], "No sock pile")
         self.assertIn("without awarding sock-laundering progress", rows[0x134]["description"])
         self.assertEqual(rows[0x135]["name"], "Clean House")
@@ -4291,24 +4353,17 @@ class OutfitStoreMappingTests(unittest.TestCase):
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x127],
             "cheat_reset_achievements.png",
         )
-        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x12E], 0x124)
-        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x12F], 0x124)
-        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x130], 0x124)
-        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x131], 0x124)
-        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x132], 0x124)
-        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x133], 0x124)
-        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x134], 0x124)
-        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x135], 0x124)
-        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[0x136], 0x124)
-        for item_id in range(0x137, 0x13C):
+        self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES, {})
+        for item_id in range(0x12E, 0x13C):
+            self.assertIn(item_id, patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
             self.assertEqual(
-                patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES[item_id],
-                0x124,
+                patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[item_id],
+                "cheat_reset_achievements.png",
             )
-        self.assertEqual(
-            patcher.visible_special_upgrade_icon_id_for(0x12E),
-            patcher.visible_special_upgrade_icon_id_for(0x124),
-        )
+            self.assertGreater(
+                patcher.visible_special_upgrade_icon_id_for(item_id),
+                patcher.visible_special_upgrade_icon_id_for(0x12D),
+            )
         item_ids = [item["item_id"] for item in patcher.CHEAT_UPGRADE_ITEMS]
         self.assertEqual(
             item_ids,
@@ -4370,16 +4425,17 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("VF2CompleteAllAchievements();", source)
         self.assertIn("static int VF2VisibleSpecialUpgradeIconSourceItem(int itemId)", source)
         self.assertIn("itemId = VF2VisibleSpecialUpgradeIconSourceItem(itemId);", source)
-        self.assertIn("if (itemId >= 0x12E && itemId <= 0x13B) itemId = 0x124;", source)
-        self.assertIn("int sourceItem = item;", source)
-        self.assertIn("if (sourceItem >= 0x12E && sourceItem <= 0x13B) sourceItem = 0x124;", source)
+        self.assertIn("int frame = item - 0x117;", source)
         self.assertIn("case 0x12F:", source)
-        self.assertIn("CollectableItem.SpawnTrashInHouse(30);", source)
+        self.assertIn("CollectableItem.SpawnTrashInHouse(1);", source)
+        self.assertIn("CollectableItem.SpawnStainInHouse(1);", source)
+        self.assertIn("CollectableItem.SpawnSockInHouse(1);", source)
         self.assertIn("case 0x130:", source)
         self.assertIn("CollectableItem.SpawnWeedsInYard(30);", source)
         self.assertIn("case 0x131:", source)
         self.assertIn("CollectableItem.RemoveAll((ECarrying)0x7D);", source)
         self.assertIn("case 0x132:", source)
+        self.assertIn("if (VF2MarriageEmailUnavailable())", source)
         self.assertIn("eEmailMessageMarriageProposal = 2", source)
         self.assertIn(
             "theGameState::Get()->QueueEmailMessage(\n"
@@ -4390,8 +4446,9 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("static void VF2SetSockPileCount(int count)", source)
         self.assertIn("*(int *)(gameState + 0x148) = count;", source)
         self.assertIn("case 0x133:", source)
-        self.assertIn("CollectableItem.SpawnSockInHouse(30);", source)
-        self.assertIn("VF2SetSockPileCount(30);", source)
+        self.assertIn("static const int kVF2MaximumSockPileCount = 0x7FFFFFFF;", source)
+        self.assertIn("CollectableItem.SpawnSockInHouse(kVF2MaximumSockPileCount);", source)
+        self.assertIn("VF2SetSockPileCount(kVF2MaximumSockPileCount);", source)
         self.assertIn("case 0x134:", source)
         self.assertIn("VF2SetSockPileCount(0);", source)
         self.assertIn("static void VF2CleanHouse()", source)
@@ -4405,6 +4462,19 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("VF2PersistentCheatAndPurchaseMask() |= 0x4;", source)
         for item_id in range(0x137, 0x13C):
             self.assertIn(f"case 0x{item_id:X}:", source)
+
+    def test_renovation_strings_do_not_collide_with_weather_refusal(self):
+        renovation_ids = [
+            string_id
+            for index in range(patcher.MOBILE_RENOVATION_IMAGE_COUNT)
+            for string_id in patcher.mobile_renovation_string_ids_for(index)
+        ]
+        self.assertEqual(len(renovation_ids), len(set(renovation_ids)))
+        self.assertNotIn(patcher.mobile_lounger_bad_weather_string_id(), renovation_ids)
+        self.assertEqual(
+            patcher.MOBILE_RENOVATION_STYLE_CATALOG[-1]["short"],
+            "Checkered Workshop Remodel",
+        )
 
     def test_trigger_all_malfunctions_uses_native_dryer_and_renovation_gates(self):
         old_patched = patcher.PATCHED

@@ -74,8 +74,11 @@ separately and still needs live QA.
 ## B157 room-overlay route
 
 The optional renderer registers the 15 mobile styles as PC store items
-`0x13C-0x14A`, retaining the mobile price and unlock-level records. The
-purchase/removal helper uses the PC inventory path, and the renderer selects
+`0x13C-0x14A`, retaining the mobile price and unlock-level records. They are
+appended only to the native House Renovations category (`0x11`,
+`gHomeList`/`gHomeListSorted`), expanding it from 10 to 25 rows; they are not
+added to Special Upgrades (`gServicesList`). The purchase/removal helper uses
+the PC inventory path, and the renderer selects
 the first owned style in each room group. It draws the complete source PNG at
 1:1 using these camera-relative world anchors:
 
