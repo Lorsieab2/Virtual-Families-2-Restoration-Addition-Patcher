@@ -1282,7 +1282,7 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x12F,
         "name": "Fill available house slots with trash",
-        "description": "Fills available house collectable slots with a mix of trash, dirt smudges, and socks. Existing collectables are preserved.",
+        "description": "Fills free slots with trash, dirt smudges, and socks. Will not work if Maid is active.",
         "price": 0,
     },
     {
@@ -1294,7 +1294,7 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x130,
         "name": "Fill available yard slots with weeds",
-        "description": "Fills every available collectable slot with yard weeds. Existing collectables are preserved.",
+        "description": "Fills free yard slots with weeds. Will not work if Gardener is active.",
         "price": 0,
     },
     {
@@ -12135,7 +12135,6 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         );
         break;
     case 0x133:
-        CollectableItem.SpawnSockInHouse(kVF2MaximumSockPileCount);
         VF2SetSockPileCount(kVF2MaximumSockPileCount);
         break;
     case 0x134:
