@@ -1901,7 +1901,10 @@ class MobileRenovationArtTests(unittest.TestCase):
             [row["environment_prop"] for row in contract["purchase_route"]["rows"]],
             ["0x3d", "0x44", "0x45", "0x41", "0x42", "0x43", "0x40", "0x3f", "0x3e", "0x46"],
         )
-        self.assertEqual(contract["renderer"], "not changed; room-background selector/compositing remains unproven")
+        self.assertEqual(
+            contract["renderer"],
+            "separate optional room-art renderer is disabled; stock map path is preserved",
+        )
         self.assertEqual(contract["reversible_removal"]["status"], "source_validated")
         self.assertEqual(contract["reversible_removal"]["enabled_by"], "cheat_upgrades")
         self.assertIn("ContentMap.Load", contract["reversible_removal"]["rebuild_route"])
@@ -1911,6 +1914,7 @@ class MobileRenovationArtTests(unittest.TestCase):
         self.assertTrue(contract_path.is_file())
         contract = json.loads(contract_path.read_text(encoding="utf-8"))
         self.assertEqual(contract["native_item_range"], "0xE1-0xEA")
+        self.assertTrue(all(len(row["sha256"]) == 64 for row in contract["curated_art"]["files"]))
         self.assertEqual(
             [row["item"] for row in contract["native_activation"]],
             [f"0x{item:X}" for item in range(0xE1, 0xEB)],
@@ -1940,6 +1944,48 @@ class MobileRenovationArtTests(unittest.TestCase):
         })
         self.assertTrue(all(len(row["size"]) == 2 for row in curated))
 
+    def test_enabled_mobile_renovation_renderer_pins_runtime_pixel_hashes(self):
+        old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
+        old_patched = patcher.PATCHED
+        old_out = patcher.OUT
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                patcher.PATCHED = root / "patched"
+                patcher.OUT = root / "out"
+                patcher.PATCHED.mkdir()
+                runtime_dir = patcher.OUT / "Images" / "MobileRenovations"
+                runtime_dir.mkdir(parents=True)
+                (patcher.PATCHED / "vf2_mobile_renovations.cpp").write_text(
+                    "1.0f; anchorX - worldX;",
+                    encoding="ascii",
+                )
+                for name in patcher.MOBILE_RENOVATION_ART_FILES:
+                    shutil.copy2(patcher.MOBILE_RENOVATION_ART_SOURCE_DIR / name, runtime_dir / name)
+                manifest = {
+                    "mobile_renovation_renderer": {
+                        "anchors": {room: list(origin) for room, origin in patcher.MOBILE_RENOVATION_ANCHORS.items()},
+                        "hook": {"insert_offset": "0x39"},
+                    },
+                    "theGraphicsManager": {
+                        "mobile_renovation_images": {
+                            "image_count": patcher.MOBILE_RENOVATION_IMAGE_COUNT,
+                            "descriptors": [{}] * patcher.MOBILE_RENOVATION_IMAGE_COUNT,
+                        }
+                    },
+                }
+                patcher.validate_mobile_renovation_renderer_contract(manifest)
+                self.assertTrue(manifest["mobile_renovation_renderer_validation"]["pixel_hashes_pinned"])
+
+                changed = runtime_dir / patcher.MOBILE_RENOVATION_ART_FILES[0]
+                changed.write_bytes(changed.read_bytes() + b"drift")
+                with self.assertRaisesRegex(RuntimeError, "pixels drifted"):
+                    patcher.validate_mobile_renovation_renderer_contract(manifest)
+        finally:
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+            patcher.PATCHED = old_patched
+            patcher.OUT = old_out
     def test_mobile_renovation_style_catalog_matches_pinned_contract(self):
         validation = patcher.validate_mobile_renovation_style_catalog()
         self.assertEqual(validation["status"], "passed")

@@ -7925,13 +7925,21 @@ def validate_native_mobile_renovation_contract(manifest):
             "rows": load_rows,
         },
         "semantics": "PC stock condemned-area activation, purchase-time Environment::SetProp, and save-load ownership gates match the mobile activation table.",
-        "renderer": "not changed; room-background selector/compositing remains unproven",
+        "renderer": (
+            "separate optional post-map 1:1 room-art overlay is linked"
+            if ENABLE_MOBILE_RENOVATIONS
+            else "separate optional room-art renderer is disabled; stock map path is preserved"
+        ),
         "reversible_removal": {
             "status": "source_validated",
             "enabled_by": "cheat_upgrades",
             "remove_route": "VF2RemoveOwnedUpgrade returns one owned renovation and rebuilds ContentMap",
             "rebuild_route": "ContentMap.Load plus exact native ten-record activation table",
-            "runtime_art": "mobile room-art compositing remains disabled",
+            "runtime_art": (
+                "mobile room-art compositing is linked by the separate optional renderer"
+                if ENABLE_MOBILE_RENOVATIONS
+                else "mobile room-art compositing is disabled"
+            ),
         },
     }
 
@@ -21810,6 +21818,13 @@ def validate_mobile_renovation_renderer_contract(manifest):
         expected_sizes = {row["name"]: tuple(row["size"]) for row in contract["curated_art"]["files"]}
         if sizes != expected_sizes:
             raise RuntimeError(f"Mobile renovation runtime art dimensions drifted: {sizes!r}")
+        expected_hashes = {row["name"]: row["sha256"].lower() for row in contract["curated_art"]["files"]}
+        actual_hashes = {
+            name: hashlib.sha256((runtime_dir / name).read_bytes()).hexdigest()
+            for name in MOBILE_RENOVATION_ART_FILES
+        }
+        if actual_hashes != expected_hashes:
+            raise RuntimeError("Mobile renovation runtime art pixels drifted from the pinned mobile extraction")
     else:
         if renderer.get("hook") is not None:
             raise RuntimeError("Disabled mobile renovation build still patches DrawScene")
@@ -21821,6 +21836,7 @@ def validate_mobile_renovation_renderer_contract(manifest):
         "scale": 1.0,
         "anchors": expected_anchors,
         "validated_image_count": MOBILE_RENOVATION_IMAGE_COUNT if ENABLE_MOBILE_RENOVATIONS else 0,
+        "pixel_hashes_pinned": ENABLE_MOBILE_RENOVATIONS,
         "style_catalog": style_catalog_validation,
     }
 

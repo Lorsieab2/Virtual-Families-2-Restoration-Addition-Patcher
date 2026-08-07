@@ -73,21 +73,21 @@
     "orientation": "upright",
     "transform": "decoded RGBA row reversal from the Android extraction",
     "files": [
-      {"name": "tp233_sw_bathroom_black.png", "room": "bathroom", "size": [603, 363]},
-      {"name": "tp233_sw_bathroom_blue_marble.png", "room": "bathroom", "size": [603, 363]},
-      {"name": "tp234_sw_bathroom_brown.png", "room": "bathroom", "size": [603, 363]},
-      {"name": "tp234_sw_bathroom_green.png", "room": "bathroom", "size": [603, 363]},
-      {"name": "tp235_sw_bathroom_pink.png", "room": "bathroom", "size": [603, 363]},
-      {"name": "tp238_beige_kitchen.png", "room": "kitchen", "size": [717, 464]},
-      {"name": "tp238_beige_workshop.png", "room": "workshop", "size": [518, 326]},
-      {"name": "tp239_red_office.png", "room": "office", "size": [585, 413]},
-      {"name": "tp239_yellow_kitchen.png", "room": "kitchen", "size": [717, 464]},
-      {"name": "tp240_country_kitchen.png", "room": "kitchen", "size": [717, 464]},
-      {"name": "tp240_dark_office.png", "room": "office", "size": [585, 413]},
-      {"name": "tp241_green_office.png", "room": "office", "size": [585, 413]},
-      {"name": "tp241_modern_office.png", "room": "office", "size": [585, 413]},
-      {"name": "tp242_blue_office.png", "room": "office", "size": [585, 413]},
-      {"name": "tp242_checkered_workshop.png", "room": "workshop", "size": [518, 326]}
+      {"name": "tp233_sw_bathroom_black.png", "room": "bathroom", "size": [603, 363], "sha256": "67414f25240912e3436e4d7d3ad7d470fc0644d2c5aebc57ea71e363d22ddb78"},
+      {"name": "tp233_sw_bathroom_blue_marble.png", "room": "bathroom", "size": [603, 363], "sha256": "6ff7484c1d7fdf11319bafe7b600cd1e106a5745ff94a465dc6c5cec092f145a"},
+      {"name": "tp234_sw_bathroom_brown.png", "room": "bathroom", "size": [603, 363], "sha256": "95b363544458012915f3a8f1daad1bbd5410367f1124789f328714d53b512fdd"},
+      {"name": "tp234_sw_bathroom_green.png", "room": "bathroom", "size": [603, 363], "sha256": "357558a2d2ec131b986d0b7bb6abfbc40d83b4763eff2233ab00470a5cfad297"},
+      {"name": "tp235_sw_bathroom_pink.png", "room": "bathroom", "size": [603, 363], "sha256": "bc30f2704a094ec70c538b159d090aaf9a884689201cdcd462aed4e27d26423a"},
+      {"name": "tp238_beige_kitchen.png", "room": "kitchen", "size": [717, 464], "sha256": "527ef57ba0b4fb39a6447a3d7b9e7855bb8d5afa820629dc0579c350006de356"},
+      {"name": "tp238_beige_workshop.png", "room": "workshop", "size": [518, 326], "sha256": "f7e2659ba3c35d895ec4ed0ae3fb3b398a1dacc4ed2c868100985f5851efc714"},
+      {"name": "tp239_red_office.png", "room": "office", "size": [585, 413], "sha256": "b839d9ed4b6d7b6b724af3bd4cfb2a0e94010df21528a6a7117d50c3ec258437"},
+      {"name": "tp239_yellow_kitchen.png", "room": "kitchen", "size": [717, 464], "sha256": "1619e79a3139d0fee590d1db110634837ec580b53c478b772ba704dd7297dafd"},
+      {"name": "tp240_country_kitchen.png", "room": "kitchen", "size": [717, 464], "sha256": "93dce5149ae85579c2ec00ab8b9b744b428c224e379052412abb977bd3829e8c"},
+      {"name": "tp240_dark_office.png", "room": "office", "size": [585, 413], "sha256": "ef2eb3760a3428a533b4eefebf93f8ca5315a6f8078f6b10282c41bfb0e62f5c"},
+      {"name": "tp241_green_office.png", "room": "office", "size": [585, 413], "sha256": "829705ac435855fcc33c3b3bb8375a4515828cf1a31e0c5a350cf864f65c77b2"},
+      {"name": "tp241_modern_office.png", "room": "office", "size": [585, 413], "sha256": "2b440aab7ac67162e9dded910b1ddfeb89e1482107ec081c752fdf4d48bbfa5e"},
+      {"name": "tp242_blue_office.png", "room": "office", "size": [585, 413], "sha256": "e4eefc202698d0f43bc0e79e1bdfef226d6d8d000ef4200196c7ad85598cf33a"},
+      {"name": "tp242_checkered_workshop.png", "room": "workshop", "size": [518, 326], "sha256": "0661ba4b150e93991bebcd90834dc28dbd92918c86b700661caab1fbb99d222a"}
     ]
   }
 }
