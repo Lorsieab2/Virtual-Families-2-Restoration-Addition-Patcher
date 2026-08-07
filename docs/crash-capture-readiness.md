@@ -37,11 +37,20 @@ reuse a patcher manifest implicitly:
 The executable path must be absolute, and every recorded size must be positive.
 The capture section is required for bundle validation; it is not required for
 the executable-only check or WER planning. Paths under `capture` are safe,
-relative paths inside the capture directory. The dump must be a non-empty
-Windows minidump with a complete `MINIDUMP_HEADER` (MDMP signature, version
-low word `0xA793`, nonzero stream count), a bounded stream directory, and
-in-file stream locations. At least one non-empty log is required. All recorded
-SHA-256 values are checked against the bytes on disk.
+relative paths inside the capture directory. At least one non-empty log is
+required. All recorded SHA-256 values are checked against the bytes on disk.
+
+The selected executable must be a bounded PE32 x86 image. Bundle validation
+requires a non-empty Windows minidump with a complete `MINIDUMP_HEADER` (MDMP
+signature, version low word `0xA793`, nonzero stream count), a bounded stream
+directory, and in-file stream locations. It also requires exactly one bounded
+x86 `ExceptionStream` with its referenced thread context and a bounded
+`ModuleListStream`, including every nested module record and module-name RVA.
+The exception address must fall inside the selected main module. That module is
+correlated with the selected executable by case-insensitive basename, PE
+timestamp, `SizeOfImage`, and PE checksum when the checksum is available. A
+missing, duplicate, truncated, out-of-bounds, wrong-architecture,
+or contradictory required record is rejected.
 
 ## Commands
 
@@ -83,11 +92,17 @@ python work/vf2_crash_capture.py validate-bundle `
   --report-out C:/exact/path/to/capture-report.json
 ```
 
+The successful report stores the bounded, dump-derived facts under
+`capture.dump.minidump`, including the exception, x86 context/registers,
+correlated main module, fault RVA, and source stream/record RVAs.
+
 Emit the IDA-consumable record only from a successful, still-current bundle
 report. The explicit manifest and bundle are revalidated, and the supplied
-report must exactly match that fresh identity. Every exception, module, register, and stack-frame field is required;
-the module and every frame must satisfy `address = base + RVA`, and `eip` must
-equal the exception address. Stack frames use JSON objects with `index`,
+report must exactly match that fresh identity. The exception code and address,
+selected module base and computed RVA, and x86 register context are consumed
+from the validated minidump facts rather than accepted as replacement command
+line values. At least one analyst-supplied stack frame remains required. Each
+frame must satisfy `address = base + RVA` and uses a JSON object with `index`,
 `address`, `module`, `module_base`, and `rva`:
 
 ```powershell
@@ -97,22 +112,26 @@ python work/vf2_crash_capture.py emit-ida-json `
   --bundle-dir C:/exact/path/to/capture `
   --bundle-report C:/exact/path/to/capture-report.json `
   --output C:/exact/path/to/ida-crash.json `
-  --exception-code 0xC0000005 `
-  --exception-address 0x<required-address> `
-  --module C:/exact/path/to/module.exe `
-  --module-base 0x<required-base> `
-  --module-rva 0x<required-rva> `
-  --register eax=0x<value> --register ebx=0x<value> `
-  --register ecx=0x<value> --register edx=0x<value> `
-  --register esi=0x<value> --register edi=0x<value> `
-  --register ebp=0x<value> --register esp=0x<value> `
-  --register eip=0x<exception-address> --register eflags=0x<value> `
   --stack-frame '{"index":0,"address":"0x<address>","module":"<module>","module_base":"0x<base>","rva":"0x<rva>"}'
 ```
 
 The resulting JSON preserves the verified executable, dump, and log hashes in
-plain hex-string form suitable for IDA-side notes and later symbolization.
-All x86 addresses, RVAs, and register values must fit `0x00000000` through
-`0xFFFFFFFF`. The
-tool rejects missing, zero-byte, stale, malformed, or mismatched artifacts
-before producing any report or IDA record.
+plain hex-string form suitable for IDA-side notes and later symbolization. It
+also records the dump-derived exception/thread-context and selected-module
+facts, the selected PE identity used for correlation, and the validation report
+provenance from which those facts were consumed. Its provenance distinguishes
+those parsed facts from the analyst-supplied stack frames. All x86 addresses,
+RVAs, and register values must fit `0x00000000` through `0xFFFFFFFF`. The tool
+rejects missing, zero-byte, stale, malformed, or mismatched artifacts before
+producing any report or IDA record.
+
+## Remaining dump-identity limit
+
+The exact-build manifest SHA-256 authenticates the selected executable on disk;
+it remains a separate gate from minidump validation. A normal minidump does not
+contain the complete loaded executable bytes or their SHA-256. Matching the
+dump module's basename, PE timestamp, `SizeOfImage`, and available checksum to
+the selected executable is strong structural correlation, but it is not
+cryptographic proof that the process loaded those exact bytes. Preserve this
+limitation in crash reports and do not describe the dump-to-EXE relationship as
+an exact hash match unless an independent captured-module hash establishes it.

@@ -1312,6 +1312,12 @@
   link uses the installed Visual Studio Community x86 ATL library. Linked
   readback is complete; live refresh/save/reload validation remains.
 
+This historical checkpoint was superseded by B158: Max out sock pile now writes
+`0x7FFFFFFF` and passes `0x7FFFFFFF` to the native bounded spawn routine. The
+physical pool remains capped at 30 records, while the persistent pile count
+uses the requested maximum signed integer. B158 also replaces the reused trophy
+descriptor with a dedicated semantic sock-pile icon.
+
 ## B156 - Clean House source checkpoint
 
 - Adds Clean House 0x135 with the exact four selectors used by the stock
