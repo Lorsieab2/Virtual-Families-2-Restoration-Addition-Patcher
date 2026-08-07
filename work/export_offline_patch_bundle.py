@@ -133,6 +133,11 @@ MOBILE_FURNITURE_BEHAVIOR_FMAP_FILES = (
     *MOBILE_HOLIDAY_FMAP_FILES,
 )
 SOURCE_BACKED_OPTIONAL_SETTINGS = {
+    "unused_pets",
+    "text_fixes",
+    "mobile_purchases",
+    "settings_evict_button",
+    "store_scroll_bar",
     "allow_older_pregnancies",
     "same_sex_marriage",
     "older_villager_mortality",
