@@ -60,6 +60,18 @@ EXECUTABLE_VARIANTS = {
         "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
         1_790_976,
     ),
+    frozenset({
+        "core_executable",
+        "behavior_patches",
+        "cheat_upgrades",
+        "holiday_ornaments_collection",
+        "island_events",
+        "mobile_renovations",
+    }): (
+        "payload/Virtual Families 2 - Modded B158 - Final All-Enabled Native.exe",
+        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        1_790_976,
+    ),
 }
 SOUND_ROUTE_NAMES = {"beaker", "Child3", "Child7", "Child8"}
 REQUIRED_RUNNERS = {

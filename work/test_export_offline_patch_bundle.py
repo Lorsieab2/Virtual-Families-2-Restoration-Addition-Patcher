@@ -134,6 +134,22 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 set(exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS) - {"mobile_sound_assets"},
             )
 
+    def test_final_playtest_profile_exposes_one_all_five_native_overlay(self):
+        self.assertEqual(
+            exporter.FINAL_PLAYTEST_NATIVE_REQUIRES,
+            [
+                "core_executable",
+                "behavior_patches",
+                "cheat_upgrades",
+                "holiday_ornaments_collection",
+                "island_events",
+                "mobile_renovations",
+            ],
+        )
+        source = EXPORTER.read_text(encoding="utf-8")
+        self.assertIn('"Final All-Enabled Native"', source)
+        self.assertIn('"native_overlay_requires": FINAL_PLAYTEST_NATIVE_REQUIRES', source)
+
     def test_b156_uses_stable_modded_folder_exe_and_save_names(self):
         self.assertEqual(exporter.modded_output_folder_name("B156"), "Virtual Families 2 - Modded")
         self.assertEqual(exporter.modded_exe_output_name("B156"), "Virtual Families 2 - Modded.exe")

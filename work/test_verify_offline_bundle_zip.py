@@ -29,10 +29,25 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         self.assertNotIn("behavior_patches", verifier.ABSENT_ZERO_RECORD_SETTINGS)
         self.assertNotIn("store_scroll_bar", verifier.ABSENT_ZERO_RECORD_SETTINGS)
 
+    def test_verifier_requires_final_all_enabled_native_overlay(self):
+        requires = frozenset({
+            "core_executable",
+            "behavior_patches",
+            "cheat_upgrades",
+            "holiday_ornaments_collection",
+            "island_events",
+            "mobile_renovations",
+        })
+        self.assertEqual(
+            verifier.EXECUTABLE_VARIANTS[requires][0],
+            "payload/Virtual Families 2 - Modded B158 - Final All-Enabled Native.exe",
+        )
+        self.assertEqual(len(verifier.EXECUTABLE_VARIANTS), 8)
+
     def test_canonical_archive_passes_all_contract_gates(self):
         self.assertTrue(CANONICAL.is_file(), CANONICAL)
         result = verifier.verify_archive(CANONICAL)
-        self.assertEqual(result["executable_variants"], 7)
+        self.assertEqual(result["executable_variants"], 8)
         self.assertEqual(result["renovation_assets"], 15)
         self.assertEqual(result["sound_assets"], 67)
         self.assertEqual(result["sound_restores"], 63)

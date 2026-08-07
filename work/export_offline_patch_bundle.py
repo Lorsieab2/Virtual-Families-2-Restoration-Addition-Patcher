@@ -39,6 +39,14 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "mobile_furniture_behaviors",
     "cheat_upgrades",
 })
+FINAL_PLAYTEST_NATIVE_REQUIRES = [
+    "core_executable",
+    "behavior_patches",
+    "cheat_upgrades",
+    "holiday_ornaments_collection",
+    "island_events",
+    "mobile_renovations",
+]
 EXCLUDED_FULL_PAYLOAD_FILES = {
     "patch-manifest.json",
     "VF2_INTERNAL_WORKINGS_SUMMARY.txt",
@@ -3469,6 +3477,19 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         # The patcher applies active records in manifest order. Keep overlays
         # ordered from least to most specific so the exact combination wins.
         overlay_specs.sort(key=lambda spec: len(spec[2]))
+        if getattr(args, "final_playtest_all_enabled", False):
+            # The final profile is intentionally one composed native image:
+            # reuse the authenticated patched/sound-base EXE and expose it
+            # under the exact all-five dependency signature.  General
+            # profiles never receive this synthetic overlay.
+            overlay_specs.append(
+                (
+                    patched_exe,
+                    "Final All-Enabled Native",
+                    FINAL_PLAYTEST_NATIVE_REQUIRES,
+                    "Final-playtest composed native overlay; all certified working native features are active together.",
+                )
+            )
         overlay_records = []
         overlay_target_identity = {
             key: value
@@ -3551,6 +3572,8 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "default_on": sorted(FINAL_PLAYTEST_DEFAULT_ON_SETTINGS),
             "explicitly_default_off": ["no_ai_icons"],
             "unrelated_visual_options_unchanged": True,
+            "native_overlay_requires": FINAL_PLAYTEST_NATIVE_REQUIRES,
+            "native_overlay_label": "Final All-Enabled Native",
         }
 
     manifest = {
