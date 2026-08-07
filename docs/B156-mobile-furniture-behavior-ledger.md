@@ -151,12 +151,16 @@ EObject cells using PC-safe value `0x2000B000`; mobile-only markers
 ## Birthday family status
 
 The four birthday hotspots and their object IDs are proven: Banner `0x91`,
-Balloons `0x92`, Presents `0x93`, and Cake `0x94`. Balloons, Presents, and Cake
-all delegate through `AllPeepsCelebratingBirthday`; Banner is always a grouped
-celebration. When Banner exists or more than one birthday object is placed, the
-mobile build makes every villager run behavior `0x1AF`. That behavior and the
-other birthday IDs `0x1AD-0x1B3` are beyond the fixed desktop table ending at
-`0x19A`.
+Balloons `0x92`, Presents `0x93`, and Cake `0x94`. Their manual-drop contracts
+are distinct: when a person is manually dropped onto the Banner, it triggers a
+whole-household celebration; manually dropping Cake, Presents, or Balloons
+retains the child-only action for that hotspot. For that manual Banner route in
+the native mobile build, Banner presence or more than one birthday object causes
+every eligible villager to run behavior `0x1AF`. The separate autonomous
+`Maybe...` callbacks may call `AllPeepsCelebratingBirthday`; that callback path
+is not the manual-drop trigger. Those mobile behavior IDs `0x1AD-0x1B3` are
+beyond the fixed desktop
+table ending at `0x19A`.
 
 The child-only manual Birthday Cake and Birthday Presents subsets are now
 ported without using the
@@ -379,18 +383,29 @@ its exact raw-age and health/stat boundaries. The tree-decoration entry
 
 The native sound IDs are now preserved in the generated plans: `0xBC/0xAA`
 for watering and `0x36/0x113/0x37/0x01/0x7F/0x39/0x3D` for kid-breaking. The
-local mobile OBB contains 316 OGG files, but no mobile-exclusive filename
-stems; the current B158 runtime therefore keeps the 317-file stock sound
-payload. Replacing stock encodings requires a proven ID-to-file mapping and
-remains separate from the behavior implementation.
+local mobile OBB contains 316 OGG files and every audited fixed/ranged ID has
+a same-stem OGG counterpart (four PC WAV records use the corresponding mobile
+OGG extension). Direct-ID mapping and asset hashes are recorded in the
+fail-closed contract; runtime/audible parity remains unverified.
 
-The local B158 runtime resolves the routed IDs as follows:
+The verified direct-ID contract resolves the routed IDs as follows. Sound.obj
+record indices are the raw mobile IDs; there is no N+1 translation. The complete
+mapping, OBB presence/hash pins, and fail-closed status are maintained in
+`data/vf2/mobile-sound-parity-contract.json`.
 
-| Behavior | Native sound IDs and local payload files |
+`VF2BirthdayOhSound` preserves the native `CVillager::GetOh` branch at
+`0x001CE4C0`: child voices use `0x33-0x3F`, adult gender `0` uses `0x40-0x4C`,
+and adult gender `1` uses `0x4D-0x55`. Defined `EGender_Unknown=-1` maps to the
+valid `eSound_None` sentinel. Other raw gender values remain unvalidated
+passthroughs; values in the numeric ESound range may select unrelated sounds,
+while out-of-range values are not proven. No replacement or runtime/audible
+parity claim is established.
+
+| Behavior | Native sound IDs, direct PC filenames, and mobile OBB assets |
 |---|---|
-| `0x19C` Admiring Tree | `0xF2` `femaleoh4.ogg`; `0xDC` `malehey8.ogg`; `0xC3` `children_giggle5.ogg` |
-| `0x19E` Watering Tree | `0xBC` `button_click_wood.ogg`; `0xAA` `cricket_loop.ogg` |
-| `0x19F` Kid Breaking | `0x36` `Child5.ogg`; `0x113` `chime.ogg`; `0x37` `Child6.ogg`; `0x01` `owl.ogg`; `0x7F` `birds_loop.ogg`; `0x39` `Child8.wav`; `0x3D` `Child12.ogg` |
+| `0x19C` Admiring Tree | `0xF2` `femaleoh3.ogg`; `0xDC` `malehey7.ogg`; `0xC3` `children_giggle3.ogg` |
+| `0x19E` Watering Tree | `0xBC` `cabinet_drawer_close.ogg`; `0xAA` `shower_loop.ogg` |
+| `0x19F` Kid Breaking | `0x36` `Child4.ogg`; `0x113` `bottle_sounds.ogg`; `0x37` `Child5.ogg`; `0x01` `beaker.wav` → `beaker.ogg`; `0x7F` `giant_clam.ogg`; `0x39` `Child7.wav` → `Child7.ogg`; `0x3D` `Child11.ogg` |
 
 The combined draw uses `stockWeight + eligibleExternalWeight`. A stock result
 falls through to the unchanged native stock draw, preserving every stock

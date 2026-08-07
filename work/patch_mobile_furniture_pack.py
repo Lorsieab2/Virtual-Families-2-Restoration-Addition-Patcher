@@ -9242,6 +9242,9 @@ static const int kVF2MobileRenovationPersistentRecordId = 0xA8;
 static const int kVF2MobileRenovationPersistentMaskOffset = 0x08;
 static const unsigned int kVF2MobileRenovationHealthPlanBit = 0x1u;
 static const int kVF2MobileRenovationPersistentShift = 1;
+static const int kVF2MobileRenovationActiveByteOffset = 0x2A3;
+static const int kVF2MobileRenovationActiveItemMin = 0xE1;
+static const int kVF2MobileRenovationActiveItemMax = 0x1AC;
 {mobile_renovation_mobile_items_cpp}
 {mobile_renovation_prices_cpp}
 {mobile_renovation_native_order_cpp}
@@ -9256,6 +9259,29 @@ static bool VF2IsMobileRenovationStyle(int itemId) {{
 static int VF2MobileRenovationStyleIndex(int itemId) {{
     if (!VF2IsMobileRenovationStyle(itemId)) return -1;
     return itemId - kVF2MobileRenovationItemBase;
+}}
+
+// The stock TakeOne/ReturnOne path is metadata-gated. Renovation records use
+// the gated field for their image id, so their persisted active byte must be
+// read and written directly at InventoryManager + itemId + 0x2A3.
+static unsigned char *VF2MobileRenovationActiveByte(int itemId) {{
+    if (!VF2IsMobileRenovationStyle(itemId) ||
+        itemId < kVF2MobileRenovationActiveItemMin ||
+        itemId > kVF2MobileRenovationActiveItemMax) {{
+        return 0;
+    }}
+    return reinterpret_cast<unsigned char *>(&InventoryManager) +
+        itemId + kVF2MobileRenovationActiveByteOffset;
+}}
+
+extern "C" bool __cdecl VF2MobileRenovationIsActive(int itemId) {{
+    unsigned char *active = VF2MobileRenovationActiveByte(itemId);
+    return active != 0 && *active != 0;
+}}
+
+extern "C" void __cdecl VF2SetMobileRenovationActive(int itemId, bool enabled) {{
+    unsigned char *active = VF2MobileRenovationActiveByte(itemId);
+    if (active != 0) *active = enabled ? 1 : 0;
 }}
 
 static int VF2MobileRenovationMobileItem(int styleIndex) {{
@@ -9310,11 +9336,18 @@ static bool VF2NormalizeMobileRenovationActives() {{
             int styleIndex = kVF2MobileRenovationNativeOrder[order];
             if (kVF2MobileRenovationRoomForStyle[styleIndex] != room) continue;
             int itemId = kVF2MobileRenovationItemBase + styleIndex;
-            if (!InventoryManager.HaveUpgrade((EInventoryItem)itemId)) continue;
+            if (!VF2MobileRenovationIsActive(itemId)) continue;
+            // An active legacy byte proves this style was purchased even when
+            // the newer ever-purchased mask was not written yet.  Backfill
+            // every active style before clearing later room duplicates.
+            if (!VF2MobileRenovationEverPurchased(styleIndex)) {{
+                VF2MarkMobileRenovationEverPurchased(styleIndex);
+                changed = true;
+            }}
             if (!kept) {{
                 kept = true;
             }} else {{
-                InventoryManager.ReturnOne((EInventoryItem)itemId);
+                VF2SetMobileRenovationActive(itemId, false);
                 changed = true;
             }}
         }}
@@ -9344,11 +9377,11 @@ extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
         int otherIndex = kVF2MobileRenovationNativeOrder[order];
         if (kVF2MobileRenovationRoomForStyle[otherIndex] != room) continue;
         int otherItemId = kVF2MobileRenovationItemBase + otherIndex;
-        if (InventoryManager.HaveUpgrade((EInventoryItem)otherItemId)) {{
-            InventoryManager.ReturnOne((EInventoryItem)otherItemId);
+        if (VF2MobileRenovationIsActive(otherItemId)) {{
+            VF2SetMobileRenovationActive(otherItemId, false);
         }}
     }}
-    InventoryManager.TakeOne((EInventoryItem)itemId);
+    VF2SetMobileRenovationActive(itemId, true);
     VF2MarkMobileRenovationEverPurchased(styleIndex);
     theGameState::Get()->SaveCurrentGame();
     return true;
@@ -9436,6 +9469,9 @@ static int gVF2LastSyntheticOutfitByGender[2] = {{0, 0}};
 static bool VF2B150UpgradeIsActive(int itemId) {{
     if (!kVF2EnableB150CheatUpgrades) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
+    if (VF2IsMobileRenovationStyle(itemId)) {{
+        return VF2MobileRenovationIsActive(itemId);
+    }}
     if (itemId == 0x33) return gameState && gameState[0x6C] != 0;
     if (itemId >= 0xE1 && itemId <= 0xEA) {{
         return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
@@ -9542,7 +9578,12 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
     if (!kVF2EnableB150CheatUpgrades) return false;
     if (!VF2B150UpgradeIsActive(itemId)) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
-    if (itemId >= 0xE1 && itemId <= 0xEA) {{
+    if (VF2IsMobileRenovationStyle(itemId)) {{
+        // Cosmetic room styles are not stock inventory records.  Remove only
+        // their direct persisted active byte; the ever-purchased marker stays
+        // set so reselecting the style remains free.
+        VF2SetMobileRenovationActive(itemId, false);
+    }} else if (itemId >= 0xE1 && itemId <= 0xEA) {{
         InventoryManager.ReturnOne((EInventoryItem)itemId);
         VF2RebuildOwnedRenovations();
     }} else if (itemId == 0x33) {{
@@ -10502,6 +10543,9 @@ enum EInventoryItem {
 
 extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId);
 extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId);
+static unsigned int &VF2PersistentHealthPlanAndRenovationMask();
+static bool VF2PersistentHealthPlanEntitlement();
+static void VF2SetPersistentHealthPlanEntitlement(bool enabled);
 
 class CContentMap {
 public:
@@ -21787,7 +21831,7 @@ def patch_mobile_renovation_renderer(manifest):
         for variant_index in MOBILE_RENOVATION_VARIANT_INDICES[room]:
             item_id = MOBILE_RENOVATION_PC_ITEM_IDS[variant_index]
             selector_cases.append(
-                f"        if (InventoryManager.HaveUpgrade((EInventoryItem){item_id})) return {mobile_renovation_image_id(variant_index, holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};"
+                f"        if (VF2MobileRenovationIsActive({item_id})) return {mobile_renovation_image_id(variant_index, holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};"
             )
         selector_cases.append("        break;")
 
@@ -21800,8 +21844,6 @@ def patch_mobile_renovation_renderer(manifest):
 
     helper_cpp = f"""
 enum EImage {{ eImageDummy = 0 }};
-enum EInventoryItem {{ eInventoryItemDummy = 0 }};
-
 class theGraphicsManager {{
 public:
     static theGraphicsManager* Get();
@@ -21814,13 +21856,8 @@ public:
     int y;
 }};
 
-class CInventoryManager {{
-public:
-    bool HaveUpgrade(EInventoryItem item);
-}};
-
 extern CWorldView WorldView;
-extern CInventoryManager InventoryManager;
+extern "C" bool __cdecl VF2MobileRenovationIsActive(int itemId);
 extern "C" void __cdecl VF2NormalizeMobileRenovationActivesAndSave();
 
 static const bool kVF2EnableMobileRenovations = {"true" if ENABLE_MOBILE_RENOVATIONS else "false"};
@@ -21931,10 +21968,16 @@ def validate_mobile_renovation_style_state_contract(manifest):
         "kVF2MobileRenovationPersistentMaskOffset = 0x08",
         "kVF2MobileRenovationHealthPlanBit = 0x1u",
         "kVF2MobileRenovationPersistentShift = 1",
+        "kVF2MobileRenovationActiveByteOffset = 0x2A3",
+        "kVF2MobileRenovationActiveItemMin = 0xE1",
+        "kVF2MobileRenovationActiveItemMax = 0x1AC",
+        "VF2MobileRenovationActiveByte",
+        "VF2MobileRenovationIsActive",
+        "VF2SetMobileRenovationActive",
         "VF2NormalizeMobileRenovationActives",
-        "InventoryManager.ReturnOne",
-        "InventoryManager.TakeOne",
         "VF2MarkMobileRenovationEverPurchased",
+        "VF2RemoveOwnedUpgrade",
+        "VF2SetMobileRenovationActive(itemId, false)",
         "kVF2MobileRenovationPrices",
     )
     missing = [token for token in required_tokens if token not in helper_text]
@@ -21943,9 +21986,11 @@ def validate_mobile_renovation_style_state_contract(manifest):
     manifest["mobile_renovation_style_state"] = {
         "status": "validated_mobile_takeone_semantics",
         "active_layer": {
-            "storage": "existing PC InventoryManager active bytes",
+            "storage": "direct persisted byte at InventoryManager + itemId + 0x2A3",
+            "proven_item_range": "0xE1-0x1AC; mobile renovations use 0x13C-0x14A",
+            "metadata_gate": "bypassed; no itemInfo dependency",
             "exclusive_by_room": True,
-            "normalization": "first active style in native mobile item order is retained; later active styles are cleared",
+            "normalization": "first active style in native mobile item order is retained; every active legacy style backfills its ever-purchased marker before later duplicates are cleared",
         },
         "ever_purchased_layer": {
             "storage": "CAchievement hidden persisted record 0xA8 + 0x08 shared dword",
@@ -21962,6 +22007,7 @@ def validate_mobile_renovation_style_state_contract(manifest):
         },
         "price_semantics": "catalog price until ever-purchased; zero thereafter",
         "purchase_semantics": "clear active room group, activate selected style, set ever-purchased marker, save immediately",
+        "remove_semantics": "active PC style is removed through VF2RemoveOwnedUpgrade by clearing only its direct active byte; ever-purchased history is preserved for free reactivation",
         "native_mobile_order": [hex(item_id) for item_id in MOBILE_RENOVATION_NATIVE_ITEM_IDS],
         "pc_item_range": f"0x{MOBILE_RENOVATION_PC_ITEM_IDS[0]:X}-0x{MOBILE_RENOVATION_PC_ITEM_IDS[-1]:X}",
     }

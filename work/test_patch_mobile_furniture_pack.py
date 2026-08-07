@@ -2142,7 +2142,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                     )
                     for index in indices:
                         marker = (
-                            f"if (InventoryManager.HaveUpgrade((EInventoryItem)"
+                            f"if (VF2MobileRenovationIsActive("
                             f"{patcher.MOBILE_RENOVATION_PC_ITEM_IDS[index]})) return "
                             f"{patcher.mobile_renovation_image_id(index, descriptor_count)};"
                         )
@@ -2167,10 +2167,16 @@ class MobileRenovationArtTests(unittest.TestCase):
                             "kVF2MobileRenovationPersistentMaskOffset = 0x08",
                             "kVF2MobileRenovationHealthPlanBit = 0x1u",
                             "kVF2MobileRenovationPersistentShift = 1",
+                            "kVF2MobileRenovationActiveByteOffset = 0x2A3",
+                            "kVF2MobileRenovationActiveItemMin = 0xE1",
+                            "kVF2MobileRenovationActiveItemMax = 0x1AC",
+                            "VF2MobileRenovationActiveByte",
+                            "VF2MobileRenovationIsActive",
+                            "VF2SetMobileRenovationActive",
                             "VF2NormalizeMobileRenovationActives",
-                            "InventoryManager.ReturnOne",
-                            "InventoryManager.TakeOne",
                             "VF2MarkMobileRenovationEverPurchased",
+                            "VF2RemoveOwnedUpgrade",
+                            "VF2SetMobileRenovationActive(itemId, false)",
                             "kVF2MobileRenovationPrices",
                         ]
                     ),
@@ -2196,6 +2202,137 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertEqual(
                     state["native_mobile_order"],
                     [f"0x{item:x}" for item in range(0x118, 0x127)],
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_mobile_renovation_active_byte_route_bypasses_metadata_gate(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                helper = temp / "vf2_special_upgrade_effects.cpp"
+                helper.write_text("", encoding="ascii")
+                patcher.PATCHED = temp
+                patcher.write_outfit_store_helpers({})
+                source = helper.read_text(encoding="ascii")
+                active_route = source.split(
+                    "static unsigned char *VF2MobileRenovationActiveByte(int itemId)",
+                    1,
+                )[1].split(
+                    "static int VF2MobileRenovationMobileItem(int styleIndex)",
+                    1,
+                )[0]
+                self.assertIn("kVF2MobileRenovationActiveByteOffset = 0x2A3", source)
+                self.assertIn("kVF2MobileRenovationActiveItemMin = 0xE1", source)
+                self.assertIn("kVF2MobileRenovationActiveItemMax = 0x1AC", source)
+                self.assertIn(
+                    "reinterpret_cast<unsigned char *>(&InventoryManager) +",
+                    active_route,
+                )
+                self.assertIn("itemId + kVF2MobileRenovationActiveByteOffset", active_route)
+                self.assertNotIn("itemInfo", active_route)
+                renovation_state = source.split(
+                    "static bool VF2NormalizeMobileRenovationActives()",
+                    1,
+                )[1].split(
+                    "extern \"C\" int __cdecl VF2GetMobileRenovationStylePrice",
+                    1,
+                )[0]
+                self.assertIn("VF2MobileRenovationIsActive", renovation_state)
+                self.assertIn("VF2SetMobileRenovationActive", renovation_state)
+                self.assertNotIn("InventoryManager.HaveUpgrade", renovation_state)
+                self.assertNotIn("InventoryManager.ReturnOne", renovation_state)
+                self.assertNotIn("InventoryManager.TakeOne", renovation_state)
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_mobile_renovation_removal_uses_direct_active_byte_and_preserves_history(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                helper = temp / "vf2_special_upgrade_effects.cpp"
+                helper.write_text("", encoding="ascii")
+                patcher.PATCHED = temp
+                patcher.write_outfit_store_helpers({})
+                source = helper.read_text(encoding="ascii")
+
+                active_gate = source.split(
+                    "static bool VF2B150UpgradeIsActive(int itemId)",
+                    1,
+                )[1].split(
+                    "extern \"C\" int __cdecl VF2GetB150UpgradePrice",
+                    1,
+                )[0]
+                self.assertIn(
+                    "if (VF2IsMobileRenovationStyle(itemId))",
+                    active_gate,
+                )
+                self.assertIn(
+                    "return VF2MobileRenovationIsActive(itemId);",
+                    active_gate,
+                )
+
+                removal = source.split(
+                    "extern \"C\" bool __cdecl VF2RemoveOwnedUpgrade(int itemId)",
+                    1,
+                )[1].split(
+                    "extern \"C\" int __cdecl VF2GetExpandedFleaMarketCount",
+                    1,
+                )[0]
+                mobile_branch = removal.split(
+                    "if (VF2IsMobileRenovationStyle(itemId))",
+                    1,
+                )[1].split("} else if", 1)[0]
+                self.assertIn(
+                    "VF2SetMobileRenovationActive(itemId, false);",
+                    mobile_branch,
+                )
+                self.assertNotIn("InventoryManager.ReturnOne", mobile_branch)
+                self.assertIn(
+                    "theGameState::Get()->SaveCurrentGame();",
+                    removal,
+                )
+                self.assertIn(
+                    "if (itemId >= 0xE1 && itemId <= 0xEA)",
+                    removal,
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_mobile_renovation_normalization_backfills_all_active_legacy_styles(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                helper = temp / "vf2_special_upgrade_effects.cpp"
+                helper.write_text("", encoding="ascii")
+                patcher.PATCHED = temp
+                patcher.write_outfit_store_helpers({})
+                source = helper.read_text(encoding="ascii")
+                normalization = source.split(
+                    "static bool VF2NormalizeMobileRenovationActives()",
+                    1,
+                )[1].split(
+                    "extern \"C\" void __cdecl VF2NormalizeMobileRenovationActivesAndSave",
+                    1,
+                )[0]
+                self.assertIn(
+                    "if (!VF2MobileRenovationEverPurchased(styleIndex))",
+                    normalization,
+                )
+                self.assertIn(
+                    "VF2MarkMobileRenovationEverPurchased(styleIndex);",
+                    normalization,
+                )
+                self.assertIn(
+                    "VF2SetMobileRenovationActive(itemId, false);",
+                    normalization,
+                )
+                self.assertLess(
+                    normalization.index("VF2MarkMobileRenovationEverPurchased(styleIndex);"),
+                    normalization.index("VF2SetMobileRenovationActive(itemId, false);"),
                 )
         finally:
             patcher.PATCHED = old_patched
