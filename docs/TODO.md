@@ -5,6 +5,14 @@ release, reconcile it against this file, build history, source settings/hooks,
 tests, release notes, and the exported payload. An uncertain historical request
 must remain visible as Needs source audit; it must not be silently omitted.
 
+## Indefinite hiatus (user-directed)
+
+- VF3 Phone: do not implement or research until the user reopens the request.
+- Races: do not implement or research until the user reopens the request.
+- Increase Child Limit to 12: do not raise the native limit or pursue the
+  required persistence, Family Tree, candidate-array, or compatibility work
+  until the user reopens the request.
+
 ## Highest Priority
 
 - Refactor the mod so releases stop distributing modified executables. Build an
@@ -803,7 +811,11 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - [ ] Open the collection page in game and visually confirm the frame, Candy
   Cane, placeholders, and collected ornaments are upright and aligned.
 
-## B153 Experimental Increase Child Limit
+## B153 Experimental Increase Child Limit — indefinite hiatus
+
+The user placed this entire workstream on indefinite hiatus. The audit below
+is retained as reference evidence only; do not implement or test it unless the
+user explicitly reopens the request.
 
 - [x] Audit live villager capacity, conception allocation, Family Tree record
   geometry, save-block boundaries, Family Tree draw/hit testing, and Next
