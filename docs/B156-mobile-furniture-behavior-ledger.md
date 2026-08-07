@@ -44,7 +44,7 @@ mobile-only marker values do not have corresponding handlers in the desktop
 | `0x2AA` | Holiday Candles | yes | `KidExaminesCandles` | exact child-only manual and autonomous routes implemented with PC-safe map |
 | `0x2AB` | Candy Canes | yes | no mobile behavior | proven decorative only: EObject 0, unhandled hotspot 0x61 |
 | `0x2AC` | Christmas Cookie | yes | no mobile behavior | proven decorative only: EObject 0, unhandled hotspot 0x61 |
-| `0x2AD-0x2AE` | Christmas Trees | yes | `XmasTree`; admire, water, celebrate | exact whole-household manual celebration implemented with two PC-safe maps |
+| `0x2AD-0x2AE` | Christmas Trees | yes | `XmasTree`; admire, water, celebrate, break ornaments | exact whole-household manual celebration plus autonomous admire (`0x19C`), adult-water (`0x19E`), and kid-breaking (`0x19F`) routes implemented with two PC-safe maps; fixing (`0x19D`) remains evidence-bound |
 | `0x2AF` | Dreidel | yes | exact `Dreidel` hotspot/behavior | exact whole-household external plan implemented with PC-safe map |
 | `0x2B0` | Eggnog | yes | exact `Eggnog` family | exact child-only manual and autonomous routes implemented with PC-safe map |
 | `0x2B1-0x2B5` | Holiday gnomes | yes | `AdmiringXmasKnickKnacks` | exact raw-age-7+ manual route implemented with five PC-safe maps |
@@ -208,11 +208,24 @@ randomized approaches, age/gender voice selection, sound `0xFB`, two twirls,
 four jumps, orientation-aware waits, and sound stop without indexing mobile
 behavior `0x1A0`.
 
+The mobile autonomous records are now also ported through the additive
+selector: `AdmiringXmasTree` `0x19C` uses weight `2000` with raw-age minimum
+`7`, `AdultWaterXMasTree` `0x19E` uses weight `3000` with raw-age minimum
+`0x118`, and `KidBreakingTreeDecor` `0x19F` uses weight `2000` with raw-age
+maximum `0x118`. All three preserve the shared native health/stat gates:
+state `>=20`, happiness `>=20`, hunger `<=60`, energy `>=40`, not sick, and
+the required tree EObject `0x88`. Their method bodies are reproduced from the
+IDA disassembly, including the tree lookup, randomized approaches, mobile
+voice/effect sounds, watering-can pickup from EObject `0x18`, work/bend/drop
+sequence, and the kid-breaking escape route. `FixingTreeDecorations` `0x19D`
+remains unrouted because its native activation record is not present.
+
 The `15x22` Tree 1 map retains fourteen `0x20004000` EObject cells and hashes
 to `5907f7f60209d77d6c63b15b009243756c9f2c4d729134c41c105e0863b66926`.
 The `16x22` Tree 2 map retains thirteen matching EObject cells and hashes to
 `289e237d686f164dfd3e2293aeac248f5259e700125d963b4b578cefd642ccc8`.
-Live two-tree placement, group filtering, and orientation QA remain.
+Live two-tree placement, autonomous age gates, group filtering, and
+orientation QA remain.
 
 Dreidel `0x2AF` / EObject `0x8A` and Menorah `0x2B8` / EObject `0x8E`
 use the mobile whole-household contract. The desktop port collects exactly the
@@ -352,11 +365,20 @@ slot.
 
 The stock desktop selector still scans exactly `0x19B` records (`0x000` through
 `0x19A`). Immediately before its final weighted draw, B156 adds a guarded
-external draw for the five mobile candidates whose exact weights and predicates
-are proven: Holiday Candles `0x19B`, Eggnog `0x1A1`, Santa-cookie stealing
-`0x1A5`, Christmas figurines `0x1A4`, and house decorations `0x1A7`. Each uses
-its mobile weight of `2000`, requires its mapped EObject to exist, and retains
-its exact raw-age boundary.
+external draw for the eight Holiday candidates whose exact weights and
+predicates are proven: Holiday Candles `0x19B`, tree admiration `0x19C`, adult
+tree watering `0x19E`, kid-breaking `0x19F`, Eggnog `0x1A1`, Santa-cookie
+stealing `0x1A5`, Christmas figurines `0x1A4`, and house decorations `0x1A7`.
+Each uses its mobile weight, requires its mapped EObject to exist, and retains
+its exact raw-age and health/stat boundaries. The tree-decoration entry
+`0x19D` is not included because its activation record is not present.
+
+The native sound IDs are now preserved in the generated plans: `0xBC/0xAA`
+for watering and `0x36/0x113/0x37/0x01/0x7F/0x39/0x3D` for kid-breaking. The
+local mobile OBB contains 316 OGG files, but no mobile-exclusive filename
+stems; the current B158 runtime therefore keeps the 317-file stock sound
+payload. Replacing stock encodings requires a proven ID-to-file mapping and
+remains separate from the behavior implementation.
 
 The combined draw uses `stockWeight + eligibleExternalWeight`. A stock result
 falls through to the unchanged native stock draw, preserving every stock

@@ -1706,3 +1706,22 @@
   all 235 repository tests pass (one intentional skip). The fully enabled
   executable is 1,777,664 bytes with SHA-256
   `2EF83392E11DE07CF52F45BF1F1FC6BEDF62F0742D7148AE4C702720867426E1`.
+
+## B158 - Native Christmas Tree autonomous behavior and sound parity
+
+- Adds the exact mobile autonomous candidates `0x19C` AdmiringXmasTree,
+  `0x19E` AdultWaterXMasTree, and `0x19F` KidBreakingTreeDecor to the external
+  furniture selector, retaining their native tree object/stat gates, raw-age
+  boundaries, weights, labels, mobile sound IDs, and plan sequences.
+- Leaves `0x19D` FixingTreeDecorations unrouted because its native activation
+  record is not present.
+- The full patcher module passes 174 tests with one intentional skip; the
+  focused mobile furniture, renovation, special-upgrade, and outfit subset
+  passes 57 tests with one skip. Offline patcher/exporter/GUI suites pass
+  48/27/12. Full native generation and MSVC compile/link completed
+  successfully.
+- The generated B158 executable is 1,707,520 bytes with SHA-256
+  `D9266536BDE70194C6AB0F1AA44243A4FAFF0CABBFED73F40164505FE7740083`.
+- Live gameplay, autonomous scheduling, and player crash/regression QA remain
+  pending. The current B158 folder is a linked build output, not yet an
+  offline-patcher release bundle with applyable native byte records.

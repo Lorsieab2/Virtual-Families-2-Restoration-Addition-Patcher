@@ -1019,6 +1019,27 @@ MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = (
         "object_enum": "eObjectPatioTable",
         "selector_marker": "VF2StartAutonomousDrinkAtPatioChair",
     },
+    {
+        "mobile_id": 0x19C,
+        "object": MOBILE_XMAS_TREE_OBJECT,
+        "weight": 2000,
+        "object_enum": "eObjectXmasTree",
+        "handler": "VF2HandleMobileAdmiringXmasTree",
+    },
+    {
+        "mobile_id": 0x19E,
+        "object": MOBILE_XMAS_TREE_OBJECT,
+        "weight": 3000,
+        "object_enum": "eObjectXmasTree",
+        "handler": "VF2HandleMobileAdultWaterXmasTree",
+    },
+    {
+        "mobile_id": 0x19F,
+        "object": MOBILE_XMAS_TREE_OBJECT,
+        "weight": 2000,
+        "object_enum": "eObjectXmasTree",
+        "handler": "VF2HandleMobileKidBreakingTreeDecor",
+    },
 )
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
 CHEAT_UPGRADE_ITEMS = [
@@ -12527,7 +12548,6 @@ class CCollectableItem {{
 public:
     void Add(ECarrying carrying, ldwPoint point, bool force);
     void SpawnSockInHouse(int count);
-    void SpawnStainInHouse(int count);
     void SpawnTrashInHouse(int count);
 }};
 
@@ -18983,6 +19003,160 @@ static void VF2RunMobileXmasTree(CVillager &villager)
     plans->StartNewBehavior(villager);
 }
 
+static bool VF2HandleMobileAdmiringXmasTree(CVillager &villager)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    int age = *reinterpret_cast<int *>(data + 0x6A54);
+    if (age < 7) return true;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectXmasTree,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return true;
+    }
+
+    VF2SetActionLabel(villager, "Celebrating around the tree");
+    ldwPoint point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+    int gender = *reinterpret_cast<int *>(data + 0x6A58);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(age <= 0x117 ? 0xC3 : (gender == 1 ? 0xF2 : 0xDC)),
+        1.0f,
+        eSoundTypeEffects);
+
+    point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(3) + 2,
+        static_cast<EBodyPosition>(info.orientation != 0 ? 0x0A : 0x0D));
+
+    point = info.point;
+    point.x += ldwGameState::GetRandom(60) - 30;
+    plans->PlanToGo(point, eSpeedNormal, ePriorityNormal);
+    EBodyPosition first = static_cast<EBodyPosition>(
+        info.orientation != 0 ? 0x0D : 0x0A);
+    EBodyPosition second = static_cast<EBodyPosition>(
+        info.orientation != 0 ? 0x0A : 0x0D);
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 1, first);
+    plans->PlanToWait(ldwGameState::GetRandom(2) + 1, second);
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
+static bool VF2HandleMobileAdultWaterXmasTree(CVillager &villager)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    if (*reinterpret_cast<int *>(data + 0x6A54) < 0x118) return true;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectXmasTree,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return true;
+    }
+
+    VF2SetActionLabel(villager, "Watering the Christmas tree");
+    plans->PlanToGo(
+        static_cast<CContentMap::EObject>(0x18),
+        eSpeedNormal,
+        ePriorityNormal,
+        false);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0xBC), 1.0f, eSoundTypeEffects);
+    plans->PlanToBend(2, ePriorityNormal);
+    plans->PlanToCarry(static_cast<ECarrying>(0x2C));
+    ldwPoint point = info.point;
+    plans->PlanToGo(
+        point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0xAA), 1.0f, eSoundTypeEffects);
+    plans->PlanToWork(3);
+    plans->PlanToBend(ldwGameState::GetRandom(4) + 1, ePriorityNormal);
+    plans->PlanToWork(2);
+    plans->PlanToDrop();
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
+static bool VF2HandleMobileKidBreakingTreeDecor(CVillager &villager)
+{
+    unsigned char *data = reinterpret_cast<unsigned char *>(&villager);
+    if (*reinterpret_cast<int *>(data + 0x6A54) > 0x118) return true;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectXmasTree,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return true;
+    }
+
+    VF2SetActionLabel(villager, "Breaking ornaments");
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x36), 1.0f, eSoundTypeEffects);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 1,
+        static_cast<EBodyPosition>(info.orientation != 0 ? 0x0D : 0x0A));
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x113), 1.0f, eSoundTypeEffects);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 1,
+        static_cast<EBodyPosition>(info.orientation != 0 ? 0x0A : 0x0D));
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x37), 1.0f, eSoundTypeEffects);
+    plans->PlanToWork(ldwGameState::GetRandom(3) + 3);
+    plans->PlanToBend(1, ePriorityNormal);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x01), 1.0f, eSoundTypeEffects);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x7F), 1.0f, eSoundTypeEffects);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(2) + 1,
+        static_cast<EBodyPosition>(0x10));
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x39), 1.0f, eSoundTypeEffects);
+    CContentMap::EObject exitObject =
+        ldwGameState::GetRandom(100) > 49
+            ? static_cast<CContentMap::EObject>(0x16)
+            : static_cast<CContentMap::EObject>(0x4D);
+    plans->PlanToGo(
+        exitObject,
+        static_cast<ESpeed>(350),
+        ePriorityNormal,
+        false);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x3D), 1.0f, eSoundTypeEffects);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(3) + 3,
+        static_cast<EBodyPosition>(0x02));
+    plans->PlanToStopSound();
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
 static void VF2RunMobileMenorah(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -19097,7 +19271,7 @@ static bool VF2VillagerDislikes(CVillager &villager, int like)
 
 struct VF2MobileExternalWeights {
     void *villager;
-    unsigned int weights[9];
+    unsigned int weights[12];
 };
 
 static VF2MobileExternalWeights gVF2MobileExternalWeights[30] = {};
@@ -19127,11 +19301,11 @@ static void VF2InitializeMobileExternalWeights(void *villager)
 {
     VF2MobileExternalWeights *record = VF2FindMobileExternalWeights(villager);
     record->villager = villager;
-    unsigned int bases[9] = {
+    unsigned int bases[12] = {
         2000, 2000, 2000, 2000, 2000,
-        3000, 12000, 3000, 12000
+        3000, 12000, 3000, 12000, 2000, 3000, 2000
     };
-    for (int index = 0; index < 9; ++index) {
+    for (int index = 0; index < 12; ++index) {
         record->weights[index] =
             VF2RandomizeMobileCandidateWeight(bases[index]);
     }
@@ -19202,6 +19376,16 @@ extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
         VF2GetMobileExternalWeights(villager);
     int age = *reinterpret_cast<int *>(
         reinterpret_cast<unsigned char *>(&villager) + 0x6A54);
+    int state0C = VF2VillagerValue(villager, 0x6B00);
+    int energy = VF2VillagerValue(villager, 0x6B28);
+    int happiness = VF2VillagerValue(villager, 0x6B2C);
+    int hunger = VF2VillagerValue(villager, 0x6B34);
+    bool treeAutonomousEligible =
+        state0C >= 20 &&
+        happiness >= 20 &&
+        hunger <= 60 &&
+        energy >= 40 &&
+        !VF2VillagerIsSick(villager);
     typedef bool (*Handler)(CVillager &);
     struct Candidate {
         CContentMap::EObject object;
@@ -19252,6 +19436,30 @@ extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
             VF2HandleMobileHouseXmasDecor,
             true
         },
+        {
+            CContentMap::eObjectXmasTree,
+            7,
+            0x7FFFFFFF,
+            mobileWeights->weights[9],
+            VF2HandleMobileAdmiringXmasTree,
+            treeAutonomousEligible
+        },
+        {
+            CContentMap::eObjectXmasTree,
+            0x118,
+            0x7FFFFFFF,
+            mobileWeights->weights[10],
+            VF2HandleMobileAdultWaterXmasTree,
+            treeAutonomousEligible
+        },
+        {
+            CContentMap::eObjectXmasTree,
+            0,
+            0x118,
+            mobileWeights->weights[11],
+            VF2HandleMobileKidBreakingTreeDecor,
+            treeAutonomousEligible
+        },
     };
 
     unsigned int externalWeight = 0;
@@ -19273,10 +19481,6 @@ extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
     // eligibility and dynamic weighting in this additive selector.
     bool sunnyDay =
         Weather.currentType == 0 && Night.AIIsDayTime();
-    int state0C = VF2VillagerValue(villager, 0x6B00);
-    int energy = VF2VillagerValue(villager, 0x6B28);
-    int happiness = VF2VillagerValue(villager, 0x6B2C);
-    int hunger = VF2VillagerValue(villager, 0x6B34);
     bool adultCanPrepare =
         age >= 0x118 &&
         state0C >= 10 &&
@@ -20302,6 +20506,27 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
                 "object": "0x98",
                 "base_weight": 12000,
                 "dynamic_weight": "triple from exact hunger threshold",
+            },
+            {
+                "behavior": "AdmiringXmasTree",
+                "mobile_id": "0x19c",
+                "object": "0x88",
+                "weight": 2000,
+                "raw_age_min": "0x7",
+            },
+            {
+                "behavior": "AdultWaterXMasTree",
+                "mobile_id": "0x19e",
+                "object": "0x88",
+                "weight": 3000,
+                "raw_age_min": "0x118",
+            },
+            {
+                "behavior": "KidBreakingTreeDecor",
+                "mobile_id": "0x19f",
+                "object": "0x88",
+                "weight": 2000,
+                "raw_age_max": "0x118",
             },
         ],
     }

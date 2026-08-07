@@ -145,7 +145,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         self.assertEqual(contract["manual_dispatch"]["item_count"], 34)
         self.assertEqual(contract["manual_dispatch"]["family_count"], 17)
         self.assertEqual(contract["autonomous"]["item_count"], 23)
-        self.assertEqual(contract["autonomous"]["external_candidate_count"], 9)
+        self.assertEqual(contract["autonomous"]["external_candidate_count"], 12)
         self.assertEqual(
             contract["rejected_scope"]["decorative_only"],
             ["0x2ab", "0x2ac", "0x2bf", "0x2d4", "0x2d5"],
@@ -1432,7 +1432,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("if (roll < stockWeight) return false;", selector)
                 self.assertIn(
                     "2000, 2000, 2000, 2000, 2000,\n"
-                    "        3000, 12000, 3000, 12000",
+                    "        3000, 12000, 3000, 12000, 2000, 3000, 2000",
                     helper,
                 )
                 self.assertIn(
@@ -1442,6 +1442,44 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("GetRandom(100) < 50", helper)
                 self.assertIn(
                     "VF2InitializeMobileExternalWeights(villager);",
+                    helper,
+                )
+                self.assertIn(
+                    "for (int index = 0; index < 12; ++index)",
+                    helper,
+                )
+                self.assertIn(
+                    'VF2SetActionLabel(villager, "Celebrating around the tree");',
+                    helper,
+                )
+                self.assertIn(
+                    'VF2SetActionLabel(villager, "Watering the Christmas tree");',
+                    helper,
+                )
+                self.assertIn(
+                    'VF2SetActionLabel(villager, "Breaking ornaments");',
+                    helper,
+                )
+                self.assertIn(
+                    "mobileWeights->weights[9]",
+                    selector,
+                )
+                self.assertIn(
+                    "mobileWeights->weights[10]",
+                    selector,
+                )
+                self.assertIn(
+                    "mobileWeights->weights[11]",
+                    selector,
+                )
+                self.assertIn("treeAutonomousEligible", selector)
+                self.assertIn("hunger <= 60", selector)
+                self.assertIn("energy >= 40", selector)
+                self.assertIn("static_cast<ESound>(0x113)", helper)
+                self.assertIn("static_cast<ESound>(0x3D)", helper)
+                self.assertIn("static_cast<ESpeed>(350)", helper)
+                self.assertIn(
+                    "static_cast<CContentMap::EObject>(0x18)",
                     helper,
                 )
                 self.assertLess(
@@ -1460,7 +1498,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("!VF2VillagerIsSick(villager)", selector)
                 self.assertIn("VF2PicnicPreparationActive()", selector)
                 self.assertIn("VF2PatioDrinksPreparationActive()", selector)
-                for index in range(9):
+                for index in range(12):
                     self.assertIn(
                         f"mobileWeights->weights[{index}]",
                         selector,
@@ -1480,8 +1518,11 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "eObjectSantaCookiePlate",
                     "eObjectXmasKnickknack",
                     "eObjectHouseXmasDecor",
+                    "eObjectXmasTree",
                 ):
                     self.assertIn(object_name, selector)
+                self.assertIn("VF2HandleMobileAdmiringXmasTree", selector)
+                self.assertIn("VF2HandleMobileAdultWaterXmasTree", selector)
         finally:
             patcher.PATCHED = old_patched
 
@@ -1750,9 +1791,20 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(
                     [
                         row["base_weight"]
-                        for row in contract["external_candidates"][5:]
+                        for row in contract["external_candidates"][5:9]
                     ],
                     [3000, 12000, 3000, 12000],
+                )
+                self.assertEqual(
+                    [
+                        (row["mobile_id"], row["object"], row["weight"])
+                        for row in contract["external_candidates"][9:]
+                    ],
+                    [
+                        ("0x19c", "0x88", 2000),
+                        ("0x19e", "0x88", 3000),
+                        ("0x19f", "0x88", 2000),
+                    ],
                 )
         finally:
             patcher.PATCHED = old_patched
