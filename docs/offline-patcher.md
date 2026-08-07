@@ -306,6 +306,16 @@ Full bundle exports also write `How to Use.txt`, a short player-facing setup
 guide with the validation-only Dry Run explanation, launcher instructions,
 vanilla-folder selection guidance, and save-copy guidance.
 
+`work/verify_offline_bundle_zip.py <explicit-zip-path>` independently
+certifies the current canonical B158 archive. It fails closed on unsafe or
+duplicate ZIP paths, CRC errors, a root-name mismatch, target-fingerprint
+drift, executable-variant drift, unreachable settings, or malformed manifest
+record types. Its canonical contract also checks four executable variants,
+15 mobile-renovation PNGs, 67 mobile sounds (63 restores and four removals),
+and all four WAV-to-OGG route records. This is static package evidence only;
+it does not establish FMOD decoding, audible parity, gameplay behavior, or
+runtime crash-freedom.
+
 The `Add Custom Couches and LDW Posters` setting is default off. Its asset
 routing covers `CouchNeonPurpleStd`, `CouchBrownColorfulStd`,
 `CouchGoldColorfulStd`, `CouchAquaStd`, `CouchPinkColorfulStd`,

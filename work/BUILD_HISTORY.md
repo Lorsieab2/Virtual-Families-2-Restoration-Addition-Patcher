@@ -1731,3 +1731,31 @@ descriptor with a dedicated semantic sock-pile icon.
 - Live gameplay, autonomous scheduling, and player crash/regression QA remain
   pending. The current B158 folder is a linked build output, not yet an
   offline-patcher release bundle with applyable native byte records.
+
+## B158 - Canonical toggle-corrected package certification
+
+- Supersedes the earlier linked-folder-only checkpoint with canonical archive
+  `VF2-B158-1b01c94-Toggle-Corrected-Playtest-Final.zip`, SHA-256
+  `933C73EDAFFD73EFC23D0022C5E5E86CA2B3E1CB1A81051DB1CEB83C682CC834`.
+- Adds `work/verify_offline_bundle_zip.py` and focused fail-closed tests. The
+  verifier certifies 6,964 safe members, four exact executable variants,
+  15 mobile-renovation images, 67 mobile-sound payloads, 63 sound restores,
+  four removals, and four route records.
+- Adds a player-executed 67-sound trigger/save/relaunch/disable/crash-capture
+  protocol. All audible, gameplay, and runtime results remain pending.
+- Begins replacing baked UI features with real default-off runtime markers:
+  Store Scroll Bar now uses `.vf2scrl`; linked artifact offsets and a new
+  canonical package remain to be generated and certified.
+
+## B158 - Separate-output loose-asset validation correction
+
+- Corrects initial vanilla-to-separate-output patching when a replaceable
+  non-executable loose asset, such as `Sounds/children_giggle3.ogg`, has an
+  unrecognized existing hash. The packaged replacement is still authenticated,
+  the original installation remains untouched, and only the separate modded
+  output receives the replacement.
+- In-place patching remains fail-closed on an unknown existing target.
+  Executable assets remain hash/structure authenticated in every mode, and
+  output-only reconfiguration keeps its existing identity checks.
+- The full offline patcher suite passes 58 tests, including explicit positive
+  separate-output and negative in-place cases.

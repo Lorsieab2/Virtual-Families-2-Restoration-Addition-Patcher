@@ -396,10 +396,11 @@ mapping, OBB presence/hash pins, and fail-closed status are maintained in
 Exact byte comparison found `0/67` identical payloads: all 63 OGG-to-OGG routes
 differ, and four PC WAV routes (`0x01`, `0x35`, `0x39`, `0x3A`) map to mobile
 OGG assets. No PC or mobile route is missing and every pinned mobile hash
-matches, but hash differences do not prove an audible difference. A future
-mobile-sound asset toggle must remain default-off and all-or-nothing; the four
-WAV-to-OGG filename/format routes require an evidence-backed alias or conversion
-path before such a toggle can be shipped.
+matches, but hash differences do not prove an audible difference. The packaged
+mobile-sound asset toggle is default-off and all-or-nothing; its four
+WAV-to-OGG filename routes and 67 payload records are statically verified.
+FMOD decoding, audible parity, and gameplay/runtime behavior remain pending
+player validation.
 
 `VF2BirthdayOhSound` preserves the native `CVillager::GetOh` branch at
 `0x001CE4C0`: child voices use `0x33-0x3F`, adult gender `0` uses `0x40-0x4C`,

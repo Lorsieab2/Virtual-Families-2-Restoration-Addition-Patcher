@@ -37,6 +37,82 @@ For every row, preserve the pre-test save and record the player-visible save
 slot/name and timestamp. If a save file is accessible, record its size and
 SHA-256; otherwise record the slot identifier and before/after screenshots.
 
+## Mobile sound parity QA (pending player validation)
+
+This section is a player-executed protocol only. It records the required
+checks; it contains no runtime, decoder, audible-parity, or crash-freedom
+result. The canonical package to test is
+`outputs/VF2-B158-1b01c94-Toggle-Corrected-Playtest-Final.zip`, SHA-256
+`933C73EDAFFD73EFC23D0022C5E5E86CA2B3E1CB1A81051DB1CEB83C682CC834`.
+Keep every sound row `Pending` until its observation, save/reload result,
+disable/restoration result, and crash status are recorded against one exact
+EXE identity.
+
+Before launching, run `work/verify_offline_bundle_zip.py` against that exact
+archive and retain its JSON result with the playtest notes. This is a static
+package preflight only; it does not replace any audible or runtime row below.
+
+The union of the following representative triggers is the complete 67-ID
+sound set. Repeated IDs intentionally cover alternate handlers; random ranges
+require repeated trials or an instrumented sound-ID trace until every member
+is observed.
+
+| Trigger | Expected raw IDs |
+| --- | --- |
+| Patio drink (`0x2E6`) | `0xC0`, `0x101` |
+| Picnic preparation/eating (`0x2E8`) | `0xC7`, `0x6A-0x6C` |
+| Birthday cake/balloons and Christmas knickknack | `0x33-0x3F`, `0x40-0x4C`, `0x4D-0x55`, `0x73` |
+| Birthday presents | `0x36`, `0x37`, `0x3D`, `0xC2-0xC5` |
+| Stockings | `0xC3`, `0xF2`, `0xDC` |
+| Birthday/tree/menorah group celebration | `0xC3`, `0xF2`, `0xDC`, `0xFB` |
+| Candles | `0x3C`, `0x12C`, `0x37`, `0x3D` |
+| Eggnog | `0x6D`, `0x3D` |
+| Save Santa cookies | `0x8C`, `0x99`, `0x23`, `0xDC` |
+| Kid steals cookies | `0x36`, `0xC5`, `0x6A` |
+| House Christmas decor/figurines | `0x8C`, `0x99`, `0xB5`, `0xCC`, `0xD3`, `0xE8` |
+| Dreidel (`0x2AF`) | `0x63`, `0x108`, `0x77`, `0xBD` |
+| Adult watering tree | `0xBC`, `0xAA` |
+| Kid breaking tree decor | `0x36`, `0x113`, `0x37`, `0x01`, `0x7F`, `0x39`, `0x3D` |
+| Menorah (`0x2B8`) | `0xC3`, `0xF2`, `0xDC`, `0xFB` |
+
+Required sound-specific steps:
+
+1. Make separate disposable enabled and disabled copies. With
+   `mobile_sound_assets` enabled, verify all 67 hashes against
+   `data/vf2/mobile-sound-parity-contract.json` before launch.
+2. Exercise the representative objects above, including the four routed
+   records: `0x01` (`beaker.wav` to `beaker.ogg`) through kid tree-breaking,
+   `0x35` (`Child3.wav` to `Child3.ogg`) through child voice,
+   `0x39` (`Child7.wav` to `Child7.ogg`) through child voice and tree-breaking,
+   and `0x3A` (`Child8.wav` to `Child8.ogg`) through child voice.
+3. Exercise `0xC3` (`children_giggle3.ogg`) through stockings/group behavior
+   and record that the mobile replacement is loaded. The disabled state
+   restores the known malformed PC 232-byte payload; any resulting load error
+   is evidence to record, not a successful playback result.
+4. Check source-prescribed stop boundaries and note behaviors without an
+   explicit stop (balloons, eggnog, knickknack, and dreidel). Test effects at
+   100%, 50%, and muted master volume; source calls use volume `1.0` and
+   `eSoundTypeEffects`.
+5. Save before and after each representative event, close/relaunch, and repeat
+   one trigger from each behavior family. Record slot/name, timestamps,
+   screenshots or save hashes, EXE identity, settings, observed order, and
+   volume state.
+6. Disable `mobile_sound_assets`; verify 63 original OGG payloads restore,
+   the four routed OGGs are removed, `.wav` route literals return, and the
+   disabled EXE is distinct and hash-recorded. Relaunch and repeat the control
+   triggers.
+7. On the first crash, stop and preserve `crash.dmp`,
+   `vf2_additive_debug.txt`, `ldwLog.txt`, launcher output, Windows
+   Application Error data, exact EXE path/size/SHA, and the save copy. Validate
+   the bundle using `docs/crash-capture-readiness.md`; do not retry before
+   capture.
+
+No concrete payload lacks a known implemented trigger. Individual random
+members remain pending until sampled. The BirthdayOh raw fallback is not a
+normal payload branch: defined `Unknown=-1` maps to valid `eSound_None`, while
+arbitrary corrupted values are unvalidated and must not be treated as parity
+evidence.
+
 ## Route matrix
 
 `Pending` is the required initial status for every row. The expected column is

@@ -1015,6 +1015,59 @@ def mobile_sound_assets_post_asset_patches(
     return records
 
 
+def store_scroll_bar_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+    allowed_source_sha256s: set[str],
+) -> list[dict[str, Any]]:
+    """Emit one exact-SHA post-asset variant for the Store Scroll marker."""
+    contract = build_manifest_data.get("StoreScrollBar")
+    if not isinstance(contract, dict):
+        return []
+    runtime_flag = contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise ValueError("Build manifest has an invalid StoreScrollBar runtime flag contract.")
+    if (
+        runtime_flag.get("symbol") != "_gVF2StoreScrollbar"
+        or runtime_flag.get("source_section") != ".vf2scrl"
+        or int(runtime_flag.get("size", 0)) != 1
+        or str(runtime_flag.get("default", "")).upper() not in {"00", "0"}
+    ):
+        raise ValueError("Build manifest has an invalid StoreScrollBar runtime flag contract.")
+    normalized_allowed = {str(value).lower() for value in allowed_source_sha256s}
+    if not normalized_allowed:
+        raise ValueError("StoreScrollBar has no authenticated executable payload hashes.")
+    records = setting_runtime_flag_post_asset_patches(
+        executable_sources,
+        output_exe_name=output_exe_name,
+        runtime_flag=runtime_flag,
+        section_name=".vf2scrl",
+        setting_id="store_scroll_bar",
+        feature_label="Store Scroll Bar",
+    )
+    source_by_sha = {
+        sha256_file(source).lower(): source
+        for source in executable_sources
+    }
+    if set(source_by_sha) - normalized_allowed:
+        unknown = sorted(set(source_by_sha) - normalized_allowed)
+        raise ValueError(
+            "StoreScrollBar executable payload is not authenticated: "
+            + ", ".join(unknown)
+        )
+    for record in records:
+        for variant in record["variants"]:
+            source = source_by_sha[str(variant["asset_sha256"]).lower()]
+            data = bytearray(source.read_bytes())
+            offset = int(str(variant["offset"]), 0)
+            replacement = bytes.fromhex(str(variant["replacement_bytes"]))
+            data[offset : offset + len(replacement)] = replacement
+            variant["result_asset_sha256"] = hashlib.sha256(bytes(data)).hexdigest()
+    return records
+
+
 def b152_runtime_flag_post_asset_patches(
     executable_sources: list[Path],
     *,
@@ -1029,6 +1082,12 @@ def b152_runtime_flag_post_asset_patches(
             build_manifest_data=build_manifest_data,
         ),
         *mobile_sound_assets_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+            allowed_source_sha256s=allowed_source_sha256s or set(),
+        ),
+        *store_scroll_bar_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,

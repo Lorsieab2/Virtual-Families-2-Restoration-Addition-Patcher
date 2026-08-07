@@ -59,6 +59,8 @@ MOBILE_FURNITURE_BEHAVIOR_FLAG_SYMBOL = "_gVF2MobileFurnitureBehaviors"
 MOBILE_FURNITURE_BEHAVIOR_HELPER_SYMBOL = (
     "?VF2HandleDropOnMobileFurniture@theMainScene@@IAE?B_NAAVCVillager@@@Z"
 )
+STORE_SCROLLBAR_FLAG_SECTION = ".vf2scrl"
+STORE_SCROLLBAR_FLAG_SYMBOL = "_gVF2StoreScrollbar"
 MOBILE_FURNITURE_AUTONOMOUS_SELECTOR_SYMBOL = (
     "_VF2TryStartMobileFurnitureAutonomous"
 )
@@ -10532,6 +10534,9 @@ extern "C" __declspec(naked) void VF2DrawGenerationLock() {{
     )
     (PATCHED / "vf2_store_scrollbar.cpp").write_text(
         r"""
+#pragma section(".vf2scrl", read, write)
+extern "C" __declspec(allocate(".vf2scrl")) volatile unsigned char gVF2StoreScrollbar = 0;
+
 struct ldwRect {
     int left;
     int top;
@@ -10581,6 +10586,10 @@ static void sync_thumb_from_scroll(void *scene) {
 }
 
 extern "C" void __cdecl VF2DrawStoreScrollbar(void *scene) {
+    if (gVF2StoreScrollbar == 0) {
+        return;
+    }
+
     int maxScroll = field_i(scene, 0x154);
     if (maxScroll <= 0) {
         return;
@@ -10616,6 +10625,10 @@ extern "C" void __cdecl VF2DrawStoreScrollbar(void *scene) {
 }
 
 extern "C" void __cdecl VF2HandleStoreScrollbarMouse(void *scene, int message, int x, int y) {
+    if (gVF2StoreScrollbar == 0) {
+        return;
+    }
+
     int maxScroll = field_i(scene, 0x154);
     if (maxScroll <= 0) {
         return;
@@ -12224,6 +12237,14 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
             "draw_hook": "?DrawScene@CScrollingStoreScene@@MAEXXZ + 0x154",
             "mouse_hook": "?HandleMouse@CScrollingStoreScene@@UAE_NHUldwPoint@@@Z + 0x30",
             "helper": "_VF2DrawStoreScrollbar / _VF2HandleStoreScrollbarMouse",
+            "runtime_flag": {
+                "symbol": STORE_SCROLLBAR_FLAG_SYMBOL,
+                "source_section": STORE_SCROLLBAR_FLAG_SECTION,
+                "size": 1,
+                "default": "00",
+                "enabled": "01",
+                "linked_location_status": "pending_link_metadata",
+            },
             "fields": {
                 "scroll_offset": "this+0x148",
                 "max_scroll": "this+0x154",
@@ -12319,6 +12340,24 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
             "overflow": "saturates at signed INT_MAX",
             "patches": price_multiplier_patches,
         },
+    }
+    manifest["StoreScrollBar"] = {
+        "status": "dormant default-off runtime marker around the native store scrollbar hooks",
+        "offline_patcher_setting": "store_scroll_bar",
+        "category": "optional",
+        "default": False,
+        "runtime_flag": {
+            "symbol": STORE_SCROLLBAR_FLAG_SYMBOL,
+            "source_section": STORE_SCROLLBAR_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "hooks": [
+            "_VF2DrawStoreScrollbar",
+            "_VF2HandleStoreScrollbarMouse",
+        ],
     }
 
 
@@ -21317,6 +21356,62 @@ def validate_mobile_furniture_runtime_bindings(manifest):
     }
 
 
+def validate_store_scrollbar_runtime_contract(manifest):
+    """Ensure the scrollbar helper is safe while its one-byte flag is off."""
+    top_level_contract = manifest.get("StoreScrollBar")
+    if not isinstance(top_level_contract, dict):
+        raise RuntimeError("StoreScrollBar manifest is missing")
+    top_level_runtime_flag = top_level_contract.get("runtime_flag")
+    if not isinstance(top_level_runtime_flag, dict):
+        raise RuntimeError("StoreScrollBar runtime flag manifest is missing")
+    scene_contract = manifest.get("ScrollingStoreScene")
+    if not isinstance(scene_contract, dict):
+        raise RuntimeError("Scrolling store scene manifest is missing")
+    scrollbar_contract = scene_contract.get("store_scrollbar")
+    if not isinstance(scrollbar_contract, dict):
+        raise RuntimeError("Store scrollbar manifest is missing")
+    runtime_flag = scrollbar_contract.get("runtime_flag")
+    if not isinstance(runtime_flag, dict):
+        raise RuntimeError("Store scrollbar runtime flag manifest is missing")
+    if runtime_flag.get("symbol") != STORE_SCROLLBAR_FLAG_SYMBOL:
+        raise RuntimeError("Store scrollbar runtime flag symbol drifted")
+    if runtime_flag.get("source_section") != STORE_SCROLLBAR_FLAG_SECTION:
+        raise RuntimeError("Store scrollbar runtime flag section drifted")
+    if runtime_flag.get("size") != 1 or runtime_flag.get("default") != "00":
+        raise RuntimeError("Store scrollbar runtime flag is not default-off")
+    if runtime_flag.get("enabled") != "01":
+        raise RuntimeError("Store scrollbar runtime flag enabled byte drifted")
+    if top_level_runtime_flag != runtime_flag:
+        raise RuntimeError("StoreScrollBar runtime flag metadata is inconsistent")
+
+    helper_path = PATCHED / "vf2_store_scrollbar.cpp"
+    if not helper_path.is_file():
+        raise RuntimeError("Missing generated store scrollbar helper")
+    helper_text = helper_path.read_text(encoding="ascii")
+    declaration = (
+        '#pragma section(".vf2scrl", read, write)\n'
+        'extern "C" __declspec(allocate(".vf2scrl")) '
+        "volatile unsigned char gVF2StoreScrollbar = 0;"
+    )
+    if helper_text.count(declaration) != 1:
+        raise RuntimeError("Store scrollbar runtime flag declaration drifted")
+    for function_name in (
+        'extern "C" void __cdecl VF2DrawStoreScrollbar(void *scene)',
+        'extern "C" void __cdecl VF2HandleStoreScrollbarMouse(void *scene, int message, int x, int y)',
+    ):
+        function_start = helper_text.find(function_name)
+        if function_start < 0:
+            raise RuntimeError(f"Missing store scrollbar helper: {function_name}")
+        function_body = helper_text[function_start:]
+        guard = "if (gVF2StoreScrollbar == 0)"
+        guard_position = function_body.find(guard)
+        first_field_access = function_body.find("field_i(scene")
+        if guard_position < 0 or first_field_access < 0 or guard_position > first_field_access:
+            raise RuntimeError(
+                f"Store scrollbar disabled guard does not precede scene access: {function_name}"
+            )
+
+
 def vf3_tv_fmap_cell_value(donor_value, fallback_value, occupied):
     if not occupied:
         return 0
@@ -25458,6 +25553,7 @@ def main():
     validate_mobile_decorative_only_fmaps(manifest)
     validate_mobile_furniture_route_classification(manifest)
     validate_mobile_furniture_runtime_bindings(manifest)
+    validate_store_scrollbar_runtime_contract(manifest)
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)

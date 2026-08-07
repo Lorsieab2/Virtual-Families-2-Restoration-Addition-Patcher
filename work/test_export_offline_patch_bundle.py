@@ -27,6 +27,8 @@ def minimal_pe_bytes(
     behavior_marker=0,
     with_same_sex_marriage_flag=False,
     same_sex_marker=0,
+    with_store_scroll_bar_flag=False,
+    store_scroll_bar_marker=0,
 ):
     runtime_flags = []
     if with_older_pregnancy_flag:
@@ -39,6 +41,8 @@ def minimal_pe_bytes(
         runtime_flags.append((".vf2beh", behavior_marker))
     if with_same_sex_marriage_flag:
         runtime_flags.append((".vf2same", same_sex_marker))
+    if with_store_scroll_bar_flag:
+        runtime_flags.append((".vf2scrl", store_scroll_bar_marker))
     # Three or more runtime-flag sections extend the PE section table past
     # 0x200, so shift those coexistence fixtures by one file-alignment block.
     text_raw_offset = 0x400 if len(runtime_flags) > 2 else 0x200
@@ -204,6 +208,104 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                     build_manifest_data={"MobileSoundAssets": {"routes": routes}},
                     allowed_source_sha256s={"0" * 64},
                 )
+
+    def test_store_scroll_bar_marker_emits_authenticated_per_exe_variant(self):
+        contract = {
+            "StoreScrollBar": {
+                "runtime_flag": {
+                    "symbol": "_gVF2StoreScrollbar",
+                    "source_section": ".vf2scrl",
+                    "size": 1,
+                    "default": "00",
+                }
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = root / "core.exe"
+            second = root / "overlay.exe"
+            first.write_bytes(minimal_pe_bytes(with_store_scroll_bar_flag=True))
+            second_data = bytearray(minimal_pe_bytes(with_store_scroll_bar_flag=True))
+            second_data[0x200] ^= 0x7F
+            second.write_bytes(second_data)
+            hashes = {
+                hashlib.sha256(first.read_bytes()).hexdigest(),
+                hashlib.sha256(second.read_bytes()).hexdigest(),
+            }
+            records = exporter.store_scroll_bar_post_asset_patches(
+                [first, second],
+                output_exe_name="Virtual Families 2 - Modded B158.exe",
+                build_manifest_data=contract,
+                allowed_source_sha256s=hashes,
+            )
+            self.assertEqual(len(records), 1)
+            record = records[0]
+            self.assertEqual(record["requires"], ["core_executable", "store_scroll_bar"])
+            self.assertEqual(len(record["variants"]), 2)
+            self.assertEqual({row["offset"] for row in record["variants"]}, {"0x400"})
+            self.assertEqual({row["expected_asset_bytes"] for row in record["variants"]}, {"00"})
+            self.assertEqual({row["replacement_bytes"] for row in record["variants"]}, {"01"})
+            self.assertTrue(all(len(row["result_asset_sha256"]) == 64 for row in record["variants"]))
+
+            with self.assertRaisesRegex(ValueError, "default byte mismatch"):
+                bad = root / "bad.exe"
+                bad.write_bytes(minimal_pe_bytes(with_store_scroll_bar_flag=True, store_scroll_bar_marker=1))
+                exporter.store_scroll_bar_post_asset_patches(
+                    [bad],
+                    output_exe_name="Virtual Families 2 - Modded B158.exe",
+                    build_manifest_data=contract,
+                    allowed_source_sha256s={hashlib.sha256(bad.read_bytes()).hexdigest()},
+                )
+
+    def test_store_scroll_bar_manifest_setting_requires_active_post_record(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base = root / "base"
+            build = root / "build"
+            out = root / "bundle"
+            vanilla = root / "Virtual Families 2.exe"
+            base.mkdir()
+            build.mkdir()
+            patched = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
+            patched.write_bytes(minimal_pe_bytes(with_store_scroll_bar_flag=True))
+            vanilla.write_bytes(minimal_pe_bytes())
+            (build / "patch-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "StoreScrollBar": {
+                            "runtime_flag": {
+                                "symbol": "_gVF2StoreScrollbar",
+                                "source_section": ".vf2scrl",
+                                "size": 1,
+                                "default": "00",
+                            }
+                        }
+                    }
+                ),
+                encoding="ascii",
+            )
+            self.run_exporter(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(out),
+                "--vanilla-exe", str(vanilla),
+                "--include-exe-replacement",
+            )
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            settings = {row["id"] for row in manifest["settings"]}
+            self.assertIn("store_scroll_bar", settings)
+            records = [
+                row for row in manifest["post_asset_patches"]
+                if row["requires"] == ["core_executable", "store_scroll_bar"]
+            ]
+            self.assertEqual(len(records), 1)
+            variant = records[0]["variants"][0]
+            enabled = bytearray(patched.read_bytes())
+            enabled[0x400] = 1
+            self.assertEqual(
+                variant["result_asset_sha256"],
+                hashlib.sha256(bytes(enabled)).hexdigest(),
+            )
 
     def test_mobile_sound_assets_stage_pinned_oggs(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -681,6 +681,63 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(log["modded_exe_name"], "Virtual Families 2 - Modded BTest.exe")
             self.assertTrue(log["modded_save_dir"].endswith(str(Path("LDW") / "Virtual Families 2 - Modded BTest")))
 
+    def test_separate_output_may_overwrite_unknown_loose_asset_without_touching_vanilla(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "Virtual Families 2"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original_exe = b"vanilla executable"
+            game_file.write_bytes(original_exe)
+            vanilla_sound = game_dir / "Sounds" / "children_giggle3.ogg"
+            vanilla_sound.parent.mkdir()
+            unknown_sound = b"unknown but preserved vanilla sound variant"
+            vanilla_sound.write_bytes(unknown_sound)
+
+            payload = tmp_path / "payload" / "children_giggle3.ogg"
+            payload.parent.mkdir()
+            mobile_sound = b"known packaged mobile sound"
+            payload.write_bytes(mobile_sound)
+            manifest = tmp_path / "asset_replace.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "safe separate-output loose asset replacement",
+                        "output": {"default_folder_name": "VF2-BTest-Modded"},
+                        "target_files": [
+                            {
+                                "path": game_file.name,
+                                "sha256": sha256_bytes(original_exe),
+                                "size": len(original_exe),
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Sounds/children_giggle3.ogg",
+                                "source_path": "payload/children_giggle3.ogg",
+                                "source_sha256": sha256_bytes(mobile_sound),
+                                "source_size": len(mobile_sound),
+                                "expected_target_sha256": sha256_bytes(b"known stock sound"),
+                                "expected_target_size": len(b"known stock sound"),
+                                "overwrite_existing": True,
+                                "note": "replace only in the separate output folder",
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_patcher("apply", "--exe", str(game_file), "--manifest", str(manifest))
+
+            self.assertEqual(vanilla_sound.read_bytes(), unknown_sound)
+            self.assertEqual(
+                (tmp_path / "VF2-BTest-Modded" / "Sounds" / "children_giggle3.ogg").read_bytes(),
+                mobile_sound,
+            )
+
     def test_refresh_rewrites_exe_that_was_up_to_date_before_refresh(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -2251,6 +2308,50 @@ class OfflineVF2PatcherTests(unittest.TestCase):
 
             self.run_patcher("restore", "--backup-dir", str(backup))
             self.assertEqual(target.read_bytes(), old_target_data)
+
+    def test_in_place_asset_patch_still_refuses_unknown_existing_target(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            game_dir = tmp_path / "game"
+            game_dir.mkdir()
+            game_file = game_dir / "Virtual Families 2.exe"
+            original = b"vanilla executable"
+            game_file.write_bytes(original)
+            target = game_dir / "Sounds" / "children_giggle3.ogg"
+            target.parent.mkdir()
+            unknown = b"unknown existing sound"
+            target.write_bytes(unknown)
+            source = tmp_path / "payload" / "children_giggle3.ogg"
+            source.parent.mkdir()
+            replacement = b"known replacement sound"
+            source.write_bytes(replacement)
+            manifest = tmp_path / "asset_patch.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "in-place authentication unit test",
+                        "target_files": [{"path": game_file.name, "sha256": sha256_bytes(original)}],
+                        "asset_patches": [
+                            {
+                                "file_path": "Sounds/children_giggle3.ogg",
+                                "source_path": "payload/children_giggle3.ogg",
+                                "source_sha256": sha256_bytes(replacement),
+                                "expected_target_sha256": sha256_bytes(b"known stock sound"),
+                                "overwrite_existing": True,
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply", "--game-dir", str(game_dir), "--manifest", str(manifest), expect=2
+            )
+            self.assertIn("SHA-256 mismatch for existing asset target", result.stderr)
+            self.assertEqual(target.read_bytes(), unknown)
 
     def test_asset_patch_refuses_source_hash_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:

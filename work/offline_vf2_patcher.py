@@ -2191,7 +2191,15 @@ def verify_asset_patches(
                 )
 
             reconfigure_output = bool(getattr(args, "reconfigure_output", False))
+            separate_output = output_dir.resolve() != game_dir.resolve()
             output_file_path = asset.output_file_path or asset.file_path
+            executable_asset = any(
+                Path(path).suffix.lower() == ".exe"
+                for path in (asset.file_path, output_file_path)
+            )
+            authenticate_existing_target = not reconfigure_output and (
+                not separate_output or not asset.overwrite_existing or executable_asset
+            )
             output_target = resolve_under_game_dir(output_dir, output_file_path)
             output_is_validation_target = output_file_path == asset.file_path
             target, target_file_path, discovered_by_structure = resolve_expected_exe_target(
@@ -2233,20 +2241,24 @@ def verify_asset_patches(
                 action = "remove" if target_exists else "remove_missing"
             elif target_exists:
                 action = "replace"
-                if not reconfigure_output and asset.expected_target_sha256 and target_sha != asset.expected_target_sha256:
+                if (
+                    authenticate_existing_target
+                    and asset.expected_target_sha256
+                    and target_sha != asset.expected_target_sha256
+                ):
                     raise PatchError(
                         f"SHA-256 mismatch for existing asset target {asset.file_path}: "
                         f"expected {asset.expected_target_sha256}, got {target_sha}"
                     )
                 if (
-                    not reconfigure_output
+                    authenticate_existing_target
                     and asset.expected_target_pe_structures
                     and not expected_structure_matches
                     and not asset.expected_target_sha256
                 ):
                     raise PatchError(f"PE structure mismatch for existing asset target {asset.file_path}.")
                 if (
-                    not reconfigure_output
+                    authenticate_existing_target
                     and
                     asset.expected_target_size is not None
                     and not expected_structure_matches

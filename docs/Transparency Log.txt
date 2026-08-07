@@ -1275,3 +1275,22 @@ B156 additive autonomous mobile Patio and Picnic behavior selector
   cheat_upgrades_holiday_ornaments output remains a stale partial-matrix
   artifact without .vf2beh; the current fully enabled layout passes its linked
   Holiday positive check.
+
+B158 canonical archive verifier and sound runtime-QA handoff
+- Canonical pre-Store-Scroll archive:
+  `outputs/VF2-B158-1b01c94-Toggle-Corrected-Playtest-Final.zip`, SHA-256
+  `933C73EDAFFD73EFC23D0022C5E5E86CA2B3E1CB1A81051DB1CEB83C682CC834`.
+- Added `work/verify_offline_bundle_zip.py` and
+  `work/test_verify_offline_bundle_zip.py`. Static verification covers ZIP
+  path/CRC/root safety, the pinned vanilla target, four exact executable
+  variants, 15 mobile-renovation images, 67 mobile sounds, 63 restores, four
+  removals, four WAV-to-OGG route records, and absence of zero-record settings.
+- The mobile-sound setting remains default off. The valid mobile
+  `children_giggle3.ogg` replaces the malformed PC payload only while enabled;
+  disabling restores the pinned PC bytes.
+- Added the exact 67-ID player protocol to `docs/B158-runtime-qa-matrix.md`.
+  FMOD decoding, audible parity, gameplay behavior, and runtime crash-freedom
+  remain pending player validation.
+- Store Scroll Bar is being split from the baked core into a default-off
+  `.vf2scrl` runtime marker. This entry does not claim a newly linked or
+  packaged Store Scroll artifact yet.
