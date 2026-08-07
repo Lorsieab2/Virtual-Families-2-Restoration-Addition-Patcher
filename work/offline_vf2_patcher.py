@@ -27,6 +27,14 @@ from typing import Any, Callable
 BACKUP_MANIFEST = "vf2_patch_backup_manifest.json"
 DEFAULT_BACKUP_ROOT = ".vf2_patch_backups"
 DEFAULT_EXE_NAME = "Virtual Families 2.exe"
+EXECUTABLE_OVERLAY_SETTINGS = {
+    "island_events",
+    "cheat_upgrades",
+    "holiday_ornaments_collection",
+    "behavior_patches",
+    "mobile_renovations",
+    "mobile_sound_assets",
+}
 RT_ICON = 3
 RT_GROUP_ICON = 14
 INVALID_INSTALL_MESSAGE = (
@@ -68,6 +76,7 @@ class AssetPatch:
     note: str
     requires: tuple[str, ...]
     restore: bool = False
+    remove_when_disabled: bool = False
 
 
 @dataclass(frozen=True)
@@ -300,7 +309,9 @@ def canonical_rel_path_key(rel_path: str) -> str:
 
 def resolve_under_game_dir(game_dir: Path, rel_path: str) -> Path:
     root = game_dir.resolve()
-    resolved = (root / rel_path).resolve()
+    candidate = root / rel_path
+    reject_symlink_components(candidate, root, rel_path)
+    resolved = candidate.resolve()
     if resolved != root and root not in resolved.parents:
         raise PatchError(f"Path escapes game directory: {rel_path}")
     return resolved
@@ -308,9 +319,29 @@ def resolve_under_game_dir(game_dir: Path, rel_path: str) -> Path:
 
 def resolve_under_manifest_dir(manifest_dir: Path, rel_path: str) -> Path:
     root = manifest_dir.resolve()
-    resolved = (root / rel_path).resolve()
+    candidate = root / rel_path
+    reject_symlink_components(candidate, root, rel_path)
+    resolved = candidate.resolve()
     if resolved != root and root not in resolved.parents:
         raise PatchError(f"Path escapes manifest directory: {rel_path}")
+    return resolved
+
+
+def reject_symlink_components(candidate: Path, root: Path, rel_path: str) -> None:
+    current = root
+    for part in Path(rel_path).parts:
+        current = current / part
+        if current.is_symlink():
+            raise PatchError(f"Symlink path components are not allowed: {rel_path}")
+
+
+def resolve_under_backup_dir(backup_dir: Path, rel_path: str) -> Path:
+    root = backup_dir.resolve()
+    candidate = root / rel_path
+    reject_symlink_components(candidate, root, rel_path)
+    resolved = candidate.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise PatchError(f"Backup path escapes backup directory: {rel_path}")
     return resolved
 
 
@@ -1519,12 +1550,20 @@ def manifest_asset_patches(
         requires = record_requires(raw, f"asset patch #{index}")
         ensure_known_settings(requires, settings, f"Asset patch #{index}")
         active = record_is_active(requires, enabled_settings)
+        if restore_inactive and active:
+            continue
         restore = False
+        remove_when_disabled = False
         if not active:
-            if not restore_inactive or restore_source_value is None:
+            if not restore_inactive:
                 continue
-            source_value = restore_source_value
-            restore = True
+            if restore_source_value is not None:
+                source_value = restore_source_value
+                restore = True
+            elif bool(raw.get("remove_when_disabled", False)):
+                remove_when_disabled = True
+            else:
+                continue
         source_path = normalize_rel_path(source_value, f"asset patch #{index} source path")
         source_sha_field = "restore_source_sha256" if restore else "source_sha256"
         source_size_field = "restore_source_size" if restore else "source_size"
@@ -1584,12 +1623,209 @@ def manifest_asset_patches(
                 overwrite_existing=bool(
                     True if restore else raw.get("overwrite_existing", raw.get("replace_existing", raw.get("overwrite", False)))
                 ),
-                note=("Restore disabled setting: " if restore else "") + str(raw.get("note", "")).strip(),
-                requires=() if restore else requires,
+                note=(
+                    "Restore disabled setting: " if restore
+                    else "Remove disabled setting: " if remove_when_disabled
+                    else ""
+                ) + str(raw.get("note", "")).strip(),
+                requires=() if (restore or remove_when_disabled) else requires,
                 restore=restore,
+                remove_when_disabled=remove_when_disabled,
             )
         )
-    return assets
+    return select_exact_executable_overlays(assets, enabled_settings)
+
+
+def select_exact_executable_overlays(
+    assets: list[AssetPatch],
+    enabled_settings: set[str],
+) -> list[AssetPatch]:
+    """Keep exactly one executable overlay for each active output target.
+
+    Overlay EXEs all write the same named modded executable. Applying multiple
+    feature overlays sequentially can silently drop earlier code when no
+    combined overlay exists. Fail closed unless the manifest contains exactly
+    one record matching the complete enabled overlay set.
+    """
+    grouped: dict[str, list[AssetPatch]] = {}
+    for asset in assets:
+        if not asset.source_path.lower().endswith(".exe"):
+            continue
+        if "core_executable" not in asset.requires:
+            continue
+        output_path = canonical_rel_path_key(asset.output_file_path or asset.file_path)
+        grouped.setdefault(output_path, []).append(asset)
+
+    selected = set()
+    for group in grouped.values():
+        present_overlay_settings = {
+            setting
+            for asset in group
+            for setting in EXECUTABLE_OVERLAY_SETTINGS
+            if setting in asset.requires
+        }
+        # A plain executable plus a post-asset/runtime-flag record is not an
+        # executable overlay matrix and must retain the existing sequencing.
+        if not present_overlay_settings:
+            selected.update(id(asset) for asset in group)
+            continue
+        enabled_overlay_settings = {
+            setting for setting in EXECUTABLE_OVERLAY_SETTINGS
+            if setting in enabled_settings and setting in present_overlay_settings
+        }
+        wanted = {"core_executable", *enabled_overlay_settings}
+        exact = [asset for asset in group if set(asset.requires) == wanted]
+        if len(exact) != 1:
+            labels = ", ".join(sorted(enabled_overlay_settings)) or "none"
+            raise PatchError(
+                "No unique executable overlay matches the enabled feature set "
+                f"({labels}) for {group[0].output_file_path or group[0].file_path}."
+            )
+        selected.add(id(exact[0]))
+
+    return [
+        asset for asset in assets
+        if (
+            not asset.source_path.lower().endswith(".exe")
+            or "core_executable" not in asset.requires
+            or id(asset) in selected
+        )
+    ]
+
+
+def validate_asset_target_plan(assets: list[AssetPatch]) -> None:
+    """Reject conflicting active/restore/remove records before mutation."""
+    grouped: dict[str, list[AssetPatch]] = {}
+    for asset in assets:
+        output_path = canonical_rel_path_key(asset.output_file_path or asset.file_path)
+        grouped.setdefault(output_path, []).append(asset)
+    for output_path, group in grouped.items():
+        if len(group) < 2:
+            continue
+        has_restore_or_remove = any(
+            asset.restore or asset.remove_when_disabled for asset in group
+        )
+        all_executable = all(asset.source_path.lower().endswith(".exe") for asset in group)
+        if has_restore_or_remove:
+            modes = ", ".join(
+                "restore" if asset.restore else "remove" if asset.remove_when_disabled else "active"
+                for asset in group
+            )
+            raise PatchError(
+                f"Conflicting duplicate asset output target {output_path}: {modes}."
+            )
+        if not all_executable:
+            requirement_signatures = [asset.requires for asset in group]
+            source_signatures = [asset.source_path.casefold() for asset in group]
+            if (
+                len(set(requirement_signatures)) == len(requirement_signatures)
+                and len(set(source_signatures)) == len(source_signatures)
+            ):
+                # Distinct active requirement signatures are an explicit
+                # layered visual override; identical signatures are an
+                # ambiguous duplicate and fail closed.
+                continue
+            raise PatchError(
+                f"Conflicting duplicate asset output target {output_path}: active, active."
+            )
+
+
+def verify_reconfigure_executable_identity(
+    manifest: dict[str, Any],
+    manifest_dir: Path,
+    output_dir: Path,
+    active_assets: list[AssetPatch],
+) -> None:
+    """Fail closed before output-only EXE replacement.
+
+    A reconfiguration may switch between known core/overlay payloads, so all
+    bundled executable source hashes are accepted for each output path. Any
+    other current hash is treated as locally modified or from another build.
+    """
+    raw_assets = manifest.get("asset_patches", manifest.get("assets", []))
+    if not isinstance(raw_assets, list):
+        return
+    if not any(
+        isinstance(raw, dict)
+        and EXECUTABLE_OVERLAY_SETTINGS.intersection(record_requires(raw, "executable overlay"))
+        for raw in raw_assets
+    ):
+        # Older/core-only output manifests may have post-asset transforms that
+        # legitimately change the final EXE hash; this guard is for the
+        # cheat/mobile overlay switch boundary.
+        return
+    candidates: dict[str, set[str]] = {}
+    for index, raw in enumerate(raw_assets):
+        if not isinstance(raw, dict):
+            continue
+        source_value = raw.get("source_path", raw.get("source_file", raw.get("source")))
+        if not isinstance(source_value, str) or not source_value.lower().endswith(".exe"):
+            continue
+        output_value = raw.get("output_file_path", raw.get("output_path", raw.get("write_path")))
+        output_path = normalize_rel_path(
+            output_value if output_value is not None else raw.get("file_path", raw.get("target_path", raw.get("target", raw.get("path")))),
+            f"asset patch #{index} output path",
+        )
+        source = resolve_under_manifest_dir(manifest_dir, normalize_rel_path(source_value, f"asset patch #{index} source path"))
+        if not source.is_file():
+            raise PatchError(f"Asset source file does not exist: {source_value}")
+        actual_source_sha = sha256_file(source)
+        declared_source_sha = normalize_sha256(
+            raw.get("source_sha256", raw.get("sha256")),
+            f"asset patch #{index} source_sha256",
+            required=True,
+        )
+        if actual_source_sha != declared_source_sha:
+            raise PatchError(
+                f"SHA-256 mismatch for executable source {source_value}: "
+                f"expected {declared_source_sha}, got {actual_source_sha}"
+            )
+        candidates.setdefault(canonical_rel_path_key(output_path), set()).add(actual_source_sha)
+
+    raw_post_patches = manifest.get("post_asset_patches", [])
+    if isinstance(raw_post_patches, list):
+        for index, raw in enumerate(raw_post_patches):
+            if not isinstance(raw, dict):
+                continue
+            file_value = raw.get("file_path", raw.get("file", raw.get("path")))
+            if not isinstance(file_value, str):
+                continue
+            output_key = canonical_rel_path_key(
+                normalize_rel_path(file_value, f"post-asset patch #{index} file path")
+            )
+            for variant_index, variant in enumerate(raw.get("variants", [])):
+                if not isinstance(variant, dict) or "result_asset_sha256" not in variant:
+                    continue
+                result_sha = normalize_sha256(
+                    variant.get("result_asset_sha256"),
+                    f"post-asset patch #{index} variant #{variant_index} result_asset_sha256",
+                    required=True,
+                )
+                candidates.setdefault(output_key, set()).add(result_sha or "")
+
+    if not candidates:
+        return
+    active_outputs = {
+        canonical_rel_path_key(asset.output_file_path or asset.file_path)
+        for asset in active_assets
+        if asset.source_path.lower().endswith(".exe")
+    }
+    for output_key, allowed_hashes in candidates.items():
+        output_path = Path(output_key)
+        target = resolve_under_game_dir(output_dir, output_path)
+        if output_key not in active_outputs:
+            raise PatchError(
+                f"Output-only reconfiguration has no active executable record for {output_path}; "
+                "keep core_executable enabled or provide a restore source."
+            )
+        if not target.is_file():
+            raise PatchError(f"Output-only executable target is missing: {output_path}")
+        current_sha = sha256_file(target)
+        if current_sha not in allowed_hashes:
+            raise PatchError(
+                f"Refusing output-only executable replacement for {output_path}: "
+                f"unknown current SHA-256 {current_sha}."
+            )
 
 
 def manifest_post_asset_patches(
@@ -1984,7 +2220,18 @@ def verify_asset_patches(
                 and pe_structure_matches_any(target, asset.expected_target_pe_structures)
             )
             action = "create"
-            if target_exists:
+            if asset.remove_when_disabled:
+                if not reconfigure_output:
+                    raise PatchError(
+                        f"Asset removal for disabled setting requires output-only reconfiguration: {asset.file_path}"
+                    )
+                if target_exists and target_sha != source_sha:
+                    raise PatchError(
+                        f"Refusing removal of {asset.file_path}: target SHA-256 {target_sha} "
+                        f"does not match the known enabled asset {source_sha}."
+                    )
+                action = "remove" if target_exists else "remove_missing"
+            elif target_exists:
                 action = "replace"
                 if not reconfigure_output and asset.expected_target_sha256 and target_sha != asset.expected_target_sha256:
                     raise PatchError(
@@ -2071,6 +2318,7 @@ def verify_asset_patches(
             "output_sha256": output_sha,
             "output_size": output_size,
             "action": action,
+            "remove_when_disabled": asset.remove_when_disabled,
             "requires": list(asset.requires),
             "note": asset.note,
         }
@@ -2250,6 +2498,64 @@ def apply_asset_patches(
         file_path = str(check["file_path"])
         output_file_path = str(check.get("output_file_path") or file_path)
         index = int(check["index"])
+        if check["action"] in {"remove", "remove_missing"}:
+            target = resolve_under_game_dir(output_dir, output_file_path)
+            if check["action"] == "remove_missing":
+                log_process_event(
+                    process_log,
+                    phase="apply",
+                    kind="asset_patch",
+                    status="skipped",
+                    index=index,
+                    file_path=file_path,
+                    note=str(check.get("note") or ""),
+                    output_file_path=output_file_path,
+                    action="remove_missing",
+                )
+                report_record_progress(
+                    args,
+                    phase="Applying",
+                    kind="asset patch",
+                    current=current,
+                    total=total,
+                    file_path=output_file_path,
+                    index=index,
+                    status="skipped",
+                )
+                continue
+            try:
+                if not target.is_file():
+                    raise PatchError(f"Removal target disappeared before apply: {output_file_path}")
+                actual_sha = sha256_file(target)
+                if actual_sha != str(check["source_sha256"]):
+                    raise PatchError(
+                        f"Refusing removal of {output_file_path}: target SHA-256 changed "
+                        f"from {check['source_sha256']} to {actual_sha}."
+                    )
+                target.unlink()
+            except OSError as exc:
+                raise PatchError(f"Could not remove disabled asset {output_file_path}: {exc}") from exc
+            log_process_event(
+                process_log,
+                phase="apply",
+                kind="asset_patch",
+                status="success",
+                index=index,
+                file_path=file_path,
+                note=str(check.get("note") or ""),
+                output_file_path=output_file_path,
+                action="remove",
+            )
+            report_record_progress(
+                args,
+                phase="Applying",
+                kind="asset patch",
+                current=current,
+                total=total,
+                file_path=output_file_path,
+                index=index,
+            )
+            continue
         if check["action"] == "up_to_date":
             source = resolve_under_manifest_dir(manifest_dir, str(check["source_path"]))
             target = resolve_under_game_dir(output_dir, output_file_path)
@@ -2295,6 +2601,8 @@ def apply_asset_patches(
         try:
             target.parent.mkdir(parents=True, exist_ok=True)
             temp = target.with_name(target.name + ".vf2patch.tmp")
+            if temp.is_symlink():
+                raise PatchError(f"Temporary patch path must not be a symlink: {temp}")
             shutil.copy2(source, temp)
             temp.replace(target)
         except OSError as exc:
@@ -2539,7 +2847,7 @@ def create_backup(
             if not source.is_file():
                 raise PatchError(f"Backup target file does not exist: {rel_path}")
             backup_rel = Path("files") / rel_path
-            destination = backup_dir / backup_rel
+            destination = resolve_under_backup_dir(backup_dir, str(backup_rel))
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, destination)
             backup_sha = sha256_file(destination)
@@ -2577,6 +2885,8 @@ def apply_patches_to_data(data: bytes, patches: list[BytePatch]) -> bytes:
 
 def atomic_write(path: Path, data: bytes) -> None:
     temp = path.with_name(path.name + ".vf2patch.tmp")
+    if temp.is_symlink():
+        raise PatchError(f"Temporary patch path must not be a symlink: {temp}")
     temp.write_bytes(data)
     temp.replace(path)
 
@@ -2618,6 +2928,7 @@ def asset_summary(asset_checks: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "output_sha256": check.get("output_sha256", check["target_sha256"]),
             "output_size": check.get("output_size", check["target_size"]),
             "action": check["action"],
+            "remove_when_disabled": check.get("remove_when_disabled", False),
             "requires": check["requires"],
             "note": check["note"],
         }
@@ -2689,7 +3000,18 @@ def apply_manifest(args: argparse.Namespace) -> int:
         assets = manifest_asset_patches(manifest, settings, enabled_settings)
         post_asset_patches = manifest_post_asset_patches(manifest, settings, enabled_settings)
         restore_assets = manifest_asset_patches(manifest, settings, enabled_settings, restore_inactive=True) if reconfigure_output else []
-        all_assets = [*assets, *restore_assets]
+        all_assets = [
+            *(asset for asset in [*assets, *restore_assets] if not asset.remove_when_disabled),
+            *(asset for asset in [*assets, *restore_assets] if asset.remove_when_disabled),
+        ]
+        validate_asset_target_plan(all_assets)
+        if reconfigure_output:
+            verify_reconfigure_executable_identity(
+                manifest,
+                manifest_path.parent,
+                output_dir,
+                assets,
+            )
         grouped = group_patches(patches)
         if reconfigure_output and grouped:
             raise PatchError("Output-only reconfiguration cannot apply byte patches without a vanilla game folder.")
@@ -3051,7 +3373,7 @@ def restore_backup(args: argparse.Namespace) -> int:
         target = resolve_under_game_dir(game_dir, rel_path)
         if raw.get("existed", True):
             backup_rel = normalize_rel_path(raw.get("backup_path"), "backup path")
-            source = (backup_dir / backup_rel).resolve()
+            source = resolve_under_backup_dir(backup_dir, backup_rel)
             if not source.is_file():
                 raise PatchError(f"Backed-up file is missing: {source}")
             data = source.read_bytes()

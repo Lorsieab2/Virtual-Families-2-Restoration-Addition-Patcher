@@ -17,6 +17,87 @@ from coff_patch import CoffObject
 
 
 class MobileFurnitureCatalogTests(unittest.TestCase):
+    def test_mobile_sound_assets_are_local_and_hash_pinned(self):
+        source_dir = patcher.MOBILE_SOUND_ASSET_SOURCE_DIR
+        self.assertTrue(source_dir.is_dir())
+        self.assertEqual(len(patcher.MOBILE_SOUND_PAYLOAD_RECORDS), 67)
+        self.assertEqual(
+            [spec["mobile_filename"] for spec in patcher.MOBILE_SOUND_ASSET_RECORDS],
+            ["beaker.ogg", "Child3.ogg", "Child7.ogg", "Child8.ogg"],
+        )
+        for spec in patcher.MOBILE_SOUND_PAYLOAD_RECORDS:
+            path = source_dir / spec["mobile_filename"]
+            self.assertTrue(path.is_file())
+            self.assertEqual(
+                hashlib.sha256(path.read_bytes()).hexdigest(),
+                spec["mobile_sha256"],
+            )
+
+    def test_mobile_sound_routes_are_default_off_and_atomic(self):
+        old_patched = patcher.PATCHED
+        old_enabled = patcher.ENABLE_MOBILE_SOUND_ASSETS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                patcher.PATCHED = temp_root
+                source = patcher.SRC_OBJS / "Sound.obj"
+                disabled_obj = temp_root / "Sound.obj"
+                shutil.copy2(source, disabled_obj)
+                patcher.ENABLE_MOBILE_SOUND_ASSETS = False
+                disabled_manifest = {}
+                patcher.patch_mobile_sound_routes(disabled_manifest)
+                disabled_data = disabled_obj.read_bytes()
+                for spec in patcher.MOBILE_SOUND_ASSET_RECORDS:
+                    self.assertIn(spec["pc_filename"].encode("ascii"), disabled_data)
+                    self.assertNotIn(spec["mobile_filename"].encode("ascii"), disabled_data)
+                self.assertFalse(disabled_manifest["MobileSoundAssets"]["enabled"])
+
+                shutil.copy2(source, disabled_obj)
+                patcher.ENABLE_MOBILE_SOUND_ASSETS = True
+                enabled_manifest = {}
+                patcher.patch_mobile_sound_routes(enabled_manifest)
+                enabled_data = disabled_obj.read_bytes()
+                for spec in patcher.MOBILE_SOUND_ASSET_RECORDS:
+                    self.assertNotIn(spec["pc_filename"].encode("ascii"), enabled_data)
+                    self.assertIn(spec["mobile_filename"].encode("ascii"), enabled_data)
+                self.assertTrue(enabled_manifest["MobileSoundAssets"]["all_or_nothing"])
+                self.assertEqual(enabled_manifest["MobileSoundAssets"]["route_count"], 4)
+
+                shutil.copy2(source, disabled_obj)
+                corrupt = bytearray(disabled_obj.read_bytes())
+                corrupt[corrupt.index(b"beaker.wav")] = ord("x")
+                disabled_obj.write_bytes(bytes(corrupt))
+                before = disabled_obj.read_bytes()
+                with self.assertRaises(RuntimeError):
+                    patcher.patch_mobile_sound_routes({})
+                self.assertEqual(disabled_obj.read_bytes(), before)
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_SOUND_ASSETS = old_enabled
+
+    def test_mobile_sound_runtime_staging_preflights_all_four_before_output(self):
+        old_source = patcher.MOBILE_SOUND_ASSET_SOURCE_DIR
+        old_out = patcher.OUT
+        old_enabled = patcher.ENABLE_MOBILE_SOUND_ASSETS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                source = root / "source"
+                source.mkdir()
+                for spec in patcher.MOBILE_SOUND_PAYLOAD_RECORDS[:-1]:
+                    shutil.copy2(old_source / spec["mobile_filename"], source / spec["mobile_filename"])
+                patcher.MOBILE_SOUND_ASSET_SOURCE_DIR = source
+                patcher.OUT = root / "out"
+                patcher.OUT.mkdir()
+                patcher.ENABLE_MOBILE_SOUND_ASSETS = True
+                with self.assertRaisesRegex(RuntimeError, "is missing"):
+                    patcher.sync_mobile_sound_assets({})
+                self.assertFalse((patcher.OUT / "Sounds").exists())
+        finally:
+            patcher.MOBILE_SOUND_ASSET_SOURCE_DIR = old_source
+            patcher.OUT = old_out
+            patcher.ENABLE_MOBILE_SOUND_ASSETS = old_enabled
+
     def test_catalog_is_workspace_local_and_hash_verified(self):
         expected_path = (
             patcher.ROOT
@@ -1881,9 +1962,99 @@ class MobileRenovationArtTests(unittest.TestCase):
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
 
+    def test_house_renovation_rows_match_pinned_price_lock_and_text_contract(self):
+        old_patched = patcher.PATCHED
+        old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                for object_name in (
+                    "InventoryManager.obj",
+                    "theStringManager.obj",
+                ):
+                    shutil.copy2(patcher.SRC_OBJS / object_name, temp / object_name)
+                patcher.PATCHED = temp
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                manifest = {}
+                patcher.patch_visible_special_upgrades(manifest)
+                patcher.patch_inventory_manager(manifest)
+                patcher.patch_house_renovations(manifest)
+                patcher.patch_string_manager(manifest)
+
+                contract = json.loads(
+                    patcher.MOBILE_RENOVATION_ATLAS_CONTRACT.read_text(encoding="utf-8")
+                )
+                pinned = {
+                    int(row["pc_item"], 16): row
+                    for row in contract["pc_style_catalog"]
+                }
+                home_rows = manifest["HouseRenovations"]["added_items"]
+                self.assertEqual(
+                    {int(row["item_id"], 16) for row in home_rows},
+                    set(pinned),
+                )
+                for row in home_rows:
+                    item_id = int(row["item_id"], 16)
+                    expected = pinned[item_id]
+                    self.assertEqual(row["room"], expected["room"])
+                    self.assertEqual(row["icon_file"], expected["file"])
+                    self.assertEqual(row["price"], expected["price"])
+
+                self.assertEqual(
+                    patcher.validate_mobile_renovation_style_catalog()["status"],
+                    "passed",
+                )
+                styles = {
+                    patcher.MOBILE_RENOVATION_PC_ITEM_IDS[index]: style
+                    for index, style in enumerate(patcher.MOBILE_RENOVATION_STYLE_CATALOG)
+                }
+                strings = [
+                    row
+                    for row in manifest["theStringManager"]["strings"]
+                    if row.get("source") == "mobile renovation style"
+                ]
+                self.assertEqual(len(strings), 30)
+                for row in strings:
+                    style = styles[int(row["item_id"], 16)]
+                    self.assertEqual(
+                        row["text"],
+                        style["short"] if row["role"] == "short" else style["long"],
+                    )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+
     def test_native_mobile_renovation_purchase_and_load_routes_match_contract(self):
-        manifest = {}
-        patcher.validate_native_mobile_renovation_contract(manifest)
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                patcher.PATCHED = temp
+                shutil.copy2(patcher.SRC_OBJS / "ScrollingStoreScene.obj", temp / "ScrollingStoreScene.obj")
+                shutil.copy2(patcher.SRC_OBJS / "theGameState.obj", temp / "theGameState.obj")
+                rows, _load_order = patcher._mobile_renovation_native_contract()
+                calls = []
+                for row in rows:
+                    x, y = row["map_area"]
+                    calls.append(
+                        "ContentMap.ActivateCondemnedArea("
+                        f"0x{x:02X}, {y}, false, true, "
+                        f"0x{row['hotspot']:02X}, 0x{row['object']:02X});"
+                    )
+                (temp / "vf2_special_upgrade_effects.cpp").write_text(
+                    "static void VF2RebuildOwnedRenovations() {\n"
+                    "ContentMap.Load();\n"
+                    + "\n".join(calls)
+                    + "\n}\n"
+                    "if (itemId >= 0xE1 && itemId <= 0xEA) {\n"
+                    "VF2RebuildOwnedRenovations();\n"
+                    "}\n",
+                    encoding="ascii",
+                )
+                manifest = {}
+                patcher.validate_native_mobile_renovation_contract(manifest)
+        finally:
+            patcher.PATCHED = old_patched
         contract = manifest["mobile_renovation_native_behavior"]
         self.assertEqual(contract["status"], "validated_and_preserved")
         self.assertEqual(contract["item_range"], "0xE1-0xEA")
@@ -1930,7 +2101,12 @@ class MobileRenovationArtTests(unittest.TestCase):
         self.assertIn("post-map/pre-decal", contract["pc_render_target"]["compositing"])
         self.assertEqual(contract["pc_render_target"]["hook"]["draw_scene_offset"], "0x39")
         self.assertEqual(contract["pc_render_target"]["hook"]["scale"], 1.0)
-        self.assertEqual(contract["pc_render_target"]["anchors"]["kitchen"], [930, 995])
+        self.assertEqual(contract["pc_render_target"]["anchors"], {
+            "bathroom": [255, 1435],
+            "kitchen": [930, 995],
+            "office": [1354, 792],
+            "workshop": [500, 1400],
+        })
         bundles = contract["bundles"]
         self.assertEqual([row["bundle"] for row in bundles], [
             "tp233.dat", "tp234.dat", "tp235.dat", "tp238.dat",
@@ -1943,6 +2119,9 @@ class MobileRenovationArtTests(unittest.TestCase):
             name for row in bundles for name in row["curated_outputs"]
         })
         self.assertTrue(all(len(row["size"]) == 2 for row in curated))
+        for row in curated:
+            source = patcher.MOBILE_RENOVATION_ART_SOURCE_DIR / row["name"]
+            self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), row["sha256"])
 
     def test_enabled_mobile_renovation_renderer_pins_runtime_pixel_hashes(self):
         old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
@@ -2107,15 +2286,17 @@ class MobileRenovationArtTests(unittest.TestCase):
         )
 
         expected_rooms = {
-            room: [hex(patcher.MOBILE_RENOVATION_PC_ITEM_IDS[index]) for index in indices]
-            for room, indices in patcher.MOBILE_RENOVATION_VARIANT_INDICES.items()
+            "bathroom": ["0x13d", "0x13c", "0x13e", "0x13f", "0x140"],
+            "kitchen": ["0x141", "0x145", "0x144"],
+            "office": ["0x149", "0x146", "0x147", "0x148", "0x143"],
+            "workshop": ["0x142", "0x14a"],
         }
         self.assertEqual(
-            expected_rooms,
             {
                 room: [hex(patcher.MOBILE_RENOVATION_PC_ITEM_IDS[index]) for index in indices]
                 for room, indices in patcher.MOBILE_RENOVATION_VARIANT_INDICES.items()
             },
+            expected_rooms,
         )
 
         old_patched = patcher.PATCHED
@@ -2152,6 +2333,92 @@ class MobileRenovationArtTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+
+    def test_renderer_draws_rooms_in_pinned_contract_z_order(self):
+        old_patched = patcher.PATCHED
+        old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(patcher.SRC_OBJS / "theMainScene.obj", temp / "theMainScene.obj")
+                patcher.PATCHED = temp
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                manifest = {}
+                patcher.patch_mobile_renovation_renderer(manifest)
+                helper = (temp / "vf2_mobile_renovations.cpp").read_text(encoding="ascii")
+
+                expected_draw_order = [
+                    "VF2DrawMobileRenovationRoom(0, 255, 1435, graphics, worldX, worldY);",
+                    "VF2DrawMobileRenovationRoom(1, 930, 995, graphics, worldX, worldY);",
+                    "VF2DrawMobileRenovationRoom(2, 1354, 792, graphics, worldX, worldY);",
+                    "VF2DrawMobileRenovationRoom(3, 500, 1400, graphics, worldX, worldY);",
+                ]
+                positions = [helper.index(marker) for marker in expected_draw_order]
+                self.assertEqual(positions, sorted(positions))
+                self.assertEqual(
+                    manifest["mobile_renovation_renderer"]["anchors"],
+                    {
+                        "bathroom": [255, 1435],
+                        "kitchen": [930, 995],
+                        "office": [1354, 792],
+                        "workshop": [500, 1400],
+                    },
+                )
+                draw_room = helper.split(
+                    "static void VF2DrawMobileRenovationRoom(", 1
+                )[1].split(
+                    'extern "C" void __cdecl VF2DrawMobileRenovations()', 1
+                )[0]
+                self.assertIn(
+                    "graphics->Draw((EImage)image, anchorX - worldX, anchorY - worldY, 1.0f, 100);",
+                    draw_room,
+                )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+
+    def test_apply_style_clears_only_same_room_then_saves(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                helper = temp / "vf2_special_upgrade_effects.cpp"
+                helper.write_text("", encoding="ascii")
+                patcher.PATCHED = temp
+                patcher.write_outfit_store_helpers({})
+                source = helper.read_text(encoding="ascii")
+                apply = source.split(
+                    'extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId)',
+                    1,
+                )[1].split(
+                    'extern "C" void __cdecl VF2SpawnBirthPeepWithForcedGender',
+                    1,
+                )[0]
+                self.assertIn(
+                    "int room = kVF2MobileRenovationRoomForStyle[styleIndex];",
+                    apply,
+                )
+                self.assertIn(
+                    "for (int order = 0; order < kVF2MobileRenovationItemCount; ++order)",
+                    apply,
+                )
+                self.assertIn(
+                    "if (kVF2MobileRenovationRoomForStyle[otherIndex] != room) continue;",
+                    apply,
+                )
+                self.assertIn(
+                    "VF2SetMobileRenovationActive(otherItemId, false);",
+                    apply,
+                )
+                self.assertIn("VF2SetMobileRenovationActive(itemId, true);", apply)
+                self.assertIn("VF2MarkMobileRenovationEverPurchased(styleIndex);", apply)
+                self.assertIn("theGameState::Get()->SaveCurrentGame();", apply)
+                self.assertLess(
+                    apply.index("VF2SetMobileRenovationActive(itemId, true);"),
+                    apply.index("theGameState::Get()->SaveCurrentGame();"),
+                )
+        finally:
+            patcher.PATCHED = old_patched
 
     def test_mobile_renovation_style_state_contract_uses_persisted_two_layer_semantics(self):
         old_patched = patcher.PATCHED

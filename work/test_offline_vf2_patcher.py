@@ -2379,6 +2379,345 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(log["mode"], "existing_modded_output")
             self.assertTrue(any(row["action"] == "replace" for row in log["asset_files"]))
 
+    def test_output_only_removes_hash_authenticated_overlay_asset_and_refuses_unknown_hash(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            modded_dir = tmp_path / "VF2-BUnit-Modded"
+            (modded_dir / ".vf2_patch_backups").mkdir(parents=True)
+            (modded_dir / "Virtual Families 2 - Modded BUnit.exe").write_bytes(b"modded exe")
+            target = modded_dir / "Images" / "MobileRenovations" / "tp238_beige_kitchen.png"
+            target.parent.mkdir(parents=True)
+            target.write_bytes(b"vanilla placeholder")
+
+            payload = tmp_path / "payload"
+            source = payload / "Images" / "MobileRenovations" / "tp238_beige_kitchen.png"
+            source.parent.mkdir(parents=True)
+            source.write_bytes(b"mobile renovation")
+
+            manifest = tmp_path / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "name": "output-only overlay removal unit test",
+                        "output": {
+                            "default_folder_name": "VF2-BUnit-Modded",
+                            "default_exe_name": "Virtual Families 2 - Modded BUnit.exe",
+                        },
+                        "settings": [
+                            {
+                                "id": "core_executable",
+                                "label": "Patch game executable",
+                                "default": True,
+                                "category": "main",
+                            },
+                            {
+                                "id": "mobile_renovations",
+                                "label": "Mobile Room Renovations",
+                                "default": False,
+                                "category": "optional",
+                            }
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Images/MobileRenovations/tp238_beige_kitchen.png",
+                                "source_path": "payload/Images/MobileRenovations/tp238_beige_kitchen.png",
+                                "source_sha256": sha256_bytes(source.read_bytes()),
+                                "source_size": source.stat().st_size,
+                                "overwrite_existing": True,
+                                "remove_when_disabled": True,
+                                "requires": ["core_executable", "mobile_renovations"],
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_patcher(
+                "apply",
+                "--output-dir",
+                str(modded_dir),
+                "--manifest",
+                str(manifest),
+                "--enable",
+                "mobile_renovations",
+            )
+            self.assertEqual(target.read_bytes(), b"mobile renovation")
+
+            target.write_bytes(b"player-customized")
+            result = self.run_patcher(
+                "apply",
+                "--output-dir",
+                str(modded_dir),
+                "--manifest",
+                str(manifest),
+                expect=2,
+            )
+            self.assertIn("Refusing removal", result.stderr)
+            self.assertEqual(target.read_bytes(), b"player-customized")
+
+            self.run_patcher(
+                "apply",
+                "--output-dir",
+                str(modded_dir),
+                "--manifest",
+                str(manifest),
+                "--enable",
+                "mobile_renovations",
+            )
+            self.run_patcher(
+                "apply",
+                "--output-dir",
+                str(modded_dir),
+                "--manifest",
+                str(manifest),
+            )
+            self.assertFalse(target.exists())
+
+    def test_rejects_ambiguous_cheat_and_mobile_executable_overlays(self):
+        def overlay(index, requires):
+            return patcher_mod.AssetPatch(
+                index=index,
+                file_path="Virtual Families 2.exe",
+                output_file_path="Virtual Families 2 - Modded BUnit.exe",
+                source_path=f"payload/overlay-{index}.exe",
+                source_sha256="0" * 64,
+                source_size=1,
+                expected_target_sha256="1" * 64,
+                expected_target_pe_structures=(),
+                expected_target_size=1,
+                allow_missing_target=False,
+                overwrite_existing=True,
+                note="overlay",
+                requires=tuple(requires),
+            )
+
+        assets = [
+            overlay(0, ["core_executable"]),
+            overlay(1, ["core_executable", "cheat_upgrades"]),
+            overlay(2, ["core_executable", "mobile_renovations"]),
+        ]
+        with self.assertRaisesRegex(patcher_mod.PatchError, "No unique executable overlay"):
+            patcher_mod.select_exact_executable_overlays(
+                assets,
+                {"core_executable", "cheat_upgrades", "mobile_renovations"},
+            )
+        selected = patcher_mod.select_exact_executable_overlays(
+            [*assets, overlay(3, ["core_executable", "cheat_upgrades", "mobile_renovations"])],
+            {"core_executable", "cheat_upgrades", "mobile_renovations"},
+        )
+        self.assertEqual([asset.index for asset in selected], [3])
+
+    def test_rejects_mixed_active_restore_same_exe_target(self):
+        def exe(index, source, *, restore=False, requires=("core_executable",)):
+            return patcher_mod.AssetPatch(
+                index=index,
+                file_path="Virtual Families 2.exe",
+                output_file_path="Virtual Families 2 - Modded BUnit.exe",
+                source_path=source,
+                source_sha256="0" * 64,
+                source_size=1,
+                expected_target_sha256="1" * 64,
+                expected_target_pe_structures=(),
+                expected_target_size=1,
+                allow_missing_target=False,
+                overwrite_existing=True,
+                note="test",
+                requires=tuple(requires),
+                restore=restore,
+            )
+
+        with self.assertRaisesRegex(patcher_mod.PatchError, "Conflicting duplicate asset output target"):
+            patcher_mod.validate_asset_target_plan(
+                [
+                    exe(0, "payload/core.exe"),
+                    exe(1, "payload/restore.exe", restore=True, requires=()),
+                ]
+            )
+
+    def test_rejects_duplicate_non_executable_targets(self):
+        def image(index, source):
+            return patcher_mod.AssetPatch(
+                index=index,
+                file_path="Images/MobileRenovations/x.png",
+                output_file_path=None,
+                source_path=source,
+                source_sha256="0" * 64,
+                source_size=1,
+                expected_target_sha256=None,
+                expected_target_pe_structures=(),
+                expected_target_size=None,
+                allow_missing_target=True,
+                overwrite_existing=True,
+                note="test",
+                requires=("core_executable",),
+            )
+
+        with self.assertRaisesRegex(patcher_mod.PatchError, "Conflicting duplicate asset output target"):
+            patcher_mod.validate_asset_target_plan(
+                [image(0, "payload/a.png"), image(1, "payload/b.png")]
+            )
+
+    def test_output_only_refuses_unknown_executable_hash_before_replacement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            modded_dir = tmp_path / "VF2-BUnit-Modded"
+            (modded_dir / ".vf2_patch_backups").mkdir(parents=True)
+            output_exe = modded_dir / "Virtual Families 2 - Modded BUnit.exe"
+            output_exe.write_bytes(b"unknown current executable")
+
+            payload = tmp_path / "payload"
+            payload.mkdir()
+            source = payload / "core.exe"
+            source.write_bytes(b"known bundled executable")
+            manifest = tmp_path / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "output": {
+                            "default_folder_name": "VF2-BUnit-Modded",
+                            "default_exe_name": output_exe.name,
+                        },
+                        "settings": [
+                            {
+                                "id": "core_executable",
+                                "label": "Patch game executable",
+                                "default": True,
+                                "category": "main",
+                            },
+                            {
+                                "id": "mobile_renovations",
+                                "label": "Mobile Room Renovations",
+                                "default": True,
+                                "category": "optional",
+                            },
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Virtual Families 2.exe",
+                                "output_file_path": output_exe.name,
+                                "source_path": "payload/core.exe",
+                                "source_sha256": sha256_bytes(source.read_bytes()),
+                                "source_size": source.stat().st_size,
+                                "expected_target_sha256": "1" * 64,
+                                "expected_target_size": 1,
+                                "overwrite_existing": True,
+                                "requires": ["core_executable", "mobile_renovations"],
+                            }
+                        ],
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.run_patcher(
+                "apply",
+                "--output-dir",
+                str(modded_dir),
+                "--manifest",
+                str(manifest),
+                expect=2,
+            )
+            self.assertIn("unknown current SHA-256", result.stderr)
+            self.assertEqual(output_exe.read_bytes(), b"unknown current executable")
+
+    def test_mobile_sound_enable_then_disable_restores_exe_before_removing_oggs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            modded = root / "VF2-BSound-Modded"
+            (modded / ".vf2_patch_backups").mkdir(parents=True)
+            exe_name = "Virtual Families 2 - Modded BSound.exe"
+            routes = (
+                ("beaker.wav", "beaker.ogg"),
+                ("Child3.wav", "Child3.ogg"),
+                ("Child7.wav", "Child7.ogg"),
+                ("Child8.wav", "Child8.ogg"),
+            )
+            core_data = b"prefix:" + b"|".join(pc.encode("ascii") for pc, _ogg in routes) + b":suffix"
+            output_exe = modded / exe_name
+            output_exe.write_bytes(core_data)
+            payload = root / "payload"
+            payload.mkdir()
+            core_source = payload / "core.exe"
+            core_source.write_bytes(core_data)
+
+            patched = bytearray(core_data)
+            post = []
+            ogg_records = []
+            for index, (pc_name, ogg_name) in enumerate(routes):
+                offset = core_data.index(pc_name.encode("ascii"))
+                patched[offset : offset + len(pc_name)] = ogg_name.encode("ascii")
+                ogg_source = payload / ogg_name
+                ogg_source.write_bytes(b"OggS" + bytes([index]) + b"payload")
+                ogg_records.append({
+                    "file_path": f"Sounds/{ogg_name}",
+                    "source_path": f"payload/{ogg_name}",
+                    "source_sha256": sha256_bytes(ogg_source.read_bytes()),
+                    "source_size": ogg_source.stat().st_size,
+                    "allow_missing_target": True,
+                    "overwrite_existing": True,
+                    "remove_when_disabled": True,
+                    "requires": ["core_executable", "mobile_sound_assets"],
+                })
+                post.append({
+                    "file_path": exe_name,
+                    "requires": ["core_executable", "mobile_sound_assets"],
+                    "variants": [{
+                        "asset_sha256": sha256_bytes(core_data),
+                        "result_asset_sha256": sha256_bytes(bytes(patched)) if index == len(routes) - 1 else "0" * 64,
+                        "offset": hex(offset),
+                        "expected_asset_bytes": pc_name.encode("ascii").hex(),
+                        "replacement_bytes": ogg_name.encode("ascii").hex(),
+                    }],
+                })
+            final_sha = sha256_bytes(bytes(patched))
+            for row in post:
+                row["variants"][0]["result_asset_sha256"] = final_sha
+
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({
+                "manifest_version": 1,
+                "output": {"default_folder_name": modded.name, "default_exe_name": exe_name},
+                "settings": [
+                    {"id": "core_executable", "label": "Core", "default": True, "category": "main"},
+                    {"id": "mobile_sound_assets", "label": "Mobile sounds", "default": False, "category": "optional"},
+                ],
+                "asset_patches": [{
+                    "file_path": "Virtual Families 2.exe",
+                    "output_file_path": exe_name,
+                    "source_path": "payload/core.exe",
+                    "source_sha256": sha256_bytes(core_data),
+                    "source_size": len(core_data),
+                    "expected_target_sha256": sha256_bytes(core_data),
+                    "expected_target_size": len(core_data),
+                    "overwrite_existing": True,
+                    "requires": ["core_executable"],
+                }, *ogg_records],
+                "post_asset_patches": post,
+            }, indent=2), encoding="utf-8")
+
+            self.run_patcher("apply", "--output-dir", str(modded), "--manifest", str(manifest), "--enable", "mobile_sound_assets")
+            self.assertEqual(output_exe.read_bytes(), bytes(patched))
+            self.assertTrue(all((modded / "Sounds" / ogg).is_file() for _pc, ogg in routes))
+
+            corrupt_target = modded / "Sounds" / routes[0][1]
+            corrupt_target.write_bytes(b"player-modified")
+            result = self.run_patcher(
+                "apply", "--output-dir", str(modded), "--manifest", str(manifest), expect=2
+            )
+            self.assertIn("Refusing removal", result.stderr)
+            self.assertEqual(output_exe.read_bytes(), bytes(patched))
+            self.assertEqual(corrupt_target.read_bytes(), b"player-modified")
+            corrupt_target.write_bytes((payload / routes[0][1]).read_bytes())
+
+            self.run_patcher("apply", "--output-dir", str(modded), "--manifest", str(manifest))
+            self.assertEqual(output_exe.read_bytes(), core_data)
+            self.assertTrue(all(not (modded / "Sounds" / ogg).exists() for _pc, ogg in routes))
+
     def test_refuses_expected_byte_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

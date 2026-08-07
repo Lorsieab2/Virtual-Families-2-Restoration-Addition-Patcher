@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import shutil
 import hashlib
 import subprocess
 import sys
@@ -141,6 +142,114 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             exporter.asset_requires_for_setting("mobile_renovations"),
             ["core_executable", "mobile_renovations"],
         )
+
+    def test_mobile_sound_setting_is_default_off_and_core_gated(self):
+        settings_by_id = {row["id"]: row for row in exporter.SETTINGS}
+        self.assertEqual(settings_by_id["mobile_sound_assets"]["category"], "optional")
+        self.assertFalse(settings_by_id["mobile_sound_assets"]["default"])
+        self.assertEqual(
+            exporter.asset_requires_for_setting("mobile_sound_assets"),
+            ["core_executable", "mobile_sound_assets"],
+        )
+        for filename in exporter.MOBILE_SOUND_ASSET_FILES:
+            self.assertEqual(
+                exporter.setting_for_asset(Path("Sounds") / filename),
+                "mobile_sound_assets",
+            )
+
+    def test_mobile_sound_routes_emit_four_exact_sha_atomic_records(self):
+        routes = [
+            {
+                "pc_filename": pc,
+                "mobile_filename": mobile,
+                "object_offset": exporter.MOBILE_SOUND_ROUTE_PINS[pc][1],
+                "expected_bytes": pc.encode("ascii").hex(),
+                "replacement_bytes": mobile.encode("ascii").hex(),
+            }
+            for pc, mobile in (
+                ("beaker.wav", "beaker.ogg"),
+                ("Child3.wav", "Child3.ogg"),
+                ("Child7.wav", "Child7.ogg"),
+                ("Child8.wav", "Child8.ogg"),
+            )
+        ]
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            exe = tmp / "core.exe"
+            exe.write_bytes(b"prefix" + b"".join(row["pc_filename"].encode("ascii") for row in routes))
+            records = exporter.mobile_sound_assets_post_asset_patches(
+                [exe],
+                output_exe_name="Virtual Families 2 - Modded B158.exe",
+                build_manifest_data={"MobileSoundAssets": {"routes": routes}},
+                allowed_source_sha256s={hashlib.sha256(exe.read_bytes()).hexdigest()},
+            )
+            self.assertEqual(len(records), 4)
+            self.assertTrue(all(row["requires"] == ["core_executable", "mobile_sound_assets"] for row in records))
+            self.assertTrue(all(len(row["variants"]) == 1 for row in records))
+            self.assertEqual(len({row["variants"][0]["result_asset_sha256"] for row in records}), 1)
+            self.assertEqual(
+                {row["variants"][0]["expected_asset_bytes"] for row in records},
+                {pc.encode("ascii").hex().upper() for pc, _mobile in (
+                    ("beaker.wav", "beaker.ogg"),
+                    ("Child3.wav", "Child3.ogg"),
+                    ("Child7.wav", "Child7.ogg"),
+                    ("Child8.wav", "Child8.ogg"),
+                )},
+            )
+
+            with self.assertRaisesRegex(ValueError, "not authenticated"):
+                exporter.mobile_sound_assets_post_asset_patches(
+                    [exe],
+                    output_exe_name="Virtual Families 2 - Modded B158.exe",
+                    build_manifest_data={"MobileSoundAssets": {"routes": routes}},
+                    allowed_source_sha256s={"0" * 64},
+                )
+
+    def test_mobile_sound_assets_stage_pinned_oggs(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp = Path(tmp)
+            bundle = tmp / "bundle"
+            base = exporter.DEFAULT_BASE_PAYLOAD
+            bundle.mkdir()
+            records = exporter.mobile_sound_asset_patches(
+                bundle,
+                base,
+                exporter.MOBILE_SOUND_ASSET_SOURCE_DIR,
+            )
+            self.assertEqual(len(records), 67)
+            self.assertEqual(sum(bool(row["remove_when_disabled"]) for row in records), 4)
+            self.assertEqual(sum("restore_source_path" in row for row in records), 63)
+            self.assertEqual(
+                {Path(row["file_path"]).name for row in records},
+                set(exporter.MOBILE_SOUND_ASSET_FILES),
+            )
+            for filename in exporter.MOBILE_SOUND_ASSET_FILES:
+                self.assertTrue((bundle / "payload" / "MobileSoundAssets" / filename).is_file())
+
+    def test_mobile_sound_assets_reject_partial_or_corrupt_sources_before_staging(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "source"
+            source.mkdir()
+            for filename in exporter.MOBILE_SOUND_ASSET_FILES[:-1]:
+                shutil.copy2(exporter.MOBILE_SOUND_ASSET_SOURCE_DIR / filename, source / filename)
+            bundle = root / "bundle"
+            base = root / "base"
+            bundle.mkdir()
+            base.mkdir()
+            with self.assertRaisesRegex(ValueError, "Missing mobile sound asset"):
+                exporter.mobile_sound_asset_patches(bundle, base, source)
+            self.assertFalse((bundle / "payload" / "MobileSoundAssets").exists())
+
+            shutil.copy2(
+                exporter.MOBILE_SOUND_ASSET_SOURCE_DIR / exporter.MOBILE_SOUND_ASSET_FILES[-1],
+                source / exporter.MOBILE_SOUND_ASSET_FILES[-1],
+            )
+            corrupt = source / exporter.MOBILE_SOUND_ASSET_FILES[0]
+            corrupt.write_bytes(corrupt.read_bytes() + b"corrupt")
+            with self.assertRaisesRegex(ValueError, "identity mismatch"):
+                exporter.mobile_sound_asset_patches(bundle, base, source)
+            self.assertFalse((bundle / "payload" / "MobileSoundAssets").exists())
 
     def test_late_special_upgrade_icons_are_gated_by_cheat_overlay(self):
         for filename in (
@@ -869,6 +978,54 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 mobile_overlay.name,
             )
             self.assertIn("mobile_renovations", {row["id"] for row in manifest["settings"]})
+
+    def test_overlay_backed_loose_assets_mark_output_only_removal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            (build / "Images" / "MobileRenovations").mkdir(parents=True)
+            (build / "Images" / "MobileRenovations" / "tp238_beige_kitchen.png").write_bytes(b"renovation")
+            (build / "Images" / "cheat_reset_achievements.png").write_bytes(b"cheat")
+            vanilla = tmp_path / "Virtual Families 2.exe"
+            vanilla.write_bytes(minimal_pe_bytes())
+            patched = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
+            patched.write_bytes(minimal_pe_bytes(marker=1))
+            (build / "patch-manifest.json").write_text(
+                json.dumps(
+                    {
+                        "generated_assets": [
+                            {"path": "Images/MobileRenovations/tp238_beige_kitchen.png"},
+                            {"path": "Images/cheat_reset_achievements.png"},
+                        ]
+                    }
+                ),
+                encoding="ascii",
+            )
+            mobile_overlay = tmp_path / "mobile.exe"
+            mobile_overlay.write_bytes(minimal_pe_bytes(marker=2))
+            cheat_overlay = tmp_path / "cheat.exe"
+            cheat_overlay.write_bytes(minimal_pe_bytes(marker=3))
+
+            self.run_exporter(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(out),
+                "--vanilla-exe", str(vanilla),
+                "--include-exe-replacement",
+                "--mobile-renovations-exe", str(mobile_overlay),
+                "--cheat-upgrades-exe", str(cheat_overlay),
+            )
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            records = {
+                row["file_path"]: row
+                for row in manifest["asset_patches"]
+                if row["file_path"].endswith(".png")
+            }
+            self.assertTrue(records["Images/MobileRenovations/tp238_beige_kitchen.png"]["remove_when_disabled"])
+            self.assertTrue(records["Images/cheat_reset_achievements.png"]["remove_when_disabled"])
 
     def test_exports_byte_patches_when_vanilla_exe_is_supplied(self):
         with tempfile.TemporaryDirectory() as tmp:

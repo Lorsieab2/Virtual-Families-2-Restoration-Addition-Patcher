@@ -9,6 +9,7 @@ import re
 import shutil
 import struct
 import sys
+import tempfile
 from collections import Counter
 from io import BytesIO
 from zipfile import ZipFile
@@ -43,6 +44,11 @@ ENABLE_BEHAVIOR_PATCHES = os.environ.get("VF2_ENABLE_BEHAVIOR_PATCHES", "0") == 
 # contract is still generated and linked in every build so the map-return ABI
 # remains independently checkable.
 ENABLE_MOBILE_RENOVATIONS = os.environ.get("VF2_ENABLE_MOBILE_RENOVATIONS", "0") == "1"
+# Optional mobile audio routing is default-off.  When enabled, the four
+# evidence-backed Sound.obj filename literals are changed from the PC WAV
+# assets to their hash-pinned mobile OGG counterparts; the offline exporter
+# stages those OGGs and applies the same route atomically behind its checkbox.
+ENABLE_MOBILE_SOUND_ASSETS = os.environ.get("VF2_ENABLE_MOBILE_SOUND_ASSETS", "0") == "1"
 
 # Genuine mobile-furniture behaviors use a dormant exact-SHA byte toggle. The
 # first proven families are the four mobile lounge chairs and the patio
@@ -681,6 +687,91 @@ MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR = (
     MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR.parent / "pc_fmaps"
 )
 MOBILE_RENOVATION_ART_SOURCE_DIR = ROOT / "work" / "assets" / "mobile_renovations"
+MOBILE_SOUND_ASSET_SOURCE_DIR = (
+    ROOT / "patcher_assets" / "optional_patches" / "mobile_sound_assets"
+)
+MOBILE_SOUND_PC_WAV_SOURCE_DIR = ROOT / "work" / "vanilla_runtime_payload" / "Sounds"
+MOBILE_SOUND_CONTRACT = ROOT / "data" / "vf2" / "mobile-sound-route-toggle-contract.json"
+MOBILE_SOUND_PARITY_CONTRACT = ROOT / "data" / "vf2" / "mobile-sound-parity-contract.json"
+MOBILE_SOUND_CONTRACT_ID = "vf2-mobile-sound-route-toggle-v1"
+MOBILE_SOUND_CONTRACT_SOURCE_HEAD = "1c627d57bd4f064410e8951f2e402bc8277c8fa6"
+MOBILE_SOUND_ASSET_RECORDS = (
+    {
+        "raw_mobile_id": "0x01",
+        "pc_filename": "beaker.wav",
+        "mobile_filename": "beaker.ogg",
+        "mobile_sha256": "0321ff33949e635b1d560d8ab5e0c24b1cf91e24453a182a6479a88cfbfc0ddc",
+        "mobile_size": 5090,
+        "sound_obj_offset": 0xEE3B,
+        "pc_sha256": "1ea91278c036d016f301b366f1155f9893d2aef52c023a5152aa6cb716b0c591",
+        "pc_size": 12254,
+    },
+    {
+        "raw_mobile_id": "0x35",
+        "pc_filename": "Child3.wav",
+        "mobile_filename": "Child3.ogg",
+        "mobile_sha256": "d7eaeb8de15fd71c9b9795273abd309caa94f7f0773240ace6d082815d5d09d7",
+        "mobile_size": 4794,
+        "sound_obj_offset": 0xF3CD,
+        "pc_sha256": "edb4a9ff3f24f077ba7695bb7b7d57fdfdb575f7aea73b3a791969560170b556",
+        "pc_size": 5800,
+    },
+    {
+        "raw_mobile_id": "0x39",
+        "pc_filename": "Child7.wav",
+        "mobile_filename": "Child7.ogg",
+        "mobile_sha256": "31bcddbdf50bcf6ceff01db95eec0b24ad5a2842815a3794b8559feff9628bb7",
+        "mobile_size": 5328,
+        "sound_obj_offset": 0xF431,
+        "pc_sha256": "92ef57977bb058439ca9c287fb19c338ee7dd55e538be0d2d692cddabb84c040",
+        "pc_size": 7806,
+    },
+    {
+        "raw_mobile_id": "0x3A",
+        "pc_filename": "Child8.wav",
+        "mobile_filename": "Child8.ogg",
+        "mobile_sha256": "c486c883eff6f612992612a9f233b27365d0425e3bcfb3371c2e8ec28c40f96a",
+        "mobile_size": 4562,
+        "sound_obj_offset": 0xF44A,
+        "pc_sha256": "efb39f885b51a480537745e625f7e805970825858a1e53f0ba4f2cf1a01f6ff8",
+        "pc_size": 5576,
+    },
+)
+MOBILE_SOUND_SOURCE_OBJECT_SHA256 = "11730b342977e3f120bf3627e762bebcf9f36976c5cfc34736c89e78523e3bc4"
+MOBILE_SOUND_FMOD_SHA256 = "7c6f7495d0a981f646bc23fdb39c0e349c598f5d6f4ef0ee58311338ae760194"
+
+
+def _load_mobile_sound_payload_records():
+    try:
+        contract = json.loads(MOBILE_SOUND_PARITY_CONTRACT.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Unable to read mobile sound parity contract: {MOBILE_SOUND_PARITY_CONTRACT}") from exc
+    rows = contract.get("sound_records")
+    if not isinstance(rows, list) or len(rows) != 67:
+        raise RuntimeError("Mobile sound parity contract must contain exactly 67 records")
+    records = []
+    seen = set()
+    for row in rows:
+        pc = row.get("pc_sound_obj", {})
+        mobile = row.get("mobile_obb", {})
+        name = mobile.get("asset_name")
+        digest = mobile.get("sha256")
+        pc_name = pc.get("filename")
+        if not isinstance(name, str) or not isinstance(pc_name, str) or not re.fullmatch(r"[0-9a-f]{64}", str(digest)):
+            raise RuntimeError("Mobile sound parity record is malformed")
+        if name.lower() in seen:
+            raise RuntimeError(f"Duplicate mobile sound payload name: {name}")
+        seen.add(name.lower())
+        records.append({
+            "raw_mobile_id": row.get("raw_mobile_id"),
+            "pc_filename": pc_name,
+            "mobile_filename": name,
+            "mobile_sha256": digest,
+        })
+    return tuple(records)
+
+
+MOBILE_SOUND_PAYLOAD_RECORDS = _load_mobile_sound_payload_records()
 MOBILE_RENOVATION_ATLAS_CONTRACT = (
     ROOT / "data" / "vf2" / "mobile-renovation-atlas-contract.json"
 )
@@ -3796,6 +3887,111 @@ def copy_obj_tree():
     PATCHED.mkdir(parents=True)
     for obj in SRC_OBJS.glob("*.obj"):
         shutil.copy2(obj, PATCHED / obj.name)
+
+
+def patch_mobile_sound_routes(manifest):
+    """Patch the four proven Sound.obj filename routes as one transaction."""
+    sound_obj = PATCHED / "Sound.obj"
+    if not sound_obj.is_file():
+        raise RuntimeError(f"Missing Sound.obj for mobile audio routing: {sound_obj}")
+    original = sound_obj.read_bytes()
+    original_sha256 = hashlib.sha256(original).hexdigest()
+    if original_sha256 != MOBILE_SOUND_SOURCE_OBJECT_SHA256:
+        raise RuntimeError(
+            "Sound.obj identity mismatch for mobile sound routing: "
+            f"expected {MOBILE_SOUND_SOURCE_OBJECT_SHA256}, got {original_sha256}"
+        )
+    fmod_path = ROOT / "work" / "desktop_runtime_dlls" / "fmod.dll"
+    if not fmod_path.is_file() or hashlib.sha256(fmod_path.read_bytes()).hexdigest() != MOBILE_SOUND_FMOD_SHA256:
+        raise RuntimeError("Pinned FMOD 3.74 identity is missing or mismatched")
+    patched = bytearray(original)
+    route_records = []
+    for spec in MOBILE_SOUND_ASSET_RECORDS:
+        source = MOBILE_SOUND_ASSET_SOURCE_DIR / spec["mobile_filename"]
+        if not source.is_file():
+            raise RuntimeError(f"Mobile sound asset is missing: {source}")
+        source_data = source.read_bytes()
+        source_sha256 = hashlib.sha256(source_data).hexdigest()
+        if (
+            source_sha256 != spec["mobile_sha256"]
+            or len(source_data) != spec["mobile_size"]
+            or not source_data.startswith(b"OggS")
+        ):
+            raise RuntimeError(
+                f"Mobile sound asset identity mismatch for {source.name}"
+            )
+        pc_source = MOBILE_SOUND_PC_WAV_SOURCE_DIR / spec["pc_filename"]
+        if not pc_source.is_file():
+            raise RuntimeError(f"Pinned PC WAV is missing: {pc_source}")
+        pc_data = pc_source.read_bytes()
+        if (
+            hashlib.sha256(pc_data).hexdigest() != spec["pc_sha256"]
+            or len(pc_data) != spec["pc_size"]
+            or not pc_data.startswith(b"RIFF")
+            or pc_data[8:12] != b"WAVE"
+        ):
+            raise RuntimeError(f"Pinned PC WAV identity mismatch for {pc_source.name}")
+        expected = spec["pc_filename"].encode("ascii")
+        replacement = spec["mobile_filename"].encode("ascii")
+        if len(expected) != len(replacement):
+            raise RuntimeError(
+                f"Mobile sound route length mismatch: {spec['pc_filename']} -> {spec['mobile_filename']}"
+            )
+        offset = spec["sound_obj_offset"]
+        if original[offset : offset + len(expected)] != expected:
+            raise RuntimeError(
+                f"Pinned Sound.obj route preimage mismatch for {spec['pc_filename']} at 0x{offset:x}"
+            )
+        if original.count(expected) != 1:
+            raise RuntimeError(f"Sound.obj route is not unique for {spec['pc_filename']}")
+        route_records.append(
+            {
+                "raw_mobile_id": spec["raw_mobile_id"],
+                "pc_filename": spec["pc_filename"],
+                "mobile_filename": spec["mobile_filename"],
+                "object_offset": f"0x{offset:x}",
+                "expected_bytes": expected.hex(),
+                "replacement_bytes": replacement.hex(),
+                "mobile_asset": str(source),
+                "mobile_asset_sha256": source_sha256,
+                "mobile_asset_size": len(source_data),
+            }
+        )
+        if ENABLE_MOBILE_SOUND_ASSETS:
+            patched[offset : offset + len(expected)] = replacement
+    if len(route_records) != len(MOBILE_SOUND_ASSET_RECORDS):
+        raise RuntimeError("Mobile sound route table is incomplete")
+    if ENABLE_MOBILE_SOUND_ASSETS:
+        temp = sound_obj.with_name(sound_obj.name + ".mobile-sound.tmp")
+        if temp.exists():
+            raise RuntimeError(f"Refusing stale mobile sound temporary object: {temp}")
+        try:
+            temp.write_bytes(bytes(patched))
+            if hashlib.sha256(temp.read_bytes()).hexdigest() != hashlib.sha256(bytes(patched)).hexdigest():
+                raise RuntimeError("Staged Sound.obj verification failed")
+            temp.replace(sound_obj)
+        finally:
+            if temp.exists():
+                temp.unlink()
+    manifest["MobileSoundAssets"] = {
+        "contract_id": "vf2-mobile-sound-route-toggle-v1",
+        "evidence_contract": "data/vf2/mobile-sound-route-toggle-contract.json",
+        "source_head": "1c627d57bd4f064410e8951f2e402bc8277c8fa6",
+        "source_object_sha256": original_sha256,
+        "enabled": ENABLE_MOBILE_SOUND_ASSETS,
+        "setting": "mobile_sound_assets",
+        "default_off": True,
+        "status": (
+            "sound_obj_routes_replaced"
+            if ENABLE_MOBILE_SOUND_ASSETS
+            else "stock_wav_routes_preserved"
+        ),
+        "source_object": "Sound.obj",
+        "route_count": len(route_records),
+        "all_or_nothing": True,
+        "runtime_qa": "routing-only; audible/mobile parity remains pending",
+        "routes": route_records,
+    }
 
 
 def count_files(root):
@@ -7661,6 +7857,87 @@ def sync_mobile_renovation_art_sources(manifest):
         "overlay_contract": "Images/MobileRenovations/*.png are drawn at 1:1 scale after CWorldMap::Draw and before decals",
         "anchors": {room: list(origin) for room, origin in MOBILE_RENOVATION_ANCHORS.items()},
         "bathroom2_policy": "reuse the corrected Bathroom 1 art only after a native second-bathroom render route is verified",
+    }
+
+
+def sync_mobile_sound_assets(manifest):
+    """Stage all 67 hash-pinned mobile behavior sounds as one optional payload."""
+    runtime_target = OUT / "Sounds"
+    copied = []
+    validated = []
+    for spec in MOBILE_SOUND_PAYLOAD_RECORDS:
+        source = MOBILE_SOUND_ASSET_SOURCE_DIR / spec["mobile_filename"]
+        if not source.is_file():
+            raise RuntimeError(f"Mobile sound asset is missing: {source}")
+        source_data = source.read_bytes()
+        source_sha256 = hashlib.sha256(source_data).hexdigest()
+        if source_sha256 != spec["mobile_sha256"] or not source_data.startswith(b"OggS"):
+            raise RuntimeError(f"Mobile sound asset identity mismatch for {source.name}")
+        validated.append((spec, source, source_data, source_sha256))
+
+    runtime_target.mkdir(parents=True, exist_ok=True)
+    destinations = [runtime_target / spec["mobile_filename"] for spec, _source, _data, _sha in validated]
+    prior = {path: path.read_bytes() if path.is_file() else None for path in destinations}
+    additive_names = {
+        spec["mobile_filename"] for spec in MOBILE_SOUND_PAYLOAD_RECORDS
+        if spec["mobile_filename"].lower() != spec["pc_filename"].lower()
+    }
+    if not ENABLE_MOBILE_SOUND_ASSETS:
+        expected_by_path = {
+            runtime_target / spec["mobile_filename"]: spec["mobile_sha256"]
+            for spec in MOBILE_SOUND_PAYLOAD_RECORDS
+            if spec["mobile_filename"] in additive_names
+        }
+        for path, expected_sha in expected_by_path.items():
+            old_data = prior[path]
+            if old_data is not None and hashlib.sha256(old_data).hexdigest() != expected_sha:
+                raise RuntimeError(f"Refusing to remove unknown sound asset: {path}")
+    try:
+        if ENABLE_MOBILE_SOUND_ASSETS:
+            with tempfile.TemporaryDirectory(prefix="vf2-mobile-sounds-", dir=OUT) as tmp:
+                stage = Path(tmp)
+                staged = []
+                for spec, source, source_data, source_sha256 in validated:
+                    staged_path = stage / spec["mobile_filename"]
+                    staged_path.write_bytes(source_data)
+                    if hashlib.sha256(staged_path.read_bytes()).hexdigest() != source_sha256:
+                        raise RuntimeError(f"Staged mobile sound verification failed for {source.name}")
+                    staged.append((spec, source, source_sha256, staged_path))
+                for spec, source, source_sha256, staged_path in staged:
+                    destination = runtime_target / spec["mobile_filename"]
+                    staged_path.replace(destination)
+                    copied.append({
+                        "name": spec["mobile_filename"], "source": str(source),
+                        "target": str(destination), "bytes": destination.stat().st_size,
+                        "sha256": source_sha256,
+                    })
+        else:
+            for destination in destinations:
+                if destination.name not in additive_names:
+                    continue
+                if destination.exists():
+                    destination.unlink()
+    except Exception:
+        for path, old_data in prior.items():
+            if old_data is None:
+                if path.exists():
+                    path.unlink()
+            else:
+                path.write_bytes(old_data)
+        raise
+    manifest["mobile_sound_asset_sources"] = {
+        "status": (
+            "runtime_ogg_payload"
+            if ENABLE_MOBILE_SOUND_ASSETS
+            else "disabled_stock_wav_payload"
+        ),
+        "source": str(MOBILE_SOUND_ASSET_SOURCE_DIR),
+        "target": str(runtime_target),
+        "copied": copied,
+        "missing": [],
+        "runtime_copy": ENABLE_MOBILE_SOUND_ASSETS,
+        "asset_count": len(MOBILE_SOUND_PAYLOAD_RECORDS),
+        "routing_contract": "Sound.obj literals are patched atomically by the offline mobile_sound_assets setting",
     }
 
 
@@ -25006,6 +25283,7 @@ def main():
             for i, (name, donor, list_name, path) in enumerate(ITEMS)
         ]
     }
+    patch_mobile_sound_routes(manifest)
     seed_from_previous_build(manifest)
     sync_vanilla_runtime_payload(manifest)
     patch_furniture_manager(manifest)
@@ -25129,6 +25407,7 @@ def main():
     sync_invisible_furniture_reference_sets(manifest)
     sync_optional_visual_mod_sources(manifest)
     sync_mobile_renovation_art_sources(manifest)
+    sync_mobile_sound_assets(manifest)
     sync_outfit_store_icon_art(manifest)
     sync_visible_special_upgrade_icon_art(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:

@@ -1,0 +1,320 @@
+{
+  "schema_version": 1,
+  "contract_id": "vf2-mobile-sound-route-toggle-v1",
+  "provenance": {
+    "source_head": "1c627d57bd4f064410e8951f2e402bc8277c8fa6",
+    "source_head_short": "1c627d57",
+    "evidence_scope": "static_pc_route_and_container_signature_evidence_only"
+  },
+  "inputs": {
+    "sound_obj": {
+      "path": "work/desktop_obj_files/Sound.obj",
+      "sha256": "11730b342977e3f120bf3627e762bebcf9f36976c5cfc34736c89e78523e3bc4",
+      "record_section": {
+        "index": 663,
+        "index_hex": "0x297",
+        "name": ".data",
+        "raw_file_offset_hex": "0x14551",
+        "raw_size_hex": "0x13C0",
+        "relocation_table_file_offset_hex": "0x15911",
+        "relocation_count": 622,
+        "relocation_count_hex": "0x26E",
+        "sound_list_section_offset_hex": "0x50",
+        "sound_list_raw_file_offset_hex": "0x145A1",
+        "record_stride_hex": "0x10",
+        "id_offset_hex": "0x0",
+        "name_pointer_relocation_offset_hex": "0x4",
+        "filename_pointer_relocation_offset_hex": "0x8",
+        "preload_dynamic_flag_offset_hex": "0xC"
+      }
+    },
+    "fmod": {
+      "path": "work/desktop_runtime_dlls/fmod.dll",
+      "sha256": "7c6f7495d0a981f646bc23fdb39c0e349c598f5d6f4ef0ee58311338ae760194",
+      "file_version": "3.74",
+      "image_base_hex": "0x10000000",
+      "sample_load_export": "_FSOUND_Sample_Load@20",
+      "sample_load_rva_hex": "0x295C4",
+      "sample_load_nominal_va_hex": "0x100295C4",
+      "packed_section": {
+        "name": "UPX0",
+        "rva_hex": "0x1000",
+        "virtual_size_hex": "0x6D000",
+        "raw_size_hex": "0x0"
+      }
+    },
+    "reference_linked_exe": {
+      "path": "outputs/VF2-Mobile-Furniture-Tree-Autonomy-B158-state-machine-removal-validation2/Virtual Families 2 - Mobile Renovations.exe",
+      "sha256": "1b8046c2d80a83f6747af65f69bb84ada9789c4fede1a6adf7d4e6971b4aa692",
+      "image_base_hex": "0x00400000",
+      "sound_list_va_hex": "0x0056FF80"
+    }
+  },
+  "static_loader_evidence": {
+    "sound_obj_load_assets": {
+      "coff_section_index_hex": "0x27B",
+      "coff_section_name": ".text$mn",
+      "coff_raw_file_offset_hex": "0x12260",
+      "coff_raw_size_hex": "0x9A",
+      "linked_function_va_hex": "0x0048DC70",
+      "filename_read_va_hex": "0x0048DCB1",
+      "flag_read_va_hex": "0x0048DCB4",
+      "filename_push_va_hex": "0x0048DCCB",
+      "ldw_sound_fx_call_va_hex": "0x0048DCCE"
+    },
+    "ldw_sound_fx_constructor": {
+      "coff_section_index_hex": "0x5",
+      "coff_section_name": ".text$mn",
+      "coff_raw_file_offset_hex": "0x266E",
+      "coff_raw_size_hex": "0xCB",
+      "linked_function_va_hex": "0x0047EDD0",
+      "zero_mode_offset_length_pushes_va_hex": [
+        "0x0047EE47",
+        "0x0047EE49",
+        "0x0047EE4B"
+      ],
+      "resolved_path_push_va_hex": "0x0047EE58",
+      "fsound_free_push_va_hex": "0x0047EE59",
+      "sample_load_thunk_call_va_hex": "0x0047EE5B"
+    },
+    "sample_load_thunk": {
+      "linked_function_va_hex": "0x004B0B70",
+      "export_name_push_va_hex": "0x004B0B8D",
+      "get_proc_address_call_va_hex": "0x004B0B93",
+      "resolved_export_jump_va_hex": "0x004B0BA2"
+    },
+    "selection_result": {
+      "sound_obj_record_selects": "filename_only",
+      "game_effect_loader_extension_branch_present": false,
+      "game_effect_loader_format_field_present": false,
+      "fmod_decoder_selection": "unresolved_because_export_body_is_runtime_unpacked_from_upx0",
+      "ogg_named_effect_route_supported": true,
+      "ogg_named_effect_route_evidence": "existing preloaded Sound.obj record 0x02 routes owl.ogg through the same ldwSoundFx and FSOUND_Sample_Load path"
+    }
+  },
+  "toggle": {
+    "id": "vf2_mobile_authentic_ogg_routes",
+    "default_enabled": false,
+    "transaction": "all_or_nothing_four_routes",
+    "strategy": "length_preserving_sound_obj_filename_literal_patch_and_additive_ogg_packaging",
+    "forbidden_strategy": "placing_oggs_bytes_under_wav_filenames",
+    "route_count": 4,
+    "retain_original_pc_wav_files": true
+  },
+  "routes": [
+    {
+      "raw_id": 1,
+      "raw_id_hex": "0x01",
+      "enum_name": "eSound_Beaker",
+      "sound_obj": {
+        "record_section_offset_hex": "0x60",
+        "record_raw_file_offset_hex": "0x145B1",
+        "name_relocation_section_offset_hex": "0x64",
+        "filename_relocation_section_offset_hex": "0x68",
+        "filename_literal_raw_file_offset_hex": "0xEE3B",
+        "preimage_literal": "beaker.wav",
+        "preimage_literal_ascii_hex": "6265616b65722e776176",
+        "replacement_literal": "beaker.ogg",
+        "replacement_literal_ascii_hex": "6265616b65722e6f6767",
+        "preload_dynamic_flag": 0
+      },
+      "linked_exe": {
+        "record_va_hex": "0x0056FF90",
+        "filename_pointer_field_va_hex": "0x0056FF98",
+        "filename_literal_va_hex": "0x004F70CC",
+        "filename_literal_file_offset_hex": "0xF56CC"
+      },
+      "pc_wav": {
+        "path": "work/vanilla_runtime_payload/Sounds/beaker.wav",
+        "sha256": "1ea91278c036d016f301b366f1155f9893d2aef52c023a5152aa6cb716b0c591",
+        "size": 12254,
+        "first_12_bytes_hex": "52494646d62f000057415645",
+        "signature": "RIFF....WAVE"
+      },
+      "mobile_ogg": {
+        "source_path": "work/vf2_apk_extract/obb/assets/beaker.ogg",
+        "sha256": "0321ff33949e635b1d560d8ab5e0c24b1cf91e24453a182a6479a88cfbfc0ddc",
+        "size": 5090,
+        "first_8_bytes_hex": "4f67675300020000",
+        "signature": "OggS",
+        "destination_path": "Sounds/beaker.ogg"
+      }
+    },
+    {
+      "raw_id": 53,
+      "raw_id_hex": "0x35",
+      "enum_name": "eSound_Ohkid3",
+      "sound_obj": {
+        "record_section_offset_hex": "0x3A0",
+        "record_raw_file_offset_hex": "0x148F1",
+        "name_relocation_section_offset_hex": "0x3A4",
+        "filename_relocation_section_offset_hex": "0x3A8",
+        "filename_literal_raw_file_offset_hex": "0xF3CD",
+        "preimage_literal": "Child3.wav",
+        "preimage_literal_ascii_hex": "4368696c64332e776176",
+        "replacement_literal": "Child3.ogg",
+        "replacement_literal_ascii_hex": "4368696c64332e6f6767",
+        "preload_dynamic_flag": 0
+      },
+      "linked_exe": {
+        "record_va_hex": "0x005702D0",
+        "filename_pointer_field_va_hex": "0x005702D8",
+        "filename_literal_va_hex": "0x004F770C",
+        "filename_literal_file_offset_hex": "0xF5D0C"
+      },
+      "pc_wav": {
+        "path": "work/vanilla_runtime_payload/Sounds/Child3.wav",
+        "sha256": "edb4a9ff3f24f077ba7695bb7b7d57fdfdb575f7aea73b3a791969560170b556",
+        "size": 5800,
+        "first_12_bytes_hex": "52494646a016000057415645",
+        "signature": "RIFF....WAVE"
+      },
+      "mobile_ogg": {
+        "source_path": "work/vf2_apk_extract/obb/assets/Child3.ogg",
+        "sha256": "d7eaeb8de15fd71c9b9795273abd309caa94f7f0773240ace6d082815d5d09d7",
+        "size": 4794,
+        "first_8_bytes_hex": "4f67675300020000",
+        "signature": "OggS",
+        "destination_path": "Sounds/Child3.ogg"
+      }
+    },
+    {
+      "raw_id": 57,
+      "raw_id_hex": "0x39",
+      "enum_name": "eSound_Ohkid7",
+      "sound_obj": {
+        "record_section_offset_hex": "0x3E0",
+        "record_raw_file_offset_hex": "0x14931",
+        "name_relocation_section_offset_hex": "0x3E4",
+        "filename_relocation_section_offset_hex": "0x3E8",
+        "filename_literal_raw_file_offset_hex": "0xF431",
+        "preimage_literal": "Child7.wav",
+        "preimage_literal_ascii_hex": "4368696c64372e776176",
+        "replacement_literal": "Child7.ogg",
+        "replacement_literal_ascii_hex": "4368696c64372e6f6767",
+        "preload_dynamic_flag": 0
+      },
+      "linked_exe": {
+        "record_va_hex": "0x00570310",
+        "filename_pointer_field_va_hex": "0x00570318",
+        "filename_literal_va_hex": "0x004F777C",
+        "filename_literal_file_offset_hex": "0xF5D7C"
+      },
+      "pc_wav": {
+        "path": "work/vanilla_runtime_payload/Sounds/Child7.wav",
+        "sha256": "92ef57977bb058439ca9c287fb19c338ee7dd55e538be0d2d692cddabb84c040",
+        "size": 7806,
+        "first_12_bytes_hex": "52494646761e000057415645",
+        "signature": "RIFF....WAVE"
+      },
+      "mobile_ogg": {
+        "source_path": "work/vf2_apk_extract/obb/assets/Child7.ogg",
+        "sha256": "31bcddbdf50bcf6ceff01db95eec0b24ad5a2842815a3794b8559feff9628bb7",
+        "size": 5328,
+        "first_8_bytes_hex": "4f67675300020000",
+        "signature": "OggS",
+        "destination_path": "Sounds/Child7.ogg"
+      }
+    },
+    {
+      "raw_id": 58,
+      "raw_id_hex": "0x3A",
+      "enum_name": "eSound_Ohkid8",
+      "sound_obj": {
+        "record_section_offset_hex": "0x3F0",
+        "record_raw_file_offset_hex": "0x14941",
+        "name_relocation_section_offset_hex": "0x3F4",
+        "filename_relocation_section_offset_hex": "0x3F8",
+        "filename_literal_raw_file_offset_hex": "0xF44A",
+        "preimage_literal": "Child8.wav",
+        "preimage_literal_ascii_hex": "4368696c64382e776176",
+        "replacement_literal": "Child8.ogg",
+        "replacement_literal_ascii_hex": "4368696c64382e6f6767",
+        "preload_dynamic_flag": 0
+      },
+      "linked_exe": {
+        "record_va_hex": "0x00570320",
+        "filename_pointer_field_va_hex": "0x00570328",
+        "filename_literal_va_hex": "0x004F7798",
+        "filename_literal_file_offset_hex": "0xF5D98"
+      },
+      "pc_wav": {
+        "path": "work/vanilla_runtime_payload/Sounds/Child8.wav",
+        "sha256": "efb39f885b51a480537745e625f7e805970825858a1e53f0ba4f2cf1a01f6ff8",
+        "size": 5576,
+        "first_12_bytes_hex": "52494646c015000057415645",
+        "signature": "RIFF....WAVE"
+      },
+      "mobile_ogg": {
+        "source_path": "work/vf2_apk_extract/obb/assets/Child8.ogg",
+        "sha256": "c486c883eff6f612992612a9f233b27365d0425e3bcfb3371c2e8ec28c40f96a",
+        "size": 4562,
+        "first_8_bytes_hex": "4f67675300020000",
+        "signature": "OggS",
+        "destination_path": "Sounds/Child8.ogg"
+      }
+    }
+  ],
+  "preflight": {
+    "when_disabled": [
+      "do_not_patch_any_sound_obj_literal",
+      "do_not_package_any_of_the_four_mobile_oggs"
+    ],
+    "when_enabled_require_all": [
+      "source_head_and_supported_input_identity_are_explicitly_selected",
+      "sound_obj_sha256_matches",
+      "fmod_sha256_and_version_match",
+      "all_four_record_ids_offsets_relocations_flags_and_preimage_literals_match",
+      "each_replacement_literal_is_byte_length_equal_to_its_preimage_literal",
+      "all_four_mobile_ogg_sources_exist_and_match_size_sha256_and_oggs_signature",
+      "all_four_pc_wav_preimages_exist_and_match_size_sha256_and_riff_wave_signature",
+      "all_four_destination_paths_are_unique_and_remain_inside_the_staged_sounds_directory"
+    ],
+    "failure_action": "abort_before_mutation_or_packaging_and_leave_toggle_disabled"
+  },
+  "staging_and_rollback": {
+    "canonical_sound_obj_mutation_allowed": false,
+    "canonical_mobile_obb_asset_mutation_allowed": false,
+    "apply_to_staged_build_inputs_only": true,
+    "commit_point": "after_all_four_literals_and_all_four_destination_assets_pass_poststage_verification",
+    "poststage_require_all": [
+      "four_staged_sound_obj_literals_equal_the_replacement_literals",
+      "four_staged_destination_files_match_the_pinned_mobile_ogg_hashes",
+      "linked_route_pointer_fields_resolve_to_the_expected_ogg_literals_for_the_exact_supported_layout",
+      "no_route_uses_oggs_bytes_under_a_wav_filename"
+    ],
+    "rollback_on_any_failure": [
+      "discard_the_entire_staged_toggle_result",
+      "publish_no_partial_sound_asset_set",
+      "preserve_the_unmodified_pc_wav_routes_and_files"
+    ]
+  },
+  "offline_packaging": {
+    "feature_default_enabled": false,
+    "must_be_self_contained": true,
+    "external_runtime_paths_allowed": false,
+    "enabled_package_requirements": [
+      "declare_the_optional_toggle_and_contract_id_in_the_package_manifest",
+      "include_exactly_the_four_pinned_mobile_oggs_at_the_declared_sounds_destinations",
+      "include_the_route_patch_only_when_all_four_assets_are_present_and_verified",
+      "record_each_destination_sha256_in_the_offline_manifest",
+      "verify_the_final_package_contains_all_four_or_none",
+      "keep_the_original_pc_wav_files_available_for_disabled_mode_and_rollback"
+    ],
+    "disabled_package_requirements": [
+      "retain_all_four_original_wav_routes",
+      "omit_all_four_optional_mobile_ogg_destinations"
+    ],
+    "partial_package_allowed": false
+  },
+  "claims": {
+    "direct_pc_record_mapping_verified": true,
+    "container_signature_difference_verified": true,
+    "byte_identity": false,
+    "decoder_selection_verified": false,
+    "ogg_bytes_under_wav_filename_safe": false,
+    "decoded_audio_content_parity_verified": false,
+    "audible_parity_verified": false,
+    "runtime_player_qa_complete": false
+  }
+}

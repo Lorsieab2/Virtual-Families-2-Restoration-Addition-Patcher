@@ -14,6 +14,7 @@ import json
 import re
 import shutil
 import struct
+import tempfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -56,6 +57,32 @@ SOURCE_ONLY_PAYLOAD_DIRS = FULL_PAYLOAD_ALWAYS_INCLUDE_DIRS
 OPTIONAL_SONG_SOURCE_DIR = Path("OptionalSongMods")
 OPTIONAL_SONG_TARGET_DIR = Path("Sounds")
 DEFAULT_OPTIONAL_SONG_MODS_SOURCE = OPTIONAL_PATCH_ASSET_DIR / "optional_song_mods" / "OptionalSongMods"
+MOBILE_SOUND_ASSET_SOURCE_DIR = OPTIONAL_PATCH_ASSET_DIR / "mobile_sound_assets"
+MOBILE_SOUND_PARITY_CONTRACT = ROOT / "data" / "vf2" / "mobile-sound-parity-contract.json"
+try:
+    _mobile_sound_contract = json.loads(MOBILE_SOUND_PARITY_CONTRACT.read_text(encoding="utf-8"))
+    _mobile_sound_rows = _mobile_sound_contract["sound_records"]
+except (OSError, KeyError, json.JSONDecodeError) as exc:
+    raise RuntimeError(f"Unable to load mobile sound parity contract: {MOBILE_SOUND_PARITY_CONTRACT}") from exc
+if not isinstance(_mobile_sound_rows, list) or len(_mobile_sound_rows) != 67:
+    raise RuntimeError("Mobile sound parity contract must contain exactly 67 records")
+MOBILE_SOUND_ASSET_FILES = tuple(row["mobile_obb"]["asset_name"] for row in _mobile_sound_rows)
+MOBILE_SOUND_ASSET_PINS = {
+    row["mobile_obb"]["asset_name"]: row["mobile_obb"]["sha256"]
+    for row in _mobile_sound_rows
+}
+MOBILE_SOUND_PC_FILENAMES = {
+    row["mobile_obb"]["asset_name"]: row["pc_sound_obj"]["filename"]
+    for row in _mobile_sound_rows
+}
+if len({name.lower() for name in MOBILE_SOUND_ASSET_FILES}) != 67:
+    raise RuntimeError("Mobile sound parity contract contains duplicate asset names")
+MOBILE_SOUND_ROUTE_PINS = {
+    "beaker.wav": ("beaker.ogg", "0xee3b"),
+    "Child3.wav": ("Child3.ogg", "0xf3cd"),
+    "Child7.wav": ("Child7.ogg", "0xf431"),
+    "Child8.wav": ("Child8.ogg", "0xf44a"),
+}
 MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR = (
     OPTIONAL_PATCH_ASSET_DIR / "mobile_furniture_behaviors" / "pc_fmaps"
 )
@@ -119,12 +146,14 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "custom_lorsieab2_map_images",
     "optional_visual_mod_graphics",
     "mobile_renovations",
+    "mobile_sound_assets",
     "cheat_upgrades",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "cheat_upgrades",
     "mobile_renovations",
 }
+OUTPUT_ONLY_REMOVABLE_ASSET_SETTINGS = EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS
 
 SETTINGS = [
     {
@@ -271,6 +300,13 @@ SETTINGS = [
         "id": "mobile_renovations",
         "label": "Add mobile room renovations",
         "description": "Optional patch: overlays the 15 verified mobile kitchen, bathroom, office, and workshop renovation images at their exact 1:1 room-map positions. The stock map remains unchanged when this setting is disabled.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "mobile_sound_assets",
+        "label": "Use mobile sound assets",
+        "description": "Stages all 67 hash-pinned mobile behavior sounds and replaces the four PC WAV filename routes that must point to OGG assets. Default-off; audible parity remains pending runtime QA.",
         "default": False,
         "category": "optional",
     },
@@ -871,17 +907,121 @@ def mobile_furniture_behavior_post_asset_patches(
     )
 
 
+def mobile_sound_assets_post_asset_patches(
+    executable_sources: list[Path],
+    *,
+    output_exe_name: str,
+    build_manifest_data: dict[str, Any],
+    allowed_source_sha256s: set[str],
+) -> list[dict[str, Any]]:
+    """Emit four exact-SHA, all-or-nothing Sound.obj route replacements."""
+    contract = build_manifest_data.get("MobileSoundAssets")
+    if not isinstance(contract, dict):
+        return []
+    routes = contract.get("routes")
+    if not isinstance(routes, list) or len(routes) != 4:
+        raise ValueError("Build manifest has an incomplete MobileSoundAssets route contract.")
+    normalized_routes = []
+    for route_index, route in enumerate(routes):
+        if not isinstance(route, dict):
+            raise ValueError(f"MobileSoundAssets route #{route_index} is invalid.")
+        try:
+            expected = bytes.fromhex(str(route["expected_bytes"]))
+            replacement = bytes.fromhex(str(route["replacement_bytes"]))
+        except (KeyError, ValueError) as exc:
+            raise ValueError(f"MobileSoundAssets route #{route_index} has invalid bytes.") from exc
+        if not expected or len(expected) != len(replacement):
+            raise ValueError(f"MobileSoundAssets route #{route_index} has invalid replacement length.")
+        pc_filename = str(route.get("pc_filename", ""))
+        mobile_filename = str(route.get("mobile_filename", ""))
+        pin = MOBILE_SOUND_ROUTE_PINS.get(pc_filename)
+        if pin is None or pin[0] != mobile_filename or str(route.get("object_offset", "")).lower() != pin[1]:
+            raise ValueError(f"MobileSoundAssets route #{route_index} disagrees with the pinned contract.")
+        if expected != pc_filename.encode("ascii") or replacement != mobile_filename.encode("ascii"):
+            raise ValueError(f"MobileSoundAssets route #{route_index} literal bytes drifted.")
+        normalized_routes.append((route_index, route, expected, replacement))
+
+    source_variants: dict[Path, dict[str, Any]] = {}
+    normalized_allowed = {str(value).lower() for value in allowed_source_sha256s}
+    if not normalized_allowed:
+        raise ValueError("MobileSoundAssets has no authenticated executable payload hashes.")
+    for source in executable_sources:
+        data = source.read_bytes()
+        source_sha = sha256_file(source).lower()
+        if source_sha not in normalized_allowed:
+            raise ValueError(
+                f"MobileSoundAssets executable payload is not authenticated: {source.name} ({source_sha})"
+            )
+        patched = bytearray(data)
+        offsets = []
+        for route_index, route, expected, replacement in normalized_routes:
+            offset = data.find(expected)
+            duplicate = data.find(expected, offset + 1) if offset >= 0 else -1
+            if offset < 0 or duplicate >= 0:
+                raise ValueError(
+                    f"Expected exactly one {route.get('pc_filename', 'sound')} route in {source.name}"
+                )
+            offsets.append(offset)
+            patched[offset : offset + len(expected)] = replacement
+        source_variants[source] = {
+            "source_sha256": source_sha,
+            "offsets": offsets,
+            "result_sha256": hashlib.sha256(bytes(patched)).hexdigest(),
+        }
+    if not source_variants:
+        raise ValueError("MobileSoundAssets has no executable payloads.")
+
+    records: list[dict[str, Any]] = []
+    for normalized_index, (route_index, route, expected, replacement) in enumerate(normalized_routes):
+        variants_by_sha: dict[str, dict[str, Any]] = {}
+        for source, source_record in source_variants.items():
+            sha = source_record["source_sha256"]
+            variant = {
+                "asset_sha256": sha,
+                "offset": f"0x{source_record['offsets'][normalized_index]:x}",
+                "expected_asset_bytes": expected.hex().upper(),
+                "replacement_bytes": replacement.hex().upper(),
+                "result_asset_sha256": source_record["result_sha256"],
+                "note": f"Enable mobile sound route {route.get('pc_filename', '')} -> {route.get('mobile_filename', '')} in {source.name}.",
+            }
+            prior = variants_by_sha.get(sha)
+            if prior is not None and prior["offset"] != variant["offset"]:
+                raise ValueError(
+                    f"Duplicate executable SHA {sha} has conflicting mobile sound offsets."
+                )
+            variants_by_sha[sha] = variant
+        records.append(
+            {
+                "file_path": output_exe_name,
+                "requires": ["core_executable", "mobile_sound_assets"],
+                "note": (
+                    "Atomic exact-SHA mobile sound route toggle; all four routes are validated "
+                    "before one executable write."
+                ),
+                "variants": list(variants_by_sha.values()),
+            }
+        )
+    return records
+
+
 def b152_runtime_flag_post_asset_patches(
     executable_sources: list[Path],
     *,
     output_exe_name: str,
     build_manifest_data: dict[str, Any],
+    allowed_source_sha256s: set[str] | None = None,
 ) -> list[dict[str, Any]]:
     return [
         *mobile_furniture_behavior_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
+        ),
+        *mobile_sound_assets_post_asset_patches(
+            executable_sources,
+            output_exe_name=output_exe_name,
+            build_manifest_data=build_manifest_data,
+            allowed_source_sha256s=allowed_source_sha256s or set(),
         ),
         *holiday_furniture_goal_post_asset_patches(
             executable_sources,
@@ -1286,6 +1426,8 @@ def setting_for_asset(rel_path: Path) -> str:
         return "optional_visual_mod_graphics"
     if text.startswith("OptionalSongMods/"):
         return "optional_song_mods"
+    if parts and parts[0] == "Sounds" and rel_path.name in MOBILE_SOUND_ASSET_FILES:
+        return "mobile_sound_assets"
     if (
         text.startswith("Images/VillagerBodies/")
         or text.startswith("Images/VillagerDetailBodies/")
@@ -1344,6 +1486,7 @@ def asset_requires_for_setting(setting: str) -> list[str]:
         "vf3_furniture",
         "behavior_patches",
         "mobile_renovations",
+        "mobile_sound_assets",
         "cheat_upgrades",
     }:
         return ["core_executable", setting]
@@ -1475,13 +1618,18 @@ def export_asset_payloads(
         if rel.parts and rel.parts[0] in SOURCE_ONLY_PAYLOAD_DIRS:
             continue
 
+        setting = setting_for_asset(rel)
         record = {
             "file_path": relative_posix(rel),
             "source_path": relative_posix(Path("payload") / rel),
             "source_sha256": source_sha,
             "source_size": source_size,
             "allow_missing_target": asset_mode == "additive",
-            "requires": asset_requires_for_setting(setting_for_asset(rel)),
+            "requires": asset_requires_for_setting(setting),
+            "remove_when_disabled": (
+                setting in OUTPUT_ONLY_REMOVABLE_ASSET_SETTINGS
+                and rel.suffix.lower() != ".exe"
+            ),
             "note": f"Generated asset payload for {relative_posix(rel)}.",
         }
         invisible_base_build_source = build_dir / INVISIBLE_BASE_SOURCE_DIR / rel.name
@@ -1674,6 +1822,82 @@ def optional_song_asset_patches(
     return records
 
 
+def mobile_sound_asset_patches(
+    bundle_dir: Path,
+    base_payload: Path,
+    source_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Stage the four hash-pinned mobile OGGs behind one default-off setting."""
+    resolved_source_dir = source_dir or MOBILE_SOUND_ASSET_SOURCE_DIR
+    if not resolved_source_dir.is_dir():
+        raise ValueError(f"Mobile sound assets directory does not exist: {resolved_source_dir}")
+    validated = []
+    for filename in MOBILE_SOUND_ASSET_FILES:
+        source = resolved_source_dir / filename
+        if not source.is_file():
+            raise ValueError(f"Missing mobile sound asset: {source}")
+        data = source.read_bytes()
+        expected_sha = MOBILE_SOUND_ASSET_PINS[filename]
+        actual_sha = hashlib.sha256(data).hexdigest()
+        if actual_sha != expected_sha or not data.startswith(b"OggS"):
+            raise ValueError(f"Mobile sound asset identity mismatch: {source}")
+        validated.append((filename, source, data, actual_sha))
+
+    payload_root = bundle_dir / "payload"
+    payload_sound_dir = payload_root / "MobileSoundAssets"
+    records: list[dict[str, Any]] = []
+    payload_sound_dir.mkdir(parents=True, exist_ok=True)
+    prior = {payload_sound_dir / filename: (payload_sound_dir / filename).read_bytes() if (payload_sound_dir / filename).is_file() else None for filename in MOBILE_SOUND_ASSET_FILES}
+    try:
+        with tempfile.TemporaryDirectory(prefix="vf2-mobile-sounds-", dir=bundle_dir) as tmp:
+            stage = Path(tmp)
+            staged = []
+            for filename, source, data, actual_sha in validated:
+                staged_path = stage / filename
+                staged_path.write_bytes(data)
+                if hashlib.sha256(staged_path.read_bytes()).hexdigest() != actual_sha:
+                    raise ValueError(f"Staged mobile sound verification failed: {filename}")
+                staged.append((filename, source, actual_sha, staged_path))
+            for filename, source, actual_sha, staged_path in staged:
+                payload = payload_sound_dir / filename
+                staged_path.replace(payload)
+                target_rel = Path("Sounds") / filename
+                base_target = base_payload / target_rel
+                record: dict[str, Any] = {
+                    "file_path": relative_posix(target_rel),
+                    "source_path": relative_posix(payload.relative_to(bundle_dir)),
+                    "source_sha256": actual_sha,
+                    "source_size": payload.stat().st_size,
+                    "overwrite_existing": True,
+                    "allow_missing_target": True,
+                    "remove_when_disabled": MOBILE_SOUND_PC_FILENAMES[filename].lower() != filename.lower(),
+                    "requires": ["core_executable", "mobile_sound_assets"],
+                    "note": (
+                        "Optional mobile OGG sound route. Enable mobile_sound_assets to stage this asset; "
+                        "disabling the setting removes only the exact pinned OGG target."
+                    ),
+                }
+                if base_target.is_file():
+                    record["expected_target_sha256"] = sha256_file(base_target)
+                    record["expected_target_size"] = base_target.stat().st_size
+                    restore = payload_root / "OriginalMobileSoundAssets" / filename
+                    restore.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(base_target, restore)
+                    record["restore_source_path"] = relative_posix(restore.relative_to(bundle_dir))
+                    record["restore_source_sha256"] = sha256_file(restore)
+                    record["restore_source_size"] = restore.stat().st_size
+                records.append(record)
+    except Exception:
+        for path, old_data in prior.items():
+            if old_data is None:
+                if path.exists():
+                    path.unlink()
+            else:
+                path.write_bytes(old_data)
+        raise
+    return records
+
+
 def mobile_furniture_behavior_asset_patches(
     bundle_dir: Path,
     base_payload: Path,
@@ -1856,6 +2080,10 @@ def optional_visual_asset_patches(bundle_dir: Path) -> list[dict[str, Any]]:
                 "source_size": source.stat().st_size,
                 "overwrite_existing": True,
                 "requires": asset_requires_for_setting(setting),
+                "remove_when_disabled": (
+                    setting in OUTPUT_ONLY_REMOVABLE_ASSET_SETTINGS
+                    and target_rel.suffix.lower() != ".exe"
+                ),
                 "note": (
                     "Named optional visual swap."
                     if setting != "optional_visual_mod_graphics"
@@ -2828,6 +3056,15 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         DEFAULT_OPTIONAL_SONG_MODS_SOURCE if DEFAULT_OPTIONAL_SONG_MODS_SOURCE.is_dir() else None
     )
     asset_patches.extend(optional_song_asset_patches(bundle_dir, base_payload, optional_song_source))
+    mobile_sound_source = Path(args.mobile_sound_assets_dir).resolve() if args.mobile_sound_assets_dir else (
+        MOBILE_SOUND_ASSET_SOURCE_DIR if MOBILE_SOUND_ASSET_SOURCE_DIR.is_dir() else None
+    )
+    if (
+        args.include_exe_replacement
+        and mobile_sound_source is not None
+        and isinstance(build_manifest_data.get("MobileSoundAssets"), dict)
+    ):
+        asset_patches.extend(mobile_sound_asset_patches(bundle_dir, base_payload, mobile_sound_source))
     asset_patches.extend(
         mobile_furniture_behavior_asset_patches(bundle_dir, base_payload)
     )
@@ -3005,6 +3242,12 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         executable_runtime_flag_sources,
         output_exe_name=output_exe_name,
         build_manifest_data=build_manifest_data,
+        allowed_source_sha256s={
+            str(row["source_sha256"]).lower()
+            for row in asset_patches
+            if str(row.get("source_path", "")).lower().endswith(".exe")
+            and isinstance(row.get("source_sha256"), str)
+        },
     ) if exe_replacement_record is not None else []
 
     asset_counts_by_setting: dict[str, int] = {}
@@ -3125,6 +3368,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--name", help="Manifest display name.")
     parser.add_argument("--asset-mode", choices=ASSET_MODES, default="additive", help="Asset export mode. 'additive' exports manifest-referenced assets; 'all' exports every Images/Assets diff.")
     parser.add_argument("--optional-song-mods-dir", help="Folder containing optional song .ogg files to place in payload/OptionalSongMods and target to Sounds/.")
+    parser.add_argument("--mobile-sound-assets-dir", help="Folder containing all 67 pinned mobile behavior sound .ogg files to place behind the mobile_sound_assets setting.")
     parser.add_argument("--invisible-upgrades-dir", help="Folder containing invisible upgrade .png files to place in payload/OptionalVisualMods/Invisible Upgrades and target to Images/Upgrades.")
     parser.add_argument("--original-upgrades-dir", help="Folder containing original upgrade .png files to bundle as restore/reference sources for Invisible Upgrades.")
     parser.add_argument("--generation-locks-dir", help="Folder containing lock_02.png through lock_30.png; defaults to bundled workspace assets.")

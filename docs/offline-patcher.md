@@ -597,6 +597,19 @@ asset records that include `restore_source_path`, the patcher copies the
 bundled restore asset back into the modded folder. This keeps visual toggles
 self-contained when the original vanilla install is not available.
 
+Output-only planning rejects conflicting duplicate output targets before any
+verification or apply step. Active/restore/remove collisions are not merged;
+the patcher fails closed. Removal is hash-authenticated, but apply remains a
+sequential operation rather than a transaction: an interruption or later
+post-asset failure can leave a partial output until the user runs the manual
+`restore` command against the verified backup.
+
+The default-off `mobile_sound_assets` setting stages all 67 hash-pinned mobile
+behavior sound payloads. Four PC sound-table filename routes are changed from
+WAV names to their mobile OGG names; disabling the setting removes those four
+additive files and restores the other 63 same-name PC payloads from the bundled
+base. Static hash and routing checks do not constitute audible runtime QA.
+
 B111 also makes EXE identity path-independent for both `target_files` and EXE
 replacement `asset_patches`: `resolve_expected_exe_target()` scans the selected
 folder's top-level `.exe` files for an accepted VF2 PE layout. The manifest may
