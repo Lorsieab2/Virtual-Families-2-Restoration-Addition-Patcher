@@ -979,6 +979,49 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             )
             self.assertIn("mobile_renovations", {row["id"] for row in manifest["settings"]})
 
+    def test_mobile_renovation_art_is_exported_from_overlay_build(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "core"
+            overlay_build = tmp_path / "renovations"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            (overlay_build / "Images" / "MobileRenovations").mkdir(parents=True)
+            renovation_art = overlay_build / "Images" / "MobileRenovations" / "tp238_beige_kitchen.png"
+            renovation_art.write_bytes(b"renovation-art")
+            (overlay_build / "patch-manifest.json").write_text(
+                json.dumps({"generated_assets": [{"path": "Images/MobileRenovations/tp238_beige_kitchen.png"}]}),
+                encoding="ascii",
+            )
+            vanilla = tmp_path / "Virtual Families 2.exe"
+            vanilla.write_bytes(minimal_pe_bytes())
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(
+                minimal_pe_bytes(marker=1)
+            )
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            mobile_overlay = overlay_build / "mobile.exe"
+            mobile_overlay.write_bytes(minimal_pe_bytes(marker=2))
+
+            self.run_exporter(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(out),
+                "--vanilla-exe", str(vanilla),
+                "--include-exe-replacement",
+                "--mobile-renovations-exe", str(mobile_overlay),
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            art_record = next(
+                row for row in manifest["asset_patches"]
+                if row["file_path"] == "Images/MobileRenovations/tp238_beige_kitchen.png"
+            )
+            self.assertEqual(art_record["requires"], ["core_executable", "mobile_renovations"])
+            self.assertTrue(art_record["remove_when_disabled"])
+            self.assertEqual((out / art_record["source_path"]).read_bytes(), renovation_art.read_bytes())
+
     def test_cheat_upgrades_mobile_renovations_combined_overlay_is_exported(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

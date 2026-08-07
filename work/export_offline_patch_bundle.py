@@ -3067,6 +3067,16 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             build_label,
         )
         append_unique_asset_records(asset_patches, holiday_asset_records)
+    if mobile_renovations_exe is not None:
+        renovation_asset_records = export_setting_overlay_asset_payloads(
+            mobile_renovations_exe.parent,
+            base_payload,
+            bundle_dir,
+            "mobile_renovations",
+            args.asset_mode,
+            build_label,
+        )
+        append_unique_asset_records(asset_patches, renovation_asset_records)
     generation_locks_source = Path(args.generation_locks_dir).resolve() if args.generation_locks_dir else None
     forced_lock_records = generation_lock_asset_patches(build_dir, bundle_dir, generation_locks_source)
     if forced_lock_records:
