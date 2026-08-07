@@ -150,7 +150,10 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "cheat_upgrades",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
+    "island_events",
     "cheat_upgrades",
+    "holiday_ornaments_collection",
+    "behavior_patches",
     "mobile_renovations",
 }
 OUTPUT_ONLY_REMOVABLE_ASSET_SETTINGS = EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS

@@ -875,7 +875,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             out = tmp_path / "bundle"
             base.mkdir()
             build.mkdir()
-            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(
+                minimal_pe_bytes(marker=1)
+            )
             (build / "patch-manifest.json").write_text("{}", encoding="ascii")
             (holiday_build / "Images" / "CollectionOrnaments").mkdir(parents=True)
             (holiday_build / "Images" / "Furniture").mkdir(parents=True)
@@ -883,7 +885,11 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             (holiday_build / "Images" / "collection-ornaments_background.png").write_bytes(b"holiday background")
             (holiday_build / "Images" / "CollectionOrnaments" / "collection_christmasornament_blueball.png").write_bytes(b"blueball")
             (holiday_build / "Images" / "Furniture" / "CandyCane.png").write_bytes(b"not part of ornament overlay")
-            (holiday_build / "Virtual Families 2 - Additive Mobile Furniture Pack Holiday Ornaments.exe").write_bytes(b"holiday exe")
+            (holiday_build / "Virtual Families 2 - Additive Mobile Furniture Pack Holiday Ornaments.exe").write_bytes(
+                minimal_pe_bytes(marker=2)
+            )
+            vanilla = tmp_path / "Virtual Families 2.exe"
+            vanilla.write_bytes(minimal_pe_bytes())
             (holiday_build / "patch-manifest.json").write_text(
                 json.dumps(
                     {
@@ -908,6 +914,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 str(out),
                 "--holiday-ornaments-exe",
                 str(holiday_build / "Virtual Families 2 - Additive Mobile Furniture Pack Holiday Ornaments.exe"),
+                "--vanilla-exe",
+                str(vanilla),
+                "--include-exe-replacement",
             )
 
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
@@ -929,7 +938,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertTrue((out / "payload" / "Images" / "collection-ornaments_background.png").is_file())
             self.assertTrue((out / "payload" / "Images" / "CollectionOrnaments" / "collection_christmasornament_blueball.png").is_file())
             self.assertFalse((out / "payload" / "Images" / "Furniture" / "CandyCane.png").exists())
-            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_ornaments_collection"], 3)
+            self.assertEqual(manifest["export_summary"]["asset_counts_by_setting"]["holiday_ornaments_collection"], 4)
 
     def test_mobile_renovations_exe_overlay_is_exported_when_requested(self):
         with tempfile.TemporaryDirectory() as tmp:
