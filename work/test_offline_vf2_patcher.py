@@ -1309,7 +1309,7 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(len(error_rows), 1)
             self.assertIn("write denied", error_rows[0]["error"])
 
-    def test_dry_run_accepts_renamed_valid_pe_structure_exe(self):
+    def test_dry_run_refuses_renamed_exe_without_exact_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             game_dir = tmp_path / "Virtual Families 2"
@@ -1344,14 +1344,11 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 "--manifest",
                 str(manifest),
                 "--dry-run",
+                expect=2,
             )
+            self.assertIn("sha256 is required", result.stderr)
 
-            self.assertIn("Dry run complete", result.stdout)
-            log = json.loads((tmp_path / "patch_dry_run_log.json").read_text(encoding="utf-8"))
-            self.assertEqual(log["target_checks"][0]["file_path"], renamed_exe.name)
-            self.assertTrue(log["target_checks"][0]["discovered_by_structure"])
-
-    def test_exe_replacement_accepts_renamed_valid_pe_structure_exe(self):
+    def test_exe_replacement_refuses_renamed_exe_without_exact_hash(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             game_dir = tmp_path / "Virtual Families 2"
@@ -1411,12 +1408,9 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 str(game_dir),
                 "--manifest",
                 str(manifest),
+                expect=2,
             )
-
-            output_dir = tmp_path / "VF2-BTest-Modded"
-            self.assertIn("Patched files successfully", result.stdout)
-            self.assertEqual((output_dir / payload.name).read_bytes(), patched)
-            self.assertFalse((output_dir / renamed_exe.name).exists())
+            self.assertIn("expected_target_sha256", result.stderr)
 
     def test_asset_patch_allow_missing_target_creates_additive_file(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1437,6 +1431,7 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                         "target_files": [
                             {
                                 "path": "Virtual Families 2.exe",
+                                "sha256": sha256_bytes(game_exe.read_bytes()),
                                 "pe_structures": [patcher_mod.pe_structure_fingerprint(game_exe)],
                             }
                         ],
@@ -1605,7 +1600,7 @@ class OfflineVF2PatcherTests(unittest.TestCase):
 
             self.assertEqual(game_file.read_bytes(), b"vapilla")
 
-    def test_exe_replacement_accepts_matching_pe_structure_when_hash_differs(self):
+    def test_exe_replacement_refuses_matching_pe_structure_when_hash_differs(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             game_dir = tmp_path / "game"
@@ -1655,14 +1650,22 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            self.run_patcher("apply", "--exe", str(game_file), "--manifest", str(manifest), "--backup-dir", str(backup))
+            result = self.run_patcher(
+                "apply",
+                "--exe",
+                str(game_file),
+                "--manifest",
+                str(manifest),
+                "--backup-dir",
+                str(backup),
+                expect=2,
+            )
 
-            self.assertEqual(game_file.read_bytes(), patched)
-            log = json.loads((backup / "patch_log.json").read_text(encoding="utf-8"))
-            self.assertEqual(log["target_checks"][0]["matched_by"], "pe_structure")
-            self.assertTrue(log["asset_patches"][0]["target_structure_matched"])
+            self.assertIn("SHA-256 mismatch", result.stderr)
+            self.assertEqual(game_file.read_bytes(), actual_original)
+            self.assertFalse(backup.exists())
 
-    def test_exe_replacement_accepts_matching_pe_layout_when_section_hash_differs(self):
+    def test_exe_replacement_refuses_matching_pe_layout_when_section_hash_differs(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             game_dir = tmp_path / "game"
@@ -1712,14 +1715,22 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            self.run_patcher("apply", "--exe", str(game_file), "--manifest", str(manifest), "--backup-dir", str(backup))
+            result = self.run_patcher(
+                "apply",
+                "--exe",
+                str(game_file),
+                "--manifest",
+                str(manifest),
+                "--backup-dir",
+                str(backup),
+                expect=2,
+            )
 
-            self.assertEqual(game_file.read_bytes(), patched)
-            log = json.loads((backup / "patch_log.json").read_text(encoding="utf-8"))
-            self.assertEqual(log["target_checks"][0]["matched_by"], "pe_structure")
-            self.assertTrue(log["asset_patches"][0]["target_structure_matched"])
+            self.assertIn("SHA-256 mismatch", result.stderr)
+            self.assertEqual(game_file.read_bytes(), actual_original)
+            self.assertFalse(backup.exists())
 
-    def test_target_file_can_find_vf2_exe_by_structure_when_name_differs(self):
+    def test_target_file_refuses_vf2_exe_by_structure_when_name_differs(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             game_dir = tmp_path / "game"
@@ -1756,9 +1767,17 @@ class OfflineVF2PatcherTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            result = self.run_patcher("apply", "--game-dir", str(game_dir), "--manifest", str(manifest), "--dry-run")
+            result = self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game_dir),
+                "--manifest",
+                str(manifest),
+                "--dry-run",
+                expect=2,
+            )
 
-            self.assertIn("Dry run complete", result.stdout)
+            self.assertIn("sha256 is required", result.stderr)
 
     def test_runtime_requirements_validate_game_payload_before_apply(self):
         with tempfile.TemporaryDirectory() as tmp:

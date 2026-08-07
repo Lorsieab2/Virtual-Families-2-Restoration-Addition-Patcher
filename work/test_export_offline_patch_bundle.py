@@ -752,10 +752,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             vanilla = tmp_path / "Virtual Families 2.exe"
             vanilla.write_bytes(minimal_pe_bytes())
             patched_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
-            patched_exe.write_bytes(b"core executable")
+            patched_exe.write_bytes(minimal_pe_bytes(marker=1))
             (build / "patch-manifest.json").write_text("{}", encoding="ascii")
             mobile_overlay = tmp_path / "Virtual Families 2 - Mobile Renovations.exe"
-            mobile_overlay.write_bytes(b"mobile renovations executable")
+            mobile_overlay.write_bytes(minimal_pe_bytes(marker=2))
 
             self.run_exporter(
                 "--build-dir",
@@ -934,9 +934,9 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             vanilla_data = minimal_pe_bytes()
             vanilla.write_bytes(vanilla_data)
             patched_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
-            patched_exe.write_bytes(b"patched executable")
+            patched_exe.write_bytes(minimal_pe_bytes(marker=1))
             island_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack Island Events.exe"
-            island_exe.write_bytes(b"patched executable with island events")
+            island_exe.write_bytes(minimal_pe_bytes(marker=2))
             (build / "Images" / "Furniture").mkdir(parents=True)
             (build / "Images" / "Furniture" / "InvisibleHammock.png").write_bytes(b"hammock")
             (build / "OptionalVisualMods" / "Invisible Furniture - Base Graphics").mkdir(parents=True)
@@ -982,10 +982,11 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(island_overlay["output_file_path"], "Virtual Families 2 - Modded B103.exe")
             self.assertIn("Island Events executable overlay", island_overlay["note"])
             self.assertTrue((out / "payload" / "Virtual Families 2 - Modded B103 - Island Events.exe").is_file())
+            self.assertEqual(core_exe["expected_target_sha256"], hashlib.sha256(vanilla.read_bytes()).hexdigest())
+            self.assertEqual(island_overlay["expected_target_sha256"], core_exe["expected_target_sha256"])
+            self.assertEqual(manifest["target_files"][0]["sha256"], core_exe["expected_target_sha256"])
             if "expected_target_pe_structures" in core_exe:
-                self.assertNotIn("expected_target_sha256", core_exe)
                 self.assertIsInstance(core_exe["expected_target_pe_structures"], list)
-                self.assertNotIn("sha256", manifest["target_files"][0])
                 self.assertIsInstance(manifest["target_files"][0]["pe_structures"], list)
                 self.assertGreaterEqual(len(manifest["target_files"][0]["pe_structures"]), 2)
                 self.assertGreaterEqual(len(core_exe["expected_target_pe_structures"]), 2)
@@ -997,9 +998,6 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                     "0x100",
                     {row.get("pe_offset") for row in core_exe["expected_target_pe_structures"]},
                 )
-            else:
-                self.assertIn("expected_target_sha256", core_exe)
-                self.assertIn("sha256", manifest["target_files"][0])
             asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"] if row["file_path"] != "Virtual Families 2.exe"}
             self.assertEqual(asset_by_path["Images/Furniture/InvisibleHammock.png"]["requires"], ["invisible_furniture_visible_graphics"])
             self.assertEqual(
@@ -1076,6 +1074,39 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertNotIn("launcher", manifest["export_summary"])
             self.assertTrue(manifest["export_summary"]["exe_replacement"])
 
+    def test_exe_replacement_rejects_non_pe_and_non_x86_payloads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            bundle = tmp_path / "bundle"
+            bundle.mkdir()
+            vanilla = tmp_path / "Virtual Families 2.exe"
+            vanilla.write_bytes(minimal_pe_bytes())
+
+            invalid = tmp_path / "invalid.exe"
+            invalid.write_bytes(b"not a PE executable")
+            with self.assertRaisesRegex(ValueError, "not a valid PE32 executable"):
+                exporter.export_exe_replacement_payload(
+                    bundle_dir=bundle,
+                    patched_exe=invalid,
+                    vanilla_exe=vanilla,
+                    accepted_exes=None,
+                    target_exe_name="Virtual Families 2.exe",
+                    build_label="B159",
+                )
+
+            wrong_machine = bytearray(minimal_pe_bytes())
+            pe_offset = int.from_bytes(wrong_machine[0x3C:0x40], "little")
+            wrong_machine[pe_offset + 4:pe_offset + 6] = (0x8664).to_bytes(2, "little")
+            invalid.write_bytes(wrong_machine)
+            with self.assertRaisesRegex(ValueError, "not a 32-bit x86 executable"):
+                exporter.export_exe_replacement_payload(
+                    bundle_dir=bundle,
+                    patched_exe=invalid,
+                    vanilla_exe=vanilla,
+                    accepted_exes=None,
+                    target_exe_name="Virtual Families 2.exe",
+                    build_label="B159",
+                )
     def test_exports_complete_behavior_exe_overlay_matrix_and_applies_most_specific(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -1090,7 +1121,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             vanilla = game / "Virtual Families 2.exe"
             vanilla.write_bytes(vanilla_data)
             patched_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
-            patched_exe.write_bytes(b"core executable without optional native patches")
+            patched_exe.write_bytes(minimal_pe_bytes(marker=31))
             (build / "patch-manifest.json").write_text("{}", encoding="ascii")
 
             overlay_specs = [
@@ -1129,7 +1160,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             source_name_by_field = {}
             for index, (flag, label, requires) in enumerate(overlay_specs, start=1):
                 source = build / f"overlay-{index:02d}.exe"
-                source_data = f"overlay executable: {label}".encode("ascii")
+                source_data = minimal_pe_bytes(marker=index)
                 source.write_bytes(source_data)
                 export_args.extend([flag, str(source)])
                 source_data_by_requires[tuple(requires)] = source_data
@@ -1248,7 +1279,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             out = tmp_path / "bundle"
             base.mkdir()
             build.mkdir()
-            (build / "VF2-B145-Core.exe").write_bytes(b"patched-binary")
+            (build / "VF2-B145-Core.exe").write_bytes(minimal_pe_bytes(marker=1))
             (build / "patch-manifest.json").write_text("{}", encoding="ascii")
             identity_manifest = tmp_path / "identity.json"
             identity_manifest.write_text(
@@ -1257,6 +1288,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                         "target_files": [
                             {
                                 "path": "Virtual Families 2.exe",
+                                "sha256": "11" * 32,
+                                "size": len(minimal_pe_bytes()),
                                 "pe_structures": [
                                     {
                                         "format": "pe32-section-raw-v1",
@@ -1292,6 +1325,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             core_exe = next(row for row in manifest["asset_patches"] if row["file_path"] == "Virtual Families 2.exe")
             self.assertEqual(core_exe["output_file_path"], "Virtual Families 2 - Modded B145.exe")
+            self.assertEqual(core_exe["expected_target_sha256"], "11" * 32)
             self.assertEqual(core_exe["expected_target_pe_structures"][0]["pe_offset"], "0x130")
             self.assertEqual(manifest["target_files"][0]["pe_structures"][0]["pe_offset"], "0x130")
             self.assertEqual(manifest["export_summary"]["native_patch_status"]["status"], "target_identity_reused")

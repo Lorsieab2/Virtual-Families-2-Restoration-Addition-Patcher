@@ -636,6 +636,21 @@ def pe_structure_fingerprint(path: Path) -> dict[str, Any] | None:
         return None
 
 
+def require_vf2_pe32_x86(path: Path, *, label: str) -> dict[str, Any]:
+    """Reject non-PE and non-x86 executable payloads before bundle export."""
+    structure = pe_structure_fingerprint(path)
+    if structure is None:
+        raise ValueError(f"{label} is not a valid PE32 executable: {path}")
+    if structure.get("machine") != "0x14c":
+        raise ValueError(
+            f"{label} is not a 32-bit x86 executable: {path} "
+            f"(machine={structure.get('machine')})"
+        )
+    if not structure.get("sections"):
+        raise ValueError(f"{label} has no PE sections: {path}")
+    return structure
+
+
 def runtime_flag_variant_for_exe(
     path: Path,
     *,
@@ -1075,17 +1090,12 @@ def target_file_record(
     pe_structures = accepted_vf2_pe_structures(vanilla_exe, accepted_exes) if use_pe_structures else []
     record = {
         "path": target_exe_name,
-        "note": (
-            "Verified vanilla VF2 PC executable by accepted PE layout, not by fixed SHA-256."
-            if pe_structures
-            else "Verified vanilla VF2 PC executable by exact SHA-256 and file size."
-        ),
+        "note": "Verified vanilla VF2 PC executable by exact SHA-256 and file size; PE layout is supplemental metadata.",
+        "sha256": sha256_file(vanilla_exe),
+        "size": vanilla_exe.stat().st_size,
     }
     if pe_structures:
         record["pe_structures"] = pe_structures
-    else:
-        record["sha256"] = sha256_file(vanilla_exe)
-        record["size"] = vanilla_exe.stat().st_size
     return record
 
 
@@ -1095,54 +1105,54 @@ def load_target_identity_from_manifest(manifest_path: Path, target_exe_name: str
     for row in manifest.get("target_files", []):
         if row.get("path") != target_exe_name:
             continue
-        if row.get("pe_structures"):
-            structures = row["pe_structures"]
-            return (
-                {
-                    "path": target_exe_name,
-                    "note": "Verified vanilla VF2 PC executable by accepted PE layout reused from a bundled patcher manifest.",
-                    "pe_structures": structures,
-                },
-                {"expected_target_pe_structures": structures},
-            )
         if row.get("sha256") and row.get("size") is not None:
+            structures = row.get("pe_structures")
+            target_record = {
+                "path": target_exe_name,
+                "note": "Verified vanilla VF2 PC executable by exact SHA-256 and file size reused from a bundled patcher manifest.",
+                "sha256": row["sha256"],
+                "size": row["size"],
+            }
+            identity_fields = {
+                "expected_target_sha256": row["sha256"],
+                "expected_target_size": row["size"],
+            }
+            if structures:
+                target_record["pe_structures"] = structures
+                identity_fields["expected_target_pe_structures"] = structures
             return (
-                {
-                    "path": target_exe_name,
-                    "note": "Verified vanilla VF2 PC executable by exact SHA-256 and file size reused from a bundled patcher manifest.",
-                    "sha256": row["sha256"],
-                    "size": row["size"],
-                },
-                {
-                    "expected_target_sha256": row["sha256"],
-                    "expected_target_size": row["size"],
-                },
+                target_record,
+                identity_fields,
+            )
+        if row.get("pe_structures"):
+            raise ValueError(
+                f"Reusable target identity for {target_exe_name!r} has PE structure metadata but no exact SHA-256."
             )
     for row in manifest.get("asset_patches", []):
         if row.get("file_path") != target_exe_name:
             continue
-        if row.get("expected_target_pe_structures"):
-            structures = row["expected_target_pe_structures"]
-            return (
-                {
-                    "path": target_exe_name,
-                    "note": "Verified vanilla VF2 PC executable by accepted PE layout reused from a bundled patcher manifest.",
-                    "pe_structures": structures,
-                },
-                {"expected_target_pe_structures": structures},
-            )
         if row.get("expected_target_sha256") and row.get("expected_target_size") is not None:
+            structures = row.get("expected_target_pe_structures")
+            target_record = {
+                "path": target_exe_name,
+                "note": "Verified vanilla VF2 PC executable by exact SHA-256 and file size reused from a bundled patcher manifest.",
+                "sha256": row["expected_target_sha256"],
+                "size": row["expected_target_size"],
+            }
+            identity_fields = {
+                "expected_target_sha256": row["expected_target_sha256"],
+                "expected_target_size": row["expected_target_size"],
+            }
+            if structures:
+                target_record["pe_structures"] = structures
+                identity_fields["expected_target_pe_structures"] = structures
             return (
-                {
-                    "path": target_exe_name,
-                    "note": "Verified vanilla VF2 PC executable by exact SHA-256 and file size reused from a bundled patcher manifest.",
-                    "sha256": row["expected_target_sha256"],
-                    "size": row["expected_target_size"],
-                },
-                {
-                    "expected_target_sha256": row["expected_target_sha256"],
-                    "expected_target_size": row["expected_target_size"],
-                },
+                target_record,
+                identity_fields,
+            )
+        if row.get("expected_target_pe_structures"):
+            raise ValueError(
+                f"Reusable target identity for {target_exe_name!r} has PE structure metadata but no exact SHA-256."
             )
     raise ValueError(f"No reusable target identity for {target_exe_name!r} found in {manifest_path}")
 
@@ -2033,6 +2043,7 @@ def export_exe_replacement_payload(
     build_label: str,
     target_identity_fields: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    require_vf2_pe32_x86(patched_exe, label="Patched executable payload")
     output_exe_name = modded_exe_output_name(build_label)
     payload_rel = Path("payload") / output_exe_name
     payload_target = bundle_dir / payload_rel
@@ -2050,18 +2061,19 @@ def export_exe_replacement_payload(
     }
     if target_identity_fields:
         record.update(target_identity_fields)
+        if "expected_target_sha256" not in record:
+            raise ValueError(
+                "Target identity manifest must provide an exact executable SHA-256; "
+                "PE structure metadata is supplemental only."
+            )
     elif vanilla_exe is not None:
         pe_structures = accepted_vf2_pe_structures(vanilla_exe, accepted_exes)
         if pe_structures:
             record["expected_target_pe_structures"] = pe_structures
-        else:
-            record["expected_target_sha256"] = sha256_file(vanilla_exe)
-            record["expected_target_size"] = vanilla_exe.stat().st_size
-    else:
-        raise ValueError("EXE replacement export requires --vanilla-exe or --target-identity-manifest.")
-    if "expected_target_pe_structures" not in record and "expected_target_sha256" not in record:
         record["expected_target_sha256"] = sha256_file(vanilla_exe)
         record["expected_target_size"] = vanilla_exe.stat().st_size
+    else:
+        raise ValueError("EXE replacement export requires --vanilla-exe or --target-identity-manifest.")
     return record
 
 
@@ -2075,12 +2087,14 @@ def export_optional_exe_overlay_payload(
     requires: list[str] | None = None,
     payload_name: str,
     note: str,
+    target_identity_fields: dict[str, Any],
 ) -> dict[str, Any]:
+    require_vf2_pe32_x86(source_exe, label="Optional executable overlay")
     payload_rel = Path("payload") / payload_name
     payload_target = bundle_dir / payload_rel
     payload_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source_exe, payload_target)
-    return {
+    record = {
         "file_path": target_exe_name,
         "output_file_path": output_exe_name,
         "source_path": relative_posix(payload_rel),
@@ -2090,6 +2104,8 @@ def export_optional_exe_overlay_payload(
         "requires": requires if requires is not None else ["core_executable", setting_id],
         "note": note,
     }
+    record.update(target_identity_fields)
+    return record
 
 
 def default_settings(
@@ -2892,6 +2908,15 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         # ordered from least to most specific so the exact combination wins.
         overlay_specs.sort(key=lambda spec: len(spec[2]))
         overlay_records = []
+        overlay_target_identity = {
+            key: value
+            for key, value in exe_replacement_record.items()
+            if key in {
+                "expected_target_sha256",
+                "expected_target_size",
+                "expected_target_pe_structures",
+            }
+        }
         for source_exe, label, requires, note in overlay_specs:
             if source_exe is None:
                 continue
@@ -2904,6 +2929,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 requires=requires,
                 payload_name=f"{Path(output_exe_name).stem} - {label}.exe",
                 note=note,
+                target_identity_fields=overlay_target_identity,
             ))
         asset_patches[1:1] = overlay_records
     validate_bundle_asset_sources(bundle_dir, asset_patches)

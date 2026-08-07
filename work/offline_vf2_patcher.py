@@ -466,6 +466,7 @@ def pe_structure_identity(structure: Any) -> dict[str, Any] | None:
             "raw_data_pointer": section.get("raw_data_pointer"),
             "raw_data_size": section.get("raw_data_size"),
             "characteristics": section.get("characteristics"),
+            "sha256": section.get("sha256"),
         })
     return {
         "format": structure.get("format"),
@@ -524,24 +525,9 @@ def resolve_expected_exe_target(
     rel_path: str,
     expected_pe_structures: tuple[dict[str, Any], ...],
 ) -> tuple[Path, str, bool]:
-    """Resolve an EXE target by accepted VF2 PE layout instead of exact name."""
+    """Resolve an EXE target by its manifest path; PE layout is never an identity fallback."""
     target = resolve_under_game_dir(game_dir, rel_path)
-    if Path(rel_path).suffix.lower() != ".exe" or not expected_pe_structures:
-        return target, rel_path, False
-
-    exact_target = target.resolve()
-    matches = [
-        candidate
-        for candidate in sorted(game_dir.glob("*.exe"))
-        if candidate.is_file() and pe_structure_matches_any(candidate, expected_pe_structures)
-    ]
-    if not matches:
-        return target, rel_path, False
-    for candidate in matches:
-        if candidate.resolve() == exact_target:
-            return candidate, relative_to_game_dir(game_dir, candidate), False
-    chosen = matches[0]
-    return chosen, relative_to_game_dir(game_dir, chosen), True
+    return target, rel_path, False
 
 
 def windows_file_versions(path: Path) -> dict[str, str]:
@@ -1569,6 +1555,11 @@ def manifest_asset_patches(
             ),
             f"asset patch #{index} expected_target_pe_structures",
         )
+        if file_path.lower().endswith(".exe") and expected_target_sha is None:
+            raise PatchError(
+                f"Asset patch #{index} executable target requires expected_target_sha256; "
+                "PE structure alone is not an executable identity."
+            )
         source_size = None
         if raw.get(source_size_field, raw.get("size")) is not None:
             source_size = parse_int(raw.get(source_size_field, raw.get("size")), f"asset patch #{index} source_size")
@@ -1722,7 +1713,11 @@ def verify_target_files(
         if not record_is_active(requires, enabled_settings):
             continue
         rel_path = normalize_rel_path(raw.get("file_path", raw.get("file", raw.get("path"))), f"target file #{index}")
-        expected_sha = raw.get("sha256", raw.get("hash"))
+        expected_sha = normalize_sha256(
+            raw.get("sha256", raw.get("hash")),
+            f"target file #{index} sha256",
+            required=Path(rel_path).suffix.lower() == ".exe",
+        )
         expected_pe_structures = normalize_pe_structure_list(
             raw.get(
                 "pe_structures",
@@ -1744,28 +1739,20 @@ def verify_target_files(
         version_info = windows_file_versions(path)
 
         matched_by = None
-        if expected_sha and actual_sha.lower() == str(expected_sha).lower():
-            matched_by = "sha256"
-        elif expected_pe_structures and pe_structure_matches_any(path, expected_pe_structures):
-            matched_by = "pe_structure"
-        elif expected_sha:
-            if expected_pe_structures:
-                raise install_validation_error(
-                    manifest,
-                    f"Target identity mismatch for {rel_path}: SHA-256 expected {expected_sha}, got {actual_sha}; "
-                    "PE structure did not match any accepted binary structure.",
-                )
+        if expected_sha and actual_sha.lower() != expected_sha:
             raise install_validation_error(
                 manifest,
                 f"SHA-256 mismatch for {rel_path}: expected {expected_sha}, got {actual_sha}",
             )
-        elif expected_pe_structures:
+        if expected_sha:
+            matched_by = "sha256"
+        if expected_pe_structures and not pe_structure_matches_any(path, expected_pe_structures):
             raise install_validation_error(
                 manifest,
-                f"PE structure mismatch for {rel_path}; this is not a recognized VF2 executable build.",
+                f"PE section identity mismatch for {rel_path}; supplied section hashes/layout do not match.",
             )
 
-        if path.suffix.lower() == ".exe" and (expected_sha or expected_pe_structures):
+        if path.suffix.lower() == ".exe" and expected_sha:
             saw_exe_sha = True
 
         expected_size = raw.get("size")
@@ -1812,7 +1799,7 @@ def verify_target_files(
             }
         )
     if not saw_exe_sha:
-        raise PatchError("Manifest must verify the original VF2 executable with a SHA-256 or accepted PE-structure target_files entry.")
+        raise PatchError("Manifest must verify the original VF2 executable with an exact SHA-256 target_files entry.")
     return checks
 
 
@@ -1999,16 +1986,10 @@ def verify_asset_patches(
             action = "create"
             if target_exists:
                 action = "replace"
-                if (
-                    not reconfigure_output
-                    and asset.expected_target_sha256
-                    and target_sha != asset.expected_target_sha256
-                    and not expected_structure_matches
-                ):
+                if not reconfigure_output and asset.expected_target_sha256 and target_sha != asset.expected_target_sha256:
                     raise PatchError(
                         f"SHA-256 mismatch for existing asset target {asset.file_path}: "
-                        f"expected {asset.expected_target_sha256}, got {target_sha}; "
-                        "PE structure did not match any accepted binary structure."
+                        f"expected {asset.expected_target_sha256}, got {target_sha}"
                     )
                 if (
                     not reconfigure_output
