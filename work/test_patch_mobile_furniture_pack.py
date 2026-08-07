@@ -1806,6 +1806,14 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         ("0x19f", "0x88", 2000),
                     ],
                 )
+                external_ids = {
+                    row["mobile_id"] for row in contract["external_candidates"]
+                }
+                self.assertTrue(
+                    {
+                        "0x1a0", "0x1ae", "0x1af", "0x1a2", "0x1a3"
+                    }.isdisjoint(external_ids)
+                )
         finally:
             patcher.PATCHED = old_patched
 

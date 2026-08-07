@@ -228,7 +228,11 @@ Live two-tree placement, autonomous age gates, group filtering, and
 orientation QA remain.
 
 Dreidel `0x2AF` / EObject `0x8A` and Menorah `0x2B8` / EObject `0x8E`
-use the mobile whole-household contract. The desktop port collects exactly the
+use the mobile whole-household contract. Christmas Tree celebration `0x1A0`
+and Birthday Banner celebration `0x1AE/0x1AF` follow the same rule: these
+family-linked actions are manual-drop-only, and a valid drop calls the full
+eligible household. They are deliberately absent from the autonomous selector
+so they cannot interrupt the household spontaneously. The desktop port collects exactly the
 30 permanent household slots first, excludes nonexistent, away, and zero-health
 residents, then applies each exact external plan. It does not pass mobile
 behavior IDs `0x1A2` or `0x1A3` through the desktop table ending at `0x19A`.
