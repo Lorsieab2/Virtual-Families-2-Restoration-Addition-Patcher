@@ -2718,6 +2718,163 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(output_exe.read_bytes(), core_data)
             self.assertTrue(all(not (modded / "Sounds" / ogg).exists() for _pc, ogg in routes))
 
+    def test_mobile_sound_all_67_assets_restore_63_and_remove_four_routes(self):
+        import export_offline_patch_bundle as exporter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            modded = root / "VF2-BSound67-Modded"
+            (modded / ".vf2_patch_backups").mkdir(parents=True)
+            sounds = modded / "Sounds"
+            sounds.mkdir()
+            exe_name = "Virtual Families 2 - Modded BSound67.exe"
+            routes = (
+                ("beaker.wav", "beaker.ogg"),
+                ("Child3.wav", "Child3.ogg"),
+                ("Child7.wav", "Child7.ogg"),
+                ("Child8.wav", "Child8.ogg"),
+            )
+            core_data = b"prefix:" + b"|".join(pc.encode("ascii") for pc, _ in routes) + b":suffix"
+            output_exe = modded / exe_name
+            output_exe.write_bytes(core_data)
+
+            bundle = root / "bundle"
+            payload = bundle / "payload"
+            base = root / "base"
+            bundle.mkdir()
+            base.mkdir()
+            base_sounds = base / "Sounds"
+            base_sounds.mkdir()
+            original_same_stem = {}
+            for filename, pc_name in exporter.MOBILE_SOUND_PC_FILENAMES.items():
+                if filename == pc_name:
+                    original = (f"stock-{filename}\0").encode("ascii")
+                    original_same_stem[filename] = original
+                    (base_sounds / filename).write_bytes(original)
+            records = exporter.mobile_sound_asset_patches(
+                bundle,
+                base,
+                exporter.MOBILE_SOUND_ASSET_SOURCE_DIR,
+            )
+            self.assertEqual(len(records), 67)
+            self.assertEqual(sum("restore_source_path" in row for row in records), 63)
+            self.assertEqual(sum(bool(row["remove_when_disabled"]) for row in records), 4)
+            remove_names = {
+                Path(row["file_path"]).name
+                for row in records
+                if row["remove_when_disabled"]
+            }
+            self.assertEqual(
+                remove_names,
+                {"beaker.ogg", "Child3.ogg", "Child7.ogg", "Child8.ogg"},
+            )
+            for filename, original in original_same_stem.items():
+                (sounds / filename).write_bytes(original)
+
+            core_source = payload / "core.exe"
+            core_source.parent.mkdir(parents=True, exist_ok=True)
+            core_source.write_bytes(core_data)
+            patched = bytearray(core_data)
+            post = []
+            for pc_name, ogg_name in routes:
+                offset = core_data.index(pc_name.encode("ascii"))
+                patched[offset : offset + len(pc_name)] = ogg_name.encode("ascii")
+                post.append(
+                    {
+                        "file_path": exe_name,
+                        "requires": ["core_executable", "mobile_sound_assets"],
+                        "variants": [
+                            {
+                                "asset_sha256": sha256_bytes(core_data),
+                                "result_asset_sha256": sha256_bytes(bytes(patched)),
+                                "offset": hex(offset),
+                                "expected_asset_bytes": pc_name.encode("ascii").hex(),
+                                "replacement_bytes": ogg_name.encode("ascii").hex(),
+                            }
+                        ],
+                    }
+                )
+            final_patched_sha = sha256_bytes(bytes(patched))
+            for row in post:
+                row["variants"][0]["result_asset_sha256"] = final_patched_sha
+
+            manifest = bundle / "manifest.json"
+            manifest.write_text(
+                json.dumps(
+                    {
+                        "manifest_version": 1,
+                        "output": {
+                            "default_folder_name": modded.name,
+                            "default_exe_name": exe_name,
+                        },
+                        "settings": [
+                            {
+                                "id": "core_executable",
+                                "label": "Core",
+                                "default": True,
+                                "category": "main",
+                            },
+                            {
+                                "id": "mobile_sound_assets",
+                                "label": "Mobile sounds",
+                                "default": False,
+                                "category": "optional",
+                            },
+                        ],
+                        "asset_patches": [
+                            {
+                                "file_path": "Virtual Families 2.exe",
+                                "output_file_path": exe_name,
+                                "source_path": "payload/core.exe",
+                                "source_sha256": sha256_bytes(core_data),
+                                "source_size": len(core_data),
+                                "expected_target_sha256": sha256_bytes(core_data),
+                                "expected_target_size": len(core_data),
+                                "overwrite_existing": True,
+                                "requires": ["core_executable"],
+                            },
+                            *records,
+                        ],
+                        "post_asset_patches": post,
+                    },
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+
+            self.run_patcher(
+                "apply",
+                "--output-dir",
+                str(modded),
+                "--manifest",
+                str(manifest),
+                "--enable",
+                "mobile_sound_assets",
+            )
+            self.assertEqual(output_exe.read_bytes(), bytes(patched))
+            self.assertTrue(
+                all(
+                    (sounds / filename).is_file()
+                    for filename in exporter.MOBILE_SOUND_ASSET_FILES
+                )
+            )
+
+            self.run_patcher(
+                "apply",
+                "--output-dir",
+                str(modded),
+                "--manifest",
+                str(manifest),
+            )
+            self.assertEqual(output_exe.read_bytes(), core_data)
+            self.assertEqual(
+                {path.name for path in sounds.iterdir()},
+                set(original_same_stem),
+            )
+            for filename, original in original_same_stem.items():
+                self.assertEqual((sounds / filename).read_bytes(), original)
+            self.assertTrue(all(not (sounds / filename).exists() for filename in remove_names))
+
     def test_refuses_expected_byte_mismatch(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
