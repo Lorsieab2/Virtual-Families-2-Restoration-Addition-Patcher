@@ -1721,7 +1721,7 @@
   48/27/12. Full native generation and MSVC compile/link completed
   successfully.
 - The generated B158 executable is 1,707,520 bytes with SHA-256
-  `D9266536BDE70194C6AB0F1AA44243A4FAFF0CABBFED73F40164505FE7740083`.
+  `CF71834BCC849DE62CA4F389469B683B6C3671D206E0DB92701CE6546FD574AF`.
 - Live gameplay, autonomous scheduling, and player crash/regression QA remain
   pending. The current B158 folder is a linked build output, not yet an
   offline-patcher release bundle with applyable native byte records.
