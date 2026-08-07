@@ -63,10 +63,15 @@ python work/vf2_crash_capture.py emit-wer-plan `
   --exe C:/exact/path/to/selected.exe `
   --dump-dir C:/exact/path/to/crash-dumps `
   --state-out C:/exact/path/to/wer-state.json `
-  --instructions-out C:/exact/path/to/wer-instructions.ps1
+  --instructions-out C:/exact/path/to/wer-setup.ps1 `
+  --restore-out C:/exact/path/to/wer-restore.ps1
 ```
 
 The plan targets only the per-executable `HKCU\Software\Microsoft\Windows\Windows Error Reporting\LocalDumps\<selected.exe>` leaf. The generator and generated instructions both refuse any pre-existing backup file, regardless of whether the registry leaf exists. Review and export any pre-existing leaf state before applying the instructions. Restore imports that exact backup, or removes only that exact leaf when it did not previously exist; the parent `LocalDumps` key is never removed.
+Run setup once, reproduce and capture the crash, and then run the separate
+restore script. Restore removes the modified executable leaf before importing a
+pre-existing backup so setup-added values cannot survive registry merge
+behavior.
 
 Validate a captured bundle against the expected dump/log records:
 

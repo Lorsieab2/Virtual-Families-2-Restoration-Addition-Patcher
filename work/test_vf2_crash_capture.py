@@ -97,8 +97,18 @@ class Vf2CrashCaptureTests(unittest.TestCase):
         self.assertTrue(state["instructions_only"])
         self.assertIn(self.exe.name, state["registry_key"])
         instructions = instructions_out.read_text(encoding="utf-8")
+        restore_out = self.root / "wer-instructions.restore.ps1"
+        self.assertTrue(restore_out.is_file())
+        restore = restore_out.read_text(encoding="utf-8")
         self.assertIn(state["registry_key"], instructions)
-        self.assertIn("Remove-Item -LiteralPath $providerKey", instructions)
+        self.assertNotIn("Remove-Item -LiteralPath $providerKey", instructions)
+        self.assertNotIn("reg.exe import", instructions)
+        self.assertIn("Remove-Item -LiteralPath $providerKey", restore)
+        self.assertIn("reg.exe import $backupFile", restore)
+        self.assertLess(
+            restore.index("Remove-Item -LiteralPath $providerKey"),
+            restore.index("reg.exe import $backupFile"),
+        )
         self.assertNotIn("Remove-Item -LiteralPath 'HKCU:\\Software\\Microsoft\\Windows\\Windows Error Reporting\\LocalDumps'", instructions)
         self.assertLess(
             instructions.index("if (Test-Path -LiteralPath $backupFile)"),
@@ -113,6 +123,7 @@ class Vf2CrashCaptureTests(unittest.TestCase):
             crash.emit_wer_plan(self.manifest, self.exe, self.root / "dumps", state_out, instructions_out)
         self.assertFalse(state_out.exists())
         self.assertFalse(instructions_out.exists())
+        self.assertFalse((self.root / "wer-instructions.restore.ps1").exists())
 
     def test_validate_bundle_emits_verified_hash_report(self):
         report = crash.validate_bundle(self.manifest, self.exe, self.capture)

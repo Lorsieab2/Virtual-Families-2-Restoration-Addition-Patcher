@@ -242,6 +242,7 @@ def emit_wer_plan(
     state_out: Path,
     instructions_out: Path,
     *,
+    restore_out: Path | None = None,
     dump_count: int = 3,
     dump_type: int = 2,
 ) -> dict[str, Any]:
@@ -258,6 +259,10 @@ def emit_wer_plan(
     registry_key = f"HKCU\\{registry_subkey}"
     provider_key = f"HKCU:\\{registry_subkey}"
     backup_file = state_out.with_name(state_out.stem + ".preexisting.reg").resolve()
+    if restore_out is None:
+        restore_out = instructions_out.with_name(
+            instructions_out.stem + ".restore" + instructions_out.suffix
+        )
     if backup_file.exists():
         raise ValueError(f"Refusing to overwrite an existing WER backup: {backup_file}")
     state = {
@@ -268,22 +273,30 @@ def emit_wer_plan(
         "registry_key": registry_key,
         "values": {"DumpFolder": str(dump_root), "DumpType": dump_type, "DumpCount": dump_count},
         "preexisting_state": {"must_be_exported_before_setup": True, "backup_file": str(backup_file)},
+        "instructions": {
+            "setup": str(instructions_out.resolve()),
+            "restore": str(restore_out.resolve()),
+        },
         "restore": {"scope": registry_key, "never_delete_parent_localdumps_key": True},
     }
     if not state_out.parent.is_dir():
         raise ValueError(f"Output parent directory is missing: {state_out.parent}")
     if not instructions_out.parent.is_dir():
         raise ValueError(f"Output parent directory is missing: {instructions_out.parent}")
-    if canonical_path(state_out) == canonical_path(instructions_out):
-        raise ValueError("WER state and instruction outputs must be different files")
+    if not restore_out.parent.is_dir():
+        raise ValueError(f"Restore output parent directory is missing: {restore_out.parent}")
+    output_paths = {canonical_path(state_out), canonical_path(instructions_out), canonical_path(restore_out)}
+    if len(output_paths) != 3:
+        raise ValueError("WER state, setup, and restore outputs must be different files")
     _write_json(state_out, state)
     escaped_dump = str(dump_root).replace("'", "''")
     escaped_provider = provider_key.replace("'", "''")
     escaped_registry = registry_key.replace("'", "''")
     escaped_backup = str(backup_file).replace("'", "''")
-    instructions = f"""# WER LocalDumps instructions for {exe_name}
+    setup_instructions = f"""# WER LocalDumps setup instructions for {exe_name}
 # Generated state is instructions only; this tool did not read or modify the registry.
 # Review the exact executable hash in the adjacent state JSON before running.
+# Run this setup once, reproduce the crash, then run the separate restore script.
 $ErrorActionPreference = 'Stop'
 $providerKey = '{escaped_provider}'
 $registryKey = '{escaped_registry}'
@@ -299,16 +312,27 @@ New-Item -Path $providerKey -Force | Out-Null
 New-ItemProperty -Path $providerKey -Name DumpFolder -PropertyType ExpandString -Value '{escaped_dump}' -Force | Out-Null
 New-ItemProperty -Path $providerKey -Name DumpType -PropertyType DWord -Value {dump_type} -Force | Out-Null
 New-ItemProperty -Path $providerKey -Name DumpCount -PropertyType DWord -Value {dump_count} -Force | Out-Null
+"""
+    restore_instructions = f"""# WER LocalDumps restore instructions for {exe_name}
+# Run only after the crash dump/log collection is complete.
+$ErrorActionPreference = 'Stop'
+$providerKey = '{escaped_provider}'
+$backupFile = '{escaped_backup}'
 
-# Restore: import the saved per-executable key, or remove only this leaf key
-# when it did not exist before setup. Never remove the LocalDumps parent.
+# Restore the exact saved per-executable key, or remove only this leaf key when
+# it did not exist before setup. Never remove the LocalDumps parent.
 if (Test-Path -LiteralPath $backupFile) {{
+    if (Test-Path -LiteralPath $providerKey) {{
+        Remove-Item -LiteralPath $providerKey -Recurse -Force
+    }}
     reg.exe import $backupFile | Out-Null
+    if ($LASTEXITCODE -ne 0) {{ throw "WER registry restore import failed" }}
 }} elseif (Test-Path -LiteralPath $providerKey) {{
     Remove-Item -LiteralPath $providerKey -Recurse -Force
 }}
 """
-    instructions_out.write_text(instructions, encoding="utf-8")
+    instructions_out.write_text(setup_instructions, encoding="utf-8")
+    restore_out.write_text(restore_instructions, encoding="utf-8")
     return state
 
 
@@ -500,12 +524,13 @@ def main() -> None:
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--exe", type=Path, required=True)
 
-    wer = subparsers.add_parser("emit-wer-plan", help="write WER LocalDumps setup/restore instructions only")
+    wer = subparsers.add_parser("emit-wer-plan", help="write separate WER LocalDumps setup and restore instructions only")
     wer.add_argument("--manifest", type=Path, required=True)
     wer.add_argument("--exe", type=Path, required=True)
     wer.add_argument("--dump-dir", type=Path, required=True)
     wer.add_argument("--state-out", type=Path, required=True)
     wer.add_argument("--instructions-out", type=Path, required=True)
+    wer.add_argument("--restore-out", type=Path)
     wer.add_argument("--dump-count", type=int, default=3)
     wer.add_argument("--dump-type", type=int, choices=(1, 2), default=2)
 
@@ -539,6 +564,7 @@ def main() -> None:
             args.dump_dir,
             args.state_out,
             args.instructions_out,
+            restore_out=args.restore_out,
             dump_count=args.dump_count,
             dump_type=args.dump_type,
         )

@@ -2326,8 +2326,9 @@ The patcher never changes Windows Error Reporting settings or launches the
 game. If a test build crashes, copy crash-capture-manifest.template.json to a
 new file and fill in the absolute path, byte size, and SHA-256 of the exact
 modded EXE. Run vf2_crash_capture.py verify-exe first, then use its
-emit-wer-plan command to generate reviewable setup/restore instructions. Those
-instructions are inert until you choose to run them manually. After a crash,
+emit-wer-plan command to generate separate reviewable setup and restore scripts.
+They are inert until you choose to run them manually: run setup, reproduce and
+capture the crash, and then run restore. After a crash,
 record the dump/log sizes and hashes in the separate capture manifest, run
 validate-bundle, and only then emit the IDA JSON. Never substitute manifest.json
 for this exact-build crash manifest.

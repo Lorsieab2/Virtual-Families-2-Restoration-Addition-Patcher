@@ -75,8 +75,10 @@ Exported bundles ship `vf2_crash_capture.py` and an unfilled
 `crash-capture-manifest.template.json`. Keep this exact-build manifest separate
 from the portable patch `manifest.json`: copy the template, then record the
 selected modded EXE's absolute path, positive byte size, and SHA-256. Run
-`verify-exe` before generating a WER plan. The helper only writes reviewable
-state and instruction files; it does not change the registry or launch VF2.
+`verify-exe` before generating separate WER setup and restore scripts. The
+helper only writes reviewable state and instruction files; it does not change
+the registry or launch VF2. Run setup before reproducing the crash and restore
+only after collecting the dump and logs.
 After a crash, record the dump and log identities, run `validate-bundle`, and
 emit IDA JSON only from the successfully revalidated bundle report. See
 `docs/crash-capture-readiness.md` for the exact commands and fail-closed gates.
