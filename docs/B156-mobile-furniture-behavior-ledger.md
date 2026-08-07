@@ -380,6 +380,14 @@ stems; the current B158 runtime therefore keeps the 317-file stock sound
 payload. Replacing stock encodings requires a proven ID-to-file mapping and
 remains separate from the behavior implementation.
 
+The local B158 runtime resolves the routed IDs as follows:
+
+| Behavior | Native sound IDs and local payload files |
+|---|---|
+| `0x19C` Admiring Tree | `0xF2` `femaleoh4.ogg`; `0xDC` `malehey8.ogg`; `0xC3` `children_giggle5.ogg` |
+| `0x19E` Watering Tree | `0xBC` `button_click_wood.ogg`; `0xAA` `cricket_loop.ogg` |
+| `0x19F` Kid Breaking | `0x36` `Child5.ogg`; `0x113` `chime.ogg`; `0x37` `Child6.ogg`; `0x01` `owl.ogg`; `0x7F` `birds_loop.ogg`; `0x39` `Child8.wav`; `0x3D` `Child12.ogg` |
+
 The combined draw uses `stockWeight + eligibleExternalWeight`. A stock result
 falls through to the unchanged native stock draw, preserving every stock
 candidate's conditional distribution. An external result starts the already
