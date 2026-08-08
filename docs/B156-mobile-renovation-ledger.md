@@ -81,8 +81,9 @@ added to Special Upgrades (`gServicesList`). The purchase/activation helper
 uses the PC inventory path, and the renderer selects
 the first active style in native mobile item order in each room group. Active
 style state remains exclusive per room in the PC inventory bytes, while a
-separate persisted purchase mask keeps previously bought styles free to
-reactivate, matching mobile `TakeOne`/`HaveUpgrade`/`GetPrice` semantics. It
+separate persisted purchase mask preserves purchase history for state
+normalization. The shared `GetPrice` hook returns zero only for the active
+style; an inactive re-buy uses its explicit catalog price. It
 draws the complete source PNG at
 1:1 using these camera-relative world anchors:
 
@@ -108,8 +109,8 @@ EXE separately from the existing 16-state B156 matrix.
 
 1. Verify the B157 overlay visually in-game against the staged mobile atlases,
    including camera movement and the selected-room boundaries.
-2. Live-verify style purchase, switching/free reactivation, and
-   save/load behavior against the mobile inventory semantics. The source route
+2. Live-verify style purchase, switching/rebuy pricing, and save/load behavior
+   against the mobile inventory semantics. The source route
    rebuilds `CContentMap` from the native ten-record table and is guarded by
    the Cheat Upgrades overlay; no generic renderer reset is used.
 3. Add Bathroom 2 as a separate optional route only after its overlay anchor

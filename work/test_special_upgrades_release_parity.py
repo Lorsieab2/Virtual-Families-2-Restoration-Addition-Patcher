@@ -87,6 +87,21 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         rows = {int(row["item_id"], 16): row for row in visible["added_items"]}
         cheat_ids = tuple(item["item_id"] for item in patcher.CHEAT_UPGRADE_ITEMS)
 
+        self.assertEqual(
+            visible["reversible_price_display"],
+            {
+                "hook": "?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z + 0x3",
+                "helper": "_VF2GetVisibleSpecialUpgradePrice",
+                "active_price": 0,
+                "inactive_price_source": "explicit item catalog price; mobile renovation styles use kVF2MobileRenovationPrices",
+                "purchase_history_affects_inactive_price": False,
+            },
+        )
+        self.assertEqual(
+            {item_id: rows[item_id]["price"] for item_id in (0x117, 0x118, 0x119, 0x11A)},
+            {0x117: 10000, 0x118: 10000, 0x119: 10000, 0x11A: 77777},
+        )
+
         self.assertEqual(cheat_ids, EXPECTED_CHEAT_IDS)
         self.assertEqual(len(set(cheat_ids)), len(cheat_ids))
         self.assertTrue(set(cheat_ids).issubset(rows))

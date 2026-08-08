@@ -60,6 +60,6 @@ optional B157 renderer; it does not by itself prove live visual selection.
 ## Remaining validation
 
 The PC style catalog and first-owned-per-room selector are now statically
-linked. Live purchase, switching/free reactivation, save/load, camera movement, and
+linked. Live purchase, switching/rebuy pricing, save/load, camera movement, and
 patch-off visual QA remain. Bathroom 2 remains deferred because no separate
 second-bathroom overlay/state route has been proven.

@@ -9763,6 +9763,13 @@ def patch_visible_special_upgrades(manifest):
             "hook": "?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z + 0x3",
             "helper": "_VF2GetVisibleSpecialUpgradePrice",
         },
+        "reversible_price_display": {
+            "hook": "?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z + 0x3",
+            "helper": "_VF2GetVisibleSpecialUpgradePrice",
+            "active_price": 0,
+            "inactive_price_source": "explicit item catalog price; mobile renovation styles use kVF2MobileRenovationPrices",
+            "purchase_history_affects_inactive_price": False,
+        },
         "icon_draw_route": {
             "status": "shared added-item DrawItem hook draws these standalone icon descriptors",
             "image_base": hex(visible_special_upgrade_icon_id_for(0x117)),
@@ -10207,9 +10214,8 @@ extern "C" void __cdecl VF2NormalizeMobileRenovationActivesAndSave() {{
 extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId) {{
     int styleIndex = VF2MobileRenovationStyleIndex(itemId);
     if (styleIndex < 0) return -1;
-    return VF2MobileRenovationEverPurchased(styleIndex)
-        ? 0
-        : kVF2MobileRenovationPrices[styleIndex];
+    if (VF2MobileRenovationIsActive(itemId)) return 0;
+    return kVF2MobileRenovationPrices[styleIndex];
 }}
 
 extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
@@ -24058,6 +24064,19 @@ def validate_mobile_renovation_style_state_contract(manifest):
     missing = [token for token in required_tokens if token not in helper_text]
     if missing:
         raise RuntimeError("Mobile renovation style-state helper is missing: " + ", ".join(missing))
+    price_helper = helper_text.split(
+        'extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId)',
+        1,
+    )[1].split(
+        'extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId)',
+        1,
+    )[0]
+    if "if (VF2MobileRenovationIsActive(itemId))" not in price_helper:
+        raise RuntimeError("Mobile renovation price helper is not active-state based")
+    if "return kVF2MobileRenovationPrices[styleIndex];" not in price_helper:
+        raise RuntimeError("Mobile renovation price helper does not return the catalog price when inactive")
+    if "VF2MobileRenovationEverPurchased(styleIndex)" in price_helper:
+        raise RuntimeError("Mobile renovation purchase history must not zero an inactive row")
     manifest["mobile_renovation_style_state"] = {
         "status": "validated_mobile_takeone_semantics",
         "active_layer": {
@@ -24070,7 +24089,8 @@ def validate_mobile_renovation_style_state_contract(manifest):
         "ever_purchased_layer": {
             "storage": "CAchievement hidden persisted record 0xA8 + 0x08 shared dword",
             "mask_bits": "mobile item 0x118-0x126 map to bits 1-15; Health Plan retains bit 0",
-            "free_repurchase": True,
+            "free_repurchase": False,
+            "history_preserved_for_repurchase": True,
         },
         "health_plan_coexistence": {
             "health_plan_bit": "bit 0",
@@ -24080,9 +24100,16 @@ def validate_mobile_renovation_style_state_contract(manifest):
             "reset_achievements_preserves_shared_dword": True,
             "new_game": "no mod-specific reset hook; stock new-game initialization remains authoritative",
         },
-        "price_semantics": "catalog price until ever-purchased; zero thereafter",
+        "price_semantics": "zero only while the style is active; inactive buy/rebuy always uses its explicit catalog price, regardless of ever-purchased history",
+        "price_display": {
+            "hook": "?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z + 0x3",
+            "helper": "_VF2GetVisibleSpecialUpgradePrice",
+            "active_price": 0,
+            "inactive_price_source": "kVF2MobileRenovationPrices indexed by the PC style catalog",
+            "purchase_history_affects_inactive_price": False,
+        },
         "purchase_semantics": "clear active room group, activate selected style, set ever-purchased marker, save immediately",
-        "remove_semantics": "active PC style is removed through VF2RemoveOwnedUpgrade by clearing only its direct active byte; ever-purchased history is preserved for free reactivation",
+        "remove_semantics": "active PC style is removed through VF2RemoveOwnedUpgrade by clearing only its direct active byte; ever-purchased history is preserved without changing the inactive catalog price",
         "native_mobile_order": [hex(item_id) for item_id in MOBILE_RENOVATION_NATIVE_ITEM_IDS],
         "pc_item_range": f"0x{MOBILE_RENOVATION_PC_ITEM_IDS[0]:X}-0x{MOBILE_RENOVATION_PC_ITEM_IDS[-1]:X}",
     }

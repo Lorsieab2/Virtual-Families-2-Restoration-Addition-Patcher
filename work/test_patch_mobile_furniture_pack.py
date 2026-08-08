@@ -2978,6 +2978,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                             "VF2RemoveOwnedUpgrade",
                             "VF2SetMobileRenovationActive(itemId, false)",
                             "kVF2MobileRenovationPrices",
+                            'extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId)',
+                            "if (VF2MobileRenovationIsActive(itemId))",
+                            "return kVF2MobileRenovationPrices[styleIndex];",
+                            'extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId)',
                         ]
                     ),
                     encoding="ascii",
@@ -2988,8 +2992,23 @@ class MobileRenovationArtTests(unittest.TestCase):
                 state = manifest["mobile_renovation_style_state"]
                 self.assertEqual(state["status"], "validated_mobile_takeone_semantics")
                 self.assertEqual(state["ever_purchased_layer"]["storage"], "CAchievement hidden persisted record 0xA8 + 0x08 shared dword")
-                self.assertTrue(state["ever_purchased_layer"]["free_repurchase"])
+                self.assertFalse(state["ever_purchased_layer"]["free_repurchase"])
+                self.assertTrue(state["ever_purchased_layer"]["history_preserved_for_repurchase"])
                 self.assertTrue(state["active_layer"]["exclusive_by_room"])
+                self.assertEqual(
+                    state["price_semantics"],
+                    "zero only while the style is active; inactive buy/rebuy always uses its explicit catalog price, regardless of ever-purchased history",
+                )
+                self.assertEqual(
+                    state["price_display"],
+                    {
+                        "hook": "?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z + 0x3",
+                        "helper": "_VF2GetVisibleSpecialUpgradePrice",
+                        "active_price": 0,
+                        "inactive_price_source": "kVF2MobileRenovationPrices indexed by the PC style catalog",
+                        "purchase_history_affects_inactive_price": False,
+                    },
+                )
                 coexistence = state["health_plan_coexistence"]
                 self.assertEqual(coexistence["health_plan_bit"], "bit 0")
                 self.assertEqual(coexistence["renovation_bits"], "bits 1-15")
@@ -3208,7 +3227,9 @@ class MobileRenovationArtTests(unittest.TestCase):
                     1,
                 )[0]
                 self.assertNotIn("VF2NormalizeMobileRenovationActivesAndSave", price_helper)
-                self.assertIn("VF2MobileRenovationEverPurchased(styleIndex)", price_helper)
+                self.assertIn("if (VF2MobileRenovationIsActive(itemId))", price_helper)
+                self.assertIn("return kVF2MobileRenovationPrices[styleIndex];", price_helper)
+                self.assertNotIn("VF2MobileRenovationEverPurchased(styleIndex)", price_helper)
         finally:
             patcher.PATCHED = old_patched
 
