@@ -41,6 +41,14 @@ def largest_sock_pile() -> Image.Image:
     return strip.crop((strip.width - frame_width, 0, strip.width, strip.height))
 
 
+def single_washer() -> Image.Image:
+    sheet = load("WasherStd.png")
+    # WasherStd is a two-cell horizontal sheet.  The No Sock Pile icon is one
+    # washer, not the complete two-washer furniture strip.
+    frame_width = sheet.width // 2
+    return sheet.crop((0, 0, frame_width, sheet.height))
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     sources = {
@@ -49,7 +57,7 @@ def main() -> None:
         "cheat_fill_yard_weeds.png": weed_icon(),
         "cheat_clean_garden.png": load("GardeningServices_icon.png"),
         "cheat_max_sock_pile.png": largest_sock_pile(),
-        "cheat_no_sock_pile.png": load("WasherStd.png"),
+        "cheat_no_sock_pile.png": single_washer(),
         "cheat_marriage_email.png": load("loveemail.png"),
         "cheat_next_babies_male.png": load("Icon_Baby2.png"),
         "cheat_next_babies_female.png": load("Icon_Baby1.png"),

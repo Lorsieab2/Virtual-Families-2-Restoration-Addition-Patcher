@@ -52,22 +52,40 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("raw + 0x94", helper)
                 self.assertIn("raw + 0x8C", helper)
                 self.assertNotIn("invisiblePortraitButton", helper)
+                self.assertNotIn("_VF2HandleActionBarTipsClick", helper)
 
                 obj = CoffObject(temp / "theMainScene.obj")
                 sym = obj.symbol("?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z")
                 sec = obj.section(sym.section)
-                patched = bytes(obj.buf[sec.raw_ptr + sym.value + 0x79 : sec.raw_ptr + sym.value + 0x79 + 24])
-                self.assertEqual(patched[:7], bytes.fromhex("FF 75 0C FF 75 08 56"))
-                self.assertEqual(patched[7], 0xE8)
-                self.assertEqual(patched[15:19], bytes.fromhex("84 C0 74 05"))
-                self.assertEqual(patched[19], 0xE9)
+                patched = bytes(obj.buf[sec.raw_ptr + sym.value + 0x79 : sec.raw_ptr + sym.value + 0x79 + 26])
+                self.assertEqual(patched[:8], bytes.fromhex("51 FF 75 0C FF 75 08 56"))
+                self.assertEqual(patched[8], 0xE8)
+                self.assertEqual(patched[16:20], bytes.fromhex("59 84 C0 74"))
+                self.assertEqual(patched[20], 0x05)
+                self.assertEqual(patched[21], 0xE9)
+                self.assertEqual(
+                    bytes(obj.buf[sec.raw_ptr + sym.value + 0x93 : sec.raw_ptr + sym.value + 0x99]),
+                    bytes.fromhex("E8 00 00 00 00 84"),
+                )
                 self.assertIn("_VF2TryRandomTipHouseHit", obj.symbol_by_name)
+                self.assertNotIn("_VF2HandleActionBarTipsClick", obj.symbol_by_name)
 
             generator_source = Path(patcher.__file__).read_text(encoding="utf-8")
             self.assertIn("write_outfit_store_helpers(manifest)\n    # The tiny house", generator_source)
             self.assertIn("patch_main_scene_random_tip_click(manifest)", generator_source)
         finally:
             patcher.PATCHED = old_patched
+
+    def test_no_ai_sock_icon_uses_one_washer_and_trophy_rows_keep_stock_icon(self):
+        builder = (Path(patcher.__file__).with_name("build_no_ai_icons.py")).read_text(encoding="utf-8")
+        self.assertIn("def single_washer()", builder)
+        self.assertIn("frame_width = sheet.width // 2", builder)
+        self.assertIn('"cheat_no_sock_pile.png": single_washer()', builder)
+        for item_id in (0x124, 0x125, 0x126, 0x127, 0x12E):
+            self.assertEqual(
+                patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[item_id],
+                "MenuBtnTrophy1.png",
+            )
 
     def test_mobile_sound_assets_are_local_and_hash_pinned(self):
         source_dir = patcher.MOBILE_SOUND_ASSET_SOURCE_DIR
@@ -2219,6 +2237,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                         row["icon_file"],
                     )
 
+                generator = Path(patcher.__file__).read_text(encoding="ascii")
+                self.assertIn("VF2GetAddedStoreIconScale", generator)
+                self.assertIn('"store_icon_scale": 0.12', generator)
+
                 curtains_by_art = {
                     "tp233_sw_bathroom_black.png": "shower_curtain_closed_black.png",
                     "tp233_sw_bathroom_blue_marble.png": "shower_curtain_closed_blue.png",
@@ -2416,6 +2438,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                     "1.0f; anchorX - worldX;",
                     encoding="ascii",
                 )
+                (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").write_text(
+                    "VF2GetAddedStoreIconScale 0.12f;",
+                    encoding="ascii",
+                )
                 for name in patcher.MOBILE_RENOVATION_ART_FILES:
                     shutil.copy2(patcher.MOBILE_RENOVATION_ART_SOURCE_DIR / name, runtime_dir / name)
                 manifest = {
@@ -2427,6 +2453,8 @@ class MobileRenovationArtTests(unittest.TestCase):
                         "mobile_renovation_images": {
                             "image_count": patcher.MOBILE_RENOVATION_IMAGE_COUNT,
                             "descriptors": [{}] * patcher.MOBILE_RENOVATION_IMAGE_COUNT,
+                            "store_icon_scale": 0.12,
+                            "store_icon_descriptor_range": "0x56B-0x579",
                         }
                     },
                 }
@@ -5433,11 +5461,11 @@ class OutfitStoreMappingTests(unittest.TestCase):
         )
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x127],
-            "cheat_reset_achievements.png",
+            "MenuBtnTrophy1.png",
         )
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES, {})
         expected_late_icons = {
-            0x12E: "cheat_reset_achievements.png",
+            0x12E: "MenuBtnTrophy1.png",
             0x12F: "cheat_fill_house_messes.png",
             0x130: "cheat_fill_yard_weeds.png",
             0x131: "cheat_clean_garden.png",
@@ -5887,7 +5915,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(reset_rows[0]["item_id"], 0x124)
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x124],
-            "cheat_reset_achievements.png",
+            "MenuBtnTrophy1.png",
         )
 
         source = Path(patcher.__file__).read_text(encoding="utf-8")
@@ -6734,7 +6762,7 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                 )
                 self.assertIn("digitCount < 8", source)
                 self.assertIn('"Generation: "', source)
-                self.assertIn('char label[32] = "Oldest: ";', source)
+                self.assertIn('char label[32] = "Oldest Villager: ";', source)
                 self.assertIn("VF2PersistentHealthPlanAndRenovationMask() >> 16", source)
                 self.assertIn("(history & 0xFFFFu) | (boundedAge << 16)", source)
                 self.assertIn("GetWideScreenOffsetX() + 100", source)
@@ -6794,7 +6822,7 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn("GetWideScreenOffsetX() + 100", source)
-                self.assertIn('char label[32] = "Oldest: ";', source)
+                self.assertIn('char label[32] = "Oldest Villager: ";', source)
 
                 achievement = CoffObject(temp_root / "Achievement.obj")
                 load = achievement.symbol(

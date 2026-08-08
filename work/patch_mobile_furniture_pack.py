@@ -654,10 +654,10 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x121: "cheat_add_food.png",
     0x122: "cheat_add_food.png",
     0x123: "cheat_no_generation_locks.png",
-    0x124: "cheat_reset_achievements.png",
-    0x125: "cheat_reset_achievements.png",
-    0x126: "cheat_reset_achievements.png",
-    0x127: "cheat_reset_achievements.png",
+    0x124: "MenuBtnTrophy1.png",
+    0x125: "MenuBtnTrophy1.png",
+    0x126: "MenuBtnTrophy1.png",
+    0x127: "MenuBtnTrophy1.png",
     0x128: "cheat_add_coins.png",
     0x129: "cheat_add_coins.png",
     0x12A: "cheat_add_coins.png",
@@ -668,7 +668,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     # artwork.  The descriptor must not be aliased through the item id: the
     # store's native image lookup and the added-item draw hook can otherwise
     # resolve the row to an empty cell.
-    0x12E: "cheat_reset_achievements.png",
+    0x12E: "MenuBtnTrophy1.png",
     0x12F: "cheat_fill_house_messes.png",
     0x130: "cheat_fill_yard_weeds.png",
     0x131: "cheat_clean_garden.png",
@@ -10503,24 +10503,29 @@ extern "C" bool __cdecl VF2TryRandomTipHouseHit(
         helper_path.write_text(helper_text.rstrip() + "\n", encoding="ascii")
 
     helper_sym = obj.append_undefined_symbol("_VF2TryRandomTipHouseHit")
-    # push y, x, this; call helper; consume the arguments.  A true result
-    # jumps to the existing stock "return true" epilogue at +0xB2.
+    # The stock point arguments are already on the stack and ECX contains the
+    # ToolTray singleton at this insertion point.  Preserve ECX across the
+    # cdecl helper so the native ToolTray dispatch receives its original this
+    # pointer on the false path.  A true result jumps to the existing stock
+    # "return true" epilogue at +0xB2.
     payload = bytearray(
+        b"\x51"               # preserve ToolTray this
         b"\xFF\x75\x0C"       # push [ebp+0C] (screen y)
         b"\xFF\x75\x08"       # push [ebp+08] (screen x)
         b"\x56"               # push esi (this)
         b"\xE8\x00\x00\x00\x00"
         b"\x83\xC4\x0C"
+        b"\x59"               # restore ToolTray this
         b"\x84\xC0"
         b"\x74\x05"           # false: continue stock path
         b"\xE9\x00\x00\x00\x00"  # true: stock return-true epilogue
     )
     obj.insert_section_bytes(sym.section, insert_off, bytes(payload))
-    obj.append_relocation(sym.section, insert_off + 8, helper_sym, IMAGE_REL_I386_REL32)
+    obj.append_relocation(sym.section, insert_off + 9, helper_sym, IMAGE_REL_I386_REL32)
     # The insertion shifts the old +0xB2 target by len(payload), so the
     # relative displacement remains old_return - insertion_site.
     jmp_disp = sym.value + 0xB2 - insert_off
-    struct.pack_into("<i", obj.buf, sec.raw_ptr + insert_off + 20, jmp_disp)
+    struct.pack_into("<i", obj.buf, sec.raw_ptr + insert_off + 22, jmp_disp)
     obj.write(PATCHED / "theMainScene.obj")
     manifest["random_tip_bottom_house"] = {
         "status": "patched",
@@ -10531,7 +10536,7 @@ extern "C" bool __cdecl VF2TryRandomTipHouseHit(
         "screen_rect_formula": "x=[this+0xA8]+relative; y=[this+0x94]-[this+0x8C]-163+relative",
         "function": "?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z",
         "insert_offset": "0x79",
-        "stock_continuation": "false falls through to native HandleMouseDown; true jumps to its existing return-true epilogue",
+        "stock_continuation": "false restores ToolTray ECX and falls through to native HandleMouseDown; true restores ECX then jumps to its existing return-true epilogue",
         "portrait_control_id1_untouched": True,
         "stock_control_id1_untouched": True,
         "string_id_first": "0x09E3",
@@ -12114,14 +12119,14 @@ static void VF2DrawOldestPersonCounter() {
     }
     unsigned int age =
         internalAge / kVF2OldestPersonAgeUnitsPerDisplayedYear;
-    char label[32] = "Oldest: ";
+    char label[32] = "Oldest Villager: ";
     char digits[8];
     int digitCount = 0;
     do {
         digits[digitCount++] = (char)('0' + age % 10);
         age /= 10;
     } while (age != 0 && digitCount < 8);
-    int labelLength = 8;
+    int labelLength = 17;
     while (digitCount > 0) {
         label[labelLength++] = digits[--digitCount];
     }
@@ -14907,6 +14912,10 @@ def patch_graphics_manager(manifest):
             if ENABLE_MOBILE_RENOVATIONS
             else 0,
             "descriptors": mobile_renovation_desc_manifest,
+            # The mobile store consumes these same full-room descriptors at
+            # the native thumbnail scale; room rendering remains 1.0f.
+            "store_icon_scale": 0.12,
+            "store_icon_descriptor_range": "0x56B-0x579",
             "runtime_asset_export": "coordinator-owned; descriptors use Images/MobileRenovations/*.png",
         },
         "holiday_ornament_collection_images": {
@@ -17237,7 +17246,7 @@ def patch_lifetime_generation_counter(manifest):
         "update": "records the highest raw age observed by longevity award and load reconciliation routes",
         "legacy_migration": "existing saves seed from the oldest currently loaded qualifying villager; deceased history before this build cannot be reconstructed",
         "goals_screen": {
-            "label": "Oldest: N",
+            "label": "Oldest Villager: N",
             "helper": "_VF2DrawLifetimeGenerationCounter",
             "position": [100, 42],
             "opposite": "Generation: N at x=760",
@@ -23457,6 +23466,14 @@ def validate_mobile_renovation_renderer_contract(manifest):
             raise RuntimeError("Mobile renovation image descriptor count drifted")
         if len(descriptors.get("descriptors", [])) != MOBILE_RENOVATION_IMAGE_COUNT:
             raise RuntimeError("Mobile renovation image descriptors are incomplete")
+        if descriptors.get("store_icon_scale") != 0.12:
+            raise RuntimeError("Mobile renovation store icon scale drifted from native 0.12f")
+        if descriptors.get("store_icon_descriptor_range") != "0x56B-0x579":
+            raise RuntimeError("Mobile renovation store icon descriptor range drifted")
+        store_helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
+        store_helper_text = store_helper_path.read_text(encoding="ascii") if store_helper_path.is_file() else ""
+        if "VF2GetAddedStoreIconScale" not in store_helper_text or "0.12f" not in store_helper_text:
+            raise RuntimeError("Mobile renovation store icon draw scale is not statically proven")
         runtime_dir = OUT / "Images" / "MobileRenovations"
         missing = [name for name in MOBILE_RENOVATION_ART_FILES if not (runtime_dir / name).is_file()]
         if missing:
