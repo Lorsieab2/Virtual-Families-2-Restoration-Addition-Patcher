@@ -2010,6 +2010,32 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
 
 
 class MobileRenovationArtTests(unittest.TestCase):
+    def test_user_store_icon_mapping_is_hash_pinned_and_missing_rows_are_explicit(self):
+        expected = {
+            "blackoffice.png": (0x146, 0x121, "office"),
+            "blueoffice.png": (0x149, 0x120, "office"),
+            "brownkitchen.png": (0x141, 0x11D, "kitchen"),
+            "checkered workshop.png": (0x14A, 0x126, "workshop"),
+            "corkworkshop.png": (0x142, 0x125, "workshop"),
+            "countrykitchen.png": (0x145, 0x11E, "kitchen"),
+            "greenbathroom.png": (0x13F, 0x11B, "bathroom"),
+            "greenoffice.png": (0x147, 0x122, "office"),
+            "pinkbathroom.png": (0x140, 0x11C, "bathroom"),
+            "redoffice.png": (0x143, 0x124, "office"),
+            "yellowbathroom1.png": (0x144, 0x11F, "kitchen"),
+        }
+        self.assertEqual(set(patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING), set(expected))
+        for name, (pc_item, mobile_item, room) in expected.items():
+            row = patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING[name]
+            path = patcher.MOBILE_RENOVATION_USER_STORE_ICON_DIR / name
+            self.assertTrue(path.is_file())
+            self.assertEqual((row["pc_item"], row["mobile_item"], row["room"]), (pc_item, mobile_item, room))
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest().upper(), row["sha256"])
+        self.assertEqual(
+            patcher.MOBILE_RENOVATION_USER_STORE_ICON_MISSING,
+            ("blackbathroom.png", "bluebathroom.png", "beigebathroom.png", "modernoffice.png"),
+        )
+
     def test_mobile_renovations_are_only_in_native_house_renovation_category(self):
         old_patched = patcher.PATCHED
         old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
@@ -2658,6 +2684,20 @@ class MobileRenovationArtTests(unittest.TestCase):
                     len(list((optional_root / "closed_curtains").glob("*.png"))),
                     5,
                 )
+                self.assertEqual(
+                    [row["color"] for row in contract["store_icons"]],
+                    ["black", "blue", "beige", "green", "pink"],
+                )
+                for row in contract["store_icons"]:
+                    icon_path = optional_root / "store_icons" / row["name"]
+                    self.assertTrue(icon_path.is_file())
+                    self.assertEqual(
+                        hashlib.sha256(icon_path.read_bytes()).hexdigest().upper(),
+                        row["sha256"],
+                    )
+                    self.assertEqual(list(patcher.read_png_size(icon_path)), row["size"])
+                    self.assertEqual(row["route"], "House Renovations only")
+                    self.assertIsNone(row["native_item_id"])
                 from PIL import Image
                 for row in contract["normalized_art"]:
                     path = optional_root / row["name"]
@@ -8080,7 +8120,7 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
                         dating.buf,
                         section.reloc_ptr + index * 10,
                     )
-                    if vaddr in {cave + 2, cave + 11, cave + 26, cave + 47, handle.value + 0x8D}:
+                    if vaddr in {cave + 2, cave + 11, cave + 26, cave + 48, handle.value + 0x8D}:
                         relocation.append((
                             vaddr,
                             dating.symbol_by_index[symbol_index].name,
@@ -8097,7 +8137,7 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
                     patcher.IMAGE_REL_I386_REL32,
                 ), relocation)
                 self.assertIn((
-                    cave + 47,
+                    cave + 48,
                     "?Get@theGameState@@SAPAV1@XZ",
                     patcher.IMAGE_REL_I386_REL32,
                 ), relocation)
@@ -8218,6 +8258,28 @@ class DivorceSpouseContractTests(unittest.TestCase):
 
 
 class SameSexMarriagePatchTests(unittest.TestCase):
+    def test_cheat_gender_mapping_and_accept_guard_are_native_and_cheat_only(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        helper_start = source.index(
+            "extern \"C\" int __fastcall VF2MarriageCandidateGender"
+        )
+        helper = source[helper_start:source.index(
+            "extern \"C\" CVillager *__fastcall VF2GetMarriageRole",
+            helper_start,
+        )]
+        self.assertIn(
+            "gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalFemale",
+            helper,
+        )
+        self.assertRegex(helper, r"ProposalFemale\)\s*\{[^}]*return 1;")
+        self.assertRegex(helper, r"ProposalMale\)\s*\{[^}]*return 0;")
+        self.assertIn("accept_hook = handle.value + 0xEB", source)
+        self.assertIn("handle.value + 0xF4", source)
+        self.assertIn("expected_accept_write = bytes.fromhex", source)
+        self.assertIn("kVF2CheatMarriageProposalFemale", source)
+        self.assertIn("kVF2CheatMarriageProposalMale", source)
+        self.assertIn("accept_safety", source)
+
     def test_dormant_hooks_cover_candidate_roles_drop_and_pregnancy(self):
         old_patched = patcher.PATCHED
         try:
@@ -8366,26 +8428,31 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 handle_raw = handle_sec.raw_ptr + handle.value
                 self.assertEqual(dating.buf[handle_raw], 0xE9)
                 self.assertEqual(dating.buf[handle_raw + 5], 0x90)
-                # The handler now has a complete true-return epilogue (including
-                # the security-cookie check and ret 8), so its generated cave is
-                # 53 bytes.  Keep the assertion anchored to the payload length;
-                # using the old 35-byte offset starts 16 bytes into the cave.
-                exit_cave = handle_sec.raw_size - 53
+                # The Accept-safety cave is appended after the exit cave, so
+                # locate the exit payload by its stable prologue rather than
+                # assuming it is the final bytes in the section.
+                handle_data = bytes(
+                    dating.buf[handle_sec.raw_ptr:
+                               handle_sec.raw_ptr + handle_sec.raw_size]
+                )
+                exit_prefix = bytes.fromhex(
+                    "55 8B EC 83 EC 28 A1 00 00 00 00 33 C5 89 45 FC 83 7D 08 08 "
+                    "51 FF 75 0C FF 75 08 51 E8 00 00 00 00 83 C4 0C 59 84 C0 75 05"
+                )
+                exit_cave = handle_data.find(exit_prefix)
+                self.assertGreaterEqual(exit_cave, 0)
                 self.assertEqual(
                     bytes(
                         dating.buf[
                             handle_sec.raw_ptr + exit_cave:
-                            handle_sec.raw_ptr + exit_cave + 53
+                            handle_sec.raw_ptr + exit_cave + 64
                         ]
-                    )[0:27],
-                    bytes.fromhex(
-                        "55 8B EC 83 EC 28 51 FF 75 0C FF 75 08 51 E8 00 00 00 00 "
-                        "83 C4 0C 59 84 C0 75 05"
-                    ),
+                    )[0:41],
+                    exit_prefix,
                 )
                 self.assertEqual(
-                    dating.buf[handle_sec.raw_ptr + exit_cave + 25 :
-                               handle_sec.raw_ptr + exit_cave + 27],
+                    dating.buf[handle_sec.raw_ptr + exit_cave + 39 :
+                               handle_sec.raw_ptr + exit_cave + 41],
                     b"\x75\x05",
                 )
                 exit_relocations = []
@@ -8395,7 +8462,7 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                         dating.buf,
                         handle_sec.reloc_ptr + index * 10,
                     )
-                    if vaddr == exit_cave + 15:
+                    if vaddr == exit_cave + 29:
                         exit_relocations.append(
                             (dating.symbol_by_index[symbol_index].name, rtype)
                         )
@@ -8403,6 +8470,58 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                     exit_relocations,
                     [(patcher.CHEAT_MARRIAGE_PROPOSAL_EXIT_HANDLER_SYMBOL,
                       patcher.IMAGE_REL_I386_REL32)],
+                )
+
+                # The appended Accept cave preserves the stock write for
+                # mode 0/invalid values and guards only cheat modes 1/2.
+                accept_prefix = bytes.fromhex(
+                    "80 3D 00 00 00 00 01 75 06 85 C0 74 0F EB 17 "
+                    "80 3D 00 00 00 00 02 75 0E 85 C0 75 0A"
+                )
+                accept_cave = handle_data.find(accept_prefix)
+                self.assertGreaterEqual(accept_cave, 0)
+                self.assertEqual(
+                    handle_data[accept_cave + 28], 0xE8,
+                )
+                self.assertEqual(handle_data[accept_cave + 33], 0xE9)
+                self.assertEqual(
+                    accept_cave + 38 + struct.unpack_from(
+                        "<i", handle_data, accept_cave + 34
+                    )[0],
+                    handle.value + 0xAA,
+                )
+                self.assertEqual(
+                    handle_data[accept_cave + 38:accept_cave + 47],
+                    bytes.fromhex("8B C8 C6 80 84 BB 01 00 01"),
+                )
+                self.assertEqual(
+                    handle_data[accept_cave + 47], 0xE9,
+                )
+                accept_relocations = {}
+                for index in range(handle_sec.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH",
+                        dating.buf,
+                        handle_sec.reloc_ptr + index * 10,
+                    )
+                    if vaddr in {
+                        accept_cave + 2,
+                        accept_cave + 17,
+                        accept_cave + 29,
+                    }:
+                        accept_relocations[vaddr] = (
+                            dating.symbol_by_index[symbol_index].name,
+                            rtype,
+                        )
+                self.assertEqual(
+                    accept_relocations[accept_cave + 17],
+                    (patcher.CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL,
+                     patcher.IMAGE_REL_I386_DIR32),
+                )
+                self.assertEqual(
+                    accept_relocations[accept_cave + 29],
+                    (patcher.CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL,
+                     patcher.IMAGE_REL_I386_REL32),
                 )
 
                 manager = CoffObject(temp_root / "VillagerManager.obj")

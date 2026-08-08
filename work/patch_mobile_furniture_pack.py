@@ -738,7 +738,8 @@ AI_BATHROOM2_DISCLAIMER = (
     "free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2)"
 )
 AI_BATHROOM2_SOURCE_DIR = (
-    ROOT / "patcher_assets" / "optional_patches" / "ai_generated_bathroom2_renovations" / "source_art"
+    ROOT / "patcher_assets" / "optional_patches" / "ai_generated_bathroom2_renovations"
+    / "source_art" / "user_fixed"
 )
 AI_BATHROOM2_REFERENCE_DIR = (
     ROOT / "patcher_assets" / "optional_patches" / "ai_generated_bathroom2_renovations" / "reference"
@@ -768,42 +769,53 @@ AI_BATHROOM2_REFERENCE_ARTIFACTS = {
     },
 }
 AI_BATHROOM2_SOURCE_HASHES = {
-    "bathroom2_ai_beige.png": "8F5B4141D5867BE4AABC303A4EBDE56959EA785327DEEE2BF06837858FE2107D",
-    "bathroom2_ai_black.png": "A490CB7DEF8E5861FF7B54010A5258AA9BA46D6D46DDDE0906320DB8835E2D19",
-    "bathroom2_ai_blue.png": "F84AD63C7AD90423414F38CD0FFE1DF7E09F7D0EE975C31DE4048B737A3C8384",
-    "bathroom2_ai_green.png": "1E575665AD0968E92906CC782FFD04657A8DE3AEB7F1627106E434A03A10985F",
-    "bathroom2_ai_pink.png": "56527AFF6DC1FEDA3760A52F71626E25E8B1BD2C4D7FCB324AF227DB986D14E6",
+    "bathroom2_ai_beige.png": "F55870587DA186E6A9D8FE0E97ECEF849E1914FF118DFF35235959FD92D47E5B",
+    "bathroom2_ai_black.png": "532B8F7F1DADD7AD191213CC07C947F80BBB7B0BD637135B54123A583BB7F22A",
+    "bathroom2_ai_blue.png": "74152865D962638F16EF14DE9C24002DDDB09F291D91B5D1AC4B8142E10A2738",
+    "bathroom2_ai_green.png": "E0569311D433C63B38300DE79A097DC40CA8FCFD59284765D2D05AE8AFC40B94",
+    "bathroom2_ai_pink.png": "253B0B0B5EDDB1017B38596FEC7784B3C13157F42F99B22BFA084F5ADDF1555C",
 }
 AI_BATHROOM2_CURTAIN_DIR = (
     ROOT / "patcher_assets" / "optional_patches" / "ai_generated_bathroom2_renovations"
-    / "source_art" / "green_key_final" / "closed_curtains"
+    / "source_art" / "user_fixed" / "closed_curtains"
 )
 AI_BATHROOM2_CURTAIN_ASSETS = {
-    "curtain_closed_bathroom2_black.png": {
+    "curtain_closed_black.png": {
         "color": "black",
-        "size": [1164, 1351],
-        "sha256": "AAB0E5D2781F3040867CCD8A688BB5FB59EB972647F2E550D8C13349A3280DA7",
+        "size": [98, 119],
+        "sha256": "E80877392754DB8B57AAE54C9BC8DD0C2C7252E799D93348F8575A01AED065A0",
     },
-    "curtain_closed_bathroom2_blue.png": {
+    "curtain_closed_blue.png": {
         "color": "blue",
-        "size": [1168, 1347],
-        "sha256": "DB5B1A614116D1FE6F9F42262A95222C1E151D654310600DDBBB06DAD9861AED",
+        "size": [98, 117],
+        "sha256": "EFABD7591A7DC363D8C3AAE64E95C5F31A8011A8AEFC6B00FF6C87155AA4BFAB",
     },
-    "curtain_closed_bathroom2_brown.png": {
+    "curtain_closed_brown.png": {
         "color": "brown",
-        "size": [1170, 1345],
-        "sha256": "B7F281586BFEA13C80F6C98802F180E5CBA496497370E0CDAA4B581911AD3CD3",
+        "size": [98, 120],
+        "sha256": "844CBDAB61656C97245D032B95610C5776D4D1D9537396C6AFA791CA041067BA",
     },
-    "curtain_closed_bathroom2_green.png": {
+    "curtain_closed_green.png": {
         "color": "green",
-        "size": [1158, 1358],
-        "sha256": "2DC3B427EE5EB167963ADAE58E111CF149BAE61D5EEC1E1FE5DE787C7D1BC674",
+        "size": [98, 121],
+        "sha256": "A26423365285F23292B7C8A123C3B893439E1E76FEAC4E6DA532ACA5D4A9579E",
     },
-    "curtain_closed_bathroom2_pink.png": {
+    "curtain_closed_pink.png": {
         "color": "pink",
-        "size": [1164, 1351],
-        "sha256": "18D2D2A810CF0EBBB02A77BCC722EEEAB8212DF9040C3ACDB0CE73054C951F74",
+        "size": [98, 117],
+        "sha256": "8E80651D4CA9D06E41B88994BED91E714347AE8C8ECE88101FBF6E16B875DE04",
     },
+}
+AI_BATHROOM2_STORE_ICON_DIR = (
+    ROOT / "patcher_assets" / "optional_patches" / "ai_generated_bathroom2_renovations"
+    / "source_art" / "store_icons_user"
+)
+AI_BATHROOM2_STORE_ICON_ASSETS = {
+    "blackbathroom2.png": {"color": "black", "size": [82, 83], "sha256": "553818DEF05BAF9FBBE9165A251D75A3FE57EDF36763139FB3335798B1453182"},
+    "bluebathroom2.png": {"color": "blue", "size": [82, 80], "sha256": "CF688548A4C6A343480C8643F88DDA3B2AAE15C4401FAA21FAEAF38C8C401950"},
+    "brown bathroom2.png": {"color": "beige", "size": [82, 84], "sha256": "7CCA2E10F087F82A5D42690E04D97034F8CAB5A8ECC8FD15586B58923F044BEC"},
+    "greenbathroon2.png": {"color": "green", "size": [82, 85], "sha256": "50F1F46E03FB19330CFA2293972451D0B6E15BDD742CCFE2676A9A2A498028F3"},
+    "pinkbathroom2.png": {"color": "pink", "size": [82, 79], "sha256": "3055C71E0281C96F4B54FD903C56E29D3407F897738B4D1DCFE1F3CB3B03B084"},
 }
 MOBILE_RENOVATION_CURTAIN_ASSETS = {
     "shower_curtain_closed_black.png": {
@@ -985,6 +997,26 @@ MOBILE_RENOVATION_STYLE_CATALOG = (
     {"room": "office", "name": "Office Remodel in Blue", "mobile_item": 0x120, "file": "tp242_blue_office.png", "price": 0x992, "lock": 3, "short": "Office Remodel in Blue", "long": "Remodel the office in a calming blue color with coordinating walls, carpet and chairs!"},
     {"room": "workshop", "name": "Checkered Workshop Remodel", "mobile_item": 0x126, "file": "tp242_checkered_workshop.png", "price": 0x76C, "lock": 3, "short": "Checkered Workshop Remodel", "long": "Remodel the workshop to look just like workshops enjoyed by famous car collectors, complete with checkerboard floor!"},
 )
+MOBILE_RENOVATION_USER_STORE_ICON_DIR = (
+    ROOT / "patcher_assets" / "optional_patches" / "mobile_renovations"
+    / "source_art" / "store_icons_user"
+)
+MOBILE_RENOVATION_USER_STORE_ICON_MAPPING = {
+    "blackoffice.png": {"pc_item": 0x146, "mobile_item": 0x121, "room": "office", "size": (82, 81), "sha256": "51F0A7D242BF212754FB6E9558098EC48FCB822D4153EA3C6F823586343A59FD"},
+    "blueoffice.png": {"pc_item": 0x149, "mobile_item": 0x120, "room": "office", "size": (80, 80), "sha256": "28205EC78F14CE4812DC0A1A8A3F152CB5907A02152E0802E202A45677F0C78F"},
+    "brownkitchen.png": {"pc_item": 0x141, "mobile_item": 0x11D, "room": "kitchen", "size": (82, 83), "sha256": "AD45FBE4BF44C71D98069216C7D1FC53E8F9FAB52033DDB122DBE5185BEC9A37"},
+    "checkered workshop.png": {"pc_item": 0x14A, "mobile_item": 0x126, "room": "workshop", "size": (82, 80), "sha256": "ECCA5F059B4690D8639B93A0F4DDD661C9882B983505DF33F2EFE2827D65A048"},
+    "corkworkshop.png": {"pc_item": 0x142, "mobile_item": 0x125, "room": "workshop", "size": (80, 81), "sha256": "6AE03387FCBEBDC5E859707C6CC5F80DAC158B23220EA22855BC1BA3660E26BA"},
+    "countrykitchen.png": {"pc_item": 0x145, "mobile_item": 0x11E, "room": "kitchen", "size": (82, 80), "sha256": "60D2667EFBFCF26B41059455C6CE23B54EE5CD8C7FD32DB5C60D7FEA17A118EF"},
+    "greenbathroom.png": {"pc_item": 0x13F, "mobile_item": 0x11B, "room": "bathroom", "size": (80, 82), "sha256": "334C66646A8683A710E374BCE285692119A7BADC56430B48C0DC912A4494251C"},
+    "greenoffice.png": {"pc_item": 0x147, "mobile_item": 0x122, "room": "office", "size": (83, 81), "sha256": "C934F3F1C898F9D54E1DB228832E3B106488311AE793D341D5A4BC2C1F05553C"},
+    "pinkbathroom.png": {"pc_item": 0x140, "mobile_item": 0x11C, "room": "bathroom", "size": (82, 80), "sha256": "D985643DC83460A5DC99ADC48FFA42FA8945E9F4C1A517CE69D8704E48A7E3B0"},
+    "redoffice.png": {"pc_item": 0x143, "mobile_item": 0x124, "room": "office", "size": (83, 81), "sha256": "9CEEF02EDA250379527382EEFC4540BE036FCD168256B803486CDFB1676672CB"},
+    "yellowbathroom1.png": {"pc_item": 0x144, "mobile_item": 0x11F, "room": "kitchen", "size": (82, 81), "sha256": "AA07C9E3092BC33C9FFEF5FE0569295502E6950F24DF47A0A5A00B2C1B2770C4"},
+}
+MOBILE_RENOVATION_USER_STORE_ICON_MISSING = (
+    "blackbathroom.png", "bluebathroom.png", "beigebathroom.png", "modernoffice.png"
+ )
 if len(MOBILE_RENOVATION_STYLE_CATALOG) != MOBILE_RENOVATION_IMAGE_COUNT:
     raise RuntimeError("Mobile renovation style catalog/art count mismatch")
 MOBILE_RENOVATION_VARIANT_INDICES = {
@@ -8106,6 +8138,40 @@ def sync_ai_generated_bathroom2_assets(manifest):
             "replacement_mode": "selected_by_active_bathroom2_color",
         })
 
+    # The optional Bathroom 2 House Renovations visual rows use these
+    # user-supplied thumbnails.  They are a separate payload: no native E6
+    # item IDs are invented or added to Special Upgrades.
+    store_icon_root = optional_root / "store_icons"
+    runtime_store_icon_root = runtime_root / "store_icons"
+    store_icon_root.mkdir(parents=True, exist_ok=True)
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        runtime_store_icon_root.mkdir(parents=True, exist_ok=True)
+    store_icon_records = []
+    for filename, spec in AI_BATHROOM2_STORE_ICON_ASSETS.items():
+        source = AI_BATHROOM2_STORE_ICON_DIR / filename
+        if not source.is_file():
+            raise RuntimeError(f"AI Bathroom 2 store icon source art is missing: {source}")
+        digest = hashlib.sha256(source.read_bytes()).hexdigest().upper()
+        if digest != spec["sha256"] or tuple(read_png_size(source) or ()) != tuple(spec["size"]):
+            raise RuntimeError(f"AI Bathroom 2 store icon source identity mismatch: {source}")
+        optional_target = store_icon_root / filename
+        shutil.copy2(source, optional_target)
+        runtime_target = None
+        if ENABLE_AI_GENERATED_BATHROOM2:
+            runtime_target = runtime_store_icon_root / filename
+            shutil.copy2(optional_target, runtime_target)
+        store_icon_records.append({
+            "name": filename,
+            "color": spec["color"],
+            "source": str(source),
+            "size": spec["size"],
+            "sha256": digest,
+            "optional_path": str(optional_target),
+            "runtime_path": str(runtime_target) if runtime_target else None,
+            "route": "House Renovations only",
+            "native_item_id": None,
+        })
+
     manifest["ai_generated_bathroom2_renovations"] = {
         "enabled": ENABLE_AI_GENERATED_BATHROOM2,
         "status": "default_off_optional_visual_payload" if not ENABLE_AI_GENERATED_BATHROOM2 else "runtime_visual_overlay_staged",
@@ -8115,6 +8181,11 @@ def sync_ai_generated_bathroom2_assets(manifest):
         "source_art": source_records,
         "normalized_art": normalized,
         "closed_curtains": curtain_records,
+        "store_icons": store_icon_records,
+        "store_icon_route": (
+            "optional Bathroom2 House Renovations visual rows only; native E6 "
+            "item IDs remain disabled/hiatus"
+        ),
         "reference_evidence": reference_records,
         "target_size": list(AI_BATHROOM2_TARGET_SIZE),
         "normalization": "RGBA LANCZOS resize from each source canvas to bathroom2_vanilla.png dimensions; no generated_chroma intermediates",
@@ -8199,6 +8270,25 @@ def sync_mobile_renovation_art_sources(manifest):
             "sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
             "style": MOBILE_RENOVATION_CURTAIN_ASSETS[source_name]["styles"],
         })
+    user_icon_target = target / "store_icons"
+    user_icon_target.mkdir(parents=True, exist_ok=True)
+    user_icon_copied = []
+    user_icon_missing = []
+    for filename, spec in MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.items():
+        source = MOBILE_RENOVATION_USER_STORE_ICON_DIR / filename
+        if not source.is_file():
+            user_icon_missing.append(str(source))
+            continue
+        digest = hashlib.sha256(source.read_bytes()).hexdigest().upper()
+        if digest != spec["sha256"] or tuple(read_png_size(source) or ()) != tuple(spec["size"]):
+            raise RuntimeError(f"Mobile renovation store icon identity mismatch: {source}")
+        destination = user_icon_target / filename
+        shutil.copy2(source, destination)
+        user_icon_copied.append({
+            "name": filename, "source": str(source), "target": str(destination),
+            "pc_item": hex(spec["pc_item"]), "mobile_item": hex(spec["mobile_item"]),
+            "room": spec["room"], "size": spec["size"], "sha256": digest,
+        })
     reference_records = []
     for filename, spec in MOBILE_RENOVATION_REFERENCE_ARTIFACTS.items():
         source = MOBILE_RENOVATION_REFERENCE_DIR / filename
@@ -8215,7 +8305,7 @@ def sync_mobile_renovation_art_sources(manifest):
             "sha256": digest,
             "purpose": spec["purpose"],
         })
-    all_missing = missing + curtain_missing
+    all_missing = missing + curtain_missing + user_icon_missing
     manifest["mobile_renovation_art_sources"] = {
         "status": (
             "runtime_1_to_1_overlay_payload"
@@ -8230,6 +8320,12 @@ def sync_mobile_renovation_art_sources(manifest):
         "missing": all_missing,
         "bathroom1_curtain_assets": curtain_copied,
         "bathroom1_stock_curtain_replacements": stock_curtain_replacements,
+        "user_store_icon_payload": user_icon_copied,
+        "user_store_icon_missing": user_icon_missing,
+        "user_store_icon_route": (
+            "staged exact-byte House Renovations icon payload; native descriptor "
+            "switch remains blocked until a proven store-icon descriptor ABI is available"
+        ),
         "bathroom1_curtain_source": str(MOBILE_RENOVATION_CURTAIN_SOURCE_DIR),
         "bathroom1_curtain_target": str(curtain_target),
         "bathroom1_curtain_replacement_mode": (
@@ -9834,6 +9930,19 @@ def patch_house_renovations(manifest):
             for index in MOBILE_RENOVATION_NATIVE_ORDER
             for style in (MOBILE_RENOVATION_STYLE_CATALOG[index],)
         ],
+        "user_store_icon_mapping": [
+            {
+                "source": str(MOBILE_RENOVATION_USER_STORE_ICON_DIR / filename),
+                "name": filename,
+                "pc_item": hex(spec["pc_item"]),
+                "mobile_item": hex(spec["mobile_item"]),
+                "room": spec["room"],
+                "sha256": spec["sha256"],
+                "status": "verified_staged_mapping_only",
+            }
+            for filename, spec in MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.items()
+        ],
+        "user_store_icon_missing": list(MOBILE_RENOVATION_USER_STORE_ICON_MISSING),
         "native_patches": {
             "sort_count": "0x0A -> 0x19",
             "max_index": "0x09 -> 0x18",
@@ -11914,10 +12023,12 @@ extern "C" int __fastcall VF2MarriageCandidateGender(
     int currentGender
 ) {
     if (gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalFemale) {
-        return 0;
+        // Native eGenderFemale is 1 (male is 0).  Keep the cheat rows
+        // deterministic without changing the ordinary proposal path.
+        return 1;
     }
     if (gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalMale) {
-        return 1;
+        return 0;
     }
     if (gVF2SameSexMarriage != 0) {
         return ldwGameState::GetRandom(2);
@@ -16305,7 +16416,9 @@ def patch_multiple_marriage_candidates(manifest):
         record = section.reloc_ptr + index * 10
         vaddr = struct.unpack_from("<I", dating.buf, record)[0]
         if vaddr == handle.value + 0x8D:
-            struct.pack_into("<I", dating.buf, record, cave + 47)
+            # The moved stock sound CALL is at cave+47; its REL32 operand is
+            # the following four bytes at cave+48.
+            struct.pack_into("<I", dating.buf, record, cave + 48)
             break
     else:
         raise RuntimeError("Dating stock Reject relocation move failed")
@@ -16558,8 +16671,17 @@ def patch_same_sex_marriage(manifest):
     if bytes(dating.buf[handle_raw:handle_raw + len(expected_handle_prefix)]) != expected_handle_prefix:
         raise RuntimeError("Dating HandleMessage prologue drifted")
     handle_cave = handle_sec.raw_size
+    handle_stock_prefix = bytes(
+        dating.buf[handle_raw:handle_raw + 20]
+    )
+    expected_cookie_prefix = bytes.fromhex(
+        "A1 00 00 00 00 33 C5 89 45 FC 83 7D 08 08"
+    )
+    if handle_stock_prefix[6:20] != expected_cookie_prefix:
+        raise RuntimeError("Dating HandleMessage cookie setup drifted")
     handle_payload = bytearray(
         expected_handle_prefix
+        + expected_cookie_prefix
         + b"\x51"                # preserve CDatingScene this
         + b"\xFF\x75\x0C"       # action
         + b"\xFF\x75\x08"       # message
@@ -16573,29 +16695,57 @@ def patch_same_sex_marriage(manifest):
         + b"\xB0\x01"              # return true
         + b"\x8B\x4D\xFC"
         + b"\x33\xCD"
-        + b"\x5F\x5E\x5B"
         + b"\xE8\x00\x00\x00\x00"  # security cookie
         + b"\x8B\xE5\x5D\xC2\x08\x00"
     )
-    if len(handle_payload) != 53:
+    if len(handle_payload) != 64:
         raise AssertionError("Dating Exit handler trampoline size drifted")
-    struct.pack_into("<b", handle_payload, 26, 5)
+    # Helper false falls through to the untouched native dispatch after the
+    # cookie setup and message compare; helper true skips the stock branch.
+    struct.pack_into("<b", handle_payload, 40, 5)
+    stock_continuation_offset = handle_payload.find(
+        b"\xE9\x00\x00\x00\x00", 41
+    )
+    if stock_continuation_offset < 0:
+        raise AssertionError("Dating stock continuation placeholder missing")
     struct.pack_into(
         "<i",
-        handle_payload,
-        28,
-        (handle.value + 6) - (handle_cave + 32),
+        handle_payload, stock_continuation_offset + 1,
+        (handle.value + 0x14) - (
+            handle_cave + stock_continuation_offset + 5
+        ),
     )
-    dating.insert_section_bytes(handle_sec.index, handle_cave, bytes(handle_payload))
+    dating.insert_section_bytes(
+        handle_sec.index, handle_cave, bytes(handle_payload)
+    )
+    cookie_setup_relocation = None
+    for index in range(handle_sec.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", dating.buf, handle_sec.reloc_ptr + index * 10
+        )
+        if vaddr == handle.value + 7:
+            cookie_setup_relocation = (symbol_index, rtype)
+            break
+    if cookie_setup_relocation is None:
+        raise RuntimeError("Dating cookie setup relocation drifted")
+    dating.append_relocation(
+        handle_sec.index, handle_cave + 7,
+        cookie_setup_relocation[0], cookie_setup_relocation[1],
+    )
     dating.append_relocation(
         handle_sec.index,
-        handle_cave + 15,
+        handle_cave + 29,
         exit_handler_helper,
         IMAGE_REL_I386_REL32,
     )
+    cookie_check_offset = handle_payload.find(
+        b"\xE8\x00\x00\x00\x00\x8B\xE5"
+    )
+    if cookie_check_offset < 0:
+        raise AssertionError("Dating cookie check placeholder missing")
     dating.append_relocation(
         handle_sec.index,
-        handle_cave + 43,
+        handle_cave + cookie_check_offset + 1,
         dating.symbol("@__security_check_cookie@4").index,
         IMAGE_REL_I386_REL32,
     )
@@ -16604,6 +16754,84 @@ def patch_same_sex_marriage(manifest):
     handle_raw = handle_sec.raw_ptr + handle.value
     dating.buf[handle_raw:handle_raw + 6] = (
         b"\xE9" + struct.pack("<i", handle_cave - (handle_hook + 5)) + b"\x90"
+    )
+
+    # IDA: the stock Accept route checks candidate index -1 before calling
+    # GetVillager, then performs `mov ecx,eax; mov byte ptr [eax+1BB84h],1`.
+    # Keep that complete sequence byte-identical for ordinary/native scenes
+    # (mode 0 and invalid values).  Cheat scenes additionally reject a null
+    # GetVillager result before the proven dereference and return through the
+    # existing handled epilogue after clearing the one-scene mode.
+    accept_guard_helper = clear_helper
+    accept_flag_symbol = dating.append_undefined_symbol(
+        CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL
+    )
+    # In the clean PC object the sequence begins at +0xEB (the linked image
+    # readback reports +0xED after its preceding two-byte layout shift).
+    accept_hook = handle.value + 0xEB
+    accept_sec = dating.section(handle.section)
+    accept_raw = accept_sec.raw_ptr + accept_hook
+    expected_accept_write = bytes.fromhex(
+        "8B C8 C6 80 84 BB 01 00 01"
+    )
+    if bytes(dating.buf[accept_raw:accept_raw + len(expected_accept_write)]) != expected_accept_write:
+        raise RuntimeError("Dating cheat Accept candidate-write anchor drifted")
+
+    accept_cave = accept_sec.raw_size
+    # cmp mode,1; mode-1 pointer guard; cmp mode,2; mode-2 pointer guard;
+    # invalid cheat pointer clears mode and returns handled; all other paths
+    # execute the copied stock write and continue at Accept+0xF4.
+    accept_payload = bytearray(
+        b"\x80\x3D\0\0\0\0\x01"  # mode == Female
+        + b"\x75\x00"              # otherwise check Male
+        + b"\x85\xC0"              # Female: pointer non-null?
+        + b"\x74\x00"              # null -> invalid cheat candidate
+        + b"\xEB\x00"              # valid Female -> stock write
+        + b"\x80\x3D\0\0\0\0\x02"  # mode == Male
+        + b"\x75\x00"              # other values -> stock write
+        + b"\x85\xC0"              # Male: pointer non-null?
+        + b"\x75\x00"              # non-null -> stock write
+        + b"\xE8\0\0\0\0"          # clear cheat mode
+        + b"\xE9\0\0\0\0"          # handled common epilogue
+        + expected_accept_write
+        + b"\xE9\0\0\0\0"          # Accept continuation
+    )
+    if len(accept_payload) != 52:
+        raise AssertionError("Dating Accept safety cave size drifted")
+    # Branches are relative to the next instruction.
+    struct.pack_into("<b", accept_payload, 8, 0x06)   # mode 1 -> mode 2 check
+    struct.pack_into("<b", accept_payload, 12, 0x0F)  # mode 1 null -> invalid
+    struct.pack_into("<b", accept_payload, 14, 0x17)  # mode 1 valid -> stock
+    struct.pack_into("<b", accept_payload, 23, 0x0E)  # mode 2 != -> stock
+    struct.pack_into("<b", accept_payload, 27, 0x0A)  # mode 2 non-null -> stock
+    struct.pack_into(
+        "<i", accept_payload, 34,
+        (handle.value + 0xAA) - (accept_cave + 38),
+    )
+    struct.pack_into(
+        "<i", accept_payload, 48,
+        (handle.value + 0xF4) - (accept_cave + 52),
+    )
+    dating.insert_section_bytes(accept_sec.index, accept_cave, bytes(accept_payload))
+    dating.append_relocation(
+        accept_sec.index, accept_cave + 2,
+        accept_flag_symbol, IMAGE_REL_I386_DIR32,
+    )
+    dating.append_relocation(
+        accept_sec.index, accept_cave + 17,
+        accept_flag_symbol, IMAGE_REL_I386_DIR32,
+    )
+    dating.append_relocation(
+        accept_sec.index, accept_cave + 29,
+        accept_guard_helper, IMAGE_REL_I386_REL32,
+    )
+    dating._parse()
+    handle = dating.symbol(handle_name)
+    accept_sec = dating.section(handle.section)
+    accept_raw = accept_sec.raw_ptr + accept_hook
+    dating.buf[accept_raw:accept_raw + len(expected_accept_write)] = (
+        b"\xE9" + struct.pack("<i", accept_cave - (accept_hook + 5))
+        + b"\x90" * (len(expected_accept_write) - 5)
     )
     dating.write(dating_path)
 
@@ -16763,8 +16991,9 @@ def patch_same_sex_marriage(manifest):
             ),
             "candidate_gender": (
                 "Force Marriage Email (Female) arms mode 0x01 and returns "
-                "gender 0; Force Marriage Email (Male) arms mode 0x02 and "
-                "returns gender 1. No RNG is used for either cheat row; "
+                "native eGenderFemale=1; Force Marriage Email (Male) arms "
+                "mode 0x02 and returns native eGenderMale=0. No RNG is used "
+                "for either cheat row; "
                 "ordinary proposal emails retain the existing .vf2same-gated "
                 "behavior"
             ),
@@ -16798,6 +17027,17 @@ def patch_same_sex_marriage(manifest):
                 "timestamp_route": "copy GameState+0x25CB8 to +0x25CBC, then clear +0x25CB8",
                 "accept_clear": "action 1 clears the scene mode before stock Accept continues",
                 "destroy_clear": "existing CDatingScene::Destroy hook remains defensive cleanup",
+            },
+            "accept_safety": {
+                "status": "cheat-only null-candidate guard; native mode 0 is byte-identical",
+                "hook_offset": "+0xEB in clean DatingScene.obj (+0xED in linked readback)",
+                "stock_span": "8B C8 C6 80 84 BB 01 00 01",
+                "guard_modes": ["0x01", "0x02"],
+                "invalid_candidate": (
+                    "null GetVillager result clears the one-scene mode and resumes "
+                    "at stock success AL=1 before [EAX+0x1BB84]"
+                ),
+                "native_mode_0": "copied stock write and continuation are preserved",
             },
         },
         "parent_storage": (
