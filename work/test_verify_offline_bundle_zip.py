@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / "work"))
 import verify_offline_bundle_zip as verifier
 
 
-CANONICAL = ROOT / "outputs" / "VF2-B158-1b01c94-Toggle-Corrected-Playtest-Final.zip"
+CANONICAL = ROOT / "outputs" / "VF2-B158-All-Enabled-Playtest-20260807-v3.zip"
 
 
 class OfflineBundleZipVerifierTests(unittest.TestCase):

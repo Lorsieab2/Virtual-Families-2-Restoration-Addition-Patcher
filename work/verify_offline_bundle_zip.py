@@ -27,37 +27,37 @@ CORE_ONLY_SETTINGS = {
 EXECUTABLE_VARIANTS = {
     frozenset({"core_executable"}): (
         "payload/Virtual Families 2 - Modded B158.exe",
-        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
         1_790_976,
     ),
     frozenset({"core_executable", "island_events"}): (
         "payload/Virtual Families 2 - Modded B158 - Island Events.exe",
-        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
         1_790_976,
     ),
     frozenset({"core_executable", "cheat_upgrades"}): (
         "payload/Virtual Families 2 - Modded B158 - Cheat Upgrades.exe",
-        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
         1_790_976,
     ),
     frozenset({"core_executable", "holiday_ornaments_collection"}): (
         "payload/Virtual Families 2 - Modded B158 - Holiday Ornaments.exe",
-        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
         1_790_976,
     ),
     frozenset({"core_executable", "behavior_patches"}): (
         "payload/Virtual Families 2 - Modded B158 - Behavior Patches.exe",
-        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
         1_790_976,
     ),
     frozenset({"core_executable", "mobile_renovations"}): (
         "payload/Virtual Families 2 - Modded B158 - Mobile Room Renovations.exe",
-        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
         1_790_976,
     ),
     frozenset({"core_executable", "cheat_upgrades", "mobile_renovations"}): (
         "payload/Virtual Families 2 - Modded B158 - Cheat Upgrades + Mobile Room Renovations.exe",
-        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
         1_790_976,
     ),
     frozenset({
@@ -69,7 +69,7 @@ EXECUTABLE_VARIANTS = {
         "mobile_renovations",
     }): (
         "payload/Virtual Families 2 - Modded B158 - Final All-Enabled Native.exe",
-        "bc2c1623cd1723837b19d8d9109be943a7338fc6f099d301f4a0cc92fa66b066",
+        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
         1_790_976,
     ),
 }
