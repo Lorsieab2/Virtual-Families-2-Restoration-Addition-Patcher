@@ -85,6 +85,11 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         for item_id in (0x124, 0x125, 0x126, 0x127, 0x12E):
             self.assertEqual(
                 patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[item_id],
+                "cheat_trophy_gold2x.png",
+            )
+        for item_id in (0x12B, 0x12D):
+            self.assertEqual(
+                patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[item_id],
                 "cheat_reset_achievements.png",
             )
 
@@ -5631,7 +5636,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         )
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x127],
-            "cheat_reset_achievements.png",
+            "cheat_trophy_gold2x.png",
         )
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES, {})
 
@@ -5643,7 +5648,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("gVF2UnlockEverythingInStore = 1;", source)
         self.assertIn("gVF2UnlockEverythingInStore = 0;", source)
         expected_late_icons = {
-            0x12E: "cheat_reset_achievements.png",
+            0x12E: "cheat_trophy_gold2x.png",
             0x12F: "cheat_fill_house_messes.png",
             0x130: "cheat_fill_yard_weeds.png",
             0x131: "cheat_clean_garden.png",
@@ -6093,7 +6098,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(reset_rows[0]["item_id"], 0x124)
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x124],
-            "cheat_reset_achievements.png",
+            "cheat_trophy_gold2x.png",
         )
 
         source = Path(patcher.__file__).read_text(encoding="utf-8")

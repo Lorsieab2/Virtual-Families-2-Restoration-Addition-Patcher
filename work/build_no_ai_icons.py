@@ -63,6 +63,7 @@ def main() -> None:
         "cheat_next_babies_female.png": load("Icon_Baby1.png"),
         "cheat_force_pregnancy.png": load("icon_BabyCrib.png"),
         "cheat_fix_malfunctions.png": load("Icon_Resort_Improvement.png"),
+        "cheat_trophy_gold2x.png": load("trophy_gold2x.png"),
         "cheat_next_pregnancy_singleton.png": load("Prop_Baby_Temp.png"),
         "cheat_next_pregnancy_twins.png": load("twins.png"),
         "cheat_next_pregnancy_triplets.png": load("triplets.png"),

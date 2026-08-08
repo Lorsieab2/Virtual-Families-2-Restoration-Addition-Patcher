@@ -658,10 +658,14 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x121: "cheat_add_food.png",
     0x122: "cheat_add_food.png",
     0x123: "cheat_no_generation_locks.png",
-    0x124: "cheat_reset_achievements.png",
-    0x125: "cheat_reset_achievements.png",
-    0x126: "cheat_reset_achievements.png",
-    0x127: "cheat_reset_achievements.png",
+    # These five rows share a dedicated descriptor so the optional No AI
+    # trophy replacement cannot bleed into unrelated reset/malfunction rows.
+    # The default payload is the existing trophy art; No AI Icons replaces
+    # only this descriptor with the supplied non-AI trophy.
+    0x124: "cheat_trophy_gold2x.png",
+    0x125: "cheat_trophy_gold2x.png",
+    0x126: "cheat_trophy_gold2x.png",
+    0x127: "cheat_trophy_gold2x.png",
     0x128: "cheat_add_coins.png",
     0x129: "cheat_add_coins.png",
     0x12A: "cheat_add_coins.png",
@@ -672,7 +676,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     # artwork.  The descriptor must not be aliased through the item id: the
     # store's native image lookup and the added-item draw hook can otherwise
     # resolve the row to an empty cell.
-    0x12E: "cheat_reset_achievements.png",
+    0x12E: "cheat_trophy_gold2x.png",
     0x12F: "cheat_fill_house_messes.png",
     0x130: "cheat_fill_yard_weeds.png",
     0x131: "cheat_clean_garden.png",

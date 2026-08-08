@@ -106,10 +106,19 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         self.assertIn('ROOT / "patcher_assets" / "optional_patches" / "no_ai_icons" / "source_art"', generator)
         self.assertNotIn('ROOT / "work" / "assets" / "no_ai_icons" / "raw"', generator)
         source_art = ROOT / "patcher_assets" / "optional_patches" / "no_ai_icons" / "source_art"
-        self.assertEqual(len(list(source_art.glob("*.png"))), 15)
+        self.assertEqual(len(list(source_art.glob("*.png"))), 16)
         self.assertEqual(
             exporter.NO_AI_ICON_REPLACEMENT_PROVENANCE["cheat_reset_achievements.png"],
             "patcher_assets/optional_patches/no_ai_icons/source_art/Icon_Resort_Improvement.png",
+        )
+        self.assertEqual(
+            exporter.NO_AI_ICON_REPLACEMENT_PROVENANCE["cheat_trophy_gold2x.png"],
+            "patcher_assets/optional_patches/no_ai_icons/source_art/trophy_gold2x.png",
+        )
+        trophy_source = source_art / "trophy_gold2x.png"
+        self.assertEqual(
+            hashlib.sha256(trophy_source.read_bytes()).hexdigest().upper(),
+            "7ACFEA13C00BCC46141C5ECE8F4A3D0448D39BF5F8F063F16839D9D0197FB3B6",
         )
 
     def test_final_playtest_profile_is_manifest_local_and_keeps_no_ai_off(self):
@@ -292,7 +301,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 [row["file_path"] for row in records],
                 [f"Images/{filename}" for filename in exporter.NO_AI_ICON_TARGETS],
             )
-            self.assertEqual(len(records), 14)
+            self.assertEqual(len(records), 15)
             for record in records:
                 self.assertEqual(
                     record["requires"],

@@ -263,8 +263,8 @@ def verify_archive(zip_path: Path | str) -> dict:
             if "no_ai_icons" in _requires(record, "asset record")
         ]
         if "no_ai_icons" in setting_ids:
-            if len(no_ai_records) != 14:
-                _fail(f"expected 14 No AI Icons records, found {len(no_ai_records)}")
+            if len(no_ai_records) != 15:
+                _fail(f"expected 15 No AI Icons records, found {len(no_ai_records)}")
             for record in no_ai_records:
                 requires = frozenset(_requires(record, "No AI Icons record"))
                 if requires != frozenset({"core_executable", "cheat_upgrades", "no_ai_icons"}):
