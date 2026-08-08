@@ -38,6 +38,7 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "mobile_sound_assets",
     "mobile_furniture_behaviors",
     "cheat_upgrades",
+    "ai_generated_bathroom2_renovations",
 })
 FINAL_PLAYTEST_NATIVE_REQUIRES = [
     "core_executable",
@@ -77,6 +78,8 @@ DEFAULT_OPTIONAL_SONG_MODS_SOURCE = OPTIONAL_PATCH_ASSET_DIR / "optional_song_mo
 MOBILE_SOUND_ASSET_SOURCE_DIR = OPTIONAL_PATCH_ASSET_DIR / "mobile_sound_assets"
 MOBILE_SOUND_PARITY_CONTRACT = ROOT / "data" / "vf2" / "mobile-sound-parity-contract.json"
 NO_AI_ICON_SOURCE_DIR = OPTIONAL_PATCH_ASSET_DIR / "no_ai_icons"
+AI_BATHROOM2_SOURCE_DIR = OPTIONAL_PATCH_ASSET_DIR / "ai_generated_bathroom2_renovations"
+AI_BATHROOM2_OPTIONAL_FOLDER = "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)"
 # These are optional visual replacements for the late Cheat Upgrades rows.
 # They intentionally target the existing generated icon filenames so the
 # default icon payload remains the restore source when the setting is off.
@@ -204,6 +207,7 @@ SOURCE_BACKED_OPTIONAL_SETTINGS = {
     "mobile_sound_assets",
     "cheat_upgrades",
     "no_ai_icons",
+    "ai_generated_bathroom2_renovations",
 }
 EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "island_events",
@@ -212,7 +216,10 @@ EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS = {
     "behavior_patches",
     "mobile_renovations",
 }
-OUTPUT_ONLY_REMOVABLE_ASSET_SETTINGS = EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS
+OUTPUT_ONLY_REMOVABLE_ASSET_SETTINGS = (
+    EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS
+    | {"ai_generated_bathroom2_renovations"}
+)
 
 SETTINGS = [
     {
@@ -352,6 +359,16 @@ SETTINGS = [
         "id": "mobile_renovations",
         "label": "Add mobile room renovations",
         "description": "Optional patch: overlays the 15 verified mobile kitchen, bathroom, office, and workshop renovation images at their exact 1:1 room-map positions. The stock map remains unchanged when this setting is disabled.",
+        "default": False,
+        "category": "optional",
+    },
+    {
+        "id": "ai_generated_bathroom2_renovations",
+        "label": "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)",
+        "description": ""
+        "Warning: These Bathroom 2 renovation images are AI-generated based on the Bathroom 1's mobile renovations art, "
+        "but manually edited by me. (Sorry, I'm too lazy to hand-make the art myself. I'm busy with other stuff, but feel "
+        "free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2)",
         "default": False,
         "category": "optional",
     },
@@ -1530,6 +1547,12 @@ def setting_for_asset(rel_path: Path) -> str:
     if stem.endswith(".png"):
         stem = stem[:-4]
     parts = rel_path.parts
+    if text.startswith(
+        "OptionalVisualMods/2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)/"
+    ):
+        return "ai_generated_bathroom2_renovations"
+    if text.startswith("OptionalVisualMods/Mobile Renovations/"):
+        return "mobile_renovations"
     if text.startswith("OptionalVisualMods/Custom Lorsieab2 Map Images/"):
         return "custom_lorsieab2_map_images"
     if text.startswith("OptionalVisualMods/Menu-Bar/"):
@@ -1573,6 +1596,10 @@ def setting_for_asset(rel_path: Path) -> str:
         return "holiday_ornaments_collection"
     if text.startswith("Images/MobileRenovations/"):
         return "mobile_renovations"
+    if text.startswith("Images/AIGeneratedBathroom2/"):
+        return "ai_generated_bathroom2_renovations"
+    if text == "Images/curtain_closed_southb.png":
+        return "mobile_renovations"
     if text in {
         "Images/familytree_scrollknob_btm.png",
         "Images/familytree_scrollknob_mid.png",
@@ -1615,6 +1642,7 @@ def asset_requires_for_setting(setting: str) -> list[str]:
         "mobile_sound_assets",
         "cheat_upgrades",
         "no_ai_icons",
+        "ai_generated_bathroom2_renovations",
     }:
         if setting == "no_ai_icons":
             return ["core_executable", "cheat_upgrades", "no_ai_icons"]
@@ -2151,6 +2179,10 @@ def loose_optional_visual_target(source: Path) -> Path:
     name = source.name
     stem_lower = source.stem.lower()
     path_text = relative_posix(source).lower()
+    if relative_posix(source).startswith(
+        "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)/"
+    ):
+        return Path("Images") / "AIGeneratedBathroom2" / name
     if any(key in path_text for key in ("workshop", "kitchen", "office", "upgrade")):
         return Path("Images") / "Upgrades" / name
     if stem_lower.endswith("std") or "furniture" in path_text:

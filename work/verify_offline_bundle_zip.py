@@ -27,37 +27,37 @@ CORE_ONLY_SETTINGS = {
 EXECUTABLE_VARIANTS = {
     frozenset({"core_executable"}): (
         "payload/Virtual Families 2 - Modded B158.exe",
-        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
+        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
         1_790_976,
     ),
     frozenset({"core_executable", "island_events"}): (
         "payload/Virtual Families 2 - Modded B158 - Island Events.exe",
-        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
+        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
         1_790_976,
     ),
     frozenset({"core_executable", "cheat_upgrades"}): (
         "payload/Virtual Families 2 - Modded B158 - Cheat Upgrades.exe",
-        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
+        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
         1_790_976,
     ),
     frozenset({"core_executable", "holiday_ornaments_collection"}): (
         "payload/Virtual Families 2 - Modded B158 - Holiday Ornaments.exe",
-        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
+        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
         1_790_976,
     ),
     frozenset({"core_executable", "behavior_patches"}): (
         "payload/Virtual Families 2 - Modded B158 - Behavior Patches.exe",
-        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
+        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
         1_790_976,
     ),
     frozenset({"core_executable", "mobile_renovations"}): (
         "payload/Virtual Families 2 - Modded B158 - Mobile Room Renovations.exe",
-        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
+        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
         1_790_976,
     ),
     frozenset({"core_executable", "cheat_upgrades", "mobile_renovations"}): (
         "payload/Virtual Families 2 - Modded B158 - Cheat Upgrades + Mobile Room Renovations.exe",
-        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
+        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
         1_790_976,
     ),
     frozenset({
@@ -69,7 +69,7 @@ EXECUTABLE_VARIANTS = {
         "mobile_renovations",
     }): (
         "payload/Virtual Families 2 - Modded B158 - Final All-Enabled Native.exe",
-        "4f59817640d2f79dc347b7e3a6f844f699a93340d82b4912f79fbd59f2ff1f31",
+        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
         1_790_976,
     ),
 }
@@ -243,7 +243,13 @@ def verify_archive(zip_path: Path | str) -> dict:
             _verify_file_record(zipped, names, root, record, f"executable {source}")
             exe_hashes.add(expected_sha)
 
-        renovation_records = [record for record in assets if "mobile_renovations" in _requires(record, "asset record") and str(record.get("source_path", "")).lower().endswith(".png")]
+        renovation_records = [
+            record
+            for record in assets
+            if "mobile_renovations" in _requires(record, "asset record")
+            and str(record.get("file_path", "")).startswith("Images/MobileRenovations/")
+            and str(record.get("source_path", "")).lower().endswith(".png")
+        ]
         if len(renovation_records) != 15:
             _fail(f"expected 15 mobile renovation PNG records, found {len(renovation_records)}")
         for record in renovation_records:

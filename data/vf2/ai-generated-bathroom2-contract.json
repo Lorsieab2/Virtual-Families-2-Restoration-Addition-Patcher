@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "label": "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)",
+  "disclaimer": "Warning: These Bathroom 2 renovation images are AI-generated based on the Bathroom 1's mobile renovations art, but manually edited by me. (Sorry, I'm too lazy to hand-make the art myself. I'm busy with other stuff, but feel free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2)",
+  "default_enabled": false,
+  "native_route": "second-bathroom renovation remains disabled/hiatus; no native E6 route changed",
+  "source_art_directory": "patcher_assets/optional_patches/ai_generated_bathroom2_renovations/source_art",
+  "source_art": [
+    {"name": "bathroom2_ai_black.png", "sha256": "A490CB7DEF8E5861FF7B54010A5258AA9BA46D6D46DDDE0906320DB8835E2D19"},
+    {"name": "bathroom2_ai_blue.png", "sha256": "F84AD63C7AD90423414F38CD0FFE1DF7E09F7D0EE975C31DE4048B737A3C8384"},
+    {"name": "bathroom2_ai_beige.png", "sha256": "8F5B4141D5867BE4AABC303A4EBDE56959EA785327DEEE2BF06837858FE2107D"},
+    {"name": "bathroom2_ai_green.png", "sha256": "1E575665AD0968E92906CC782FFD04657A8DE3AEB7F1627106E434A03A10985F"},
+    {"name": "bathroom2_ai_pink.png", "sha256": "56527AFF6DC1FEDA3760A52F71626E25E8B1BD2C4D7FCB324AF227DB986D14E6"}
+  ],
+  "closed_curtains": [
+    {"name": "curtain_closed_bathroom2_black.png", "color": "black", "size": [1164, 1351], "sha256": "AAB0E5D2781F3040867CCD8A688BB5FB59EB972647F2E550D8C13349A3280DA7", "replacement_target": "Images/curtain_closed.png"},
+    {"name": "curtain_closed_bathroom2_blue.png", "color": "blue", "size": [1168, 1347], "sha256": "DB5B1A614116D1FE6F9F42262A95222C1E151D654310600DDBBB06DAD9861AED", "replacement_target": "Images/curtain_closed.png"},
+    {"name": "curtain_closed_bathroom2_brown.png", "color": "brown", "size": [1170, 1345], "sha256": "B7F281586BFEA13C80F6C98802F180E5CBA496497370E0CDAA4B581911AD3CD3", "replacement_target": "Images/curtain_closed.png"},
+    {"name": "curtain_closed_bathroom2_green.png", "color": "green", "size": [1158, 1358], "sha256": "2DC3B427EE5EB167963ADAE58E111CF149BAE61D5EEC1E1FE5DE787C7D1BC674", "replacement_target": "Images/curtain_closed.png"},
+    {"name": "curtain_closed_bathroom2_pink.png", "color": "pink", "size": [1164, 1351], "sha256": "18D2D2A810CF0EBBB02A77BCC722EEEAB8212DF9040C3ACDB0CE73054C951F74", "replacement_target": "Images/curtain_closed.png"}
+  ],
+  "normalization": {
+    "target_size": [511, 378],
+    "reference": "patcher_assets/optional_patches/ai_generated_bathroom2_renovations/reference/bathroom2_vanilla.png",
+    "reference_sha256": "EB635DB8B2553423C56AA3BAD780C943C77CD752987B35958685374922DEC056",
+    "algorithm": "RGBA LANCZOS resize from each source canvas; no generated_chroma intermediates"
+  },
+  "placement": {
+    "native_map_area": [13, 7],
+    "anchor": [949, 145],
+    "anchor_basis": "tracked 2048x2048 room-map reference/native north-bathroom bounds; room-apex origin",
+    "reference_bounds": "patcher_assets/optional_patches/ai_generated_bathroom2_renovations/reference/bathroom2_bounds_reference.png",
+    "reference_bounds_sha256": "8FA3306621329BF08C54E4B6818075733AAEFF05F5E092D1FF76786E63C2A068"
+  }
+}

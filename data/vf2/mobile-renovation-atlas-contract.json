@@ -7,8 +7,23 @@
     "copy_into_pc_images": "when mobile_renovations is enabled",
     "reason": "The optional PC renderer draws these complete PNGs at 1:1 scale after CWorldMap::Draw; the stock map path remains unchanged when disabled.",
     "staged_target": "Images/MobileRenovations when enabled; OptionalVisualMods/Mobile Renovations otherwise",
-    "bathroom2": "Reuse corrected Bathroom 1 art only after a native second-bathroom render route is verified."
+    "bathroom2": "Reuse corrected Bathroom 1 art only after a native second-bathroom render route is verified.",
+    "bathroom1_curtains": "Five tracked PNGs are staged by their source names; the black Bathroom 1 purchase replaces Images/curtain_closed_southb.png with shower_curtain_closed_black.png bytes under that stock filename. Bathroom 2 remains excluded."
   },
+  "reference_evidence": [
+    {"name": "test.png", "path": "patcher_assets/optional_patches/mobile_renovations/reference/test.png", "size": [2048, 2048], "sha256": "1F83DF47517B30D5613A1D55004B28B14ACCD1ED1F326CD9EB1EFEDAB5275DB4", "purpose": "measured room-anchor reference"},
+    {"name": "tp237.png", "path": "patcher_assets/optional_patches/mobile_renovations/reference/tp237.png", "size": [512, 512], "sha256": "35FA3A17A0C50CDBFE82F17C58444882499D416B0A977CA795DB418D73AE2294", "purpose": "mobile renovation icon atlas evidence"}
+  ],
+  "bathroom1_curtain_assets": [
+    {"name": "shower_curtain_closed_black.png", "styles": ["tp233_sw_bathroom_black.png"], "size": [98, 96], "sha256": "7c1260cd9b965a9fcf157b40d3364ba07bb5bf6544440c9cd1d46b8488a0b510"},
+    {"name": "shower_curtain_closed_blue.png", "styles": ["tp233_sw_bathroom_blue_marble.png"], "size": [98, 96], "sha256": "a33a00aedb3bb3b74d3e4aeeedc4e230ca056258b465d6b2d76fa4190d91e8ff"},
+    {"name": "shower_curtain_closed_brown.png", "styles": ["tp234_sw_bathroom_brown.png"], "size": [98, 96], "sha256": "cb0bb1614a8dee1150067fe158f15e7fd7cb20cc3b467d7fdfb336e48fc7c0e2"},
+    {"name": "shower_curtain_closed_green.png", "styles": ["tp234_sw_bathroom_green.png"], "size": [98, 96], "sha256": "653d17b53843d8ec5a2734e07a79565935406c68284e9007351eead1366b614e"},
+    {"name": "shower_curtain_closed_pink.png", "styles": ["tp235_sw_bathroom_pink.png"], "size": [105, 96], "sha256": "d9a5025dfe95895f66a853c3a89956ce4ff1186f708ba26cf6e90dae13f4b73f"}
+  ],
+  "bathroom1_stock_curtain_replacements": [
+    {"style": "tp233_sw_bathroom_black.png", "source": "shower_curtain_closed_black.png", "target": "Images/curtain_closed_southb.png", "mode": "replace_named_images_root_file"}
+  ],
   "native_activation": [
     {"item": "0xE1", "map_area": [16, 6], "materials": [0, 1], "hotspot": 61, "object": 51, "environment_prop": 61},
     {"item": "0xE2", "map_area": [8, 7], "materials": [0, 1], "hotspot": 55, "object": 107, "environment_prop": 68},
@@ -51,10 +66,10 @@
       "scale": 1.0
     },
     "anchors": {
-      "bathroom": [535, 1263],
+      "bathroom": [563, 1287],
       "kitchen": [930, 995],
-      "office": [1357, 792],
-      "workshop": [900, 1475]
+      "office": [1353, 804],
+      "workshop": [868, 1519]
     },
     "selector": "first active PC style item in native mobile item order per room; IDs 0x13C-0x14A in the optional renderer build"
   },

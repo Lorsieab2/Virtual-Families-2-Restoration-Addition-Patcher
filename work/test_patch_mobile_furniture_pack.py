@@ -80,6 +80,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         builder = (Path(patcher.__file__).with_name("build_no_ai_icons.py")).read_text(encoding="utf-8")
         self.assertIn("def single_washer()", builder)
         self.assertIn("frame_width = sheet.width // 2", builder)
+        self.assertIn('load("sockPileStrip_06.png")', builder)
         self.assertIn('"cheat_no_sock_pile.png": single_washer()', builder)
         for item_id in (0x124, 0x125, 0x126, 0x127, 0x12E):
             self.assertEqual(
@@ -2155,10 +2156,10 @@ class MobileRenovationArtTests(unittest.TestCase):
             patcher.MOBILE_RENOVATION_ATLAS_CONTRACT.read_text(encoding="utf-8")
         )
         expected_anchors = {
-            "bathroom": [535, 1263],
+            "bathroom": [563, 1287],
             "kitchen": [930, 995],
-            "office": [1357, 792],
-            "workshop": [900, 1475],
+            "office": [1353, 804],
+            "workshop": [868, 1519],
         }
         self.assertEqual(contract["pc_render_target"]["anchors"], expected_anchors)
         self.assertEqual(
@@ -2400,10 +2401,10 @@ class MobileRenovationArtTests(unittest.TestCase):
         self.assertEqual(contract["pc_render_target"]["hook"]["draw_scene_offset"], "0x39")
         self.assertEqual(contract["pc_render_target"]["hook"]["scale"], 1.0)
         self.assertEqual(contract["pc_render_target"]["anchors"], {
-            "bathroom": [535, 1263],
+            "bathroom": [563, 1287],
             "kitchen": [930, 995],
-            "office": [1357, 792],
-            "workshop": [900, 1475],
+            "office": [1353, 804],
+            "workshop": [868, 1519],
         })
         bundles = contract["bundles"]
         self.assertEqual([row["bundle"] for row in bundles], [
@@ -2505,6 +2506,20 @@ class MobileRenovationArtTests(unittest.TestCase):
             with Image.open(path) as image:
                 self.assertEqual(image.size, expected_sizes[filename])
 
+        for filename, spec in patcher.MOBILE_RENOVATION_CURTAIN_ASSETS.items():
+            path = patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / filename
+            self.assertTrue(path.is_file(), filename)
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), spec["sha256"].lower())
+            with Image.open(path) as image:
+                self.assertEqual(list(image.size), spec["size"])
+
+        for filename, spec in patcher.MOBILE_RENOVATION_REFERENCE_ARTIFACTS.items():
+            path = patcher.MOBILE_RENOVATION_REFERENCE_DIR / filename
+            self.assertTrue(path.is_file(), filename)
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest(), spec["sha256"].lower())
+            with Image.open(path) as image:
+                self.assertEqual(list(image.size), spec["size"])
+
         with tempfile.TemporaryDirectory() as tmp:
             old_out = patcher.OUT
             try:
@@ -2518,11 +2533,41 @@ class MobileRenovationArtTests(unittest.TestCase):
             self.assertEqual(record["native_item_range"], "0xE1-0xEA")
             self.assertFalse(record["runtime_copy"])
             self.assertEqual(len(record["copied"]), 15)
+            self.assertEqual(len(record["bathroom1_curtain_assets"]), 5)
+            self.assertEqual(
+                record["bathroom1_stock_curtain_replacements"],
+                [
+                    {
+                        "source_name": "shower_curtain_closed_black.png",
+                        "target_name": "curtain_closed_southb.png",
+                        "source": str(
+                            patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR
+                            / "shower_curtain_closed_black.png"
+                        ),
+                        "target": str(Path(tmp) / "OptionalVisualMods" / "Mobile Renovations" / "curtain_closed_southb.png"),
+                        "bytes": (
+                            patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR
+                            / "shower_curtain_closed_black.png"
+                        ).stat().st_size,
+                        "sha256": hashlib.sha256(
+                            (
+                                patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR
+                                / "shower_curtain_closed_black.png"
+                            ).read_bytes()
+                        ).hexdigest(),
+                        "style": ["tp233_sw_bathroom_black.png"],
+                    }
+                ],
+            )
             self.assertEqual(record["missing"], [])
+            self.assertEqual(
+                {row["name"] for row in record["bathroom1_curtain_assets"]},
+                set(patcher.MOBILE_RENOVATION_CURTAIN_ASSETS),
+            )
             self.assertFalse((Path(tmp) / "Images").exists())
             self.assertEqual(
                 len(list((Path(tmp) / "OptionalVisualMods" / "Mobile Renovations").glob("*.png"))),
-                15,
+                21,
             )
 
     def test_enabled_mobile_renovation_art_is_copied_to_runtime_images(self):
@@ -2532,6 +2577,10 @@ class MobileRenovationArtTests(unittest.TestCase):
             try:
                 patcher.OUT = Path(tmp)
                 patcher.ENABLE_MOBILE_RENOVATIONS = True
+                image_root = patcher.OUT / "Images"
+                image_root.mkdir(parents=True)
+                for filename in patcher.MOBILE_RENOVATION_CURTAIN_ASSETS:
+                    (image_root / filename).write_bytes(b"stock-curtain-placeholder")
                 manifest = {}
                 patcher.sync_mobile_renovation_art_sources(manifest)
             finally:
@@ -2540,11 +2589,130 @@ class MobileRenovationArtTests(unittest.TestCase):
             record = manifest["mobile_renovation_art_sources"]
             self.assertEqual(record["status"], "runtime_1_to_1_overlay_payload")
             self.assertTrue(record["runtime_copy"])
+            self.assertEqual(record["bathroom1_curtain_replacement_mode"], "replace_named_images_root_files")
             self.assertEqual(
                 len(list((Path(tmp) / "Images" / "MobileRenovations").glob("*.png"))),
                 15,
             )
+            self.assertEqual(
+                len(list((Path(tmp) / "Images").glob("shower_curtain_closed_*.png"))),
+                5,
+            )
+            self.assertEqual(
+                (Path(tmp) / "Images" / "curtain_closed_southb.png").read_bytes(),
+                (
+                    patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR
+                    / "shower_curtain_closed_black.png"
+                ).read_bytes(),
+            )
+            for filename in patcher.MOBILE_RENOVATION_CURTAIN_ASSETS:
+                self.assertEqual(
+                    (Path(tmp) / "Images" / filename).read_bytes(),
+                    (patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / filename).read_bytes(),
+                )
             self.assertFalse((Path(tmp) / "OptionalVisualMods" / "Mobile Renovations").exists())
+
+    def test_ai_bathroom2_visual_payload_is_default_off_and_deterministically_normalized(self):
+        old_out = patcher.OUT
+        old_enabled = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.OUT = Path(tmp)
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = False
+                manifest = {}
+                patcher.sync_ai_generated_bathroom2_assets(manifest)
+                contract = manifest["ai_generated_bathroom2_renovations"]
+                self.assertFalse(contract["enabled"])
+                self.assertEqual(
+                    contract["label"],
+                    "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)",
+                )
+                self.assertEqual(
+                    contract["disclaimer"],
+                    patcher.AI_BATHROOM2_DISCLAIMER,
+                )
+                self.assertEqual(contract["target_size"], [511, 378])
+                self.assertEqual(contract["native_map_area"], [13, 7])
+                self.assertEqual(contract["anchor"], [949, 145])
+                self.assertEqual(len(contract["source_art"]), 5)
+                self.assertEqual(len(contract["normalized_art"]), 5)
+                self.assertEqual(
+                    [row["color"] for row in contract["closed_curtains"]],
+                    ["black", "blue", "brown", "green", "pink"],
+                )
+                self.assertEqual(
+                    [row["replacement_target"] for row in contract["closed_curtains"]],
+                    ["Images/curtain_closed.png"] * 5,
+                )
+                self.assertTrue(all("generated_chroma" not in row["name"] for row in contract["normalized_art"]))
+                self.assertIsNone(contract["runtime_target"])
+                optional_root = Path(contract["optional_target"])
+                self.assertTrue(optional_root.is_dir())
+                self.assertEqual(len(list(optional_root.glob("*.png"))), 5)
+                self.assertEqual(
+                    len(list((optional_root / "closed_curtains").glob("*.png"))),
+                    5,
+                )
+                from PIL import Image
+                for row in contract["normalized_art"]:
+                    path = optional_root / row["name"]
+                    with Image.open(path) as image:
+                        self.assertEqual(list(image.size), [511, 378])
+                        self.assertIsNotNone(image.getchannel("A").getbbox())
+                self.assertFalse((Path(tmp) / "Images" / "AIGeneratedBathroom2").exists())
+        finally:
+            patcher.OUT = old_out
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_enabled
+
+    def test_ai_bathroom2_visual_payload_runtime_copy_is_separate_from_native_route(self):
+        old_out = patcher.OUT
+        old_enabled = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.OUT = Path(tmp)
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                manifest = {}
+                patcher.sync_ai_generated_bathroom2_assets(manifest)
+                contract = manifest["ai_generated_bathroom2_renovations"]
+                self.assertTrue(contract["enabled"])
+                self.assertTrue((Path(tmp) / "Images" / "AIGeneratedBathroom2").is_dir())
+                self.assertEqual(
+                    sorted(p.name for p in (Path(tmp) / "Images" / "AIGeneratedBathroom2").glob("*.png")),
+                    sorted(patcher.AI_BATHROOM2_SOURCE_FILES),
+                )
+                self.assertEqual(
+                    len(list((Path(tmp) / "Images" / "AIGeneratedBathroom2" / "closed_curtains").glob("*.png"))),
+                    5,
+                )
+                self.assertIn("second-bathroom renovation remains disabled/hiatus", contract["native_route"])
+        finally:
+            patcher.OUT = old_out
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_enabled
+
+    def test_ai_bathroom2_contract_matches_tracked_source_hashes(self):
+        contract_path = patcher.ROOT / "data" / "vf2" / "ai-generated-bathroom2-contract.json"
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        self.assertEqual(contract["label"], patcher.AI_BATHROOM2_LABEL)
+        self.assertFalse(contract["default_enabled"])
+        self.assertEqual(contract["normalization"]["target_size"], [511, 378])
+        self.assertEqual(contract["placement"]["native_map_area"], [13, 7])
+        self.assertEqual(contract["placement"]["anchor"], [949, 145])
+        self.assertEqual(
+            contract["normalization"]["reference_sha256"],
+            "EB635DB8B2553423C56AA3BAD780C943C77CD752987B35958685374922DEC056",
+        )
+        self.assertEqual(
+            contract["placement"]["reference_bounds_sha256"],
+            "8FA3306621329BF08C54E4B6818075733AAEFF05F5E092D1FF76786E63C2A068",
+        )
+        self.assertEqual(
+            [row["name"] for row in contract["source_art"]],
+            list(patcher.AI_BATHROOM2_SOURCE_FILES),
+        )
+        for row in contract["source_art"]:
+            path = patcher.AI_BATHROOM2_SOURCE_DIR / row["name"]
+            self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest().upper(), row["sha256"])
+        self.assertFalse(any("generated_chroma" in path.name for path in patcher.AI_BATHROOM2_SOURCE_DIR.glob("*.png")))
 
     def test_renderer_injects_after_world_map_at_1_to_1_anchors(self):
         old_patched = patcher.PATCHED
@@ -2561,10 +2729,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertEqual(renderer["hook"]["insert_offset"], "0x39")
                 self.assertEqual(renderer["image_scale"], 1.0)
                 self.assertEqual(renderer["anchors"], {
-                    "bathroom": [535, 1263],
+                    "bathroom": [563, 1287],
                     "kitchen": [930, 995],
-                    "office": [1357, 792],
-                    "workshop": [900, 1475],
+                    "office": [1353, 804],
+                    "workshop": [868, 1519],
                 })
                 helper = (temp / "vf2_mobile_renovations.cpp").read_text(encoding="ascii")
                 self.assertIn("anchorX - worldX", helper)
@@ -2652,20 +2820,20 @@ class MobileRenovationArtTests(unittest.TestCase):
                 helper = (temp / "vf2_mobile_renovations.cpp").read_text(encoding="ascii")
 
                 expected_draw_order = [
-                    "VF2DrawMobileRenovationRoom(0, 535, 1263, graphics, worldX, worldY);",
+                    "VF2DrawMobileRenovationRoom(0, 563, 1287, graphics, worldX, worldY);",
                     "VF2DrawMobileRenovationRoom(1, 930, 995, graphics, worldX, worldY);",
-                    "VF2DrawMobileRenovationRoom(2, 1357, 792, graphics, worldX, worldY);",
-                    "VF2DrawMobileRenovationRoom(3, 900, 1475, graphics, worldX, worldY);",
+                    "VF2DrawMobileRenovationRoom(2, 1353, 804, graphics, worldX, worldY);",
+                    "VF2DrawMobileRenovationRoom(3, 868, 1519, graphics, worldX, worldY);",
                 ]
                 positions = [helper.index(marker) for marker in expected_draw_order]
                 self.assertEqual(positions, sorted(positions))
                 self.assertEqual(
                     manifest["mobile_renovation_renderer"]["anchors"],
                     {
-                        "bathroom": [535, 1263],
+                        "bathroom": [563, 1287],
                         "kitchen": [930, 995],
-                        "office": [1357, 792],
-                        "workshop": [900, 1475],
+                        "office": [1353, 804],
+                        "workshop": [868, 1519],
                     },
                 )
                 draw_room = helper.split(
@@ -5391,6 +5559,8 @@ class OutfitStoreMappingTests(unittest.TestCase):
     def test_b150_cheat_upgrade_rows_and_exact_descriptions(self):
         rows = {item["item_id"]: item for item in patcher.CHEAT_UPGRADE_ITEMS}
 
+        self.assertEqual(rows[0x123]["name"], "Unlock everything in the store")
+        self.assertIn("across all store categories", rows[0x123]["description"])
         self.assertEqual(rows[0x125]["name"], "Reset Ants")
         self.assertEqual(rows[0x126]["name"], "Reset all collections")
         self.assertEqual(rows[0x127]["name"], "Complete all collections")
@@ -5464,6 +5634,14 @@ class OutfitStoreMappingTests(unittest.TestCase):
             "cheat_reset_achievements.png",
         )
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES, {})
+
+    def test_unlock_everything_in_store_routes_all_generation_locks_through_shared_flag(self):
+        source = Path(patcher.__file__).read_text(encoding="ascii")
+        self.assertIn('"name": "Unlock everything in the store"', source)
+        self.assertIn("static volatile unsigned char gVF2UnlockEverythingInStore = 0;", source)
+        self.assertIn("if (gVF2UnlockEverythingInStore != 0) return 0;", source)
+        self.assertIn("gVF2UnlockEverythingInStore = 1;", source)
+        self.assertIn("gVF2UnlockEverythingInStore = 0;", source)
         expected_late_icons = {
             0x12E: "cheat_reset_achievements.png",
             0x12F: "cheat_fill_house_messes.png",
@@ -7826,7 +8004,7 @@ class IncreaseChildLimitContractTests(unittest.TestCase):
 
 
 class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
-    def test_reject_rerolls_in_place_and_preserves_email_state_route(self):
+    def test_reject_modes_0_1_2_3_gate_stock_and_cheat_routes(self):
         old_patched = patcher.PATCHED
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -7845,13 +8023,51 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
                 )
                 section = dating.section(handle.section)
                 raw = section.raw_ptr + handle.value + 0x85
-                self.assertEqual(
-                    bytes(dating.buf[raw:raw + 19]),
-                    bytes.fromhex(
-                        "8B CB 90 90 90 90 90 E8 00 00 00 00 "
-                        "5F 5E 5B B0 01 EB 14"
-                    ),
+                stock = bytes.fromhex(
+                    "C7 43 10 FF FF FF FF E8 00 00 00 00 5F 5E 5B "
+                    "8B 88 B8 5C 02 00"
                 )
+                self.assertEqual(
+                    bytes(dating.buf[raw:raw + len(stock)]),
+                    b"\xE9" + bytes(dating.buf[raw + 1:raw + 5])
+                    + b"\x90" * (len(stock) - 5),
+                )
+                cave = section.raw_size - 66
+                cave_raw = section.raw_ptr + cave
+                cave_bytes = bytes(dating.buf[cave_raw:cave_raw + 66])
+                self.assertEqual(
+                    cave_bytes[:7],
+                    bytes.fromhex("80 3D 00 00 00 00 01"),
+                )
+                self.assertEqual(cave_bytes[7:9], bytes.fromhex("74 09"))
+                self.assertEqual(
+                    cave_bytes[9:16],
+                    bytes.fromhex("80 3D 00 00 00 00 02"),
+                )
+                self.assertEqual(cave_bytes[16:18], bytes.fromhex("75 16"))
+                # Modes 1 and 2 branch to the reroll body. Mode 0 and every
+                # other byte value (including 3) fall through to stock bytes.
+                self.assertEqual(cave_bytes[6], 0x01)
+                self.assertEqual(cave_bytes[15], 0x02)
+                def route_for_mode(mode):
+                    if mode == cave_bytes[6]:
+                        return "cheat"
+                    if mode != cave_bytes[15]:
+                        return "stock"
+                    return "cheat"
+                self.assertEqual(
+                    {mode: route_for_mode(mode) for mode in (0, 1, 2, 3)},
+                    {0: "stock", 1: "cheat", 2: "cheat", 3: "stock"},
+                )
+                self.assertEqual(cave_bytes[18:25], bytes.fromhex("8B CB 90 90 90 90 90"))
+                self.assertEqual(cave_bytes[30:35], bytes.fromhex("5F 5E 5B B0 01"))
+                self.assertEqual(cave_bytes[40:61], stock)
+                self.assertEqual(cave_bytes[35], 0xE9)
+                self.assertEqual(cave_bytes[61], 0xE9)
+                cheat_target = cave + 40 + struct.unpack_from("<i", cave_bytes, 36)[0]
+                stock_target = cave + 66 + struct.unpack_from("<i", cave_bytes, 62)[0]
+                self.assertEqual(cheat_target, handle.value + 0xAC)
+                self.assertEqual(stock_target, handle.value + 0x9A)
                 relocation = []
                 for index in range(section.nreloc):
                     vaddr, symbol_index, rtype = struct.unpack_from(
@@ -7859,20 +8075,34 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
                         dating.buf,
                         section.reloc_ptr + index * 10,
                     )
-                    if vaddr == handle.value + 0x8D:
+                    if vaddr in {cave + 2, cave + 11, cave + 26, cave + 47, handle.value + 0x8D}:
                         relocation.append((
+                            vaddr,
                             dating.symbol_by_index[symbol_index].name,
                             rtype,
                         ))
-                self.assertEqual(
-                    relocation,
-                    [(
-                        "?GeneratePeepCandidate@CDatingScene@@AAEXXZ",
-                        patcher.IMAGE_REL_I386_REL32,
-                    )],
-                )
+                self.assertIn((
+                    cave + 2,
+                    patcher.CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL,
+                    patcher.IMAGE_REL_I386_DIR32,
+                ), relocation)
+                self.assertIn((
+                    cave + 26,
+                    "?GeneratePeepCandidate@CDatingScene@@AAEXXZ",
+                    patcher.IMAGE_REL_I386_REL32,
+                ), relocation)
+                self.assertIn((
+                    cave + 47,
+                    "?Get@theGameState@@SAPAV1@XZ",
+                    patcher.IMAGE_REL_I386_REL32,
+                ), relocation)
+                self.assertNotIn(handle.value + 0x8D, [item[0] for item in relocation])
                 contract = manifest["MultipleMarriageCandidates"]
-                self.assertEqual(contract["scope"], "core executable")
+                self.assertEqual(contract["scope"], "cheat upgrades only")
+                self.assertIn("mode 0", contract["mode_gate"])
+                self.assertIn("Female (1)", contract["mode_gate"])
+                self.assertIn("Male (2)", contract["mode_gate"])
+                self.assertIn("invalid", contract["mode_gate"])
                 self.assertIn("not cleared", contract["email_state"])
                 self.assertIn("byte-identical", contract["accept_path"])
         finally:
@@ -8133,24 +8363,24 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertEqual(dating.buf[handle_raw + 5], 0x90)
                 # The handler now has a complete true-return epilogue (including
                 # the security-cookie check and ret 8), so its generated cave is
-                # 51 bytes.  Keep the assertion anchored to the payload length;
+                # 53 bytes.  Keep the assertion anchored to the payload length;
                 # using the old 35-byte offset starts 16 bytes into the cave.
-                exit_cave = handle_sec.raw_size - 51
+                exit_cave = handle_sec.raw_size - 53
                 self.assertEqual(
                     bytes(
                         dating.buf[
                             handle_sec.raw_ptr + exit_cave:
-                            handle_sec.raw_ptr + exit_cave + 51
+                            handle_sec.raw_ptr + exit_cave + 53
                         ]
-                    )[0:23],
+                    )[0:27],
                     bytes.fromhex(
-                        "55 8B EC 83 EC 28 FF 75 0C FF 75 08 51 E8 00 00 00 00 "
-                        "83 C4 0C 84 C0"
+                        "55 8B EC 83 EC 28 51 FF 75 0C FF 75 08 51 E8 00 00 00 00 "
+                        "83 C4 0C 59 84 C0 75 05"
                     ),
                 )
                 self.assertEqual(
-                    dating.buf[handle_sec.raw_ptr + exit_cave + 23 :
-                               handle_sec.raw_ptr + exit_cave + 25],
+                    dating.buf[handle_sec.raw_ptr + exit_cave + 25 :
+                               handle_sec.raw_ptr + exit_cave + 27],
                     b"\x75\x05",
                 )
                 exit_relocations = []
@@ -8160,7 +8390,7 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                         dating.buf,
                         handle_sec.reloc_ptr + index * 10,
                     )
-                    if vaddr == exit_cave + 14:
+                    if vaddr == exit_cave + 15:
                         exit_relocations.append(
                             (dating.symbol_by_index[symbol_index].name, rtype)
                         )

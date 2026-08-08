@@ -36,9 +36,9 @@ def weed_icon() -> Image.Image:
 
 
 def largest_sock_pile() -> Image.Image:
-    strip = load("sockPileStrip.png")
-    frame_width = strip.width // 8
-    return strip.crop((strip.width - frame_width, 0, strip.width, strip.height))
+    # Player-supplied complete pile art; unlike the cropped eight-frame strip,
+    # this source contains the full visible pile without a clipped edge.
+    return load("sockPileStrip_06.png")
 
 
 def single_washer() -> Image.Image:

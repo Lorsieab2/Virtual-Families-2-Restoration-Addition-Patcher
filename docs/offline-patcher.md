@@ -591,13 +591,29 @@ as:
   custom-made artwork. The bundled current Cheat Upgrades icon is recorded as
   the restore source, so disabling the setting restores the current icon set;
   disabling Cheat Upgrades still removes its late icon payloads.
+- `ai_generated_bathroom2_renovations` - **2nd Bathroom Mobile-Style
+  Renovations (AI-Generated Art Warning)**, default off. It stages only the
+  five tracked AI-generated source variants, normalized to the vanilla north
+  Bathroom 2 crop size and the measured native room-apex anchor. The native
+  second-bathroom renovation route remains disabled/hiatus; the exact warning
+  shown by the setting is: `Warning: These Bathroom 2 renovation images are
+  AI-generated based on the Bathroom 1's mobile renovations art, but manually
+  edited by me. (Sorry, I'm too lazy to hand-make the art myself. I'm busy with
+  other stuff, but feel free to make some yourself and open an Issue on the
+  Github if you want to change it- Lorsieab2)`.
+- When `mobile_renovations` is enabled, the black Bathroom 1 row stages its
+  verified `shower_curtain_closed_black.png` bytes under the stock filename
+  `Images/curtain_closed_southb.png`; the other five source-named curtain
+  assets remain available in the gated renovation payload. Bathroom 2 is not
+  part of this route.
 
 For the final all-working playtest bundle, the exporter supports
 `--final-playtest-all-enabled`. This is an export-only profile: it marks
 Island Events, Holiday Ornaments, Behavior Patches, Mobile Renovations,
-Mobile Sound Assets, Mobile Furniture Behaviors, and Cheat Upgrades default-on
-in that bundle manifest. It does not change the general `SETTINGS` defaults;
-No AI Icons and unrelated visual options remain default-off.
+Mobile Sound Assets, Mobile Furniture Behaviors, Cheat Upgrades, and the
+separate AI Bathroom 2 visual overlay default-on in that bundle manifest. It
+does not change the general `SETTINGS` defaults; No AI Icons and unrelated
+visual options remain default-off.
 
 Patch records, asset records, and target-file checks can include `requires`,
 `settings`, or `setting`. A record is active only when all required settings
@@ -801,7 +817,7 @@ B131 build-specific notes:
   workout, career, shower/bath, coffee/tea, cocktail, pool, sandbox, toy train,
   playground, and snow-play routes. The wrappers call the original native
   behavior and only alter the displayed action label afterward.
-- The optional `cheat_upgrades` overlay adds `Unlock all furniture` to Special
+- The optional `cheat_upgrades` overlay adds `Unlock everything in the store` to Special
   Upgrades. It toggles all live `sFurnitureInfo+0x0C` generation locks between
   `0` and the generated original-lock snapshot.
 - `expand_game_map` appears under Experimental/Not Working patches as a
@@ -840,7 +856,7 @@ B134 build/export notes:
   B134 changes the patched symbol storage class to external after appending
   records, without changing the stock table bytes, so helper objects can link
   against the live furniture table for the optional Cheat Upgrades
-  `Unlock all furniture` generation-lock toggle.
+  `Unlock everything in the store` generation-lock toggle.
 - The optional Island Events helper source is emitted from a Python template.
   B134 formats that template before writing `vf2_island_events.cpp`, so the
   doubled C++ braces become normal braces and the generated

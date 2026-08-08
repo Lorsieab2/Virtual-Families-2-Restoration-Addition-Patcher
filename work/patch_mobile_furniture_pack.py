@@ -49,6 +49,10 @@ ENABLE_MOBILE_RENOVATIONS = os.environ.get("VF2_ENABLE_MOBILE_RENOVATIONS", "0")
 # assets to their hash-pinned mobile OGG counterparts; the offline exporter
 # stages those OGGs and applies the same route atomically behind its checkbox.
 ENABLE_MOBILE_SOUND_ASSETS = os.environ.get("VF2_ENABLE_MOBILE_SOUND_ASSETS", "0") == "1"
+# Separate visual-only Bathroom 2 experiment.  This never enables the native
+# second-bathroom renovation route; it only stages the explicitly labelled,
+# default-off AI art payload when selected.
+ENABLE_AI_GENERATED_BATHROOM2 = os.environ.get("VF2_ENABLE_AI_GENERATED_BATHROOM2", "0") == "1"
 
 # Genuine mobile-furniture behaviors use a dormant exact-SHA byte toggle. The
 # first proven families are the four mobile lounge chairs and the patio
@@ -705,6 +709,132 @@ MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR = (
     MOBILE_FURNITURE_BEHAVIOR_SOURCE_DIR.parent / "pc_fmaps"
 )
 MOBILE_RENOVATION_ART_SOURCE_DIR = ROOT / "work" / "assets" / "mobile_renovations"
+MOBILE_RENOVATION_CURTAIN_SOURCE_DIR = (
+    ROOT / "patcher_assets" / "optional_patches" / "mobile_renovations" / "source_art" / "shower_curtains"
+)
+MOBILE_RENOVATION_REFERENCE_DIR = (
+    ROOT / "patcher_assets" / "optional_patches" / "mobile_renovations" / "reference"
+)
+MOBILE_RENOVATION_REFERENCE_ARTIFACTS = {
+    "test.png": {
+        "size": [2048, 2048],
+        "sha256": "1F83DF47517B30D5613A1D55004B28B14ACCD1ED1F326CD9EB1EFEDAB5275DB4",
+        "purpose": "measured room-anchor reference",
+    },
+    "tp237.png": {
+        "size": [512, 512],
+        "sha256": "35FA3A17A0C50CDBFE82F17C58444882499D416B0A977CA795DB418D73AE2294",
+        "purpose": "mobile renovation icon atlas evidence",
+    },
+}
+AI_BATHROOM2_LABEL = "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)"
+AI_BATHROOM2_DISCLAIMER = (
+    "Warning: These Bathroom 2 renovation images are AI-generated based on the Bathroom 1's mobile renovations art, "
+    "but manually edited by me. (Sorry, I'm too lazy to hand-make the art myself. I'm busy with other stuff, but feel "
+    "free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2)"
+)
+AI_BATHROOM2_SOURCE_DIR = (
+    ROOT / "patcher_assets" / "optional_patches" / "ai_generated_bathroom2_renovations" / "source_art"
+)
+AI_BATHROOM2_REFERENCE_DIR = (
+    ROOT / "patcher_assets" / "optional_patches" / "ai_generated_bathroom2_renovations" / "reference"
+)
+AI_BATHROOM2_SOURCE_FILES = (
+    "bathroom2_ai_black.png",
+    "bathroom2_ai_blue.png",
+    "bathroom2_ai_beige.png",
+    "bathroom2_ai_green.png",
+    "bathroom2_ai_pink.png",
+)
+AI_BATHROOM2_TARGET_SIZE = (511, 378)
+AI_BATHROOM2_NATIVE_MAP_AREA = (13, 7)
+# The anchor is the native room-apex origin measured against the tracked
+# 2048x2048 reference; it is not the ordinary Bathroom 1 anchor.
+AI_BATHROOM2_ANCHOR = (949, 145)
+AI_BATHROOM2_REFERENCE_ARTIFACTS = {
+    "bathroom2_vanilla.png": {
+        "size": [511, 378],
+        "sha256": "EB635DB8B2553423C56AA3BAD780C943C77CD752987B35958685374922DEC056",
+        "purpose": "vanilla north-bathroom crop defining the normalized target canvas",
+    },
+    "bathroom2_bounds_reference.png": {
+        "size": [709, 601],
+        "sha256": "8FA3306621329BF08C54E4B6818075733AAEFF05F5E092D1FF76786E63C2A068",
+        "purpose": "tracked Bathroom 2 bounds/placement evidence",
+    },
+}
+AI_BATHROOM2_SOURCE_HASHES = {
+    "bathroom2_ai_beige.png": "8F5B4141D5867BE4AABC303A4EBDE56959EA785327DEEE2BF06837858FE2107D",
+    "bathroom2_ai_black.png": "A490CB7DEF8E5861FF7B54010A5258AA9BA46D6D46DDDE0906320DB8835E2D19",
+    "bathroom2_ai_blue.png": "F84AD63C7AD90423414F38CD0FFE1DF7E09F7D0EE975C31DE4048B737A3C8384",
+    "bathroom2_ai_green.png": "1E575665AD0968E92906CC782FFD04657A8DE3AEB7F1627106E434A03A10985F",
+    "bathroom2_ai_pink.png": "56527AFF6DC1FEDA3760A52F71626E25E8B1BD2C4D7FCB324AF227DB986D14E6",
+}
+AI_BATHROOM2_CURTAIN_DIR = (
+    ROOT / "patcher_assets" / "optional_patches" / "ai_generated_bathroom2_renovations"
+    / "source_art" / "green_key_final" / "closed_curtains"
+)
+AI_BATHROOM2_CURTAIN_ASSETS = {
+    "curtain_closed_bathroom2_black.png": {
+        "color": "black",
+        "size": [1164, 1351],
+        "sha256": "AAB0E5D2781F3040867CCD8A688BB5FB59EB972647F2E550D8C13349A3280DA7",
+    },
+    "curtain_closed_bathroom2_blue.png": {
+        "color": "blue",
+        "size": [1168, 1347],
+        "sha256": "DB5B1A614116D1FE6F9F42262A95222C1E151D654310600DDBBB06DAD9861AED",
+    },
+    "curtain_closed_bathroom2_brown.png": {
+        "color": "brown",
+        "size": [1170, 1345],
+        "sha256": "B7F281586BFEA13C80F6C98802F180E5CBA496497370E0CDAA4B581911AD3CD3",
+    },
+    "curtain_closed_bathroom2_green.png": {
+        "color": "green",
+        "size": [1158, 1358],
+        "sha256": "2DC3B427EE5EB167963ADAE58E111CF149BAE61D5EEC1E1FE5DE787C7D1BC674",
+    },
+    "curtain_closed_bathroom2_pink.png": {
+        "color": "pink",
+        "size": [1164, 1351],
+        "sha256": "18D2D2A810CF0EBBB02A77BCC722EEEAB8212DF9040C3ACDB0CE73054C951F74",
+    },
+}
+MOBILE_RENOVATION_CURTAIN_ASSETS = {
+    "shower_curtain_closed_black.png": {
+        "size": [98, 96],
+        "sha256": "7c1260cd9b965a9fcf157b40d3364ba07bb5bf6544440c9cd1d46b8488a0b510",
+        "styles": ["tp233_sw_bathroom_black.png"],
+    },
+    "shower_curtain_closed_blue.png": {
+        "size": [98, 96],
+        "sha256": "a33a00aedb3bb3b74d3e4aeeedc4e230ca056258b465d6b2d76fa4190d91e8ff",
+        "styles": ["tp233_sw_bathroom_blue_marble.png"],
+    },
+    "shower_curtain_closed_brown.png": {
+        "size": [98, 96],
+        "sha256": "cb0bb1614a8dee1150067fe158f15e7fd7cb20cc3b467d7fdfb336e48fc7c0e2",
+        "styles": ["tp234_sw_bathroom_brown.png"],
+    },
+    "shower_curtain_closed_green.png": {
+        "size": [98, 96],
+        "sha256": "653d17b53843d8ec5a2734e07a79565935406c68284e9007351eead1366b614e",
+        "styles": ["tp234_sw_bathroom_green.png"],
+    },
+    "shower_curtain_closed_pink.png": {
+        "size": [105, 96],
+        "sha256": "d9a5025dfe95895f66a853c3a89956ce4ff1186f708ba26cf6e90dae13f4b73f",
+        "styles": ["tp235_sw_bathroom_pink.png"],
+    },
+}
+# The southwest Bathroom 1 curtain is the stock ``curtain_closed_southb``
+# image.  The black mobile renovation supplies the replacement bytes for that
+# exact stock filename; keep the source name as a separate staged asset so the
+# mapping remains auditable and reversible.
+MOBILE_RENOVATION_CURTAIN_RUNTIME_REPLACEMENTS = {
+    "shower_curtain_closed_black.png": "curtain_closed_southb.png",
+}
 MOBILE_SOUND_ASSET_SOURCE_DIR = (
     ROOT / "patcher_assets" / "optional_patches" / "mobile_sound_assets"
 )
@@ -813,10 +943,10 @@ MOBILE_RENOVATION_ART_FILES = (
 MOBILE_RENOVATION_IMAGE_COUNT = len(MOBILE_RENOVATION_ART_FILES)
 MOBILE_RENOVATION_ROOM_ORDER = ("bathroom", "kitchen", "office", "workshop")
 MOBILE_RENOVATION_ANCHORS = {
-    "bathroom": (535, 1263),
+    "bathroom": (563, 1287),
     "kitchen": (930, 995),
-    "office": (1357, 792),
-    "workshop": (900, 1475),
+    "office": (1353, 804),
+    "workshop": (868, 1519),
 }
 MOBILE_RENOVATION_DEFAULT_SELECTION = {
     room: -1 for room in MOBILE_RENOVATION_ROOM_ORDER
@@ -1225,8 +1355,8 @@ CHEAT_UPGRADE_ITEMS = [
     },
     {
         "item_id": 0x123,
-        "name": "Unlock all furniture",
-        "description": "Sets all furniture generation locks to 0. Buy again to reset.",
+        "name": "Unlock everything in the store",
+        "description": "Unlocks every generation-locked store entry across all store categories. Buy again to restore the original locks.",
         "price": 0,
     },
     {
@@ -7861,6 +7991,137 @@ def sync_optional_visual_mod_sources(manifest):
     }
 
 
+def sync_ai_generated_bathroom2_assets(manifest):
+    """Stage the separate, default-off AI Bathroom 2 visual payload.
+
+    The source canvases are intentionally kept untouched in tracked
+    ``source_art``.  Runtime/optional copies are deterministically resized to
+    the tracked vanilla north-bathroom crop (511x378) in RGBA mode.  This is a
+    visual-only overlay contract; the native second-bathroom renovation route
+    remains disabled/hiatus.
+    """
+    from PIL import Image
+
+    source_records = []
+    for filename in AI_BATHROOM2_SOURCE_FILES:
+        source = AI_BATHROOM2_SOURCE_DIR / filename
+        if not source.is_file():
+            raise RuntimeError(f"AI Bathroom 2 source art is missing: {source}")
+        digest = hashlib.sha256(source.read_bytes()).hexdigest().upper()
+        expected = AI_BATHROOM2_SOURCE_HASHES.get(filename)
+        if digest != expected:
+            raise RuntimeError(f"AI Bathroom 2 source art identity mismatch: {source}")
+        size = read_png_size(source)
+        if not size or size[0] < 1 or size[1] < 1:
+            raise RuntimeError(f"AI Bathroom 2 source art is not a readable PNG: {source}")
+        source_records.append({
+            "name": filename,
+            "source": str(source),
+            "source_size": list(size),
+            "source_sha256": digest,
+        })
+
+    reference_records = []
+    for filename, spec in AI_BATHROOM2_REFERENCE_ARTIFACTS.items():
+        reference = AI_BATHROOM2_REFERENCE_DIR / filename
+        if not reference.is_file():
+            raise RuntimeError(f"AI Bathroom 2 reference artifact is missing: {reference}")
+        size = read_png_size(reference)
+        digest = hashlib.sha256(reference.read_bytes()).hexdigest().upper()
+        if tuple(size or ()) != tuple(spec["size"]) or digest != spec["sha256"]:
+            raise RuntimeError(f"AI Bathroom 2 reference size drifted: {reference}")
+        reference_records.append({
+            "name": filename,
+            "path": str(reference),
+            "size": spec["size"],
+            "sha256": digest,
+            "purpose": spec["purpose"],
+        })
+
+    optional_root = OUT / "OptionalVisualMods" / AI_BATHROOM2_LABEL
+    runtime_root = OUT / "Images" / "AIGeneratedBathroom2"
+    optional_curtain_root = optional_root / "closed_curtains"
+    runtime_curtain_root = runtime_root / "closed_curtains"
+    if optional_root.exists():
+        shutil.rmtree(optional_root)
+    if runtime_root.exists():
+        shutil.rmtree(runtime_root)
+    optional_root.mkdir(parents=True, exist_ok=True)
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        runtime_root.mkdir(parents=True, exist_ok=True)
+
+    normalized = []
+    for record in source_records:
+        source = Path(record["source"])
+        with Image.open(source).convert("RGBA") as image:
+            if image.getbbox() is None:
+                raise RuntimeError(f"AI Bathroom 2 source art has no visible pixels: {source}")
+            resized = image.resize(AI_BATHROOM2_TARGET_SIZE, Image.Resampling.LANCZOS)
+            # Keep optional and runtime copies identical and hash-pinned.
+            optional_target = optional_root / source.name
+            resized.save(optional_target, format="PNG", optimize=False)
+            runtime_target = None
+            if ENABLE_AI_GENERATED_BATHROOM2:
+                runtime_target = runtime_root / source.name
+                shutil.copy2(optional_target, runtime_target)
+        normalized.append({
+            "name": source.name,
+            "target_size": list(AI_BATHROOM2_TARGET_SIZE),
+            "optional_path": str(optional_root / source.name),
+            "runtime_path": str(runtime_root / source.name) if ENABLE_AI_GENERATED_BATHROOM2 else None,
+            "normalized_sha256": hashlib.sha256((optional_root / source.name).read_bytes()).hexdigest().upper(),
+            "alpha_required": True,
+        })
+
+    curtain_records = []
+    optional_curtain_root.mkdir(parents=True, exist_ok=True)
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        runtime_curtain_root.mkdir(parents=True, exist_ok=True)
+    for filename, spec in AI_BATHROOM2_CURTAIN_ASSETS.items():
+        source = AI_BATHROOM2_CURTAIN_DIR / filename
+        if not source.is_file():
+            raise RuntimeError(f"AI Bathroom 2 curtain source art is missing: {source}")
+        digest = hashlib.sha256(source.read_bytes()).hexdigest().upper()
+        if digest != spec["sha256"] or tuple(read_png_size(source) or ()) != tuple(spec["size"]):
+            raise RuntimeError(f"AI Bathroom 2 curtain source identity mismatch: {source}")
+        optional_target = optional_curtain_root / filename
+        shutil.copy2(source, optional_target)
+        runtime_target = None
+        if ENABLE_AI_GENERATED_BATHROOM2:
+            runtime_target = runtime_curtain_root / filename
+            shutil.copy2(optional_target, runtime_target)
+        curtain_records.append({
+            "name": filename,
+            "color": spec["color"],
+            "source": str(source),
+            "size": spec["size"],
+            "sha256": digest,
+            "optional_path": str(optional_target),
+            "runtime_path": str(runtime_target) if runtime_target else None,
+            "replacement_target": "Images/curtain_closed.png",
+            "replacement_mode": "selected_by_active_bathroom2_color",
+        })
+
+    manifest["ai_generated_bathroom2_renovations"] = {
+        "enabled": ENABLE_AI_GENERATED_BATHROOM2,
+        "status": "default_off_optional_visual_payload" if not ENABLE_AI_GENERATED_BATHROOM2 else "runtime_visual_overlay_staged",
+        "label": AI_BATHROOM2_LABEL,
+        "disclaimer": AI_BATHROOM2_DISCLAIMER,
+        "native_route": "second-bathroom renovation remains disabled/hiatus; no native E6 route changed",
+        "source_art": source_records,
+        "normalized_art": normalized,
+        "closed_curtains": curtain_records,
+        "reference_evidence": reference_records,
+        "target_size": list(AI_BATHROOM2_TARGET_SIZE),
+        "normalization": "RGBA LANCZOS resize from each source canvas to bathroom2_vanilla.png dimensions; no generated_chroma intermediates",
+        "native_map_area": list(AI_BATHROOM2_NATIVE_MAP_AREA),
+        "anchor": list(AI_BATHROOM2_ANCHOR),
+        "anchor_basis": "tracked 2048x2048 room-map reference/native north-bathroom bounds; room-apex origin",
+        "optional_target": str(optional_root),
+        "runtime_target": str(runtime_root) if ENABLE_AI_GENERATED_BATHROOM2 else None,
+    }
+
+
 def sync_mobile_renovation_art_sources(manifest):
     """Copy verified 1:1 room overlays to the enabled renderer payload."""
     runtime_target = OUT / "Images" / "MobileRenovations"
@@ -7890,18 +8151,90 @@ def sync_mobile_renovation_art_sources(manifest):
             "target": str(destination),
             "bytes": destination.stat().st_size,
         })
+    curtain_copied = []
+    curtain_missing = []
+    curtain_target = OUT / "Images" if ENABLE_MOBILE_RENOVATIONS else optional_target
+    curtain_target.mkdir(parents=True, exist_ok=True)
+    for filename, spec in MOBILE_RENOVATION_CURTAIN_ASSETS.items():
+        source = MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / filename
+        destination = curtain_target / filename
+        if not source.is_file():
+            curtain_missing.append(str(source))
+            continue
+        data = source.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        if digest.lower() != spec["sha256"].lower() or read_png_size(source) != tuple(spec["size"]):
+            raise RuntimeError(f"Bathroom 1 curtain asset identity mismatch: {source}")
+        shutil.copy2(source, destination)
+        curtain_copied.append({
+            "name": filename,
+            "source": str(source),
+            "target": str(destination),
+            "bytes": destination.stat().st_size,
+            "size": spec["size"],
+            "sha256": digest,
+            "styles": spec["styles"],
+        })
+    stock_curtain_replacements = []
+    for source_name, target_name in MOBILE_RENOVATION_CURTAIN_RUNTIME_REPLACEMENTS.items():
+        source = MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / source_name
+        if not source.is_file():
+            curtain_missing.append(str(source))
+            continue
+        # This is deliberately a named-file replacement, matching the other
+        # visual-mod swaps.  The mobile renovation row remains the owner of
+        # the style; no second-bathroom/native route is added here.
+        destination = curtain_target / target_name
+        shutil.copy2(source, destination)
+        stock_curtain_replacements.append({
+            "source_name": source_name,
+            "target_name": target_name,
+            "source": str(source),
+            "target": str(destination),
+            "bytes": destination.stat().st_size,
+            "sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
+            "style": MOBILE_RENOVATION_CURTAIN_ASSETS[source_name]["styles"],
+        })
+    reference_records = []
+    for filename, spec in MOBILE_RENOVATION_REFERENCE_ARTIFACTS.items():
+        source = MOBILE_RENOVATION_REFERENCE_DIR / filename
+        if not source.is_file():
+            raise RuntimeError(f"Mobile renovation reference artifact is missing: {source}")
+        data = source.read_bytes()
+        digest = hashlib.sha256(data).hexdigest()
+        if digest.lower() != spec["sha256"].lower() or read_png_size(source) != tuple(spec["size"]):
+            raise RuntimeError(f"Mobile renovation reference artifact identity mismatch: {source}")
+        reference_records.append({
+            "name": filename,
+            "path": str(source),
+            "size": spec["size"],
+            "sha256": digest,
+            "purpose": spec["purpose"],
+        })
+    all_missing = missing + curtain_missing
     manifest["mobile_renovation_art_sources"] = {
         "status": (
             "runtime_1_to_1_overlay_payload"
-            if ENABLE_MOBILE_RENOVATIONS and not missing
+            if ENABLE_MOBILE_RENOVATIONS and not all_missing
             else "staged_optional_payload_renderer_disabled"
-            if not ENABLE_MOBILE_RENOVATIONS and not missing
+            if not ENABLE_MOBILE_RENOVATIONS and not all_missing
             else "missing_sources"
         ),
         "source": str(MOBILE_RENOVATION_ART_SOURCE_DIR),
         "target": str(target),
         "copied": copied,
-        "missing": missing,
+        "missing": all_missing,
+        "bathroom1_curtain_assets": curtain_copied,
+        "bathroom1_stock_curtain_replacements": stock_curtain_replacements,
+        "bathroom1_curtain_source": str(MOBILE_RENOVATION_CURTAIN_SOURCE_DIR),
+        "bathroom1_curtain_target": str(curtain_target),
+        "bathroom1_curtain_replacement_mode": (
+            "replace_named_images_root_files"
+            if ENABLE_MOBILE_RENOVATIONS
+            else "staged_optional_visual_mod"
+        ),
+        "reference_evidence": reference_records,
+        "reference_source": str(MOBILE_RENOVATION_REFERENCE_DIR),
         "native_item_range": "0xE1-0xEA",
         "runtime_copy": ENABLE_MOBILE_RENOVATIONS,
         "overlay_contract": "Images/MobileRenovations/*.png are drawn at 1:1 scale after CWorldMap::Draw and before decals",
@@ -10203,6 +10536,7 @@ extern "C" int __cdecl VF2GetOutfitStorePrice(int itemId) {{
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreLockGeneration(int itemId) {{
+    if (gVF2UnlockEverythingInStore != 0) return 0;
     return VF2OutfitBodyForItem(itemId) < 0 ? -1 : 0;
 }}
 
@@ -12338,10 +12672,12 @@ struct sFurnitureInfo {
 
 extern sFurnitureInfo itemInfo[];
 
+static volatile unsigned char gVF2UnlockEverythingInStore = 0;
 __VF2_FURNITURE_LOCK_ARRAY__
 static const int kVF2FurnitureRecordCount = __VF2_FURNITURE_RECORD_COUNT__;
 
 static bool VF2AllFurnitureLocksUnlocked() {
+    if (gVF2UnlockEverythingInStore != 0) return true;
     for (int i = 0; i < kVF2FurnitureRecordCount; ++i) {
         if (kVF2OriginalFurnitureGenerationLocks[i] > 0 && itemInfo[i].generationLock != 0) {
             return false;
@@ -12606,10 +12942,12 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         VF2FoodAdjustAndAward(&FoodStore, 0, 0x7FFFFFFF);
         break;
     case 0x123:
-        if (VF2AllFurnitureLocksUnlocked()) {
+        if (gVF2UnlockEverythingInStore != 0) {
+            gVF2UnlockEverythingInStore = 0;
             VF2RestoreFurnitureGenerationLocks();
             break;
         }
+        gVF2UnlockEverythingInStore = 1;
         VF2UnlockAllFurnitureGenerationLocks();
         break;
     case 0x124:
@@ -15901,34 +16239,96 @@ def patch_multiple_marriage_candidates(manifest):
         raise RuntimeError("Dating Reject candidate-clear route drifted")
 
     generate = dating.symbol(generate_name)
-    dating.buf[reject_raw:reject_raw + len(expected)] = (
-        b"\x8B\xCB"              # mov ecx,ebx: this
-        + b"\x90" * 5
-        + b"\xE8\0\0\0\0"       # call GeneratePeepCandidate
-        + b"\x5F\x5E\x5B"        # restore edi, esi, ebx
-        + b"\xB0\x01"            # handled = true
-        + b"\xEB\x14"            # common security-cookie epilogue
-        + b"\x90" * 2
+    flag_symbol = dating.append_undefined_symbol(
+        CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL
     )
-    dating.retarget_relocation(
-        section.index,
-        handle.value + 0x8D,
-        generate.index,
-        IMAGE_REL_I386_REL32,
+    # The stock call at +0x8D is CSound::Play.  Preserve its relocation and
+    # move it into the stock branch of the gated cave; ordinary proposals must
+    # execute these bytes unchanged.
+    stock_sound_relocation = None
+    for index in range(section.nreloc):
+        vaddr, symbol_index, rtype = struct.unpack_from(
+            "<IIH", dating.buf, section.reloc_ptr + index * 10
+        )
+        if vaddr == handle.value + 0x8D:
+            stock_sound_relocation = (index, symbol_index, rtype)
+            break
+    if stock_sound_relocation is None:
+        raise RuntimeError("Dating stock Reject sound relocation drifted")
+
+    cave = section.raw_size
+    # cmp [proposal-mode],0; JE stock branch; cheat-only reroll branch;
+    # stock clear/sound/continuation bytes; both branches rejoin native flow.
+    payload = bytearray(
+        b"\x80\x3D\0\0\0\0\x01"  # mode == Female
+        + b"\x74\x00"              # -> cheat branch
+        + b"\x80\x3D\0\0\0\0\x02"  # mode == Male
+        + b"\x75\x00"              # other values -> stock branch
+        + b"\x8B\xCB"              # cheat: this = CDatingScene (EBX)
+        + b"\x90" * 5
+        + b"\xE8\0\0\0\0"          # GeneratePeepCandidate
+        + b"\x5F\x5E\x5B"
+        + b"\xB0\x01"              # handled = true
+        + b"\xE9\0\0\0\0"          # cheat -> common epilogue
+        + expected                  # exact stock clear/sound/tail bytes
+        + b"\xE9\0\0\0\0"          # stock -> post-hook continuation
+    )
+    if len(payload) != 66:
+        raise AssertionError("Marriage Reject mode-gated cave size drifted")
+    struct.pack_into("<b", payload, 8, 0x09)  # cave+18 - (cave+9)
+    struct.pack_into("<b", payload, 17, 0x16)  # cave+40 - (cave+18)
+    struct.pack_into(
+        "<i", payload, 36,
+        (handle.value + 0xAC) - (cave + 40),
+    )
+    struct.pack_into(
+        "<i", payload, 62,
+        (handle.value + 0x9A) - (cave + 66),
+    )
+    dating.insert_section_bytes(section.index, cave, bytes(payload))
+    dating.append_relocation(
+        section.index, cave + 2, flag_symbol, IMAGE_REL_I386_DIR32
+    )
+    dating.append_relocation(
+        section.index, cave + 11, flag_symbol, IMAGE_REL_I386_DIR32
+    )
+    dating.append_relocation(
+        section.index, cave + 26, generate.index, IMAGE_REL_I386_REL32
+    )
+    # Move, rather than duplicate, the original stock sound relocation.
+    section = dating.section(handle.section)
+    for index in range(section.nreloc):
+        record = section.reloc_ptr + index * 10
+        vaddr = struct.unpack_from("<I", dating.buf, record)[0]
+        if vaddr == handle.value + 0x8D:
+            struct.pack_into("<I", dating.buf, record, cave + 47)
+            break
+    else:
+        raise RuntimeError("Dating stock Reject relocation move failed")
+    dating._parse()
+    dating.buf[reject_raw:reject_raw + len(expected)] = (
+        b"\xE9" + struct.pack("<i", cave - (reject_hook + 5))
+        + b"\x90" * (len(expected) - 5)
     )
     dating.write(dating_path)
 
     manifest["MultipleMarriageCandidates"] = {
         "status": "patched",
-        "scope": "core executable",
+        "scope": "cheat upgrades only",
         "trigger": "Reject button in the active marriage-proposal scene",
         "candidate_lifecycle": (
-            "GeneratePeepCandidate deactivates the rejected temporary villager "
-            "before spawning and displaying exactly one replacement"
+            "mode 0 executes the exact stock candidate-clear/sound path; modes "
+            "1/2 deactivate the rejected temporary villager before spawning and "
+            "displaying exactly one replacement"
         ),
         "email_state": (
             "the scene remains open and the stock proposal timestamp fields "
             "at theGameState+0x25CB8/+0x25CBC are not cleared or rewritten"
+        ),
+        "mode_gate": (
+            "mode 0 and invalid values preserve the original native Reject route; "
+            "only exact Female (1) or Male (2) modes reroll in place and keep "
+            "the proposal scene active"
         ),
         "same_sex_interaction": (
             "each replacement passes through the optional .vf2same candidate-"
@@ -16156,11 +16556,13 @@ def patch_same_sex_marriage(manifest):
     handle_cave = handle_sec.raw_size
     handle_payload = bytearray(
         expected_handle_prefix
+        + b"\x51"                # preserve CDatingScene this
         + b"\xFF\x75\x0C"       # action
         + b"\xFF\x75\x08"       # message
         + b"\x51"                # this
         + b"\xE8\x00\x00\x00\x00"
         + b"\x83\xC4\x0C"
+        + b"\x59"                # restore CDatingScene this
         + b"\x84\xC0"
         + b"\x75\x00"
         + b"\xE9\x00\x00\x00\x00"  # stock continuation
@@ -16171,25 +16573,25 @@ def patch_same_sex_marriage(manifest):
         + b"\xE8\x00\x00\x00\x00"  # security cookie
         + b"\x8B\xE5\x5D\xC2\x08\x00"
     )
-    if len(handle_payload) != 51:
+    if len(handle_payload) != 53:
         raise AssertionError("Dating Exit handler trampoline size drifted")
-    struct.pack_into("<b", handle_payload, 24, 5)
+    struct.pack_into("<b", handle_payload, 26, 5)
     struct.pack_into(
         "<i",
         handle_payload,
-        26,
-        (handle.value + 6) - (handle_cave + 30),
+        28,
+        (handle.value + 6) - (handle_cave + 32),
     )
     dating.insert_section_bytes(handle_sec.index, handle_cave, bytes(handle_payload))
     dating.append_relocation(
         handle_sec.index,
-        handle_cave + 14,
+        handle_cave + 15,
         exit_handler_helper,
         IMAGE_REL_I386_REL32,
     )
     dating.append_relocation(
         handle_sec.index,
-        handle_cave + 41,
+        handle_cave + 43,
         dating.symbol("@__security_check_cookie@4").index,
         IMAGE_REL_I386_REL32,
     )
@@ -26577,6 +26979,7 @@ def main():
     sync_invisible_furniture_reference_sets(manifest)
     sync_optional_visual_mod_sources(manifest)
     sync_mobile_renovation_art_sources(manifest)
+    sync_ai_generated_bathroom2_assets(manifest)
     sync_mobile_sound_assets(manifest)
     sync_outfit_store_icon_art(manifest)
     sync_visible_special_upgrade_icon_art(manifest)

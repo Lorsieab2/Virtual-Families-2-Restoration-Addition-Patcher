@@ -106,7 +106,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         self.assertIn('ROOT / "patcher_assets" / "optional_patches" / "no_ai_icons" / "source_art"', generator)
         self.assertNotIn('ROOT / "work" / "assets" / "no_ai_icons" / "raw"', generator)
         source_art = ROOT / "patcher_assets" / "optional_patches" / "no_ai_icons" / "source_art"
-        self.assertEqual(len(list(source_art.glob("*.png"))), 14)
+        self.assertEqual(len(list(source_art.glob("*.png"))), 15)
         self.assertEqual(
             exporter.NO_AI_ICON_REPLACEMENT_PROVENANCE["cheat_reset_achievements.png"],
             "patcher_assets/optional_patches/no_ai_icons/source_art/Icon_Resort_Improvement.png",
@@ -194,6 +194,50 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         self.assertEqual(
             exporter.asset_requires_for_setting("mobile_renovations"),
             ["core_executable", "mobile_renovations"],
+        )
+        self.assertEqual(
+            exporter.setting_for_asset(
+                Path("Images") / "curtain_closed_southb.png"
+            ),
+            "mobile_renovations",
+        )
+        self.assertEqual(
+            exporter.loose_optional_visual_target(
+                Path("Mobile Renovations") / "curtain_closed_southb.png"
+            ),
+            Path("Images") / "curtain_closed_southb.png",
+        )
+
+    def test_ai_bathroom2_setting_is_default_off_with_exact_provenance(self):
+        settings_by_id = {row["id"]: row for row in exporter.SETTINGS}
+        setting = settings_by_id["ai_generated_bathroom2_renovations"]
+        self.assertEqual(
+            setting["label"],
+            "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)",
+        )
+        self.assertFalse(setting["default"])
+        self.assertEqual(setting["category"], "optional")
+        self.assertIn("AI-generated", setting["description"])
+        self.assertIn("Bathroom 1's mobile renovations art", setting["description"])
+        self.assertEqual(
+            exporter.setting_for_asset(
+                Path("OptionalVisualMods") / exporter.AI_BATHROOM2_OPTIONAL_FOLDER / "bathroom2_ai_blue.png"
+            ),
+            "ai_generated_bathroom2_renovations",
+        )
+        self.assertEqual(
+            exporter.setting_for_asset(
+                Path("Images") / "AIGeneratedBathroom2" / "bathroom2_ai_blue.png"
+            ),
+            "ai_generated_bathroom2_renovations",
+        )
+        self.assertEqual(
+            exporter.asset_requires_for_setting("ai_generated_bathroom2_renovations"),
+            ["core_executable", "ai_generated_bathroom2_renovations"],
+        )
+        self.assertIn(
+            "ai_generated_bathroom2_renovations",
+            exporter.OUTPUT_ONLY_REMOVABLE_ASSET_SETTINGS,
         )
 
     def test_mobile_sound_setting_is_default_off_and_core_gated(self):
