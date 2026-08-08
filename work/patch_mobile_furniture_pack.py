@@ -654,10 +654,10 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x121: "cheat_add_food.png",
     0x122: "cheat_add_food.png",
     0x123: "cheat_no_generation_locks.png",
-    0x124: "MenuBtnTrophy1.png",
-    0x125: "MenuBtnTrophy1.png",
-    0x126: "MenuBtnTrophy1.png",
-    0x127: "MenuBtnTrophy1.png",
+    0x124: "cheat_reset_achievements.png",
+    0x125: "cheat_reset_achievements.png",
+    0x126: "cheat_reset_achievements.png",
+    0x127: "cheat_reset_achievements.png",
     0x128: "cheat_add_coins.png",
     0x129: "cheat_add_coins.png",
     0x12A: "cheat_add_coins.png",
@@ -668,7 +668,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     # artwork.  The descriptor must not be aliased through the item id: the
     # store's native image lookup and the added-item draw hook can otherwise
     # resolve the row to an empty cell.
-    0x12E: "MenuBtnTrophy1.png",
+    0x12E: "cheat_reset_achievements.png",
     0x12F: "cheat_fill_house_messes.png",
     0x130: "cheat_fill_yard_weeds.png",
     0x131: "cheat_clean_garden.png",

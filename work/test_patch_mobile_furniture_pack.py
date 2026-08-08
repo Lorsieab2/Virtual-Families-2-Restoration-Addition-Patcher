@@ -84,7 +84,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         for item_id in (0x124, 0x125, 0x126, 0x127, 0x12E):
             self.assertEqual(
                 patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[item_id],
-                "MenuBtnTrophy1.png",
+                "cheat_reset_achievements.png",
             )
 
     def test_mobile_sound_assets_are_local_and_hash_pinned(self):
@@ -5461,11 +5461,11 @@ class OutfitStoreMappingTests(unittest.TestCase):
         )
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x127],
-            "MenuBtnTrophy1.png",
+            "cheat_reset_achievements.png",
         )
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES, {})
         expected_late_icons = {
-            0x12E: "MenuBtnTrophy1.png",
+            0x12E: "cheat_reset_achievements.png",
             0x12F: "cheat_fill_house_messes.png",
             0x130: "cheat_fill_yard_weeds.png",
             0x131: "cheat_clean_garden.png",
@@ -5915,7 +5915,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertEqual(reset_rows[0]["item_id"], 0x124)
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x124],
-            "MenuBtnTrophy1.png",
+            "cheat_reset_achievements.png",
         )
 
         source = Path(patcher.__file__).read_text(encoding="utf-8")
