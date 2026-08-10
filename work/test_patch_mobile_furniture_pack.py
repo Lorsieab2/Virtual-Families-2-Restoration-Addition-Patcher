@@ -5087,6 +5087,38 @@ class MobileIslandEventTextTests(unittest.TestCase):
         }
         self.assertEqual(relocations, expected)
 
+    def test_island_award_helper_is_external_and_in_link_inputs(self):
+        source_path = patcher.PATCHED / "vf2_island_events.cpp"
+        obj_path = patcher.PATCHED / "vf2_island_events.obj"
+        if not source_path.is_file() or not obj_path.is_file():
+            self.skipTest("fresh Island helper source/object has not been generated")
+
+        source = source_path.read_text(encoding="ascii")
+        self.assertIn(
+            "extern __declspec(naked) void VF2MobileIslandEventGetAwardAmount()",
+            source,
+        )
+        obj = CoffObject(obj_path)
+        helper = obj.symbol("?VF2MobileIslandEventGetAwardAmount@@YAXXZ")
+        storage_class = struct.unpack_from("<B", obj.buf, helper.off + 16)[0]
+        self.assertEqual(storage_class, patcher.IMAGE_SYM_CLASS_EXTERNAL)
+        self.assertGreater(helper.section, 0)
+
+        compile_rsp = (patcher.ROOT / "work" / "compile_helpers_b22.rsp").read_text(
+            encoding="ascii"
+        )
+        link_rsp = (
+            patcher.ROOT / "work" / "vf2_link_b27_arcade_behavior_restore.rsp"
+        ).read_text(encoding="ascii")
+        self.assertIn(
+            '"work\\patched_mobile_furniture_pack_objs\\vf2_island_events.cpp"',
+            compile_rsp,
+        )
+        self.assertIn(
+            '"work\\patched_mobile_furniture_pack_objs\\vf2_island_events.obj"',
+            link_rsp,
+        )
+
     def test_power_failure_patch_uses_event_keyed_state_and_exact_rel32_caves(self):
         old_patched = patcher.PATCHED
         try:

@@ -15354,7 +15354,13 @@ VF2_ISLAND_THUNK1(VF2MobileIslandEventImpactGameChoice, VF2MobileIslandEventImpa
 VF2_ISLAND_THUNK0(VF2MobileIslandEventImpactGameNoChoice, VF2MobileIslandEventImpactGameNoChoiceBody)
 VF2_ISLAND_THUNK1(VF2MobileIslandEventCalcAwardChoice, VF2MobileIslandEventCalcAwardChoiceBody)
 VF2_ISLAND_THUNK0(VF2MobileIslandEventCalcAwardNoChoice, VF2MobileIslandEventCalcAwardNoChoiceBody)
-VF2_ISLAND_THUNK0(VF2MobileIslandEventGetAwardAmount, VF2MobileIslandEventGetAwardAmountBody)
+// IslandEvents.obj retargets the native ChoiceAB +0x44 slot to this exact
+// decorated symbol. Keep external linkage so the linker can resolve that
+// cross-object relocation; the other table-only thunks remain internal.
+extern __declspec(naked) void VF2MobileIslandEventGetAwardAmount() {{
+    __asm {{ call VF2MobileIslandEventGetAwardAmountBody }}
+    __asm {{ ret }}
+}}
 #undef VF2_ISLAND_THUNK0
 #undef VF2_ISLAND_THUNK1
 
