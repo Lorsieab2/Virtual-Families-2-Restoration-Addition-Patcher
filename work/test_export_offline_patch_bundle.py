@@ -14,6 +14,7 @@ EXPORTER = ROOT / "work" / "export_offline_patch_bundle.py"
 PATCHER = ROOT / "work" / "offline_vf2_patcher.py"
 sys.path.insert(0, str(ROOT / "work"))
 import export_offline_patch_bundle as exporter
+import offline_vf2_patcher as patcher
 
 
 def minimal_pe_bytes(
@@ -101,6 +102,51 @@ def minimal_pe_bytes(
 
 
 class ExportOfflinePatchBundleTests(unittest.TestCase):
+    def test_default_settings_carry_fail_closed_readiness_metadata(self):
+        available = set(exporter.SOURCE_BACKED_OPTIONAL_SETTINGS) | {"core_executable"}
+        settings = exporter.default_settings(False, True, available)
+        by_id = {row["id"]: row for row in settings}
+
+        for setting_id in (
+            "behavior_patches",
+            "mobile_furniture_behaviors",
+            "mobile_renovations",
+            "mobile_sound_assets",
+            "ai_generated_bathroom2_renovations",
+        ):
+            with self.subTest(setting_id=setting_id):
+                readiness = by_id[setting_id]["readiness"]
+                self.assertIn(readiness["status"].lower(), {"stop", "pending"})
+                self.assertFalse(readiness["runtime_ready"])
+                self.assertFalse(readiness["linked"])
+                self.assertTrue(readiness["reason"])
+        island_readiness = by_id["island_events"]["readiness"]
+        self.assertEqual(island_readiness["status"], "experimental")
+        self.assertEqual(island_readiness["selection_policy"], "experimental_diagnostic")
+        self.assertFalse(island_readiness["runtime_ready"])
+        self.assertFalse(island_readiness["linked"])
+        self.assertIn("pending", island_readiness["reason"])
+        self.assertNotIn("readiness", exporter.SETTINGS[0])
+
+        parsed = patcher.manifest_settings({"settings": settings})
+        island = parsed["island_events"]
+        self.assertFalse(island.blocked)
+        island_log = next(row for row in patcher.settings_log(parsed, set())["available"] if row["id"] == "island_events")
+        self.assertTrue(island_log["selectable"])
+        self.assertEqual(island_log["readiness_status"], "experimental")
+        self.assertIn("pending", island_log["readiness_reason"])
+
+        with self.assertRaisesRegex(patcher.PatchError, "Blocked setting\\(s\\) cannot be enabled"):
+            patcher.resolve_enabled_settings(
+                {"settings": settings},
+                patcher.argparse.Namespace(
+                    enable_all=True,
+                    disable_all=False,
+                    enable=None,
+                    disable=None,
+                ),
+            )
+
     def test_no_ai_icon_generator_uses_tracked_source_art(self):
         generator = (ROOT / "work" / "build_no_ai_icons.py").read_text(encoding="utf-8")
         self.assertIn('ROOT / "patcher_assets" / "optional_patches" / "no_ai_icons" / "source_art"', generator)
@@ -122,6 +168,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         )
 
     def test_final_playtest_profile_is_manifest_local_and_keeps_no_ai_off(self):
+        self.assertNotIn("same_sex_marriage", exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS)
         original_defaults = {row["id"]: row["default"] for row in exporter.SETTINGS}
         available = set(exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS) | {"core_executable"}
         settings = [dict(row) for row in exporter.SETTINGS]
@@ -129,6 +176,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         updated_by_id = {row["id"]: row for row in updated}
         for setting_id in exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS:
             self.assertTrue(updated_by_id[setting_id]["default"], setting_id)
+        self.assertFalse(updated_by_id["same_sex_marriage"]["default"])
         self.assertFalse(updated_by_id["no_ai_icons"]["default"])
         self.assertEqual(
             original_defaults,
@@ -653,6 +701,22 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             )
         return result
 
+    @staticmethod
+    def mark_synthetic_settings_runtime_ready(manifest, *setting_ids):
+        """Mark only synthetic overlay rows ready for selection tests."""
+        readiness = manifest.setdefault("setting_readiness", {})
+        for setting_id in setting_ids:
+            ready = {
+                "status": "verified",
+                "runtime_ready": True,
+                "linked": True,
+                "reason": "Synthetic overlay fixture authenticated for selection tests.",
+            }
+            readiness[setting_id] = dict(ready)
+            for row in manifest.get("settings", []):
+                if isinstance(row, dict) and row.get("id") == setting_id:
+                    row["readiness"] = dict(ready)
+
     def test_exports_and_applies_coexisting_b152_runtime_flags(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
@@ -766,16 +830,16 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 variant["asset_sha256"],
                 hashlib.sha256(patched_data).hexdigest(),
             )
-            self.assertEqual(
-                manifest["export_summary"]["post_asset_patch_count"],
-                4,
-            )
             same_sex_record = records["same_sex_marriage"]
             self.assertEqual(
                 same_sex_record["requires"],
                 ["core_executable", "same_sex_marriage"],
             )
             self.assertEqual(same_sex_record["variants"][0]["offset"], "0xc00")
+            self.assertEqual(
+                manifest["export_summary"]["post_asset_patch_count"],
+                4,
+            )
             mortality_record = records["older_villager_mortality"]
             self.assertEqual(
                 mortality_record["requires"],
@@ -808,6 +872,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(disabled_installed.read_bytes()[0x600], 0)
             self.assertEqual(disabled_installed.read_bytes()[0x800], 0)
             self.assertEqual(disabled_installed.read_bytes()[0xA00], 1)
+            self.assertEqual(disabled_installed.read_bytes()[0xC00], 0)
             self.run_patcher(
                 "apply",
                 "--game-dir",
@@ -824,6 +889,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(installed.read_bytes()[0x600], 1)
             self.assertEqual(installed.read_bytes()[0x800], 0)
             self.assertEqual(installed.read_bytes()[0xA00], 1)
+            self.assertEqual(installed.read_bytes()[0xC00], 0)
             self.run_patcher(
                 "apply",
                 "--game-dir",
@@ -1381,6 +1447,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             (game / "Virtual Families 2.exe").write_bytes(vanilla.read_bytes())
             manifest["runtime_requirements"] = {}
             manifest["output"]["preserve_stock_exe_icon"] = False
+            self.mark_synthetic_settings_runtime_ready(
+                manifest,
+                "mobile_renovations",
+            )
             manifest_path = out / "manifest.json"
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             applied = tmp_path / "applied"
@@ -1923,6 +1993,11 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             # preservation is covered against resource-bearing fixtures in the
             # patch-engine tests; disable it for this overlay-only matrix.
             manifest["output"]["preserve_stock_exe_icon"] = False
+            self.mark_synthetic_settings_runtime_ready(
+                manifest,
+                "island_events",
+                "behavior_patches",
+            )
             manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
             modded_exe_name = "Virtual Families 2 - Modded B150.exe"
 

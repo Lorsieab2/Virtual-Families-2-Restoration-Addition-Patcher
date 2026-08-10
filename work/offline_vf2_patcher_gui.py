@@ -214,6 +214,10 @@ def build_apply_namespace(
     unknown = sorted(selected_settings - set(settings))
     if unknown:
         raise patcher.PatchError(f"Unknown selected setting(s): {', '.join(unknown)}")
+    blocked = [settings[setting_id] for setting_id in sorted(selected_settings) if settings[setting_id].blocked]
+    if blocked:
+        details = ", ".join(f"{setting.id}: {setting.readiness_reason}" for setting in blocked)
+        raise patcher.PatchError(f"Cannot select blocked setting(s): {details}")
     return Namespace(
         game_dir=optional_path(game_dir),
         manifest=required_path(manifest, "Patch manifest"),
@@ -576,14 +580,20 @@ class VF2PatcherGUI:
                 self._category_header(self.settings_inner, label, color).grid(row=row, column=0, sticky="ew", pady=(8 if row else 0, 4))
                 row += 1
                 for setting in category_settings:
-                    var = tk.BooleanVar(value=setting.default)
+                    var = tk.BooleanVar(value=setting.default and not setting.blocked)
                     self.setting_vars[setting.id] = var
                     item = ttk.Frame(self.settings_inner, padding=(0, 4))
                     item.grid(row=row, column=0, sticky="ew")
                     item.columnconfigure(0, weight=1)
-                    ttk.Checkbutton(item, text=setting.label, variable=var).grid(row=0, column=0, sticky="w")
-                    state = "default on" if setting.default else "default off"
-                    details = f"{setting.id} - {state} - {setting.description}" if setting.description else f"{setting.id} - {state}"
+                    checkbutton = ttk.Checkbutton(item, text=setting.label, variable=var)
+                    if setting.blocked:
+                        checkbutton.state(["disabled"])
+                    checkbutton.grid(row=0, column=0, sticky="w")
+                    if setting.blocked:
+                        details = f"{setting.id} - BLOCKED - {setting.readiness_reason}"
+                    else:
+                        state = "default on" if setting.default else "default off"
+                        details = f"{setting.id} - {state} - {setting.description}" if setting.description else f"{setting.id} - {state}"
                     self._markup_label(item, details).grid(row=1, column=0, sticky="ew", padx=(22, 0))
                     row += 1
         self.status_var.set(f"Loaded {len(settings)} setting(s) from {manifest_path.name}.")
@@ -669,11 +679,12 @@ class VF2PatcherGUI:
 
     def select_default_settings(self) -> None:
         for setting_id, var in self.setting_vars.items():
-            var.set(self.settings[setting_id].default)
+            setting = self.settings[setting_id]
+            var.set(setting.default and not setting.blocked)
 
     def select_all_settings(self) -> None:
-        for var in self.setting_vars.values():
-            var.set(True)
+        for setting_id, var in self.setting_vars.items():
+            var.set(not self.settings[setting_id].blocked)
 
     def clear_all_settings(self) -> None:
         for var in self.setting_vars.values():
@@ -682,7 +693,7 @@ class VF2PatcherGUI:
     def select_category_settings(self, category: str) -> None:
         for setting_id in setting_ids_for_category(self.settings, category):
             var = self.setting_vars.get(setting_id)
-            if var is not None:
+            if var is not None and not self.settings[setting_id].blocked:
                 var.set(True)
 
     def start_apply(self, *, dry_run: bool) -> None:

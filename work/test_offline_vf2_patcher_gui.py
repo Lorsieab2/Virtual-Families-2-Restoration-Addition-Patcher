@@ -206,6 +206,187 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
                 },
             )
 
+    def test_manifest_readiness_blocks_unready_rows_but_keeps_them_declared(self):
+        manifest = {
+            "setting_readiness": {
+                "stop_feature": {"status": "STOP", "reason": "native bytes not authenticated"},
+                "pending_feature": {"status": "pending", "runtime_ready": False, "reason": "awaiting readback"},
+                "unlinked_feature": {"link_status": "unlinked"},
+                "runtime_feature": {"runtime_ready": False},
+            },
+            "settings": [
+                {"id": "stop_feature", "default": True},
+                {"id": "pending_feature", "default": False},
+                {"id": "unlinked_feature", "default": False},
+                {"id": "runtime_feature", "default": False},
+                {"id": "ready_feature", "default": True, "runtime_ready": True, "linked": True},
+            ],
+        }
+
+        settings = patcher.manifest_settings(manifest)
+
+        self.assertEqual(
+            set(settings),
+            {"stop_feature", "pending_feature", "unlinked_feature", "runtime_feature", "ready_feature"},
+        )
+        self.assertTrue(settings["stop_feature"].blocked)
+        self.assertIn("manifest status=STOP", settings["stop_feature"].readiness_reason)
+        self.assertIn("runtime_ready=false", settings["pending_feature"].readiness_reason)
+        self.assertIn("manifest status=unlinked", settings["unlinked_feature"].readiness_reason or "")
+        self.assertIn("runtime_ready=false", settings["runtime_feature"].readiness_reason)
+        self.assertFalse(settings["ready_feature"].blocked)
+        self.assertEqual(
+            set(setting.id for _key, _label, _color, rows in gui.categorized_settings(settings) for setting in rows),
+            set(settings),
+        )
+        log = patcher.settings_log(settings, set())
+        self.assertIn("stop_feature", log["blocked"])
+        self.assertFalse(next(row for row in log["available"] if row["id"] == "stop_feature")["selectable"])
+        self.assertTrue(next(row for row in log["available"] if row["id"] == "ready_feature")["selectable"])
+
+    def test_enable_all_and_gui_selection_reject_blocked_settings(self):
+        manifest = {
+            "settings": [
+                {"id": "blocked_feature", "default": False, "status": "pending", "runtime_ready": False, "reason": "not linked"},
+                {"id": "ready_feature", "default": False},
+            ]
+        }
+        args = patcher.argparse.Namespace(
+            enable_all=True,
+            disable_all=False,
+            enable=None,
+            disable=None,
+        )
+
+        with self.assertRaisesRegex(patcher.PatchError, r"blocked_feature: .*runtime_ready=false"):
+            patcher.resolve_enabled_settings(manifest, args)
+
+        settings = patcher.manifest_settings(manifest)
+        with self.assertRaisesRegex(patcher.PatchError, r"Cannot select blocked setting\(s\): blocked_feature: .*"):
+            gui.build_apply_namespace(
+                game_dir="C:\\Games\\VF2",
+                manifest="patches\\vf2.json",
+                settings=settings,
+                selected_settings={"blocked_feature"},
+            )
+
+    def test_explicit_final_playtest_profile_allows_blocked_rows_only_with_profile_flag(self):
+        manifest = {
+            "final_playtest_profile": {"id": "final_playtest_all_enabled"},
+            "settings": [
+                {
+                    "id": "behavior_patches",
+                    "default": False,
+                    "status": "pending",
+                    "runtime_ready": False,
+                    "linked": False,
+                    "reason": "readback pending",
+                },
+                {"id": "same_sex_marriage", "default": False},
+            ],
+        }
+        normal_args = patcher.argparse.Namespace(
+            enable_all=True,
+            disable_all=False,
+            enable=None,
+            disable=None,
+        )
+        with self.assertRaisesRegex(patcher.PatchError, r"behavior_patches: .*runtime_ready=false"):
+            patcher.resolve_enabled_settings(manifest, normal_args)
+
+        playtest_args = patcher.argparse.Namespace(
+            enable_all=False,
+            disable_all=False,
+            enable=None,
+            disable=None,
+            final_playtest_all_enabled=True,
+        )
+        _settings, enabled = patcher.resolve_enabled_settings(manifest, playtest_args)
+        self.assertEqual(enabled, {"behavior_patches", "same_sex_marriage"})
+
+    def test_final_playtest_flag_requires_explicit_manifest_profile(self):
+        manifest = {"settings": [{"id": "same_sex_marriage", "default": False}]}
+        args = patcher.argparse.Namespace(
+            enable_all=False,
+            disable_all=False,
+            enable=None,
+            disable=None,
+            final_playtest_all_enabled=True,
+        )
+        with self.assertRaisesRegex(patcher.PatchError, r"requires an explicit final_playtest_all_enabled"):
+            patcher.resolve_enabled_settings(manifest, args)
+
+    def test_island_events_experimental_diagnostic_is_selectable_but_unverified(self):
+        manifest = {
+            "settings": [
+                {
+                    "id": "island_events",
+                    "default": False,
+                    "readiness": {
+                        "status": "experimental",
+                        "runtime_ready": False,
+                        "linked": False,
+                        "selection_policy": "experimental_diagnostic",
+                        "reason": "Runtime behavior and crash proof remain pending.",
+                    },
+                },
+                {"id": "blocked_feature", "default": False, "status": "pending", "runtime_ready": False},
+            ]
+        }
+        settings = patcher.manifest_settings(manifest)
+        self.assertFalse(settings["island_events"].blocked)
+        self.assertTrue(settings["blocked_feature"].blocked)
+
+        args = gui.build_apply_namespace(
+            game_dir="C:\\Games\\VF2",
+            manifest="patches\\vf2.json",
+            settings=settings,
+            selected_settings={"island_events"},
+        )
+        _, enabled = patcher.resolve_enabled_settings(manifest, args)
+        self.assertEqual(enabled, {"island_events"})
+        island_row = next(
+            row for row in patcher.settings_log(settings, enabled)["available"]
+            if row["id"] == "island_events"
+        )
+        self.assertTrue(island_row["selectable"])
+        self.assertEqual(island_row["readiness_status"], "experimental")
+        self.assertIn("pending", island_row["readiness_reason"])
+        self.assertNotEqual(island_row["readiness_status"], "verified")
+
+    def test_gui_select_all_skips_blocked_settings(self):
+        settings = {
+            "blocked_feature": patcher.PatchSetting(
+                id="blocked_feature",
+                label="Blocked",
+                description="",
+                default=True,
+                readiness_status="STOP",
+                readiness_reason="manifest status=STOP; linked=false",
+            ),
+            "ready_feature": patcher.PatchSetting(
+                id="ready_feature",
+                label="Ready",
+                description="",
+                default=False,
+            ),
+        }
+
+        class FakeVar:
+            def __init__(self):
+                self.value = None
+
+            def set(self, value):
+                self.value = value
+
+        controller = object.__new__(gui.VF2PatcherGUI)
+        controller.settings = settings
+        controller.setting_vars = {setting_id: FakeVar() for setting_id in settings}
+        gui.VF2PatcherGUI.select_all_settings(controller)
+
+        self.assertFalse(controller.setting_vars["blocked_feature"].value)
+        self.assertTrue(controller.setting_vars["ready_feature"].value)
+
     def test_saved_output_parent_path_round_trips_and_drives_namespace(self):
         with tempfile.TemporaryDirectory() as tmp:
             settings_path = Path(tmp) / "patcher_local_settings.json"

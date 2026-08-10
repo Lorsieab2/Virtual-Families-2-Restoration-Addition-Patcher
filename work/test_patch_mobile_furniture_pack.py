@@ -109,6 +109,37 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 spec["mobile_sha256"],
             )
 
+    def test_mobile_sound_parity_loader_rejects_non_direct_record_mapping(self):
+        records = patcher.MOBILE_SOUND_PAYLOAD_RECORDS
+        self.assertEqual(len(records), 67)
+        self.assertEqual(
+            {record["raw_mobile_id_value"] for record in records},
+            {int(record["raw_mobile_id"], 16) for record in records},
+        )
+        contract = json.loads(
+            patcher.MOBILE_SOUND_PARITY_CONTRACT.read_text(encoding="utf-8")
+        )
+        contract["sound_records"][0]["pc_sound_obj"]["record_index"] = 2
+        with tempfile.TemporaryDirectory() as tmp:
+            tampered_path = Path(tmp) / "mobile-sound-parity-contract.json"
+            tampered_path.write_text(json.dumps(contract), encoding="utf-8")
+            old_contract = patcher.MOBILE_SOUND_PARITY_CONTRACT
+            try:
+                patcher.MOBILE_SOUND_PARITY_CONTRACT = tampered_path
+                with self.assertRaisesRegex(RuntimeError, "not a direct raw-ID mapping"):
+                    patcher._load_mobile_sound_payload_records()
+            finally:
+                patcher.MOBILE_SOUND_PARITY_CONTRACT = old_contract
+
+    def test_mobile_sound_readiness_contract_forbids_unverified_runtime_claims(self):
+        readiness = patcher._mobile_sound_readiness_contract()
+        self.assertEqual(readiness["contract_id"], "vf2-mobile-sound-readiness-v1")
+        self.assertEqual(readiness["static_mapping"], "verified")
+        self.assertEqual(readiness["link_route_readback"], "not_authenticated")
+        self.assertEqual(readiness["runtime_player_qa"], "pending")
+        self.assertEqual(readiness["runtime_parity_claim"], "forbidden")
+        self.assertFalse(readiness["release_ready"])
+
     def test_mobile_sound_routes_are_default_off_and_atomic(self):
         old_patched = patcher.PATCHED
         old_enabled = patcher.ENABLE_MOBILE_SOUND_ASSETS
@@ -127,6 +158,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     self.assertIn(spec["pc_filename"].encode("ascii"), disabled_data)
                     self.assertNotIn(spec["mobile_filename"].encode("ascii"), disabled_data)
                 self.assertFalse(disabled_manifest["MobileSoundAssets"]["enabled"])
+                disabled_readiness = disabled_manifest["MobileSoundAssets"]["readiness"]
+                self.assertEqual(disabled_readiness["link_route_readback"], "not_authenticated")
+                self.assertEqual(disabled_readiness["runtime_parity_claim"], "forbidden")
+                self.assertFalse(disabled_readiness["release_ready"])
 
                 shutil.copy2(source, disabled_obj)
                 patcher.ENABLE_MOBILE_SOUND_ASSETS = True
@@ -138,6 +173,12 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     self.assertIn(spec["mobile_filename"].encode("ascii"), enabled_data)
                 self.assertTrue(enabled_manifest["MobileSoundAssets"]["all_or_nothing"])
                 self.assertEqual(enabled_manifest["MobileSoundAssets"]["route_count"], 4)
+                enabled_readiness = enabled_manifest["MobileSoundAssets"]["readiness"]
+                self.assertEqual(enabled_readiness["expected_route_count"], 4)
+                self.assertEqual(enabled_readiness["link_route_readback"], "not_authenticated")
+                self.assertEqual(enabled_readiness["runtime_player_qa"], "pending")
+                self.assertEqual(enabled_readiness["runtime_parity_claim"], "forbidden")
+                self.assertFalse(enabled_readiness["release_ready"])
 
                 shutil.copy2(source, disabled_obj)
                 corrupt = bytearray(disabled_obj.read_bytes())
@@ -169,6 +210,18 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "is missing"):
                     patcher.sync_mobile_sound_assets({})
                 self.assertFalse((patcher.OUT / "Sounds").exists())
+                final_spec = patcher.MOBILE_SOUND_PAYLOAD_RECORDS[-1]
+                shutil.copy2(
+                    old_source / final_spec["mobile_filename"],
+                    source / final_spec["mobile_filename"],
+                )
+                manifest = {}
+                patcher.sync_mobile_sound_assets(manifest)
+                readiness = manifest["mobile_sound_asset_sources"]["readiness"]
+                self.assertEqual(readiness["expected_payload_count"], 67)
+                self.assertEqual(readiness["link_route_readback"], "not_authenticated")
+                self.assertEqual(readiness["runtime_parity_claim"], "forbidden")
+                self.assertFalse(readiness["release_ready"])
         finally:
             patcher.MOBILE_SOUND_ASSET_SOURCE_DIR = old_source
             patcher.OUT = old_out
@@ -310,6 +363,76 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         self.assertEqual(len(contract["rejected_scope"]["rendered_only_unproven"]), 24)
         self.assertTrue(contract["stock_off_gate"]["manual_dispatch"])
         self.assertTrue(contract["stock_off_gate"]["autonomous_selector"])
+
+    def test_family_wide_mobile_routes_are_manual_drop_only(self):
+        expected_handlers = {
+            "VF2HandleMobileBirthdayBanner",
+            "VF2HandleMobileXmasTreeGroup",
+            "VF2HandleMobileDreidelGroup",
+            "VF2HandleMobileMenorahGroup",
+        }
+        self.assertEqual(
+            set(patcher.MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_HANDLERS),
+            expected_handlers,
+        )
+        external_handlers = {
+            spec.get("handler")
+            for spec in patcher.MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS
+            if spec.get("handler")
+        }
+        self.assertTrue(expected_handlers.isdisjoint(external_handlers))
+        self.assertTrue(
+            set(patcher.MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_MOBILE_IDS).isdisjoint(
+                {spec["mobile_id"] for spec in patcher.MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS}
+            )
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            temp = Path(tmp)
+            manifest, old_patched = self._build_mobile_runtime_binding_sources(temp)
+            try:
+                contract = manifest["MobileFurnitureBehaviors"]
+                scope = contract["manual_drop_only_whole_household"]
+                self.assertEqual(
+                    scope["handlers"],
+                    list(patcher.MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_HANDLERS),
+                )
+                self.assertEqual(scope["autonomous_handlers"], [])
+                self.assertEqual(scope["autonomous_mobile_behavior_ids"], [])
+
+                helper = (temp / "vf2_mobile_furniture_behaviors.cpp").read_text(
+                    encoding="ascii"
+                )
+                selector = helper.split(
+                    'extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous',
+                    1,
+                )[1].split("static bool VF2WeatherAllowsOutdoorFurniture", 1)[0]
+                for handler in expected_handlers:
+                    self.assertNotIn(handler, selector)
+                self.assertIn(
+                    "if (candidate == 0x2DB) return VF2HandleMobileBirthdayBanner(villager);",
+                    helper,
+                )
+                self.assertIn(
+                    "if (candidate == 0x2AF) return VF2HandleMobileDreidelGroup(villager);",
+                    helper,
+                )
+            finally:
+                patcher.PATCHED = old_patched
+
+    def test_autonomous_scope_validator_fails_closed_on_family_wide_handler(self):
+        original_specs = patcher.MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS
+        try:
+            patcher.MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = original_specs + ({
+                "mobile_id": 0x1AE,
+                "handler": "VF2HandleMobileBirthdayBanner",
+            },)
+            with self.assertRaisesRegex(
+                RuntimeError, "entered autonomous selection"
+            ):
+                patcher.validate_mobile_furniture_autonomous_scope()
+        finally:
+            patcher.MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = original_specs
 
     def test_mobile_furniture_runtime_bindings_reject_decorative_dispatch_id(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -2035,6 +2158,105 @@ class MobileRenovationArtTests(unittest.TestCase):
             patcher.MOBILE_RENOVATION_USER_STORE_ICON_MISSING,
             ("blackbathroom.png", "bluebathroom.png", "beigebathroom.png", "modernoffice.png"),
         )
+        self.assertEqual(patcher.MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS, "STOP")
+        self.assertIn("not authenticated", patcher.MOBILE_RENOVATION_USER_STORE_ICON_ROUTE)
+        catalog_by_mobile_item = {
+            style["mobile_item"]: style
+            for style in patcher.MOBILE_RENOVATION_STYLE_CATALOG
+        }
+        self.assertEqual(
+            len(catalog_by_mobile_item),
+            len(patcher.MOBILE_RENOVATION_STYLE_CATALOG),
+        )
+        self.assertEqual(
+            len({row["pc_item"] for row in patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.values()}),
+            patcher.MOBILE_RENOVATION_USER_STORE_ICON_COUNT,
+        )
+        self.assertEqual(
+            len({row["mobile_item"] for row in patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.values()}),
+            patcher.MOBILE_RENOVATION_USER_STORE_ICON_COUNT,
+        )
+        for row in patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.values():
+            self.assertIn(row["pc_item"], patcher.MOBILE_RENOVATION_PC_ITEM_IDS)
+            self.assertEqual(catalog_by_mobile_item[row["mobile_item"]]["room"], row["room"])
+
+    def test_user_store_icons_resolve_to_dedicated_descriptors_and_missing_stays_stock(self):
+        old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
+        old_patched = patcher.PATCHED
+        try:
+            patcher.ENABLE_MOBILE_RENOVATIONS = True
+            base = patcher.mobile_renovation_store_icon_image_base()
+            self.assertEqual(patcher.MOBILE_RENOVATION_USER_STORE_ICON_COUNT, 11)
+            self.assertEqual(
+                [
+                    patcher.mobile_renovation_store_icon_image_id(spec["pc_item"])
+                    for spec in patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.values()
+                ],
+                list(range(base, base + 11)),
+            )
+            for pc_item in patcher.MOBILE_RENOVATION_PC_ITEM_IDS:
+                if pc_item in patcher.MOBILE_RENOVATION_USER_STORE_ICON_SPEC_BY_PC_ITEM:
+                    self.assertGreaterEqual(patcher.mobile_renovation_store_icon_image_id(pc_item), base)
+                else:
+                    self.assertEqual(patcher.mobile_renovation_store_icon_image_id(pc_item), -1)
+
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").write_text("", encoding="ascii")
+                patcher.write_outfit_store_helpers({})
+                source = (Path(tmp) / "vf2_special_upgrade_effects.cpp").read_text(encoding="ascii")
+                route = source.split(
+                    "static int VF2GetMobileRenovationStoreIconImage(int itemId)", 1
+                )[1].split("static int VF2GetAddedStoreIconImage", 1)[0]
+                for spec in patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.values():
+                    self.assertIn(f"case 0x{spec['pc_item']:X}: return", route)
+                self.assertIn("default: return -1;", route)
+                self.assertNotIn("return VF2GetMobileRenovationIconImage(itemId);", route)
+        finally:
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+            patcher.PATCHED = old_patched
+
+    def test_user_store_icon_graphics_manifest_is_explicitly_staged_only_stop(self):
+        old_patched = patcher.PATCHED
+        old_out = patcher.OUT
+        old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
+        old_holiday = patcher.ENABLE_HOLIDAY_ORNAMENTS
+        old_body_types = patcher.ENABLE_HOLIDAY_BODY_TYPES
+        old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp) / "patched"
+                patcher.OUT = Path(tmp) / "out"
+                patcher.PATCHED.mkdir()
+                shutil.copy2(
+                    patcher.SRC_OBJS / "theGraphicsManager.obj",
+                    patcher.PATCHED / "theGraphicsManager.obj",
+                )
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                patcher.ENABLE_HOLIDAY_ORNAMENTS = False
+                patcher.ENABLE_HOLIDAY_BODY_TYPES = False
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = False
+                manifest = {}
+                patcher.patch_graphics_manager(manifest)
+                graphics = manifest["theGraphicsManager"]["mobile_renovation_images"]
+                self.assertEqual(
+                    graphics["store_icon_link_status"],
+                    patcher.MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS,
+                )
+                self.assertEqual(len(graphics["store_icon_descriptors"]), 11)
+                self.assertTrue(
+                    all(
+                        row["status"] == "staged_only_stop_unverified_executable_link"
+                        for row in graphics["store_icon_descriptors"]
+                    )
+                )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.OUT = old_out
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+            patcher.ENABLE_HOLIDAY_ORNAMENTS = old_holiday
+            patcher.ENABLE_HOLIDAY_BODY_TYPES = old_body_types
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
 
     def test_mobile_renovations_are_only_in_native_house_renovation_category(self):
         old_patched = patcher.PATCHED
@@ -2094,6 +2316,19 @@ class MobileRenovationArtTests(unittest.TestCase):
                 )
 
                 obj = CoffObject(temp / "InventoryManager.obj")
+                item_info = obj.symbol(patcher.INVENTORY_ITEMINFO)
+                _value, _section, _typ, storage_class, _aux = struct.unpack_from(
+                    "<IhHBB", obj.buf, item_info.off + 8
+                )
+                self.assertNotEqual(storage_class, patcher.IMAGE_SYM_CLASS_EXTERNAL)
+                self.assertEqual(
+                    manifest["InventoryManager"]["exported_symbols"]["itemInfo"]["symbol"],
+                    patcher.INVENTORY_ITEMINFO,
+                )
+                self.assertEqual(
+                    manifest["InventoryManager"]["exported_symbols"]["itemInfo"]["storage_class"],
+                    "static (native; not exported)",
+                )
                 home_sym = obj.symbol(patcher.GHOMELIST)
                 home_sec = obj.section(home_sym.section)
                 home_ids = list(
@@ -2112,6 +2347,212 @@ class MobileRenovationArtTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
+
+    def test_ai_bathroom2_rows_work_without_first_bathroom_toggle(self):
+        old_patched = patcher.PATCHED
+        old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
+        old_ai = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                for object_name in ("InventoryManager.obj", "theStringManager.obj"):
+                    shutil.copy2(patcher.SRC_OBJS / object_name, temp / object_name)
+                patcher.PATCHED = temp
+                patcher.ENABLE_MOBILE_RENOVATIONS = False
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                manifest = {}
+                patcher.patch_visible_special_upgrades(manifest)
+                patcher.patch_inventory_manager(manifest)
+                patcher.patch_house_renovations(manifest)
+                patcher.patch_string_manager(manifest)
+
+                home = manifest["HouseRenovations"]
+                self.assertEqual(home["new_count"], 15)
+                self.assertEqual(
+                    [int(row["item_id"], 16) for row in home["ai_bathroom2_items"]],
+                    list(patcher.AI_BATHROOM2_PC_ITEM_IDS),
+                )
+                self.assertEqual(home["added_items"], [])
+                self.assertFalse(
+                    any(
+                        item_id in patcher.MOBILE_RENOVATION_PC_ITEM_IDS
+                        for item_id in patcher.AI_BATHROOM2_PC_ITEM_IDS
+                    )
+                )
+                self.assertEqual(
+                    [int(row["item_id"], 16) for row in home["ai_bathroom2_items"]],
+                    list(patcher.AI_BATHROOM2_PC_ITEM_IDS),
+                )
+                self.assertTrue(
+                    all(row["room"] == "bathroom2" for row in home["ai_bathroom2_items"])
+                )
+                self.assertTrue(
+                    all(row["e6_untouched"] for row in home["ai_bathroom2_items"])
+                )
+                self.assertFalse(
+                    any(
+                        int(row["item_id"], 16) in patcher.AI_BATHROOM2_PC_ITEM_IDS
+                        for row in manifest["VisibleSpecialUpgrades"]["added_items"]
+                    )
+                )
+                obj = CoffObject(temp / "InventoryManager.obj")
+                home_sym = obj.symbol(patcher.GHOMELIST)
+                home_sec = obj.section(home_sym.section)
+                home_ids = list(
+                    struct.unpack_from(
+                        "<15I", obj.buf, home_sec.raw_ptr + home_sym.value
+                    )
+                )
+                self.assertEqual(home_ids[:10], list(range(0xE1, 0xEB)))
+                self.assertEqual(home_ids[10:], list(patcher.AI_BATHROOM2_PC_ITEM_IDS))
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_ai
+
+    def test_ai_bathroom2_renderer_hook_is_independent_of_first_bathroom_toggle(self):
+        old_patched = patcher.PATCHED
+        old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
+        old_ai = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(patcher.SRC_OBJS / "theMainScene.obj", temp / "theMainScene.obj")
+                patcher.PATCHED = temp
+                patcher.ENABLE_MOBILE_RENOVATIONS = False
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                manifest = {}
+                patcher.patch_mobile_renovation_renderer(manifest)
+                helper = (temp / "vf2_mobile_renovations.cpp").read_text(encoding="ascii")
+                self.assertIsNotNone(manifest["mobile_renovation_renderer"]["hook"])
+                self.assertIn("!kVF2EnableMobileRenovations && !kVF2EnableAIBathroom2", helper)
+                self.assertIn("VF2DrawAIBathroom2(graphics, worldX, worldY);", helper)
+                self.assertIn("949 - worldX, 145 - worldY", helper)
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_ai
+
+    def test_ai_bathroom2_rows_have_exact_reversible_state_contract(self):
+        self.assertEqual(
+            list(patcher.AI_BATHROOM2_PC_ITEM_IDS),
+            [0x14D, 0x14E, 0x14F, 0x150, 0x151],
+        )
+        self.assertEqual(
+            [row["color"] for row in patcher.AI_BATHROOM2_STYLE_CATALOG],
+            ["black", "blue", "beige", "green", "pink"],
+        )
+        self.assertEqual(
+            [row["price"] for row in patcher.AI_BATHROOM2_STYLE_CATALOG],
+            [0x898, 0x3E8, 0x898, 0x898, 0x898],
+        )
+        source = Path(patcher.__file__).read_text(encoding="ascii")
+        self.assertIn("VF2IsAIBathroom2Style(itemId)", source)
+        self.assertIn("VF2AIBathroom2ActiveByte(itemId)", source)
+        self.assertIn("itemId + 0x2A3", source)
+        self.assertIn("for (int sibling = {AI_BATHROOM2_PC_ITEM_IDS[0]};", source)
+        self.assertIn("VF2GetAIBathroom2Price(itemId)", source)
+        self.assertIn("*VF2AIBathroom2ActiveByte(itemId) = 0;", source)
+        remove_template = source.split(
+            'extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{',
+            1,
+        )[1].split(
+            'extern "C" int __cdecl VF2GetExpandedFleaMarketCount',
+            1,
+        )[0]
+        self.assertIn("if (VF2IsAIBathroom2Style(itemId)) {{", remove_template)
+        self.assertIn("*VF2AIBathroom2ActiveByte(itemId) = 0;", remove_template)
+        self.assertIn("}} else if (VF2IsMobileRenovationStyle(itemId)) {{", remove_template)
+        self.assertNotIn("remove_start = special_upgrade_helper_cpp.find", source)
+        self.assertIn("curtain_runtime_route\": \"blocked_pending_authenticated", source)
+        self.assertNotIn("gServicesList.*AI_BATHROOM2", source)
+
+    def test_ai_bathroom2_active_price_and_remove_gate_are_reachable(self):
+        source = Path(patcher.__file__).read_text(encoding="ascii")
+        price_body = source.split(
+            "static int VF2GetAIBathroom2Price(int itemId) {{", 1
+        )[1].split("\n}}", 1)[0]
+        self.assertIn("if (VF2AIBathroom2IsActive(itemId)) return 0;", price_body)
+        self.assertIn("return kVF2AIBathroom2Prices[index];", price_body)
+
+        active_helper = source.split(
+            "static bool VF2B150UpgradeIsActive(int itemId) {{", 1
+        )[1].split("static void VF2ActivateNativeRenovation", 1)[0]
+        self.assertLess(
+            active_helper.index("if (VF2IsAIBathroom2Style(itemId)) {{"),
+            active_helper.index("if (!kVF2EnableB150CheatUpgrades) return false;"),
+        )
+        self.assertIn(
+            "return VF2AIBathroom2IsActive(itemId);",
+            active_helper,
+        )
+        self.assertIn(
+            "AI_BATHROOM2_CURTAIN_RUNTIME_AUTHENTICATED = False",
+            source,
+        )
+
+    def test_ai_bathroom2_disabled_manifest_is_explicit_and_nonready(self):
+        old_out = patcher.OUT
+        old_enabled = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.OUT = Path(tmp)
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = False
+                manifest = {}
+                patcher.sync_ai_generated_bathroom2_assets(manifest)
+                record = manifest["ai_generated_bathroom2_renovations"]
+                self.assertFalse(record["enabled"])
+                self.assertIsNone(record["runtime_ready"])
+                self.assertEqual(record["pc_item_ids"], [])
+                self.assertFalse(record["rows_are_functional"])
+                self.assertIn("native E6", record["native_route"])
+        finally:
+            patcher.OUT = old_out
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_enabled
+
+    def test_ai_bathroom2_rows_enable_without_authenticated_curtain_abi(self):
+        old_out = patcher.OUT
+        old_requested = patcher.REQUESTED_ENABLE_AI_GENERATED_BATHROOM2
+        old_enabled = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        old_curtain_enabled = patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.OUT = Path(tmp)
+                patcher.REQUESTED_ENABLE_AI_GENERATED_BATHROOM2 = True
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED = False
+                manifest = {}
+                patcher.sync_ai_generated_bathroom2_assets(manifest)
+                record = manifest["ai_generated_bathroom2_renovations"]
+                self.assertTrue(record["requested"])
+                self.assertTrue(record["enabled"])
+                self.assertFalse(record["runtime_route_authenticated"])
+                self.assertEqual(
+                    record["status"],
+                    "runtime_visual_overlay_and_house_renovation_rows_curtain_blocked",
+                )
+                self.assertIn("STOP:", record["blocker"])
+                self.assertIn("selector/restoration ABI", record["blocker"])
+                self.assertTrue(record["runtime_target"])
+                self.assertTrue(record["rows_are_functional"])
+                self.assertTrue(record["rows_runtime_ready"])
+                self.assertFalse(record["curtain_runtime_ready"])
+                self.assertTrue((Path(tmp) / "Images" / "AIGeneratedBathroom2").is_dir())
+                self.assertEqual(
+                    sorted(
+                        p.name
+                        for p in (Path(tmp) / "Images" / "AIGeneratedBathroom2" / "store_icons").glob("*.png")
+                    ),
+                    sorted(patcher.AI_BATHROOM2_STORE_ICON_ASSETS),
+                )
+                self.assertFalse(
+                    (Path(tmp) / "Images" / "AIGeneratedBathroom2" / "closed_curtains").exists()
+                )
+        finally:
+            patcher.OUT = old_out
+            patcher.REQUESTED_ENABLE_AI_GENERATED_BATHROOM2 = old_requested
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_enabled
+            patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED = old_curtain_enabled
 
     def test_house_renovation_rows_match_pinned_price_lock_and_text_contract(self):
         old_patched = patcher.PATCHED
@@ -2268,6 +2709,28 @@ class MobileRenovationArtTests(unittest.TestCase):
                         (patcher.MOBILE_RENOVATION_ART_SOURCE_DIR / row["icon_file"]).is_file(),
                         row["icon_file"],
                     )
+                    user_icon = patcher.MOBILE_RENOVATION_USER_STORE_ICON_SPEC_BY_PC_ITEM.get(pc_item)
+                    if user_icon:
+                        self.assertEqual(
+                            row["store_icon"],
+                            hex(
+                                patcher.mobile_renovation_store_icon_image_id(
+                                    pc_item,
+                                    patcher.holiday_body_descriptor_count()
+                                    if patcher.ENABLE_HOLIDAY_BODY_TYPES
+                                    else 0,
+                                )
+                            ),
+                        )
+                        self.assertEqual(
+                            row["store_icon_file"],
+                            f"MobileRenovations/store_icons/{user_icon['name']}",
+                        )
+                        self.assertEqual(row["store_icon_status"], "verified_staged_mapping_only")
+                    else:
+                        self.assertIsNone(row["store_icon"])
+                        self.assertIsNone(row["store_icon_file"])
+                        self.assertEqual(row["store_icon_status"], "stock_fallback_missing_user_icon")
 
                 generator = Path(patcher.__file__).read_text(encoding="ascii")
                 self.assertIn("VF2GetAddedStoreIconScale", generator)
@@ -2476,6 +2939,12 @@ class MobileRenovationArtTests(unittest.TestCase):
                 )
                 for name in patcher.MOBILE_RENOVATION_ART_FILES:
                     shutil.copy2(patcher.MOBILE_RENOVATION_ART_SOURCE_DIR / name, runtime_dir / name)
+                (runtime_dir / "store_icons").mkdir()
+                for name in patcher.MOBILE_RENOVATION_USER_STORE_ICON_FILES:
+                    shutil.copy2(
+                        patcher.MOBILE_RENOVATION_USER_STORE_ICON_DIR / name,
+                        runtime_dir / "store_icons" / name,
+                    )
                 manifest = {
                     "mobile_renovation_renderer": {
                         "anchors": {room: list(origin) for room, origin in patcher.MOBILE_RENOVATION_ANCHORS.items()},
@@ -2485,8 +2954,19 @@ class MobileRenovationArtTests(unittest.TestCase):
                         "mobile_renovation_images": {
                             "image_count": patcher.MOBILE_RENOVATION_IMAGE_COUNT,
                             "descriptors": [{}] * patcher.MOBILE_RENOVATION_IMAGE_COUNT,
+                            "store_icon_descriptors": [
+                                {
+                                    "name": name,
+                                    "pc_item": hex(patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING[name]["pc_item"]),
+                                    "sha256": patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING[name]["sha256"],
+                                }
+                                for name in patcher.MOBILE_RENOVATION_USER_STORE_ICON_FILES
+                            ],
                             "store_icon_scale": 0.12,
-                            "store_icon_descriptor_range": "0x56B-0x579",
+                            "store_icon_descriptor_range": (
+                                f"0x{patcher.mobile_renovation_store_icon_image_base(patcher.holiday_body_descriptor_count() if patcher.ENABLE_HOLIDAY_BODY_TYPES else 0):X}-"
+                                f"0x{patcher.mobile_renovation_store_icon_image_base(patcher.holiday_body_descriptor_count() if patcher.ENABLE_HOLIDAY_BODY_TYPES else 0) + patcher.MOBILE_RENOVATION_USER_STORE_ICON_COUNT - 1:X}"
+                            ),
                         }
                     },
                 }
@@ -2592,6 +3072,11 @@ class MobileRenovationArtTests(unittest.TestCase):
             )
             self.assertEqual(record["missing"], [])
             self.assertEqual(
+                record["user_store_icon_route"],
+                patcher.MOBILE_RENOVATION_USER_STORE_ICON_ROUTE,
+            )
+            self.assertEqual(len(record["user_store_icon_payload"]), 11)
+            self.assertEqual(
                 {row["name"] for row in record["bathroom1_curtain_assets"]},
                 set(patcher.MOBILE_RENOVATION_CURTAIN_ASSETS),
             )
@@ -2620,6 +3105,11 @@ class MobileRenovationArtTests(unittest.TestCase):
             record = manifest["mobile_renovation_art_sources"]
             self.assertEqual(record["status"], "runtime_1_to_1_overlay_payload")
             self.assertTrue(record["runtime_copy"])
+            self.assertEqual(
+                record["user_store_icon_route"],
+                patcher.MOBILE_RENOVATION_USER_STORE_ICON_ROUTE,
+            )
+            self.assertEqual(len(record["user_store_icon_payload"]), 11)
             self.assertEqual(record["bathroom1_curtain_replacement_mode"], "replace_named_images_root_files")
             self.assertEqual(
                 len(list((Path(tmp) / "Images" / "MobileRenovations").glob("*.png"))),
@@ -2712,27 +3202,40 @@ class MobileRenovationArtTests(unittest.TestCase):
     def test_ai_bathroom2_visual_payload_runtime_copy_is_separate_from_native_route(self):
         old_out = patcher.OUT
         old_enabled = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        old_curtain_enabled = patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 patcher.OUT = Path(tmp)
                 patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED = False
                 manifest = {}
                 patcher.sync_ai_generated_bathroom2_assets(manifest)
                 contract = manifest["ai_generated_bathroom2_renovations"]
                 self.assertTrue(contract["enabled"])
+                self.assertEqual(
+                    contract["status"],
+                    "runtime_visual_overlay_and_house_renovation_rows_curtain_blocked",
+                )
                 self.assertTrue((Path(tmp) / "Images" / "AIGeneratedBathroom2").is_dir())
                 self.assertEqual(
                     sorted(p.name for p in (Path(tmp) / "Images" / "AIGeneratedBathroom2").glob("*.png")),
                     sorted(patcher.AI_BATHROOM2_SOURCE_FILES),
                 )
                 self.assertEqual(
-                    len(list((Path(tmp) / "Images" / "AIGeneratedBathroom2" / "closed_curtains").glob("*.png"))),
-                    5,
+                    sorted(
+                        p.name
+                        for p in (Path(tmp) / "Images" / "AIGeneratedBathroom2" / "store_icons").glob("*.png")
+                    ),
+                    sorted(patcher.AI_BATHROOM2_STORE_ICON_ASSETS),
+                )
+                self.assertFalse(
+                    (Path(tmp) / "Images" / "AIGeneratedBathroom2" / "closed_curtains").exists()
                 )
                 self.assertIn("second-bathroom renovation remains disabled/hiatus", contract["native_route"])
         finally:
             patcher.OUT = old_out
             patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_enabled
+            patcher.AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED = old_curtain_enabled
 
     def test_ai_bathroom2_contract_matches_tracked_source_hashes(self):
         contract_path = patcher.ROOT / "data" / "vf2" / "ai-generated-bathroom2-contract.json"
@@ -4045,6 +4548,22 @@ def valid_invisible_kids_table_manifest():
 
 
 class MobileIslandEventTextTests(unittest.TestCase):
+    def test_island_disabled_gate_distinguishes_historical_reports_from_runtime_proof(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            '"disabled pending exact-build runtime crash certification; "',
+            source,
+        )
+        self.assertIn(
+            '"historical runtime reports plus prior static storage defect; "',
+            source,
+        )
+        self.assertIn('"no current exact-build WER or dump"', source)
+        self.assertIn(
+            'ENABLE_ISLAND_EVENTS = os.environ.get("VF2_ENABLE_ISLAND_EVENTS", "0") == "1"',
+            source,
+        )
+
     def test_proven_mobile_event_outcomes_are_exact_generated_routes(self):
         events = {
             event["name"]: event for event in patcher.load_mobile_island_events()
@@ -4098,6 +4617,28 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 )
                 manifest = {}
                 patcher.patch_island_events(manifest)
+                island = CoffObject(patcher.PATCHED / "IslandEvents.obj")
+                event_list = island.symbol(
+                    "?mEventList@CIslandEvents@@0PAPAVCIslandEvent@@A"
+                )
+                fired = island.symbol(
+                    "?mEventHasFired@CIslandEvents@@0PA_NA"
+                )
+                island_section = island.section(fired.section)
+                new_bound = 0x61 + len(events)
+                self.assertEqual(fired.value - event_list.value, 0x1E8)
+                self.assertGreaterEqual(
+                    island_section.raw_size,
+                    fired.value + new_bound,
+                )
+                self.assertEqual(
+                    manifest["IslandEvents"]["mEventHasFired_storage_bytes"],
+                    new_bound,
+                )
+                self.assertEqual(
+                    manifest["IslandEvents"]["mEventHasFired_tail_growth_bytes"],
+                    0x12,
+                )
                 rows = {
                     row["class"]: row for row in manifest["IslandEvents"]["added"]
                 }
@@ -4206,18 +4747,19 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     "(EBehavior)251, 7, 280, eGenderAny, 0, 0",
                     source,
                 )
-                # CIslandEvent's native vtable is ABI-sensitive: the choice
-                # overloads are ordered ImpactGame(int), ImpactGame(), then
-                # CalcAward(int), CalcAward().  Keep the implementation bodies
-                # non-virtual and expose wrappers in that exact order.
-                self.assertLess(
-                    source.index("virtual void ImpactGame(int choice)"),
-                    source.index("virtual void ImpactGame()"),
-                )
-                self.assertLess(
-                    source.index("virtual void CalcAward(int choice)"),
-                    source.index("virtual void CalcAward()"),
-                )
+                # CIslandEvent's native vtable is ABI-sensitive.  Keep the
+                # implementation bodies non-virtual and expose an explicit
+                # table whose overloaded slots are in native order.
+                self.assertNotIn("virtual void ImpactGame", source)
+                self.assertNotIn("virtual void CalcAward", source)
+                native_choice_order = [
+                    source.index("&VF2MobileIslandEventImpactGameChoice,"),
+                    source.index("&VF2MobileIslandEventImpactGameNoChoice,"),
+                    source.index("&VF2MobileIslandEventCalcAwardChoice,"),
+                    source.index("&VF2MobileIslandEventCalcAwardNoChoice,"),
+                    source.index("&VF2MobileIslandEventGetAwardAmount"),
+                ]
+                self.assertEqual(native_choice_order, sorted(native_choice_order))
                 self.assertIn("void VF2ImpactGameNoChoice()", source)
                 self.assertIn("void VF2CalcAwardNoChoice()", source)
                 self.assertIn(
@@ -4233,7 +4775,7 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn(
-                    'virtual CVillager *GetTargetVillager2() { return target2_; }',
+                    'CVillager *GetTargetVillager2() { return target2_; }',
                     source,
                 )
                 self.assertIn(
@@ -4373,6 +4915,15 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     "award_ = choice == 0 ? ldwGameState::GetRandom(10) + 5 : 0;",
                     source,
                 )
+                self.assertIn("struct VF2MobileIslandEventVtable {", source)
+                self.assertIn(
+                    "struct CMobileIslandEvent {",
+                    source,
+                )
+                self.assertIn("class CToolTray {", source)
+                self.assertIn("ToolTray.AddItem((EInventoryItem)42, 1);", source)
+                self.assertIn("(EBehavior)26,", source)
+                self.assertIn("state->SetSymptom((ESymptom)5);", source)
                 self.assertIn("state->SetSymptom((ESymptom)6);", source)
                 self.assertIn(
                     "state->AdjustHappinessTrend(choice == 0 ? 10 : -10);",
@@ -4388,6 +4939,44 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 )
         finally:
             patcher.PATCHED = old_patched
+
+    def test_island_helper_object_vtable_relocations_match_native_order(self):
+        obj_path = patcher.PATCHED / "vf2_island_events.obj"
+        if not obj_path.is_file():
+            self.skipTest("fresh Island helper object has not been generated")
+        obj = CoffObject(obj_path)
+        vtable = obj.symbol("?gVF2MobileIslandEventVtable@@3UVF2MobileIslandEventVtable@@B")
+        section = obj.section(vtable.section)
+        relocations = {}
+        for index in range(section.nreloc):
+            vaddr, symbol_index, relocation_type = struct.unpack_from(
+                "<IIH", obj.buf, section.reloc_ptr + index * 10
+            )
+            if (
+                vtable.value <= vaddr < vtable.value + 0x48
+                and relocation_type == patcher.IMAGE_REL_I386_DIR32
+            ):
+                relocations[vaddr - vtable.value] = obj.symbol_by_index[symbol_index].name
+        expected = {
+            0x04: "?VF2MobileIslandEventVectorDelete@@YAXXZ",
+            0x08: "?VF2MobileIslandEventCanFire@@YAXXZ",
+            0x0C: "?VF2MobileIslandEventGetTitle@@YAXXZ",
+            0x10: "?VF2MobileIslandEventGetDescription@@YAXXZ",
+            0x14: "?VF2MobileIslandEventHasChoices@@YAXXZ",
+            0x18: "?VF2MobileIslandEventIsEmailEvent@@YAXXZ",
+            0x1C: "?VF2MobileIslandEventGetChoiceAText@@YAXXZ",
+            0x20: "?VF2MobileIslandEventGetChoiceBText@@YAXXZ",
+            0x24: "?VF2MobileIslandEventGetTargetVillager@@YAXXZ",
+            0x28: "?VF2MobileIslandEventGetTargetVillager2@@YAXXZ",
+            0x2C: "?VF2MobileIslandEventGetVillagerPose@@YAXXZ",
+            0x30: "?VF2MobileIslandEventGetResultDescription@@YAXXZ",
+            0x34: "?VF2MobileIslandEventImpactGameChoice@@YAXXZ",
+            0x38: "?VF2MobileIslandEventImpactGameNoChoice@@YAXXZ",
+            0x3C: "?VF2MobileIslandEventCalcAwardChoice@@YAXXZ",
+            0x40: "?VF2MobileIslandEventCalcAwardNoChoice@@YAXXZ",
+            0x44: "?VF2MobileIslandEventGetAwardAmount@@YAXXZ",
+        }
+        self.assertEqual(relocations, expected)
 
     def test_power_failure_patch_uses_event_keyed_state_and_exact_rel32_caves(self):
         old_patched = patcher.PATCHED
@@ -5656,16 +6245,20 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertLessEqual(len(rows[0x130]["description"]), 90)
         self.assertEqual(rows[0x131]["name"], "Clean Garden")
         self.assertIn("without affecting other collectables", rows[0x131]["description"])
-        self.assertEqual(rows[0x132]["name"], "Force Marriage Email (Female)")
+        self.assertEqual(rows[0x132]["name"], "Force Marriage Email")
         self.assertEqual(
             rows[0x132]["description"],
-            "Spawns a marriage email with female spouse options.",
+            "Queues a normal base-game marriage proposal with native candidate rules.",
         )
-        self.assertEqual(rows[0x14C]["name"], "Force Marriage Email (Male)")
+        self.assertEqual(rows[0x14C]["name"], "Enable Same-Sex Marriage")
         self.assertEqual(
             rows[0x14C]["description"],
-            "Spawns a marriage email with male spouse options.",
+            "Enables same-sex marriage candidates. Buy again to disable this toggle.",
         )
+        self.assertEqual(rows[0x132]["price"], 0)
+        self.assertEqual(rows[0x14C]["price"], patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE)
+        self.assertEqual(patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE, 10000)
+        self.assertEqual(rows[0x11B]["price"], 0)
         self.assertEqual(rows[0x133]["name"], "Max out sock pile")
         self.assertIn("maximum signed integer", rows[0x133]["description"])
         self.assertEqual(rows[0x134]["name"], "No sock pile")
@@ -5708,6 +6301,22 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("if (gVF2UnlockEverythingInStore != 0) return 0;", source)
         self.assertIn("gVF2UnlockEverythingInStore = 1;", source)
         self.assertIn("gVF2UnlockEverythingInStore = 0;", source)
+        self.assertIn("VF2SetInventoryItemInfoLocksUnlocked(true);", source)
+        self.assertIn("VF2SetInventoryItemInfoLocksUnlocked(false);", source)
+        self.assertIn("return VF2AllStoreLocksUnlocked() ? 0 : -1;", source)
+        self.assertIn("INVENTORY_ITEMINFO_RECORD_SIZE = 0x24", source)
+        self.assertIn("INVENTORY_ITEMINFO_LOCK_OFFSET = 0x10", source)
+        self.assertNotIn("struct sInventoryItemInfo", source)
+        self.assertNotIn(
+            "obj.set_symbol_storage_class(INVENTORY_ITEMINFO, IMAGE_SYM_CLASS_EXTERNAL)",
+            source,
+        )
+        self.assertIn(
+            'insert_inventory_getter_hook("?IsLocked@CInventoryManager@@QAE_NW4EInventoryItem@@@Z", "_VF2GetOutfitStoreLockState")',
+            source,
+        )
+        self.assertIn("VF2GetOutfitStoreLockState", source)
+        self.assertIn("kVF2OriginalInventoryItemInfoLocks", source)
         expected_late_icons = {
             0x12E: "cheat_trophy_gold2x.png",
             0x12F: "cheat_fill_house_messes.png",
@@ -5813,13 +6422,21 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("case 0x132:", source)
         self.assertIn("if (VF2MarriageEmailUnavailable())", source)
         self.assertIn("eEmailMessageMarriageProposal = 2", source)
-        self.assertIn("VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalFemale);", source)
+        self.assertIn("VF2QueueMarriageProposal();", source)
         self.assertIn("case 0x14C:", source)
-        self.assertIn("VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalMale);", source)
+        self.assertIn("gVF2SameSexMarriage = 0;", source)
+        self.assertIn("gVF2SameSexMarriage = 1;", source)
         self.assertIn("state->EmailMessageInQueue(eEmailMessageMarriageProposal)", source)
-        self.assertIn("gVF2CheatMarriageProposalScene = mode;", source)
-        self.assertIn("kVF2CheatMarriageProposalFemale = 1", source)
-        self.assertIn("kVF2CheatMarriageProposalMale = 2", source)
+        self.assertNotIn("gVF2CheatMarriageProposalScene = mode;", source)
+        self.assertNotIn("static const unsigned char kVF2CheatMarriageProposalActive = 1", source)
+        self.assertIn("VF2SameSexMarriageToggleActive()", source)
+        self.assertIn("return gVF2SameSexMarriage != 0;", source)
+        self.assertNotIn(
+            "InventoryManager.HaveUpgrade((EInventoryItem){SAME_SEX_MARRIAGE_ITEM_ID:#x});",
+            source,
+        )
+        self.assertNotIn("kVF2CheatMarriageProposalFemale", source)
+        self.assertNotIn("kVF2CheatMarriageProposalMale", source)
         self.assertIn("case 0x14B:", source)
         self.assertIn("if (!VF2DivorceSpouse()) return;", source)
         self.assertIn("WARNING: Permanently removes spouse from the Family Tree and House!", source)
@@ -5857,6 +6474,186 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("VF2PersistentCheatAndPurchaseMask() |= 0x4;", source)
         for item_id in range(0x137, 0x13C):
             self.assertIn(f"case 0x{item_id:X}:", source)
+
+    def test_inventory_item_info_lock_snapshot_covers_authenticated_native_bounds(self):
+        locks = patcher.inventory_item_info_generation_locks()
+
+        self.assertEqual(len(locks), patcher.INVENTORY_ITEMINFO_RECORD_COUNT)
+        self.assertEqual(patcher.INVENTORY_ITEMINFO_RECORD_COUNT, 0x1AD)
+        self.assertEqual(patcher.INVENTORY_ITEMINFO_RECORD_SIZE, 0x24)
+        self.assertEqual(patcher.INVENTORY_ITEMINFO_LOCK_OFFSET, 0x10)
+        self.assertEqual(locks[0xE1], 2)
+        self.assertEqual(locks[0xE2], 3)
+        self.assertEqual(locks[0x116], 0)
+        self.assertEqual(locks[0x117], 0)
+        self.assertEqual(locks[0x1AC], 0)
+
+    def test_inventory_item_info_lock_snapshot_fails_closed_on_id_drift(self):
+        old_src_objs = patcher.SRC_OBJS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                source_obj = patcher.SRC_OBJS / "InventoryManager.obj"
+                target_obj = temp / source_obj.name
+                shutil.copy2(source_obj, target_obj)
+
+                obj = CoffObject(target_obj)
+                item_info = obj.symbol(patcher.INVENTORY_ITEMINFO)
+                section = obj.section(item_info.section)
+                table_raw = section.raw_ptr + item_info.value
+                struct.pack_into(
+                    "<I",
+                    obj.buf,
+                    table_raw + patcher.INVENTORY_ITEMINFO_RECORD_SIZE,
+                    0xDEAD,
+                )
+                obj.write(target_obj)
+
+                patcher.SRC_OBJS = temp
+                with self.assertRaisesRegex(RuntimeError, "enumeration drifted"):
+                    patcher.inventory_item_info_generation_locks()
+        finally:
+            patcher.SRC_OBJS = old_src_objs
+
+    def test_unlock_everything_store_manifest_records_both_native_lock_tables(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                (temp / "vf2_special_upgrade_effects.cpp").write_text("", encoding="ascii")
+                patcher.PATCHED = temp
+                manifest = {}
+                patcher.write_outfit_store_helpers(manifest)
+
+                contract = manifest["outfit_store_helpers"]["unlock_everything_store_locks"]
+                self.assertEqual(contract["store_item_id"], "0x123")
+                self.assertEqual(contract["furniture_manager"]["record_size"], "0x6c")
+                self.assertEqual(contract["furniture_manager"]["lock_offset"], "+0x0C")
+                self.assertEqual(contract["inventory_manager"]["record_count"], 0x1AD)
+                self.assertEqual(contract["inventory_manager"]["record_size"], "0x24")
+                self.assertEqual(contract["inventory_manager"]["lock_offset"], "+0x10")
+                self.assertEqual(contract["inventory_manager"]["snapshot_entries"], 0x1AD)
+                self.assertIn("GetLockGenerationLevel", contract["inventory_manager"]["native_getter"])
+                self.assertIn("fail closed", contract["inventory_manager"]["enumeration"])
+                self.assertIn("bounded runtime flag", contract["inventory_manager"]["runtime_route"])
+                self.assertEqual(
+                    contract["inventory_manager"]["lock_state_hook"],
+                    "?IsLocked@CInventoryManager@@QAE_NW4EInventoryItem@@@Z",
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_generation_lock_helper_emits_inventory_item_info_lock_operations(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(
+                    patcher.SRC_OBJS / "ScrollingStoreScene.obj",
+                    temp / "ScrollingStoreScene.obj",
+                )
+                patcher.PATCHED = temp
+                patcher.patch_scrolling_store_scene({})
+
+                helper = (temp / "vf2_generation_locks.cpp").read_text(encoding="ascii")
+                self.assertNotIn("struct sInventoryItemInfo", helper)
+                self.assertNotIn("extern sInventoryItemInfo itemInfo[];", helper)
+                self.assertNotIn("itemInfo[itemId]", helper)
+                self.assertIn("kVF2OriginalInventoryItemInfoLocks[]", helper)
+                self.assertIn("VF2AllInventoryItemInfoLocksUnlocked", helper)
+                self.assertIn("VF2SetInventoryItemInfoLocksUnlocked", helper)
+                self.assertIn("gVF2InventoryItemInfoLocksUnlocked", helper)
+                self.assertEqual(helper.count("kVF2OriginalInventoryItemInfoLocks[itemId]"), 0)
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_generation_lock_item_info_reference_matches_native_coff_decoration(self):
+        native = CoffObject(patcher.SRC_OBJS / "InventoryManager.obj")
+        native_item_info = native.symbol("?itemInfo@@3PAUsInventoryItemInfo@@A")
+        self.assertEqual(native_item_info.section > 0, True)
+
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(
+                    patcher.SRC_OBJS / "ScrollingStoreScene.obj",
+                    temp / "ScrollingStoreScene.obj",
+                )
+                patcher.PATCHED = temp
+                patcher.patch_scrolling_store_scene({})
+
+                helper = (temp / "vf2_generation_locks.cpp").read_text(
+                    encoding="ascii"
+                )
+                self.assertNotIn("struct sInventoryItemInfo", helper)
+                self.assertNotIn("extern sInventoryItemInfo itemInfo[];", helper)
+                self.assertNotIn("itemInfo[]", helper)
+                self.assertEqual(
+                    native_item_info.name,
+                    "?itemInfo@@3PAUsInventoryItemInfo@@A",
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_special_upgrade_helper_declares_inventory_lock_api_before_use(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(
+                    patcher.SRC_OBJS / "ScrollingStoreScene.obj",
+                    temp / "ScrollingStoreScene.obj",
+                )
+                patcher.PATCHED = temp
+                patcher.patch_scrolling_store_scene({})
+                patcher.write_outfit_store_helpers({})
+
+                helper = (temp / "vf2_special_upgrade_effects.cpp").read_text(encoding="ascii")
+                declaration = 'extern "C" bool __cdecl VF2AllInventoryItemInfoLocksUnlocked();'
+                self.assertEqual(helper.count(declaration), 1)
+                self.assertLess(
+                    helper.index(declaration),
+                    helper.index("VF2AllInventoryItemInfoLocksUnlocked();"),
+                )
+                setter_declaration = 'extern "C" void __cdecl VF2SetInventoryItemInfoLocksUnlocked(bool enabled);'
+                self.assertEqual(helper.count(setter_declaration), 1)
+                self.assertLess(
+                    helper.index(setter_declaration),
+                    helper.index("VF2SetInventoryItemInfoLocksUnlocked(false);"),
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_special_upgrade_helper_generation_is_idempotent(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                shutil.copy2(
+                    patcher.SRC_OBJS / "ScrollingStoreScene.obj",
+                    temp / "ScrollingStoreScene.obj",
+                )
+                patcher.PATCHED = temp
+                patcher.patch_scrolling_store_scene({})
+                patcher.write_outfit_store_helpers({})
+                first = (temp / "vf2_special_upgrade_effects.cpp").read_text(encoding="ascii")
+                patcher.write_outfit_store_helpers({})
+                second = (temp / "vf2_special_upgrade_effects.cpp").read_text(encoding="ascii")
+
+                self.assertEqual(second, first)
+                self.assertEqual(
+                    second.count(patcher.SPECIAL_UPGRADE_HELPER_SECTION_BEGIN), 1
+                )
+                self.assertEqual(
+                    second.count(patcher.SPECIAL_UPGRADE_HELPER_SECTION_END), 1
+                )
+                self.assertEqual(
+                    second.count("extern \"C\" bool __cdecl VF2AllInventoryItemInfoLocksUnlocked();"),
+                    1,
+                )
+        finally:
+            patcher.PATCHED = old_patched
 
     def test_renovation_strings_do_not_collide_with_weather_refusal(self):
         renovation_ids = [
@@ -8071,6 +8868,12 @@ class IncreaseChildLimitContractTests(unittest.TestCase):
 
 class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
     def test_reject_modes_0_1_2_3_gate_stock_and_cheat_routes(self):
+        # The old female/male scene-scoped reroll route was removed.  Force
+        # Marriage Email now queues the native proposal and keeps stock
+        # Reject/close behavior; the legacy fixture below is intentionally
+        # unreachable and retained only as historical context.
+        self.assertFalse(hasattr(patcher, "CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL"))
+        return
         old_patched = patcher.PATCHED
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -8166,8 +8969,7 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
                 contract = manifest["MultipleMarriageCandidates"]
                 self.assertEqual(contract["scope"], "cheat upgrades only")
                 self.assertIn("mode 0", contract["mode_gate"])
-                self.assertIn("Female (1)", contract["mode_gate"])
-                self.assertIn("Male (2)", contract["mode_gate"])
+                self.assertIn("active forced-email mode (1)", contract["mode_gate"])
                 self.assertIn("invalid", contract["mode_gate"])
                 self.assertIn("not cleared", contract["email_state"])
                 self.assertIn("byte-identical", contract["accept_path"])
@@ -8194,10 +8996,7 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
         ]
         self.assertEqual(
             calls,
-            [
-                "patch_multiple_marriage_candidates",
-                "patch_same_sex_marriage",
-            ],
+            ["patch_same_sex_marriage"],
         )
 
 
@@ -8288,19 +9087,138 @@ class SameSexMarriagePatchTests(unittest.TestCase):
             "extern \"C\" CVillager *__fastcall VF2GetMarriageRole",
             helper_start,
         )]
-        self.assertIn(
-            "gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalFemale",
-            helper,
-        )
-        self.assertRegex(helper, r"ProposalFemale\)\s*\{[^}]*return 1;")
-        self.assertRegex(helper, r"ProposalMale\)\s*\{[^}]*return 0;")
+        self.assertIn("VF2SameSexMarriageToggleActive()", helper)
+        self.assertIn("return currentGender;", helper)
+        self.assertIn("return currentGender == 1 ? 0 : 1;", helper)
+        self.assertNotIn("GetRandom(2)", helper)
         self.assertIn("accept_hook = handle.value + 0xEB", source)
         self.assertIn("handle.value + 0xF4", source)
         self.assertIn("expected_accept_write = bytes.fromhex", source)
-        self.assertIn("kVF2CheatMarriageProposalFemale", source)
-        self.assertIn("kVF2CheatMarriageProposalMale", source)
+        self.assertIn("VF2QueueMarriageProposal()", source)
+        self.assertNotIn("kVF2CheatMarriageProposalFemale", source)
+        self.assertNotIn("kVF2CheatMarriageProposalMale", source)
+        self.assertNotIn("kVF2CheatMarriageProposalFemale", source)
+        self.assertNotIn("kVF2CheatMarriageProposalMale", source)
         self.assertIn("accept_safety", source)
+        self.assertIn("parent_guard_manifest", source)
+        self.assertIn("expected_parent_call", source)
+        self.assertIn("ESI == EDI", source)
 
+    def test_force_email_has_no_scene_override_and_accept_guard_is_mode_independent(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn("static void VF2QueueMarriageProposal()", source)
+        self.assertIn("state->QueueEmailMessage(eEmailMessageMarriageProposal);", source)
+        self.assertNotIn("VF2QueueCheatMarriageProposal", source)
+        self.assertNotIn("VF2MaybeAddCheatMarriageExit", source)
+        self.assertNotIn("VF2HandleCheatMarriageProposalExit", source)
+        self.assertIn("#pragma section(\".vf2same\", read, write)", source)
+        self.assertIn("volatile unsigned char gVF2SameSexMarriage = 0;", source)
+        self.assertIn("b\"\\x85\\xC0\"", source)
+        self.assertIn("invalid_candidate", source)
+
+    def test_same_sex_manifest_uses_explicit_inactive_catalog_price(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                for filename in ("DatingScene.obj", "VillagerManager.obj", "theMainScene.obj"):
+                    shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+                patcher.PATCHED = temp_root
+                manifest = {}
+                patcher.patch_same_sex_marriage(manifest)
+                contract = manifest["SameSexMarriage"]["cheat_upgrade"]
+                self.assertEqual(contract["item_id"], "0x14c")
+                self.assertEqual(contract["inactive_price"], 10000)
+                self.assertEqual(contract["price_source"], "Health Plan catalog row 0x119")
+                self.assertEqual(contract["active_price"], 0)
+                self.assertIn("checkmark.png", contract["active_state"])
+                self.assertEqual(contract["active_icon"], "checkmark.png")
+                self.assertEqual(contract["active_icon_id"], "0x166")
+                self.assertEqual(contract["inactive_state"], "explicit catalog price")
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_accept_guard_preserves_stock_write_and_continuation_for_valid_candidate(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                for filename in ("DatingScene.obj", "VillagerManager.obj", "theMainScene.obj"):
+                    shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+                patcher.PATCHED = temp_root
+                manifest = {}
+                patcher.patch_same_sex_marriage(manifest)
+                contract = manifest["SameSexMarriage"]["force_marriage_email"]["accept_safety"]
+                dating = CoffObject(temp_root / "DatingScene.obj")
+                handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
+                section = dating.section(handle.section)
+                cave = int(contract["trampoline"], 16)
+                raw = section.raw_ptr + cave
+                self.assertEqual(bytes(dating.buf[raw:raw + 5]), b"\x85\xC0\x75\x05\xE9")
+                self.assertEqual(
+                    bytes(dating.buf[raw + 9:raw + 18]),
+                    bytes.fromhex("8B C8 C6 80 84 BB 01 00 01"),
+                )
+                self.assertEqual(dating.buf[raw + 18], 0xE9)
+                self.assertEqual(
+                    cave + 9 + struct.unpack_from("<i", dating.buf, raw + 5)[0],
+                    handle.value + 0xAA,
+                )
+                self.assertEqual(
+                    cave + 23 + struct.unpack_from("<i", dating.buf, raw + 19)[0],
+                    handle.value + 0xF4,
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_update_parents_guard_uses_authenticated_datingscene_callsite(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                for filename in ("DatingScene.obj", "VillagerManager.obj", "theMainScene.obj"):
+                    shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+                patcher.PATCHED = temp_root
+                manifest = {}
+                patcher.patch_same_sex_marriage(manifest)
+
+                guard = manifest["SameSexMarriage"]["update_parents_guard"]
+                self.assertEqual(guard["native_valid_sequence"], "57 56 B9 <FamilyTree> E8 <UpdateParents>")
+                self.assertEqual(guard["invalid_route"], "skip UpdateParents and continue at HandleMessage +0x1C8")
+                self.assertFalse(guard["family_tree_object_touched"])
+
+                dating = CoffObject(temp_root / "DatingScene.obj")
+                handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
+                section = dating.section(handle.section)
+                hook = handle.value + 0x1BC
+                raw = section.raw_ptr + hook
+                self.assertEqual(bytes(dating.buf[raw:raw + 12])[0], 0xE9)
+                self.assertEqual(bytes(dating.buf[raw + 5:raw + 12]), b"\x90" * 7)
+
+                cave = int(guard["trampoline"], 16)
+                cave_raw = section.raw_ptr + cave
+                self.assertEqual(bytes(dating.buf[cave_raw:cave_raw + 12]), b"\x85\xF6\x74\x19\x85\xFF\x74\x15\x3B\xFE\x74\x11")
+                self.assertEqual(
+                    bytes(dating.buf[cave_raw + 12:cave_raw + 24]),
+                    b"\x57\x56\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00",
+                )
+                relocation_names = []
+                relocation_vaddrs = set()
+                for index in range(section.nreloc):
+                    vaddr, symbol_index, _rtype = struct.unpack_from(
+                        "<IIH", dating.buf, section.reloc_ptr + index * 10
+                    )
+                    relocation_vaddrs.add(vaddr)
+                    if vaddr in (cave + 15, cave + 20):
+                        relocation_names.append(dating.symbol_by_index[symbol_index].name)
+                self.assertIn("?FamilyTree@@3VCFamilyTree@@A", relocation_names)
+                self.assertIn("?UpdateParents@CFamilyTree@@QAE_NAAVCVillager@@0@Z", relocation_names)
+                self.assertNotIn(hook + 3, relocation_vaddrs)
+                self.assertNotIn(hook + 8, relocation_vaddrs)
+        finally:
+            patcher.PATCHED = old_patched
+
+    @unittest.skip("obsolete: Force Marriage Email now uses the untouched DatingScene constructor/close route")
     def test_dormant_hooks_cover_candidate_roles_drop_and_pregnancy(self):
         old_patched = patcher.PATCHED
         try:
@@ -8345,6 +9263,18 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                         generate_sec.raw_ptr + gender_cave + 15
                     ]),
                 )
+                gender_cave_bytes = bytes(
+                    dating.buf[
+                        generate_sec.raw_ptr + gender_cave:
+                        generate_sec.raw_ptr + gender_cave + 15
+                    ]
+                )
+                self.assertEqual(
+                    gender_cave
+                    + 15
+                    + struct.unpack_from("<i", gender_cave_bytes, 11)[0],
+                    generate.value + 0x83,
+                )
                 gender_relocations = []
                 for index in range(generate_sec.nreloc):
                     vaddr, symbol_index, rtype = struct.unpack_from(
@@ -8365,184 +9295,45 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                     )],
                 )
 
-                destroy = dating.symbol("?Destroy@CDatingScene@@SAXXZ")
-                destroy_sec = dating.section(destroy.section)
-                destroy_hook = destroy.value + 0x0A
-                destroy_raw = destroy_sec.raw_ptr + destroy_hook
-                self.assertEqual(dating.buf[destroy_raw], 0xE9)
-                self.assertEqual(dating.buf[destroy_raw + 5], 0x90)
-                destroy_cave = destroy_sec.raw_size - 16
-                self.assertEqual(
-                    bytes(dating.buf[
-                        destroy_sec.raw_ptr + destroy_cave:
-                        destroy_sec.raw_ptr + destroy_cave + 16
-                    ])[0:6],
-                    b"\x8B\x01\x6A\x01\xFF\x10",
-                )
-                clear_relocations = []
-                for index in range(destroy_sec.nreloc):
-                    vaddr, symbol_index, rtype = struct.unpack_from(
-                        "<IIH",
-                        dating.buf,
-                        destroy_sec.reloc_ptr + index * 10,
-                    )
-                    if vaddr == destroy_cave + 7:
-                        clear_relocations.append((
-                            dating.symbol_by_index[symbol_index].name,
-                            rtype,
-                        ))
-                self.assertEqual(
-                    clear_relocations,
-                    [(
-                        patcher.CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL,
-                        patcher.IMAGE_REL_I386_REL32,
-                    )],
-                )
-                self.assertEqual(
-                    struct.unpack_from(
-                        "<i",
-                        dating.buf,
-                        destroy_sec.raw_ptr + destroy_cave + 12,
-                    )[0]
-                    + destroy_cave
-                    + 16,
-                    destroy.value + 0x10,
-                )
-
+                stock_dating = CoffObject(patcher.SRC_OBJS / "DatingScene.obj")
                 constructor = dating.symbol("??0CDatingScene@@AAE@XZ")
                 constructor_sec = dating.section(constructor.section)
-                constructor_data = bytes(
-                    dating.buf[
-                        constructor_sec.raw_ptr:
-                        constructor_sec.raw_ptr + constructor_sec.raw_size
-                    ]
-                )
-                cleanup = bytes.fromhex(
-                    "C7 47 10 FF FF FF FF 8B C7 8B 4D F4 64 89 0D 00 00 00 00 "
-                    "59 5F 5E 5B 8B E5 5D C3"
-                )
-                cleanup_offset = constructor_data.find(cleanup)
-                self.assertGreater(cleanup_offset, 0)
+                stock_constructor = stock_dating.symbol("??0CDatingScene@@AAE@XZ")
+                stock_constructor_sec = stock_dating.section(stock_constructor.section)
                 self.assertEqual(
-                    constructor_data[cleanup_offset - 9 : cleanup_offset],
-                    b"\x57\xE8\x00\x00\x00\x00\x83\xC4\x04",
+                    bytes(dating.buf[constructor_sec.raw_ptr:constructor_sec.raw_ptr + constructor_sec.raw_size]),
+                    bytes(stock_dating.buf[stock_constructor_sec.raw_ptr:stock_constructor_sec.raw_ptr + stock_constructor_sec.raw_size]),
                 )
-                constructor_relocations = []
-                for index in range(constructor_sec.nreloc):
-                    vaddr, symbol_index, rtype = struct.unpack_from(
-                        "<IIH",
-                        dating.buf,
-                        constructor_sec.reloc_ptr + index * 10,
-                    )
-                    if vaddr == cleanup_offset - 7:
-                        constructor_relocations.append(
-                            (dating.symbol_by_index[symbol_index].name, rtype)
-                        )
-                self.assertEqual(
-                    constructor_relocations,
-                    [(patcher.CHEAT_MARRIAGE_PROPOSAL_EXIT_CONSTRUCTOR_SYMBOL,
-                      patcher.IMAGE_REL_I386_REL32)],
-                )
-
                 handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
                 handle_sec = dating.section(handle.section)
                 handle_raw = handle_sec.raw_ptr + handle.value
-                self.assertEqual(dating.buf[handle_raw], 0xE9)
-                self.assertEqual(dating.buf[handle_raw + 5], 0x90)
-                # The Accept-safety cave is appended after the exit cave, so
-                # locate the exit payload by its stable prologue rather than
-                # assuming it is the final bytes in the section.
+                self.assertEqual(dating.buf[handle_raw], 0x55)
+                self.assertEqual(bytes(dating.buf[handle_raw:handle_raw + 6]), bytes.fromhex("55 8B EC 83 EC 28"))
+                # Locate the Accept-safety cave by its stable prologue.
                 handle_data = bytes(
                     dating.buf[handle_sec.raw_ptr:
                                handle_sec.raw_ptr + handle_sec.raw_size]
                 )
-                exit_prefix = bytes.fromhex(
-                    "55 8B EC 83 EC 28 A1 00 00 00 00 33 C5 89 45 FC 83 7D 08 08 "
-                    "51 FF 75 0C FF 75 08 51 E8 00 00 00 00 83 C4 0C 59 84 C0 75 05"
-                )
-                exit_cave = handle_data.find(exit_prefix)
-                self.assertGreaterEqual(exit_cave, 0)
-                self.assertEqual(
-                    bytes(
-                        dating.buf[
-                            handle_sec.raw_ptr + exit_cave:
-                            handle_sec.raw_ptr + exit_cave + 64
-                        ]
-                    )[0:41],
-                    exit_prefix,
-                )
-                self.assertEqual(
-                    dating.buf[handle_sec.raw_ptr + exit_cave + 39 :
-                               handle_sec.raw_ptr + exit_cave + 41],
-                    b"\x75\x05",
-                )
-                exit_relocations = []
-                for index in range(handle_sec.nreloc):
-                    vaddr, symbol_index, rtype = struct.unpack_from(
-                        "<IIH",
-                        dating.buf,
-                        handle_sec.reloc_ptr + index * 10,
-                    )
-                    if vaddr == exit_cave + 29:
-                        exit_relocations.append(
-                            (dating.symbol_by_index[symbol_index].name, rtype)
-                        )
-                self.assertEqual(
-                    exit_relocations,
-                    [(patcher.CHEAT_MARRIAGE_PROPOSAL_EXIT_HANDLER_SYMBOL,
-                      patcher.IMAGE_REL_I386_REL32)],
-                )
-
-                # The appended Accept cave preserves the stock write for
-                # mode 0/invalid values and guards only cheat modes 1/2.
+                # The appended Accept cave preserves the stock write for every
+                # valid candidate and guards null candidates on every route.
                 accept_prefix = bytes.fromhex(
-                    "80 3D 00 00 00 00 01 75 06 85 C0 74 0F EB 17 "
-                    "80 3D 00 00 00 00 02 75 0E 85 C0 75 0A"
+                    "85 C0 75 05 E9"
                 )
                 accept_cave = handle_data.find(accept_prefix)
                 self.assertGreaterEqual(accept_cave, 0)
+                self.assertEqual(handle_data[accept_cave + 4], 0xE9)
                 self.assertEqual(
-                    handle_data[accept_cave + 28], 0xE8,
-                )
-                self.assertEqual(handle_data[accept_cave + 33], 0xE9)
-                self.assertEqual(
-                    accept_cave + 38 + struct.unpack_from(
-                        "<i", handle_data, accept_cave + 34
+                    accept_cave + 9 + struct.unpack_from(
+                        "<i", handle_data, accept_cave + 5
                     )[0],
                     handle.value + 0xAA,
                 )
                 self.assertEqual(
-                    handle_data[accept_cave + 38:accept_cave + 47],
+                    handle_data[accept_cave + 9:accept_cave + 18],
                     bytes.fromhex("8B C8 C6 80 84 BB 01 00 01"),
                 )
                 self.assertEqual(
-                    handle_data[accept_cave + 47], 0xE9,
-                )
-                accept_relocations = {}
-                for index in range(handle_sec.nreloc):
-                    vaddr, symbol_index, rtype = struct.unpack_from(
-                        "<IIH",
-                        dating.buf,
-                        handle_sec.reloc_ptr + index * 10,
-                    )
-                    if vaddr in {
-                        accept_cave + 2,
-                        accept_cave + 17,
-                        accept_cave + 29,
-                    }:
-                        accept_relocations[vaddr] = (
-                            dating.symbol_by_index[symbol_index].name,
-                            rtype,
-                        )
-                self.assertEqual(
-                    accept_relocations[accept_cave + 17],
-                    (patcher.CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL,
-                     patcher.IMAGE_REL_I386_DIR32),
-                )
-                self.assertEqual(
-                    accept_relocations[accept_cave + 29],
-                    (patcher.CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL,
-                     patcher.IMAGE_REL_I386_REL32),
+                    handle_data[accept_cave + 18], 0xE9,
                 )
 
                 manager = CoffObject(temp_root / "VillagerManager.obj")
@@ -8595,33 +9386,21 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                     contract["runtime_flag"]["source_section"],
                     ".vf2same",
                 )
+                force_contract = contract["force_marriage_email"]
+                self.assertEqual(force_contract["queue"], "eEmailMessageMarriageProposal (enum 2) only")
+                self.assertIn("native opposite-sex", force_contract["candidate_rules"])
+                self.assertIn("stock Accept, Reject, and close", force_contract["scene_behavior"])
+                self.assertNotIn("cheat_proposal", contract)
+                guard = contract["update_parents_guard"]
+                self.assertEqual(guard["object"], "DatingScene.obj")
+                self.assertEqual(guard["hook_offset"], "+0x1BC")
+                self.assertEqual(guard["update_parents_call_offset"], "+0x1C4")
+                self.assertEqual(guard["continuation_offset"], "+0x1C8")
                 self.assertEqual(
-                    contract["cheat_proposal"]["runtime_flag"]["source_section"],
-                    ".vf2proposal",
+                    guard["invalid_parent_checks"],
+                    ["ESI == 0", "EDI == 0", "ESI == EDI"],
                 )
-                exit_contract = contract["cheat_proposal"]["exit_button"]
-                self.assertEqual(exit_contract["control_id"], 3)
-                self.assertEqual(exit_contract["image_id"], "0x129")
-                self.assertEqual(exit_contract["text_id"], "0x76C")
-                self.assertEqual(
-                    exit_contract["position"],
-                    "theGameState::GetWideScreenOffsetX() + 4, y 0x2DD",
-                )
-                self.assertEqual(exit_contract["message"], 8)
-                self.assertEqual(exit_contract["action"], 3)
-                self.assertEqual(exit_contract["sound_id"], "0x8A")
-                self.assertIn("+0x25CB8", exit_contract["timestamp_route"])
-                self.assertIn("arms mode 0x01", contract["cheat_proposal"]["candidate_gender"])
-                self.assertIn("arms mode 0x02", contract["cheat_proposal"]["candidate_gender"])
-                self.assertIn("No RNG", contract["cheat_proposal"]["candidate_gender"])
-                self.assertEqual(
-                    contract["cheat_proposal"]["mode_values"],
-                    {"off": "0x00", "female": "0x01", "male": "0x02"},
-                )
-                self.assertIn(
-                    "remains open",
-                    contract["cheat_proposal"]["reject_replacement"],
-                )
+                self.assertFalse(guard["family_tree_object_touched"])
                 self.assertIn("0%", contract["pregnancy"])
         finally:
             patcher.PATCHED = old_patched
@@ -8645,10 +9424,9 @@ class SameSexMarriagePatchTests(unittest.TestCase):
             "if (VF2IsSameSexMarriage())",
             source,
         )
-        self.assertIn("gVF2CheatMarriageProposalScene = kVF2CheatMarriageProposalOff", source)
-        self.assertIn("gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalFemale", source)
-        self.assertIn("gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalMale", source)
-        self.assertIn("CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL", source)
+        self.assertNotIn("volatile unsigned char gVF2CheatMarriageProposalScene", source)
+        self.assertIn("VF2QueueMarriageProposal()", source)
+        self.assertNotIn("CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL", source)
 
 
 class OlderMortalityPatchTests(unittest.TestCase):

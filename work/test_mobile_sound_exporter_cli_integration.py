@@ -50,7 +50,7 @@ class MobileSoundExporterCliIntegrationTests(unittest.TestCase):
         )
         return result
 
-    def test_exported_manifest_round_trips_all_67_sounds_and_four_routes(self):
+    def test_exported_manifest_round_trips_all_67_sounds_and_blocks_unverified_apply(self):
         routes = (
             ("beaker.wav", "beaker.ogg"),
             ("Child3.wav", "Child3.ogg"),
@@ -197,49 +197,35 @@ class MobileSoundExporterCliIntegrationTests(unittest.TestCase):
             manifest["output"]["preserve_stock_exe_icon"] = False
             manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
-            self.run_patcher(
-                "apply",
-                "--game-dir",
-                str(game),
-                "--output-dir",
-                str(root / "output"),
-                "--manifest",
-                str(manifest_path),
-                "--enable",
-                "mobile_sound_assets",
+            mobile_sound_setting = next(
+                row for row in manifest["settings"] if row["id"] == "mobile_sound_assets"
             )
-            output = root / "output"
-            output_exe = output / manifest["output"]["default_exe_name"]
-            self.assertEqual(output_exe.read_bytes(), bytes(expected_enabled))
-            self.assertEqual(hashlib.sha256(output_exe.read_bytes()).hexdigest(), expected_enabled_hash)
-            output_sounds = output / "Sounds"
-            self.assertEqual(
-                {path.name for path in output_sounds.iterdir()},
-                set(exporter.MOBILE_SOUND_ASSET_FILES)
-                | {path.name for path in game_sounds.iterdir() if path.name.startswith("runtime-")},
-            )
-            for filename in exporter.MOBILE_SOUND_ASSET_FILES:
-                self.assertEqual(
-                    (output_sounds / filename).read_bytes(),
-                    (bundle / "payload" / "MobileSoundAssets" / filename).read_bytes(),
-                )
+            self.assertEqual(mobile_sound_setting["readiness"]["status"], "pending")
+            self.assertFalse(mobile_sound_setting["readiness"]["runtime_ready"])
+            self.assertFalse(mobile_sound_setting["readiness"]["linked"])
 
-            self.run_patcher(
-                "apply",
-                "--game-dir",
-                str(game),
-                "--output-dir",
-                str(output),
-                "--manifest",
-                str(manifest_path),
-                "--disable",
-                "mobile_sound_assets",
+            blocked = subprocess.run(
+                [
+                    sys.executable,
+                    str(PATCHER),
+                    "apply",
+                    "--game-dir",
+                    str(game),
+                    "--output-dir",
+                    str(root / "output"),
+                    "--manifest",
+                    str(manifest_path),
+                    "--enable",
+                    "mobile_sound_assets",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
             )
-            self.assertEqual(output_exe.read_bytes(), original_exe)
-            self.assertEqual(hashlib.sha256(output_exe.read_bytes()).hexdigest(), hashlib.sha256(original_exe).hexdigest())
-            for filename, original in original_sounds.items():
-                self.assertEqual((output_sounds / filename).read_bytes(), original)
-            self.assertTrue(all(not (output_sounds / filename).exists() for filename in remove_names))
+            self.assertNotEqual(blocked.returncode, 0)
+            self.assertIn("Blocked setting(s) cannot be enabled", blocked.stderr)
+            self.assertIn("mobile_sound_assets", blocked.stderr)
+            self.assertFalse((root / "output").exists())
 
 
 if __name__ == "__main__":

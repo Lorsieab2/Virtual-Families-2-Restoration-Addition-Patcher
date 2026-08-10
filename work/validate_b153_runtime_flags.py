@@ -145,6 +145,21 @@ class LinkedPE:
         raise ValueError(f"{self.path}: RVA {rva:#x} is outside raw sections")
 
 
+# These controls are deliberately resolved from the final PE section table.
+# Icon-resource preservation can insert a file-alignment block before the
+# sections, so a source/build-time raw offset is not a valid final readback
+# coordinate.  .shr is intentionally absent: it is native HWND storage, not a
+# gameplay runtime toggle.
+RUNTIME_FLAG_SECTIONS = {
+    "holiday_furniture_goals": ".vf2goal",
+    "mobile_furniture_behaviors": ".vf2beh",
+    "allow_older_pregnancies": ".vf2preg",
+    "same_sex_marriage": ".vf2same",
+    "older_villager_mortality": ".vf2mort",
+    "store_scroll_bar": ".vf2scrl",
+}
+
+
 def rel32_target(source_rva: int, instruction_size: int, displacement: int) -> int:
     return source_rva + instruction_size + displacement
 
@@ -409,6 +424,27 @@ def validate_one_byte_flag(
     }
 
 
+def validate_applied_runtime_flag_bytes(
+    path: Path,
+    expected_flag: int,
+) -> dict[str, dict]:
+    """Read applied runtime controls from the final PE section table.
+
+    This is intentionally independent of source-object offsets and of the
+    static helper/trampoline contracts.  It is the readback used after an
+    asset-preserving reconfiguration has shifted PE raw data.
+    """
+    image = LinkedPE(path)
+    flags = {
+        setting_id: validate_one_byte_flag(image, section_name, expected_flag)
+        for setting_id, section_name in RUNTIME_FLAG_SECTIONS.items()
+    }
+    offsets = [int(flag["raw_offset"], 16) for flag in flags.values()]
+    if len(offsets) != len(set(offsets)):
+        raise ValueError(f"{path}: runtime flag section offsets overlap")
+    return flags
+
+
 def executable_section_for_rva(image: LinkedPE, rva: int) -> dict:
     for section in image.sections:
         span = max(section["virtual_size"], section["raw_size"])
@@ -606,22 +642,34 @@ def validate_exe(
     path: Path,
     expected_flag: int,
     build_label: str = "B153",
+    *,
+    validate_static_helpers: bool = True,
 ) -> dict:
-    pregnancy = validate_older_pregnancy(path, expected_flag)
     image = LinkedPE(path)
-    goal = validate_one_byte_flag(image, ".vf2goal", expected_flag)
-    behavior = validate_one_byte_flag(image, ".vf2beh", expected_flag)
-    same_sex = validate_one_byte_flag(image, ".vf2same", expected_flag)
-    mortality = validate_older_mortality(path, expected_flag, build_label)
+    runtime_flags = validate_applied_runtime_flag_bytes(path, expected_flag)
+    if validate_static_helpers:
+        pregnancy = validate_older_pregnancy(path, expected_flag)
+        mortality = validate_older_mortality(path, expected_flag, build_label)
+        static_helper_validation = {
+            "status": "validated",
+            "build_label": build_label,
+        }
+    else:
+        # Applied-byte readback must remain usable when a final executable's
+        # helper was built from a newer/alternate source contract.  Do not
+        # silently call that a helper validation; report the distinction.
+        pregnancy = None
+        mortality = {
+            "flag": runtime_flags["older_villager_mortality"],
+            "static_helper_validation": "skipped",
+        }
+        static_helper_validation = {
+            "status": "skipped",
+            "reason": "runtime section readback only",
+        }
     original = bytes(image.data)
-    flag_offsets = [
-        int(goal["raw_offset"], 16),
-        int(behavior["raw_offset"], 16),
-        int(pregnancy["flag_raw_offset"], 16),
-        int(same_sex["raw_offset"], 16),
-        int(mortality["flag"]["raw_offset"], 16),
-    ]
-    if len(set(flag_offsets)) != 5:
+    flag_offsets = [int(flag["raw_offset"], 16) for flag in runtime_flags.values()]
+    if len(set(flag_offsets)) != len(flag_offsets):
         raise ValueError(f"{path}: runtime flag offsets overlap")
     enabled = bytearray(original)
     for offset in flag_offsets:
@@ -638,23 +686,13 @@ def validate_exe(
         "path": str(path),
         "sha256": hashlib.sha256(image.data).hexdigest(),
         "size": len(image.data),
-        "runtime_flags": {
-            "holiday_furniture_goals": goal,
-            "mobile_furniture_behaviors": behavior,
-            "allow_older_pregnancies": {
-                "section": ".vf2preg",
-                "raw_offset": pregnancy["flag_raw_offset"],
-                "rva": pregnancy["flag_rva"],
-                "value": pregnancy["flag_value"],
-                "writable": True,
-            },
-            "same_sex_marriage": same_sex,
-            "older_villager_mortality": mortality["flag"],
-        },
+        "runtime_flags": runtime_flags,
         "older_pregnancy": pregnancy,
         "older_mortality": mortality,
+        "static_helper_validation": static_helper_validation,
         "toggle_cycle": {
-            "five_nonoverlapping_offsets": True,
+            "runtime_flag_count": len(flag_offsets),
+            "nonoverlapping_offsets": True,
             "enable_sets_all_to_01": all(enabled_once[offset] == 1 for offset in flag_offsets),
             "repeated_enable_idempotent": repeated_enable_idempotent,
             "disable_after_enable_restores_exact_original": disable_restores_original,

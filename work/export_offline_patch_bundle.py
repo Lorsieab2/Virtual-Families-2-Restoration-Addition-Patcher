@@ -340,7 +340,7 @@ SETTINGS = [
     {
         "id": "same_sex_marriage",
         "label": "Allow Same-Sex Marriage",
-        "description": "Optional patch: marriage proposals may offer either women or men. Same-sex spouses are stored in the native two-parent family tree, can repeat the private romantic action when dropped on each other, and have a 0% pregnancy chance. Disabling this restores the stock opposite-sex candidate and spouse behavior.",
+        "description": "Optional patch: installs the dormant native marriage hooks with same-sex mode OFF. Use the in-game Enable Same-Sex Marriage Special Upgrade to enable or disable same-sex candidates; the normal Force Marriage Email row keeps native opposite-sex rules while it is OFF.",
         "default": False,
         "category": "optional",
     },
@@ -385,7 +385,7 @@ SETTINGS = [
     {
         "id": "island_events",
         "label": "Add mobile-exclusive Island Events",
-        "description": "Adds mobile-exclusive Island Event records, including mobile-only email events, with their bundled event text and choice/result dialogs.",
+        "description": "EXPERIMENTAL/DIAGNOSTIC ONLY: adds mobile-exclusive Island Event records, including mobile-only email events, with bundled event text and choice/result dialogs. Runtime behavior and crash proof remain pending; do not treat this setting as verified.",
         "default": False,
         "category": "optional",
     },
@@ -485,6 +485,46 @@ SETTINGS = [
         "category": "optional",
     },
 ]
+
+SETTING_READINESS = {
+    "behavior_patches": {
+        "status": "pending",
+        "runtime_ready": False,
+        "linked": False,
+        "reason": "Fresh executable linkage/readback and runtime validation are pending.",
+    },
+    "mobile_furniture_behaviors": {
+        "status": "pending",
+        "runtime_ready": False,
+        "linked": False,
+        "reason": "Native behavior linkage and runtime validation are pending.",
+    },
+    "island_events": {
+        "status": "experimental",
+        "runtime_ready": False,
+        "linked": False,
+        "selection_policy": "experimental_diagnostic",
+        "reason": "Experimental/diagnostic selection is permitted; native runtime behavior and crash proof remain pending.",
+    },
+    "mobile_renovations": {
+        "status": "STOP",
+        "runtime_ready": False,
+        "linked": False,
+        "reason": "Native renovation/store-icon linkage is not authenticated for this manifest.",
+    },
+    "mobile_sound_assets": {
+        "status": "pending",
+        "runtime_ready": False,
+        "linked": False,
+        "reason": "Audible parity remains pending runtime validation.",
+    },
+    "ai_generated_bathroom2_renovations": {
+        "status": "STOP",
+        "runtime_ready": False,
+        "linked": False,
+        "reason": "Bathroom 2 runtime linkage is not authenticated; staged assets remain disabled.",
+    },
+}
 
 OPTIONAL_VISUAL_SWAP_SPECS = [
     {
@@ -996,6 +1036,7 @@ def mobile_sound_assets_post_asset_patches(
     output_exe_name: str,
     build_manifest_data: dict[str, Any],
     allowed_source_sha256s: set[str],
+    allow_prelinked_ogg: bool = False,
 ) -> list[dict[str, Any]]:
     """Emit four exact-SHA, all-or-nothing Sound.obj route replacements."""
     contract = build_manifest_data.get("MobileSoundAssets")
@@ -1036,8 +1077,19 @@ def mobile_sound_assets_post_asset_patches(
                 f"MobileSoundAssets executable payload is not authenticated: {source.name} ({source_sha})"
             )
         patched = bytearray(data)
+        route_mode = "wav_to_ogg"
+        if allow_prelinked_ogg:
+            wav_hits = [data.find(expected) for _idx, _route, expected, _replacement in normalized_routes]
+            ogg_hits = [
+                data.find(str(route.get("mobile_filename", "")).encode("ascii"))
+                for _idx, route, _expected, _replacement in normalized_routes
+            ]
+            if all(hit < 0 for hit in wav_hits) and all(hit >= 0 for hit in ogg_hits):
+                route_mode = "prelinked_ogg"
         offsets = []
         for route_index, route, expected, replacement in normalized_routes:
+            if route_mode == "prelinked_ogg":
+                expected = replacement = str(route.get("mobile_filename", "")).encode("ascii")
             offset = data.find(expected)
             duplicate = data.find(expected, offset + 1) if offset >= 0 else -1
             if offset < 0 or duplicate >= 0:
@@ -1050,6 +1102,7 @@ def mobile_sound_assets_post_asset_patches(
             "source_sha256": source_sha,
             "offsets": offsets,
             "result_sha256": hashlib.sha256(bytes(patched)).hexdigest(),
+            "route_mode": route_mode,
         }
     if not source_variants:
         raise ValueError("MobileSoundAssets has no executable payloads.")
@@ -1059,13 +1112,23 @@ def mobile_sound_assets_post_asset_patches(
         variants_by_sha: dict[str, dict[str, Any]] = {}
         for source, source_record in source_variants.items():
             sha = source_record["source_sha256"]
+            route_mode = source_record["route_mode"]
+            expected_bytes = expected
+            replacement_bytes = replacement
+            if route_mode == "prelinked_ogg":
+                expected_bytes = replacement_bytes = str(route.get("mobile_filename", "")).encode("ascii")
             variant = {
                 "asset_sha256": sha,
                 "offset": f"0x{source_record['offsets'][normalized_index]:x}",
-                "expected_asset_bytes": expected.hex().upper(),
-                "replacement_bytes": replacement.hex().upper(),
+                "expected_asset_bytes": expected_bytes.hex().upper(),
+                "replacement_bytes": replacement_bytes.hex().upper(),
                 "result_asset_sha256": source_record["result_sha256"],
-                "note": f"Enable mobile sound route {route.get('pc_filename', '')} -> {route.get('mobile_filename', '')} in {source.name}.",
+                "note": (
+                    f"Authenticated prelinked mobile sound route {route.get('pc_filename', '')} -> "
+                    f"{route.get('mobile_filename', '')}; no byte replacement is applied."
+                    if route_mode == "prelinked_ogg"
+                    else f"Enable mobile sound route {route.get('pc_filename', '')} -> {route.get('mobile_filename', '')} in {source.name}."
+                ),
             }
             prior = variants_by_sha.get(sha)
             if prior is not None and prior["offset"] != variant["offset"]:
@@ -1146,6 +1209,7 @@ def b152_runtime_flag_post_asset_patches(
     output_exe_name: str,
     build_manifest_data: dict[str, Any],
     allowed_source_sha256s: set[str] | None = None,
+    allow_prelinked_mobile_sound_assets: bool = False,
 ) -> list[dict[str, Any]]:
     return [
         *mobile_furniture_behavior_post_asset_patches(
@@ -1158,6 +1222,7 @@ def b152_runtime_flag_post_asset_patches(
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
             allowed_source_sha256s=allowed_source_sha256s or set(),
+            allow_prelinked_ogg=allow_prelinked_mobile_sound_assets,
         ),
         *store_scroll_bar_post_asset_patches(
             executable_sources,
@@ -1175,12 +1240,12 @@ def b152_runtime_flag_post_asset_patches(
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
         ),
-        *same_sex_marriage_post_asset_patches(
+        *older_mortality_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
         ),
-        *older_mortality_post_asset_patches(
+        *same_sex_marriage_post_asset_patches(
             executable_sources,
             output_exe_name=output_exe_name,
             build_manifest_data=build_manifest_data,
@@ -2600,7 +2665,11 @@ def default_settings(
     include_exe_replacement: bool,
     available_settings: set[str] | None = None,
 ) -> list[dict[str, Any]]:
-    settings = [row for row in SETTINGS if include_exe_replacement or row["id"] != "core_executable"]
+    settings = [dict(row) for row in SETTINGS if include_exe_replacement or row["id"] != "core_executable"]
+    for row in settings:
+        readiness = SETTING_READINESS.get(row["id"])
+        if readiness:
+            row["readiness"] = dict(readiness)
     if available_settings is not None:
         settings = [
             row
@@ -2990,7 +3059,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- The six-page/72-item collection and Holiday-aware count require holiday_ornaments_collection. Brokerage 11% wording follows mobile_purchases.",
         "- Holiday Furniture goals 0x6D-0x7F use an exact-SHA .vf2goal post-asset byte enabled only with core_executable plus holiday_furniture.",
         "- Allow Older Pregnancies is a default-off exact-SHA post-asset toggle of the dormant .vf2preg byte; age-50+ failed attempts skip the stock cooldown deadline write. The same byte permits the native Next Generation flow when the oldest active living non-departed villager reaches age 60 while still requiring a surviving child. Native StartNextGeneration and its 30-record MakeRoomInTree rollover remain unchanged. The setting does not add another executable overlay dimension.",
-        "- Allow Same-Sex Marriage is a default-off exact-SHA post-asset toggle of the dormant .vf2same byte. Proposals may offer either gender; the native two-parent family-tree records are preserved, same-sex spouses can repeat the private romantic action, and normal or cheat-forced pregnancy remains 0%.",
+        "- Same-sex marriage hooks are installed with the .vf2same byte defaulted OFF. The in-game Enable Same-Sex Marriage Special Upgrade supplies the reversible toggle; Force Marriage Email remains a normal native proposal with opposite-sex rules while the toggle is OFF. No global post-asset same-sex enable is emitted.",
         "- Older Villager Mortality Curve is a default-off exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
         "- F5 enables and toggles the native debugger overlay; Up/Down change pages, F6 selects Waypoint Editor, F7 selects Light Source Editor, and F4 exits an editor. B153 recognizes VF2's internal key codes as well as Win32/SDL fallbacks.",
     ]
@@ -3584,6 +3653,9 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             if str(row.get("source_path", "")).lower().endswith(".exe")
             and isinstance(row.get("source_sha256"), str)
         },
+        allow_prelinked_mobile_sound_assets=bool(
+            getattr(args, "final_playtest_all_enabled", False)
+        ),
     ) if exe_replacement_record is not None else []
 
     asset_counts_by_setting: dict[str, int] = {}

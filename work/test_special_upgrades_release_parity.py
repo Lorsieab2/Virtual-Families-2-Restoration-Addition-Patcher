@@ -44,6 +44,9 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "InventoryManager.obj",
             "ScrollingStoreScene.obj",
             "theStringManager.obj",
+            "DatingScene.obj",
+            "VillagerManager.obj",
+            "theMainScene.obj",
         ):
             shutil.copy2(
                 patcher.SRC_OBJS / object_name,
@@ -51,6 +54,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             )
 
         cls.manifest = {}
+        patcher.patch_same_sex_marriage(cls.manifest)
         patcher.patch_visible_special_upgrades(cls.manifest)
         patcher.patch_inventory_manager(cls.manifest)
         patcher.patch_scrolling_store_scene(cls.manifest)
@@ -145,10 +149,10 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             int(divorce["description_string"], 16),
             patcher.divorce_spouse_string_ids()[1],
         )
-        female = rows[0x132]
-        male = rows[0x14C]
-        self.assertEqual(female["name"], "Force Marriage Email (Female)")
-        self.assertEqual(male["name"], "Force Marriage Email (Male)")
+        force_email = rows[0x132]
+        same_sex = rows[0x14C]
+        self.assertEqual(force_email["name"], "Force Marriage Email")
+        self.assertEqual(same_sex["name"], "Enable Same-Sex Marriage")
         marriage_strings = {
             (row["item_id"], row["role"]): row["text"]
             for row in self.manifest["theStringManager"]["strings"]
@@ -156,27 +160,32 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         }
         self.assertEqual(
             marriage_strings[("0x132", "long")],
-            "Spawns a marriage email with female spouse options.",
+            "Queues a normal base-game marriage proposal with native candidate rules.",
         )
         self.assertEqual(
             marriage_strings[("0x14c", "long")],
-            "Spawns a marriage email with male spouse options.",
+            "Enables same-sex marriage candidates. Buy again to disable this toggle.",
         )
-        self.assertEqual(male["icon_file"], "cheat_marriage_email.png")
+        self.assertEqual(same_sex["icon_file"], "cheat_marriage_email.png")
         self.assertEqual(
-            int(male["description_string"], 16),
-            patcher.marriage_email_male_string_ids()[1],
+            int(same_sex["description_string"], 16),
+            patcher.same_sex_marriage_string_ids()[1],
         )
-        self.assertNotEqual(female["icon"], male["icon"])
-        self.assertNotEqual(male["icon"], divorce["icon"])
+        self.assertNotEqual(force_email["icon"], same_sex["icon"])
+        self.assertNotEqual(same_sex["icon"], divorce["icon"])
         item_ids = [item["item_id"] for item in patcher.CHEAT_UPGRADE_ITEMS]
-        female_index = item_ids.index(0x132)
-        self.assertEqual(item_ids[female_index + 1 : female_index + 3], [0x14C, 0x14B])
+        force_email_index = item_ids.index(0x132)
+        self.assertEqual(item_ids[force_email_index + 1 : force_email_index + 3], [0x14C, 0x14B])
 
         self.assertIn(
             "static int VF2VisibleSpecialUpgradeIconFrame(int itemId)",
             self.helper,
         )
+        self.assertIn(
+            "if (itemId == 0x14c &&\n        VF2SameSexMarriageToggleActive())",
+            self.helper,
+        )
+        self.assertIn("return 358;", self.helper)
         self.assertIn("case 0x14B: return 37;", self.helper)
         self.assertIn("case 0x14C: return 38;", self.helper)
         self.assertNotIn(
@@ -367,7 +376,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "extern \"C\" bool __cdecl VF2PurchaseOutfitStoreItem",
         )
         self.assertIn(
-            "if ((itemId == 0x132 || itemId == 0x14C) && VF2MarriageEmailUnavailable()) {\n"
+            "if (itemId == 0x132 && VF2MarriageEmailUnavailable()) {\n"
             "        // A second resident adult means the stock proposal path has no valid\n"
             "        // candidate state.  Hide the purchase instead of queueing the email\n"
             "        // into the crash-prone path.\n"
@@ -406,35 +415,24 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         apply_source = self.helper[apply_start:]
         marriage = self._case_block(self.helper[apply_start:], 0x132)
         self.assertIn("if (VF2MarriageEmailUnavailable())", marriage)
-        self.assertIn("VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalFemale);", marriage)
-        male_marriage = self._case_block(self.helper[apply_start:], 0x14C)
-        self.assertIn("if (VF2MarriageEmailUnavailable())", male_marriage)
-        self.assertIn("VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalMale);", male_marriage)
-        self.assertIn("kVF2CheatMarriageProposalOff = 0", self.helper)
-        self.assertIn("return 0;", self._function_block(self.helper, "extern \"C\" int __fastcall VF2MarriageCandidateGender", "extern \"C\" CVillager *__fastcall VF2GetMarriageRole"))
-        self.assertIn("return 1;", self._function_block(self.helper, "extern \"C\" int __fastcall VF2MarriageCandidateGender", "extern \"C\" CVillager *__fastcall VF2GetMarriageRole"))
-        exit_add = self._function_block(
+        self.assertIn("VF2QueueMarriageProposal();", marriage)
+        self.assertNotIn("kVF2CheatMarriageProposalActive", marriage)
+        same_sex_toggle = self._case_block(self.helper[apply_start:], 0x14C)
+        self.assertIn("VF2SameSexMarriageToggleActive()", same_sex_toggle)
+        self.assertIn("gVF2SameSexMarriage = 1;", same_sex_toggle)
+        self.assertIn("gVF2SameSexMarriage = 0;", same_sex_toggle)
+        self.assertNotIn("InventoryManager.TakeOne((EInventoryItem)itemId);", same_sex_toggle)
+        self.assertNotIn("InventoryManager.ReturnOne((EInventoryItem)itemId);", same_sex_toggle)
+        candidate_gender = self._function_block(
             self.helper,
-            "extern \"C\" void __cdecl VF2MaybeAddCheatMarriageExit",
-            "extern \"C\" bool __cdecl VF2HandleCheatMarriageProposalExit",
+            "extern \"C\" int __fastcall VF2MarriageCandidateGender",
+            "extern \"C\" CVillager *__fastcall VF2GetMarriageRole",
         )
-        self.assertIn("gVF2CheatMarriageProposalScene != kVF2CheatMarriageProposalFemale", exit_add)
-        self.assertIn("new ldwButton", exit_add)
-        self.assertIn("\n        3,", exit_add)
-        self.assertIn("(EImage)0x129", exit_add)
-        self.assertIn("GetString((StringId)0x76C)", exit_add)
-        self.assertIn("GetWideScreenOffsetX() + 4", exit_add)
-        exit_handler = self._function_block(
-            self.helper,
-            "extern \"C\" bool __cdecl VF2HandleCheatMarriageProposalExit",
-            "static CVillager *VF2ActiveVillagerByPersistentIdUnique",
-        )
-        self.assertIn("message != 8", exit_handler)
-        self.assertIn("action == 1", exit_handler)
-        self.assertIn("action != 3", exit_handler)
-        self.assertIn("Sound.Play((ESound)0x8A)", exit_handler)
-        self.assertIn("raw + 0x25CBC", exit_handler)
-        self.assertIn("raw + 0x25CB8", exit_handler)
+        self.assertIn("return currentGender;", candidate_gender)
+        self.assertIn("return currentGender == 1 ? 0 : 1;", candidate_gender)
+        self.assertNotIn("GetRandom(2)", candidate_gender)
+        self.assertNotIn("VF2MaybeAddCheatMarriageExit", self.helper)
+        self.assertNotIn("VF2HandleCheatMarriageProposalExit", self.helper)
         self.assertIn("eEmailMessageMarriageProposal", self.helper)
         self.assertIn("eEmailMessageMarriageProposal = 2", self.helper)
 

@@ -105,6 +105,15 @@ class PatchSetting:
     description: str
     default: bool
     category: str = "main"
+    readiness_status: str | None = None
+    readiness_reason: str | None = None
+    selection_policy: str | None = None
+
+    @property
+    def blocked(self) -> bool:
+        if self.id == "island_events" and self.selection_policy == "experimental_diagnostic":
+            return False
+        return self.readiness_reason is not None
 
 
 @dataclass(frozen=True)
@@ -1045,14 +1054,102 @@ def manifest_settings(manifest: dict[str, Any]) -> dict[str, PatchSetting]:
         setting_id = normalize_setting_id(raw.get("id"), f"setting #{index} id")
         if setting_id in settings:
             raise PatchError(f"Duplicate setting id: {setting_id}")
+        readiness_status, readiness_reason, selection_policy = manifest_setting_readiness(manifest, raw)
         settings[setting_id] = PatchSetting(
             id=setting_id,
             label=str(raw.get("label", setting_id)).strip() or setting_id,
             description=str(raw.get("description", "")).strip(),
             default=bool(raw.get("default", False)),
             category=str(raw.get("category", "main")).strip().lower() or "main",
+            readiness_status=readiness_status,
+            readiness_reason=readiness_reason,
+            selection_policy=selection_policy,
         )
     return settings
+
+
+READINESS_BLOCKED_MARKERS = ("stop", "pending", "unlinked")
+
+
+def manifest_setting_readiness(
+    manifest: dict[str, Any],
+    raw: dict[str, Any],
+) -> tuple[str | None, str | None, str | None]:
+    """Return (status, blocking reason) for one manifest setting.
+
+    The manifest may put readiness fields directly on a setting, under a
+    ``readiness`` object, or in a top-level ``setting_readiness`` map keyed by
+    setting ID.  Unknown/ready statuses remain selectable; only explicit STOP,
+    pending, unlinked, runtime_ready=false, or linked=false evidence blocks a
+    setting.
+    """
+    setting_id = normalize_setting_id(raw.get("id"), "setting readiness id")
+    metadata: dict[str, Any] = {}
+    for container_name in ("setting_readiness", "feature_readiness"):
+        container = manifest.get(container_name)
+        if isinstance(container, dict):
+            shared = container.get(setting_id)
+            if isinstance(shared, dict):
+                metadata.update(shared)
+    nested = raw.get("readiness")
+    if isinstance(nested, dict):
+        metadata.update(nested)
+    elif isinstance(nested, str) and nested.strip():
+        metadata["status"] = nested.strip()
+    for key in (
+        "status",
+        "link_status",
+        "runtime_ready",
+        "linked",
+        "selection_policy",
+        "reason",
+        "readiness_reason",
+        "message",
+    ):
+        if key in raw:
+            metadata[key] = raw[key]
+
+    status_values = [
+        metadata.get("status"),
+        metadata.get("link_status"),
+    ]
+    status_texts = [
+        value.strip()
+        for value in status_values
+        if isinstance(value, str) and value.strip()
+    ]
+    blocked = any(
+        marker in text.lower()
+        for text in status_texts
+        for marker in READINESS_BLOCKED_MARKERS
+    )
+    if metadata.get("runtime_ready") is False:
+        blocked = True
+    if metadata.get("linked") is False:
+        blocked = True
+
+    readiness_status = status_texts[0] if status_texts else None
+    if not blocked:
+        return readiness_status, None, metadata.get("selection_policy")
+
+    reasons: list[str] = []
+    for text in status_texts:
+        reasons.append(f"manifest status={text}")
+    if metadata.get("runtime_ready") is False:
+        reasons.append("runtime_ready=false")
+    if metadata.get("linked") is False:
+        reasons.append("linked=false")
+    explicit_reason = next(
+        (
+            metadata.get(key).strip()
+            for key in ("readiness_reason", "reason", "message")
+            if isinstance(metadata.get(key), str) and metadata.get(key).strip()
+        ),
+        None,
+    )
+    if explicit_reason:
+        reasons.append(explicit_reason)
+    return readiness_status, "; ".join(dict.fromkeys(reasons)), metadata.get("selection_policy")
 
 
 def record_requires(raw: dict[str, Any], field: str) -> tuple[str, ...]:
@@ -1089,10 +1186,21 @@ def record_is_active(requires: tuple[str, ...], enabled_settings: set[str]) -> b
 
 def resolve_enabled_settings(manifest: dict[str, Any], args: argparse.Namespace) -> tuple[dict[str, PatchSetting], set[str]]:
     settings = manifest_settings(manifest)
+    explicit_final_playtest = bool(getattr(args, "final_playtest_all_enabled", False))
+    profile = manifest.get("final_playtest_profile")
+    if explicit_final_playtest and (
+        not isinstance(profile, dict)
+        or profile.get("id") != "final_playtest_all_enabled"
+    ):
+        raise PatchError(
+            "--final-playtest-all-enabled requires an explicit final_playtest_all_enabled manifest profile."
+        )
     if args.enable_all and args.disable_all:
         raise PatchError("--enable-all and --disable-all cannot be used together.")
 
-    if args.enable_all:
+    if explicit_final_playtest:
+        enabled = set(settings)
+    elif args.enable_all:
         enabled = set(settings)
     elif args.disable_all:
         enabled = set()
@@ -1106,6 +1214,17 @@ def resolve_enabled_settings(manifest: dict[str, Any], args: argparse.Namespace)
             raise PatchError(f"Unknown setting: {setting_id}")
     enabled.update(enable_ids)
     enabled.difference_update(disable_ids)
+    blocked = [
+        settings[setting_id]
+        for setting_id in sorted(enabled)
+        if settings[setting_id].blocked
+    ]
+    if blocked and not explicit_final_playtest:
+        details = ", ".join(
+            f"{setting.id}: {setting.readiness_reason}"
+            for setting in blocked
+        )
+        raise PatchError(f"Blocked setting(s) cannot be enabled: {details}")
     return settings, enabled
 
 
@@ -1113,6 +1232,11 @@ def settings_log(settings: dict[str, PatchSetting], enabled: set[str]) -> dict[s
     return {
         "enabled": sorted(enabled),
         "disabled": sorted(set(settings) - enabled),
+        "blocked": {
+            setting.id: setting.readiness_reason
+            for setting in settings.values()
+            if setting.blocked
+        },
         "available": [
             {
                 "id": setting.id,
@@ -1121,6 +1245,10 @@ def settings_log(settings: dict[str, PatchSetting], enabled: set[str]) -> dict[s
                 "default": setting.default,
                 "enabled": setting.id in enabled,
                 "category": setting.category,
+                "readiness_status": setting.readiness_status,
+                "readiness_reason": setting.readiness_reason,
+                "selection_policy": setting.selection_policy,
+                "selectable": not setting.blocked,
             }
             for setting in settings.values()
         ],
@@ -3456,14 +3584,26 @@ def list_manifest_settings(args: argparse.Namespace) -> int:
     manifest = read_json(manifest_path)
     settings = manifest_settings(manifest)
     if args.json:
-        write_json(Path(args.json), {"manifest": str(manifest_path), "settings": settings_log(settings, {s for s, row in settings.items() if row.default})})
+        write_json(
+            Path(args.json),
+            {
+                "manifest": str(manifest_path),
+                "settings": settings_log(
+                    settings,
+                    {setting_id for setting_id, row in settings.items() if row.default and not row.blocked},
+                ),
+            },
+        )
         print(f"Settings JSON written: {Path(args.json).resolve()}")
         return 0
     if not settings:
         print("This manifest does not declare toggleable settings.")
         return 0
     for setting in settings.values():
-        state = "default on" if setting.default else "default off"
+        if setting.blocked:
+            state = f"BLOCKED - {setting.readiness_reason}"
+        else:
+            state = "default on" if setting.default else "default off"
         line = f"{setting.id} [{state}] - {setting.label}"
         if setting.description:
             line += f": {setting.description}"
@@ -3563,6 +3703,14 @@ def build_parser() -> argparse.ArgumentParser:
     apply_cmd.add_argument("--enable", action="append", help="Enable a manifest setting. Repeat or comma-separate IDs.")
     apply_cmd.add_argument("--disable", action="append", help="Disable a manifest setting. Repeat or comma-separate IDs.")
     apply_cmd.add_argument("--enable-all", action="store_true", help="Enable all manifest-declared settings before patching.")
+    apply_cmd.add_argument(
+        "--final-playtest-all-enabled",
+        action="store_true",
+        help=(
+            "Enable every setting in an explicit final_playtest_all_enabled manifest profile, "
+            "including rows that are normally readiness-blocked."
+        ),
+    )
     apply_cmd.add_argument("--disable-all", action="store_true", help="Disable all manifest-declared settings before patching.")
     apply_cmd.set_defaults(func=apply_manifest)
 

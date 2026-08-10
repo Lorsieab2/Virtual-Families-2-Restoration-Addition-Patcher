@@ -50,9 +50,24 @@ ENABLE_MOBILE_RENOVATIONS = os.environ.get("VF2_ENABLE_MOBILE_RENOVATIONS", "0")
 # stages those OGGs and applies the same route atomically behind its checkbox.
 ENABLE_MOBILE_SOUND_ASSETS = os.environ.get("VF2_ENABLE_MOBILE_SOUND_ASSETS", "0") == "1"
 # Separate visual-only Bathroom 2 experiment.  This never enables the native
-# second-bathroom renovation route; it only stages the explicitly labelled,
-# default-off AI art payload when selected.
-ENABLE_AI_GENERATED_BATHROOM2 = os.environ.get("VF2_ENABLE_AI_GENERATED_BATHROOM2", "0") == "1"
+# second-bathroom renovation route; selecting it enables the five PC-only
+# House Renovations rows/state/icons and their overlay art.  The closed-curtain selector has
+# no authenticated native ABI yet (the captured objects do not prove the
+# image-538 callsite, cache invalidation, or restoration path), so an
+# environment request must fail closed until that route is proven.  Keep the
+# raw request separately so the generated manifest can report the blocker.
+REQUESTED_ENABLE_AI_GENERATED_BATHROOM2 = (
+    os.environ.get("VF2_ENABLE_AI_GENERATED_BATHROOM2", "0") == "1"
+)
+AI_BATHROOM2_CURTAIN_RUNTIME_AUTHENTICATED = False
+# The five visual rows/state/icons are independently useful and can be
+# enabled without touching native E6.  Only the closed-curtain replacement
+# remains gated on its still-unproven selector/cache ABI.
+ENABLE_AI_GENERATED_BATHROOM2 = REQUESTED_ENABLE_AI_GENERATED_BATHROOM2
+AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED = (
+    ENABLE_AI_GENERATED_BATHROOM2
+    and AI_BATHROOM2_CURTAIN_RUNTIME_AUTHENTICATED
+)
 
 # Genuine mobile-furniture behaviors use a dormant exact-SHA byte toggle. The
 # first proven families are the four mobile lounge chairs and the patio
@@ -284,18 +299,16 @@ NEXT_GENERATION_INTERNAL_AGE_60 = 60 * 20
 # one female and one male selector.
 SAME_SEX_MARRIAGE_FLAG_SECTION = ".vf2same"
 SAME_SEX_MARRIAGE_FLAG_SYMBOL = "_gVF2SameSexMarriage"
-CHEAT_MARRIAGE_PROPOSAL_FLAG_SECTION = ".vf2proposal"
-CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL = "_gVF2CheatMarriageProposalScene"
-CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL = "_VF2ClearCheatMarriageProposalMode"
-CHEAT_MARRIAGE_PROPOSAL_EXIT_CONSTRUCTOR_SYMBOL = "_VF2MaybeAddCheatMarriageExit"
-CHEAT_MARRIAGE_PROPOSAL_EXIT_HANDLER_SYMBOL = "_VF2HandleCheatMarriageProposalExit"
 SAME_SEX_CANDIDATE_GENDER_HELPER_SYMBOL = "@VF2MarriageCandidateGender@8"
 SAME_SEX_ROLE_HELPER_SYMBOL = "@VF2GetMarriageRole@12"
 SAME_SEX_DROP_HELPER_SYMBOL = "@VF2IsSameSexSpouseDrop@12"
 ADOPTION_CHOOSER_HELPER_SYMBOL = "_VF2AdoptRandomChildChoice"
 
-MARRIAGE_EMAIL_FEMALE_ITEM_ID = 0x132
-MARRIAGE_EMAIL_MALE_ITEM_ID = 0x14C
+MARRIAGE_EMAIL_ITEM_ID = 0x132
+SAME_SEX_MARRIAGE_ITEM_ID = 0x14C
+SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID = 0x119
+SAME_SEX_MARRIAGE_CATALOG_PRICE = 10000
+SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID = 0x166
 DIVORCE_SPOUSE_ITEM_ID = 0x14B
 DIVORCE_SPOUSE_WARNING = "WARNING: Permanently removes spouse from the Family Tree and House!"
 DIVORCE_SPOUSE_ICON_FILE = "cheat_marriage_email.png"
@@ -427,6 +440,17 @@ GHOMELISTSORTED = "?gHomeListSorted@@3PAW4EInventoryItem@@A"
 GET_CATEGORY_ITEM = "?GetCategoryItem@CInventoryManager@@QAE?AW4EInventoryItem@@W4EInventoryCategory@@H@Z"
 GET_CATEGORY_ITEM_COUNT = "?GetCategoryItemCount@CInventoryManager@@QAEHW4EInventoryCategory@@@Z"
 IMAGE_REL_I386_REL32 = 0x0014
+
+# Native CInventoryManager::GetLockGenerationLevel evidence:
+# item IDs 0x1..0x1AC are resolved through InventoryItemInfo records with a
+# 0x24-byte stride, and the generation lock is the record's +0x10 field.
+# Keep this separate from FurnitureManager's 0x6C-byte records/+0x0C field.
+INVENTORY_ITEMINFO_RECORD_SIZE = 0x24
+INVENTORY_ITEMINFO_LOCK_OFFSET = 0x10
+INVENTORY_ITEMINFO_FIRST_ITEM_ID = 0x1
+INVENTORY_ITEMINFO_LAST_DEFINED_ITEM_ID = 0x116
+INVENTORY_ITEMINFO_LAST_ITEM_ID = 0x1AC
+INVENTORY_ITEMINFO_RECORD_COUNT = INVENTORY_ITEMINFO_LAST_ITEM_ID + 1
 
 RECORD_SIZE = 0x6C
 DESC_SIZE = 0x30
@@ -694,7 +718,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     # Reuse the existing marriage-email descriptor while keeping Divorce on
     # its own item and image descriptor slots.
     DIVORCE_SPOUSE_ITEM_ID: DIVORCE_SPOUSE_ICON_FILE,
-    MARRIAGE_EMAIL_MALE_ITEM_ID: "cheat_marriage_email.png",
+    SAME_SEX_MARRIAGE_ITEM_ID: "cheat_marriage_email.png",
 }
 # Kept as a named contract for manifests and downstream validators.  Late
 # rows now use concrete descriptors instead of an item-id alias.
@@ -903,6 +927,22 @@ MOBILE_SOUND_ASSET_RECORDS = (
 )
 MOBILE_SOUND_SOURCE_OBJECT_SHA256 = "11730b342977e3f120bf3627e762bebcf9f36976c5cfc34736c89e78523e3bc4"
 MOBILE_SOUND_FMOD_SHA256 = "7c6f7495d0a981f646bc23fdb39c0e349c598f5d6f4ef0ee58311338ae760194"
+MOBILE_SOUND_READINESS_CONTRACT_ID = "vf2-mobile-sound-readiness-v1"
+
+
+def _mobile_sound_readiness_contract():
+    """Return a non-claiming status until link readback and player QA exist."""
+    return {
+        "contract_id": MOBILE_SOUND_READINESS_CONTRACT_ID,
+        "static_mapping": "verified",
+        "link_route_readback": "not_authenticated",
+        "runtime_player_qa": "pending",
+        "runtime_parity_claim": "forbidden",
+        "release_ready": False,
+        "required_before_claim": (
+            "exact linked-executable route/pointer readback and independent player QA"
+        ),
+    }
 
 
 def _load_mobile_sound_payload_records():
@@ -911,27 +951,82 @@ def _load_mobile_sound_payload_records():
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"Unable to read mobile sound parity contract: {MOBILE_SOUND_PARITY_CONTRACT}") from exc
     rows = contract.get("sound_records")
+    scope = contract.get("scope")
     if not isinstance(rows, list) or len(rows) != 67:
         raise RuntimeError("Mobile sound parity contract must contain exactly 67 records")
+    if not isinstance(scope, dict) or scope.get("record_count") != 67:
+        raise RuntimeError("Mobile sound parity contract record_count must be 67")
     records = []
-    seen = set()
+    seen_ids = set()
+    seen_pc_names = set()
+    seen_mobile_names = set()
+    permitted_status = "direct_pc_mapping_verified_mobile_asset_hash_pinned_parity_unverified"
     for row in rows:
+        if not isinstance(row, dict):
+            raise RuntimeError("Mobile sound parity record is malformed")
+        raw_id = row.get("raw_mobile_id")
         pc = row.get("pc_sound_obj", {})
         mobile = row.get("mobile_obb", {})
         name = mobile.get("asset_name")
         digest = mobile.get("sha256")
         pc_name = pc.get("filename")
-        if not isinstance(name, str) or not isinstance(pc_name, str) or not re.fullmatch(r"[0-9a-f]{64}", str(digest)):
+        if (
+            not isinstance(raw_id, str)
+            or not re.fullmatch(r"0x[0-9A-Fa-f]+", raw_id)
+            or not isinstance(pc, dict)
+            or not isinstance(mobile, dict)
+            or not isinstance(name, str)
+            or not isinstance(pc_name, str)
+            or not pc_name
+            or not isinstance(pc.get("enum_name"), str)
+            or not pc.get("enum_name")
+            or not isinstance(pc.get("record_index"), int)
+            or not isinstance(pc.get("record_index_hex"), str)
+            or not re.fullmatch(r"0x[0-9A-Fa-f]+", pc["record_index_hex"])
+            or not isinstance(mobile.get("present"), bool)
+            or mobile.get("present") is not True
+            or not re.fullmatch(r"[0-9a-f]{64}", str(digest))
+            or row.get("parity_status") != permitted_status
+        ):
             raise RuntimeError("Mobile sound parity record is malformed")
-        if name.lower() in seen:
+        raw_value = int(raw_id, 16)
+        if (
+            pc["record_index"] != raw_value
+            or int(pc["record_index_hex"], 16) != raw_value
+        ):
+            raise RuntimeError(
+                f"Mobile sound parity record is not a direct raw-ID mapping: {raw_id}"
+            )
+        if raw_value in seen_ids:
+            raise RuntimeError(f"Duplicate mobile sound raw ID: {raw_id}")
+        if pc_name.lower() in seen_pc_names:
+            raise RuntimeError(f"Duplicate PC sound payload name: {pc_name}")
+        if name.lower() in seen_mobile_names:
             raise RuntimeError(f"Duplicate mobile sound payload name: {name}")
-        seen.add(name.lower())
+        seen_ids.add(raw_value)
+        seen_pc_names.add(pc_name.lower())
+        seen_mobile_names.add(name.lower())
         records.append({
-            "raw_mobile_id": row.get("raw_mobile_id"),
+            "raw_mobile_id": raw_id,
+            "raw_mobile_id_value": raw_value,
             "pc_filename": pc_name,
             "mobile_filename": name,
             "mobile_sha256": digest,
         })
+    payload_by_id = {record["raw_mobile_id"]: record for record in records}
+    for route in MOBILE_SOUND_ASSET_RECORDS:
+        payload = payload_by_id.get(route["raw_mobile_id"])
+        if payload is None or any(
+            payload[key] != route[route_key]
+            for key, route_key in (
+                ("pc_filename", "pc_filename"),
+                ("mobile_filename", "mobile_filename"),
+                ("mobile_sha256", "mobile_sha256"),
+            )
+        ):
+            raise RuntimeError(
+                f"Mobile sound route {route['raw_mobile_id']} is absent or disagrees with parity contract"
+            )
     return tuple(records)
 
 
@@ -978,6 +1073,26 @@ MOBILE_RENOVATION_PC_ITEM_IDS = tuple(
     MOBILE_RENOVATION_PC_ITEM_BASE + index
     for index in range(MOBILE_RENOVATION_IMAGE_COUNT)
 )
+# Bathroom 2 is already a native/base-game room (E6).  These five rows are
+# deliberately a separate PC-only visual block: they never enter gServices,
+# never call the native E6 renovation path, and use only the proven direct
+# persisted active-byte range shared by the existing PC renovation helpers.
+AI_BATHROOM2_PC_ITEM_BASE = 0x14D
+AI_BATHROOM2_PC_ITEM_IDS = tuple(
+    AI_BATHROOM2_PC_ITEM_BASE + index for index in range(5)
+)
+AI_BATHROOM2_COLOR_ORDER = ("black", "blue", "beige", "green", "pink")
+AI_BATHROOM2_STYLE_CATALOG = (
+    {"color": "black", "name": "Bathroom 2 Remodel in Black", "price": 0x898, "file": "bathroom2_ai_black.png"},
+    {"color": "blue", "name": "Bathroom 2 Remodel in Blue", "price": 0x3E8, "file": "bathroom2_ai_blue.png"},
+    {"color": "beige", "name": "Bathroom 2 Remodel in Beige", "price": 0x898, "file": "bathroom2_ai_beige.png"},
+    {"color": "green", "name": "Bathroom 2 Remodel in Green", "price": 0x898, "file": "bathroom2_ai_green.png"},
+    {"color": "pink", "name": "Bathroom 2 Remodel in Pink", "price": 0x898, "file": "bathroom2_ai_pink.png"},
+)
+if tuple(row["color"] for row in AI_BATHROOM2_STYLE_CATALOG) != AI_BATHROOM2_COLOR_ORDER:
+    raise RuntimeError("Bathroom 2 visual style order drifted")
+if len(set(AI_BATHROOM2_PC_ITEM_IDS)) != 5 or set(AI_BATHROOM2_PC_ITEM_IDS) & set(MOBILE_RENOVATION_PC_ITEM_IDS):
+    raise RuntimeError("Bathroom 2 synthetic item IDs collide with mobile renovation IDs")
 HOME_RENOVATION_CATEGORY = 0x11
 NATIVE_HOME_RENOVATION_COUNT = 10
 MOBILE_RENOVATION_STYLE_CATALOG = (
@@ -1017,6 +1132,37 @@ MOBILE_RENOVATION_USER_STORE_ICON_MAPPING = {
 MOBILE_RENOVATION_USER_STORE_ICON_MISSING = (
     "blackbathroom.png", "bluebathroom.png", "beigebathroom.png", "modernoffice.png"
  )
+MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS = "STOP"
+MOBILE_RENOVATION_USER_STORE_ICON_ROUTE = (
+    "STOP: exact-byte user icon payload is staged; final executable linkage is not authenticated"
+)
+MOBILE_RENOVATION_USER_STORE_ICON_FILES = tuple(MOBILE_RENOVATION_USER_STORE_ICON_MAPPING)
+MOBILE_RENOVATION_USER_STORE_ICON_SPEC_BY_PC_ITEM = {
+    spec["pc_item"]: {"name": filename, **spec}
+    for filename, spec in MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.items()
+}
+MOBILE_RENOVATION_USER_STORE_ICON_INDEX_BY_PC_ITEM = {
+    spec["pc_item"]: index
+    for index, spec in enumerate(MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.values())
+}
+MOBILE_RENOVATION_USER_STORE_ICON_COUNT = len(MOBILE_RENOVATION_USER_STORE_ICON_FILES)
+MOBILE_RENOVATION_STYLE_BY_MOBILE_ITEM = {
+    style["mobile_item"]: style for style in MOBILE_RENOVATION_STYLE_CATALOG
+}
+if len(MOBILE_RENOVATION_STYLE_BY_MOBILE_ITEM) != len(MOBILE_RENOVATION_STYLE_CATALOG):
+    raise RuntimeError("Mobile renovation style mobile-item IDs are not unique")
+if len({spec["pc_item"] for spec in MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.values()}) != MOBILE_RENOVATION_USER_STORE_ICON_COUNT:
+    raise RuntimeError("Mobile renovation user store PC item IDs are not unique")
+if len({spec["mobile_item"] for spec in MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.values()}) != MOBILE_RENOVATION_USER_STORE_ICON_COUNT:
+    raise RuntimeError("Mobile renovation user store mobile item IDs are not unique")
+if set(MOBILE_RENOVATION_USER_STORE_ICON_MAPPING) & set(MOBILE_RENOVATION_USER_STORE_ICON_MISSING):
+    raise RuntimeError("Mobile renovation user store icon mapping includes a missing row")
+for _icon_name, _icon_spec in MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.items():
+    if _icon_spec["pc_item"] not in MOBILE_RENOVATION_PC_ITEM_IDS:
+        raise RuntimeError(f"Mobile renovation user store PC item is outside the supplied range: {_icon_name}")
+    _style = MOBILE_RENOVATION_STYLE_BY_MOBILE_ITEM.get(_icon_spec["mobile_item"])
+    if _style is None or _style["room"] != _icon_spec["room"]:
+        raise RuntimeError(f"Mobile renovation user store mapping disagrees with the style catalog: {_icon_name}")
 if len(MOBILE_RENOVATION_STYLE_CATALOG) != MOBILE_RENOVATION_IMAGE_COUNT:
     raise RuntimeError("Mobile renovation style catalog/art count mismatch")
 MOBILE_RENOVATION_VARIANT_INDICES = {
@@ -1253,6 +1399,61 @@ MOBILE_FURNITURE_MANUAL_BINDING_SPECS = (
         "literal_ids": MOBILE_XMAS_STOCKING_ITEM_IDS,
     },
 )
+
+# Native mobile behavior IDs 0x1A0/0x1A2/0x1A3 and birthday IDs 0x1AE/0x1AF
+# are family-wide celebration routes.  Their desktop grafts are intentionally
+# reachable only from the manual furniture-drop dispatcher.  Keep this list
+# explicit so an autonomous catalog change fails closed instead of creating
+# autonomous family-wide interruptions.
+MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_HANDLERS = (
+    "VF2HandleMobileBirthdayBanner",
+    "VF2HandleMobileXmasTreeGroup",
+    "VF2HandleMobileDreidelGroup",
+    "VF2HandleMobileMenorahGroup",
+)
+MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_MOBILE_IDS = (
+    0x1AE,
+    0x1AF,
+    0x1A0,
+    0x1A2,
+    0x1A3,
+)
+
+
+def validate_mobile_furniture_autonomous_scope():
+    """Reject any autonomous binding for a native family-wide route."""
+    manual_handlers = {
+        spec["handler"] for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS
+    }
+    expected_handlers = set(MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_HANDLERS)
+    if not expected_handlers.issubset(manual_handlers):
+        raise RuntimeError(
+            "Manual family-wide mobile handlers are missing from the drop catalog"
+        )
+
+    external_handlers = {
+        spec.get("handler")
+        for spec in MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS
+        if spec.get("handler")
+    }
+    overlap = expected_handlers.intersection(external_handlers)
+    if overlap:
+        raise RuntimeError(
+            "Family-wide mobile handlers entered autonomous selection: "
+            + ", ".join(sorted(overlap))
+        )
+
+    external_ids = {
+        int(spec["mobile_id"]) for spec in MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS
+    }
+    id_overlap = external_ids.intersection(
+        MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_MOBILE_IDS
+    )
+    if id_overlap:
+        raise RuntimeError(
+            "Family-wide mobile behavior IDs entered autonomous selection: "
+            + ", ".join(hex(value) for value in sorted(id_overlap))
+        )
 MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = (
     {
         "mobile_id": 0x19B,
@@ -1498,16 +1699,16 @@ CHEAT_UPGRADE_ITEMS = [
         "price": 0,
     },
     {
-        "item_id": MARRIAGE_EMAIL_FEMALE_ITEM_ID,
-        "name": "Force Marriage Email (Female)",
-        "description": "Spawns a marriage email with female spouse options.",
+        "item_id": MARRIAGE_EMAIL_ITEM_ID,
+        "name": "Force Marriage Email",
+        "description": "Queues a normal base-game marriage proposal with native candidate rules.",
         "price": 0,
     },
     {
-        "item_id": MARRIAGE_EMAIL_MALE_ITEM_ID,
-        "name": "Force Marriage Email (Male)",
-        "description": "Spawns a marriage email with male spouse options.",
-        "price": 0,
+        "item_id": SAME_SEX_MARRIAGE_ITEM_ID,
+        "name": "Enable Same-Sex Marriage",
+        "description": "Enables same-sex marriage candidates. Buy again to disable this toggle.",
+        "price": SAME_SEX_MARRIAGE_CATALOG_PRICE,
     },
     {
         "item_id": DIVORCE_SPOUSE_ITEM_ID,
@@ -4176,10 +4377,12 @@ def patch_mobile_sound_routes(manifest):
         finally:
             if temp.exists():
                 temp.unlink()
+    readiness = _mobile_sound_readiness_contract()
+    readiness["expected_route_count"] = len(route_records)
     manifest["MobileSoundAssets"] = {
-        "contract_id": "vf2-mobile-sound-route-toggle-v1",
+        "contract_id": MOBILE_SOUND_CONTRACT_ID,
         "evidence_contract": "data/vf2/mobile-sound-route-toggle-contract.json",
-        "source_head": "1c627d57bd4f064410e8951f2e402bc8277c8fa6",
+        "source_head": MOBILE_SOUND_CONTRACT_SOURCE_HEAD,
         "source_object_sha256": original_sha256,
         "enabled": ENABLE_MOBILE_SOUND_ASSETS,
         "setting": "mobile_sound_assets",
@@ -4193,6 +4396,7 @@ def patch_mobile_sound_routes(manifest):
         "route_count": len(route_records),
         "all_or_nothing": True,
         "runtime_qa": "routing-only; audible/mobile parity remains pending",
+        "readiness": readiness,
         "routes": route_records,
     }
 
@@ -4582,6 +4786,46 @@ def mobile_renovation_image_id(index, holiday_body_descriptor_count=0):
     return mobile_renovation_image_base(holiday_body_descriptor_count) + index
 
 
+def mobile_renovation_store_icon_image_base(holiday_body_descriptor_count=0):
+    base = mobile_renovation_image_base(holiday_body_descriptor_count)
+    if ENABLE_MOBILE_RENOVATIONS:
+        base += MOBILE_RENOVATION_IMAGE_COUNT
+    if ENABLE_HOLIDAY_ORNAMENTS:
+        base += HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT
+    return base
+
+
+def mobile_renovation_store_icon_image_id(pc_item_id, holiday_body_descriptor_count=0):
+    index = MOBILE_RENOVATION_USER_STORE_ICON_INDEX_BY_PC_ITEM.get(pc_item_id)
+    if index is None or not ENABLE_MOBILE_RENOVATIONS:
+        return -1
+    return mobile_renovation_store_icon_image_base(holiday_body_descriptor_count) + index
+
+
+def ai_bathroom2_image_base(holiday_body_descriptor_count=0):
+    """Image descriptors appended after the existing renovation/store-icon block."""
+    base = mobile_renovation_store_icon_image_base(holiday_body_descriptor_count)
+    if ENABLE_MOBILE_RENOVATIONS:
+        base += MOBILE_RENOVATION_USER_STORE_ICON_COUNT
+    return base
+
+
+def ai_bathroom2_image_id(index, holiday_body_descriptor_count=0):
+    if index < 0 or index >= len(AI_BATHROOM2_STYLE_CATALOG):
+        raise IndexError(f"Bathroom 2 image index out of range: {index}")
+    return ai_bathroom2_image_base(holiday_body_descriptor_count) + index
+
+
+def ai_bathroom2_store_icon_image_base(holiday_body_descriptor_count=0):
+    return ai_bathroom2_image_base(holiday_body_descriptor_count) + len(AI_BATHROOM2_STYLE_CATALOG)
+
+
+def ai_bathroom2_store_icon_image_id(index, holiday_body_descriptor_count=0):
+    if index < 0 or index >= len(AI_BATHROOM2_STYLE_CATALOG):
+        raise IndexError(f"Bathroom 2 store-icon index out of range: {index}")
+    return ai_bathroom2_store_icon_image_base(holiday_body_descriptor_count) + index
+
+
 def outfit_icon_path(gender, body_value):
     return f"OutfitIcons/{gender.title()}_Body_{body_value:02d}.png"
 
@@ -4679,6 +4923,13 @@ def mobile_renovation_string_ids_for(index):
     )
 
 
+def ai_bathroom2_string_ids_for(index):
+    if index < 0 or index >= len(AI_BATHROOM2_STYLE_CATALOG):
+        raise IndexError(f"Bathroom 2 string index is out of range: {index}")
+    first_id = same_sex_marriage_string_ids()[1] + 1
+    return first_id + index * 2, first_id + index * 2 + 1
+
+
 def divorce_spouse_string_ids():
     # The current generated manifest leaves 0xED3/0xED4 immediately after
     # the 15 renovation rows. Keep this explicit so adding a late cheat row
@@ -4687,7 +4938,7 @@ def divorce_spouse_string_ids():
     return first_id, first_id + 1
 
 
-def marriage_email_male_string_ids():
+def same_sex_marriage_string_ids():
     first_id = divorce_spouse_string_ids()[1] + 1
     return first_id, first_id + 1
 
@@ -8111,7 +8362,7 @@ def sync_ai_generated_bathroom2_assets(manifest):
 
     curtain_records = []
     optional_curtain_root.mkdir(parents=True, exist_ok=True)
-    if ENABLE_AI_GENERATED_BATHROOM2:
+    if AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED:
         runtime_curtain_root.mkdir(parents=True, exist_ok=True)
     for filename, spec in AI_BATHROOM2_CURTAIN_ASSETS.items():
         source = AI_BATHROOM2_CURTAIN_DIR / filename
@@ -8123,7 +8374,7 @@ def sync_ai_generated_bathroom2_assets(manifest):
         optional_target = optional_curtain_root / filename
         shutil.copy2(source, optional_target)
         runtime_target = None
-        if ENABLE_AI_GENERATED_BATHROOM2:
+        if AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED:
             runtime_target = runtime_curtain_root / filename
             shutil.copy2(optional_target, runtime_target)
         curtain_records.append({
@@ -8169,12 +8420,31 @@ def sync_ai_generated_bathroom2_assets(manifest):
             "optional_path": str(optional_target),
             "runtime_path": str(runtime_target) if runtime_target else None,
             "route": "House Renovations only",
+            "pc_item_id": hex(AI_BATHROOM2_PC_ITEM_IDS[AI_BATHROOM2_COLOR_ORDER.index(spec["color"])]),
             "native_item_id": None,
+            "pc_only_synthetic": True,
         })
 
+    curtain_blocker = (
+        "STOP: Bathroom 2 closed-curtain selector/restoration ABI is not "
+        "authenticated; the five House Renovations rows/overlays/icons are "
+        "independent, but color curtain assets remain payload-only."
+    )
     manifest["ai_generated_bathroom2_renovations"] = {
+        "requested": REQUESTED_ENABLE_AI_GENERATED_BATHROOM2,
         "enabled": ENABLE_AI_GENERATED_BATHROOM2,
-        "status": "default_off_optional_visual_payload" if not ENABLE_AI_GENERATED_BATHROOM2 else "runtime_visual_overlay_staged",
+        "runtime_route_authenticated": AI_BATHROOM2_CURTAIN_RUNTIME_AUTHENTICATED,
+        "rows_runtime_ready": bool(ENABLE_AI_GENERATED_BATHROOM2),
+        "curtain_runtime_ready": bool(AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED),
+        "status": (
+            "runtime_visual_overlay_and_house_renovation_rows_curtain_blocked"
+            if ENABLE_AI_GENERATED_BATHROOM2
+            and not AI_BATHROOM2_CURTAIN_RUNTIME_AUTHENTICATED
+            else "default_off_optional_visual_payload"
+            if not ENABLE_AI_GENERATED_BATHROOM2
+            else "runtime_visual_overlay_and_house_renovation_rows"
+        ),
+        "blocker": curtain_blocker,
         "label": AI_BATHROOM2_LABEL,
         "disclaimer": AI_BATHROOM2_DISCLAIMER,
         "native_route": "second-bathroom renovation remains disabled/hiatus; no native E6 route changed",
@@ -8182,10 +8452,11 @@ def sync_ai_generated_bathroom2_assets(manifest):
         "normalized_art": normalized,
         "closed_curtains": curtain_records,
         "store_icons": store_icon_records,
-        "store_icon_route": (
-            "optional Bathroom2 House Renovations visual rows only; native E6 "
-            "item IDs remain disabled/hiatus"
-        ),
+        "store_icon_route": "House Renovations-only PC synthetic rows; native E6 item IDs remain disabled/hiatus",
+        "pc_item_ids": [hex(item_id) for item_id in AI_BATHROOM2_PC_ITEM_IDS] if ENABLE_AI_GENERATED_BATHROOM2 else [],
+        "rows_are_functional": bool(ENABLE_AI_GENERATED_BATHROOM2),
+        "runtime_ready": False if ENABLE_AI_GENERATED_BATHROOM2 else None,
+        "curtain_runtime_route": "blocked_pending_authenticated dynamic curtain selection; staged color assets are reversible payload only",
         "reference_evidence": reference_records,
         "target_size": list(AI_BATHROOM2_TARGET_SIZE),
         "normalization": "RGBA LANCZOS resize from each source canvas to bathroom2_vanilla.png dimensions; no generated_chroma intermediates",
@@ -8305,7 +8576,7 @@ def sync_mobile_renovation_art_sources(manifest):
             "sha256": digest,
             "purpose": spec["purpose"],
         })
-    all_missing = missing + curtain_missing + user_icon_missing
+    all_missing = missing + curtain_missing
     manifest["mobile_renovation_art_sources"] = {
         "status": (
             "runtime_1_to_1_overlay_payload"
@@ -8322,10 +8593,7 @@ def sync_mobile_renovation_art_sources(manifest):
         "bathroom1_stock_curtain_replacements": stock_curtain_replacements,
         "user_store_icon_payload": user_icon_copied,
         "user_store_icon_missing": user_icon_missing,
-        "user_store_icon_route": (
-            "staged exact-byte House Renovations icon payload; native descriptor "
-            "switch remains blocked until a proven store-icon descriptor ABI is available"
-        ),
+        "user_store_icon_route": MOBILE_RENOVATION_USER_STORE_ICON_ROUTE,
         "bathroom1_curtain_source": str(MOBILE_RENOVATION_CURTAIN_SOURCE_DIR),
         "bathroom1_curtain_target": str(curtain_target),
         "bathroom1_curtain_replacement_mode": (
@@ -8408,6 +8676,8 @@ def sync_mobile_sound_assets(manifest):
             else:
                 path.write_bytes(old_data)
         raise
+    readiness = _mobile_sound_readiness_contract()
+    readiness["expected_payload_count"] = len(MOBILE_SOUND_PAYLOAD_RECORDS)
     manifest["mobile_sound_asset_sources"] = {
         "status": (
             "runtime_ogg_payload"
@@ -8421,6 +8691,7 @@ def sync_mobile_sound_assets(manifest):
         "runtime_copy": ENABLE_MOBILE_SOUND_ASSETS,
         "asset_count": len(MOBILE_SOUND_PAYLOAD_RECORDS),
         "routing_contract": "Sound.obj literals are patched atomically by the offline mobile_sound_assets setting",
+        "readiness": readiness,
     }
 
 
@@ -8963,11 +9234,11 @@ def cheat_upgrade_string_ids_for_entry(entry_index):
     item_id = CHEAT_UPGRADE_ITEMS[entry_index]["item_id"]
     if item_id == DIVORCE_SPOUSE_ITEM_ID:
         return divorce_spouse_string_ids()
-    if item_id == MARRIAGE_EMAIL_MALE_ITEM_ID:
-        # Allocate the new deterministic male row after the existing
+    if item_id == SAME_SEX_MARRIAGE_ITEM_ID:
+        # Allocate the same-sex toggle after the existing
         # renovation/Divorce block. This keeps pre-existing IDs stable and
         # avoids colliding with the fixed renovation string range.
-        return marriage_email_male_string_ids()
+        return same_sex_marriage_string_ids()
     if entry_index < CHEAT_UPGRADE_LEGACY_COUNT:
         base = (
             ORIG_STRING_ONE_PAST_MAX
@@ -9035,6 +9306,59 @@ def behavior_label_string_ids_for_group(group_name):
 
 def cpp_int_array(name, values):
     return f"static const int {name}[] = {{{', '.join(str(value) for value in values)}}};"
+
+
+def inventory_item_info_generation_locks():
+    """Read and validate the native InventoryManager lock table exactly.
+
+    The native getter proves a fixed item-ID range and record stride.  Read
+    the pristine object rather than a patched copy, and reject any table that
+    cannot be enumerated with those exact bounds.
+    """
+    source_path = SRC_OBJS / "InventoryManager.obj"
+    if not source_path.is_file():
+        raise RuntimeError(f"Missing native InventoryManager object: {source_path}")
+
+    try:
+        obj = CoffObject(source_path)
+        item_info = obj.symbol(INVENTORY_ITEMINFO)
+        section = obj.section(item_info.section)
+    except (KeyError, IndexError, ValueError) as exc:
+        raise RuntimeError(
+            "Unable to authenticate the native InventoryManager itemInfo lock table"
+        ) from exc
+
+    table_raw = section.raw_ptr + item_info.value
+    table_size = INVENTORY_ITEMINFO_RECORD_COUNT * INVENTORY_ITEMINFO_RECORD_SIZE
+    section_end = section.raw_ptr + section.raw_size
+    if section.raw_ptr <= 0 or table_raw < section.raw_ptr or table_raw + table_size > section_end:
+        raise RuntimeError(
+            "InventoryManager itemInfo lock table is truncated or outside its native data section"
+        )
+
+    locks = []
+    for item_id in range(INVENTORY_ITEMINFO_RECORD_COUNT):
+        record_raw = table_raw + item_id * INVENTORY_ITEMINFO_RECORD_SIZE
+        record_item_id = struct.unpack_from("<I", obj.buf, record_raw)[0]
+        expected_item_id = (
+            item_id
+            if item_id <= INVENTORY_ITEMINFO_LAST_DEFINED_ITEM_ID
+            else 0
+        )
+        if record_item_id != expected_item_id:
+            raise RuntimeError(
+                "InventoryManager itemInfo lock table enumeration drifted at "
+                f"slot {item_id:#x}: expected {expected_item_id:#x}, "
+                f"found {record_item_id:#x}"
+            )
+        locks.append(
+            struct.unpack_from(
+                "<I",
+                obj.buf,
+                record_raw + INVENTORY_ITEMINFO_LOCK_OFFSET,
+            )[0]
+        )
+    return locks
 
 
 def normalize_event_text(value):
@@ -9464,6 +9788,7 @@ def patch_inventory_manager(manifest):
         insert_inventory_getter_hook("?GetOutfit@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreBodyValue"),
         insert_inventory_getter_hook("?GetPrice@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStorePrice"),
         insert_inventory_getter_hook("?GetLockGenerationLevel@CInventoryManager@@QAEHW4EInventoryItem@@@Z", "_VF2GetOutfitStoreLockGeneration"),
+        insert_inventory_getter_hook("?IsLocked@CInventoryManager@@QAE_NW4EInventoryItem@@@Z", "_VF2GetOutfitStoreLockState"),
         insert_inventory_getter_hook("?GetShortDesc@CInventoryManager@@SA?AW4StringId@@W4EInventoryItem@@@Z", "_VF2GetOutfitStoreShortDesc", returns_stdcall=False),
         insert_inventory_getter_hook("?GetLongDesc@CInventoryManager@@SA?AW4StringId@@W4EInventoryItem@@@Z", "_VF2GetOutfitStoreLongDesc", returns_stdcall=False),
     ]
@@ -9586,6 +9911,10 @@ def patch_inventory_manager(manifest):
         ),
     ]
 
+    # InventoryManager::itemInfo is an internally-scoped native definition
+    # (COFF storage class Static).  Do not rewrite its storage class or emit a
+    # cross-object reference to it: the generation-lock override is now a
+    # bounded runtime flag handled by the two authenticated lock-method hooks.
     obj.write(PATCHED / "InventoryManager.obj")
     manifest["InventoryManager"] = {
         "lists": list_manifest,
@@ -9617,6 +9946,13 @@ def patch_inventory_manager(manifest):
             ],
             "getter_hooks": outfit_getter_hooks,
             "draw_hooks": outfit_draw_hooks,
+        },
+        "exported_symbols": {
+            "itemInfo": {
+                "symbol": INVENTORY_ITEMINFO,
+                "storage_class": "static (native; not exported)",
+                "reason": "native table is used only for source-time snapshot validation; runtime override uses lock-method hooks",
+            },
         },
         "generation_sort_cap": {"old": 9, "new": 30, "patches": generation_cap_patches},
         "expanded_flea_market": {
@@ -9686,6 +10022,22 @@ def patch_visible_special_upgrades(manifest):
                 1,
                 style["price"],
                 style["lock"],
+                short_id,
+                long_id,
+                0,
+                0,
+            ]
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        renovation_desc_count = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
+        for index, style in enumerate(AI_BATHROOM2_STYLE_CATALOG):
+            short_id, long_id = ai_bathroom2_string_ids_for(index)
+            item_id = AI_BATHROOM2_PC_ITEM_IDS[index]
+            special_upgrade_records[item_id] = [
+                item_id,
+                ai_bathroom2_store_icon_image_id(index, renovation_desc_count),
+                1,
+                style["price"],
+                0,
                 short_id,
                 long_id,
                 0,
@@ -9836,7 +10188,7 @@ def patch_house_renovations(manifest):
     records are appended to that native list and the three native count sites
     are widened to 25.  They are deliberately not added to gServicesList.
     """
-    if not ENABLE_MOBILE_RENOVATIONS:
+    if not ENABLE_MOBILE_RENOVATIONS and not ENABLE_AI_GENERATED_BATHROOM2:
         manifest["HouseRenovations"] = {
             "status": "disabled",
             "category": hex(HOME_RENOVATION_CATEGORY),
@@ -9856,11 +10208,20 @@ def patch_house_renovations(manifest):
         )
 
     # Keep item identities stable while presenting the added styles as four
-    # contiguous room groups: Bathroom, Kitchen, Office, Workshop.
-    append_ids = [
-        MOBILE_RENOVATION_PC_ITEM_IDS[index]
-        for index in MOBILE_RENOVATION_NATIVE_ORDER
-    ]
+    # contiguous room groups: Bathroom, Kitchen, Office, Workshop.  The
+    # optional Bathroom2 visual rows are a separate synthetic PC-only block
+    # appended after the 15 mobile rows; they never enter gServicesList/E6.
+    append_ids = (
+        [
+            MOBILE_RENOVATION_PC_ITEM_IDS[index]
+            for index in MOBILE_RENOVATION_NATIVE_ORDER
+        ]
+        if ENABLE_MOBILE_RENOVATIONS
+        else []
+    )
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        append_ids.extend(AI_BATHROOM2_PC_ITEM_IDS)
+    new_count = NATIVE_HOME_RENOVATION_COUNT + len(append_ids)
     append_off = home_sym.value + NATIVE_HOME_RENOVATION_COUNT * 4
     existing_after = list(
         struct.unpack_from(
@@ -9893,12 +10254,12 @@ def patch_house_renovations(manifest):
     sort_push = obj.buf.find(b"\x6A\x0A", sort_push, item_start + item_sec.raw_size)
     if sort_push < 0:
         raise RuntimeError("Could not find House Renovations sort-count push")
-    obj.buf[sort_push : sort_push + 2] = b"\x6A\x19"
+    obj.buf[sort_push : sort_push + 2] = b"\x6A" + bytes([new_count])
 
     bounds = obj.buf.find(b"\x83\xFE\x09", item_start, item_start + item_sec.raw_size)
     if bounds < 0:
         raise RuntimeError("Could not find House Renovations item bounds")
-    obj.buf[bounds : bounds + 3] = b"\x83\xFE\x18"
+    obj.buf[bounds : bounds + 3] = b"\x83\xFE" + bytes([new_count - 1])
 
     count_sym = obj.symbol(GET_CATEGORY_ITEM_COUNT)
     count_sec = obj.section(count_sym.section)
@@ -9910,7 +10271,7 @@ def patch_house_renovations(manifest):
     )
     if count_return < 0:
         raise RuntimeError("Could not find House Renovations category count return")
-    obj.buf[count_return : count_return + 5] = b"\xB8" + struct.pack("<I", NATIVE_HOME_RENOVATION_COUNT + len(append_ids))
+    obj.buf[count_return : count_return + 5] = b"\xB8" + struct.pack("<I", new_count)
 
     obj.write(PATCHED / "InventoryManager.obj")
     descriptor_count = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
@@ -9921,7 +10282,7 @@ def patch_house_renovations(manifest):
         "source_list": "gHomeList",
         "sorted_list": "gHomeListSorted",
         "old_count": NATIVE_HOME_RENOVATION_COUNT,
-        "new_count": NATIVE_HOME_RENOVATION_COUNT + len(append_ids),
+        "new_count": new_count,
         "base_items_preserved": [hex(x) for x in native_ids],
         "added_items": [
             {
@@ -9931,12 +10292,46 @@ def patch_house_renovations(manifest):
                 "icon": hex(mobile_renovation_image_id(index, descriptor_count)),
                 "icon_file": style["file"],
                 "room": style["room"],
+                "store_icon": (
+                    hex(mobile_renovation_store_icon_image_id(MOBILE_RENOVATION_PC_ITEM_IDS[index], descriptor_count))
+                    if MOBILE_RENOVATION_PC_ITEM_IDS[index] in MOBILE_RENOVATION_USER_STORE_ICON_SPEC_BY_PC_ITEM
+                    else None
+                ),
+                "store_icon_file": (
+                    f"MobileRenovations/store_icons/{MOBILE_RENOVATION_USER_STORE_ICON_SPEC_BY_PC_ITEM[MOBILE_RENOVATION_PC_ITEM_IDS[index]]['name']}"
+                    if MOBILE_RENOVATION_PC_ITEM_IDS[index] in MOBILE_RENOVATION_USER_STORE_ICON_SPEC_BY_PC_ITEM
+                    else None
+                ),
+                "store_icon_status": (
+                    "verified_staged_mapping_only"
+                    if MOBILE_RENOVATION_PC_ITEM_IDS[index] in MOBILE_RENOVATION_USER_STORE_ICON_SPEC_BY_PC_ITEM
+                    else "stock_fallback_missing_user_icon"
+                ),
                 "title_string": hex(mobile_renovation_string_ids_for(index)[0]),
                 "description_string": hex(mobile_renovation_string_ids_for(index)[1]),
             }
             for index in MOBILE_RENOVATION_NATIVE_ORDER
             for style in (MOBILE_RENOVATION_STYLE_CATALOG[index],)
-        ],
+        ] if ENABLE_MOBILE_RENOVATIONS else [],
+        "ai_bathroom2_items": [
+            {
+                "item_id": hex(item_id),
+                "name": style["name"],
+                "color": style["color"],
+                "price": style["price"],
+                "icon": hex(ai_bathroom2_store_icon_image_id(index, descriptor_count)),
+                "icon_file": f"AIGeneratedBathroom2/store_icons/{next(name for name, spec in AI_BATHROOM2_STORE_ICON_ASSETS.items() if spec['color'] == style['color'])}",
+                "overlay_image": hex(ai_bathroom2_image_id(index, descriptor_count)),
+                "overlay_file": f"AIGeneratedBathroom2/{style['file']}",
+                "room": "bathroom2",
+                "pc_only_synthetic": True,
+                "native_item_id": None,
+                "e6_untouched": True,
+                "title_string": hex(ai_bathroom2_string_ids_for(index)[0]),
+                "description_string": hex(ai_bathroom2_string_ids_for(index)[1]),
+            }
+            for index, (item_id, style) in enumerate(zip(AI_BATHROOM2_PC_ITEM_IDS, AI_BATHROOM2_STYLE_CATALOG))
+        ] if ENABLE_AI_GENERATED_BATHROOM2 else [],
         "user_store_icon_mapping": [
             {
                 "source": str(MOBILE_RENOVATION_USER_STORE_ICON_DIR / filename),
@@ -9944,19 +10339,37 @@ def patch_house_renovations(manifest):
                 "pc_item": hex(spec["pc_item"]),
                 "mobile_item": hex(spec["mobile_item"]),
                 "room": spec["room"],
+                "image_id": hex(mobile_renovation_store_icon_image_id(spec["pc_item"], descriptor_count)),
+                "runtime_path": f"Images/MobileRenovations/store_icons/{filename}",
+                "size": list(spec["size"]),
                 "sha256": spec["sha256"],
                 "status": "verified_staged_mapping_only",
             }
             for filename, spec in MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.items()
         ],
         "user_store_icon_missing": list(MOBILE_RENOVATION_USER_STORE_ICON_MISSING),
+        "user_store_icon_link_status": MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS,
         "native_patches": {
-            "sort_count": "0x0A -> 0x19",
-            "max_index": "0x09 -> 0x18",
-            "category_count": "10 -> 25",
+            "sort_count": f"0x0A -> 0x{new_count:X}",
+            "max_index": f"0x09 -> 0x{new_count - 1:X}",
+            "category_count": f"10 -> {new_count}",
         },
         "inserted_list_entries": inserted,
+        "ai_bathroom2": {
+            "enabled": ENABLE_AI_GENERATED_BATHROOM2,
+            "category": hex(HOME_RENOVATION_CATEGORY),
+            "native_e6_touched": False,
+            "synthetic_item_range": (
+                f"0x{AI_BATHROOM2_PC_ITEM_IDS[0]:X}-0x{AI_BATHROOM2_PC_ITEM_IDS[-1]:X}"
+                if ENABLE_AI_GENERATED_BATHROOM2 else None
+            ),
+            "price_semantics": "explicit catalog price whenever inactive; active row is removable by repurchase",
+        },
     }
+
+
+SPECIAL_UPGRADE_HELPER_SECTION_BEGIN = "// VF2 generated special-upgrade helper section: begin"
+SPECIAL_UPGRADE_HELPER_SECTION_END = "// VF2 generated special-upgrade helper section: end"
 
 
 def write_outfit_store_helpers(manifest):
@@ -9965,6 +10378,22 @@ def write_outfit_store_helpers(manifest):
         raise RuntimeError("Expected vf2_special_upgrade_effects.cpp before adding outfit helpers")
     first_short, _first_long = outfit_string_ids_for_entry(0)
     existing_helper = helper_path.read_text(encoding="ascii")
+    inventory_lock_api_preamble = (
+        'extern "C" void __cdecl VF2SetInventoryItemInfoLocksUnlocked(bool enabled);\n'
+        'extern "C" bool __cdecl VF2AllInventoryItemInfoLocksUnlocked();\n\n'
+    )
+    # Keep the native source prefix and replace only our generated section.
+    # The fallback also cleans helper files generated before these markers
+    # existed, making the writer safe across refreshes.
+    if SPECIAL_UPGRADE_HELPER_SECTION_BEGIN in existing_helper:
+        existing_helper = existing_helper.split(SPECIAL_UPGRADE_HELPER_SECTION_BEGIN, 1)[0]
+    elif "class CToolTray {" in existing_helper:
+        existing_helper = existing_helper.split("class CToolTray {", 1)[0]
+    if existing_helper.startswith(inventory_lock_api_preamble):
+        existing_helper = existing_helper[len(inventory_lock_api_preamble):]
+    existing_helper = existing_helper.rstrip()
+    if existing_helper:
+        existing_helper += "\n"
     shared_type_preamble = ""
     if (
         "enum EInventoryItem" not in existing_helper
@@ -10047,14 +10476,29 @@ public:
             for style in MOBILE_RENOVATION_STYLE_CATALOG
         ],
     )
+    ai_bathroom2_prices_cpp = cpp_int_array(
+        "kVF2AIBathroom2Prices",
+        [style["price"] for style in AI_BATHROOM2_STYLE_CATALOG],
+    )
     visible_special_upgrade_icon_cases = "\n".join(
         f"    case 0x{item_id:X}: return {index};"
         for index, item_id in enumerate(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
     )
+    mobile_renovation_store_icon_cases = "\n".join(
+        f"    case 0x{spec['pc_item']:X}: return kVF2MobileRenovationStoreIconImageBase + {index};"
+        for index, spec in enumerate(MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.values())
+    )
+    ai_bathroom2_store_icon_cases = "\n".join(
+        f"    case 0x{item_id:X}: return kVF2AIBathroom2StoreIconImageBase + {index};"
+        for index, item_id in enumerate(AI_BATHROOM2_PC_ITEM_IDS)
+    )
     helper_path.write_text(
-        existing_helper
+        inventory_lock_api_preamble
+        + existing_helper
         + shared_type_preamble
         + f"""
+
+{SPECIAL_UPGRADE_HELPER_SECTION_BEGIN}
 
 class CToolTray {{
 public:
@@ -10082,7 +10526,14 @@ extern CInventoryManager InventoryManager;
 extern CFurnitureManager FurnitureManager;
 extern CVillagerManager VillagerManager;
 extern EInventoryItem gGoodiesList[];
+extern "C" bool __cdecl VF2SameSexMarriageToggleActive() {{
+    // The dedicated runtime byte is authoritative. Inventory history is not
+    // state: using HaveUpgrade here would make ReturnOne leave the toggle
+    // active after the second purchase.
+    return gVF2SameSexMarriage != 0;
+}}
 static const bool kVF2EnableB150CheatUpgrades = {"true" if ENABLE_CHEAT_UPGRADES else "false"};
+static const int kVF2SameSexMarriageCatalogPrice = {next(item["price"] for item in CHEAT_UPGRADE_ITEMS if item["item_id"] == SAME_SEX_MARRIAGE_ITEM_ID)};
 static const bool kVF2EnableMobileRenovations = {"true" if ENABLE_MOBILE_RENOVATIONS else "false"};
 static const int kVF2MobileRenovationItemBase = {MOBILE_RENOVATION_PC_ITEM_BASE};
 static const int kVF2MobileRenovationItemCount = {MOBILE_RENOVATION_IMAGE_COUNT};
@@ -10105,6 +10556,11 @@ static bool VF2IsMobileRenovationStyle(int itemId) {{
         itemId >= kVF2MobileRenovationItemBase &&
         itemId < kVF2MobileRenovationItemBase + kVF2MobileRenovationItemCount;
 }}
+
+// Definitions are emitted in the special-upgrade helper below; these
+// declarations let the shared removal helper call that one canonical route.
+static bool VF2IsAIBathroom2Style(int itemId);
+static unsigned char *VF2AIBathroom2ActiveByte(int itemId);
 
 static int VF2MobileRenovationStyleIndex(int itemId) {{
     if (!VF2IsMobileRenovationStyle(itemId)) return -1;
@@ -10313,6 +10769,8 @@ static const int kVF2VisibleSpecialUpgradeCount = {len(VISIBLE_SPECIAL_UPGRADE_I
 static const int kVF2VisibleSpecialUpgradeIconImageBase = {visible_special_upgrade_icon_id_for(min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES))};
 static const int kVF2VisibleSpecialUpgradeIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
 static const int kVF2MobileRenovationImageBase = {mobile_renovation_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
+static const int kVF2MobileRenovationStoreIconImageBase = {mobile_renovation_store_icon_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
+static const int kVF2AIBathroom2StoreIconImageBase = {ai_bathroom2_store_icon_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
 static const int kVF2MobileRenovationIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
 static const int kVF2FleaMarketCategory = 0x0F;
 static const int kVF2FleaMarketGoodiesCount = 0x24;
@@ -10321,8 +10779,17 @@ static int gVF2SyntheticOutfitToolInUse = 0;
 static int gVF2LastSyntheticOutfitByGender[2] = {{0, 0}};
 
 static bool VF2B150UpgradeIsActive(int itemId) {{
+    // Bathroom 2 is visual-only House Renovations state. Its active byte
+    // must remain visible to the shared removal hook even when Cheat
+    // Upgrades is disabled; no native E6 behavior is involved.
+    if (VF2IsAIBathroom2Style(itemId)) {{
+        return VF2AIBathroom2IsActive(itemId);
+    }}
     if (!kVF2EnableB150CheatUpgrades) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
+    if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
+        return VF2SameSexMarriageToggleActive();
+    }}
     if (VF2IsMobileRenovationStyle(itemId)) {{
         return VF2MobileRenovationIsActive(itemId);
     }}
@@ -10339,6 +10806,11 @@ static bool VF2B150UpgradeIsActive(int itemId) {{
 
 extern "C" int __cdecl VF2GetB150UpgradePrice(int itemId) {{
     if (!kVF2EnableB150CheatUpgrades) return -1;
+    if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
+        return VF2B150UpgradeIsActive(itemId)
+            ? 0
+            : kVF2SameSexMarriageCatalogPrice;
+    }}
     return VF2B150UpgradeIsActive(itemId) ? 0 : -1;
 }}
 
@@ -10429,10 +10901,19 @@ static void VF2DeactivateWorker(int workerId, int expiryOffset) {{
 }}
 
 extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
-    if (!kVF2EnableB150CheatUpgrades) return false;
+    if (!kVF2EnableB150CheatUpgrades && !kVF2EnableAIBathroom2) return false;
     if (!VF2B150UpgradeIsActive(itemId)) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
-    if (VF2IsMobileRenovationStyle(itemId)) {{
+    if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
+        gVF2SameSexMarriage = 0;
+        if (gameState) theGameState::Get()->SaveCurrentGame();
+        return true;
+    }}
+    if (VF2IsAIBathroom2Style(itemId)) {{
+        // B2 visual rows clear only their direct persisted active byte;
+        // purchase history remains intact for reversible reactivation.
+        *VF2AIBathroom2ActiveByte(itemId) = 0;
+    }} else if (VF2IsMobileRenovationStyle(itemId)) {{
         // Cosmetic room styles are not stock inventory records.  Remove only
         // their direct persisted active byte; the ever-purchased marker stays
         // set so reselecting the style remains free.
@@ -10536,11 +11017,14 @@ extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
-    if ((itemId == 0x132 || itemId == 0x14C) && VF2MarriageEmailUnavailable()) {{
+    if (itemId == {MARRIAGE_EMAIL_ITEM_ID:#x} && VF2MarriageEmailUnavailable()) {{
         // A second resident adult means the stock proposal path has no valid
         // candidate state.  Hide the purchase instead of queueing the email
         // into the crash-prone path.
         return 0;
+    }}
+    if (kVF2EnableB150CheatUpgrades && itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
+        return 1;
     }}
     if (itemId == 0x14B) {{
         return VF2DivorceSpouseAvailable() ? 1 : 0;
@@ -10659,6 +11143,19 @@ extern "C" int __cdecl VF2GetOutfitStoreLockGeneration(int itemId) {{
     return VF2OutfitBodyForItem(itemId) < 0 ? -1 : 0;
 }}
 
+// CInventoryManager::IsLocked is the second native consumer of the
+// InventoryItemInfo generation field.  That table is a static symbol in the
+// stock object, so the optional unlock uses the same bounded state flag here
+// and returns -1 for every item outside the proven 0x1..0x1AC route.  The
+// generated getter hook treats -1 as "run the untouched native body".
+extern "C" int __cdecl VF2GetOutfitStoreLockState(int itemId) {{
+    if (gVF2UnlockEverythingInStore != 0 &&
+        itemId >= 0x1 && itemId <= 0x1AC) {{
+        return 0;
+    }}
+    return -1;
+}}
+
 extern "C" int __cdecl VF2GetOutfitStoreShortDesc(int itemId) {{
     int index = VF2OutfitStoreEntryIndex(itemId);
     return index < 0 ? -1 : kVF2OutfitStoreShortStringBase + index * 2;
@@ -10687,6 +11184,10 @@ __VF2_VISIBLE_SPECIAL_UPGRADE_ICON_CASES__
 }}
 
 static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
+    if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x} &&
+        VF2SameSexMarriageToggleActive()) {{
+        return {SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID};
+    }}
     int index = VF2VisibleSpecialUpgradeIconFrame(itemId);
     return index < 0 ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -10699,16 +11200,36 @@ static int VF2GetMobileRenovationIconImage(int itemId) {{
         : kVF2MobileRenovationImageBase + index;
 }}
 
+static int VF2GetMobileRenovationStoreIconImage(int itemId) {{
+    if (!kVF2EnableMobileRenovations) return -1;
+    switch (itemId) {{
+__VF2_MOBILE_RENOVATION_STORE_ICON_CASES__
+    default: return -1;
+    }}
+}}
+
+static int VF2GetAIBathroom2StoreIconImage(int itemId) {{
+    if (!kVF2EnableAIBathroom2) return -1;
+    switch (itemId) {{
+__VF2_AI_BATHROOM2_STORE_ICON_CASES__
+    default: return -1;
+    }}
+}}
+
 static int VF2GetAddedStoreIconImage(int itemId) {{
     int image = VF2GetOutfitStoreIconImage(itemId);
     if (image >= 0) return image;
     image = VF2GetVisibleSpecialUpgradeIconImage(itemId);
     if (image >= 0) return image;
-    return VF2GetMobileRenovationIconImage(itemId);
+    image = VF2GetAIBathroom2StoreIconImage(itemId);
+    if (image >= 0) return image;
+    return VF2GetMobileRenovationStoreIconImage(itemId);
 }}
 
 static int VF2GetAddedStoreIconCellSize(int itemId) {{
-    if (VF2GetMobileRenovationIconImage(itemId) >= 0)
+    if (VF2GetAIBathroom2StoreIconImage(itemId) >= 0)
+        return kVF2MobileRenovationIconCellSize;
+    if (VF2GetMobileRenovationStoreIconImage(itemId) >= 0)
         return kVF2MobileRenovationIconCellSize;
     return VF2GetVisibleSpecialUpgradeIconImage(itemId) >= 0
         ? kVF2VisibleSpecialUpgradeIconCellSize
@@ -10716,7 +11237,7 @@ static int VF2GetAddedStoreIconCellSize(int itemId) {{
 }}
 
 static float VF2GetAddedStoreIconScale(int itemId) {{
-    return VF2GetMobileRenovationIconImage(itemId) >= 0 ? 0.12f : 1.0f;
+    return (VF2GetAIBathroom2StoreIconImage(itemId) >= 0 || VF2GetMobileRenovationStoreIconImage(itemId) >= 0) ? 0.12f : 1.0f;
 }}
 
 extern "C" bool __cdecl VF2DrawOutfitStoreIconPoint(int x, int y, int itemId, int state, int position, int selected) {{
@@ -10749,12 +11270,23 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
     }}
     return true;
 }}
+
+{SPECIAL_UPGRADE_HELPER_SECTION_END}
 """.replace(
             "__VF2_VISIBLE_SPECIAL_UPGRADE_ICON_CASES__",
             visible_special_upgrade_icon_cases,
         ),
         encoding="ascii",
     )
+    helper_text = helper_path.read_text(encoding="ascii").replace(
+        "__VF2_MOBILE_RENOVATION_STORE_ICON_CASES__",
+        mobile_renovation_store_icon_cases,
+    )
+    helper_text = helper_text.replace(
+        "__VF2_AI_BATHROOM2_STORE_ICON_CASES__",
+        ai_bathroom2_store_icon_cases,
+    )
+    helper_path.write_text(helper_text, encoding="ascii")
     manifest["outfit_store_helpers"] = {
         "source": str(helper_path),
         "item_bases": {gender: hex(base) for gender, base in OUTFIT_STORE_GENDER_ITEM_BASES.items()},
@@ -10789,6 +11321,37 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
             "rebuild_route": "ContentMap.Load followed by the native ten-record activation table",
             "native_activation_source": "theGameState::Load",
             "visual_scope": "native PC content-map materials, hotspots, and objects only; mobile room-art compositing remains disabled",
+        },
+        "unlock_everything_store_locks": {
+            "store_item_id": "0x123",
+            "toggle_route": "VF2ApplyVisibleSpecialUpgrade toggles both native generation-lock tables and restores their snapshots on repurchase",
+            "price_route": "VF2GetVisibleSpecialUpgradePrice returns zero only when both tables are unlocked",
+            "furniture_manager": {
+                "table_symbol": ITEMINFO,
+                "record_count": ORIG_FURNITURE_COUNT + len(ITEMS),
+                "record_size": hex(RECORD_SIZE),
+                "lock_offset": "+0x0C",
+                "snapshot_source": str(SRC_OBJS / "FurnitureManager.obj"),
+                "helper": "_VF2UnlockAllFurnitureGenerationLocks / _VF2RestoreFurnitureGenerationLocks",
+            },
+            "inventory_manager": {
+                "table_symbol": INVENTORY_ITEMINFO,
+                "native_getter": "?GetLockGenerationLevel@CInventoryManager@@QAEHW4EInventoryItem@@@Z + 0x31",
+                "item_id_range": "0x1-0x1AC",
+                "defined_item_id_range": "0x1-0x116",
+                "reserved_pristine_tail": "0x117-0x1AC must contain zero record IDs",
+                "record_count": INVENTORY_ITEMINFO_RECORD_COUNT,
+                "record_size": hex(INVENTORY_ITEMINFO_RECORD_SIZE),
+                "lock_offset": "+0x10",
+                "lock_field_index": INVENTORY_ITEMINFO_LOCK_OFFSET // 4,
+                "snapshot_entries": INVENTORY_ITEMINFO_RECORD_COUNT,
+                "snapshot_source": str(SRC_OBJS / "InventoryManager.obj"),
+                "enumeration": "fail closed unless the authenticated native bounds, stride, IDs, and reserved tail all match",
+                "helper": "_VF2AllInventoryItemInfoLocksUnlocked / _VF2SetInventoryItemInfoLocksUnlocked",
+                "runtime_route": "bounded runtime flag consumed by CInventoryManager::GetLockGenerationLevel and IsLocked hooks; native itemInfo remains untouched",
+                "lock_state_hook": "?IsLocked@CInventoryManager@@QAE_NW4EInventoryItem@@@Z",
+            },
+            "inactive_repurchase_price": "explicit catalog price remains active after a prior purchase; zero applies only while this toggle is active",
         },
         "purchase_route": {
             "male_stock_tray_item": "0x49",
@@ -11086,10 +11649,15 @@ def patch_scrolling_store_scene(manifest):
         if ENABLE_CHEAT_UPGRADES
         else MOBILE_SPECIAL_UPGRADE_ITEM_IDS[-1]
     ) - MOBILE_SPECIAL_UPGRADE_ITEM_IDS[0]
-    if ENABLE_MOBILE_RENOVATIONS:
+    if ENABLE_MOBILE_RENOVATIONS or ENABLE_AI_GENERATED_BATHROOM2:
         max_visible_special_index = max(
             max_visible_special_index,
             MOBILE_RENOVATION_PC_ITEM_IDS[-1] - MOBILE_SPECIAL_UPGRADE_ITEM_IDS[0],
+        )
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        max_visible_special_index = max(
+            max_visible_special_index,
+            AI_BATHROOM2_PC_ITEM_IDS[-1] - MOBILE_SPECIAL_UPGRADE_ITEM_IDS[0],
         )
     purchase_payload += b"\x2D\x17\x01\x00\x00"                      # sub eax,117h
     purchase_payload += b"\x83\xF8" + bytes([max_visible_special_index])  # cmp eax,last added Special Upgrade index
@@ -11195,6 +11763,18 @@ def patch_scrolling_store_scene(manifest):
         f"        case 0x{item_id:X}: frame = {index}; break;"
         for index, item_id in enumerate(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
     )
+    inventory_item_info_locks = inventory_item_info_generation_locks()
+    inventory_item_info_restore_locks = list(inventory_item_info_locks)
+    if ENABLE_MOBILE_RENOVATIONS:
+        for item_id, style in zip(
+            MOBILE_RENOVATION_PC_ITEM_IDS,
+            MOBILE_RENOVATION_STYLE_CATALOG,
+        ):
+            inventory_item_info_restore_locks[item_id] = int(style["lock"])
+    inventory_lock_array_cpp = cpp_int_array(
+        "kVF2OriginalInventoryItemInfoLocks",
+        inventory_item_info_restore_locks,
+    )
     (PATCHED / "vf2_generation_locks.cpp").write_text(
         f"""
 enum EImage {{ eImageDummy = 0 }};
@@ -11203,6 +11783,26 @@ class theGraphicsManager {{
 public:
     void Draw(EImage image, int x, int y, float scale, int alpha);
 }};
+
+// The native InventoryManager itemInfo definition is internally scoped in
+// InventoryManager.obj (COFF storage class Static). It is authenticated at
+// generation time for the snapshot below, but cannot be referenced safely by
+// a generated translation unit. Runtime unlock state therefore lives in a
+// bounded flag and is consumed only by the native GetLockGenerationLevel and
+// IsLocked hooks emitted by patch_inventory_manager().
+{inventory_lock_array_cpp}
+static volatile unsigned char gVF2InventoryItemInfoLocksUnlocked = 0;
+static const int kVF2InventoryItemInfoRecordCount = {INVENTORY_ITEMINFO_RECORD_COUNT};
+static const int kVF2InventoryItemInfoFirstItemId = {INVENTORY_ITEMINFO_FIRST_ITEM_ID};
+static const int kVF2InventoryItemInfoLastItemId = {INVENTORY_ITEMINFO_LAST_ITEM_ID};
+
+extern "C" bool __cdecl VF2AllInventoryItemInfoLocksUnlocked() {{
+    return gVF2InventoryItemInfoLocksUnlocked != 0;
+}}
+
+extern "C" void __cdecl VF2SetInventoryItemInfoLocksUnlocked(bool enabled) {{
+    gVF2InventoryItemInfoLocksUnlocked = enabled ? 1 : 0;
+}}
 
 extern "C" void __cdecl VF2DrawGenerationLockImpl(theGraphicsManager* graphics, int frame, int x, int y, float scale, int alpha) {{
     if (frame < 0) {{
@@ -11411,6 +12011,10 @@ extern "C" void __cdecl VF2HandleStoreScrollbarMouse(void *scene, int message, i
                 OLDER_MORTALITY_TABLE_LAST_AGE + 1,
             )
         ],
+    )
+    ai_bathroom2_prices_cpp = cpp_int_array(
+        "kVF2AIBathroom2Prices",
+        [style["price"] for style in AI_BATHROOM2_STYLE_CATALOG],
     )
     special_upgrade_helper_cpp = r"""
 class CFoodStore {
@@ -11741,6 +12345,7 @@ extern "C" void __cdecl VF2ToggleB150PriceMode(int itemId);
 extern "C" void __cdecl VF2ResetB150PriceMode();
 extern "C" void __cdecl VF2TriggerAllHouseMalfunctions();
 extern "C" void __cdecl VF2FixAllHouseMalfunctions();
+extern "C" bool __cdecl VF2SameSexMarriageToggleActive();
 
 extern const int achievementOrder[];
 
@@ -11755,10 +12360,6 @@ volatile unsigned char gVF2AllowOlderPregnancies = 0;
 #pragma section(".vf2same", read, write)
 extern "C" __declspec(allocate(".vf2same"))
 volatile unsigned char gVF2SameSexMarriage = 0;
-
-#pragma section(".vf2proposal", read, write)
-extern "C" __declspec(allocate(".vf2proposal"))
-volatile unsigned char gVF2CheatMarriageProposalScene = 0;
 
 #pragma section(".vf2mort", read, write)
 extern "C" __declspec(allocate(".vf2mort"))
@@ -11861,88 +12462,13 @@ static bool VF2MarriageEmailUnavailable() {
     return VF2MarriagePair(first, second);
 }
 
-static const unsigned char kVF2CheatMarriageProposalOff = 0;
-static const unsigned char kVF2CheatMarriageProposalFemale = 1;
-static const unsigned char kVF2CheatMarriageProposalMale = 2;
-
-static void VF2QueueCheatMarriageProposal(unsigned char mode) {
+static void VF2QueueMarriageProposal() {
     theGameState *state = theGameState::Get();
     if (!state ||
         state->EmailMessageInQueue(eEmailMessageMarriageProposal)) {
         return;
     }
     state->QueueEmailMessage(eEmailMessageMarriageProposal);
-    // QueueEmailMessage is a no-op when the native queue is full.  Arm the
-    // one-scene gender mode only after a new enum-2 entry is observable.
-    if (state->EmailMessageInQueue(eEmailMessageMarriageProposal)) {
-        gVF2CheatMarriageProposalScene = mode;
-    }
-}
-
-extern "C" void __cdecl VF2ClearCheatMarriageProposalMode() {
-  gVF2CheatMarriageProposalScene = kVF2CheatMarriageProposalOff;
-}
-
-extern "C" void __cdecl VF2MaybeAddCheatMarriageExit(ldwScene *scene) {
-    if (!scene ||
-        (gVF2CheatMarriageProposalScene != kVF2CheatMarriageProposalFemale &&
-         gVF2CheatMarriageProposalScene != kVF2CheatMarriageProposalMale)) {
-        return;
-    }
-
-    ldwPoint point = {
-        theGameState::Get()->GetWideScreenOffsetX() + 4,
-        0x2DD,
-    };
-    ldwColor white = {0xFFFFFFFFu};
-    ldwButton *exitButton = new ldwButton(
-        3,
-        theGraphicsManager::Get()->GetImageGrid((EImage)0x129),
-        point,
-        scene,
-        true
-    );
-    exitButton->SetText(
-        theStringManager::Get()->GetString((StringId)0x76C),
-        white,
-        white,
-        white,
-        theStringManager::Get()->GetLargeFont()
-    );
-    scene->VF2AddControl(exitButton);
-}
-
-extern "C" bool __cdecl VF2HandleCheatMarriageProposalExit(
-    void *scene,
-    int message,
-    int action
-) {
-    if (gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalOff ||
-        message != 8) {
-        return false;
-    }
-
-    // Accept follows the native close path; clear the one-scene mode before
-    // it can be destroyed so a subsequent ordinary proposal cannot inherit it.
-    if (action == 1) {
-        VF2ClearCheatMarriageProposalMode();
-        return false;
-    }
-    if (action != 3) {
-        return false;
-    }
-
-    Sound.Play((ESound)0x8A);
-    theGameState *state = theGameState::Get();
-    if (!state) {
-        return false;
-    }
-    unsigned char *raw = (unsigned char *)state;
-    *(unsigned int *)(raw + 0x25CBC) = *(unsigned int *)(raw + 0x25CB8);
-    *(unsigned int *)(raw + 0x25CB8) = 0;
-    VF2ClearCheatMarriageProposalMode();
-    (void)scene;
-    return true;
 }
 
 static CVillager *VF2ActiveVillagerByPersistentIdUnique(
@@ -12016,7 +12542,7 @@ static bool VF2DivorceSpouse() {
 }
 
 static bool VF2IsSameSexMarriage() {
-    if (gVF2SameSexMarriage == 0) return false;
+    if (!VF2SameSexMarriageToggleActive()) return false;
     CVillager *first;
     CVillager *second;
     if (!VF2MarriagePair(first, second)) return false;
@@ -12028,16 +12554,10 @@ extern "C" int __fastcall VF2MarriageCandidateGender(
     void *,
     int currentGender
 ) {
-    if (gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalFemale) {
-        // Native eGenderFemale is 1 (male is 0).  Keep the cheat rows
-        // deterministic without changing the ordinary proposal path.
-        return 1;
-    }
-    if (gVF2CheatMarriageProposalScene == kVF2CheatMarriageProposalMale) {
-        return 0;
-    }
-    if (gVF2SameSexMarriage != 0) {
-        return ldwGameState::GetRandom(2);
+    if (VF2SameSexMarriageToggleActive()) {
+        // The same-sex toggle matches the candidate to the current adult;
+        // it never introduces an independent gender roll.
+        return currentGender;
     }
     return currentGender == 1 ? 0 : 1;
 }
@@ -12807,6 +13327,12 @@ static bool VF2AllFurnitureLocksUnlocked() {
     return true;
 }
 
+static bool VF2AllStoreLocksUnlocked() {
+    if (gVF2UnlockEverythingInStore != 0) return true;
+    return VF2AllFurnitureLocksUnlocked() &&
+        VF2AllInventoryItemInfoLocksUnlocked();
+}
+
 static void VF2UnlockAllFurnitureGenerationLocks() {
     for (int i = 0; i < kVF2FurnitureRecordCount; ++i) {
         itemInfo[i].generationLock = 0;
@@ -12989,7 +13515,7 @@ extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
     case 0x11A:
         return CollectableItem.luckyRockActive ? 0 : -1;
     case 0x123:
-        return VF2AllFurnitureLocksUnlocked() ? 0 : -1;
+        return VF2AllStoreLocksUnlocked() ? 0 : -1;
     default:
         return -1;
     }
@@ -13066,10 +13592,12 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         if (gVF2UnlockEverythingInStore != 0) {
             gVF2UnlockEverythingInStore = 0;
             VF2RestoreFurnitureGenerationLocks();
+            VF2SetInventoryItemInfoLocksUnlocked(false);
             break;
         }
         gVF2UnlockEverythingInStore = 1;
         VF2UnlockAllFurnitureGenerationLocks();
+        VF2SetInventoryItemInfoLocksUnlocked(true);
         break;
     case 0x124:
         {
@@ -13131,13 +13659,15 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         if (VF2MarriageEmailUnavailable()) {
             break;
         }
-        VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalFemale);
+        VF2QueueMarriageProposal();
         break;
     case 0x14C:
-        if (VF2MarriageEmailUnavailable()) {
-            break;
+        if (VF2SameSexMarriageToggleActive()) {
+            gVF2SameSexMarriage = 0;
+        } else {
+            gVF2SameSexMarriage = 1;
         }
-        VF2QueueCheatMarriageProposal(kVF2CheatMarriageProposalMale);
+        theGameState::Get()->SaveCurrentGame();
         break;
     case 0x133:
         VF2SetSockPileCount(kVF2MaximumSockPileCount);
@@ -13216,6 +13746,83 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_MOBILE_RENOVATION_ITEM_COUNT__",
         str(MOBILE_RENOVATION_IMAGE_COUNT),
+    )
+    ai_bathroom2_cpp = f"""
+static const bool kVF2EnableAIBathroom2 = {"true" if ENABLE_AI_GENERATED_BATHROOM2 else "false"};
+{ai_bathroom2_prices_cpp}
+class CInventoryManager;
+extern CInventoryManager InventoryManager;
+
+static bool VF2IsAIBathroom2Style(int itemId) {{
+    return kVF2EnableAIBathroom2 && itemId >= {AI_BATHROOM2_PC_ITEM_IDS[0]} &&
+        itemId <= {AI_BATHROOM2_PC_ITEM_IDS[-1]};
+}}
+
+static unsigned char *VF2AIBathroom2ActiveByte(int itemId) {{
+    if (!VF2IsAIBathroom2Style(itemId)) return 0;
+    return reinterpret_cast<unsigned char *>(&InventoryManager) + itemId + 0x2A3;
+}}
+
+extern "C" bool __cdecl VF2AIBathroom2IsActive(int itemId) {{
+    unsigned char *active = VF2AIBathroom2ActiveByte(itemId);
+    return active != 0 && *active != 0;
+}}
+
+static int VF2AIBathroom2StyleIndex(int itemId) {{
+    return VF2IsAIBathroom2Style(itemId) ? itemId - {AI_BATHROOM2_PC_ITEM_BASE} : -1;
+}}
+
+static bool VF2ApplyAIBathroom2Style(int itemId) {{
+    int index = VF2AIBathroom2StyleIndex(itemId);
+    if (index < 0) return false;
+    if (VF2AIBathroom2IsActive(itemId)) {{
+        *VF2AIBathroom2ActiveByte(itemId) = 0;
+    }} else {{
+        for (int sibling = {AI_BATHROOM2_PC_ITEM_IDS[0]}; sibling <= {AI_BATHROOM2_PC_ITEM_IDS[-1]}; ++sibling) {{
+            if (sibling != itemId && VF2AIBathroom2IsActive(sibling)) *VF2AIBathroom2ActiveByte(sibling) = 0;
+        }}
+        *VF2AIBathroom2ActiveByte(itemId) = 1;
+    }}
+    theGameState::Get()->SaveCurrentGame();
+    return true;
+}}
+
+static int VF2GetAIBathroom2Price(int itemId) {{
+    int index = VF2AIBathroom2StyleIndex(itemId);
+    if (index < 0) return -1;
+    // An active row is the zero-price repurchase/removal action. Inactive
+    // rows retain their explicit catalog price; curtain behavior remains
+    // separately fail-closed.
+    if (VF2AIBathroom2IsActive(itemId)) return 0;
+    return kVF2AIBathroom2Prices[index];
+}}
+""".strip()
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        'extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {\n'
+        '    int mobileRenovationPrice = VF2GetMobileRenovationStylePrice(itemId);',
+        'extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {\n'
+        '    int aiBathroom2Price = VF2GetAIBathroom2Price(itemId);\n'
+        '    if (aiBathroom2Price != -1) return aiBathroom2Price;\n'
+        '    int mobileRenovationPrice = VF2GetMobileRenovationStylePrice(itemId);',
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        'extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {\n'
+        '    if (VF2ApplyMobileRenovationStyle(itemId)) return;',
+        'extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {\n'
+        '    if (VF2ApplyAIBathroom2Style(itemId)) return;\n'
+        '    if (VF2ApplyMobileRenovationStyle(itemId)) return;',
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        'extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {\n'
+        '    if ((itemId == 0x132 || itemId == 0x14C)',
+        'extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {\n'
+        '    if (VF2IsAIBathroom2Style(itemId)) return 1;\n'
+        '    if ((itemId == 0x132 || itemId == 0x14C)',
+    )
+    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
+        'extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {\n',
+        ai_bathroom2_cpp + '\n\nextern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {\n',
+        1,
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         "__VF2_GENERAL_PURCHASE_GOAL_CASES__",
@@ -13692,6 +14299,29 @@ def patch_string_manager(manifest):
                     "text": text,
                 })
 
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        for index, style in enumerate(AI_BATHROOM2_STYLE_CATALOG):
+            short_id, long_id = ai_bathroom2_string_ids_for(index)
+            for string_id, role, text in (
+                (short_id, "short", style["name"]),
+                (long_id, "long", f"{style['name']}. Buy again to remove."),
+            ):
+                key = f"eString_AIBathroom2{style['color'].title()}{role.title()}Desc"
+                key_sym = f"_vf2aibathroom2str_key_{index:02d}_{role}"
+                text_sym = f"_vf2aibathroom2str_text_{index:02d}_{role}"
+                helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+                helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+                new_rows.append((string_id, key_sym, text_sym))
+                string_manifest.append({
+                    "pc_string_id": hex(string_id),
+                    "source": "AI Bathroom 2 visual House Renovations row",
+                    "item_id": hex(AI_BATHROOM2_PC_ITEM_IDS[index]),
+                    "color": style["color"],
+                    "role": role,
+                    "key": key,
+                    "text": text,
+                })
+
     if ENABLE_CHEAT_UPGRADES:
         divorce_item = next(
             item for item in CHEAT_UPGRADE_ITEMS
@@ -13950,6 +14580,24 @@ def patch_island_events(manifest):
         event_list_sym = obj.symbol("?mEventList@CIslandEvents@@0PAPAVCIslandEvent@@A")
         event_has_fired_sym = obj.symbol("?mEventHasFired@CIslandEvents@@0PA_NA")
 
+    # The native object keeps mEventHasFired immediately after the pointer
+    # table, and its original BSS contribution happens to contain enough
+    # trailing bytes for the desktop bound.  Moving that table does not grow
+    # its storage: without an explicit tail extension, the new mobile slots
+    # write past this object's BSS contribution (the first bad index is 0x68
+    # for the current 25-row mobile set).  Reserve the complete byte range
+    # required by the patched exclusive bound while leaving all symbols and
+    # code above untouched.
+    island_sec = obj.section(event_has_fired_sym.section)
+    fired_table_end_offset = event_has_fired_sym.value + new_bound
+    fired_storage_growth = max(0, fired_table_end_offset - island_sec.raw_size)
+    if fired_storage_growth:
+        obj.grow_bss_section(
+            event_has_fired_sym.section,
+            island_sec.raw_size,
+            fired_storage_growth,
+        )
+
     insert_off = ctor_sym.value + 0x15B8
     payload = bytearray([
         0x68, first_slot_offset & 0xFF, (first_slot_offset >> 8) & 0xFF, 0x00, 0x00,  # push offset mEventList+184h
@@ -14090,6 +14738,11 @@ public:
     void SpawnTrashInHouse(int count);
 }};
 
+class CToolTray {{
+public:
+    bool AddItem(EInventoryItem item, int useCount);
+}};
+
 class CFurnitureManager {{
 public:
     bool AddToStorage(EInventoryItem item);
@@ -14097,6 +14750,7 @@ public:
 
 extern CMoney Money;
 extern CCollectableItem CollectableItem;
+extern CToolTray ToolTray;
 extern CFurnitureManager FurnitureManager;
 
 static CVillager *VF2PickMobileAdultEventVillager()
@@ -14153,11 +14807,42 @@ static CVillagerSkills *VF2MobileEventVillagerSkills(CVillager *villager)
         reinterpret_cast<unsigned char *>(villager) + 0x6B8C);
 }}
 
+// Pin the native CIslandEventChoiceAB vtable order with an explicit table.
+// MSVC groups overloaded virtuals by signature when emitting a C++ vtable;
+// that placed ImpactGame() before ImpactGame(int) in the old helper.  The
+// native table is fixed: ImpactGame(int), ImpactGame(), CalcAward(int),
+// CalcAward(), then GetAwardAmount.  Use non-virtual member bodies plus this
+// exact function-pointer table so every COFF relocation is deterministic.
+struct CMobileIslandEvent;
+struct VF2MobileIslandEventVtable {{
+    void *rtti;
+    void *vector_delete;
+    void *CanFire;
+    void *GetTitle;
+    void *GetDescription;
+    void *HasChoices;
+    void *IsEmailEvent;
+    void *GetChoiceAText;
+    void *GetChoiceBText;
+    void *GetTargetVillager;
+    void *GetTargetVillager2;
+    void *GetVillagerPose;
+    void *GetResultDescription;
+    void *ImpactGameChoice;
+    void *ImpactGameNoChoice;
+    void *CalcAwardChoice;
+    void *CalcAwardNoChoice;
+    void *GetAwardAmount;
+}};
+extern const VF2MobileIslandEventVtable gVF2MobileIslandEventVtable;
+
 // Vtable- and layout-compatible with the native CIslandEventChoiceAB path.
 // The stock prefix is vptr, target1 (+0x04), choice-layer slot (+0x08), award
 // (+0x0C), target2 (+0x10). Keeping that prefix prevents dialog/scheduler code
 // from interpreting title and description IDs as pointers.
+//
 struct CMobileIslandEvent {{
+    void **vtable_;
     CVillager *target1_;
     // CIslandEventChoiceAB keeps its second target at +0x10; +0x08 is a
     // native choice-layer slot and must not be used for the target or custom
@@ -14177,10 +14862,11 @@ struct CMobileIslandEvent {{
     int outcome_kind_;
 
     CMobileIslandEvent(int title, int desc, int choice_a, int choice_b, int result_a, int result_b, bool has_choices, bool is_email, int outcome_kind)
-        : target1_(0), choice_layer_slot_(0), award_(0), target2_(0), title_(title), desc_(desc), choice_a_(choice_a), choice_b_(choice_b), result_a_(result_a), result_b_(result_b),
+        : vtable_(reinterpret_cast<void **>(const_cast<VF2MobileIslandEventVtable *>(&gVF2MobileIslandEventVtable)) + 1),
+          target1_(0), choice_layer_slot_(0), award_(0), target2_(0), title_(title), desc_(desc), choice_a_(choice_a), choice_b_(choice_b), result_a_(result_a), result_b_(result_b),
           has_choices_(has_choices), is_email_(is_email), outcome_kind_(outcome_kind) {{}}
-    virtual ~CMobileIslandEvent() {{}}
-    virtual bool CanFire() {{
+    ~CMobileIslandEvent() {{}}
+    bool CanFire() {{
         // These eight mobile classes return false unconditionally. Some retain
         // unreachable award/effect methods, but the normal and email schedulers
         // both reject them at CanFire.
@@ -14246,16 +14932,16 @@ struct CMobileIslandEvent {{
         target2_ = target1_;
         return target1_ != 0;
     }}
-    virtual StringId GetTitle() {{ return (StringId)title_; }}
-    virtual StringId GetDescription() {{ return (StringId)desc_; }}
-    virtual bool HasChoices() {{ return has_choices_; }}
-    virtual bool IsEmailEvent() {{ return is_email_; }}
-    virtual StringId GetChoiceAText() {{ return (StringId)choice_a_; }}
-    virtual StringId GetChoiceBText() {{ return (StringId)choice_b_; }}
-    virtual CVillager *GetTargetVillager() {{ return target1_; }}
-    virtual CVillager *GetTargetVillager2() {{ return target2_; }}
-    virtual EBodyPosition GetVillagerPose() {{ return eBodyPosition_Standing; }}
-    virtual StringId GetResultDescription(int choice) {{ return (StringId)(choice == 0 ? result_a_ : result_b_); }}
+    StringId GetTitle() {{ return (StringId)title_; }}
+    StringId GetDescription() {{ return (StringId)desc_; }}
+    bool HasChoices() {{ return has_choices_; }}
+    bool IsEmailEvent() {{ return is_email_; }}
+    StringId GetChoiceAText() {{ return (StringId)choice_a_; }}
+    StringId GetChoiceBText() {{ return (StringId)choice_b_; }}
+    CVillager *GetTargetVillager() {{ return target1_; }}
+    CVillager *GetTargetVillager2() {{ return target2_; }}
+    EBodyPosition GetVillagerPose() {{ return eBodyPosition_Standing; }}
+    StringId GetResultDescription(int choice) {{ return (StringId)(choice == 0 ? result_a_ : result_b_); }}
     // Keep the declaration order identical to CIslandEvent's native vtable:
     // ImpactGame(int) precedes the no-argument ImpactGame().  The implementation
     // body is non-virtual so the generated helper cannot accidentally swap the
@@ -14333,10 +15019,29 @@ struct CMobileIslandEvent {{
                 *reinterpret_cast<SBehaviorData *>(&behavior_data));
         }}
     }}
-    virtual void ImpactGame(int choice) {{
+    void ImpactGame(int choice) {{
         if (outcome_kind_ == 2) {{
             if (choice == 0) {{
                 Money.Adjust((float)award_, true);
+            }}
+            return;
+        }}
+        if (outcome_kind_ == 5) {{
+            // Native CEventFruitcakes::ImpactGame(choice): choice A charges
+            // the calculated -25 award, adds tool item 42, starts behavior 26,
+            // and applies symptom 5. Choice B is a no-op.
+            if (choice == 0 && target1_) {{
+                Money.Adjust((float)award_, true);
+                ToolTray.AddItem((EInventoryItem)42, 1);
+                unsigned char behavior_data = 0;
+                target1_->NewBehavior(
+                    (EBehavior)26,
+                    *reinterpret_cast<SBehaviorData *>(&behavior_data));
+                reinterpret_cast<CVillagerPlans *>(target1_)
+                    ->StartNewBehavior(*target1_);
+                CVillagerState *state =
+                    VF2MobileEventVillagerState(target1_);
+                if (state) state->SetSymptom((ESymptom)5);
             }}
             return;
         }}
@@ -14487,7 +15192,8 @@ struct CMobileIslandEvent {{
             award_ = 0;
         }}
     }}
-    virtual void CalcAward(int choice) {{
+    void ImpactGame() {{ VF2ImpactGameNoChoice(); }}
+    void CalcAward(int choice) {{
         if (outcome_kind_ == 2) {{
             award_ = choice == 0 ? ldwGameState::GetRandom(100) + 50 : 0;
         }} else if (outcome_kind_ == 3) {{
@@ -14510,10 +15216,84 @@ struct CMobileIslandEvent {{
             award_ = 0;
         }}
     }}
-    virtual void ImpactGame() {{ VF2ImpactGameNoChoice(); }}
-    virtual void CalcAward() {{ VF2CalcAwardNoChoice(); }}
-    virtual int GetAwardAmount() {{ return award_; }}
+    void CalcAward() {{ VF2CalcAwardNoChoice(); }}
+    int GetAwardAmount() {{ return award_; }}
 }};
+
+// Keep the native CIslandEventChoiceAB slot order independent of compiler
+// overload-ordering rules.  These thunks receive the native thiscall ABI
+// (ECX=self, choice/flags at [esp+4]) and forward to fastcall bodies.
+static void *__fastcall VF2MobileIslandEventVectorDeleteBody(
+    CMobileIslandEvent *self, unsigned int flags) {{
+    self->~CMobileIslandEvent();
+    if (flags & 1u) {{
+        ::operator delete(self);
+    }}
+    return self;
+}}
+static bool __fastcall VF2MobileIslandEventCanFireBody(CMobileIslandEvent *self, int) {{ return self->CanFire(); }}
+static StringId __fastcall VF2MobileIslandEventGetTitleBody(CMobileIslandEvent *self, int) {{ return self->GetTitle(); }}
+static StringId __fastcall VF2MobileIslandEventGetDescriptionBody(CMobileIslandEvent *self, int) {{ return self->GetDescription(); }}
+static bool __fastcall VF2MobileIslandEventHasChoicesBody(CMobileIslandEvent *self, int) {{ return self->HasChoices(); }}
+static bool __fastcall VF2MobileIslandEventIsEmailEventBody(CMobileIslandEvent *self, int) {{ return self->IsEmailEvent(); }}
+static StringId __fastcall VF2MobileIslandEventGetChoiceATextBody(CMobileIslandEvent *self, int) {{ return self->GetChoiceAText(); }}
+static StringId __fastcall VF2MobileIslandEventGetChoiceBTextBody(CMobileIslandEvent *self, int) {{ return self->GetChoiceBText(); }}
+static CVillager *__fastcall VF2MobileIslandEventGetTargetVillagerBody(CMobileIslandEvent *self, int) {{ return self->GetTargetVillager(); }}
+static CVillager *__fastcall VF2MobileIslandEventGetTargetVillager2Body(CMobileIslandEvent *self, int) {{ return self->GetTargetVillager2(); }}
+static EBodyPosition __fastcall VF2MobileIslandEventGetVillagerPoseBody(CMobileIslandEvent *self, int) {{ return self->GetVillagerPose(); }}
+static StringId __fastcall VF2MobileIslandEventGetResultDescriptionBody(CMobileIslandEvent *self, int choice) {{ return self->GetResultDescription(choice); }}
+static void __fastcall VF2MobileIslandEventImpactGameChoiceBody(CMobileIslandEvent *self, int choice) {{ self->ImpactGame(choice); }}
+static void __fastcall VF2MobileIslandEventImpactGameNoChoiceBody(CMobileIslandEvent *self, int) {{ self->ImpactGame(); }}
+static void __fastcall VF2MobileIslandEventCalcAwardChoiceBody(CMobileIslandEvent *self, int choice) {{ self->CalcAward(choice); }}
+static void __fastcall VF2MobileIslandEventCalcAwardNoChoiceBody(CMobileIslandEvent *self, int) {{ self->CalcAward(); }}
+static int __fastcall VF2MobileIslandEventGetAwardAmountBody(CMobileIslandEvent *self, int) {{ return self->GetAwardAmount(); }}
+
+#define VF2_ISLAND_THUNK0(name, body) \
+    static __declspec(naked) void name() {{ __asm {{ call body }} __asm {{ ret }} }}
+#define VF2_ISLAND_THUNK1(name, body) \
+    static __declspec(naked) void name() {{ __asm {{ mov edx, [esp+4] }} __asm {{ call body }} __asm {{ ret 4 }} }}
+VF2_ISLAND_THUNK1(VF2MobileIslandEventVectorDelete, VF2MobileIslandEventVectorDeleteBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventCanFire, VF2MobileIslandEventCanFireBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventGetTitle, VF2MobileIslandEventGetTitleBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventGetDescription, VF2MobileIslandEventGetDescriptionBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventHasChoices, VF2MobileIslandEventHasChoicesBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventIsEmailEvent, VF2MobileIslandEventIsEmailEventBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventGetChoiceAText, VF2MobileIslandEventGetChoiceATextBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventGetChoiceBText, VF2MobileIslandEventGetChoiceBTextBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventGetTargetVillager, VF2MobileIslandEventGetTargetVillagerBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventGetTargetVillager2, VF2MobileIslandEventGetTargetVillager2Body)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventGetVillagerPose, VF2MobileIslandEventGetVillagerPoseBody)
+VF2_ISLAND_THUNK1(VF2MobileIslandEventGetResultDescription, VF2MobileIslandEventGetResultDescriptionBody)
+VF2_ISLAND_THUNK1(VF2MobileIslandEventImpactGameChoice, VF2MobileIslandEventImpactGameChoiceBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventImpactGameNoChoice, VF2MobileIslandEventImpactGameNoChoiceBody)
+VF2_ISLAND_THUNK1(VF2MobileIslandEventCalcAwardChoice, VF2MobileIslandEventCalcAwardChoiceBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventCalcAwardNoChoice, VF2MobileIslandEventCalcAwardNoChoiceBody)
+VF2_ISLAND_THUNK0(VF2MobileIslandEventGetAwardAmount, VF2MobileIslandEventGetAwardAmountBody)
+#undef VF2_ISLAND_THUNK0
+#undef VF2_ISLAND_THUNK1
+
+const VF2MobileIslandEventVtable gVF2MobileIslandEventVtable = {{
+    0,
+    &VF2MobileIslandEventVectorDelete,
+    &VF2MobileIslandEventCanFire,
+    &VF2MobileIslandEventGetTitle,
+    &VF2MobileIslandEventGetDescription,
+    &VF2MobileIslandEventHasChoices,
+    &VF2MobileIslandEventIsEmailEvent,
+    &VF2MobileIslandEventGetChoiceAText,
+    &VF2MobileIslandEventGetChoiceBText,
+    &VF2MobileIslandEventGetTargetVillager,
+    &VF2MobileIslandEventGetTargetVillager2,
+    &VF2MobileIslandEventGetVillagerPose,
+    &VF2MobileIslandEventGetResultDescription,
+    &VF2MobileIslandEventImpactGameChoice,
+    &VF2MobileIslandEventImpactGameNoChoice,
+    &VF2MobileIslandEventCalcAwardChoice,
+    &VF2MobileIslandEventCalcAwardNoChoice,
+    &VF2MobileIslandEventGetAwardAmount
+}};
+
+static_assert(sizeof(void *) == 4, "Island helper requires x86 pointers");
 
 static_assert(offsetof(CMobileIslandEvent, target1_) == 4, "CIslandEventChoiceAB target1 layout");
 static_assert(offsetof(CMobileIslandEvent, choice_layer_slot_) == 8, "CIslandEventChoiceAB choice slot layout");
@@ -14568,6 +15348,9 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
         "event_list_growth_bytes": event_table_growth,
         "event_list_new_end_offset": hex(new_table_end_offset),
         "mEventHasFired_new_offset": hex(event_has_fired_sym.value),
+        "mEventHasFired_storage_bytes": new_bound,
+        "mEventHasFired_tail_growth_bytes": fired_storage_growth,
+        "bss_end_offset": hex(obj.section(event_has_fired_sym.section).raw_size),
         "event_bound_patches": bound_patches,
         "destructor_bound_patches": destructor_bound_patches,
         "abi_layout": {
@@ -14582,7 +15365,7 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
                 "CalcAward(int)",
                 "CalcAward()",
             ],
-            "native_evidence": "IslandEvents_dump.txt CIslandEventChoiceAB GetTargetVillager2 reads [ecx+0x10]; vtable #60B",
+            "native_evidence": "IslandEvents_dump.txt CIslandEventChoiceAB GetTargetVillager2 reads [ecx+0x10]; vtable #60C",
         },
     }
 
@@ -15026,6 +15809,8 @@ def patch_graphics_manager(manifest):
         + OUTFIT_STORE_ENTRY_COUNT
         + (MOBILE_RENOVATION_IMAGE_COUNT if ENABLE_MOBILE_RENOVATIONS else 0)
         + (HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT if ENABLE_HOLIDAY_ORNAMENTS else 0)
+        + (MOBILE_RENOVATION_USER_STORE_ICON_COUNT if ENABLE_MOBILE_RENOVATIONS else 0)
+        + (len(AI_BATHROOM2_STYLE_CATALOG) * 2 if ENABLE_AI_GENERATED_BATHROOM2 else 0)
     )
     if append_count:
         obj.insert_section_bytes(img_sym.section, img_sym.value + ORIG_IMAGE_COUNT * DESC_SIZE, b"\0" * (append_count * DESC_SIZE))
@@ -15315,6 +16100,97 @@ def patch_graphics_manager(manifest):
             "symbol": ornament_bg_sym,
         })
 
+    mobile_renovation_store_icon_desc_manifest = []
+    if ENABLE_MOBILE_RENOVATIONS:
+        for filename, spec in MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.items():
+            source = MOBILE_RENOVATION_USER_STORE_ICON_DIR / filename
+            if not source.is_file():
+                raise RuntimeError(f"Mobile renovation store icon source art is missing: {source}")
+            digest = hashlib.sha256(source.read_bytes()).hexdigest().upper()
+            if digest != spec["sha256"] or tuple(read_png_size(source) or ()) != tuple(spec["size"]):
+                raise RuntimeError(f"Mobile renovation store icon source identity mismatch: {source}")
+            image_id = mobile_renovation_store_icon_image_id(spec["pc_item"], holiday_desc_count)
+            path = f"MobileRenovations/store_icons/{filename}"
+            vals = plain_image_donor[:]
+            vals[0] = image_id
+            vals[1] = 0
+            vals[2] = 1
+            vals[3] = 1
+            desc_off = img_sym.value + image_id * DESC_SIZE
+            img_sec = obj.section(img_sym.section)
+            obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack(
+                "<" + "I" * (DESC_SIZE // 4),
+                *vals,
+            )
+            sym = "_vf2renovation_store_icon_" + filename.replace(".", "_").replace("-", "_").replace(" ", "_")
+            helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+            symidx = obj.append_undefined_symbol(sym)
+            obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+            mobile_renovation_store_icon_desc_manifest.append({
+                "image_id": hex(image_id),
+                "name": filename,
+                "path": path,
+                "source": str(source),
+                "symbol": sym,
+                "pc_item": hex(spec["pc_item"]),
+                "mobile_item": hex(spec["mobile_item"]),
+                "room": spec["room"],
+                "size": list(spec["size"]),
+                "sha256": digest,
+                "grid": [1, 1],
+                "scale": [0.12, 0.12],
+                "status": "staged_only_stop_unverified_executable_link",
+            })
+
+    ai_bathroom2_desc_manifest = []
+    ai_bathroom2_store_icon_desc_manifest = []
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        holiday_desc_count = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
+        for index, style in enumerate(AI_BATHROOM2_STYLE_CATALOG):
+            image_id = ai_bathroom2_image_id(index, holiday_desc_count)
+            path = f"AIGeneratedBathroom2/{style['file']}"
+            vals = plain_image_donor[:]
+            vals[0] = image_id
+            vals[1] = 0
+            vals[2] = 1
+            vals[3] = 1
+            desc_off = img_sym.value + image_id * DESC_SIZE
+            obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack(
+                "<" + "I" * (DESC_SIZE // 4), *vals,
+            )
+            sym = "_vf2aibathroom2_overlay_" + style["color"]
+            helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+            symidx = obj.append_undefined_symbol(sym)
+            obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+            ai_bathroom2_desc_manifest.append({
+                "image_id": hex(image_id), "color": style["color"], "path": path,
+                "symbol": sym, "grid": [1, 1], "scale": [1.0, 1.0],
+            })
+            icon_filename = next(
+                filename for filename, spec in AI_BATHROOM2_STORE_ICON_ASSETS.items()
+                if spec["color"] == style["color"]
+            )
+            icon_id = ai_bathroom2_store_icon_image_id(index, holiday_desc_count)
+            icon_path = f"AIGeneratedBathroom2/store_icons/{icon_filename}"
+            icon_vals = plain_image_donor[:]
+            icon_vals[0] = icon_id
+            icon_vals[1] = 0
+            icon_vals[2] = 1
+            icon_vals[3] = 1
+            icon_off = img_sym.value + icon_id * DESC_SIZE
+            obj.buf[img_sec.raw_ptr + icon_off : img_sec.raw_ptr + icon_off + DESC_SIZE] = struct.pack(
+                "<" + "I" * (DESC_SIZE // 4), *icon_vals,
+            )
+            icon_sym = "_vf2aibathroom2_store_icon_" + style["color"]
+            helper_lines.append(f'const char {icon_sym[1:]}[] = "{icon_path}";')
+            icon_symidx = obj.append_undefined_symbol(icon_sym)
+            obj.append_relocation(img_sym.section, icon_off + 4, icon_symidx)
+            ai_bathroom2_store_icon_desc_manifest.append({
+                "image_id": hex(icon_id), "color": style["color"], "name": icon_filename,
+                "path": icon_path, "symbol": icon_sym, "grid": [1, 1],
+                "scale": [0.12, 0.12],
+            })
+
     new_image_max = ORIG_IMAGE_MAX + append_count
     new_scan_end = ORIG_IMAGE_COUNT * DESC_SIZE + append_count * DESC_SIZE
     new_cleanup_end = 0x7798 + append_count * DESC_SIZE
@@ -15371,11 +16247,36 @@ def patch_graphics_manager(manifest):
             if ENABLE_MOBILE_RENOVATIONS
             else 0,
             "descriptors": mobile_renovation_desc_manifest,
-            # The mobile store consumes these same full-room descriptors at
-            # the native thumbnail scale; room rendering remains 1.0f.
+            "store_icon_descriptors": mobile_renovation_store_icon_desc_manifest,
+            "store_icon_link_status": MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS,
+            "store_icon_image_base": hex(mobile_renovation_store_icon_image_base(holiday_desc_count))
+            if ENABLE_MOBILE_RENOVATIONS
+            else None,
+            "store_icon_image_count": len(mobile_renovation_store_icon_desc_manifest),
+            # Room rendering consumes the complete 1:1 descriptors. The store
+            # draw hook selects only the verified user-supplied icon descriptors;
+            # missing mappings fall through to the stock DrawItem path.
             "store_icon_scale": 0.12,
-            "store_icon_descriptor_range": "0x56B-0x579",
-            "runtime_asset_export": "coordinator-owned; descriptors use Images/MobileRenovations/*.png",
+            "store_icon_descriptor_range": (
+                f"0x{mobile_renovation_store_icon_image_base(holiday_desc_count):X}-"
+                f"0x{mobile_renovation_store_icon_image_base(holiday_desc_count) + len(mobile_renovation_store_icon_desc_manifest) - 1:X}"
+                if mobile_renovation_store_icon_desc_manifest
+                else None
+            ),
+            "store_icon_missing_fallback": list(MOBILE_RENOVATION_USER_STORE_ICON_MISSING),
+            "runtime_asset_export": (
+                "staged Images/MobileRenovations/store_icons/*.png; final executable "
+                "linkage STOP until authenticated; stock DrawItem fallback for missing mappings"
+            ),
+        },
+        "ai_bathroom2_visual_images": {
+            "enabled": ENABLE_AI_GENERATED_BATHROOM2,
+            "image_base": hex(ai_bathroom2_image_base(holiday_desc_count)) if ENABLE_AI_GENERATED_BATHROOM2 else None,
+            "descriptors": ai_bathroom2_desc_manifest,
+            "store_icon_image_base": hex(ai_bathroom2_store_icon_image_base(holiday_desc_count)) if ENABLE_AI_GENERATED_BATHROOM2 else None,
+            "store_icon_descriptors": ai_bathroom2_store_icon_desc_manifest,
+            "scale": {"room_overlay": 1.0, "store_icon": 0.12},
+            "route": "PC-only House Renovations visual rows; native E6 untouched",
         },
         "holiday_ornament_collection_images": {
             "enabled": ENABLE_HOLIDAY_ORNAMENTS,
@@ -16343,7 +17244,13 @@ def patch_next_generation_age_gate(manifest):
 
 
 def patch_multiple_marriage_candidates(manifest):
-    """Keep the proposal scene open and generate a new candidate on Reject."""
+    """Legacy compatibility stub; native Reject/close behavior is retained."""
+    # Force Marriage Email no longer arms a scene-scoped reroll mode.  Keep
+    # this legacy entry point inert for old callers while the active generator
+    # routes only through the normal proposal queue.
+    return
+
+    # Historical implementation retained below for source archaeology only.
     dating_path = PATCHED / "DatingScene.obj"
     dating = CoffObject(dating_path)
     handle_name = "?HandleMessage@CDatingScene@@UAE_NHJ@Z"
@@ -16360,9 +17267,7 @@ def patch_multiple_marriage_candidates(manifest):
         raise RuntimeError("Dating Reject candidate-clear route drifted")
 
     generate = dating.symbol(generate_name)
-    flag_symbol = dating.append_undefined_symbol(
-        CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL
-    )
+    flag_symbol = dating.append_undefined_symbol("_vf2_legacy_marriage_reroll")
     # The stock call at +0x8D is CSound::Play.  Preserve its relocation and
     # move it into the stock branch of the gated cave; ordinary proposals must
     # execute these bytes unchanged.
@@ -16450,13 +17355,13 @@ def patch_multiple_marriage_candidates(manifest):
         ),
         "mode_gate": (
             "mode 0 and invalid values preserve the original native Reject route; "
-            "only exact Female (1) or Male (2) modes reroll in place and keep "
-            "the proposal scene active"
+            "only the exact active forced-email mode (1) rerolls in place and "
+            "keeps the proposal scene active"
         ),
         "same_sex_interaction": (
             "each replacement passes through the optional .vf2same candidate-"
-            "gender helper, so flag-off remains opposite-sex and flag-on may "
-            "produce either gender"
+            "gender helper, so flag-off remains opposite-sex and flag-on matches "
+            "the current adult"
         ),
         "accept_path": "byte-identical stock HandleMessage parameter-1 route",
     }
@@ -16547,9 +17452,8 @@ def patch_same_sex_marriage(manifest):
         SAME_SEX_CANDIDATE_GENDER_HELPER_SYMBOL
     )
     # GeneratePeepCandidate keeps the villager-manager pointer in ECX for the
-    # SpawnSpecificPeep call immediately after this hook.  The enabled helper
-    # path calls native GetRandom(2), which is allowed to clobber ECX, so use a
-    # local trampoline to preserve the native this-pointer across the helper.
+    # SpawnSpecificPeep call immediately after this hook.  Keep a local
+    # trampoline so the helper cannot disturb that native this-pointer.
     gender_cave = generate_sec.raw_size
     gender_trampoline = bytearray(
         b"\x8B\xD7"             # mov edx,edi: current gender
@@ -16579,199 +17483,115 @@ def patch_same_sex_marriage(manifest):
         + b"\x90\x90\x90"
     )
 
-    clear_helper = dating.append_undefined_symbol(
-        CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL
-    )
-    destroy_name = "?Destroy@CDatingScene@@SAXXZ"
-    destroy = dating.symbol(destroy_name)
-    destroy_sec = dating.section(destroy.section)
-    destroy_hook = destroy.value + 0x0A
-    destroy_raw = destroy_sec.raw_ptr + destroy_hook
-    expected_destroy = b"\x8B\x01\x6A\x01\xFF\x10"
-    if bytes(dating.buf[destroy_raw:destroy_raw + 6]) != expected_destroy:
-        raise RuntimeError("Dating Destroy hook bytes drifted")
-
-    # Destroy is a six-byte stock call sequence.  Preserve it in the cave,
-    # clear the one-scene proposal mode, then resume at Destroy+0x10.
-    destroy_cave = destroy_sec.raw_size
-    destroy_trampoline = bytearray(
-        expected_destroy
-        + b"\xE8\0\0\0\0"
-        + b"\xE9\0\0\0\0"
-    )
-    if len(destroy_trampoline) != 16:
-        raise AssertionError("Dating Destroy trampoline size drifted")
-    struct.pack_into(
-        "<i",
-        destroy_trampoline,
-        12,
-        (destroy.value + 0x10) - (destroy_cave + len(destroy_trampoline)),
-    )
-    dating.insert_section_bytes(
-        destroy_sec.index,
-        destroy_cave,
-        bytes(destroy_trampoline),
-    )
-    dating.append_relocation(
-        destroy_sec.index,
-        destroy_cave + 7,
-        clear_helper,
-        IMAGE_REL_I386_REL32,
-    )
-    destroy = dating.symbol(destroy_name)
-    destroy_sec = dating.section(destroy.section)
-    destroy_raw = destroy_sec.raw_ptr + destroy_hook
-    dating.buf[destroy_raw:destroy_raw + 6] = (
-        b"\xE9" + struct.pack("<i", destroy_cave - (destroy_hook + 5))
-        + b"\x90"
-    )
-
-    exit_constructor_helper = dating.append_undefined_symbol(
-        CHEAT_MARRIAGE_PROPOSAL_EXIT_CONSTRUCTOR_SYMBOL
-    )
-    exit_handler_helper = dating.append_undefined_symbol(
-        CHEAT_MARRIAGE_PROPOSAL_EXIT_HANDLER_SYMBOL
-    )
-
-    # IDA: the stock constructor's final field cleanup is a stable anchor.
-    # Insert the armed-only control before that cleanup so ordinary scenes
-    # execute the untouched constructor body and epilogue.
-    constructor_name = "??0CDatingScene@@AAE@XZ"
-    constructor = dating.symbol(constructor_name)
-    constructor_sec = dating.section(constructor.section)
-    constructor_epilogue_pattern = bytes.fromhex(
-        "C7 47 10 FF FF FF FF 8B C7 8B 4D F4 64 89 0D 00 00 00 00 "
-        "59 5F 5E 5B 8B E5 5D C3"
-    )
-    constructor_raw = constructor_sec.raw_ptr + constructor.value
-    constructor_bytes = bytes(
-        dating.buf[constructor_raw:constructor_raw + constructor_sec.raw_size]
-    )
-    constructor_epilogue = constructor_bytes.find(constructor_epilogue_pattern)
-    if constructor_epilogue < 0 or constructor_bytes.find(
-        constructor_epilogue_pattern, constructor_epilogue + 1
-    ) >= 0:
-        raise RuntimeError("Dating constructor cleanup anchor drifted")
-    constructor_payload = b"\x57\xE8\x00\x00\x00\x00\x83\xC4\x04"
-    dating.insert_section_bytes(
-        constructor_sec.index,
-        constructor_epilogue,
-        constructor_payload,
-    )
-    dating.append_relocation(
-        constructor_sec.index,
-        constructor_epilogue + 2,
-        exit_constructor_helper,
-        IMAGE_REL_I386_REL32,
-    )
-
-    # IDA: HandleMessage starts with a normal frame and dispatches message 8
-    # actions 1/2. Preserve the complete prologue, then fail through to the
-    # stock body when the armed-only action-3 helper returns false.
+    # IDA: HandleMessage pushes the two selected parent pointers in EDI/ESI,
+    # loads FamilyTree, then calls UpdateParents at +0x1C4.  Keep the exact
+    # native sequence when both pointers are valid and distinct; fail closed
+    # before the call for null or identical pointers.
     handle_name = "?HandleMessage@CDatingScene@@UAE_NHJ@Z"
     handle = dating.symbol(handle_name)
     handle_sec = dating.section(handle.section)
-    handle_hook = handle.value
-    handle_raw = handle_sec.raw_ptr + handle_hook
-    expected_handle_prefix = bytes.fromhex("55 8B EC 83 EC 28")
-    if bytes(dating.buf[handle_raw:handle_raw + len(expected_handle_prefix)]) != expected_handle_prefix:
-        raise RuntimeError("Dating HandleMessage prologue drifted")
-    handle_cave = handle_sec.raw_size
-    handle_stock_prefix = bytes(
-        dating.buf[handle_raw:handle_raw + 20]
+    parent_hook = handle.value + 0x1BC
+    expected_parent_call = bytes.fromhex(
+        "57 56 B9 00 00 00 00 E8 00 00 00 00"
     )
-    expected_cookie_prefix = bytes.fromhex(
-        "A1 00 00 00 00 33 C5 89 45 FC 83 7D 08 08"
-    )
-    if handle_stock_prefix[6:20] != expected_cookie_prefix:
-        raise RuntimeError("Dating HandleMessage cookie setup drifted")
-    handle_payload = bytearray(
-        expected_handle_prefix
-        + expected_cookie_prefix
-        + b"\x51"                # preserve CDatingScene this
-        + b"\xFF\x75\x0C"       # action
-        + b"\xFF\x75\x08"       # message
-        + b"\x51"                # this
-        + b"\xE8\x00\x00\x00\x00"
-        + b"\x83\xC4\x0C"
-        + b"\x59"                # restore CDatingScene this
-        + b"\x84\xC0"
-        + b"\x75\x00"
-        + b"\xE9\x00\x00\x00\x00"  # stock continuation
-        + b"\xB0\x01"              # return true
-        + b"\x8B\x4D\xFC"
-        + b"\x33\xCD"
-        + b"\xE8\x00\x00\x00\x00"  # security cookie
-        + b"\x8B\xE5\x5D\xC2\x08\x00"
-    )
-    if len(handle_payload) != 64:
-        raise AssertionError("Dating Exit handler trampoline size drifted")
-    # Helper false falls through to the untouched native dispatch after the
-    # cookie setup and message compare; helper true skips the stock branch.
-    struct.pack_into("<b", handle_payload, 40, 5)
-    stock_continuation_offset = handle_payload.find(
-        b"\xE9\x00\x00\x00\x00", 41
-    )
-    if stock_continuation_offset < 0:
-        raise AssertionError("Dating stock continuation placeholder missing")
-    struct.pack_into(
-        "<i",
-        handle_payload, stock_continuation_offset + 1,
-        (handle.value + 0x14) - (
-            handle_cave + stock_continuation_offset + 5
-        ),
-    )
-    dating.insert_section_bytes(
-        handle_sec.index, handle_cave, bytes(handle_payload)
-    )
-    cookie_setup_relocation = None
+    parent_raw = handle_sec.raw_ptr + parent_hook
+    if bytes(dating.buf[parent_raw:parent_raw + len(expected_parent_call)]) != expected_parent_call:
+        raise RuntimeError("Dating UpdateParents callsite drifted")
+    parent_relocations = {}
     for index in range(handle_sec.nreloc):
-        vaddr, symbol_index, rtype = struct.unpack_from(
+        vaddr, symbol_index, relocation_type = struct.unpack_from(
             "<IIH", dating.buf, handle_sec.reloc_ptr + index * 10
         )
-        if vaddr == handle.value + 7:
-            cookie_setup_relocation = (symbol_index, rtype)
-            break
-    if cookie_setup_relocation is None:
-        raise RuntimeError("Dating cookie setup relocation drifted")
-    dating.append_relocation(
-        handle_sec.index, handle_cave + 7,
-        cookie_setup_relocation[0], cookie_setup_relocation[1],
+        if vaddr in (parent_hook + 3, parent_hook + 8):
+            parent_relocations[vaddr] = (symbol_index, relocation_type)
+    if set(parent_relocations) != {parent_hook + 3, parent_hook + 8}:
+        raise RuntimeError("Dating UpdateParents relocations drifted")
+
+    parent_guard_cave = handle_sec.raw_size
+    parent_guard = bytearray(
+        b"\x85\xF6"              # test esi, esi
+        + b"\x74\x00"             # null first parent -> skip
+        + b"\x85\xFF"             # test edi, edi
+        + b"\x74\x00"             # null second parent -> skip
+        + b"\x3B\xFE"             # cmp edi, esi
+        + b"\x74\x00"             # identical parents -> skip
+        + expected_parent_call     # exact native valid-parent path
+        + b"\xE9\x00\x00\x00\x00"  # valid -> HandleMessage +0x1C8
+        + b"\xE9\x00\x00\x00\x00"  # invalid -> HandleMessage +0x1C8
     )
-    dating.append_relocation(
-        handle_sec.index,
-        handle_cave + 29,
-        exit_handler_helper,
-        IMAGE_REL_I386_REL32,
+    if len(parent_guard) != 34:
+        raise AssertionError("Dating UpdateParents guard cave size drifted")
+    struct.pack_into("<b", parent_guard, 3, 0x19)
+    struct.pack_into("<b", parent_guard, 7, 0x15)
+    struct.pack_into("<b", parent_guard, 11, 0x11)
+    struct.pack_into(
+        "<i", parent_guard, 25,
+        (handle.value + 0x1C8) - (parent_guard_cave + 29),
     )
-    cookie_check_offset = handle_payload.find(
-        b"\xE8\x00\x00\x00\x00\x8B\xE5"
+    struct.pack_into(
+        "<i", parent_guard, 30,
+        (handle.value + 0x1C8) - (parent_guard_cave + 34),
     )
-    if cookie_check_offset < 0:
-        raise AssertionError("Dating cookie check placeholder missing")
-    dating.append_relocation(
-        handle_sec.index,
-        handle_cave + cookie_check_offset + 1,
-        dating.symbol("@__security_check_cookie@4").index,
-        IMAGE_REL_I386_REL32,
+    dating.insert_section_bytes(
+        handle_sec.index, parent_guard_cave, bytes(parent_guard)
     )
+    # Move the two stock relocations into the copied native sequence.  The
+    # original callsite is replaced by an E9 cave jump; leaving its DIR32 and
+    # REL32 records at +3/+8 would make the linker rewrite the E9 displacement
+    # (the malformed 70 AC high bytes seen in the linked EXE).  Reusing the
+    # existing records also avoids duplicate relocations at the old callsite.
+    moved_relocations = {
+        parent_hook + 3: parent_guard_cave + 15,
+        parent_hook + 8: parent_guard_cave + 20,
+    }
+    section = dating.section(handle_sec.index)
+    for index in range(section.nreloc):
+        record = section.reloc_ptr + index * 10
+        vaddr = struct.unpack_from("<I", dating.buf, record)[0]
+        new_vaddr = moved_relocations.get(vaddr)
+        if new_vaddr is not None:
+            struct.pack_into("<I", dating.buf, record, new_vaddr)
+    dating._parse()
+    section = dating.section(handle_sec.index)
+    remaining_parent_relocations = {
+        struct.unpack_from("<I", dating.buf, section.reloc_ptr + index * 10)[0]
+        for index in range(section.nreloc)
+    }
+    if parent_hook + 3 in remaining_parent_relocations or parent_hook + 8 in remaining_parent_relocations:
+        raise RuntimeError("Dating UpdateParents hook relocations were not moved")
+    if parent_guard_cave + 15 not in remaining_parent_relocations or parent_guard_cave + 20 not in remaining_parent_relocations:
+        raise RuntimeError("Dating UpdateParents cave relocations were not installed")
     handle = dating.symbol(handle_name)
     handle_sec = dating.section(handle.section)
-    handle_raw = handle_sec.raw_ptr + handle.value
-    dating.buf[handle_raw:handle_raw + 6] = (
-        b"\xE9" + struct.pack("<i", handle_cave - (handle_hook + 5)) + b"\x90"
+    parent_raw = handle_sec.raw_ptr + parent_hook
+    dating.buf[parent_raw:parent_raw + len(expected_parent_call)] = (
+        b"\xE9" + struct.pack("<i", parent_guard_cave - (parent_hook + 5))
+        + b"\x90" * (len(expected_parent_call) - 5)
     )
+    parent_guard_manifest = {
+        "status": "authenticated source/COFF guard installed",
+        "object": "DatingScene.obj",
+        "function": handle_name,
+        "hook_offset": "+0x1BC",
+        "trampoline": hex(parent_guard_cave),
+        "update_parents_call_offset": "+0x1C4",
+        "continuation_offset": "+0x1C8",
+        "native_valid_sequence": "57 56 B9 <FamilyTree> E8 <UpdateParents>",
+        "invalid_parent_checks": [
+            "ESI == 0",
+            "EDI == 0",
+            "ESI == EDI",
+        ],
+        "invalid_route": "skip UpdateParents and continue at HandleMessage +0x1C8",
+        "valid_route": "copied native parent pushes, FamilyTree load, and UpdateParents call",
+        "family_tree_object_touched": False,
+    }
 
     # IDA: the stock Accept route checks candidate index -1 before calling
     # GetVillager, then performs `mov ecx,eax; mov byte ptr [eax+1BB84h],1`.
-    # Keep that complete sequence byte-identical for ordinary/native scenes
-    # (mode 0 and invalid values).  Cheat scenes additionally reject a null
-    # GetVillager result before the proven dereference and return through the
-    # existing handled epilogue after clearing the one-scene mode.
-    accept_guard_helper = clear_helper
-    accept_flag_symbol = dating.append_undefined_symbol(
-        CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL
-    )
+    # Keep that complete sequence byte-identical when GetVillager succeeds.
+    # A null candidate is invalid for every proposal mode and now fails closed
+    # through the existing handled epilogue before the native dereference.
     # In the clean PC object the sequence begins at +0xEB (the linked image
     # readback reports +0xED after its preceding two-byte layout shift).
     accept_hook = handle.value + 0xEB
@@ -16784,53 +17604,29 @@ def patch_same_sex_marriage(manifest):
         raise RuntimeError("Dating cheat Accept candidate-write anchor drifted")
 
     accept_cave = accept_sec.raw_size
-    # cmp mode,1; mode-1 pointer guard; cmp mode,2; mode-2 pointer guard;
-    # invalid cheat pointer clears mode and returns handled; all other paths
-    # execute the copied stock write and continue at Accept+0xF4.
+    # Null candidate -> handled epilogue; valid candidate -> copied stock
+    # write and untouched continuation.  Force Marriage Email never changes
+    # the native candidate selector or DatingScene actions.
     accept_payload = bytearray(
-        b"\x80\x3D\0\0\0\0\x01"  # mode == Female
-        + b"\x75\x00"              # otherwise check Male
-        + b"\x85\xC0"              # Female: pointer non-null?
-        + b"\x74\x00"              # null -> invalid cheat candidate
-        + b"\xEB\x00"              # valid Female -> stock write
-        + b"\x80\x3D\0\0\0\0\x02"  # mode == Male
-        + b"\x75\x00"              # other values -> stock write
-        + b"\x85\xC0"              # Male: pointer non-null?
-        + b"\x75\x00"              # non-null -> stock write
-        + b"\xE8\0\0\0\0"          # clear cheat mode
-        + b"\xE9\0\0\0\0"          # handled common epilogue
+        b"\x85\xC0"              # candidate pointer non-null?
+        + b"\x75\x00"             # non-null -> stock write
+        + b"\xE9\0\0\0\0"         # null -> handled epilogue
         + expected_accept_write
         + b"\xE9\0\0\0\0"          # Accept continuation
     )
-    if len(accept_payload) != 52:
+    if len(accept_payload) != 23:
         raise AssertionError("Dating Accept safety cave size drifted")
     # Branches are relative to the next instruction.
-    struct.pack_into("<b", accept_payload, 8, 0x06)   # mode 1 -> mode 2 check
-    struct.pack_into("<b", accept_payload, 12, 0x0F)  # mode 1 null -> invalid
-    struct.pack_into("<b", accept_payload, 14, 0x17)  # mode 1 valid -> stock
-    struct.pack_into("<b", accept_payload, 23, 0x0E)  # mode 2 != -> stock
-    struct.pack_into("<b", accept_payload, 27, 0x0A)  # mode 2 non-null -> stock
+    struct.pack_into("<b", accept_payload, 3, 0x05)   # valid -> stock write
     struct.pack_into(
-        "<i", accept_payload, 34,
-        (handle.value + 0xAA) - (accept_cave + 38),
+        "<i", accept_payload, 5,
+        (handle.value + 0xAA) - (accept_cave + 9),
     )
     struct.pack_into(
-        "<i", accept_payload, 48,
-        (handle.value + 0xF4) - (accept_cave + 52),
+        "<i", accept_payload, 19,
+        (handle.value + 0xF4) - (accept_cave + 23),
     )
     dating.insert_section_bytes(accept_sec.index, accept_cave, bytes(accept_payload))
-    dating.append_relocation(
-        accept_sec.index, accept_cave + 2,
-        accept_flag_symbol, IMAGE_REL_I386_DIR32,
-    )
-    dating.append_relocation(
-        accept_sec.index, accept_cave + 17,
-        accept_flag_symbol, IMAGE_REL_I386_DIR32,
-    )
-    dating.append_relocation(
-        accept_sec.index, accept_cave + 29,
-        accept_guard_helper, IMAGE_REL_I386_REL32,
-    )
     dating._parse()
     handle = dating.symbol(handle_name)
     accept_sec = dating.section(handle.section)
@@ -16972,6 +17768,19 @@ def patch_same_sex_marriage(manifest):
         "offline_patcher_setting": "same_sex_marriage",
         "category": "optional",
         "default": False,
+        "cheat_upgrade": {
+            "item_id": hex(SAME_SEX_MARRIAGE_ITEM_ID),
+            "inactive_price": SAME_SEX_MARRIAGE_CATALOG_PRICE,
+            "price_source_item_id": hex(SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID),
+            "price_source": "Health Plan catalog row 0x119",
+            "active_price": 0,
+            "active_state": "gVF2SameSexMarriage runtime byte with checkmark.png",
+            "inactive_state": "explicit catalog price",
+            "inactive_icon": "cheat_marriage_email.png",
+            "active_icon": "checkmark.png",
+            "active_icon_id": hex(SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID),
+        },
+        "update_parents_guard": parent_guard_manifest,
         "runtime_flag": {
             "symbol": SAME_SEX_MARRIAGE_FLAG_SYMBOL,
             "source_section": SAME_SEX_MARRIAGE_FLAG_SECTION,
@@ -16981,69 +17790,22 @@ def patch_same_sex_marriage(manifest):
             "linked_location_status": "pending_link_metadata",
         },
         "candidate_gender": (
-            "flag off preserves opposite-sex candidates; flag on chooses "
-            "female or male with equal native RNG probability"
+            "flag off preserves opposite-sex candidates; flag on matches "
+            "the candidate gender to the current adult"
         ),
-        "cheat_proposal": {
-            "runtime_flag": {
-                "symbol": CHEAT_MARRIAGE_PROPOSAL_FLAG_SYMBOL,
-                "source_section": CHEAT_MARRIAGE_PROPOSAL_FLAG_SECTION,
-                "size": 1,
-                "default": "00",
-            },
-            "arm": (
-                "only VF2QueueCheatMarriageProposal arms after QueueEmailMessage "
-                "makes a new enum-2 queue entry observable"
-            ),
-            "candidate_gender": (
-                "Force Marriage Email (Female) arms mode 0x01 and returns "
-                "native eGenderFemale=1; Force Marriage Email (Male) arms "
-                "mode 0x02 and returns native eGenderMale=0. No RNG is used "
-                "for either cheat row; "
-                "ordinary proposal emails retain the existing .vf2same-gated "
-                "behavior"
-            ),
-            "mode_values": {
-                "off": "0x00",
-                "female": "0x01",
-                "male": "0x02",
-            },
-            "reject_replacement": (
-                "inherits the scene-scoped mode because Reject calls "
-                "GeneratePeepCandidate while CDatingScene remains open"
-            ),
-            "clear": {
-                "function": destroy_name,
-                "hook_offset": "+0x0A",
-                "resume_offset": "+0x10",
-                "helper": CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL,
-                "trampoline": hex(destroy_cave),
-            },
-            "exit_button": {
-                "status": "armed-only; ordinary DatingScene construction is unchanged",
-                "control_id": 3,
-                "image_id": "0x129",
-                "text_id": "0x76C",
-                "position": "theGameState::GetWideScreenOffsetX() + 4, y 0x2DD",
-                "constructor_helper": CHEAT_MARRIAGE_PROPOSAL_EXIT_CONSTRUCTOR_SYMBOL,
-                "handler_helper": CHEAT_MARRIAGE_PROPOSAL_EXIT_HANDLER_SYMBOL,
-                "message": 8,
-                "action": 3,
-                "sound_id": "0x8A",
-                "timestamp_route": "copy GameState+0x25CB8 to +0x25CBC, then clear +0x25CB8",
-                "accept_clear": "action 1 clears the scene mode before stock Accept continues",
-                "destroy_clear": "existing CDatingScene::Destroy hook remains defensive cleanup",
-            },
+        "force_marriage_email": {
+            "status": "normal native proposal queue",
+            "queue": "eEmailMessageMarriageProposal (enum 2) only",
+            "candidate_rules": "native opposite-sex rules while the toggle is off; no gender override",
+            "scene_behavior": "stock Accept, Reject, and close behavior; no cheat-only reroll or Exit control",
             "accept_safety": {
-                "status": "cheat-only null-candidate guard; native mode 0 is byte-identical",
+                "status": "native candidate null guard retained",
                 "hook_offset": "+0xEB in clean DatingScene.obj (+0xED in linked readback)",
                 "stock_span": "8B C8 C6 80 84 BB 01 00 01",
-                "guard_modes": ["0x01", "0x02"],
-                "invalid_candidate": (
-                    "null GetVillager result clears the one-scene mode and resumes "
-                    "at stock success AL=1 before [EAX+0x1BB84]"
-                ),
-                "native_mode_0": "copied stock write and continuation are preserved",
+                "trampoline": hex(accept_cave),
+                "cave_size": len(accept_payload),
+                "invalid_candidate": "skip the [EAX+0x1BB84] write and resume at the handled native continuation",
+                "valid_candidate": "copied stock write and continuation are preserved",
             },
         },
         "parent_storage": (
@@ -19601,6 +20363,7 @@ def validate_mobile_furniture_route_classification(manifest):
 
 
 def patch_mobile_furniture_behavior_dispatch(manifest):
+    validate_mobile_furniture_autonomous_scope()
     helper_path = PATCHED / "vf2_mobile_furniture_behaviors.cpp"
     behavior_fallback_decls = ""
     nap_fallback = "CBehavior::NappingCouch(villager);"
@@ -21993,6 +22756,15 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "size": 1,
             "default": "00",
         },
+        "manual_drop_only_whole_household": {
+            "handlers": list(MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_HANDLERS),
+            "mobile_behavior_ids": [
+                hex(value)
+                for value in MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_MOBILE_IDS
+            ],
+            "autonomous_handlers": [],
+            "autonomous_mobile_behavior_ids": [],
+        },
         "drop_hook": {
             "caller": "theMainScene::DropVillager",
             "relocation_offset": hex(relocation_offset - drop.value),
@@ -22528,6 +23300,7 @@ def patch_mobile_furniture_autonomous_candidates(manifest):
 
 def patch_mobile_furniture_external_autonomous_selection(manifest):
     """Add weighted mobile-only choices without extending the fixed PC table."""
+    validate_mobile_furniture_autonomous_scope()
     obj_path = PATCHED / "VillagerAI.obj"
     obj = CoffObject(obj_path)
     decide = obj.symbol("?DecideWhatToDo@CVillagerAI@@AAEXAAVCVillager@@@Z")
@@ -22864,6 +23637,23 @@ def validate_mobile_furniture_runtime_bindings(manifest):
         raise RuntimeError("Mobile furniture behavior flag symbol drifted")
     if runtime_flag.get("default") != "00" or runtime_flag.get("size") != 1:
         raise RuntimeError("Mobile furniture behavior flag is not default-off")
+    validate_mobile_furniture_autonomous_scope()
+    whole_household_contract = behavior_contract.get(
+        "manual_drop_only_whole_household"
+    )
+    expected_whole_household_contract = {
+        "handlers": list(MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_HANDLERS),
+        "mobile_behavior_ids": [
+            hex(value)
+            for value in MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_MOBILE_IDS
+        ],
+        "autonomous_handlers": [],
+        "autonomous_mobile_behavior_ids": [],
+    }
+    if whole_household_contract != expected_whole_household_contract:
+        raise RuntimeError(
+            "Manual family-wide mobile behavior scope contract drifted"
+        )
     drop_hook = behavior_contract.get("drop_hook", {})
     if not drop_hook.get("stock_first") or not drop_hook.get(
         "stock_false_fallthrough_preserved"
@@ -22917,6 +23707,9 @@ def validate_mobile_furniture_runtime_bindings(manifest):
     external_rows = external_contract.get("external_candidates")
     if not isinstance(external_rows, list):
         raise RuntimeError("Mobile external autonomous candidate list is missing")
+    forbidden_external_ids = set(
+        MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_MOBILE_IDS
+    )
     actual_external = []
     for index, row in enumerate(external_rows):
         try:
@@ -22930,6 +23723,11 @@ def validate_mobile_furniture_runtime_bindings(manifest):
             raise RuntimeError(
                 f"Mobile external autonomous row {index} is malformed"
             ) from exc
+        if mobile_id in forbidden_external_ids:
+            raise RuntimeError(
+                "Family-wide mobile behavior ID entered autonomous manifest: "
+                f"{mobile_id:#x}"
+            )
         actual_external.append((mobile_id, object_id, weight))
     expected_external = [
         (spec["mobile_id"], spec["object"], spec["weight"])
@@ -22951,6 +23749,11 @@ def validate_mobile_furniture_runtime_bindings(manifest):
     if selector_start < 0 or selector_end < 0:
         raise RuntimeError("Mobile external autonomous selector source is missing")
     selector = helper_text[selector_start:selector_end]
+    for handler in MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_HANDLERS:
+        if handler in selector:
+            raise RuntimeError(
+                "Family-wide mobile handler entered autonomous selector: " + handler
+            )
     selector_gate = selector.find(stock_gate)
     selector_weights = selector.find("VF2GetMobileExternalWeights(villager)")
     if selector_gate < 0 or selector_gate > selector_weights:
@@ -23884,7 +24687,7 @@ def patch_mobile_renovation_renderer(manifest):
         raise RuntimeError("theMainScene::DrawScene decal boundary drifted")
 
     hook = None
-    if ENABLE_MOBILE_RENOVATIONS:
+    if ENABLE_MOBILE_RENOVATIONS or ENABLE_AI_GENERATED_BATHROOM2:
         helper_sym = obj.append_undefined_symbol("_VF2DrawMobileRenovations")
         insert_off = draw_sym.value + 0x39
         obj.insert_section_bytes(
@@ -23917,11 +24720,16 @@ def patch_mobile_renovation_renderer(manifest):
         selector_cases.append("        break;")
 
     draw_lines = []
-    for room_index, room in enumerate(MOBILE_RENOVATION_ROOM_ORDER):
-        x, y = MOBILE_RENOVATION_ANCHORS[room]
-        draw_lines.append(
-            f"    VF2DrawMobileRenovationRoom({room_index}, {x}, {y}, graphics, worldX, worldY);"
-        )
+    if ENABLE_MOBILE_RENOVATIONS:
+        for room_index, room in enumerate(MOBILE_RENOVATION_ROOM_ORDER):
+            x, y = MOBILE_RENOVATION_ANCHORS[room]
+            draw_lines.append(
+                f"    VF2DrawMobileRenovationRoom({room_index}, {x}, {y}, graphics, worldX, worldY);"
+            )
+    b2_draw_line = (
+        "    VF2DrawAIBathroom2(graphics, worldX, worldY);"
+        if ENABLE_AI_GENERATED_BATHROOM2 else ""
+    )
 
     helper_cpp = f"""
 enum EImage {{ eImageDummy = 0 }};
@@ -23940,10 +24748,14 @@ public:
 extern CWorldView WorldView;
 extern "C" bool __cdecl VF2MobileRenovationIsActive(int itemId);
 extern "C" void __cdecl VF2NormalizeMobileRenovationActivesAndSave();
+extern "C" bool __cdecl VF2AIBathroom2IsActive(int itemId);
 
 static const bool kVF2EnableMobileRenovations = {"true" if ENABLE_MOBILE_RENOVATIONS else "false"};
+static const bool kVF2EnableAIBathroom2 = {"true" if ENABLE_AI_GENERATED_BATHROOM2 else "false"};
 static const int kVF2MobileRenovationImageBase = {mobile_renovation_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
 static const int kVF2MobileRenovationItemBase = {MOBILE_RENOVATION_PC_ITEM_BASE};
+static const int kVF2AIBathroom2ItemBase = {AI_BATHROOM2_PC_ITEM_BASE};
+static const int kVF2AIBathroom2ImageBase = {ai_bathroom2_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
 
 static int VF2SelectedMobileRenovationImage(int room) {{
     VF2NormalizeMobileRenovationActivesAndSave();
@@ -23968,13 +24780,30 @@ static void VF2DrawMobileRenovationRoom(
     graphics->Draw((EImage)image, anchorX - worldX, anchorY - worldY, 1.0f, 100);
 }}
 
+static void VF2DrawAIBathroom2(
+    theGraphicsManager* graphics,
+    int worldX,
+    int worldY
+) {{
+    if (!graphics || !kVF2EnableAIBathroom2) return;
+    int image = -1;
+    for (int index = 0; index < 5; ++index) {{
+        if (VF2AIBathroom2IsActive(kVF2AIBathroom2ItemBase + index)) {{
+            image = kVF2AIBathroom2ImageBase + index;
+            break;
+        }}
+    }}
+    if (image >= 0) graphics->Draw((EImage)image, {AI_BATHROOM2_ANCHOR[0]} - worldX, {AI_BATHROOM2_ANCHOR[1]} - worldY, 1.0f, 100);
+}}
+
 extern "C" void __cdecl VF2DrawMobileRenovations() {{
-    if (!kVF2EnableMobileRenovations) return;
+    if (!kVF2EnableMobileRenovations && !kVF2EnableAIBathroom2) return;
     theGraphicsManager* graphics = theGraphicsManager::Get();
     if (!graphics) return;
     const int worldX = WorldView.x;
     const int worldY = WorldView.y;
 {chr(10).join(draw_lines)}
+{b2_draw_line}
 }}
 """.lstrip()
     (PATCHED / "vf2_mobile_renovations.cpp").write_text(helper_cpp, encoding="ascii")
@@ -23997,6 +24826,14 @@ extern "C" void __cdecl VF2DrawMobileRenovations() {{
             "native_mobile_order": [hex(item_id) for item_id in MOBILE_RENOVATION_NATIVE_ITEM_IDS],
         },
         "source": str(PATCHED / "vf2_mobile_renovations.cpp"),
+        "ai_bathroom2": {
+            "enabled": ENABLE_AI_GENERATED_BATHROOM2,
+            "selector": "direct persisted active byte, first active color order",
+            "item_ids": [hex(item_id) for item_id in AI_BATHROOM2_PC_ITEM_IDS],
+            "anchor": list(AI_BATHROOM2_ANCHOR),
+            "native_e6_touched": False,
+            "route": "same DrawScene+0x39 overlay boundary as Bathroom1; separate Bathroom2 anchor",
+        },
     }
 
 
@@ -24064,13 +24901,25 @@ def validate_mobile_renovation_style_state_contract(manifest):
     missing = [token for token in required_tokens if token not in helper_text]
     if missing:
         raise RuntimeError("Mobile renovation style-state helper is missing: " + ", ".join(missing))
-    price_helper = helper_text.split(
-        'extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId)',
-        1,
-    )[1].split(
-        'extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId)',
-        1,
-    )[0]
+    price_start = helper_text.find(
+        'extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId) {'
+    )
+    price_end = helper_text.find(
+        'extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {',
+        price_start + 1,
+    )
+    if price_start < 0:
+        price_start = helper_text.find(
+            'extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId)'
+        )
+    if price_end < 0:
+        price_end = helper_text.find(
+            'extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId)',
+            price_start + 1,
+        )
+    if price_start < 0 or price_end < 0:
+        raise RuntimeError("Mobile renovation price helper definition is missing")
+    price_helper = helper_text[price_start:price_end]
     if "if (VF2MobileRenovationIsActive(itemId))" not in price_helper:
         raise RuntimeError("Mobile renovation price helper is not active-state based")
     if "return kVF2MobileRenovationPrices[styleIndex];" not in price_helper:
@@ -24130,6 +24979,31 @@ def validate_mobile_renovation_renderer_contract(manifest):
     helper_text = helper_path.read_text(encoding="ascii")
     if "1.0f" not in helper_text or "anchorX - worldX" not in helper_text:
         raise RuntimeError("Mobile renovation renderer is not a 1:1 camera-relative overlay")
+    if ENABLE_AI_GENERATED_BATHROOM2 and not ENABLE_MOBILE_RENOVATIONS:
+        hook = renderer.get("hook") or {}
+        if hook.get("insert_offset") != "0x39":
+            raise RuntimeError("Bathroom2-only renderer was not injected at the post-map boundary")
+        ai_record = renderer.get("ai_bathroom2") or {}
+        if ai_record.get("item_ids") != [hex(item_id) for item_id in AI_BATHROOM2_PC_ITEM_IDS]:
+            raise RuntimeError("Bathroom2-only renderer item range drifted")
+        ai_runtime = OUT / "Images" / "AIGeneratedBathroom2"
+        missing_ai = [
+            name for name in AI_BATHROOM2_SOURCE_FILES if not (ai_runtime / name).is_file()
+        ]
+        if missing_ai:
+            raise RuntimeError("Missing enabled Bathroom2 runtime art: " + ", ".join(missing_ai))
+        manifest["mobile_renovation_renderer_validation"] = {
+            "status": "passed",
+            "enabled": False,
+            "ai_bathroom2_enabled": True,
+            "scale": 1.0,
+            "anchors": expected_anchors,
+            "validated_image_count": 0,
+            "validated_ai_bathroom2_image_count": len(AI_BATHROOM2_SOURCE_FILES),
+            "pixel_hashes_pinned": True,
+            "style_catalog": style_catalog_validation,
+        }
+        return
     if ENABLE_MOBILE_RENOVATIONS:
         hook = renderer.get("hook") or {}
         if hook.get("insert_offset") != "0x39":
@@ -24139,10 +25013,28 @@ def validate_mobile_renovation_renderer_contract(manifest):
             raise RuntimeError("Mobile renovation image descriptor count drifted")
         if len(descriptors.get("descriptors", [])) != MOBILE_RENOVATION_IMAGE_COUNT:
             raise RuntimeError("Mobile renovation image descriptors are incomplete")
+        store_icon_descriptors = descriptors.get("store_icon_descriptors", [])
+        if len(store_icon_descriptors) != MOBILE_RENOVATION_USER_STORE_ICON_COUNT:
+            raise RuntimeError("Mobile renovation user store icon descriptors are incomplete")
+        expected_store_icon_base = mobile_renovation_store_icon_image_base(
+            holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
+        )
+        expected_store_icon_range = (
+            f"0x{expected_store_icon_base:X}-"
+            f"0x{expected_store_icon_base + MOBILE_RENOVATION_USER_STORE_ICON_COUNT - 1:X}"
+        )
+        if descriptors.get("store_icon_descriptor_range") != expected_store_icon_range:
+            raise RuntimeError("Mobile renovation user store icon descriptor range drifted")
         if descriptors.get("store_icon_scale") != 0.12:
             raise RuntimeError("Mobile renovation store icon scale drifted from native 0.12f")
-        if descriptors.get("store_icon_descriptor_range") != "0x56B-0x579":
-            raise RuntimeError("Mobile renovation store icon descriptor range drifted")
+        for row in store_icon_descriptors:
+            filename = row.get("name")
+            spec = MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.get(filename)
+            if spec is None or row.get("pc_item") != hex(spec["pc_item"]):
+                raise RuntimeError("Mobile renovation user store icon mapping drifted")
+            source = MOBILE_RENOVATION_USER_STORE_ICON_DIR / filename
+            if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest().upper() != row.get("sha256"):
+                raise RuntimeError("Mobile renovation user store icon hash evidence drifted")
         store_helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
         store_helper_text = store_helper_path.read_text(encoding="ascii") if store_helper_path.is_file() else ""
         if "VF2GetAddedStoreIconScale" not in store_helper_text or "0.12f" not in store_helper_text:
@@ -24151,6 +25043,13 @@ def validate_mobile_renovation_renderer_contract(manifest):
         missing = [name for name in MOBILE_RENOVATION_ART_FILES if not (runtime_dir / name).is_file()]
         if missing:
             raise RuntimeError("Missing enabled mobile renovation runtime art: " + ", ".join(missing))
+        missing_store_icons = [
+            name
+            for name in MOBILE_RENOVATION_USER_STORE_ICON_FILES
+            if not (runtime_dir / "store_icons" / name).is_file()
+        ]
+        if missing_store_icons:
+            raise RuntimeError("Missing enabled mobile renovation store icons: " + ", ".join(missing_store_icons))
         sizes = {name: read_png_size(runtime_dir / name) for name in MOBILE_RENOVATION_ART_FILES}
         contract = json.loads(MOBILE_RENOVATION_ATLAS_CONTRACT.read_text(encoding="utf-8"))
         expected_sizes = {row["name"]: tuple(row["size"]) for row in contract["curated_art"]["files"]}
@@ -27150,7 +28049,9 @@ def main():
     # this feature adds no executable-matrix dimension.
     patch_allow_older_pregnancies(manifest)
     patch_next_generation_age_gate(manifest)
-    patch_multiple_marriage_candidates(manifest)
+    # Force Marriage Email is deliberately a normal queued proposal.  Do not
+    # install the former cheat-only Reject reroll route; native Accept,
+    # Reject, and close behavior must remain untouched.
     patch_vf3_style_child_adoption_chooser(manifest)
     patch_same_sex_marriage(manifest)
     patch_force_successful_pregnancy_callsites(manifest)
@@ -27229,7 +28130,14 @@ def main():
         )
         manifest["IslandEvents"] = {
             "added": [],
-            "status": "disabled because the additive event object graft crashes the game",
+            "status": (
+                "disabled pending exact-build runtime crash certification; "
+                "historical linked builds reported crashes"
+            ),
+            "evidence_classification": (
+                "historical runtime reports plus prior static storage defect; "
+                "no current exact-build WER or dump"
+            ),
         }
         manifest["PowerFailure"] = {
             "status": "disabled with Island Events",
