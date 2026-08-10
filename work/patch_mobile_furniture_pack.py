@@ -51,11 +51,9 @@ ENABLE_MOBILE_RENOVATIONS = os.environ.get("VF2_ENABLE_MOBILE_RENOVATIONS", "0")
 ENABLE_MOBILE_SOUND_ASSETS = os.environ.get("VF2_ENABLE_MOBILE_SOUND_ASSETS", "0") == "1"
 # Separate visual-only Bathroom 2 experiment.  This never enables the native
 # second-bathroom renovation route; selecting it enables the five PC-only
-# House Renovations rows/state/icons and their overlay art.  The closed-curtain selector has
-# no authenticated native ABI yet (the captured objects do not prove the
-# image-538 callsite, cache invalidation, or restoration path), so an
-# environment request must fail closed until that route is proven.  Keep the
-# raw request separately so the generated manifest can report the blocker.
+# House Renovations rows/state/icons and their overlay art. The supplied
+# renderer/state contract proves the visual-only Bathroom 2 route; native E6
+# renovation behavior remains untouched.
 REQUESTED_ENABLE_AI_GENERATED_BATHROOM2 = (
     os.environ.get("VF2_ENABLE_AI_GENERATED_BATHROOM2", "0") == "1"
 )
@@ -301,7 +299,7 @@ SAME_SEX_MARRIAGE_FLAG_SECTION = ".vf2same"
 SAME_SEX_MARRIAGE_FLAG_SYMBOL = "_gVF2SameSexMarriage"
 SAME_SEX_CANDIDATE_GENDER_HELPER_SYMBOL = "@VF2MarriageCandidateGender@8"
 SAME_SEX_ROLE_HELPER_SYMBOL = "@VF2GetMarriageRole@12"
-SAME_SEX_DROP_HELPER_SYMBOL = "@VF2IsSameSexSpouseDrop@12"
+ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL = "@VF2ClassifyRomanticSpouseDrop@12"
 ADOPTION_CHOOSER_HELPER_SYMBOL = "_VF2AdoptRandomChildChoice"
 
 MARRIAGE_EMAIL_ITEM_ID = 0x132
@@ -779,11 +777,24 @@ AI_BATHROOM2_SOURCE_FILES = (
     "bathroom2_ai_green.png",
     "bathroom2_ai_pink.png",
 )
-AI_BATHROOM2_TARGET_SIZE = (511, 378)
+AI_BATHROOM2_OVERLAY_SIZES = {
+    "black": (545, 385),
+    "blue": (539, 385),
+    "beige": (441, 360),
+    "green": (444, 360),
+    "pink": (642, 385),
+}
 AI_BATHROOM2_NATIVE_MAP_AREA = (13, 7)
-# The anchor is the native room-apex origin measured against the tracked
-# 2048x2048 reference; it is not the ordinary Bathroom 1 anchor.
-AI_BATHROOM2_ANCHOR = (949, 145)
+# These are the authenticated world top-lefts for the immutable supplied
+# overlays.  Each color has its own art bounds and origin; no shared anchor,
+# crop, resize, or re-encode is permitted.
+AI_BATHROOM2_WORLD_TOP_LEFTS = {
+    "black": (555, 137),
+    "blue": (659, 137),
+    "beige": (659, 145),
+    "green": (656, 145),
+    "pink": (556, 136),
+}
 AI_BATHROOM2_REFERENCE_ARTIFACTS = {
     "bathroom2_vanilla.png": {
         "size": [511, 378],
@@ -8316,14 +8327,11 @@ def sync_optional_visual_mod_sources(manifest):
 def sync_ai_generated_bathroom2_assets(manifest):
     """Stage the separate, default-off AI Bathroom 2 visual payload.
 
-    The source canvases are intentionally kept untouched in tracked
-    ``source_art``.  Runtime/optional copies are deterministically resized to
-    the tracked vanilla north-bathroom crop (511x378) in RGBA mode.  This is a
-    visual-only overlay contract; the native second-bathroom renovation route
-    remains disabled/hiatus.
+    The source canvases are immutable tracked ``source_art``.  Runtime and
+    optional payloads are byte-for-byte copies: no crop, resize, or re-encode
+    is allowed.  This is a visual-only overlay contract; the native
+    second-bathroom renovation route remains disabled/hiatus.
     """
-    from PIL import Image
-
     source_records = []
     for filename in AI_BATHROOM2_SOURCE_FILES:
         source = AI_BATHROOM2_SOURCE_DIR / filename
@@ -8336,6 +8344,11 @@ def sync_ai_generated_bathroom2_assets(manifest):
         size = read_png_size(source)
         if not size or size[0] < 1 or size[1] < 1:
             raise RuntimeError(f"AI Bathroom 2 source art is not a readable PNG: {source}")
+        expected_size = AI_BATHROOM2_OVERLAY_SIZES.get(
+            AI_BATHROOM2_STYLE_CATALOG[AI_BATHROOM2_SOURCE_FILES.index(filename)]["color"]
+        )
+        if tuple(size) != tuple(expected_size or ()):
+            raise RuntimeError(f"AI Bathroom 2 source dimensions drifted: {source}")
         source_records.append({
             "name": filename,
             "source": str(source),
@@ -8375,23 +8388,22 @@ def sync_ai_generated_bathroom2_assets(manifest):
     normalized = []
     for record in source_records:
         source = Path(record["source"])
-        with Image.open(source).convert("RGBA") as image:
-            if image.getbbox() is None:
-                raise RuntimeError(f"AI Bathroom 2 source art has no visible pixels: {source}")
-            resized = image.resize(AI_BATHROOM2_TARGET_SIZE, Image.Resampling.LANCZOS)
-            # Keep optional and runtime copies identical and hash-pinned.
-            optional_target = optional_root / source.name
-            resized.save(optional_target, format="PNG", optimize=False)
-            runtime_target = None
-            if ENABLE_AI_GENERATED_BATHROOM2:
-                runtime_target = runtime_root / source.name
-                shutil.copy2(optional_target, runtime_target)
+        # Keep optional and runtime copies byte-identical to the supplied
+        # source.  Renderer scale is 1.0; image content must not be rewritten.
+        optional_target = optional_root / source.name
+        shutil.copy2(source, optional_target)
+        runtime_target = None
+        if ENABLE_AI_GENERATED_BATHROOM2:
+            runtime_target = runtime_root / source.name
+            shutil.copy2(source, runtime_target)
         normalized.append({
             "name": source.name,
-            "target_size": list(AI_BATHROOM2_TARGET_SIZE),
+            "target_size": list(record["source_size"]),
+            "source_sha256": record["source_sha256"],
             "optional_path": str(optional_root / source.name),
             "runtime_path": str(runtime_root / source.name) if ENABLE_AI_GENERATED_BATHROOM2 else None,
-            "normalized_sha256": hashlib.sha256((optional_root / source.name).read_bytes()).hexdigest().upper(),
+            "normalized_sha256": record["source_sha256"],
+            "copy_mode": "byte_exact_source_copy_no_crop_resize_or_reencode",
             "alpha_required": True,
         })
 
@@ -8489,6 +8501,13 @@ def sync_ai_generated_bathroom2_assets(manifest):
         "store_icons": store_icon_records,
         "store_icon_route": "House Renovations-only PC synthetic rows; native E6 item IDs remain disabled/hiatus",
         "pc_item_ids": [hex(item_id) for item_id in AI_BATHROOM2_PC_ITEM_IDS] if ENABLE_AI_GENERATED_BATHROOM2 else [],
+        "active_state": {
+            "storage": "direct persisted byte at InventoryManager + itemId + 0x2A3",
+            "bathroom2_offsets": {f"0x{item_id:X}": f"0x{item_id + 0x2A3:X}" for item_id in AI_BATHROOM2_PC_ITEM_IDS},
+            "native_save_load_span": "InventoryManager + 0x384..0x44F",
+            "native_reset": "Reset zeros the persisted active-byte span",
+            "independent_from_bathroom1": True,
+        },
         "rows_are_functional": bool(ENABLE_AI_GENERATED_BATHROOM2),
         "runtime_ready": False if ENABLE_AI_GENERATED_BATHROOM2 else None,
         "curtain_runtime_route": (
@@ -8497,11 +8516,12 @@ def sync_ai_generated_bathroom2_assets(manifest):
             else "theGraphicsManager::Draw image 538 substitution selects only the active Bathroom 2 color and returns stock image 538 when inactive"
         ),
         "reference_evidence": reference_records,
-        "target_size": list(AI_BATHROOM2_TARGET_SIZE),
-        "normalization": "RGBA LANCZOS resize from each source canvas to bathroom2_vanilla.png dimensions; no generated_chroma intermediates",
+        "normalization": "immutable byte-exact source copies; no crop, resize, re-encode, or generated_chroma intermediates",
         "native_map_area": list(AI_BATHROOM2_NATIVE_MAP_AREA),
-        "anchor": list(AI_BATHROOM2_ANCHOR),
-        "anchor_basis": "tracked 2048x2048 room-map reference/native north-bathroom bounds; room-apex origin",
+        "world_top_lefts": {color: list(origin) for color, origin in AI_BATHROOM2_WORLD_TOP_LEFTS.items()},
+        "overlay_sizes": {color: list(size) for color, size in AI_BATHROOM2_OVERLAY_SIZES.items()},
+        "placement_basis": "authenticated per-color world top-lefts; draw origin minus WorldView at scale 1.0 and opacity 100",
+        "immutable_source_art": True,
         "optional_target": str(optional_root),
         "runtime_target": str(runtime_root) if ENABLE_AI_GENERATED_BATHROOM2 else None,
     }
@@ -10179,36 +10199,35 @@ def patch_visible_special_upgrades(manifest):
             "meaning": "second-listed adult in the current active generation Family Tree",
             "record_offset": "+0xDC",
             "valid_offset": "+0xF6",
-            "persistent_id_offset": "+0x104",
+            "manager_slot_offset": "+0x104",
             "record_size": "0xD8",
         },
         "availability": (
             "zero unless the current second-parent slot is present and its "
-            "persistent ID maps to exactly one active, non-away, live-health manager "
-            "slot 0..29"
+            "manager slot is in 0..29, exists as an active non-away resident, "
+            "matches CVillager+0x1BB48, and has living health"
         ),
         "catalog_price": DIVORCE_SPOUSE_CATALOG_PRICE,
         "price_semantics": "explicit catalog price while a valid current spouse exists; unavailable otherwise",
         "owned_state": "never active or owned; generic checkmark/active renderer is bypassed",
         "resolver": (
-            "exact persistent ID match at CVillager+0x1BB48; no gender, role, "
-            "household order, selected-villager, or adult heuristic"
+            "use current-family F+0x104 directly as manager slot 0..29 and "
+            "require the resident CVillager+0x1BB48 to match; no gender, role, "
+            "household order, selected-villager, or historical-generation heuristic"
         ),
         "apply": (
-            "call native CVillagerState::SetHealth(0, OldAge) at CVillager+0x6AF4, "
-            "call native CFamilyTree::ReportDeath, clear exact focus if it is "
-            "this spouse, retain the current second-parent record, then use the "
-            "common SaveCurrentGame path"
+            "clear exact focus if it is this spouse, call native "
+            "CVillager::DetachAll and CVillager::Reset, zero exactly 0xD8 bytes "
+            "at current-family F+0xDC, call native "
+            "CFamilyTree::UpdateCurrentFamilyRecord, then use the common "
+            "SaveCurrentGame path"
         ),
         "native_evidence": {
-            "villager_state_base": "CVillager+0x6AF4",
-            "health_field": "CVillager+0x6B00 (CVillagerState+0x0C)",
-            "cause_field": "CVillagerState+0x10",
-            "set_health_symbol": "?SetHealth@CVillagerState@@QAEXHW4ECauseOfDeath@@@Z",
-            "set_health_behavior": "native setter writes zero health and cause; it does not call ReportDeath",
-            "death_symbol": "?ReportDeath@CFamilyTree@@QAEXAAVCVillager@@@Z",
-            "report_death_behavior": "native handler retains the current parent record but may mark the matching parent ID -1",
-            "update_parents_second_slot": "CFamilyTree::UpdateParents writes SPeepRecord+0xDC, valid +0xF6, ID +0x104",
+            "living_health_field": "CVillager+0x6B00",
+            "detach_all_symbol": "?DetachAll@CVillager@@QAEXXZ",
+            "reset_symbol": "?Reset@CVillager@@QAEXXZ",
+            "second_adult_range": "exactly 0xD8 bytes at current-family F+0xDC",
+            "update_symbol": "?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ",
         },
         "historical_generations": "never iterated or modified",
         "warning": DIVORCE_SPOUSE_WARNING,
@@ -10440,6 +10459,37 @@ def write_outfit_store_helpers(manifest):
     existing_helper = existing_helper.rstrip()
     if existing_helper:
         existing_helper += "\n"
+    renderer_type_preamble = ""
+    if "class ldwImageGrid {" not in existing_helper:
+        renderer_type_preamble = r"""
+enum EImage { eImageDummy = 0 };
+struct ldwRect {
+    int left;
+    int top;
+    int right;
+    int bottom;
+};
+struct ldwColor {
+    unsigned int value;
+};
+class ldwImageGrid {
+public:
+    void GetCellRect(int row, int col, ldwRect &rect);
+};
+class ldwGameWindow {
+public:
+    static ldwGameWindow *Get();
+    void Draw(ldwImageGrid *grid, int x, int y, int cell);
+    void DrawTinted(ldwImageGrid *grid, int x, int y, int cell,
+        ldwColor color, float tint, float scale);
+};
+class theGraphicsManager {
+public:
+    static theGraphicsManager *Get();
+    ldwImageGrid *GetImageGrid(EImage image);
+};
+static const ldwColor kVF2Black = { 0xFF000000u };
+"""
     shared_type_preamble = ""
     if (
         "enum EInventoryItem" not in existing_helper
@@ -10539,12 +10589,22 @@ public:
         for index, item_id in enumerate(AI_BATHROOM2_PC_ITEM_IDS)
     )
     bathroom1_curtain_cases = "\n".join(
-        f"        if (VF2MobileRenovationIsActive(0x{item_id:X})) return kVF2Bathroom1CurtainImageBase + {index};"
-        for index, item_id in enumerate((0x13C, 0x13D, 0x13E, 0x13F, 0x140))
+        f"        if (VF2MobileRenovationIsActive(0x{MOBILE_RENOVATION_PC_ITEM_IDS[index]:X})) return kVF2Bathroom1CurtainImageBase + {index};"
+        for index in MOBILE_RENOVATION_NATIVE_ORDER
+        if MOBILE_RENOVATION_STYLE_CATALOG[index]["room"] == "bathroom"
     )
     bathroom2_curtain_cases = "\n".join(
         f"        if (VF2AIBathroom2IsActive(0x{item_id:X})) return kVF2Bathroom2CurtainImageBase + {index};"
         for index, item_id in enumerate(AI_BATHROOM2_PC_ITEM_IDS)
+    )
+    curtain_holiday_desc_count = (
+        holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
+    )
+    bathroom1_curtain_image_base = mobile_renovation_curtain_image_id(
+        "black", curtain_holiday_desc_count
+    )
+    bathroom2_curtain_image_base = ai_bathroom2_curtain_image_id(
+        "black", curtain_holiday_desc_count
     )
     helper_path.write_text(
         inventory_lock_api_preamble
@@ -10574,6 +10634,7 @@ public:
 {villager_type_preamble}
 {gender_type_preamble}
 {manager_type_preamble}
+{renderer_type_preamble}
 
 extern CToolTray ToolTray;
 extern CInventoryManager InventoryManager;
@@ -10733,6 +10794,7 @@ extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId) {{
 extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
     int styleIndex = VF2MobileRenovationStyleIndex(itemId);
     if (styleIndex < 0) return false;
+    VF2NormalizeMobileRenovationActives();
     if (VF2MobileRenovationIsActive(itemId)) {{
         VF2SetMobileRenovationActive(itemId, false);
         theGameState::Get()->SaveCurrentGame();
@@ -11284,14 +11346,18 @@ __VF2_AI_BATHROOM2_STORE_ICON_CASES__
 
 static const int kVF2StockBathroom1ClosedCurtainImage = {MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE};
 static const int kVF2StockBathroom2ClosedCurtainImage = {AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE};
-static const int kVF2Bathroom1CurtainImageBase = {mobile_renovation_curtain_image_id("black")};
-static const int kVF2Bathroom2CurtainImageBase = {ai_bathroom2_curtain_image_id("black")};
+static const int kVF2Bathroom1CurtainImageBase = {bathroom1_curtain_image_base};
+static const int kVF2Bathroom2CurtainImageBase = {bathroom2_curtain_image_base};
+extern "C" void __cdecl VF2NormalizeMobileRenovationActivesAndSave();
+extern "C" void __cdecl VF2NormalizeAIBathroom2ActivesAndSave();
 
 extern "C" int __cdecl VF2ResolveRenovationCurtainImage(int image) {{
     if (image == kVF2StockBathroom1ClosedCurtainImage && kVF2EnableMobileRenovations) {{
+        VF2NormalizeMobileRenovationActivesAndSave();
 {bathroom1_curtain_cases}
     }}
     if (image == kVF2StockBathroom2ClosedCurtainImage && kVF2EnableAIBathroom2) {{
+        VF2NormalizeAIBathroom2ActivesAndSave();
 {bathroom2_curtain_cases}
     }}
     return image;
@@ -11307,27 +11373,28 @@ static int VF2GetAddedStoreIconImage(int itemId) {{
     return VF2GetMobileRenovationStoreIconImage(itemId);
 }}
 
-static int VF2GetAddedStoreIconCellSize(int itemId) {{
-    if (VF2GetAIBathroom2StoreIconImage(itemId) >= 0)
-        return kVF2MobileRenovationIconCellSize;
-    if (VF2GetMobileRenovationStoreIconImage(itemId) >= 0)
-        return kVF2MobileRenovationIconCellSize;
-    return VF2GetVisibleSpecialUpgradeIconImage(itemId) >= 0
-        ? kVF2VisibleSpecialUpgradeIconCellSize
-        : kVF2OutfitStoreIconCellSize;
-}}
-
-static float VF2GetAddedStoreIconScale(int itemId) {{
-    return (VF2GetAIBathroom2StoreIconImage(itemId) >= 0 || VF2GetMobileRenovationStoreIconImage(itemId) >= 0) ? 0.12f : 1.0f;
+static bool VF2DrawAddedStoreIconNativeCell(int x, int y, int itemId, int selected) {{
+    int image = VF2GetAddedStoreIconImage(itemId);
+    if (image < 0) return false;
+    theGraphicsManager *graphics = theGraphicsManager::Get();
+    ldwGameWindow *window = ldwGameWindow::Get();
+    if (!graphics || !window) return true;
+    ldwImageGrid *grid = graphics->GetImageGrid((EImage)image);
+    if (!grid) return true;
+    ldwRect cell = {{ 0, 0, 0, 0 }};
+    grid->GetCellRect(0, 0, cell);
+    int drawX = x - (cell.right - cell.left) / 2;
+    int drawY = y - (cell.bottom - cell.top) / 2;
+    if (selected) {{
+    window->DrawTinted(grid, drawX + 2, drawY + 2, 0, kVF2Black, 0.4f, 1.0f);
+    window->DrawTinted(grid, drawX + 4, drawY + 4, 0, kVF2Black, 0.4f, 1.0f);
+    }}
+    window->Draw(grid, drawX, drawY, 0);
+    return true;
 }}
 
 extern "C" bool __cdecl VF2DrawOutfitStoreIconPoint(int x, int y, int itemId, int state, int position, int selected) {{
-    int image = VF2GetAddedStoreIconImage(itemId);
-    if (image < 0) return false;
-    int cellSize = VF2GetAddedStoreIconCellSize(itemId);
-    theGraphicsManager* graphics = theGraphicsManager::Get();
-    if (graphics) graphics->Draw((EImage)image, x - cellSize / 2, y - cellSize / 2, VF2GetAddedStoreIconScale(itemId), 255);
-    return true;
+    return VF2DrawAddedStoreIconNativeCell(x, y, itemId, selected);
 }}
 
 extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
@@ -11340,16 +11407,14 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
     int position,
     int selected
 ) {{
-    int image = VF2GetAddedStoreIconImage(itemId);
-    if (image < 0) return false;
-    int cellSize = VF2GetAddedStoreIconCellSize(itemId);
-    theGraphicsManager* graphics = theGraphicsManager::Get();
-    if (graphics) {{
-        int x = left + ((right - left) - cellSize) / 2;
-        int y = top + ((bottom - top) - cellSize) / 2;
-        graphics->Draw((EImage)image, x, y, VF2GetAddedStoreIconScale(itemId), 255);
-    }}
-    return true;
+    return VF2DrawOutfitStoreIconPoint(
+        left + (right - left) / 2,
+        top + (bottom - top) / 2,
+        itemId,
+        0,
+        0,
+        1
+    );
 }}
 
 {SPECIAL_UPGRADE_HELPER_SECTION_END}
@@ -11558,6 +11623,21 @@ def patch_main_scene_random_tip_click(manifest):
     if bytes(obj.buf[raw : raw + len(expected)]) != expected:
         raise RuntimeError("theMainScene HandleMouseDown house-hit anchor drifted")
 
+    # The stock invisible hit rectangle overlaps the authenticated tiny-house
+    # target.  Patch it before either additive input insertion shifts the
+    # function: +0x1132 here becomes +0x1166 in the run5 all-enabled layout.
+    native_overlap_off = sym.value + 0x1132
+    native_overlap_raw = sec.raw_ptr + native_overlap_off
+    native_overlap_stock = b"\x3B\x8E\x98\x00\x00\x00"
+    native_overlap_bypass = b"\xE9\x46\x00\x00\x00\x90"
+    if bytes(obj.buf[
+        native_overlap_raw : native_overlap_raw + len(native_overlap_stock)
+    ]) != native_overlap_stock:
+        raise RuntimeError("theMainScene native invisible house rectangle drifted")
+    obj.buf[
+        native_overlap_raw : native_overlap_raw + len(native_overlap_stock)
+    ] = native_overlap_bypass
+
     helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
     if not helper_path.exists():
         raise RuntimeError("vf2_special_upgrade_effects.cpp missing before random-tip helper")
@@ -11588,7 +11668,7 @@ extern "C" bool __cdecl VF2TryRandomTipHouseHit(
     const int localX = screenX - stripX;
     const int localY = screenY - stripY;
     // Tiny house in the baked main_BG_ws.png 1024x163 bottom-navigation strip.
-    if (localX < 184 || localX >= 218 || localY < 58 || localY >= 99) {
+    if (localX < 232 || localX >= 257 || localY < 127 || localY >= 151) {
         return false;
     }
     const int stringId = ldwGameState::GetRandom(0x32) + 0x09E3;
@@ -11629,7 +11709,7 @@ extern "C" bool __cdecl VF2TryRandomTipHouseHit(
         "route": "theMainScene::HandleMouseDown additive coordinate overlay over baked main_BG_ws.png",
         "image_id": "0x174",
         "image_size": [1024, 163],
-        "relative_rect": {"left": 184, "top": 58, "right": 218, "bottom": 99},
+        "relative_rect": {"left": 232, "top": 127, "right": 257, "bottom": 151},
         "screen_rect_formula": "x=[this+0xA8]+relative; y=[this+0x94]-[this+0x8C]-163+relative",
         "function": "?HandleMouseDown@theMainScene@@IAE?B_NUldwPoint@@@Z",
         "insert_offset": "0x79",
@@ -11642,7 +11722,17 @@ extern "C" bool __cdecl VF2TryRandomTipHouseHit(
         "selection": "GetRandom(0x32) + 0x09E3",
         "dealer_say": "CDealerSay::Say(StringId, -1) general notification channel",
         "helper": "_VF2TryRandomTipHouseHit",
-        "evidence": "additive PC overlay over baked main_BG_ws.png; no stock house control exists",
+        "native_invisible_rect_bypass": {
+            "source_object_offset": "0x1132",
+            "run5_final_offset": "0x1166",
+            "run5_target": "0x11B1",
+            "patch_on": "E9 46 00 00 00 90",
+            "patch_off": "3B 8E 98 00 00 00",
+        },
+        "evidence": (
+            "authenticated run5 second-house half-open bounds over the baked "
+            "bottom strip; stale native invisible rectangle bypassed"
+        ),
     }
 
 
@@ -12128,17 +12218,14 @@ public:
     struct SSaveState;
     bool const LoadState(SSaveState &state);
     bool Impregnate(int count, const char *name, int motherBody, int fatherBody, bool adopted);
-};
-
-enum ECauseOfDeath {
-    eCauseOfDeathOldAge = 2
+    void DetachAll();
+    void Reset();
 };
 
 class CVillagerState {
 public:
     int FoodGroupsActive(bool includeOrganic);
     bool ChanceOfPregnancy(int motherAge, int fatherAge, int fatherFertility);
-    void SetHealth(int health, ECauseOfDeath cause);
 };
 
 enum ECareerType {
@@ -12201,7 +12288,7 @@ public:
     struct SPeepRecord;
     struct SSaveState;
     SFamilyRecord *GetCurrentFamily();
-    void ReportDeath(CVillager &villager);
+    void UpdateCurrentFamilyRecord();
     void UpdatePeepRecord(SPeepRecord *record);
     bool const LoadState(SSaveState const &state);
     bool AddOffspring(CVillager const &villager);
@@ -12220,7 +12307,16 @@ enum FontId {
 };
 
 class ldwControl {};
-class ldwImageGrid {};
+struct ldwRect {
+    int left;
+    int top;
+    int right;
+    int bottom;
+};
+class ldwImageGrid {
+public:
+    void GetCellRect(int row, int col, ldwRect &rect);
+};
 struct ldwColor {
     unsigned int value;
 };
@@ -12253,6 +12349,7 @@ public:
     ldwImageGrid *GetImageGrid(EImage image);
     void Draw(EImage image, int x, int y, float scale, int alpha);
 };
+static const ldwColor kVF2Black = { 0xFF000000u };
 
 class theStringManager {
 public:
@@ -12552,73 +12649,46 @@ static void VF2QueueMarriageProposal() {
     state->QueueEmailMessage(eEmailMessageMarriageProposal);
 }
 
-static CVillager *VF2ActiveVillagerByPersistentIdUnique(
-    int peepId,
-    int *outIndex
+static CVillager *VF2CurrentGenerationSecondAdult(
+    unsigned char **outFamily
 ) {
-    if (peepId <= 0) return 0;
-
-    CVillager *match = 0;
-    int matchIndex = -1;
-    int matches = 0;
-    for (int index = 0; index < 30; ++index) {
-        if (!VillagerManager.VillagerExists(index, false)) continue;
-        CVillager *resident = &VillagerManager.GetVillager(index);
-        if (*(int *)((unsigned char *)resident + 0x1BB48) != peepId) {
-            continue;
-        }
-        if (*(int *)((unsigned char *)resident + 0x6B00) <= 0) {
-            continue;
-        }
-        ++matches;
-        if (matches != 1) return 0;
-        match = resident;
-        matchIndex = index;
-    }
-    if (matches != 1) return 0;
-    if (outIndex) *outIndex = matchIndex;
-    return match;
-}
-
-static unsigned char *VF2CurrentGenerationSecondAdultRecord() {
-    unsigned char *record =
+    unsigned char *family =
         (unsigned char *)FamilyTree.GetCurrentFamily();
-    if (!record || record[0] == 0 || record[0xF6] == 0) return 0;
-    return record;
+    if (!family || family[0] == 0 || family[0xF6] == 0) return 0;
+
+    int managerSlot = *(int *)(family + 0x104);
+    if (managerSlot < 0 || managerSlot >= 30) return 0;
+    if (!VillagerManager.VillagerExists(managerSlot, false)) return 0;
+
+    CVillager *spouse = &VillagerManager.GetVillager(managerSlot);
+    unsigned char *resident = (unsigned char *)spouse;
+    if (*(int *)(resident + 0x1BB48) != managerSlot) return 0;
+    if (*(int *)(resident + 0x6B00) <= 0) return 0;
+
+    if (outFamily) *outFamily = family;
+    return spouse;
 }
 
 static bool VF2DivorceSpouseAvailable() {
-    unsigned char *record = VF2CurrentGenerationSecondAdultRecord();
-    if (!record) return false;
-    int peepId = *(int *)(record + 0x104);
-    return VF2ActiveVillagerByPersistentIdUnique(peepId, 0) != 0;
+    return VF2CurrentGenerationSecondAdult(0) != 0;
 }
 
 static bool VF2DivorceSpouse() {
-    unsigned char *record = VF2CurrentGenerationSecondAdultRecord();
-    if (!record) return false;
+    unsigned char *family = 0;
+    CVillager *spouse = VF2CurrentGenerationSecondAdult(&family);
+    if (!spouse || !family) return false;
 
-    int peepId = *(int *)(record + 0x104);
-    int index = -1;
-    CVillager *spouse =
-        VF2ActiveVillagerByPersistentIdUnique(peepId, &index);
-    if (!spouse) return false;
-
-    // CVillagerState is embedded at CVillager+0x6AF4 and native SetHealth
-    // stores zero health plus the stock OldAge death cause.  SetHealth does
-    // not report the death itself; the stock death behavior calls the native
-    // FamilyTree::ReportDeath path separately.
-    CVillagerState *state =
-        (CVillagerState *)((unsigned char *)spouse + 0x6AF4);
-    state->SetHealth(0, eCauseOfDeathOldAge);
-    FamilyTree.ReportDeath(*spouse);
     if (VillagerManager.GetVillagerInFocus() == spouse) {
         VillagerManager.SetNoFocus();
     }
-    // Do not clear: retain the current second-parent SPeepRecord.  Native
-    // ReportDeath may mark its matching parent ID invalid, but does not zero
-    // the record; UpdateParents overwrites that exact +0xDC slot when a newly
-    // accepted spouse is recorded, and children remain in their records.
+    spouse->DetachAll();
+    spouse->Reset();
+
+    unsigned char *secondAdult = family + 0xDC;
+    for (int offset = 0; offset < 0xD8; ++offset) {
+        secondAdult[offset] = 0;
+    }
+    FamilyTree.UpdateCurrentFamilyRecord();
     return true;
 }
 
@@ -12674,17 +12744,20 @@ extern "C" CVillager *__fastcall VF2GetMarriageRole(
     return firstGender == wantedGender ? first : second;
 }
 
-extern "C" bool __fastcall VF2IsSameSexSpouseDrop(
+extern "C" int __fastcall VF2ClassifyRomanticSpouseDrop(
     CVillager *dropped,
     void *,
     CVillager *target
 ) {
-    if (!dropped || !target || !VF2IsSameSexMarriage()) return false;
+    if (!dropped || !target) return 0;
     CVillager *first;
     CVillager *second;
-    if (!VF2MarriagePair(first, second)) return false;
-    return (dropped == first && target == second) ||
-        (dropped == second && target == first);
+    if (!VF2MarriagePair(first, second)) return 0;
+    if (!((dropped == first && target == second) ||
+          (dropped == second && target == first))) return 0;
+    int firstGender = *(int *)((unsigned char *)first + 0x6A58);
+    int secondGender = *(int *)((unsigned char *)second + 0x6A58);
+    return firstGender == secondGender ? 1 : 2;
 }
 
 extern "C" void __cdecl VF2StoreTryForBabyCooldownMaybe(
@@ -13149,6 +13222,9 @@ class ldwFont;
 class ldwGameWindow {
 public:
     static ldwGameWindow *__cdecl Get();
+    void Draw(ldwImageGrid *grid, int x, int y, int cell);
+    void DrawTinted(ldwImageGrid *grid, int x, int y, int cell,
+        ldwColor color, float tint, float scale);
     void DrawString(
         const char *text,
         int x,
@@ -13854,6 +13930,26 @@ extern "C" bool __cdecl VF2AIBathroom2IsActive(int itemId) {{
     return active != 0 && *active != 0;
 }}
 
+static bool VF2NormalizeAIBathroom2Actives() {{
+    bool changed = false;
+    bool kept = false;
+    for (int index = 0; index < 5; ++index) {{
+        int itemId = {AI_BATHROOM2_PC_ITEM_BASE} + index;
+        if (!VF2AIBathroom2IsActive(itemId)) continue;
+        if (!kept) {{
+            kept = true;
+        }} else {{
+            *VF2AIBathroom2ActiveByte(itemId) = 0;
+            changed = true;
+        }}
+    }}
+    return changed;
+}}
+
+extern "C" void __cdecl VF2NormalizeAIBathroom2ActivesAndSave() {{
+    if (VF2NormalizeAIBathroom2Actives()) theGameState::Get()->SaveCurrentGame();
+}}
+
 static int VF2AIBathroom2StyleIndex(int itemId) {{
     return VF2IsAIBathroom2Style(itemId) ? itemId - {AI_BATHROOM2_PC_ITEM_BASE} : -1;
 }}
@@ -13861,6 +13957,7 @@ static int VF2AIBathroom2StyleIndex(int itemId) {{
 static bool VF2ApplyAIBathroom2Style(int itemId) {{
     int index = VF2AIBathroom2StyleIndex(itemId);
     if (index < 0) return false;
+    VF2NormalizeAIBathroom2Actives();
     if (VF2AIBathroom2IsActive(itemId)) {{
         *VF2AIBathroom2ActiveByte(itemId) = 0;
     }} else {{
@@ -16274,7 +16371,7 @@ def patch_graphics_manager(manifest):
                 "size": list(spec["size"]),
                 "sha256": digest,
                 "grid": [1, 1],
-                "scale": [0.12, 0.12],
+                "scale": [1.0, 1.0],
                 "status": "staged_only_stop_unverified_executable_link",
             })
 
@@ -16324,7 +16421,7 @@ def patch_graphics_manager(manifest):
             ai_bathroom2_store_icon_desc_manifest.append({
                 "image_id": hex(icon_id), "color": style["color"], "name": icon_filename,
                 "path": icon_path, "symbol": icon_sym, "grid": [1, 1],
-                "scale": [0.12, 0.12],
+                "scale": [1.0, 1.0],
             })
 
     bathroom1_curtain_desc_manifest = []
@@ -16464,7 +16561,19 @@ def patch_graphics_manager(manifest):
             # Room rendering consumes the complete 1:1 descriptors. The store
             # draw hook selects only the verified user-supplied icon descriptors;
             # missing mappings fall through to the stock DrawItem path.
-            "store_icon_scale": 0.12,
+            "store_icon_scale": 1.0,
+            "store_icon_renderer_contract": {
+                "visible_cell_rect": ["x+10", "y+5", "x+152", "y+108"],
+                "rect_centers_then_calls_point": True,
+                "descriptor_grid": [1, 1],
+                "cell_rect_method": "ldwImageGrid::GetCellRect",
+                "shadow_draws": [
+                    {"offset": [2, 2], "tint": "kVF2Black", "scale": 1.0, "opacity": 0.4},
+                    {"offset": [4, 4], "tint": "kVF2Black", "scale": 1.0, "opacity": 0.4},
+                ],
+                "final_draw": {"scale": 1.0, "opacity": 1.0},
+                "ownership_lock_overlay": "native separate overlay preserved",
+            },
             "store_icon_descriptor_range": (
                 f"0x{mobile_renovation_store_icon_image_base(holiday_desc_count):X}-"
                 f"0x{mobile_renovation_store_icon_image_base(holiday_desc_count) + len(mobile_renovation_store_icon_desc_manifest) - 1:X}"
@@ -16485,7 +16594,7 @@ def patch_graphics_manager(manifest):
             "descriptors": ai_bathroom2_desc_manifest,
             "store_icon_image_base": hex(ai_bathroom2_store_icon_image_base(holiday_desc_count)) if ENABLE_AI_GENERATED_BATHROOM2 else None,
             "store_icon_descriptors": ai_bathroom2_store_icon_desc_manifest,
-            "scale": {"room_overlay": 1.0, "store_icon": 0.12},
+            "scale": {"room_overlay": 1.0, "store_icon": 1.0},
             "route": "PC-only House Renovations visual rows; native E6 untouched",
             "closed_curtain_descriptors": bathroom2_curtain_desc_manifest,
             "closed_curtain_route": "theGraphicsManager::Draw image 538 selector; stock image 538 remains fallback when no Bathroom 2 style is active",
@@ -17917,31 +18026,48 @@ def patch_same_sex_marriage(manifest):
     expected_drop = b"\x8B\x43\x14\x8B\xC8"
     if bytes(main_obj.buf[drop_raw:drop_raw + 5]) != expected_drop:
         raise RuntimeError("Same-sex spouse drop hook drifted")
+    gender_branch = drop.value + 0x218
+    if bytes(main_obj.buf[drop_sec.raw_ptr + gender_branch:drop_sec.raw_ptr + gender_branch + 2]) != b"\x74\x3c":
+        raise RuntimeError("Romantic spouse gender branch drifted")
     drop_cave = drop_sec.raw_size
     drop_trampoline = bytearray(
         b"\x56"                         # push target
         b"\x8B\xCF"                    # mov ecx,dropped
         b"\xE8\0\0\0\0"              # call spouse-drop helper
         b"\x84\xC0"                    # test al,al
-        b"\x0F\x85\0\0\0\0"          # jne private action
-        b"\x8B\x43\x14\x8B\xC8"      # stock overwritten bytes
-        b"\xE9\0\0\0\0"              # jmp stock +25B
+        b"\x74\0"                     # zero -> native rejection
+        b"\x83\xF8\x01"              # same-sex spouse?
+        b"\x74\0"                     # same-sex -> private action
+        b"\xE9\0\0\0\0"              # opposite-sex -> stock cooldown
+        b"\xE9\0\0\0\0"              # same-sex -> private action
+        b"\xE9\0\0\0\0"              # non-spouse -> native rejection
     )
-    if len(drop_trampoline) != 26:
+    if len(drop_trampoline) != 32:
         raise AssertionError("Same-sex spouse-drop trampoline size drifted")
     struct.pack_into(
-        "<i", drop_trampoline, 12,
-        (drop.value + 0x26E) - (drop_cave + 16),
+        "<b", drop_trampoline, 11,
+        0x0F,
     )
     struct.pack_into(
-        "<i", drop_trampoline, 22,
-        (drop.value + 0x25B) - (drop_cave + 26),
+        "<b", drop_trampoline, 16, 0x0A,
+    )
+    struct.pack_into(
+        "<i", drop_trampoline, 18,
+        (drop.value + 0x25B) - (drop_cave + 22),
+    )
+    struct.pack_into(
+        "<i", drop_trampoline, 23,
+        (drop.value + 0x26E) - (drop_cave + 27),
+    )
+    struct.pack_into(
+        "<i", drop_trampoline, 28,
+        (drop.value + 0x22B) - (drop_cave + 32),
     )
     main_obj.insert_section_bytes(
         drop_sec.index, drop_cave, bytes(drop_trampoline)
     )
     drop_helper = main_obj.append_undefined_symbol(
-        SAME_SEX_DROP_HELPER_SYMBOL
+        ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL
     )
     main_obj.append_relocation(
         drop_sec.index,
@@ -17955,6 +18081,7 @@ def patch_same_sex_marriage(manifest):
     main_obj.buf[drop_raw:drop_raw + 5] = (
         b"\xE9" + struct.pack("<i", drop_cave - (drop_hook + 5))
     )
+    main_obj.buf[drop_sec.raw_ptr + gender_branch:drop_sec.raw_ptr + gender_branch + 2] = b"\xEB\x3C"
 
     try_name = "?TryToMakeBaby@theMainScene@@IAEXXZ"
     try_func = main_obj.symbol(try_name)
@@ -18026,9 +18153,28 @@ def patch_same_sex_marriage(manifest):
         ),
         "selectors": selector_hooks,
         "romantic_action": (
-            "manual spouse-on-spouse drops bypass the stock conception "
-            "cooldown only for an established same-sex marriage"
+            "manual spouse-on-spouse drops are classified by the native "
+            "current-generation spouse pair: same-sex uses +0x26E, "
+            "opposite-sex uses stock cooldown +0x25B even at six children, "
+            "and non-spouses use native rejection +0x22B"
         ),
+        "romantic_action_gate": {
+            "gender_branch_stock": "74 3C",
+            "gender_branch_patched": "EB 3C",
+            "hook_offset": "+0x256",
+            "patch_off": {
+                "gender_branch": "74 3C",
+                "gate_bytes": "8B 43 14 8B C8",
+            },
+            "classification": {
+                "same_sex_spouse": "1 -> +0x26E",
+                "opposite_sex_spouse": "2 -> +0x25B",
+                "non_spouse_or_invalid": "0 -> +0x22B",
+            },
+            "helper": ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL,
+            "trampoline": hex(drop_cave),
+            "trampoline_size": len(drop_trampoline),
+        },
         "pregnancy": (
             "same-sex marriages have 0% pregnancy: return false before normal or forced "
             "pregnancy chance; no Impregnate call is reached"
@@ -24942,6 +25088,14 @@ def patch_mobile_renovation_renderer(manifest):
         "    VF2DrawAIBathroom2(graphics, worldX, worldY);"
         if ENABLE_AI_GENERATED_BATHROOM2 else ""
     )
+    b2_world_x_cpp = ", ".join(
+        str(AI_BATHROOM2_WORLD_TOP_LEFTS[color][0])
+        for color in AI_BATHROOM2_COLOR_ORDER
+    )
+    b2_world_y_cpp = ", ".join(
+        str(AI_BATHROOM2_WORLD_TOP_LEFTS[color][1])
+        for color in AI_BATHROOM2_COLOR_ORDER
+    )
 
     helper_cpp = f"""
 enum EImage {{ eImageDummy = 0 }};
@@ -24961,6 +25115,7 @@ extern CWorldView WorldView;
 extern "C" bool __cdecl VF2MobileRenovationIsActive(int itemId);
 extern "C" void __cdecl VF2NormalizeMobileRenovationActivesAndSave();
 extern "C" bool __cdecl VF2AIBathroom2IsActive(int itemId);
+extern "C" void __cdecl VF2NormalizeAIBathroom2ActivesAndSave();
 
 static const bool kVF2EnableMobileRenovations = {"true" if ENABLE_MOBILE_RENOVATIONS else "false"};
 static const bool kVF2EnableAIBathroom2 = {"true" if ENABLE_AI_GENERATED_BATHROOM2 else "false"};
@@ -24968,6 +25123,8 @@ static const int kVF2MobileRenovationImageBase = {mobile_renovation_image_base(h
 static const int kVF2MobileRenovationItemBase = {MOBILE_RENOVATION_PC_ITEM_BASE};
 static const int kVF2AIBathroom2ItemBase = {AI_BATHROOM2_PC_ITEM_BASE};
 static const int kVF2AIBathroom2ImageBase = {ai_bathroom2_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
+static const int kVF2AIBathroom2WorldX[5] = {{{b2_world_x_cpp}}};
+static const int kVF2AIBathroom2WorldY[5] = {{{b2_world_y_cpp}}};
 
 static int VF2SelectedMobileRenovationImage(int room) {{
     VF2NormalizeMobileRenovationActivesAndSave();
@@ -24998,14 +25155,17 @@ static void VF2DrawAIBathroom2(
     int worldY
 ) {{
     if (!graphics || !kVF2EnableAIBathroom2) return;
+    VF2NormalizeAIBathroom2ActivesAndSave();
     int image = -1;
+    int styleIndex = -1;
     for (int index = 0; index < 5; ++index) {{
         if (VF2AIBathroom2IsActive(kVF2AIBathroom2ItemBase + index)) {{
             image = kVF2AIBathroom2ImageBase + index;
+            styleIndex = index;
             break;
         }}
     }}
-    if (image >= 0) graphics->Draw((EImage)image, {AI_BATHROOM2_ANCHOR[0]} - worldX, {AI_BATHROOM2_ANCHOR[1]} - worldY, 1.0f, 100);
+    if (image >= 0) graphics->Draw((EImage)image, kVF2AIBathroom2WorldX[styleIndex] - worldX, kVF2AIBathroom2WorldY[styleIndex] - worldY, 1.0f, 100);
 }}
 
 extern "C" void __cdecl VF2DrawMobileRenovations() {{
@@ -25038,10 +25198,10 @@ extern "C" void __cdecl VF2DrawMobileRenovations() {{
                 "translation_only": True,
             },
             "bathroom2": {
-                "origin": list(AI_BATHROOM2_ANCHOR),
-                "bounds": list(AI_BATHROOM2_TARGET_SIZE),
+                "world_top_lefts": {color: list(origin) for color, origin in AI_BATHROOM2_WORLD_TOP_LEFTS.items()},
+                "bounds_by_color": {color: list(size) for color, size in AI_BATHROOM2_OVERLAY_SIZES.items()},
                 "translation_only": True,
-                "all_color_variants_share_origin_and_bounds": True,
+                "immutable_source_art": True,
             },
         },
         "selector": {
@@ -25055,7 +25215,8 @@ extern "C" void __cdecl VF2DrawMobileRenovations() {{
             "enabled": ENABLE_AI_GENERATED_BATHROOM2,
             "selector": "direct persisted active byte, first active color order",
             "item_ids": [hex(item_id) for item_id in AI_BATHROOM2_PC_ITEM_IDS],
-            "anchor": list(AI_BATHROOM2_ANCHOR),
+            "world_top_lefts": {color: list(origin) for color, origin in AI_BATHROOM2_WORLD_TOP_LEFTS.items()},
+            "overlay_sizes": {color: list(size) for color, size in AI_BATHROOM2_OVERLAY_SIZES.items()},
             "native_e6_touched": False,
             "route": "same DrawScene+0x39 overlay boundary as Bathroom1; separate Bathroom2 anchor",
         },
@@ -25155,6 +25316,9 @@ def validate_mobile_renovation_style_state_contract(manifest):
         "status": "validated_mobile_takeone_semantics",
         "active_layer": {
             "storage": "direct persisted byte at InventoryManager + itemId + 0x2A3",
+            "bathroom1_offsets": {f"0x{item_id:X}": f"0x{item_id + 0x2A3:X}" for item_id in range(0x13C, 0x141)},
+            "native_save_load_span": "InventoryManager + 0x384..0x44F",
+            "native_reset": "Reset zeros the persisted active-byte span",
             "proven_item_range": "0xE1-0x1AC; mobile renovations use 0x13C-0x14A",
             "metadata_gate": "bypassed; no itemInfo dependency",
             "exclusive_by_room": True,
@@ -25204,6 +25368,30 @@ def validate_mobile_renovation_renderer_contract(manifest):
     helper_text = helper_path.read_text(encoding="ascii")
     if "1.0f" not in helper_text or "anchorX - worldX" not in helper_text:
         raise RuntimeError("Mobile renovation renderer is not a 1:1 camera-relative overlay")
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        ai_record = renderer.get("ai_bathroom2") or {}
+        expected_origins = {
+            color: list(origin)
+            for color, origin in AI_BATHROOM2_WORLD_TOP_LEFTS.items()
+        }
+        expected_sizes = {
+            color: list(size)
+            for color, size in AI_BATHROOM2_OVERLAY_SIZES.items()
+        }
+        if ai_record.get("world_top_lefts") != expected_origins:
+            raise RuntimeError("Bathroom 2 per-color world top-lefts drifted")
+        if ai_record.get("overlay_sizes") != expected_sizes:
+            raise RuntimeError("Bathroom 2 immutable overlay dimensions drifted")
+        if "kVF2AIBathroom2WorldX[5]" not in helper_text or "kVF2AIBathroom2WorldY[5]" not in helper_text:
+            raise RuntimeError("Bathroom 2 per-color coordinate arrays are missing")
+        if "1.0f, 100" not in helper_text:
+            raise RuntimeError("Bathroom 2 overlay opacity/scale drifted")
+        ai_runtime = OUT / "Images" / "AIGeneratedBathroom2"
+        for filename in AI_BATHROOM2_SOURCE_FILES:
+            source = AI_BATHROOM2_SOURCE_DIR / filename
+            runtime = ai_runtime / filename
+            if not runtime.is_file() or runtime.read_bytes() != source.read_bytes():
+                raise RuntimeError(f"Bathroom 2 runtime overlay is not an immutable source copy: {filename}")
     if ENABLE_AI_GENERATED_BATHROOM2 and not ENABLE_MOBILE_RENOVATIONS:
         hook = renderer.get("hook") or {}
         if hook.get("insert_offset") != "0x39":
@@ -25250,8 +25438,8 @@ def validate_mobile_renovation_renderer_contract(manifest):
         )
         if descriptors.get("store_icon_descriptor_range") != expected_store_icon_range:
             raise RuntimeError("Mobile renovation user store icon descriptor range drifted")
-        if descriptors.get("store_icon_scale") != 0.12:
-            raise RuntimeError("Mobile renovation store icon scale drifted from native 0.12f")
+        if descriptors.get("store_icon_scale") != 1.0:
+            raise RuntimeError("Mobile renovation store icon scale drifted from native 1.0f")
         for row in store_icon_descriptors:
             filename = row.get("name")
             spec = MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.get(filename)
@@ -25263,14 +25451,18 @@ def validate_mobile_renovation_renderer_contract(manifest):
         store_helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
         store_helper_text = store_helper_path.read_text(encoding="ascii") if store_helper_path.is_file() else ""
         if (
-            "VF2GetAddedStoreIconScale" not in store_helper_text
-            or "0.12f" not in store_helper_text
-            or "VF2GetAddedStoreIconScale(itemId), 255" not in store_helper_text
+            "VF2DrawAddedStoreIconNativeCell" not in store_helper_text
+            or "GetCellRect(0, 0, cell)" not in store_helper_text
+            or "DrawTinted(grid, drawX + 2, drawY + 2, 0, kVF2Black, 0.4f, 1.0f)" not in store_helper_text
+            or "DrawTinted(grid, drawX + 4, drawY + 4, 0, kVF2Black, 0.4f, 1.0f)" not in store_helper_text
+            or "window->Draw(grid, drawX, drawY, 0);" not in store_helper_text
+            or "graphics->Draw((EImage)image" in store_helper_text
+            or "0.12f" in store_helper_text
             or "VF2ResolveRenovationCurtainImage" not in store_helper_text
             or "kVF2StockBathroom1ClosedCurtainImage = 539" not in store_helper_text
             or "kVF2StockBathroom2ClosedCurtainImage = 538" not in store_helper_text
         ):
-            raise RuntimeError("Mobile renovation store icon draw scale/opacity is not statically proven")
+            raise RuntimeError("Mobile renovation store icon native DrawItem contract is not statically proven")
         runtime_dir = OUT / "Images" / "MobileRenovations"
         missing = [name for name in MOBILE_RENOVATION_ART_FILES if not (runtime_dir / name).is_file()]
         if missing:

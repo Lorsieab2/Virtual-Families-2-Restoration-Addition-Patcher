@@ -228,29 +228,30 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "never active or owned; generic checkmark/active renderer is bypassed",
         )
         self.assertEqual(
-            divorce_contract["target_slot"]["persistent_id_offset"],
+            divorce_contract["target_slot"]["manager_slot_offset"],
             "+0x104",
         )
         self.assertEqual(
             divorce_contract["availability"],
-            "zero unless the current second-parent slot is present and its persistent ID maps to exactly one active, non-away, live-health manager slot 0..29",
+            "zero unless the current second-parent slot is present and its manager slot is in 0..29, exists as an active non-away resident, matches CVillager+0x1BB48, and has living health",
         )
-        self.assertEqual(
-            divorce_contract["native_evidence"]["villager_state_base"],
-            "CVillager+0x6AF4",
-        )
-        self.assertEqual(
-            divorce_contract["native_evidence"]["health_field"],
-            "CVillager+0x6B00 (CVillagerState+0x0C)",
-        )
-        self.assertIn(
-            "SetHealth(0, OldAge)",
-            divorce_contract["apply"],
-        )
-        self.assertIn(
-            "ReportDeath",
-            divorce_contract["apply"],
-        )
+        self.assertEqual(divorce_contract["native_evidence"], {
+            "living_health_field": "CVillager+0x6B00",
+            "detach_all_symbol": "?DetachAll@CVillager@@QAEXXZ",
+            "reset_symbol": "?Reset@CVillager@@QAEXXZ",
+            "second_adult_range": "exactly 0xD8 bytes at current-family F+0xDC",
+            "update_symbol": "?UpdateCurrentFamilyRecord@CFamilyTree@@QAEXXZ",
+        })
+        for evidence in (
+            "CVillager::DetachAll",
+            "CVillager::Reset",
+            "zero exactly 0xD8 bytes",
+            "CFamilyTree::UpdateCurrentFamilyRecord",
+            "common SaveCurrentGame path",
+        ):
+            self.assertIn(evidence, divorce_contract["apply"])
+        for forbidden in ("SetHealth", "OldAge", "ReportDeath", "retain"):
+            self.assertNotIn(forbidden, str(divorce_contract))
         self.assertEqual(
             divorce_contract["warning"],
             "WARNING: Permanently removes spouse from the Family Tree and House!",
@@ -345,12 +346,16 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
 
         divorce_helpers = self._function_block(
             self.helper,
-            "static unsigned char *VF2CurrentGenerationSecondAdultRecord",
+            "static CVillager *VF2CurrentGenerationSecondAdult",
             "static bool VF2IsSameSexMarriage",
         )
         self.assertIn("FamilyTree.GetCurrentFamily()", divorce_helpers)
-        self.assertIn("record + 0x104", divorce_helpers)
-        self.assertIn("VF2ActiveVillagerByPersistentIdUnique", divorce_helpers)
+        self.assertIn("family + 0x104", divorce_helpers)
+        self.assertIn("managerSlot < 0 || managerSlot >= 30", divorce_helpers)
+        self.assertIn("spouse->DetachAll();", divorce_helpers)
+        self.assertIn("spouse->Reset();", divorce_helpers)
+        self.assertIn("family + 0xDC", divorce_helpers)
+        self.assertIn("FamilyTree.UpdateCurrentFamilyRecord();", divorce_helpers)
         self.assertNotIn("for (int generation", divorce_helpers)
 
     def test_every_cheat_row_reaches_purchase_dispatch_effect_and_save(self):
@@ -536,27 +541,40 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         )
         divorce_helpers = self._function_block(
             self.helper,
-            "static CVillager *VF2ActiveVillagerByPersistentIdUnique",
+            "static CVillager *VF2CurrentGenerationSecondAdult",
             "static bool VF2IsSameSexMarriage",
         )
         for evidence in (
             "FamilyTree.GetCurrentFamily()",
-            "record[0xF6]",
-            "record + 0x104",
-            "VillagerManager.VillagerExists(index, false)",
-            "0x1BB48",
-            "0x6B00) <= 0",
+            "family[0xF6]",
+            "family + 0x104",
+            "managerSlot < 0 || managerSlot >= 30",
+            "VillagerManager.VillagerExists(managerSlot, false)",
+            "resident + 0x1BB48) != managerSlot",
+            "resident + 0x6B00) <= 0",
             "VillagerManager.GetVillagerInFocus() == spouse",
             "VillagerManager.SetNoFocus();",
-            "state->SetHealth(0, eCauseOfDeathOldAge);",
-            "FamilyTree.ReportDeath(*spouse);",
-            "retain the current second-parent SPeepRecord",
+            "spouse->DetachAll();",
+            "spouse->Reset();",
+            "unsigned char *secondAdult = family + 0xDC;",
+            "for (int offset = 0; offset < 0xD8; ++offset)",
+            "secondAdult[offset] = 0;",
+            "FamilyTree.UpdateCurrentFamilyRecord();",
         ):
             self.assertIn(evidence, divorce_helpers)
-        self.assertNotIn("spouse->Reset();", divorce_helpers)
-        self.assertNotIn("for (int offset = 0; offset < 0xD8; ++offset)", divorce_helpers)
-        self.assertNotIn("GetFamilyRecord(", divorce_helpers)
-        self.assertNotIn("VF2MarriageAdult", divorce_helpers)
+        for forbidden in (
+            "SetHealth(",
+            "eCauseOfDeath",
+            "ReportDeath",
+            "CountSurvivingChildren",
+            "CanStartNextGeneration",
+            "StartNextGeneration",
+            "VF2PersistentCheatAndPurchaseMask",
+            "for (int generation",
+            "GetFamilyRecord(",
+            "VF2MarriageAdult",
+        ):
+            self.assertNotIn(forbidden, divorce_helpers)
 
         draw_point = self._function_block(
             self.helper,
@@ -568,10 +586,34 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
                 'extern "C" bool __cdecl VF2DrawOutfitStoreIconRect'
             ):
         ]
-        for draw_hook in (draw_point, draw_rect):
-            self.assertIn("int image = VF2GetAddedStoreIconImage(itemId);", draw_hook)
-            self.assertIn("if (image < 0) return false;", draw_hook)
-            self.assertIn("graphics->Draw", draw_hook)
+        native_cell = self._function_block(
+            self.helper,
+            "static bool VF2DrawAddedStoreIconNativeCell",
+            'extern "C" bool __cdecl VF2DrawOutfitStoreIconPoint',
+        )
+        self.assertIn("GetCellRect(0, 0, cell);", native_cell)
+        self.assertIn(
+            "DrawTinted(grid, drawX + 2, drawY + 2, 0, kVF2Black, 0.4f, 1.0f)",
+            native_cell,
+        )
+        self.assertIn(
+            "DrawTinted(grid, drawX + 4, drawY + 4, 0, kVF2Black, 0.4f, 1.0f)",
+            native_cell,
+        )
+        self.assertIn("window->Draw(grid, drawX, drawY, 0);", native_cell)
+        self.assertEqual(
+            self.helper.count("static const ldwColor kVF2Black = { 0xFF000000u };"),
+            1,
+        )
+        self.assertNotIn("cLdwBlack", self.helper)
+        self.assertNotIn("graphics->Draw", native_cell)
+        self.assertIn(
+            "return VF2DrawAddedStoreIconNativeCell(x, y, itemId, selected);",
+            draw_point,
+        )
+        self.assertIn("return VF2DrawOutfitStoreIconPoint(", draw_rect)
+        self.assertIn("left + (right - left) / 2", draw_rect)
+        self.assertIn("top + (bottom - top) / 2", draw_rect)
 
     def test_weather_refusal_is_not_a_catalog_row_or_cheat_string(self):
         catalog_text = [
