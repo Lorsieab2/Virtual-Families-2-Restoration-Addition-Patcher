@@ -2937,6 +2937,73 @@ def report_post_asset_apply_error(
         )
 
 
+def rebase_post_asset_checks_to_output(
+    output_dir: Path,
+    manifest_dir: Path,
+    post_asset_checks: list[dict[str, Any]],
+) -> None:
+    """Rebase executable offsets after a PE resource rewrite.
+
+    Stock-icon preservation can rebuild the PE resource section and shift the
+    raw offsets of every later section.  Post-asset records are authored
+    against the linked payload EXE, so preserve their section-relative offset
+    while selecting the corresponding section in the output EXE.  The source
+    payload was already hash/byte validated before this output-only mutation;
+    after rebasing, the current output hash is the integrity check used by the
+    final write.
+    """
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for check in post_asset_checks:
+        grouped.setdefault(str(check["file_path"]).lower(), []).append(check)
+    for checks in grouped.values():
+        first = checks[0]
+        source = resolve_under_manifest_dir(manifest_dir, str(first["source_path"]))
+        target = resolve_under_game_dir(output_dir, str(first["file_path"]))
+        source_structure = pe_structure_fingerprint(source)
+        target_structure = pe_structure_fingerprint(target)
+        if source_structure is None or target_structure is None:
+            current_sha = sha256_file(target)
+            for check in checks:
+                check["source_asset_sha256"] = check["asset_sha256"]
+                check["asset_sha256"] = current_sha
+            continue
+        source_sections = source_structure.get("sections", [])
+        target_sections = target_structure.get("sections", [])
+        target_by_name = {str(section.get("name")): section for section in target_sections}
+        for check in checks:
+            old_offset = int(check["offset"])
+            source_section = next(
+                (
+                    section
+                    for section in source_sections
+                    if int(str(section.get("raw_data_pointer", "0")), 0)
+                    <= old_offset
+                    < int(str(section.get("raw_data_pointer", "0")), 0)
+                    + int(str(section.get("raw_data_size", "0")), 0)
+                ),
+                None,
+            )
+            if source_section is None:
+                raise PatchError(
+                    f"Post-asset patch #{check['index']} offset 0x{old_offset:x} "
+                    f"is outside every source PE section in {source.name}."
+                )
+            target_section = target_by_name.get(str(source_section.get("name")))
+            if target_section is None:
+                raise PatchError(
+                    f"Post-asset patch #{check['index']} source section "
+                    f"{source_section.get('name')} is missing from output {target.name}."
+                )
+            source_raw = int(str(source_section["raw_data_pointer"]), 0)
+            target_raw = int(str(target_section["raw_data_pointer"]), 0)
+            check["source_offset"] = old_offset
+            check["offset"] = target_raw + (old_offset - source_raw)
+        current_sha = sha256_file(target)
+        for check in checks:
+            check["source_asset_sha256"] = check["asset_sha256"]
+            check["asset_sha256"] = current_sha
+
+
 def apply_post_asset_patches(
     output_dir: Path,
     post_asset_checks: list[dict[str, Any]],
@@ -3402,7 +3469,6 @@ def apply_manifest(args: argparse.Namespace) -> int:
                         index=patch.index,
                     )
             apply_asset_patches(output_dir, manifest_path.parent, asset_checks, args, process_log)
-            apply_post_asset_patches(output_dir, post_asset_checks, args, process_log)
             enforced_exe_name = enforce_modded_exe_name(game_dir, output_dir, manifest, process_log)
             if preserve_stock_exe_icon:
                 if not enforced_exe_name:
@@ -3436,6 +3502,12 @@ def apply_manifest(args: argparse.Namespace) -> int:
                         resource.resource_type == RT_GROUP_ICON for resource in captured_icon_resources
                     ),
                 )
+            rebase_post_asset_checks_to_output(
+                output_dir,
+                manifest_path.parent,
+                post_asset_checks,
+            )
+            apply_post_asset_patches(output_dir, post_asset_checks, args, process_log)
         else:
             enforced_exe_name = manifest_output_exe_name(manifest)
 

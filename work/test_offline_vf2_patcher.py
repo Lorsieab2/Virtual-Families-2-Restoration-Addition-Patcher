@@ -365,7 +365,7 @@ class OfflineVF2PatcherTests(unittest.TestCase):
 
             def write_icons(target, captured):
                 self.assertEqual(target, output_dir / output_name)
-                self.assertEqual(target.read_bytes(), b"FLAG\x01DATA")
+                self.assertEqual(target.read_bytes(), b"FLAG\x00DATA")
                 self.assertEqual(captured, resources)
                 target.write_bytes(target.read_bytes() + b"|stock-icons")
 
@@ -384,6 +384,64 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             write_icon_resources.assert_called_once()
             self.assertEqual((output_dir / output_name).read_bytes(), b"FLAG\x01DATA|stock-icons")
             self.assertEqual(game_file.read_bytes(), b"vanilla executable")
+
+    def test_rebases_post_asset_offsets_after_icon_section_shift(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            manifest_dir = tmp_path / "manifest"
+            output_dir = tmp_path / "output"
+            source = manifest_dir / "payload" / "Modded.exe"
+            target = output_dir / "Modded.exe"
+            source.parent.mkdir(parents=True)
+            output_dir.mkdir()
+            source.write_bytes(b"linked payload")
+            target.write_bytes(b"rewritten output")
+            checks = [
+                {
+                    "index": 0,
+                    "file_path": "Modded.exe",
+                    "source_path": "payload/Modded.exe",
+                    "offset": 0x108,
+                    "expected": b"\x00",
+                    "replacement": b"\x01",
+                    "asset_sha256": patcher_mod.sha256_file(source),
+                }
+            ]
+            source_structure = {
+                "sections": [
+                    {
+                        "name": ".vf2same",
+                        "raw_data_pointer": "0x100",
+                        "raw_data_size": "0x200",
+                    }
+                ]
+            }
+            target_structure = {
+                "sections": [
+                    {
+                        "name": ".vf2same",
+                        "raw_data_pointer": "0x300",
+                        "raw_data_size": "0x200",
+                    }
+                ]
+            }
+            with mock.patch.object(
+                patcher_mod,
+                "pe_structure_fingerprint",
+                side_effect=[source_structure, target_structure],
+            ):
+                patcher_mod.rebase_post_asset_checks_to_output(
+                    output_dir,
+                    manifest_dir,
+                    checks,
+                )
+
+            self.assertEqual(checks[0]["source_offset"], 0x108)
+            self.assertEqual(checks[0]["offset"], 0x308)
+            self.assertEqual(
+                checks[0]["asset_sha256"],
+                patcher_mod.sha256_file(target),
+            )
 
     def test_stock_exe_icon_dry_run_validates_without_writing(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -459,7 +517,7 @@ class OfflineVF2PatcherTests(unittest.TestCase):
 
             def write_icons(target, captured):
                 self.assertEqual(target, existing_exe)
-                self.assertEqual(target.read_bytes(), b"FLAG\x01DATA")
+                self.assertEqual(target.read_bytes(), b"FLAG\x00DATA")
                 self.assertEqual(captured, resources)
                 target.write_bytes(target.read_bytes() + b"|stock-icons")
 
