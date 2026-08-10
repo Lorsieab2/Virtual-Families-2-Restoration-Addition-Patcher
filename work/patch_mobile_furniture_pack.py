@@ -59,10 +59,10 @@ ENABLE_MOBILE_SOUND_ASSETS = os.environ.get("VF2_ENABLE_MOBILE_SOUND_ASSETS", "0
 REQUESTED_ENABLE_AI_GENERATED_BATHROOM2 = (
     os.environ.get("VF2_ENABLE_AI_GENERATED_BATHROOM2", "0") == "1"
 )
-AI_BATHROOM2_CURTAIN_RUNTIME_AUTHENTICATED = False
-# The five visual rows/state/icons are independently useful and can be
-# enabled without touching native E6.  Only the closed-curtain replacement
-# remains gated on its still-unproven selector/cache ABI.
+# Closed-curtain selection uses the existing theGraphicsManager::Draw image
+# argument.  It substitutes only the two stock closed-curtain image IDs and
+# therefore preserves native E6 and stock fallback behavior.
+AI_BATHROOM2_CURTAIN_RUNTIME_AUTHENTICATED = True
 ENABLE_AI_GENERATED_BATHROOM2 = REQUESTED_ENABLE_AI_GENERATED_BATHROOM2
 AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED = (
     ENABLE_AI_GENERATED_BATHROOM2
@@ -312,6 +312,10 @@ SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID = 0x166
 DIVORCE_SPOUSE_ITEM_ID = 0x14B
 DIVORCE_SPOUSE_WARNING = "WARNING: Permanently removes spouse from the Family Tree and House!"
 DIVORCE_SPOUSE_ICON_FILE = "cheat_marriage_email.png"
+# Divorce is a one-shot cheat action, not an owned upgrade. Keep its
+# configured catalog price explicit so a valid current spouse is rendered as
+# an ordinary purchasable row even when purchase history contains stale state.
+DIVORCE_SPOUSE_CATALOG_PRICE = 0
 
 # B153 mortality research uses the same dormant-byte architecture as older
 # pregnancies. Every executable contains the hook with a zero byte; the
@@ -873,7 +877,8 @@ MOBILE_RENOVATION_CURTAIN_ASSETS = {
 # exact stock filename; keep the source name as a separate staged asset so the
 # mapping remains auditable and reversible.
 MOBILE_RENOVATION_CURTAIN_RUNTIME_REPLACEMENTS = {
-    "shower_curtain_closed_black.png": "curtain_closed_southb.png",
+    # Kept as an explicit empty contract: the stock root image is never
+    # replaced statically; the Draw hook selects a color at render time.
 }
 MOBILE_SOUND_ASSET_SOURCE_DIR = (
     ROOT / "patcher_assets" / "optional_patches" / "mobile_sound_assets"
@@ -1714,7 +1719,7 @@ CHEAT_UPGRADE_ITEMS = [
         "item_id": DIVORCE_SPOUSE_ITEM_ID,
         "name": "Divorce Spouse",
         "description": DIVORCE_SPOUSE_WARNING,
-        "price": 0,
+        "price": DIVORCE_SPOUSE_CATALOG_PRICE,
     },
     {
         "item_id": 0x136,
@@ -4824,6 +4829,36 @@ def ai_bathroom2_store_icon_image_id(index, holiday_body_descriptor_count=0):
     if index < 0 or index >= len(AI_BATHROOM2_STYLE_CATALOG):
         raise IndexError(f"Bathroom 2 store-icon index out of range: {index}")
     return ai_bathroom2_store_icon_image_base(holiday_body_descriptor_count) + index
+
+
+MOBILE_RENOVATION_CURTAIN_COLOR_ORDER = ("black", "blue", "brown", "green", "pink")
+MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE = 539
+AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE = 538
+
+
+def renovation_curtain_image_base(holiday_body_descriptor_count=0):
+    """Return the first descriptor appended for dynamic closed curtains."""
+    base = mobile_renovation_store_icon_image_base(holiday_body_descriptor_count)
+    if ENABLE_MOBILE_RENOVATIONS:
+        base += MOBILE_RENOVATION_USER_STORE_ICON_COUNT
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        base += len(AI_BATHROOM2_STYLE_CATALOG) * 2
+    return base
+
+
+def mobile_renovation_curtain_image_id(color, holiday_body_descriptor_count=0):
+    if color not in MOBILE_RENOVATION_CURTAIN_COLOR_ORDER:
+        raise KeyError(color)
+    return renovation_curtain_image_base(holiday_body_descriptor_count) + MOBILE_RENOVATION_CURTAIN_COLOR_ORDER.index(color)
+
+
+def ai_bathroom2_curtain_image_id(color, holiday_body_descriptor_count=0):
+    if color not in MOBILE_RENOVATION_CURTAIN_COLOR_ORDER:
+        raise KeyError(color)
+    base = renovation_curtain_image_base(holiday_body_descriptor_count)
+    if ENABLE_MOBILE_RENOVATIONS:
+        base += len(MOBILE_RENOVATION_CURTAIN_COLOR_ORDER)
+    return base + MOBILE_RENOVATION_CURTAIN_COLOR_ORDER.index(color)
 
 
 def outfit_icon_path(gender, body_value):
@@ -8426,9 +8461,10 @@ def sync_ai_generated_bathroom2_assets(manifest):
         })
 
     curtain_blocker = (
-        "STOP: Bathroom 2 closed-curtain selector/restoration ABI is not "
-        "authenticated; the five House Renovations rows/overlays/icons are "
-        "independent, but color curtain assets remain payload-only."
+        "STOP: Bathroom 2 closed-curtain Draw image selector is disabled by "
+        "the authenticated-route gate."
+        if not AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED
+        else None
     )
     manifest["ai_generated_bathroom2_renovations"] = {
         "requested": REQUESTED_ENABLE_AI_GENERATED_BATHROOM2,
@@ -8437,12 +8473,11 @@ def sync_ai_generated_bathroom2_assets(manifest):
         "rows_runtime_ready": bool(ENABLE_AI_GENERATED_BATHROOM2),
         "curtain_runtime_ready": bool(AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED),
         "status": (
-            "runtime_visual_overlay_and_house_renovation_rows_curtain_blocked"
-            if ENABLE_AI_GENERATED_BATHROOM2
-            and not AI_BATHROOM2_CURTAIN_RUNTIME_AUTHENTICATED
-            else "default_off_optional_visual_payload"
+            "default_off_optional_visual_payload"
             if not ENABLE_AI_GENERATED_BATHROOM2
-            else "runtime_visual_overlay_and_house_renovation_rows"
+            else "runtime_visual_overlay_and_house_renovation_rows_curtain_blocked"
+            if not AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED
+            else "runtime_visual_overlay_rows_and_dynamic_closed_curtain_draw_selector"
         ),
         "blocker": curtain_blocker,
         "label": AI_BATHROOM2_LABEL,
@@ -8456,7 +8491,11 @@ def sync_ai_generated_bathroom2_assets(manifest):
         "pc_item_ids": [hex(item_id) for item_id in AI_BATHROOM2_PC_ITEM_IDS] if ENABLE_AI_GENERATED_BATHROOM2 else [],
         "rows_are_functional": bool(ENABLE_AI_GENERATED_BATHROOM2),
         "runtime_ready": False if ENABLE_AI_GENERATED_BATHROOM2 else None,
-        "curtain_runtime_route": "blocked_pending_authenticated dynamic curtain selection; staged color assets are reversible payload only",
+        "curtain_runtime_route": (
+            "blocked_pending_authenticated Draw selector"
+            if not AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED
+            else "theGraphicsManager::Draw image 538 substitution selects only the active Bathroom 2 color and returns stock image 538 when inactive"
+        ),
         "reference_evidence": reference_records,
         "target_size": list(AI_BATHROOM2_TARGET_SIZE),
         "normalization": "RGBA LANCZOS resize from each source canvas to bathroom2_vanilla.png dimensions; no generated_chroma intermediates",
@@ -8501,6 +8540,11 @@ def sync_mobile_renovation_art_sources(manifest):
     curtain_missing = []
     curtain_target = OUT / "Images" if ENABLE_MOBILE_RENOVATIONS else optional_target
     curtain_target.mkdir(parents=True, exist_ok=True)
+    curtain_runtime_target = (
+        runtime_target / "curtains" if ENABLE_MOBILE_RENOVATIONS else None
+    )
+    if curtain_runtime_target is not None:
+        curtain_runtime_target.mkdir(parents=True, exist_ok=True)
     for filename, spec in MOBILE_RENOVATION_CURTAIN_ASSETS.items():
         source = MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / filename
         destination = curtain_target / filename
@@ -8512,6 +8556,8 @@ def sync_mobile_renovation_art_sources(manifest):
         if digest.lower() != spec["sha256"].lower() or read_png_size(source) != tuple(spec["size"]):
             raise RuntimeError(f"Bathroom 1 curtain asset identity mismatch: {source}")
         shutil.copy2(source, destination)
+        if curtain_runtime_target is not None:
+            shutil.copy2(source, curtain_runtime_target / filename)
         curtain_copied.append({
             "name": filename,
             "source": str(source),
@@ -8522,25 +8568,22 @@ def sync_mobile_renovation_art_sources(manifest):
             "styles": spec["styles"],
         })
     stock_curtain_replacements = []
-    for source_name, target_name in MOBILE_RENOVATION_CURTAIN_RUNTIME_REPLACEMENTS.items():
-        source = MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / source_name
-        if not source.is_file():
-            curtain_missing.append(str(source))
-            continue
-        # This is deliberately a named-file replacement, matching the other
-        # visual-mod swaps.  The mobile renovation row remains the owner of
-        # the style; no second-bathroom/native route is added here.
-        destination = curtain_target / target_name
-        shutil.copy2(source, destination)
-        stock_curtain_replacements.append({
-            "source_name": source_name,
-            "target_name": target_name,
-            "source": str(source),
-            "target": str(destination),
-            "bytes": destination.stat().st_size,
-            "sha256": hashlib.sha256(destination.read_bytes()).hexdigest(),
-            "style": MOBILE_RENOVATION_CURTAIN_ASSETS[source_name]["styles"],
-        })
+    if ENABLE_MOBILE_RENOVATIONS:
+        stock_source = ROOT / "work" / "vanilla_runtime_payload" / "Images" / "curtain_closed_southb.png"
+        stock_destination = OUT / "Images" / "curtain_closed_southb.png"
+        if not stock_source.is_file():
+            curtain_missing.append(str(stock_source))
+        else:
+            shutil.copy2(stock_source, stock_destination)
+            stock_curtain_replacements.append({
+                "source_name": stock_source.name,
+                "target_name": stock_destination.name,
+                "source": str(stock_source),
+                "target": str(stock_destination),
+                "bytes": stock_destination.stat().st_size,
+                "sha256": hashlib.sha256(stock_destination.read_bytes()).hexdigest(),
+                "style": "stock_fallback_restored; dynamic Draw selector owns active colors",
+            })
     user_icon_target = target / "store_icons"
     user_icon_target.mkdir(parents=True, exist_ok=True)
     user_icon_copied = []
@@ -8597,7 +8640,7 @@ def sync_mobile_renovation_art_sources(manifest):
         "bathroom1_curtain_source": str(MOBILE_RENOVATION_CURTAIN_SOURCE_DIR),
         "bathroom1_curtain_target": str(curtain_target),
         "bathroom1_curtain_replacement_mode": (
-            "replace_named_images_root_files"
+            "restore_stock_named_image_and_select_by_draw_image_id"
             if ENABLE_MOBILE_RENOVATIONS
             else "staged_optional_visual_mod"
         ),
@@ -8607,7 +8650,7 @@ def sync_mobile_renovation_art_sources(manifest):
         "runtime_copy": ENABLE_MOBILE_RENOVATIONS,
         "overlay_contract": "Images/MobileRenovations/*.png are drawn at 1:1 scale after CWorldMap::Draw and before decals",
         "anchors": {room: list(origin) for room, origin in MOBILE_RENOVATION_ANCHORS.items()},
-        "bathroom2_policy": "reuse the corrected Bathroom 1 art only after a native second-bathroom render route is verified",
+        "bathroom2_policy": "independent upper-bathroom overlay and closed-curtain Draw image selector; native E6 remains untouched",
     }
 
 
@@ -10144,6 +10187,9 @@ def patch_visible_special_upgrades(manifest):
             "persistent ID maps to exactly one active, non-away, live-health manager "
             "slot 0..29"
         ),
+        "catalog_price": DIVORCE_SPOUSE_CATALOG_PRICE,
+        "price_semantics": "explicit catalog price while a valid current spouse exists; unavailable otherwise",
+        "owned_state": "never active or owned; generic checkmark/active renderer is bypassed",
         "resolver": (
             "exact persistent ID match at CVillager+0x1BB48; no gender, role, "
             "household order, selected-villager, or adult heuristic"
@@ -10492,6 +10538,14 @@ public:
         f"    case 0x{item_id:X}: return kVF2AIBathroom2StoreIconImageBase + {index};"
         for index, item_id in enumerate(AI_BATHROOM2_PC_ITEM_IDS)
     )
+    bathroom1_curtain_cases = "\n".join(
+        f"        if (VF2MobileRenovationIsActive(0x{item_id:X})) return kVF2Bathroom1CurtainImageBase + {index};"
+        for index, item_id in enumerate((0x13C, 0x13D, 0x13E, 0x13F, 0x140))
+    )
+    bathroom2_curtain_cases = "\n".join(
+        f"        if (VF2AIBathroom2IsActive(0x{item_id:X})) return kVF2Bathroom2CurtainImageBase + {index};"
+        for index, item_id in enumerate(AI_BATHROOM2_PC_ITEM_IDS)
+    )
     helper_path.write_text(
         inventory_lock_api_preamble
         + existing_helper
@@ -10534,6 +10588,7 @@ extern "C" bool __cdecl VF2SameSexMarriageToggleActive() {{
 }}
 static const bool kVF2EnableB150CheatUpgrades = {"true" if ENABLE_CHEAT_UPGRADES else "false"};
 static const int kVF2SameSexMarriageCatalogPrice = {next(item["price"] for item in CHEAT_UPGRADE_ITEMS if item["item_id"] == SAME_SEX_MARRIAGE_ITEM_ID)};
+static const int kVF2DivorceSpouseCatalogPrice = {DIVORCE_SPOUSE_CATALOG_PRICE};
 static const bool kVF2EnableMobileRenovations = {"true" if ENABLE_MOBILE_RENOVATIONS else "false"};
 static const int kVF2MobileRenovationItemBase = {MOBILE_RENOVATION_PC_ITEM_BASE};
 static const int kVF2MobileRenovationItemCount = {MOBILE_RENOVATION_IMAGE_COUNT};
@@ -10561,6 +10616,7 @@ static bool VF2IsMobileRenovationStyle(int itemId) {{
 // declarations let the shared removal helper call that one canonical route.
 static bool VF2IsAIBathroom2Style(int itemId);
 static unsigned char *VF2AIBathroom2ActiveByte(int itemId);
+static bool VF2DivorceSpouseAvailable();
 
 static int VF2MobileRenovationStyleIndex(int itemId) {{
     if (!VF2IsMobileRenovationStyle(itemId)) return -1;
@@ -10787,6 +10843,11 @@ static bool VF2B150UpgradeIsActive(int itemId) {{
     }}
     if (!kVF2EnableB150CheatUpgrades) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
+    if (itemId == {DIVORCE_SPOUSE_ITEM_ID:#x}) {{
+        // Divorce Spouse is a one-shot action. Never let purchase history
+        // classify it as an owned/checkmarked Special Upgrade.
+        return false;
+    }}
     if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
         return VF2SameSexMarriageToggleActive();
     }}
@@ -11184,6 +11245,11 @@ __VF2_VISIBLE_SPECIAL_UPGRADE_ICON_CASES__
 }}
 
 static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
+    if (itemId == {DIVORCE_SPOUSE_ITEM_ID:#x}) {{
+        // This one-shot action always uses its normal envelope artwork; it
+        // must never inherit the generic owned/checkmark state.
+        return kVF2VisibleSpecialUpgradeIconImageBase + 37;
+    }}
     if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x} &&
         VF2SameSexMarriageToggleActive()) {{
         return {SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID};
@@ -11216,6 +11282,21 @@ __VF2_AI_BATHROOM2_STORE_ICON_CASES__
     }}
 }}
 
+static const int kVF2StockBathroom1ClosedCurtainImage = {MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE};
+static const int kVF2StockBathroom2ClosedCurtainImage = {AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE};
+static const int kVF2Bathroom1CurtainImageBase = {mobile_renovation_curtain_image_id("black")};
+static const int kVF2Bathroom2CurtainImageBase = {ai_bathroom2_curtain_image_id("black")};
+
+extern "C" int __cdecl VF2ResolveRenovationCurtainImage(int image) {{
+    if (image == kVF2StockBathroom1ClosedCurtainImage && kVF2EnableMobileRenovations) {{
+{bathroom1_curtain_cases}
+    }}
+    if (image == kVF2StockBathroom2ClosedCurtainImage && kVF2EnableAIBathroom2) {{
+{bathroom2_curtain_cases}
+    }}
+    return image;
+}}
+
 static int VF2GetAddedStoreIconImage(int itemId) {{
     int image = VF2GetOutfitStoreIconImage(itemId);
     if (image >= 0) return image;
@@ -11245,7 +11326,7 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconPoint(int x, int y, int itemId, in
     if (image < 0) return false;
     int cellSize = VF2GetAddedStoreIconCellSize(itemId);
     theGraphicsManager* graphics = theGraphicsManager::Get();
-    if (graphics) graphics->Draw((EImage)image, x - cellSize / 2, y - cellSize / 2, VF2GetAddedStoreIconScale(itemId), 100);
+    if (graphics) graphics->Draw((EImage)image, x - cellSize / 2, y - cellSize / 2, VF2GetAddedStoreIconScale(itemId), 255);
     return true;
 }}
 
@@ -11266,7 +11347,7 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
     if (graphics) {{
         int x = left + ((right - left) - cellSize) / 2;
         int y = top + ((bottom - top) - cellSize) / 2;
-        graphics->Draw((EImage)image, x, y, VF2GetAddedStoreIconScale(itemId), 100);
+        graphics->Draw((EImage)image, x, y, VF2GetAddedStoreIconScale(itemId), 255);
     }}
     return true;
 }}
@@ -13505,6 +13586,11 @@ extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
     if (b150Price != -1) {
         return b150Price;
     }
+    if (itemId == 0x14B) {
+        return VF2DivorceSpouseAvailable()
+            ? 0
+            : -1;
+    }
     switch (itemId) {
     case 0x117:
         return Money.bankingInterest > 0.1001f ? 0 : -1;
@@ -15309,6 +15395,39 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
 }}
 '''.format(registrations="\n".join(registrations)).strip() + "\n"
     (PATCHED / "vf2_island_events.cpp").write_text(helper_cpp, encoding="ascii")
+
+    # The stock ChoiceAB vtable is also consumed by the event scheduler.  Its
+    # GetAwardAmount slot is the native +0x44 slot and was observed as NULL in
+    # the linked executable even though the generated mobile table contained a
+    # valid thunk.  Bind only that slot to the generated thunk: all native
+    # ChoiceAB slots remain untouched, while the mobile event award dispatch
+    # becomes link-authenticated and non-null.  The generated CMobile objects
+    # continue to use their explicit table above.
+    native_vtable = obj.symbol("??_7CIslandEventChoiceAB@@6B@")
+    native_sec = obj.section(native_vtable.section)
+    native_slot_vaddr = native_vtable.value + 0x40
+    native_slot_target = _coff_relocation_target_name(
+        obj, native_sec, native_slot_vaddr
+    )
+    if native_slot_target is None:
+        raise RuntimeError(
+            "CIslandEventChoiceAB native GetAwardAmount vtable slot relocation missing"
+        )
+    if native_slot_target != "?GetAwardAmount@CIslandEvent@@UAEHXZ":
+        raise RuntimeError(
+            "CIslandEventChoiceAB native GetAwardAmount vtable target drifted: "
+            + native_slot_target
+        )
+    native_award_helper = obj.append_undefined_symbol(
+        "?VF2MobileIslandEventGetAwardAmount@@YAXXZ"
+    )
+    obj.retarget_relocation(
+        native_sec.index,
+        native_slot_vaddr,
+        native_award_helper,
+        IMAGE_REL_I386_DIR32,
+    )
+    obj.write(PATCHED / "IslandEvents.obj")
     manifest["IslandEvents"] = {
         "added": [
             {
@@ -15366,6 +15485,15 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
                 "CalcAward()",
             ],
             "native_evidence": "IslandEvents_dump.txt CIslandEventChoiceAB GetTargetVillager2 reads [ecx+0x10]; vtable #60C",
+        },
+        "native_vtable_binding": {
+            "symbol": "??_7CIslandEventChoiceAB@@6B@",
+            "slot_offset": "0x44",
+            "object_vaddr": hex(native_slot_vaddr),
+            "original_target": native_slot_target,
+            "replacement": "?VF2MobileIslandEventGetAwardAmount@@YAXXZ",
+            "preserved_native_slots": "all ChoiceAB slots except native GetAwardAmount +0x44",
+            "link_requirement": "replacement must resolve to generated vf2_island_events.obj thunk",
         },
     }
 
@@ -15811,6 +15939,8 @@ def patch_graphics_manager(manifest):
         + (HOLIDAY_ORNAMENT_COLLECTION_IMAGE_COUNT if ENABLE_HOLIDAY_ORNAMENTS else 0)
         + (MOBILE_RENOVATION_USER_STORE_ICON_COUNT if ENABLE_MOBILE_RENOVATIONS else 0)
         + (len(AI_BATHROOM2_STYLE_CATALOG) * 2 if ENABLE_AI_GENERATED_BATHROOM2 else 0)
+        + (len(MOBILE_RENOVATION_CURTAIN_COLOR_ORDER) if ENABLE_MOBILE_RENOVATIONS else 0)
+        + (len(MOBILE_RENOVATION_CURTAIN_COLOR_ORDER) if ENABLE_AI_GENERATED_BATHROOM2 else 0)
     )
     if append_count:
         obj.insert_section_bytes(img_sym.section, img_sym.value + ORIG_IMAGE_COUNT * DESC_SIZE, b"\0" * (append_count * DESC_SIZE))
@@ -16191,6 +16321,69 @@ def patch_graphics_manager(manifest):
                 "scale": [0.12, 0.12],
             })
 
+    bathroom1_curtain_desc_manifest = []
+    if ENABLE_MOBILE_RENOVATIONS:
+        for color in MOBILE_RENOVATION_CURTAIN_COLOR_ORDER:
+            filename = f"shower_curtain_closed_{color}.png"
+            image_id = mobile_renovation_curtain_image_id(color, holiday_desc_count)
+            path = f"MobileRenovations/curtains/{filename}"
+            vals = plain_image_donor[:]
+            vals[0] = image_id
+            vals[1] = 0
+            vals[2] = 1
+            vals[3] = 1
+            desc_off = img_sym.value + image_id * DESC_SIZE
+            obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack(
+                "<" + "I" * (DESC_SIZE // 4), *vals,
+            )
+            sym = "_vf2bathroom1_curtain_" + color
+            helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+            symidx = obj.append_undefined_symbol(sym)
+            obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+            bathroom1_curtain_desc_manifest.append({
+                "image_id": hex(image_id), "color": color, "name": filename,
+                "path": path, "symbol": sym, "grid": [1, 1], "scale": [1.0, 1.0],
+            })
+
+    bathroom2_curtain_desc_manifest = []
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        for color in MOBILE_RENOVATION_CURTAIN_COLOR_ORDER:
+            filename = f"curtain_closed_{color}.png"
+            image_id = ai_bathroom2_curtain_image_id(color, holiday_desc_count)
+            path = f"AIGeneratedBathroom2/closed_curtains/{filename}"
+            vals = plain_image_donor[:]
+            vals[0] = image_id
+            vals[1] = 0
+            vals[2] = 1
+            vals[3] = 1
+            desc_off = img_sym.value + image_id * DESC_SIZE
+            obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack(
+                "<" + "I" * (DESC_SIZE // 4), *vals,
+            )
+            sym = "_vf2bathroom2_curtain_" + color
+            helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+            symidx = obj.append_undefined_symbol(sym)
+            obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+            bathroom2_curtain_desc_manifest.append({
+                "image_id": hex(image_id), "color": color, "name": filename,
+                "path": path, "symbol": sym, "grid": [1, 1], "scale": [1.0, 1.0],
+            })
+
+    curtain_draw_sym = obj.symbol("?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z")
+    curtain_draw_sec = obj.section(curtain_draw_sym.section)
+    curtain_draw_insert = curtain_draw_sym.value + 3
+    if obj.buf[curtain_draw_sec.raw_ptr + curtain_draw_sym.value : curtain_draw_sec.raw_ptr + curtain_draw_sym.value + 3] != b"\x55\x8B\xEC":
+        raise RuntimeError("Unexpected theGraphicsManager::Draw prologue")
+    curtain_helper = obj.append_undefined_symbol("_VF2ResolveRenovationCurtainImage")
+    curtain_payload = (
+        b"\xFF\x75\x08"       # push image
+        b"\xE8\x00\x00\x00\x00" # call selector
+        b"\x83\xC4\x04"       # pop image argument
+        b"\x89\x45\x08"       # replace image argument for stock Draw
+    )
+    obj.insert_section_bytes(curtain_draw_sym.section, curtain_draw_insert, curtain_payload)
+    obj.append_relocation(curtain_draw_sym.section, curtain_draw_insert + 4, curtain_helper, IMAGE_REL_I386_REL32)
+
     new_image_max = ORIG_IMAGE_MAX + append_count
     new_scan_end = ORIG_IMAGE_COUNT * DESC_SIZE + append_count * DESC_SIZE
     new_cleanup_end = 0x7798 + append_count * DESC_SIZE
@@ -16207,6 +16400,15 @@ def patch_graphics_manager(manifest):
 
     (PATCHED / "vf2_mobile_furniture_strings.c").write_text("\n".join(helper_lines) + "\n", encoding="ascii")
     manifest["theGraphicsManager"] = {
+        "renovation_closed_curtain_draw_hook": {
+            "function": "?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z",
+            "helper": "_VF2ResolveRenovationCurtainImage",
+            "argument": "[ebp+0x08] EImage image",
+            "stock_bathroom1_image": hex(MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE),
+            "stock_bathroom2_image": hex(AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE),
+            "fallback": "returns the original stock image when that bathroom has no active style",
+            "independent_state": True,
+        },
         "generation_lock_art": {
             "image_id": hex(LOCKED_IMAGE_ID),
             "path": "locked.png",
@@ -16268,6 +16470,8 @@ def patch_graphics_manager(manifest):
                 "staged Images/MobileRenovations/store_icons/*.png; final executable "
                 "linkage STOP until authenticated; stock DrawItem fallback for missing mappings"
             ),
+            "closed_curtain_descriptors": bathroom1_curtain_desc_manifest,
+            "closed_curtain_route": "theGraphicsManager::Draw image 539 selector; stock image 539 remains fallback when no Bathroom 1 style is active",
         },
         "ai_bathroom2_visual_images": {
             "enabled": ENABLE_AI_GENERATED_BATHROOM2,
@@ -16277,6 +16481,8 @@ def patch_graphics_manager(manifest):
             "store_icon_descriptors": ai_bathroom2_store_icon_desc_manifest,
             "scale": {"room_overlay": 1.0, "store_icon": 0.12},
             "route": "PC-only House Renovations visual rows; native E6 untouched",
+            "closed_curtain_descriptors": bathroom2_curtain_desc_manifest,
+            "closed_curtain_route": "theGraphicsManager::Draw image 538 selector; stock image 538 remains fallback when no Bathroom 2 style is active",
         },
         "holiday_ornament_collection_images": {
             "enabled": ENABLE_HOLIDAY_ORNAMENTS,
@@ -24819,6 +25025,19 @@ extern "C" void __cdecl VF2DrawMobileRenovations() {{
         },
         "image_scale": 1.0,
         "anchors": {room: list(origin) for room, origin in MOBILE_RENOVATION_ANCHORS.items()},
+        "geometry": {
+            "bathroom1": {
+                "origin": list(MOBILE_RENOVATION_ANCHORS["bathroom"]),
+                "bounds": [603, 363],
+                "translation_only": True,
+            },
+            "bathroom2": {
+                "origin": list(AI_BATHROOM2_ANCHOR),
+                "bounds": list(AI_BATHROOM2_TARGET_SIZE),
+                "translation_only": True,
+                "all_color_variants_share_origin_and_bounds": True,
+            },
+        },
         "selector": {
             "mode": "first_active_style_per_room_native_order",
             "item_ids": [hex(item_id) for item_id in MOBILE_RENOVATION_PC_ITEM_IDS],
@@ -25037,8 +25256,15 @@ def validate_mobile_renovation_renderer_contract(manifest):
                 raise RuntimeError("Mobile renovation user store icon hash evidence drifted")
         store_helper_path = PATCHED / "vf2_special_upgrade_effects.cpp"
         store_helper_text = store_helper_path.read_text(encoding="ascii") if store_helper_path.is_file() else ""
-        if "VF2GetAddedStoreIconScale" not in store_helper_text or "0.12f" not in store_helper_text:
-            raise RuntimeError("Mobile renovation store icon draw scale is not statically proven")
+        if (
+            "VF2GetAddedStoreIconScale" not in store_helper_text
+            or "0.12f" not in store_helper_text
+            or "VF2GetAddedStoreIconScale(itemId), 255" not in store_helper_text
+            or "VF2ResolveRenovationCurtainImage" not in store_helper_text
+            or "kVF2StockBathroom1ClosedCurtainImage = 539" not in store_helper_text
+            or "kVF2StockBathroom2ClosedCurtainImage = 538" not in store_helper_text
+        ):
+            raise RuntimeError("Mobile renovation store icon draw scale/opacity is not statically proven")
         runtime_dir = OUT / "Images" / "MobileRenovations"
         missing = [name for name in MOBILE_RENOVATION_ART_FILES if not (runtime_dir / name).is_file()]
         if missing:

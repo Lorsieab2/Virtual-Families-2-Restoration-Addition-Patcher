@@ -216,6 +216,18 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         divorce_contract = self.manifest["DivorceSpouse"]
         self.assertEqual(divorce_contract["store_item_id"], "0x14b")
         self.assertEqual(
+            divorce_contract["catalog_price"],
+            patcher.DIVORCE_SPOUSE_CATALOG_PRICE,
+        )
+        self.assertEqual(
+            divorce_contract["price_semantics"],
+            "explicit catalog price while a valid current spouse exists; unavailable otherwise",
+        )
+        self.assertEqual(
+            divorce_contract["owned_state"],
+            "never active or owned; generic checkmark/active renderer is bypassed",
+        )
+        self.assertEqual(
             divorce_contract["target_slot"]["persistent_id_offset"],
             "+0x104",
         )
@@ -269,6 +281,77 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             for item_id in LATE_CHEAT_IDS
         }
         self.assertEqual(len(late_source_hashes), len(LATE_CHEAT_IDS))
+
+    def test_divorce_is_priced_available_and_never_owned(self):
+        divorce_price = self._function_block(
+            self.helper,
+            'extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice',
+            'extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade',
+        )
+        self.assertIn(
+            "if (itemId == 0x14B) {\n"
+            "        return VF2DivorceSpouseAvailable()\n"
+            "            ? 0\n"
+            "            : -1;",
+            divorce_price,
+        )
+
+        active_state = self._function_block(
+            self.helper,
+            "static bool VF2B150UpgradeIsActive",
+            'extern "C" int __cdecl VF2GetB150UpgradePrice',
+        )
+        self.assertIn(
+            "if (itemId == 0x14b) {\n"
+            "        // Divorce Spouse is a one-shot action. Never let purchase history\n"
+            "        // classify it as an owned/checkmarked Special Upgrade.\n"
+            "        return false;\n"
+            "    }",
+            active_state,
+        )
+
+        icon = self._function_block(
+            self.helper,
+            "static int VF2GetVisibleSpecialUpgradeIconImage",
+            "static int VF2GetMobileRenovationIconImage",
+        )
+        self.assertIn(
+            "if (itemId == 0x14b) {\n"
+            "        // This one-shot action always uses its normal envelope artwork; it\n"
+            "        // must never inherit the generic owned/checkmark state.\n"
+            "        return kVF2VisibleSpecialUpgradeIconImageBase + 37;\n"
+            "    }",
+            icon,
+        )
+
+        availability = self._function_block(
+            self.helper,
+            'extern "C" int __cdecl VF2GetOutfitStoreNumAvailable',
+            'extern "C" bool __cdecl VF2PurchaseOutfitStoreItem',
+        )
+        self.assertIn(
+            "if (itemId == 0x14B) {\n"
+            "        return VF2DivorceSpouseAvailable() ? 1 : 0;\n"
+            "    }",
+            availability,
+        )
+
+        apply_case = self._case_block(self.helper, 0x14B)
+        self.assertIn("if (!VF2DivorceSpouse()) return;", apply_case)
+        divorce_case = apply_case.split("case 0x14B:", 1)[1].split("default:", 1)[0]
+        self.assertNotIn("InventoryManager.TakeOne", divorce_case)
+        self.assertNotIn("InventoryManager.ReturnOne", divorce_case)
+        self.assertIn("theGameState::Get()->SaveCurrentGame();", self.helper)
+
+        divorce_helpers = self._function_block(
+            self.helper,
+            "static unsigned char *VF2CurrentGenerationSecondAdultRecord",
+            "static bool VF2IsSameSexMarriage",
+        )
+        self.assertIn("FamilyTree.GetCurrentFamily()", divorce_helpers)
+        self.assertIn("record + 0x104", divorce_helpers)
+        self.assertIn("VF2ActiveVillagerByPersistentIdUnique", divorce_helpers)
+        self.assertNotIn("for (int generation", divorce_helpers)
 
     def test_every_cheat_row_reaches_purchase_dispatch_effect_and_save(self):
         cheat_ids = EXPECTED_CHEAT_IDS

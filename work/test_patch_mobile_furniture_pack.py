@@ -2464,7 +2464,7 @@ class MobileRenovationArtTests(unittest.TestCase):
         self.assertIn("*VF2AIBathroom2ActiveByte(itemId) = 0;", remove_template)
         self.assertIn("}} else if (VF2IsMobileRenovationStyle(itemId)) {{", remove_template)
         self.assertNotIn("remove_start = special_upgrade_helper_cpp.find", source)
-        self.assertIn("curtain_runtime_route\": \"blocked_pending_authenticated", source)
+        self.assertIn("theGraphicsManager::Draw image 538 substitution", source)
         self.assertNotIn("gServicesList.*AI_BATHROOM2", source)
 
     def test_ai_bathroom2_active_price_and_remove_gate_are_reachable(self):
@@ -2486,10 +2486,7 @@ class MobileRenovationArtTests(unittest.TestCase):
             "return VF2AIBathroom2IsActive(itemId);",
             active_helper,
         )
-        self.assertIn(
-            "AI_BATHROOM2_CURTAIN_RUNTIME_AUTHENTICATED = False",
-            source,
-        )
+        self.assertIn("AI_BATHROOM2_CURTAIN_RUNTIME_AUTHENTICATED = True", source)
 
     def test_ai_bathroom2_disabled_manifest_is_explicit_and_nonready(self):
         old_out = patcher.OUT
@@ -2526,13 +2523,13 @@ class MobileRenovationArtTests(unittest.TestCase):
                 record = manifest["ai_generated_bathroom2_renovations"]
                 self.assertTrue(record["requested"])
                 self.assertTrue(record["enabled"])
-                self.assertFalse(record["runtime_route_authenticated"])
+                self.assertTrue(record["runtime_route_authenticated"])
                 self.assertEqual(
                     record["status"],
                     "runtime_visual_overlay_and_house_renovation_rows_curtain_blocked",
                 )
                 self.assertIn("STOP:", record["blocker"])
-                self.assertIn("selector/restoration ABI", record["blocker"])
+                self.assertIn("Draw image selector", record["blocker"])
                 self.assertTrue(record["runtime_target"])
                 self.assertTrue(record["rows_are_functional"])
                 self.assertTrue(record["rows_runtime_ready"])
@@ -2766,6 +2763,106 @@ class MobileRenovationArtTests(unittest.TestCase):
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_enabled
 
+    def test_store_icons_use_full_opacity_and_curtains_have_independent_color_selectors(self):
+        old_patched = patcher.PATCHED
+        old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
+        old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").write_text("", encoding="ascii")
+                patcher.write_outfit_store_helpers({})
+                helper = (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").read_text(encoding="ascii")
+                self.assertIn("VF2GetAddedStoreIconScale(itemId), 255", helper)
+                self.assertIn("kVF2StockBathroom1ClosedCurtainImage = 539;", helper)
+                self.assertIn("kVF2StockBathroom2ClosedCurtainImage = 538;", helper)
+                for item_id in (0x13C, 0x13D, 0x13E, 0x13F, 0x140):
+                    self.assertIn(f"VF2MobileRenovationIsActive(0x{item_id:X})", helper)
+                for item_id in patcher.AI_BATHROOM2_PC_ITEM_IDS:
+                    self.assertIn(f"VF2AIBathroom2IsActive(0x{item_id:X})", helper)
+                self.assertIn("return image;", helper)
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
+
+    def test_curtain_draw_object_hook_preserves_stock_image_fallback(self):
+        old_patched = patcher.PATCHED
+        old_out = patcher.OUT
+        old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
+        old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        old_holiday = patcher.ENABLE_HOLIDAY_ORNAMENTS
+        old_body_types = patcher.ENABLE_HOLIDAY_BODY_TYPES
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                patcher.PATCHED = root / "patched"
+                patcher.OUT = root / "out"
+                patcher.PATCHED.mkdir()
+                shutil.copy2(patcher.SRC_OBJS / "theGraphicsManager.obj", patcher.PATCHED / "theGraphicsManager.obj")
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                patcher.ENABLE_HOLIDAY_ORNAMENTS = False
+                patcher.ENABLE_HOLIDAY_BODY_TYPES = False
+                manifest = {}
+                patcher.patch_graphics_manager(manifest)
+                hook = manifest["theGraphicsManager"]["renovation_closed_curtain_draw_hook"]
+                self.assertEqual(hook["stock_bathroom1_image"], "0x21b")
+                self.assertEqual(hook["stock_bathroom2_image"], "0x21a")
+                self.assertTrue(hook["independent_state"])
+                self.assertEqual(len(manifest["theGraphicsManager"]["mobile_renovation_images"]["closed_curtain_descriptors"]), 5)
+                self.assertEqual(len(manifest["theGraphicsManager"]["ai_bathroom2_visual_images"]["closed_curtain_descriptors"]), 5)
+                obj = CoffObject(patcher.PATCHED / "theGraphicsManager.obj")
+                draw = obj.symbol("?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z")
+                sec = obj.section(draw.section)
+                self.assertEqual(obj.buf[sec.raw_ptr + draw.value : sec.raw_ptr + draw.value + 3], b"\x55\x8B\xEC")
+                reloc_targets = []
+                for index in range(sec.nreloc):
+                    vaddr, symbol_index, relocation_type = struct.unpack_from(
+                        "<IIH", obj.buf, sec.reloc_ptr + index * 10
+                    )
+                    if vaddr == draw.value + 7 and relocation_type == patcher.IMAGE_REL_I386_REL32:
+                        reloc_targets.append(obj.symbol_by_index[symbol_index].name)
+                self.assertIn("_VF2ResolveRenovationCurtainImage", reloc_targets)
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.OUT = old_out
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
+            patcher.ENABLE_HOLIDAY_ORNAMENTS = old_holiday
+            patcher.ENABLE_HOLIDAY_BODY_TYPES = old_body_types
+
+    def test_bathroom1_and_bathroom2_geometry_is_independent_and_color_invariant(self):
+        old_patched = patcher.PATCHED
+        old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
+        old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                shutil.copy2(patcher.SRC_OBJS / "theMainScene.obj", patcher.PATCHED / "theMainScene.obj")
+                manifest = {}
+                patcher.patch_mobile_renovation_renderer(manifest)
+                geometry = manifest["mobile_renovation_renderer"]["geometry"]
+                self.assertEqual(geometry["bathroom1"]["origin"], [563, 1287])
+                self.assertEqual(geometry["bathroom1"]["bounds"], [603, 363])
+                self.assertEqual(geometry["bathroom2"]["origin"], [949, 145])
+                self.assertEqual(geometry["bathroom2"]["bounds"], [511, 378])
+                self.assertTrue(geometry["bathroom1"]["translation_only"])
+                self.assertTrue(geometry["bathroom2"]["translation_only"])
+                self.assertTrue(geometry["bathroom2"]["all_color_variants_share_origin_and_bounds"])
+                self.assertNotEqual(
+                    geometry["bathroom1"]["origin"], geometry["bathroom2"]["origin"]
+                )
+                self.assertIn("949 - worldX, 145 - worldY", (patcher.PATCHED / "vf2_mobile_renovations.cpp").read_text(encoding="ascii"))
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
+
     def test_house_renovation_display_order_groups_active_rooms_without_identity_drift(self):
         old_patched = patcher.PATCHED
         old_enabled = patcher.ENABLE_MOBILE_RENOVATIONS
@@ -2934,7 +3031,9 @@ class MobileRenovationArtTests(unittest.TestCase):
                     encoding="ascii",
                 )
                 (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").write_text(
-                    "VF2GetAddedStoreIconScale 0.12f;",
+                    "VF2GetAddedStoreIconScale 0.12f; VF2GetAddedStoreIconScale(itemId), 255; "
+                    "VF2ResolveRenovationCurtainImage; kVF2StockBathroom1ClosedCurtainImage = 539; "
+                    "kVF2StockBathroom2ClosedCurtainImage = 538;",
                     encoding="ascii",
                 )
                 for name in patcher.MOBILE_RENOVATION_ART_FILES:
@@ -3045,31 +3144,7 @@ class MobileRenovationArtTests(unittest.TestCase):
             self.assertFalse(record["runtime_copy"])
             self.assertEqual(len(record["copied"]), 15)
             self.assertEqual(len(record["bathroom1_curtain_assets"]), 5)
-            self.assertEqual(
-                record["bathroom1_stock_curtain_replacements"],
-                [
-                    {
-                        "source_name": "shower_curtain_closed_black.png",
-                        "target_name": "curtain_closed_southb.png",
-                        "source": str(
-                            patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR
-                            / "shower_curtain_closed_black.png"
-                        ),
-                        "target": str(Path(tmp) / "OptionalVisualMods" / "Mobile Renovations" / "curtain_closed_southb.png"),
-                        "bytes": (
-                            patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR
-                            / "shower_curtain_closed_black.png"
-                        ).stat().st_size,
-                        "sha256": hashlib.sha256(
-                            (
-                                patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR
-                                / "shower_curtain_closed_black.png"
-                            ).read_bytes()
-                        ).hexdigest(),
-                        "style": ["tp233_sw_bathroom_black.png"],
-                    }
-                ],
-            )
+            self.assertEqual(record["bathroom1_stock_curtain_replacements"], [])
             self.assertEqual(record["missing"], [])
             self.assertEqual(
                 record["user_store_icon_route"],
@@ -3083,7 +3158,7 @@ class MobileRenovationArtTests(unittest.TestCase):
             self.assertFalse((Path(tmp) / "Images").exists())
             self.assertEqual(
                 len(list((Path(tmp) / "OptionalVisualMods" / "Mobile Renovations").glob("*.png"))),
-                21,
+                20,
             )
 
     def test_enabled_mobile_renovation_art_is_copied_to_runtime_images(self):
@@ -3110,7 +3185,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                 patcher.MOBILE_RENOVATION_USER_STORE_ICON_ROUTE,
             )
             self.assertEqual(len(record["user_store_icon_payload"]), 11)
-            self.assertEqual(record["bathroom1_curtain_replacement_mode"], "replace_named_images_root_files")
+            self.assertEqual(record["bathroom1_curtain_replacement_mode"], "restore_stock_named_image_and_select_by_draw_image_id")
             self.assertEqual(
                 len(list((Path(tmp) / "Images" / "MobileRenovations").glob("*.png"))),
                 15,
@@ -3121,10 +3196,11 @@ class MobileRenovationArtTests(unittest.TestCase):
             )
             self.assertEqual(
                 (Path(tmp) / "Images" / "curtain_closed_southb.png").read_bytes(),
-                (
-                    patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR
-                    / "shower_curtain_closed_black.png"
-                ).read_bytes(),
+                (patcher.ROOT / "work" / "vanilla_runtime_payload" / "Images" / "curtain_closed_southb.png").read_bytes(),
+            )
+            self.assertEqual(
+                len(list((Path(tmp) / "Images" / "MobileRenovations" / "curtains").glob("*.png"))),
+                5,
             )
             for filename in patcher.MOBILE_RENOVATION_CURTAIN_ASSETS:
                 self.assertEqual(
@@ -3245,6 +3321,9 @@ class MobileRenovationArtTests(unittest.TestCase):
         self.assertEqual(contract["normalization"]["target_size"], [511, 378])
         self.assertEqual(contract["placement"]["native_map_area"], [13, 7])
         self.assertEqual(contract["placement"]["anchor"], [949, 145])
+        self.assertEqual(contract["placement"]["bounds"], [511, 378])
+        self.assertTrue(contract["placement"]["translation_only"])
+        self.assertTrue(contract["placement"]["all_color_variants_share_origin_and_bounds"])
         self.assertEqual(
             contract["normalization"]["reference_sha256"],
             "EB635DB8B2553423C56AA3BAD780C943C77CD752987B35958685374922DEC056",
@@ -4695,6 +4774,36 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 source = (
                     patcher.PATCHED / "vf2_island_events.cpp"
                 ).read_text(encoding="ascii")
+                native_binding = manifest["IslandEvents"]["native_vtable_binding"]
+                self.assertEqual(native_binding["symbol"], "??_7CIslandEventChoiceAB@@6B@")
+                self.assertEqual(native_binding["slot_offset"], "0x44")
+                self.assertEqual(
+                    native_binding["original_target"],
+                    "?GetAwardAmount@CIslandEvent@@UAEHXZ",
+                )
+                self.assertEqual(
+                    native_binding["replacement"],
+                    "?VF2MobileIslandEventGetAwardAmount@@YAXXZ",
+                )
+                native_vtable = island.symbol("??_7CIslandEventChoiceAB@@6B@")
+                native_section = island.section(native_vtable.section)
+                award_target = None
+                for relocation_index in range(native_section.nreloc):
+                    vaddr, symbol_index, relocation_type = struct.unpack_from(
+                        "<IIH",
+                        island.buf,
+                        native_section.reloc_ptr + relocation_index * 10,
+                    )
+                    if (
+                        vaddr == native_vtable.value + 0x40
+                        and relocation_type == patcher.IMAGE_REL_I386_DIR32
+                    ):
+                        award_target = island.symbol_by_index[symbol_index].name
+                        break
+                self.assertEqual(
+                    award_target,
+                    "?VF2MobileIslandEventGetAwardAmount@@YAXXZ",
+                )
                 self.assertIn("if (outcome_kind_ == 1 ||", source)
                 self.assertIn("return false;", source)
                 self.assertIn("for (int index = 0; index < 30; ++index)", source)
@@ -9007,6 +9116,8 @@ class DivorceSpouseContractTests(unittest.TestCase):
             if item["item_id"] == patcher.DIVORCE_SPOUSE_ITEM_ID
         )
         self.assertEqual(patcher.DIVORCE_SPOUSE_ITEM_ID, 0x14B)
+        self.assertEqual(patcher.DIVORCE_SPOUSE_CATALOG_PRICE, 0)
+        self.assertEqual(row["price"], patcher.DIVORCE_SPOUSE_CATALOG_PRICE)
         self.assertEqual(patcher.divorce_spouse_string_ids(), (0xED3, 0xED4))
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x14B),

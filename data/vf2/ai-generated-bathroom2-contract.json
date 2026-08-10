@@ -36,6 +36,9 @@
   "placement": {
     "native_map_area": [13, 7],
     "anchor": [949, 145],
+    "bounds": [511, 378],
+    "translation_only": true,
+    "all_color_variants_share_origin_and_bounds": true,
     "anchor_basis": "tracked 2048x2048 room-map reference/native north-bathroom bounds; room-apex origin",
     "reference_bounds": "patcher_assets/optional_patches/ai_generated_bathroom2_renovations/reference/bathroom2_bounds_reference.png",
     "reference_bounds_sha256": "8FA3306621329BF08C54E4B6818075733AAEFF05F5E092D1FF76786E63C2A068"
