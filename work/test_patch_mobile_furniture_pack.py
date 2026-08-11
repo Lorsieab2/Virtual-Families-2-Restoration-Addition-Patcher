@@ -106,11 +106,36 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(0x09E3 + 49, 0x0A14)
                 self.assertEqual(contract["string_id_count"], 50)
                 self.assertTrue(contract["stock_control_id1_untouched"])
+                self.assertEqual(contract["success_sound"], {
+                    "api": "CSound::Play(ESound)",
+                    "raw_id": "0xbd",
+                    "filename": "button_click_wood.ogg",
+                    "source": str(
+                        patcher.MOBILE_SOUND_ASSET_SOURCE_DIR
+                        / "button_click_wood.ogg"
+                    ),
+                    "sha256": patcher.RANDOM_TIP_CLICK_SOUND_SHA256,
+                    "only_after_successful_house_hit": True,
+                })
 
                 helper = (temp / "vf2_special_upgrade_effects.cpp").read_text(encoding="ascii")
                 self.assertIn("VF2TryRandomTipHouseHit", helper)
                 self.assertIn("ldwGameState::GetRandom(0x32) + 0x09E3", helper)
                 self.assertIn("DealerSay.Say((StringId)stringId, -1)", helper)
+                self.assertIn(
+                    "Sound.Play(static_cast<ESound>(0xBD));",
+                    helper,
+                )
+                hit_start = helper.index("extern \"C\" bool __cdecl VF2TryRandomTipHouseHit")
+                hit_body = helper[hit_start:]
+                self.assertLess(
+                    hit_body.index("localX < 232 || localX >= 257 || localY < 127 || localY >= 151"),
+                    hit_body.index("Sound.Play(static_cast<ESound>(0xBD));"),
+                )
+                self.assertLess(
+                    hit_body.index("Sound.Play(static_cast<ESound>(0xBD));"),
+                    hit_body.index("return true;"),
+                )
                 self.assertIn("raw + 0xA8", helper)
                 self.assertIn("raw + 0x94", helper)
                 self.assertIn("raw + 0x8C", helper)
@@ -2393,6 +2418,21 @@ class MobileRenovationArtTests(unittest.TestCase):
                         for row in graphics["store_icon_descriptors"]
                     )
                 )
+                special = manifest["theGraphicsManager"]["visible_special_upgrade_icons"]
+                self.assertEqual(len(special), len(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES))
+                self.assertTrue(all(row["grid"] == [1, 1] for row in special))
+                self.assertTrue(all(row["scale"] == [1.0, 1.0] for row in special))
+                obj = CoffObject(patcher.PATCHED / "theGraphicsManager.obj")
+                image_list = obj.symbol(patcher.IMAGELIST)
+                image_section = obj.section(image_list.section)
+                for row in special:
+                    image_id = int(row["image_id"], 16)
+                    descriptor = struct.unpack_from(
+                        "<12I",
+                        obj.buf,
+                        image_section.raw_ptr + image_list.value + image_id * patcher.DESC_SIZE,
+                    )
+                    self.assertEqual(descriptor[2:4], (1, 1), row)
         finally:
             patcher.PATCHED = old_patched
             patcher.OUT = old_out
@@ -5131,7 +5171,6 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 for event_class in (
                     "CEventFruitcakes",
                     "CEventGreatUncleElmer",
-                    "CEventMarchingBandTripExpenses",
                     "CEventLoanReturned",
                     "CEventMetallicKnockingOnDoor",
                     "CEventMissionFromGod",
@@ -5139,8 +5178,12 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 ):
                     self.assertEqual(
                         rows[event_class]["outcome_status"],
-                        "exact mobile dummied-out CanFire=false",
+                        "exact mobile outcome",
                     )
+                self.assertEqual(
+                    rows["CEventMarchingBandTripExpenses"]["outcome_status"],
+                    "exact mobile dummied-out CanFire=false",
+                )
 
                 source = (
                     patcher.PATCHED / "vf2_island_events.cpp"
@@ -5200,7 +5243,7 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 self.assertIn("CollectableItem.SpawnTrashInHouse(10);", source)
                 self.assertNotIn("SpawnStainInHouse", source)
                 self.assertIn(
-                    "outcome_kind_ >= 5 && outcome_kind_ <= 8",
+                    "if (outcome_kind_ == 1 || outcome_kind_ == 7)",
                     source,
                 )
                 self.assertIn(
@@ -5259,7 +5302,7 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn(
-                    "FurnitureManager.AddToStorage((EInventoryItem)0x24B);",
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x24A);",
                     source,
                 )
                 self.assertIn("award_ = -50;", source)
@@ -5341,7 +5384,7 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn(
-                    "FurnitureManager.AddToStorage((EInventoryItem)0x23C);",
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x23B);",
                     source,
                 )
                 self.assertIn("likes->Add((ELike)0x24);", source)
@@ -5351,12 +5394,12 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn(
-                    "FurnitureManager.AddToStorage((EInventoryItem)0x219);",
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x218);",
                     source,
                 )
                 self.assertIn("(EBehavior)0x171,", source)
                 self.assertIn(
-                    "FurnitureManager.AddToStorage((EInventoryItem)0x242);",
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x241);",
                     source,
                 )
                 self.assertIn("state->AdjustHappinessTrend(20);", source)
@@ -5372,7 +5415,7 @@ class MobileIslandEventTextTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn(
-                    "FurnitureManager.AddToStorage((EInventoryItem)0x1F5);",
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x1F4);",
                     source,
                 )
                 self.assertIn(
@@ -5381,7 +5424,7 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 )
                 self.assertIn("award_ = -100;", source)
                 self.assertIn(
-                    "FurnitureManager.AddToStorage((EInventoryItem)0x207);",
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x206);",
                     source,
                 )
                 self.assertIn("likes->Add((ELike)0x6D);", source)
@@ -5415,6 +5458,92 @@ class MobileIslandEventTextTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "skills->AdvanceCareer(",
+                    source,
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_mobile_event_parity_contract_covers_all_25_authenticated_routes(self):
+        # This table is deliberately source/static: the mobile IDA dump is the
+        # authority for outcome kind, CanFire status, and each translated PC
+        # effect.  It must not be converted into runtime claims.
+        parity = (
+            ("MeteoriteFallsInYard1", 1, "exact mobile dummied-out CanFire=false", ("if (outcome_kind_ == 1 ||",)),
+            ("StrangePackageOnPorch", 2, "exact mobile outcome", ("award_ = choice == 0 ? ldwGameState::GetRandom(100) + 50 : 0;",)),
+            ("Teens", 3, "exact mobile outcome", ("award_ = choice == 0 ? 0 : -75;", "CollectableItem.SpawnSockInHouse(10);", "CollectableItem.SpawnTrashInHouse(10);")),
+            ("Invitation", 4, "exact mobile outcome", ("VillagerManager.AdjustAllChildrenHappiness(20);", "(EBehavior)251, 7, 280, eGenderAny, 0, 0")),
+            ("Fruitcakes", 5, "exact mobile outcome", ("ToolTray.AddItem((EInventoryItem)42, 1);", "(EBehavior)26,", "state->SetSymptom((ESymptom)5);")),
+            ("GreatUncleElmer", 6, "exact mobile outcome", ("FurnitureManager.AddToStorage((EInventoryItem)0x24A);",)),
+            ("MarchingBandTripExpenses", 7, "exact mobile dummied-out CanFire=false", ("award_ = -50;",)),
+            ("LoanReturned", 8, "exact mobile outcome", ("award_ = 20;",)),
+            ("BlastFromThePast", 9, "exact mobile outcome", ("ldwGameState::GetRandom(50) + 50", "state->AdjustHappinessTrend(15);")),
+            ("EmailFromACME", 10, "exact mobile outcome", ("award_ = 70;",)),
+            ("EmailFromAntonioGuildenstern", 11, "exact mobile outcome", ("(EBehavior)424, 7, 7, eGenderAny, 0, 0", "state->AdjustHappinessTrend(15);")),
+            ("EmailFromSchool", 12, "exact mobile outcome", ("(EBehavior)88,", "+ 0x6B74")),
+            ("InterestingArticleAboutFossils", 13, "exact mobile outcome", ("ldwGameState::GetRandom(12) + 103", "CollectableItem.Add(carrying, point, false);")),
+            ("MeteoriteFallsInYard2", 14, "exact mobile outcome", ("award_ = choice == 0 ? 50 : 0;",)),
+            ("ClownHoldingMetalRod", 15, "exact mobile outcome", ("FurnitureManager.AddToStorage((EInventoryItem)0x23B);", "likes->Add((ELike)0x24);")),
+            ("MenInBlackAtDoor", 16, "exact mobile outcome", ("FurnitureManager.AddToStorage((EInventoryItem)0x218);", "(EBehavior)0x171,")),
+            ("HearStrangeSound", 17, "exact mobile outcome", ("FurnitureManager.AddToStorage((EInventoryItem)0x241);", "state->AdjustHappinessTrend(20);")),
+            ("MetallicKnockingOnDoor", 18, "exact mobile outcome", ("award_ = choice == 0 ? 50 : 0;",)),
+            ("GroupOfKidsAtTheDoor", 19, "exact mobile outcome", ("award_ = choice == 0 ? ldwGameState::GetRandom(100) + 50 : 0;", "state->AdjustHappinessTrend(20);")),
+            ("MissionFromGod", 20, "exact mobile outcome", ("award_ = choice == 0 ? -20 : 0;", "VillagerManager.CureAllVillagers();")),
+            ("OddOldWomanAtDoor", 21, "exact mobile outcome", ("award_ = choice == 0 ? ldwGameState::GetRandom(10) + 5 : 0;", "state->SetSymptom((ESymptom)6);", "(EBehavior)175,")),
+            ("RIPUncleAlpert", 22, "exact mobile outcome", ("FurnitureManager.AddToStorage((EInventoryItem)0x1F4);", "ldwGameState::GetRandom(100) + 75")),
+            ("ResurrectionOfAgatha", 23, "exact mobile outcome", ("award_ = -100;",)),
+            ("SurpriseVisitFromUnclePhineas", 24, "exact mobile outcome", ("FurnitureManager.AddToStorage((EInventoryItem)0x206);", "likes->Add((ELike)0x6D);", "award_ = 0;")),
+            ("Volunteer", 25, "exact mobile outcome", ("(EBehavior)100, 7, 7, eGenderAny, 0, 0", "skills->AdvanceCareer(")),
+        )
+        self.assertEqual(len(parity), 25)
+        events = {event["name"]: event for event in patcher.load_mobile_island_events()}
+        self.assertEqual(set(events), {row[0] for row in parity})
+
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                shutil.copy2(
+                    patcher.SRC_OBJS / "IslandEvents.obj",
+                    patcher.PATCHED / "IslandEvents.obj",
+                )
+                manifest = {}
+                patcher.patch_island_events(manifest)
+                source = (patcher.PATCHED / "vf2_island_events.cpp").read_text(encoding="ascii")
+                rows = {
+                    row["class"].removeprefix("CEvent"): row
+                    for row in manifest["IslandEvents"]["added"]
+                }
+                for name, outcome_kind, outcome_status, source_tokens in parity:
+                    self.assertEqual(events[name]["outcome_kind"], outcome_kind, name)
+                    row = rows[name]
+                    self.assertEqual(row["outcome_status"], outcome_status, name)
+                    for token in source_tokens:
+                        self.assertIn(token, source, f"{name}: missing {token}")
+
+                # Every furniture ID emitted by the table must exist in the
+                # PC catalog. These are authenticated mobile-to-PC translations;
+                # Surprise Visit is mobile 0x207 -> PC Acoustic Guitar 0x206.
+                pc_records = {
+                    record["item_id"]: record
+                    for record in json.loads(
+                        (patcher.ROOT / "data" / "vf2" / "furniture-records.json")
+                        .read_text(encoding="utf-8")
+                    )["records"]
+                }
+                expected_pc_furniture = {
+                    "GreatUncleElmer": 0x24A,
+                    "ClownHoldingMetalRod": 0x23B,
+                    "MenInBlackAtDoor": 0x218,
+                    "HearStrangeSound": 0x241,
+                    "GroupOfKidsAtTheDoor": 0x23B,
+                    "RIPUncleAlpert": 0x1F4,
+                    "SurpriseVisitFromUnclePhineas": 0x206,
+                }
+                for name, item_id in expected_pc_furniture.items():
+                    self.assertIn(item_id, pc_records, name)
+                self.assertEqual(pc_records[0x206]["image_id"], 73)
+                self.assertNotIn(
+                    "FurnitureManager.AddToStorage((EInventoryItem)0x207);",
                     source,
                 )
         finally:
@@ -5575,6 +5704,53 @@ class MobileIslandEventTextTests(unittest.TestCase):
         self.assertIn("came here today to repay the loan", description)
         self.assertTrue(description.endswith("in person."))
         self.assertGreater(len(description), 500)
+
+    def test_reopened_can_fire_set_and_authenticated_text_repairs(self):
+        events = {event["name"]: event for event in patcher.load_mobile_island_events()}
+        enabled = {
+            "Fruitcakes",
+            "GreatUncleElmer",
+            "LoanReturned",
+            "MetallicKnockingOnDoor",
+            "MissionFromGod",
+            "ResurrectionOfAgatha",
+        }
+        disabled = {"MeteoriteFallsInYard1", "MarchingBandTripExpenses"}
+        self.assertEqual(
+            {
+                name
+                for name in events
+                if name in enabled or name in disabled
+            },
+            enabled | disabled,
+        )
+
+        def text(name, kind):
+            return next(row["text"] for row in events[name]["strings"] if row["kind"] == kind)
+
+        great_uncle = text("GreatUncleElmer", "Desc")
+        self.assertIn("eldest male descendant remaining", great_uncle)
+        self.assertIn("female descendant. As", great_uncle)
+        self.assertIn("once again. Take care", great_uncle)
+        metallic_desc = text("MetallicKnockingOnDoor", "Desc")
+        self.assertTrue(metallic_desc.endswith("what you see."))
+        metallic_a = text("MetallicKnockingOnDoor", "ResultA")
+        metallic_b = text("MetallicKnockingOnDoor", "ResultB")
+        self.assertIn('". You open', metallic_a)
+        self.assertIn("have loaded it onto a dolly", metallic_b)
+        self.assertNotIn("have it loaded it onto", metallic_b)
+        mission_desc = text("MissionFromGod", "Desc")
+        mission_a = text("MissionFromGod", "ResultA")
+        self.assertIn("powerful, but", mission_desc)
+        self.assertIn("ill-fitting suits", mission_desc)
+        self.assertIn("Elwood. Elwood", mission_desc)
+        self.assertIn("you still see spots", mission_a)
+        # The mobile evidence ends this text at "save her one"; do not invent
+        # a completion while keeping the exact supplied ending visible.
+        self.assertEqual(
+            text("ResurrectionOfAgatha", "Desc").split()[-3:],
+            ["save", "her", "one"],
+        )
 
 
 class GenerationLockTests(unittest.TestCase):
@@ -9540,14 +9716,119 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
             and isinstance(node.value, ast.Call)
             and isinstance(node.value.func, ast.Name)
             and node.value.func.id in {
+                "patch_marriage_candidate_reroll",
                 "patch_multiple_marriage_candidates",
                 "patch_same_sex_marriage",
             }
         ]
         self.assertEqual(
             calls,
-            ["patch_same_sex_marriage"],
+            ["patch_marriage_candidate_reroll", "patch_same_sex_marriage"],
         )
+
+
+class MarriageCandidateRerollContractTests(unittest.TestCase):
+    def test_catalog_and_dedicated_flag_contract(self):
+        rows = {item["item_id"]: item for item in patcher.CHEAT_UPGRADE_ITEMS}
+        row = rows[patcher.MARRIAGE_CANDIDATE_REROLL_ITEM_ID]
+        self.assertEqual(patcher.MARRIAGE_CANDIDATE_REROLL_ITEM_ID, 0x152)
+        self.assertEqual(row["name"], "Allow Reroll of Marriage Candidates")
+        self.assertEqual(row["price"], 10000)
+        self.assertEqual(
+            patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x152],
+            "cheat_marriage_email.png",
+        )
+        source = Path(patcher.__file__).read_text(encoding="ascii")
+        self.assertIn('#pragma section(".vf2reroll", read, write)', source)
+        self.assertIn(
+            'volatile unsigned char gVF2AllowMarriageCandidateReroll = 0;',
+            source,
+        )
+        self.assertIn("case 0x152:", source)
+        self.assertIn("kVF2MarriageCandidateRerollCatalogPrice", source)
+        self.assertNotIn("gVF2SameSexMarriage = gVF2AllowMarriageCandidateReroll", source)
+
+    def test_reject_hook_preserves_stock_branch_and_accept_bytes(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                dating_path = temp_root / "DatingScene.obj"
+                shutil.copy2(patcher.SRC_OBJS / "DatingScene.obj", dating_path)
+                patcher.PATCHED = temp_root
+                manifest = {}
+                patcher.patch_marriage_candidate_reroll(manifest)
+
+                dating = CoffObject(dating_path)
+                handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
+                section = dating.section(handle.section)
+                contract = manifest["MarriageCandidateReroll"]
+                cave = int(contract["reject"]["trampoline"], 16)
+                cave_raw = section.raw_ptr + cave
+                cave_bytes = bytes(dating.buf[cave_raw:cave_raw + 57])
+                stock = bytes.fromhex(contract["reject"]["stock_span"])
+                self.assertEqual(len(stock), 21)
+                self.assertEqual(cave_bytes[31:52], stock)
+                self.assertEqual(cave_bytes[0:7], bytes.fromhex("80 3D 00 00 00 00 00"))
+                self.assertEqual(cave_bytes[7:9], bytes.fromhex("74 16"))
+                self.assertEqual(cave_bytes[9:16], bytes.fromhex("8B CB 90 90 90 90 90"))
+                self.assertEqual(cave_bytes[16], 0xE8)
+                self.assertEqual(cave_bytes[21:26], bytes.fromhex("5F 5E 5B B0 01"))
+                self.assertEqual(cave_bytes[26], 0xE9)
+                self.assertEqual(
+                    cave + 31 + struct.unpack_from("<i", cave_bytes, 27)[0],
+                    handle.value + 0xAC,
+                )
+                self.assertEqual(cave_bytes[52], 0xE9)
+                self.assertEqual(
+                    cave + 57 + struct.unpack_from("<i", cave_bytes, 53)[0],
+                    handle.value + 0x9A,
+                )
+                reject_raw = section.raw_ptr + handle.value + 0x85
+                self.assertEqual(dating.buf[reject_raw], 0xE9)
+                self.assertEqual(
+                    bytes(dating.buf[reject_raw + 5:reject_raw + 21]),
+                    b"\x90" * 16,
+                )
+
+                relocations = []
+                for index in range(section.nreloc):
+                    vaddr, symbol_index, relocation_type = struct.unpack_from(
+                        "<IIH", dating.buf, section.reloc_ptr + index * 10
+                    )
+                    if vaddr in {cave + 2, cave + 17, cave + 39, handle.value + 0x8D}:
+                        relocations.append(
+                            (vaddr, dating.symbol_by_index[symbol_index].name, relocation_type)
+                        )
+                self.assertIn(
+                    (cave + 2, patcher.MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL,
+                     patcher.IMAGE_REL_I386_DIR32),
+                    relocations,
+                )
+                self.assertIn(
+                    (cave + 17, "?GeneratePeepCandidate@CDatingScene@@AAEXXZ",
+                     patcher.IMAGE_REL_I386_REL32),
+                    relocations,
+                )
+                self.assertIn(
+                    (cave + 39, "?Get@theGameState@@SAPAV1@XZ",
+                     patcher.IMAGE_REL_I386_REL32),
+                    relocations,
+                )
+                self.assertNotIn(handle.value + 0x8D, [item[0] for item in relocations])
+                accept_raw = section.raw_ptr + handle.value + 0xEB
+                self.assertEqual(
+                    bytes(dating.buf[accept_raw:accept_raw + 9]),
+                    bytes.fromhex("8B C8 C6 80 84 BB 01 00 01"),
+                )
+                self.assertEqual(contract["cheat_upgrade"]["item_id"], "0x152")
+                self.assertEqual(contract["cheat_upgrade"]["catalog_price"], 10000)
+                self.assertEqual(contract["runtime_flag"]["source_section"], ".vf2reroll")
+                self.assertEqual(contract["reject"]["hook_offset"], "+0x85")
+                self.assertIn("+0xAC", contract["reject"]["active_continuation"])
+                self.assertIn("not cleared", contract["accept"])
+        finally:
+            patcher.PATCHED = old_patched
 
 
 class DivorceSpouseContractTests(unittest.TestCase):
@@ -9808,7 +10089,7 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertEqual(gate["trampoline_size"], 32)
                 self.assertEqual(
                     data[cave:cave + 17],
-                    bytes.fromhex("56 8B CF E8 00 00 00 00 84 C0 74 0F 83 F8 01 74 0A"),
+                    bytes.fromhex("56 8B CF E8 00 00 00 00 84 C0 74 0F 83 F8 01 74 05"),
                 )
                 self.assertEqual(gate["helper"], patcher.ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL)
                 targets = {}
@@ -11746,6 +12027,47 @@ class RuntimePayloadContractTests(unittest.TestCase):
                 self.assertEqual(
                     manifest["base_runtime_payload"]["missing_root_files"],
                     list(patcher.VANILLA_RUNTIME_REQUIRED_FILES),
+                )
+        finally:
+            patcher.OUT = old_out
+            patcher.VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS = old_sources
+
+    def test_sync_filters_desktop_source_filenames_only_in_runtime_asset_dirs(self):
+        old_out = patcher.OUT
+        old_sources = patcher.VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp = Path(tmp)
+                source = tmp / "source"
+                out = tmp / "out"
+                patcher.OUT = out
+                patcher.VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS = (source,)
+                (source / "Images").mkdir(parents=True)
+                (source / "Sounds").mkdir(parents=True)
+                (source / "Images" / "MapX0Y2-DESKTOP-J6OI2AP.xcf").write_bytes(b"dev")
+                (source / "Images" / "MapX1y2-DESKTOP-J6OI2AP.xcf").write_bytes(b"dev")
+                (source / "Images" / "MapX0Y2.jpg").write_bytes(b"runtime")
+                (source / "Images" / "notes-DESKTOP-J6OI2AP.txt").write_bytes(b"doc")
+
+                manifest = {}
+                patcher.sync_vanilla_runtime_payload(manifest)
+
+                self.assertFalse(
+                    (out / "Images" / "MapX0Y2-DESKTOP-J6OI2AP.xcf").exists()
+                )
+                self.assertFalse(
+                    (out / "Images" / "MapX1y2-DESKTOP-J6OI2AP.xcf").exists()
+                )
+                self.assertTrue(
+                    (out / "Images" / "notes-DESKTOP-J6OI2AP.txt").is_file()
+                )
+                self.assertTrue((out / "Images" / "MapX0Y2.jpg").is_file())
+                self.assertEqual(
+                    manifest["runtime_payload_exclusions"]["removed"],
+                    [
+                        "Images/MapX0Y2-DESKTOP-J6OI2AP.xcf",
+                        "Images/MapX1y2-DESKTOP-J6OI2AP.xcf",
+                    ],
                 )
         finally:
             patcher.OUT = old_out

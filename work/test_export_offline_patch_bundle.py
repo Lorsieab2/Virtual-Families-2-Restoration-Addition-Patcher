@@ -2225,6 +2225,43 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertIn("Images/UnreferencedGenerated.png", asset_by_path)
             self.assertEqual(manifest["export_summary"]["asset_mode"], "all")
 
+    def test_runtime_asset_export_excludes_desktop_source_filenames(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            (base / "Images").mkdir(parents=True)
+            (build / "Images").mkdir(parents=True)
+            (build / "Images" / "MapX0Y2-DESKTOP-J6OI2AP.xcf").write_bytes(b"dev")
+            (build / "Images" / "MapX1y2-DESKTOP-J6OI2AP.png").write_bytes(b"dev")
+            (build / "Images" / "MapX0Y2.png").write_bytes(b"runtime")
+            (build / "Images" / "notes-DESKTOP-J6OI2AP.txt").write_bytes(b"doc")
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(b"patched")
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+
+            self.run_exporter(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(out),
+                "--asset-mode", "all",
+            )
+
+            asset_paths = {
+                row["file_path"] for row in json.loads(
+                    (out / "manifest.json").read_text(encoding="utf-8")
+                )["asset_patches"]
+            }
+            self.assertNotIn("Images/MapX0Y2-DESKTOP-J6OI2AP.xcf", asset_paths)
+            self.assertNotIn("Images/MapX1y2-DESKTOP-J6OI2AP.png", asset_paths)
+            self.assertNotIn("Images/notes-DESKTOP-J6OI2AP.txt", asset_paths)
+            self.assertIn("Images/MapX0Y2.png", asset_paths)
+            self.assertTrue(
+                exporter.is_desktop_runtime_source_file(
+                    Path("Images/MapX0Y2-DESKTOP-J6OI2AP.xcf")
+                )
+            )
+
     def test_optional_song_mods_target_sounds_from_source_only_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

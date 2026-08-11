@@ -72,6 +72,10 @@ VF3_LIVING_ROOM_BATCH_02_FILES = {
     "FloweredLoveseat",
 }
 SOURCE_ONLY_PAYLOAD_DIRS = FULL_PAYLOAD_ALWAYS_INCLUDE_DIRS
+DESKTOP_RUNTIME_SOURCE_FILENAME_RE = re.compile(
+    r"DESKTOP-[A-Za-z0-9]+",
+    re.IGNORECASE,
+)
 OPTIONAL_SONG_SOURCE_DIR = Path("OptionalSongMods")
 OPTIONAL_SONG_TARGET_DIR = Path("Sounds")
 DEFAULT_OPTIONAL_SONG_MODS_SOURCE = OPTIONAL_PATCH_ASSET_DIR / "optional_song_mods" / "OptionalSongMods"
@@ -1733,6 +1737,11 @@ def is_invisible_runtime_asset(rel_path: Path) -> bool:
     return len(parts) >= 2 and parts[0] == "Assets" and stem.startswith("Invisible")
 
 
+def is_desktop_runtime_source_file(rel_path: Path) -> bool:
+    """Keep development-source filtering scoped to runtime asset filenames."""
+    return bool(DESKTOP_RUNTIME_SOURCE_FILENAME_RE.search(rel_path.name))
+
+
 def is_full_payload_candidate(rel_path: Path) -> bool:
     if not rel_path.parts:
         return False
@@ -1766,6 +1775,8 @@ def iter_candidate_assets(
                 continue
             rel = path.relative_to(build_dir)
             rel_text = relative_posix(rel)
+            if is_desktop_runtime_source_file(rel):
+                continue
             if rel_text in EXCLUDED_FULL_PAYLOAD_FILES:
                 continue
             if len(rel.parts) == 1 and rel.name.lower() in patched_exe_candidates:
@@ -1793,6 +1804,8 @@ def iter_candidate_assets(
                 if not path.is_file():
                     continue
                 rel = path.relative_to(build_dir)
+                if is_desktop_runtime_source_file(rel):
+                    continue
                 if rel.suffix.lower() == ".bak":
                     continue
                 if allowed_paths is not None and rel not in allowed_paths:
@@ -1823,6 +1836,8 @@ def export_asset_payloads(
             if not source.is_file():
                 continue
             rel = source.relative_to(build_dir)
+            if is_desktop_runtime_source_file(rel):
+                continue
             if not is_full_payload_candidate(rel):
                 continue
             target = payload_root / rel

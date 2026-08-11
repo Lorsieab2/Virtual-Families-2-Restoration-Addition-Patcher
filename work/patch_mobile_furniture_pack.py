@@ -307,6 +307,10 @@ SAME_SEX_MARRIAGE_ITEM_ID = 0x14C
 SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID = 0x119
 SAME_SEX_MARRIAGE_CATALOG_PRICE = 10000
 SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID = 0x166
+MARRIAGE_CANDIDATE_REROLL_ITEM_ID = 0x152
+MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE = 10000
+MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION = ".vf2reroll"
+MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL = "_gVF2AllowMarriageCandidateReroll"
 DIVORCE_SPOUSE_ITEM_ID = 0x14B
 DIVORCE_SPOUSE_WARNING = "WARNING: Permanently removes spouse from the Family Tree and House!"
 DIVORCE_SPOUSE_ICON_FILE = "cheat_marriage_email.png"
@@ -499,6 +503,16 @@ VANILLA_RUNTIME_REQUIRED_DIRS = (
     "Sounds",
 )
 VANILLA_RUNTIME_SEED_DIRS = VANILLA_RUNTIME_REQUIRED_DIRS
+RUNTIME_ASSET_DIRS = (
+    "Assets",
+    "Images",
+    "OptionalVisualMods",
+    "Sounds",
+)
+DESKTOP_RUNTIME_SOURCE_FILENAME_RE = re.compile(
+    r"DESKTOP-[A-Za-z0-9]+",
+    re.IGNORECASE,
+)
 OFFICIAL_B93_RELEASE_REQUIRED_DIRS = (
     "Assets",
     "Images",
@@ -721,6 +735,7 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     # its own item and image descriptor slots.
     DIVORCE_SPOUSE_ITEM_ID: DIVORCE_SPOUSE_ICON_FILE,
     SAME_SEX_MARRIAGE_ITEM_ID: "cheat_marriage_email.png",
+    MARRIAGE_CANDIDATE_REROLL_ITEM_ID: "cheat_marriage_email.png",
 }
 # Kept as a named contract for manifests and downstream validators.  Late
 # rows now use concrete descriptors instead of an item-id alias.
@@ -944,6 +959,11 @@ MOBILE_SOUND_ASSET_RECORDS = (
 MOBILE_SOUND_SOURCE_OBJECT_SHA256 = "11730b342977e3f120bf3627e762bebcf9f36976c5cfc34736c89e78523e3bc4"
 MOBILE_SOUND_FMOD_SHA256 = "7c6f7495d0a981f646bc23fdb39c0e349c598f5d6f4ef0ee58311338ae760194"
 MOBILE_SOUND_READINESS_CONTRACT_ID = "vf2-mobile-sound-readiness-v1"
+RANDOM_TIP_CLICK_SOUND_ID = 0xBD
+RANDOM_TIP_CLICK_SOUND_FILE = "button_click_wood.ogg"
+RANDOM_TIP_CLICK_SOUND_SHA256 = (
+    "c50742747835eacf1fb4e463cf0d901233263d62b239f6c3bddfd7abb38d165b"
+)
 
 
 def _mobile_sound_readiness_contract():
@@ -1733,6 +1753,12 @@ CHEAT_UPGRADE_ITEMS = [
         "price": DIVORCE_SPOUSE_CATALOG_PRICE,
     },
     {
+        "item_id": MARRIAGE_CANDIDATE_REROLL_ITEM_ID,
+        "name": "Allow Reroll of Marriage Candidates",
+        "description": "Allows Reject to generate a new marriage candidate until Accept is clicked. Buy again to disable this toggle.",
+        "price": MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE,
+    },
+    {
         "item_id": 0x136,
         "name": "Force Successful Pregnancy",
         "description": "Makes the next eligible try-for-baby attempt pass its pregnancy roll. The one-shot remains armed until the native birth routine succeeds.",
@@ -1777,6 +1803,7 @@ CHEAT_UPGRADE_STRING_COUNT = CHEAT_UPGRADE_LEGACY_COUNT * 2
 CHEAT_UPGRADE_EXTRA_STRING_ORDER = (
     0x12D, 0x12F, 0x135, 0x130, 0x131, 0x133, 0x134, 0x132,
     0x136, 0x137, 0x138, 0x139, 0x13A, 0x13B,
+    MARRIAGE_CANDIDATE_REROLL_ITEM_ID,
 )
 HOLIDAY_ORNAMENT_COLLECTABLE_START = 0x9E
 HOLIDAY_ORNAMENT_COLLECTABLE_END = 0xA9
@@ -4549,6 +4576,37 @@ def find_vanilla_runtime_payload_source():
     return None
 
 
+def filter_desktop_runtime_source_files(manifest):
+    """Remove development-source filenames from generated runtime assets only."""
+    removed = manifest.setdefault(
+        "runtime_payload_exclusions",
+        {
+            "status": "validated",
+            "pattern": "DESKTOP-<identifier>",
+            "directories": list(RUNTIME_ASSET_DIRS),
+            "removed": [],
+        },
+    )["removed"]
+    seen = set(removed)
+    for dirname in RUNTIME_ASSET_DIRS:
+        root = OUT / dirname
+        if not root.is_dir():
+            continue
+        for path in root.rglob("*"):
+            if (
+                not path.is_file()
+                or path.suffix.lower() in {".json", ".log", ".md", ".txt"}
+                or not DESKTOP_RUNTIME_SOURCE_FILENAME_RE.search(path.name)
+            ):
+                continue
+            relative = path.relative_to(OUT).as_posix()
+            path.unlink()
+            if relative not in seen:
+                removed.append(relative)
+                seen.add(relative)
+    manifest["runtime_payload_exclusions"]["removed_count"] = len(removed)
+
+
 def sync_vanilla_runtime_payload(manifest):
     source = find_vanilla_runtime_payload_source()
     if source is None:
@@ -4597,6 +4655,7 @@ def sync_vanilla_runtime_payload(manifest):
         "missing_root_files": missing_root_files,
         "runtime_note": "Every release folder must keep the full clean vanilla Images and Sounds payload beside the patched EXE; additive art is overlaid after this seed step. Root launcher files are copied when present and are still required by final release validation.",
     }
+    filter_desktop_runtime_source_files(manifest)
 
 
 def raw_records_by_item():
@@ -4974,6 +5033,11 @@ def ai_bathroom2_string_ids_for(index):
         raise IndexError(f"Bathroom 2 string index is out of range: {index}")
     first_id = same_sex_marriage_string_ids()[1] + 1
     return first_id + index * 2, first_id + index * 2 + 1
+
+
+def marriage_candidate_reroll_string_ids():
+    first_id = ai_bathroom2_string_ids_for(len(AI_BATHROOM2_STYLE_CATALOG) - 1)[1] + 1
+    return first_id, first_id + 1
 
 
 def divorce_spouse_string_ids():
@@ -9272,6 +9336,35 @@ EVENT_TEXT_OVERRIDES = {
     ),
 }
 
+# Only unambiguous, source-backed typo/spacing repairs for the six events
+# whose mobile CanFire gates are being reopened.  Keep narrative wording and
+# the truncated Resurrection ending unchanged until an exact completion is
+# found in self-contained evidence.
+EVENT_TEXT_REPLACEMENTS = {
+    ("GreatUncleElmer", "Desc"): (
+        ("descendent", "descendant"),
+        ("descendant.As", "descendant. As"),
+        ("again.Take", "again. Take"),
+    ),
+    ("MetallicKnockingOnDoor", "Desc"): (
+        ("what you see", "what you see."),
+    ),
+    ("MetallicKnockingOnDoor", "ResultA"): (
+        ('".You', '". You'),
+    ),
+    ("MetallicKnockingOnDoor", "ResultB"): (
+        ("have it loaded it onto", "have loaded it onto"),
+    ),
+    ("MissionFromGod", "Desc"): (
+        ("powerful,but", "powerful, but"),
+        ("ill-fitting suites", "ill-fitting suits"),
+        ("Elwood.Elwood", "Elwood. Elwood"),
+    ),
+    ("MissionFromGod", "ResultA"): (
+        ("you still sees spots", "you still see spots"),
+    ),
+}
+
 EMAIL_EVENT_NAMES = {
     "EmailFromACME",
     "EmailFromAntonioGuildenstern",
@@ -9302,6 +9395,8 @@ def cheat_upgrade_string_ids_for_entry(entry_index):
         # renovation/Divorce block. This keeps pre-existing IDs stable and
         # avoids colliding with the fixed renovation string range.
         return same_sex_marriage_string_ids()
+    if item_id == MARRIAGE_CANDIDATE_REROLL_ITEM_ID:
+        return marriage_candidate_reroll_string_ids()
     if entry_index < CHEAT_UPGRADE_LEGACY_COUNT:
         base = (
             ORIG_STRING_ONE_PAST_MAX
@@ -9455,6 +9550,8 @@ def load_mobile_island_events():
             if not value:
                 continue
             value = EVENT_TEXT_OVERRIDES.get((event_name, kind), value)
+            for old, new in EVENT_TEXT_REPLACEMENTS.get((event_name, kind), ()):
+                value = value.replace(old, new)
             value = EVENT_CHOICE_OVERRIDES.get((event_name, kind), value)
             event_text.setdefault(event_name, {})[kind] = normalize_event_text(value)
 
@@ -10649,6 +10746,7 @@ extern "C" bool __cdecl VF2SameSexMarriageToggleActive() {{
 }}
 static const bool kVF2EnableB150CheatUpgrades = {"true" if ENABLE_CHEAT_UPGRADES else "false"};
 static const int kVF2SameSexMarriageCatalogPrice = {next(item["price"] for item in CHEAT_UPGRADE_ITEMS if item["item_id"] == SAME_SEX_MARRIAGE_ITEM_ID)};
+static const int kVF2MarriageCandidateRerollCatalogPrice = {MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE};
 static const int kVF2DivorceSpouseCatalogPrice = {DIVORCE_SPOUSE_CATALOG_PRICE};
 static const bool kVF2EnableMobileRenovations = {"true" if ENABLE_MOBILE_RENOVATIONS else "false"};
 static const int kVF2MobileRenovationItemBase = {MOBILE_RENOVATION_PC_ITEM_BASE};
@@ -10913,6 +11011,9 @@ static bool VF2B150UpgradeIsActive(int itemId) {{
     if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
         return VF2SameSexMarriageToggleActive();
     }}
+    if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) {{
+        return gVF2AllowMarriageCandidateReroll != 0;
+    }}
     if (VF2IsMobileRenovationStyle(itemId)) {{
         return VF2MobileRenovationIsActive(itemId);
     }}
@@ -10933,6 +11034,11 @@ extern "C" int __cdecl VF2GetB150UpgradePrice(int itemId) {{
         return VF2B150UpgradeIsActive(itemId)
             ? 0
             : kVF2SameSexMarriageCatalogPrice;
+    }}
+    if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) {{
+        return VF2B150UpgradeIsActive(itemId)
+            ? 0
+            : kVF2MarriageCandidateRerollCatalogPrice;
     }}
     return VF2B150UpgradeIsActive(itemId) ? 0 : -1;
 }}
@@ -11029,6 +11135,11 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
     unsigned char* gameState = (unsigned char*)theGameState::Get();
     if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
         gVF2SameSexMarriage = 0;
+        if (gameState) theGameState::Get()->SaveCurrentGame();
+        return true;
+    }}
+    if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) {{
+        gVF2AllowMarriageCandidateReroll = 0;
         if (gameState) theGameState::Get()->SaveCurrentGame();
         return true;
     }}
@@ -11147,6 +11258,9 @@ extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
         return 0;
     }}
     if (kVF2EnableB150CheatUpgrades && itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
+        return 1;
+    }}
+    if (kVF2EnableB150CheatUpgrades && itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) {{
         return 1;
     }}
     if (itemId == 0x14B) {{
@@ -11314,6 +11428,10 @@ static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
     }}
     if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x} &&
         VF2SameSexMarriageToggleActive()) {{
+        return {SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID};
+    }}
+    if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x} &&
+        gVF2AllowMarriageCandidateReroll != 0) {{
         return {SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID};
     }}
     int index = VF2VisibleSpecialUpgradeIconFrame(itemId);
@@ -11643,6 +11761,19 @@ def patch_main_scene_random_tip_click(manifest):
         raise RuntimeError("vf2_special_upgrade_effects.cpp missing before random-tip helper")
     helper_text = helper_path.read_text(encoding="ascii")
     helper_token = "VF2TryRandomTipHouseHit"
+    click_sound_source = MOBILE_SOUND_ASSET_SOURCE_DIR / RANDOM_TIP_CLICK_SOUND_FILE
+    if not click_sound_source.is_file():
+        raise RuntimeError(f"Random-tip click sound asset is missing: {click_sound_source}")
+    click_sound_sha256 = hashlib.sha256(click_sound_source.read_bytes()).hexdigest()
+    if click_sound_sha256 != RANDOM_TIP_CLICK_SOUND_SHA256:
+        raise RuntimeError(
+            "Random-tip click sound asset identity mismatch: "
+            f"expected {RANDOM_TIP_CLICK_SOUND_SHA256}, got {click_sound_sha256}"
+        )
+    dealer_say_call = "    DealerSay.Say((StringId)stringId, -1);"
+    click_sound_call = (
+        f"    Sound.Play(static_cast<ESound>(0x{RANDOM_TIP_CLICK_SOUND_ID:X}));"
+    )
     if helper_token not in helper_text:
         helper_text += r'''
 
@@ -11673,11 +11804,22 @@ extern "C" bool __cdecl VF2TryRandomTipHouseHit(
     }
     const int stringId = ldwGameState::GetRandom(0x32) + 0x09E3;
     DealerSay.Say((StringId)stringId, -1);
+    Sound.Play(static_cast<ESound>(0xBD));
     return true;
 }
 #endif
 '''
-        helper_path.write_text(helper_text.rstrip() + "\n", encoding="ascii")
+    elif click_sound_call not in helper_text:
+        if dealer_say_call not in helper_text:
+            raise RuntimeError("Random-tip helper notification call drifted")
+        helper_text = helper_text.replace(
+            dealer_say_call,
+            dealer_say_call + "\n" + click_sound_call,
+            1,
+        )
+    if click_sound_call not in helper_text:
+        raise RuntimeError("Random-tip helper sound call was not emitted")
+    helper_path.write_text(helper_text.rstrip() + "\n", encoding="ascii")
 
     helper_sym = obj.append_undefined_symbol("_VF2TryRandomTipHouseHit")
     # The stock point arguments are already on the stack and ECX contains the
@@ -11721,6 +11863,14 @@ extern "C" bool __cdecl VF2TryRandomTipHouseHit(
         "string_id_count": 50,
         "selection": "GetRandom(0x32) + 0x09E3",
         "dealer_say": "CDealerSay::Say(StringId, -1) general notification channel",
+        "success_sound": {
+            "api": "CSound::Play(ESound)",
+            "raw_id": hex(RANDOM_TIP_CLICK_SOUND_ID),
+            "filename": RANDOM_TIP_CLICK_SOUND_FILE,
+            "source": str(click_sound_source),
+            "sha256": click_sound_sha256,
+            "only_after_successful_house_hit": True,
+        },
         "helper": "_VF2TryRandomTipHouseHit",
         "native_invisible_rect_bypass": {
             "source_object_offset": "0x1132",
@@ -12538,6 +12688,10 @@ volatile unsigned char gVF2AllowOlderPregnancies = 0;
 #pragma section(".vf2same", read, write)
 extern "C" __declspec(allocate(".vf2same"))
 volatile unsigned char gVF2SameSexMarriage = 0;
+
+#pragma section(".vf2reroll", read, write)
+extern "C" __declspec(allocate(".vf2reroll"))
+volatile unsigned char gVF2AllowMarriageCandidateReroll = 0;
 
 #pragma section(".vf2mort", read, write)
 extern "C" __declspec(allocate(".vf2mort"))
@@ -13831,6 +13985,11 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         }
         theGameState::Get()->SaveCurrentGame();
         break;
+    case 0x152:
+        gVF2AllowMarriageCandidateReroll =
+            gVF2AllowMarriageCandidateReroll != 0 ? 0 : 1;
+        theGameState::Get()->SaveCurrentGame();
+        break;
     case 0x133:
         VF2SetSockPileCount(kVF2MaximumSockPileCount);
         break;
@@ -15050,12 +15209,11 @@ struct CMobileIslandEvent {{
           has_choices_(has_choices), is_email_(is_email), outcome_kind_(outcome_kind) {{}}
     ~CMobileIslandEvent() {{}}
     bool CanFire() {{
-        // These eight mobile classes return false unconditionally. Some retain
-        // unreachable award/effect methods, but the normal and email schedulers
-        // both reject them at CanFire.
-        if (outcome_kind_ == 1 || (outcome_kind_ >= 5 && outcome_kind_ <= 8)
-            || outcome_kind_ == 18 || outcome_kind_ == 20
-            || outcome_kind_ == 23) {{
+        // Only MeteoriteFallsInYard1 and MarchingBandTripExpenses remain
+        // mobile-dummied and return false unconditionally. The six formerly
+        // disabled events are now spawnable; their audited effects remain
+        // unchanged below.
+        if (outcome_kind_ == 1 || outcome_kind_ == 7) {{
             target1_ = 0;
             target2_ = 0;
             return false;
@@ -15131,7 +15289,8 @@ struct CMobileIslandEvent {{
     // two overloaded slots when the compiler lays out the vtable.
     void VF2ImpactGameNoChoice() {{
         if (outcome_kind_ == 6) {{
-            FurnitureManager.AddToStorage((EInventoryItem)0x24B);
+            // Mobile 0x24B maps to the PC Black Bookshelf at 0x24A.
+            FurnitureManager.AddToStorage((EInventoryItem)0x24A);
         }} else if (outcome_kind_ == 7 || outcome_kind_ == 8) {{
             Money.Adjust((float)award_, true);
         }} else if (outcome_kind_ == 9) {{
@@ -15177,7 +15336,8 @@ struct CMobileIslandEvent {{
         }} else if (outcome_kind_ == 22) {{
             if (!target1_) return;
             Money.Adjust((float)award_, true);
-            FurnitureManager.AddToStorage((EInventoryItem)0x1F5);
+            // Mobile 0x1F5 maps to the PC Antique Radio at 0x1F4.
+            FurnitureManager.AddToStorage((EInventoryItem)0x1F4);
             unsigned char behavior_data = 0;
             target1_->NewBehavior(
                 (EBehavior)23,
@@ -15188,7 +15348,10 @@ struct CMobileIslandEvent {{
             Money.Adjust((float)award_, true);
         }} else if (outcome_kind_ == 24) {{
             if (!target1_) return;
-            FurnitureManager.AddToStorage((EInventoryItem)0x207);
+            // The mobile event uses item 0x207, but the PC catalog is shifted:
+            // Acoustic Guitar is item 0x206.  Keep the native likes/dislikes,
+            // plans, and behavior effects unchanged.
+            FurnitureManager.AddToStorage((EInventoryItem)0x206);
             CLikeList *likes = VF2MobileEventVillagerLikes(target1_);
             CDislikeList *dislikes =
                 VF2MobileEventVillagerDislikes(target1_);
@@ -15258,7 +15421,8 @@ struct CMobileIslandEvent {{
         }}
         if (outcome_kind_ == 15) {{
             if (choice == 0 && target1_) {{
-                FurnitureManager.AddToStorage((EInventoryItem)0x23C);
+                // Mobile 0x23C maps to the PC Kitten at 0x23B.
+                FurnitureManager.AddToStorage((EInventoryItem)0x23B);
                 CLikeList *likes = VF2MobileEventVillagerLikes(target1_);
                 CDislikeList *dislikes =
                     VF2MobileEventVillagerDislikes(target1_);
@@ -15274,7 +15438,8 @@ struct CMobileIslandEvent {{
         if (outcome_kind_ == 16) {{
             if (!target1_) return;
             if (choice == 0) {{
-                FurnitureManager.AddToStorage((EInventoryItem)0x219);
+                // Mobile 0x219 maps to the PC Wall Clock at 0x218.
+                FurnitureManager.AddToStorage((EInventoryItem)0x218);
             }}
             unsigned char behavior_data = 0;
             target1_->NewBehavior(
@@ -15286,7 +15451,8 @@ struct CMobileIslandEvent {{
         }}
         if (outcome_kind_ == 17) {{
             if (choice == 0 && target1_) {{
-                FurnitureManager.AddToStorage((EInventoryItem)0x242);
+                // Mobile 0x242 maps to the PC Yellow Lab at 0x241.
+                FurnitureManager.AddToStorage((EInventoryItem)0x241);
                 CVillagerState *state =
                     VF2MobileEventVillagerState(target1_);
                 if (state) state->AdjustHappinessTrend(20);
@@ -15295,7 +15461,8 @@ struct CMobileIslandEvent {{
         }}
         if (outcome_kind_ == 19) {{
             if (choice == 0 && target1_) {{
-                FurnitureManager.AddToStorage((EInventoryItem)0x23C);
+                // Mobile 0x23C maps to the PC Kitten at 0x23B.
+                FurnitureManager.AddToStorage((EInventoryItem)0x23B);
                 CVillagerState *state =
                     VF2MobileEventVillagerState(target1_);
                 if (state) state->AdjustHappinessTrend(20);
@@ -15545,13 +15712,13 @@ extern "C" void __cdecl VF2RegisterMobileIslandEvents(void **slots)
                 "outcome_status": (
                     "exact mobile outcome"
                     if event["outcome_kind"] in (
-                        2, 3, 4, 9, 10, 11, 12, 13, 14, 15, 16, 17,
-                        19, 21, 22, 24, 25
+                        2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15,
+                        16, 17, 18, 19, 20, 21, 22, 23, 24, 25
                     )
                     else (
                         "exact mobile dummied-out CanFire=false"
                         if event["outcome_kind"] in (
-                            1, 5, 6, 7, 8, 18, 20, 23
+                            1, 7
                         )
                         else "text shell only; outcome pending"
                     )
@@ -16112,8 +16279,8 @@ def patch_graphics_manager(manifest):
         vals = plain_image_donor[:]
         vals[0] = image_id
         vals[1] = 0
-        vals[2] = 0
-        vals[3] = 0
+        vals[2] = 1
+        vals[3] = 1
         desc_off = img_sym.value + image_id * DESC_SIZE
         img_sec = obj.section(img_sym.section)
         obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
@@ -16126,6 +16293,8 @@ def patch_graphics_manager(manifest):
             "image_id": hex(image_id),
             "path": filename,
             "symbol": sym,
+            "grid": [1, 1],
+            "scale": [1.0, 1.0],
         })
 
     holiday_body_desc_manifest = []
@@ -17688,6 +17857,113 @@ def patch_multiple_marriage_candidates(manifest):
     }
 
 
+def patch_marriage_candidate_reroll(manifest):
+    """Gate native Reject on the dedicated, default-off reroll byte."""
+    dating_path = PATCHED / "DatingScene.obj"
+    dating = CoffObject(dating_path)
+    handle_name = "?HandleMessage@CDatingScene@@UAE_NHJ@Z"
+    generate_name = "?GeneratePeepCandidate@CDatingScene@@AAEXXZ"
+    handle = dating.symbol(handle_name)
+    section = dating.section(handle.section)
+    reject_hook = handle.value + 0x85
+    reject_raw = section.raw_ptr + reject_hook
+    expected_stock = bytes.fromhex(
+        "C7 43 10 FF FF FF FF E8 00 00 00 00 5F 5E 5B "
+        "8B 88 B8 5C 02 00"
+    )
+    if bytes(dating.buf[reject_raw:reject_raw + len(expected_stock)]) != expected_stock:
+        raise RuntimeError("Dating Reject stock route drifted")
+
+    generate = dating.symbol(generate_name)
+    flag_symbol = dating.append_undefined_symbol(
+        MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL
+    )
+    stock_relocation = None
+    for index in range(section.nreloc):
+        vaddr, symbol_index, relocation_type = struct.unpack_from(
+            "<IIH", dating.buf, section.reloc_ptr + index * 10
+        )
+        if vaddr == handle.value + 0x8D:
+            stock_relocation = (index, symbol_index, relocation_type)
+            break
+    if stock_relocation is None:
+        raise RuntimeError("Dating Reject stock sound relocation drifted")
+
+    cave = section.raw_size
+    stock_offset = 31
+    payload = bytearray(
+        b"\x80\x3D\0\0\0\0\x00"  # compare .vf2reroll byte with zero
+        + b"\x74\x00"              # inactive -> exact stock branch
+        + b"\x8B\xCB"              # active: this = CDatingScene (EBX)
+        + b"\x90" * 5
+        + b"\xE8\0\0\0\0"          # GeneratePeepCandidate
+        + b"\x5F\x5E\x5B\xB0\x01"  # handled = true
+        + b"\xE9\0\0\0\0"          # active -> HandleMessage +0xAC
+        + expected_stock
+        + b"\xE9\0\0\0\0"          # stock -> HandleMessage +0x9A
+    )
+    if len(payload) != 57:
+        raise AssertionError("Marriage Reject reroll cave size drifted")
+    struct.pack_into("<b", payload, 8, stock_offset - 9)
+    struct.pack_into("<i", payload, 27, (handle.value + 0xAC) - (cave + 31))
+    struct.pack_into("<i", payload, 53, (handle.value + 0x9A) - (cave + 57))
+
+    dating.insert_section_bytes(section.index, cave, bytes(payload))
+    dating.append_relocation(
+        section.index, cave + 2, flag_symbol, IMAGE_REL_I386_DIR32
+    )
+    dating.append_relocation(
+        section.index, cave + 17, generate.index, IMAGE_REL_I386_REL32
+    )
+    section = dating.section(handle.section)
+    for index in range(section.nreloc):
+        record = section.reloc_ptr + index * 10
+        vaddr = struct.unpack_from("<I", dating.buf, record)[0]
+        if vaddr == handle.value + 0x8D:
+            struct.pack_into("<I", dating.buf, record, cave + stock_offset + 8)
+            break
+    else:
+        raise RuntimeError("Dating Reject stock relocation move failed")
+    dating._parse()
+    section = dating.section(handle.section)
+    reject_raw = section.raw_ptr + reject_hook
+    dating.buf[reject_raw:reject_raw + len(expected_stock)] = (
+        b"\xE9" + struct.pack("<i", cave - (reject_hook + 5))
+        + b"\x90" * (len(expected_stock) - 5)
+    )
+    dating.write(dating_path)
+
+    manifest["MarriageCandidateReroll"] = {
+        "status": "dormant native hook installed",
+        "cheat_upgrade": {
+            "item_id": hex(MARRIAGE_CANDIDATE_REROLL_ITEM_ID),
+            "catalog_price": MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE,
+            "icon_file": "cheat_marriage_email.png",
+            "active_state": "dedicated .vf2reroll byte with existing checkmark renderer",
+            "inactive_state": "explicit catalog price 10000",
+            "buy_again": "clears .vf2reroll",
+        },
+        "runtime_flag": {
+            "symbol": MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL,
+            "source_section": MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "reject": {
+            "function": handle_name,
+            "hook_offset": "+0x85",
+        "trampoline": hex(cave),
+            "stock_span": expected_stock.hex(" ").upper(),
+            "active_call": generate_name,
+            "active_continuation": "HandleMessage +0xAC handled continuation",
+            "inactive_continuation": "exact stock Reject bytes and HandleMessage +0x9A continuation",
+        },
+        "accept": "existing valid/safety path unchanged; purchased .vf2reroll is not cleared",
+    }
+
+
 def patch_vf3_style_child_adoption_chooser(manifest):
     """Choose a random newborn or a random age-2-through-8 adoptee."""
     path = PATCHED / "ScrollingStoreScene.obj"
@@ -18049,7 +18325,7 @@ def patch_same_sex_marriage(manifest):
         0x0F,
     )
     struct.pack_into(
-        "<b", drop_trampoline, 16, 0x0A,
+        "<b", drop_trampoline, 16, 0x05,
     )
     struct.pack_into(
         "<i", drop_trampoline, 18,
@@ -28477,6 +28753,7 @@ def main():
     # install the former cheat-only Reject reroll route; native Accept,
     # Reject, and close behavior must remain untouched.
     patch_vf3_style_child_adoption_chooser(manifest)
+    patch_marriage_candidate_reroll(manifest)
     patch_same_sex_marriage(manifest)
     patch_force_successful_pregnancy_callsites(manifest)
     # The optional mortality curve is another exact-SHA dormant-byte hook.
@@ -28639,6 +28916,10 @@ def main():
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)
     normalize_added_furniture_sheets(manifest)
+    # Seeded and additive runtime assets may both contribute files; remove
+    # development-source names only from known runtime asset directories
+    # before writing the final manifest/readiness record.
+    filter_desktop_runtime_source_files(manifest)
     write_internal_workings_summary(manifest)
     validate_vf3_tv_animation_contract(manifest)
     validate_vf3_tv_behavior_contract(manifest)

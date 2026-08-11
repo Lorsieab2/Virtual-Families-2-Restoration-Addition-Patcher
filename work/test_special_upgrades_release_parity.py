@@ -17,7 +17,7 @@ EXPECTED_CHEAT_IDS = (
     0x128, 0x129, 0x12A, 0x12C,
     0x12B, 0x12D,
     0x12F, 0x135, 0x130, 0x131,
-    0x133, 0x134, 0x132, 0x14C, 0x14B,
+    0x133, 0x134, 0x132, 0x14C, 0x14B, 0x152,
     0x136, 0x137, 0x138,
     0x139, 0x13A, 0x13B,
 )
@@ -54,6 +54,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             )
 
         cls.manifest = {}
+        patcher.patch_marriage_candidate_reroll(cls.manifest)
         patcher.patch_same_sex_marriage(cls.manifest)
         patcher.patch_visible_special_upgrades(cls.manifest)
         patcher.patch_inventory_manager(cls.manifest)
@@ -151,6 +152,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         )
         force_email = rows[0x132]
         same_sex = rows[0x14C]
+        reroll = rows[0x152]
         self.assertEqual(force_email["name"], "Force Marriage Email")
         self.assertEqual(same_sex["name"], "Enable Same-Sex Marriage")
         marriage_strings = {
@@ -167,6 +169,24 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "Enables same-sex marriage candidates. Buy again to disable this toggle.",
         )
         self.assertEqual(same_sex["icon_file"], "cheat_marriage_email.png")
+        self.assertEqual(reroll["name"], "Allow Reroll of Marriage Candidates")
+        self.assertEqual(reroll["price"], 10000)
+        self.assertEqual(reroll["icon_file"], "cheat_marriage_email.png")
+        self.assertEqual(
+            int(reroll["icon"], 16),
+            patcher.visible_special_upgrade_icon_id_for(0x152),
+        )
+        reroll_contract = self.manifest["MarriageCandidateReroll"]
+        self.assertEqual(reroll_contract["cheat_upgrade"]["item_id"], "0x152")
+        self.assertEqual(reroll_contract["cheat_upgrade"]["catalog_price"], 10000)
+        self.assertEqual(
+            reroll_contract["runtime_flag"]["source_section"],
+            ".vf2reroll",
+        )
+        self.assertEqual(reroll_contract["reject"]["hook_offset"], "+0x85")
+        self.assertIn("GeneratePeepCandidate", reroll_contract["reject"]["active_call"])
+        self.assertIn("+0xAC", reroll_contract["reject"]["active_continuation"])
+        self.assertIn("not cleared", reroll_contract["accept"])
         self.assertEqual(
             int(same_sex["description_string"], 16),
             patcher.same_sex_marriage_string_ids()[1],
@@ -175,7 +195,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertNotEqual(same_sex["icon"], divorce["icon"])
         item_ids = [item["item_id"] for item in patcher.CHEAT_UPGRADE_ITEMS]
         force_email_index = item_ids.index(0x132)
-        self.assertEqual(item_ids[force_email_index + 1 : force_email_index + 3], [0x14C, 0x14B])
+        self.assertEqual(item_ids[force_email_index + 1 : force_email_index + 4], [0x14C, 0x14B, 0x152])
 
         self.assertIn(
             "static int VF2VisibleSpecialUpgradeIconFrame(int itemId)",
@@ -188,6 +208,8 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertIn("return 358;", self.helper)
         self.assertIn("case 0x14B: return 37;", self.helper)
         self.assertIn("case 0x14C: return 38;", self.helper)
+        self.assertIn("case 0x152: return 39;", self.helper)
+        self.assertIn("gVF2AllowMarriageCandidateReroll != 0", self.helper)
         self.assertNotIn(
             "int index = itemId - kVF2VisibleSpecialUpgradeFirstItem",
             self.helper,
