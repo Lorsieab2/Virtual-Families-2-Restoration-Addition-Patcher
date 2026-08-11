@@ -309,7 +309,7 @@ SAME_SEX_MARRIAGE_CATALOG_PRICE = 10000
 SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID = 0x166
 MARRIAGE_CANDIDATE_REROLL_ITEM_ID = 0x152
 MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE = 10000
-MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION = ".vf2reroll"
+MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION = ".vf2rero"
 MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL = "_gVF2AllowMarriageCandidateReroll"
 DIVORCE_SPOUSE_ITEM_ID = 0x14B
 DIVORCE_SPOUSE_WARNING = "WARNING: Permanently removes spouse from the Family Tree and House!"
@@ -1101,6 +1101,7 @@ MOBILE_RENOVATION_DEFAULT_SELECTION = {
 MOBILE_RENOVATION_PC_ITEM_BASE = 0x13C
 MOBILE_RENOVATION_NATIVE_ITEM_BASE = 0x118
 MOBILE_RENOVATION_NATIVE_ITEM_COUNT = 15
+MOBILE_RENOVATION_GENERATION_LOCK = 0
 MOBILE_RENOVATION_PERSISTENT_RECORD_ID = 0xA8
 MOBILE_RENOVATION_PERSISTENT_MASK_OFFSET = 0x08
 MOBILE_RENOVATION_HEALTH_PLAN_BIT = 0x1
@@ -1225,6 +1226,39 @@ if MOBILE_RENOVATION_NATIVE_ITEM_IDS != tuple(
     range(MOBILE_RENOVATION_NATIVE_ITEM_BASE, MOBILE_RENOVATION_NATIVE_ITEM_BASE + MOBILE_RENOVATION_NATIVE_ITEM_COUNT)
 ):
     raise RuntimeError("Mobile renovation native item order drifted")
+
+
+def house_renovation_append_groups():
+    """Return the enabled synthetic rows in their exact visible category order."""
+    groups = []
+    if ENABLE_MOBILE_RENOVATIONS:
+        groups.append((
+            "bathroom1",
+            tuple(
+                MOBILE_RENOVATION_PC_ITEM_IDS[index]
+                for index in MOBILE_RENOVATION_VARIANT_INDICES["bathroom"]
+            ),
+        ))
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        groups.append(("bathroom2", AI_BATHROOM2_PC_ITEM_IDS))
+    if ENABLE_MOBILE_RENOVATIONS:
+        for room in ("kitchen", "office", "workshop"):
+            groups.append((
+                room,
+                tuple(
+                    MOBILE_RENOVATION_PC_ITEM_IDS[index]
+                    for index in MOBILE_RENOVATION_VARIANT_INDICES[room]
+                ),
+            ))
+    return tuple(groups)
+
+
+def house_renovation_append_ids():
+    return tuple(
+        item_id
+        for _group, item_ids in house_renovation_append_groups()
+        for item_id in item_ids
+    )
 MOBILE_DECORATIVE_ONLY_FMAP_SPECS = {
     "CandyCane.png.fmap": {
         "item_id": 0x2AB,
@@ -4904,6 +4938,24 @@ def ai_bathroom2_store_icon_image_id(index, holiday_body_descriptor_count=0):
 MOBILE_RENOVATION_CURTAIN_COLOR_ORDER = ("black", "blue", "brown", "green", "pink")
 MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE = 539
 AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE = 538
+MOBILE_RENOVATION_BATHROOM_CURTAIN_COLOR_BY_ITEM = {
+    0x13C: "black",
+    0x13D: "blue",
+    0x13E: "brown",
+    0x13F: "green",
+    0x140: "pink",
+}
+AI_BATHROOM2_CURTAIN_COLOR_BY_ITEM = {
+    item_id: color
+    for item_id, color in zip(
+        AI_BATHROOM2_PC_ITEM_IDS,
+        MOBILE_RENOVATION_CURTAIN_COLOR_ORDER,
+    )
+}
+if set(MOBILE_RENOVATION_BATHROOM_CURTAIN_COLOR_BY_ITEM) != set(range(0x13C, 0x141)):
+    raise RuntimeError("Bathroom 1 curtain item mapping drifted")
+if set(AI_BATHROOM2_CURTAIN_COLOR_BY_ITEM) != set(AI_BATHROOM2_PC_ITEM_IDS):
+    raise RuntimeError("Bathroom 2 curtain item mapping drifted")
 
 
 def renovation_curtain_image_base(holiday_body_descriptor_count=0):
@@ -10181,7 +10233,7 @@ def patch_visible_special_upgrades(manifest):
                 mobile_renovation_image_id(index, renovation_desc_count),
                 1,
                 style["price"],
-                style["lock"],
+                MOBILE_RENOVATION_GENERATION_LOCK,
                 short_id,
                 long_id,
                 0,
@@ -10197,7 +10249,7 @@ def patch_visible_special_upgrades(manifest):
                 ai_bathroom2_store_icon_image_id(index, renovation_desc_count),
                 1,
                 style["price"],
-                0,
+                MOBILE_RENOVATION_GENERATION_LOCK,
                 short_id,
                 long_id,
                 0,
@@ -10348,7 +10400,8 @@ def patch_house_renovations(manifest):
     desktop object has ten entries and GetCategoryItem's category-0x11 branch
     sorts and bounds-checks exactly those ten entries.  The optional PC item
     records are appended to that native list and the three native count sites
-    are widened to 25.  They are deliberately not added to gServicesList.
+    are widened to the enabled total.  They are deliberately not added to
+    gServicesList.
     """
     if not ENABLE_MOBILE_RENOVATIONS and not ENABLE_AI_GENERATED_BATHROOM2:
         manifest["HouseRenovations"] = {
@@ -10369,20 +10422,11 @@ def patch_house_renovations(manifest):
             f"Unexpected native House Renovations list: {[hex(x) for x in native_ids]}"
         )
 
-    # Keep item identities stable while presenting the added styles as four
-    # contiguous room groups: Bathroom, Kitchen, Office, Workshop.  The
-    # optional Bathroom2 visual rows are a separate synthetic PC-only block
-    # appended after the 15 mobile rows; they never enter gServicesList/E6.
-    append_ids = (
-        [
-            MOBILE_RENOVATION_PC_ITEM_IDS[index]
-            for index in MOBILE_RENOVATION_NATIVE_ORDER
-        ]
-        if ENABLE_MOBILE_RENOVATIONS
-        else []
-    )
-    if ENABLE_AI_GENERATED_BATHROOM2:
-        append_ids.extend(AI_BATHROOM2_PC_ITEM_IDS)
+    # Keep item identities stable while presenting the exact room order:
+    # Bathroom 1, Bathroom 2, Kitchen, Office, Workshop. Bathroom2 remains a
+    # separate synthetic PC-only block and never enters gServicesList/E6.
+    append_groups = house_renovation_append_groups()
+    append_ids = list(house_renovation_append_ids())
     new_count = NATIVE_HOME_RENOVATION_COUNT + len(append_ids)
     append_off = home_sym.value + NATIVE_HOME_RENOVATION_COUNT * 4
     existing_after = list(
@@ -10446,6 +10490,14 @@ def patch_house_renovations(manifest):
         "old_count": NATIVE_HOME_RENOVATION_COUNT,
         "new_count": new_count,
         "base_items_preserved": [hex(x) for x in native_ids],
+        "display_order": [hex(x) for x in native_ids + append_ids],
+        "order_contract": [
+            {"group": "native_construction", "item_ids": [hex(x) for x in native_ids]},
+            *(
+                {"group": group, "item_ids": [hex(x) for x in item_ids]}
+                for group, item_ids in append_groups
+            ),
+        ],
         "added_items": [
             {
                 "item_id": hex(MOBILE_RENOVATION_PC_ITEM_IDS[index]),
@@ -10685,17 +10737,18 @@ public:
         f"    case 0x{item_id:X}: return kVF2AIBathroom2StoreIconImageBase + {index};"
         for index, item_id in enumerate(AI_BATHROOM2_PC_ITEM_IDS)
     )
-    bathroom1_curtain_cases = "\n".join(
-        f"        if (VF2MobileRenovationIsActive(0x{MOBILE_RENOVATION_PC_ITEM_IDS[index]:X})) return kVF2Bathroom1CurtainImageBase + {index};"
-        for index in MOBILE_RENOVATION_NATIVE_ORDER
-        if MOBILE_RENOVATION_STYLE_CATALOG[index]["room"] == "bathroom"
-    )
-    bathroom2_curtain_cases = "\n".join(
-        f"        if (VF2AIBathroom2IsActive(0x{item_id:X})) return kVF2Bathroom2CurtainImageBase + {index};"
-        for index, item_id in enumerate(AI_BATHROOM2_PC_ITEM_IDS)
-    )
     curtain_holiday_desc_count = (
         holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
+    )
+    bathroom1_curtain_cases = "\n".join(
+        f"    if (VF2MobileRenovationIsActive(0x{item_id:X})) return {mobile_renovation_curtain_image_id(MOBILE_RENOVATION_BATHROOM_CURTAIN_COLOR_BY_ITEM[item_id], curtain_holiday_desc_count)};"
+        for index in MOBILE_RENOVATION_NATIVE_ORDER
+        for item_id in (MOBILE_RENOVATION_PC_ITEM_IDS[index],)
+        if item_id in MOBILE_RENOVATION_BATHROOM_CURTAIN_COLOR_BY_ITEM
+    )
+    bathroom2_curtain_cases = "\n".join(
+        f"    if (VF2AIBathroom2IsActive(0x{item_id:X})) return {ai_bathroom2_curtain_image_id(AI_BATHROOM2_CURTAIN_COLOR_BY_ITEM[item_id], curtain_holiday_desc_count)};"
+        for item_id in AI_BATHROOM2_PC_ITEM_IDS
     )
     bathroom1_curtain_image_base = mobile_renovation_curtain_image_id(
         "black", curtain_holiday_desc_count
@@ -11469,14 +11522,28 @@ static const int kVF2Bathroom2CurtainImageBase = {bathroom2_curtain_image_base};
 extern "C" void __cdecl VF2NormalizeMobileRenovationActivesAndSave();
 extern "C" void __cdecl VF2NormalizeAIBathroom2ActivesAndSave();
 
-extern "C" int __cdecl VF2ResolveRenovationCurtainImage(int image) {{
-    if (image == kVF2StockBathroom1ClosedCurtainImage && kVF2EnableMobileRenovations) {{
-        VF2NormalizeMobileRenovationActivesAndSave();
+static int VF2ResolveBathroom1ClosedCurtainImage() {{
+    VF2NormalizeMobileRenovationActivesAndSave();
 {bathroom1_curtain_cases}
-    }}
-    if (image == kVF2StockBathroom2ClosedCurtainImage && kVF2EnableAIBathroom2) {{
-        VF2NormalizeAIBathroom2ActivesAndSave();
+    return kVF2StockBathroom1ClosedCurtainImage;
+}}
+
+static int VF2ResolveBathroom2ClosedCurtainImage() {{
+    VF2NormalizeAIBathroom2ActivesAndSave();
 {bathroom2_curtain_cases}
+    return kVF2StockBathroom2ClosedCurtainImage;
+}}
+
+extern "C" int __cdecl VF2ResolveRenovationCurtainImage(int image) {{
+    if (image == kVF2StockBathroom1ClosedCurtainImage) {{
+        return kVF2EnableMobileRenovations
+            ? VF2ResolveBathroom1ClosedCurtainImage()
+            : kVF2StockBathroom1ClosedCurtainImage;
+    }}
+    if (image == kVF2StockBathroom2ClosedCurtainImage) {{
+        return kVF2EnableAIBathroom2
+            ? VF2ResolveBathroom2ClosedCurtainImage()
+            : kVF2StockBathroom2ClosedCurtainImage;
     }}
     return image;
 }}
@@ -12087,11 +12154,11 @@ def patch_scrolling_store_scene(manifest):
     inventory_item_info_locks = inventory_item_info_generation_locks()
     inventory_item_info_restore_locks = list(inventory_item_info_locks)
     if ENABLE_MOBILE_RENOVATIONS:
-        for item_id, style in zip(
-            MOBILE_RENOVATION_PC_ITEM_IDS,
-            MOBILE_RENOVATION_STYLE_CATALOG,
-        ):
-            inventory_item_info_restore_locks[item_id] = int(style["lock"])
+        for item_id in MOBILE_RENOVATION_PC_ITEM_IDS:
+            inventory_item_info_restore_locks[item_id] = MOBILE_RENOVATION_GENERATION_LOCK
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        for item_id in AI_BATHROOM2_PC_ITEM_IDS:
+            inventory_item_info_restore_locks[item_id] = MOBILE_RENOVATION_GENERATION_LOCK
     inventory_lock_array_cpp = cpp_int_array(
         "kVF2OriginalInventoryItemInfoLocks",
         inventory_item_info_restore_locks,
@@ -12689,8 +12756,8 @@ volatile unsigned char gVF2AllowOlderPregnancies = 0;
 extern "C" __declspec(allocate(".vf2same"))
 volatile unsigned char gVF2SameSexMarriage = 0;
 
-#pragma section(".vf2reroll", read, write)
-extern "C" __declspec(allocate(".vf2reroll"))
+#pragma section(".vf2rero", read, write)
+extern "C" __declspec(allocate(".vf2rero"))
 volatile unsigned char gVF2AllowMarriageCandidateReroll = 0;
 
 #pragma section(".vf2mort", read, write)
@@ -16680,6 +16747,14 @@ def patch_graphics_manager(manifest):
             "stock_bathroom2_image": hex(AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE),
             "fallback": "returns the original stock image when that bathroom has no active style",
             "independent_state": True,
+            "bathroom1_active_images": {
+                hex(item_id): hex(mobile_renovation_curtain_image_id(color, holiday_desc_count))
+                for item_id, color in MOBILE_RENOVATION_BATHROOM_CURTAIN_COLOR_BY_ITEM.items()
+            },
+            "bathroom2_active_images": {
+                hex(item_id): hex(ai_bathroom2_curtain_image_id(color, holiday_desc_count))
+                for item_id, color in AI_BATHROOM2_CURTAIN_COLOR_BY_ITEM.items()
+            },
         },
         "generation_lock_art": {
             "image_id": hex(LOCKED_IMAGE_ID),
@@ -17875,6 +17950,10 @@ def patch_marriage_candidate_reroll(manifest):
         raise RuntimeError("Dating Reject stock route drifted")
 
     generate = dating.symbol(generate_name)
+    get_villager_name = "?GetVillager@CVillagerManager@@QAEAAVCVillager@@H@Z"
+    villager_manager_name = "?VillagerManager@@3VCVillagerManager@@A"
+    get_villager = dating.symbol(get_villager_name)
+    villager_manager = dating.symbol(villager_manager_name)
     flag_symbol = dating.append_undefined_symbol(
         MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL
     )
@@ -17890,30 +17969,51 @@ def patch_marriage_candidate_reroll(manifest):
         raise RuntimeError("Dating Reject stock sound relocation drifted")
 
     cave = section.raw_size
-    stock_offset = 31
+    stock_offset = 63
     payload = bytearray(
-        b"\x80\x3D\0\0\0\0\x00"  # compare .vf2reroll byte with zero
+        b"\x80\x3D\0\0\0\0\x00"  # compare .vf2rero byte with zero
         + b"\x74\x00"              # inactive -> exact stock branch
-        + b"\x8B\xCB"              # active: this = CDatingScene (EBX)
-        + b"\x90" * 5
+        # GeneratePeepCandidate's authenticated native prologue deactivates
+        # the old temporary villager through this exact manager lookup and
+        # CVillager+0x1BB84 write.  Perform it before resetting the scene index
+        # so the generator cannot lose the old candidate identity.
+        + b"\x8B\x43\x10"          # active: old candidate index
+        + b"\x83\xF8\xFF"          # no old candidate?
+        + b"\x74\x00"              # -> reset scene index
+        + b"\x50"                  # push old candidate index
+        + b"\xB9\0\0\0\0"       # this = VillagerManager
+        + b"\xE8\0\0\0\0"       # GetVillager(old index)
+        + b"\x85\xC0"              # invalid old pointer?
+        + b"\x74\x00"              # -> fail closed through stock Reject
+        + b"\xC6\x80\x84\xBB\x01\x00\x00"  # old active byte = 0
+        + b"\xC7\x43\x10\xFF\xFF\xFF\xFF"  # scene index = -1
+        + b"\x8B\xCB"              # this = CDatingScene (EBX)
         + b"\xE8\0\0\0\0"          # GeneratePeepCandidate
         + b"\x5F\x5E\x5B\xB0\x01"  # handled = true
         + b"\xE9\0\0\0\0"          # active -> HandleMessage +0xAC
         + expected_stock
         + b"\xE9\0\0\0\0"          # stock -> HandleMessage +0x9A
     )
-    if len(payload) != 57:
+    if len(payload) != 89:
         raise AssertionError("Marriage Reject reroll cave size drifted")
     struct.pack_into("<b", payload, 8, stock_offset - 9)
-    struct.pack_into("<i", payload, 27, (handle.value + 0xAC) - (cave + 31))
-    struct.pack_into("<i", payload, 53, (handle.value + 0x9A) - (cave + 57))
+    struct.pack_into("<b", payload, 16, 39 - 17)
+    struct.pack_into("<b", payload, 31, stock_offset - 32)
+    struct.pack_into("<i", payload, 59, (handle.value + 0xAC) - (cave + 63))
+    struct.pack_into("<i", payload, 85, (handle.value + 0x9A) - (cave + 89))
 
     dating.insert_section_bytes(section.index, cave, bytes(payload))
     dating.append_relocation(
         section.index, cave + 2, flag_symbol, IMAGE_REL_I386_DIR32
     )
     dating.append_relocation(
-        section.index, cave + 17, generate.index, IMAGE_REL_I386_REL32
+        section.index, cave + 19, villager_manager.index, IMAGE_REL_I386_DIR32
+    )
+    dating.append_relocation(
+        section.index, cave + 24, get_villager.index, IMAGE_REL_I386_REL32
+    )
+    dating.append_relocation(
+        section.index, cave + 49, generate.index, IMAGE_REL_I386_REL32
     )
     section = dating.section(handle.section)
     for index in range(section.nreloc):
@@ -17939,9 +18039,9 @@ def patch_marriage_candidate_reroll(manifest):
             "item_id": hex(MARRIAGE_CANDIDATE_REROLL_ITEM_ID),
             "catalog_price": MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE,
             "icon_file": "cheat_marriage_email.png",
-            "active_state": "dedicated .vf2reroll byte with existing checkmark renderer",
+            "active_state": "dedicated .vf2rero byte with existing checkmark renderer",
             "inactive_state": "explicit catalog price 10000",
-            "buy_again": "clears .vf2reroll",
+            "buy_again": "clears .vf2rero",
         },
         "runtime_flag": {
             "symbol": MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL,
@@ -17956,11 +18056,16 @@ def patch_marriage_candidate_reroll(manifest):
             "hook_offset": "+0x85",
         "trampoline": hex(cave),
             "stock_span": expected_stock.hex(" ").upper(),
+            "active_lifecycle": (
+                "resolve the old scene candidate through native "
+                "CVillagerManager::GetVillager, clear CVillager+0x1BB84, set "
+                "CDatingScene+0x10 to -1, then call GeneratePeepCandidate"
+            ),
             "active_call": generate_name,
             "active_continuation": "HandleMessage +0xAC handled continuation",
             "inactive_continuation": "exact stock Reject bytes and HandleMessage +0x9A continuation",
         },
-        "accept": "existing valid/safety path unchanged; purchased .vf2reroll is not cleared",
+        "accept": "existing valid/safety path unchanged; purchased .vf2rero is not cleared",
     }
 
 
@@ -18082,8 +18187,9 @@ def patch_same_sex_marriage(manifest):
 
     # IDA: HandleMessage pushes the two selected parent pointers in EDI/ESI,
     # loads FamilyTree, then calls UpdateParents at +0x1C4.  Keep the exact
-    # native sequence when both pointers are valid and distinct; fail closed
-    # before the call for null or identical pointers.
+    # native sequence only when both pointers are valid and distinct and the
+    # exact accepted candidate local [EBP-0x24] is one of them.  This prevents
+    # a global adult scan from committing an unrelated pair.
     handle_name = "?HandleMessage@CDatingScene@@UAE_NHJ@Z"
     handle = dating.symbol(handle_name)
     handle_sec = dating.section(handle.section)
@@ -18106,28 +18212,44 @@ def patch_same_sex_marriage(manifest):
 
     parent_guard_cave = handle_sec.raw_size
     parent_guard = bytearray(
-        b"\x85\xF6"              # test esi, esi
-        + b"\x74\x00"             # null first parent -> skip
+        b"\x8B\x45\xDC"         # eax = exact accepted candidate [ebp-0x24]
+        + b"\x85\xC0"             # null accepted candidate -> native cleanup
+        + b"\x74\x00"
+        + b"\x85\xF6"             # test esi, esi
+        + b"\x74\x00"             # null first parent -> fail closed
         + b"\x85\xFF"             # test edi, edi
-        + b"\x74\x00"             # null second parent -> skip
+        + b"\x74\x00"             # null second parent -> fail closed
         + b"\x3B\xFE"             # cmp edi, esi
-        + b"\x74\x00"             # identical parents -> skip
+        + b"\x74\x00"             # identical parents -> fail closed
+        + b"\x3B\xF0"             # first parent is accepted candidate?
+        + b"\x74\x00"             # yes -> valid native sequence
+        + b"\x3B\xF8"             # second parent is accepted candidate?
+        + b"\x75\x00"             # no -> fail closed
         + expected_parent_call     # exact native valid-parent path
         + b"\xE9\x00\x00\x00\x00"  # valid -> HandleMessage +0x1C8
-        + b"\xE9\x00\x00\x00\x00"  # invalid -> HandleMessage +0x1C8
+        + b"\xC6\x80\x84\xBB\x01\x00\x00"  # invalid: candidate active = 0
+        + b"\xE9\x00\x00\x00\x00"  # invalid -> native scene cleanup +0x222
+        + b"\xE9\x00\x00\x00\x00"  # null candidate -> native cleanup +0x222
     )
-    if len(parent_guard) != 34:
+    if len(parent_guard) != 61:
         raise AssertionError("Dating UpdateParents guard cave size drifted")
-    struct.pack_into("<b", parent_guard, 3, 0x19)
-    struct.pack_into("<b", parent_guard, 7, 0x15)
-    struct.pack_into("<b", parent_guard, 11, 0x11)
+    struct.pack_into("<b", parent_guard, 6, 56 - 7)
+    struct.pack_into("<b", parent_guard, 10, 44 - 11)
+    struct.pack_into("<b", parent_guard, 14, 44 - 15)
+    struct.pack_into("<b", parent_guard, 18, 44 - 19)
+    struct.pack_into("<b", parent_guard, 22, 27 - 23)
+    struct.pack_into("<b", parent_guard, 26, 44 - 27)
     struct.pack_into(
-        "<i", parent_guard, 25,
-        (handle.value + 0x1C8) - (parent_guard_cave + 29),
+        "<i", parent_guard, 40,
+        (handle.value + 0x1C8) - (parent_guard_cave + 44),
     )
     struct.pack_into(
-        "<i", parent_guard, 30,
-        (handle.value + 0x1C8) - (parent_guard_cave + 34),
+        "<i", parent_guard, 52,
+        (handle.value + 0x222) - (parent_guard_cave + 56),
+    )
+    struct.pack_into(
+        "<i", parent_guard, 57,
+        (handle.value + 0x222) - (parent_guard_cave + 61),
     )
     dating.insert_section_bytes(
         handle_sec.index, parent_guard_cave, bytes(parent_guard)
@@ -18138,8 +18260,8 @@ def patch_same_sex_marriage(manifest):
     # (the malformed 70 AC high bytes seen in the linked EXE).  Reusing the
     # existing records also avoids duplicate relocations at the old callsite.
     moved_relocations = {
-        parent_hook + 3: parent_guard_cave + 15,
-        parent_hook + 8: parent_guard_cave + 20,
+        parent_hook + 3: parent_guard_cave + 30,
+        parent_hook + 8: parent_guard_cave + 35,
     }
     section = dating.section(handle_sec.index)
     for index in range(section.nreloc):
@@ -18156,7 +18278,7 @@ def patch_same_sex_marriage(manifest):
     }
     if parent_hook + 3 in remaining_parent_relocations or parent_hook + 8 in remaining_parent_relocations:
         raise RuntimeError("Dating UpdateParents hook relocations were not moved")
-    if parent_guard_cave + 15 not in remaining_parent_relocations or parent_guard_cave + 20 not in remaining_parent_relocations:
+    if parent_guard_cave + 30 not in remaining_parent_relocations or parent_guard_cave + 35 not in remaining_parent_relocations:
         raise RuntimeError("Dating UpdateParents cave relocations were not installed")
     handle = dating.symbol(handle_name)
     handle_sec = dating.section(handle.section)
@@ -18178,8 +18300,15 @@ def patch_same_sex_marriage(manifest):
             "ESI == 0",
             "EDI == 0",
             "ESI == EDI",
+            "accepted candidate [EBP-0x24] == 0",
+            "accepted candidate is neither ESI nor EDI",
         ],
-        "invalid_route": "skip UpdateParents and continue at HandleMessage +0x1C8",
+        "accepted_candidate_local": "[EBP-0x24]",
+        "invalid_route": (
+            "clear accepted candidate CVillager+0x1BB84 when available, skip "
+            "all parent effects, and continue through native scene cleanup at "
+            "HandleMessage +0x222"
+        ),
         "valid_route": "copied native parent pushes, FamilyTree load, and UpdateParents call",
         "family_tree_object_touched": False,
     }

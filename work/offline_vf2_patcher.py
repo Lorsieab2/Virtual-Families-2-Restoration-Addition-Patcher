@@ -27,6 +27,7 @@ from typing import Any, Callable
 BACKUP_MANIFEST = "vf2_patch_backup_manifest.json"
 DEFAULT_BACKUP_ROOT = ".vf2_patch_backups"
 DEFAULT_EXE_NAME = "Virtual Families 2.exe"
+DESKTOP_RUNTIME_SOURCE_FILENAME_RE = re.compile(r"DESKTOP-[A-Za-z0-9]+", flags=re.IGNORECASE)
 EXECUTABLE_OVERLAY_SETTINGS = {
     "island_events",
     "cheat_upgrades",
@@ -1195,11 +1196,42 @@ def resolve_enabled_settings(manifest: dict[str, Any], args: argparse.Namespace)
         raise PatchError(
             "--final-playtest-all-enabled requires an explicit final_playtest_all_enabled manifest profile."
         )
+    profile_default_on: tuple[str, ...] = ()
+    profile_default_off: tuple[str, ...] = ()
+    if explicit_final_playtest:
+        profile_ids: dict[str, tuple[str, ...]] = {}
+        for field in ("default_on", "explicitly_default_off"):
+            raw_ids = profile.get(field, [])
+            if not isinstance(raw_ids, list):
+                raise PatchError(f"final_playtest_profile.{field} must be an array.")
+            ids = tuple(
+                normalize_setting_id(
+                    value,
+                    f"final_playtest_profile.{field} setting #{index}",
+                )
+                for index, value in enumerate(raw_ids)
+            )
+            if field == "default_on":
+                ensure_known_settings(ids, settings, f"final_playtest_profile.{field}")
+            else:
+                # A manifest may omit an optional feature that the profile
+                # explicitly keeps off.  Absence is already equivalent to
+                # disabled, so retain only declared IDs.
+                ids = tuple(setting_id for setting_id in ids if setting_id in settings)
+            profile_ids[field] = ids
+        profile_default_on = profile_ids["default_on"]
+        profile_default_off = profile_ids["explicitly_default_off"]
     if args.enable_all and args.disable_all:
         raise PatchError("--enable-all and --disable-all cannot be used together.")
 
     if explicit_final_playtest:
-        enabled = set(settings)
+        enabled = {
+            setting_id
+            for setting_id, setting in settings.items()
+            if setting.default
+        }
+        enabled.update(profile_default_on)
+        enabled.difference_update(profile_default_off)
     elif args.enable_all:
         enabled = set(settings)
     elif args.disable_all:
@@ -1374,6 +1406,8 @@ def prepare_output_dir(
     for source in source_root.rglob("*"):
         rel = source.relative_to(source_root)
         if rel.parts and rel.parts[0] == DEFAULT_BACKUP_ROOT:
+            continue
+        if any(DESKTOP_RUNTIME_SOURCE_FILENAME_RE.search(part) for part in rel.parts):
             continue
         if str(rel) in normalized_skips:
             continue

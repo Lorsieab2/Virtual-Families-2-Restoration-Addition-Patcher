@@ -181,7 +181,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertEqual(reroll_contract["cheat_upgrade"]["catalog_price"], 10000)
         self.assertEqual(
             reroll_contract["runtime_flag"]["source_section"],
-            ".vf2reroll",
+            ".vf2rero",
         )
         self.assertEqual(reroll_contract["reject"]["hook_offset"], "+0x85")
         self.assertIn("GeneratePeepCandidate", reroll_contract["reject"]["active_call"])

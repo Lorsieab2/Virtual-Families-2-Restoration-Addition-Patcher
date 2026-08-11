@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import unittest
 import sys
 import tempfile
@@ -11,6 +12,30 @@ import offline_vf2_patcher_gui as gui
 
 
 class OfflineVF2PatcherGUITests(unittest.TestCase):
+    def test_prepare_output_dir_excludes_desktop_identifier_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "vanilla"
+            output = root / "VF2-Test-Modded"
+            sounds = source / "Sounds"
+            sounds.mkdir(parents=True)
+            (sounds / "keep.ogg").write_bytes(b"keep")
+            (sounds / "chime3bX-DESKTOP-J6OI2AP.ogg").write_bytes(b"exclude")
+            desktop_dir = source / "Images-DESKTOP-ABC123"
+            desktop_dir.mkdir()
+            (desktop_dir / "nested.png").write_bytes(b"exclude")
+
+            patcher.prepare_output_dir(
+                source,
+                output,
+                set(),
+                argparse.Namespace(progress_callback=lambda _message: None),
+            )
+
+            self.assertEqual((output / "Sounds" / "keep.ogg").read_bytes(), b"keep")
+            self.assertFalse((output / "Sounds" / "chime3bX-DESKTOP-J6OI2AP.ogg").exists())
+            self.assertFalse((output / "Images-DESKTOP-ABC123").exists())
+
     def test_b150_creator_and_save_compatibility_messages_are_exact(self):
         self.assertEqual(
             gui.PROJECT_CREATOR_MESSAGE,
@@ -272,8 +297,14 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
 
     def test_explicit_final_playtest_profile_allows_blocked_rows_only_with_profile_flag(self):
         manifest = {
-            "final_playtest_profile": {"id": "final_playtest_all_enabled"},
+            "final_playtest_profile": {
+                "id": "final_playtest_all_enabled",
+                "default_on": ["behavior_patches"],
+                "explicitly_default_off": ["no_ai_icons"],
+            },
             "settings": [
+                {"id": "core_executable", "default": True},
+                {"id": "holiday_furniture", "default": True},
                 {
                     "id": "behavior_patches",
                     "default": False,
@@ -283,6 +314,9 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
                     "reason": "readback pending",
                 },
                 {"id": "same_sex_marriage", "default": False},
+                {"id": "custom_lorsieab2_map_images", "default": False},
+                {"id": "transparent_menu_bar", "default": False},
+                {"id": "no_ai_icons", "default": True},
             ],
         }
         normal_args = patcher.argparse.Namespace(
@@ -302,7 +336,49 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
             final_playtest_all_enabled=True,
         )
         _settings, enabled = patcher.resolve_enabled_settings(manifest, playtest_args)
-        self.assertEqual(enabled, {"behavior_patches", "same_sex_marriage"})
+        self.assertEqual(
+            enabled,
+            {"core_executable", "holiday_furniture", "behavior_patches"},
+        )
+
+    def test_final_playtest_profile_rejects_unknown_default_on_id(self):
+        args = patcher.argparse.Namespace(
+            enable_all=False,
+            disable_all=False,
+            enable=None,
+            disable=None,
+            final_playtest_all_enabled=True,
+        )
+        manifest = {
+            "final_playtest_profile": {
+                "id": "final_playtest_all_enabled",
+                "default_on": ["missing_feature"],
+            },
+            "settings": [{"id": "core_executable", "default": True}],
+        }
+        with self.assertRaisesRegex(
+            patcher.PatchError,
+            r"final_playtest_profile\.default_on references unknown setting\(s\): missing_feature",
+        ):
+            patcher.resolve_enabled_settings(manifest, args)
+
+    def test_final_playtest_profile_allows_unknown_explicitly_off_optional_id(self):
+        args = patcher.argparse.Namespace(
+            enable_all=False,
+            disable_all=False,
+            enable=None,
+            disable=None,
+            final_playtest_all_enabled=True,
+        )
+        manifest = {
+            "final_playtest_profile": {
+                "id": "final_playtest_all_enabled",
+                "explicitly_default_off": ["missing_visual_patch"],
+            },
+            "settings": [{"id": "core_executable", "default": True}],
+        }
+        _settings, enabled = patcher.resolve_enabled_settings(manifest, args)
+        self.assertEqual(enabled, {"core_executable"})
 
     def test_final_playtest_flag_requires_explicit_manifest_profile(self):
         manifest = {"settings": [{"id": "same_sex_marriage", "default": False}]}

@@ -172,16 +172,40 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         original_defaults = {row["id"]: row["default"] for row in exporter.SETTINGS}
         available = set(exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS) | {"core_executable"}
         settings = [dict(row) for row in exporter.SETTINGS]
+        next(row for row in settings if row["id"] == "no_ai_icons")["default"] = True
         updated = exporter.apply_final_playtest_defaults(settings, available)
         updated_by_id = {row["id"]: row for row in updated}
         for setting_id in exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS:
             self.assertTrue(updated_by_id[setting_id]["default"], setting_id)
         self.assertFalse(updated_by_id["same_sex_marriage"]["default"])
         self.assertFalse(updated_by_id["no_ai_icons"]["default"])
+        for setting_id in (
+            "custom_lorsieab2_map_images",
+            "transparent_menu_bar",
+            "transparent_store_bar",
+            "transparent_decor_tab",
+            "optional_visual_mod_graphics",
+        ):
+            self.assertFalse(updated_by_id[setting_id]["default"], setting_id)
         self.assertEqual(
             original_defaults,
             {row["id"]: row["default"] for row in exporter.SETTINGS},
         )
+
+    def test_final_playtest_profile_allows_absent_explicitly_off_optional_setting(self):
+        settings = [
+            dict(row)
+            for row in exporter.SETTINGS
+            if row["id"] != "no_ai_icons"
+        ]
+        updated = exporter.apply_final_playtest_defaults(
+            settings,
+            set(exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS),
+        )
+        updated_by_id = {row["id"]: row for row in updated}
+        self.assertNotIn("no_ai_icons", updated_by_id)
+        for setting_id in exporter.FINAL_PLAYTEST_DEFAULT_ON_SETTINGS:
+            self.assertTrue(updated_by_id[setting_id]["default"], setting_id)
 
     def test_final_playtest_profile_fails_closed_when_feature_record_is_missing(self):
         settings = [dict(row) for row in exporter.SETTINGS]

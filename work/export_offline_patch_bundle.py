@@ -40,6 +40,9 @@ FINAL_PLAYTEST_DEFAULT_ON_SETTINGS = frozenset({
     "cheat_upgrades",
     "ai_generated_bathroom2_renovations",
 })
+FINAL_PLAYTEST_EXPLICITLY_DEFAULT_OFF_SETTINGS = frozenset({
+    "no_ai_icons",
+})
 FINAL_PLAYTEST_NATIVE_REQUIRES = [
     "core_executable",
     "behavior_patches",
@@ -2723,6 +2726,16 @@ def apply_final_playtest_defaults(
     This operates on a manifest-local copy.  The global ``SETTINGS`` table
     remains unchanged, and No AI Icons plus unrelated visual options stay off.
     """
+    declared = {row["id"] for row in settings}
+    # Every feature that this profile turns on must exist.  An explicitly-off
+    # optional setting may be absent when its assets were not exported; that is
+    # already equivalent to keeping it disabled and must not block the bundle.
+    unknown = FINAL_PLAYTEST_DEFAULT_ON_SETTINGS - declared
+    if unknown:
+        raise ValueError(
+            "Final playtest profile references unknown setting IDs: "
+            + ", ".join(sorted(unknown))
+        )
     missing = FINAL_PLAYTEST_DEFAULT_ON_SETTINGS - available_settings
     if missing:
         raise ValueError(
@@ -2732,6 +2745,8 @@ def apply_final_playtest_defaults(
     for row in settings:
         if row["id"] in FINAL_PLAYTEST_DEFAULT_ON_SETTINGS:
             row["default"] = True
+        if row["id"] in FINAL_PLAYTEST_EXPLICITLY_DEFAULT_OFF_SETTINGS:
+            row["default"] = False
     return settings
 
 
@@ -3692,7 +3707,9 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         final_profile = {
             "id": "final_playtest_all_enabled",
             "default_on": sorted(FINAL_PLAYTEST_DEFAULT_ON_SETTINGS),
-            "explicitly_default_off": ["no_ai_icons"],
+            "explicitly_default_off": sorted(
+                FINAL_PLAYTEST_EXPLICITLY_DEFAULT_OFF_SETTINGS
+            ),
             "unrelated_visual_options_unchanged": True,
             "native_overlay_requires": FINAL_PLAYTEST_NATIVE_REQUIRES,
             "native_overlay_label": "Final All-Enabled Native",
