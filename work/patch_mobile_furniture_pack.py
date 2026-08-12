@@ -1771,7 +1771,7 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x12F,
         "name": "Fill available house slots with trash",
-        "description": "Fills free slots with trash, dirt smudges, and socks. Will not work if Maid is active.",
+        "description": "Uses native trash, dirt smudges, and sock spawn. Will not work if Maid is active.",
         "price": 0,
     },
     {
@@ -1783,7 +1783,7 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x130,
         "name": "Fill available yard slots with weeds",
-        "description": "Fills free yard slots with weeds. Will not work if Gardener is active.",
+        "description": "Uses the native weed spawn. Will not work if Gardener is active.",
         "price": 0,
     },
     {
@@ -13991,21 +13991,6 @@ static void VF2CleanHouse() {
     CollectableItem.RemoveAll((ECarrying)0x83);
 }
 
-static int VF2CountMessRecords(bool weeds) {
-    int count = 0;
-    unsigned char *record = (unsigned char *)&CollectableItem + 4;
-    for (int index = 0; index < 30; ++index, record += 0x1C) {
-        if (!record[0]) continue;
-        int carrying = *(int *)(record + 4);
-        bool isWeed = carrying >= 0x7D && carrying <= 0x80;
-        bool isRequestedHouseMess =
-            (carrying >= 0x73 && carrying <= 0x7C) ||
-            (carrying >= 0x83 && carrying <= 0x85);
-        if ((weeds && isWeed) || (!weeds && isRequestedHouseMess)) ++count;
-    }
-    return count;
-}
-
 static void VF2ResetAntPuzzle() {
     theGameState::Get()->ResetWorldState(0x13);
     for (int prop = 0x4D; prop <= 0x54; ++prop) {
@@ -14185,20 +14170,15 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         VF2CompleteAllAchievements();
         break;
     case 0x12F:
-        // Reserve half of the native 30-record mess pool for the house.  Five
-        // rounds produce 15 combined wrappers, smudges, and loose socks,
-        // leaving 15 records available for garden weeds regardless of order.
-        for (int count = VF2CountMessRecords(false); count < 15; ++count) {
-            if (count % 3 == 0) CollectableItem.SpawnTrashInHouse(1);
-            else if (count % 3 == 1) CollectableItem.SpawnStainInHouse(1);
-            else CollectableItem.SpawnSockInHouse(1);
-        }
+        // Delegate to the stock house-mess spawners. Each native routine
+        // performs its own bounded slot selection and house spawn routing.
+        CollectableItem.SpawnTrashInHouse(10);
+        CollectableItem.SpawnStainInHouse(10);
+        CollectableItem.SpawnSockInHouse(10);
         break;
     case 0x130:
-        {
-        int weeds = VF2CountMessRecords(true);
-        if (weeds < 15) CollectableItem.SpawnWeedsInYard(15 - weeds);
-        }
+        // The native routine owns the yard spawn area and slot selection.
+        CollectableItem.SpawnWeedsInYard(30);
         break;
     case 0x131:
         CollectableItem.RemoveAll((ECarrying)0x7D);
