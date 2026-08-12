@@ -10549,9 +10549,13 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 )
                 helper = Path(patcher.__file__).read_text(encoding="utf-8")
                 self.assertIn("extern \"C\" int __fastcall VF2ClassifyRomanticSpouseDrop", helper)
-                self.assertIn("if (!dropped || !target || !VF2SameSexMarriageToggleActive()) return 0;", helper)
+                self.assertIn("if (!dropped || !target) return 0;", helper)
                 self.assertIn("if (!VF2MarriagePair(first, second)) return 0;", helper)
-                self.assertIn("return firstGender == secondGender ? 1 : 0;", helper)
+                self.assertIn("if (firstGender == secondGender) {", helper)
+                self.assertIn("return VF2SameSexMarriageToggleActive() ? 1 : 0;", helper)
+                self.assertIn("static bool VF2IsBehaviorSixChildPrivateTimeMarriage()", helper)
+                self.assertIn("return *(int *)(family + 0x1B4) >= 6;", helper)
+                self.assertIn("return VF2IsBehaviorSixChildPrivateTimeMarriage() ? 1 : 0;", helper)
                 self.assertIn("if (!((dropped == first && target == second)", helper)
 
                 pristine = CoffObject(patcher.SRC_OBJS / "theMainScene.obj")
@@ -10776,6 +10780,29 @@ class SameSexMarriagePatchTests(unittest.TestCase):
         self.assertNotIn("volatile unsigned char gVF2CheatMarriageProposalScene", source)
         self.assertIn("VF2QueueMarriageProposal()", source)
         self.assertNotIn("CHEAT_MARRIAGE_PROPOSAL_CLEAR_HELPER_SYMBOL", source)
+
+    def test_behavior_patches_six_child_private_time_contract_is_narrow(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn("if (!kVF2IncludeBehaviorGoals) return false;", source)
+        self.assertIn(
+            "exact current-generation opposite-sex adult spouse pair with child count >= 6",
+            source,
+        )
+        self.assertIn('"child_count_field": "CFamilyTree current record +0x1B4"', source)
+        self.assertIn(
+            '"native_action": "HandleDropOnVillager +0x26E private-romantic-time sequence"',
+            source,
+        )
+        self.assertIn(
+            '"pregnancy": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate"',
+            source,
+        )
+        self.assertIn(
+            '"argument": "native refusal/argument route is bypassed for this exact spouse pair"',
+            source,
+        )
+        self.assertIn('"six_child_private_romantic_time": {', source)
+        self.assertIn('"enabled": False,', source)
 
 
 class OlderMortalityPatchTests(unittest.TestCase):

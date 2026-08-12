@@ -13015,12 +13015,31 @@ static bool VF2IsSameSexMarriage() {
         *(int *)((unsigned char *)second + 0x6A58);
 }
 
+static bool VF2IsBehaviorSixChildPrivateTimeMarriage() {
+    if (!kVF2IncludeBehaviorGoals) return false;
+
+    CVillager *first;
+    CVillager *second;
+    if (!VF2MarriagePair(first, second)) return false;
+
+    int firstGender = *(int *)((unsigned char *)first + 0x6A58);
+    int secondGender = *(int *)((unsigned char *)second + 0x6A58);
+    if (firstGender == secondGender) return false;
+
+    // CFamilyTree::EmptyOffspringSlots and AddOffspring use this native
+    // current-generation field for the six-child capacity check.
+    unsigned char *family =
+        (unsigned char *)FamilyTree.GetCurrentFamily();
+    if (!family) return false;
+    return *(int *)(family + 0x1B4) >= 6;
+}
+
 extern "C" int __fastcall VF2ClassifyRomanticSpouseDrop(
     CVillager *dropped,
     void *,
     CVillager *target
 ) {
-    if (!dropped || !target || !VF2SameSexMarriageToggleActive()) return 0;
+    if (!dropped || !target) return 0;
     CVillager *first;
     CVillager *second;
     if (!VF2MarriagePair(first, second)) return 0;
@@ -13028,11 +13047,15 @@ extern "C" int __fastcall VF2ClassifyRomanticSpouseDrop(
           (dropped == second && target == first))) return 0;
     int firstGender = *(int *)((unsigned char *)first + 0x6A58);
     int secondGender = *(int *)((unsigned char *)second + 0x6A58);
-    return firstGender == secondGender ? 1 : 0;
+    if (firstGender == secondGender) {
+        return VF2SameSexMarriageToggleActive() ? 1 : 0;
+    }
+    return VF2IsBehaviorSixChildPrivateTimeMarriage() ? 1 : 0;
 }
 
 extern "C" bool __cdecl VF2SkipSameSexTryToMakeBaby() {
-    return VF2IsSameSexMarriage();
+    return VF2IsSameSexMarriage() ||
+        VF2IsBehaviorSixChildPrivateTimeMarriage();
 }
 
 extern "C" void __cdecl VF2StoreTryForBabyCooldownMaybe(
@@ -13041,7 +13064,8 @@ extern "C" void __cdecl VF2StoreTryForBabyCooldownMaybe(
     int motherInternalAge,
     int fatherInternalAge
 ) {
-    if (VF2IsSameSexMarriage()) {
+    if (VF2IsSameSexMarriage() ||
+        VF2IsBehaviorSixChildPrivateTimeMarriage()) {
         return;
     }
     bool olderCouple =
@@ -18295,7 +18319,7 @@ def patch_vf3_style_child_adoption_chooser(manifest):
 
 
 def patch_same_sex_marriage(manifest):
-    """Install only the post-spawn candidate flip and native pregnancy guard."""
+    """Install the post-spawn candidate flip and native private-time guards."""
     dating_path = PATCHED / "DatingScene.obj"
     dating = CoffObject(dating_path)
     generate_name = "?GeneratePeepCandidate@CDatingScene@@AAEXXZ"
@@ -18352,9 +18376,9 @@ def patch_same_sex_marriage(manifest):
         b"\x9C"                  # preserve native cmp flags
         b"\x56"                  # push target villager (ESI)
         b"\x8B\xCF"              # ecx = dropped villager
-        b"\xE8\0\0\0\0"        # classify exact same-sex spouse pair
-        b"\x83\xF8\x01"        # same-sex pair?
-        b"\x75\x06"              # not same-sex -> restore and native JE
+        b"\xE8\0\0\0\0"        # classify exact eligible spouse pair
+        b"\x83\xF8\x01"        # private-romantic-time pair?
+        b"\x75\x06"              # not eligible -> restore and native JE
         b"\x9D"                  # restore native cmp flags
         b"\xE9\0\0\0\0"        # same-sex -> native private action +0x26E
         b"\x9D"                  # restore native cmp flags
@@ -18375,7 +18399,8 @@ def patch_same_sex_marriage(manifest):
     )
 
     # Keep TryToMakeBaby's native stack frame and all other routes intact, but
-    # return before its ChanceOfPregnancy/Impregnate path for same-sex spouses.
+    # return before its ChanceOfPregnancy/Impregnate path for same-sex spouses
+    # and the Behavior Patches six-child opposite-sex spouse rule.
     try_name = "?TryToMakeBaby@theMainScene@@IAEXXZ"
     try_func = main_obj.symbol(try_name)
     try_sec = main_obj.section(try_func.section)
@@ -18448,7 +18473,8 @@ def patch_same_sex_marriage(manifest):
         },
         "romantic_action": {
             "same_sex_spouse": "exact enabled spouse pair is routed to native private-time +0x26E",
-            "opposite_sex_spouse": "native route unchanged",
+            "opposite_sex_spouse": "native route unchanged unless the Behavior Patches six-child rule is enabled",
+            "behavior_patches_six_child_opposite_sex": "Behavior Patches only: exact current-generation opposite-sex adult spouse pair with child count >= 6 is routed to native private-time +0x26E",
             "non_spouse_or_invalid": "native refusal/argument route unchanged",
             "unconditional_gender_branch_patch": False,
             "hook_offset": "+0x218 in clean theMainScene.obj",
@@ -18459,7 +18485,8 @@ def patch_same_sex_marriage(manifest):
         },
         "pregnancy": {
             "same_sex": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate",
-            "opposite_sex": "native TryToMakeBaby body unchanged",
+            "behavior_patches_six_child_opposite_sex": "0%; Behavior Patches six-child private time returns before ChanceOfPregnancy/Impregnate",
+            "opposite_sex_otherwise": "native TryToMakeBaby body unchanged",
             "hook_offset": "+0x0 in clean theMainScene.obj",
             "trampoline": hex(try_cave),
         },
@@ -29221,8 +29248,9 @@ def main():
     }
     # Same-sex support is a default-off runtime byte.  Its only proposal edit
     # occurs after GetVillager returns the spawned candidate; HandleMessage,
-    # parent storage, selectors, and the native equal-gender private-time
-    # branch remain untouched.
+    # parent storage, selectors, and the native private-time target remain
+    # stock.  The shared drop classifier also admits the separate
+    # Behavior-Patches six-child opposite-sex rule.
     patch_same_sex_marriage(manifest)
     patch_force_successful_pregnancy_callsites(manifest)
     # The optional mortality curve is another exact-SHA dormant-byte hook.
@@ -29259,6 +29287,14 @@ def main():
             "enabled": True,
             "environment": "VF2_ENABLE_BEHAVIOR_PATCHES",
             "offline_patcher_setting": "behavior_patches",
+            "six_child_private_romantic_time": {
+                "enabled": True,
+                "condition": "exact current-generation opposite-sex adult spouse pair with child count >= 6",
+                "child_count_field": "CFamilyTree current record +0x1B4",
+                "native_action": "HandleDropOnVillager +0x26E private-romantic-time sequence",
+                "pregnancy": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate",
+                "argument": "native refusal/argument route is bypassed for this exact spouse pair",
+            },
         }
     else:
         patch_mobile_furniture_autonomous_candidates(manifest)
@@ -29275,6 +29311,10 @@ def main():
             "environment": "VF2_ENABLE_BEHAVIOR_PATCHES",
             "offline_patcher_setting": "behavior_patches",
             "status": "stock behavior objects preserved for the behavior-disabled core executable",
+            "six_child_private_romantic_time": {
+                "enabled": False,
+                "status": "stock private-romantic-time and pregnancy routes preserved",
+            },
         }
     patch_mobile_furniture_external_autonomous_selection(manifest)
     # This final pass intentionally runs after label wrappers so the mobile

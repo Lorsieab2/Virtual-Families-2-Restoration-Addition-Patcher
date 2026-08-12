@@ -3161,6 +3161,14 @@
   before `ChanceOfPregnancy`/`Impregnate`, so pregnancy is 0%; the pair does not
   use the native refusal or argument outcomes. Opposite-sex couples, non-spouse
   drops, and the flag-off state retain their native routes.
+- B158 Behavior Patches extends the same native private-romantic-time detour only
+  for an exact current-generation opposite-sex adult spouse pair whose native
+  FamilyTree child-slot count at current-record `+0x1B4` is at least six. The
+  route bypasses the native refusal/argument branch, and the shared
+  `TryToMakeBaby` entry returns before `ChanceOfPregnancy`/`Impregnate`, making
+  this action 0% pregnancy. The helper is compile-gated by
+  `VF2_ENABLE_BEHAVIOR_PATCHES`; the behavior-disabled executable retains stock
+  opposite-sex routing.
 - The complete B156 matrix links 16 unique executable layouts. Holiday
   positive/negative validation passes 8/8, and the five default-zero runtime
   controls (`.vf2beh`, `.vf2goal`, `.vf2preg`, `.vf2same`, `.vf2mort`) are
