@@ -603,7 +603,8 @@ as:
   Github if you want to change it- Lorsieab2)`.
 - When `mobile_renovations` is enabled, the five Bathroom 1 closed-curtain
   assets are staged under `Images/MobileRenovations/curtains/` and selected by
-  the active Bathroom 1 renovation item. The blue row (`0x13D`) selects
+  the active Bathroom 1 renovation item. The black row (`0x13C`) selects
+  `shower_curtain_closed_black.png`; the blue row (`0x13D`) selects
   `shower_curtain_closed_blue.png`. If no Bathroom 1 style is active, or the
   selected custom descriptor cannot load, the selector returns the stock
   `Images/curtain_closed_southb.png` image/grid. Bathroom 2 is not part of

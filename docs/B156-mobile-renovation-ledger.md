@@ -48,7 +48,9 @@ The bundle-level extraction record is tracked in
 texture bundles that supplied the 15 staged room overlays, the extracted
 bathroom support textures that are intentionally not staged, and the current
 runtime-copy/selector boundary. Bathroom 1 closed curtains are selected by the
-active PC renovation item: `0x13D` (blue) selects
+active PC renovation item: `0x13C` (black) selects
+`Images/MobileRenovations/curtains/shower_curtain_closed_black.png`, and
+`0x13D` (blue) selects
 `Images/MobileRenovations/curtains/shower_curtain_closed_blue.png`; no active
 style, or an unavailable custom descriptor, returns the stock
 `Images/curtain_closed_southb.png` image/grid. It now also pins the ten native

@@ -16932,6 +16932,8 @@ def patch_graphics_manager(manifest):
             "independent_state": True,
             "bathroom1_selector": {
                 "active_item_range": "0x13C-0x140",
+                "black_item": "0x13C",
+                "black_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_black.png",
                 "blue_item": "0x13D",
                 "blue_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_blue.png",
                 "stock_fallback": "0x21B / Images/curtain_closed_southb.png",

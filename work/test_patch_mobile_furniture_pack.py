@@ -3397,7 +3397,19 @@ class MobileRenovationArtTests(unittest.TestCase):
         selector = contract["bathroom1_curtain_selector"]
         self.assertEqual(selector["stock_image_id"], "0x21B")
         self.assertEqual(selector["stock_path"], "Images/curtain_closed_southb.png")
+        self.assertEqual(selector["black_item"], "0x13C")
+        self.assertEqual(
+            selector["black_asset"],
+            "Images/MobileRenovations/curtains/shower_curtain_closed_black.png",
+        )
         self.assertEqual(selector["active_item_to_color"]["0x13D"], "blue")
+        self.assertEqual(selector["active_item_to_color"]["0x13C"], "black")
+        black = patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / "shower_curtain_closed_black.png"
+        self.assertTrue(black.is_file())
+        self.assertEqual(
+            hashlib.sha256(black.read_bytes()).hexdigest(),
+            "7c1260cd9b965a9fcf157b40d3364ba07bb5bf6544440c9cd1d46b8488a0b510",
+        )
         self.assertEqual(
             next(
                 row for row in contract["bathroom1_curtain_assets"]
