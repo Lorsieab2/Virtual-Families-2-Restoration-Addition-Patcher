@@ -16940,6 +16940,8 @@ def patch_graphics_manager(manifest):
                 "beige_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_brown.png",
                 "pink_item": "0x140",
                 "pink_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_pink.png",
+                "green_item": "0x13F",
+                "green_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_green.png",
                 "stock_fallback": "0x21B / Images/curtain_closed_southb.png",
                 "unavailable_custom_descriptor_fallback": True,
             },

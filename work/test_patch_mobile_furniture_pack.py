@@ -3412,9 +3412,15 @@ class MobileRenovationArtTests(unittest.TestCase):
             selector["pink_asset"],
             "Images/MobileRenovations/curtains/shower_curtain_closed_pink.png",
         )
+        self.assertEqual(selector["green_item"], "0x13F")
+        self.assertEqual(
+            selector["green_asset"],
+            "Images/MobileRenovations/curtains/shower_curtain_closed_green.png",
+        )
         self.assertEqual(selector["active_item_to_color"]["0x13D"], "blue")
         self.assertEqual(selector["active_item_to_color"]["0x13C"], "black")
         self.assertEqual(selector["active_item_to_color"]["0x13E"], "brown")
+        self.assertEqual(selector["active_item_to_color"]["0x13F"], "green")
         black = patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / "shower_curtain_closed_black.png"
         self.assertTrue(black.is_file())
         self.assertEqual(
@@ -3433,6 +3439,12 @@ class MobileRenovationArtTests(unittest.TestCase):
         self.assertEqual(
             hashlib.sha256(pink.read_bytes()).hexdigest(),
             "d9a5025dfe95895f66a853c3a89956ce4ff1186f708ba26cf6e90dae13f4b73f",
+        )
+        green = patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / "shower_curtain_closed_green.png"
+        self.assertTrue(green.is_file())
+        self.assertEqual(
+            hashlib.sha256(green.read_bytes()).hexdigest(),
+            "653d17b53843d8ec5a2734e07a79565935406c68284e9007351eead1366b614e",
         )
         self.assertEqual(
             next(

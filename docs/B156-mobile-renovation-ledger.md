@@ -53,9 +53,11 @@ active PC renovation item: `0x13C` (black) selects
 `0x13D` (blue) selects
 `Images/MobileRenovations/curtains/shower_curtain_closed_blue.png`; `0x13E`
 (beige) selects
-`Images/MobileRenovations/curtains/shower_curtain_closed_brown.png`; no active
-(pink `0x140`) selects
-`Images/MobileRenovations/curtains/shower_curtain_closed_pink.png`; no active
+`Images/MobileRenovations/curtains/shower_curtain_closed_brown.png`; `0x13F`
+(green) selects
+`Images/MobileRenovations/curtains/shower_curtain_closed_green.png`; `0x140`
+(pink) selects
+`Images/MobileRenovations/curtains/shower_curtain_closed_pink.png`. No active
 style, or an unavailable custom descriptor, returns the stock
 `Images/curtain_closed_southb.png` image/grid. It now also pins the ten native
 activation records and the mobile save-load order used by the static PC parity validator.
