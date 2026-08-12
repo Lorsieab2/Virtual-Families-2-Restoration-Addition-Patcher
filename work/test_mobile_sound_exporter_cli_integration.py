@@ -50,7 +50,7 @@ class MobileSoundExporterCliIntegrationTests(unittest.TestCase):
         )
         return result
 
-    def test_exported_manifest_round_trips_all_67_sounds_and_blocks_unverified_apply(self):
+    def test_exported_manifest_round_trips_all_67_sounds_and_allows_player_qa_apply(self):
         routes = (
             ("beaker.wav", "beaker.ogg"),
             ("Child3.wav", "Child3.ogg"),
@@ -200,32 +200,31 @@ class MobileSoundExporterCliIntegrationTests(unittest.TestCase):
             mobile_sound_setting = next(
                 row for row in manifest["settings"] if row["id"] == "mobile_sound_assets"
             )
-            self.assertEqual(mobile_sound_setting["readiness"]["status"], "pending")
-            self.assertFalse(mobile_sound_setting["readiness"]["runtime_ready"])
-            self.assertFalse(mobile_sound_setting["readiness"]["linked"])
+            self.assertEqual(mobile_sound_setting["readiness"]["status"], "ready_for_player_qa")
+            self.assertTrue(mobile_sound_setting["readiness"]["runtime_ready"])
+            self.assertTrue(mobile_sound_setting["readiness"]["linked"])
 
-            blocked = subprocess.run(
-                [
-                    sys.executable,
-                    str(PATCHER),
-                    "apply",
-                    "--game-dir",
-                    str(game),
-                    "--output-dir",
-                    str(root / "output"),
-                    "--manifest",
-                    str(manifest_path),
-                    "--enable",
-                    "mobile_sound_assets",
-                ],
-                cwd=ROOT,
-                text=True,
-                capture_output=True,
+            output = root / "output"
+            self.run_patcher(
+                "apply",
+                "--game-dir",
+                str(game),
+                "--output-dir",
+                str(output),
+                "--manifest",
+                str(manifest_path),
+                "--enable",
+                "mobile_sound_assets",
             )
-            self.assertNotEqual(blocked.returncode, 0)
-            self.assertIn("Blocked setting(s) cannot be enabled", blocked.stderr)
-            self.assertIn("mobile_sound_assets", blocked.stderr)
-            self.assertFalse((root / "output").exists())
+            output_exe = next(
+                row["output_file_path"]
+                for row in manifest["asset_patches"]
+                if row.get("requires") == ["core_executable"]
+                and str(row.get("file_path", "")).lower().endswith(".exe")
+            )
+            self.assertTrue((output / output_exe).is_file())
+            for _pc_name, mobile_name in routes:
+                self.assertTrue((output / "Sounds" / mobile_name).is_file())
 
 
 if __name__ == "__main__":

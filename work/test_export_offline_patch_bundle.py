@@ -107,16 +107,19 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         settings = exporter.default_settings(False, True, available)
         by_id = {row["id"]: row for row in settings}
 
-        for setting_id in (
-            "behavior_patches",
-            "mobile_furniture_behaviors",
-            "mobile_sound_assets",
-        ):
+        with self.subTest(setting_id="behavior_patches"):
+            readiness = by_id["behavior_patches"]["readiness"]
+            self.assertIn(readiness["status"].lower(), {"stop", "pending"})
+            self.assertFalse(readiness["runtime_ready"])
+            self.assertFalse(readiness["linked"])
+            self.assertTrue(readiness["reason"])
+        for setting_id in ("mobile_furniture_behaviors", "mobile_sound_assets"):
             with self.subTest(setting_id=setting_id):
                 readiness = by_id[setting_id]["readiness"]
-                self.assertIn(readiness["status"].lower(), {"stop", "pending"})
-                self.assertFalse(readiness["runtime_ready"])
-                self.assertFalse(readiness["linked"])
+                self.assertEqual(readiness["status"], "ready_for_player_qa")
+                self.assertTrue(readiness["runtime_ready"])
+                self.assertTrue(readiness["linked"])
+                self.assertIn("player", readiness["reason"])
                 self.assertTrue(readiness["reason"])
         for setting_id in ("mobile_renovations", "ai_generated_bathroom2_renovations"):
             with self.subTest(setting_id=setting_id):

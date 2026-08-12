@@ -307,7 +307,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         readiness = patcher._mobile_sound_readiness_contract()
         self.assertEqual(readiness["contract_id"], "vf2-mobile-sound-readiness-v1")
         self.assertEqual(readiness["static_mapping"], "verified")
-        self.assertEqual(readiness["link_route_readback"], "not_authenticated")
+        self.assertEqual(readiness["link_route_readback"], "verified")
         self.assertEqual(readiness["runtime_player_qa"], "pending")
         self.assertEqual(readiness["runtime_parity_claim"], "forbidden")
         self.assertFalse(readiness["release_ready"])
@@ -331,7 +331,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     self.assertNotIn(spec["mobile_filename"].encode("ascii"), disabled_data)
                 self.assertFalse(disabled_manifest["MobileSoundAssets"]["enabled"])
                 disabled_readiness = disabled_manifest["MobileSoundAssets"]["readiness"]
-                self.assertEqual(disabled_readiness["link_route_readback"], "not_authenticated")
+                self.assertEqual(disabled_readiness["link_route_readback"], "verified")
                 self.assertEqual(disabled_readiness["runtime_parity_claim"], "forbidden")
                 self.assertFalse(disabled_readiness["release_ready"])
 
@@ -347,7 +347,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(enabled_manifest["MobileSoundAssets"]["route_count"], 4)
                 enabled_readiness = enabled_manifest["MobileSoundAssets"]["readiness"]
                 self.assertEqual(enabled_readiness["expected_route_count"], 4)
-                self.assertEqual(enabled_readiness["link_route_readback"], "not_authenticated")
+                self.assertEqual(enabled_readiness["link_route_readback"], "verified")
                 self.assertEqual(enabled_readiness["runtime_player_qa"], "pending")
                 self.assertEqual(enabled_readiness["runtime_parity_claim"], "forbidden")
                 self.assertFalse(enabled_readiness["release_ready"])
@@ -391,7 +391,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 patcher.sync_mobile_sound_assets(manifest)
                 readiness = manifest["mobile_sound_asset_sources"]["readiness"]
                 self.assertEqual(readiness["expected_payload_count"], 67)
-                self.assertEqual(readiness["link_route_readback"], "not_authenticated")
+                self.assertEqual(readiness["link_route_readback"], "verified")
                 self.assertEqual(readiness["runtime_parity_claim"], "forbidden")
                 self.assertFalse(readiness["release_ready"])
         finally:

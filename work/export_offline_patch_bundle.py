@@ -501,10 +501,10 @@ SETTING_READINESS = {
         "reason": "Fresh executable linkage/readback and runtime validation are pending.",
     },
     "mobile_furniture_behaviors": {
-        "status": "pending",
-        "runtime_ready": False,
-        "linked": False,
-        "reason": "Native behavior linkage and runtime validation are pending.",
+        "status": "ready_for_player_qa",
+        "runtime_ready": True,
+        "linked": True,
+        "reason": "Fresh B158 executable section/code-marker readback is verified; supported furniture behavior and gate testing remains a player gate.",
     },
     "island_events": {
         "status": "ready_for_player_qa",
@@ -519,10 +519,10 @@ SETTING_READINESS = {
         "reason": "The enabled renderer, House Renovations rows, descriptors, store-icon DrawItem route, and runtime payload are linked in the selected mobile-renovation executable. Live purchase/save/load QA remains a player gate.",
     },
     "mobile_sound_assets": {
-        "status": "pending",
-        "runtime_ready": False,
-        "linked": False,
-        "reason": "Audible parity remains pending runtime validation.",
+        "status": "ready_for_player_qa",
+        "runtime_ready": True,
+        "linked": True,
+        "reason": "Fresh B158 linked sound route/pointer readback is verified; FMOD decoding and audible parity remain a player gate.",
     },
     "ai_generated_bathroom2_renovations": {
         "status": "ready_for_player_qa",

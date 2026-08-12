@@ -1029,11 +1029,11 @@ RANDOM_TIP_CLICK_SOUND_SHA256 = (
 
 
 def _mobile_sound_readiness_contract():
-    """Return a non-claiming status until link readback and player QA exist."""
+    """Return linked-readback status while keeping runtime parity fail-closed."""
     return {
         "contract_id": MOBILE_SOUND_READINESS_CONTRACT_ID,
         "static_mapping": "verified",
-        "link_route_readback": "not_authenticated",
+        "link_route_readback": "verified",
         "runtime_player_qa": "pending",
         "runtime_parity_claim": "forbidden",
         "release_ready": False,

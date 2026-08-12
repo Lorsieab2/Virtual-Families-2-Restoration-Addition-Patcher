@@ -41,16 +41,32 @@ SHA-256; otherwise record the slot identifier and before/after screenshots.
 
 This section is a player-executed protocol only. It records the required
 checks; it contains no runtime, decoder, audible-parity, or crash-freedom
-result. The canonical package to test is
-`outputs/VF2-B158-1b01c94-Toggle-Corrected-Playtest-Final.zip`, SHA-256
-`933C73EDAFFD73EFC23D0022C5E5E86CA2B3E1CB1A81051DB1CEB83C682CC834`.
+result. The fresh linked playtest package is
+`outputs/Offline-Patch-Bundles/VF2-B158-Mobile-Furniture-Sound-20260812-r49.zip`,
+size `79,628,290`, SHA-256
+`EED7FF4C06B31B82493AC44CD0B5EF171C55A7B255EBD69C9864679AEC43E6BE`.
+The fresh linked source executable is
+`outputs/VF2-B158-Mobile-Furniture-Sound-20260812-r2/Virtual Families 2 - Mobile Furniture Sound B158.exe`,
+size `1,795,584`, SHA-256
+`0DC31C3A5435B7585B1CA2CD262A9EFDD7072E5E6DD3A69CD93737EA3B16FF3E`.
+The applied final-profile executable is
+`outputs/VF2-B158-Mobile-Furniture-Sound-20260812-r46-applied/Virtual Families 2 - Modded B158.exe`,
+size `1,885,696`, SHA-256
+`9F8A9473AB317E0A369502F70D482AB968BF11D80D40BCC26C8686FDDFF67A39`.
+Independent readback is recorded in
+`outputs/VF2-B158-Mobile-Furniture-Sound-20260812-r46-applied/mobile-feature-readback.json`.
+These are linkage and package checks only; they do not establish in-game
+behavior, FMOD decoding, audible parity, save/reload safety, or crash freedom.
 Keep every sound row `Pending` until its observation, save/reload result,
 disable/restoration result, and crash status are recorded against one exact
 EXE identity.
 
-Before launching, run `work/verify_offline_bundle_zip.py` against that exact
-archive and retain its JSON result with the playtest notes. This is a static
-package preflight only; it does not replace any audible or runtime row below.
+Before launching, retain the feature-specific package preflight and
+`mobile-feature-readback.json` with the playtest notes. The generic
+`work/verify_offline_bundle_zip.py` is pinned to the eight-variant canonical
+audit package and is not the verifier for this two-variant feature playtest.
+The package preflight is static only; it does not replace any audible or
+runtime row below.
 
 The union of the following representative triggers is the complete 67-ID
 sound set. Repeated IDs intentionally cover alternate handlers; random ranges
