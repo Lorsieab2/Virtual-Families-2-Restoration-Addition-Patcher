@@ -3527,6 +3527,39 @@ class MobileRenovationArtTests(unittest.TestCase):
             "stock image/grid when no style is active or the selected custom descriptor cannot load",
         )
 
+    def test_bathroom2_black_curtain_asset_and_selector_are_authoritative(self):
+        contract = json.loads(
+            patcher.AI_BATHROOM2_CONTRACT.read_text(encoding="utf-8")
+        )
+        black = patcher.AI_BATHROOM2_CURTAIN_DIR / "curtain_closed_black.png"
+        self.assertTrue(black.is_file())
+        self.assertEqual(
+            patcher.read_png_size(black),
+            (98, 119),
+        )
+        self.assertEqual(
+            hashlib.sha256(black.read_bytes()).hexdigest(),
+            "e80877392754db8b57aae54c9bc8dd0c2c7252e799d93348f8575a01aed065a0",
+        )
+        selector = contract["closed_curtain_selector"]
+        self.assertEqual(selector["black_item"], "0x14D")
+        self.assertEqual(
+            selector["black_asset"],
+            "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_black.png",
+        )
+        self.assertEqual(selector["active_item_to_color"]["0x14D"], "black")
+        self.assertEqual(
+            next(
+                row for row in contract["closed_curtains"]
+                if row["name"] == "curtain_closed_black.png"
+            )["sha256"],
+            "E80877392754DB8B57AAE54C9BC8DD0C2C7252E799D93348F8575A01AED065A0",
+        )
+        self.assertEqual(
+            selector["fallback"],
+            "stock image/grid when no style is active or the selected custom descriptor cannot load",
+        )
+
     def test_bathroom2_beige_curtain_asset_and_selector_are_authoritative(self):
         contract = json.loads(
             patcher.AI_BATHROOM2_CONTRACT.read_text(encoding="utf-8")
