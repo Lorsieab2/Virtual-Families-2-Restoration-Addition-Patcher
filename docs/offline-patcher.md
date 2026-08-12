@@ -605,7 +605,8 @@ as:
   assets are staged under `Images/MobileRenovations/curtains/` and selected by
   the active Bathroom 1 renovation item. The black row (`0x13C`) selects
   `shower_curtain_closed_black.png`; the blue row (`0x13D`) selects
-  `shower_curtain_closed_blue.png`. If no Bathroom 1 style is active, or the
+  `shower_curtain_closed_blue.png`; the beige row (`0x13E`) selects
+  `shower_curtain_closed_brown.png`. If no Bathroom 1 style is active, or the
   selected custom descriptor cannot load, the selector returns the stock
   `Images/curtain_closed_southb.png` image/grid. Bathroom 2 is not part of
   this route.

@@ -16936,6 +16936,8 @@ def patch_graphics_manager(manifest):
                 "black_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_black.png",
                 "blue_item": "0x13D",
                 "blue_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_blue.png",
+                "beige_item": "0x13E",
+                "beige_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_brown.png",
                 "stock_fallback": "0x21B / Images/curtain_closed_southb.png",
                 "unavailable_custom_descriptor_fallback": True,
             },
