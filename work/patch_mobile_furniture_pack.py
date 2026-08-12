@@ -11785,8 +11785,9 @@ static int VF2ResolveBathroom1ClosedCurtainImageForDraw() {{
         : kVF2StockBathroom1ClosedCurtainImage;
 }}
 
-static ldwImageGrid *VF2ResolveBathroom1ClosedCurtainGridImpl() {{
-    ldwImageGrid *stockGrid = Decal.bathroom1ClosedCurtainGrid;
+static ldwImageGrid *VF2ResolveBathroom1ClosedCurtainGridImpl(CDecal *decal) {{
+    if (!decal) decal = &Decal;
+    ldwImageGrid *stockGrid = decal->bathroom1ClosedCurtainGrid;
     if (!kVF2EnableMobileRenovations) return stockGrid;
     int image = VF2ResolveBathroom1ClosedCurtainImage();
     if (image == kVF2StockBathroom1ClosedCurtainImage) return stockGrid;
@@ -11798,9 +11799,12 @@ static ldwImageGrid *VF2ResolveBathroom1ClosedCurtainGridImpl() {{
 
 extern "C" __declspec(naked) ldwImageGrid *__cdecl VF2ResolveBathroom1ClosedCurtainGrid() {{
     __asm {{
-        push ecx
+        // RefreshProps keeps the active CDecal instance in EDI at this
+        // callsite. Pass that instance so Bathroom 1 cannot borrow a cached
+        // grid from another decal object.
+        push edi
         call VF2ResolveBathroom1ClosedCurtainGridImpl
-        pop ecx
+        add esp, 4
         ret
     }}
 }}
@@ -11821,8 +11825,9 @@ static int VF2ResolveBathroom2ClosedCurtainImageForDraw() {{
         : kVF2StockBathroom2ClosedCurtainImage;
 }}
 
-static ldwImageGrid *VF2ResolveBathroom2ClosedCurtainGridImpl() {{
-    ldwImageGrid *stockGrid = Decal.bathroom2ClosedCurtainGrid;
+static ldwImageGrid *VF2ResolveBathroom2ClosedCurtainGridImpl(CDecal *decal) {{
+    if (!decal) decal = &Decal;
+    ldwImageGrid *stockGrid = decal->bathroom2ClosedCurtainGrid;
     if (!kVF2EnableAIBathroom2) return stockGrid;
     int image = VF2ResolveBathroom2ClosedCurtainImage();
     if (image == kVF2StockBathroom2ClosedCurtainImage) return stockGrid;
@@ -11834,9 +11839,12 @@ static ldwImageGrid *VF2ResolveBathroom2ClosedCurtainGridImpl() {{
 
 extern "C" __declspec(naked) ldwImageGrid *__cdecl VF2ResolveBathroom2ClosedCurtainGrid() {{
     __asm {{
-        push ecx
+        // RefreshDecals keeps the active CDecal instance in ESI at this
+        // callsite. Pass that instance so Bathroom 2 is resolved from its
+        // own cached stock grid and never from Bathroom 1's field.
+        push esi
         call VF2ResolveBathroom2ClosedCurtainGridImpl
-        pop ecx
+        add esp, 4
         ret
     }}
 }}
@@ -16513,10 +16521,11 @@ def patch_bathroom1_curtain_decal(manifest):
     helper = obj.append_undefined_symbol(
         "_VF2ResolveBathroom1ClosedCurtainGrid"
     )
-    # Native RefreshProps has already pushed the position/size arguments and
-    # has loaded this into ECX as `this`.  The six-byte stock grid push is
-    # exactly large enough for a no-argument resolver call followed by
-    # `push eax`; the naked wrapper preserves ECX for AddDecal.
+    # Native RefreshProps keeps its CDecal instance in EDI at this exact
+    # instruction. The six-byte stock grid push is exactly large enough for
+    # a resolver call followed by `push eax`; the naked wrapper passes EDI as
+    # the resolver's CDecal argument and leaves the native AddDecal stack
+    # layout unchanged.
     obj.buf[raw_offset : raw_offset + len(stock_push)] = (
         b"\xE8\x00\x00\x00\x00\x50"
     )
@@ -16560,7 +16569,8 @@ def patch_bathroom1_curtain_decal(manifest):
             "helper": "_VF2ResolveBathroom2ClosedCurtainGrid",
             "cached_grid_offset": "0x1910",
             "fallback": "returns the native cached Bathroom 2 grid when inactive or unresolved",
-            "ecx_preserved_for_add_decal": True,
+            "native_instance_register": "ESI",
+            "native_instance_passed_to_resolver": True,
             "reason": (
                 "CDecal::RefreshDecals passes the cached Bathroom 2 grid directly "
                 "to AddDecal; theGraphicsManager::Draw image hook is not reached"
@@ -16577,7 +16587,8 @@ def patch_bathroom1_curtain_decal(manifest):
             "helper": "_VF2ResolveBathroom1ClosedCurtainGrid",
             "cached_grid_offset": "0x1924",
             "fallback": "returns the native cached Bathroom 1 grid when inactive or unresolved",
-            "ecx_preserved_for_add_decal": True,
+            "native_instance_register": "EDI",
+            "native_instance_passed_to_resolver": True,
             "reason": (
                 "CDecal::RefreshProps passes the cached grid directly to AddDecal; "
                 "theGraphicsManager::Draw image hook is not reached on this path"

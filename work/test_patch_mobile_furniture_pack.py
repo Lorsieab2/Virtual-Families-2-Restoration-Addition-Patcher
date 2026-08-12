@@ -3142,6 +3142,29 @@ class MobileRenovationArtTests(unittest.TestCase):
                     int(row["image_id"], 16)
                     for row in graphics["ai_bathroom2_visual_images"]["closed_curtain_descriptors"]
                 ]
+                bathroom1_paths = [
+                    row["path"]
+                    for row in graphics["mobile_renovation_images"]["closed_curtain_descriptors"]
+                ]
+                bathroom2_paths = [
+                    row["path"]
+                    for row in graphics["ai_bathroom2_visual_images"]["closed_curtain_descriptors"]
+                ]
+                self.assertEqual(
+                    bathroom1_paths,
+                    [
+                        f"MobileRenovations/curtains/shower_curtain_closed_{color}.png"
+                        for color in patcher.MOBILE_RENOVATION_CURTAIN_COLOR_ORDER
+                    ],
+                )
+                self.assertEqual(
+                    bathroom2_paths,
+                    [
+                        f"AIGeneratedBathroom2/closed_curtains/curtain_closed_{color}.png"
+                        for color in patcher.MOBILE_RENOVATION_CURTAIN_COLOR_ORDER
+                    ],
+                )
+                self.assertTrue(set(bathroom1_paths).isdisjoint(bathroom2_paths))
                 holiday_count = patcher.holiday_body_descriptor_count()
                 self.assertEqual(
                     bathroom1_ids,
@@ -3684,7 +3707,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                 )
                 hook = manifest["CDecal"]["bathroom1_closed_curtain_grid_hook"]
                 self.assertEqual(hook["offset"], "0x570")
-                self.assertTrue(hook["ecx_preserved_for_add_decal"])
+                self.assertEqual(hook["native_instance_register"], "EDI")
+                self.assertTrue(hook["native_instance_passed_to_resolver"])
+                self.assertIn("VF2ResolveBathroom1ClosedCurtainGridImpl(CDecal *decal)", source)
+                self.assertIn("push edi", source)
                 obj = CoffObject(patcher.PATCHED / "Decal.obj")
                 refresh_props = obj.symbol("?RefreshProps@CDecal@@QAEXXZ")
                 sec = obj.section(refresh_props.section)
@@ -3738,6 +3764,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertEqual(hook["function"], "?RefreshDecals@CDecal@@QAEXXZ")
                 self.assertEqual(hook["offset"], "0xb0b")
                 self.assertEqual(hook["cached_grid_offset"], "0x1910")
+                self.assertEqual(hook["native_instance_register"], "ESI")
+                self.assertTrue(hook["native_instance_passed_to_resolver"])
+                self.assertIn("VF2ResolveBathroom2ClosedCurtainGridImpl(CDecal *decal)", source)
+                self.assertIn("push esi", source)
                 obj = CoffObject(patcher.PATCHED / "Decal.obj")
                 refresh_decals = obj.symbol("?RefreshDecals@CDecal@@QAEXXZ")
                 sec = obj.section(refresh_decals.section)
