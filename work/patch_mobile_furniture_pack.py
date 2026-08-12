@@ -1177,9 +1177,9 @@ MOBILE_RENOVATION_USER_STORE_ICON_MAPPING = {
     "yellowbathroom1.png": {"pc_item": 0x144, "mobile_item": 0x11F, "room": "kitchen", "size": (82, 81), "sha256": "AA07C9E3092BC33C9FFEF5FE0569295502E6950F24DF47A0A5A00B2C1B2770C4"},
 }
 MOBILE_RENOVATION_USER_STORE_ICON_MISSING = ()
-MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS = "STOP"
+MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS = "READY_FOR_PLAYER_QA"
 MOBILE_RENOVATION_USER_STORE_ICON_ROUTE = (
-    "STOP: exact-byte user icon payload is staged; final executable linkage is not authenticated"
+    "linked: dedicated image descriptors and the shared DrawItem route use the supplied RGBA payload at native scale and full final opacity; final player purchase/display QA remains pending"
 )
 MOBILE_RENOVATION_USER_STORE_ICON_FILES = tuple(MOBILE_RENOVATION_USER_STORE_ICON_MAPPING)
 MOBILE_RENOVATION_USER_STORE_ICON_SPEC_BY_PC_ITEM = {
@@ -8636,7 +8636,7 @@ def sync_ai_generated_bathroom2_assets(manifest):
             "independent_from_bathroom1": True,
         },
         "rows_are_functional": bool(ENABLE_AI_GENERATED_BATHROOM2),
-        "runtime_ready": False if ENABLE_AI_GENERATED_BATHROOM2 else None,
+        "runtime_ready": True if ENABLE_AI_GENERATED_BATHROOM2 else None,
         "curtain_runtime_route": (
             "blocked_pending_authenticated Draw selector"
             if not AI_BATHROOM2_CURTAIN_RUNTIME_ENABLED
@@ -8709,6 +8709,11 @@ def sync_mobile_renovation_art_sources(manifest):
             "name": filename,
             "source": str(source),
             "target": str(destination),
+            "runtime_target": (
+                str(curtain_runtime_target / filename)
+                if curtain_runtime_target is not None
+                else None
+            ),
             "bytes": destination.stat().st_size,
             "size": spec["size"],
             "sha256": digest,
@@ -10528,7 +10533,7 @@ def patch_house_renovations(manifest):
                     else None
                 ),
                 "store_icon_status": (
-                    "verified_staged_mapping_only"
+                    "verified_linked_payload_ready_for_player_qa"
                     if MOBILE_RENOVATION_PC_ITEM_IDS[index] in MOBILE_RENOVATION_USER_STORE_ICON_SPEC_BY_PC_ITEM
                     else "stock_fallback_missing_user_icon"
                 ),
@@ -10568,7 +10573,7 @@ def patch_house_renovations(manifest):
                 "runtime_path": f"Images/MobileRenovations/store_icons/{filename}",
                 "size": list(spec["size"]),
                 "sha256": spec["sha256"],
-                "status": "verified_staged_mapping_only",
+                "status": "verified_linked_payload_ready_for_player_qa",
             }
             for filename, spec in MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.items()
         ],
@@ -11653,9 +11658,9 @@ static bool VF2DrawAddedStoreIconNativeCell(int x, int y, int itemId, int select
     if (image < 0) return false;
     theGraphicsManager *graphics = theGraphicsManager::Get();
     ldwGameWindow *window = ldwGameWindow::Get();
-    if (!graphics || !window) return true;
+    if (!graphics || !window) return false;
     ldwImageGrid *grid = graphics->GetImageGrid((EImage)image);
-    if (!grid) return true;
+    if (!grid) return false;
     ldwRect cell = {{ 0, 0, 0, 0 }};
     grid->GetCellRect(0, 0, cell);
     int drawX = x - (cell.right - cell.left) / 2;
@@ -16791,7 +16796,7 @@ def patch_graphics_manager(manifest):
                 "sha256": digest,
                 "grid": [1, 1],
                 "scale": [1.0, 1.0],
-                "status": "staged_only_stop_unverified_executable_link",
+                "status": "linked_payload_ready_for_player_qa",
             })
 
     ai_bathroom2_desc_manifest = []
@@ -17009,8 +17014,9 @@ def patch_graphics_manager(manifest):
             ),
             "store_icon_missing_fallback": list(MOBILE_RENOVATION_USER_STORE_ICON_MISSING),
             "runtime_asset_export": (
-                "staged Images/MobileRenovations/store_icons/*.png; final executable "
-                "linkage STOP until authenticated; stock DrawItem fallback for missing mappings"
+                "linked Images/MobileRenovations/store_icons/*.png; the shared DrawItem "
+                "route draws each supplied RGBA icon at native scale and full final opacity; "
+                "stock fallback remains for missing mappings"
             ),
             "closed_curtain_descriptors": bathroom1_curtain_desc_manifest,
             "closed_curtain_route": (
@@ -29073,8 +29079,25 @@ def main():
     # install the former cheat-only Reject reroll route; native Accept,
     # Reject, and close behavior must remain untouched.
     patch_vf3_style_child_adoption_chooser(manifest)
-    patch_marriage_candidate_reroll(manifest)
-    patch_same_sex_marriage(manifest)
+    # Do not alter CDatingScene::HandleMessage. The proposal scene must keep
+    # the base-game candidate, Accept, Reject, close, and state-write bytes.
+    manifest["MarriageCandidateReroll"] = {
+        "status": "disabled to preserve the stock marriage proposal path",
+        "runtime_hooks_installed": False,
+        "reason": "The candidate-reroll hook is not linked; native proposal behavior remains unchanged.",
+    }
+    # Keep the proposal scene entirely native. The former dormant same-sex
+    # DatingScene/parent-selector hooks could still be enabled by an older
+    # save or package and crash the stock Accept path for a same-sex candidate.
+    # The old function remains available for historical source audits, but no
+    # new executable receives those proposal hooks.
+    manifest["SameSexMarriage"] = {
+        "status": "disabled to preserve the stock marriage proposal path",
+        "offline_patcher_setting": "same_sex_marriage",
+        "default": False,
+        "runtime_hooks_installed": False,
+        "reason": "The same-sex candidate, parent-selector, and romantic-action hooks are not linked; native candidate generation, Accept, Reject, close, and proposal state remain unchanged.",
+    }
     patch_force_successful_pregnancy_callsites(manifest)
     # The optional mortality curve is another exact-SHA dormant-byte hook.
     # Its zero .vf2mort default resumes the untouched stock mortality block.

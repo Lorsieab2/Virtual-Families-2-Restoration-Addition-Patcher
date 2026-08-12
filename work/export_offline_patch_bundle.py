@@ -514,10 +514,10 @@ SETTING_READINESS = {
         "reason": "Experimental/diagnostic selection is permitted; native runtime behavior and crash proof remain pending.",
     },
     "mobile_renovations": {
-        "status": "STOP",
-        "runtime_ready": False,
-        "linked": False,
-        "reason": "Native renovation/store-icon linkage is not authenticated for this manifest.",
+        "status": "ready_for_player_qa",
+        "runtime_ready": True,
+        "linked": True,
+        "reason": "The enabled renderer, House Renovations rows, descriptors, store-icon DrawItem route, and runtime payload are linked in the selected mobile-renovation executable. Live purchase/save/load QA remains a player gate.",
     },
     "mobile_sound_assets": {
         "status": "pending",
@@ -526,10 +526,10 @@ SETTING_READINESS = {
         "reason": "Audible parity remains pending runtime validation.",
     },
     "ai_generated_bathroom2_renovations": {
-        "status": "STOP",
-        "runtime_ready": False,
-        "linked": False,
-        "reason": "Bathroom 2 runtime linkage is not authenticated; staged assets remain disabled.",
+        "status": "ready_for_player_qa",
+        "runtime_ready": True,
+        "linked": True,
+        "reason": "The enabled Bathroom 2 renderer, synthetic House Renovations rows, per-color overlays, curtain selector, descriptors, and runtime payload are linked in the selected executable. Live purchase/save/load QA remains a player gate.",
     },
 }
 
@@ -973,6 +973,8 @@ def same_sex_marriage_post_asset_patches(
 ) -> list[dict[str, Any]]:
     contract = build_manifest_data.get("SameSexMarriage")
     if not isinstance(contract, dict):
+        return []
+    if contract.get("runtime_hooks_installed") is False:
         return []
     runtime_flag = contract.get("runtime_flag")
     if not isinstance(runtime_flag, dict):
@@ -3089,7 +3091,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- The six-page/72-item collection and Holiday-aware count require holiday_ornaments_collection. Brokerage 11% wording follows mobile_purchases.",
         "- Holiday Furniture goals 0x6D-0x7F use an exact-SHA .vf2goal post-asset byte enabled only with core_executable plus holiday_furniture.",
         "- Allow Older Pregnancies is a default-off exact-SHA post-asset toggle of the dormant .vf2preg byte; age-50+ failed attempts skip the stock cooldown deadline write. The same byte permits the native Next Generation flow when the oldest active living non-departed villager reaches age 60 while still requiring a surviving child. Native StartNextGeneration and its 30-record MakeRoomInTree rollover remain unchanged. The setting does not add another executable overlay dimension.",
-        "- Same-sex marriage hooks are installed with the .vf2same byte defaulted OFF. The in-game Enable Same-Sex Marriage Special Upgrade supplies the reversible toggle; Force Marriage Email remains a normal native proposal with opposite-sex rules while the toggle is OFF. No global post-asset same-sex enable is emitted.",
+        "- Same-sex marriage hooks are not linked. The proposal scene keeps native candidate generation, Accept, Reject, close, and proposal-state behavior so the Force Marriage Email route remains base-game identical.",
         "- Older Villager Mortality Curve is a default-off exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
         "- F5 enables and toggles the native debugger overlay; Up/Down change pages, F6 selects Waypoint Editor, F7 selects Light Source Editor, and F4 exits an editor. B153 recognizes VF2's internal key codes as well as Win32/SDL fallbacks.",
     ]

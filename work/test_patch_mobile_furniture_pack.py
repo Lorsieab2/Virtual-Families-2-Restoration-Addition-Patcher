@@ -2327,8 +2327,8 @@ class MobileRenovationArtTests(unittest.TestCase):
             self.assertEqual((row["pc_item"], row["mobile_item"], row["room"]), (pc_item, mobile_item, room))
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest().upper(), row["sha256"])
         self.assertEqual(patcher.MOBILE_RENOVATION_USER_STORE_ICON_MISSING, ())
-        self.assertEqual(patcher.MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS, "STOP")
-        self.assertIn("not authenticated", patcher.MOBILE_RENOVATION_USER_STORE_ICON_ROUTE)
+        self.assertEqual(patcher.MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS, "READY_FOR_PLAYER_QA")
+        self.assertIn("full final opacity", patcher.MOBILE_RENOVATION_USER_STORE_ICON_ROUTE)
         catalog_by_mobile_item = {
             style["mobile_item"]: style
             for style in patcher.MOBILE_RENOVATION_STYLE_CATALOG
@@ -2415,7 +2415,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertEqual(len(graphics["store_icon_descriptors"]), 15)
                 self.assertTrue(
                     all(
-                        row["status"] == "staged_only_stop_unverified_executable_link"
+                        row["status"] == "linked_payload_ready_for_player_qa"
                         for row in graphics["store_icon_descriptors"]
                     )
                 )
@@ -2974,7 +2974,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                             row["store_icon_file"],
                             f"MobileRenovations/store_icons/{user_icon['name']}",
                         )
-                        self.assertEqual(row["store_icon_status"], "verified_staged_mapping_only")
+                        self.assertEqual(row["store_icon_status"], "verified_linked_payload_ready_for_player_qa")
                     else:
                         self.assertIsNone(row["store_icon"])
                         self.assertIsNone(row["store_icon_file"])
@@ -3934,6 +3934,18 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertEqual(
                     (Path(tmp) / "Images" / filename).read_bytes(),
                     (patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / filename).read_bytes(),
+                )
+                self.assertEqual(
+                    (Path(tmp) / "Images" / "MobileRenovations" / "curtains" / filename).read_bytes(),
+                    (patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / filename).read_bytes(),
+                )
+                runtime_record = next(
+                    row for row in record["bathroom1_curtain_assets"]
+                    if row["name"] == filename
+                )
+                self.assertEqual(
+                    Path(runtime_record["runtime_target"]),
+                    Path(tmp) / "Images" / "MobileRenovations" / "curtains" / filename,
                 )
             self.assertFalse((Path(tmp) / "OptionalVisualMods" / "Mobile Renovations").exists())
 
@@ -10041,7 +10053,7 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
-    def test_reroll_precedes_same_sex_candidate_hook_in_every_layout(self):
+    def test_stock_proposal_path_excludes_same_sex_candidate_hook(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
         main = next(
@@ -10062,11 +10074,11 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
         ]
         self.assertEqual(
             calls,
-            [
-                "patch_marriage_candidate_reroll",
-                "patch_same_sex_marriage",
-            ],
+            [],
         )
+        self.assertIn('manifest["MarriageCandidateReroll"]', source)
+        self.assertIn('"runtime_hooks_installed": False', source)
+        self.assertIn('manifest["SameSexMarriage"]', source)
 
 
 class MarriageCandidateRerollContractTests(unittest.TestCase):

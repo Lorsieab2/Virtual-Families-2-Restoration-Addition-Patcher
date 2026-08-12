@@ -110,9 +110,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         for setting_id in (
             "behavior_patches",
             "mobile_furniture_behaviors",
-            "mobile_renovations",
             "mobile_sound_assets",
-            "ai_generated_bathroom2_renovations",
         ):
             with self.subTest(setting_id=setting_id):
                 readiness = by_id[setting_id]["readiness"]
@@ -120,6 +118,13 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 self.assertFalse(readiness["runtime_ready"])
                 self.assertFalse(readiness["linked"])
                 self.assertTrue(readiness["reason"])
+        for setting_id in ("mobile_renovations", "ai_generated_bathroom2_renovations"):
+            with self.subTest(setting_id=setting_id):
+                readiness = by_id[setting_id]["readiness"]
+                self.assertEqual(readiness["status"], "ready_for_player_qa")
+                self.assertTrue(readiness["runtime_ready"])
+                self.assertTrue(readiness["linked"])
+                self.assertIn("player", readiness["reason"])
         island_readiness = by_id["island_events"]["readiness"]
         self.assertEqual(island_readiness["status"], "experimental")
         self.assertEqual(island_readiness["selection_policy"], "experimental_diagnostic")
@@ -1374,8 +1379,19 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             (overlay_build / "Images" / "MobileRenovations").mkdir(parents=True)
             renovation_art = overlay_build / "Images" / "MobileRenovations" / "tp238_beige_kitchen.png"
             renovation_art.write_bytes(b"renovation-art")
+            curtain_dir = overlay_build / "Images" / "MobileRenovations" / "curtains"
+            curtain_dir.mkdir(parents=True)
+            curtain = curtain_dir / "shower_curtain_closed_black.png"
+            curtain.write_bytes(b"bathroom1-curtain")
             (overlay_build / "patch-manifest.json").write_text(
-                json.dumps({"generated_assets": [{"path": "Images/MobileRenovations/tp238_beige_kitchen.png"}]}),
+                json.dumps(
+                    {
+                        "generated_assets": [{"path": "Images/MobileRenovations/tp238_beige_kitchen.png"}],
+                        "mobile_renovation_art_sources": {
+                            "bathroom1_curtain_assets": [{"runtime_target": str(curtain)}],
+                        },
+                    }
+                ),
                 encoding="ascii",
             )
             vanilla = tmp_path / "Virtual Families 2.exe"
@@ -1404,6 +1420,13 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertEqual(art_record["requires"], ["core_executable", "mobile_renovations"])
             self.assertTrue(art_record["remove_when_disabled"])
             self.assertEqual((out / art_record["source_path"]).read_bytes(), renovation_art.read_bytes())
+            curtain_record = next(
+                row for row in manifest["asset_patches"]
+                if row["file_path"] == "Images/MobileRenovations/curtains/shower_curtain_closed_black.png"
+            )
+            self.assertEqual(curtain_record["requires"], ["core_executable", "mobile_renovations"])
+            self.assertTrue(curtain_record["remove_when_disabled"])
+            self.assertEqual((out / curtain_record["source_path"]).read_bytes(), curtain.read_bytes())
 
     def test_cheat_upgrades_mobile_renovations_combined_overlay_is_exported(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -2,7 +2,8 @@ param(
     [string]$Python = "",
     [string]$PreviousBuildDir = "",
     [string]$OutputDir = "",
-    [switch]$EnableCheatUpgrades
+    [switch]$EnableCheatUpgrades,
+    [switch]$EnableAIGeneratedBathroom2
 )
 
 $ErrorActionPreference = "Stop"
@@ -89,6 +90,7 @@ $environmentNames = @(
     "VF2_ENABLE_CHEAT_UPGRADES",
     "VF2_ENABLE_HOLIDAY_ORNAMENTS",
     "VF2_ENABLE_BEHAVIOR_PATCHES",
+    "VF2_ENABLE_AI_GENERATED_BATHROOM2",
     "VF2_ENABLE_DEBUGGER_FEATURES"
 )
 
@@ -107,6 +109,7 @@ try {
     $env:VF2_ENABLE_CHEAT_UPGRADES = if ($EnableCheatUpgrades) { "1" } else { "0" }
     $env:VF2_ENABLE_HOLIDAY_ORNAMENTS = "0"
     $env:VF2_ENABLE_BEHAVIOR_PATCHES = "0"
+    $env:VF2_ENABLE_AI_GENERATED_BATHROOM2 = if ($EnableAIGeneratedBathroom2) { "1" } else { "0" }
     $env:VF2_ENABLE_DEBUGGER_FEATURES = "0"
 
     & $pythonExe @pythonArgs $patcher *> $patchLog
@@ -136,6 +139,9 @@ try {
     }
     if ($manifest.ScrollingStoreScene.price_multiplier.enabled -ne [bool]$EnableCheatUpgrades) {
         throw "Generated Cheat Upgrades gate does not match -EnableCheatUpgrades"
+    }
+    if ($manifest.ai_generated_bathroom2_renovations.enabled -ne [bool]$EnableAIGeneratedBathroom2) {
+        throw "Generated Bathroom 2 gate does not match -EnableAIGeneratedBathroom2"
     }
 
     # The previous build is a complete runtime seed and can contain older
