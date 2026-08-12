@@ -36,6 +36,12 @@ EXECUTABLE_OVERLAY_SETTINGS = {
     "mobile_renovations",
     "mobile_sound_assets",
 }
+# Mobile sound files are a post-asset route toggle.  They share the runtime
+# flag validation path but do not have a linked executable overlay record.
+# Only settings in this set must be represented by the exact EXE matrix.
+EXECUTABLE_OVERLAY_MATRIX_SETTINGS = EXECUTABLE_OVERLAY_SETTINGS - {
+    "mobile_sound_assets",
+}
 RT_ICON = 3
 RT_GROUP_ICON = 14
 INVALID_INSTALL_MESSAGE = (
@@ -1836,7 +1842,7 @@ def select_exact_executable_overlays(
         present_overlay_settings = {
             setting
             for asset in group
-            for setting in EXECUTABLE_OVERLAY_SETTINGS
+            for setting in EXECUTABLE_OVERLAY_MATRIX_SETTINGS
             if setting in asset.requires
         }
         # A plain executable plus a post-asset/runtime-flag record is not an
@@ -1844,10 +1850,19 @@ def select_exact_executable_overlays(
         if not present_overlay_settings:
             selected.update(id(asset) for asset in group)
             continue
-        enabled_overlay_settings = {
-            setting for setting in EXECUTABLE_OVERLAY_SETTINGS
-            if setting in enabled_settings and setting in present_overlay_settings
+        requested_overlay_settings = {
+            setting for setting in EXECUTABLE_OVERLAY_MATRIX_SETTINGS
+            if setting in enabled_settings
         }
+        missing_overlay_settings = requested_overlay_settings - present_overlay_settings
+        if missing_overlay_settings:
+            labels = ", ".join(sorted(missing_overlay_settings))
+            raise PatchError(
+                "Executable overlay matrix is incomplete for the enabled feature set; "
+                f"no overlay records are present for {labels} at "
+                f"{group[0].output_file_path or group[0].file_path}."
+            )
+        enabled_overlay_settings = requested_overlay_settings
         wanted = {"core_executable", *enabled_overlay_settings}
         exact = [asset for asset in group if set(asset.requires) == wanted]
         if len(exact) != 1:

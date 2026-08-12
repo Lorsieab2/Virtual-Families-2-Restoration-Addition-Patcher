@@ -3261,6 +3261,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     holiday_ornaments_exe = Path(args.holiday_ornaments_exe).resolve() if args.holiday_ornaments_exe else None
     behavior_patches_exe = Path(args.behavior_patches_exe).resolve() if args.behavior_patches_exe else None
     mobile_renovations_exe = Path(args.mobile_renovations_exe).resolve() if args.mobile_renovations_exe else None
+    ai_generated_bathroom2_dir = (
+        Path(args.ai_generated_bathroom2_dir).resolve()
+        if args.ai_generated_bathroom2_dir
+        else None
+    )
     cheat_upgrades_mobile_renovations_exe = (
         Path(args.cheat_upgrades_mobile_renovations_exe).resolve()
         if args.cheat_upgrades_mobile_renovations_exe
@@ -3447,6 +3452,16 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             build_label,
         )
         append_unique_asset_records(asset_patches, renovation_asset_records)
+    if ai_generated_bathroom2_dir is not None:
+        bathroom2_asset_records = export_setting_overlay_asset_payloads(
+            ai_generated_bathroom2_dir,
+            base_payload,
+            bundle_dir,
+            "ai_generated_bathroom2_renovations",
+            args.asset_mode,
+            build_label,
+        )
+        append_unique_asset_records(asset_patches, bathroom2_asset_records)
     generation_locks_source = Path(args.generation_locks_dir).resolve() if args.generation_locks_dir else None
     forced_lock_records = generation_lock_asset_patches(build_dir, bundle_dir, generation_locks_source)
     if forced_lock_records:
@@ -3811,6 +3826,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--holiday-ornaments-exe", help="Optional fully linked EXE overlay to apply when holiday_ornaments_collection is enabled.")
     parser.add_argument("--behavior-patches-exe", help="Optional EXE overlay to apply when behavior_patches is enabled.")
     parser.add_argument("--mobile-renovations-exe", help="Optional EXE overlay to apply when mobile_renovations is enabled.")
+    parser.add_argument("--ai-generated-bathroom2-dir", help="Optional generated build directory containing the Bathroom 2 asset overlay.")
     parser.add_argument("--cheat-upgrades-mobile-renovations-exe", help="Combined optional EXE overlay to apply when cheat_upgrades and mobile_renovations are both enabled.")
     parser.add_argument("--island-events-cheat-upgrades-exe", help="Combined optional EXE overlay to apply when island_events and cheat_upgrades are both enabled.")
     parser.add_argument("--island-events-holiday-ornaments-exe", help="Combined optional EXE overlay to apply when island_events and holiday_ornaments_collection are both enabled.")

@@ -2752,6 +2752,33 @@ class OfflineVF2PatcherTests(unittest.TestCase):
         )
         self.assertEqual([asset.index for asset in selected], [3])
 
+    def test_rejects_incomplete_executable_overlay_matrix_instead_of_falling_back(self):
+        def overlay(index, requires):
+            return patcher_mod.AssetPatch(
+                index=index,
+                file_path="Virtual Families 2.exe",
+                output_file_path="Virtual Families 2 - Modded BUnit.exe",
+                source_path=f"payload/overlay-{index}.exe",
+                source_sha256="0" * 64,
+                source_size=1,
+                expected_target_sha256="1" * 64,
+                expected_target_pe_structures=(),
+                expected_target_size=1,
+                allow_missing_target=False,
+                overwrite_existing=True,
+                note="overlay",
+                requires=tuple(requires),
+            )
+
+        with self.assertRaisesRegex(patcher_mod.PatchError, "matrix is incomplete"):
+            patcher_mod.select_exact_executable_overlays(
+                [
+                    overlay(0, ["core_executable"]),
+                    overlay(1, ["core_executable", "mobile_renovations"]),
+                ],
+                {"core_executable", "cheat_upgrades", "mobile_renovations"},
+            )
+
     def test_rejects_mixed_active_restore_same_exe_target(self):
         def exe(index, source, *, restore=False, requires=("core_executable",)):
             return patcher_mod.AssetPatch(

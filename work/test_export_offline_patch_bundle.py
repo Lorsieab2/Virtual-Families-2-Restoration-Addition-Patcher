@@ -326,6 +326,11 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             exporter.OUTPUT_ONLY_REMOVABLE_ASSET_SETTINGS,
         )
 
+    def test_ai_bathroom2_asset_source_option_is_exported_separately_from_exe_matrix(self):
+        source = EXPORTER.read_text(encoding="utf-8")
+        self.assertIn("--ai-generated-bathroom2-dir", source)
+        self.assertIn('"ai_generated_bathroom2_renovations"', source)
+
     def test_mobile_sound_setting_is_default_off_and_core_gated(self):
         settings_by_id = {row["id"]: row for row in exporter.SETTINGS}
         self.assertEqual(settings_by_id["mobile_sound_assets"]["category"], "optional")
