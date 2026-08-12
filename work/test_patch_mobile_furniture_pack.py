@@ -44,6 +44,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             if line.strip().lower().startswith('link @"%link_rsp%"')
         )
         self.assertNotIn(object_path.lower(), link_line.lower())
+        self.assertIn(
+            "/INCLUDE:?TryToMakeBaby@theMainScene@@IAEXXZ",
+            link_line,
+        )
 
         def consumed_lines(source_lines):
             return [
@@ -10053,7 +10057,7 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
-    def test_stock_proposal_path_excludes_same_sex_candidate_hook(self):
+    def test_same_sex_candidate_hook_is_installed_by_main_without_broad_proposal_hooks(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
         main = next(
@@ -10072,12 +10076,9 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
                 "patch_same_sex_marriage",
             }
         ]
-        self.assertEqual(
-            calls,
-            [],
-        )
+        self.assertEqual(calls, ["patch_same_sex_marriage"])
         self.assertIn('manifest["MarriageCandidateReroll"]', source)
-        self.assertIn('"runtime_hooks_installed": False', source)
+        self.assertIn('"runtime_hooks_installed": True', source)
         self.assertIn('manifest["SameSexMarriage"]', source)
 
 
@@ -10270,11 +10271,12 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 dating = CoffObject(temp_root / "DatingScene.obj")
                 handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
                 section = dating.section(handle.section)
-                for hook_offset in (0x85, 0xEB, 0x1BC):
-                    self.assertEqual(
-                        dating.buf[section.raw_ptr + handle.value + hook_offset],
-                        0xE9,
-                    )
+                self.assertEqual(dating.buf[section.raw_ptr + handle.value + 0x85], 0xE9)
+                self.assertNotEqual(dating.buf[section.raw_ptr + handle.value + 0xEB], 0xE9)
+                self.assertEqual(
+                    bytes(dating.buf[section.raw_ptr + handle.value + 0x1BC:section.raw_ptr + handle.value + 0x1C8]),
+                    bytes.fromhex("57 56 B9 00 00 00 00 E8 00 00 00 00"),
+                )
 
                 reroll = manifest["MarriageCandidateReroll"]
                 self.assertEqual(reroll["runtime_flag"]["source_section"], ".vf2rero")
@@ -10282,25 +10284,12 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
 
                 same_sex = manifest["SameSexMarriage"]
                 self.assertFalse(same_sex["default"])
-                parent = same_sex["update_parents_guard"]
-                parent_cave = int(parent["trampoline"], 16)
-                parent_raw = section.raw_ptr + parent_cave
                 self.assertEqual(
-                    bytes(dating.buf[parent_raw:parent_raw + 7]),
-                    bytes.fromhex("8B 45 DC 85 C0 74 31"),
+                    same_sex["candidate_gender"]["hook_offset"],
+                    "+0x9B in clean DatingScene.obj",
                 )
-                self.assertEqual(
-                    bytes(dating.buf[parent_raw + 44:parent_raw + 51]),
-                    bytes.fromhex("C6 80 84 BB 01 00 00"),
-                )
-
-                accept = same_sex["force_marriage_email"]["accept_safety"]
-                accept_cave = int(accept["trampoline"], 16)
-                accept_raw = section.raw_ptr + accept_cave
-                self.assertEqual(
-                    bytes(dating.buf[accept_raw:accept_raw + 4]),
-                    bytes.fromhex("85 C0 75 05"),
-                )
+                self.assertNotIn("update_parents_guard", same_sex)
+                self.assertNotIn("accept_safety", same_sex["force_marriage_email"])
         finally:
             patcher.PATCHED = old_patched
 
@@ -10413,32 +10402,16 @@ class DivorceSpouseContractTests(unittest.TestCase):
 
 
 class SameSexMarriagePatchTests(unittest.TestCase):
-    def test_cheat_gender_mapping_and_accept_guard_are_native_and_cheat_only(self):
+    def test_candidate_flip_is_post_spawn_and_accept_path_is_stock(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
-        helper_start = source.index(
-            "extern \"C\" int __fastcall VF2MarriageCandidateGender"
-        )
-        helper = source[helper_start:source.index(
-            "extern \"C\" CVillager *__fastcall VF2GetMarriageRole",
-            helper_start,
-        )]
-        self.assertIn("VF2SameSexMarriageToggleActive()", helper)
-        self.assertIn("return currentGender;", helper)
-        self.assertIn("return currentGender == 1 ? 0 : 1;", helper)
-        self.assertNotIn("GetRandom(2)", helper)
-        self.assertIn("accept_hook = handle.value + 0xEB", source)
-        self.assertIn("handle.value + 0xF4", source)
-        self.assertIn("expected_accept_write = bytes.fromhex", source)
+        self.assertIn('gender_hook = generate.value + 0x9B', source)
+        self.assertIn('expected_post_spawn = bytes.fromhex("8D 8F 64 6A 00 00")', source)
+        self.assertIn('candidate_field": "CVillager+0x6A58"', source)
+        self.assertIn('enabled": "flip the spawned candidate value 0 <-> 1"', source)
+        self.assertNotIn('gender_hook = generate.value + 0x7B', source[:source.index('def patch_same_sex_marriage_legacy')])
+        self.assertNotIn('parent_guard_manifest', source[:source.index('def patch_same_sex_marriage_legacy')])
+        self.assertNotIn('selector_hooks', source[:source.index('def patch_same_sex_marriage_legacy')])
         self.assertIn("VF2QueueMarriageProposal()", source)
-        self.assertNotIn("kVF2CheatMarriageProposalFemale", source)
-        self.assertNotIn("kVF2CheatMarriageProposalMale", source)
-        self.assertNotIn("kVF2CheatMarriageProposalFemale", source)
-        self.assertNotIn("kVF2CheatMarriageProposalMale", source)
-        self.assertIn("accept_safety", source)
-        self.assertIn("parent_guard_manifest", source)
-        self.assertIn("expected_parent_call", source)
-        self.assertIn("ESI == EDI", source)
-        self.assertIn('"accepted_candidate_local": "[EBP-0x24]"', source)
 
     def test_force_email_has_no_scene_override_and_accept_guard_is_mode_independent(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
@@ -10474,7 +10447,7 @@ class SameSexMarriagePatchTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
-    def test_accept_guard_preserves_stock_write_and_continuation_for_valid_candidate(self):
+    def test_post_spawn_and_native_romantic_hooks_are_authenticated(self):
         old_patched = patcher.PATCHED
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -10484,30 +10457,24 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 patcher.PATCHED = temp_root
                 manifest = {}
                 patcher.patch_same_sex_marriage(manifest)
-                contract = manifest["SameSexMarriage"]["force_marriage_email"]["accept_safety"]
+                contract = manifest["SameSexMarriage"]
                 dating = CoffObject(temp_root / "DatingScene.obj")
                 handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
                 section = dating.section(handle.section)
-                cave = int(contract["trampoline"], 16)
-                raw = section.raw_ptr + cave
-                self.assertEqual(bytes(dating.buf[raw:raw + 5]), b"\x85\xC0\x75\x05\xE9")
-                self.assertEqual(
-                    bytes(dating.buf[raw + 9:raw + 18]),
-                    bytes.fromhex("8B C8 C6 80 84 BB 01 00 01"),
-                )
-                self.assertEqual(dating.buf[raw + 18], 0xE9)
-                self.assertEqual(
-                    cave + 9 + struct.unpack_from("<i", dating.buf, raw + 5)[0],
-                    handle.value + 0xAA,
-                )
-                self.assertEqual(
-                    cave + 23 + struct.unpack_from("<i", dating.buf, raw + 19)[0],
-                    handle.value + 0xF4,
-                )
+                self.assertEqual(bytes(dating.buf[section.raw_ptr + handle.value + 0x94:section.raw_ptr + handle.value + 0xAA]), bytes.fromhex("8B 88 B8 5C 02 00 89 88 BC 5C 02 00 C7 80 B8 5C 02 00 00 00 00 00"))
+                self.assertEqual(contract["candidate_gender"]["hook_offset"], "+0x9B in clean DatingScene.obj")
+                self.assertEqual(contract["force_marriage_email"]["scene_behavior"], "stock Accept, Reject, close, proposal state, parent storage, and candidate selectors")
+
+                main = CoffObject(temp_root / "theMainScene.obj")
+                drop = main.symbol("?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z")
+                drop_sec = main.section(drop.section)
+                self.assertEqual(main.buf[drop_sec.raw_ptr + drop.value + 0x218], 0xE9)
+                self.assertEqual(contract["romantic_action"]["native_private_time_offset"], "+0x26E")
+                self.assertEqual(contract["romantic_action"]["unconditional_gender_branch_patch"], False)
         finally:
             patcher.PATCHED = old_patched
 
-    def test_update_parents_guard_uses_authenticated_datingscene_callsite(self):
+    def test_proposal_parent_and_selector_objects_are_untouched(self):
         old_patched = patcher.PATCHED
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -10517,70 +10484,23 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 patcher.PATCHED = temp_root
                 manifest = {}
                 patcher.patch_same_sex_marriage(manifest)
-
-                guard = manifest["SameSexMarriage"]["update_parents_guard"]
-                self.assertEqual(guard["native_valid_sequence"], "57 56 B9 <FamilyTree> E8 <UpdateParents>")
-                self.assertIn("CVillager+0x1BB84", guard["invalid_route"])
-                self.assertIn("HandleMessage +0x222", guard["invalid_route"])
-                self.assertEqual(guard["accepted_candidate_local"], "[EBP-0x24]")
-                self.assertIn(
-                    "accepted candidate is neither ESI nor EDI",
-                    guard["invalid_parent_checks"],
-                )
-                self.assertFalse(guard["family_tree_object_touched"])
 
                 dating = CoffObject(temp_root / "DatingScene.obj")
                 handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
                 section = dating.section(handle.section)
-                hook = handle.value + 0x1BC
-                raw = section.raw_ptr + hook
-                self.assertEqual(bytes(dating.buf[raw:raw + 12])[0], 0xE9)
-                self.assertEqual(bytes(dating.buf[raw + 5:raw + 12]), b"\x90" * 7)
-
-                cave = int(guard["trampoline"], 16)
-                cave_raw = section.raw_ptr + cave
                 self.assertEqual(
-                    bytes(dating.buf[cave_raw:cave_raw + 27]),
-                    bytes.fromhex(
-                        "8B 45 DC 85 C0 74 31 85 F6 74 21 85 FF 74 1D "
-                        "3B FE 74 19 3B F0 74 04 3B F8 75 11"
-                    ),
+                    bytes(dating.buf[section.raw_ptr + handle.value + 0x1BC:section.raw_ptr + handle.value + 0x1C8]),
+                    bytes.fromhex("57 56 B9 00 00 00 00 E8 00 00 00 00"),
                 )
-                self.assertEqual(
-                    bytes(dating.buf[cave_raw + 27:cave_raw + 39]),
-                    b"\x57\x56\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00",
-                )
-                self.assertEqual(
-                    bytes(dating.buf[cave_raw + 44:cave_raw + 51]),
-                    bytes.fromhex("C6 80 84 BB 01 00 00"),
-                )
-                self.assertEqual(dating.buf[cave_raw + 51], 0xE9)
-                self.assertEqual(
-                    cave + 56 + struct.unpack_from("<i", dating.buf, cave_raw + 52)[0],
-                    handle.value + 0x222,
-                )
-                self.assertEqual(dating.buf[cave_raw + 56], 0xE9)
-                self.assertEqual(
-                    cave + 61 + struct.unpack_from("<i", dating.buf, cave_raw + 57)[0],
-                    handle.value + 0x222,
-                )
-                relocation_names = []
-                relocation_vaddrs = set()
-                for index in range(section.nreloc):
-                    vaddr, symbol_index, _rtype = struct.unpack_from(
-                        "<IIH", dating.buf, section.reloc_ptr + index * 10
-                    )
-                    relocation_vaddrs.add(vaddr)
-                    if vaddr in (cave + 30, cave + 35):
-                        relocation_names.append(dating.symbol_by_index[symbol_index].name)
-                self.assertIn("?FamilyTree@@3VCFamilyTree@@A", relocation_names)
-                self.assertIn("?UpdateParents@CFamilyTree@@QAE_NAAVCVillager@@0@Z", relocation_names)
-                self.assertNotIn(hook + 3, relocation_vaddrs)
-                self.assertNotIn(hook + 8, relocation_vaddrs)
+                manager = CoffObject(temp_root / "VillagerManager.obj")
+                for name in ("?GetMatriarch@CVillagerManager@@QAEPAVCVillager@@XZ", "?GetPatriarch@CVillagerManager@@QAEPAVCVillager@@XZ"):
+                    function = manager.symbol(name)
+                    manager_section = manager.section(function.section)
+                    self.assertEqual(manager.buf[manager_section.raw_ptr + function.value], 0x53)
         finally:
             patcher.PATCHED = old_patched
 
-    def test_private_romantic_adult_time_routes_spouses_by_gender_and_capacity(self):
+    def test_private_romantic_adult_time_routes_only_enabled_same_sex_spouses(self):
         old_patched = patcher.PATCHED
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -10591,12 +10511,9 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 manifest = {}
                 patcher.patch_same_sex_marriage(manifest)
 
-                gate = manifest["SameSexMarriage"]["romantic_action_gate"]
-                self.assertEqual(gate["gender_branch_stock"], "74 3C")
-                self.assertEqual(gate["gender_branch_patched"], "EB 3C")
-                self.assertEqual(gate["classification"]["same_sex_spouse"], "1 -> +0x26E")
-                self.assertEqual(gate["classification"]["opposite_sex_spouse"], "2 -> +0x25B")
-                self.assertEqual(gate["classification"]["non_spouse_or_invalid"], "0 -> +0x22B")
+                gate = manifest["SameSexMarriage"]["romantic_action"]
+                self.assertEqual(gate["native_private_time_offset"], "+0x26E")
+                self.assertFalse(gate["unconditional_gender_branch_patch"])
 
                 main = CoffObject(temp_root / "theMainScene.obj")
                 drop = main.symbol(
@@ -10604,38 +10521,37 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 )
                 section = main.section(drop.section)
                 data = bytes(main.buf[section.raw_ptr:section.raw_ptr + section.raw_size])
-                self.assertEqual(data[drop.value + 0x218:drop.value + 0x21A], b"\xEB\x3C")
-                # The native six-child capacity branch remains intact; the
-                # patched gender branch classifies the already-married pair
-                # instead of rejecting opposite-sex spouses at capacity.
+                self.assertEqual(data[drop.value + 0x218], 0xE9)
+                # The native six-child capacity branch remains intact.
                 self.assertEqual(data[drop.value + 0x1F2:drop.value + 0x1F4], b"\x75\x62")
-                self.assertEqual(data[drop.value + 0x256], 0xE9)
+                self.assertEqual(data[drop.value + 0x218], 0xE9)
                 cave = int(gate["trampoline"], 16)
-                self.assertEqual(gate["trampoline_size"], 32)
+                self.assertEqual(gate["trampoline_size"], 28)
                 self.assertEqual(
-                    data[cave:cave + 17],
-                    bytes.fromhex("56 8B CF E8 00 00 00 00 84 C0 74 0F 83 F8 01 74 05"),
+                    data[cave:cave + 16],
+                    bytes.fromhex("9C 56 8B CF E8 00 00 00 00 83 F8 01 75 06 9D E9"),
                 )
+                self.assertEqual(data[cave + 20:cave + 23], bytes.fromhex("9D 74 3C"))
                 self.assertEqual(gate["helper"], patcher.ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL)
                 targets = {}
                 for index in range(section.nreloc):
                     vaddr, symbol_index, relocation_type = struct.unpack_from(
                         "<IIH", main.buf, section.reloc_ptr + index * 10
                     )
-                    if vaddr == cave + 4:
+                    if vaddr == cave + 5:
                         targets[vaddr] = (
                             main.symbol_by_index[symbol_index].name,
                             relocation_type,
                         )
                 self.assertEqual(
-                    targets[cave + 4],
+                    targets[cave + 5],
                     (patcher.ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL, patcher.IMAGE_REL_I386_REL32),
                 )
                 helper = Path(patcher.__file__).read_text(encoding="utf-8")
                 self.assertIn("extern \"C\" int __fastcall VF2ClassifyRomanticSpouseDrop", helper)
-                self.assertIn("if (!dropped || !target) return 0;", helper)
+                self.assertIn("if (!dropped || !target || !VF2SameSexMarriageToggleActive()) return 0;", helper)
                 self.assertIn("if (!VF2MarriagePair(first, second)) return 0;", helper)
-                self.assertIn("return firstGender == secondGender ? 1 : 2;", helper)
+                self.assertIn("return firstGender == secondGender ? 1 : 0;", helper)
                 self.assertIn("if (!((dropped == first && target == second)", helper)
 
                 pristine = CoffObject(patcher.SRC_OBJS / "theMainScene.obj")

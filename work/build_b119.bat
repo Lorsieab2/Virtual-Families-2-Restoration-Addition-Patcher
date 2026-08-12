@@ -18,5 +18,8 @@ if errorlevel 1 exit /b %errorlevel%
 for /f %%C in ('findstr /L /C:"%MOBILE_RENOVATION_OBJ%" "%LINK_RSP%" ^| find /C /V ""') do set "MOBILE_RENOVATION_COUNT=%%C"
 if not "%MOBILE_RENOVATION_COUNT%"=="1" exit /b 1
 
-link @"%LINK_RSP%" "work\patched_mobile_furniture_pack_objs\vf2_debug_features.obj" /OUT:"%VF2_BUILD_OUT%\%VF2_OUTPUT_EXE%"
+rem Keep the protected native entry point alive.  The same-sex marriage guard
+rem is installed at TryToMakeBaby's entry, but that method has no ordinary
+rem linker reference in some stripped builds and /OPT:REF can discard it.
+link @"%LINK_RSP%" "work\patched_mobile_furniture_pack_objs\vf2_debug_features.obj" /INCLUDE:?TryToMakeBaby@theMainScene@@IAEXXZ /OUT:"%VF2_BUILD_OUT%\%VF2_OUTPUT_EXE%"
 exit /b %errorlevel%

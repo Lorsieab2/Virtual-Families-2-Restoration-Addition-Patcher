@@ -347,7 +347,7 @@ SETTINGS = [
     {
         "id": "same_sex_marriage",
         "label": "Allow Same-Sex Marriage",
-        "description": "Optional patch: installs the dormant native marriage hooks with same-sex mode OFF. Use the in-game Enable Same-Sex Marriage Special Upgrade to enable or disable same-sex candidates; the normal Force Marriage Email row keeps native opposite-sex rules while it is OFF.",
+        "description": "Optional patch: installs the default-off same-sex marriage support. When the in-game Enable Same-Sex Marriage Special Upgrade is enabled, only the spawned marriage candidate's gender field is flipped; the native proposal scene remains intact. Same-sex spouses retain the native private-romantic-time sequence, never become pregnant, and do not take refusal or argument outcomes.",
         "default": False,
         "category": "optional",
     },
@@ -3091,7 +3091,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- The six-page/72-item collection and Holiday-aware count require holiday_ornaments_collection. Brokerage 11% wording follows mobile_purchases.",
         "- Holiday Furniture goals 0x6D-0x7F use an exact-SHA .vf2goal post-asset byte enabled only with core_executable plus holiday_furniture.",
         "- Allow Older Pregnancies is a default-off exact-SHA post-asset toggle of the dormant .vf2preg byte; age-50+ failed attempts skip the stock cooldown deadline write. The same byte permits the native Next Generation flow when the oldest active living non-departed villager reaches age 60 while still requiring a surviving child. Native StartNextGeneration and its 30-record MakeRoomInTree rollover remain unchanged. The setting does not add another executable overlay dimension.",
-        "- Same-sex marriage hooks are not linked. The proposal scene keeps native candidate generation, Accept, Reject, close, and proposal-state behavior so the Force Marriage Email route remains base-game identical.",
+        "- Same-sex marriage support is linked behind the default-zero .vf2same byte. When enabled, only the post-spawn marriage candidate gender field is flipped; the proposal scene keeps native Accept, Reject, close, proposal-state, parent-storage, and selector behavior. Same-sex spouse drops use the native private-romantic-time sequence, TryToMakeBaby returns before pregnancy, and refusal/argument routes are not used for the established same-sex spouse pair.",
         "- Older Villager Mortality Curve is a default-off exact-SHA post-asset toggle of the dormant .vf2mort byte; flag-off resumes the stock old-age block and it does not add another executable overlay dimension.",
         "- F5 enables and toggles the native debugger overlay; Up/Down change pages, F6 selects Waypoint Editor, F7 selects Light Source Editor, and F4 exits an editor. B153 recognizes VF2's internal key codes as well as Win32/SDL fallbacks.",
     ]

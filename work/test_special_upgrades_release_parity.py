@@ -533,14 +533,16 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertIn("gVF2SameSexMarriage = 0;", same_sex_toggle)
         self.assertNotIn("InventoryManager.TakeOne((EInventoryItem)itemId);", same_sex_toggle)
         self.assertNotIn("InventoryManager.ReturnOne((EInventoryItem)itemId);", same_sex_toggle)
-        candidate_gender = self._function_block(
+        same_sex = self._function_block(
             self.helper,
-            "extern \"C\" int __fastcall VF2MarriageCandidateGender",
-            "extern \"C\" CVillager *__fastcall VF2GetMarriageRole",
+            "static bool VF2IsSameSexMarriage()",
+            "extern \"C\" void __cdecl VF2StoreTryForBabyCooldownMaybe",
         )
-        self.assertIn("return currentGender;", candidate_gender)
-        self.assertIn("return currentGender == 1 ? 0 : 1;", candidate_gender)
-        self.assertNotIn("GetRandom(2)", candidate_gender)
+        self.assertIn("VF2SameSexMarriageToggleActive()", same_sex)
+        self.assertIn("extern \"C\" int __fastcall VF2ClassifyRomanticSpouseDrop", same_sex)
+        self.assertIn("return firstGender == secondGender ? 1 : 0;", same_sex)
+        self.assertIn("extern \"C\" bool __cdecl VF2SkipSameSexTryToMakeBaby()", same_sex)
+        self.assertIn("return VF2IsSameSexMarriage();", same_sex)
         self.assertNotIn("VF2MaybeAddCheatMarriageExit", self.helper)
         self.assertNotIn("VF2HandleCheatMarriageProposalExit", self.helper)
         self.assertIn("eEmailMessageMarriageProposal", self.helper)
