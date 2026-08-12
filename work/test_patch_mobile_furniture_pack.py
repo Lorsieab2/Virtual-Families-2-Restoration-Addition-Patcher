@@ -2660,11 +2660,11 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertIn("!kVF2EnableMobileRenovations && !kVF2EnableAIBathroom2", helper)
                 self.assertIn("VF2DrawAIBathroom2(graphics, worldX, worldY);", helper)
                 self.assertIn(
-                    "kVF2AIBathroom2WorldX[5] = {555, 659, 659, 656, 556};",
+                    "kVF2AIBathroom2AnchorX = 949;",
                     helper,
                 )
                 self.assertIn(
-                    "kVF2AIBathroom2WorldY[5] = {137, 137, 145, 145, 136};",
+                    "kVF2AIBathroom2AnchorY = 145;",
                     helper,
                 )
         finally:
@@ -3055,7 +3055,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertEqual(
                     patcher.MOBILE_RENOVATION_USER_STORE_ICON_COUNT
                     + len(patcher.AI_BATHROOM2_STORE_ICON_ASSETS),
-                    16,
+                    20,
                 )
                 self.assertIn("return image;", helper)
         finally:
@@ -3245,10 +3245,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                 for filename in patcher.AI_BATHROOM2_SOURCE_FILES:
                     source = patcher.AI_BATHROOM2_SOURCE_DIR / filename
                     runtime = patcher.OUT / "Images" / "AIGeneratedBathroom2" / filename
-                    self.assertEqual(runtime.read_bytes(), source.read_bytes())
-                    self.assertEqual(patcher.read_png_size(runtime), patcher.read_png_size(source))
+                    self.assertNotEqual(runtime.read_bytes(), source.read_bytes())
+                    self.assertEqual(patcher.read_png_size(runtime), patcher.AI_BATHROOM2_TARGET_SIZE)
                     self.assertEqual(
-                        hashlib.sha256(runtime.read_bytes()).hexdigest().upper(),
+                        hashlib.sha256(source.read_bytes()).hexdigest().upper(),
                         patcher.AI_BATHROOM2_SOURCE_HASHES[filename],
                     )
                 curtain_manifest = {}
@@ -3264,10 +3264,11 @@ class MobileRenovationArtTests(unittest.TestCase):
                 )
                 geometry = renderer_manifest["mobile_renovation_renderer"]["geometry"]["bathroom2"]
                 self.assertEqual(
-                    geometry["world_top_lefts"],
-                    {color: list(origin) for color, origin in patcher.AI_BATHROOM2_WORLD_TOP_LEFTS.items()},
+                    geometry["origin"],
+                    list(patcher.AI_BATHROOM2_ANCHOR),
                 )
-                self.assertTrue(geometry["immutable_source_art"])
+                self.assertEqual(geometry["bounds"], list(patcher.AI_BATHROOM2_TARGET_SIZE))
+                self.assertTrue(geometry["all_color_variants_share_origin_and_bounds"])
         finally:
             patcher.PATCHED = old_patched
             patcher.OUT = old_out
@@ -3343,7 +3344,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                     "VF2ResolveBathroom1ClosedCurtainGridImpl", source
                 )
                 self.assertIn(
-                    "unsigned char vf2_curtain_prefix[0x1924];", source
+                    "unsigned char vf2_curtain_prefix[0x1910];", source
                 )
                 hook = manifest["CDecal"]["bathroom1_closed_curtain_grid_hook"]
                 self.assertEqual(hook["offset"], "0x570")
@@ -3374,6 +3375,60 @@ class MobileRenovationArtTests(unittest.TestCase):
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
 
+    def test_bathroom2_refreshdecals_resolves_cached_grid_before_adddecal(self):
+        old_patched = patcher.PATCHED
+        old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
+        old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                patcher.PATCHED = root
+                shutil.copy2(patcher.SRC_OBJS / "Decal.obj", patcher.PATCHED / "Decal.obj")
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").write_text(
+                    "", encoding="ascii"
+                )
+                patcher.write_outfit_store_helpers({})
+                manifest = {}
+                patcher.patch_bathroom1_curtain_decal(manifest)
+                source = (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").read_text(
+                    encoding="ascii"
+                )
+                self.assertIn("vf2_curtain_prefix[0x1910]", source)
+                self.assertIn("vf2_bathroom1_gap[0x10]", source)
+                self.assertIn("VF2ResolveBathroom2ClosedCurtainGridImpl", source)
+                hook = manifest["CDecal"]["bathroom2_closed_curtain_grid_hook"]
+                self.assertEqual(hook["function"], "?RefreshDecals@CDecal@@QAEXXZ")
+                self.assertEqual(hook["offset"], "0xb0b")
+                self.assertEqual(hook["cached_grid_offset"], "0x1910")
+                obj = CoffObject(patcher.PATCHED / "Decal.obj")
+                refresh_decals = obj.symbol("?RefreshDecals@CDecal@@QAEXXZ")
+                sec = obj.section(refresh_decals.section)
+                raw_offset = sec.raw_ptr + refresh_decals.value + 0xB0B
+                self.assertEqual(
+                    bytes(obj.buf[raw_offset : raw_offset + 6]),
+                    b"\xE8\x00\x00\x00\x00\x50",
+                )
+                reloc_targets = []
+                for index in range(sec.nreloc):
+                    vaddr, symbol_index, relocation_type = struct.unpack_from(
+                        "<IIH", obj.buf, sec.reloc_ptr + index * 10
+                    )
+                    if (
+                        vaddr == refresh_decals.value + 0xB0C
+                        and relocation_type == patcher.IMAGE_REL_I386_REL32
+                    ):
+                        reloc_targets.append(obj.symbol_by_index[symbol_index].name)
+                self.assertEqual(
+                    reloc_targets,
+                    ["_VF2ResolveBathroom2ClosedCurtainGrid"],
+                )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
+
     def test_bathroom1_and_bathroom2_geometry_is_independent_and_color_invariant(self):
         old_patched = patcher.PATCHED
         old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
@@ -3390,19 +3445,19 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertEqual(geometry["bathroom1"]["origin"], [563, 1287])
                 self.assertEqual(geometry["bathroom1"]["bounds"], [603, 363])
                 self.assertEqual(
-                    geometry["bathroom2"]["world_top_lefts"],
-                    {color: list(origin) for color, origin in patcher.AI_BATHROOM2_WORLD_TOP_LEFTS.items()},
+                    geometry["bathroom2"]["origin"],
+                    list(patcher.AI_BATHROOM2_ANCHOR),
                 )
                 self.assertEqual(
-                    geometry["bathroom2"]["bounds_by_color"],
-                    {color: list(size) for color, size in patcher.AI_BATHROOM2_OVERLAY_SIZES.items()},
+                    geometry["bathroom2"]["bounds"],
+                    list(patcher.AI_BATHROOM2_TARGET_SIZE),
                 )
                 self.assertTrue(geometry["bathroom1"]["translation_only"])
                 self.assertTrue(geometry["bathroom2"]["translation_only"])
-                self.assertTrue(geometry["bathroom2"]["immutable_source_art"])
+                self.assertTrue(geometry["bathroom2"]["all_color_variants_share_origin_and_bounds"])
                 self.assertNotEqual(
                     geometry["bathroom1"]["origin"],
-                    geometry["bathroom2"]["world_top_lefts"]["black"],
+                    geometry["bathroom2"]["origin"],
                 )
         finally:
             patcher.PATCHED = old_patched
@@ -3849,15 +3904,9 @@ class MobileRenovationArtTests(unittest.TestCase):
                     contract["disclaimer"],
                     patcher.AI_BATHROOM2_DISCLAIMER,
                 )
-                self.assertEqual(
-                    contract["overlay_sizes"],
-                    {color: list(size) for color, size in patcher.AI_BATHROOM2_OVERLAY_SIZES.items()},
-                )
+                self.assertEqual(contract["bounds"], list(patcher.AI_BATHROOM2_TARGET_SIZE))
                 self.assertEqual(contract["native_map_area"], [13, 7])
-                self.assertEqual(
-                    contract["world_top_lefts"],
-                    {color: list(origin) for color, origin in patcher.AI_BATHROOM2_WORLD_TOP_LEFTS.items()},
-                )
+                self.assertEqual(contract["anchor"], list(patcher.AI_BATHROOM2_ANCHOR))
                 self.assertEqual(len(contract["source_art"]), 5)
                 self.assertEqual(len(contract["normalized_art"]), 5)
                 self.assertEqual(
@@ -3894,10 +3943,17 @@ class MobileRenovationArtTests(unittest.TestCase):
                 for row in contract["normalized_art"]:
                     path = optional_root / row["name"]
                     source = patcher.AI_BATHROOM2_SOURCE_DIR / row["name"]
-                    self.assertEqual(path.read_bytes(), source.read_bytes())
+                    self.assertNotEqual(path.read_bytes(), source.read_bytes())
                     self.assertEqual(list(patcher.read_png_size(path)), row["target_size"])
-                    self.assertEqual(row["normalized_sha256"], row["source_sha256"])
-                    self.assertEqual(row["copy_mode"], "byte_exact_source_copy_no_crop_resize_or_reencode")
+                    self.assertEqual(tuple(row["target_size"]), patcher.AI_BATHROOM2_TARGET_SIZE)
+                    self.assertEqual(
+                        row["normalized_sha256"],
+                        hashlib.sha256(path.read_bytes()).hexdigest().upper(),
+                    )
+                    self.assertEqual(
+                        row["copy_mode"],
+                        "RGBA_LANCZOS_resize_to_vanilla_bathroom2_canvas",
+                    )
                 self.assertFalse((Path(tmp) / "Images" / "AIGeneratedBathroom2").exists())
         finally:
             patcher.OUT = old_out
@@ -3946,18 +4002,21 @@ class MobileRenovationArtTests(unittest.TestCase):
         contract = json.loads(contract_path.read_text(encoding="utf-8"))
         self.assertEqual(contract["label"], patcher.AI_BATHROOM2_LABEL)
         self.assertFalse(contract["default_enabled"])
-        self.assertIsNone(contract["normalization"]["target_size"])
+        self.assertEqual(
+            contract["normalization"]["target_size"],
+            list(patcher.AI_BATHROOM2_TARGET_SIZE),
+        )
         self.assertEqual(contract["placement"]["native_map_area"], [13, 7])
         self.assertEqual(
-            contract["placement"]["world_top_lefts"],
-            {color: list(origin) for color, origin in patcher.AI_BATHROOM2_WORLD_TOP_LEFTS.items()},
+            contract["placement"]["anchor"],
+            list(patcher.AI_BATHROOM2_ANCHOR),
         )
         self.assertEqual(
-            contract["placement"]["bounds_by_color"],
-            {color: list(size) for color, size in patcher.AI_BATHROOM2_OVERLAY_SIZES.items()},
+            contract["placement"]["bounds"],
+            list(patcher.AI_BATHROOM2_TARGET_SIZE),
         )
         self.assertTrue(contract["placement"]["translation_only"])
-        self.assertTrue(contract["placement"]["immutable_source_art"])
+        self.assertTrue(contract["placement"]["all_color_variants_share_origin_and_bounds"])
         self.assertEqual(
             contract["normalization"]["reference_sha256"],
             "EB635DB8B2553423C56AA3BAD780C943C77CD752987B35958685374922DEC056",

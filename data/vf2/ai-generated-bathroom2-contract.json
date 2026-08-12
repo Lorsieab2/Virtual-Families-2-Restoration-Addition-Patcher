@@ -28,18 +28,18 @@
   ],
   "store_icon_route": "optional Bathroom2 House Renovations visual rows only; native E6 item IDs remain disabled/hiatus",
   "normalization": {
-    "target_size": null,
+    "target_size": [511, 378],
     "reference": "patcher_assets/optional_patches/ai_generated_bathroom2_renovations/reference/bathroom2_vanilla.png",
     "reference_sha256": "EB635DB8B2553423C56AA3BAD780C943C77CD752987B35958685374922DEC056",
-    "algorithm": "byte-exact source copy; no crop, resize, re-encode, or generated_chroma intermediates"
+    "algorithm": "RGBA LANCZOS resize from each source canvas; no generated_chroma intermediates"
   },
   "placement": {
     "native_map_area": [13, 7],
-    "world_top_lefts": {"black": [555, 137], "blue": [659, 137], "beige": [659, 145], "green": [656, 145], "pink": [556, 136]},
-    "bounds_by_color": {"black": [545, 385], "blue": [539, 385], "beige": [441, 360], "green": [444, 360], "pink": [642, 385]},
+    "anchor": [949, 145],
+    "bounds": [511, 378],
     "translation_only": true,
-    "immutable_source_art": true,
-    "placement_basis": "authenticated per-color world top-lefts; draw origin minus WorldView at scale 1.0 and opacity 100",
+    "all_color_variants_share_origin_and_bounds": true,
+    "placement_basis": "measured shared room-apex world anchor; draw origin minus WorldView at scale 1.0 and opacity 100",
     "reference_bounds": "patcher_assets/optional_patches/ai_generated_bathroom2_renovations/reference/bathroom2_bounds_reference.png",
     "reference_bounds_sha256": "8FA3306621329BF08C54E4B6818075733AAEFF05F5E092D1FF76786E63C2A068"
   }
