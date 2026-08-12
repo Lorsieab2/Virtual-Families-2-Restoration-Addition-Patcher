@@ -102,16 +102,17 @@ def minimal_pe_bytes(
 
 
 class ExportOfflinePatchBundleTests(unittest.TestCase):
-    def test_default_settings_carry_fail_closed_readiness_metadata(self):
+    def test_default_settings_expose_linked_behavior_overlay_for_player_qa(self):
         available = set(exporter.SOURCE_BACKED_OPTIONAL_SETTINGS) | {"core_executable"}
         settings = exporter.default_settings(False, True, available)
         by_id = {row["id"]: row for row in settings}
 
         with self.subTest(setting_id="behavior_patches"):
             readiness = by_id["behavior_patches"]["readiness"]
-            self.assertIn(readiness["status"].lower(), {"stop", "pending"})
-            self.assertFalse(readiness["runtime_ready"])
-            self.assertFalse(readiness["linked"])
+            self.assertEqual(readiness["status"], "ready_for_player_qa")
+            self.assertTrue(readiness["runtime_ready"])
+            self.assertTrue(readiness["linked"])
+            self.assertIn("player", readiness["reason"])
             self.assertTrue(readiness["reason"])
         for setting_id in ("mobile_furniture_behaviors", "mobile_sound_assets"):
             with self.subTest(setting_id=setting_id):
@@ -143,16 +144,16 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         self.assertEqual(island_log["readiness_status"], "ready_for_player_qa")
         self.assertIsNone(island_log["readiness_reason"])
 
-        with self.assertRaisesRegex(patcher.PatchError, "Blocked setting\\(s\\) cannot be enabled"):
-            patcher.resolve_enabled_settings(
-                {"settings": settings},
-                patcher.argparse.Namespace(
-                    enable_all=True,
-                    disable_all=False,
-                    enable=None,
-                    disable=None,
-                ),
-            )
+        _resolved, enabled = patcher.resolve_enabled_settings(
+            {"settings": settings},
+            patcher.argparse.Namespace(
+                enable_all=True,
+                disable_all=False,
+                enable=None,
+                disable=None,
+            ),
+        )
+        self.assertIn("behavior_patches", enabled)
 
     def test_no_ai_icon_generator_uses_tracked_source_art(self):
         generator = (ROOT / "work" / "build_no_ai_icons.py").read_text(encoding="utf-8")

@@ -495,10 +495,10 @@ SETTINGS = [
 
 SETTING_READINESS = {
     "behavior_patches": {
-        "status": "pending",
-        "runtime_ready": False,
-        "linked": False,
-        "reason": "Fresh executable linkage/readback and runtime validation are pending.",
+        "status": "ready_for_player_qa",
+        "runtime_ready": True,
+        "linked": True,
+        "reason": "Fresh B158 Behavior Patches executable overlay and native marker/readback are verified; live behavior frequency, eligibility, save/reload, and crash testing remain a player gate.",
     },
     "mobile_furniture_behaviors": {
         "status": "ready_for_player_qa",
