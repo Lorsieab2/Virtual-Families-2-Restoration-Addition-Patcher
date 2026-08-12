@@ -362,7 +362,7 @@ SETTINGS = [
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
         "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes good-weather loungers choose among relaxing, reading, studying, sitting, napping, and sleeping with exhaustion-sensitive rest odds, plus spontaneous supported variants. Exact guarded manual routes cover the Patio Umbrella and tables, Picnic Table, Birthday furniture, Christmas Trees, Dreidel, Menorah, Stockings, Holiday Candles, Santa's Cookie Plate, ten Holiday figurines, Red Bow, Santa Wall Decoration, and both garlands. Invisible/custom/VF3 furniture is excluded.",
-        "default": False,
+        "default": True,
         "category": "optional",
     },
     {
@@ -385,8 +385,8 @@ SETTINGS = [
     {
         "id": "mobile_sound_assets",
         "label": "Use mobile sound assets",
-        "description": "Stages all 67 hash-pinned mobile behavior sounds and replaces the four PC WAV filename routes that must point to OGG assets. Default-off; audible parity remains pending runtime QA.",
-        "default": False,
+        "description": "Stages all 67 hash-pinned mobile behavior sounds and replaces the four PC WAV filename routes that must point to OGG assets. Default-on for player QA; audible parity remains pending runtime QA.",
+        "default": True,
         "category": "optional",
     },
     {
@@ -2773,6 +2773,77 @@ def export_optional_exe_overlay_payload(
     return record
 
 
+def native_core_settings_available(
+    build_manifest_data: dict[str, Any],
+    include_exe_replacement: bool,
+) -> set[str]:
+    """Return native-only settings proven by the linked build manifest.
+
+    These settings do not create independent asset records.  Requiring the
+    exact native manifest evidence keeps them visible for a real linked build
+    without making a synthetic/core-only export appear to support features it
+    does not contain.
+    """
+    if not include_exe_replacement:
+        return set()
+
+    available: set[str] = set()
+
+    inventory = build_manifest_data.get("InventoryManager")
+    pet_rows = inventory.get("pet_store_additions", []) if isinstance(inventory, dict) else []
+    if isinstance(pet_rows, list):
+        pet_names = {
+            str(row.get("name", "")).strip().casefold()
+            for row in pet_rows
+            if isinstance(row, dict)
+        }
+        pet_ids = {
+            str(row.get("item_id", "")).strip().casefold()
+            for row in pet_rows
+            if isinstance(row, dict)
+        }
+        if {"turtle", "hamster"} <= pet_names or {"0x245", "0x247"} <= pet_ids:
+            available.add("unused_pets")
+
+    visible_upgrades = build_manifest_data.get("VisibleSpecialUpgrades")
+    upgrade_rows = (
+        visible_upgrades.get("added_items", [])
+        if isinstance(visible_upgrades, dict)
+        else []
+    )
+    if isinstance(upgrade_rows, list):
+        upgrade_ids = {
+            str(row.get("item_id", "")).strip().casefold()
+            for row in upgrade_rows
+            if isinstance(row, dict)
+        }
+        if {"0x117", "0x118", "0x119", "0x11a"} <= upgrade_ids:
+            available.add("mobile_purchases")
+
+    string_manager = build_manifest_data.get("theStringManager")
+    string_rows = (
+        string_manager.get("updated_existing_strings", [])
+        if isinstance(string_manager, dict)
+        else []
+    )
+    required_text_fixes = {
+        ("{name} sees pet", "{name} sees their adorable pet."),
+        ("Cooking like mommy", "Cooking like a grownup"),
+        ("Driving like daddy", "Driving like a grownup"),
+        ("Not feeling fresh", "Not feeling clean"),
+    }
+    if isinstance(string_rows, list):
+        text_fixes = {
+            (str(row.get("old", "")), str(row.get("new", "")))
+            for row in string_rows
+            if isinstance(row, dict)
+        }
+        if required_text_fixes <= text_fixes:
+            available.add("text_fixes")
+
+    return available
+
+
 def default_settings(
     include_byte_patches: bool,
     include_exe_replacement: bool,
@@ -3807,6 +3878,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     available_settings = set(asset_counts_by_setting)
     for row in post_asset_patches:
         available_settings.update(row.get("requires", []))
+    native_core_settings = native_core_settings_available(
+        build_manifest_data,
+        include_exe_replacement=exe_replacement_record is not None,
+    )
+    available_settings.update(native_core_settings)
 
     settings = default_settings(
         bool(byte_patches),
@@ -3886,6 +3962,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "asset_patch_count": len(asset_patches),
             "post_asset_patch_count": len(post_asset_patches),
             "asset_counts_by_setting": dict(sorted(asset_counts_by_setting.items())),
+            "native_core_settings": sorted(native_core_settings),
             "payload_file_count": count_files(bundle_dir / "payload"),
             "payload_pruning": payload_pruning,
             "payload_deduplication": payload_deduplication,

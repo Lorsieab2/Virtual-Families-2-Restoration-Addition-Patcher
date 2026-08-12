@@ -116,6 +116,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertTrue(readiness["reason"])
         for setting_id in ("mobile_furniture_behaviors", "mobile_sound_assets"):
             with self.subTest(setting_id=setting_id):
+                self.assertTrue(by_id[setting_id]["default"])
                 readiness = by_id[setting_id]["readiness"]
                 self.assertEqual(readiness["status"], "ready_for_player_qa")
                 self.assertTrue(readiness["runtime_ready"])
@@ -334,10 +335,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         self.assertIn("--ai-generated-bathroom2-dir", source)
         self.assertIn('"ai_generated_bathroom2_renovations"', source)
 
-    def test_mobile_sound_setting_is_default_off_and_core_gated(self):
+    def test_mobile_sound_setting_is_default_on_for_player_qa_and_core_gated(self):
         settings_by_id = {row["id"]: row for row in exporter.SETTINGS}
         self.assertEqual(settings_by_id["mobile_sound_assets"]["category"], "optional")
-        self.assertFalse(settings_by_id["mobile_sound_assets"]["default"])
+        self.assertTrue(settings_by_id["mobile_sound_assets"]["default"])
         self.assertEqual(
             exporter.asset_requires_for_setting("mobile_sound_assets"),
             ["core_executable", "mobile_sound_assets"],
@@ -347,6 +348,58 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 exporter.setting_for_asset(Path("Sounds") / filename),
                 "mobile_sound_assets",
             )
+
+    def test_native_core_settings_require_matching_manifest_evidence(self):
+        manifest = {
+            "InventoryManager": {
+                "pet_store_additions": [
+                    {"name": "Turtle", "item_id": "0x245"},
+                    {"name": "Hamster", "item_id": "0x247"},
+                ]
+            },
+            "VisibleSpecialUpgrades": {
+                "added_items": [
+                    {"item_id": item_id}
+                    for item_id in ("0x117", "0x118", "0x119", "0x11a")
+                ]
+            },
+            "theStringManager": {
+                "updated_existing_strings": [
+                    {"old": old, "new": new}
+                    for old, new in (
+                        ("{name} sees pet", "{name} sees their adorable pet."),
+                        ("Cooking like mommy", "Cooking like a grownup"),
+                        ("Driving like daddy", "Driving like a grownup"),
+                        ("Not feeling fresh", "Not feeling clean"),
+                    )
+                ]
+            },
+        }
+        self.assertEqual(
+            exporter.native_core_settings_available(manifest, True),
+            {"unused_pets", "text_fixes", "mobile_purchases"},
+        )
+        self.assertEqual(exporter.native_core_settings_available(manifest, False), set())
+        self.assertNotIn(
+            "unused_pets",
+            exporter.native_core_settings_available({}, True),
+        )
+
+        settings = exporter.default_settings(
+            include_byte_patches=False,
+            include_exe_replacement=True,
+            available_settings={
+                "core_executable",
+                "unused_pets",
+                "text_fixes",
+                "mobile_purchases",
+            },
+        )
+        by_id = {row["id"]: row for row in settings}
+        for setting_id in ("unused_pets", "text_fixes", "mobile_purchases"):
+            with self.subTest(setting_id=setting_id):
+                self.assertIn(setting_id, by_id)
+                self.assertTrue(by_id[setting_id]["default"])
 
     def test_no_ai_icons_setting_is_default_off_and_cheat_gated(self):
         settings_by_id = {row["id"]: row for row in exporter.SETTINGS}

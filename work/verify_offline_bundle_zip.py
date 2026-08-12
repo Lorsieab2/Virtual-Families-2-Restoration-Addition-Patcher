@@ -13,64 +13,102 @@ from pathlib import Path, PurePosixPath
 
 TARGET_SHA256 = "1582d9e84e1c32f51475be17335c5137c592cebf809748d401ccef99a32b73c3"
 TARGET_SIZE = 1_511_424
-ABSENT_ZERO_RECORD_SETTINGS = {
-    # The current authenticated candidate carries executable/asset records
-    # for Island Events, Holiday Ornaments, and Behavior Patches.  Keep only
-    # settings that genuinely have no reachable record in this package shape.
+NATIVE_CORE_SETTINGS = {
+    # These settings are implemented in the linked core executable and
+    # intentionally have no independent asset/post-asset record.
     "unused_pets",
     "text_fixes",
     "mobile_purchases",
 }
+ABSENT_ZERO_RECORD_SETTINGS = set()
 CORE_ONLY_SETTINGS = {
     "settings_evict_button",
 }
 EXECUTABLE_VARIANTS = {
     frozenset({"core_executable"}): (
-        "payload/Virtual Families 2 - Modded B158.exe",
-        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
-        1_790_976,
-    ),
-    frozenset({"core_executable", "island_events"}): (
-        "payload/Virtual Families 2 - Modded B158 - Island Events.exe",
-        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
-        1_790_976,
-    ),
-    frozenset({"core_executable", "cheat_upgrades"}): (
-        "payload/Virtual Families 2 - Modded B158 - Cheat Upgrades.exe",
-        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
-        1_790_976,
-    ),
-    frozenset({"core_executable", "holiday_ornaments_collection"}): (
-        "payload/Virtual Families 2 - Modded B158 - Holiday Ornaments.exe",
-        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
-        1_790_976,
-    ),
-    frozenset({"core_executable", "behavior_patches"}): (
-        "payload/Virtual Families 2 - Modded B158 - Behavior Patches.exe",
-        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
-        1_790_976,
+        "payload/Virtual Families 2 - Modded B159.exe",
+        "744fac14c3715718c88e6001e37c43bd50621a3f69468bfd29cd094e1d4debc6",
+        1_711_616,
     ),
     frozenset({"core_executable", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B158 - Mobile Room Renovations.exe",
-        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
-        1_790_976,
+        "payload/Virtual Families 2 - Modded B159 - Mobile Room Renovations.exe",
+        "c60f87e4793b19f23cd419f2e480be0d84e1a365412235f93023d19a4b0d43d4",
+        1_723_904,
+    ),
+    frozenset({"core_executable", "island_events", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Island Events.exe",
+        "55d03b5d00c3eae54df618be47ab90b6e9c520dac218bea428960c05bd7785e9",
+        1_754_624,
     ),
     frozenset({"core_executable", "cheat_upgrades", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B158 - Cheat Upgrades + Mobile Room Renovations.exe",
-        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
-        1_790_976,
+        "payload/Virtual Families 2 - Modded B159 - Cheat Upgrades.exe",
+        "82185c4895293969ea31fda391fdb14a89573261d228c16ce3904011aba2a080",
+        1_725_440,
     ),
-    frozenset({
-        "core_executable",
-        "behavior_patches",
-        "cheat_upgrades",
-        "holiday_ornaments_collection",
-        "island_events",
-        "mobile_renovations",
-    }): (
-        "payload/Virtual Families 2 - Modded B158 - Final All-Enabled Native.exe",
-        "65f0d18a1aa4cb7ab03802a67570d7f98f165eaede7fcd331284fdfba6b422f8",
-        1_790_976,
+    frozenset({"core_executable", "holiday_ornaments_collection", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Holiday Ornaments.exe",
+        "e2bdfe8d7881f5e141ae4d0344b04168f64856169105a10ef585917918f72bea",
+        1_725_952,
+    ),
+    frozenset({"core_executable", "behavior_patches", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Behavior Patches.exe",
+        "b62e9ca54896a145af51e5982788a1cd995052ad966e3f14c3e6bdf83ef4c7bb",
+        1_761_280,
+    ),
+    frozenset({"core_executable", "island_events", "cheat_upgrades", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Island Events + Cheat Upgrades.exe",
+        "cd5d60e3077be04440bc404ea49cda1edd9c7b4588848b1af3f91714e55a1b08",
+        1_755_648,
+    ),
+    frozenset({"core_executable", "island_events", "holiday_ornaments_collection", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Island Events + Holiday Ornaments.exe",
+        "e6421b46a6c5e1d451b602783cd6dc685e5ef3d826d8e2d1ac602df9c587e4e3",
+        1_757_184,
+    ),
+    frozenset({"core_executable", "cheat_upgrades", "holiday_ornaments_collection", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Cheat Upgrades + Holiday Ornaments.exe",
+        "b033ee9488ce9b16b4c00c56df713fa58bca6e3231d5f3ad7c5103daf92c9fbc",
+        1_728_512,
+    ),
+    frozenset({"core_executable", "island_events", "behavior_patches", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Island Events + Behavior Patches.exe",
+        "9d34aeb49220d08b105f16892bc2766d44c84d33de14ee2c1958637930dcb521",
+        1_791_488,
+    ),
+    frozenset({"core_executable", "cheat_upgrades", "behavior_patches", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Cheat Upgrades + Behavior Patches.exe",
+        "f81f5aa5d8be273df1ecbe597d25cc2926e53ee772668aeb516c1c805adf5b99",
+        1_762_304,
+    ),
+    frozenset({"core_executable", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Holiday Ornaments + Behavior Patches.exe",
+        "fb048fa5cf7ef200c45e060e7c5c9dacc11169886f97390ea041628e63818c7b",
+        1_764_352,
+    ),
+    frozenset({"core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Island Events + Cheat Upgrades + Holiday Ornaments.exe",
+        "1e49f0c7532487daae50dca3ef84afbbb7ba9f8b6c2758bdf31b9b5fcd28a818",
+        1_758_208,
+    ),
+    frozenset({"core_executable", "island_events", "cheat_upgrades", "behavior_patches", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Island Events + Cheat Upgrades + Behavior Patches.exe",
+        "088f06ab925e7c1facb204af4951ac2a7bfccc7e5bf876d9e3e4d115c7a57210",
+        1_793_536,
+    ),
+    frozenset({"core_executable", "island_events", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Island Events + Holiday Ornaments + Behavior Patches.exe",
+        "41220018f303efbaf07e36c828b8384a97bafd8523de1b43a6e758dfd7b13577",
+        1_794_560,
+    ),
+    frozenset({"core_executable", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Cheat Upgrades + Holiday Ornaments + Behavior Patches.exe",
+        "194e9503ed46ea9c55445a42d1e26a06a1e40b465eadbaf3836c716b23592fad",
+        1_765_888,
+    ),
+    frozenset({"core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
+        "payload/Virtual Families 2 - Modded B159 - Island Events + Cheat Upgrades + Holiday Ornaments + Behavior Patches.exe",
+        "a7f19a76ad22f1539a51eb990a1bb05f0f4211fc47f782a36ae7a1eaa80d6aac",
+        1_795_584,
     ),
 }
 SOUND_ROUTE_NAMES = {"beaker", "Child3", "Child7", "Child8"}
@@ -79,7 +117,7 @@ REQUIRED_RUNNERS = {
     "offline_vf2_patcher_gui.py",
     "vf2_crash_capture.py",
     "crash-capture-manifest.template.json",
-    "Apply_B158_Patcher.bat",
+    "Apply_B159_Patcher.bat",
     "Launch_GUI.bat",
 }
 
@@ -220,12 +258,18 @@ def verify_archive(zip_path: Path | str) -> dict:
         }
         if not ABSENT_ZERO_RECORD_SETTINGS.isdisjoint(record_settings):
             _fail("zero-record setting appears in an asset or post record")
+        if NATIVE_CORE_SETTINGS & record_settings:
+            _fail("native core setting appears in an asset or post record")
         if CORE_ONLY_SETTINGS & record_settings:
             _fail(f"core-only setting appears in an asset or post record: {sorted(CORE_ONLY_SETTINGS & record_settings)}")
-        if setting_ids - {"core_assets"} - record_settings:
-            _fail(f"advertised setting has no reachable asset/post record: {sorted(setting_ids - {'core_assets'} - record_settings)}")
+        zero_record_settings = {"core_assets"} | NATIVE_CORE_SETTINGS
+        if setting_ids - zero_record_settings - record_settings:
+            _fail(f"advertised setting has no reachable asset/post record: {sorted(setting_ids - zero_record_settings - record_settings)}")
         if record_settings - setting_ids:
             _fail(f"asset/post record requires an unknown setting: {sorted(record_settings - setting_ids)}")
+        native_summary = manifest.get("export_summary", {}).get("native_core_settings", [])
+        if not isinstance(native_summary, list) or set(native_summary) != NATIVE_CORE_SETTINGS & setting_ids:
+            _fail("manifest native core setting evidence does not match advertised native settings")
 
         exe_records = [record for record in assets if str(record.get("source_path", "")).lower().endswith(".exe")]
         if len(exe_records) != len(EXECUTABLE_VARIANTS):
@@ -250,8 +294,8 @@ def verify_archive(zip_path: Path | str) -> dict:
             and str(record.get("file_path", "")).startswith("Images/MobileRenovations/")
             and str(record.get("source_path", "")).lower().endswith(".png")
         ]
-        if len(renovation_records) != 15:
-            _fail(f"expected 15 mobile renovation PNG records, found {len(renovation_records)}")
+        if len(renovation_records) != 35:
+            _fail(f"expected 35 mobile renovation PNG records, found {len(renovation_records)}")
         for record in renovation_records:
             if not str(record.get("file_path", "")).startswith("Images/MobileRenovations/") or record.get("remove_when_disabled") is not True:
                 _fail("mobile renovation record has the wrong destination or removal policy")
@@ -330,12 +374,14 @@ def verify_archive(zip_path: Path | str) -> dict:
             if route is None or route in seen_routes:
                 _fail("mobile sound post routes are missing or duplicated")
             seen_routes.add(route)
+            expected = (route + ".wav").encode("ascii")
             if len(variants) != len(exe_hashes) or {str(v.get("asset_sha256", "")).lower() for v in variants} != exe_hashes:
                 _fail(f"mobile sound route {route} does not cover all executable variants")
-            expected = (route + ".wav").encode("ascii")
             replacement = (route + ".ogg").encode("ascii")
             for variant in variants:
-                if bytes.fromhex(str(variant.get("expected_asset_bytes", ""))) != expected or bytes.fromhex(str(variant.get("replacement_bytes", ""))) != replacement:
+                expected_bytes = bytes.fromhex(str(variant.get("expected_asset_bytes", "")))
+                replacement_bytes = bytes.fromhex(str(variant.get("replacement_bytes", "")))
+                if expected_bytes not in {expected, replacement} or replacement_bytes != replacement:
                     _fail(f"mobile sound route {route} has incorrect byte replacement")
         if seen_routes != SOUND_ROUTE_NAMES:
             _fail("mobile sound post-route set is incomplete")

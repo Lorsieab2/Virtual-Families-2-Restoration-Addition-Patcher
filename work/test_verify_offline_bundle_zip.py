@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / "work"))
 import verify_offline_bundle_zip as verifier
 
 
-CANONICAL = ROOT / "outputs" / "VF2-B158-All-Enabled-Playtest-20260807-v3.zip"
+CANONICAL = ROOT / "outputs" / "VF2-B159-Behavior-Variations-Fix-20260812-r54.zip"
 
 
 class OfflineBundleZipVerifierTests(unittest.TestCase):
@@ -40,15 +40,15 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         })
         self.assertEqual(
             verifier.EXECUTABLE_VARIANTS[requires][0],
-            "payload/Virtual Families 2 - Modded B158 - Final All-Enabled Native.exe",
+            "payload/Virtual Families 2 - Modded B159 - Island Events + Cheat Upgrades + Holiday Ornaments + Behavior Patches.exe",
         )
-        self.assertEqual(len(verifier.EXECUTABLE_VARIANTS), 8)
+        self.assertEqual(len(verifier.EXECUTABLE_VARIANTS), 17)
 
     def test_canonical_archive_passes_all_contract_gates(self):
         self.assertTrue(CANONICAL.is_file(), CANONICAL)
         result = verifier.verify_archive(CANONICAL)
-        self.assertEqual(result["executable_variants"], 8)
-        self.assertEqual(result["renovation_assets"], 15)
+        self.assertEqual(result["executable_variants"], 17)
+        self.assertEqual(result["renovation_assets"], 35)
         self.assertEqual(result["sound_assets"], 67)
         self.assertEqual(result["sound_restores"], 63)
         self.assertEqual(result["sound_removals"], 4)
