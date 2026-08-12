@@ -1855,7 +1855,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertNotIn("Virtual Families 2.exe", manifest["runtime_requirements"]["exact_top_level_entries"])
             self.assertIn({"path": "Assets", "min_files": 200}, manifest["runtime_requirements"]["required_dirs"])
             self.assertEqual(manifest["output"]["default_folder_name"], "VF2-B103-Modded")
-            self.assertTrue((out / "payload" / "Virtual Families 2 - Modded B103.exe").is_file())
+            core_payload = next(
+                row for row in manifest["asset_patches"]
+                if row["file_path"] == "Virtual Families 2.exe"
+            )
+            self.assertTrue((out / core_payload["source_path"]).is_file())
+            self.assertEqual(
+                (out / core_payload["source_path"]).stat().st_size,
+                core_payload["source_size"],
+            )
             self.assertTrue((out / "Apply_B103_Patcher.bat").is_file())
             self.assertTrue((out / "README-B103-PATCHER.txt").is_file())
             self.assertTrue((out / "Transparency Log.txt").is_file())
@@ -2031,7 +2039,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 self.assertEqual(manifest["source_build"][field], source_name)
             for record, (_, label, requires) in zip(exe_records[1:], overlay_specs):
                 payload = out / record["source_path"]
-                self.assertEqual(payload.name, f"Virtual Families 2 - Modded B150 - {label}.exe")
+                self.assertTrue(payload.is_file())
                 self.assertEqual(payload.read_bytes(), source_data_by_requires[tuple(requires)])
 
             # Strip unrelated official-install requirements so this focused test
@@ -2558,6 +2566,42 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             keep.write_bytes(b"tampered")
             with self.assertRaises(ValueError):
                 exporter.validate_bundle_asset_sources(bundle, records)
+
+    def test_payload_deduplication_repoints_records_to_one_canonical_source(self):
+        import export_offline_patch_bundle as exporter
+
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            first = bundle / "payload" / "Images" / "first.png"
+            second = bundle / "payload" / "OptionalVisualMods" / "second.png"
+            first.parent.mkdir(parents=True)
+            second.parent.mkdir(parents=True)
+            first.write_bytes(b"same bytes")
+            second.write_bytes(b"same bytes")
+            digest = hashlib.sha256(b"same bytes").hexdigest()
+            records = [
+                {
+                    "file_path": "Images/target-a.png",
+                    "source_path": "payload/Images/first.png",
+                    "source_sha256": digest,
+                    "source_size": len(b"same bytes"),
+                },
+                {
+                    "file_path": "Images/target-b.png",
+                    "source_path": "payload/OptionalVisualMods/second.png",
+                    "source_sha256": digest,
+                    "source_size": len(b"same bytes"),
+                },
+            ]
+
+            summary = exporter.deduplicate_payload_files(bundle, records)
+
+            self.assertEqual(summary["removed_file_count"], 1)
+            self.assertEqual(summary["removed_bytes"], len(b"same bytes"))
+            self.assertEqual(records[0]["source_path"], records[1]["source_path"])
+            self.assertTrue((bundle / records[0]["source_path"]).is_file())
+            self.assertFalse(second.exists())
+            exporter.validate_bundle_asset_sources(bundle, records)
 
 
 if __name__ == "__main__":

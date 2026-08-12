@@ -2528,6 +2528,99 @@ def validate_bundle_asset_sources(bundle_dir: Path, asset_patches: list[dict[str
                 raise ValueError(f"asset patch #{index} {key} size does not match {size_key}")
 
 
+def deduplicate_payload_files(
+    bundle_dir: Path,
+    asset_patches: list[dict[str, Any]],
+) -> dict[str, int]:
+    """Collapse byte-identical payload aliases without changing target records."""
+
+    bundle_root = bundle_dir.resolve()
+    payload_root = (bundle_root / "payload").resolve()
+    if not payload_root.is_dir():
+        return {
+            "removed_file_count": 0,
+            "removed_bytes": 0,
+            "retained_file_count": 0,
+            "retained_bytes": 0,
+        }
+
+    by_digest: dict[tuple[int, str], list[Path]] = {}
+    for path in sorted(payload_root.rglob("*")):
+        if not path.is_file():
+            continue
+        by_digest.setdefault((path.stat().st_size, sha256_file(path)), []).append(path)
+
+    canonical_for: dict[Path, Path] = {}
+    removed_file_count = 0
+    removed_bytes = 0
+    for paths in by_digest.values():
+        if len(paths) < 2:
+            continue
+        # Prefer a normal runtime path over a source-only or restore folder;
+        # the patcher reads the manifest path, so the canonical location is
+        # an implementation detail and does not change the target file.
+        canonical = min(
+            paths,
+            key=lambda path: (
+                0 if path.parts[-2:-1] and path.parts[-2] in {"Images", "Assets"} else 1,
+                1 if path.name.endswith(".ORIGINAL") else 0,
+                len(path.parts),
+                path.as_posix().lower(),
+            ),
+        )
+        for path in paths:
+            canonical_for[path.resolve()] = canonical.resolve()
+        for duplicate in paths:
+            if duplicate.resolve() == canonical.resolve():
+                continue
+            removed_file_count += 1
+            removed_bytes += duplicate.stat().st_size
+
+    if not canonical_for:
+        files = [path for path in payload_root.rglob("*") if path.is_file()]
+        return {
+            "removed_file_count": 0,
+            "removed_bytes": 0,
+            "retained_file_count": len(files),
+            "retained_bytes": sum(path.stat().st_size for path in files),
+        }
+
+    for record in asset_patches:
+        for key in ("source_path", "restore_source_path"):
+            rel_text = record.get(key)
+            if not rel_text:
+                continue
+            resolved = (bundle_root / Path(str(rel_text))).resolve()
+            canonical = canonical_for.get(resolved)
+            if canonical is None:
+                continue
+            record[key] = relative_posix(canonical.relative_to(bundle_root))
+
+    for duplicate, canonical in canonical_for.items():
+        if duplicate == canonical:
+            continue
+        if duplicate.is_file():
+            duplicate.unlink()
+
+    for directory in sorted(
+        (path for path in payload_root.rglob("*") if path.is_dir()),
+        key=lambda path: len(path.parts),
+        reverse=True,
+    ):
+        try:
+            directory.rmdir()
+        except OSError:
+            pass
+
+    retained = [path for path in payload_root.rglob("*") if path.is_file()]
+    return {
+        "removed_file_count": removed_file_count,
+        "removed_bytes": removed_bytes,
+        "retained_file_count": len(retained),
+        "retained_bytes": sum(path.stat().st_size for path in retained),
+    }
+
+
 def prune_unreferenced_payload_files(
     bundle_dir: Path,
     asset_patches: list[dict[str, Any]],
@@ -3042,6 +3135,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
         "- Feature-specific payloads for optional visual mods and Invisible Furniture are tied to their default-off settings, so unchecked settings leave those files unused and omitted from refreshed modded output folders.",
         "- Custom Couches and LDW Posters/Paintings payload files are tied to their own default-off setting. Current native store-row support still comes from the full modded EXE payload until those native table edits are split into per-feature patch records.",
         f"- Payload file count in this bundle: {len(payload_files)}",
+        f"- Duplicate payload files removed during export: {summary.get('payload_deduplication', {}).get('removed_file_count', 0)} ({summary.get('payload_deduplication', {}).get('removed_bytes', 0)} bytes)",
         f"- Unreachable payload files pruned during export: {summary.get('payload_pruning', {}).get('removed_file_count', 0)} ({summary.get('payload_pruning', {}).get('removed_bytes', 0)} bytes)",
         "- Every retained payload file is reachable through a manifest source_path or restore_source_path; every retained source is revalidated after pruning.",
         "",
@@ -3682,6 +3776,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 & (EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS - overlay_settings)
             )
         ]
+    payload_deduplication = deduplicate_payload_files(bundle_dir, asset_patches)
     validate_bundle_asset_sources(bundle_dir, asset_patches)
     payload_pruning = prune_unreferenced_payload_files(bundle_dir, asset_patches)
     validate_bundle_asset_sources(bundle_dir, asset_patches)
@@ -3789,6 +3884,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "asset_counts_by_setting": dict(sorted(asset_counts_by_setting.items())),
             "payload_file_count": count_files(bundle_dir / "payload"),
             "payload_pruning": payload_pruning,
+            "payload_deduplication": payload_deduplication,
             "base_payload": base_payload.name,
             "asset_mode": args.asset_mode,
             "exe_replacement": exe_replacement_record is not None,
