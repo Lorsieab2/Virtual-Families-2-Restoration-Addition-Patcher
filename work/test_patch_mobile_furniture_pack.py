@@ -3150,6 +3150,14 @@ class MobileRenovationArtTests(unittest.TestCase):
                 (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").write_text("", encoding="ascii")
                 patcher.write_outfit_store_helpers({})
                 source = (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").read_text(encoding="ascii")
+                self.assertIn("void RefreshProps();", source)
+                self.assertIn("void RefreshDecals();", source)
+                self.assertIn(
+                    "static void VF2RefreshRenovationCurtainDecals()",
+                    source,
+                )
+                self.assertIn("Decal.RefreshProps();", source)
+                self.assertIn("Decal.RefreshDecals();", source)
                 bathroom1 = source.split(
                     "static int VF2ResolveBathroom1ClosedCurtainImage()",
                     1,
@@ -3196,6 +3204,35 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertIn(": kVF2StockBathroom1ClosedCurtainImage;", resolver)
                 self.assertIn("? VF2ResolveBathroom2ClosedCurtainImage()", resolver)
                 self.assertIn(": kVF2StockBathroom2ClosedCurtainImage;", resolver)
+                self.assertGreaterEqual(
+                    source.count("VF2RefreshRenovationCurtainDecals();"),
+                    5,
+                )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
+
+    def test_curtain_refresh_helper_is_not_duplicated_when_special_upgrade_source_has_one(self):
+        old_patched = patcher.PATCHED
+        old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
+        old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                helper = patcher.PATCHED / "vf2_special_upgrade_effects.cpp"
+                helper.write_text(
+                    "static void VF2RefreshRenovationCurtainDecals() { }\n",
+                    encoding="ascii",
+                )
+                patcher.write_outfit_store_helpers({})
+                source = helper.read_text(encoding="ascii")
+                self.assertEqual(
+                    source.count("static void VF2RefreshRenovationCurtainDecals() {"),
+                    1,
+                )
         finally:
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
@@ -3835,7 +3872,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                 record["user_store_icon_route"],
                 patcher.MOBILE_RENOVATION_USER_STORE_ICON_ROUTE,
             )
-            self.assertEqual(len(record["user_store_icon_payload"]), 11)
+            self.assertEqual(
+                len(record["user_store_icon_payload"]),
+                len(patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING),
+            )
             self.assertEqual(
                 {row["name"] for row in record["bathroom1_curtain_assets"]},
                 set(patcher.MOBILE_RENOVATION_CURTAIN_ASSETS),
@@ -3869,7 +3909,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                 record["user_store_icon_route"],
                 patcher.MOBILE_RENOVATION_USER_STORE_ICON_ROUTE,
             )
-            self.assertEqual(len(record["user_store_icon_payload"]), 11)
+            self.assertEqual(
+                len(record["user_store_icon_payload"]),
+                len(patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING),
+            )
             self.assertEqual(record["bathroom1_curtain_replacement_mode"], "restore_stock_named_image_and_select_by_draw_image_id")
             self.assertEqual(
                 len(list((Path(tmp) / "Images" / "MobileRenovations").glob("*.png"))),
@@ -10013,7 +10056,6 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
             and isinstance(node.value.func, ast.Name)
             and node.value.func.id in {
                 "patch_marriage_candidate_reroll",
-                "patch_marriage_proposal_state_guard",
                 "patch_multiple_marriage_candidates",
                 "patch_same_sex_marriage",
             }
@@ -10022,7 +10064,6 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
             calls,
             [
                 "patch_marriage_candidate_reroll",
-                "patch_marriage_proposal_state_guard",
                 "patch_same_sex_marriage",
             ],
         )
@@ -10198,51 +10239,6 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
-    def test_proposal_state_guard_skips_both_null_state_writes(self):
-        old_patched = patcher.PATCHED
-        try:
-            with tempfile.TemporaryDirectory() as tmp:
-                temp_root = Path(tmp)
-                dating_path = temp_root / "DatingScene.obj"
-                shutil.copy2(patcher.SRC_OBJS / "DatingScene.obj", dating_path)
-                patcher.PATCHED = temp_root
-                manifest = {}
-                patcher.patch_marriage_proposal_state_guard(manifest)
-
-                dating = CoffObject(dating_path)
-                handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
-                section = dating.section(handle.section)
-                contract = manifest["MarriageProposalStateGuard"]
-                cave = int(contract["trampoline"], 16)
-                cave_raw = section.raw_ptr + cave
-                cave_bytes = bytes(dating.buf[cave_raw:cave_raw + 20])
-                self.assertEqual(cave_bytes[:4], bytes.fromhex("85 C0 75 05"))
-                self.assertEqual(
-                    cave_bytes[9:15],
-                    bytes.fromhex("89 88 BC 5C 02 00"),
-                )
-                self.assertEqual(cave_bytes[15], 0xE9)
-                self.assertEqual(
-                    cave + 9 + struct.unpack_from("<i", cave_bytes, 5)[0],
-                    handle.value + 0xAA,
-                )
-                self.assertEqual(
-                    cave + 20 + struct.unpack_from("<i", cave_bytes, 16)[0],
-                    handle.value + 0xA0,
-                )
-
-                hook_raw = section.raw_ptr + handle.value + 0x9A
-                self.assertEqual(dating.buf[hook_raw], 0xE9)
-                self.assertEqual(dating.buf[hook_raw + 5], 0x90)
-                self.assertEqual(
-                    bytes(dating.buf[section.raw_ptr + handle.value + 0xA0:section.raw_ptr + handle.value + 0xAA]),
-                    bytes.fromhex("C7 80 B8 5C 02 00 00 00 00 00"),
-                )
-                self.assertEqual(contract["hook_offset"], "+0x9A")
-                self.assertIn("skip both native state writes", contract["null_state"])
-        finally:
-            patcher.PATCHED = old_patched
-
     def test_reroll_and_same_sex_accept_guards_coexist_in_main_order(self):
         old_patched = patcher.PATCHED
         try:
@@ -10257,7 +10253,6 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 patcher.PATCHED = temp_root
                 manifest = {}
                 patcher.patch_marriage_candidate_reroll(manifest)
-                patcher.patch_marriage_proposal_state_guard(manifest)
                 patcher.patch_same_sex_marriage(manifest)
 
                 dating = CoffObject(temp_root / "DatingScene.obj")
@@ -10268,13 +10263,6 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                         dating.buf[section.raw_ptr + handle.value + hook_offset],
                         0xE9,
                     )
-
-                state_guard = manifest["MarriageProposalStateGuard"]
-                state_cave = int(state_guard["trampoline"], 16)
-                self.assertEqual(
-                    bytes(dating.buf[section.raw_ptr + state_cave:section.raw_ptr + state_cave + 4]),
-                    bytes.fromhex("85 C0 75 05"),
-                )
 
                 reroll = manifest["MarriageCandidateReroll"]
                 self.assertEqual(reroll["runtime_flag"]["source_section"], ".vf2rero")
@@ -10300,6 +10288,30 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 self.assertEqual(
                     bytes(dating.buf[accept_raw:accept_raw + 4]),
                     bytes.fromhex("85 C0 75 05"),
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_same_sex_patch_leaves_stock_proposal_state_commit_untouched(self):
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                for filename in ("DatingScene.obj", "VillagerManager.obj", "theMainScene.obj"):
+                    shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+                patcher.PATCHED = temp_root
+                patcher.patch_same_sex_marriage({})
+
+                dating = CoffObject(temp_root / "DatingScene.obj")
+                handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
+                section = dating.section(handle.section)
+                self.assertEqual(
+                    bytes(dating.buf[section.raw_ptr + handle.value + 0x94:section.raw_ptr + handle.value + 0xAA]),
+                    bytes.fromhex(
+                        "8B 88 B8 5C 02 00 "
+                        "89 88 BC 5C 02 00 "
+                        "C7 80 B8 5C 02 00 00 00 00 00"
+                    ),
                 )
         finally:
             patcher.PATCHED = old_patched

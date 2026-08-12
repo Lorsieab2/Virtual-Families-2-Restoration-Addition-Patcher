@@ -10659,9 +10659,20 @@ public:
     ldwImageGrid *bathroom2ClosedCurtainGrid;
     unsigned char vf2_bathroom1_gap[0x10];
     ldwImageGrid *bathroom1ClosedCurtainGrid;
+    void RefreshProps();
+    void RefreshDecals();
 };
 extern CDecal Decal;
 """
+    elif "void RefreshProps();" not in existing_helper:
+        existing_helper = existing_helper.replace(
+            "    ldwImageGrid *bathroom1ClosedCurtainGrid;\n};",
+            "    ldwImageGrid *bathroom1ClosedCurtainGrid;\n"
+            "    void RefreshProps();\n"
+            "    void RefreshDecals();\n"
+            "};",
+            1,
+        )
     shared_type_preamble = ""
     if (
         "enum EInventoryItem" not in existing_helper
@@ -10779,6 +10790,14 @@ public:
     bathroom2_curtain_image_base = ai_bathroom2_curtain_image_id(
         "black", curtain_holiday_desc_count
     )
+    refresh_curtain_helper_definition = ""
+    if "static void VF2RefreshRenovationCurtainDecals() {" not in existing_helper:
+        refresh_curtain_helper_definition = (
+            "static void VF2RefreshRenovationCurtainDecals() {\n"
+            f"    if ({str(ENABLE_MOBILE_RENOVATIONS).lower()}) Decal.RefreshProps();\n"
+            f"    if ({str(ENABLE_AI_GENERATED_BATHROOM2).lower()}) Decal.RefreshDecals();\n"
+            "}\n"
+        )
     helper_path.write_text(
         inventory_lock_api_preamble
         + existing_helper
@@ -10826,6 +10845,7 @@ static const int kVF2SameSexMarriageCatalogPrice = {next(item["price"] for item 
 static const int kVF2MarriageCandidateRerollCatalogPrice = {MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE};
 static const int kVF2DivorceSpouseCatalogPrice = {DIVORCE_SPOUSE_CATALOG_PRICE};
 static const bool kVF2EnableMobileRenovations = {"true" if ENABLE_MOBILE_RENOVATIONS else "false"};
+{refresh_curtain_helper_definition}
 static const int kVF2MobileRenovationItemBase = {MOBILE_RENOVATION_PC_ITEM_BASE};
 static const int kVF2MobileRenovationItemCount = {MOBILE_RENOVATION_IMAGE_COUNT};
 static const int kVF2MobileRenovationNativeItemBase = 0x118;
@@ -10959,6 +10979,8 @@ extern "C" void __cdecl VF2NormalizeMobileRenovationActivesAndSave() {{
     }}
 }}
 
+static void VF2RefreshRenovationCurtainDecals();
+
 extern "C" int __cdecl VF2GetMobileRenovationStylePrice(int itemId) {{
     int styleIndex = VF2MobileRenovationStyleIndex(itemId);
     if (styleIndex < 0) return -1;
@@ -10972,6 +10994,7 @@ extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
     VF2NormalizeMobileRenovationActives();
     if (VF2MobileRenovationIsActive(itemId)) {{
         VF2SetMobileRenovationActive(itemId, false);
+        VF2RefreshRenovationCurtainDecals();
         theGameState::Get()->SaveCurrentGame();
         return true;
     }}
@@ -10986,6 +11009,7 @@ extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
     }}
     VF2SetMobileRenovationActive(itemId, true);
     VF2MarkMobileRenovationEverPurchased(styleIndex);
+    VF2RefreshRenovationCurtainDecals();
     theGameState::Get()->SaveCurrentGame();
     return true;
 }}
@@ -11224,11 +11248,13 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
         // B2 visual rows clear only their direct persisted active byte;
         // purchase history remains intact for reversible reactivation.
         *VF2AIBathroom2ActiveByte(itemId) = 0;
+        VF2RefreshRenovationCurtainDecals();
     }} else if (VF2IsMobileRenovationStyle(itemId)) {{
         // Cosmetic room styles are not stock inventory records.  Remove only
         // their direct persisted active byte; the ever-purchased marker stays
         // set so reselecting the style remains free.
         VF2SetMobileRenovationActive(itemId, false);
+        VF2RefreshRenovationCurtainDecals();
     }} else if (itemId >= 0xE1 && itemId <= 0xEA) {{
         InventoryManager.ReturnOne((EInventoryItem)itemId);
         VF2RebuildOwnedRenovations();
@@ -14240,6 +14266,8 @@ extern "C" void __cdecl VF2NormalizeAIBathroom2ActivesAndSave() {{
     if (VF2NormalizeAIBathroom2Actives()) theGameState::Get()->SaveCurrentGame();
 }}
 
+static void VF2RefreshRenovationCurtainDecals();
+
 static int VF2AIBathroom2StyleIndex(int itemId) {{
     return VF2IsAIBathroom2Style(itemId) ? itemId - {AI_BATHROOM2_PC_ITEM_BASE} : -1;
 }}
@@ -14256,6 +14284,7 @@ static bool VF2ApplyAIBathroom2Style(int itemId) {{
         }}
         *VF2AIBathroom2ActiveByte(itemId) = 1;
     }}
+    VF2RefreshRenovationCurtainDecals();
     theGameState::Get()->SaveCurrentGame();
     return true;
 }}
@@ -18297,72 +18326,6 @@ def patch_vf3_style_child_adoption_chooser(manifest):
         ),
         "family_tree": "native CFamilyTree::AddOffspring retained",
         "achievements": "native adoption achievements 0x0C and 0x0D retained",
-    }
-
-
-def patch_marriage_proposal_state_guard(manifest):
-    """Fail closed when the native proposal state singleton is unavailable."""
-    dating_path = PATCHED / "DatingScene.obj"
-    dating = CoffObject(dating_path)
-    handle_name = "?HandleMessage@CDatingScene@@UAE_NHJ@Z"
-    handle = dating.symbol(handle_name)
-    section = dating.section(handle.section)
-    hook = handle.value + 0x9A
-    stock = bytes.fromhex(
-        "89 88 BC 5C 02 00 "
-        "C7 80 B8 5C 02 00 00 00 00 00"
-    )
-    raw = section.raw_ptr + hook
-    if bytes(dating.buf[raw:raw + len(stock)]) != stock:
-        raise RuntimeError("Dating marriage proposal state dereference drifted")
-
-    # The proposal close/commit route obtains the native game-state singleton
-    # immediately before this span.  Preserve both stock writes when EAX is
-    # valid; when the singleton is null, skip both writes and resume at the
-    # existing handled epilogue (+0xAA) instead of dereferencing EAX twice.
-    cave = section.raw_size
-    payload = bytearray(
-        b"\x85\xC0"              # native proposal state pointer non-null?
-        + b"\x75\x05"            # valid -> copied stock first write
-        + b"\xE9\0\0\0\0"       # null -> handled epilogue
-        + stock[:6]               # stock [state+0x25CBC] = ECX
-        + b"\xE9\0\0\0\0"       # continue with stock second write
-    )
-    if len(payload) != 20:
-        raise AssertionError("Marriage proposal state guard cave size drifted")
-    struct.pack_into(
-        "<i", payload, 5,
-        (handle.value + 0xAA) - (cave + 9),
-    )
-    struct.pack_into(
-        "<i", payload, 16,
-        (handle.value + 0xA0) - (cave + 20),
-    )
-    dating.insert_section_bytes(section.index, cave, bytes(payload))
-    dating._parse()
-    handle = dating.symbol(handle_name)
-    section = dating.section(handle.section)
-    raw = section.raw_ptr + hook
-    dating.buf[raw:raw + len(stock[:6])] = (
-        b"\xE9" + struct.pack("<i", cave - (hook + 5))
-        + b"\x90"
-    )
-    dating.write(dating_path)
-
-    manifest["MarriageProposalStateGuard"] = {
-        "status": "authenticated native game-state null guard installed",
-        "function": handle_name,
-        "hook_offset": "+0x9A",
-        "stock_span": stock.hex(" ").upper(),
-        "trampoline": hex(cave),
-        "cave_size": len(payload),
-        "valid_state": (
-            "preserve [EAX+0x25CBC] = ECX and continue at HandleMessage +0xA0"
-        ),
-        "null_state": (
-            "skip both native state writes and resume at the handled epilogue "
-            "HandleMessage +0xAA"
-        ),
     }
 
 
@@ -29111,7 +29074,6 @@ def main():
     # Reject, and close behavior must remain untouched.
     patch_vf3_style_child_adoption_chooser(manifest)
     patch_marriage_candidate_reroll(manifest)
-    patch_marriage_proposal_state_guard(manifest)
     patch_same_sex_marriage(manifest)
     patch_force_successful_pregnancy_callsites(manifest)
     # The optional mortality curve is another exact-SHA dormant-byte hook.
