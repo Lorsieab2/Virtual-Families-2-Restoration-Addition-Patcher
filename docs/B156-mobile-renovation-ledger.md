@@ -64,6 +64,18 @@ activation records and the mobile save-load order used by the static PC parity v
 The enabled and disabled renderer states are separately recorded in each
 generated build manifest; live visual selection still requires player QA.
 
+The separate optional Bathroom 2 route uses PC House Renovation rows
+`0x14D-0x151`. Its closed-curtain selector maps `0x14D` black, `0x14E` blue,
+`0x14F` beige, `0x150` green, and `0x151` pink to the corresponding
+`Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_*.png` payloads.
+In particular, `0x14E` selects the supplied `curtain_closed_blue.png` asset
+(98×117, SHA-256
+`EFABD7591A7DC363D8C3AAE64E95C5F31A8011A8AEFC6B00FF6C87155AA4BFAB`).
+When no Bathroom 2 style is active, or a custom descriptor cannot load, the
+selector returns the stock `Images/curtain_closed.png` image/grid. The native
+E6 second-bathroom route remains untouched; this is a separate PC-only visual
+route and still requires live player QA.
+
 ## Native PC route parity
 
 The inspected PC executable already contains the corresponding native routes.
@@ -125,5 +137,5 @@ EXE separately from the existing 16-state B156 matrix.
    against the mobile inventory semantics. The source route
    rebuilds `CContentMap` from the native ten-record table and is guarded by
    the Cheat Upgrades overlay; no generic renderer reset is used.
-3. Add Bathroom 2 as a separate optional route only after its overlay anchor
-   and state writes are proven.
+3. Native second-bathroom E6 parity remains separate from the optional PC-only
+   Bathroom 2 visual route; do not infer native E6 support from the PC overlay.

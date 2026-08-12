@@ -61,5 +61,6 @@ optional B157 renderer; it does not by itself prove live visual selection.
 
 The PC style catalog and first-owned-per-room selector are now statically
 linked. Live purchase, switching/rebuy pricing, save/load, camera movement, and
-patch-off visual QA remain. Bathroom 2 remains deferred because no separate
-second-bathroom overlay/state route has been proven.
+patch-off visual QA remain. The separate optional Bathroom 2 PC-only route is
+now linked and uses its own active-color curtain selector; native E6 remains
+untouched and is not implied by this visual route.

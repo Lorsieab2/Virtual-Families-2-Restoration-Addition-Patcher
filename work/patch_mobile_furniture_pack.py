@@ -783,6 +783,9 @@ AI_BATHROOM2_SOURCE_DIR = (
 AI_BATHROOM2_REFERENCE_DIR = (
     ROOT / "patcher_assets" / "optional_patches" / "ai_generated_bathroom2_renovations" / "reference"
 )
+AI_BATHROOM2_CONTRACT = (
+    ROOT / "data" / "vf2" / "ai-generated-bathroom2-contract.json"
+)
 AI_BATHROOM2_SOURCE_FILES = (
     "bathroom2_ai_black.png",
     "bathroom2_ai_blue.png",
@@ -863,6 +866,29 @@ AI_BATHROOM2_CURTAIN_ASSETS = {
         "size": [98, 117],
         "sha256": "8E80651D4CA9D06E41B88994BED91E714347AE8C8ECE88101FBF6E16B875DE04",
     },
+}
+AI_BATHROOM2_CLOSED_CURTAIN_SELECTOR = {
+    "stock_image_id": "0x21A",
+    "stock_path": "Images/curtain_closed.png",
+    "active_item_to_color": {
+        "0x14D": "black",
+        "0x14E": "blue",
+        "0x14F": "brown",
+        "0x150": "green",
+        "0x151": "pink",
+    },
+    "black_item": "0x14D",
+    "black_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_black.png",
+    "blue_item": "0x14E",
+    "blue_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_blue.png",
+    "beige_item": "0x14F",
+    "beige_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_brown.png",
+    "green_item": "0x150",
+    "green_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_green.png",
+    "pink_item": "0x151",
+    "pink_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_pink.png",
+    "selection_order": "first active Bathroom 2 style in black, blue, beige, green, pink order",
+    "fallback": "stock image/grid when no style is active or the selected custom descriptor cannot load",
 }
 AI_BATHROOM2_STORE_ICON_DIR = (
     ROOT / "patcher_assets" / "optional_patches" / "ai_generated_bathroom2_renovations"
@@ -8623,6 +8649,7 @@ def sync_ai_generated_bathroom2_assets(manifest):
         "source_art": source_records,
         "normalized_art": normalized,
         "closed_curtains": curtain_records,
+        "closed_curtain_selector": AI_BATHROOM2_CLOSED_CURTAIN_SELECTOR,
         "store_icons": store_icon_records,
         "store_icon_route": "House Renovations-only PC synthetic rows; native E6 item IDs remain disabled/hiatus",
         "pc_item_ids": [hex(item_id) for item_id in AI_BATHROOM2_PC_ITEM_IDS] if ENABLE_AI_GENERATED_BATHROOM2 else [],
@@ -11617,6 +11644,16 @@ static int VF2ResolveBathroom2ClosedCurtainImage() {{
     return kVF2StockBathroom2ClosedCurtainImage;
 }}
 
+static int VF2ResolveBathroom2ClosedCurtainImageForDraw() {{
+    int image = VF2ResolveBathroom2ClosedCurtainImage();
+    if (image == kVF2StockBathroom2ClosedCurtainImage) return image;
+    theGraphicsManager *graphics = theGraphicsManager::Get();
+    if (!graphics) return kVF2StockBathroom2ClosedCurtainImage;
+    return graphics->GetImageGrid((EImage)image)
+        ? image
+        : kVF2StockBathroom2ClosedCurtainImage;
+}}
+
 static ldwImageGrid *VF2ResolveBathroom2ClosedCurtainGridImpl() {{
     ldwImageGrid *stockGrid = Decal.bathroom2ClosedCurtainGrid;
     if (!kVF2EnableAIBathroom2) return stockGrid;
@@ -11645,7 +11682,7 @@ extern "C" int __cdecl VF2ResolveRenovationCurtainImage(int image) {{
     }}
     if (image == kVF2StockBathroom2ClosedCurtainImage) {{
         return kVF2EnableAIBathroom2
-            ? VF2ResolveBathroom2ClosedCurtainImage()
+            ? VF2ResolveBathroom2ClosedCurtainImageForDraw()
             : kVF2StockBathroom2ClosedCurtainImage;
     }}
     return image;
@@ -17044,6 +17081,7 @@ def patch_graphics_manager(manifest):
             "scale": {"room_overlay": 1.0, "store_icon": 1.0},
             "route": "PC-only House Renovations visual rows; native E6 untouched",
             "closed_curtain_descriptors": bathroom2_curtain_desc_manifest,
+            "closed_curtain_selector": AI_BATHROOM2_CLOSED_CURTAIN_SELECTOR,
             "closed_curtain_route": (
                 "theGraphicsManager::Draw image 538 selector plus "
                 "CDecal::RefreshDecals cached-grid selector; stock image/grid "
@@ -26046,6 +26084,38 @@ def validate_mobile_renovation_style_catalog():
     }
 
 
+def validate_ai_bathroom2_curtain_selector_contract():
+    """Fail closed if the generated Bathroom 2 curtain route drifts."""
+    try:
+        contract = json.loads(AI_BATHROOM2_CONTRACT.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError("Unable to read Bathroom 2 curtain contract") from exc
+    selector = contract.get("closed_curtain_selector")
+    if selector != AI_BATHROOM2_CLOSED_CURTAIN_SELECTOR:
+        raise RuntimeError("Bathroom 2 curtain selector contract drifted")
+    expected_rows = {
+        filename: spec for filename, spec in AI_BATHROOM2_CURTAIN_ASSETS.items()
+    }
+    rows = {
+        row.get("name"): row
+        for row in contract.get("closed_curtains", [])
+        if isinstance(row, dict)
+    }
+    for filename, spec in expected_rows.items():
+        row = rows.get(filename)
+        if row is None or row.get("color") != spec["color"]:
+            raise RuntimeError(f"Bathroom 2 curtain contract is missing {filename}")
+        if row.get("sha256", "").upper() != spec["sha256"]:
+            raise RuntimeError(f"Bathroom 2 curtain hash drifted for {filename}")
+    return {
+        "status": "passed",
+        "stock_image_id": selector["stock_image_id"],
+        "blue_item": selector["blue_item"],
+        "blue_asset": selector["blue_asset"],
+        "fallback": selector["fallback"],
+    }
+
+
 def validate_mobile_renovation_style_state_contract(manifest):
     """Fail closed if the generated helper loses mobile TakeOne/GetPrice state semantics."""
     expected_native_order = tuple(range(MOBILE_RENOVATION_NATIVE_ITEM_BASE, MOBILE_RENOVATION_NATIVE_ITEM_BASE + MOBILE_RENOVATION_NATIVE_ITEM_COUNT))
@@ -26148,6 +26218,7 @@ def validate_mobile_renovation_renderer_contract(manifest):
     if not isinstance(renderer, dict):
         raise RuntimeError("Missing mobile renovation renderer manifest")
     style_catalog_validation = validate_mobile_renovation_style_catalog()
+    bathroom2_curtain_validation = validate_ai_bathroom2_curtain_selector_contract()
     expected_anchors = {room: list(origin) for room, origin in MOBILE_RENOVATION_ANCHORS.items()}
     if renderer.get("anchors") != expected_anchors:
         raise RuntimeError("Mobile renovation renderer anchors drifted")
@@ -26204,6 +26275,7 @@ def validate_mobile_renovation_renderer_contract(manifest):
             "validated_ai_bathroom2_image_count": len(AI_BATHROOM2_SOURCE_FILES),
             "pixel_hashes_pinned": True,
             "style_catalog": style_catalog_validation,
+            "bathroom2_curtain_selector": bathroom2_curtain_validation,
         }
         return
     if ENABLE_MOBILE_RENOVATIONS:
@@ -26287,7 +26359,8 @@ def validate_mobile_renovation_renderer_contract(manifest):
         "anchors": expected_anchors,
         "validated_image_count": MOBILE_RENOVATION_IMAGE_COUNT if ENABLE_MOBILE_RENOVATIONS else 0,
         "pixel_hashes_pinned": ENABLE_MOBILE_RENOVATIONS,
-        "style_catalog": style_catalog_validation,
+            "style_catalog": style_catalog_validation,
+            "bathroom2_curtain_selector": bathroom2_curtain_validation,
     }
 
 

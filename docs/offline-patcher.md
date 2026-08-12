@@ -601,6 +601,13 @@ as:
   edited by me. (Sorry, I'm too lazy to hand-make the art myself. I'm busy with
   other stuff, but feel free to make some yourself and open an Issue on the
   Github if you want to change it- Lorsieab2)`.
+- With this setting enabled, Bathroom 2 closed curtains are selected by the
+  active PC renovation row: `0x14D` black, `0x14E` blue, `0x14F` beige,
+  `0x150` green, and `0x151` pink. The blue row uses
+  `Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_blue.png`;
+  inactive or unavailable custom descriptors return the stock
+  `Images/curtain_closed.png` image/grid. This remains a PC-only visual route;
+  the native E6 second-bathroom route is untouched.
 - When `mobile_renovations` is enabled, the five Bathroom 1 closed-curtain
   assets are staged under `Images/MobileRenovations/curtains/` and selected by
   the active Bathroom 1 renovation item. The black row (`0x13C`) selects
@@ -610,8 +617,7 @@ as:
   `shower_curtain_closed_pink.png`; the green row (`0x13F`) selects
   `shower_curtain_closed_green.png`. If no Bathroom 1 style is active, or the
   selected custom descriptor cannot load, the selector returns the stock
-  `Images/curtain_closed_southb.png` image/grid. Bathroom 2 is not part of
-  this route.
+  `Images/curtain_closed_southb.png` image/grid.
 
 For the final all-working playtest bundle, the exporter supports
 `--final-playtest-all-enabled`. This is an export-only profile: it marks

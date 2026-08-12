@@ -3216,9 +3216,13 @@ class MobileRenovationArtTests(unittest.TestCase):
                     source,
                 )
                 self.assertIn("return kVF2StockBathroom2ClosedCurtainImage;", bathroom2)
+                self.assertIn(
+                    "static int VF2ResolveBathroom2ClosedCurtainImageForDraw()",
+                    source,
+                )
                 self.assertIn("? VF2ResolveBathroom1ClosedCurtainImageForDraw()", resolver)
                 self.assertIn(": kVF2StockBathroom1ClosedCurtainImage;", resolver)
-                self.assertIn("? VF2ResolveBathroom2ClosedCurtainImage()", resolver)
+                self.assertIn("? VF2ResolveBathroom2ClosedCurtainImageForDraw()", resolver)
                 self.assertIn(": kVF2StockBathroom2ClosedCurtainImage;", resolver)
                 self.assertGreaterEqual(
                     source.count("VF2RefreshRenovationCurtainDecals();"),
@@ -3454,6 +3458,41 @@ class MobileRenovationArtTests(unittest.TestCase):
             "a33a00aedb3bb3b74d3e4aeeedc4e230ca056258b465d6b2d76fa4190d91e8ff",
         )
         self.assertEqual(contract["bathroom1_stock_curtain_replacements"], [])
+
+    def test_bathroom2_blue_curtain_asset_and_selector_are_authoritative(self):
+        contract = json.loads(
+            patcher.AI_BATHROOM2_CONTRACT.read_text(encoding="utf-8")
+        )
+        blue = patcher.AI_BATHROOM2_CURTAIN_DIR / "curtain_closed_blue.png"
+        self.assertTrue(blue.is_file())
+        self.assertEqual(
+            patcher.read_png_size(blue),
+            (98, 117),
+        )
+        self.assertEqual(
+            hashlib.sha256(blue.read_bytes()).hexdigest(),
+            "efabd7591a7dc363d8c3aae64e95c5f31a8011a8aefc6b00ff6c87155aa4bfab",
+        )
+        selector = contract["closed_curtain_selector"]
+        self.assertEqual(selector["stock_image_id"], "0x21A")
+        self.assertEqual(selector["stock_path"], "Images/curtain_closed.png")
+        self.assertEqual(selector["blue_item"], "0x14E")
+        self.assertEqual(
+            selector["blue_asset"],
+            "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_blue.png",
+        )
+        self.assertEqual(selector["active_item_to_color"]["0x14E"], "blue")
+        self.assertEqual(
+            next(
+                row for row in contract["closed_curtains"]
+                if row["name"] == "curtain_closed_blue.png"
+            )["sha256"],
+            "EFABD7591A7DC363D8C3AAE64E95C5F31A8011A8AEFC6B00FF6C87155AA4BFAB",
+        )
+        self.assertEqual(
+            selector,
+            patcher.AI_BATHROOM2_CLOSED_CURTAIN_SELECTOR,
+        )
 
     def test_bathroom1_decal_refreshprops_resolves_cached_grid_before_adddecal(self):
         old_patched = patcher.PATCHED

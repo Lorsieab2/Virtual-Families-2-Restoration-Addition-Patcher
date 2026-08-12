@@ -19,6 +19,29 @@
     {"name": "curtain_closed_green.png", "color": "green", "size": [98, 121], "sha256": "A26423365285F23292B7C8A123C3B893439E1E76FEAC4E6DA532ACA5D4A9579E", "replacement_target": "Images/curtain_closed.png"},
     {"name": "curtain_closed_pink.png", "color": "pink", "size": [98, 117], "sha256": "8E80651D4CA9D06E41B88994BED91E714347AE8C8ECE88101FBF6E16B875DE04", "replacement_target": "Images/curtain_closed.png"}
   ],
+  "closed_curtain_selector": {
+    "stock_image_id": "0x21A",
+    "stock_path": "Images/curtain_closed.png",
+    "active_item_to_color": {
+      "0x14D": "black",
+      "0x14E": "blue",
+      "0x14F": "brown",
+      "0x150": "green",
+      "0x151": "pink"
+    },
+    "black_item": "0x14D",
+    "black_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_black.png",
+    "blue_item": "0x14E",
+    "blue_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_blue.png",
+    "beige_item": "0x14F",
+    "beige_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_brown.png",
+    "green_item": "0x150",
+    "green_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_green.png",
+    "pink_item": "0x151",
+    "pink_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_pink.png",
+    "selection_order": "first active Bathroom 2 style in black, blue, beige, green, pink order",
+    "fallback": "stock image/grid when no style is active or the selected custom descriptor cannot load"
+  },
   "store_icons": [
     {"name": "blackbathroom2.png", "color": "black", "size": [82, 83], "sha256": "553818DEF05BAF9FBBE9165A251D75A3FE57EDF36763139FB3335798B1453182"},
     {"name": "bluebathroom2.png", "color": "blue", "size": [82, 80], "sha256": "CF688548A4C6A343480C8643F88DDA3B2AAE15C4401FAA21FAEAF38C8C401950"},
