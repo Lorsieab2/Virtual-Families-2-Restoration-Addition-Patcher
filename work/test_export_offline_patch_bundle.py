@@ -268,8 +268,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             with self.subTest(setting_id=setting_id):
                 self.assertEqual(settings_by_id[setting_id]["category"], "optional")
         cheat_description = settings_by_id["cheat_upgrades"]["description"]
-        self.assertIn("coins, food, goals, collections, prices", cheat_description)
-        self.assertIn("house renovation again can remove it", cheat_description)
+        self.assertIn("0xE1-0xEA", cheat_description)
+        self.assertIn("rebuilds the native content map", cheat_description)
 
     def test_mobile_renovation_assets_require_the_toggle_and_core_executable(self):
         self.assertEqual(
@@ -302,8 +302,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         )
         self.assertFalse(setting["default"])
         self.assertEqual(setting["category"], "optional")
-        self.assertIn("AI-assisted", setting["description"])
-        self.assertIn("manually edited", setting["description"])
+        self.assertIn("AI-generated", setting["description"])
+        self.assertIn("Bathroom 1's mobile renovations art", setting["description"])
         self.assertEqual(
             exporter.setting_for_asset(
                 Path("OptionalVisualMods") / exporter.AI_BATHROOM2_OPTIONAL_FOLDER / "bathroom2_ai_blue.png"
@@ -350,8 +350,11 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         self.assertEqual(setting["label"], "No AI Icons")
         self.assertFalse(setting["default"])
         self.assertEqual(setting["category"], "optional")
-        self.assertIn("alternate artwork", setting["description"])
-        self.assertIn("restore the regular pictures", setting["description"])
+        self.assertIn("other LDW games", setting["description"])
+        self.assertIn("online art sources", setting["description"])
+        self.assertIn("custom-made", setting["description"])
+        self.assertIn("late Special Upgrade icon PNGs", setting["description"])
+        self.assertIn("Disabling restores", setting["description"])
         self.assertEqual(
             exporter.asset_requires_for_setting("no_ai_icons"),
             ["core_executable", "cheat_upgrades", "no_ai_icons"],
@@ -1222,7 +1225,7 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertNotIn("unused_pets", settings.stdout)
             self.assertNotIn("mobile_purchases", settings.stdout)
             self.assertNotIn("island_events", settings.stdout)
-            self.assertIn("more clothing choices", settings.stdout)
+            self.assertIn("body field sync", settings.stdout)
             self.assertNotIn("transparent_store_bar [default off]", settings.stdout)
             self.assertIn("optional_song_mods [default off]", settings.stdout)
             settings_by_id = {row["id"]: row for row in manifest["settings"]}
