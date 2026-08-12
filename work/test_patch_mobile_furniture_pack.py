@@ -7310,6 +7310,163 @@ class TextFixStringManagerTests(unittest.TestCase):
                 patcher.ENABLE_HOLIDAY_ORNAMENTS = old_ornaments
 
 class MobileSpecialUpgradeContractTests(unittest.TestCase):
+    def test_antispam_and_rockhound_are_reversible_stock_rows(self):
+        old_patched = patcher.PATCHED
+        old_enabled = patcher.ENABLE_CHEAT_UPGRADES
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                for enabled in (False, True):
+                    temp = root / ("enabled" if enabled else "disabled")
+                    temp.mkdir()
+                    shutil.copy2(
+                        patcher.SRC_OBJS / "InventoryManager.obj",
+                        temp / "InventoryManager.obj",
+                    )
+                    (temp / "vf2_special_upgrade_effects.cpp").write_text(
+                        "",
+                        encoding="ascii",
+                    )
+                    patcher.PATCHED = temp
+                    patcher.ENABLE_CHEAT_UPGRADES = enabled
+                    manifest = {}
+                    patcher.patch_visible_special_upgrades(manifest)
+                    patcher.patch_inventory_manager(manifest)
+                    patcher.write_outfit_store_helpers(manifest)
+                    source = (temp / "vf2_special_upgrade_effects.cpp").read_text(
+                        encoding="ascii"
+                    )
+
+                    self.assertIn(
+                        "static const int kVF2AntiSpamSoftwareItem = 51;",
+                        source,
+                    )
+                    self.assertIn(
+                        "static const int kVF2RockhoundCertificateItem = 266;",
+                        source,
+                    )
+                    self.assertIn(
+                        "return itemId == kVF2AntiSpamSoftwareItem ||",
+                        source,
+                    )
+                    self.assertIn(
+                        "itemId == kVF2RockhoundCertificateItem;",
+                        source,
+                    )
+
+                    active = source.split(
+                        "static bool VF2B150UpgradeIsActive(int itemId)",
+                        1,
+                    )[1].split(
+                        'extern "C" int __cdecl VF2GetB150UpgradePrice',
+                        1,
+                    )[0]
+                    price = source.split(
+                        'extern "C" int __cdecl VF2GetB150UpgradePrice',
+                        1,
+                    )[1].split(
+                        "static void VF2ActivateNativeRenovation",
+                        1,
+                    )[0]
+                    removal = source.split(
+                        'extern "C" bool __cdecl VF2RemoveOwnedUpgrade',
+                        1,
+                    )[1].split(
+                        'extern "C" int __cdecl VF2GetExpandedFleaMarketCount',
+                        1,
+                    )[0]
+                    availability = source.split(
+                        'extern "C" int __cdecl VF2GetOutfitStoreNumAvailable',
+                        1,
+                    )[1].split(
+                        'extern "C" bool __cdecl VF2PurchaseOutfitStoreItem',
+                        1,
+                    )[0]
+
+                    self.assertIn("VF2IsCheatReversibleStockUpgrade(itemId)", active)
+                    self.assertIn(
+                        "return VF2B150UpgradeIsActive(itemId) ? 0 : -1;",
+                        price,
+                    )
+                    self.assertIn(
+                        "if (itemId == kVF2AntiSpamSoftwareItem)",
+                        removal,
+                    )
+                    self.assertIn("gameState[0x6C] = 0;", removal)
+                    self.assertIn(
+                        "InventoryManager.ReturnOne((EInventoryItem)itemId);",
+                        removal,
+                    )
+                    self.assertIn(
+                        "VF2IsCheatReversibleStockUpgrade(itemId)",
+                        availability,
+                    )
+                    self.assertIn("return 1;", availability)
+                    self.assertEqual(
+                        manifest["outfit_store_helpers"]["b150_cheat_upgrade_gate"][
+                            "reversible_stock_upgrades"
+                        ],
+                        {
+                            "category": "0x0F",
+                            "native_list": "gGoodiesList",
+                            "items": [
+                                {
+                                    "item_id": "0x33",
+                                    "name": "Anti-Spam Software",
+                                    "active_flag": "theGameState + 0x6C",
+                                },
+                                {
+                                    "item_id": "0x10a",
+                                    "name": "Rockhound Certificate",
+                                    "active_flag": "InventoryManager.HaveUpgrade",
+                                },
+                            ],
+                            "active_price": 0,
+                            "available_when_active": 1,
+                            "removal_route": "VF2RemoveOwnedUpgrade before native purchase handling",
+                        },
+                    )
+                    self.assertEqual(
+                        manifest["outfit_store_helpers"]["b150_cheat_upgrade_gate"][
+                            "enabled"
+                        ],
+                        enabled,
+                    )
+
+                    obj = CoffObject(temp / "InventoryManager.obj")
+                    symbol = obj.symbol(
+                        "?GetNumAvailable@CInventoryManager@@QAEHW4EInventoryItem@@@Z"
+                    )
+                    section = obj.section(symbol.section)
+                    raw = section.raw_ptr + symbol.value
+                    self.assertEqual(
+                        bytes(obj.buf[raw : raw + 25]),
+                        bytes.fromhex(
+                            "55 8B EC 51 FF 75 08 E8 00 00 00 00 "
+                            "83 C4 04 59 83 F8 FF 74 04 5D C2 04 00"
+                        ),
+                    )
+                    relocs = [
+                        struct.unpack_from(
+                            "<IIH",
+                            obj.buf,
+                            section.reloc_ptr + index * 10,
+                        )
+                        for index in range(section.nreloc)
+                    ]
+                    helper = obj.symbol_by_name["_VF2GetOutfitStoreNumAvailable"]
+                    self.assertEqual(
+                        [
+                            vaddr
+                            for vaddr, symbol_index, _rtype in relocs
+                            if symbol_index == helper.index
+                        ],
+                        [0x08],
+                    )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_CHEAT_UPGRADES = old_enabled
+
     def test_exact_effect_math_and_health_plan_persistence(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         self.assertIn("Money.bankingInterest + 0.02f", source)
