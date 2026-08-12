@@ -515,6 +515,34 @@ DESKTOP_RUNTIME_SOURCE_FILENAME_RE = re.compile(
     r"DESKTOP-[A-Za-z0-9]+",
     re.IGNORECASE,
 )
+PACKAGE_DEVELOPMENT_SUFFIXES = {
+    ".bak",
+    ".id0",
+    ".id1",
+    ".id2",
+    ".i64",
+    ".lib",
+    ".log",
+    ".map",
+    ".nam",
+    ".obj",
+    ".pdb",
+    ".til",
+    ".tmp",
+}
+PACKAGE_DEVELOPMENT_ROOT_FILES = {
+    "VF2_INTERNAL_WORKINGS_SUMMARY.txt",
+    "same-sex-native-generator.log",
+}
+PACKAGE_DEVELOPMENT_EXACT_FILES = {
+    "build.stderr.log",
+    "build.stdout.log",
+    "generator.console.log",
+    "generator.log",
+    "generator.stderr.log",
+    "generator.stdout.log",
+}
+PACKAGE_UNWANTED_NAMES = {".DS_Store"}
 OFFICIAL_B93_RELEASE_REQUIRED_DIRS = (
     "Assets",
     "Images",
@@ -4580,7 +4608,20 @@ def seed_from_previous_build(manifest):
         return
 
     copied = []
+    skipped = []
+    allowed_dirs = set(OFFICIAL_B93_RELEASE_REQUIRED_DIRS)
+    allowed_root_files = set(
+        VANILLA_RUNTIME_REQUIRED_FILES
+        + VANILLA_RUNTIME_OPTIONAL_FILES
+        + DESKTOP_RUNTIME_DLL_NAMES
+    )
     for entry in source.iterdir():
+        if entry.is_dir() and entry.name not in allowed_dirs:
+            skipped.append({"name": entry.name, "kind": "dir", "reason": "not part of the runtime package seed"})
+            continue
+        if entry.is_file() and entry.name not in allowed_root_files:
+            skipped.append({"name": entry.name, "kind": "file", "reason": "not part of the runtime package seed"})
+            continue
         target = OUT / entry.name
         if entry.is_dir():
             shutil.copytree(entry, target, dirs_exist_ok=True)
@@ -4593,6 +4634,7 @@ def seed_from_previous_build(manifest):
         "status": "seeded from previous build",
         "source": str(source),
         "copied": copied,
+        "skipped": skipped,
         "runtime_note": "Newest builds start from the most recent previous B-build, then overlay clean base assets and regenerated additive changes.",
     }
 
@@ -4645,34 +4687,132 @@ def find_vanilla_runtime_payload_source():
 
 
 def filter_desktop_runtime_source_files(manifest):
-    """Remove development-source filenames from generated runtime assets only."""
+    """Remove development-source filenames from every generated package path."""
     removed = manifest.setdefault(
         "runtime_payload_exclusions",
         {
             "status": "validated",
             "pattern": "DESKTOP-<identifier>",
-            "directories": list(RUNTIME_ASSET_DIRS),
+            "scope": "entire output package",
             "removed": [],
         },
     )["removed"]
     seen = set(removed)
-    for dirname in RUNTIME_ASSET_DIRS:
-        root = OUT / dirname
-        if not root.is_dir():
+    for path in OUT.rglob("*"):
+        if not path.is_file() or not DESKTOP_RUNTIME_SOURCE_FILENAME_RE.search(path.name):
             continue
-        for path in root.rglob("*"):
-            if (
-                not path.is_file()
-                or path.suffix.lower() in {".json", ".log", ".md", ".txt"}
-                or not DESKTOP_RUNTIME_SOURCE_FILENAME_RE.search(path.name)
-            ):
-                continue
+        relative = path.relative_to(OUT).as_posix()
+        path.unlink()
+        if relative not in seen:
+            removed.append(relative)
+            seen.add(relative)
+    manifest["runtime_payload_exclusions"]["removed_count"] = len(removed)
+
+
+def remove_package_development_artifacts(manifest):
+    """Remove copied build-analysis artifacts before a release package is written."""
+    removed = manifest.setdefault(
+        "package_development_exclusions",
+        {"status": "validated", "removed": []},
+    )["removed"]
+    seen = set(removed)
+    for path in OUT.rglob("*"):
+        if not path.is_file():
+            continue
+        relative_parts = path.relative_to(OUT).parts
+        is_macos_metadata = "__MACOSX" in relative_parts or path.name.startswith("._")
+        if is_macos_metadata or path.name in PACKAGE_UNWANTED_NAMES:
             relative = path.relative_to(OUT).as_posix()
             path.unlink()
             if relative not in seen:
                 removed.append(relative)
                 seen.add(relative)
-    manifest["runtime_payload_exclusions"]["removed_count"] = len(removed)
+            continue
+        is_root_dev_file = path.parent == OUT and path.name in PACKAGE_DEVELOPMENT_ROOT_FILES
+        is_root_executable = path.parent == OUT and path.suffix.lower() == ".exe"
+        is_build_log = path.name in PACKAGE_DEVELOPMENT_EXACT_FILES
+        if (
+            not is_root_dev_file
+            and not is_root_executable
+            and not is_build_log
+            and path.suffix.lower() not in PACKAGE_DEVELOPMENT_SUFFIXES
+        ):
+            continue
+        relative = path.relative_to(OUT).as_posix()
+        path.unlink()
+        if relative not in seen:
+            removed.append(relative)
+            seen.add(relative)
+    for path in sorted(OUT.rglob("*"), reverse=True):
+        if path.is_dir() and not any(path.iterdir()):
+            path.rmdir()
+    manifest["package_development_exclusions"]["removed_count"] = len(removed)
+
+
+def sanitize_manifest_paths(value):
+    """Make generated evidence portable and remove local absolute path details."""
+    if isinstance(value, dict):
+        return {key: sanitize_manifest_paths(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [sanitize_manifest_paths(item) for item in value]
+    if not isinstance(value, str):
+        return value
+
+    normalized = value.replace("\\", "/")
+    root_prefix = str(ROOT).replace("\\", "/").rstrip("/") + "/"
+    if normalized.lower().startswith(root_prefix.lower()):
+        return "workspace/" + normalized[len(root_prefix) :]
+    if re.match(r"^[A-Za-z]:/", normalized) or normalized.startswith("//"):
+        return "<local-source>/" + Path(normalized).name
+    return value
+
+
+def validate_clean_package(manifest):
+    """Fail closed if private paths, desktop identifiers, or dev artifacts remain."""
+    errors = []
+    desktop_names = []
+    development_files = []
+    owner_paths = []
+    for path in OUT.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(OUT).as_posix()
+        if DESKTOP_RUNTIME_SOURCE_FILENAME_RE.search(path.name):
+            desktop_names.append(relative)
+        if path.suffix.lower() in PACKAGE_DEVELOPMENT_SUFFIXES and not (
+            path.parent == OUT and path.suffix.lower() == ".exe"
+        ):
+            development_files.append(relative)
+        try:
+            raw = path.read_bytes()
+        except OSError as exc:
+            errors.append(f"could not read package file {relative}: {exc}")
+            continue
+        if b"C:\\Users\\Owner" in raw or b"C:/Users/Owner" in raw:
+            owner_paths.append(relative)
+        if re.search(rb"-----BEGIN [A-Z ]*PRIVATE KEY-----", raw):
+            errors.append(f"private-key marker found in {relative}")
+        if re.search(rb"gh[pousr]_[A-Za-z0-9_-]{20,}", raw) or re.search(
+            rb"github_pat_[A-Za-z0-9_-]{20,}", raw
+        ):
+            errors.append(f"GitHub token-shaped value found in {relative}")
+        if re.search(rb"AKIA[0-9A-Z]{16}", raw):
+            errors.append(f"AWS access-key-shaped value found in {relative}")
+    if desktop_names:
+        errors.append("DESKTOP identifier filenames remain: " + ", ".join(desktop_names[:10]))
+    if development_files:
+        errors.append("development artifacts remain: " + ", ".join(development_files[:10]))
+    if owner_paths:
+        errors.append("owner paths remain in package bytes: " + ", ".join(owner_paths[:10]))
+    if errors:
+        raise RuntimeError("Clean package validation failed:\n- " + "\n- ".join(errors))
+    manifest["clean_package_validation"] = {
+        "status": "validated",
+        "desktop_identifier_filenames": 0,
+        "development_artifacts": 0,
+        "owner_path_files": 0,
+        "secret_marker_errors": 0,
+    }
 
 
 def sync_vanilla_runtime_payload(manifest):
@@ -29549,6 +29689,7 @@ def main():
     # before writing the final manifest/readiness record.
     filter_desktop_runtime_source_files(manifest)
     write_internal_workings_summary(manifest)
+    remove_package_development_artifacts(manifest)
     validate_vf3_tv_animation_contract(manifest)
     validate_vf3_tv_behavior_contract(manifest)
     validate_native_north_bathroom_malfunction_selection(manifest)
@@ -29567,7 +29708,11 @@ def main():
     validate_invisible_kids_table_behavior_contract(manifest)
     remove_legacy_package_dirs(manifest)
     validate_runtime_payload_contract(manifest)
-    (OUT / "patch-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    validate_clean_package(manifest)
+    (OUT / "patch-manifest.json").write_text(
+        json.dumps(sanitize_manifest_paths(manifest), indent=2),
+        encoding="utf-8",
+    )
     print(json.dumps(manifest, indent=2))
 
 

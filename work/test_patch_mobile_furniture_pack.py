@@ -12936,8 +12936,8 @@ class RuntimePayloadContractTests(unittest.TestCase):
                 self.assertFalse(
                     (out / "Images" / "MapX1y2-DESKTOP-J6OI2AP.xcf").exists()
                 )
-                self.assertTrue(
-                    (out / "Images" / "notes-DESKTOP-J6OI2AP.txt").is_file()
+                self.assertFalse(
+                    (out / "Images" / "notes-DESKTOP-J6OI2AP.txt").exists()
                 )
                 self.assertTrue((out / "Images" / "MapX0Y2.jpg").is_file())
                 self.assertEqual(
@@ -12945,11 +12945,103 @@ class RuntimePayloadContractTests(unittest.TestCase):
                     [
                         "Images/MapX0Y2-DESKTOP-J6OI2AP.xcf",
                         "Images/MapX1y2-DESKTOP-J6OI2AP.xcf",
+                        "Images/notes-DESKTOP-J6OI2AP.txt",
                     ],
                 )
         finally:
             patcher.OUT = old_out
             patcher.VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS = old_sources
+
+    def test_previous_build_seed_skips_development_artifacts(self):
+        old_root = patcher.ROOT
+        old_out = patcher.OUT
+        old_env = patcher.os.environ.pop(patcher.PREVIOUS_BUILD_ENV, None)
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                tmp = Path(tmp)
+                previous = tmp / "previous"
+                out = tmp / "out"
+                (previous / "Images").mkdir(parents=True)
+                (previous / "Sounds").mkdir()
+                (previous / "Assets").mkdir()
+                (previous / "Images" / "stock.png").write_bytes(b"image")
+                (previous / "old.exe").write_bytes(b"analysis")
+                (previous / "old.i64").write_bytes(b"analysis")
+                (previous / "old.log").write_bytes(b"analysis")
+                (previous / "patch-manifest.json").write_text("{}", encoding="ascii")
+                (previous / "Assets" / "source.txt").write_text("asset", encoding="ascii")
+                patcher.ROOT = tmp
+                patcher.OUT = out
+                patcher.os.environ[patcher.PREVIOUS_BUILD_ENV] = str(previous)
+
+                manifest = {}
+                patcher.seed_from_previous_build(manifest)
+
+                self.assertTrue((out / "Images" / "stock.png").is_file())
+                self.assertFalse((out / "old.exe").exists())
+                self.assertFalse((out / "old.i64").exists())
+                self.assertFalse((out / "old.log").exists())
+                self.assertFalse((out / "patch-manifest.json").exists())
+                self.assertTrue((out / "Assets" / "source.txt").is_file())
+                self.assertEqual(len(manifest["previous_build_seed"]["skipped"]), 4)
+        finally:
+            patcher.ROOT = old_root
+            patcher.OUT = old_out
+            if old_env is not None:
+                patcher.os.environ[patcher.PREVIOUS_BUILD_ENV] = old_env
+
+    def test_package_cleanup_removes_development_artifacts_and_desktop_names(self):
+        old_out = patcher.OUT
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.OUT = Path(tmp)
+                (patcher.OUT / "Images").mkdir()
+                (patcher.OUT / "Images" / "notes-DESKTOP-ABC123.png").write_bytes(b"dev")
+                (patcher.OUT / "Images" / "old.i64").write_bytes(b"dev")
+                (patcher.OUT / "old.exe").write_bytes(b"dev")
+                (patcher.OUT / "old.log").write_bytes(b"dev")
+                (patcher.OUT / "generator.stdout.log").write_bytes(b"dev")
+                (patcher.OUT / "__MACOSX").mkdir()
+                (patcher.OUT / "__MACOSX" / "._metadata").write_bytes(b"dev")
+                (patcher.OUT / ".DS_Store").write_bytes(b"dev")
+                (patcher.OUT / "keep.txt").write_text("runtime", encoding="ascii")
+
+                manifest = {}
+                patcher.filter_desktop_runtime_source_files(manifest)
+                patcher.remove_package_development_artifacts(manifest)
+
+                self.assertFalse((patcher.OUT / "Images" / "notes-DESKTOP-ABC123.png").exists())
+                self.assertFalse((patcher.OUT / "Images" / "old.i64").exists())
+                self.assertFalse((patcher.OUT / "old.exe").exists())
+                self.assertFalse((patcher.OUT / "old.log").exists())
+                self.assertTrue((patcher.OUT / "keep.txt").is_file())
+                self.assertEqual(manifest["runtime_payload_exclusions"]["removed_count"], 1)
+                self.assertEqual(manifest["package_development_exclusions"]["removed_count"], 6)
+        finally:
+            patcher.OUT = old_out
+
+    def test_clean_package_validation_rejects_private_paths_and_tokens(self):
+        old_out = patcher.OUT
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.OUT = Path(tmp)
+                (patcher.OUT / "clean.txt").write_text("C:\\Users\\Owner\\secret", encoding="ascii")
+                with self.assertRaisesRegex(RuntimeError, "owner paths remain"):
+                    patcher.validate_clean_package({})
+        finally:
+            patcher.OUT = old_out
+
+    def test_manifest_path_sanitizer_removes_local_owner_paths(self):
+        value = {
+            "source": str(patcher.ROOT / "patcher_assets" / "source.png"),
+            "external": r"C:\Users\Owner\Downloads\source.png",
+            "relative": "Images/source.png",
+        }
+        sanitized = patcher.sanitize_manifest_paths(value)
+        self.assertNotIn("Owner", json.dumps(sanitized))
+        self.assertEqual(sanitized["source"], "workspace/patcher_assets/source.png")
+        self.assertEqual(sanitized["external"], "<local-source>/source.png")
+        self.assertEqual(sanitized["relative"], "Images/source.png")
 
     def test_accepts_complete_runtime_payload(self):
         def run(root):
