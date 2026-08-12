@@ -47,8 +47,12 @@ The bundle-level extraction record is tracked in
 `data/vf2/mobile-renovation-atlas-contract.json`. It records the eight mobile
 texture bundles that supplied the 15 staged room overlays, the extracted
 bathroom support textures that are intentionally not staged, and the current
-runtime-copy/selector boundary. It now also pins the ten native activation
-records and the mobile save-load order used by the static PC parity validator.
+runtime-copy/selector boundary. Bathroom 1 closed curtains are selected by the
+active PC renovation item: `0x13D` (blue) selects
+`Images/MobileRenovations/curtains/shower_curtain_closed_blue.png`; no active
+style, or an unavailable custom descriptor, returns the stock
+`Images/curtain_closed_southb.png` image/grid. It now also pins the ten native
+activation records and the mobile save-load order used by the static PC parity validator.
 The enabled and disabled renderer states are separately recorded in each
 generated build manifest; live visual selection still requires player QA.
 

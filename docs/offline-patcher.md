@@ -601,11 +601,13 @@ as:
   edited by me. (Sorry, I'm too lazy to hand-make the art myself. I'm busy with
   other stuff, but feel free to make some yourself and open an Issue on the
   Github if you want to change it- Lorsieab2)`.
-- When `mobile_renovations` is enabled, the black Bathroom 1 row stages its
-  verified `shower_curtain_closed_black.png` bytes under the stock filename
-  `Images/curtain_closed_southb.png`; the other five source-named curtain
-  assets remain available in the gated renovation payload. Bathroom 2 is not
-  part of this route.
+- When `mobile_renovations` is enabled, the five Bathroom 1 closed-curtain
+  assets are staged under `Images/MobileRenovations/curtains/` and selected by
+  the active Bathroom 1 renovation item. The blue row (`0x13D`) selects
+  `shower_curtain_closed_blue.png`. If no Bathroom 1 style is active, or the
+  selected custom descriptor cannot load, the selector returns the stock
+  `Images/curtain_closed_southb.png` image/grid. Bathroom 2 is not part of
+  this route.
 
 For the final all-working playtest bundle, the exporter supports
 `--final-playtest-all-enabled`. This is an export-only profile: it marks

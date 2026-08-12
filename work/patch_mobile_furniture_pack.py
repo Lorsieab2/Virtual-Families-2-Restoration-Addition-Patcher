@@ -11581,6 +11581,16 @@ static int VF2ResolveBathroom1ClosedCurtainImage() {{
     return kVF2StockBathroom1ClosedCurtainImage;
 }}
 
+static int VF2ResolveBathroom1ClosedCurtainImageForDraw() {{
+    int image = VF2ResolveBathroom1ClosedCurtainImage();
+    if (image == kVF2StockBathroom1ClosedCurtainImage) return image;
+    theGraphicsManager *graphics = theGraphicsManager::Get();
+    if (!graphics) return kVF2StockBathroom1ClosedCurtainImage;
+    return graphics->GetImageGrid((EImage)image)
+        ? image
+        : kVF2StockBathroom1ClosedCurtainImage;
+}}
+
 static ldwImageGrid *VF2ResolveBathroom1ClosedCurtainGridImpl() {{
     ldwImageGrid *stockGrid = Decal.bathroom1ClosedCurtainGrid;
     if (!kVF2EnableMobileRenovations) return stockGrid;
@@ -11630,7 +11640,7 @@ extern "C" __declspec(naked) ldwImageGrid *__cdecl VF2ResolveBathroom2ClosedCurt
 extern "C" int __cdecl VF2ResolveRenovationCurtainImage(int image) {{
     if (image == kVF2StockBathroom1ClosedCurtainImage) {{
         return kVF2EnableMobileRenovations
-            ? VF2ResolveBathroom1ClosedCurtainImage()
+            ? VF2ResolveBathroom1ClosedCurtainImageForDraw()
             : kVF2StockBathroom1ClosedCurtainImage;
     }}
     if (image == kVF2StockBathroom2ClosedCurtainImage) {{
@@ -16376,6 +16386,8 @@ def patch_bathroom1_curtain_decal(manifest):
                 "CDecal::RefreshProps passes the cached grid directly to AddDecal; "
                 "theGraphicsManager::Draw image hook is not reached on this path"
             ),
+            "active_selector": "PC Bathroom 1 renovation item 0x13C-0x140 -> matching closed-curtain descriptor",
+            "stock_fallback": "image 0x21B / Images/curtain_closed_southb.png when no style is active or its descriptor cannot load",
         }
     }
     if bathroom2_hook is not None:
@@ -16918,6 +16930,13 @@ def patch_graphics_manager(manifest):
             "stock_bathroom2_image": hex(AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE),
             "fallback": "returns the original stock image when that bathroom has no active style",
             "independent_state": True,
+            "bathroom1_selector": {
+                "active_item_range": "0x13C-0x140",
+                "blue_item": "0x13D",
+                "blue_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_blue.png",
+                "stock_fallback": "0x21B / Images/curtain_closed_southb.png",
+                "unavailable_custom_descriptor_fallback": True,
+            },
             "bathroom1_active_images": {
                 hex(item_id): hex(mobile_renovation_curtain_image_id(color, holiday_desc_count))
                 for item_id, color in MOBILE_RENOVATION_BATHROOM_CURTAIN_COLOR_BY_ITEM.items()

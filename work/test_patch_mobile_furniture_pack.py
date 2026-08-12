@@ -3203,8 +3203,20 @@ class MobileRenovationArtTests(unittest.TestCase):
                         bathroom2,
                     )
                 self.assertIn("return kVF2StockBathroom1ClosedCurtainImage;", bathroom1)
+                self.assertIn(
+                    "static int VF2ResolveBathroom1ClosedCurtainImageForDraw()",
+                    source,
+                )
+                self.assertIn(
+                    "return graphics->GetImageGrid((EImage)image)",
+                    source,
+                )
+                self.assertIn(
+                    "? image\n        : kVF2StockBathroom1ClosedCurtainImage;",
+                    source,
+                )
                 self.assertIn("return kVF2StockBathroom2ClosedCurtainImage;", bathroom2)
-                self.assertIn("? VF2ResolveBathroom1ClosedCurtainImage()", resolver)
+                self.assertIn("? VF2ResolveBathroom1ClosedCurtainImageForDraw()", resolver)
                 self.assertIn(": kVF2StockBathroom1ClosedCurtainImage;", resolver)
                 self.assertIn("? VF2ResolveBathroom2ClosedCurtainImage()", resolver)
                 self.assertIn(": kVF2StockBathroom2ClosedCurtainImage;", resolver)
@@ -3371,6 +3383,29 @@ class MobileRenovationArtTests(unittest.TestCase):
             patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
             patcher.ENABLE_HOLIDAY_ORNAMENTS = old_holiday
             patcher.ENABLE_HOLIDAY_BODY_TYPES = old_body_types
+
+    def test_bathroom1_blue_curtain_asset_and_selector_are_authoritative(self):
+        contract = json.loads(
+            patcher.MOBILE_RENOVATION_ATLAS_CONTRACT.read_text(encoding="utf-8")
+        )
+        blue = patcher.MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / "shower_curtain_closed_blue.png"
+        self.assertTrue(blue.is_file())
+        self.assertEqual(
+            hashlib.sha256(blue.read_bytes()).hexdigest(),
+            "a33a00aedb3bb3b74d3e4aeeedc4e230ca056258b465d6b2d76fa4190d91e8ff",
+        )
+        selector = contract["bathroom1_curtain_selector"]
+        self.assertEqual(selector["stock_image_id"], "0x21B")
+        self.assertEqual(selector["stock_path"], "Images/curtain_closed_southb.png")
+        self.assertEqual(selector["active_item_to_color"]["0x13D"], "blue")
+        self.assertEqual(
+            next(
+                row for row in contract["bathroom1_curtain_assets"]
+                if row["name"] == "shower_curtain_closed_blue.png"
+            )["sha256"],
+            "a33a00aedb3bb3b74d3e4aeeedc4e230ca056258b465d6b2d76fa4190d91e8ff",
+        )
+        self.assertEqual(contract["bathroom1_stock_curtain_replacements"], [])
 
     def test_bathroom1_decal_refreshprops_resolves_cached_grid_before_adddecal(self):
         old_patched = patcher.PATCHED
