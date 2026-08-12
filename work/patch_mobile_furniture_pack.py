@@ -1154,6 +1154,9 @@ MOBILE_RENOVATION_USER_STORE_ICON_DIR = (
     / "source_art" / "store_icons_user"
 )
 MOBILE_RENOVATION_USER_STORE_ICON_MAPPING = {
+    "blackbathroom1.png": {"pc_item": 0x13C, "mobile_item": 0x119, "room": "bathroom", "size": (80, 80), "sha256": "87C0EFD0E1AE8771ACDD8FDE5FE261CF82D0B4DF5BD97E47FACDEE77763F098A"},
+    "bluebathroom1.png": {"pc_item": 0x13D, "mobile_item": 0x118, "room": "bathroom", "size": (81, 80), "sha256": "A8619B0485B05E7BAC9DFE819518665A16AD4A120C67194E80676B6B10488715"},
+    "beigebathroom1.png": {"pc_item": 0x13E, "mobile_item": 0x11A, "room": "bathroom", "size": (81, 83), "sha256": "80DB32D91D6410F691D83E5C1DB78A0DF0AFBC01038EFE016988B0A4E0531F1E"},
     "blackoffice.png": {"pc_item": 0x146, "mobile_item": 0x121, "room": "office", "size": (82, 81), "sha256": "51F0A7D242BF212754FB6E9558098EC48FCB822D4153EA3C6F823586343A59FD"},
     "blueoffice.png": {"pc_item": 0x149, "mobile_item": 0x120, "room": "office", "size": (80, 80), "sha256": "28205EC78F14CE4812DC0A1A8A3F152CB5907A02152E0802E202A45677F0C78F"},
     "brownkitchen.png": {"pc_item": 0x141, "mobile_item": 0x11D, "room": "kitchen", "size": (82, 83), "sha256": "AD45FBE4BF44C71D98069216C7D1FC53E8F9FAB52033DDB122DBE5185BEC9A37"},
@@ -1162,13 +1165,12 @@ MOBILE_RENOVATION_USER_STORE_ICON_MAPPING = {
     "countrykitchen.png": {"pc_item": 0x145, "mobile_item": 0x11E, "room": "kitchen", "size": (82, 80), "sha256": "60D2667EFBFCF26B41059455C6CE23B54EE5CD8C7FD32DB5C60D7FEA17A118EF"},
     "greenbathroom.png": {"pc_item": 0x13F, "mobile_item": 0x11B, "room": "bathroom", "size": (80, 82), "sha256": "334C66646A8683A710E374BCE285692119A7BADC56430B48C0DC912A4494251C"},
     "greenoffice.png": {"pc_item": 0x147, "mobile_item": 0x122, "room": "office", "size": (83, 81), "sha256": "C934F3F1C898F9D54E1DB228832E3B106488311AE793D341D5A4BC2C1F05553C"},
+    "modernoffice.png": {"pc_item": 0x148, "mobile_item": 0x123, "room": "office", "size": (87, 81), "sha256": "3E3EB8ECA0D34CECCE5A66CBBA79E2265A1D3BE0879168A73925A1D5198FBFB7"},
     "pinkbathroom.png": {"pc_item": 0x140, "mobile_item": 0x11C, "room": "bathroom", "size": (82, 80), "sha256": "D985643DC83460A5DC99ADC48FFA42FA8945E9F4C1A517CE69D8704E48A7E3B0"},
     "redoffice.png": {"pc_item": 0x143, "mobile_item": 0x124, "room": "office", "size": (83, 81), "sha256": "9CEEF02EDA250379527382EEFC4540BE036FCD168256B803486CDFB1676672CB"},
     "yellowbathroom1.png": {"pc_item": 0x144, "mobile_item": 0x11F, "room": "kitchen", "size": (82, 81), "sha256": "AA07C9E3092BC33C9FFEF5FE0569295502E6950F24DF47A0A5A00B2C1B2770C4"},
 }
-MOBILE_RENOVATION_USER_STORE_ICON_MISSING = (
-    "blackbathroom.png", "bluebathroom.png", "beigebathroom.png", "modernoffice.png"
- )
+MOBILE_RENOVATION_USER_STORE_ICON_MISSING = ()
 MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS = "STOP"
 MOBILE_RENOVATION_USER_STORE_ICON_ROUTE = (
     "STOP: exact-byte user icon payload is staged; final executable linkage is not authenticated"
@@ -10639,6 +10641,16 @@ public:
 };
 static const ldwColor kVF2Black = { 0xFF000000u };
 """
+    decal_type_preamble = ""
+    if "class CDecal {" not in existing_helper:
+        decal_type_preamble = r"""
+class CDecal {
+public:
+    unsigned char vf2_curtain_prefix[0x1924];
+    ldwImageGrid *bathroom1ClosedCurtainGrid;
+};
+extern CDecal Decal;
+"""
     shared_type_preamble = ""
     if (
         "enum EInventoryItem" not in existing_helper
@@ -10785,6 +10797,7 @@ public:
 {gender_type_preamble}
 {manager_type_preamble}
 {renderer_type_preamble}
+{decal_type_preamble}
 
 extern CToolTray ToolTray;
 extern CInventoryManager InventoryManager;
@@ -11526,6 +11539,26 @@ static int VF2ResolveBathroom1ClosedCurtainImage() {{
     VF2NormalizeMobileRenovationActivesAndSave();
 {bathroom1_curtain_cases}
     return kVF2StockBathroom1ClosedCurtainImage;
+}}
+
+static ldwImageGrid *VF2ResolveBathroom1ClosedCurtainGridImpl() {{
+    ldwImageGrid *stockGrid = Decal.bathroom1ClosedCurtainGrid;
+    if (!kVF2EnableMobileRenovations) return stockGrid;
+    int image = VF2ResolveBathroom1ClosedCurtainImage();
+    if (image == kVF2StockBathroom1ClosedCurtainImage) return stockGrid;
+    theGraphicsManager *graphics = theGraphicsManager::Get();
+    if (!graphics) return stockGrid;
+    ldwImageGrid *grid = graphics->GetImageGrid((EImage)image);
+    return grid ? grid : stockGrid;
+}}
+
+extern "C" __declspec(naked) ldwImageGrid *__cdecl VF2ResolveBathroom1ClosedCurtainGrid() {{
+    __asm {{
+        push ecx
+        call VF2ResolveBathroom1ClosedCurtainGridImpl
+        pop ecx
+        ret
+    }}
 }}
 
 static int VF2ResolveBathroom2ClosedCurtainImage() {{
@@ -16211,6 +16244,53 @@ def apply_second_bathroom_leaks(manifest):
     patch_second_bathroom_leaks(manifest)
 
 
+def patch_bathroom1_curtain_decal(manifest):
+    """Resolve the Bathroom 1 decal grid before native RefreshProps adds it."""
+    obj = CoffObject(PATCHED / "Decal.obj")
+    refresh_props = obj.symbol("?RefreshProps@CDecal@@QAEXXZ")
+    section = obj.section(refresh_props.section)
+    hook_offset = refresh_props.value + 0x570
+    stock_push = b"\xFF\xB7\x24\x19\x00\x00"
+    raw_offset = section.raw_ptr + hook_offset
+    if bytes(obj.buf[raw_offset : raw_offset + len(stock_push)]) != stock_push:
+        raise RuntimeError(
+            "CDecal::RefreshProps Bathroom 1 curtain grid push drifted"
+        )
+    helper = obj.append_undefined_symbol(
+        "_VF2ResolveBathroom1ClosedCurtainGrid"
+    )
+    # Native RefreshProps has already pushed the position/size arguments and
+    # has loaded this into ECX as `this`.  The six-byte stock grid push is
+    # exactly large enough for a no-argument resolver call followed by
+    # `push eax`; the naked wrapper preserves ECX for AddDecal.
+    obj.buf[raw_offset : raw_offset + len(stock_push)] = (
+        b"\xE8\x00\x00\x00\x00\x50"
+    )
+    obj.append_relocation(
+        refresh_props.section,
+        hook_offset + 1,
+        helper,
+        IMAGE_REL_I386_REL32,
+    )
+    obj.write(PATCHED / "Decal.obj")
+    manifest["CDecal"] = {
+        "bathroom1_closed_curtain_grid_hook": {
+            "function": "?RefreshProps@CDecal@@QAEXXZ",
+            "offset": hex(0x570),
+            "stock_bytes": stock_push.hex(" "),
+            "replacement": "call _VF2ResolveBathroom1ClosedCurtainGrid; push eax",
+            "helper": "_VF2ResolveBathroom1ClosedCurtainGrid",
+            "cached_grid_offset": "0x1924",
+            "fallback": "returns the native cached Bathroom 1 grid when inactive or unresolved",
+            "ecx_preserved_for_add_decal": True,
+            "reason": (
+                "CDecal::RefreshProps passes the cached grid directly to AddDecal; "
+                "theGraphicsManager::Draw image hook is not reached on this path"
+            ),
+        }
+    }
+
+
 def patch_graphics_manager(manifest):
     obj = CoffObject(PATCHED / "theGraphicsManager.obj")
     image_records = image_records_by_id()
@@ -16830,7 +16910,11 @@ def patch_graphics_manager(manifest):
                 "linkage STOP until authenticated; stock DrawItem fallback for missing mappings"
             ),
             "closed_curtain_descriptors": bathroom1_curtain_desc_manifest,
-            "closed_curtain_route": "theGraphicsManager::Draw image 539 selector; stock image 539 remains fallback when no Bathroom 1 style is active",
+            "closed_curtain_route": (
+                "theGraphicsManager::Draw image 539 selector plus "
+                "CDecal::RefreshProps cached-grid selector; stock image/grid "
+                "remain the fallback when no Bathroom 1 style is active"
+            ),
         },
         "ai_bathroom2_visual_images": {
             "enabled": ENABLE_AI_GENERATED_BATHROOM2,
@@ -28999,6 +29083,7 @@ def main():
     else:
         remove_holiday_ornament_collection_art(manifest)
     patch_graphics_manager(manifest)
+    patch_bathroom1_curtain_decal(manifest)
     patch_floating_anim_table(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
         write_holiday_body_draw_helper(manifest)

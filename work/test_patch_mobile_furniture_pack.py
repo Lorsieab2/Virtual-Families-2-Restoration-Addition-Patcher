@@ -2301,8 +2301,11 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
 
 
 class MobileRenovationArtTests(unittest.TestCase):
-    def test_user_store_icon_mapping_is_hash_pinned_and_missing_rows_are_explicit(self):
+    def test_user_store_icon_mapping_is_hash_pinned_and_all_rows_are_present(self):
         expected = {
+            "blackbathroom1.png": (0x13C, 0x119, "bathroom"),
+            "bluebathroom1.png": (0x13D, 0x118, "bathroom"),
+            "beigebathroom1.png": (0x13E, 0x11A, "bathroom"),
             "blackoffice.png": (0x146, 0x121, "office"),
             "blueoffice.png": (0x149, 0x120, "office"),
             "brownkitchen.png": (0x141, 0x11D, "kitchen"),
@@ -2311,6 +2314,7 @@ class MobileRenovationArtTests(unittest.TestCase):
             "countrykitchen.png": (0x145, 0x11E, "kitchen"),
             "greenbathroom.png": (0x13F, 0x11B, "bathroom"),
             "greenoffice.png": (0x147, 0x122, "office"),
+            "modernoffice.png": (0x148, 0x123, "office"),
             "pinkbathroom.png": (0x140, 0x11C, "bathroom"),
             "redoffice.png": (0x143, 0x124, "office"),
             "yellowbathroom1.png": (0x144, 0x11F, "kitchen"),
@@ -2322,10 +2326,7 @@ class MobileRenovationArtTests(unittest.TestCase):
             self.assertTrue(path.is_file())
             self.assertEqual((row["pc_item"], row["mobile_item"], row["room"]), (pc_item, mobile_item, room))
             self.assertEqual(hashlib.sha256(path.read_bytes()).hexdigest().upper(), row["sha256"])
-        self.assertEqual(
-            patcher.MOBILE_RENOVATION_USER_STORE_ICON_MISSING,
-            ("blackbathroom.png", "bluebathroom.png", "beigebathroom.png", "modernoffice.png"),
-        )
+        self.assertEqual(patcher.MOBILE_RENOVATION_USER_STORE_ICON_MISSING, ())
         self.assertEqual(patcher.MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS, "STOP")
         self.assertIn("not authenticated", patcher.MOBILE_RENOVATION_USER_STORE_ICON_ROUTE)
         catalog_by_mobile_item = {
@@ -2354,13 +2355,13 @@ class MobileRenovationArtTests(unittest.TestCase):
         try:
             patcher.ENABLE_MOBILE_RENOVATIONS = True
             base = patcher.mobile_renovation_store_icon_image_base()
-            self.assertEqual(patcher.MOBILE_RENOVATION_USER_STORE_ICON_COUNT, 11)
+            self.assertEqual(patcher.MOBILE_RENOVATION_USER_STORE_ICON_COUNT, 15)
             self.assertEqual(
                 [
                     patcher.mobile_renovation_store_icon_image_id(spec["pc_item"])
                     for spec in patcher.MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.values()
                 ],
-                list(range(base, base + 11)),
+                list(range(base, base + 15)),
             )
             for pc_item in patcher.MOBILE_RENOVATION_PC_ITEM_IDS:
                 if pc_item in patcher.MOBILE_RENOVATION_USER_STORE_ICON_SPEC_BY_PC_ITEM:
@@ -2411,7 +2412,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                     graphics["store_icon_link_status"],
                     patcher.MOBILE_RENOVATION_USER_STORE_ICON_LINK_STATUS,
                 )
-                self.assertEqual(len(graphics["store_icon_descriptors"]), 11)
+                self.assertEqual(len(graphics["store_icon_descriptors"]), 15)
                 self.assertTrue(
                     all(
                         row["status"] == "staged_only_stop_unverified_executable_link"
@@ -3319,6 +3320,59 @@ class MobileRenovationArtTests(unittest.TestCase):
             patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
             patcher.ENABLE_HOLIDAY_ORNAMENTS = old_holiday
             patcher.ENABLE_HOLIDAY_BODY_TYPES = old_body_types
+
+    def test_bathroom1_decal_refreshprops_resolves_cached_grid_before_adddecal(self):
+        old_patched = patcher.PATCHED
+        old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                patcher.PATCHED = root
+                shutil.copy2(patcher.SRC_OBJS / "Decal.obj", patcher.PATCHED / "Decal.obj")
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").write_text(
+                    "", encoding="ascii"
+                )
+                patcher.write_outfit_store_helpers({})
+                manifest = {}
+                patcher.patch_bathroom1_curtain_decal(manifest)
+                source = (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").read_text(
+                    encoding="ascii"
+                )
+                self.assertIn(
+                    "VF2ResolveBathroom1ClosedCurtainGridImpl", source
+                )
+                self.assertIn(
+                    "unsigned char vf2_curtain_prefix[0x1924];", source
+                )
+                hook = manifest["CDecal"]["bathroom1_closed_curtain_grid_hook"]
+                self.assertEqual(hook["offset"], "0x570")
+                self.assertTrue(hook["ecx_preserved_for_add_decal"])
+                obj = CoffObject(patcher.PATCHED / "Decal.obj")
+                refresh_props = obj.symbol("?RefreshProps@CDecal@@QAEXXZ")
+                sec = obj.section(refresh_props.section)
+                raw_offset = sec.raw_ptr + refresh_props.value + 0x570
+                self.assertEqual(
+                    bytes(obj.buf[raw_offset : raw_offset + 6]),
+                    b"\xE8\x00\x00\x00\x00\x50",
+                )
+                reloc_targets = []
+                for index in range(sec.nreloc):
+                    vaddr, symbol_index, relocation_type = struct.unpack_from(
+                        "<IIH", obj.buf, sec.reloc_ptr + index * 10
+                    )
+                    if (
+                        vaddr == refresh_props.value + 0x571
+                        and relocation_type == patcher.IMAGE_REL_I386_REL32
+                    ):
+                        reloc_targets.append(obj.symbol_by_index[symbol_index].name)
+                self.assertEqual(
+                    reloc_targets,
+                    ["_VF2ResolveBathroom1ClosedCurtainGrid"],
+                )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
 
     def test_bathroom1_and_bathroom2_geometry_is_independent_and_color_invariant(self):
         old_patched = patcher.PATCHED
