@@ -7669,72 +7669,71 @@ class OutfitStoreMappingTests(unittest.TestCase):
         rows = {item["item_id"]: item for item in patcher.CHEAT_UPGRADE_ITEMS}
 
         self.assertEqual(rows[0x123]["name"], "Unlock everything in the store")
-        self.assertIn("across all store categories", rows[0x123]["description"])
+        self.assertEqual(rows[0x123]["description"], "Unlocks every store item. Buy again to restore the original locks.")
         self.assertEqual(rows[0x125]["name"], "Reset Ants")
         self.assertEqual(rows[0x126]["name"], "Reset all collections")
         self.assertEqual(rows[0x127]["name"], "Complete all collections")
-        self.assertEqual(rows[0x128]["description"], "Everything in the store costs twice as much.")
-        self.assertEqual(rows[0x129]["description"], "Everything in the store costs five times as much.")
+        self.assertEqual(rows[0x128]["description"], "Doubles every store price.")
+        self.assertEqual(rows[0x129]["description"], "Makes every store item cost five times more.")
         self.assertEqual(
             rows[0x12A]["description"],
-            "Everything in the store now costs an insane amount. Good Luck!",
+            "Makes every store item cost 100 times more.",
         )
         self.assertEqual(rows[0x12B]["name"], "Trigger all house malfunctions")
-        self.assertIn('Useful for getting the "Handyman" goal.', rows[0x12B]["description"])
+        self.assertIn('Helps with the "Handyman" goal.', rows[0x12B]["description"])
         self.assertIn(0x12B, patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
         self.assertEqual(rows[0x12C]["name"], "Reset Price Multiplier")
-        self.assertEqual(rows[0x12C]["description"], "Resets store prices to original values.")
+        self.assertEqual(rows[0x12C]["description"], "Returns store prices to normal.")
         self.assertIn(0x12C, patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
         self.assertEqual(rows[0x12D]["name"], "Fix all house malfunctions")
         self.assertIn("Router back online", rows[0x12D]["description"])
         self.assertIn(0x12D, patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
         self.assertEqual(rows[0x12E]["name"], "Complete all Achievements")
-        self.assertIn("normal coin reward", rows[0x12E]["description"])
+        self.assertIn("usual coin rewards", rows[0x12E]["description"])
         self.assertEqual(rows[0x12F]["name"], "Fill available house slots with trash")
-        self.assertIn("dirt smudges", rows[0x12F]["description"])
-        self.assertIn("Will not work if Maid is active", rows[0x12F]["description"])
+        self.assertIn("trash, dirt, and socks", rows[0x12F]["description"])
+        self.assertIn("Does not work while the Maid is active", rows[0x12F]["description"])
         self.assertEqual(rows[0x130]["name"], "Fill available yard slots with weeds")
-        self.assertIn("Will not work if Gardener is active", rows[0x130]["description"])
+        self.assertIn("Does not work while the Gardener is active", rows[0x130]["description"])
         self.assertLessEqual(len(rows[0x12F]["description"]), 90)
         self.assertLessEqual(len(rows[0x130]["description"]), 90)
         self.assertEqual(rows[0x131]["name"], "Clean Garden")
-        self.assertIn("without affecting other collectables", rows[0x131]["description"])
+        self.assertIn("without removing other items", rows[0x131]["description"])
         self.assertEqual(rows[0x132]["name"], "Force Marriage Email")
         self.assertEqual(
             rows[0x132]["description"],
-            "Queues a normal base-game marriage proposal with native candidate rules.",
+            "Sends a normal marriage proposal using the game's usual rules.",
         )
         self.assertEqual(rows[0x14C]["name"], "Enable Same-Sex Marriage")
         self.assertEqual(
             rows[0x14C]["description"],
-            "Enables same-sex marriage candidates. Buy again to disable this toggle.",
+            "Allows same-sex marriage candidates. Buy again to turn this off.",
         )
         self.assertEqual(rows[0x132]["price"], 0)
         self.assertEqual(rows[0x14C]["price"], patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE)
         self.assertEqual(patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE, 10000)
         self.assertEqual(rows[0x11B]["price"], 0)
         self.assertEqual(rows[0x133]["name"], "Max out sock pile")
-        self.assertIn("maximum signed integer", rows[0x133]["description"])
+        self.assertIn("maximum size", rows[0x133]["description"])
         self.assertEqual(rows[0x134]["name"], "No sock pile")
-        self.assertIn("without awarding sock-laundering progress", rows[0x134]["description"])
+        self.assertIn("without giving sock-laundering progress", rows[0x134]["description"])
         self.assertEqual(rows[0x135]["name"], "Clean House")
-        self.assertIn("stock Housekeeping Services event", rows[0x135]["description"])
-        self.assertIn("Yard weeds", rows[0x135]["description"])
+        self.assertIn("Cleans indoor messes", rows[0x135]["description"])
+        self.assertIn("yard weeds", rows[0x135]["description"])
         self.assertIn("laundry-room sock pile", rows[0x135]["description"])
         self.assertEqual(rows[0x136]["name"], "Force Successful Pregnancy")
-        self.assertIn("next eligible try-for-baby attempt", rows[0x136]["description"])
-        self.assertIn("until the native birth routine succeeds", rows[0x136]["description"])
+        self.assertIn("next successful try for a baby", rows[0x136]["description"])
         self.assertEqual(rows[0x137]["name"], "Next Babies Male")
         self.assertEqual(rows[0x138]["name"], "Next Babies Female")
         self.assertEqual(rows[0x139]["name"], "Next Pregnancy Singleton")
         self.assertEqual(rows[0x13A]["name"], "Next Pregnancy Twins")
         self.assertEqual(rows[0x13B]["name"], "Next Pregnancy Triplets")
-        self.assertIn("available capacity", rows[0x13A]["description"])
-        self.assertIn("available capacity", rows[0x13B]["description"])
+        self.assertIn("room for two children", rows[0x13A]["description"])
+        self.assertIn("room for three children", rows[0x13B]["description"])
         self.assertEqual(rows[0x14B]["name"], "Divorce Spouse")
         self.assertEqual(
             rows[0x14B]["description"],
-            "WARNING: Permanently removes spouse from the Family Tree and House!",
+            "WARNING: Permanently removes your spouse from the family and Family Tree!",
         )
         self.assertEqual(patcher.CHEAT_UPGRADE_LEGACY_COUNT, 19)
         self.assertEqual(patcher.CHEAT_UPGRADE_STRING_COUNT, 38)
@@ -7893,7 +7892,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertNotIn("kVF2CheatMarriageProposalMale", source)
         self.assertIn("case 0x14B:", source)
         self.assertIn("if (!VF2DivorceSpouse()) return;", source)
-        self.assertIn("WARNING: Permanently removes spouse from the Family Tree and House!", source)
+        self.assertIn("WARNING: Permanently removes your spouse from the family and Family Tree!", source)
         self.assertIn("static bool VF2DivorceSpouseAvailable()", source)
         divorce_helper = source.split(
             "static CVillager *VF2CurrentGenerationSecondAdult", 1
@@ -10753,7 +10752,7 @@ class DivorceSpouseContractTests(unittest.TestCase):
         ledger = Path(__file__).resolve().parents[1] / "docs" / "REQUEST_LEDGER.md"
         text = ledger.read_text(encoding="utf-8")
         self.assertIn(
-            "WARNING: Permanently removes spouse from the Family Tree and House!",
+            "WARNING: Permanently removes your spouse from the family and Family Tree!",
             text,
         )
 

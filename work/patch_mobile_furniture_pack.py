@@ -314,7 +314,7 @@ MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL = "_gVF2AllowMarriageCandidateReroll"
 # removal cannot drift apart again.
 CHEAT_REVERSIBLE_STOCK_UPGRADE_IDS = (0x33, 0x10A)
 DIVORCE_SPOUSE_ITEM_ID = 0x14B
-DIVORCE_SPOUSE_WARNING = "WARNING: Permanently removes spouse from the Family Tree and House!"
+DIVORCE_SPOUSE_WARNING = "WARNING: Permanently removes your spouse from the family and Family Tree!"
 DIVORCE_SPOUSE_ICON_FILE = "cheat_marriage_email.png"
 # Divorce is a one-shot cheat action, not an owned upgrade. Keep its
 # configured catalog price explicit so a valid current spouse is rendered as
@@ -776,9 +776,7 @@ MOBILE_RENOVATION_REFERENCE_ARTIFACTS = {
 }
 AI_BATHROOM2_LABEL = "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)"
 AI_BATHROOM2_DISCLAIMER = (
-    "Warning: These Bathroom 2 renovation images are AI-generated based on the Bathroom 1's mobile renovations art, "
-    "but manually edited by me. (Sorry, I'm too lazy to hand-make the art myself. I'm busy with other stuff, but feel "
-    "free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2)"
+    "These Bathroom 2 makeover pictures were AI-assisted and then manually edited."
 )
 AI_BATHROOM2_SOURCE_DIR = (
     ROOT / "patcher_assets" / "optional_patches" / "ai_generated_bathroom2_renovations"
@@ -1167,21 +1165,21 @@ if len(set(AI_BATHROOM2_PC_ITEM_IDS)) != 5 or set(AI_BATHROOM2_PC_ITEM_IDS) & se
 HOME_RENOVATION_CATEGORY = 0x11
 NATIVE_HOME_RENOVATION_COUNT = 10
 MOBILE_RENOVATION_STYLE_CATALOG = (
-    {"room": "bathroom", "name": "Bathroom Remodel in Black", "mobile_item": 0x119, "file": "tp233_sw_bathroom_black.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Black", "long": "For a stunning, bold look, remodel the southwest bathroom with patterned wallpaper, ceramic flooring, and a new shower curtain!"},
-    {"room": "bathroom", "name": "Bathroom Remodel in Blue", "mobile_item": 0x118, "file": "tp233_sw_bathroom_blue_marble.png", "price": 0x3E8, "lock": 0, "short": "Bathroom Remodel in Blue", "long": "For a fresh, updated look, remodel the southwest bathroom with patterned wallpaper, marble flooring, and a new shower curtain!"},
-    {"room": "bathroom", "name": "Bathroom Remodel in Beige", "mobile_item": 0x11A, "file": "tp234_sw_bathroom_brown.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Beige", "long": "For a fresh, updated look, remodel the southwest bathroom with new wallpaper, tile flooring, and a striped shower curtain!"},
-    {"room": "bathroom", "name": "Bathroom Remodel in Green", "mobile_item": 0x11B, "file": "tp234_sw_bathroom_green.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Green", "long": "For a fresh, updated look, remodel the southwest bathroom with striped wallpaper, tile flooring, and a new shower curtain!"},
-    {"room": "bathroom", "name": "Bathroom Remodel in Pink", "mobile_item": 0x11C, "file": "tp235_sw_bathroom_pink.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Pink", "long": "For a fresh, updated look, remodel the southwest bathroom with new wallpaper, tile flooring, and a striped shower curtain!"},
-    {"room": "kitchen", "name": "Kitchen Remodel in Beige", "mobile_item": 0x11D, "file": "tp238_beige_kitchen.png", "price": 0x898, "lock": 4, "short": "Kitchen Remodel in Beige", "long": "Remodel the walls and floors with a fresh coat of paint and ceramic tile!"},
-    {"room": "workshop", "name": "Wood Paneled Workshop Remodel", "mobile_item": 0x125, "file": "tp238_beige_workshop.png", "price": 0x834, "lock": 3, "short": "Wood Paneled Workshop Remodel", "long": "Update the workshop with wood paneled walls and faux cork flooring!"},
-    {"room": "office", "name": "Office Remodel in Red", "mobile_item": 0x124, "file": "tp239_red_office.png", "price": 0xABE, "lock": 3, "short": "Office Remodel in Red", "long": "Remodel the office in red! Your family will enjoy bright red walls and chairs, with coordinating neutral desks, carpet and chairs!"},
-    {"room": "kitchen", "name": "Kitchen Remodel in Yellow", "mobile_item": 0x11F, "file": "tp239_yellow_kitchen.png", "price": 0xDAC, "lock": 3, "short": "Kitchen Remodel in Yellow", "long": "Remodel the kitchen with a yellow gingham wallpaper and a bright, lemony ceramic tile!"},
-    {"room": "kitchen", "name": "Country Kitchen Remodel", "mobile_item": 0x11E, "file": "tp240_country_kitchen.png", "price": 0x73A, "lock": 3, "short": "Country Kitchen Remodel", "long": "Remodel the walls and floors with wood and stone to create a charming country kitchen!"},
-    {"room": "office", "name": "Dark Office Remodel", "mobile_item": 0x121, "file": "tp240_dark_office.png", "price": 0x834, "lock": 3, "short": "Dark Office Remodel", "long": "Remodel the office with striking black-and-white tiled walls and coordinating neutral desks, carpet and chairs!"},
-    {"room": "office", "name": "Office Remodel in Green", "mobile_item": 0x122, "file": "tp241_green_office.png", "price": 0xAF0, "lock": 3, "short": "Office Remodel in Green", "long": "Remodel the office in a lush green color with coordinating walls, carpet and chairs!"},
-    {"room": "office", "name": "Modern Office Remodel", "mobile_item": 0x123, "file": "tp241_modern_office.png", "price": 0x834, "lock": 3, "short": "Modern Office Remodel", "long": "Remodel the office with white paneled walls, coordinating neutral desks, carpet and chairs!"},
-    {"room": "office", "name": "Office Remodel in Blue", "mobile_item": 0x120, "file": "tp242_blue_office.png", "price": 0x992, "lock": 3, "short": "Office Remodel in Blue", "long": "Remodel the office in a calming blue color with coordinating walls, carpet and chairs!"},
-    {"room": "workshop", "name": "Checkered Workshop Remodel", "mobile_item": 0x126, "file": "tp242_checkered_workshop.png", "price": 0x76C, "lock": 3, "short": "Checkered Workshop Remodel", "long": "Remodel the workshop to look just like workshops enjoyed by famous car collectors, complete with checkerboard floor!"},
+    {"room": "bathroom", "name": "Bathroom Remodel in Black", "mobile_item": 0x119, "file": "tp233_sw_bathroom_black.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Black", "long": "Gives the bathroom black walls, dark floors, and a matching shower curtain."},
+    {"room": "bathroom", "name": "Bathroom Remodel in Blue", "mobile_item": 0x118, "file": "tp233_sw_bathroom_blue_marble.png", "price": 0x3E8, "lock": 0, "short": "Bathroom Remodel in Blue", "long": "Gives the bathroom blue walls, light floors, and a matching shower curtain."},
+    {"room": "bathroom", "name": "Bathroom Remodel in Beige", "mobile_item": 0x11A, "file": "tp234_sw_bathroom_brown.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Beige", "long": "Gives the bathroom beige walls, tile floors, and a matching shower curtain."},
+    {"room": "bathroom", "name": "Bathroom Remodel in Green", "mobile_item": 0x11B, "file": "tp234_sw_bathroom_green.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Green", "long": "Gives the bathroom green walls, tile floors, and a matching shower curtain."},
+    {"room": "bathroom", "name": "Bathroom Remodel in Pink", "mobile_item": 0x11C, "file": "tp235_sw_bathroom_pink.png", "price": 0x898, "lock": 4, "short": "Bathroom Remodel in Pink", "long": "Gives the bathroom pink walls, tile floors, and a matching shower curtain."},
+    {"room": "kitchen", "name": "Kitchen Remodel in Beige", "mobile_item": 0x11D, "file": "tp238_beige_kitchen.png", "price": 0x898, "lock": 4, "short": "Kitchen Remodel in Beige", "long": "Gives the kitchen beige walls and tile floors."},
+    {"room": "workshop", "name": "Wood Paneled Workshop Remodel", "mobile_item": 0x125, "file": "tp238_beige_workshop.png", "price": 0x834, "lock": 3, "short": "Wood Paneled Workshop Remodel", "long": "Gives the workshop wood walls and a cork-colored floor."},
+    {"room": "office", "name": "Office Remodel in Red", "mobile_item": 0x124, "file": "tp239_red_office.png", "price": 0xABE, "lock": 3, "short": "Office Remodel in Red", "long": "Gives the office red walls, matching chairs, and a neutral floor."},
+    {"room": "kitchen", "name": "Kitchen Remodel in Yellow", "mobile_item": 0x11F, "file": "tp239_yellow_kitchen.png", "price": 0xDAC, "lock": 3, "short": "Kitchen Remodel in Yellow", "long": "Gives the kitchen yellow walls and bright tile floors."},
+    {"room": "kitchen", "name": "Country Kitchen Remodel", "mobile_item": 0x11E, "file": "tp240_country_kitchen.png", "price": 0x73A, "lock": 3, "short": "Country Kitchen Remodel", "long": "Gives the kitchen wood walls and stone floors."},
+    {"room": "office", "name": "Dark Office Remodel", "mobile_item": 0x121, "file": "tp240_dark_office.png", "price": 0x834, "lock": 3, "short": "Dark Office Remodel", "long": "Gives the office dark walls and a black-and-white floor."},
+    {"room": "office", "name": "Office Remodel in Green", "mobile_item": 0x122, "file": "tp241_green_office.png", "price": 0xAF0, "lock": 3, "short": "Office Remodel in Green", "long": "Gives the office green walls, carpet, and chairs."},
+    {"room": "office", "name": "Modern Office Remodel", "mobile_item": 0x123, "file": "tp241_modern_office.png", "price": 0x834, "lock": 3, "short": "Modern Office Remodel", "long": "Gives the office white walls, neutral desks, and a soft-colored floor."},
+    {"room": "office", "name": "Office Remodel in Blue", "mobile_item": 0x120, "file": "tp242_blue_office.png", "price": 0x992, "lock": 3, "short": "Office Remodel in Blue", "long": "Gives the office blue walls, carpet, and chairs."},
+    {"room": "workshop", "name": "Checkered Workshop Remodel", "mobile_item": 0x126, "file": "tp242_checkered_workshop.png", "price": 0x76C, "lock": 3, "short": "Checkered Workshop Remodel", "long": "Gives the workshop a checkered floor and a car-collector style."},
 )
 MOBILE_RENOVATION_USER_STORE_ICON_DIR = (
     ROOT / "patcher_assets" / "optional_patches" / "mobile_renovations"
@@ -1651,217 +1649,217 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x11B,
         "name": "No Money",
-        "description": "Sets coins to 0. Useful for starting the game over.",
+        "description": "Sets your coins to 0.",
         "price": 0,
     },
     {
         "item_id": 0x11D,
         "name": "Add 100 coins",
-        "description": "Adds 100 coins to the current amount.",
+        "description": "Adds 100 coins.",
         "price": 0,
     },
     {
         "item_id": 0x11E,
         "name": "Add 10 thousand coins",
-        "description": "Adds 10,000 coins to the current amount.",
+        "description": "Adds 10,000 coins.",
         "price": 0,
     },
     {
         "item_id": 0x11F,
         "name": "Add max amount of coins",
-        "description": "Sets coins to the game's maximum amount.",
+        "description": "Sets your coins to the maximum amount.",
         "price": 0,
     },
     {
         "item_id": 0x11C,
         "name": "No Food",
-        "description": "Sets food to 0. Useful for starting the game over.",
+        "description": "Sets your food to 0.",
         "price": 0,
     },
     {
         "item_id": 0x120,
         "name": "Add 100 food",
-        "description": "Adds 100 food to the current amount.",
+        "description": "Adds 100 food.",
         "price": 0,
     },
     {
         "item_id": 0x121,
         "name": "Add 10 thousand food",
-        "description": "Adds 10,000 food to the current amount.",
+        "description": "Adds 10,000 food.",
         "price": 0,
     },
     {
         "item_id": 0x122,
         "name": "Add max amount of food",
-        "description": "Sets food to the game's maximum signed amount.",
+        "description": "Sets your food to the maximum amount.",
         "price": 0,
     },
     {
         "item_id": 0x123,
         "name": "Unlock everything in the store",
-        "description": "Unlocks every generation-locked store entry across all store categories. Buy again to restore the original locks.",
+        "description": "Unlocks every store item. Buy again to restore the original locks.",
         "price": 0,
     },
     {
         "item_id": 0x124,
         "name": "Reset Achievements",
-        "description": "Resets all goals and progress. Useful for starting the game over.",
+        "description": "Resets all goals and their progress.",
         "price": 0,
     },
     {
         "item_id": 0x12E,
         "name": "Complete all Achievements",
-        "description": "Completes every currently enabled achievement and awards its normal coin reward.",
+        "description": "Completes all achievements and gives their usual coin rewards.",
         "price": 0,
     },
     {
         "item_id": 0x125,
         "name": "Reset Ants",
-        "description": "Resets the ants puzzle so it can be completed again.",
+        "description": "Resets the ant puzzle so you can solve it again.",
         "price": 0,
     },
     {
         "item_id": 0x126,
         "name": "Reset all collections",
-        "description": "Removes every collected item and resets collection progress.",
+        "description": "Removes all collected items and resets collection progress.",
         "price": 0,
     },
     {
         "item_id": 0x127,
         "name": "Complete all collections",
-        "description": "Completes every collection and its related achievements.",
+        "description": "Completes all collections and their related achievements.",
         "price": 0,
     },
     {
         "item_id": 0x128,
         "name": "2x Prices",
-        "description": "Everything in the store costs twice as much.",
+        "description": "Doubles every store price.",
         "price": 0,
     },
     {
         "item_id": 0x129,
         "name": "5x Prices",
-        "description": "Everything in the store costs five times as much.",
+        "description": "Makes every store item cost five times more.",
         "price": 0,
     },
     {
         "item_id": 0x12A,
         "name": "100x Prices",
-        "description": "Everything in the store now costs an insane amount. Good Luck!",
+        "description": "Makes every store item cost 100 times more.",
         "price": 0,
     },
     {
         "item_id": 0x12C,
         "name": "Reset Price Multiplier",
-        "description": "Resets store prices to original values.",
+        "description": "Returns store prices to normal.",
         "price": 0,
     },
     {
         "item_id": 0x12B,
         "name": "Trigger all house malfunctions",
-        "description": 'Cause all possible house malfunctions, including sink/toilet leaks, oven/dryer fires, etc. Useful for getting the "Handyman" goal.',
+        "description": 'Causes every possible house problem, including leaks and oven or dryer fires. Helps with the "Handyman" goal.',
         "price": 0,
     },
     {
         "item_id": 0x12D,
         "name": "Fix all house malfunctions",
-        "description": "Fixes every active house malfunction and brings the Router back online.",
+        "description": "Fixes every active house problem and brings the Router back online.",
         "price": 0,
     },
     {
         "item_id": 0x12F,
         "name": "Fill available house slots with trash",
-        "description": "Uses native trash, dirt smudges, and sock spawn. Will not work if Maid is active.",
+        "description": "Fills the house with trash, dirt, and socks. Does not work while the Maid is active.",
         "price": 0,
     },
     {
         "item_id": 0x135,
         "name": "Clean House",
-        "description": "Removes the same four indoor mess categories as the stock Housekeeping Services event. Yard weeds and the laundry-room sock pile are preserved.",
+        "description": "Cleans indoor messes but leaves yard weeds and the laundry-room sock pile alone.",
         "price": 0,
     },
     {
         "item_id": 0x130,
         "name": "Fill available yard slots with weeds",
-        "description": "Uses the native weed spawn. Will not work if Gardener is active.",
+        "description": "Fills the yard with weeds. Does not work while the Gardener is active.",
         "price": 0,
     },
     {
         "item_id": 0x131,
         "name": "Clean Garden",
-        "description": "Removes every weed from the yard without affecting other collectables.",
+        "description": "Removes every weed from the yard without removing other items.",
         "price": 0,
     },
     {
         "item_id": 0x133,
         "name": "Max out sock pile",
-        "description": "Sets only the laundry-room sock pile to the maximum signed integer value.",
+        "description": "Fills the laundry-room sock pile to its maximum size.",
         "price": 0,
     },
     {
         "item_id": 0x134,
         "name": "No sock pile",
-        "description": "Clears the laundry-room sock pile without awarding sock-laundering progress.",
+        "description": "Clears the laundry-room sock pile without giving sock-laundering progress.",
         "price": 0,
     },
     {
         "item_id": MARRIAGE_EMAIL_ITEM_ID,
         "name": "Force Marriage Email",
-        "description": "Queues a normal base-game marriage proposal with native candidate rules.",
+        "description": "Sends a normal marriage proposal using the game's usual rules.",
         "price": 0,
     },
     {
         "item_id": SAME_SEX_MARRIAGE_ITEM_ID,
         "name": "Enable Same-Sex Marriage",
-        "description": "Enables same-sex marriage candidates. Buy again to disable this toggle.",
+        "description": "Allows same-sex marriage candidates. Buy again to turn this off.",
         "price": SAME_SEX_MARRIAGE_CATALOG_PRICE,
     },
     {
         "item_id": DIVORCE_SPOUSE_ITEM_ID,
         "name": "Divorce Spouse",
-        "description": DIVORCE_SPOUSE_WARNING,
+        "description": "WARNING: Permanently removes your spouse from the family and Family Tree!",
         "price": DIVORCE_SPOUSE_CATALOG_PRICE,
     },
     {
         "item_id": MARRIAGE_CANDIDATE_REROLL_ITEM_ID,
         "name": "Allow Reroll of Marriage Candidates",
-        "description": "Allows Reject to generate a new marriage candidate until Accept is clicked. Buy again to disable this toggle.",
+        "description": "Lets Reject show another marriage candidate until you accept one. Buy again to turn this off.",
         "price": MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE,
     },
     {
         "item_id": 0x136,
         "name": "Force Successful Pregnancy",
-        "description": "Makes the next eligible try-for-baby attempt pass its pregnancy roll. The one-shot remains armed until the native birth routine succeeds.",
+        "description": "Makes the next successful try for a baby succeed.",
         "price": 0,
     },
     {
         "item_id": 0x137,
         "name": "Next Babies Male",
-        "description": "Makes every baby in the next successful birth male. Replaces the Female one-shot and clears after birth.",
+        "description": "Makes the next babies all male.",
         "price": 0,
     },
     {
         "item_id": 0x138,
         "name": "Next Babies Female",
-        "description": "Makes every baby in the next successful birth female. Replaces the Male one-shot and clears after birth.",
+        "description": "Makes the next babies all female.",
         "price": 0,
     },
     {
         "item_id": 0x139,
         "name": "Next Pregnancy Singleton",
-        "description": "Makes the next successful birth one baby. Replaces the Twins or Triplets one-shot and clears after birth.",
+        "description": "Makes the next birth a single baby.",
         "price": 0,
     },
     {
         "item_id": 0x13A,
         "name": "Next Pregnancy Twins",
-        "description": "Makes the next successful birth twins when two child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Triplets one-shot and clears after birth.",
+        "description": "Makes the next birth twins when there is room for two children.",
         "price": 0,
     },
     {
         "item_id": 0x13B,
         "name": "Next Pregnancy Triplets",
-        "description": "Makes the next successful birth triplets when three child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Twins one-shot and clears after birth.",
+        "description": "Makes the next birth triplets when there is room for three children.",
         "price": 0,
     },
 ]
