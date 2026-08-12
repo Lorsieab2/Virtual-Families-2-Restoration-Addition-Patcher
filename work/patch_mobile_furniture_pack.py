@@ -792,24 +792,25 @@ AI_BATHROOM2_SOURCE_FILES = (
     "bathroom2_ai_green.png",
     "bathroom2_ai_pink.png",
 )
-AI_BATHROOM2_SOURCE_SIZES = {
+AI_BATHROOM2_OVERLAY_SIZES = {
     "black": (545, 385),
     "blue": (539, 385),
     "beige": (441, 360),
     "green": (444, 360),
     "pink": (642, 385),
 }
-AI_BATHROOM2_TARGET_SIZE = (511, 378)
-AI_BATHROOM2_OVERLAY_SIZES = {
-    color: AI_BATHROOM2_TARGET_SIZE
-    for color in ("black", "blue", "beige", "green", "pink")
-}
 AI_BATHROOM2_NATIVE_MAP_AREA = (13, 7)
-# All variants use the vanilla Bathroom 2 canvas and the measured room-apex
-# origin.  Per-color source canvases are normalized before they enter the
-# image table; drawing them at separate origins was the map-grid alignment
-# regression.
-AI_BATHROOM2_ANCHOR = (949, 145)
+# These are source-canvas world top-lefts measured against the user's supplied
+# 2048x2048 Bathroom 2 placement mockup.  The pink source art matches that
+# mockup exactly at (763,170); the other variants retain their source-canvas
+# dimensions and use the corresponding measured relative origins.
+AI_BATHROOM2_WORLD_TOP_LEFTS = {
+    "black": (762, 171),
+    "blue": (866, 171),
+    "beige": (866, 179),
+    "green": (864, 179),
+    "pink": (763, 170),
+}
 AI_BATHROOM2_REFERENCE_ARTIFACTS = {
     "bathroom2_vanilla.png": {
         "size": [511, 378],
@@ -820,6 +821,11 @@ AI_BATHROOM2_REFERENCE_ARTIFACTS = {
         "size": [709, 601],
         "sha256": "8FA3306621329BF08C54E4B6818075733AAEFF05F5E092D1FF76786E63C2A068",
         "purpose": "tracked Bathroom 2 bounds/placement evidence",
+    },
+    "bathroom2_placement_mockup.png": {
+        "size": [2048, 2048],
+        "sha256": "62234A96000D1C3AEA9989D9398F0988168D74DD0FB13BAC30E42F2ED005522C",
+        "purpose": "user-supplied 2048x2048 mockup defining the corrected Bathroom 2 source-canvas placement",
     },
 }
 AI_BATHROOM2_SOURCE_HASHES = {
@@ -8446,13 +8452,10 @@ def sync_ai_generated_bathroom2_assets(manifest):
     """Stage the separate, default-off AI Bathroom 2 visual payload.
 
     The tracked source art remains immutable. Runtime and optional copies are
-    deterministically resized to the vanilla Bathroom 2 canvas so every color
-    shares the same map-grid origin and bounds. This is a visual-only overlay
-    contract; the native second-bathroom renovation route remains
-    disabled/hiatus.
+    byte-exact source copies; each source canvas is placed at its measured
+    mockup world origin. This is a visual-only overlay contract; the native
+    second-bathroom renovation route remains disabled/hiatus.
     """
-    from PIL import Image
-
     source_records = []
     for filename in AI_BATHROOM2_SOURCE_FILES:
         source = AI_BATHROOM2_SOURCE_DIR / filename
@@ -8466,11 +8469,12 @@ def sync_ai_generated_bathroom2_assets(manifest):
         if not size or size[0] < 1 or size[1] < 1:
             raise RuntimeError(f"AI Bathroom 2 source art is not a readable PNG: {source}")
         color = AI_BATHROOM2_STYLE_CATALOG[AI_BATHROOM2_SOURCE_FILES.index(filename)]["color"]
-        expected_size = AI_BATHROOM2_SOURCE_SIZES.get(color)
+        expected_size = AI_BATHROOM2_OVERLAY_SIZES.get(color)
         if tuple(size) != tuple(expected_size or ()):
             raise RuntimeError(f"AI Bathroom 2 source dimensions drifted: {source}")
         source_records.append({
             "name": filename,
+            "color": color,
             "source": str(source),
             "source_size": list(size),
             "source_sha256": digest,
@@ -8508,30 +8512,25 @@ def sync_ai_generated_bathroom2_assets(manifest):
     normalized = []
     for record in source_records:
         source = Path(record["source"])
-        # Normalize only the generated runtime/optional copy. The tracked
-        # source file and its hash remain the audit source of truth.
+        # Keep optional and runtime copies byte-identical to the supplied
+        # source. Renderer scale is 1.0; placement is represented by the
+        # per-color world top-lefts below.
         optional_target = optional_root / source.name
-        with Image.open(source).convert("RGBA") as image:
-            if image.getbbox() is None:
-                raise RuntimeError(f"AI Bathroom 2 source art has no visible pixels: {source}")
-            image.resize(AI_BATHROOM2_TARGET_SIZE, Image.Resampling.LANCZOS).save(
-                optional_target,
-                format="PNG",
-                optimize=False,
-            )
+        shutil.copy2(source, optional_target)
         runtime_target = None
         if ENABLE_AI_GENERATED_BATHROOM2:
             runtime_target = runtime_root / source.name
-            shutil.copy2(optional_target, runtime_target)
-        normalized_digest = hashlib.sha256(optional_target.read_bytes()).hexdigest().upper()
+            shutil.copy2(source, runtime_target)
         normalized.append({
             "name": source.name,
-            "target_size": list(AI_BATHROOM2_TARGET_SIZE),
+            "color": record["color"],
+            "target_size": list(record["source_size"]),
+            "source_size": list(record["source_size"]),
             "source_sha256": record["source_sha256"],
             "optional_path": str(optional_root / source.name),
             "runtime_path": str(runtime_root / source.name) if ENABLE_AI_GENERATED_BATHROOM2 else None,
-            "normalized_sha256": normalized_digest,
-            "copy_mode": "RGBA_LANCZOS_resize_to_vanilla_bathroom2_canvas",
+            "normalized_sha256": record["source_sha256"],
+            "copy_mode": "byte_exact_source_copy_no_crop_resize_or_reencode",
             "alpha_required": True,
         })
 
@@ -8644,11 +8643,11 @@ def sync_ai_generated_bathroom2_assets(manifest):
             else "theGraphicsManager::Draw image 538 substitution selects only the active Bathroom 2 color and returns stock image 538 when inactive"
         ),
         "reference_evidence": reference_records,
-        "normalization": "RGBA LANCZOS resize from each immutable source canvas to bathroom2_vanilla.png dimensions; no generated_chroma intermediates",
+        "normalization": "immutable byte-exact source copies; no crop, resize, re-encode, or generated_chroma intermediates",
         "native_map_area": list(AI_BATHROOM2_NATIVE_MAP_AREA),
-        "anchor": list(AI_BATHROOM2_ANCHOR),
-        "bounds": list(AI_BATHROOM2_TARGET_SIZE),
-        "placement_basis": "measured shared room-apex world anchor; draw origin minus WorldView at scale 1.0 and opacity 100",
+        "world_top_lefts": {color: list(origin) for color, origin in AI_BATHROOM2_WORLD_TOP_LEFTS.items()},
+        "overlay_sizes": {color: list(size) for color, size in AI_BATHROOM2_OVERLAY_SIZES.items()},
+        "placement_basis": "user-supplied 2048x2048 mockup; draw origin minus WorldView at scale 1.0 and opacity 100",
         "immutable_source_art": True,
         "optional_target": str(optional_root),
         "runtime_target": str(runtime_root) if ENABLE_AI_GENERATED_BATHROOM2 else None,
@@ -25722,6 +25721,14 @@ def patch_mobile_renovation_renderer(manifest):
         "    VF2DrawAIBathroom2(graphics, worldX, worldY);"
         if ENABLE_AI_GENERATED_BATHROOM2 else ""
     )
+    b2_world_x_cpp = ", ".join(
+        str(AI_BATHROOM2_WORLD_TOP_LEFTS[color][0])
+        for color in AI_BATHROOM2_COLOR_ORDER
+    )
+    b2_world_y_cpp = ", ".join(
+        str(AI_BATHROOM2_WORLD_TOP_LEFTS[color][1])
+        for color in AI_BATHROOM2_COLOR_ORDER
+    )
 
     helper_cpp = f"""
 enum EImage {{ eImageDummy = 0 }};
@@ -25749,8 +25756,8 @@ static const int kVF2MobileRenovationImageBase = {mobile_renovation_image_base(h
 static const int kVF2MobileRenovationItemBase = {MOBILE_RENOVATION_PC_ITEM_BASE};
 static const int kVF2AIBathroom2ItemBase = {AI_BATHROOM2_PC_ITEM_BASE};
 static const int kVF2AIBathroom2ImageBase = {ai_bathroom2_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
-static const int kVF2AIBathroom2AnchorX = {AI_BATHROOM2_ANCHOR[0]};
-static const int kVF2AIBathroom2AnchorY = {AI_BATHROOM2_ANCHOR[1]};
+static const int kVF2AIBathroom2WorldX[5] = {{{b2_world_x_cpp}}};
+static const int kVF2AIBathroom2WorldY[5] = {{{b2_world_y_cpp}}};
 
 static int VF2SelectedMobileRenovationImage(int room) {{
     VF2NormalizeMobileRenovationActivesAndSave();
@@ -25791,7 +25798,7 @@ static void VF2DrawAIBathroom2(
             break;
         }}
     }}
-    if (image >= 0) graphics->Draw((EImage)image, kVF2AIBathroom2AnchorX - worldX, kVF2AIBathroom2AnchorY - worldY, 1.0f, 100);
+    if (image >= 0) graphics->Draw((EImage)image, kVF2AIBathroom2WorldX[styleIndex] - worldX, kVF2AIBathroom2WorldY[styleIndex] - worldY, 1.0f, 100);
 }}
 
 extern "C" void __cdecl VF2DrawMobileRenovations() {{
@@ -25824,10 +25831,10 @@ extern "C" void __cdecl VF2DrawMobileRenovations() {{
                 "translation_only": True,
             },
             "bathroom2": {
-                "origin": list(AI_BATHROOM2_ANCHOR),
-                "bounds": list(AI_BATHROOM2_TARGET_SIZE),
+                "world_top_lefts": {color: list(origin) for color, origin in AI_BATHROOM2_WORLD_TOP_LEFTS.items()},
+                "bounds_by_color": {color: list(size) for color, size in AI_BATHROOM2_OVERLAY_SIZES.items()},
                 "translation_only": True,
-                "all_color_variants_share_origin_and_bounds": True,
+                "immutable_source_art": True,
             },
         },
         "selector": {
@@ -25841,8 +25848,8 @@ extern "C" void __cdecl VF2DrawMobileRenovations() {{
             "enabled": ENABLE_AI_GENERATED_BATHROOM2,
             "selector": "direct persisted active byte, first active color order",
             "item_ids": [hex(item_id) for item_id in AI_BATHROOM2_PC_ITEM_IDS],
-            "anchor": list(AI_BATHROOM2_ANCHOR),
-            "bounds": list(AI_BATHROOM2_TARGET_SIZE),
+            "world_top_lefts": {color: list(origin) for color, origin in AI_BATHROOM2_WORLD_TOP_LEFTS.items()},
+            "overlay_sizes": {color: list(size) for color, size in AI_BATHROOM2_OVERLAY_SIZES.items()},
             "native_e6_touched": False,
             "route": "same DrawScene+0x39 overlay boundary as Bathroom1; separate Bathroom2 anchor",
         },
@@ -25996,20 +26003,28 @@ def validate_mobile_renovation_renderer_contract(manifest):
         raise RuntimeError("Mobile renovation renderer is not a 1:1 camera-relative overlay")
     if ENABLE_AI_GENERATED_BATHROOM2:
         ai_record = renderer.get("ai_bathroom2") or {}
-        if ai_record.get("anchor") != list(AI_BATHROOM2_ANCHOR):
-            raise RuntimeError("Bathroom 2 shared world anchor drifted")
-        if ai_record.get("bounds") != list(AI_BATHROOM2_TARGET_SIZE):
-            raise RuntimeError("Bathroom 2 normalized overlay dimensions drifted")
-        if "kVF2AIBathroom2AnchorX" not in helper_text or "kVF2AIBathroom2AnchorY" not in helper_text:
-            raise RuntimeError("Bathroom 2 shared anchor is missing")
+        expected_origins = {
+            color: list(origin)
+            for color, origin in AI_BATHROOM2_WORLD_TOP_LEFTS.items()
+        }
+        expected_sizes = {
+            color: list(size)
+            for color, size in AI_BATHROOM2_OVERLAY_SIZES.items()
+        }
+        if ai_record.get("world_top_lefts") != expected_origins:
+            raise RuntimeError("Bathroom 2 mockup world top-lefts drifted")
+        if ai_record.get("overlay_sizes") != expected_sizes:
+            raise RuntimeError("Bathroom 2 source overlay dimensions drifted")
+        if "kVF2AIBathroom2WorldX[5]" not in helper_text or "kVF2AIBathroom2WorldY[5]" not in helper_text:
+            raise RuntimeError("Bathroom 2 per-color coordinate arrays are missing")
         if "1.0f, 100" not in helper_text:
             raise RuntimeError("Bathroom 2 overlay opacity/scale drifted")
         ai_runtime = OUT / "Images" / "AIGeneratedBathroom2"
         for filename in AI_BATHROOM2_SOURCE_FILES:
             source = AI_BATHROOM2_SOURCE_DIR / filename
             runtime = ai_runtime / filename
-            if not runtime.is_file() or tuple(read_png_size(runtime) or ()) != AI_BATHROOM2_TARGET_SIZE:
-                raise RuntimeError(f"Bathroom 2 runtime overlay is not normalized: {filename}")
+            if not runtime.is_file() or runtime.read_bytes() != source.read_bytes():
+                raise RuntimeError(f"Bathroom 2 runtime overlay is not an immutable source copy: {filename}")
     if ENABLE_AI_GENERATED_BATHROOM2 and not ENABLE_MOBILE_RENOVATIONS:
         hook = renderer.get("hook") or {}
         if hook.get("insert_offset") != "0x39":
