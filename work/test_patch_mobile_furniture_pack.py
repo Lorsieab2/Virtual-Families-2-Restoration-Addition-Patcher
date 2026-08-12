@@ -2743,6 +2743,38 @@ class MobileRenovationArtTests(unittest.TestCase):
         )
         self.assertIn("AI_BATHROOM2_CURTAIN_RUNTIME_AUTHENTICATED = True", source)
 
+    def test_ai_bathroom2_purchase_availability_reaches_repurchase_removal(self):
+        old_patched = patcher.PATCHED
+        old_ai = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                helper = temp / "vf2_special_upgrade_effects.cpp"
+                helper.write_text("", encoding="ascii")
+                patcher.PATCHED = temp
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                patcher.write_outfit_store_helpers({})
+                source = helper.read_text(encoding="ascii")
+                availability = source.split(
+                    'extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId)',
+                    1,
+                )[1].split(
+                    'extern "C" bool __cdecl VF2PurchaseOutfitStoreItem',
+                    1,
+                )[0]
+                self.assertIn(
+                    "if (VF2IsAIBathroom2Style(itemId)) {\n"
+                    "        // Active Bathroom 2 styles are deliberately repurchasable:",
+                    availability,
+                )
+                self.assertLess(
+                    availability.index("if (VF2IsAIBathroom2Style(itemId))"),
+                    availability.index("return VF2OutfitBodyForItem(itemId) < 0 ? -1 : 1;"),
+                )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_ai
+
     def test_ai_bathroom2_disabled_manifest_is_explicit_and_nonready(self):
         old_out = patcher.OUT
         old_enabled = patcher.ENABLE_AI_GENERATED_BATHROOM2

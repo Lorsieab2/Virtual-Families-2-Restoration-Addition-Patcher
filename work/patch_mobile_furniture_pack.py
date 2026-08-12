@@ -11547,6 +11547,12 @@ extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
         // into the crash-prone path.
         return 0;
     }}
+    if (VF2IsAIBathroom2Style(itemId)) {{
+        // Active Bathroom 2 styles are deliberately repurchasable: the click
+        // handler must see a positive availability result so it can reach
+        // VF2RemoveOwnedUpgrade before the stock already-purchased branch.
+        return 1;
+    }}
     if (kVF2EnableB150CheatUpgrades && itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
         return 1;
     }}
@@ -14508,13 +14514,6 @@ static int VF2GetAIBathroom2Price(int itemId) {{
         'extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {\n'
         '    if (VF2ApplyAIBathroom2Style(itemId)) return;\n'
         '    if (VF2ApplyMobileRenovationStyle(itemId)) return;',
-    )
-    special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
-        'extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {\n'
-        '    if ((itemId == 0x132 || itemId == 0x14C)',
-        'extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {\n'
-        '    if (VF2IsAIBathroom2Style(itemId)) return 1;\n'
-        '    if ((itemId == 0x132 || itemId == 0x14C)',
     )
     special_upgrade_helper_cpp = special_upgrade_helper_cpp.replace(
         'extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {\n',
