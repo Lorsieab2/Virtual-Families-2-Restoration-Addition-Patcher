@@ -18222,6 +18222,72 @@ def patch_vf3_style_child_adoption_chooser(manifest):
     }
 
 
+def patch_marriage_proposal_state_guard(manifest):
+    """Fail closed when the native proposal state singleton is unavailable."""
+    dating_path = PATCHED / "DatingScene.obj"
+    dating = CoffObject(dating_path)
+    handle_name = "?HandleMessage@CDatingScene@@UAE_NHJ@Z"
+    handle = dating.symbol(handle_name)
+    section = dating.section(handle.section)
+    hook = handle.value + 0x9A
+    stock = bytes.fromhex(
+        "89 88 BC 5C 02 00 "
+        "C7 80 B8 5C 02 00 00 00 00 00"
+    )
+    raw = section.raw_ptr + hook
+    if bytes(dating.buf[raw:raw + len(stock)]) != stock:
+        raise RuntimeError("Dating marriage proposal state dereference drifted")
+
+    # The proposal close/commit route obtains the native game-state singleton
+    # immediately before this span.  Preserve both stock writes when EAX is
+    # valid; when the singleton is null, skip both writes and resume at the
+    # existing handled epilogue (+0xAA) instead of dereferencing EAX twice.
+    cave = section.raw_size
+    payload = bytearray(
+        b"\x85\xC0"              # native proposal state pointer non-null?
+        + b"\x75\x05"            # valid -> copied stock first write
+        + b"\xE9\0\0\0\0"       # null -> handled epilogue
+        + stock[:6]               # stock [state+0x25CBC] = ECX
+        + b"\xE9\0\0\0\0"       # continue with stock second write
+    )
+    if len(payload) != 20:
+        raise AssertionError("Marriage proposal state guard cave size drifted")
+    struct.pack_into(
+        "<i", payload, 5,
+        (handle.value + 0xAA) - (cave + 9),
+    )
+    struct.pack_into(
+        "<i", payload, 16,
+        (handle.value + 0xA0) - (cave + 20),
+    )
+    dating.insert_section_bytes(section.index, cave, bytes(payload))
+    dating._parse()
+    handle = dating.symbol(handle_name)
+    section = dating.section(handle.section)
+    raw = section.raw_ptr + hook
+    dating.buf[raw:raw + len(stock[:6])] = (
+        b"\xE9" + struct.pack("<i", cave - (hook + 5))
+        + b"\x90"
+    )
+    dating.write(dating_path)
+
+    manifest["MarriageProposalStateGuard"] = {
+        "status": "authenticated native game-state null guard installed",
+        "function": handle_name,
+        "hook_offset": "+0x9A",
+        "stock_span": stock.hex(" ").upper(),
+        "trampoline": hex(cave),
+        "cave_size": len(payload),
+        "valid_state": (
+            "preserve [EAX+0x25CBC] = ECX and continue at HandleMessage +0xA0"
+        ),
+        "null_state": (
+            "skip both native state writes and resume at the handled epilogue "
+            "HandleMessage +0xAA"
+        ),
+    }
+
+
 def patch_same_sex_marriage(manifest):
     """Install dormant gender-neutral marriage and romantic-action routing."""
     dating_path = PATCHED / "DatingScene.obj"
@@ -28967,6 +29033,7 @@ def main():
     # Reject, and close behavior must remain untouched.
     patch_vf3_style_child_adoption_chooser(manifest)
     patch_marriage_candidate_reroll(manifest)
+    patch_marriage_proposal_state_guard(manifest)
     patch_same_sex_marriage(manifest)
     patch_force_successful_pregnancy_callsites(manifest)
     # The optional mortality curve is another exact-SHA dormant-byte hook.
