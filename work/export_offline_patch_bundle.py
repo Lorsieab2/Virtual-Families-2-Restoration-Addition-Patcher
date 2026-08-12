@@ -392,7 +392,7 @@ SETTINGS = [
     {
         "id": "island_events",
         "label": "Add mobile-exclusive Island Events",
-        "description": "EXPERIMENTAL/DIAGNOSTIC ONLY: adds mobile-exclusive Island Event records, including mobile-only email events, with bundled event text and choice/result dialogs. Runtime behavior and crash proof remain pending; do not treat this setting as verified.",
+        "description": "Optional patch: adds all 25 authenticated mobile-exclusive Island Event records, including mobile-only email events, with bundled event text and choice/result dialogs. Twenty-three events use recovered native firing/award/impact routes; two retain mobile CanFire=false. Static and linked validation are complete; live player QA remains.",
         "default": False,
         "category": "optional",
     },
@@ -507,11 +507,10 @@ SETTING_READINESS = {
         "reason": "Native behavior linkage and runtime validation are pending.",
     },
     "island_events": {
-        "status": "experimental",
-        "runtime_ready": False,
-        "linked": False,
-        "selection_policy": "experimental_diagnostic",
-        "reason": "Experimental/diagnostic selection is permitted; native runtime behavior and crash proof remain pending.",
+        "status": "ready_for_player_qa",
+        "runtime_ready": True,
+        "linked": True,
+        "reason": "Native event registration, exact outcome routing, and x86 linkage are validated; live player behavior and crash proof remain a player gate.",
     },
     "mobile_renovations": {
         "status": "ready_for_player_qa",

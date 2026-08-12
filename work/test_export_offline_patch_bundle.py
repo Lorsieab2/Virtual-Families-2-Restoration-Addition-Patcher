@@ -126,11 +126,10 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 self.assertTrue(readiness["linked"])
                 self.assertIn("player", readiness["reason"])
         island_readiness = by_id["island_events"]["readiness"]
-        self.assertEqual(island_readiness["status"], "experimental")
-        self.assertEqual(island_readiness["selection_policy"], "experimental_diagnostic")
-        self.assertFalse(island_readiness["runtime_ready"])
-        self.assertFalse(island_readiness["linked"])
-        self.assertIn("pending", island_readiness["reason"])
+        self.assertEqual(island_readiness["status"], "ready_for_player_qa")
+        self.assertTrue(island_readiness["runtime_ready"])
+        self.assertTrue(island_readiness["linked"])
+        self.assertIn("player", island_readiness["reason"])
         self.assertNotIn("readiness", exporter.SETTINGS[0])
 
         parsed = patcher.manifest_settings({"settings": settings})
@@ -138,8 +137,8 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         self.assertFalse(island.blocked)
         island_log = next(row for row in patcher.settings_log(parsed, set())["available"] if row["id"] == "island_events")
         self.assertTrue(island_log["selectable"])
-        self.assertEqual(island_log["readiness_status"], "experimental")
-        self.assertIn("pending", island_log["readiness_reason"])
+        self.assertEqual(island_log["readiness_status"], "ready_for_player_qa")
+        self.assertIsNone(island_log["readiness_reason"])
 
         with self.assertRaisesRegex(patcher.PatchError, "Blocked setting\\(s\\) cannot be enabled"):
             patcher.resolve_enabled_settings(

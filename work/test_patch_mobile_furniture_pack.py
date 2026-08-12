@@ -7811,6 +7811,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 0x130, 0x131,
                 0x133, 0x134,
                 0x132, 0x14C, 0x14B,
+                0x152,
                 0x136,
                 0x137, 0x138,
             0x139, 0x13A, 0x13B,

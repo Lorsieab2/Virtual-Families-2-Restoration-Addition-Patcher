@@ -392,18 +392,17 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
         with self.assertRaisesRegex(patcher.PatchError, r"requires an explicit final_playtest_all_enabled"):
             patcher.resolve_enabled_settings(manifest, args)
 
-    def test_island_events_experimental_diagnostic_is_selectable_but_unverified(self):
+    def test_island_events_ready_for_player_qa_is_selectable(self):
         manifest = {
             "settings": [
                 {
                     "id": "island_events",
                     "default": False,
                     "readiness": {
-                        "status": "experimental",
-                        "runtime_ready": False,
-                        "linked": False,
-                        "selection_policy": "experimental_diagnostic",
-                        "reason": "Runtime behavior and crash proof remain pending.",
+                        "status": "ready_for_player_qa",
+                        "runtime_ready": True,
+                        "linked": True,
+                        "reason": "Static and linked validation are complete; live player QA remains.",
                     },
                 },
                 {"id": "blocked_feature", "default": False, "status": "pending", "runtime_ready": False},
@@ -426,8 +425,8 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
             if row["id"] == "island_events"
         )
         self.assertTrue(island_row["selectable"])
-        self.assertEqual(island_row["readiness_status"], "experimental")
-        self.assertIn("pending", island_row["readiness_reason"])
+        self.assertEqual(island_row["readiness_status"], "ready_for_player_qa")
+        self.assertIsNone(island_row["readiness_reason"])
         self.assertNotEqual(island_row["readiness_status"], "verified")
 
     def test_gui_select_all_skips_blocked_settings(self):

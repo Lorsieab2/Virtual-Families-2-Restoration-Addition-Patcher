@@ -154,16 +154,17 @@ must remain visible as Needs source audit; it must not be silently omitted.
 - Add an optional setting for mobile-exclusive furniture behavior support on
   added mobile-exclusive furniture in the PC build, then implement the correct
   villager behavior routes for those furniture items.
-- [x] Implement function-level firing, award, and impact routes for all 25
-  added mobile-exclusive Island Events. Eight exact mobile classes remain
-  deliberately dummied out by `CanFire=false`; their unreachable methods are
-  retained only where recovered. No generic firing rule remains for an added
-  event.
+- [x] Implement and link function-level firing, award, and impact routes for
+  all 25 added mobile-exclusive Island Events. Twenty-three use recovered
+  mobile routes; `MeteoriteFallsInYard1` and `MarchingBandTripExpenses` remain
+  deliberately dummied out by `CanFire=false`. No generic firing rule remains
+  for an added event.
 - In-game test all 25 added mobile Island Events: verify dialog substitutions,
   reachable-event target gates, both choice outcomes, inventory/collectible/
   behavior/happiness/money/career effects, dummied-event nonappearance,
   persistence where applicable, and byte-identical patch-off behavior.
-- In-game test B132 second-bathroom leaks: after buying the second-bathroom
+- In-game test B132 second-bathroom leaks in the enabled Island Events build:
+  after buying the second-bathroom
   renovation, trigger Water Pressure Surge and confirm the north toilet,
   shower, and sink leaks appear and can be repaired through their native
   second-bathroom repair routes.

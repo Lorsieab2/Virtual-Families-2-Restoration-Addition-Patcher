@@ -448,10 +448,10 @@ or generic firing rules:
 | `Teens` | Choice A spawns exactly 10 socks and 10 trash; Choice B sets award `-75` and applies that money adjustment. It fires only with a raw-age `260..340` villager. |
 | `StrangePackageOnPorch` | Choice A calculates `GetRandom(100)+50` and awards 50-149 coins; Choice B awards zero. It requires a random adult target. |
 | `Invitation` | Requires both a random adult and a random child. Allow adds 20 happiness to every child and assigns behavior `100` to villagers aged `7..280`; Disallow subtracts 20 child happiness and assigns behavior `251` over the same range. |
-| `Fruitcakes` | Dummied out by unconditional `CanFire=false`. Its unreachable choice award is still `-25` or zero; the mobile effect also gives inventory item `42` and symptom `5` to a target that normal scheduling never supplies. |
-| `GreatUncleElmer` | Dummied out by unconditional `CanFire=false` despite being email-marked. Its unreachable effect stores furniture item `0x24B`. |
+| `Fruitcakes` | Requires a random adult. Choice A charges `25` coins, adds tool-tray item `42`, starts behavior `26`, and applies symptom `5`; Choice B is a no-op. |
+| `GreatUncleElmer` | Email-marked event requiring a random adult. Its effect stores the authenticated PC bookshelf mapping `0x24A`. |
 | `MarchingBandTripExpenses` | Dummied out by unconditional `CanFire=false` despite being email-marked. Its unreachable award/effect is `-50` coins. |
-| `LoanReturned` | Dummied out by unconditional `CanFire=false`. Its unreachable award/effect is `+20` coins. |
+| `LoanReturned` | Requires a random adult and awards exactly `20` coins. |
 | `BlastFromThePast` | Requires a random adult, awards 50-99 coins, and adds 15 to that adult's happiness trend. |
 | `EmailFromACME` | Email event requiring a random adult male; awards exactly 70 coins. |
 | `EmailFromAntonioGuildenstern` | Email event requiring a random adult; assigns behavior `424` to raw-age-7 villagers and adds 15 to the target adult's happiness trend. |
@@ -461,12 +461,12 @@ or generic firing rules:
 | `ClownHoldingMetalRod` | Requires a random adult. Choice A stores furniture item `0x23C`, adds like `0x24`, removes dislike `0x24`, adds 15 target happiness trend, and adds 15 happiness to all children; Choice B has no effect. |
 | `MenInBlackAtDoor` | Requires a random adult. Both choices start behavior `0x171`; Choice A also stores furniture item `0x219`. |
 | `HearStrangeSound` | Requires numeric age selector `7` with any gender. Choice A stores furniture item `0x242` and adds 20 target happiness trend; Choice B has no effect. |
-| `MetallicKnockingOnDoor` | Dummied out by unconditional `CanFire=false`. Its unreachable Choice A calculation/effect is 50 coins. |
+| `MetallicKnockingOnDoor` | Dummied out by unconditional `CanFire=false` in the current authenticated mobile route. Its unreachable Choice A calculation/effect is 50 coins. |
 | `GroupOfKidsAtTheDoor` | Requires a random adult. Choice A stores item `0x23C` and adds 20 target happiness trend. It calculates 50-149, but its exact impact does not apply that value to Money. |
-| `MissionFromGod` | Dummied out by unconditional `CanFire=false`. Its unreachable Choice A route deducts 20 coins and cures all villagers. |
+| `MissionFromGod` | Requires a random adult. Choice A deducts 20 coins and cures all villagers; Choice B is a no-op. |
 | `OddOldWomanAtDoor` | Requires a random adult and post-interest Money balance above 20. Choice A costs 5-14, sets symptom `6`, starts behavior `175`, and adds 10 happiness; Choice B sets the same symptom/behavior and subtracts 10 happiness. |
 | `RIPUncleAlpert` | Requires a random adult, awards 75-174 coins, stores item `0x1F5`, and starts behavior `23`. |
-| `ResurrectionOfAgatha` | Dummied out by unconditional `CanFire=false`. Its unreachable award/effect is `-100` coins. |
+| `ResurrectionOfAgatha` | Requires a random adult and charges exactly `100` coins. |
 | `SurpriseVisitFromUnclePhineas` | Requires numeric age selector `7`, stores item `0x207`, adds like `0x6D`, removes dislike `0x6D`, forgets current plans, and assigns behavior `23` without starting it. |
 | `Volunteer` | Requires a random adult. Choice A runs behavior `100` for raw-age-7 villagers and advances the target's career with `(false,true)`; its award is zero. |
 
