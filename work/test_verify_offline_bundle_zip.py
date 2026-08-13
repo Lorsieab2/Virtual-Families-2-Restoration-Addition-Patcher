@@ -44,6 +44,37 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         )
         self.assertEqual(len(verifier.EXECUTABLE_VARIANTS), 19)
 
+    def test_real_executable_variants_table_has_no_hash_collisions(self):
+        # Confirms the actual, currently-shipped EXECUTABLE_VARIANTS table
+        # this repository verifies against does not itself carry the B162
+        # defect (two different requires sets sharing one payload hash).
+        verifier._reject_executable_variant_hash_collisions(verifier.EXECUTABLE_VARIANTS)
+
+    def test_rejects_two_requires_sets_sharing_one_executable_hash(self):
+        # Reproduces the B162 defect at the level of the EXECUTABLE_VARIANTS
+        # contract this verifier checks archives against: the
+        # core_executable-only baseline and the Final All-Enabled Native
+        # overlay must never resolve to the same payload hash.
+        same_hash = "a" * 64
+        variants = {
+            frozenset({"core_executable"}): (
+                "payload/core.exe", same_hash, 100,
+            ),
+            frozenset({
+                "core_executable", "island_events", "cheat_upgrades",
+                "holiday_ornaments_collection", "behavior_patches", "mobile_renovations",
+            }): (
+                "payload/final-all-enabled.exe", same_hash, 100,
+            ),
+        }
+        with self.assertRaisesRegex(ValueError, "share one payload hash"):
+            verifier._reject_executable_variant_hash_collisions(variants)
+
+        # Distinct hashes for distinct requires sets must not raise.
+        variants_ok = dict(variants)
+        variants_ok[frozenset({"core_executable"})] = ("payload/core.exe", "b" * 64, 100)
+        verifier._reject_executable_variant_hash_collisions(variants_ok)
+
     def test_canonical_archive_passes_all_contract_gates(self):
         self.assertTrue(CANONICAL.is_file(), CANONICAL)
         result = verifier.verify_archive(CANONICAL)

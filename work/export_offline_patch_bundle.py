@@ -326,7 +326,7 @@ SETTINGS = [
     {
         "id": "holiday_ornaments_collection",
         "label": "Add Holiday Ornaments collection",
-        "description": "Adds the fully linked mobile Holiday Ornament collection: 12 yard collectibles, six Collections Chest pages/72 total items, Ornamentologist and six-family collection goals, save/load support, Lucky Rock rarity odds, and The Collector offer/sell handling. B151 removes the non-mobile launch-crash hooks and uses tracked canonical artwork. Default-off so players opt into the extra collection; manual gameplay verification is still recommended.",
+        "description": "Adds the fully linked mobile Holiday Ornament collection: 12 yard collectibles, six Collections Chest pages/72 total items, Ornamentologist and six-family collection goals, save/load support, Lucky Rock rarity odds, and The Collector offer/sell handling. B151 removes the non-mobile launch-crash hooks and uses tracked canonical artwork. Manual gameplay verification is still recommended.",
         "default": False,
         "category": "optional",
     },
@@ -368,7 +368,7 @@ SETTINGS = [
     {
         "id": "mobile_renovations",
         "label": "Add mobile room renovations",
-        "description": "Optional patch: overlays the 15 verified mobile kitchen, bathroom, office, and workshop renovation images at their exact 1:1 room-map positions. The stock map remains unchanged when this setting is disabled.",
+        "description": "Optional patch: overlays 20 verified mobile renovation images (5 Bathroom 1 styles, 5 Bathroom 2 styles, 3 kitchen, 5 office, and 2 workshop) at their exact 1:1 room-map positions. The stock map remains unchanged when this setting is disabled.",
         "default": False,
         "category": "optional",
     },
@@ -1432,6 +1432,33 @@ def collect_manifest_asset_paths(data: Any) -> set[Path]:
     elif isinstance(data, str):
         paths.update(candidate_manifest_rel_paths(data))
     return paths
+
+
+def require_distinct_final_playtest_source(final_source: Path, patched_exe: Path) -> None:
+    """Refuse to reuse the plain core executable as the Final All-Enabled
+    Native overlay source.
+
+    The plain core_executable record (requires only ["core_executable"]) and
+    the Final All-Enabled Native overlay (requires all five optional flags)
+    must never be backed by byte-identical payloads: that silently makes the
+    "nothing enabled" baseline ship with every optional feature's code
+    compiled in, and duplicates one manifest asset record's source across two
+    records, which package_patcher_zip.validate_executable_inventory()
+    correctly rejects. This happened for the B162 release, where
+    --final-playtest-native-exe was not distinct from --patched-exe (the
+    former "final_source = final_playtest_native_exe or patched_exe"
+    fallback silently took over). Fail closed instead of silently reusing
+    patched_exe or accepting a mistaken explicit duplicate.
+    """
+    if sha256_file(final_source) == sha256_file(patched_exe):
+        raise ValueError(
+            "--final-playtest-all-enabled requires a --final-playtest-native-exe "
+            "(or an auto-detected --patched-exe) that is byte-distinct from the "
+            f"plain core executable. {final_source} and {patched_exe} are "
+            "byte-identical (same SHA-256), which would make the "
+            "core_executable-only baseline and the Final All-Enabled Native "
+            "overlay the same file."
+        )
 
 
 def find_patched_exe(build_dir: Path, explicit: str | None) -> Path:
@@ -3443,6 +3470,10 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         if args.final_playtest_native_exe
         else None
     )
+    if getattr(args, "final_playtest_all_enabled", False):
+        require_distinct_final_playtest_source(
+            final_playtest_native_exe or patched_exe, patched_exe
+        )
     ai_generated_bathroom2_dir = (
         Path(args.ai_generated_bathroom2_dir).resolve()
         if args.ai_generated_bathroom2_dir
@@ -3470,6 +3501,76 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "Exporting both cheat_upgrades and mobile_renovations requires "
             "--cheat-upgrades-mobile-renovations-exe."
         )
+    island_events_mobile_renovations_exe = (
+        Path(args.island_events_mobile_renovations_exe).resolve()
+        if args.island_events_mobile_renovations_exe
+        else None
+    )
+    holiday_ornaments_mobile_renovations_exe = (
+        Path(args.holiday_ornaments_mobile_renovations_exe).resolve()
+        if args.holiday_ornaments_mobile_renovations_exe
+        else None
+    )
+    behavior_patches_mobile_renovations_exe = (
+        Path(args.behavior_patches_mobile_renovations_exe).resolve()
+        if args.behavior_patches_mobile_renovations_exe
+        else None
+    )
+    island_events_cheat_upgrades_mobile_renovations_exe = (
+        Path(args.island_events_cheat_upgrades_mobile_renovations_exe).resolve()
+        if args.island_events_cheat_upgrades_mobile_renovations_exe
+        else None
+    )
+    island_events_holiday_ornaments_mobile_renovations_exe = (
+        Path(args.island_events_holiday_ornaments_mobile_renovations_exe).resolve()
+        if args.island_events_holiday_ornaments_mobile_renovations_exe
+        else None
+    )
+    island_events_behavior_patches_mobile_renovations_exe = (
+        Path(args.island_events_behavior_patches_mobile_renovations_exe).resolve()
+        if args.island_events_behavior_patches_mobile_renovations_exe
+        else None
+    )
+    cheat_upgrades_holiday_ornaments_mobile_renovations_exe = (
+        Path(args.cheat_upgrades_holiday_ornaments_mobile_renovations_exe).resolve()
+        if args.cheat_upgrades_holiday_ornaments_mobile_renovations_exe
+        else None
+    )
+    cheat_upgrades_behavior_patches_mobile_renovations_exe = (
+        Path(args.cheat_upgrades_behavior_patches_mobile_renovations_exe).resolve()
+        if args.cheat_upgrades_behavior_patches_mobile_renovations_exe
+        else None
+    )
+    holiday_ornaments_behavior_patches_mobile_renovations_exe = (
+        Path(args.holiday_ornaments_behavior_patches_mobile_renovations_exe).resolve()
+        if args.holiday_ornaments_behavior_patches_mobile_renovations_exe
+        else None
+    )
+    island_events_cheat_upgrades_holiday_ornaments_mobile_renovations_exe = (
+        Path(args.island_events_cheat_upgrades_holiday_ornaments_mobile_renovations_exe).resolve()
+        if args.island_events_cheat_upgrades_holiday_ornaments_mobile_renovations_exe
+        else None
+    )
+    island_events_cheat_upgrades_behavior_patches_mobile_renovations_exe = (
+        Path(args.island_events_cheat_upgrades_behavior_patches_mobile_renovations_exe).resolve()
+        if args.island_events_cheat_upgrades_behavior_patches_mobile_renovations_exe
+        else None
+    )
+    island_events_holiday_ornaments_behavior_patches_mobile_renovations_exe = (
+        Path(args.island_events_holiday_ornaments_behavior_patches_mobile_renovations_exe).resolve()
+        if args.island_events_holiday_ornaments_behavior_patches_mobile_renovations_exe
+        else None
+    )
+    cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe = (
+        Path(args.cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe).resolve()
+        if args.cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe
+        else None
+    )
+    island_events_cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe = (
+        Path(args.island_events_cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe).resolve()
+        if args.island_events_cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe
+        else None
+    )
     island_events_cheat_upgrades_exe = (
         Path(args.island_events_cheat_upgrades_exe).resolve()
         if args.island_events_cheat_upgrades_exe
@@ -3742,6 +3843,90 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 "Combined optional executable overlay. Applied only when core_executable, cheat_upgrades, and mobile_renovations are enabled.",
             ),
             (
+                island_events_mobile_renovations_exe,
+                "Island Events + Mobile Room Renovations",
+                ["core_executable", "island_events", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, and mobile_renovations are enabled.",
+            ),
+            (
+                holiday_ornaments_mobile_renovations_exe,
+                "Holiday Ornaments + Mobile Room Renovations",
+                ["core_executable", "holiday_ornaments_collection", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, holiday_ornaments_collection, and mobile_renovations are enabled.",
+            ),
+            (
+                behavior_patches_mobile_renovations_exe,
+                "Behavior Patches + Mobile Room Renovations",
+                ["core_executable", "behavior_patches", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, behavior_patches, and mobile_renovations are enabled.",
+            ),
+            (
+                island_events_cheat_upgrades_mobile_renovations_exe,
+                "Island Events + Cheat Upgrades + Mobile Room Renovations",
+                ["core_executable", "island_events", "cheat_upgrades", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, cheat_upgrades, and mobile_renovations are enabled.",
+            ),
+            (
+                island_events_holiday_ornaments_mobile_renovations_exe,
+                "Island Events + Holiday Ornaments + Mobile Room Renovations",
+                ["core_executable", "island_events", "holiday_ornaments_collection", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, holiday_ornaments_collection, and mobile_renovations are enabled.",
+            ),
+            (
+                island_events_behavior_patches_mobile_renovations_exe,
+                "Island Events + Behavior Patches + Mobile Room Renovations",
+                ["core_executable", "island_events", "behavior_patches", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, behavior_patches, and mobile_renovations are enabled.",
+            ),
+            (
+                cheat_upgrades_holiday_ornaments_mobile_renovations_exe,
+                "Cheat Upgrades + Holiday Ornaments + Mobile Room Renovations",
+                ["core_executable", "cheat_upgrades", "holiday_ornaments_collection", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, cheat_upgrades, holiday_ornaments_collection, and mobile_renovations are enabled.",
+            ),
+            (
+                cheat_upgrades_behavior_patches_mobile_renovations_exe,
+                "Cheat Upgrades + Behavior Patches + Mobile Room Renovations",
+                ["core_executable", "cheat_upgrades", "behavior_patches", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, cheat_upgrades, behavior_patches, and mobile_renovations are enabled.",
+            ),
+            (
+                holiday_ornaments_behavior_patches_mobile_renovations_exe,
+                "Holiday Ornaments + Behavior Patches + Mobile Room Renovations",
+                ["core_executable", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, holiday_ornaments_collection, behavior_patches, and mobile_renovations are enabled.",
+            ),
+            (
+                island_events_cheat_upgrades_holiday_ornaments_mobile_renovations_exe,
+                "Island Events + Cheat Upgrades + Holiday Ornaments + Mobile Room Renovations",
+                ["core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, cheat_upgrades, holiday_ornaments_collection, and mobile_renovations are enabled.",
+            ),
+            (
+                island_events_cheat_upgrades_behavior_patches_mobile_renovations_exe,
+                "Island Events + Cheat Upgrades + Behavior Patches + Mobile Room Renovations",
+                ["core_executable", "island_events", "cheat_upgrades", "behavior_patches", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, cheat_upgrades, behavior_patches, and mobile_renovations are enabled.",
+            ),
+            (
+                island_events_holiday_ornaments_behavior_patches_mobile_renovations_exe,
+                "Island Events + Holiday Ornaments + Behavior Patches + Mobile Room Renovations",
+                ["core_executable", "island_events", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, island_events, holiday_ornaments_collection, behavior_patches, and mobile_renovations are enabled.",
+            ),
+            (
+                cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe,
+                "Cheat Upgrades + Holiday Ornaments + Behavior Patches + Mobile Room Renovations",
+                ["core_executable", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"],
+                "Combined optional executable overlay. Applied only when core_executable, cheat_upgrades, holiday_ornaments_collection, behavior_patches, and mobile_renovations are enabled.",
+            ),
+            (
+                island_events_cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe,
+                "Island Events + Cheat Upgrades + Holiday Ornaments + Behavior Patches + Mobile Room Renovations",
+                ["core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"],
+                "Combined optional executable overlay for the final all-enabled set, expressed through the general overlay mechanism rather than --final-playtest-all-enabled. Applied only when every optional setting is enabled.",
+            ),
+            (
                 island_events_cheat_upgrades_exe,
                 "Island Events + Cheat Upgrades",
                 ["core_executable", "island_events", "cheat_upgrades"],
@@ -3825,7 +4010,9 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             # The final profile is intentionally one composed native image:
             # reuse the authenticated patched/sound-base EXE and expose it
             # under the exact all-five dependency signature.  General
-            # profiles never receive this synthetic overlay.
+            # profiles never receive this synthetic overlay.  The byte-identity
+            # guard against silently reusing patched_exe runs earlier, before
+            # any bundle output is written (see the top of build_manifest()).
             final_source = final_playtest_native_exe or patched_exe
             final_spec = (
                 final_source,
@@ -3982,6 +4169,20 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "island_events_holiday_ornaments_behavior_patches_exe": island_events_holiday_ornaments_behavior_patches_exe.name if island_events_holiday_ornaments_behavior_patches_exe else None,
             "cheat_upgrades_holiday_ornaments_behavior_patches_exe": cheat_upgrades_holiday_ornaments_behavior_patches_exe.name if cheat_upgrades_holiday_ornaments_behavior_patches_exe else None,
             "island_events_cheat_upgrades_holiday_ornaments_behavior_patches_exe": island_events_cheat_upgrades_holiday_ornaments_behavior_patches_exe.name if island_events_cheat_upgrades_holiday_ornaments_behavior_patches_exe else None,
+            "island_events_mobile_renovations_exe": island_events_mobile_renovations_exe.name if island_events_mobile_renovations_exe else None,
+            "holiday_ornaments_mobile_renovations_exe": holiday_ornaments_mobile_renovations_exe.name if holiday_ornaments_mobile_renovations_exe else None,
+            "behavior_patches_mobile_renovations_exe": behavior_patches_mobile_renovations_exe.name if behavior_patches_mobile_renovations_exe else None,
+            "island_events_cheat_upgrades_mobile_renovations_exe": island_events_cheat_upgrades_mobile_renovations_exe.name if island_events_cheat_upgrades_mobile_renovations_exe else None,
+            "island_events_holiday_ornaments_mobile_renovations_exe": island_events_holiday_ornaments_mobile_renovations_exe.name if island_events_holiday_ornaments_mobile_renovations_exe else None,
+            "island_events_behavior_patches_mobile_renovations_exe": island_events_behavior_patches_mobile_renovations_exe.name if island_events_behavior_patches_mobile_renovations_exe else None,
+            "cheat_upgrades_holiday_ornaments_mobile_renovations_exe": cheat_upgrades_holiday_ornaments_mobile_renovations_exe.name if cheat_upgrades_holiday_ornaments_mobile_renovations_exe else None,
+            "cheat_upgrades_behavior_patches_mobile_renovations_exe": cheat_upgrades_behavior_patches_mobile_renovations_exe.name if cheat_upgrades_behavior_patches_mobile_renovations_exe else None,
+            "holiday_ornaments_behavior_patches_mobile_renovations_exe": holiday_ornaments_behavior_patches_mobile_renovations_exe.name if holiday_ornaments_behavior_patches_mobile_renovations_exe else None,
+            "island_events_cheat_upgrades_holiday_ornaments_mobile_renovations_exe": island_events_cheat_upgrades_holiday_ornaments_mobile_renovations_exe.name if island_events_cheat_upgrades_holiday_ornaments_mobile_renovations_exe else None,
+            "island_events_cheat_upgrades_behavior_patches_mobile_renovations_exe": island_events_cheat_upgrades_behavior_patches_mobile_renovations_exe.name if island_events_cheat_upgrades_behavior_patches_mobile_renovations_exe else None,
+            "island_events_holiday_ornaments_behavior_patches_mobile_renovations_exe": island_events_holiday_ornaments_behavior_patches_mobile_renovations_exe.name if island_events_holiday_ornaments_behavior_patches_mobile_renovations_exe else None,
+            "cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe": cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe.name if cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe else None,
+            "island_events_cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe": island_events_cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe.name if island_events_cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations_exe else None,
             "build_manifest_keys": sorted(build_manifest_data) if build_manifest_data else [],
         },
         "settings": settings,
@@ -4055,6 +4256,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--island-events-holiday-ornaments-behavior-patches-exe", help="Combined optional EXE overlay to apply when island_events, holiday_ornaments_collection, and behavior_patches are all enabled.")
     parser.add_argument("--cheat-upgrades-holiday-ornaments-behavior-patches-exe", help="Combined optional EXE overlay to apply when cheat_upgrades, holiday_ornaments_collection, and behavior_patches are all enabled.")
     parser.add_argument("--island-events-cheat-upgrades-holiday-ornaments-behavior-patches-exe", help="Combined optional EXE overlay to apply when island_events, cheat_upgrades, holiday_ornaments_collection, and behavior_patches are all enabled.")
+    # The 13 remaining Mobile Renovations combinations. Before these existed,
+    # there was no way to pass a built overlay for any of these combinations
+    # into the exporter even if one had been linked - the manifest's overlay
+    # matrix could only ever cover mobile_renovations alone,
+    # cheat_upgrades+mobile_renovations, and the all-five final profile. See
+    # select_exact_executable_overlays() in offline_vf2_patcher.py, which
+    # fails closed (refuses to apply) for any settings combination that
+    # falls in the remaining gap rather than silently choosing a
+    # less-specific overlay.
+    parser.add_argument("--island-events-mobile-renovations-exe", help="Combined optional EXE overlay to apply when island_events and mobile_renovations are both enabled.")
+    parser.add_argument("--holiday-ornaments-mobile-renovations-exe", help="Combined optional EXE overlay to apply when holiday_ornaments_collection and mobile_renovations are both enabled.")
+    parser.add_argument("--behavior-patches-mobile-renovations-exe", help="Combined optional EXE overlay to apply when behavior_patches and mobile_renovations are both enabled.")
+    parser.add_argument("--island-events-cheat-upgrades-mobile-renovations-exe", help="Combined optional EXE overlay to apply when island_events, cheat_upgrades, and mobile_renovations are all enabled.")
+    parser.add_argument("--island-events-holiday-ornaments-mobile-renovations-exe", help="Combined optional EXE overlay to apply when island_events, holiday_ornaments_collection, and mobile_renovations are all enabled.")
+    parser.add_argument("--island-events-behavior-patches-mobile-renovations-exe", help="Combined optional EXE overlay to apply when island_events, behavior_patches, and mobile_renovations are all enabled.")
+    parser.add_argument("--cheat-upgrades-holiday-ornaments-mobile-renovations-exe", help="Combined optional EXE overlay to apply when cheat_upgrades, holiday_ornaments_collection, and mobile_renovations are all enabled.")
+    parser.add_argument("--cheat-upgrades-behavior-patches-mobile-renovations-exe", help="Combined optional EXE overlay to apply when cheat_upgrades, behavior_patches, and mobile_renovations are all enabled.")
+    parser.add_argument("--holiday-ornaments-behavior-patches-mobile-renovations-exe", help="Combined optional EXE overlay to apply when holiday_ornaments_collection, behavior_patches, and mobile_renovations are all enabled.")
+    parser.add_argument("--island-events-cheat-upgrades-holiday-ornaments-mobile-renovations-exe", help="Combined optional EXE overlay to apply when island_events, cheat_upgrades, holiday_ornaments_collection, and mobile_renovations are all enabled.")
+    parser.add_argument("--island-events-cheat-upgrades-behavior-patches-mobile-renovations-exe", help="Combined optional EXE overlay to apply when island_events, cheat_upgrades, behavior_patches, and mobile_renovations are all enabled.")
+    parser.add_argument("--island-events-holiday-ornaments-behavior-patches-mobile-renovations-exe", help="Combined optional EXE overlay to apply when island_events, holiday_ornaments_collection, behavior_patches, and mobile_renovations are all enabled.")
+    parser.add_argument("--cheat-upgrades-holiday-ornaments-behavior-patches-mobile-renovations-exe", help="Combined optional EXE overlay to apply when cheat_upgrades, holiday_ornaments_collection, behavior_patches, and mobile_renovations are all enabled.")
+    parser.add_argument("--island-events-cheat-upgrades-holiday-ornaments-behavior-patches-mobile-renovations-exe", help="Combined optional EXE overlay to apply when island_events, cheat_upgrades, holiday_ornaments_collection, behavior_patches, and mobile_renovations (the final all-enabled set) are all enabled. Prefer --final-playtest-native-exe with --final-playtest-all-enabled for that profile; this flag exists for completeness/testing.")
     parser.add_argument("--target-exe-name", default=DEFAULT_EXE_NAME, help="Relative EXE path expected in the user's game folder.")
     parser.add_argument("--name", help="Manifest display name.")
     parser.add_argument("--asset-mode", choices=ASSET_MODES, default="additive", help="Asset export mode. 'additive' exports manifest-referenced assets; 'all' exports every Images/Assets diff.")
