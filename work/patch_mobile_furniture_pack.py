@@ -18654,13 +18654,25 @@ def patch_same_sex_marriage(manifest):
         b"\x9D"                  # restore native cmp flags
         b"\xE9\0\0\0\0"        # same-sex -> native private action +0x26E
         b"\x9D"                  # restore native cmp flags
-        b"\x74\x3C"              # original native JE
+        b"\x0F\x84\0\0\0\0"    # original native JE, widened to rel32: the
+                                  # original two-byte 74 3C encodes an 8-bit
+                                  # *relative* displacement, not an absolute
+                                  # target. Re-executing those same two bytes
+                                  # unmodified from this cave address (over
+                                  # 0x120 bytes further into the file than the
+                                  # original +0x218 site) would compute a
+                                  # completely different, out-of-section
+                                  # target instead of the intended +0x256,
+                                  # so the displacement must be recalculated
+                                  # for the new address; rel8 cannot reach
+                                  # +0x256 from here, hence 0F 84 (JE rel32).
         b"\xE9\0\0\0\0"        # original fall-through +0x21A
     )
-    if len(drop_trampoline) != 28:
+    if len(drop_trampoline) != 32:
         raise AssertionError("Same-sex romantic branch trampoline size drifted")
     struct.pack_into("<i", drop_trampoline, 16, (drop.value + 0x26E) - (drop_cave + 20))
-    struct.pack_into("<i", drop_trampoline, 24, (drop.value + 0x21A) - (drop_cave + 28))
+    struct.pack_into("<i", drop_trampoline, 23, (drop.value + 0x256) - (drop_cave + 27))
+    struct.pack_into("<i", drop_trampoline, 28, (drop.value + 0x21A) - (drop_cave + 32))
     drop_helper = main_obj.append_undefined_symbol(ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL)
     main_obj.insert_section_bytes(drop_sec.index, drop_cave, bytes(drop_trampoline))
     main_obj.append_relocation(drop_sec.index, drop_cave + 5, drop_helper, IMAGE_REL_I386_REL32)

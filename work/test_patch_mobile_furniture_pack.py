@@ -11043,12 +11043,25 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertEqual(data[drop.value + 0x1F2:drop.value + 0x1F4], b"\x75\x62")
                 self.assertEqual(data[drop.value + 0x218], 0xE9)
                 cave = int(gate["trampoline"], 16)
-                self.assertEqual(gate["trampoline_size"], 28)
+                self.assertEqual(gate["trampoline_size"], 32)
                 self.assertEqual(
                     data[cave:cave + 16],
                     bytes.fromhex("9C 56 8B CF E8 00 00 00 00 83 F8 01 75 06 9D E9"),
                 )
-                self.assertEqual(data[cave + 20:cave + 23], bytes.fromhex("9D 74 3C"))
+                # The original stock branch at +0x218 is a two-byte 74 3C
+                # (JE rel8), which encodes a *relative* displacement, not an
+                # absolute target. Re-executing those same two bytes
+                # unmodified from this cave (far past the original site)
+                # would compute a different, out-of-section target than the
+                # intended +0x256, so it must be widened to a six-byte JE
+                # rel32 (0F 84) with a freshly computed displacement instead
+                # of being copied byte-for-byte.
+                self.assertEqual(data[cave + 20:cave + 21], b"\x9D")
+                self.assertEqual(data[cave + 21:cave + 23], b"\x0F\x84")
+                je_target = struct.unpack_from("<i", data, cave + 23)[0] + cave + 27
+                self.assertEqual(je_target, drop.value + 0x256)
+                fallthrough_target = struct.unpack_from("<i", data, cave + 28)[0] + cave + 32
+                self.assertEqual(fallthrough_target, drop.value + 0x21A)
                 self.assertEqual(gate["helper"], patcher.ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL)
                 targets = {}
                 for index in range(section.nreloc):
