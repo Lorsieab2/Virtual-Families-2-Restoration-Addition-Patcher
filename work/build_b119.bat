@@ -1,6 +1,6 @@
 @echo off
 setlocal
-call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars32.bat" >nul
+call "C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvarsall.bat" x86 >nul
 if errorlevel 1 exit /b %errorlevel%
 
 cl @work\compile_helpers_b22.rsp
