@@ -326,7 +326,7 @@ SETTINGS = [
     {
         "id": "holiday_ornaments_collection",
         "label": "Add Holiday Ornaments collection",
-        "description": "Adds the fully linked mobile Holiday Ornament collection: 12 yard collectibles, six Collections Chest pages/72 total items, Ornamentologist and six-family collection goals, save/load support, Lucky Rock rarity odds, and The Collector offer/sell handling. B151 removes the non-mobile launch-crash hooks and uses tracked canonical artwork. Default-off so players opt into the extra collection; manual gameplay verification is still recommended.",
+        "description": "Adds the fully linked mobile Holiday Ornament collection: 12 yard collectibles, six Collections Chest pages/72 total items, Ornamentologist and six-family collection goals, save/load support, Lucky Rock rarity odds, and The Collector offer/sell handling. B151 removes the non-mobile launch-crash hooks and uses tracked canonical artwork. Manual gameplay verification is still recommended.",
         "default": False,
         "category": "optional",
     },
@@ -368,7 +368,7 @@ SETTINGS = [
     {
         "id": "mobile_renovations",
         "label": "Add mobile room renovations",
-        "description": "Optional patch: overlays the 15 verified mobile kitchen, bathroom, office, and workshop renovation images at their exact 1:1 room-map positions. The stock map remains unchanged when this setting is disabled.",
+        "description": "Optional patch: overlays 20 verified mobile renovation images (5 Bathroom 1 styles, 5 Bathroom 2 styles, 3 kitchen, 5 office, and 2 workshop) at their exact 1:1 room-map positions. The stock map remains unchanged when this setting is disabled.",
         "default": False,
         "category": "optional",
     },
