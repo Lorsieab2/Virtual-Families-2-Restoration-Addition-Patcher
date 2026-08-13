@@ -1434,6 +1434,33 @@ def collect_manifest_asset_paths(data: Any) -> set[Path]:
     return paths
 
 
+def require_distinct_final_playtest_source(final_source: Path, patched_exe: Path) -> None:
+    """Refuse to reuse the plain core executable as the Final All-Enabled
+    Native overlay source.
+
+    The plain core_executable record (requires only ["core_executable"]) and
+    the Final All-Enabled Native overlay (requires all five optional flags)
+    must never be backed by byte-identical payloads: that silently makes the
+    "nothing enabled" baseline ship with every optional feature's code
+    compiled in, and duplicates one manifest asset record's source across two
+    records, which package_patcher_zip.validate_executable_inventory()
+    correctly rejects. This happened for the B162 release, where
+    --final-playtest-native-exe was not distinct from --patched-exe (the
+    former "final_source = final_playtest_native_exe or patched_exe"
+    fallback silently took over). Fail closed instead of silently reusing
+    patched_exe or accepting a mistaken explicit duplicate.
+    """
+    if sha256_file(final_source) == sha256_file(patched_exe):
+        raise ValueError(
+            "--final-playtest-all-enabled requires a --final-playtest-native-exe "
+            "(or an auto-detected --patched-exe) that is byte-distinct from the "
+            f"plain core executable. {final_source} and {patched_exe} are "
+            "byte-identical (same SHA-256), which would make the "
+            "core_executable-only baseline and the Final All-Enabled Native "
+            "overlay the same file."
+        )
+
+
 def find_patched_exe(build_dir: Path, explicit: str | None) -> Path:
     if explicit:
         path = build_dir / explicit
@@ -3443,6 +3470,10 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         if args.final_playtest_native_exe
         else None
     )
+    if getattr(args, "final_playtest_all_enabled", False):
+        require_distinct_final_playtest_source(
+            final_playtest_native_exe or patched_exe, patched_exe
+        )
     ai_generated_bathroom2_dir = (
         Path(args.ai_generated_bathroom2_dir).resolve()
         if args.ai_generated_bathroom2_dir
@@ -3825,7 +3856,9 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             # The final profile is intentionally one composed native image:
             # reuse the authenticated patched/sound-base EXE and expose it
             # under the exact all-five dependency signature.  General
-            # profiles never receive this synthetic overlay.
+            # profiles never receive this synthetic overlay.  The byte-identity
+            # guard against silently reusing patched_exe runs earlier, before
+            # any bundle output is written (see the top of build_manifest()).
             final_source = final_playtest_native_exe or patched_exe
             final_spec = (
                 final_source,

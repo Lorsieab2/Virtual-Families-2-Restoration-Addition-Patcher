@@ -245,8 +245,14 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         self.assertIn("--final-playtest-native-exe", source)
         self.assertIn("--native-overlays-include-mobile-renovations", source)
         self.assertIn("requires if \"mobile_renovations\" in requires else [*requires, \"mobile_renovations\"]", source)
-        self.assertIn("final_source = final_playtest_native_exe or patched_exe", source)
         self.assertIn("overlay_specs[final_index] = final_spec", source)
+        # The "final source" must genuinely be distinct from the plain core
+        # executable, not merely present as a variable name: see
+        # test_final_playtest_all_enabled_rejects_reusing_the_core_executable
+        # for the behavioral guarantee. A bare
+        # "final_playtest_native_exe or patched_exe" fallback with no
+        # byte-identity check is exactly the bug that shipped in B162.
+        self.assertIn("sha256_file(final_source) == sha256_file(patched_exe)", source)
 
     def test_b156_uses_stable_modded_folder_exe_and_save_names(self):
         self.assertEqual(exporter.modded_output_folder_name("B156"), "Virtual Families 2 - Modded")
@@ -1582,6 +1588,75 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 (applied / "Virtual Families 2 - Modded B158.exe").read_bytes(),
                 combined_overlay.read_bytes(),
             )
+
+    def test_final_playtest_all_enabled_rejects_reusing_the_core_executable(self):
+        # Reproduces the actual B162 release defect: --final-playtest-all-enabled
+        # was invoked without a --final-playtest-native-exe distinct from the
+        # auto-detected --patched-exe, so "final_source = final_playtest_native_exe
+        # or patched_exe" silently fell back to reusing the same file for both
+        # the core_executable-only baseline and the Final All-Enabled Native
+        # overlay. package_patcher_zip.validate_executable_inventory() rejects
+        # that shipped bundle; the exporter itself must refuse to produce it.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            base.mkdir()
+            build.mkdir()
+            vanilla = tmp_path / "Virtual Families 2.exe"
+            vanilla.write_bytes(minimal_pe_bytes())
+            (build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe").write_bytes(
+                minimal_pe_bytes(marker=1)
+            )
+
+            reused = self.run_exporter_expect(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(tmp_path / "reused-core"),
+                "--vanilla-exe", str(vanilla),
+                "--include-exe-replacement",
+                "--final-playtest-all-enabled",
+                expect=1,
+            )
+            self.assertIn("byte-identical", reused.stderr)
+            self.assertFalse((tmp_path / "reused-core").exists())
+
+            # An explicit --final-playtest-native-exe that is (by mistake)
+            # byte-identical to the core build must be rejected the same way.
+            same_bytes_explicit = tmp_path / "same-bytes.exe"
+            same_bytes_explicit.write_bytes(minimal_pe_bytes(marker=1))
+            reused_explicit = self.run_exporter_expect(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(tmp_path / "reused-explicit"),
+                "--vanilla-exe", str(vanilla),
+                "--include-exe-replacement",
+                "--final-playtest-all-enabled",
+                "--final-playtest-native-exe", str(same_bytes_explicit),
+                expect=1,
+            )
+            self.assertIn("byte-identical", reused_explicit.stderr)
+            self.assertFalse((tmp_path / "reused-explicit").exists())
+
+    def test_require_distinct_final_playtest_source_only_rejects_byte_identical(self):
+        # Focused unit coverage for the guard used above, isolated from the
+        # rest of --final-playtest-all-enabled's much larger fixture
+        # requirements (mobile_furniture_behaviors, ai_generated_bathroom2,
+        # mobile_sound_assets, etc. must all be independently satisfied for a
+        # full end-to-end success run, which is out of scope for this check).
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            patched_exe = tmp_path / "patched.exe"
+            patched_exe.write_bytes(minimal_pe_bytes())
+            same_bytes = tmp_path / "same.exe"
+            same_bytes.write_bytes(minimal_pe_bytes())
+            distinct = tmp_path / "distinct.exe"
+            distinct.write_bytes(minimal_pe_bytes(with_older_pregnancy_flag=True, marker=7))
+
+            with self.assertRaisesRegex(ValueError, "byte-identical"):
+                exporter.require_distinct_final_playtest_source(same_bytes, patched_exe)
+            # Must not raise for a genuinely distinct source.
+            exporter.require_distinct_final_playtest_source(distinct, patched_exe)
 
     def test_cheat_upgrades_mobile_renovations_matrix_must_be_complete(self):
         with tempfile.TemporaryDirectory() as tmp:
