@@ -304,7 +304,7 @@ MARRIAGE_EMAIL_ITEM_ID = 0x132
 SAME_SEX_MARRIAGE_ITEM_ID = 0x14C
 SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID = 0x119
 SAME_SEX_MARRIAGE_CATALOG_PRICE = 10000
-SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID = 0x166
+SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID = 0x162
 MARRIAGE_CANDIDATE_REROLL_ITEM_ID = 0x152
 MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE = 10000
 MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION = ".vf2rero"
@@ -29653,11 +29653,12 @@ def main():
     patch_ldwscene_setactive_null_guard(manifest)
     # Do not alter CDatingScene::HandleMessage. The proposal scene must keep
     # the base-game candidate, Accept, Reject, close, and state-write bytes.
-    manifest["MarriageCandidateReroll"] = {
-        "status": "disabled to preserve the stock marriage proposal path",
-        "runtime_hooks_installed": False,
-        "reason": "The candidate-reroll hook is not linked; native proposal behavior remains unchanged.",
-    }
+    # Allow Reroll of Marriage Candidates: the dedicated .vf2rero-gated hook
+    # in patch_marriage_candidate_reroll() was fully implemented and tested
+    # in isolation but never called from here, so the purchasable row
+    # persisted a toggle that gameplay never read - buying it did nothing.
+    # Wire it in for real.
+    patch_marriage_candidate_reroll(manifest)
     # Same-sex support is a default-off runtime byte.  Its only proposal edit
     # occurs after GetVillager returns the spawned candidate; HandleMessage,
     # parent storage, selectors, and the native private-time target remain

@@ -10600,7 +10600,13 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
-    def test_same_sex_candidate_hook_is_installed_by_main_without_broad_proposal_hooks(self):
+    def test_same_sex_and_reroll_hooks_are_installed_by_main_without_broad_proposal_hooks(self):
+        # Allow Reroll of Marriage Candidates was previously purchasable but
+        # non-functional: patch_marriage_candidate_reroll() was fully written
+        # and independently tested, but main() never called it, so gameplay
+        # never read the toggle it persisted. It is now wired in; only
+        # patch_multiple_marriage_candidates (a separate, still-unshipped
+        # feature) remains intentionally uncalled.
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         tree = ast.parse(source)
         main = next(
@@ -10619,7 +10625,7 @@ class MultipleMarriageCandidatesPatchTests(unittest.TestCase):
                 "patch_same_sex_marriage",
             }
         ]
-        self.assertEqual(calls, ["patch_same_sex_marriage"])
+        self.assertEqual(calls, ["patch_marriage_candidate_reroll", "patch_same_sex_marriage"])
         self.assertIn('manifest["MarriageCandidateReroll"]', source)
         self.assertIn('"runtime_hooks_installed": True', source)
         self.assertIn('manifest["SameSexMarriage"]', source)
@@ -10985,7 +10991,12 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertEqual(contract["active_price"], 0)
                 self.assertIn("checkmark.png", contract["active_state"])
                 self.assertEqual(contract["active_icon"], "checkmark.png")
-                self.assertEqual(contract["active_icon_id"], "0x166")
+                # Regression guard: 0x166 is the native ImageList entry for
+                # StatusBarSliceR.png, not a checkmark - that mismatch left
+                # this icon rendering as garbage/blank once purchased. The
+                # real stock checkmark.png entry is 0x162 (confirmed by
+                # reading the native image descriptor table directly).
+                self.assertEqual(contract["active_icon_id"], "0x162")
                 self.assertEqual(contract["inactive_state"], "explicit catalog price")
         finally:
             patcher.PATCHED = old_patched
