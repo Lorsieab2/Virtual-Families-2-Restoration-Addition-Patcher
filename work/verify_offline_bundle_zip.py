@@ -233,6 +233,30 @@ def _fail(message: str) -> None:
     raise ValueError(message)
 
 
+def _reject_executable_variant_hash_collisions(variants: dict) -> None:
+    """Refuse an EXECUTABLE_VARIANTS table where two different requires
+    combinations share one payload hash.
+
+    Two different requires combinations sharing one physical payload means
+    two manifest asset records point at the same executable despite
+    representing different feature sets - e.g. the B162 release, where the
+    plain core_executable-only baseline and the Final All-Enabled Native
+    overlay were both exported from the same source EXE. Every entry here is
+    expected to compile distinct code, so a collision means the release's
+    executable matrix (or this table describing it) is wrong, even though a
+    per-variant lookup would still resolve each one individually.
+    """
+    by_hash: dict[str, list[str]] = {}
+    for requires, (source, expected_sha, _size) in variants.items():
+        by_hash.setdefault(expected_sha, []).append(f"{sorted(requires)} -> {source}")
+    colliding = [group for group in by_hash.values() if len(group) > 1]
+    if colliding:
+        _fail(
+            "two or more executable variants with different requires share "
+            "one payload hash: " + "; ".join(" == ".join(group) for group in colliding)
+        )
+
+
 def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -381,6 +405,7 @@ def verify_archive(zip_path: Path | str) -> dict:
         exe_records = [record for record in assets if str(record.get("source_path", "")).lower().endswith(".exe")]
         if len(exe_records) != len(EXECUTABLE_VARIANTS):
             _fail(f"expected {len(EXECUTABLE_VARIANTS)} executable variants, found {len(exe_records)}")
+        _reject_executable_variant_hash_collisions(EXECUTABLE_VARIANTS)
         exe_hashes: set[str] = set()
         for requires, (source, expected_sha, expected_size) in EXECUTABLE_VARIANTS.items():
             matching = [record for record in exe_records if frozenset(_requires(record, "executable record")) == requires]
