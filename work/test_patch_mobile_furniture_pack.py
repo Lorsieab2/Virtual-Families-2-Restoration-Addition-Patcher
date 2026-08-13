@@ -2737,6 +2737,14 @@ class MobileRenovationArtTests(unittest.TestCase):
             active_helper.index("if (VF2IsAIBathroom2Style(itemId)) {{"),
             active_helper.index("if (!kVF2EnableB150CheatUpgrades) return false;"),
         )
+        self.assertLess(
+            active_helper.index("if (VF2IsMobileRenovationStyle(itemId)) {{"),
+            active_helper.index("if (!kVF2EnableB150CheatUpgrades) return false;"),
+        )
+        self.assertLess(
+            active_helper.index("if (itemId >= 0xE1 && itemId <= 0xEA) {{"),
+            active_helper.index("if (!kVF2EnableB150CheatUpgrades) return false;"),
+        )
         self.assertIn(
             "return VF2AIBathroom2IsActive(itemId);",
             active_helper,
@@ -3215,8 +3223,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                     "static void VF2RefreshRenovationCurtainDecals()",
                     source,
                 )
-                self.assertIn("Decal.RefreshProps();", source)
-                self.assertIn("Decal.RefreshDecals();", source)
+                self.assertIn("normal game-load/restart path", source)
+                self.assertNotIn("Decal.RefreshProps();", source)
+                self.assertNotIn("Decal.RefreshDecals();", source)
+                self.assertEqual(source.count("VF2RefreshRenovationCurtainDecals();"), 1)
                 bathroom1 = source.split(
                     "static int VF2ResolveBathroom1ClosedCurtainImage()",
                     1,
@@ -3279,10 +3289,6 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertIn(": kVF2StockBathroom1ClosedCurtainImage;", resolver)
                 self.assertIn("? VF2ResolveBathroom2ClosedCurtainImageForDraw()", resolver)
                 self.assertIn(": kVF2StockBathroom2ClosedCurtainImage;", resolver)
-                self.assertGreaterEqual(
-                    source.count("VF2RefreshRenovationCurtainDecals();"),
-                    5,
-                )
         finally:
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
@@ -7502,7 +7508,10 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
                         manifest["outfit_store_helpers"]["b150_cheat_upgrade_gate"][
                             "independent_effects"
                         ],
-                        ["repurchase Rockhound/Anti-Spam to remove"],
+                        [
+                            "repurchase Rockhound/Anti-Spam to remove",
+                            "mobile renovation active-byte state and native 0xE1-0xEA renovation state are independent of Cheat Upgrades",
+                        ],
                     )
                     self.assertEqual(
                         manifest["outfit_store_helpers"]["b150_cheat_upgrade_gate"][
@@ -8424,12 +8433,13 @@ class OutfitStoreMappingTests(unittest.TestCase):
                     self.assertEqual(
                         manifest["outfit_store_helpers"]["renovation_reversible"],
                         {
-                            "enabled": enabled,
-                            "setting": "cheat_upgrades",
+                            "enabled": True,
+                            "setting": "native House Renovations and enabled mobile House Renovations rows",
                             "item_range": "0xE1-0xEA",
                             "remove_route": "VF2RemoveOwnedUpgrade",
                             "rebuild_route": "ContentMap.Load followed by the native ten-record activation table",
                             "native_activation_source": "theGameState::Load",
+                            "independent_of_cheat_upgrades": True,
                             "visual_scope": "native PC content-map materials, hotspots, and objects only; mobile room-art compositing remains disabled",
                         },
                     )

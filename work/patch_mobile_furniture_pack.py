@@ -10754,6 +10754,15 @@ def patch_house_renovations(manifest):
             "category_count": f"10 -> {new_count}",
         },
         "inserted_list_entries": inserted,
+        "native_rows_preserved": True,
+        "native_row_range": "0xE1-0xEA",
+        "curtain_state_behavior": {
+            "mode": "restart_only",
+            "purchase_state_persisted_before_restart": True,
+            "store_click_refresh": "disabled",
+            "reload_route": "normal CDecal refresh during game load/restart",
+            "bathroom2_live_refresh_crash_route": "removed",
+        },
         "ai_bathroom2": {
             "enabled": ENABLE_AI_GENERATED_BATHROOM2,
             "category": hex(HOME_RENOVATION_CATEGORY),
@@ -10968,8 +10977,9 @@ public:
     if "static void VF2RefreshRenovationCurtainDecals() {" not in existing_helper:
         refresh_curtain_helper_definition = (
             "static void VF2RefreshRenovationCurtainDecals() {\n"
-            f"    if ({str(ENABLE_MOBILE_RENOVATIONS).lower()}) Decal.RefreshProps();\n"
-            f"    if ({str(ENABLE_AI_GENERATED_BATHROOM2).lower()}) Decal.RefreshDecals();\n"
+            "    // Curtain grids are rebuilt by the normal game-load/restart path.\n"
+            "    // Never call CDecal refresh methods from a store click: Bathroom 2\n"
+            "    // previously entered that native path with an invalid live state.\n"
             "}\n"
         )
     helper_path.write_text(
@@ -11168,7 +11178,6 @@ extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
     VF2NormalizeMobileRenovationActives();
     if (VF2MobileRenovationIsActive(itemId)) {{
         VF2SetMobileRenovationActive(itemId, false);
-        VF2RefreshRenovationCurtainDecals();
         theGameState::Get()->SaveCurrentGame();
         return true;
     }}
@@ -11183,7 +11192,6 @@ extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
     }}
     VF2SetMobileRenovationActive(itemId, true);
     VF2MarkMobileRenovationEverPurchased(styleIndex);
-    VF2RefreshRenovationCurtainDecals();
     theGameState::Get()->SaveCurrentGame();
     return true;
 }}
@@ -11298,6 +11306,16 @@ static bool VF2B150UpgradeIsActive(int itemId) {{
     if (VF2IsAIBathroom2Style(itemId)) {{
         return VF2AIBathroom2IsActive(itemId);
     }}
+    // Mobile renovation rows are visual House Renovations state, not Cheat
+    // Upgrades.  Keep their active bytes reachable in mobile-only builds.
+    if (VF2IsMobileRenovationStyle(itemId)) {{
+        return VF2MobileRenovationIsActive(itemId);
+    }}
+    // Native House Renovations remain stock rows and must remain functional
+    // when the optional Cheat Upgrades catalog is not compiled in.
+    if (itemId >= 0xE1 && itemId <= 0xEA) {{
+        return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
+    }}
     if (!kVF2EnableB150CheatUpgrades) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
     if (itemId == {DIVORCE_SPOUSE_ITEM_ID:#x}) {{
@@ -11310,12 +11328,6 @@ static bool VF2B150UpgradeIsActive(int itemId) {{
     }}
     if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) {{
         return gVF2AllowMarriageCandidateReroll != 0;
-    }}
-    if (VF2IsMobileRenovationStyle(itemId)) {{
-        return VF2MobileRenovationIsActive(itemId);
-    }}
-    if (itemId >= 0xE1 && itemId <= 0xEA) {{
-        return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
     }}
     if (itemId == 0x115 || itemId == 0x116 ||
         itemId == 0x128 || itemId == 0x129 || itemId == 0x12A) {{
@@ -11430,6 +11442,8 @@ static void VF2DeactivateWorker(int workerId, int expiryOffset) {{
 
 extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
     if (!kVF2EnableB150CheatUpgrades && !kVF2EnableAIBathroom2 &&
+        !VF2IsMobileRenovationStyle(itemId) &&
+        !(itemId >= 0xE1 && itemId <= 0xEA) &&
         !VF2IsReversibleStockUpgrade(itemId)) return false;
     if (!VF2B150UpgradeIsActive(itemId)) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
@@ -11447,13 +11461,11 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
         // B2 visual rows clear only their direct persisted active byte;
         // purchase history remains intact for reversible reactivation.
         *VF2AIBathroom2ActiveByte(itemId) = 0;
-        VF2RefreshRenovationCurtainDecals();
     }} else if (VF2IsMobileRenovationStyle(itemId)) {{
         // Cosmetic room styles are not stock inventory records.  Remove only
         // their direct persisted active byte; the ever-purchased marker stays
         // set so reselecting the style remains free.
         VF2SetMobileRenovationActive(itemId, false);
-        VF2RefreshRenovationCurtainDecals();
     }} else if (itemId >= 0xE1 && itemId <= 0xEA) {{
         InventoryManager.ReturnOne((EInventoryItem)itemId);
         VF2RebuildOwnedRenovations();
@@ -11993,6 +12005,7 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
             },
             "independent_effects": [
                 "repurchase Rockhound/Anti-Spam to remove",
+                "mobile renovation active-byte state and native 0xE1-0xEA renovation state are independent of Cheat Upgrades",
             ],
             "gated_effects": [
                 "price modes",
@@ -12000,16 +12013,16 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
                 "fix all house malfunctions",
                 "Router offline/online malfunction state",
                 "repurchase Maid/Gardener to fire",
-                "remove and repurchase owned house renovations 0xE1-0xEA",
             ],
         },
         "renovation_reversible": {
-            "enabled": ENABLE_CHEAT_UPGRADES,
-            "setting": "cheat_upgrades",
+            "enabled": True,
+            "setting": "native House Renovations and enabled mobile House Renovations rows",
             "item_range": "0xE1-0xEA",
             "remove_route": "VF2RemoveOwnedUpgrade",
             "rebuild_route": "ContentMap.Load followed by the native ten-record activation table",
             "native_activation_source": "theGameState::Load",
+            "independent_of_cheat_upgrades": True,
             "visual_scope": "native PC content-map materials, hotspots, and objects only; mobile room-art compositing remains disabled",
         },
         "unlock_everything_store_locks": {
@@ -14518,7 +14531,6 @@ static bool VF2ApplyAIBathroom2Style(int itemId) {{
         }}
         *VF2AIBathroom2ActiveByte(itemId) = 1;
     }}
-    VF2RefreshRenovationCurtainDecals();
     theGameState::Get()->SaveCurrentGame();
     return true;
 }}

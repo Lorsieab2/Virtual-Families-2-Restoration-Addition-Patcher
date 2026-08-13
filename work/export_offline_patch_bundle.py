@@ -609,6 +609,12 @@ B151_CHANGELOG_LINES = (
     "- B151 self-contained art: The 12 ornament icons and 1024x768 collection page are tracked, hash-verified workspace assets. Holiday-disabled outputs remove inherited unused collection PNGs; Holiday-enabled outputs no longer depend on ignored tp225.dat/tp225.pvr files.",
     "- B151 verification: The complete 16-overlay matrix and independent positive/negative linked-PE validator cover spawning, observers, exact item matching, rarity/Lucky Rock thresholds, pickup/completion, chest navigation/tooltips, persistence, achievements, Collector routes, and canonical art. Manual in-game launch, chest, pickup, save/reload, Collector, and collection-cheat testing remains required.",
 )
+B162_CHANGELOG_LINES = (
+    "- B162 renovation repair: Preserves the ten native Home Renovation rows 0xE1-0xEA and appends the mobile renovation rows instead of replacing the native category. The generated mobile category contains 30 total rows when enabled.",
+    "- B162 bathroom safety: Bathroom 1 and Bathroom 2 renovation purchases persist their selected state without calling live CDecal refresh methods from the store-click path. Curtain colors are therefore applied through the normal game-load/restart refresh route, and the Bathroom 2 click-crash route is removed.",
+    "- B162 Special Upgrades: Keeps the six stock rows, adds four mobile Special Upgrade rows in mobile-enabled overlays, and adds the 36 cheat-upgrade rows when Cheat Upgrades is enabled. The final all-enabled overlay exposes 46 total Special Upgrade rows.",
+    "- B162 verification: Rebuilt all 19 native/mobile overlay combinations with unique executable SHA-256 hashes, manifest checks for native-row preservation, restart-only curtain behavior, renovation counts, and Special Upgrade counts. Static and package checks do not replace the required player launch, purchase, restart, save/reload, and Bathroom 2 crash-reproduction checks.",
+)
 INVALID_INSTALL_MESSAGE = (
     "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\n"
     "Links:\n"
@@ -3033,6 +3039,10 @@ manifest.json so the vanilla game folder stays untouched.
 B151 changelog
 --------------
 {chr(10).join(B151_CHANGELOG_LINES)}
+
+B162 changelog
+--------------
+{chr(10).join(B162_CHANGELOG_LINES)}
 """,
         encoding="ascii",
         newline="\r\n",
@@ -3382,6 +3392,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B149 game build: Holiday Ornaments now validate the collection page-count route, proving DrawScene uses _VF2CollectionPageCount(page) for page 5 while Activate keeps the five stock cached counters and this+0x2C hover field intact.",
             *B150_CHANGELOG_LINES,
             *B151_CHANGELOG_LINES,
+            *B162_CHANGELOG_LINES,
             "- B153 game build: Restores the F5-gated native debugger and editor selectors in every executable layout. VF2 internal keys are F4=0x3FD, F5=0x3FE, F6=0x3FF, F7=0x400, Up=0x3EE, and Down=0x3EF.",
             "- B153 game build: Corrects debugger input-hook false fallthrough from JE +4 to JE +6, preventing the prior house-load access violation while keeping unhandled input on the stock route.",
             "- B153 validation: Rebuilds and validates all 16 feature combinations, including unique hashes, debugger hook/key maps, eight Holiday-positive/eight Holiday-negative layouts, reversible exact-SHA runtime toggles, the age-50+ pregnancy cooldown bypass, and the sigma-3/70%-cap mortality helper.",
