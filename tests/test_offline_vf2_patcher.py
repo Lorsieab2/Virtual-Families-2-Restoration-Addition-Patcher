@@ -894,6 +894,114 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertIn("SHA-256 mismatch", result.stderr)
             self.assertEqual(game_file.read_bytes(), original)
 
+    def test_select_exact_executable_overlays_rejects_incomplete_matrix(self):
+        # Reproduces the class of defect found in the B162 release: a group of
+        # core_executable-gated .exe overlays where the currently-enabled
+        # settings have no single record whose requires exactly match them.
+        # Applying the "closest" partial matches in list order would silently
+        # drop whichever feature the last-applied record doesn't cover.
+        def overlay(index, requires):
+            return patcher_mod.AssetPatch(
+                index=index,
+                file_path="Virtual Families 2.exe",
+                output_file_path="Virtual Families 2 - Modded.exe",
+                source_path=f"payload/overlay-{index}.exe",
+                source_sha256="0" * 64,
+                source_size=1,
+                expected_target_sha256="1" * 64,
+                expected_target_pe_structure=None,
+                expected_target_size=1,
+                overwrite_existing=True,
+                note="overlay",
+                requires=tuple(requires),
+            )
+
+        universe = {
+            "virtual families 2 - modded.exe": {"island_events", "cheat_upgrades", "mobile_renovations"},
+        }
+        with self.assertRaisesRegex(patcher_mod.PatchError, "incomplete or ambiguous"):
+            patcher_mod.select_exact_executable_overlays(
+                [
+                    overlay(0, ["core_executable"]),
+                    overlay(1, ["core_executable", "island_events"]),
+                    overlay(2, ["core_executable", "mobile_renovations"]),
+                ],
+                {"core_executable", "island_events", "mobile_renovations", "cheat_upgrades"},
+                universe,
+            )
+
+    def test_select_exact_executable_overlays_picks_unique_exact_match(self):
+        def overlay(index, requires):
+            return patcher_mod.AssetPatch(
+                index=index,
+                file_path="Virtual Families 2.exe",
+                output_file_path="Virtual Families 2 - Modded.exe",
+                source_path=f"payload/overlay-{index}.exe",
+                source_sha256="0" * 64,
+                source_size=1,
+                expected_target_sha256="1" * 64,
+                expected_target_pe_structure=None,
+                expected_target_size=1,
+                overwrite_existing=True,
+                note="overlay",
+                requires=tuple(requires),
+            )
+
+        base = overlay(0, ["core_executable"])
+        cheat = overlay(1, ["core_executable", "cheat_upgrades"])
+        universe = {"virtual families 2 - modded.exe": {"cheat_upgrades", "island_events"}}
+
+        selected = patcher_mod.select_exact_executable_overlays(
+            [base, cheat], {"core_executable", "cheat_upgrades"}, universe,
+        )
+        self.assertEqual([asset.index for asset in selected], [1])
+
+        selected_off = patcher_mod.select_exact_executable_overlays(
+            [base, cheat], {"core_executable"}, universe,
+        )
+        self.assertEqual([asset.index for asset in selected_off], [0])
+
+    def test_manifest_asset_patches_rejects_incomplete_overlay_matrix_end_to_end(self):
+        # End-to-end reproduction through the real manifest-parsing entry
+        # point: a manifest whose executable overlay matrix (like B162's)
+        # only covers "island_events", "cheat_upgrades" and their pairing,
+        # but not "island_events + cheat_upgrades" together, must refuse to
+        # silently pick one of the two partial overlays.
+        manifest = {
+            "settings": [
+                {"id": "core_executable", "label": "Core", "default": True},
+                {"id": "island_events", "label": "Island Events", "default": True},
+                {"id": "cheat_upgrades", "label": "Cheat Upgrades", "default": True},
+            ],
+            "asset_patches": [
+                {
+                    "file_path": "Virtual Families 2.exe",
+                    "output_file_path": "Virtual Families 2 - Modded.exe",
+                    "source_path": "payload/core.exe",
+                    "source_sha256": "0" * 64,
+                    "requires": ["core_executable"],
+                },
+                {
+                    "file_path": "Virtual Families 2.exe",
+                    "output_file_path": "Virtual Families 2 - Modded.exe",
+                    "source_path": "payload/island.exe",
+                    "source_sha256": "1" * 64,
+                    "requires": ["core_executable", "island_events"],
+                },
+                {
+                    "file_path": "Virtual Families 2.exe",
+                    "output_file_path": "Virtual Families 2 - Modded.exe",
+                    "source_path": "payload/cheat.exe",
+                    "source_sha256": "2" * 64,
+                    "requires": ["core_executable", "cheat_upgrades"],
+                },
+            ],
+        }
+        settings = patcher_mod.manifest_settings(manifest)
+        enabled = {"core_executable", "island_events", "cheat_upgrades"}
+        with self.assertRaisesRegex(patcher_mod.PatchError, "incomplete or ambiguous"):
+            patcher_mod.manifest_asset_patches(manifest, settings, enabled)
+
     def test_setting_defaults_and_explicit_enable(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

@@ -817,6 +817,34 @@ def manifest_patches(
     return patches
 
 
+def executable_overlay_universe(raw_assets: list[Any]) -> dict[str, set[str]]:
+    """Map each ``core_executable``-gated ``.exe`` output path to the union of
+    every optional setting id used anywhere to select an overlay for it.
+
+    This is derived from the manifest data itself (every record's ``requires``,
+    active or not) rather than a hard-coded setting list, so it stays correct
+    as the manifest's overlay matrix grows without needing a matching code
+    change here.
+    """
+    universe: dict[str, set[str]] = {}
+    for raw in raw_assets:
+        if not isinstance(raw, dict):
+            continue
+        source_value = raw.get("source_path", raw.get("source_file", raw.get("source")))
+        if not isinstance(source_value, str) or not source_value.lower().endswith(".exe"):
+            continue
+        requires = set(record_requires(raw, "asset patch"))
+        if "core_executable" not in requires:
+            continue
+        target_value = raw.get("file_path", raw.get("target_path", raw.get("target", raw.get("path"))))
+        output_value = raw.get("output_file_path", raw.get("output_path", raw.get("write_path")))
+        output_key = str(output_value or target_value or "").replace("\\", "/").strip("/").lower()
+        if not output_key:
+            continue
+        universe.setdefault(output_key, set()).update(requires - {"core_executable"})
+    return universe
+
+
 def manifest_asset_patches(
     manifest: dict[str, Any],
     settings: dict[str, PatchSetting],
@@ -825,6 +853,7 @@ def manifest_asset_patches(
     raw_assets = manifest.get("asset_patches", manifest.get("assets", []))
     if not isinstance(raw_assets, list):
         raise PatchError("Manifest 'asset_patches' must be an array when present.")
+    overlay_universe = executable_overlay_universe(raw_assets)
     assets: list[AssetPatch] = []
     for index, raw in enumerate(raw_assets):
         if not isinstance(raw, dict):
@@ -886,7 +915,64 @@ def manifest_asset_patches(
                 requires=requires,
             )
         )
-    return assets
+    return select_exact_executable_overlays(assets, enabled_settings, overlay_universe)
+
+
+def select_exact_executable_overlays(
+    assets: list[AssetPatch],
+    enabled_settings: set[str],
+    overlay_universe: dict[str, set[str]],
+) -> list[AssetPatch]:
+    """Keep exactly one executable overlay per active output target.
+
+    Several ``core_executable``-gated ``.exe`` asset records can legitimately
+    share the same output path, one per supported combination of optional
+    settings (e.g. "cheat upgrades only", "cheat upgrades + mobile
+    renovations", "everything enabled"). Applying all of the *active* ones
+    (``requires`` a subset of ``enabled_settings``) in manifest order and
+    letting a later, less-specific record silently overwrite an earlier,
+    more-specific one drops already-selected feature code with no warning to
+    the player. Fail closed instead: for each output target, require exactly
+    one active record whose ``requires`` set equals every optional setting
+    that (a) is enabled and (b) is known, anywhere in the manifest, to
+    differentiate an overlay for that target. If no active record accounts
+    for the complete enabled/relevant set, or if manifest data is malformed
+    enough to yield more than one, refuse rather than guess.
+    """
+    grouped: dict[str, list[AssetPatch]] = {}
+    for asset in assets:
+        if not asset.source_path.lower().endswith(".exe"):
+            continue
+        if "core_executable" not in asset.requires:
+            continue
+        output_key = (asset.output_file_path or asset.file_path).replace("\\", "/").strip("/").lower()
+        grouped.setdefault(output_key, []).append(asset)
+
+    selected_ids: set[int] = set()
+    for output_key, group in grouped.items():
+        relevant = overlay_universe.get(output_key, set())
+        wanted = {"core_executable", *(relevant & enabled_settings)}
+        exact = [asset for asset in group if set(asset.requires) == wanted]
+        if len(exact) != 1:
+            labels = ", ".join(sorted(wanted - {"core_executable"})) or "(none)"
+            target = group[0].output_file_path or group[0].file_path
+            raise PatchError(
+                "Executable overlay matrix is incomplete or ambiguous for the enabled "
+                f"settings ({labels}) at {target}: {len(exact)} overlay records match "
+                "the complete enabled feature set instead of exactly one. Refusing to "
+                "guess which one to apply."
+            )
+        selected_ids.add(id(exact[0]))
+
+    return [
+        asset
+        for asset in assets
+        if (
+            not asset.source_path.lower().endswith(".exe")
+            or "core_executable" not in asset.requires
+            or id(asset) in selected_ids
+        )
+    ]
 
 
 def manifest_target_files(manifest: dict[str, Any]) -> list[dict[str, Any]]:
