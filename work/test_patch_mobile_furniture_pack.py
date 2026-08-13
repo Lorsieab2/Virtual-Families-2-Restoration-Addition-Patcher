@@ -3792,6 +3792,32 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertTrue(hook["native_instance_passed_to_resolver"])
                 self.assertIn("VF2ResolveBathroom2ClosedCurtainGridImpl(CDecal *decal)", source)
                 self.assertIn("push esi", source)
+                # Regression guard for the P0 crash fixed after B162.1: the
+                # native RefreshDecals callsite already executed
+                # "mov ecx, esi" to set up ECX as the CDecal `this` pointer
+                # for the *next* native instruction (an AddEntry-style decal
+                # insertion) that runs after this hook returns. ECX is
+                # caller-saved, so the Impl call is free to clobber it; the
+                # naked wrapper must explicitly save/restore ECX around that
+                # call or the following native instruction dereferences
+                # garbage (observed crashing on the raw stock image ID,
+                # 538/539, treated as a pointer). Bathroom 1's equivalent
+                # wrapper does not need this since its callsite depends on
+                # EDI afterward, which is callee-saved.
+                wrapper_start = source.index("VF2ResolveBathroom2ClosedCurtainGrid()")
+                wrapper_body = source[wrapper_start:wrapper_start + 1500]
+                self.assertIn("push ecx", wrapper_body)
+                self.assertIn("pop ecx", wrapper_body)
+                self.assertLess(
+                    wrapper_body.index("push ecx"),
+                    wrapper_body.index("call VF2ResolveBathroom2ClosedCurtainGridImpl"),
+                    "ECX must be saved before the Impl call",
+                )
+                self.assertGreater(
+                    wrapper_body.index("pop ecx"),
+                    wrapper_body.index("call VF2ResolveBathroom2ClosedCurtainGridImpl"),
+                    "ECX must be restored after the Impl call",
+                )
                 obj = CoffObject(patcher.PATCHED / "Decal.obj")
                 refresh_decals = obj.symbol("?RefreshDecals@CDecal@@QAEXXZ")
                 sec = obj.section(refresh_decals.section)
