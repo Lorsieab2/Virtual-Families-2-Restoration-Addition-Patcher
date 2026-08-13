@@ -1759,3 +1759,18 @@ descriptor with a dedicated semantic sock-pile icon.
   output-only reconfiguration keeps its existing identity checks.
 - The full offline patcher suite passes 58 tests, including explicit positive
   separate-output and negative in-place cases.
+
+## B160 - Merged curtain-routing and Behavior-Patches QA package
+
+- Carries forward the B159 catalog additions and its 17 executable overlay
+  variants.
+- Merges the independently linked Bathroom 1/Bathroom 2 curtain fix: the
+  final all-enabled overlay uses the native `EDI` Bathroom 1 and `ESI`
+  Bathroom 2 `CDecal` instances instead of a shared global resolver.
+- Fixes exporter precedence so an explicitly supplied final-playtest EXE
+  replaces an older overlay with the same dependency set.
+- The B160 ZIP passes the fail-closed package verifier: 17 executable
+  variants, 35 renovation assets, 67 mobile sounds, 63 sound restores, four
+  removals, and four authenticated sound routes.
+- Static/package verification only; live purchase, curtain, save/load, audio,
+  furniture behavior, and player regression QA remain player gates.

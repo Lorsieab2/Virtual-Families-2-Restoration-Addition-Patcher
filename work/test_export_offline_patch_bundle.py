@@ -240,6 +240,14 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
         self.assertIn('"Final All-Enabled Native"', source)
         self.assertIn('"native_overlay_requires": FINAL_PLAYTEST_NATIVE_REQUIRES', source)
 
+    def test_merged_native_overlay_inputs_keep_mobile_dependency_and_explicit_final_source(self):
+        source = EXPORTER.read_text(encoding="utf-8")
+        self.assertIn("--final-playtest-native-exe", source)
+        self.assertIn("--native-overlays-include-mobile-renovations", source)
+        self.assertIn("requires if \"mobile_renovations\" in requires else [*requires, \"mobile_renovations\"]", source)
+        self.assertIn("final_source = final_playtest_native_exe or patched_exe", source)
+        self.assertIn("overlay_specs[final_index] = final_spec", source)
+
     def test_b156_uses_stable_modded_folder_exe_and_save_names(self):
         self.assertEqual(exporter.modded_output_folder_name("B156"), "Virtual Families 2 - Modded")
         self.assertEqual(exporter.modded_exe_output_name("B156"), "Virtual Families 2 - Modded.exe")

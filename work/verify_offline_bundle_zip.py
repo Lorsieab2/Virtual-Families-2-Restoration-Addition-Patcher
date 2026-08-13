@@ -26,89 +26,89 @@ CORE_ONLY_SETTINGS = {
 }
 EXECUTABLE_VARIANTS = {
     frozenset({"core_executable"}): (
-        "payload/Virtual Families 2 - Modded B159.exe",
+        "payload/Virtual Families 2 - Modded B160.exe",
         "744fac14c3715718c88e6001e37c43bd50621a3f69468bfd29cd094e1d4debc6",
         1_711_616,
     ),
     frozenset({"core_executable", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Mobile Room Renovations.exe",
+        "payload/Virtual Families 2 - Modded B160 - Mobile Room Renovations.exe",
         "c60f87e4793b19f23cd419f2e480be0d84e1a365412235f93023d19a4b0d43d4",
         1_723_904,
     ),
     frozenset({"core_executable", "island_events", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Island Events.exe",
+        "payload/Virtual Families 2 - Modded B160 - Island Events.exe",
         "55d03b5d00c3eae54df618be47ab90b6e9c520dac218bea428960c05bd7785e9",
         1_754_624,
     ),
     frozenset({"core_executable", "cheat_upgrades", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Cheat Upgrades.exe",
+        "payload/Virtual Families 2 - Modded B160 - Cheat Upgrades.exe",
         "82185c4895293969ea31fda391fdb14a89573261d228c16ce3904011aba2a080",
         1_725_440,
     ),
     frozenset({"core_executable", "holiday_ornaments_collection", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Holiday Ornaments.exe",
+        "payload/Virtual Families 2 - Modded B160 - Holiday Ornaments.exe",
         "e2bdfe8d7881f5e141ae4d0344b04168f64856169105a10ef585917918f72bea",
         1_725_952,
     ),
     frozenset({"core_executable", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Behavior Patches.exe",
+        "payload/Virtual Families 2 - Modded B160 - Behavior Patches.exe",
         "b62e9ca54896a145af51e5982788a1cd995052ad966e3f14c3e6bdf83ef4c7bb",
         1_761_280,
     ),
     frozenset({"core_executable", "island_events", "cheat_upgrades", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Island Events + Cheat Upgrades.exe",
+        "payload/Virtual Families 2 - Modded B160 - Island Events + Cheat Upgrades.exe",
         "cd5d60e3077be04440bc404ea49cda1edd9c7b4588848b1af3f91714e55a1b08",
         1_755_648,
     ),
     frozenset({"core_executable", "island_events", "holiday_ornaments_collection", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Island Events + Holiday Ornaments.exe",
+        "payload/Virtual Families 2 - Modded B160 - Island Events + Holiday Ornaments.exe",
         "e6421b46a6c5e1d451b602783cd6dc685e5ef3d826d8e2d1ac602df9c587e4e3",
         1_757_184,
     ),
     frozenset({"core_executable", "cheat_upgrades", "holiday_ornaments_collection", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Cheat Upgrades + Holiday Ornaments.exe",
+        "payload/Virtual Families 2 - Modded B160 - Cheat Upgrades + Holiday Ornaments.exe",
         "b033ee9488ce9b16b4c00c56df713fa58bca6e3231d5f3ad7c5103daf92c9fbc",
         1_728_512,
     ),
     frozenset({"core_executable", "island_events", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Island Events + Behavior Patches.exe",
+        "payload/Virtual Families 2 - Modded B160 - Island Events + Behavior Patches.exe",
         "9d34aeb49220d08b105f16892bc2766d44c84d33de14ee2c1958637930dcb521",
         1_791_488,
     ),
     frozenset({"core_executable", "cheat_upgrades", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Cheat Upgrades + Behavior Patches.exe",
+        "payload/Virtual Families 2 - Modded B160 - Cheat Upgrades + Behavior Patches.exe",
         "f81f5aa5d8be273df1ecbe597d25cc2926e53ee772668aeb516c1c805adf5b99",
         1_762_304,
     ),
     frozenset({"core_executable", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Holiday Ornaments + Behavior Patches.exe",
+        "payload/Virtual Families 2 - Modded B160 - Holiday Ornaments + Behavior Patches.exe",
         "fb048fa5cf7ef200c45e060e7c5c9dacc11169886f97390ea041628e63818c7b",
         1_764_352,
     ),
     frozenset({"core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Island Events + Cheat Upgrades + Holiday Ornaments.exe",
+        "payload/Virtual Families 2 - Modded B160 - Island Events + Cheat Upgrades + Holiday Ornaments.exe",
         "1e49f0c7532487daae50dca3ef84afbbb7ba9f8b6c2758bdf31b9b5fcd28a818",
         1_758_208,
     ),
     frozenset({"core_executable", "island_events", "cheat_upgrades", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Island Events + Cheat Upgrades + Behavior Patches.exe",
+        "payload/Virtual Families 2 - Modded B160 - Island Events + Cheat Upgrades + Behavior Patches.exe",
         "088f06ab925e7c1facb204af4951ac2a7bfccc7e5bf876d9e3e4d115c7a57210",
         1_793_536,
     ),
     frozenset({"core_executable", "island_events", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Island Events + Holiday Ornaments + Behavior Patches.exe",
+        "payload/Virtual Families 2 - Modded B160 - Island Events + Holiday Ornaments + Behavior Patches.exe",
         "41220018f303efbaf07e36c828b8384a97bafd8523de1b43a6e758dfd7b13577",
         1_794_560,
     ),
     frozenset({"core_executable", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Cheat Upgrades + Holiday Ornaments + Behavior Patches.exe",
+        "payload/Virtual Families 2 - Modded B160 - Cheat Upgrades + Holiday Ornaments + Behavior Patches.exe",
         "194e9503ed46ea9c55445a42d1e26a06a1e40b465eadbaf3836c716b23592fad",
         1_765_888,
     ),
     frozenset({"core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B159 - Island Events + Cheat Upgrades + Holiday Ornaments + Behavior Patches.exe",
-        "a7f19a76ad22f1539a51eb990a1bb05f0f4211fc47f782a36ae7a1eaa80d6aac",
-        1_795_584,
+        "payload/Virtual Families 2 - Modded B160 - Final All-Enabled Native.exe",
+        "d60930d05f1adaced87bda4e57c4bdd5fe8d614e7b5c40547609cc277ed76f5f",
+        1_793_024,
     ),
 }
 SOUND_ROUTE_NAMES = {"beaker", "Child3", "Child7", "Child8"}
@@ -117,7 +117,7 @@ REQUIRED_RUNNERS = {
     "offline_vf2_patcher_gui.py",
     "vf2_crash_capture.py",
     "crash-capture-manifest.template.json",
-    "Apply_B159_Patcher.bat",
+    "Apply_B160_Patcher.bat",
     "Launch_GUI.bat",
 }
 

@@ -10,7 +10,7 @@ sys.path.insert(0, str(ROOT / "work"))
 import verify_offline_bundle_zip as verifier
 
 
-CANONICAL = ROOT / "outputs" / "VF2-B159-Behavior-Variations-Fix-20260812-r54.zip"
+CANONICAL = ROOT / "outputs" / "VF2-B160-Merged-Curtain-Behavior-QA-20260812.zip"
 
 
 class OfflineBundleZipVerifierTests(unittest.TestCase):
@@ -40,7 +40,7 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         })
         self.assertEqual(
             verifier.EXECUTABLE_VARIANTS[requires][0],
-            "payload/Virtual Families 2 - Modded B159 - Island Events + Cheat Upgrades + Holiday Ornaments + Behavior Patches.exe",
+            "payload/Virtual Families 2 - Modded B160 - Final All-Enabled Native.exe",
         )
         self.assertEqual(len(verifier.EXECUTABLE_VARIANTS), 17)
 

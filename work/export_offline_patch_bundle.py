@@ -3396,6 +3396,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             "- B155.5 calibration: Uses 60 adults per full game. Constant 0-4 food-group cases place modal deaths at ages 72-76; reaching 110 takes about 4.279-2.289 games per success and reaching 122 takes about 2796.10-112.00 games per success.",
             "- B156 patcher refresh: Removes the active Experimental/Not Working section, drops the inactive Expand game map setting, and moves Allow Older Pregnancies, Older Villager Mortality Curve, and mobile furniture behaviors into Optional Patches.",
             "- B158 patcher refresh: Adds default-off No AI Icons, a Cheat Upgrades-dependent visual layer for the late Special Upgrade PNGs with hash-checked current-icon restores.",
+            "- B160 merge: Carries the B159 catalog and 17-overlay package forward, and gives the explicit final-playtest overlay precedence so the Bathroom 1/Bathroom 2 curtain instance fix is used for the all-enabled profile.",
             "- B156 game build: Allow Older Pregnancies also exposes the native Next Generation flow at displayed age 60 for the oldest active living non-departed villager. Native eligibility remains first, a surviving child is required, native MakeRoomInTree rollover remains intact, and .vf2preg off returns the stock result.",
             "- B119 patcher refresh: The GUI stores the last vanilla install folder and modded output folder in patcher_local_settings.json beside the patcher.",
             "- B119 text fixes: Retargets existing string-table rows so Cooking like mommy becomes Cooking like a grownup and Driving like daddy becomes Driving like a grownup.",
@@ -3426,6 +3427,11 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     holiday_ornaments_exe = Path(args.holiday_ornaments_exe).resolve() if args.holiday_ornaments_exe else None
     behavior_patches_exe = Path(args.behavior_patches_exe).resolve() if args.behavior_patches_exe else None
     mobile_renovations_exe = Path(args.mobile_renovations_exe).resolve() if args.mobile_renovations_exe else None
+    final_playtest_native_exe = (
+        Path(args.final_playtest_native_exe).resolve()
+        if args.final_playtest_native_exe
+        else None
+    )
     ai_generated_bathroom2_dir = (
         Path(args.ai_generated_bathroom2_dir).resolve()
         if args.ai_generated_bathroom2_dir
@@ -3447,6 +3453,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         cheat_upgrades_exe is not None
         and mobile_renovations_exe is not None
         and cheat_upgrades_mobile_renovations_exe is None
+        and not getattr(args, "native_overlays_include_mobile_renovations", False)
     ):
         raise ValueError(
             "Exporting both cheat_upgrades and mobile_renovations requires "
@@ -3790,6 +3797,16 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
                 "Combined optional executable overlay. Applied only when core_executable, island_events, cheat_upgrades, holiday_ornaments_collection, and behavior_patches are enabled.",
             ),
         ]
+        if getattr(args, "native_overlays_include_mobile_renovations", False):
+            overlay_specs = [
+                (
+                    source_exe,
+                    label,
+                    requires if "mobile_renovations" in requires else [*requires, "mobile_renovations"],
+                    note + " This overlay was built with Mobile Room Renovations enabled.",
+                )
+                for source_exe, label, requires, note in overlay_specs
+            ]
         # The patcher applies active records in manifest order. Keep overlays
         # ordered from least to most specific so the exact combination wins.
         overlay_specs.sort(key=lambda spec: len(spec[2]))
@@ -3798,14 +3815,26 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             # reuse the authenticated patched/sound-base EXE and expose it
             # under the exact all-five dependency signature.  General
             # profiles never receive this synthetic overlay.
-            overlay_specs.append(
-                (
-                    patched_exe,
-                    "Final All-Enabled Native",
-                    FINAL_PLAYTEST_NATIVE_REQUIRES,
-                    "Final-playtest composed native overlay; all certified working native features are active together.",
-                )
+            final_source = final_playtest_native_exe or patched_exe
+            final_spec = (
+                final_source,
+                "Final All-Enabled Native",
+                FINAL_PLAYTEST_NATIVE_REQUIRES,
+                "Final-playtest composed native overlay; all certified working native features are active together.",
             )
+            final_index = next(
+                (
+                    index
+                    for index, (source_exe, _label, requires, _note) in enumerate(overlay_specs)
+                    if source_exe is not None
+                    and set(requires) == set(FINAL_PLAYTEST_NATIVE_REQUIRES)
+                ),
+                None,
+            )
+            if final_index is None:
+                overlay_specs.append(final_spec)
+            elif final_playtest_native_exe is not None:
+                overlay_specs[final_index] = final_spec
         overlay_records = []
         overlay_target_identity = {
             key: value
@@ -3929,6 +3958,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
             "holiday_ornaments_exe": holiday_ornaments_exe.name if holiday_ornaments_exe else None,
             "behavior_patches_exe": behavior_patches_exe.name if behavior_patches_exe else None,
             "mobile_renovations_exe": mobile_renovations_exe.name if mobile_renovations_exe else None,
+            "final_playtest_native_exe": final_playtest_native_exe.name if final_playtest_native_exe else None,
             "cheat_upgrades_mobile_renovations_exe": cheat_upgrades_mobile_renovations_exe.name if cheat_upgrades_mobile_renovations_exe else None,
             "island_events_cheat_upgrades_exe": island_events_cheat_upgrades_exe.name if island_events_cheat_upgrades_exe else None,
             "island_events_holiday_ornaments_exe": island_events_holiday_ornaments_exe.name if island_events_holiday_ornaments_exe else None,
@@ -3999,6 +4029,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--holiday-ornaments-exe", help="Optional fully linked EXE overlay to apply when holiday_ornaments_collection is enabled.")
     parser.add_argument("--behavior-patches-exe", help="Optional EXE overlay to apply when behavior_patches is enabled.")
     parser.add_argument("--mobile-renovations-exe", help="Optional EXE overlay to apply when mobile_renovations is enabled.")
+    parser.add_argument("--final-playtest-native-exe", help="Explicit fully linked EXE used only by --final-playtest-all-enabled.")
+    parser.add_argument("--native-overlays-include-mobile-renovations", action="store_true", help="Mark supplied native feature overlays as requiring mobile_renovations.")
     parser.add_argument("--ai-generated-bathroom2-dir", help="Optional generated build directory containing the Bathroom 2 asset overlay.")
     parser.add_argument("--cheat-upgrades-mobile-renovations-exe", help="Combined optional EXE overlay to apply when cheat_upgrades and mobile_renovations are both enabled.")
     parser.add_argument("--island-events-cheat-upgrades-exe", help="Combined optional EXE overlay to apply when island_events and cheat_upgrades are both enabled.")
