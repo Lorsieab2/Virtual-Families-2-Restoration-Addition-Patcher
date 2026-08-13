@@ -1589,6 +1589,86 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 combined_overlay.read_bytes(),
             )
 
+    def test_island_events_mobile_renovations_combined_overlay_is_exported(self):
+        # Before --island-events-mobile-renovations-exe existed, there was no
+        # way to export a manifest record for this combination at all - the
+        # exporter's overlay matrix only ever covered mobile_renovations
+        # alone, cheat_upgrades+mobile_renovations, and the all-five final
+        # profile (see the B162 audit finding on the incomplete matrix).
+        # Mirrors test_cheat_upgrades_mobile_renovations_combined_overlay_is_exported
+        # for one of the 13 previously-impossible combinations, proving the
+        # export -> apply -> unique-overlay-selection pipeline now works
+        # end-to-end for it.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            base = tmp_path / "base"
+            build = tmp_path / "build"
+            out = tmp_path / "bundle"
+            base.mkdir()
+            build.mkdir()
+            vanilla = tmp_path / "Virtual Families 2.exe"
+            vanilla.write_bytes(minimal_pe_bytes())
+            patched_exe = build / "Virtual Families 2 - Additive Mobile Furniture Pack.exe"
+            patched_exe.write_bytes(minimal_pe_bytes(marker=1))
+            (build / "patch-manifest.json").write_text("{}", encoding="ascii")
+            island_overlay = tmp_path / "island.exe"
+            island_overlay.write_bytes(minimal_pe_bytes(marker=2))
+            mobile_overlay = tmp_path / "renovations.exe"
+            mobile_overlay.write_bytes(minimal_pe_bytes(marker=3))
+            combined_overlay = tmp_path / "island-renovations.exe"
+            combined_overlay.write_bytes(minimal_pe_bytes(marker=4))
+
+            self.run_exporter(
+                "--build-dir", str(build),
+                "--base-payload", str(base),
+                "--out-dir", str(out),
+                "--name", "B163",
+                "--vanilla-exe", str(vanilla),
+                "--include-exe-replacement",
+                "--island-events-exe", str(island_overlay),
+                "--mobile-renovations-exe", str(mobile_overlay),
+                "--island-events-mobile-renovations-exe", str(combined_overlay),
+            )
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            requires = ["core_executable", "island_events", "mobile_renovations"]
+            overlay = next(
+                row for row in manifest["asset_patches"]
+                if row["file_path"] == "Virtual Families 2.exe"
+                and row["requires"] == requires
+            )
+            self.assertEqual((out / overlay["source_path"]).read_bytes(), combined_overlay.read_bytes())
+            self.assertEqual(
+                manifest["source_build"]["island_events_mobile_renovations_exe"],
+                combined_overlay.name,
+            )
+
+            game = tmp_path / "game"
+            game.mkdir()
+            (game / "Virtual Families 2.exe").write_bytes(vanilla.read_bytes())
+            manifest["runtime_requirements"] = {}
+            manifest["output"]["preserve_stock_exe_icon"] = False
+            self.mark_synthetic_settings_runtime_ready(
+                manifest,
+                "mobile_renovations",
+                "island_events",
+            )
+            manifest_path = out / "manifest.json"
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            applied = tmp_path / "applied"
+            self.run_patcher(
+                "apply",
+                "--game-dir", str(game),
+                "--manifest", str(manifest_path),
+                "--output-dir", str(applied),
+                "--disable-all",
+                "--enable", "core_executable,island_events,mobile_renovations",
+            )
+            self.assertEqual(
+                (applied / "Virtual Families 2 - Modded B163.exe").read_bytes(),
+                combined_overlay.read_bytes(),
+            )
+
     def test_final_playtest_all_enabled_rejects_reusing_the_core_executable(self):
         # Reproduces the actual B162 release defect: --final-playtest-all-enabled
         # was invoked without a --final-playtest-native-exe distinct from the
