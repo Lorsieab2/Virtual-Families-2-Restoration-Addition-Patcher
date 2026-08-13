@@ -1,0 +1,127 @@
+{
+  "note": "Accepted official Virtual Families 2 PC executable PE layouts. These are structural fingerprints only, not executable payloads.",
+  "structures": [
+    {
+      "format": "pe32-section-raw-v1",
+      "pe_offset": "0x130",
+      "machine": "0x14c",
+      "number_of_sections": 6,
+      "characteristics": "0x102",
+      "optional_header_size": 224,
+      "optional_magic": "0x10b",
+      "address_of_entry_point": "0xd5ee2",
+      "image_base": "0x400000",
+      "section_alignment": "0x1000",
+      "file_alignment": "0x200",
+      "size_of_image": "0x799000",
+      "subsystem": "0x2",
+      "sections": [
+        {
+          "name": ".text",
+          "virtual_address": "0x1000",
+          "virtual_size": "0x1241b4",
+          "raw_data_pointer": "0x400",
+          "raw_data_size": "0x124200",
+          "characteristics": "0x60000020"
+        },
+        {
+          "name": ".rdata",
+          "virtual_address": "0x126000",
+          "virtual_size": "0x55642",
+          "raw_data_pointer": "0x124600",
+          "raw_data_size": "0x55800",
+          "characteristics": "0x40000040"
+        },
+        {
+          "name": ".data",
+          "virtual_address": "0x17c000",
+          "virtual_size": "0x5f4b10",
+          "raw_data_pointer": "0x179e00",
+          "raw_data_size": "0x2b800",
+          "characteristics": "0xc0000040"
+        },
+        {
+          "name": ".shr",
+          "virtual_address": "0x771000",
+          "virtual_size": "0x4",
+          "raw_data_pointer": "0x1a5600",
+          "raw_data_size": "0x200",
+          "characteristics": "0xd0000040"
+        },
+        {
+          "name": ".rsrc",
+          "virtual_address": "0x772000",
+          "virtual_size": "0x16370",
+          "raw_data_pointer": "0x1a5800",
+          "raw_data_size": "0x16400",
+          "characteristics": "0x40000040"
+        },
+        {
+          "name": ".reloc",
+          "virtual_address": "0x789000",
+          "virtual_size": "0xf774",
+          "raw_data_pointer": "0x1bbc00",
+          "raw_data_size": "0xf800",
+          "characteristics": "0x42000040"
+        }
+      ]
+    },
+    {
+      "format": "pe32-section-raw-v1",
+      "pe_offset": "0x100",
+      "machine": "0x14c",
+      "number_of_sections": 5,
+      "characteristics": "0x103",
+      "optional_header_size": 224,
+      "optional_magic": "0x10b",
+      "address_of_entry_point": "0xc80dc",
+      "image_base": "0x400000",
+      "section_alignment": "0x1000",
+      "file_alignment": "0x1000",
+      "size_of_image": "0x73b000",
+      "subsystem": "0x2",
+      "sections": [
+        {
+          "name": ".text",
+          "virtual_address": "0x1000",
+          "virtual_size": "0xdce49",
+          "raw_data_pointer": "0x1000",
+          "raw_data_size": "0xdd000",
+          "characteristics": "0x60000020"
+        },
+        {
+          "name": ".rdata",
+          "virtual_address": "0xde000",
+          "virtual_size": "0x4e5b6",
+          "raw_data_pointer": "0xde000",
+          "raw_data_size": "0x4f000",
+          "characteristics": "0x40000040"
+        },
+        {
+          "name": ".data",
+          "virtual_address": "0x12d000",
+          "virtual_size": "0x5f5b24",
+          "raw_data_pointer": "0x12d000",
+          "raw_data_size": "0x2c000",
+          "characteristics": "0xc0000040"
+        },
+        {
+          "name": ".shr",
+          "virtual_address": "0x723000",
+          "virtual_size": "0x4",
+          "raw_data_pointer": "0x159000",
+          "raw_data_size": "0x1000",
+          "characteristics": "0xd0000040"
+        },
+        {
+          "name": ".rsrc",
+          "virtual_address": "0x724000",
+          "virtual_size": "0x16244",
+          "raw_data_pointer": "0x15a000",
+          "raw_data_size": "0x17000",
+          "characteristics": "0x40000040"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "build": "B156",
+  "source": "Virtual Families 2 mobile 1.7.16 Android asset bundles",
+  "native_item_range": "0xE1-0xEA",
+  "runtime_policy": {
+    "copy_into_pc_images": "when mobile_renovations is enabled",
+    "reason": "The optional PC renderer draws these complete PNGs at 1:1 scale after CWorldMap::Draw; the stock map path remains unchanged when disabled.",
+    "staged_target": "Images/MobileRenovations when enabled; OptionalVisualMods/Mobile Renovations otherwise",
+    "bathroom2": "Separate optional PC-only Bathroom 2 overlay and closed-curtain route; native E6 remains untouched.",
+    "bathroom1_curtains": "Five tracked PNGs are staged under Images/MobileRenovations/curtains and selected at render time from the active Bathroom 1 renovation item. The black Bathroom 1 item 0x13C selects shower_curtain_closed_black.png, the blue item 0x13D selects shower_curtain_closed_blue.png, the beige item 0x13E selects shower_curtain_closed_brown.png, the green item 0x13F selects shower_curtain_closed_green.png, and the pink item 0x140 selects shower_curtain_closed_pink.png; when no supported style is active, or a custom descriptor cannot load, image 0x21B falls back to the stock Images/curtain_closed_southb.png. Bathroom 2 remains excluded."
+  },
+  "reference_evidence": [
+    {"name": "test.png", "path": "patcher_assets/optional_patches/mobile_renovations/reference/test.png", "size": [2048, 2048], "sha256": "1F83DF47517B30D5613A1D55004B28B14ACCD1ED1F326CD9EB1EFEDAB5275DB4", "purpose": "measured room-anchor reference"},
+    {"name": "tp237.png", "path": "patcher_assets/optional_patches/mobile_renovations/reference/tp237.png", "size": [512, 512], "sha256": "35FA3A17A0C50CDBFE82F17C58444882499D416B0A977CA795DB418D73AE2294", "purpose": "mobile renovation icon atlas evidence"}
+  ],
+  "bathroom1_curtain_assets": [
+    {"name": "shower_curtain_closed_black.png", "styles": ["tp233_sw_bathroom_black.png"], "size": [98, 96], "sha256": "7c1260cd9b965a9fcf157b40d3364ba07bb5bf6544440c9cd1d46b8488a0b510"},
+    {"name": "shower_curtain_closed_blue.png", "styles": ["tp233_sw_bathroom_blue_marble.png"], "size": [98, 96], "sha256": "a33a00aedb3bb3b74d3e4aeeedc4e230ca056258b465d6b2d76fa4190d91e8ff"},
+    {"name": "shower_curtain_closed_brown.png", "styles": ["tp234_sw_bathroom_brown.png"], "size": [98, 96], "sha256": "cb0bb1614a8dee1150067fe158f15e7fd7cb20cc3b467d7fdfb336e48fc7c0e2"},
+    {"name": "shower_curtain_closed_green.png", "styles": ["tp234_sw_bathroom_green.png"], "size": [98, 96], "sha256": "653d17b53843d8ec5a2734e07a79565935406c68284e9007351eead1366b614e"},
+    {"name": "shower_curtain_closed_pink.png", "styles": ["tp235_sw_bathroom_pink.png"], "size": [105, 96], "sha256": "d9a5025dfe95895f66a853c3a89956ce4ff1186f708ba26cf6e90dae13f4b73f"}
+  ],
+  "bathroom1_stock_curtain_replacements": [],
+  "bathroom1_curtain_selector": {
+    "stock_image_id": "0x21B",
+    "stock_path": "Images/curtain_closed_southb.png",
+    "active_item_to_color": {
+      "0x13C": "black",
+      "0x13D": "blue",
+      "0x13E": "brown",
+      "0x13F": "green",
+      "0x140": "pink"
+    },
+    "black_item": "0x13C",
+    "black_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_black.png",
+    "blue_item": "0x13D",
+    "blue_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_blue.png",
+    "beige_item": "0x13E",
+    "beige_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_brown.png",
+    "pink_item": "0x140",
+    "pink_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_pink.png",
+    "green_item": "0x13F",
+    "green_asset": "Images/MobileRenovations/curtains/shower_curtain_closed_green.png",
+    "selection_order": "native mobile item order, one active style per Bathroom 1 room",
+    "fallback": "stock image/grid when no style is active or the selected custom descriptor cannot load"
+  },
+  "native_activation": [
+    {"item": "0xE1", "map_area": [16, 6], "materials": [0, 1], "hotspot": 61, "object": 51, "environment_prop": 61},
+    {"item": "0xE2", "map_area": [8, 7], "materials": [0, 1], "hotspot": 55, "object": 107, "environment_prop": 68},
+    {"item": "0xE3", "map_area": [10, 7], "materials": [0, 1], "hotspot": 52, "object": 108, "environment_prop": 69},
+    {"item": "0xE4", "map_area": [15, 7], "materials": [0, 1], "hotspot": 53, "object": 49, "environment_prop": 65},
+    {"item": "0xE5", "map_area": [14, 7], "materials": [0, 1], "hotspot": 59, "object": 105, "environment_prop": 66},
+    {"item": "0xE6", "map_area": [13, 7], "materials": [0, 1], "hotspot": 58, "object": 106, "environment_prop": 67},
+    {"item": "0xE7", "map_area": [12, 7], "materials": [0, 1], "hotspot": 57, "object": 48, "environment_prop": 64},
+    {"item": "0xE8", "map_area": [9, 7], "materials": [0, 1], "hotspot": 54, "object": 53, "environment_prop": 63},
+    {"item": "0xE9", "map_area": [11, 7], "materials": [0, 1], "hotspot": 56, "object": 52, "environment_prop": 62},
+    {"item": "0xEA", "map_area": [17, 6], "materials": [0, 1], "hotspot": 62, "object": 109, "environment_prop": 70}
+  ],
+  "native_load_order": ["0xE9", "0xE7", "0xE4", "0xE8", "0xE3", "0xE5", "0xE2", "0xE1", "0xEA", "0xE6"],
+  "pc_style_catalog": [
+    {"pc_item": "0x13C", "mobile_item": "0x119", "room": "bathroom", "file": "tp233_sw_bathroom_black.png", "price": 2200, "lock": 4},
+    {"pc_item": "0x13D", "mobile_item": "0x118", "room": "bathroom", "file": "tp233_sw_bathroom_blue_marble.png", "price": 1000, "lock": 0},
+    {"pc_item": "0x13E", "mobile_item": "0x11A", "room": "bathroom", "file": "tp234_sw_bathroom_brown.png", "price": 2200, "lock": 4},
+    {"pc_item": "0x13F", "mobile_item": "0x11B", "room": "bathroom", "file": "tp234_sw_bathroom_green.png", "price": 2200, "lock": 4},
+    {"pc_item": "0x140", "mobile_item": "0x11C", "room": "bathroom", "file": "tp235_sw_bathroom_pink.png", "price": 2200, "lock": 4},
+    {"pc_item": "0x141", "mobile_item": "0x11D", "room": "kitchen", "file": "tp238_beige_kitchen.png", "price": 2200, "lock": 4},
+    {"pc_item": "0x142", "mobile_item": "0x125", "room": "workshop", "file": "tp238_beige_workshop.png", "price": 2100, "lock": 3},
+    {"pc_item": "0x143", "mobile_item": "0x124", "room": "office", "file": "tp239_red_office.png", "price": 2750, "lock": 3},
+    {"pc_item": "0x144", "mobile_item": "0x11F", "room": "kitchen", "file": "tp239_yellow_kitchen.png", "price": 3500, "lock": 3},
+    {"pc_item": "0x145", "mobile_item": "0x11E", "room": "kitchen", "file": "tp240_country_kitchen.png", "price": 1850, "lock": 3},
+    {"pc_item": "0x146", "mobile_item": "0x121", "room": "office", "file": "tp240_dark_office.png", "price": 2100, "lock": 3},
+    {"pc_item": "0x147", "mobile_item": "0x122", "room": "office", "file": "tp241_green_office.png", "price": 2800, "lock": 3},
+    {"pc_item": "0x148", "mobile_item": "0x123", "room": "office", "file": "tp241_modern_office.png", "price": 2100, "lock": 3},
+    {"pc_item": "0x149", "mobile_item": "0x120", "room": "office", "file": "tp242_blue_office.png", "price": 2450, "lock": 3},
+    {"pc_item": "0x14A", "mobile_item": "0x126", "room": "workshop", "file": "tp242_checkered_workshop.png", "price": 1900, "lock": 3}
+  ],
+  "pc_render_target": {
+    "renderer": "CWorldMap::Draw",
+    "asset_pattern": "Images/MapX##Y##.jpg",
+    "tile_size": [512, 512],
+    "stitched_size": [2048, 2048],
+    "compositing": "theMainScene::DrawScene +0x39 post-map/pre-decal hook; complete PNGs are drawn 1:1 with camera-relative origins",
+    "hook": {
+      "draw_scene_offset": "0x39",
+      "boundary": "after CWorldMap::Draw and before CDecal::DrawDecals",
+      "scale": 1.0
+    },
+    "anchors": {
+      "bathroom": [563, 1287],
+      "kitchen": [930, 995],
+      "office": [1353, 804],
+      "workshop": [868, 1519]
+    },
+    "selector": "first active PC style item in native mobile item order per room; IDs 0x13C-0x14A in the optional renderer build"
+  },
+  "bundles": [
+    {"bundle": "tp233.dat", "room_assets": ["sw_bathroom_black.png", "sw_bathroom_blue_marble.png"], "support_assets": ["shower_curtain_closed_black.png", "shower_curtain_closed_blue.png", "soapblackstd.png"], "curated_outputs": ["tp233_sw_bathroom_black.png", "tp233_sw_bathroom_blue_marble.png"]},
+    {"bundle": "tp234.dat", "room_assets": ["sw_bathroom_brown.png", "sw_bathroom_green.png"], "support_assets": ["shower_curtain_closed_brown.png", "shower_curtain_closed_green.png", "soapgreenstd.png", "towelrackbathroombrownstd.png"], "curated_outputs": ["tp234_sw_bathroom_brown.png", "tp234_sw_bathroom_green.png"]},
+    {"bundle": "tp235.dat", "room_assets": ["sw_bathroom_pink.png"], "support_assets": ["shower_curtain_closed_pink.png", "towelrackbathroompinkstd.png"], "curated_outputs": ["tp235_sw_bathroom_pink.png"]},
+    {"bundle": "tp238.dat", "room_assets": ["beige_kitchen.png", "beige_workshop.png"], "support_assets": [], "curated_outputs": ["tp238_beige_kitchen.png", "tp238_beige_workshop.png"]},
+    {"bundle": "tp239.dat", "room_assets": ["red_office.png", "yellow_kitchen.png"], "support_assets": [], "curated_outputs": ["tp239_red_office.png", "tp239_yellow_kitchen.png"]},
+    {"bundle": "tp240.dat", "room_assets": ["country_kitchen.png", "dark_office.png"], "support_assets": [], "curated_outputs": ["tp240_country_kitchen.png", "tp240_dark_office.png"]},
+    {"bundle": "tp241.dat", "room_assets": ["green_office.png", "modern_office.png"], "support_assets": [], "curated_outputs": ["tp241_green_office.png", "tp241_modern_office.png"]},
+    {"bundle": "tp242.dat", "room_assets": ["blue_office.png", "checkered_workshop.png"], "support_assets": [], "curated_outputs": ["tp242_blue_office.png", "tp242_checkered_workshop.png"]}
+  ],
+  "curated_art": {
+    "source_dir": "work/assets/mobile_renovations",
+    "orientation": "upright",
+    "transform": "decoded RGBA row reversal from the Android extraction",
+    "files": [
+      {"name": "tp233_sw_bathroom_black.png", "room": "bathroom", "size": [603, 363], "sha256": "67414f25240912e3436e4d7d3ad7d470fc0644d2c5aebc57ea71e363d22ddb78"},
+      {"name": "tp233_sw_bathroom_blue_marble.png", "room": "bathroom", "size": [603, 363], "sha256": "6ff7484c1d7fdf11319bafe7b600cd1e106a5745ff94a465dc6c5cec092f145a"},
+      {"name": "tp234_sw_bathroom_brown.png", "room": "bathroom", "size": [603, 363], "sha256": "95b363544458012915f3a8f1daad1bbd5410367f1124789f328714d53b512fdd"},
+      {"name": "tp234_sw_bathroom_green.png", "room": "bathroom", "size": [603, 363], "sha256": "357558a2d2ec131b986d0b7bb6abfbc40d83b4763eff2233ab00470a5cfad297"},
+      {"name": "tp235_sw_bathroom_pink.png", "room": "bathroom", "size": [603, 363], "sha256": "bc30f2704a094ec70c538b159d090aaf9a884689201cdcd462aed4e27d26423a"},
+      {"name": "tp238_beige_kitchen.png", "room": "kitchen", "size": [717, 464], "sha256": "527ef57ba0b4fb39a6447a3d7b9e7855bb8d5afa820629dc0579c350006de356"},
+      {"name": "tp238_beige_workshop.png", "room": "workshop", "size": [518, 326], "sha256": "f7e2659ba3c35d895ec4ed0ae3fb3b398a1dacc4ed2c868100985f5851efc714"},
+      {"name": "tp239_red_office.png", "room": "office", "size": [585, 413], "sha256": "b839d9ed4b6d7b6b724af3bd4cfb2a0e94010df21528a6a7117d50c3ec258437"},
+      {"name": "tp239_yellow_kitchen.png", "room": "kitchen", "size": [717, 464], "sha256": "1619e79a3139d0fee590d1db110634837ec580b53c478b772ba704dd7297dafd"},
+      {"name": "tp240_country_kitchen.png", "room": "kitchen", "size": [717, 464], "sha256": "93dce5149ae85579c2ec00ab8b9b744b428c224e379052412abb977bd3829e8c"},
+      {"name": "tp240_dark_office.png", "room": "office", "size": [585, 413], "sha256": "ef2eb3760a3428a533b4eefebf93f8ca5315a6f8078f6b10282c41bfb0e62f5c"},
+      {"name": "tp241_green_office.png", "room": "office", "size": [585, 413], "sha256": "829705ac435855fcc33c3b3bb8375a4515828cf1a31e0c5a350cf864f65c77b2"},
+      {"name": "tp241_modern_office.png", "room": "office", "size": [585, 413], "sha256": "2b440aab7ac67162e9dded910b1ddfeb89e1482107ec081c752fdf4d48bbfa5e"},
+      {"name": "tp242_blue_office.png", "room": "office", "size": [585, 413], "sha256": "e4eefc202698d0f43bc0e79e1bdfef226d6d8d000ef4200196c7ad85598cf33a"},
+      {"name": "tp242_checkered_workshop.png", "room": "workshop", "size": [518, 326], "sha256": "0661ba4b150e93991bebcd90834dc28dbd92918c86b700661caab1fbb99d222a"}
+    ]
+  }
+}

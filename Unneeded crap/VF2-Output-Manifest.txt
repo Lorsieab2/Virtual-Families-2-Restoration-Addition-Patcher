@@ -1,0 +1,23 @@
+Codex output deliverables for the Virtual Families 2 prototype work
+
+Folder:
+C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\outputs
+
+Built executable:
+- VF2-Native-Rebuild-Prototype.exe
+- SHA-256: 175230E9ECFC824A9240A0E7399B18DA07CEAC56B42BAB71A1BDD899CC6CC084
+
+Build/debug files:
+- VF2-Native-Rebuild-Prototype.pdb
+- VF2-Native-Rebuild-Prototype-Source.cs
+- Build-VF2-Native-Rebuild-Prototype.ps1
+
+Documentation:
+- VF2-Native-Rebuild-Prototype-Notes.txt
+- VF2-Android-Save-Analysis.md
+
+Notes:
+- The EXE is a plain .NET Framework build, not packed or obfuscated.
+- The source contains the Android-style save writer.
+- The command-line save export entry point is:
+  VF2-Native-Rebuild-Prototype.exe --write-sample-save

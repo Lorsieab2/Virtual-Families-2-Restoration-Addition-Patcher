@@ -1,0 +1,1776 @@
+# Build History
+
+## B53 - Base Villager Sheets Restore
+
+- Rebuilt from the verified B52 release payload.
+- Replaced `female_sit00.png`, `male_sit00.png`, `female_actions00.png`,
+  `male_actions00.png`, `female_bodies00.png`, and `male_bodies00.png` with
+  the supplied base-game sheets.
+- No native object patches, furniture data, or behavior routes changed.
+
+## B54 - Stock Villager Body Runtime Restore
+
+- Restores the stock 0--49 body-row limit and stock rare-body range.
+- Disables the experimental holiday body-row append, animator clamp expansion,
+  and runtime separated-body export by default.
+- Keeps the experimental helper functions in source for later investigation,
+  but they are opt-in through `VF2_ENABLE_HOLIDAY_BODY_TYPES=1` and are not
+  part of the normal build path.
+
+## B55 - Additive Mobile Island Event Table
+
+- Appends mobile-only event objects after the stock desktop event slots.
+- Preserves slots `0x01` through `0x60` and expands the stock list consumers'
+  exclusive upper bound for the appended entries.
+- Uses a `CIslandEvent`-compatible object prefix and selects target villagers
+  in `CanFire`, matching the stock event lifetime rather than selecting them
+  while the global event table is constructed.
+
+## B57 - Folder-Backed Holiday Body Renderer
+
+- Stops using the B56 expanded villager body/action/sit spritesheets for holiday
+  outfits.
+- Registers each holiday body frame as its own one-cell graphics descriptor and
+  writes runtime frames under `Images/VillagerBodies`.
+- Redirects only the two native villager body draw calls through a folder-backed
+  helper. Stock body values `0-49` fall back to the original draw path.
+- Keeps the original villager spritesheets as fallback assets and leaves head
+  rendering untouched.
+- At the time of B57, build folders were mirrored to Downloads and an old
+  OneDrive test-build directory. That external default was retired before
+  B155.5; `work/sync_build_outputs.py` now mirrors only to the repository's
+  ignored `outputs/test-build-copies` directory unless an explicit destination
+  is supplied.
+
+## B58 - VF3 TV Appliances And Playhouse
+
+- Adds the VF3 Large Flat Screen TV, VF3 Small Flat Screen TV, and Father's
+  Favorite TV as new General Appliances entries.
+- Confirms General Appliances is the native `gAppliancesList`; category number
+  5 by itself is not the store list authority.
+- Gives each added VF3 TV its own sprite-sized fmap and its own base-TV-shaped
+  animation sheets so the base desktop TV resources remain untouched.
+- Enables the Playhouse spontaneous behavior candidate for all ages, including
+  children.
+
+## B59 - Crash Fix And Child-Only Playhouse
+
+- Rebuilt from the B57 folder-backed holiday-body baseline, then reapplied the
+  current additive furniture/events patch.
+- Fixes the General Appliances count widening to patch only the native
+  `GetCategoryItemCount` return for `gAppliancesList`. B58 used a broad pattern
+  replacement, which could also widen another stock category that happened to
+  return the same desktop count.
+- Keeps the added VF3 TVs on their private furniture sprites, fmaps, and
+  animation sheet names; base desktop TV assets are not overwritten.
+- Changes the Playhouse spontaneous behavior hook to preserve the stock native
+  age gates, so it is no longer enabled for all ages.
+
+## B60 - Targeted Appliance Count Widening
+
+- Fixes the remaining B59 startup-crash risk by making General Appliances count
+  widening fully symbol-relative instead of partially pattern-based.
+- Patches `CInventoryManager::GetCategoryItem` appliance offsets `0x73` and
+  `0x95`, and keeps the `CInventoryManager::GetCategoryItemCount` return patch
+  targeted at offset `0x37`.
+- Prevents the VF3 TV appliance count increase from also widening `gPetList`,
+  whose additive count is also `15` after Turtle/Hamster support.
+- Keeps the previous Accessories expansion approach intact for distinctive
+  category counts.
+
+## B61 - Save-Load Mouse Hook Fix
+
+- Removes the injected `_VF2PatchedDebuggerMouseMove` early-return hook from
+  `theMainScene::HandleMouseMove`.
+- Maps the B58/B59/B60 save-load crash offset `0x0009ff8b` to that injected
+  mouse-move hook region, not to General Appliances count widening.
+- Keeps the B60 targeted appliance-count widening and the VF3 TV data intact.
+
+## B62 - F5-Gated Debugger Input
+
+- Keeps normal gameplay on the stock input path by inserting fall-through
+  debugger hooks instead of replacing `theMainScene::HandleKeyDown`.
+- Debugger input is inert until F5 enables it for the session; normal mouse
+  down/move/up and key-character events return false immediately and continue
+  into the original handlers.
+- Wraps `Debugger` and selected `IEditor` calls with guarded access so a
+  debugger/editor fault disables debugger input and falls back to stock input
+  instead of crashing the game.
+- Removes the normal-startup debug log bootstrap. Debug logging begins only
+  after F5 activates debugger input.
+
+## B63 - Base Mouse And Save-Load Restore
+
+- Disables debugger/editor hooks by default after B62 still crashed while
+  opening the affected save.
+- Leaves `theMainScene::HandleKeyDown`, `DrawScene`, `HandleKeyCharacter`,
+  `HandleMouseDown`, `HandleMouseMove`, and `HandleMouseUp` stock in normal
+  builds.
+- Keeps `vf2_debug_features.cpp` as an empty helper object so existing compile
+  and link response files keep working without introducing runtime behavior.
+- Adds `VF2_ENABLE_DEBUGGER_FEATURES=1` as a dev-only opt-in for isolated
+  debugger research. Even that opt-in path no longer patches main-scene mouse
+  handlers.
+- User testing confirmed B63 opens the affected save without the B61/B62
+  debugger crash.
+
+## B64 - VF3 TV Animation Strip Scaling
+
+- Regenerates only the private VF3 TV animation strip graphics used by the
+  added Large, Small, and Father's Favorite TV assets.
+- Scales each donor TV frame into an explicit per-cell screen box:
+  `Large/LargeEast=(4,5,65,60)`, `Small/SmallEast=(2,3,48,43)`, and
+  `FathersFavorite/FathersFavoriteEast=(5,5,96,78)`.
+- Leaves base TV strips (`TVAnimBig*.png`, `TVAnimSmall*.png`), villager
+  behavior, furniture behavior, debugger/input hooks, and `theMainScene`
+  unchanged.
+
+## B65 - VF3 TV Private Floating Animations
+
+- Wires the private VF3 TV animation strips into the runtime instead of leaving
+  them as unreferenced assets.
+- Appends private `CFloatingAnim::m_sAnim` entries `0x40-0x45`, image
+  descriptors `0x4CD-0x4D2`, and extends `CFloatingAnim::LoadAssets` from
+  `0x400` to `0x460` table bytes.
+- Sets only the added VF3 TV `FurnitureInfo` records to the new private enums
+  with zeroed x/y animation offsets; base TV animation enums and stock
+  `TVAnimBig*.png`/`TVAnimSmall*.png` assets remain untouched.
+- Verifies all non-identity, non-store, non-animation `FurnitureInfo` fields
+  still match donor `0x1F3`, and the click-dispatch table aliases each added
+  VF3 TV to the same base flat-screen TV donor.
+- Keeps debugger features disabled and preserves the stock `theMainScene.obj`
+  hash `BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB`.
+
+## B66 - Gendered Outfit Store Icons
+
+- Fixes blank Clothing-store rows for added outfit entries by generating one
+  91 x 91 preview icon per outfit row under `Images/OutfitIcons/`.
+- Splits added outfit rows into female item IDs `0x400-0x435` and male item
+  IDs `0x440-0x475`; total Clothing row count is now 114 including the six
+  stock rows.
+- Appends outfit icon image descriptors `0x4D3-0x53E` and routes only those
+  high outfit item IDs through targeted `CInventoryManager::DrawItem` hooks.
+- Leaves villager behavior, furniture behavior, TV behavior, debugger features,
+  and stock `theMainScene.obj` unchanged.
+
+## B67 - Visible Special Upgrade Icons
+
+- Fixes blank visible Special Upgrade rows for Brokerage Account, Food Club,
+  Health Plan, and Lucky Rock by routing item IDs `0x117-0x11A` through the
+  shared added-item `CInventoryManager::DrawItem` helper.
+- Keeps their existing standalone image descriptors `0x309-0x30C` and ensures
+  the four icon PNG payloads are emitted into the additive output.
+- Leaves Special Upgrade purchase/apply behavior, hidden-IAP dialog bypass,
+  villager behavior, furniture behavior, debugger features, and stock
+  `theMainScene.obj` unchanged.
+
+## B68 - Holiday Outfit Runtime Frame Restore
+
+- Fixes the B66/B67 regression where Holiday outfit store icons could render
+  while `holiday_body_runtime_frames.frames` stayed at `0`, leaving runtime
+  body-frame descriptors without offsets.
+- `sync_holiday_body_runtime_frames()` now searches complete image roots:
+  current output, prior completed `VF2-Mobile-Furniture-With-Island-Events-B*`
+  folders, then the B56 expanded Holiday body fallback.
+- Regenerates all 448 folder-backed Holiday body frames for female/male body
+  values `50-53` across `bodies`, `actions`, and `sit`, with all 448 graphics
+  descriptors carrying non-null offsets.
+- Adds a defensive `vf2_villager_body_frames.cpp` fallback clamp: recognized
+  Holiday body grids draw stock row `49` if an individual frame image is
+  unavailable instead of passing row `50-53` to the vanilla sheet renderer.
+- Keeps the native `CAnimManager` body lookup unpatched, debugger features
+  disabled, and villager/furniture behavior routes unchanged.
+
+## B69 - Outfit Purchase And Action Icons
+
+- Changes all generated Clothing-row preview icons to use the matching row's
+  last action-sheet frame: `female_actions00.png` / `male_actions00.png`
+  column `14`.
+- Uses stock action sheets for body values `0-49` and the expanded B56 action
+  sheets for Holiday body values `50-53` when the current output has only
+  stock rows.
+- Adds generated-outfit purchase handling at
+  `CScrollingStoreScene::HandlePurchaseItem + 0x1AD`: recognized synthetic
+  store IDs set `InventoryManager+0x468` or `+0x46C`, add stock tray item
+  `0x49` or `0x4A`, save, and skip the native high-ID no-op path.
+- Hooks `CInventoryManager::GetNumAvailable` and `GetUseCount` for the
+  generated outfit IDs so the store click path treats them as valid one-use
+  outfit rows.
+
+## B70 - VF3 TV Animation Orientation
+
+- Swaps the private VF3 TV animation source orientation: non-East added TV
+  labels now use `TVAnimBigE*` frames, and East labels use `TVAnimBig*` frames.
+- Retunes the private animation screen boxes to the full slanted face bounds:
+  `Large/LargeEast=(4,5,65,80)`, `Small/SmallEast=(2,2,48,60)`, and
+  `FathersFavorite/FathersFavoriteEast=(5,8,96,104)`.
+- Leaves base `TVAnimBig*.png` / `TVAnimSmall*.png`, furniture behavior,
+  villager behavior, and click behavior untouched; only the private VF3
+  animation strips are regenerated.
+
+## B71 - Clothing Category Crash Guard
+
+- Removes the B69 generated-outfit `CInventoryManager::GetUseCount` hook.
+- Changes `_VF2GetOutfitStoreNumAvailable` into a side-effect-free synthetic
+  ID guard: generated outfit rows return available, stock rows fall through to
+  native code, and the helper no longer calls `CToolTray::IsSlotAvailable`
+  while the Clothing category is opening/drawing.
+- Keeps the direct generated-outfit purchase hook that sets
+  `InventoryManager+0x468/+0x46C`, adds tray item `0x49/0x4A`, and saves only
+  after a generated outfit row is actually purchased.
+
+## B72 - Settings Evict Button
+
+- Calls the existing `patch_options_dialog()` step during the additive patch
+  pipeline.
+- Enables the dormant Settings Evict control ID `4` by NOPing the two
+  `theOptionsDialog` constructor branches that skip Evict button creation for
+  normal in-progress families.
+- Reuses the existing `theOptionsDialog::EvictFamily()` to
+  `CFamilyTree::EvictFamily()` path instead of adding new family-state clearing
+  code.
+
+## B73 - Clothing Getter ECX Guard
+
+- Fixes the likely remaining Clothing category crash in the generated-outfit
+  getter hooks.
+- Preserves `ECX` across member-function outfit helper calls so stock Clothing
+  rows can safely fall through to native `CInventoryManager` code with the
+  original `this` pointer intact.
+- Leaves the generated Clothing rows, outfit icon graphics, direct outfit
+  purchase helper, Evict button, TV behavior, furniture behavior, and villager
+  behavior unchanged.
+
+## B74 - Any-Generation Settings Evict
+
+- Changes the Settings Evict constructor gate from "generation count < 2" to
+  "generation count > 0", so the button is available for every active family
+  generation.
+- Keeps the existing confirmation and
+  `theOptionsDialog::EvictFamily()` -> `CFamilyTree::EvictFamily()` click path.
+  `CFamilyTree::EvictFamily()` is generation-agnostic: it resets the family
+  tree and marks it evicted, while the Options handler resets villagers and
+  routes to the adoption scene.
+- Leaves Clothing, furniture, villager, debugger, TV, and store-category
+  behavior unchanged.
+
+## B75 - Independent Outfit Tray Items
+
+- Copies the six supplied stock villager sheets into the completed build's
+  `Images` folder before outfit icon and frame export generation:
+  `female/male_bodies00.png`, `female/male_actions00.png`, and
+  `female/male_sit00.png`.
+- Exports build-local separated outfit frames under
+  `Images/VillagerBodies/<Gender>/Body_##/{bodies,actions,sit}/Frame##.png`
+  while keeping runtime stock body rows on the normal sheet renderer.
+- Fixes generated outfit purchases so `ToolTray` stores the independent
+  synthetic outfit item ID (`0x400-0x435` female, `0x440-0x475` male) instead
+  of reusing one stock outfit item per gender and mutating the shared
+  `InventoryManager` outfit body field.
+- Patches `CToolTray::GetToolInHand()` and `CToolTray::GetToolInUse()` to
+  normalize a selected synthetic outfit to stock `0x4A` female or `0x49` male
+  only for vanilla main-scene application checks. `GetOutfit()` then decodes
+  the body value from the selected synthetic item.
+- Leaves stock outfit items, furniture behavior, villager behavior, debugger,
+  TV behavior, and base save/load paths otherwise unchanged.
+
+## B76 - Holiday Ornaments Collection
+
+- Adds the mobile Holiday Ornaments collectible range `0x9E-0xA9` as a sixth
+  Collections page with generated build-local art from `tp225.pvr`.
+- Registers base ornament carrying value `0x9E` through the stock full-yard
+  collectible spawn system, so normal spawn cadence and Lucky Rock odds remain
+  owned by the existing `CCollectableItem::Update/Add` path.
+- Adds the `Ornamentologist` Goals entry at achievement row `0x5F`, target
+  `12`, and bumps the Goal Collector target to include the new collection goal.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B76-Holiday-Ornaments-Collection`.
+
+## B77 - Child-Only Playhouse Spontaneous
+
+- Fixes the Playhouse spontaneous candidate so adults no longer select
+  `PlayOnPlayStructure` autonomously.
+- Sets candidate `0x11E` max age to `0x117`, matching the stock child/adult
+  boundary (`CVillager+0x6A54 < 0x118`).
+- Leaves furniture drop/click behavior, villager behavior functions, debugger,
+  TV behavior, Clothing, and Holiday Ornaments unchanged.
+
+## B78 - VF3 TV Frame Enum Orientation
+
+- Swaps the added VF3 TV `FurnitureInfo` frame `0`/frame `1` private
+  floating-animation enum assignments so the overlay slant follows the
+  generated furniture frame orientation.
+- Leaves the generated private animation strips, base TV assets, click
+  behavior, furniture behavior, villager behavior, debugger, Clothing, Holiday
+  Ornaments, and Playhouse changes otherwise unchanged.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B78-TV-Frame-Enum-Orientation`.
+
+## B79 - Complete Runtime Package
+
+- Copies the required desktop runtime DLLs into the completed build root:
+  `SDL2.dll`, `SDL2_image.dll`, `libpng16-16.dll`, `libjpeg-9.dll`,
+  `zlib1.dll`, and `fmod.dll`.
+- Records the copied DLLs in `patch-manifest.json` under
+  `desktop_runtime_dlls` and fails the patcher run if any required DLL is
+  missing from the known runtime source folders.
+- Leaves gameplay, furniture data, VF3 TV orientation, Playhouse, Clothing,
+  Holiday Ornaments, and executable code behavior otherwise unchanged from
+  B78.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B79-Complete-Runtime-Package`.
+
+## B80 - Holiday Outfit Body Values
+
+- Re-enables the native `CAnimManager` body-link lookup widening for Holiday
+  outfit rows `50-53`.
+- Keeps invalid body values on a stock-safe fallback: link lookups still fall
+  back to row `49`, and the folder-backed draw helper clamps unsupported rows
+  before calling the vanilla `DrawScaled` path.
+- Adds regression tests proving generated Holiday outfit IDs decode to body
+  values `50-53` for both female and male rows.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B80-Holiday-Outfit-Body-Values`.
+
+## B81 - VF3 TV Behavior Fmaps
+
+- Patches the separate `CFurnitureManager::LoadFmap` furniture-offset guard
+  from stock max `0xFB` to the additive furniture max so appended VF3 TV item
+  IDs `0x324-0x326` can load their content maps.
+- Ensures empty output folders still receive `Assets/` fmaps by seeding donor
+  fmaps from `work/vf2_obb/assets`, then regenerates the three VF3 TV fmaps
+  from their sprite footprints while preserving stock TV object-cell payloads.
+- Adds `validate_vf3_tv_behavior_contract()` so future builds fail if the new
+  TVs lose the LoadFmap patch, donor behavior contract, or generated fmaps.
+- Keeps villager behavior, base TV behavior, base TV sprites, and base TV
+  animation assets untouched.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B81-VF3-TV-Behavior-Fmaps`.
+
+## B82 - VC90 Runtime Package
+
+- Fixes the B79-B81 launch regression caused by packaging `SDL2_image.dll`
+  without its VC90 side-by-side CRT dependency.
+- Adds `sync_vc90_crt_private_assembly()` to copy the local x86 VC90 CRT files
+  into `Microsoft.VC90.CRT/` and write `Microsoft.VC90.CRT.manifest` matching
+  the `SDL2_image.dll` embedded dependency on version `9.0.21022.8`.
+- Keeps the B81 VF3 TV behavior/fmap fix intact and does not change gameplay,
+  furniture behavior, villager behavior, or TV behavior code.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B82-VC90-Runtime-Package`.
+
+## B83 - Full Runtime Payload
+
+- Fixes the B79-B82 launch regression where release folders contained the SDL
+  DLLs but only a partial generated `Images/` tree. Probes showed the B82 EXE
+  stayed running with the complete vanilla image payload and exited with code
+  `3` with the partial B82 image payload.
+- Adds `sync_vanilla_runtime_payload()` to seed every output with the official
+  vanilla `Images/`, `Sounds/`, `ldw.ini`, `wc.dat`, and `icon.bmp` before
+  overlaying additive art.
+- Adds `validate_runtime_payload_contract()` and offline patcher
+  `runtime_requirements` support so future builds and patch bundles can reject
+  incomplete runtime folders before release or patching.
+- Keeps gameplay, furniture behavior, villager behavior, and TV behavior code
+  unchanged from B82.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B83-Full-Runtime-Payload`.
+
+## B84 - Disable Unstable Holiday Ornaments Collection
+
+- Disables the experimental Holiday Ornaments collection/page/achievement
+  native hooks in normal builds behind `VF2_ENABLE_HOLIDAY_ORNAMENTS=1`.
+- Keeps stock Collections behavior active so the UI should remain on the base
+  four pages and `48` total collectibles instead of crashing while reporting
+  `60`.
+- Leaves the research code and generated-art path available for isolated
+  Holiday Ornament work, but marks the offline patcher setting experimental and
+  default-off.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B84-Disable-Holiday-Ornaments`.
+
+## B85 - VF3 TV Animation Inset
+
+- Refines only the private VF3 TV animation strip screen boxes to reduce minor
+  bezel bleed seen in B84 screenshots.
+- New boxes: Large `5,6,63,77`, Small `3,3,46,57`, and Father's Favorite
+  `8,10,90,96`; East and West variants keep matching box dimensions.
+- Leaves base TV assets, VF3 furniture behavior, click handling, fmaps,
+  villager behavior, and floating-animation enum order unchanged.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B85-TV-Animation-Inset`.
+
+## B86 - Holiday Ornament Pickup Recognition
+
+- Ornament-enabled research build. Keeps the B84 default source guard
+  (`VF2_ENABLE_HOLIDAY_ORNAMENTS=1` required), but generates this build with
+  that flag enabled so Holiday Ornament pickup can be tested in-game.
+- Adds `0x9E` family-range recognition to
+  `CCollectableItem::Find(CVillager&, ECarrying, ldwPoint&)`, matching spawned
+  variants `0x9E-0xA9` when villagers search for the base ornament request.
+- Adds the same family recognition to
+  `CCollectableItem::WasItemSpawned(ECarrying)` so the spawn gate sees an
+  already-active ornament variant and does not repeatedly spawn new ornaments.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B86-Holiday-Ornament-Pickup-Fix`.
+
+## B87 - Holiday Ornament Collection Art
+
+- Ornament-enabled research build using the supplied
+  `C:\Users\Owner\Downloads\Holiday Collectibles` collection-screen art and
+  `C:\Users\Owner\Downloads\collectables_small.png`.
+- Bakes the supplied `*-Placeholder.png` ornament silhouettes into the
+  `Collection_ChristmasOrnament_Frame.png` background so uncollected slots show
+  the expected placeholders without changing `CCollectionScene::DrawScene()`.
+- Copies the 12 collected ornament images into `Images/CollectionOrnaments/`
+  and preserves `Collection_ChristmasOrnament_CandyCane.png` as decorative
+  source art, not a 13th collectible.
+- Replaces the build-local `Images/collectables_small.png` with the supplied
+  sheet so the small collection icon atlas includes the Holiday Ornament row.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B87-Holiday-Ornament-Collection-Art`.
+
+## B88 - VF3 TV Animation Box Revert
+
+- Reverts the B85 private VF3 TV animation inset boxes after in-game testing
+  showed worse overlay alignment.
+- Restores the B84 private strip geometry: Large `4,5,65,80`, Small
+  `2,2,48,60`, and Father's Favorite `5,8,96,104`; East and West variants
+  keep matching dimensions.
+- Leaves VF3 TV fmaps, furniture behavior, villager behavior, base TV assets,
+  Holiday Ornament research hooks, and runtime packaging unchanged from B87.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B88-TV-Animation-Box-Revert`.
+
+## B89 - Holiday Body Link Fallback
+
+- Fixes the broken Holiday body/head alignment caused by widening native
+  `CAnimManager` link lookups to rows `50-53` while normal builds still ship
+  50-row stock villager sheets.
+- Keeps the folder-backed Holiday body renderer active for visual body frames,
+  but preserves the stock row-49 link fallback for head/body attachment points.
+- Adds a regression test and manifest policy entry proving Holiday body values
+  `50-53` draw through folder-backed art while link geometry remains stock-safe.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B89-Holiday-Body-Link-Fallback`.
+
+## B90 - Stock Collections Runtime Assets
+
+- Restores normal build generation to the stock Collections path by leaving the
+  experimental Holiday Ornament collection native hook disabled unless
+  `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` is explicitly set for research builds.
+- Seeds and validates the full runtime `Assets/` payload from the workspace
+  asset cache before overlaying additive `.fmap` files. Required sentinels now
+  include `cmap.dat`, `wpts.dat`, `animpts.dat`, `anims.dat`, `lsmap.dat`, and
+  `TVFlatScreenStd.png.fmap`.
+- Tightens direct-build and offline-patcher runtime checks so folders missing
+  map/path geometry assets fail before release or patch application.
+- Does not alter villager behavior, furniture behavior, or stock collection
+  screen code.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B90-Stock-Collections-Runtime-Assets`.
+
+## B91 - Revert Full Assets Payload
+
+- Reverts the B90 full runtime `Assets/` payload seeding and validation after
+  in-game testing showed the copied asset payload broke the modded runtime.
+- Removes the build path that copied map/path geometry files such as
+  `cmap.dat`, `wpts.dat`, `animpts.dat`, `anims.dat`, and `lsmap.dat` into the
+  release folder.
+- Keeps the stock Collections default from B84/B90: Holiday Ornaments native
+  collection hooks remain disabled unless `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` is
+  explicitly set for isolated research.
+- Removes the old hidden fallback to a `Copy Official` furniture sprite folder;
+  normal builds must use build-local/runtime-local art or explicit workspace
+  inputs.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B91-Revert-Full-Assets-Payload`.
+
+## B92 - Holiday Ornaments Collectible Array
+
+- Enables Holiday Ornaments by default after verifying the mobile 1.7.16 native
+  collection table shape: stock PC has five pages/60 entries, while mobile adds
+  page `5` and appends carrying values `0x9E-0xA9` for 72 total entries.
+- Keeps the B86 `CCollectableItem` family-range patches for spawn recognition,
+  pickup search, `WasItemSpawned`, `CollectionCount`, and first-copy
+  achievement progress.
+- Adds `CCollectable` constructor observer registrations for `0x9E-0xA9` so
+  villager carry/drop dispatch reaches `CCollectableItem` and ornaments can be
+  removed and counted after pickup.
+- Adds regression tests for the patched 72-entry `gCollectable` table and the
+  new ornament observer registrations.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B92-Holiday-Ornaments-Collectable-Array`.
+
+## Next Build Contract - Additive Native Arrays
+
+- Enables the additive mobile Island event table by default in the patcher.
+- Records the native arrays that additive builds are allowed to grow:
+  furniture records/lookups, inventory category lists, graphics descriptors,
+  string rows, Island event slots, furniture click dispatch, and villager
+  behavior candidates.
+- Documents the rule that new furniture, events, strings, graphics, and behavior
+  routes are appended with widened bounds, while base desktop entries remain
+  untouched.
+- Adds a source audit helper showing the current patcher coverage:
+  110 additive furniture/store records, Turtle and Hamster pet additions,
+  mobile Island events enabled by default, and holiday body values `50-53`
+  remaining opt-in until the folder-backed renderer is stable.
+
+## Next Build Contract - Previous Build Baseline
+
+- New B-build folders must seed from the most recent previous completed
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B*` build before applying
+  clean base assets and regenerated additive changes.
+- `work/patch_mobile_furniture_pack.py` chooses the highest lower B-number when
+  `VF2_PATCH_OUT` names a B-build, or the highest available B-build otherwise.
+  `VF2_PREVIOUS_BUILD_DIR` can override the source for explicit rebuilds.
+- This preserves runtime packaging fixes and carried-forward additive assets
+  while still refreshing base-game `Images` and `Sounds` from the clean
+  workspace payload.
+- As of the standalone B98-current release, future package roots must preserve
+  the B98 ZIP shape exactly: top-level `Assets/`, `Images/`,
+  `OptionalVisualMods/`, `Original Virtual Families 2 Assets/`, `Sounds/`, the
+  required root launcher/config/DLL files, and no legacy `ReferenceAssets/` or
+  `Microsoft.VC90.CRT/` folders. The current release baseline asset is
+  `Current VF2 Modded Build! B98.zip` on tag
+  `B98-current-vf2-modded-build`, size `353,946,169`, SHA-256
+  `63ad60cfb963008bed7cc6706f05146ed7ed6a8f40aa785204c9ccefa36dbf55`.
+
+## Next Build Contract - Offline Patch Bundle Export
+
+- `work/export_offline_patch_bundle.py` exports generated build folders into
+  `offline_vf2_patcher.py` manifest/payload bundles with toggleable settings,
+  runtime requirements, asset SHA-256 records, and optional vanilla-vs-patched
+  EXE byte diffs.
+- The B93 asset preview is now pruned by default with `--asset-mode additive`,
+  producing 713 manifest-referenced asset records instead of exporting inherited
+  previous-build payloads. It still needs vanilla EXE target metadata and
+  native byte records before publication.
+- The workspace-local vanilla EXE candidate
+  `Unneeded crap\Virtual Families 2.exe` exports target metadata successfully
+  (SHA-256 `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4`,
+  size `1,881,088`), but B93's patched EXE size is `1,677,824`, so native
+  records must be derived from linker/object patch metadata rather than a full
+  executable byte diff.
+- Object-relative native byte triples from build manifests are preserved under
+  `native_patch_sources` only. B93 currently exports the three Settings Evict
+  constructor records this way; they must be translated to final vanilla EXE
+  file offsets before the offline patcher is allowed to apply them.
+
+## B94 - Stability, Outfit Apply, Ornament Opt-In
+
+- Seeds from the current standalone B98 release package folder and preserves its
+  top-level package shape.
+- Disables Holiday Ornament native collection/spawn/pickup hooks in normal
+  builds; `VF2_ENABLE_HOLIDAY_ORNAMENTS=1` remains the isolated research opt-in
+  for mobile parity work.
+- Disables the mobile Island Event table graft in normal builds;
+  `VF2_ENABLE_ISLAND_EVENTS=1` remains research-only until outcomes are mapped
+  and crash-free.
+- Fixes Holiday outfit placement by keeping a gendered last-synthetic-outfit
+  fallback while stock tray normalization maps generated outfit items to stock
+  `0x49/0x4A`, so body values `50-53` can survive the apply path instead of
+  falling back to body `49`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B94-Stability-Outfit-Ornament-OptIn`.
+
+## B95 - Holiday Outfit Apply Field Sync
+
+- Seeds from B94 and keeps Holiday Ornaments plus mobile Island Events disabled
+  by default for stability.
+- Updates the stock `CInventoryManager` male/female outfit body fields whenever
+  a generated outfit item is purchased or selected through the tray
+  normalization helper. This gives the vanilla apply path body values `50-53`
+  for Holiday outfit rows even after the synthetic tray ID is normalized to
+  stock item `0x49/0x4A`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B95-Holiday-Outfit-Apply-Field-Sync`.
+
+## B96 - Holiday Outfit Apply Resolver
+
+- Keeps the B95 purchase/tray fixes but patches the final
+  `theMainScene::HandleMouseDown` drop-on-villager apply callsites for stock
+  outfit items `0x49` and `0x4A`.
+- Redirects those two callsites to `_VF2ResolveOutfitBodyForApply`, which reads
+  the selected synthetic outfit from `ToolTray` before falling back to the
+  gendered last-synthetic value or vanilla `InventoryManager` body fields.
+- Targets the actual villager body write at `CVillager+0x6A84`, fixing the
+  failure mode where Holiday outfit items display correctly in the tool tray
+  but still apply body `49`.
+- Adds the matching live house-view draw redirect at
+  `CVillagerManager::DrawVillager + 0x454`, so body values `50-53` render
+  through the folder-backed Holiday frame table instead of crashing
+  `CSceneManager::DrawScaled` with an out-of-range stock sheet row.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B96-Holiday-Outfit-Apply-Resolver`.
+
+## B97 - Outfit Apply Stability
+
+- Keeps the B96 live house-view Holiday body renderer redirect, but disables
+  the direct `theMainScene::HandleMouseDown` stock outfit callsite replacement
+  after in-game testing showed generated Outfit-section items could crash on
+  drop/apply.
+- Moves selected generated outfit body recovery back into the existing
+  `CInventoryManager::GetOutfit` hook path. `_VF2GetOutfitStoreBodyValue` now
+  reads the current synthetic ToolTray item before falling back to the
+  gendered last-synthetic cache or vanilla outfit fields.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B97-Outfit-Apply-Stability`.
+
+## B98 - Male Outfit Strings
+
+- Fixes the `theStringManager` lookup/guard bound used for generated strings.
+  The previous row-count based bound stopped at StringId `0xC25`, which made
+  male generated Outfit body `04` and later display `Unknown String Id!!!!`.
+- Computes the string lookup one-past value from the highest actual generated
+  StringId. Normal B98 generation reports `new_one_past_max = 0xC8B`, covering
+  all generated Outfit rows plus the added behavior labels.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B98-Male-Outfit-Strings`.
+
+## B99 - Evict and Invisible Hammock Parity
+
+- Keeps the stock/mobile Settings Evict handler path intact and preserves the
+  `theOptionsDialog` constructor state guard at `+0x2DA`, while relaxing only
+  the generation threshold so the button is available in every active family
+  generation.
+- Treats Invisible Hammock item `0x30C` as a base HammockStd donor clone for
+  behavior fields. The generated furniture row must match donor `0x1E1` for
+  every non-identity/store/string field.
+- Wires `CHotSpot::Hammock` through `_VF2EitherHammockInWorld`, allowing the
+  stock hammock hotspot/drop predicate to accept either base `0x1E1` or
+  Invisible Hammock `0x30C` before continuing through the native
+  `eBehavior_LieInHammockNoLeadIn (0x24)` action.
+- Adds `vf2_invisible_hammock.cpp` to the helper compile and link response
+  files and validates `InvisibleHammock.png.fmap` is copied from
+  `HammockStd.png.fmap`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B99-Evict-Hammock-Parity`.
+
+## B99 Offline Patcher - Full-Payload Smoke Bundle
+
+- Adds direct `--exe` input to `work/offline_vf2_patcher.py`, allowing the
+  patcher to infer the game folder from `Virtual Families 2.exe`, validate the
+  vanilla EXE by exact SHA-256 or by PE32 section structure, create a backup
+  under `.vf2_patch_backups`, and write the patched EXE back to the same path.
+- Extends `work/export_offline_patch_bundle.py` with `--asset-mode full`,
+  `--include-exe-replacement`, and `--include-patcher-scripts`.
+- Exports a B99 full-payload patcher bundle to
+  `outputs/VF2-B99-Offline-Patcher-Full` and copies it to
+  `C:\Users\Owner\Downloads\VF2-B99-Offline-Patcher` for testing.
+- Smoke-tested from an EXE-only folder:
+  `Virtual Families 2.exe` vanilla SHA-256
+  `67e8cf073be89b9699f4f7a19bc1105ceae865cdaefe98abd0c1e59e5f0d6bc4` became
+  B99 SHA-256
+  `9a713d38e830dcfb2fe1f4f054c36f1340d772c9e28c2abb96501137ee164ea1`, with the
+  B99 runtime folder structure recreated beside it.
+- Re-exported the B99 full-payload patcher bundle against the user-provided
+  vanilla EXE at `C:\Users\Owner\Downloads\Virtual Families 2\Virtual Families
+  2.exe`: size `1,511,424`, SHA-256
+  `1582d9e84e1c32f51475be17335c5137c592cebf809748d401ccef99a32b73c3`, five
+  PE sections. A structure smoke test appended overlay bytes to the copied EXE,
+  changed its whole-file SHA, and still patched successfully with
+  `matched_by=pe_structure`.
+
+## B101 - Invisible Hammock Fireplace-Style Alias
+
+- Supersedes the B99/B100 `CHotSpot::Hammock` detour attempt. `HotSpot.obj`
+  now remains byte-identical to the stock desktop object for the hammock path.
+- Keeps Invisible Hammock item `0x30C` as a donor clone of base HammockStd
+  `0x1E1`: `CFurnitureManager::itemInfo` behavior fields match the donor,
+  `HandleMouseDown` uses the donor lookup-table case, and
+  `InvisibleHammock.png.fmap` is copied from `HammockStd.png.fmap`.
+- Adds a regression test proving `patch_invisible_hammock_drop_action()` writes
+  only the compile-response stub and does not modify `HotSpot.obj`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B101-Invisible-Hammock-Fireplace-Style`.
+
+## B102 - Invisible Hammock Drop Parity
+
+- Restores the missing native drop gate for Invisible Hammock. B101 preserved
+  donor item fields, donor click alias, and `HammockStd.png.fmap`, but
+  `CHotSpot::Hammock` still rejected worlds without base item `0x1E1`.
+- Patches `CHotSpot::Hammock` safely by NOPing only the hardcoded
+  `push 0x1E1`, preserving the relocated `mov ecx, FurnitureManager`, and
+  retargeting the existing call to `_VF2EitherHammockInWorld`.
+- `_VF2EitherHammockInWorld` checks `IsInWorld(0x1E1)` or `IsInWorld(0x30C)`,
+  then the stock function continues through
+  `eBehavior_LieInHammockNoLeadIn (0x24)`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B102-Invisible-Hammock-Drop-Parity`.
+
+## B103 - Invisible Heart-Shaped Bed and Patcher Refresh
+
+- Adds `InvisibleHeartShapedBed` as a new item `0x327` in `gFurniture4`,
+  donor-cloned from the base Heart-Shaped Bed `0x252`. The existing
+  `InvisibleAdultDoubleBed` remains unchanged as item `0x314` with Brown Adult
+  Bed donor `0x1B7`.
+- Copies `InvisibleHeartShapedBed.png.fmap` from `HeartShapedBed.png.fmap` and
+  generates the usual base/transparent sprite pair from `HeartShapedBed.png`.
+- Builds to
+  `outputs/VF2-Mobile-Furniture-With-Island-Events-B103-Invisible-Heart-Bed`.
+  Linked EXE SHA-256:
+  `66343cac83b0f835fa6decb7c9abeb8249c04be269d85e85e989e16a528957eb`.
+- Refreshes the full-payload offline patcher bundle at
+  `outputs/VF2-B103-Offline-Patcher-Full` with B103-labeled runner files and
+  the B103 EXE payload. Smoke apply from a copied vanilla EXE produced the B103
+  hash and recreated `Assets/`, `Images/`, `OptionalVisualMods/`,
+  `Original Virtual Families 2 Assets/`, and `Sounds/`.
+- Adds a separate manifest-declared modded output folder
+  (`VF2-B103-Modded`) and writes the patched EXE as
+  `Virtual Families 2 - Modded B103.exe` instead of replacing the user-selected
+  vanilla EXE in place.
+- Adds per-record patcher progress/process-log entries, a GUI completion popup,
+  `Transparency Log.txt`, and an optional generated patcher launcher that
+  auto-loads the adjacent `manifest.json`.
+- Splits optional visual and Invisible Furniture support files behind
+  default-off settings so unchecked options are omitted from fresh modded output
+  folders. Native/game-code toggles still need future per-feature byte/table
+  records before they can revert independently of the full EXE payload.
+
+## B103 Restoration/Addition Patcher ZIP Refresh
+
+- Renames the patcher UI to `Virtual Families 2 Restoration/Addition Patcher`
+  and the generated Windows launcher to
+  `Virtual Families 2 Restoration-Addition Patcher.exe`.
+- Adds a Codex AI creation disclosure to generated README, manifest metadata,
+  and `Transparency Log.txt`.
+- Adds a pre-write official-install validation gate requiring the exact LDW
+  website top-level entries: `Assets`, `Images`, `Sounds`, `Virtual Families
+  2.exe`, root DLLs, `Readme.txt`, `ldw.ini`, `icon.bmp`, `uninst.exe`, and
+  `Virtual Families 2.url`.
+- Updates the GUI with auto-populated paths, green bold Apply Patches text,
+  `**bold**` description rendering, `Dry Run (Validate Only)` wording,
+  clickable blue path labels, and a completion popup where only the
+  modified-file log scrolls.
+- Groups patch settings as green Main Patches, black Optional Patches, and red
+  Experimental/Not Working Patches; setting descriptions now auto-size so the
+  full description remains visible in the scrollable settings panel.
+- Adds `patcher_icon.png` and `patcher_icon.ico` to the bundle. The GUI shows
+  the literal family picture beside the bold title, and the generated Windows
+  launcher embeds the ICO when a local C# compiler is available.
+- The generated launcher still auto-loads adjacent `manifest.json`, but the GUI
+  no longer opens the vanilla-folder picker automatically. The user selects the
+  vanilla VF2 installation manually, and no hardcoded install path is used.
+- Adds buttons to enable all Main Patches, all Optional Content, or all
+  Experimental Patches without changing unrelated categories.
+- Adds the default-off `Add Custom Couches and LDW Posters` setting for
+  Colorful Couches and LDW Poster/Painting image/fmap payloads. Native
+  store-row gating for that feature still needs future per-feature byte/table
+  records because current full bundles use a verified full modded EXE payload.
+- Ships the patcher as a ZIP bundle for testing instead of a loose folder only.
+
+## B104 - Restoration/Addition Patcher BAT Refresh
+
+- Increments the patcher release to B104 and removes the compiled patcher
+  launcher EXE from generated bundles. B104 ships `Launch_GUI.bat` plus an
+  optional `Launch GUI.lnk` shortcut that uses `patcher_icon.ico` when Windows
+  shortcut creation succeeds.
+- Adds the default-on `Add unused pets` setting for the existing Turtle/Hamster
+  pet-store native metadata (`gPet` / `pet_store_additions`).
+- Adds the default-off `Add optional song mods` setting. Optional songs stay in
+  `payload/OptionalSongMods` and write to runtime `Sounds/*.ogg` only when the
+  setting is enabled.
+- Adds default-off loose `OptionalVisualMods` image support. Loose furniture
+  images target `Images/Furniture`; future Workshop/Kitchen/Office upgrade
+  images target `Images/Upgrades`; other loose images target `Images`.
+- Makes recognized `VF2-*-Modded` output folders refresh from the vanilla
+  install before checked patch records are applied. Unchecking a patch and
+  clicking Enable/Disable Patches now removes that patch from the regenerated
+  modded folder.
+- Keeps `OptionalVisualMods`, `Original Virtual Families 2 Assets`, and
+  `OptionalSongMods` as read-only/copy-only payload source folders during
+  apply; they are not copied wholesale into the playable game folder.
+
+## B105 - Restoration/Addition Patcher Launcher and Byte Patch Refresh
+
+- Removes generated `Launch GUI.lnk` from patcher ZIPs because Windows
+  shortcuts are path-specific and can break after extraction. `Launch_GUI.bat`
+  is the supported GUI launcher and stale shortcut/status files are cleared on
+  forced exports.
+- Adds manifest `output.default_exe_name` and patcher-side output enforcement
+  so byte-patched builds are renamed from `Virtual Families 2.exe` to
+  `Virtual Families 2 - Modded B105.exe`, with the save folder derived from the
+  same EXE stem.
+- B105 release packaging should use `--include-byte-patches` and avoid
+  `--include-exe-replacement` for normal releases. This keeps native/code/table
+  features working while avoiding a ZIP that contains a ready-made modified game
+  executable payload.
+
+## B118 - Settings Evict Button Re-Enable
+
+- Re-enables the dormant Settings Evict button by NOPing both stock
+  `theOptionsDialog` constructor skip branches at `+0x2DA` and `+0x2E7`.
+- Leaves the existing native confirmation click path untouched:
+  `theOptionsDialog::EvictFamily()` still delegates to
+  `CFamilyTree::EvictFamily()`, then resets the villager manager and switches
+  to the adoption scene flow.
+- Exports `Virtual-Families-2-Restoration-Addition-Patcher-B118.zip` and the
+  standalone `Virtual Families 2 - Modded B118.exe` for testing.
+
+## B119 - Settings Evict AddControl and Patcher Release Repo
+
+- Completes the Settings Evict visibility patch by inserting the missing
+  `ldwScene::AddControl(evictButton)` call after the dormant button's
+  `SetText()` call. B118 enabled the constructor path but did not attach the
+  button to the Settings scene control list.
+- Adds stock text fixes for `Cooking like mommy` and `Driving like daddy`,
+  retargeting them to gender-neutral `...like a grownup` wording.
+- Adds an optional Island Events EXE overlay export path so enabling the
+  experimental Island Events setting can swap in a bundled event-enabled EXE
+  instead of leaving the checkbox visually enabled but functionally inert.
+- Adds a GUI `Check for updates` hyperlink to the private standalone patcher
+  release repo:
+  `https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases`.
+- Saves the last vanilla install folder and modded output folder in
+  `patcher_local_settings.json` beside the patcher for the next launch.
+
+## B120 - Patcher Path and Island Events Refresh
+
+- Publishes the portable B120 patcher bundle to the standalone patcher release
+  repo.
+- Shows the current build label in the GUI, adds a Check for updates link, and
+  persists the vanilla/modded paths between launches.
+- Moves Settings Evict and Island Events to Optional patches now that the
+  button/event listing path is functional, and bundles the Island Events EXE
+  overlay so the checkbox has a real payload.
+
+## B121 - Evict Warning Wrap and Optional Graphics Patches
+
+- Pre-wraps the Settings Evict confirmation string with explicit line breaks so
+  it fits inside the stock in-game modal instead of clipping horizontally.
+- Adds default-off optional `Misc Graphics Fixes`, currently replacing
+  `Images/Upgrades/superFridge_NW.png`.
+- Adds default-off optional `Glowing Collectibles`, replacing
+  `Images/collectables_small.png`.
+- Both new graphics patches are self-contained in the patcher payload and carry
+  bundled vanilla restore sources for disable/reapply flows.
+
+## B122 - Invisible Workspace Upgrades Payload
+
+- Renames the optional upgrades visual setting label to `Invisible Workspace
+  Upgrades` while keeping setting ID `invisible_upgrades_graphics`.
+- Bundles the supplied invisible/original workspace upgrade PNG pairs under
+  `payload/OptionalVisualMods/Invisible Workspace Upgrades/`.
+- Enables/restores those graphics through `Images/Upgrades/*.png` asset records
+  with paired `restore_source_path` entries, so applying and disabling the
+  patch are both self-contained.
+
+## B138 - Flea Market Expanded Sale Pool
+
+- Adds native hooks for `CInventoryManager::GetCategoryItemCount` and
+  `CInventoryManager::GetCategoryItem` when the active store category is the
+  Flea Market (`3`).
+- Recomputes the native eligible sale pool across item IDs `0x1AD` through
+  `0x2A8` using the same generation-lock, pet-exclusion, and
+  `AvailableForSale` filters seen in `MaybeUpdateSaleItems()`.
+- Leaves the stock three-item sale cache at `CInventoryManager+0x474`
+  untouched so its adjacent count and refresh timer fields are not overwritten.
+
+## B139 - Reset Achievements Cheat Upgrade
+
+- Adds `Reset Achievements` as Cheat Upgrades row `0x124` in Special Upgrades.
+- Reuses the stock `CAchievement::Reset()` routine, then follows the existing
+  visible-special-upgrade save path so goal/progress reset state persists.
+- Bundles the trophy icon as `cheat_reset_achievements.png` in the workspace
+  cheat-upgrade asset sources for self-contained patcher exports.
+
+## B140 - Portable Patcher Metadata Refresh
+
+- Re-exports the B139 gameplay payload as a B140 patcher release because the
+  existing B139 GitHub Release asset is immutable and cannot be replaced.
+- Keeps the same `1052` asset records and four EXE overlay payloads, but writes
+  source-build provenance as portable filenames/build labels instead of local
+  `C:\Users\...` paths.
+- Verified the B140 patcher with an all-settings dry run against the workspace
+  vanilla install; all `1052` active/restore asset records validated.
+
+## B141 - Behavior Guard and Flea Market Retarget
+
+- Guards Behavior Patch label variants behind the native behavior start result
+  by comparing the villager action label at `CVillager+0x1BBA8` before and
+  after each stock `CBehavior::*` call. This keeps stock shower, bathroom sink,
+  grooming, age, object, and targeting gates intact while still applying label
+  variants after accepted actions.
+- Adds a per-villager/per-wrapper label cache so praise/HUD refresh calls keep
+  the selected stock/custom behavior label instead of rerolling another
+  variation while the same native route is still active.
+- Corrects the Flea Market expansion from the category `0x03` On Sale cache to
+  the real category `0x0F` rotating-goodies path backed by `gGoodiesList`.
+- Normalizes Cheat Upgrade icons to transparent `90x90` payload images and
+  refreshes the bundled `Reset Achievements` trophy icon from the supplied
+  workspace-local copy.
+- Exports `Virtual-Families-2-Restoration-Addition-Patcher-B141` with `1052`
+  asset records, `2949` payload files, four B141 EXE overlays, and a clean
+  all-settings dry run.
+
+## B150 - Gated Behavior, Collection, Cheat, and Patcher Upgrade
+
+- Adds Behavior Patches as the fourth independently built optional native
+  switch. Together with Island Events, Cheat Upgrades, and Holiday Ornaments,
+  B150 produces the full 16-state executable overlay matrix. Disabled features
+  are absent from the selected executable instead of relying only on GUI
+  checkbox metadata.
+- Fixes the Holiday Ornaments Collections Chest crash by changing the injected
+  collection page-count helper from cdecl to stdcall. Adds the Holiday family
+  to the main-scene total and changes the unique visible suffix from 60 to 72,
+  yielding six pages of 12 only under holiday_ornaments_collection.
+- Behavior Patches makes Needs to sit down and Checking weight spontaneous for
+  all ages; Mending a button and Ironing clothes spontaneous from displayed age
+  14; and Teaching first words spontaneous only for nursing mothers carrying a
+  baby. Petting label variants remain manual/native and Petting is not made
+  spontaneous.
+- Adds infant-care labels Teaching baby how to walk, Talking with baby, Feeding
+  baby, Singing lullabies to baby, Playing with baby, Admiring baby, Playing
+  peek-a-boo with baby, Kissing baby, and Taking pictures of baby.
+- Adds Browsing web labels Watching memes, Making memes, Posting memes online,
+  and Buying stuff online. Buying is gated to displayed age 13+.
+- Expands Taking a nap to 30 dream labels: Isola, family, pets, friends, future,
+  beach, snow, holidays, vacations, roller coasters, climbing mountains,
+  camping, family trips, countryside, LDW games, city, forest, unicorns, fish,
+  jungles, tropical islands, skyscrapers, floating in space, treasure, getting
+  rich, adventures, swimming, flying, falling, and discovering something.
+- Expands Needs to sit down with general reflection/rest/phone/scrapbook/texting
+  labels. Age 19+ adds children/grandchildren/spouse and Texting spouse;
+  Thinking of work requires age 19+ with a career; Thinking of school requires
+  not being an age-19+ career holder; Texting boyfriend is female-only and
+  Texting girlfriend male-only at ages 14-18.
+- Enables direct sink behaviors 0x0A5-0x0A8 by cloning the native sink candidate
+  gates, retains the general and female grooming pools, and adds Putting on
+  jewelry for females age 14+. North-shower and snow routes preserve their
+  object/weather gates; snow remains Weather.currentType 5 only.
+- Repairs praise label retention by caching behavior ID/serial, the native
+  praise counter, exact stock-label bytes, and the Radio listening/dancing
+  branch, allowing a praise restart to reuse the current action string.
+- Adds Cheat Upgrade rows Reset Ants 0x125, Reset all collections 0x126,
+  Complete all collections 0x127, 2x Prices 0x128, 5x Prices 0x129, 100x
+  Prices 0x12A, Trigger all house malfunctions 0x12B, and Reset Price
+  Multiplier 0x12C.
+- Reset Ants resets native world puzzle 0x13, clears ant props 0x4D-0x54, and
+  reseeds the native start pieces. Collection reset raw-clears page/Master
+  completion and progress, resets Holiday achievement state across overlay
+  toggles, and recomputes Goal Collector from preserved selling goals.
+  Completion covers five stock 12-item pages and conditionally adds the Holiday
+  page/achievement only in a Holiday overlay.
+- Price modes are mutually exclusive persistent toggles applied to the final
+  CalcPrice result, covering furniture, Flea Market, renovations, career and
+  Special Upgrades, and other store purchases. Overflow saturates at INT_MAX.
+  Reset Price Multiplier removes active 0x128-0x12A and uses the exact
+  description "Resets store prices to original values."
+- Trigger all house malfunctions sets the normal house failure props. Dryer fire
+  requires a Dryer lookup; north toilet/shower/sink leaks require renovation
+  0xE6. Island Events Water Pressure Surge adds the three gated north leaks,
+  while the stock standalone north random path remains independently available
+  with its native renovation gate.
+- Under Cheat Upgrades, rebuying Maid/Gardener fires the active service worker,
+  clears its timer, and repairs selected-villager state. Rebuying Rockhound
+  Certificate/Anti-Spam removes the owned upgrade/flag. Explicit cheat guards
+  retain stock already-purchased behavior when the setting is disabled.
+- Updates Brokerage Account text to state that its Interest Rate can reach 11%
+  under mobile_purchases.
+- Adds the exact vanilla-save compatibility note and Lorsieab2 passion-project,
+  no-infringement, and support-the-original-creators message to the GUI,
+  generated README, manifest metadata, and Transparency Log.
+- Automated source, COFF, string, manifest, and exporter contracts cover these
+  additions. Manual in-game matrix/collection/eligibility/store/removal/
+  save-reload/malfunction testing remains tracked in docs/TODO.md and is not
+  represented here as completed runtime verification.
+- Final B150 automation generated, compiled, linked, and manifest-checked all
+  16 Island/Cheat/Holiday/Behavior combinations. All build logs were clean and
+  all 16 EXE SHA-256 values were unique. Test totals were 69 binary-patcher and
+  30 exporter/GUI tests. Export totals were 1,075 asset records and 1,112
+  manifest-reachable payload files.
+- Final reachability pruning removed 1,860 payload files (100,244,363 bytes)
+  that no source/restore record could read, excluded three generated `.bak`
+  artifacts, revalidated retained hashes/sizes, and replaced the absolute
+  base-payload metadata with its portable folder name. The 16-overlay matrix
+  is retained because it contributes only about 10.9 MB compressed and
+  preserves every independent native-setting combination.
+- Final release archive:
+  `outputs/Virtual-Families-2-Restoration-Addition-Patcher-B150.zip`,
+  86,326,515 bytes, 1,122 entries, SHA-256
+  `5A2EAE1FA89D723CE808FD82EC3FDA182AEF3E02E298F79CD3EEEECE5E7BF1DE`.
+
+## B150 Hotfix - Holiday Control Flow, Praise, and Malfunction Pair
+
+- Replaces the first B150 Holiday asset after a user-confirmed access violation.
+  HandleMouse, Find, and WasItemSpawned use fixed-size detours to appended code
+  caves; Drop has an incomplete-family reentry sentinel; The Collector Keep
+  branch is repaired; and SetComplete awards the new collection meta-goal only
+  on first completion.
+- Normal praise now captures/restores the exact 0x28-byte action label around
+  InvokeReward's native ForgetPlans/StartNewBehavior sequence. The intentional
+  over-praise RunAway path remains native.
+- Adds Fix all house malfunctions 0x12D, pairs Router offline/online state with
+  Trigger/Fix, groups cheat rows by function without renumbering, and validates
+  the stock Dryer-gated lint-fire/Handyman path.
+- Records the requested B151 goal and Older Villagers design separately in
+  docs/B151-design.md.
+- Rebuilt all 16 overlays. All eight linked Holiday PEs passed direct branch
+  validation. Tests: 71 binary patcher plus 56 exporter/runner/GUI, 127 total.
+  Default and enable-all dry runs passed on the full official-install fixture.
+- Replacement package retains 1,075 asset records, 1,112 reachable payload
+  files, and 16 unique executable hashes. ZIP: 86,331,216 bytes, 1,122 files,
+  SHA-256
+  `847B8999135290632AD4216E463585EB2E7D3C4BCFEA79AF47A1BCE10CAAEC48`.
+
+## B152 - Holiday Ornament Collection Text and Order
+
+- Shortens only the Collections page title from "Holiday Ornaments" to
+  "Ornaments".
+- Replaces the reused bottle-cap rarity/footer IDs with dedicated additive
+  ornament strings 0xE42-0xE44 and routes the existing fixed-size tooltip cave
+  to their consecutive ID base.
+- Keeps Ornamentologist at internal achievement ID 0x5F while inserting it
+  directly after Bottlologist 0x5E in every layout where it is visible.
+- Adds exact string, cave-routing, native-contract, and four-layout adjacency
+  tests. The 18-test Holiday-focused run and full 82-test patcher module pass.
+  No graphics or B2 award-hook regions changed; manual UI verification remains
+  outstanding.
+
+## B152 - Experimental Allow Older Pregnancies
+
+- Adds a dormant ChanceOfPregnancy detour and default-zero writable .vf2preg
+  byte to every executable, preserving the untouched native continuation when
+  disabled or when both parents are under 50.
+- The enabled late-age path uses GetRandom(1000), caps stock fertility math
+  by the older parent's requested 10.0%-to-0.1% curve, and prevents the stock
+  first-pregnancy tutorial from forcing a failed old-age roll to success.
+- Adds a default-off Experimental patcher setting and generates exact-SHA
+  post-asset variants for selected executable overlays, avoiding another
+  matrix dimension. Multiples logic remains native.
+- Core diagnostic SHA-256
+  74C8F440FEAE80C3087818BD4B24A0D4B4685A7C2C1916AB01D5C7EF57BC657B
+  links .vf2preg at raw 0x188800 and passes the bounded detour/helper validator.
+- The exporter also locates .vf2goal at raw 0x188600 in that same payload and
+  emits an independent Holiday Furniture goal record. Two-record apply tests
+  cover default, both-enabled, both-disabled, and 16 unique layout hashes.
+
+## B152 - Upright Holiday Ornament Graphics Payload
+
+- Rebuilds the runtime collection page at 1024x768 from the supplied wood
+  background, upright frame at (74, 4), upright Candy Cane at (848, 461), and 12
+  upright placeholders at their absolute page coordinates.
+- Ships the 12 supplied collected-icon PNGs byte-for-byte. No graphics are
+  flipped, rotated, cropped, or resized.
+- Canonical manifest schema 3 records all page layers. The rebuilt background
+  SHA-256 is C94D42F228B78FB018F8F27392165072202BB57F5BA72B1FC902058678B983E0.
+- Twenty-two Holiday Ornament tests plus the exporter routing test pass.
+
+## B152 - Fresh Matrix Export and Package Pruning
+
+- Rebuilt all 16 Island Events/Cheat Upgrades/Holiday Ornaments/Behavior
+  Patches combinations from the B151 matrix instead of reusing stale output
+  executables.
+- Every generated variant passed its feature-gate check. The linked Holiday
+  validator passed all eight Holiday-enabled and all eight Holiday-disabled
+  variants.
+- Exported only manifest-reachable files. The final ZIP contains 1,112 payload
+  files and excludes stale EXEs plus build and patch logs.
+- Final release archive:
+  `outputs/Virtual-Families-2-Restoration-Addition-Patcher-B152.zip`,
+  85,738,821 bytes, SHA-256
+  `543A2E5814DECC7F70F30D8454F1475E3AD1A49FF8D3E6D63B8CFF709BE0DC36`.
+
+## B153 Research - Request Ledger and Native Debugger Interface
+
+- Adds `docs/REQUEST_LEDGER.md` as the durable cross-build completeness gate.
+  It separates shipped, runtime-QA-pending, partial, uncertain, blocked, and
+  not-started requests and includes all currently recovered behavior, cheat,
+  goal, renovation, map, family, event, UI, packaging, and debugger requests.
+- Desktop COFF inspection proves `theMainScene+8` is an `IDebugger` base,
+  while `WaypointEditor` and `LightSourceEditor` are `IEditor` globals.
+  The old research helper's editor-to-debugger casts were invalid.
+- Corrects the dormant/default-off helper to register only the real main-scene
+  debugger provider. F6 selects Waypoint Editor, F7 selects Light Source
+  Editor, and F4 exits the selected editor through an independent IEditor route.
+- Keeps mouse handlers stock in this phase. The native light editor's L add,
+  D delete, S save, type cycling, and drag code are documented, but drag is not
+  exposed until the key/display-only path passes save-load testing.
+- The generated helper compiles successfully with the Visual C++ x86 toolchain.
+  The targeted debugger interface regression test and Python syntax checks pass.
+
+## B153 Source - Optional Older Villager Mortality Curve
+
+- Adds a dormant `.vf2mort` byte and a default-off Experimental patcher row.
+  Exact-SHA post-asset records toggle it independently of `.vf2preg` and
+  `.vf2goal`, without expanding the 16 executable layouts.
+- Detours only the annual old-age decision in VillagerManager upkeep. Flag-off
+  calls native FoodGroupsActive and rejoins the unchanged stock block;
+  enabled mode rolls the replacement curve and rejoins immediately afterward.
+- Uses a normal survival component centered at effective age 75 (sigma 7), a
+  0-4 year nutrition shift, and a 0.02% exponential no-hard-cap tail. Above
+  effective age 130, annual old-age hazard remains 3%.
+- Focused COFF, curve, and three-runtime-flag exporter tests pass. This source
+  milestone is not yet a B153 release or a claim of live-gameplay validation.
+- A disposable linked diagnostic resolves the native hook/helper and exposes
+  writable/default-zero `.vf2mort` at raw `0x197A00`; SHA-256 is
+  `A9EE0A6BB1D96296129F4EFE603837512E848BD5F28D6AC536EB318A3F87DC5C`.
+  The full patcher/exporter suite passes 117 tests.
+
+## B153 Research - Twelve-Child Storage and Next Generation
+
+- Proves the live villager manager already has 30 ordinary slots, so 12 living
+  children do not require enlarging the household object.
+- Maps the actual blockers: six `0xD8` child records inside each `0x6C8`
+  generation, a completely occupied `0xCB74` Family Tree save block, a
+  two-row renderer/hit tester designed around six children, and two six-entry
+  Next Generation candidate arrays embedded in `CAdoptionScene`.
+- Records the safe implementation boundary: versioned sidecar persistence and
+  coordinated tree/candidate/UI detours must land before the birth limit can
+  be raised. This research milestone intentionally does not ship a partial
+  12-child toggle that could corrupt generations or scene fields.
+
+## B153 Source - Guarded Native Debugger Input
+
+- Keeps debugger support completely default-off. Normal builds still use the
+  stock `theMainScene.obj`; only `ENABLE_DEBUGGER_FEATURES=1` produces the
+  developer research route.
+- Extends the existing F5-gated key-down hook with key-character and mouse
+  down/move/up hooks. Disabled sessions and unhandled events resume the stock
+  functions, while guarded access faults disable the research session.
+- Preserves the correct interface split: only `theMainScene+8` registers as an
+  `IDebugger`; F6/F7 select Waypoint/Light Source through `IEditor`, and F4
+  exits the active editor.
+- Stock disassembly found and the source corrects an interim character-hook
+  cleanup mismatch: `HandleKeyCharacter(char)` uses `ret 4`, not `ret 12`.
+  The superseded research diagnostic was never shipped.
+- A second ABI audit corrects the generated IEditor vtable order to the native
+  Reset/Draw/KeyCharacter/KeyDown/KeyUp/MouseDown/MouseUp/MouseMove/Activate
+  relocation sequence. The earlier research-only validator was never shipped.
+- The earlier vtable-corrected x86 validator at SHA-256
+  `73000ACC7AC03DCF55643906394324EA0F7F1B5DEB870EBCF9166BBBCA721305`
+  is superseded by the single-dispatch validator below and was never shipped.
+- Byte-level tests cover all five payloads, native cleanup widths, REL32 helper
+  targets, and stock fallthrough. Native-object tests pin all nine editor
+  vtable relocations.
+- Constructor/vtable evidence pins the main-scene IDebugger base at `+8`, and
+  CDebugger Register/Draw bytes pin the provider/count/selection/draw layout.
+- Default-off parity preserves the canonical main-scene object at SHA-256
+  `BA93F6430B45AAB75EFAE17C982BD9AC52DF078AE6E798D7D4F92E5DEBF733FB`.
+- Native disassembly proves Light Source Editor key-down is a return-false stub
+  while add/delete/save/type-cycle commands live in the character handler.
+- Printable commands now travel only through the dedicated character hook,
+  preventing key-down plus character-event double execution.
+- The corrected COFF scene/helper link into a 1,737,216-byte x86 Windows GUI
+  diagnostic. SHA-256:
+  `1D8C51B67CB02BC3310CA5C25DC00E51D792A720B6BE684328488B5B12B04520`.
+- The complete 101-test suite passes.
+- Prepared the minimized `outputs/B153-Debugger-Live-Test-All-Patches`
+  developer-only folder from the exact B152 all-patches runtime. It contains
+  both the untouched control and opt-in debugger executable, launchers,
+  manifests, a save-safe checklist, and a results template.
+- The folder contains 8,472 files / 239,085,638 logical bytes. It omits patcher
+  backups, old logs, historical executables, optional source payloads, and
+  original-asset backups; 8,465 reused runtime files are hardlinked.
+- Live save-load, selector, waypoint, light-source, input-fallthrough, and
+  fault-recovery validation remains before enabling this path in a release.
+
+## B153 native editor key-map audit (2026-07-13)
+
+- Pinned the stock Light Source Editor controls: `+`, `-`, `L`, `D`, and `S`.
+- Pinned the stock Waypoint Editor controls: `W` and `S`.
+- Letter commands are case-insensitive; both editors receive them through the
+  character route, not raw key-down.
+
+## B153 linked validation and debugger fallthrough correction
+
+- Completed the 16-layout B153 linked matrix and validated Holiday positive/
+  negative states, three independent writable runtime flags, exact-SHA patch
+  records, unique executable hashes, and reversible toggle cycles.
+- Verified Behavior Patches gating for spontaneous Ironing clothes and Needs to
+  sit down, and changed the linked label to `Taking boss' advice on a job
+  project`.
+- Audited price multipliers and Reset semantics across ordinary/career
+  `CalcPrice` paths; Reset removes multiplier flags and resumes current
+  canonical prices without a stale cache.
+- Diagnosed the live debugger test's house-load access violation at RVA
+  `0xC5D4B` as a JE `+4` branch into a six-byte true-return sequence. Corrected
+  both hooks to JE `+6` and built a structurally validated isolated diagnostic
+  at SHA-256
+  `82936F22A33F8991D9282DB15D90CE1105828C7A2FE57014E7924B98D1510135`.
+- The debugger remains default-off and excluded from playable builds pending a
+  successful live house-load and editor retest. This milestone is not a B153
+  release.
+
+
+## B153 - Restored debugger keys and full release matrix
+
+- The live-corrected fallthrough build loads the house without the earlier
+  access violation, but F5 produced no visible response.
+- Native CDebugger::HandleKeyDown and VF2 event routing prove the engine sends
+  internal codes, not Win32 virtual keys: Up 0x3EE, Down 0x3EF, F4
+  0x3FD, F5 0x3FE, F6 0x3FF, and F7 0x400.
+- The guarded route now recognizes those exact internal codes while retaining
+  Win32/SDL fallbacks. F5 toggles CDebugger; F6/F7 select the native
+  Waypoint/Light Source editors; F4 exits the selected editor.
+- Rebuilt all 16 B153 native feature layouts from their corresponding B152
+  bases. All 16 have unique hashes and pass the corrected hook and complete
+  key-map validator. Holiday validation passes 8 enabled and 8 disabled
+  layouts; runtime-flag validation passes all three nonoverlapping,
+  idempotent, reversible exact-SHA toggles.
+- The all-patches executable is 1,739,264 bytes, SHA-256
+  C32E1BC1A5FF4E340C2B8168D06B4DB946C49A4604EA69DDC6F62AD4C367D9C2.
+- The 106-test native patcher suite passes. Live confirmation of visible F5
+  overlay/editor behavior remains a gameplay QA item and is not replaced by
+  structural validation.
+- Exported 1,112 reachable payload files into the B153 patcher. The ZIP has
+  1,122 unique entries, passes full CRC validation, contains no build logs or
+  caches, and is 85,840,975 bytes. SHA-256:
+  E85A18323AF17534E68DAA9D3682C83FA75D5A8E6BCFE966A8873A6F3D7EF20E.
+
+## B154 - mortality, older-pregnancy, debugger, event-text, and cheat follow-up
+
+- Restores the complete A Loan Returned mobile event description in both the canonical CSV and generated payload override.
+- Adds a linked and independently validated age-50+ failed-attempt cooldown bypass to Allow Older Pregnancies while preserving stock flag-off/under-50 behavior.
+- Tightens the optional mortality curve to sigma 3 at age 75, the restored cumulative 0-4-year food-group benefit, and a 99.99% maximum annual hazard with no hard maximum age.
+- Corrects Light Source Editor `+`/`-` direction only inside the debugger editor bridge.
+- Adds Cheat Upgrade 0x12E, Complete all Achievements, through native SetComplete semantics and assigns the trophy icon to it and Complete all collections.
+- Validation: all 177 tests pass; all 16 B154 layouts have unique hashes and pass linked debugger, Holiday-positive/negative, runtime-flag ABI, exact-SHA toggle, idempotence, and exact-disable restoration checks.
+- Release package: 1,122 unique files, 85,847,005 bytes, CRC-clean, no build logs/caches, 16 executable overlays, three runtime toggles, SHA-256 5FFC049FBC4371BF92C69201B74B04B171C32CAEBB8A205880BD2F8BC5E91976.
+
+## B155 - SSA mortality-only follow-up
+
+- Replaced B154's sigma-3 optional mortality curve with sex-averaged SSA 2022
+  annual probabilities for effective ages 55-105 and a 50% yearly plateau
+  thereafter.
+- Retained the native annual timing, old-age death path, optional runtime flag,
+  and 0-4 active-food-group effective-age shift.
+- Released as `Virtual-Families-2-Restoration-Addition-Patcher-B155.zip` with
+  SHA-256 `2C0DC8452D9D09B86380A8330A446B49BC80684EF7A4D699A04FDE481862C4A4`.
+
+## B155.5 - full-game calibrated mortality
+
+- Replaces only B155's optional SSA/50% mortality table with a monotonically
+  increasing, never-certain curve calibrated against 60 adults per full game.
+- Retains the stock threshold `55 + active food groups`, clamped to 0-4, and
+  uses annual intensity `0.00365*n + 0.06*max(0,n-55)`.
+- Uses one native million-way birthday roll, a 999999/1000000 maximum hazard,
+  no hard maximum age, and late acceleration after effective age 110.
+- A release refresh removes six active machine-specific source fallbacks; the
+  generator now resolves those inputs only under the workspace, including the
+  already-tracked mobile event CSV files.
+- Adds analytical and million-person-per-food-case validation. All 178 unit
+  tests pass with one intentional skip. All 16 linked layouts have unique
+  hashes and pass Holiday-positive/negative, exact millionth-table/helper,
+  three-flag toggle, idempotence, and exact-disable restoration validation.
+- The manifest-pruned offline bundle contains 1,122 files and no logs, caches,
+  object files, duplicate ZIP names, or other forbidden build artifacts. The
+  CRC-clean ZIP is 85,791,142 bytes with SHA-256
+  `14ADD32A067848F10BA992FBF41CB2D0CE15FC22505AD6277A7C623E9E7F481C`.
+
+## B156 - live-pet achievement checkpoint
+
+- Adds six exact live-pet achievements at IDs 0x8A-0x8F.
+- Awards from successful in-house placement, never purchase or Tool Tray
+  storage, and reconciles active pets after successful save loading.
+- Preserves native pet-spawn/load results and changes only the two exact REL32
+  targets in FurnitureManager and theGameState.
+- The fully enabled executable is 1,761,792 bytes with SHA-256
+  `ADF281867FBF395DDDF6DA33FE7FABD7C9364483AC22ECB91909A5DCAB184777`.
+- All existing linked Holiday and four-runtime-flag validations pass. Live
+  award/notification/reset/save/reload testing remains.
+
+## B156 - family-tree appearance achievement checkpoint
+
+- Adds Return of the Rainbow 0x90 and Spiky! 0x91 using the exact persistent
+  family-tree record-present, gender, and head fields.
+- Observes all six native record-update calls after their writes and reconciles
+  both parents plus up to six children across at most 30 loaded generations.
+- Dead and departed relatives remain eligible; no active-household or living
+  filter is applied.
+- The fully enabled executable is 1,762,816 bytes with SHA-256
+  `16A622D702E6464F7B612BADC5FAEE004911CFB66962845C37DC39356F4F3B8C`.
+- Existing linked Holiday and four-runtime-flag validations pass. Live
+  birth/adoption/notification/reset/save/reload testing remains.
+
+## B156 - Spawn Marriage Email checkpoint
+
+- Adds Cheat Upgrade 0x132 and queues native email message 2 through
+  `theGameState::QueueEmailMessage`.
+- Preserves the stock ten-slot queue, duplicate suppression, proposal UI, and
+  common post-cheat save path.
+- The fully enabled executable remains 1,762,816 bytes with SHA-256
+  `AC850ACE342515E5DA097CFF362568D9BC060E9070C5AD8EF21A34E81EA73EDA`.
+- Existing linked Holiday and four-runtime-flag validations pass. Live
+  duplicate/full-queue/proposal/save-reload testing remains.
+
+## B156 - sock-pile cheat checkpoint
+
+- Adds Max out sock pile 0x133 and No sock pile 0x134 using the exact stock
+  `theGameState+0x148` counter.
+- Max uses 30, the first count that selects the sixth and largest stock decal
+  frame. Clear uses 0 without invoking the native laundry-achievement transfer.
+- Both rows reuse the trophy icon descriptor and the common post-cheat save
+  path.
+- All 213 tests pass with one intentional skip. The generated helper compiles,
+  and its object-code readback contains the exact `+0x148 = 30` and
+  `+0x148 = 0` writes followed by `SaveCurrentGame`.
+- This source checkpoint initially stopped at the final link because the
+  Build Tools-only installation did not contain ATL. The later combined B156
+  link uses the installed Visual Studio Community x86 ATL library. Linked
+  readback is complete; live refresh/save/reload validation remains.
+
+This historical checkpoint was superseded by B158: Max out sock pile now writes
+`0x7FFFFFFF` and passes `0x7FFFFFFF` to the native bounded spawn routine. The
+physical pool remains capped at 30 records, while the persistent pile count
+uses the requested maximum signed integer. B158 also replaces the reused trophy
+descriptor with a dedicated semantic sock-pile icon.
+
+## B156 - Clean House source checkpoint
+
+- Adds Clean House 0x135 with the exact four selectors used by the stock
+  Housekeeping Services event: `0x73`, `0x79`, `0x81`, and `0x83`.
+- It deliberately excludes Landscaping Services selector `0x7D` and does not
+  alter the separate laundry-room sock-pile counter.
+- The row reuses the trophy icon descriptor and common post-cheat save path.
+  The generated helper compiles, and object-code readback confirms the four
+  native `RemoveAll` calls. All 213 tests pass with one intentional skip.
+  The later combined B156 executable links successfully. Live
+  removal/save/reload validation remains.
+
+## B156 - Cheat Upgrade function-sort checkpoint
+
+- Reorders the store rows into functional groups and keeps every established
+  item ID and implementation unchanged.
+- Reset/Complete Achievements, Reset/Complete Collections, malfunction
+  trigger/fix, house-trash/Clean House, yard-weeds/Clean Garden, and sock-pile
+  max/clear remain adjacent pairs.
+
+## B156 - combined Cheat Upgrade and executable-shell QA checkpoint
+
+- Visual Studio Community supplies the x86 ATL library required by the five
+  pre-existing `FlashPlayer.obj` references, so the fully enabled B156 layout
+  now links successfully.
+- The linked executable is 1,758,208 bytes. After writing its verified nonzero
+  Windows PE checksum it has SHA-256
+  `00F4DF3C3FC6302A73C3DBAAFEDC5FBB8ADD23BA3D623644E50F23DBF0D6FE25`
+  and checksum `0x001B4EF8`; ImageHlp independently computes the same value.
+- The exact Holiday Ornaments manifest and PE contract passes on this image.
+  The four writable default-zero runtime flags pass enable, idempotent
+  re-enable, disable, and byte-for-byte restoration validation.
+- The player-facing patcher now refreshes and verifies the PE checksum after
+  copying the stock executable's icon resources. Its real Windows resource
+  round-trip test proves shell extraction at 16x16, 32x32, and 48x48.
+- Sock-pile max/clear, Clean House, and the function-sorted Cheat Upgrade rows
+  are therefore present in the same linked B156 image. Live UI/effect/save
+  testing remains.
+
+## B156 - Achiever Extraordinaire checkpoint
+
+- Defines persisted custom goal `0x92` as Achiever Extraordinaire and appends
+  it as the final visible row in every compile/runtime layout.
+- The completion observer checks the exact selected visible order, excluding
+  only itself. Ornamentologist, Behavior goals, and Holiday Furniture goals
+  are prerequisites only while their matching compile/runtime gates expose
+  them.
+- A relocation-only `theGameState::Load` wrapper reconciles older qualifying
+  saves after native achievement loading succeeds.
+- The fully enabled executable links at 1,758,208 bytes. Its refreshed PE
+  checksum is `0x001B5814` and SHA-256 is
+  `470494CF2DE84BC073744A05B85ACA3EC31DE24F33F3AE5594312EAE4DE37BE8`.
+  Holiday/Lucky Rock validation and the four runtime toggle/restoration checks
+  pass. Live final-award/popup/save QA remains.
+
+## B156 - Force Successful Pregnancy checkpoint
+
+- Adds Cheat Upgrade `0x136`, Force Successful Pregnancy, as a persisted
+  one-shot using hidden achievement record `0xA8` bit `0x4`.
+- Retargets only the existing `ChanceOfPregnancy` and `Impregnate` call
+  relocations in `CVillagerPlans::ProcessCurrentPlan`; surrounding machine
+  code and every native eligibility, capacity, multiples, birth, and
+  Family Tree route remain unchanged.
+- The flag clears only after native `Impregnate` succeeds. It remains armed
+  after a capacity failure, and the Taters-goal low-bit writeback now preserves
+  the pregnancy bit.
+- The fully enabled executable links at 1,763,840 bytes. Its refreshed PE
+  checksum is `0x001B2A7A` and SHA-256 is
+  `A28AB64BD29F3186E6AEFF2522E288D80C3A98A2A893DC3472557D532342585A`.
+  B156 runtime-toggle/restoration validation passes, as do all 219 tests with
+  one intentional skip. Live purchase/conception/birth/save QA remains.
+
+## B156 - baby gender and multiplicity controls checkpoint
+
+- Adds Next Babies Male/Female as Cheat Upgrades `0x137-0x138` using
+  mutually exclusive persisted bits `0x8/0x10`.
+- Adds Next Pregnancy Singleton/Twins/Triplets as `0x139-0x13B` using
+  mutually exclusive bits `0x20/0x40/0x80`.
+- The first baby receives the forced gender through an ABI-compatible
+  long-form `SpawnSpecificPeep` wrapper; native `InitTwin` cloning carries it
+  to every additional baby.
+- The requested birth count is applied after the native roll and clamped to
+  the stock `EmptyOffspringSlots` result. All one-shot pregnancy bits clear
+  only after native `Impregnate` succeeds.
+- The fully enabled executable links at 1,765,888 bytes with checksum
+  `0x001B0712` and SHA-256
+  `4EC5142F74E6A37F55ECC30E1D232E54D553D85275F4113FD5D1192E6F12E344`.
+  B156 runtime-toggle/restoration validation and all 219 tests pass; one test
+  remains intentionally skipped. Live pregnancy boundary/persistence QA
+  remains.
+
+## B156 - age-60 Next Generation checkpoint
+
+- The original request was recovered as: show Next Generation when the oldest
+  person reaches around age 60 under the allow-older-ages patch. The concrete
+  threshold is displayed age 60, or internal age 1200.
+- All four desktop `CFamilyTree::CanStartNextGeneration` call relocations in
+  `FamilyTreeScene.obj` and `theMainScene.obj` now target one ABI-compatible
+  wrapper. The wrapper calls and returns native eligibility first.
+- Only when `.vf2preg` is enabled and native eligibility is false does the
+  wrapper scan the 30 live villager slots for the oldest active, living,
+  non-departed person. It additionally requires at least one surviving child.
+  Native `StartNextGeneration` and its 30-record `MakeRoomInTree` rollover are
+  unchanged.
+- All 228 tests pass with one intentional skip. All 16 B156 layouts link with
+  unique hashes, pass the 8 Holiday-positive/8 Holiday-negative checks, and
+  pass five-flag enable, repeated-enable, disable, and exact-restoration
+  validation.
+- The fully enabled executable is 1,768,448 bytes with SHA-256
+  `85EFD04714A0243E7F34881EE04344B5A517575674E2396C8474F2CBBD474AA0`.
+  Live age-59/60, transition, no-child, generation-30 rollover, save/reload, and
+  patch-off QA remains.
+
+## B156 - comprehensive exact-action and discipline goals checkpoint
+
+- Adds exact social/game praise and scold achievements `0x94-0xA0`, including
+  reachable Poptropicals, Club Puffle, and PetKinz video-game variations.
+- Adds four child-only discipline achievements `0xA1-0xA4`. Stock No jumping
+  on the bed is retained rather than duplicated.
+- Adds Props to you `0xA5`, requiring stock Tight Ship `0x30` plus all four new
+  discipline achievements, with successful-load reconciliation.
+- Fixes the exact-scold award wrapper so a matching label still continues
+  through exactly one native ForgetPlans call.
+- All 229 automated tests pass with one intentional skip. All 16 linked layouts
+  have unique hashes and pass Holiday-positive/negative validation plus
+  five-flag enable, repeated-enable, disable, and exact-restoration cycles.
+- The fully enabled executable is 1,772,032 bytes with SHA-256
+  `3B2C57C7BF96BB6FA94EE7F35580DF0DEB23E327DFD3985DD9F1ADBC7B4EF7AA`.
+  Live exact-action, popup, persistence, reset, and patch-off QA remains.
+
+## B156 - Furnishing the Future checkpoint
+
+- Adds Furnishing the Future at `0xA6`, awarding after any successful purchase
+  from the complete active nine-item VF3 furniture-patch catalog.
+- Qualifying IDs are couches/loveseats `0x2F6-0x2FB` and televisions
+  `0x324-0x326`; the source contract cross-checks the purchase mapping against
+  the active item definitions.
+- The shared purchase wrapper preserves native AddToStorage success/failure
+  semantics.
+- All 230 automated tests pass with one intentional skip. All 16 linked layouts
+  have unique hashes and pass Holiday-positive/negative plus five-flag
+  exact-restoration validation.
+- The fully enabled executable is 1,772,032 bytes with SHA-256
+  `D7DE86665C84C69C860E45A982851030DD01848895F86D594597F14FD842DA76`.
+  Live purchase, notification, persistence, reset, and patch-off QA remains.
+
+## B156 - Holiday Candles behavior checkpoint
+
+- Adds an exact child-only manual port of mobile
+  `CBehavior::KidExaminesCandles` for Holiday Candles item `0x2AA`.
+- Preserves mobile behavior ID `0x19B`, candidate weight `2000`, EObject
+  `0x89`, raw child boundary, orientation-aware inspections, and the
+  30-percent random-adult/no-adult fallback sequence.
+- Adds an `8x9` PC-safe `CandleOnHolder.png.fmap` containing only three
+  translated EObject cells. Raw mobile hotspot metadata is not installed.
+- Leaves autonomous behavior `0x19B` unindexed because the fixed desktop
+  behavior table ends at `0x19A`.
+- All 230 project tests pass with one intentional skip. All 16 B156 layouts
+  link uniquely, Holiday validation passes 8/8 positive and 8/8 negative, and
+  all five runtime flags pass non-overlap, repeated-enable, disable, and exact
+  restoration checks.
+- The fully enabled executable is 1,772,544 bytes with SHA-256
+  `74BA49761CC2DDC1070AFBB1E6FC812D15C225113D5D37E589766F7B80A59859`.
+  Live Candle placement, orientation, age, branch, and patch-off QA remains.
+
+## B156 - Plate of Cookies behavior checkpoint
+
+- Adds an exact manual port of `KidStealsSantasCookies` / behavior `0x1A5`
+  for children and `AdultsSaveSantasCookies` / behavior `0x1A6` for adults.
+- Preserves the raw-age `0x118` boundary, child candidate weight `2000`,
+  EObject `0x8F`, orientation-aware child plan, optional adult rescuer,
+  gender-specific adult sounds, and exact departure/work sequence.
+- Adds a `9x9` PC-safe `PlateOfCookies.png.fmap` with only the two proven
+  EObject anchors. Mobile-only candidate IDs remain outside the fixed desktop
+  behavior table.
+- All 230 project tests pass with one intentional skip. All 16 B156 layouts
+  link uniquely, Holiday validation passes 8/8 positive and 8/8 negative, and
+  all five runtime flags pass non-overlap, repeated-enable, disable, and exact
+  restoration checks.
+- The fully enabled executable is 1,773,568 bytes with SHA-256
+  `A31601B316144E2FAE4B6BFE48CA4BD8E9B635DD68CA3590BF567BF0BFBA575F`.
+  Live Cookie Plate child/adult/orientation/rescuer/patch-off QA remains.
+
+## B156 - Christmas figurine and house-decoration behavior checkpoint
+
+- Audits every preserved mobile QAMF for exact EObject payloads and maps ten
+  item IDs to object `0x8C` / `AdmiringXmasKnickKnacks` behavior `0x1A4`.
+- Adds the exact raw-age-7+ `Enjoying the figurines` manual plan for gnomes,
+  Penguin, Polar Bear, Reindeer, garden Santa, and Snowman.
+- Maps Red Bow, Santa Wall Decoration, Holiday Garland, and Lighted Garland to
+  object `0x8D` / `InteractHouseXmasDecor` behavior `0x1A7`, preserving the
+  exact adult `0x118+` plan and gender-specific sounds.
+- Adds fourteen PC-safe maps containing only proven EObject anchors. The
+  optional behavior payload now replaces 33 maps in total.
+- Corrects the offline exporter so Candle and Cookie maps, plus all fourteen
+  new maps, are included in the same exact enable/restore set.
+- Leaves spontaneous IDs `0x1A4` and `0x1A7` unindexed beyond the desktop
+  table. Wreath QAMFs contain no `0x8D` marker and remain unresolved.
+- All 230 project tests pass with one intentional skip. All 16 B156 layouts
+  link uniquely, Holiday validation passes 8/8 positive and 8/8 negative, and
+  all five runtime flags pass non-overlap, repeated-enable, disable, and exact
+  restoration checks.
+- The fully enabled executable is 1,774,080 bytes with SHA-256
+  `7E7389620C19BAF1409332809EAB4BB9F26E19BE367C288116C0CA89CAF0DFA1`.
+  Live item, age-boundary, orientation, sound, and patch-off QA remains.
+
+## B156 - Eggnog behavior checkpoint
+
+- Adds the exact child-only manual port of mobile `CBehavior::Eggnog`,
+  behavior `0x1A1`, for Glass of Eggnog item `0x2B0`.
+- Preserves candidate weight `2000`, EObject `0x8B`, raw child boundary
+  `0x118`, label `Stealing egg nog`, orientation-aware inspection, sounds,
+  all three movement targets, twelve jumps, both twirl directions, and exact
+  random waits.
+- Adds a `7x6` PC-safe `GlassOfEggnog.png.fmap` containing only the two proven
+  EObject cells. The optional behavior payload now replaces 34 maps.
+- Leaves autonomous behavior `0x1A1` unindexed because the fixed desktop
+  behavior table ends at `0x19A`.
+- All 230 project tests pass with one intentional skip. All 16 B156 layouts
+  rebuild with unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass non-overlap, repeated-enable,
+  disable, and exact-restoration checks.
+- The fully enabled executable is 1,775,104 bytes with SHA-256
+  `CC46BA5FA861928AD1DEE58335C0F6A3AA1F24B4758C38B5A3E42A0DB6CD2332`.
+  Live Eggnog child/age-boundary/orientation/movement/sound/patch-off QA
+  remains.
+
+## B156 - First exact mobile Island Event outcomes checkpoint
+
+- Replaces experimental outcome approximations for Meteorite Falls in Yard 1,
+  Strange Package on Porch, and Teens with exact mobile-derived routes.
+- Preserves Meteorite Falls in Yard 1 as a dummied-out shell whose `CanFire`
+  always returns false and whose award and impact methods are empty.
+- Gives Strange Package on Porch exactly 50-149 coins for choice zero.
+- Gives Teens its exact raw-age 260-340 gate, 10-sock plus 10-trash first
+  outcome, and -75-coin second outcome. No unsupported stains are spawned.
+- Uses a guarded external scan of the 30 desktop resident slots because the
+  mobile age-range selector has no desktop export.
+- Removes the obsolete experimental event-outcome batch script.
+- Confirms that Using Warm Towel already exists as behavior `0xE7` / EObject
+  `0x50` in both builds; no unproven Towel Set furniture binding is added.
+- All 231 project tests pass with one intentional skip. All 16 B156 layouts
+  rebuild with unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass non-overlap, repeated-enable,
+  disable, and exact-restoration checks.
+- The fully enabled executable is 1,775,616 bytes with SHA-256
+  `FE659A21E475CE4EED652BF647437928738BB91AAC4483A5F884BD723383FD6D`.
+  Live event choice, award, world-effect, age-boundary, and patch-off QA
+  remains.
+
+## B156 - Second exact mobile Island Event outcome checkpoint
+
+- Adds The Invitation's exact random-adult plus random-child firing gate.
+- Ports both exact choices: Allow adds 20 happiness to all children and runs
+  behavior `100` for raw ages `7..280`; Disallow subtracts 20 happiness and
+  runs behavior `251` over the same range.
+- Preserves unconditional mobile `CanFire=false` for Fruitcakes, Great Uncle
+  Elmer, Marching Band Trip Expenses, and Loan Returned instead of exposing
+  them through the generic shell.
+- Retains the unreachable mobile award/effect records where they are safe and
+  target-independent: item `0x24B`, -50 coins, +20 coins, and Fruitcakes'
+  -25/0 award calculation.
+- Adds duplicate-safe shared enum generation after the combined build caught
+  the Island Events and second-bathroom helpers defining the same type.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,775,616 bytes with SHA-256
+  `EE9433E810C62153168CEE44DDF1892DBBE42D546169D339CBD51C62A8EE9010`.
+  Live Invitation targeting, both choices, child happiness/behavior, and
+  patch-off QA remain.
+
+## B156 - Third exact mobile Island Event outcome checkpoint
+
+- Adds Blast from the Past's exact random-adult gate, 50-99 coin award, money
+  adjustment, and +15 target happiness trend.
+- Adds Email from ACME's exact adult-male-only gate and 70-coin award/effect.
+- Adds Email from Antonio Guildenstern's exact random-adult gate, raw-age-7
+  group behavior `424`, and +15 target happiness trend.
+- Records but does not approximate the decoded Email from School and
+  Interesting Article About Fossils behavior/state/collectible routes.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,776,128 bytes with SHA-256
+  `2FF43E7E5500E0AE22754F4D72384AC528800DDCD470A4CF7BA80CF6D849A36B`.
+  Live email selection, award, happiness, group behavior, and patch-off QA
+  remains.
+
+## B156 - School email and Fossils outcome checkpoint
+
+- Adds Email from School's exact random-child gate and random selection among
+  the available matriarch and patriarch.
+- Preserves its 75-174 calculation, behavior `88` restart on the selected
+  parent, and byte-1 write at parent offset `0x6B74`.
+- Adds Interesting Article About Fossils' behavior `100`, +10 target
+  happiness trend, fossil carrying roll `103..114`, and exact mobile yard
+  coordinate rolls x `1212..1471`, y `1829..1954`.
+- Reuses the verified desktop-native behavior and collectible ABIs.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,776,640 bytes with SHA-256
+  `A4059B461F52E3D8246FCC95D688CF3AB82DF2CB598E340DEA0395594DB53CF3`.
+  Live parent selection, behavior/state effects, fossil spawn/pickup, and
+  patch-off QA remain.
+
+## B156 - Fourth exact mobile Island Event outcome checkpoint
+
+- Adds Meteorite Falls in Yard 2's numeric selector-7 gate and exact
+  choice-zero 50-coin award/effect.
+- Adds Clown Holding Metal Rod's adult gate, furniture item `0x23C`,
+  like/dislike value `0x24`, +15 target happiness trend, and +15 happiness
+  for all children.
+- Uses the desktop-native `CLikeList` and `CDislikeList` offsets independently
+  verified as `0x1BC34` and `0x1BC40`; mobile villager offsets are not reused.
+- Adds Men in Black at Door's adult gate, behavior `0x171` on either choice,
+  and choice-zero furniture item `0x219`.
+- Adds Hear Strange Sound's numeric selector-7 gate, choice-zero furniture
+  item `0x242`, and +20 target happiness trend.
+- Preserves Metallic Knocking on Door's unconditional `CanFire=false` while
+  retaining its unreachable choice-zero 50-coin calculation/effect.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,776,640 bytes with SHA-256
+  `57D2161408891891E3D19BBC77D7D889A312A0FE43DF98D1E78C1E606F28C57F`.
+  Live event target/effect and patch-off QA remain.
+
+## B156 - Complete mobile Island Event outcome checkpoint
+
+- Adds the final seven exact outcome routes: Group of Kids at the Door,
+  Mission from God, Odd Old Woman at Door, RIP Uncle Alpert, Resurrection of
+  Agatha, Surprise Visit from Uncle Phineas, and Volunteer.
+- Preserves unconditional mobile `CanFire=false` for Mission from God and
+  Resurrection of Agatha while retaining their unreachable award/effect
+  methods.
+- Reuses verified desktop-native Money, symptom, behavior, plan, career,
+  cure-all, furniture-storage, like, and dislike calls and PC object offsets.
+- Completes function-level firing, award, and impact coverage for all 25 added
+  mobile Island Events. Live gameplay and patch-off QA remains.
+- All 231 project tests pass with one intentional skip. The complete 16-layout
+  matrix has 16 unique hashes, Holiday validation passes 8/8 positive and 8/8
+  negative, and all five runtime flags pass exact toggle/restoration checks.
+- The fully enabled executable is 1,777,664 bytes with SHA-256
+  `D85E067CBB3B7A4F647B693F946810CA5209B1454CCBEA5BD78AB2B9EBD6FA3B`.
+
+## B156 - Exact Lucky Rock odds checkpoint
+
+- Confirms the mobile and PC collectible implementations use the same Lucky
+  Rock byte and exact `Update/Add` odds.
+- Lucky Rock doubles spawn attempts from `3/6600` to `3/3300` per Update and
+  changes common/uncommon/rare rarity from `83/13/4` to `66/26/8`.
+- Confirms Holiday base `0x9E` uses the same spawn-area selection and generic
+  `+0/+4/+8` rarity offsets, so Holiday Ornaments receive both bonuses.
+- Extends the Holiday native contract to require both `Update` and `Add` to
+  remain byte-identical to stock.
+- All 232 repository tests pass with one intentional skip. The complete
+  16-layout B156 matrix passes, including all eight Holiday-positive and all
+  eight Holiday-negative layouts.
+- The fully enabled executable is 1,777,664 bytes with SHA-256
+  `F3EE7955D59380C5B9259C88BA494C6F5737BA36CF03AB3F4BE7C899994229AE`.
+
+## B156 - Exact mobile Special Upgrades checkpoint
+
+- Recovers Brokerage Account's exact `+0.02` interest increment, serialized
+  money field, and stock 11% load ceiling.
+- Recovers Food Club's immediate 500-food delivery, 86,400-game-second repeat
+  interval, exact runtime fields, nutrition refresh, and 16-byte save block.
+- Recovers Health Plan's exact medicine range `0x18-0x21`, divide-by-four
+  price effect, and mobile entitlement-based restoration.
+- Fixes the desktop coin-purchase port so Health Plan ownership persists in
+  hidden achievement record `0xA8+0x08`, restores the stock desktop discount
+  byte during load, and survives Reset Achievements without sharing the
+  Taters/pregnancy/generation mask at record `+0x04`.
+- The clean 16-layout executable matrix, linked Holiday positive/negative
+  validator, runtime-toggle validator, and all 234 repository tests pass
+  (one intentional skip).
+- The fully enabled executable is 1,777,664 bytes with SHA-256
+  `E3DDB645D9228EF5252E6E636AED5D2A175965F6DA7E111F97531930DB43CE52`.
+
+## B156 - Decorative-only Holiday furniture audit
+
+- Closes the remaining Candy Cane, Single Cookie, Poinsettia, and Wreath
+  behavior question from exact mobile content-map and drop-dispatch evidence.
+- Their preserved QAMFs decode to EObject 0 and only hotspots `0x60/0x61`.
+  Both hotspot handlers are null in the mobile constructor, and the mobile
+  drop route has no furniture-item-ID fallback.
+- Adds a generation-time and unit-test contract that rejects functional-cell
+  drift or an accidental PC behavior map for these decorative-only items.
+- The fully enabled generation/link, all linked cross-layout validators, and
+  all 235 repository tests pass (one intentional skip). The fully enabled
+  executable is 1,777,664 bytes with SHA-256
+  `2EF83392E11DE07CF52F45BF1F1FC6BEDF62F0742D7148AE4C702720867426E1`.
+
+## B158 - Native Christmas Tree autonomous behavior and sound parity
+
+- Adds the exact mobile autonomous candidates `0x19C` AdmiringXmasTree,
+  `0x19E` AdultWaterXMasTree, and `0x19F` KidBreakingTreeDecor to the external
+  furniture selector, retaining their native tree object/stat gates, raw-age
+  boundaries, weights, labels, mobile sound IDs, and plan sequences.
+- Leaves `0x19D` FixingTreeDecorations unrouted because its native activation
+  record is not present.
+- The full patcher module passes 174 tests with one intentional skip; the
+  focused mobile furniture, renovation, special-upgrade, and outfit subset
+  passes 57 tests with one skip. Offline patcher/exporter/GUI suites pass
+  48/27/12. Full native generation and MSVC compile/link completed
+  successfully.
+- The generated B158 executable is 1,707,520 bytes with SHA-256
+  `CF71834BCC849DE62CA4F389469B683B6C3671D206E0DB92701CE6546FD574AF`.
+- Live gameplay, autonomous scheduling, and player crash/regression QA remain
+  pending. The current B158 folder is a linked build output, not yet an
+  offline-patcher release bundle with applyable native byte records.
+
+## B158 - Canonical toggle-corrected package certification
+
+- Supersedes the earlier linked-folder-only checkpoint with canonical archive
+  `VF2-B158-1b01c94-Toggle-Corrected-Playtest-Final.zip`, SHA-256
+  `933C73EDAFFD73EFC23D0022C5E5E86CA2B3E1CB1A81051DB1CEB83C682CC834`.
+- Adds `work/verify_offline_bundle_zip.py` and focused fail-closed tests. The
+  verifier certifies 6,964 safe members, four exact executable variants,
+  15 mobile-renovation images, 67 mobile-sound payloads, 63 sound restores,
+  four removals, and four route records.
+- Adds a player-executed 67-sound trigger/save/relaunch/disable/crash-capture
+  protocol. All audible, gameplay, and runtime results remain pending.
+- Begins replacing baked UI features with real default-off runtime markers:
+  Store Scroll Bar now uses `.vf2scrl`; linked artifact offsets and a new
+  canonical package remain to be generated and certified.
+
+## B158 - Separate-output loose-asset validation correction
+
+- Corrects initial vanilla-to-separate-output patching when a replaceable
+  non-executable loose asset, such as `Sounds/children_giggle3.ogg`, has an
+  unrecognized existing hash. The packaged replacement is still authenticated,
+  the original installation remains untouched, and only the separate modded
+  output receives the replacement.
+- In-place patching remains fail-closed on an unknown existing target.
+  Executable assets remain hash/structure authenticated in every mode, and
+  output-only reconfiguration keeps its existing identity checks.
+- The full offline patcher suite passes 58 tests, including explicit positive
+  separate-output and negative in-place cases.
+
+## B160 - Merged curtain-routing and Behavior-Patches QA package
+
+- Carries forward the B159 catalog additions and its 17 executable overlay
+  variants.
+- Merges the independently linked Bathroom 1/Bathroom 2 curtain fix: the
+  final all-enabled overlay uses the native `EDI` Bathroom 1 and `ESI`
+  Bathroom 2 `CDecal` instances instead of a shared global resolver.
+- Fixes exporter precedence so an explicitly supplied final-playtest EXE
+  replaces an older overlay with the same dependency set.
+- The B160 ZIP passes the fail-closed package verifier: 17 executable
+  variants, 35 renovation assets, 67 mobile sounds, 63 sound restores, four
+  removals, and four authenticated sound routes.
+- Static/package verification only; live purchase, curtain, save/load, audio,
+  furniture behavior, and player regression QA remain player gates.

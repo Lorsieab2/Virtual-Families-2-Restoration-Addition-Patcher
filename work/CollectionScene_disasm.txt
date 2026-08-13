@@ -1,0 +1,1036 @@
+Microsoft (R) COFF/PE Dumper Version 14.51.36247.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file work\desktop_obj_files\CollectionScene.obj
+
+File Type: COFF OBJECT
+
+??0CCollectionScene@@AAE@XZ (private: __thiscall CCollectionScene::CCollectionScene(void)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 6A FF              push        0FFFFFFFFh
+  00000005: 68 00 00 00 00     push        offset __ehhandler$??0CCollectionScene@@AAE@XZ
+  0000000A: 64 A1 00 00 00 00  mov         eax,dword ptr fs:[00000000h]
+  00000010: 50                 push        eax
+  00000011: 83 EC 0C           sub         esp,0Ch
+  00000014: 53                 push        ebx
+  00000015: 56                 push        esi
+  00000016: 57                 push        edi
+  00000017: A1 00 00 00 00     mov         eax,dword ptr [___security_cookie]
+  0000001C: 33 C5              xor         eax,ebp
+  0000001E: 50                 push        eax
+  0000001F: 8D 45 F4           lea         eax,[ebp-0Ch]
+  00000022: 64 A3 00 00 00 00  mov         dword ptr fs:[00000000h],eax
+  00000028: 8B F1              mov         esi,ecx
+  0000002A: 89 75 EC           mov         dword ptr [ebp-14h],esi
+  0000002D: E8 00 00 00 00     call        ??0ldwScene@@QAE@XZ
+  00000032: C7 45 FC 00 00 00  mov         dword ptr [ebp-4],0
+            00
+  00000039: C7 06 00 00 00 00  mov         dword ptr [esi],offset ??_7CCollectionScene@@6B@
+  0000003F: E8 00 00 00 00     call        ?Get@theGraphicsManager@@SAPAV1@XZ
+  00000044: 8B D8              mov         ebx,eax
+  00000046: E8 00 00 00 00     call        ?Get@theStringManager@@SAPAV1@XZ
+  0000004B: 89 45 F0           mov         dword ptr [ebp-10h],eax
+  0000004E: E8 00 00 00 00     call        ?Get@theGameState@@SAPAV1@XZ
+  00000053: 8B C8              mov         ecx,eax
+  00000055: E8 00 00 00 00     call        ?GetWideScreenOffsetX@theGameState@@QAEHXZ
+  0000005A: 6A 14              push        14h
+  0000005C: 89 46 10           mov         dword ptr [esi+10h],eax
+  0000005F: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  00000064: 8B F8              mov         edi,eax
+  00000066: 83 C4 04           add         esp,4
+  00000069: 89 7D E8           mov         dword ptr [ebp-18h],edi
+  0000006C: C6 45 FC 01        mov         byte ptr [ebp-4],1
+  00000070: 85 FF              test        edi,edi
+  00000072: 74 29              je          0000009D
+  00000074: 8B 4E 10           mov         ecx,dword ptr [esi+10h]
+  00000077: 6A 00              push        0
+  00000079: 56                 push        esi
+  0000007A: 83 C1 0C           add         ecx,0Ch
+  0000007D: 68 E1 02 00 00     push        2E1h
+  00000082: 51                 push        ecx
+  00000083: 68 29 01 00 00     push        129h
+  00000088: 8B CB              mov         ecx,ebx
+  0000008A: E8 00 00 00 00     call        ?GetImageGrid@theGraphicsManager@@QAEPAVldwImageGrid@@W4EImage@@@Z
+  0000008F: 50                 push        eax
+  00000090: 6A 00              push        0
+  00000092: 8B CF              mov         ecx,edi
+  00000094: E8 00 00 00 00     call        ??0ldwButton@@QAE@HPAVldwImageGrid@@UldwPoint@@PAVldwScene@@_N@Z
+  00000099: 8B F8              mov         edi,eax
+  0000009B: EB 02              jmp         0000009F
+  0000009D: 33 FF              xor         edi,edi
+  0000009F: 6A 03              push        3
+  000000A1: C6 45 FC 00        mov         byte ptr [ebp-4],0
+  000000A5: E8 00 00 00 00     call        ?Get@theStringManager@@SAPAV1@XZ
+  000000AA: 8B C8              mov         ecx,eax
+  000000AC: E8 00 00 00 00     call        ?GetFont@theStringManager@@QAEPAVldwFont@@W4FontId@@@Z
+  000000B1: 8B 4D F0           mov         ecx,dword ptr [ebp-10h]
+  000000B4: 50                 push        eax
+  000000B5: A1 00 00 00 00     mov         eax,dword ptr [?cLdwWhite@@3UldwColor@@B]
+  000000BA: 50                 push        eax
+  000000BB: 50                 push        eax
+  000000BC: 50                 push        eax
+  000000BD: 68 6C 07 00 00     push        76Ch
+  000000C2: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  000000C7: 50                 push        eax
+  000000C8: 8B CF              mov         ecx,edi
+  000000CA: E8 00 00 00 00     call        ?SetText@ldwButton@@QAEXPBDUldwColor@@11PAVldwFont@@@Z
+  000000CF: 57                 push        edi
+  000000D0: 8B CE              mov         ecx,esi
+  000000D2: E8 00 00 00 00     call        ?AddControl@ldwScene@@IAEXPAVldwControl@@@Z
+  000000D7: 6A 14              push        14h
+  000000D9: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  000000DE: 8B F8              mov         edi,eax
+  000000E0: 83 C4 04           add         esp,4
+  000000E3: 89 7D E8           mov         dword ptr [ebp-18h],edi
+  000000E6: C6 45 FC 02        mov         byte ptr [ebp-4],2
+  000000EA: 85 FF              test        edi,edi
+  000000EC: 74 24              je          00000112
+  000000EE: E8 00 00 00 00     call        ?Get@theStringManager@@SAPAV1@XZ
+  000000F3: 51                 push        ecx
+  000000F4: C7 04 24 00 00 80  mov         dword ptr [esp],3F800000h
+            3F
+  000000FB: 8B CF              mov         ecx,edi
+  000000FD: FF 30              push        dword ptr [eax]
+  000000FF: 6A 01              push        1
+  00000101: 68 00 00 00 00     push        offset ??_C@_01LFCBOECM@?4?$AA@
+  00000106: 6A 14              push        14h
+  00000108: 6A 14              push        14h
+  0000010A: 56                 push        esi
+  0000010B: E8 00 00 00 00     call        ??0ldwTextControl@@QAE@PAVldwScene@@UldwPoint@@PBDHPAVldwFont@@M@Z
+  00000110: EB 02              jmp         00000114
+  00000112: 33 C0              xor         eax,eax
+  00000114: 89 46 08           mov         dword ptr [esi+8],eax
+  00000117: 8B C8              mov         ecx,eax
+  00000119: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  0000011F: C6 45 FC 00        mov         byte ptr [ebp-4],0
+  00000123: FF 35 00 00 00 00  push        dword ptr [?cLdwWhite@@3UldwColor@@B]
+  00000129: E8 00 00 00 00     call        ?SetColors@ldwTextControl@@QAEXUldwColor@@0@Z
+  0000012E: FF 76 08           push        dword ptr [esi+8]
+  00000131: 8B CE              mov         ecx,esi
+  00000133: E8 00 00 00 00     call        ?AddControl@ldwScene@@IAEXPAVldwControl@@@Z
+  00000138: 6A 14              push        14h
+  0000013A: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  0000013F: 8B F8              mov         edi,eax
+  00000141: 83 C4 04           add         esp,4
+  00000144: 89 7D E8           mov         dword ptr [ebp-18h],edi
+  00000147: C6 45 FC 03        mov         byte ptr [ebp-4],3
+  0000014B: 85 FF              test        edi,edi
+  0000014D: 74 24              je          00000173
+  0000014F: E8 00 00 00 00     call        ?Get@theStringManager@@SAPAV1@XZ
+  00000154: 51                 push        ecx
+  00000155: C7 04 24 00 00 80  mov         dword ptr [esp],3F800000h
+            3F
+  0000015C: 8B CF              mov         ecx,edi
+  0000015E: FF 30              push        dword ptr [eax]
+  00000160: 6A 01              push        1
+  00000162: 68 00 00 00 00     push        offset ??_C@_01LFCBOECM@?4?$AA@
+  00000167: 6A 14              push        14h
+  00000169: 6A 3C              push        3Ch
+  0000016B: 56                 push        esi
+  0000016C: E8 00 00 00 00     call        ??0ldwTextControl@@QAE@PAVldwScene@@UldwPoint@@PBDHPAVldwFont@@M@Z
+  00000171: EB 02              jmp         00000175
+  00000173: 33 C0              xor         eax,eax
+  00000175: 89 46 0C           mov         dword ptr [esi+0Ch],eax
+  00000178: 8B C8              mov         ecx,eax
+  0000017A: FF 35 00 00 00 00  push        dword ptr [?cLdwNoColor@@3UldwColor@@B]
+  00000180: C6 45 FC 00        mov         byte ptr [ebp-4],0
+  00000184: FF 35 00 00 00 00  push        dword ptr [?cLdwWhite@@3UldwColor@@B]
+  0000018A: E8 00 00 00 00     call        ?SetColors@ldwTextControl@@QAEXUldwColor@@0@Z
+  0000018F: FF 76 0C           push        dword ptr [esi+0Ch]
+  00000192: 8B CE              mov         ecx,esi
+  00000194: E8 00 00 00 00     call        ?AddControl@ldwScene@@IAEXPAVldwControl@@@Z
+  00000199: C7 46 14 00 00 00  mov         dword ptr [esi+14h],0
+            00
+  000001A0: 8B C6              mov         eax,esi
+  000001A2: 8B 4D F4           mov         ecx,dword ptr [ebp-0Ch]
+  000001A5: 64 89 0D 00 00 00  mov         dword ptr fs:[0],ecx
+            00
+  000001AC: 59                 pop         ecx
+  000001AD: 5F                 pop         edi
+  000001AE: 5E                 pop         esi
+  000001AF: 5B                 pop         ebx
+  000001B0: 8B E5              mov         esp,ebp
+  000001B2: 5D                 pop         ebp
+  000001B3: C3                 ret
+
+__unwindfunclet$??0CCollectionScene@@AAE@XZ$0:
+  00000000: 8B 4D EC           mov         ecx,dword ptr [ebp-14h]
+  00000003: E9 00 00 00 00     jmp         ??1ldwScene@@UAE@XZ
+__unwindfunclet$??0CCollectionScene@@AAE@XZ$1:
+  00000008: 6A 14              push        14h
+  0000000A: 8B 45 E8           mov         eax,dword ptr [ebp-18h]
+  0000000D: 50                 push        eax
+  0000000E: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  00000013: 83 C4 08           add         esp,8
+  00000016: C3                 ret
+__unwindfunclet$??0CCollectionScene@@AAE@XZ$2:
+  00000017: 6A 14              push        14h
+  00000019: 8B 45 E8           mov         eax,dword ptr [ebp-18h]
+  0000001C: 50                 push        eax
+  0000001D: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  00000022: 83 C4 08           add         esp,8
+  00000025: C3                 ret
+__unwindfunclet$??0CCollectionScene@@AAE@XZ$3:
+  00000026: 6A 14              push        14h
+  00000028: 8B 45 E8           mov         eax,dword ptr [ebp-18h]
+  0000002B: 50                 push        eax
+  0000002C: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  00000031: 83 C4 08           add         esp,8
+  00000034: C3                 ret
+__ehhandler$??0CCollectionScene@@AAE@XZ:
+  00000035: 8B 54 24 08        mov         edx,dword ptr [esp+8]
+  00000039: 8D 42 0C           lea         eax,[edx+0Ch]
+  0000003C: 8B 4A E4           mov         ecx,dword ptr [edx-1Ch]
+  0000003F: 33 C8              xor         ecx,eax
+  00000041: E8 00 00 00 00     call        @__security_check_cookie@4
+  00000046: B8 00 00 00 00     mov         eax,offset __ehfuncinfo$??0CCollectionScene@@AAE@XZ
+  0000004B: E9 00 00 00 00     jmp         ___CxxFrameHandler3
+
+??1CCollectionScene@@EAE@XZ (private: virtual __thiscall CCollectionScene::~CCollectionScene(void)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 6A FF              push        0FFFFFFFFh
+  00000005: 68 00 00 00 00     push        offset __ehhandler$??1CCollectionScene@@EAE@XZ
+  0000000A: 64 A1 00 00 00 00  mov         eax,dword ptr fs:[00000000h]
+  00000010: 50                 push        eax
+  00000011: 56                 push        esi
+  00000012: A1 00 00 00 00     mov         eax,dword ptr [___security_cookie]
+  00000017: 33 C5              xor         eax,ebp
+  00000019: 50                 push        eax
+  0000001A: 8D 45 F4           lea         eax,[ebp-0Ch]
+  0000001D: 64 A3 00 00 00 00  mov         dword ptr fs:[00000000h],eax
+  00000023: 8B F1              mov         esi,ecx
+  00000025: C7 06 00 00 00 00  mov         dword ptr [esi],offset ??_7CCollectionScene@@6B@
+  0000002B: E8 00 00 00 00     call        ?DeleteControls@ldwScene@@IAEXXZ
+  00000030: 8B CE              mov         ecx,esi
+  00000032: E8 00 00 00 00     call        ??1ldwScene@@UAE@XZ
+  00000037: 8B 4D F4           mov         ecx,dword ptr [ebp-0Ch]
+  0000003A: 64 89 0D 00 00 00  mov         dword ptr fs:[0],ecx
+            00
+  00000041: 59                 pop         ecx
+  00000042: 5E                 pop         esi
+  00000043: 8B E5              mov         esp,ebp
+  00000045: 5D                 pop         ebp
+  00000046: C3                 ret
+
+__ehhandler$??1CCollectionScene@@EAE@XZ:
+  00000000: 8B 54 24 08        mov         edx,dword ptr [esp+8]
+  00000004: 8D 42 0C           lea         eax,[edx+0Ch]
+  00000007: 8B 4A F8           mov         ecx,dword ptr [edx-8]
+  0000000A: 33 C8              xor         ecx,eax
+  0000000C: E8 00 00 00 00     call        @__security_check_cookie@4
+  00000011: B8 00 00 00 00     mov         eax,offset __ehfuncinfo$??1CCollectionScene@@EAE@XZ
+  00000016: E9 00 00 00 00     jmp         ___CxxFrameHandler3
+
+??_GCCollectionScene@@EAEPAXI@Z (private: virtual void * __thiscall CCollectionScene::`scalar deleting destructor'(unsigned int)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 56                 push        esi
+  00000004: 8B F1              mov         esi,ecx
+  00000006: E8 00 00 00 00     call        ??1CCollectionScene@@EAE@XZ
+  0000000B: F6 45 08 01        test        byte ptr [ebp+8],1
+  0000000F: 74 0B              je          0000001C
+  00000011: 6A 30              push        30h
+  00000013: 56                 push        esi
+  00000014: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  00000019: 83 C4 08           add         esp,8
+  0000001C: 8B C6              mov         eax,esi
+  0000001E: 5E                 pop         esi
+  0000001F: 5D                 pop         ebp
+  00000020: C2 04 00           ret         4
+
+??_H@YGXPAXIIP6EPAX0@Z@Z (void __stdcall `vector constructor iterator'(void *,unsigned int,unsigned int,void * (__thiscall*)(void *))):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 56                 push        esi
+  00000004: 8B 75 10           mov         esi,dword ptr [ebp+10h]
+  00000007: 85 F6              test        esi,esi
+  00000009: 74 16              je          00000021
+  0000000B: 53                 push        ebx
+  0000000C: 8B 5D 14           mov         ebx,dword ptr [ebp+14h]
+  0000000F: 57                 push        edi
+  00000010: 8B 7D 08           mov         edi,dword ptr [ebp+8]
+  00000013: 8B CF              mov         ecx,edi
+  00000015: FF D3              call        ebx
+  00000017: 03 7D 0C           add         edi,dword ptr [ebp+0Ch]
+  0000001A: 83 EE 01           sub         esi,1
+  0000001D: 75 F4              jne         00000013
+  0000001F: 5F                 pop         edi
+  00000020: 5B                 pop         ebx
+  00000021: 5E                 pop         esi
+  00000022: 5D                 pop         ebp
+  00000023: C2 10 00           ret         10h
+
+?Activate@CCollectionScene@@MAEX_N@Z (protected: virtual void __thiscall CCollectionScene::Activate(bool)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 80 7D 08 00        cmp         byte ptr [ebp+8],0
+  00000007: 56                 push        esi
+  00000008: 8B F1              mov         esi,ecx
+  0000000A: 0F 84 80 00 00 00  je          00000090
+  00000010: 6A 01              push        1
+  00000012: 6A 01              push        1
+  00000014: 6A 01              push        1
+  00000016: 6A 4F              push        4Fh
+  00000018: B9 00 00 00 00     mov         ecx,offset ?CollectableItem@@3VCCollectableItem@@A
+  0000001D: E8 00 00 00 00     call        ?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z
+  00000022: 6A 01              push        1
+  00000024: 6A 01              push        1
+  00000026: 6A 01              push        1
+  00000028: 6A 5B              push        5Bh
+  0000002A: B9 00 00 00 00     mov         ecx,offset ?CollectableItem@@3VCCollectableItem@@A
+  0000002F: 89 46 18           mov         dword ptr [esi+18h],eax
+  00000032: E8 00 00 00 00     call        ?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z
+  00000037: 6A 01              push        1
+  00000039: 6A 01              push        1
+  0000003B: 6A 01              push        1
+  0000003D: 6A 67              push        67h
+  0000003F: B9 00 00 00 00     mov         ecx,offset ?CollectableItem@@3VCCollectableItem@@A
+  00000044: 89 46 1C           mov         dword ptr [esi+1Ch],eax
+  00000047: E8 00 00 00 00     call        ?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z
+  0000004C: 6A 01              push        1
+  0000004E: 6A 01              push        1
+  00000050: 6A 01              push        1
+  00000052: 68 86 00 00 00     push        86h
+  00000057: B9 00 00 00 00     mov         ecx,offset ?CollectableItem@@3VCCollectableItem@@A
+  0000005C: 89 46 20           mov         dword ptr [esi+20h],eax
+  0000005F: E8 00 00 00 00     call        ?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z
+  00000064: 6A 01              push        1
+  00000066: 6A 01              push        1
+  00000068: 6A 01              push        1
+  0000006A: 68 92 00 00 00     push        92h
+  0000006F: B9 00 00 00 00     mov         ecx,offset ?CollectableItem@@3VCCollectableItem@@A
+  00000074: 89 46 24           mov         dword ptr [esi+24h],eax
+  00000077: E8 00 00 00 00     call        ?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z
+  0000007C: B9 00 00 00 00     mov         ecx,offset ?DealerSay@@3VCDealerSay@@A
+  00000081: 89 46 28           mov         dword ptr [esi+28h],eax
+  00000084: E8 00 00 00 00     call        ?Reset@CDealerSay@@QAEXXZ
+  00000089: C7 46 2C FF FF FF  mov         dword ptr [esi+2Ch],0FFFFFFFFh
+            FF
+  00000090: 5E                 pop         esi
+  00000091: 5D                 pop         ebp
+  00000092: C2 04 00           ret         4
+
+?Destroy@CCollectionScene@@SAXXZ (public: static void __cdecl CCollectionScene::Destroy(void)):
+  00000000: 8B 0D 00 00 00 00  mov         ecx,dword ptr [?m_pInstance@CCollectionScene@@0PAV1@A]
+  00000006: 85 C9              test        ecx,ecx
+  00000008: 74 06              je          00000010
+  0000000A: 8B 01              mov         eax,dword ptr [ecx]
+  0000000C: 6A 01              push        1
+  0000000E: FF 10              call        dword ptr [eax]
+  00000010: C7 05 00 00 00 00  mov         dword ptr [?m_pInstance@CCollectionScene@@0PAV1@A],0
+            00 00 00 00
+  0000001A: C3                 ret
+
+?DrawScene@CCollectionScene@@MAEXXZ (protected: virtual void __thiscall CCollectionScene::DrawScene(void)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 81 EC 24 01 00 00  sub         esp,124h
+  00000009: A1 00 00 00 00     mov         eax,dword ptr [___security_cookie]
+  0000000E: 33 C5              xor         eax,ebp
+  00000010: 89 45 FC           mov         dword ptr [ebp-4],eax
+  00000013: 53                 push        ebx
+  00000014: 56                 push        esi
+  00000015: 57                 push        edi
+  00000016: 8B F9              mov         edi,ecx
+  00000018: E8 00 00 00 00     call        ?Get@ldwGameWindow@@SAPAV1@XZ
+  0000001D: 89 85 F0 FE FF FF  mov         dword ptr [ebp-110h],eax
+  00000023: E8 00 00 00 00     call        ?Get@theGraphicsManager@@SAPAV1@XZ
+  00000028: 8B F0              mov         esi,eax
+  0000002A: 89 B5 F8 FE FF FF  mov         dword ptr [ebp-108h],esi
+  00000030: E8 00 00 00 00     call        ?Get@theStringManager@@SAPAV1@XZ
+  00000035: 89 85 F4 FE FF FF  mov         dword ptr [ebp-10Ch],eax
+  0000003B: E8 00 00 00 00     call        ?Get@theGameState@@SAPAV1@XZ
+  00000040: 8B D8              mov         ebx,eax
+  00000042: 80 BB E0 5C 02 00  cmp         byte ptr [ebx+25CE0h],0
+            00
+  00000049: 74 52              je          0000009D
+  0000004B: 8B 13              mov         edx,dword ptr [ebx]
+  0000004D: 8B CB              mov         ecx,ebx
+  0000004F: FF 52 18           call        dword ptr [edx+18h]
+  00000052: 8B 13              mov         edx,dword ptr [ebx]
+  00000054: 8B CB              mov         ecx,ebx
+  00000056: 8B F0              mov         esi,eax
+  00000058: FF 52 18           call        dword ptr [edx+18h]
+  0000005B: FF 35 00 00 00 00  push        dword ptr [?cLdwBlack@@3UldwColor@@B]
+  00000061: 8B 9D F0 FE FF FF  mov         ebx,dword ptr [ebp-110h]
+  00000067: 8B CB              mov         ecx,ebx
+  00000069: 89 85 E4 FE FF FF  mov         dword ptr [ebp-11Ch],eax
+  0000006F: 8D 85 DC FE FF FF  lea         eax,[ebp-124h]
+  00000075: 50                 push        eax
+  00000076: C7 85 DC FE FF FF  mov         dword ptr [ebp-124h],0
+            00 00 00 00
+  00000080: C7 85 E0 FE FF FF  mov         dword ptr [ebp-120h],0
+            00 00 00 00
+  0000008A: 89 B5 E8 FE FF FF  mov         dword ptr [ebp-118h],esi
+  00000090: E8 00 00 00 00     call        ?FillRect@ldwGameWindow@@QAEXAAUldwRect@@UldwColor@@@Z
+  00000095: 8B B5 F8 FE FF FF  mov         esi,dword ptr [ebp-108h]
+  0000009B: EB 06              jmp         000000A3
+  0000009D: 8B 9D F0 FE FF FF  mov         ebx,dword ptr [ebp-110h]
+  000000A3: 8B 47 14           mov         eax,dword ptr [edi+14h]
+  000000A6: 83 F8 04           cmp         eax,4
+  000000A9: 74 1E              je          000000C9
+  000000AB: 6A 64              push        64h
+  000000AD: 51                 push        ecx
+  000000AE: C7 04 24 00 00 80  mov         dword ptr [esp],3F800000h
+            3F
+  000000B5: 8B CE              mov         ecx,esi
+  000000B7: 6A 00              push        0
+  000000B9: FF 77 10           push        dword ptr [edi+10h]
+  000000BC: 68 7F 01 00 00     push        17Fh
+  000000C1: E8 00 00 00 00     call        ?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z
+  000000C6: 8B 47 14           mov         eax,dword ptr [edi+14h]
+  000000C9: 8D 0C 40           lea         ecx,[eax+eax*2]
+  000000CC: C1 E1 02           shl         ecx,2
+  000000CF: 6A 64              push        64h
+  000000D1: 51                 push        ecx
+  000000D2: C7 04 24 00 00 80  mov         dword ptr [esp],3F800000h
+            3F
+  000000D9: FF B1 08 00 00 00  push        dword ptr ?gCollectionFrame@@3PAUSCollectable@CCollectionScene@@A[ecx+8]
+  000000DF: 8B 81 04 00 00 00  mov         eax,dword ptr ?gCollectionFrame@@3PAUSCollectable@CCollectionScene@@A[ecx+4]
+  000000E5: 03 47 10           add         eax,dword ptr [edi+10h]
+  000000E8: 50                 push        eax
+  000000E9: FF B1 00 00 00 00  push        dword ptr ?gCollectionFrame@@3PAUSCollectable@CCollectionScene@@A[ecx]
+  000000EF: 8B CE              mov         ecx,esi
+  000000F1: E8 00 00 00 00     call        ?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z
+  000000F6: 8B 47 14           mov         eax,dword ptr [edi+14h]
+  000000F9: 6A 64              push        64h
+  000000FB: 8D 0C 40           lea         ecx,[eax+eax*2]
+  000000FE: C1 E1 02           shl         ecx,2
+  00000101: 51                 push        ecx
+  00000102: C7 04 24 00 00 80  mov         dword ptr [esp],3F800000h
+            3F
+  00000109: FF B1 08 00 00 00  push        dword ptr ?gCollectionLabel@@3PAUSCollectable@CCollectionScene@@A[ecx+8]
+  0000010F: 8B 81 04 00 00 00  mov         eax,dword ptr ?gCollectionLabel@@3PAUSCollectable@CCollectionScene@@A[ecx+4]
+  00000115: 03 47 10           add         eax,dword ptr [edi+10h]
+  00000118: 50                 push        eax
+  00000119: FF B1 00 00 00 00  push        dword ptr ?gCollectionLabel@@3PAUSCollectable@CCollectionScene@@A[ecx]
+  0000011F: 8B CE              mov         ecx,esi
+  00000121: E8 00 00 00 00     call        ?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z
+  00000126: 8B 47 10           mov         eax,dword ptr [edi+10h]
+  00000129: 6A 64              push        64h
+  0000012B: 51                 push        ecx
+  0000012C: C7 04 24 00 00 80  mov         dword ptr [esp],3F800000h
+            3F
+  00000133: 83 C0 17           add         eax,17h
+  00000136: 68 50 01 00 00     push        150h
+  0000013B: 50                 push        eax
+  0000013C: 68 80 01 00 00     push        180h
+  00000141: 8B CE              mov         ecx,esi
+  00000143: E8 00 00 00 00     call        ?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z
+  00000148: 8B 47 10           mov         eax,dword ptr [edi+10h]
+  0000014B: 6A 64              push        64h
+  0000014D: 51                 push        ecx
+  0000014E: C7 04 24 00 00 80  mov         dword ptr [esp],3F800000h
+            3F
+  00000155: 05 BE 03 00 00     add         eax,3BEh
+  0000015A: 68 50 01 00 00     push        150h
+  0000015F: 50                 push        eax
+  00000160: 68 81 01 00 00     push        181h
+  00000165: 8B CE              mov         ecx,esi
+  00000167: E8 00 00 00 00     call        ?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z
+  0000016C: 8B 8D F4 FE FF FF  mov         ecx,dword ptr [ebp-10Ch]
+  00000172: 68 2C 0A 00 00     push        0A2Ch
+  00000177: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  0000017C: 50                 push        eax
+  0000017D: 8B 47 14           mov         eax,dword ptr [edi+14h]
+  00000180: FF 74 87 18        push        dword ptr [edi+eax*4+18h]
+  00000184: 8D 85 FC FE FF FF  lea         eax,[ebp-104h]
+  0000018A: 68 00 00 00 00     push        offset ??_C@_06NEABAPCG@?$CFd?$CFs12?$AA@
+  0000018F: 50                 push        eax
+  00000190: E8 00 00 00 00     call        _sprintf
+  00000195: 8B 47 14           mov         eax,dword ptr [edi+14h]
+  00000198: 83 C4 10           add         esp,10h
+  0000019B: 8D 14 80           lea         edx,[eax+eax*4]
+  0000019E: 8D 0C 40           lea         ecx,[eax+eax*2]
+  000001A1: 8B 04 95 08 00 00  mov         eax,dword ptr ?gLabelInfo@@3PAUsCollectionLabelInfo@@A[edx*4+8]
+            00
+  000001A8: 03 04 8D 08 00 00  add         eax,dword ptr ?gCollectionLabel@@3PAUSCollectable@CCollectionScene@@A[ecx*4+8]
+            00
+  000001AF: 6A 00              push        0
+  000001B1: FF 35 00 00 00 00  push        dword ptr [?cLdwWhite@@3UldwColor@@B]
+  000001B7: 50                 push        eax
+  000001B8: 8B 04 95 04 00 00  mov         eax,dword ptr ?gLabelInfo@@3PAUsCollectionLabelInfo@@A[edx*4+4]
+            00
+  000001BF: 03 04 8D 04 00 00  add         eax,dword ptr ?gCollectionLabel@@3PAUSCollectable@CCollectionScene@@A[ecx*4+4]
+            00
+  000001C6: 03 47 10           add         eax,dword ptr [edi+10h]
+  000001C9: 8B 8D F4 FE FF FF  mov         ecx,dword ptr [ebp-10Ch]
+  000001CF: 50                 push        eax
+  000001D0: FF 34 95 00 00 00  push        dword ptr ?gLabelInfo@@3PAUsCollectionLabelInfo@@A[edx*4]
+            00
+  000001D7: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  000001DC: 50                 push        eax
+  000001DD: 8B CB              mov         ecx,ebx
+  000001DF: E8 00 00 00 00     call        ?DrawStringRight@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  000001E4: 8B 47 14           mov         eax,dword ptr [edi+14h]
+  000001E7: 6A 00              push        0
+  000001E9: FF 35 00 00 00 00  push        dword ptr [?cLdwWhite@@3UldwColor@@B]
+  000001EF: 8D 14 80           lea         edx,[eax+eax*4]
+  000001F2: 8D 0C 40           lea         ecx,[eax+eax*2]
+  000001F5: 8B 04 95 10 00 00  mov         eax,dword ptr ?gLabelInfo@@3PAUsCollectionLabelInfo@@A[edx*4+10h]
+            00
+  000001FC: 03 04 8D 08 00 00  add         eax,dword ptr ?gCollectionLabel@@3PAUSCollectable@CCollectionScene@@A[ecx*4+8]
+            00
+  00000203: 50                 push        eax
+  00000204: 8B 04 95 0C 00 00  mov         eax,dword ptr ?gLabelInfo@@3PAUsCollectionLabelInfo@@A[edx*4+0Ch]
+            00
+  0000020B: 03 04 8D 04 00 00  add         eax,dword ptr ?gCollectionLabel@@3PAUSCollectable@CCollectionScene@@A[ecx*4+4]
+            00
+  00000212: 8B CB              mov         ecx,ebx
+  00000214: 03 47 10           add         eax,dword ptr [edi+10h]
+  00000217: 50                 push        eax
+  00000218: 8D 85 FC FE FF FF  lea         eax,[ebp-104h]
+  0000021E: 50                 push        eax
+  0000021F: E8 00 00 00 00     call        ?DrawString@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  00000224: 8B 47 14           mov         eax,dword ptr [edi+14h]
+  00000227: 8D 1C 40           lea         ebx,[eax+eax*2]
+  0000022A: C1 E3 02           shl         ebx,2
+  0000022D: 8D 43 0C           lea         eax,[ebx+0Ch]
+  00000230: 89 85 EC FE FF FF  mov         dword ptr [ebp-114h],eax
+  00000236: 3B D8              cmp         ebx,eax
+  00000238: 0F 8D 99 00 00 00  jge         000002D7
+  0000023E: 8D 34 5B           lea         esi,[ebx+ebx*2]
+  00000241: C1 E6 02           shl         esi,2
+  00000244: FF 34 9D 00 00 00  push        dword ptr ?gCollectable@@3PAW4ECarrying@@A[ebx*4]
+            00
+  0000024B: B9 00 00 00 00     mov         ecx,offset ?CollectableItem@@3VCCollectableItem@@A
+  00000250: E8 00 00 00 00     call        ?Count@CCollectableItem@@QBE?BHW4ECarrying@@@Z
+  00000255: 85 C0              test        eax,eax
+  00000257: 7E 68              jle         000002C1
+  00000259: 8B 47 10           mov         eax,dword ptr [edi+10h]
+  0000025C: 03 86 04 00 00 00  add         eax,dword ptr ?sm_sCollectable@CCollectionScene@@0PAUSCollectable@1@A[esi+4]
+  00000262: 6A 64              push        64h
+  00000264: 51                 push        ecx
+  00000265: 8B 8D F8 FE FF FF  mov         ecx,dword ptr [ebp-108h]
+  0000026B: C7 04 24 00 00 80  mov         dword ptr [esp],3F800000h
+            3F
+  00000272: FF B6 08 00 00 00  push        dword ptr ?sm_sCollectable@CCollectionScene@@0PAUSCollectable@1@A[esi+8]
+  00000278: 50                 push        eax
+  00000279: FF B6 00 00 00 00  push        dword ptr ?sm_sCollectable@CCollectionScene@@0PAUSCollectable@1@A[esi]
+  0000027F: E8 00 00 00 00     call        ?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z
+  00000284: 83 7F 14 00        cmp         dword ptr [edi+14h],0
+  00000288: 75 2B              jne         000002B5
+  0000028A: 8B 86 04 00 00 00  mov         eax,dword ptr ?gInsectPin@@3PAUSCollectable@CCollectionScene@@A[esi+4]
+  00000290: 03 47 10           add         eax,dword ptr [edi+10h]
+  00000293: 6A 64              push        64h
+  00000295: 51                 push        ecx
+  00000296: 8B 8D F8 FE FF FF  mov         ecx,dword ptr [ebp-108h]
+  0000029C: C7 04 24 00 00 80  mov         dword ptr [esp],3F800000h
+            3F
+  000002A3: FF B6 08 00 00 00  push        dword ptr ?gInsectPin@@3PAUSCollectable@CCollectionScene@@A[esi+8]
+  000002A9: 50                 push        eax
+  000002AA: FF B6 00 00 00 00  push        dword ptr ?gInsectPin@@3PAUSCollectable@CCollectionScene@@A[esi]
+  000002B0: E8 00 00 00 00     call        ?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z
+  000002B5: 39 5F 2C           cmp         dword ptr [edi+2Ch],ebx
+  000002B8: 75 07              jne         000002C1
+  000002BA: C7 47 2C FF FF FF  mov         dword ptr [edi+2Ch],0FFFFFFFFh
+            FF
+  000002C1: 43                 inc         ebx
+  000002C2: 83 C6 0C           add         esi,0Ch
+  000002C5: 3B 9D EC FE FF FF  cmp         ebx,dword ptr [ebp-114h]
+  000002CB: 0F 8C 73 FF FF FF  jl          00000244
+  000002D1: 8B B5 F8 FE FF FF  mov         esi,dword ptr [ebp-108h]
+  000002D7: 8B 47 10           mov         eax,dword ptr [edi+10h]
+  000002DA: 6A 64              push        64h
+  000002DC: 51                 push        ecx
+  000002DD: C7 04 24 00 00 80  mov         dword ptr [esp],3F800000h
+            3F
+  000002E4: 05 FC 00 00 00     add         eax,0FCh
+  000002E9: 68 CC 02 00 00     push        2CCh
+  000002EE: 50                 push        eax
+  000002EF: 68 83 01 00 00     push        183h
+  000002F4: 8B CE              mov         ecx,esi
+  000002F6: E8 00 00 00 00     call        ?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z
+  000002FB: 6A 64              push        64h
+  000002FD: 51                 push        ecx
+  000002FE: C7 04 24 00 00 80  mov         dword ptr [esp],3F800000h
+            3F
+  00000305: 8B CE              mov         ecx,esi
+  00000307: 68 D0 02 00 00     push        2D0h
+  0000030C: FF 77 10           push        dword ptr [edi+10h]
+  0000030F: 68 82 01 00 00     push        182h
+  00000314: E8 00 00 00 00     call        ?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z
+  00000319: 8B 8D F4 FE FF FF  mov         ecx,dword ptr [ebp-10Ch]
+  0000031F: 6A 01              push        1
+  00000321: E8 00 00 00 00     call        ?GetFont@theStringManager@@QAEPAVldwFont@@W4FontId@@@Z
+  00000326: 50                 push        eax
+  00000327: FF 35 00 00 00 00  push        dword ptr [?cLdwWhite@@3UldwColor@@B]
+  0000032D: 8B 47 10           mov         eax,dword ptr [edi+10h]
+  00000330: B9 00 00 00 00     mov         ecx,offset ?DealerSay@@3VCDealerSay@@A
+  00000335: 68 E9 02 00 00     push        2E9h
+  0000033A: 05 F6 01 00 00     add         eax,1F6h
+  0000033F: 50                 push        eax
+  00000340: E8 00 00 00 00     call        ?Message@CDealerSay@@QBEPBDXZ
+  00000345: 8B 8D F0 FE FF FF  mov         ecx,dword ptr [ebp-110h]
+  0000034B: 50                 push        eax
+  0000034C: E8 00 00 00 00     call        ?DrawStringCentered@ldwGameWindow@@QAEXPBDHHUldwColor@@PAVldwFont@@@Z
+  00000351: 8B 4D FC           mov         ecx,dword ptr [ebp-4]
+  00000354: 5F                 pop         edi
+  00000355: 5E                 pop         esi
+  00000356: 33 CD              xor         ecx,ebp
+  00000358: 5B                 pop         ebx
+  00000359: E8 00 00 00 00     call        @__security_check_cookie@4
+  0000035E: 8B E5              mov         esp,ebp
+  00000360: 5D                 pop         ebp
+  00000361: C3                 ret
+
+?DrawSceneFinal@ldwScene@@MAEXXZ (protected: virtual void __thiscall ldwScene::DrawSceneFinal(void)):
+  00000000: C3                 ret
+
+?Get@CCollectionScene@@SAPAV1@XZ (public: static class CCollectionScene * __cdecl CCollectionScene::Get(void)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 6A FF              push        0FFFFFFFFh
+  00000005: 68 00 00 00 00     push        offset __ehhandler$?Get@CCollectionScene@@SAPAV1@XZ
+  0000000A: 64 A1 00 00 00 00  mov         eax,dword ptr fs:[00000000h]
+  00000010: 50                 push        eax
+  00000011: 51                 push        ecx
+  00000012: A1 00 00 00 00     mov         eax,dword ptr [___security_cookie]
+  00000017: 33 C5              xor         eax,ebp
+  00000019: 50                 push        eax
+  0000001A: 8D 45 F4           lea         eax,[ebp-0Ch]
+  0000001D: 64 A3 00 00 00 00  mov         dword ptr fs:[00000000h],eax
+  00000023: A1 00 00 00 00     mov         eax,dword ptr [?m_pInstance@CCollectionScene@@0PAV1@A]
+  00000028: 85 C0              test        eax,eax
+  0000002A: 75 3A              jne         00000066
+  0000002C: 6A 30              push        30h
+  0000002E: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  00000033: 83 C4 04           add         esp,4
+  00000036: 89 45 F0           mov         dword ptr [ebp-10h],eax
+  00000039: C7 45 FC 00 00 00  mov         dword ptr [ebp-4],0
+            00
+  00000040: 85 C0              test        eax,eax
+  00000042: 74 1B              je          0000005F
+  00000044: 8B C8              mov         ecx,eax
+  00000046: E8 00 00 00 00     call        ??0CCollectionScene@@AAE@XZ
+  0000004B: A3 00 00 00 00     mov         dword ptr [?m_pInstance@CCollectionScene@@0PAV1@A],eax
+  00000050: 8B 4D F4           mov         ecx,dword ptr [ebp-0Ch]
+  00000053: 64 89 0D 00 00 00  mov         dword ptr fs:[0],ecx
+            00
+  0000005A: 59                 pop         ecx
+  0000005B: 8B E5              mov         esp,ebp
+  0000005D: 5D                 pop         ebp
+  0000005E: C3                 ret
+  0000005F: 33 C0              xor         eax,eax
+  00000061: A3 00 00 00 00     mov         dword ptr [?m_pInstance@CCollectionScene@@0PAV1@A],eax
+  00000066: 8B 4D F4           mov         ecx,dword ptr [ebp-0Ch]
+  00000069: 64 89 0D 00 00 00  mov         dword ptr fs:[0],ecx
+            00
+  00000070: 59                 pop         ecx
+  00000071: 8B E5              mov         esp,ebp
+  00000073: 5D                 pop         ebp
+  00000074: C3                 ret
+
+__unwindfunclet$?Get@CCollectionScene@@SAPAV1@XZ$0:
+  00000000: 6A 30              push        30h
+  00000002: 8B 45 F0           mov         eax,dword ptr [ebp-10h]
+  00000005: 50                 push        eax
+  00000006: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  0000000B: 83 C4 08           add         esp,8
+  0000000E: C3                 ret
+__ehhandler$?Get@CCollectionScene@@SAPAV1@XZ:
+  0000000F: 8B 54 24 08        mov         edx,dword ptr [esp+8]
+  00000013: 8D 42 0C           lea         eax,[edx+0Ch]
+  00000016: 8B 4A F8           mov         ecx,dword ptr [edx-8]
+  00000019: 33 C8              xor         ecx,eax
+  0000001B: E8 00 00 00 00     call        @__security_check_cookie@4
+  00000020: B8 00 00 00 00     mov         eax,offset __ehfuncinfo$?Get@CCollectionScene@@SAPAV1@XZ
+  00000025: E9 00 00 00 00     jmp         ___CxxFrameHandler3
+
+?HandleKey@CCollectionScene@@UAE_NHHH@Z (public: virtual bool __thiscall CCollectionScene::HandleKey(int,int,int)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 83 7D 08 06        cmp         dword ptr [ebp+8],6
+  00000007: 75 1E              jne         00000027
+  00000009: 8B 45 0C           mov         eax,dword ptr [ebp+0Ch]
+  0000000C: 2D E8 03 00 00     sub         eax,3E8h
+  00000011: 74 05              je          00000018
+  00000013: 83 E8 12           sub         eax,12h
+  00000016: 75 0F              jne         00000027
+  00000018: 8B 01              mov         eax,dword ptr [ecx]
+  0000001A: 6A 00              push        0
+  0000001C: 6A 08              push        8
+  0000001E: FF 50 0C           call        dword ptr [eax+0Ch]
+  00000021: B0 01              mov         al,1
+  00000023: 5D                 pop         ebp
+  00000024: C2 0C 00           ret         0Ch
+  00000027: 32 C0              xor         al,al
+  00000029: 5D                 pop         ebp
+  0000002A: C2 0C 00           ret         0Ch
+
+?HandleMessage@CCollectionScene@@UAE_NHJ@Z (public: virtual bool __thiscall CCollectionScene::HandleMessage(int,long)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 83 7D 08 08        cmp         dword ptr [ebp+8],8
+  00000007: 8B 45 0C           mov         eax,dword ptr [ebp+0Ch]
+  0000000A: 75 34              jne         00000040
+  0000000C: 85 C0              test        eax,eax
+  0000000E: 75 30              jne         00000040
+  00000010: 68 8A 00 00 00     push        8Ah
+  00000015: B9 00 00 00 00     mov         ecx,offset ?Sound@@3VCSound@@A
+  0000001A: E8 00 00 00 00     call        ?Play@CSound@@QAEXW4ESound@@@Z
+  0000001F: E8 00 00 00 00     call        ?Get@theGameState@@SAPAV1@XZ
+  00000024: 8B 88 B8 5C 02 00  mov         ecx,dword ptr [eax+25CB8h]
+  0000002A: 89 88 BC 5C 02 00  mov         dword ptr [eax+25CBCh],ecx
+  00000030: C7 80 B8 5C 02 00  mov         dword ptr [eax+25CB8h],0
+            00 00 00 00
+  0000003A: B0 01              mov         al,1
+  0000003C: 5D                 pop         ebp
+  0000003D: C2 08 00           ret         8
+  00000040: 32 C0              xor         al,al
+  00000042: 5D                 pop         ebp
+  00000043: C2 08 00           ret         8
+
+?HandleMouse@CCollectionScene@@UAE_NHUldwPoint@@@Z (public: virtual bool __thiscall CCollectionScene::HandleMouse(int,struct ldwPoint)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 81 EC 60 01 00 00  sub         esp,160h
+  00000009: A1 00 00 00 00     mov         eax,dword ptr [___security_cookie]
+  0000000E: 33 C5              xor         eax,ebp
+  00000010: 89 45 FC           mov         dword ptr [ebp-4],eax
+  00000013: 53                 push        ebx
+  00000014: 8B D9              mov         ebx,ecx
+  00000016: 89 9D B0 FE FF FF  mov         dword ptr [ebp-150h],ebx
+  0000001C: E8 00 00 00 00     call        ?Get@theStringManager@@SAPAV1@XZ
+  00000021: 8B 4D 08           mov         ecx,dword ptr [ebp+8]
+  00000024: 89 85 A0 FE FF FF  mov         dword ptr [ebp-160h],eax
+  0000002A: 83 E9 01           sub         ecx,1
+  0000002D: 74 66              je          00000095
+  0000002F: 83 E9 01           sub         ecx,1
+  00000032: 0F 85 B7 02 00 00  jne         000002EF
+  00000038: 8B 4B 10           mov         ecx,dword ptr [ebx+10h]
+  0000003B: 8B 55 0C           mov         edx,dword ptr [ebp+0Ch]
+  0000003E: 8D 41 46           lea         eax,[ecx+46h]
+  00000041: 3B D0              cmp         edx,eax
+  00000043: 7D 20              jge         00000065
+  00000045: 83 6B 14 01        sub         dword ptr [ebx+14h],1
+  00000049: 79 37              jns         00000082
+  0000004B: C7 43 14 04 00 00  mov         dword ptr [ebx+14h],4
+            00
+  00000052: B0 01              mov         al,1
+  00000054: 5B                 pop         ebx
+  00000055: 8B 4D FC           mov         ecx,dword ptr [ebp-4]
+  00000058: 33 CD              xor         ecx,ebp
+  0000005A: E8 00 00 00 00     call        @__security_check_cookie@4
+  0000005F: 8B E5              mov         esp,ebp
+  00000061: 5D                 pop         ebp
+  00000062: C2 0C 00           ret         0Ch
+  00000065: 8D 81 B6 03 00 00  lea         eax,[ecx+3B6h]
+  0000006B: 3B D0              cmp         edx,eax
+  0000006D: 0F 8E 7C 02 00 00  jle         000002EF
+  00000073: 8B 43 14           mov         eax,dword ptr [ebx+14h]
+  00000076: 33 C9              xor         ecx,ecx
+  00000078: 40                 inc         eax
+  00000079: 83 F8 05           cmp         eax,5
+  0000007C: 0F 4D C1           cmovge      eax,ecx
+  0000007F: 89 43 14           mov         dword ptr [ebx+14h],eax
+  00000082: B0 01              mov         al,1
+  00000084: 5B                 pop         ebx
+  00000085: 8B 4D FC           mov         ecx,dword ptr [ebp-4]
+  00000088: 33 CD              xor         ecx,ebp
+  0000008A: E8 00 00 00 00     call        @__security_check_cookie@4
+  0000008F: 8B E5              mov         esp,ebp
+  00000091: 5D                 pop         ebp
+  00000092: C2 0C 00           ret         0Ch
+  00000095: 56                 push        esi
+  00000096: 57                 push        edi
+  00000097: E8 00 00 00 00     call        ?Get@theGraphicsManager@@SAPAV1@XZ
+  0000009C: 8B 4B 14           mov         ecx,dword ptr [ebx+14h]
+  0000009F: 8B F0              mov         esi,eax
+  000000A1: 89 B5 A4 FE FF FF  mov         dword ptr [ebp-15Ch],esi
+  000000A7: C7 43 2C FF FF FF  mov         dword ptr [ebx+2Ch],0FFFFFFFFh
+            FF
+  000000AE: 8D 3C 49           lea         edi,[ecx+ecx*2]
+  000000B1: C1 E7 02           shl         edi,2
+  000000B4: 89 BD B8 FE FF FF  mov         dword ptr [ebp-148h],edi
+  000000BA: 8D 47 0C           lea         eax,[edi+0Ch]
+  000000BD: 89 85 A8 FE FF FF  mov         dword ptr [ebp-158h],eax
+  000000C3: 3B F8              cmp         edi,eax
+  000000C5: 0F 8D 22 02 00 00  jge         000002ED
+  000000CB: 8D 04 7F           lea         eax,[edi+edi*2]
+  000000CE: 8D 14 85 04 00 00  lea         edx,?sm_sCollectable@CCollectionScene@@0PAUSCollectable@1@A[eax*4+4]
+            00
+  000000D5: 89 95 BC FE FF FF  mov         dword ptr [ebp-144h],edx
+  000000DB: 0F 1F 44 00 00     nop         dword ptr [eax+eax]
+  000000E0: FF 72 FC           push        dword ptr [edx-4]
+  000000E3: 8B CE              mov         ecx,esi
+  000000E5: E8 00 00 00 00     call        ?GetImage@theGraphicsManager@@QAEPAVldwImage@@W4EImage@@@Z
+  000000EA: 8B BD B0 FE FF FF  mov         edi,dword ptr [ebp-150h]
+  000000F0: 8B F0              mov         esi,eax
+  000000F2: 8B 85 BC FE FF FF  mov         eax,dword ptr [ebp-144h]
+  000000F8: 8B CE              mov         ecx,esi
+  000000FA: 8B 7F 10           mov         edi,dword ptr [edi+10h]
+  000000FD: 8B 18              mov         ebx,dword ptr [eax]
+  000000FF: 8B 40 04           mov         eax,dword ptr [eax+4]
+  00000102: 89 85 AC FE FF FF  mov         dword ptr [ebp-154h],eax
+  00000108: E8 00 00 00 00     call        ?GetWidth@ldwImage@@QAEHXZ
+  0000010D: 8B 95 BC FE FF FF  mov         edx,dword ptr [ebp-144h]
+  00000113: 8B 0A              mov         ecx,dword ptr [edx]
+  00000115: 03 C8              add         ecx,eax
+  00000117: 8B 85 B0 FE FF FF  mov         eax,dword ptr [ebp-150h]
+  0000011D: 8B 40 10           mov         eax,dword ptr [eax+10h]
+  00000120: 03 C1              add         eax,ecx
+  00000122: 8B CE              mov         ecx,esi
+  00000124: 89 85 B4 FE FF FF  mov         dword ptr [ebp-14Ch],eax
+  0000012A: E8 00 00 00 00     call        ?GetHeight@ldwImage@@QAEHXZ
+  0000012F: 8B 95 BC FE FF FF  mov         edx,dword ptr [ebp-144h]
+  00000135: 8B 4D 0C           mov         ecx,dword ptr [ebp+0Ch]
+  00000138: 8B 72 04           mov         esi,dword ptr [edx+4]
+  0000013B: 03 F0              add         esi,eax
+  0000013D: 8D 04 3B           lea         eax,[ebx+edi]
+  00000140: 3B C8              cmp         ecx,eax
+  00000142: 7C 1B              jl          0000015F
+  00000144: 3B 8D B4 FE FF FF  cmp         ecx,dword ptr [ebp-14Ch]
+  0000014A: 7F 13              jg          0000015F
+  0000014C: 8B 45 10           mov         eax,dword ptr [ebp+10h]
+  0000014F: 3B 85 AC FE FF FF  cmp         eax,dword ptr [ebp-154h]
+  00000155: 7C 08              jl          0000015F
+  00000157: 3B C6              cmp         eax,esi
+  00000159: 7F 04              jg          0000015F
+  0000015B: B0 01              mov         al,1
+  0000015D: EB 02              jmp         00000161
+  0000015F: 32 C0              xor         al,al
+  00000161: 84 C0              test        al,al
+  00000163: 75 2D              jne         00000192
+  00000165: 8B 85 B8 FE FF FF  mov         eax,dword ptr [ebp-148h]
+  0000016B: 83 C2 0C           add         edx,0Ch
+  0000016E: 8B B5 A4 FE FF FF  mov         esi,dword ptr [ebp-15Ch]
+  00000174: 40                 inc         eax
+  00000175: 89 85 B8 FE FF FF  mov         dword ptr [ebp-148h],eax
+  0000017B: 89 95 BC FE FF FF  mov         dword ptr [ebp-144h],edx
+  00000181: 3B 85 A8 FE FF FF  cmp         eax,dword ptr [ebp-158h]
+  00000187: 0F 8C 53 FF FF FF  jl          000000E0
+  0000018D: E9 5B 01 00 00     jmp         000002ED
+  00000192: 8B BD B8 FE FF FF  mov         edi,dword ptr [ebp-148h]
+  00000198: 8B C7              mov         eax,edi
+  0000019A: 0F 28 05 00 00 00  movaps      xmm0,xmmword ptr [__xmm@0000074b0000074a0000074900000748]
+            00
+  000001A1: 99                 cdq
+  000001A2: 83 E2 03           and         edx,3
+  000001A5: C7 85 F0 FE FF FF  mov         dword ptr [ebp-110h],751h
+            51 07 00 00
+  000001AF: 0F 11 85 C0 FE FF  movups      xmmword ptr [ebp-140h],xmm0
+            FF
+  000001B6: 03 C2              add         eax,edx
+  000001B8: C7 85 F4 FE FF FF  mov         dword ptr [ebp-10Ch],752h
+            52 07 00 00
+  000001C2: 0F 28 05 00 00 00  movaps      xmm0,xmmword ptr [__xmm@0000074f0000074e0000074d0000074c]
+            00
+  000001C9: C1 F8 02           sar         eax,2
+  000001CC: 0F 11 85 D0 FE FF  movups      xmmword ptr [ebp-130h],xmm0
+            FF
+  000001D3: C7 85 F8 FE FF FF  mov         dword ptr [ebp-108h],753h
+            53 07 00 00
+  000001DD: 0F 28 05 00 00 00  movaps      xmm0,xmmword ptr [__xmm@000007500000074f0000074e00000750]
+            00
+  000001E4: 0F 11 85 E0 FE FF  movups      xmmword ptr [ebp-120h],xmm0
+            FF
+  000001EB: 8B 9C 85 C0 FE FF  mov         ebx,dword ptr [ebp+eax*4-140h]
+            FF
+  000001F2: C6 85 B4 FE FF FF  mov         byte ptr [ebp-14Ch],0
+            00
+  000001F9: C6 85 BC FE FF FF  mov         byte ptr [ebp-144h],0
+            00
+  00000200: C6 85 B8 FE FF FF  mov         byte ptr [ebp-148h],0
+            00
+  00000207: 81 FB 48 07 00 00  cmp         ebx,748h
+  0000020D: 74 6A              je          00000279
+  0000020F: 81 FB 4B 07 00 00  cmp         ebx,74Bh
+  00000215: 74 62              je          00000279
+  00000217: 81 FB 4E 07 00 00  cmp         ebx,74Eh
+  0000021D: 74 5A              je          00000279
+  0000021F: 81 FB 51 07 00 00  cmp         ebx,751h
+  00000225: 74 52              je          00000279
+  00000227: 81 FB 49 07 00 00  cmp         ebx,749h
+  0000022D: 74 41              je          00000270
+  0000022F: 81 FB 4C 07 00 00  cmp         ebx,74Ch
+  00000235: 74 39              je          00000270
+  00000237: 81 FB 4F 07 00 00  cmp         ebx,74Fh
+  0000023D: 74 31              je          00000270
+  0000023F: 81 FB 52 07 00 00  cmp         ebx,752h
+  00000245: 74 29              je          00000270
+  00000247: 81 FB 4A 07 00 00  cmp         ebx,74Ah
+  0000024D: 74 18              je          00000267
+  0000024F: 81 FB 4D 07 00 00  cmp         ebx,74Dh
+  00000255: 74 10              je          00000267
+  00000257: 81 FB 50 07 00 00  cmp         ebx,750h
+  0000025D: 74 08              je          00000267
+  0000025F: 81 FB 53 07 00 00  cmp         ebx,753h
+  00000265: 75 19              jne         00000280
+  00000267: C6 85 B8 FE FF FF  mov         byte ptr [ebp-148h],1
+            01
+  0000026E: EB 10              jmp         00000280
+  00000270: C6 85 BC FE FF FF  mov         byte ptr [ebp-144h],1
+            01
+  00000277: EB 07              jmp         00000280
+  00000279: C6 85 B4 FE FF FF  mov         byte ptr [ebp-14Ch],1
+            01
+  00000280: FF B5 B8 FE FF FF  push        dword ptr [ebp-148h]
+  00000286: B9 4F 00 00 00     mov         ecx,4Fh
+  0000028B: 83 FF 24           cmp         edi,24h
+  0000028E: FF B5 BC FE FF FF  push        dword ptr [ebp-144h]
+  00000294: B8 62 00 00 00     mov         eax,62h
+  00000299: FF B5 B4 FE FF FF  push        dword ptr [ebp-14Ch]
+  0000029F: 0F 4C C1           cmovl       eax,ecx
+  000002A2: B9 00 00 00 00     mov         ecx,offset ?CollectableItem@@3VCCollectableItem@@A
+  000002A7: 03 C7              add         eax,edi
+  000002A9: 50                 push        eax
+  000002AA: E8 00 00 00 00     call        ?CollectionCount@CCollectableItem@@QBE?BHW4ECarrying@@_N11@Z
+  000002AF: 8B 8D A0 FE FF FF  mov         ecx,dword ptr [ebp-160h]
+  000002B5: 8B F0              mov         esi,eax
+  000002B7: 53                 push        ebx
+  000002B8: E8 00 00 00 00     call        ?GetString@theStringManager@@QAEPADW4StringId@@@Z
+  000002BD: 50                 push        eax
+  000002BE: 56                 push        esi
+  000002BF: 8D 85 FC FE FF FF  lea         eax,[ebp-104h]
+  000002C5: 68 00 00 00 00     push        offset ??_C@_04LOCMGGPM@?$CFd?$CFs?$AA@
+  000002CA: 50                 push        eax
+  000002CB: E8 00 00 00 00     call        _sprintf
+  000002D0: 83 C4 10           add         esp,10h
+  000002D3: 8D 85 FC FE FF FF  lea         eax,[ebp-104h]
+  000002D9: B9 00 00 00 00     mov         ecx,offset ?DealerSay@@3VCDealerSay@@A
+  000002DE: 50                 push        eax
+  000002DF: E8 00 00 00 00     call        ?Say@CDealerSay@@QAEXPBD@Z
+  000002E4: 8B 85 B0 FE FF FF  mov         eax,dword ptr [ebp-150h]
+  000002EA: 89 78 2C           mov         dword ptr [eax+2Ch],edi
+  000002ED: 5F                 pop         edi
+  000002EE: 5E                 pop         esi
+  000002EF: 8B 4D FC           mov         ecx,dword ptr [ebp-4]
+  000002F2: 32 C0              xor         al,al
+  000002F4: 33 CD              xor         ecx,ebp
+  000002F6: 5B                 pop         ebx
+  000002F7: E8 00 00 00 00     call        @__security_check_cookie@4
+  000002FC: 8B E5              mov         esp,ebp
+  000002FE: 5D                 pop         ebp
+  000002FF: C2 0C 00           ret         0Ch
+
+?Ref@CCollectionScene@@SAAAV1@XZ (public: static class CCollectionScene & __cdecl CCollectionScene::Ref(void)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 6A FF              push        0FFFFFFFFh
+  00000005: 68 00 00 00 00     push        offset __ehhandler$?Ref@CCollectionScene@@SAAAV1@XZ
+  0000000A: 64 A1 00 00 00 00  mov         eax,dword ptr fs:[00000000h]
+  00000010: 50                 push        eax
+  00000011: 51                 push        ecx
+  00000012: A1 00 00 00 00     mov         eax,dword ptr [___security_cookie]
+  00000017: 33 C5              xor         eax,ebp
+  00000019: 50                 push        eax
+  0000001A: 8D 45 F4           lea         eax,[ebp-0Ch]
+  0000001D: 64 A3 00 00 00 00  mov         dword ptr fs:[00000000h],eax
+  00000023: A1 00 00 00 00     mov         eax,dword ptr [?m_pInstance@CCollectionScene@@0PAV1@A]
+  00000028: 85 C0              test        eax,eax
+  0000002A: 75 3A              jne         00000066
+  0000002C: 6A 30              push        30h
+  0000002E: E8 00 00 00 00     call        ??2@YAPAXI@Z
+  00000033: 83 C4 04           add         esp,4
+  00000036: 89 45 F0           mov         dword ptr [ebp-10h],eax
+  00000039: C7 45 FC 00 00 00  mov         dword ptr [ebp-4],0
+            00
+  00000040: 85 C0              test        eax,eax
+  00000042: 74 1B              je          0000005F
+  00000044: 8B C8              mov         ecx,eax
+  00000046: E8 00 00 00 00     call        ??0CCollectionScene@@AAE@XZ
+  0000004B: A3 00 00 00 00     mov         dword ptr [?m_pInstance@CCollectionScene@@0PAV1@A],eax
+  00000050: 8B 4D F4           mov         ecx,dword ptr [ebp-0Ch]
+  00000053: 64 89 0D 00 00 00  mov         dword ptr fs:[0],ecx
+            00
+  0000005A: 59                 pop         ecx
+  0000005B: 8B E5              mov         esp,ebp
+  0000005D: 5D                 pop         ebp
+  0000005E: C3                 ret
+  0000005F: 33 C0              xor         eax,eax
+  00000061: A3 00 00 00 00     mov         dword ptr [?m_pInstance@CCollectionScene@@0PAV1@A],eax
+  00000066: 8B 4D F4           mov         ecx,dword ptr [ebp-0Ch]
+  00000069: 64 89 0D 00 00 00  mov         dword ptr fs:[0],ecx
+            00
+  00000070: 59                 pop         ecx
+  00000071: 8B E5              mov         esp,ebp
+  00000073: 5D                 pop         ebp
+  00000074: C3                 ret
+
+__unwindfunclet$?Ref@CCollectionScene@@SAAAV1@XZ$0:
+  00000000: 6A 30              push        30h
+  00000002: 8B 45 F0           mov         eax,dword ptr [ebp-10h]
+  00000005: 50                 push        eax
+  00000006: E8 00 00 00 00     call        ??3@YAXPAXI@Z
+  0000000B: 83 C4 08           add         esp,8
+  0000000E: C3                 ret
+__ehhandler$?Ref@CCollectionScene@@SAAAV1@XZ:
+  0000000F: 8B 54 24 08        mov         edx,dword ptr [esp+8]
+  00000013: 8D 42 0C           lea         eax,[edx+0Ch]
+  00000016: 8B 4A F8           mov         ecx,dword ptr [edx-8]
+  00000019: 33 C8              xor         ecx,eax
+  0000001B: E8 00 00 00 00     call        @__security_check_cookie@4
+  00000020: B8 00 00 00 00     mov         eax,offset __ehfuncinfo$?Ref@CCollectionScene@@SAAAV1@XZ
+  00000025: E9 00 00 00 00     jmp         ___CxxFrameHandler3
+
+?UpdateScene@CCollectionScene@@MAEXXZ (protected: virtual void __thiscall CCollectionScene::UpdateScene(void)):
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 83 EC 08           sub         esp,8
+  00000006: 8D 45 F8           lea         eax,[ebp-8]
+  00000009: 56                 push        esi
+  0000000A: 50                 push        eax
+  0000000B: 8B F1              mov         esi,ecx
+  0000000D: E8 00 00 00 00     call        ?GetMousePosition@ldwEventManager@@SA?AUldwPoint@@XZ
+  00000012: 83 C4 04           add         esp,4
+  00000015: B9 00 00 00 00     mov         ecx,offset ?DealerSay@@3VCDealerSay@@A
+  0000001A: E8 00 00 00 00     call        ?Update@CDealerSay@@QAEXXZ
+  0000001F: 6A 00              push        0
+  00000021: 6A 0B              push        0Bh
+  00000023: 68 61 08 00 00     push        861h
+  00000028: B9 00 00 00 00     mov         ecx,offset ?TutorialTip@@3VCTutorialTip@@A
+  0000002D: E8 00 00 00 00     call        ?Queue@CTutorialTip@@QAEXW4StringId@@W4EGameScene@@_N@Z
+  00000032: 56                 push        esi
+  00000033: 6A 0B              push        0Bh
+  00000035: B9 00 00 00 00     mov         ecx,offset ?TutorialTip@@3VCTutorialTip@@A
+  0000003A: E8 00 00 00 00     call        ?Update@CTutorialTip@@QAE?BW4StringId@@W4EGameScene@@PAVldwScene@@@Z
+  0000003F: 5E                 pop         esi
+  00000040: 8B E5              mov         esp,ebp
+  00000042: 5D                 pop         ebp
+  00000043: C3                 ret
+
+___local_stdio_printf_options:
+  00000000: B8 00 00 00 00     mov         eax,offset ?_OptionsStorage@?1??__local_stdio_printf_options@@9@4_KA
+  00000005: C3                 ret
+
+_sprintf:
+  00000000: 55                 push        ebp
+  00000001: 8B EC              mov         ebp,esp
+  00000003: 8D 45 10           lea         eax,[ebp+10h]
+  00000006: 50                 push        eax
+  00000007: 6A 00              push        0
+  00000009: FF 75 0C           push        dword ptr [ebp+0Ch]
+  0000000C: 6A FF              push        0FFFFFFFFh
+  0000000E: FF 75 08           push        dword ptr [ebp+8]
+  00000011: E8 00 00 00 00     call        ___local_stdio_printf_options
+  00000016: 8B 08              mov         ecx,dword ptr [eax]
+  00000018: FF 70 04           push        dword ptr [eax+4]
+  0000001B: 83 C9 01           or          ecx,1
+  0000001E: 51                 push        ecx
+  0000001F: E8 00 00 00 00     call        ___stdio_common_vsprintf
+  00000024: 83 C9 FF           or          ecx,0FFFFFFFFh
+  00000027: 83 C4 1C           add         esp,1Ch
+  0000002A: 85 C0              test        eax,eax
+  0000002C: 0F 48 C1           cmovs       eax,ecx
+  0000002F: 5D                 pop         ebp
+  00000030: C3                 ret
+
+  Summary
+
+          10 .bss
+         228 .chks64
+         588 .data
+          54 .data$r
+        A44C .debug$S
+          7C .debug$T
+          62 .drectve
+          6A .rdata
+          B3 .rdata$r
+          10 .sxdata
+         B31 .text$mn
+          BF .text$x
+          C0 .xdata$x

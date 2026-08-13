@@ -1,0 +1,17 @@
+/nologo
+/c
+/O2
+/Fowork\patched_mobile_furniture_pack_objs\
+"work\vf2_fmod_thunks.cpp"
+"work\patched_mobile_furniture_pack_objs\vf2_debug_features.cpp"
+"work\patched_mobile_furniture_pack_objs\vf2_generation_locks.cpp"
+"work\patched_mobile_furniture_pack_objs\vf2_invisible_hammock.cpp"
+"work\patched_mobile_furniture_pack_objs\vf2_mobile_furniture_behaviors.cpp"
+"work\patched_mobile_furniture_pack_objs\vf2_island_events.cpp"
+"work\patched_mobile_furniture_pack_objs\vf2_special_upgrade_effects.cpp"
+"work\patched_mobile_furniture_pack_objs\vf2_store_scrollbar.cpp"
+"work\patched_mobile_furniture_pack_objs\vf2_spontaneous_behaviors.cpp"
+"work\patched_mobile_furniture_pack_objs\vf2_villager_body_frames.cpp"
+"work\patched_mobile_furniture_pack_objs\vf2_mobile_furniture_strings.c"
+"work\patched_mobile_furniture_pack_objs\vf2_mobile_string_table.c"
+"work\patched_mobile_furniture_pack_objs\vf2_mobile_renovations.cpp"

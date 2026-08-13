@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "label": "2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)",
+  "disclaimer": "Warning: These Bathroom 2 renovation images are AI-generated based on the Bathroom 1's mobile renovations art, but manually edited by me. (Sorry, I'm too lazy to hand-make the art myself. I'm busy with other stuff, but feel free to make some yourself and open an Issue on the Github if you want to change it- Lorsieab2)",
+  "default_enabled": false,
+  "native_route": "second-bathroom renovation remains disabled/hiatus; no native E6 route changed",
+  "source_art_directory": "patcher_assets/optional_patches/ai_generated_bathroom2_renovations/source_art/user_fixed",
+  "source_art": [
+    {"name": "bathroom2_ai_black.png", "sha256": "532B8F7F1DADD7AD191213CC07C947F80BBB7B0BD637135B54123A583BB7F22A"},
+    {"name": "bathroom2_ai_blue.png", "sha256": "74152865D962638F16EF14DE9C24002DDDB09F291D91B5D1AC4B8142E10A2738"},
+    {"name": "bathroom2_ai_beige.png", "sha256": "F55870587DA186E6A9D8FE0E97ECEF849E1914FF118DFF35235959FD92D47E5B"},
+    {"name": "bathroom2_ai_green.png", "sha256": "E0569311D433C63B38300DE79A097DC40CA8FCFD59284765D2D05AE8AFC40B94"},
+    {"name": "bathroom2_ai_pink.png", "sha256": "253B0B0B5EDDB1017B38596FEC7784B3C13157F42F99B22BFA084F5ADDF1555C"}
+  ],
+  "closed_curtains": [
+    {"name": "curtain_closed_black.png", "color": "black", "size": [98, 119], "sha256": "E80877392754DB8B57AAE54C9BC8DD0C2C7252E799D93348F8575A01AED065A0", "replacement_target": "Images/curtain_closed.png"},
+    {"name": "curtain_closed_blue.png", "color": "blue", "size": [98, 117], "sha256": "EFABD7591A7DC363D8C3AAE64E95C5F31A8011A8AEFC6B00FF6C87155AA4BFAB", "replacement_target": "Images/curtain_closed.png"},
+    {"name": "curtain_closed_brown.png", "color": "brown", "size": [98, 120], "sha256": "844CBDAB61656C97245D032B95610C5776D4D1D9537396C6AFA791CA041067BA", "replacement_target": "Images/curtain_closed.png"},
+    {"name": "curtain_closed_green.png", "color": "green", "size": [98, 121], "sha256": "A26423365285F23292B7C8A123C3B893439E1E76FEAC4E6DA532ACA5D4A9579E", "replacement_target": "Images/curtain_closed.png"},
+    {"name": "curtain_closed_pink.png", "color": "pink", "size": [98, 117], "sha256": "8E80651D4CA9D06E41B88994BED91E714347AE8C8ECE88101FBF6E16B875DE04", "replacement_target": "Images/curtain_closed.png"}
+  ],
+  "closed_curtain_selector": {
+    "stock_image_id": "0x21A",
+    "stock_path": "Images/curtain_closed.png",
+    "active_item_to_color": {
+      "0x14D": "black",
+      "0x14E": "blue",
+      "0x14F": "brown",
+      "0x150": "green",
+      "0x151": "pink"
+    },
+    "black_item": "0x14D",
+    "black_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_black.png",
+    "blue_item": "0x14E",
+    "blue_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_blue.png",
+    "beige_item": "0x14F",
+    "beige_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_brown.png",
+    "green_item": "0x150",
+    "green_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_green.png",
+    "pink_item": "0x151",
+    "pink_asset": "Images/AIGeneratedBathroom2/closed_curtains/curtain_closed_pink.png",
+    "selection_order": "first active Bathroom 2 style in black, blue, beige, green, pink order",
+    "fallback": "stock image/grid when no style is active or the selected custom descriptor cannot load"
+  },
+  "store_icons": [
+    {"name": "blackbathroom2.png", "color": "black", "size": [82, 83], "sha256": "553818DEF05BAF9FBBE9165A251D75A3FE57EDF36763139FB3335798B1453182"},
+    {"name": "bluebathroom2.png", "color": "blue", "size": [82, 80], "sha256": "CF688548A4C6A343480C8643F88DDA3B2AAE15C4401FAA21FAEAF38C8C401950"},
+    {"name": "brown bathroom2.png", "color": "beige", "size": [82, 84], "sha256": "7CCA2E10F087F82A5D42690E04D97034F8CAB5A8ECC8FD15586B58923F044BEC"},
+    {"name": "greenbathroon2.png", "color": "green", "size": [82, 85], "sha256": "50F1F46E03FB19330CFA2293972451D0B6E15BDD742CCFE2676A9A2A498028F3"},
+    {"name": "pinkbathroom2.png", "color": "pink", "size": [82, 79], "sha256": "3055C71E0281C96F4B54FD903C56E29D3407F897738B4D1DCFE1F3CB3B03B084"}
+  ],
+  "store_icon_route": "optional Bathroom2 House Renovations visual rows only; native E6 item IDs remain disabled/hiatus",
+  "normalization": {
+    "target_size": null,
+    "reference": "patcher_assets/optional_patches/ai_generated_bathroom2_renovations/reference/bathroom2_vanilla.png",
+    "reference_sha256": "EB635DB8B2553423C56AA3BAD780C943C77CD752987B35958685374922DEC056",
+    "algorithm": "byte-exact source copy; no crop, resize, re-encode, or generated_chroma intermediates"
+  },
+  "placement": {
+    "native_map_area": [13, 7],
+    "world_top_lefts": {"black": [762, 171], "blue": [866, 171], "beige": [866, 179], "green": [864, 179], "pink": [763, 170]},
+    "bounds_by_color": {"black": [545, 385], "blue": [539, 385], "beige": [441, 360], "green": [444, 360], "pink": [642, 385]},
+    "translation_only": true,
+    "immutable_source_art": true,
+    "placement_basis": "user-supplied 2048x2048 mockup; draw origin minus WorldView at scale 1.0 and opacity 100",
+    "reference_bounds": "patcher_assets/optional_patches/ai_generated_bathroom2_renovations/reference/bathroom2_bounds_reference.png",
+    "reference_bounds_sha256": "8FA3306621329BF08C54E4B6818075733AAEFF05F5E092D1FF76786E63C2A068",
+    "placement_mockup": "patcher_assets/optional_patches/ai_generated_bathroom2_renovations/reference/bathroom2_placement_mockup.png",
+    "placement_mockup_sha256": "62234A96000D1C3AEA9989D9398F0988168D74DD0FB13BAC30E42F2ED005522C"
+  }
+}

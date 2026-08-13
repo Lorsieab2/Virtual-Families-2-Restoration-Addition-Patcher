@@ -1,0 +1,12 @@
+Deco_MiniGraveyard.png
+size:256,256
+filter:Linear,Linear
+pma:true
+Arm
+bounds:2,2,11,30
+rotate:90
+Fog
+bounds:2,15,158,102
+offsets:6,1,171,108
+Mini Graveyard
+bounds:2,119,159,122

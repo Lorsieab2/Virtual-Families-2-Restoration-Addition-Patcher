@@ -1,0 +1,163 @@
+Microsoft (R) COFF/PE Dumper Version 14.51.36247.0
+Copyright (C) Microsoft Corporation.  All rights reserved.
+
+
+Dump of file C:\Users\Owner\Documents\Codex\2026-06-13\files-mentioned-by-the-user-virtual\work\patched_mobile_furniture_pack_objs\VillagerAI.obj
+
+File Type: COFF OBJECT
+
+COFF SYMBOL TABLE
+000 0105673C ABS    notype       Static       | @comp.id
+001 80000191 ABS    notype       Static       | @feat.00
+002 00000000 SECT1  notype       Static       | .drectve
+    Section length   62, #relocs    0, #linenums    0, checksum        0
+004 00000000 SECT2  notype       Static       | .debug$S
+    Section length 6EF0, #relocs   32, #linenums    0, checksum        0
+006 00000000 SECT3  notype       Static       | .debug$T
+    Section length   7C, #relocs    0, #linenums    0, checksum        0
+008 00000000 SECT4  notype       Static       | .text$mn
+    Section length   26, #relocs    0, #linenums    0, checksum BF89B839, selection    2 (pick any)
+00A 00000000 SECT5  notype       Static       | .debug$S
+    Section length  228, #relocs   13, #linenums    0, checksum        0, selection    5 (pick associative Section 0x4)
+00C 00000000 SECT6  notype       Static       | .text$mn
+    Section length   48, #relocs    3, #linenums    0, checksum 3AA747E1, selection    1 (pick no duplicates)
+00E 00000000 SECT7  notype       Static       | .debug$S
+    Section length  300, #relocs   15, #linenums    0, checksum        0, selection    5 (pick associative Section 0x6)
+010 00000000 SECT8  notype       Static       | .text$mn
+    Section length  104, #relocs   13, #linenums    0, checksum 7FD3B5E4, selection    1 (pick no duplicates)
+012 00000000 SECT9  notype       Static       | .debug$S
+    Section length  398, #relocs   2B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x8)
+014 00000000 SECTA  notype       Static       | .text$mn
+    Section length  98C, #relocs   42, #linenums    0, checksum 65B45BE2, selection    1 (pick no duplicates)
+016 00000000 SECTB  notype       Static       | .debug$S
+    Section length  7B8, #relocs   33, #linenums    0, checksum        0, selection    5 (pick associative Section 0xA)
+018 00000000 SECTC  notype       Static       | .text$mn
+    Section length   31, #relocs    3, #linenums    0, checksum C3E624E0, selection    1 (pick no duplicates)
+01A 00000000 SECTD  notype       Static       | .debug$S
+    Section length  178, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0xC)
+01C 00000000 SECTE  notype       Static       | .text$mn
+    Section length   9F, #relocs    4, #linenums    0, checksum F0874604, selection    1 (pick no duplicates)
+01E 00000000 SECTF  notype       Static       | .debug$S
+    Section length  298, #relocs   11, #linenums    0, checksum        0, selection    5 (pick associative Section 0xE)
+020 00000000 SECT10 notype       Static       | .text$mn
+    Section length   1B, #relocs    1, #linenums    0, checksum E8697414, selection    1 (pick no duplicates)
+022 00000000 SECT11 notype       Static       | .debug$S
+    Section length  14C, #relocs    9, #linenums    0, checksum        0, selection    5 (pick associative Section 0x10)
+024 00000000 SECT12 notype       Static       | .text$mn
+    Section length   E9, #relocs    D, #linenums    0, checksum F986A0CE, selection    1 (pick no duplicates)
+026 00000000 SECT13 notype       Static       | .debug$S
+    Section length  3EC, #relocs   1B, #linenums    0, checksum        0, selection    5 (pick associative Section 0x12)
+028 00000000 SECT14 notype       Static       | .text$mn
+    Section length   FE, #relocs    C, #linenums    0, checksum 2C901248, selection    1 (pick no duplicates)
+02A 00000000 SECT15 notype       Static       | .debug$S
+    Section length  380, #relocs    F, #linenums    0, checksum        0, selection    5 (pick associative Section 0x14)
+02C 00000000 SECT4  notype ()    External     | ??_H@YGXPAXIIP6EPAX0@Z@Z (void __stdcall `vector constructor iterator'(void *,unsigned int,unsigned int,void * (__thiscall*)(void *)))
+02D 00000000 UNDEF  notype ()    External     | ?Get@theStringManager@@SAPAV1@XZ (public: static class theStringManager * __cdecl theStringManager::Get(void))
+02E 00000000 UNDEF  notype ()    External     | ?GetString@theStringManager@@QAEPADW4StringId@@@Z (public: char * __thiscall theStringManager::GetString(enum StringId))
+02F 00000000 UNDEF  notype ()    External     | ?GetRandom@ldwGameState@@SAHH@Z (public: static int __cdecl ldwGameState::GetRandom(int))
+030 00000000 UNDEF  notype ()    External     | ?GetSecondsFromGameStart@ldwGameState@@QAEIXZ (public: unsigned int __thiscall ldwGameState::GetSecondsFromGameStart(void))
+031 00000000 UNDEF  notype ()    External     | ?CareerType@CVillagerSkills@@QAE?BW4ECareerType@@XZ (public: enum ECareerType const __thiscall CVillagerSkills::CareerType(void))
+032 00000000 UNDEF  notype ()    External     | ?AdvanceCareer@CVillagerSkills@@QAEXAAVCVillager@@_N1@Z (public: void __thiscall CVillagerSkills::AdvanceCareer(class CVillager &,bool,bool))
+033 00000000 UNDEF  notype ()    External     | _strncpy
+034 00000000 UNDEF  notype ()    External     | ?IncrementProgress@CAchievement@@QAEXW4EAchievement@@H@Z (public: void __thiscall CAchievement::IncrementProgress(enum EAchievement,int))
+035 00000000 UNDEF  notype ()    External     | ?ObjectExists@CContentMap@@QAE?B_NW4EObject@1@@Z (public: bool const __thiscall CContentMap::ObjectExists(enum CContentMap::EObject))
+036 00000000 UNDEF  notype ()    External     | ?FindLegalTerrain@CContentMap@@QAE?BUldwPoint@@U2@W4EDirection@@_N@Z (public: struct ldwPoint const __thiscall CContentMap::FindLegalTerrain(struct ldwPoint,enum EDirection,bool))
+037 00000000 UNDEF  notype ()    External     | ?HaveUpgrade@CInventoryManager@@QAE_NW4EInventoryItem@@@Z (public: bool __thiscall CInventoryManager::HaveUpgrade(enum EInventoryItem))
+038 00000000 UNDEF  notype ()    External     | ?AdvanceCurrentPlan@CVillagerPlans@@QAEXAAVCVillager@@@Z (public: void __thiscall CVillagerPlans::AdvanceCurrentPlan(class CVillager &))
+039 00000000 UNDEF  notype ()    External     | ?NextPlan@CVillagerPlans@@QAEXAAVCVillager@@_N@Z (public: void __thiscall CVillagerPlans::NextPlan(class CVillager &,bool))
+03A 00000000 UNDEF  notype ()    External     | ?ForgetPlans@CVillagerPlans@@QAEXAAVCVillager@@_N@Z (public: void __thiscall CVillagerPlans::ForgetPlans(class CVillager &,bool))
+03B 00000000 UNDEF  notype ()    External     | ?StartNewBehavior@CVillagerPlans@@QAEXAAVCVillager@@@Z (public: void __thiscall CVillagerPlans::StartNewBehavior(class CVillager &))
+03C 00000000 UNDEF  notype ()    External     | ?ProcessCurrentPlan@CVillagerPlans@@QAEXAAVCVillager@@@Z (public: void __thiscall CVillagerPlans::ProcessCurrentPlan(class CVillager &))
+03D 00000000 UNDEF  notype ()    External     | ?HasCurrentPlanExpired@CVillagerPlans@@QBE?B_NXZ (public: bool const __thiscall CVillagerPlans::HasCurrentPlanExpired(void)const )
+03E 00000000 SECT10 notype ()    External     | ?Reset@CVillagerAI@@QAEXAAVCVillager@@@Z (public: void __thiscall CVillagerAI::Reset(class CVillager &))
+03F 00000000 SECT14 notype ()    External     | ?Update@CVillagerAI@@QAEXAAVCVillager@@@Z (public: void __thiscall CVillagerAI::Update(class CVillager &))
+040 00000000 SECTE  notype ()    External     | ?RealtimeWorkDone@CVillagerAI@@QAEXAAVCVillager@@@Z (public: void __thiscall CVillagerAI::RealtimeWorkDone(class CVillager &))
+041 00000000 SECT6  notype ()    External     | ?AcquireTarget@CVillagerAI@@QAEXAAVCVillager@@HHW4ESpeed@@@Z (public: void __thiscall CVillagerAI::AcquireTarget(class CVillager &,int,int,enum ESpeed))
+042 00000000 SECT12 notype ()    External     | ?TakePosition@CVillagerAI@@QAEXAAVCVillager@@@Z (public: void __thiscall CVillagerAI::TakePosition(class CVillager &))
+043 00000000 SECT8  notype ()    External     | ?AdvanceState@CVillagerAI@@IAEXAAVCVillager@@H@Z (protected: void __thiscall CVillagerAI::AdvanceState(class CVillager &,int))
+044 00000000 SECTA  notype ()    External     | ?DecideWhatToDo@CVillagerAI@@AAEXAAVCVillager@@@Z (private: void __thiscall CVillagerAI::DecideWhatToDo(class CVillager &))
+045 00000000 SECTC  notype ()    External     | ?OKToUseKidBed@CVillagerAI@@AAE_NAAVCVillager@@@Z (private: bool __thiscall CVillagerAI::OKToUseKidBed(class CVillager &))
+046 00000000 UNDEF  notype ()    External     | ?IsSick@CVillagerState@@QAE_NXZ (public: bool __thiscall CVillagerState::IsSick(void))
+047 00000000 UNDEF  notype ()    External     | ?Queue@CTutorialTip@@QAEXW4StringId@@W4EGameScene@@_N@Z (public: void __thiscall CTutorialTip::Queue(enum StringId,enum EGameScene,bool))
+048 00000000 UNDEF  notype ()    External     | ?Contains@CLikeList@@QBE?B_NW4ELike@@@Z (public: bool const __thiscall CLikeList::Contains(enum ELike)const )
+049 00000000 UNDEF  notype ()    External     | ?Contains@CDislikeList@@QBE?B_NW4ELike@@@Z (public: bool const __thiscall CDislikeList::Contains(enum ELike)const )
+04A 00000000 UNDEF  notype ()    External     | ?NewBehavior@CVillager@@QAEXW4EBehavior@@ABUSBehaviorData@@@Z (public: void __thiscall CVillager::NewBehavior(enum EBehavior,struct SBehaviorData const &))
+04B 00000000 UNDEF  notype ()    External     | ?NormVel@CVillager@@QAEXH@Z (public: void __thiscall CVillager::NormVel(int))
+04C 00000000 UNDEF  notype ()    External     | ?Stop@CVillager@@QAEXXZ (public: void __thiscall CVillager::Stop(void))
+04D 00000000 UNDEF  notype ()    External     | ?SetFeetPos@CVillager@@QAEXUldwPoint@@@Z (public: void __thiscall CVillager::SetFeetPos(struct ldwPoint))
+04E 00000000 UNDEF  notype ()    External     | ?FeetPos@CVillager@@QBE?BUldwPoint@@XZ (public: struct ldwPoint const __thiscall CVillager::FeetPos(void)const )
+04F 00000000 UNDEF  notype ()    External     | ?SetCarrying@CVillager@@QAEXW4ECarrying@@@Z (public: void __thiscall CVillager::SetCarrying(enum ECarrying))
+050 00000000 UNDEF  notype ()    External     | ?MothersCaringForBabies@CVillagerManager@@QAE?BHXZ (public: int const __thiscall CVillagerManager::MothersCaringForBabies(void))
+051 00000000 UNDEF  notype ()    External     | ?GetVillagerDoing@CVillagerManager@@QAEPAVCVillager@@W4EBehavior@@@Z (public: class CVillager * __thiscall CVillagerManager::GetVillagerDoing(enum EBehavior))
+052 00000000 UNDEF  notype ()    External     | ?IsRoomEmpty@CVillagerManager@@QAE_NW4ESemaphore@@@Z (public: bool __thiscall CVillagerManager::IsRoomEmpty(enum ESemaphore))
+053 00000000 UNDEF  notype ()    External     | ?AreChildrenPresent@CVillagerManager@@QAE_N_N@Z (public: bool __thiscall CVillagerManager::AreChildrenPresent(bool))
+054 00000000 UNDEF  notype ()    External     | ?Get@theGameState@@SAPAV1@XZ (public: static class theGameState * __cdecl theGameState::Get(void))
+055 00000000 UNDEF  notype ()    External     | ?AIIsDayTime@CNight@@QAE_NXZ (public: bool __thiscall CNight::AIIsDayTime(void))
+056 00000000 UNDEF  notype ()    External     | ?AIIsMidday@CNight@@QAE_NXZ (public: bool __thiscall CNight::AIIsMidday(void))
+057 00000000 UNDEF  notype ()    External     | ?AIIsEvening@CNight@@QAE_NXZ (public: bool __thiscall CNight::AIIsEvening(void))
+058 00000000 UNDEF  notype ()    External     | ?AIIsMorning@CNight@@QAE_NXZ (public: bool __thiscall CNight::AIIsMorning(void))
+059 00000000 UNDEF  notype ()    External     | ?GetTimeOfDay@CNight@@QAEMXZ (public: float __thiscall CNight::GetTimeOfDay(void))
+05A 00000000 UNDEF  notype ()    External     | @__security_check_cookie@4
+05B 000000D0 SECT8  notype       Static       | $LN22
+05C 0000001E SECT8  notype       Label        | $LN5
+05D 00000029 SECT8  notype       Label        | $LN6
+05E 00000034 SECT8  notype       Label        | $LN7
+05F 0000003F SECT8  notype       Label        | $LN8
+060 0000004A SECT8  notype       Label        | $LN9
+061 00000055 SECT8  notype       Label        | $LN10
+062 00000060 SECT8  notype       Label        | $LN11
+063 0000006B SECT8  notype       Label        | $LN12
+064 00000076 SECT8  notype       Label        | $LN13
+065 00000081 SECT8  notype       Label        | $LN14
+066 0000008C SECT8  notype       Label        | $LN15
+067 00000097 SECT8  notype       Label        | $LN16
+068 000000B7 SECT8  notype       Label        | $LN17
+069 00000000 SECT16 notype       Static       | .bss
+    Section length    4, #relocs    0, #linenums    0, checksum        0
+06B 00000000 SECT16 notype       Static       | ?cLdwNoColor@@3UldwColor@@B (struct ldwColor const cLdwNoColor)
+06C 00000000 SECT17 notype       Static       | .data
+    Section length   50, #relocs    0, #linenums    0, checksum 43CB382E
+06E 00000000 SECT17 notype       Static       | ?cLdwBlack@@3UldwColor@@B (struct ldwColor const cLdwBlack)
+06F 00000004 SECT17 notype       Static       | ?cLdwWhite@@3UldwColor@@B (struct ldwColor const cLdwWhite)
+070 00000008 SECT17 notype       Static       | ?cLdwLightGrey@@3UldwColor@@B (struct ldwColor const cLdwLightGrey)
+071 0000000C SECT17 notype       Static       | ?cLdwDarkGrey@@3UldwColor@@B (struct ldwColor const cLdwDarkGrey)
+072 00000010 SECT17 notype       Static       | ?cLdwRed@@3UldwColor@@B (struct ldwColor const cLdwRed)
+073 00000014 SECT17 notype       Static       | ?cLdwGreen@@3UldwColor@@B (struct ldwColor const cLdwGreen)
+074 00000018 SECT17 notype       Static       | ?cLdwBlue@@3UldwColor@@B (struct ldwColor const cLdwBlue)
+075 00000000 UNDEF  notype       External     | ?Weather@@3VCWeather@@A (class CWeather Weather)
+076 0000001C SECT17 notype       Static       | ?UI_ButtonUpColor@@3UldwColor@@B (struct ldwColor const UI_ButtonUpColor)
+077 00000020 SECT17 notype       Static       | ?UI_ButtonOverColor@@3UldwColor@@B (struct ldwColor const UI_ButtonOverColor)
+078 00000024 SECT17 notype       Static       | ?UI_ButtonDownColor@@3UldwColor@@B (struct ldwColor const UI_ButtonDownColor)
+079 00000028 SECT17 notype       Static       | ?UI_LabelColor@@3UldwColor@@B (struct ldwColor const UI_LabelColor)
+07A 0000002C SECT17 notype       Static       | ?UI_DiplomaColor@@3UldwColor@@B (struct ldwColor const UI_DiplomaColor)
+07B 00000030 SECT17 notype       Static       | ?UI_HandCursorHotSpot@@3UldwPoint@@B (struct ldwPoint const UI_HandCursorHotSpot)
+07C 00000000 UNDEF  notype       External     | ?Achievement@@3VCAchievement@@A (class CAchievement Achievement)
+07D 00000038 SECT17 notype       Static       | ?ContentMap_c_sSnapToCenter@@3UldwPoint@@B (struct ldwPoint const ContentMap_c_sSnapToCenter)
+07E 00000000 UNDEF  notype       External     | ?ContentMap@@3VCContentMap@@A (class CContentMap ContentMap)
+07F 00000040 SECT17 notype       Static       | ?Environment_c_sAlchemyLabPos@@3UldwPoint@@B (struct ldwPoint const Environment_c_sAlchemyLabPos)
+080 00000048 SECT17 notype       Static       | ?Environment_c_sScienceLabPos@@3UldwPoint@@B (struct ldwPoint const Environment_c_sScienceLabPos)
+081 00000000 UNDEF  notype       External     | ?Environment@@3VCEnvironment@@A (class CEnvironment Environment)
+082 00000000 UNDEF  notype       External     | ?InventoryManager@@3VCInventoryManager@@A (class CInventoryManager InventoryManager)
+083 00000000 UNDEF  notype       External     | ?TutorialTip@@3VCTutorialTip@@A (class CTutorialTip TutorialTip)
+084 00000000 UNDEF  notype       External     | ?VillagerManager@@3VCVillagerManager@@A (class CVillagerManager VillagerManager)
+085 00000000 UNDEF  notype       External     | ?Night@@3VCNight@@A (class CNight Night)
+086 00000000 UNDEF  notype       External     | ___security_cookie
+087 00000000 UNDEF  notype       External     | __fltused
+088 00000000 SECT18 notype       Static       | .rdata
+    Section length    4, #relocs    0, #linenums    0, checksum E51EDFBE, selection    2 (pick any)
+08A 00000000 SECT18 notype       External     | __real@41b00000
+08B 00000000 SECT19 notype       Static       | .chks64
+    Section length   C8, #relocs    0, #linenums    0, checksum        0
+
+String Table Size = 0xB67 bytes
+
+  Summary
+
+           4 .bss
+          C8 .chks64
+          50 .data
+        8C30 .debug$S
+          7C .debug$T
+          62 .drectve
+           4 .rdata
+         DD0 .text$mn

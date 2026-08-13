@@ -1,24 +1,86 @@
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.vf2_patch_backups/
-patch_dry_run_log.json
-patch_error_log.json
-patch_log.json
-restore_log.json
-payload/
-dist/
-outputs/
+# Generated game packages belong in GitHub Releases, not Git history.
+/outputs/
+/release-artifacts/
+/generated/
+/build/
+/dist/
+/cache/
+/.env
+/node_modules/
+/.venv/
+
+# Build logs, link maps, and locally generated binary/object trees.
+/*.log
+/work/*.log
+/work/desktop_obj_files/
+/work/patched_mobile_furniture_pack_objs/
+/work/generated_import_libs/
+/work/pydeps/
+/work/vf2_apk_extract/
+/work/vf3_apk/
+/work/b19_overlay/
+
+# `work` is primarily a local reverse-engineering/build cache. Keep only its
+# editable source, manifests, tables, and notes under version control.
+/work/**
+!/work/*.py
+!/work/*.ps1
+!/work/*.bat
+!/work/*.c
+!/work/*.cpp
+!/work/*.h
+!/work/*.hpp
+!/work/*.rsp
+!/work/*.json
+!/work/*.csv
+!/work/*.txt
+!/work/*.md
+!/work/*.idc
+!/work/*.js
+
+# Curated, user-supplied Holiday Ornament source PNGs and the reproducible
+# canonical runtime layer are project inputs, not extracted bulk assets.
+!/work/assets/
+!/work/assets/holiday_collectibles/
+!/work/assets/holiday_collectibles/*.png
+!/work/assets/holiday_collectibles/collection/
+!/work/assets/holiday_collectibles/collection/*.png
+!/work/assets/mobile_renovations/
+!/work/assets/mobile_renovations/*.png
+!/work/assets/mobile_renovations/*.md
+# Game payloads and compiled artifacts are release assets or local inputs.
+*.apk
+*.xapk
+*.obb
+*.pvr
 *.zip
 *.7z
-*.rar
 *.exe
 *.dll
-*.dat
-*.fmap
-*.ogg
-*.wav
-*.png
-*.jpg
-*.bmp
+*.lib
+*.obj
+*.pdb
+*.map
+*.swf
+*.xcf
+
+# Preserve editable project source/configuration only from historical folders.
+/Unneeded crap/**
+!/Unneeded crap/**/*.md
+!/Unneeded crap/**/*.txt
+!/Unneeded crap/**/*.json
+!/Unneeded crap/**/*.csv
+!/Unneeded crap/**/*.ps1
+!/Unneeded crap/**/*.py
+!/Unneeded crap/**/*.c
+!/Unneeded crap/**/*.cpp
+!/Unneeded crap/**/*.cs
+!/Unneeded crap/**/*.h
+!/Unneeded crap/**/*.hpp
+!/Unneeded crap/**/*.bat
+!/Unneeded crap/**/*.rsp
+
+# Never commit local Git/Codex state.
+/.git/
+/.codex/
+/.agents/

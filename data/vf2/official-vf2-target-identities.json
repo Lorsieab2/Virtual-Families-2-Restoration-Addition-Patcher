@@ -1,0 +1,139 @@
+{
+    "target_files":  [
+                         {
+                             "note":  "Verified vanilla VF2 PC executable by accepted PE layout reused from a bundled patcher manifest.",
+                             "path":  "Virtual Families 2.exe",
+                             "pe_structures":  [
+                                                   {
+                                                       "address_of_entry_point":  "0xd5ee2",
+                                                       "characteristics":  "0x102",
+                                                       "file_alignment":  "0x200",
+                                                       "format":  "pe32-section-raw-v1",
+                                                       "image_base":  "0x400000",
+                                                       "machine":  "0x14c",
+                                                       "number_of_sections":  6,
+                                                       "optional_header_size":  224,
+                                                       "optional_magic":  "0x10b",
+                                                       "pe_offset":  "0x130",
+                                                       "section_alignment":  "0x1000",
+                                                       "sections":  [
+                                                                        {
+                                                                            "characteristics":  "0x60000020",
+                                                                            "name":  ".text",
+                                                                            "raw_data_pointer":  "0x400",
+                                                                            "raw_data_size":  "0x124200",
+                                                                            "sha256":  "754e1b8ff487819988bf7c2b885246b41a3047d8abcae85dc3fac449735573e9",
+                                                                            "virtual_address":  "0x1000",
+                                                                            "virtual_size":  "0x1241b4"
+                                                                        },
+                                                                        {
+                                                                            "characteristics":  "0x40000040",
+                                                                            "name":  ".rdata",
+                                                                            "raw_data_pointer":  "0x124600",
+                                                                            "raw_data_size":  "0x55800",
+                                                                            "sha256":  "cc0e79854fdec5aa4b0e0acfa3f0d4db7da644753a6d2e48991eb9233b79fee4",
+                                                                            "virtual_address":  "0x126000",
+                                                                            "virtual_size":  "0x55642"
+                                                                        },
+                                                                        {
+                                                                            "characteristics":  "0xc0000040",
+                                                                            "name":  ".data",
+                                                                            "raw_data_pointer":  "0x179e00",
+                                                                            "raw_data_size":  "0x2b800",
+                                                                            "sha256":  "1b6d135b2b92d2773a881603d331af6a2d6282a97adcc472df65bc82aa04434a",
+                                                                            "virtual_address":  "0x17c000",
+                                                                            "virtual_size":  "0x5f4b10"
+                                                                        },
+                                                                        {
+                                                                            "characteristics":  "0xd0000040",
+                                                                            "name":  ".shr",
+                                                                            "raw_data_pointer":  "0x1a5600",
+                                                                            "raw_data_size":  "0x200",
+                                                                            "sha256":  "076a27c79e5ace2a3d47f9dd2e83e4ff6ea8872b3c2218f66c92b89b55f36560",
+                                                                            "virtual_address":  "0x771000",
+                                                                            "virtual_size":  "0x4"
+                                                                        },
+                                                                        {
+                                                                            "characteristics":  "0x40000040",
+                                                                            "name":  ".rsrc",
+                                                                            "raw_data_pointer":  "0x1a5800",
+                                                                            "raw_data_size":  "0x16400",
+                                                                            "sha256":  "475d09e8cc7993ee97ccd2b37366f27d7e89ebce7542b095a9c720cb333275a9",
+                                                                            "virtual_address":  "0x772000",
+                                                                            "virtual_size":  "0x16370"
+                                                                        },
+                                                                        {
+                                                                            "characteristics":  "0x42000040",
+                                                                            "name":  ".reloc",
+                                                                            "raw_data_pointer":  "0x1bbc00",
+                                                                            "raw_data_size":  "0xf800",
+                                                                            "sha256":  "6d8a74b106f81eefa2df83fa06b2caba1e13850bb15241278b5b60273ed74150",
+                                                                            "virtual_address":  "0x789000",
+                                                                            "virtual_size":  "0xf774"
+                                                                        }
+                                                                    ],
+                                                       "size_of_image":  "0x799000",
+                                                       "subsystem":  "0x2",
+                                                       "time_date_stamp":  "0x5b100d0e"
+                                                   },
+                                                   {
+                                                       "address_of_entry_point":  "0xc80dc",
+                                                       "characteristics":  "0x103",
+                                                       "file_alignment":  "0x1000",
+                                                       "format":  "pe32-section-raw-v1",
+                                                       "image_base":  "0x400000",
+                                                       "machine":  "0x14c",
+                                                       "number_of_sections":  5,
+                                                       "optional_header_size":  224,
+                                                       "optional_magic":  "0x10b",
+                                                       "pe_offset":  "0x100",
+                                                       "section_alignment":  "0x1000",
+                                                       "sections":  [
+                                                                        {
+                                                                            "characteristics":  "0x60000020",
+                                                                            "name":  ".text",
+                                                                            "raw_data_pointer":  "0x1000",
+                                                                            "raw_data_size":  "0xdd000",
+                                                                            "virtual_address":  "0x1000",
+                                                                            "virtual_size":  "0xdce49"
+                                                                        },
+                                                                        {
+                                                                            "characteristics":  "0x40000040",
+                                                                            "name":  ".rdata",
+                                                                            "raw_data_pointer":  "0xde000",
+                                                                            "raw_data_size":  "0x4f000",
+                                                                            "virtual_address":  "0xde000",
+                                                                            "virtual_size":  "0x4e5b6"
+                                                                        },
+                                                                        {
+                                                                            "characteristics":  "0xc0000040",
+                                                                            "name":  ".data",
+                                                                            "raw_data_pointer":  "0x12d000",
+                                                                            "raw_data_size":  "0x2c000",
+                                                                            "virtual_address":  "0x12d000",
+                                                                            "virtual_size":  "0x5f5b24"
+                                                                        },
+                                                                        {
+                                                                            "characteristics":  "0xd0000040",
+                                                                            "name":  ".shr",
+                                                                            "raw_data_pointer":  "0x159000",
+                                                                            "raw_data_size":  "0x1000",
+                                                                            "virtual_address":  "0x723000",
+                                                                            "virtual_size":  "0x4"
+                                                                        },
+                                                                        {
+                                                                            "characteristics":  "0x40000040",
+                                                                            "name":  ".rsrc",
+                                                                            "raw_data_pointer":  "0x15a000",
+                                                                            "raw_data_size":  "0x17000",
+                                                                            "virtual_address":  "0x724000",
+                                                                            "virtual_size":  "0x16244"
+                                                                        }
+                                                                    ],
+                                                       "size_of_image":  "0x73b000",
+                                                       "subsystem":  "0x2"
+                                                   }
+                                               ]
+                         }
+                     ]
+}

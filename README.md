@@ -1,49 +1,50 @@
 # Virtual Families 2 Restoration/Addition Patcher
 
-Offline patcher source for Virtual Families 2 restoration/addition builds.
+Offline patcher and restoration/addition project for the official Windows version of *Virtual Families 2*.
 
-Created with Codex AI in collaboration with Lorsieab2.
+Created with Codex AI in collaboration with Lorsieab2. This is a passion project dedicated to improving the *Virtual Families 2* experience. No copyright infringement is intended; please support the original game creators. :)
 
-## What It Does
+## Download
 
-- Verifies a user-selected official Virtual Families 2 PC install before changing anything.
-- Applies records from `manifest.json` only when their toggleable settings are enabled.
-- Creates a separate clearly labeled modded game folder by default.
-- Creates backups and patch logs before writing changed files.
-- Provides a restore option for patcher-created backups.
-- Avoids runtime injection, process memory editing, packers, obfuscation, and admin requirements.
+Download the newest patcher ZIP from the [official releases page](https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases). Release ZIPs and compiled game payloads are intentionally not committed to the source tree.
 
-## Dry Run, ELI5
+Vanilla *Virtual Families 2* saves are compatible with the modded version. The patcher creates a separate modded game folder by default and does not overwrite the selected vanilla installation.
 
-Dry Run validates that the patcher's working. It checks that the selected VF2 folder looks official, checks that the EXE and payload files match the manifest, and then stops.
+## What the patcher does
 
-It does not actually change or write files.
+- Validates a user-selected official VF2 installation before changing files.
+- Applies only the patches selected in the manifest-driven GUI.
+- Creates or refreshes a clearly named modded copy of the game.
+- Supports dry-run validation, backups, restore, and machine-readable logs.
+- Uses offline file patching; it does not inject into a running process.
 
-## Release Artifact
+After extracting a release, run `Launch_GUI.bat`. The exported bundle also contains `How to Use.txt` with player-facing instructions.
+Release bundles include the instruction-only `vf2_crash_capture.py` helper and
+an unfilled exact-build manifest template for optional crash QA. Neither the
+patcher nor that helper changes the registry or launches VF2; any generated WER
+instructions must be reviewed and run manually by the player.
 
-The full B105 patcher ZIP is intentionally not committed to source because it contains the patch payload. It should be attached to a GitHub Release:
+## Source layout
 
-`Virtual-Families-2-Restoration-Addition-Patcher-B105.zip`
-
-## Source Layout
-
-- `src/offline_vf2_patcher.py` - CLI patcher, validation, backups, apply/restore logic.
-- `src/offline_vf2_patcher_gui.py` - Tkinter GUI wrapper.
-- `src/export_offline_patch_bundle.py` - bundle/manifest/payload exporter.
-- `src/assets/patcher_icon.png` and `src/assets/patcher_icon.ico` - GUI title picture and shortcut/window icon assets.
-- `tests/` - unit tests for the patcher, GUI helpers, and exporter.
+- `work/offline_vf2_patcher.py` - command-line patcher and validation/apply/restore engine.
+- `work/offline_vf2_patcher_gui.py` - Tkinter GUI.
+- `work/export_offline_patch_bundle.py` - self-contained release-bundle exporter.
+- `work/vf2_crash_capture.py` - exact-build dump/log validation and IDA handoff helper.
+- `work/patch_mobile_furniture_pack.py` - native VF2 build/patch pipeline.
+- `work/test_*.py` - source, binary-contract, exporter, runner, and GUI tests.
+- `work/assets/holiday_collectibles/` - curated Holiday Ornament source art and reproducible runtime assets.
 - `docs/offline-patcher.md` - technical patcher documentation.
-- `Transparency Log.txt` - transparency notes for users.
-- `How to Use.txt` - player-facing instructions.
+- `docs/Transparency Log.txt` - implementation and verification disclosures.
+- `docs/REQUEST_LEDGER.md` - durable shipped/partial/unverified/deferred request
+  inventory and release-completeness gate.
+- `docs/discoveries.md` and `docs/TODO.md` - reverse-engineering evidence and remaining manual checks.
 
-## Run Tests
+## Development
+
+The project is designed to be self-contained. Do not add dependencies on Downloads, Desktop, OneDrive, or another private repository. Build outputs, extracted payloads, executables, caches, and archives stay out of Git and are distributed only through the latest GitHub Release.
+
+Run the Python test modules from the repository root with a compatible Python 3 interpreter, for example:
 
 ```powershell
-python -m unittest discover -s tests
+python -m unittest work.test_offline_vf2_patcher work.test_export_offline_patch_bundle work.test_offline_vf2_patcher_gui work.test_patch_mobile_furniture_pack
 ```
-
-## Use The Patcher
-
-For normal users, download the release ZIP, unzip it, run `Launch_GUI.bat`, select the vanilla VF2 install folder, optionally run `Dry Run (Validate Only)`, then click `Enable/Disable Patches`. Prebuilt `Launch GUI.lnk` shortcuts are not shipped because Windows shortcuts can point at stale paths after ZIP extraction.
-
-Have fun! -Lorsieab2 :)
