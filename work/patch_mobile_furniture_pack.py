@@ -18608,6 +18608,76 @@ def patch_vf3_style_child_adoption_chooser(manifest):
     }
 
 
+def patch_ldwscene_setactive_null_guard(manifest):
+    """Guard ldwScene::SetActive against an unbound (null) active-flag pointer.
+
+    Confirmed root cause of a real crash (Windows crash dump + independent
+    disassembly, not a guess): ldwScene::SetActive(bool) unconditionally
+    writes its bool argument through this->field_4 -- an externally-bound
+    flag pointer -- before doing anything else. That field_4 binding is
+    never set up for at least one scene slot reachable through the native
+    scene-activation dispatch used by theGame's scene-management helpers
+    (a 16-case switch keyed by a queued scene id; case 2 is the affected
+    slot). Calling SetActive on that slot dereferences a null field_4 and
+    crashes with an access violation. Observed in practice the moment a
+    family reaches its native six-child capacity, which is exactly when
+    that scene id gets queued.
+
+    This patches the one shared setter all 59+ call sites funnel through,
+    rather than each call site individually: for every scene whose
+    binding *is* set up (effectively all of them except this one slot),
+    behavior is byte-identical to stock. Only the crashing null case now
+    returns instead of dereferencing a null pointer.
+    """
+    obj = CoffObject(PATCHED / "ldwScene.obj")
+    sym = obj.symbol("?SetActive@ldwScene@@QAEX_N@Z")
+    sec = obj.section(sym.section)
+    hook_offset = sym.value + 0xA
+    raw = sec.raw_ptr + hook_offset
+    expected = bytes.fromhex("8B4604 8818".replace(" ", ""))
+    if bytes(obj.buf[raw:raw + len(expected)]) != expected:
+        raise RuntimeError("ldwScene::SetActive field_4 write site drifted")
+    epilogue_offset = sym.value + 0x4F
+    epilogue_raw = sec.raw_ptr + epilogue_offset
+    expected_epilogue = bytes.fromhex("5E5B5DC20400")
+    if bytes(obj.buf[epilogue_raw:epilogue_raw + len(expected_epilogue)]) != expected_epilogue:
+        raise RuntimeError("ldwScene::SetActive epilogue drifted")
+
+    cave = sec.raw_size
+    resume_offset = sym.value + 0xF
+    payload = bytearray(
+        b"\x8B\x46\x04"            # mov eax, [esi+4]     (identical to replaced code)
+        b"\x85\xC0"                # test eax, eax        (new: is the binding set up?)
+        b"\x74\x07"                # jz early_return       (new: skip the write if not)
+        b"\x88\x18"                # mov [eax], bl        (identical to replaced code)
+        b"\xE9\0\0\0\0"            # jmp resume            (continue the original function body)
+        b"\x5E\x5B\x5D\xC2\x04\x00"  # early_return: pop esi; pop ebx; pop ebp; ret 4
+                                      # (exact copy of this function's own epilogue, so the
+                                      # early-return path unwinds the stack identically)
+    )
+    if len(payload) != 20:
+        raise AssertionError("ldwScene::SetActive null-guard trampoline size drifted")
+    struct.pack_into("<i", payload, 10, (resume_offset) - (cave + 14))
+    obj.insert_section_bytes(sym.section, cave, bytes(payload))
+
+    sym = obj.symbol("?SetActive@ldwScene@@QAEX_N@Z")
+    sec = obj.section(sym.section)
+    hook_offset = sym.value + 0xA
+    raw = sec.raw_ptr + hook_offset
+    obj.buf[raw:raw + 5] = b"\xE9" + struct.pack("<i", cave - (hook_offset + 5))
+    obj.write(PATCHED / "ldwScene.obj")
+
+    manifest["ldwSceneSetActiveNullGuard"] = {
+        "status": "installed",
+        "function": "?SetActive@ldwScene@@QAEX_N@Z",
+        "hook_offset": hex(0xA),
+        "trampoline": hex(cave),
+        "trampoline_size": len(payload),
+        "reason": "field_4 (bound active-flag pointer) is unset for at least one native scene slot reachable once a family reaches six children; every other caller is unaffected",
+        "stock_off_state": "byte-identical to stock for every properly-bound scene",
+    }
+
+
 def patch_same_sex_marriage(manifest):
     """Install the post-spawn candidate flip and native private-time guards."""
     dating_path = PATCHED / "DatingScene.obj"
@@ -29576,6 +29646,11 @@ def main():
     # install the former cheat-only Reject reroll route; native Accept,
     # Reject, and close behavior must remain untouched.
     patch_vf3_style_child_adoption_chooser(manifest)
+    # Crash fix: ldwScene::SetActive dereferences a null field_4 for one
+    # native scene slot once a family reaches six children (see the
+    # function docstring for the confirmed root cause). Always installed;
+    # it is a byte-identical no-op for every properly-bound scene.
+    patch_ldwscene_setactive_null_guard(manifest)
     # Do not alter CDatingScene::HandleMessage. The proposal scene must keep
     # the base-game candidate, Accept, Reject, close, and state-write bytes.
     manifest["MarriageCandidateReroll"] = {
