@@ -1774,3 +1774,18 @@ descriptor with a dedicated semantic sock-pile icon.
   removals, and four authenticated sound routes.
 - Static/package verification only; live purchase, curtain, save/load, audio,
   furniture behavior, and player regression QA remain player gates.
+
+## B161 - Independent Anti-Spam and Rockhound repurchase route
+
+- Anti-Spam Software (`0x33`) and Rockhound Certificate (`0x10A`) remain
+  repurchaseable in every patched executable instead of inheriting the native
+  one-purchase blocker when a saved effect flag has already been cleared.
+- Active rows use the existing zero-price removal hook; inactive rows fall
+  through to the native purchase price and purchase effect. Other Cheat
+  Upgrades rows and their removal hooks remain gated by `cheat_upgrades`.
+- Source and generated-helper regression coverage was updated. Static checks
+  still do not establish live purchase, effect, save/reload, or player proof.
+- B161 package evidence: 19 linked executable variants, 6,912 asset patches,
+  10 post-asset patches, and 6,830 payload files. The normalized ZIP passes
+  the fail-closed verifier; archive SHA-256 is
+  `649EA487CBAC8CD270B0009071A9F527968A660274A238EBC8B8817A2D32B70`.

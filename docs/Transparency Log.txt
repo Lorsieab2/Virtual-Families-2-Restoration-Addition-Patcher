@@ -374,7 +374,8 @@ B150 transparency addendum
 - behavior_patches owns autonomous behavior additions, every behavior
   variation, direct sink candidate clones, snow/shower routing, and praise
   cache changes. cheat_upgrades owns cheat rows, price modes/reset, the
-  malfunction trigger, and reversible Maid/Gardener/Rockhound/Anti-Spam.
+  malfunction trigger, and reversible Maid/Gardener. Anti-Spam/Rockhound
+  retain an independent repurchase/removal route in every patched executable.
   holiday_ornaments_collection owns the six-page collection. island_events
   owns Water Pressure Surge registration. mobile_purchases owns Brokerage text.
 - The B150 Holiday overlay repairs the Collections Chest calling convention:
@@ -444,9 +445,11 @@ B150 transparency addendum
   only when Island Events is enabled; stock standalone random north failures
   remain independently possible with the native renovation gate.
 - With Cheat Upgrades enabled, rebuying Maid/Gardener clears the service timer,
-  deactivates the worker, and repairs selected-villager state. Rebuying
-  Rockhound Certificate/Anti-Spam removes that owned upgrade/flag.
-  Cheat-disabled executables keep stock already-purchased behavior.
+  deactivates the worker, and repairs selected-villager state. Anti-Spam
+  Software and Rockhound Certificate remain repurchaseable even when a saved
+  effect flag is already cleared; buying an active row removes that owned
+  upgrade/flag at zero price. Other cheat-disabled executables keep stock
+  already-purchased behavior.
 - Brokerage Account now tells players its Interest Rate can reach 11%.
 - The B150 GUI, generated README, manifest, and generated transparency log state
   exactly: "Vanilla Virtual Families 2 saves are compatible with the modded

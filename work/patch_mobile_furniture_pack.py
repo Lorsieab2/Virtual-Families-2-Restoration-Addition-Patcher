@@ -312,7 +312,7 @@ MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL = "_gVF2AllowMarriageCandidateReroll"
 # These are native Flea Market rows, not added Special Upgrades rows.  Keep
 # their reversible behavior in one explicit set so availability, price, and
 # removal cannot drift apart again.
-CHEAT_REVERSIBLE_STOCK_UPGRADE_IDS = (0x33, 0x10A)
+REVERSIBLE_STOCK_UPGRADE_IDS = (0x33, 0x10A)
 DIVORCE_SPOUSE_ITEM_ID = 0x14B
 DIVORCE_SPOUSE_WARNING = "WARNING: Permanently removes spouse from the Family Tree and House!"
 DIVORCE_SPOUSE_ICON_FILE = "cheat_marriage_email.png"
@@ -11265,17 +11265,33 @@ static const int kVF2AIBathroom2StoreIconImageBase = {ai_bathroom2_store_icon_im
 static const int kVF2MobileRenovationIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
 static const int kVF2FleaMarketCategory = 0x0F;
 static const int kVF2FleaMarketGoodiesCount = 0x24;
-static const int kVF2AntiSpamSoftwareItem = {CHEAT_REVERSIBLE_STOCK_UPGRADE_IDS[0]};
-static const int kVF2RockhoundCertificateItem = {CHEAT_REVERSIBLE_STOCK_UPGRADE_IDS[1]};
-static bool VF2IsCheatReversibleStockUpgrade(int itemId) {{
+static const int kVF2AntiSpamSoftwareItem = {REVERSIBLE_STOCK_UPGRADE_IDS[0]};
+static const int kVF2RockhoundCertificateItem = {REVERSIBLE_STOCK_UPGRADE_IDS[1]};
+static bool VF2IsReversibleStockUpgrade(int itemId) {{
     return itemId == kVF2AntiSpamSoftwareItem ||
         itemId == kVF2RockhoundCertificateItem;
+}}
+static bool VF2IsReversibleStockUpgradeActive(int itemId) {{
+    unsigned char* gameState = (unsigned char*)theGameState::Get();
+    if (itemId == kVF2AntiSpamSoftwareItem) {{
+        return gameState && gameState[0x6C] != 0;
+    }}
+    if (itemId == kVF2RockhoundCertificateItem) {{
+        return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
+    }}
+    return false;
 }}
 static int gVF2SyntheticOutfitToolInHand = 0;
 static int gVF2SyntheticOutfitToolInUse = 0;
 static int gVF2LastSyntheticOutfitByGender[2] = {{0, 0}};
 
 static bool VF2B150UpgradeIsActive(int itemId) {{
+    // These two native Flea Market rows remain reversible even when the
+    // optional Cheat Upgrades overlay is disabled.  Their persisted effect
+    // state is distinct from the native one-purchase availability state.
+    if (VF2IsReversibleStockUpgrade(itemId)) {{
+        return VF2IsReversibleStockUpgradeActive(itemId);
+    }}
     // Bathroom 2 is visual-only House Renovations state. Its active byte
     // must remain visible to the shared removal hook even when Cheat
     // Upgrades is disabled; no native E6 behavior is involved.
@@ -11298,10 +11314,6 @@ static bool VF2B150UpgradeIsActive(int itemId) {{
     if (VF2IsMobileRenovationStyle(itemId)) {{
         return VF2MobileRenovationIsActive(itemId);
     }}
-    if (VF2IsCheatReversibleStockUpgrade(itemId)) {{
-        if (itemId == kVF2AntiSpamSoftwareItem) return gameState && gameState[0x6C] != 0;
-        return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
-    }}
     if (itemId >= 0xE1 && itemId <= 0xEA) {{
         return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
     }}
@@ -11313,6 +11325,9 @@ static bool VF2B150UpgradeIsActive(int itemId) {{
 }}
 
 extern "C" int __cdecl VF2GetB150UpgradePrice(int itemId) {{
+    if (VF2IsReversibleStockUpgrade(itemId)) {{
+        return VF2IsReversibleStockUpgradeActive(itemId) ? 0 : -1;
+    }}
     if (!kVF2EnableB150CheatUpgrades) return -1;
     if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
         return VF2B150UpgradeIsActive(itemId)
@@ -11414,7 +11429,8 @@ static void VF2DeactivateWorker(int workerId, int expiryOffset) {{
 }}
 
 extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
-    if (!kVF2EnableB150CheatUpgrades && !kVF2EnableAIBathroom2) return false;
+    if (!kVF2EnableB150CheatUpgrades && !kVF2EnableAIBathroom2 &&
+        !VF2IsReversibleStockUpgrade(itemId)) return false;
     if (!VF2B150UpgradeIsActive(itemId)) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
     if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
@@ -11441,7 +11457,7 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
     }} else if (itemId >= 0xE1 && itemId <= 0xEA) {{
         InventoryManager.ReturnOne((EInventoryItem)itemId);
         VF2RebuildOwnedRenovations();
-    }} else if (VF2IsCheatReversibleStockUpgrade(itemId)) {{
+    }} else if (VF2IsReversibleStockUpgrade(itemId)) {{
         if (itemId == kVF2AntiSpamSoftwareItem) {{
             if (gameState) gameState[0x6C] = 0;
         }} else {{
@@ -11576,8 +11592,14 @@ extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
         // consumes and clears the flag.
         return 0;
     }}
+    if (VF2IsReversibleStockUpgrade(itemId)) {{
+        // The native list remembers both rows as one-purchase items even
+        // after their persisted effect is cleared.  Always expose the row so
+        // a cleared save flag can be purchased again.
+        return 1;
+    }}
     if (kVF2EnableB150CheatUpgrades &&
-        (VF2IsCheatReversibleStockUpgrade(itemId) || itemId == 0x115 || itemId == 0x116 ||
+        (itemId == 0x115 || itemId == 0x116 ||
         itemId == 0x128 || itemId == 0x129 || itemId == 0x12A)) {{
         return 1;
     }}
@@ -11664,8 +11686,7 @@ extern "C" int __cdecl VF2ResolveOutfitBodyForApply(int stockItem, int villagerG
 }}
 
 extern "C" int __cdecl VF2GetOutfitStorePrice(int itemId) {{
-    if (kVF2EnableB150CheatUpgrades &&
-        VF2IsCheatReversibleStockUpgrade(itemId)) {{
+    if (VF2IsReversibleStockUpgrade(itemId)) {{
         return VF2B150UpgradeIsActive(itemId) ? 0 : -1;
     }}
     int body = VF2OutfitBodyForItem(itemId);
@@ -11952,29 +11973,33 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
             "reversible_stock_upgrades": {
                 "category": "0x0F",
                 "native_list": "gGoodiesList",
+                "setting": "core_executable",
+                "independent_of_cheat_upgrades": True,
                 "items": [
                     {
-                        "item_id": hex(CHEAT_REVERSIBLE_STOCK_UPGRADE_IDS[0]),
+                        "item_id": hex(REVERSIBLE_STOCK_UPGRADE_IDS[0]),
                         "name": "Anti-Spam Software",
                         "active_flag": "theGameState + 0x6C",
                     },
                     {
-                        "item_id": hex(CHEAT_REVERSIBLE_STOCK_UPGRADE_IDS[1]),
+                        "item_id": hex(REVERSIBLE_STOCK_UPGRADE_IDS[1]),
                         "name": "Rockhound Certificate",
                         "active_flag": "InventoryManager.HaveUpgrade",
                     },
                 ],
                 "active_price": 0,
                 "available_when_active": 1,
-                "removal_route": "VF2RemoveOwnedUpgrade before native purchase handling",
+                "removal_route": "VF2RemoveOwnedUpgrade before native purchase handling; always enabled for these two rows",
             },
+            "independent_effects": [
+                "repurchase Rockhound/Anti-Spam to remove",
+            ],
             "gated_effects": [
                 "price modes",
                 "trigger all house malfunctions",
                 "fix all house malfunctions",
                 "Router offline/online malfunction state",
                 "repurchase Maid/Gardener to fire",
-                "repurchase Rockhound/Anti-Spam to remove",
                 "remove and repurchase owned house renovations 0xE1-0xEA",
             ],
         },

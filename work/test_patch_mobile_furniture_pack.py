@@ -7445,7 +7445,11 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
                         1,
                     )[0]
 
-                    self.assertIn("VF2IsCheatReversibleStockUpgrade(itemId)", active)
+                    self.assertIn("VF2IsReversibleStockUpgrade(itemId)", active)
+                    self.assertIn(
+                        "return VF2IsReversibleStockUpgradeActive(itemId);",
+                        active,
+                    )
                     self.assertIn(
                         "return VF2B150UpgradeIsActive(itemId) ? 0 : -1;",
                         price,
@@ -7460,7 +7464,11 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
                         removal,
                     )
                     self.assertIn(
-                        "VF2IsCheatReversibleStockUpgrade(itemId)",
+                        "VF2IsReversibleStockUpgrade(itemId)",
+                        availability,
+                    )
+                    self.assertIn(
+                        "Always expose the row so",
                         availability,
                     )
                     self.assertIn("return 1;", availability)
@@ -7471,6 +7479,8 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
                         {
                             "category": "0x0F",
                             "native_list": "gGoodiesList",
+                            "setting": "core_executable",
+                            "independent_of_cheat_upgrades": True,
                             "items": [
                                 {
                                     "item_id": "0x33",
@@ -7485,8 +7495,14 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
                             ],
                             "active_price": 0,
                             "available_when_active": 1,
-                            "removal_route": "VF2RemoveOwnedUpgrade before native purchase handling",
+                            "removal_route": "VF2RemoveOwnedUpgrade before native purchase handling; always enabled for these two rows",
                         },
+                    )
+                    self.assertEqual(
+                        manifest["outfit_store_helpers"]["b150_cheat_upgrade_gate"][
+                            "independent_effects"
+                        ],
+                        ["repurchase Rockhound/Anti-Spam to remove"],
                     )
                     self.assertEqual(
                         manifest["outfit_store_helpers"]["b150_cheat_upgrade_gate"][

@@ -974,7 +974,8 @@ B150 patcher/build notes:
   IDs that produced it.
 - Behavior Patches owns every B150 autonomous/label/praise/sink change. Cheat
   Upgrades owns every B150 cheat, price mode/reset, malfunction Trigger/Fix, and
-  Maid/Gardener/Rockhound/Anti-Spam removal. Holiday Ornaments owns the
+  Maid/Gardener removal. Anti-Spam/Rockhound removal has an independent
+  repurchase route in every patched executable. Holiday Ornaments owns the
   six-page/72-item collection fix. Water Pressure Surge requires Island Events,
   while Brokerage's 11% description follows mobile_purchases.
 - The Holiday setting remains default-off Experimental for a replacement
@@ -1037,9 +1038,11 @@ B150 patcher/build notes:
   renovation 0xE6; Water Pressure Surge adds them only with Island Events.
 - With Cheat Upgrades active, buying an already active Maid or Gardener row at
   zero price clears its service timer, deactivates worker 0x23/0x24, and safely
-  clears selection. Rebuying Rockhound Certificate or Anti-Spam removes its
-  inventory/state flag. Cheat-disabled overlays retain stock already-purchased
-  behavior because the removal helper is explicitly gated.
+  clears selection. Anti-Spam Software and Rockhound Certificate remain
+  repurchaseable in every patched executable, even when the saved effect flag
+  is already cleared; buying an active row removes its inventory/state flag at
+  zero price. Other cheat-disabled overlays retain stock already-purchased
+  behavior because their removal helpers remain explicitly gated.
 - Generated runner README text now includes the shared B150 changelog. Generated
   Transparency Log.txt includes the feature matrix, setting-to-feature map, all
   B150 behavior/cheat/fix notes, and an explicit distinction between automated

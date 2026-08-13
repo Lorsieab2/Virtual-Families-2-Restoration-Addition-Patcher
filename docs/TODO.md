@@ -628,9 +628,10 @@ must remain visible as Needs source audit; it must not be silently omitted.
   crashes.
 - Reversible upgrades: with Cheat Upgrades enabled, repurchase Maid/Gardener
   and verify the correct worker disappears, service expiry clears, and selected
-  villager state is valid. Repurchase Rockhound Certificate and Anti-Spam and
-  verify their effects disappear and remain removed after reload. Repeat in a
-  Cheat-disabled EXE and confirm stock "already purchased" behavior remains.
+  villager state is valid. In patched executables, repurchase Rockhound
+  Certificate and Anti-Spam from both active and already-cleared effect saves;
+  verify their effects disappear and remain removed after reload. Other
+  Cheat-disabled behavior should retain stock "already purchased" semantics.
 - Text/notices: verify Brokerage Account states the Interest Rate can reach 11%;
   the GUI shows the Lorsieab2 passion-project/support message and the exact
   vanilla-save compatibility note; generated README, manifest, changelog, and
