@@ -10734,12 +10734,36 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
             patcher.PATCHED = old_patched
 
     def test_reject_hook_preserves_stock_branch_and_accept_bytes(self):
+        # Regression guard for a real crash: an earlier version of this hook
+        # overwrote HandleMessage+0x85..+0x9A (21 bytes), which includes a
+        # "call theGameState::Get(); pop edi/esi/ebx; ..." tail that the
+        # Accept ("Marry") case handler ALSO reaches via its own direct jump
+        # at HandleMessage+0x23F ("jmp 0x8c"). Overwriting that shared tail
+        # left Accept's jump landing on NOPs, EAX never reassigned, and a
+        # crash writing through a stale EAX. The fix hooks only the 7-byte
+        # Reject-private scene-index reset (+0x85..+0x8C) and rejoins the
+        # untouched native tail at +0x8C from both cave branches -- exactly
+        # where Accept's own jump also lands.
         old_patched = patcher.PATCHED
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 temp_root = Path(tmp)
                 dating_path = temp_root / "DatingScene.obj"
                 shutil.copy2(patcher.SRC_OBJS / "DatingScene.obj", dating_path)
+                pristine = CoffObject(patcher.SRC_OBJS / "DatingScene.obj")
+                pristine_handle = pristine.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
+                pristine_section = pristine.section(pristine_handle.section)
+                pristine_tail_raw = pristine_section.raw_ptr + pristine_handle.value + 0x8C
+                pristine_tail = bytes(pristine.buf[pristine_tail_raw:pristine_tail_raw + 14])
+                # Accept's own jump into the shared tail, confirmed present
+                # in the pristine, unpatched object.
+                accept_jump_raw = pristine_section.raw_ptr + pristine_handle.value + 0x23F
+                self.assertEqual(
+                    bytes(pristine.buf[accept_jump_raw:accept_jump_raw + 5]),
+                    bytes.fromhex("E9 48 FE FF FF"),
+                    "Accept's jump into the shared +0x8C tail drifted; re-derive the fix's assumptions",
+                )
+
                 patcher.PATCHED = temp_root
                 manifest = {}
                 patcher.patch_marriage_candidate_reroll(manifest)
@@ -10750,46 +10774,66 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 contract = manifest["MarriageCandidateReroll"]
                 cave = int(contract["reject"]["trampoline"], 16)
                 cave_raw = section.raw_ptr + cave
-                cave_bytes = bytes(dating.buf[cave_raw:cave_raw + 89])
-                stock = bytes.fromhex(contract["reject"]["stock_span"])
-                self.assertEqual(len(stock), 21)
-                self.assertEqual(cave_bytes[63:84], stock)
+                cave_bytes = bytes(dating.buf[cave_raw:cave_raw + 70])
+
                 self.assertEqual(cave_bytes[0:7], bytes.fromhex("80 3D 00 00 00 00 00"))
-                self.assertEqual(cave_bytes[7:9], bytes.fromhex("74 36"))
+                self.assertEqual(cave_bytes[7:9], bytes.fromhex("74 31"))  # -> inactive (58)
                 self.assertEqual(
                     cave_bytes[9:17],
-                    bytes.fromhex("8B 43 10 83 F8 FF 74 16"),
+                    bytes.fromhex("8B 43 10 83 F8 FF 74 16"),  # -> reset (39)
                 )
                 self.assertEqual(cave_bytes[17], 0x50)
                 self.assertEqual(cave_bytes[18:23], bytes.fromhex("B9 00 00 00 00"))
                 self.assertEqual(cave_bytes[23], 0xE8)
-                self.assertEqual(cave_bytes[28:32], bytes.fromhex("85 C0 74 1F"))
+                self.assertEqual(cave_bytes[28:32], bytes.fromhex("85 C0 74 07"))  # -> reset (39)
                 self.assertEqual(
                     cave_bytes[32:39],
                     bytes.fromhex("C6 80 84 BB 01 00 00"),
                 )
+                # reset: (offset 39) exact stock scene-index reset, active call, rejoin
                 self.assertEqual(
                     cave_bytes[39:46],
                     bytes.fromhex("C7 43 10 FF FF FF FF"),
                 )
                 self.assertEqual(cave_bytes[46:48], bytes.fromhex("8B CB"))
                 self.assertEqual(cave_bytes[48], 0xE8)
-                self.assertEqual(cave_bytes[53:58], bytes.fromhex("5F 5E 5B B0 01"))
-                self.assertEqual(cave_bytes[58], 0xE9)
+                self.assertEqual(cave_bytes[53], 0xE9)
                 self.assertEqual(
-                    cave + 63 + struct.unpack_from("<i", cave_bytes, 59)[0],
-                    handle.value + 0xAC,
+                    cave + 58 + struct.unpack_from("<i", cave_bytes, 54)[0],
+                    handle.value + 0x8C,
+                    "active path must rejoin at the untouched shared tail, not a duplicated/relocated copy",
                 )
-                self.assertEqual(cave_bytes[84], 0xE9)
+                # inactive: (offset 58) exact stock scene-index reset, rejoin
                 self.assertEqual(
-                    cave + 89 + struct.unpack_from("<i", cave_bytes, 85)[0],
-                    handle.value + 0x9A,
+                    cave_bytes[58:65],
+                    bytes.fromhex("C7 43 10 FF FF FF FF"),
                 )
+                self.assertEqual(cave_bytes[65], 0xE9)
+                self.assertEqual(
+                    cave + 70 + struct.unpack_from("<i", cave_bytes, 66)[0],
+                    handle.value + 0x8C,
+                    "inactive path must rejoin at the untouched shared tail, not a duplicated/relocated copy",
+                )
+
+                # Only the 7-byte Reject-private reset is hooked; the shared
+                # tail at +0x8C is never touched.
                 reject_raw = section.raw_ptr + handle.value + 0x85
                 self.assertEqual(dating.buf[reject_raw], 0xE9)
                 self.assertEqual(
-                    bytes(dating.buf[reject_raw + 5:reject_raw + 21]),
-                    b"\x90" * 16,
+                    bytes(dating.buf[reject_raw + 5:reject_raw + 7]),
+                    b"\x90" * 2,
+                )
+                tail_raw = section.raw_ptr + handle.value + 0x8C
+                self.assertEqual(
+                    bytes(dating.buf[tail_raw:tail_raw + 14]),
+                    pristine_tail,
+                    "the shared tail Accept also jumps into must stay byte-identical to stock",
+                )
+                # Accept's own jump into that tail must also be untouched.
+                accept_jump_raw = section.raw_ptr + handle.value + 0x23F
+                self.assertEqual(
+                    bytes(dating.buf[accept_jump_raw:accept_jump_raw + 5]),
+                    bytes.fromhex("E9 48 FE FF FF"),
                 )
 
                 relocations = []
@@ -10802,7 +10846,6 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                         cave + 19,
                         cave + 24,
                         cave + 49,
-                        cave + 71,
                         handle.value + 0x8D,
                     }:
                         relocations.append(
@@ -10828,12 +10871,12 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                      patcher.IMAGE_REL_I386_REL32),
                     relocations,
                 )
-                self.assertIn(
-                    (cave + 71, "?Get@theGameState@@SAPAV1@XZ",
-                     patcher.IMAGE_REL_I386_REL32),
-                    relocations,
+                # The stock sound-play call's relocation at +0x8D must never
+                # move: that instruction is inside the untouched shared tail.
+                self.assertEqual(
+                    [item for item in relocations if item[0] == handle.value + 0x8D],
+                    [(handle.value + 0x8D, "?Get@theGameState@@SAPAV1@XZ", patcher.IMAGE_REL_I386_REL32)],
                 )
-                self.assertNotIn(handle.value + 0x8D, [item[0] for item in relocations])
                 accept_raw = section.raw_ptr + handle.value + 0xEB
                 self.assertEqual(
                     bytes(dating.buf[accept_raw:accept_raw + 9]),
@@ -10845,8 +10888,8 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 self.assertEqual(contract["reject"]["hook_offset"], "+0x85")
                 self.assertIn("CVillager+0x1BB84", contract["reject"]["active_lifecycle"])
                 self.assertIn("CDatingScene+0x10 to -1", contract["reject"]["active_lifecycle"])
-                self.assertIn("+0xAC", contract["reject"]["active_continuation"])
-                self.assertIn("not cleared", contract["accept"])
+                self.assertIn("+0x8C", contract["reject"]["rejoin"])
+                self.assertIn("no longer touched", contract["accept"])
         finally:
             patcher.PATCHED = old_patched
 

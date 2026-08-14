@@ -18440,7 +18440,32 @@ def patch_multiple_marriage_candidates(manifest):
 
 
 def patch_marriage_candidate_reroll(manifest):
-    """Gate native Reject on the dedicated, default-off reroll byte."""
+    """Gate native Reject on the dedicated, default-off reroll byte.
+
+    CRITICAL: the byte span at HandleMessage+0x85 is NOT exclusive to
+    Reject's own code. It is "mov dword ptr [ebx+0x10], -1" (reset the
+    scene's candidate index) immediately followed, at +0x8C, by a shared
+    tail -- "call theGameState::Get(); pop edi; pop esi; pop ebx; mov
+    ecx,[eax+0x25CB8]; mov [eax+0x25CBC],ecx; mov [eax+0x25CB8],0; mov
+    al,1; ..." -- that flushes a pending proposal-timestamp field and
+    returns `true`. Reject reaches +0x8C by falling straight through from
+    +0x85. But the Accept ("Marry") case handler, elsewhere in this same
+    function, performs its own identical scene-index reset and then
+    JUMPS DIRECTLY to +0x8C to reuse that exact tail (confirmed via a
+    real crash dump + live IDA trace, and independently via a pristine,
+    unpatched disassembly showing that jump).
+    An earlier version of this hook overwrote the entire +0x85..+0x9A
+    span (through the shared tail) with a trampoline jump and NOP
+    padding. That destroyed the "call theGameState::Get()" Accept jumps
+    into, so clicking Marry landed on NOPs instead, fell through with
+    EAX never reassigned (observed live as EAX=1, a leftover boolean from
+    unrelated earlier code), and crashed writing through it as a pointer.
+    Fixed by hooking ONLY the 7-byte scene-index-reset instruction that
+    is genuinely Reject-private, and having both the active and inactive
+    cave paths rejoin execution at the untouched +0x8C shared tail --
+    exactly where Accept's own jump also lands -- instead of duplicating
+    or relocating any of that shared code.
+    """
     dating_path = PATCHED / "DatingScene.obj"
     dating = CoffObject(dating_path)
     handle_name = "?HandleMessage@CDatingScene@@UAE_NHJ@Z"
@@ -18449,12 +18474,10 @@ def patch_marriage_candidate_reroll(manifest):
     section = dating.section(handle.section)
     reject_hook = handle.value + 0x85
     reject_raw = section.raw_ptr + reject_hook
-    expected_stock = bytes.fromhex(
-        "C7 43 10 FF FF FF FF E8 00 00 00 00 5F 5E 5B "
-        "8B 88 B8 5C 02 00"
-    )
-    if bytes(dating.buf[reject_raw:reject_raw + len(expected_stock)]) != expected_stock:
-        raise RuntimeError("Dating Reject stock route drifted")
+    shared_tail_offset = handle.value + 0x8C
+    expected_reset = bytes.fromhex("C7 43 10 FF FF FF FF")
+    if bytes(dating.buf[reject_raw:reject_raw + len(expected_reset)]) != expected_reset:
+        raise RuntimeError("Dating Reject stock scene-index-reset drifted")
 
     generate = dating.symbol(generate_name)
     get_villager_name = "?GetVillager@CVillagerManager@@QAEAAVCVillager@@H@Z"
@@ -18464,50 +18487,40 @@ def patch_marriage_candidate_reroll(manifest):
     flag_symbol = dating.append_undefined_symbol(
         MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL
     )
-    stock_relocation = None
-    for index in range(section.nreloc):
-        vaddr, symbol_index, relocation_type = struct.unpack_from(
-            "<IIH", dating.buf, section.reloc_ptr + index * 10
-        )
-        if vaddr == handle.value + 0x8D:
-            stock_relocation = (index, symbol_index, relocation_type)
-            break
-    if stock_relocation is None:
-        raise RuntimeError("Dating Reject stock sound relocation drifted")
 
     cave = section.raw_size
-    stock_offset = 63
     payload = bytearray(
         b"\x80\x3D\0\0\0\0\x00"  # compare .vf2rero byte with zero
-        + b"\x74\x00"              # inactive -> exact stock branch
+        + b"\x74\x00"              # inactive -> stock reset branch
         # GeneratePeepCandidate's authenticated native prologue deactivates
         # the old temporary villager through this exact manager lookup and
-        # CVillager+0x1BB84 write.  Perform it before resetting the scene index
-        # so the generator cannot lose the old candidate identity.
+        # CVillager+0x1BB84 write.  Perform it before resetting the scene
+        # index so the generator cannot lose the old candidate identity.
         + b"\x8B\x43\x10"          # active: old candidate index
         + b"\x83\xF8\xFF"          # no old candidate?
-        + b"\x74\x00"              # -> reset scene index
+        + b"\x74\x00"              # -> reset scene index (skip deactivation)
         + b"\x50"                  # push old candidate index
         + b"\xB9\0\0\0\0"       # this = VillagerManager
         + b"\xE8\0\0\0\0"       # GetVillager(old index)
         + b"\x85\xC0"              # invalid old pointer?
-        + b"\x74\x00"              # -> fail closed through stock Reject
+        + b"\x74\x00"              # -> reset scene index (fail closed, same as inactive)
         + b"\xC6\x80\x84\xBB\x01\x00\x00"  # old active byte = 0
-        + b"\xC7\x43\x10\xFF\xFF\xFF\xFF"  # scene index = -1
+        # reset: (both the active and no-old-candidate/fail-closed paths land here)
+        + b"\xC7\x43\x10\xFF\xFF\xFF\xFF"  # scene index = -1 (same as stock)
         + b"\x8B\xCB"              # this = CDatingScene (EBX)
         + b"\xE8\0\0\0\0"          # GeneratePeepCandidate
-        + b"\x5F\x5E\x5B\xB0\x01"  # handled = true
-        + b"\xE9\0\0\0\0"          # active -> HandleMessage +0xAC
-        + expected_stock
-        + b"\xE9\0\0\0\0"          # stock -> HandleMessage +0x9A
+        + b"\xE9\0\0\0\0"          # active -> HandleMessage +0x8C shared tail
+        # inactive: exact stock scene-index reset, then the same shared tail
+        + b"\xC7\x43\x10\xFF\xFF\xFF\xFF"
+        + b"\xE9\0\0\0\0"          # stock -> HandleMessage +0x8C shared tail
     )
-    if len(payload) != 89:
+    if len(payload) != 70:
         raise AssertionError("Marriage Reject reroll cave size drifted")
-    struct.pack_into("<b", payload, 8, stock_offset - 9)
-    struct.pack_into("<b", payload, 16, 39 - 17)
-    struct.pack_into("<b", payload, 31, stock_offset - 32)
-    struct.pack_into("<i", payload, 59, (handle.value + 0xAC) - (cave + 63))
-    struct.pack_into("<i", payload, 85, (handle.value + 0x9A) - (cave + 89))
+    struct.pack_into("<b", payload, 8, 58 - 9)   # je inactive (offset 58)
+    struct.pack_into("<b", payload, 16, 39 - 17)  # je reset (offset 39, skip deactivation)
+    struct.pack_into("<b", payload, 31, 39 - 32)  # je reset (offset 39, fail closed)
+    struct.pack_into("<i", payload, 54, shared_tail_offset - (cave + 58))
+    struct.pack_into("<i", payload, 66, shared_tail_offset - (cave + 70))
 
     dating.insert_section_bytes(section.index, cave, bytes(payload))
     dating.append_relocation(
@@ -18522,21 +18535,12 @@ def patch_marriage_candidate_reroll(manifest):
     dating.append_relocation(
         section.index, cave + 49, generate.index, IMAGE_REL_I386_REL32
     )
-    section = dating.section(handle.section)
-    for index in range(section.nreloc):
-        record = section.reloc_ptr + index * 10
-        vaddr = struct.unpack_from("<I", dating.buf, record)[0]
-        if vaddr == handle.value + 0x8D:
-            struct.pack_into("<I", dating.buf, record, cave + stock_offset + 8)
-            break
-    else:
-        raise RuntimeError("Dating Reject stock relocation move failed")
     dating._parse()
     section = dating.section(handle.section)
     reject_raw = section.raw_ptr + reject_hook
-    dating.buf[reject_raw:reject_raw + len(expected_stock)] = (
+    dating.buf[reject_raw:reject_raw + len(expected_reset)] = (
         b"\xE9" + struct.pack("<i", cave - (reject_hook + 5))
-        + b"\x90" * (len(expected_stock) - 5)
+        + b"\x90" * (len(expected_reset) - 5)
     )
     dating.write(dating_path)
 
@@ -18561,18 +18565,21 @@ def patch_marriage_candidate_reroll(manifest):
         "reject": {
             "function": handle_name,
             "hook_offset": "+0x85",
-        "trampoline": hex(cave),
-            "stock_span": expected_stock.hex(" ").upper(),
+            "hook_span": "7 bytes (scene-index reset only; the +0x8C shared "
+                "tail Accept also jumps into is never touched)",
+            "trampoline": hex(cave),
             "active_lifecycle": (
                 "resolve the old scene candidate through native "
                 "CVillagerManager::GetVillager, clear CVillager+0x1BB84, set "
                 "CDatingScene+0x10 to -1, then call GeneratePeepCandidate"
             ),
             "active_call": generate_name,
-            "active_continuation": "HandleMessage +0xAC handled continuation",
-            "inactive_continuation": "exact stock Reject bytes and HandleMessage +0x9A continuation",
+            "rejoin": "both active and inactive paths jump to HandleMessage "
+                "+0x8C, the untouched native shared tail also used directly "
+                "by Accept",
         },
-        "accept": "existing valid/safety path unchanged; purchased .vf2rero is not cleared",
+        "accept": "byte-identical stock code path; no longer touched or "
+            "duplicated by this hook",
     }
 
 
