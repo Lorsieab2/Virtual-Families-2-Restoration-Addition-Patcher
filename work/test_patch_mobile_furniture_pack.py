@@ -3241,10 +3241,21 @@ class MobileRenovationArtTests(unittest.TestCase):
                     "static void VF2RefreshRenovationCurtainDecals()",
                     source,
                 )
-                self.assertIn("normal game-load/restart path", source)
+                # Live refresh regression guard: RefreshProps has no direct
+                # callers anywhere in the compiled game - it is only ever
+                # reached via a compiler tail-call from the very end of
+                # RefreshDecals (confirmed by disassembly), which always
+                # resets the full decal array first via InitDecals. Calling
+                # RefreshProps directly and independently (the previous,
+                # since-removed implementation) skipped that reset and hit
+                # an unbounded-growth overflow in its bounds-unchecked
+                # AddDecal calls on repeated live use. Never call
+                # Decal.RefreshProps() directly again; always go through
+                # Decal.RefreshDecals(), and only from this one wrapper.
+                self.assertIn("tail-call", source)
                 self.assertNotIn("Decal.RefreshProps();", source)
-                self.assertNotIn("Decal.RefreshDecals();", source)
-                self.assertEqual(source.count("VF2RefreshRenovationCurtainDecals();"), 1)
+                self.assertEqual(source.count("Decal.RefreshDecals();"), 1)
+                self.assertEqual(source.count("VF2RefreshRenovationCurtainDecals();"), 5)
                 bathroom1 = source.split(
                     "static int VF2ResolveBathroom1ClosedCurtainImage()",
                     1,
