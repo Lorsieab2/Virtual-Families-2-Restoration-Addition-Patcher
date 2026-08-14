@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import math
 import re
 import subprocess
 import threading
 import traceback
+import webbrowser
 from argparse import Namespace
 from pathlib import Path
 import sys
@@ -20,12 +22,23 @@ from tkinter import filedialog, messagebox, ttk
 import offline_vf2_patcher as patcher
 
 APP_DISPLAY_NAME = "Virtual Families 2 Restoration/Addition Patcher"
+PATCHER_RELEASES_URL = "https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases"
 PATCHER_ICON_PNG = "patcher_icon.png"
 PATCHER_ICON_ICO = "patcher_icon.ico"
+LOCAL_SETTINGS_FILE = "patcher_local_settings.json"
+PROJECT_CREATOR_MESSAGE = (
+    'Created by Lorsieab2. This is a passion project dedicated to improving the '
+    '"Virtual Families 2" experience!\n'
+    'No copyright infringement intended! Please support the original game creators! :)'
+)
+SAVE_COMPATIBILITY_NOTE = "Vanilla Virtual Families 2 saves are compatible with the modded version!"
+CODEX_DISCLOSURE = (
+    "Created with Codex AI. Applies transparent JSON patch manifests to a vanilla VF2 "
+    "install or an existing modded output folder."
+)
 SETTING_CATEGORIES = [
     ("main", "Main Patches", "#00802b"),
     ("optional", "Optional Patches", "#000000"),
-    ("experimental", "Experimental/Not Working Patches", "#b00020"),
 ]
 SETTING_CATEGORY_LOOKUP = {key: (label, color) for key, label, color in SETTING_CATEGORIES}
 
@@ -44,6 +57,50 @@ def required_path(value: str | None, label: str) -> str:
     if not text:
         raise patcher.PatchError(f"{label} is required.")
     return text
+
+
+def local_settings_path(base_dir: Path | None = None) -> Path:
+    root = base_dir or Path(__file__).resolve().parent
+    return root / LOCAL_SETTINGS_FILE
+
+
+def load_saved_paths(settings_path: Path | None = None) -> dict[str, str]:
+    path = settings_path or local_settings_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    saved: dict[str, str] = {}
+    for key in ("vanilla_game_dir", "modded_output_parent_dir", "modded_output_dir"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            saved[key] = value.strip()
+    return saved
+
+
+def save_saved_paths(
+    *,
+    vanilla_game_dir: str | None = None,
+    modded_output_parent_dir: str | None = None,
+    modded_output_dir: str | None = None,
+    settings_path: Path | None = None,
+) -> None:
+    path = settings_path or local_settings_path()
+    data = load_saved_paths(path)
+    vanilla = clean_path_text(vanilla_game_dir)
+    parent = clean_path_text(modded_output_parent_dir)
+    output = clean_path_text(modded_output_dir)
+    if vanilla:
+        data["vanilla_game_dir"] = vanilla
+    if parent:
+        data["modded_output_parent_dir"] = parent
+    if output:
+        data["modded_output_dir"] = output
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 
 
 def markup_segments(text: str) -> list[tuple[str, bool]]:
@@ -90,6 +147,28 @@ def setting_ids_for_category(settings: dict[str, patcher.PatchSetting], category
     ]
 
 
+def manifest_build_label(manifest: dict[str, object]) -> str:
+    for value in (
+        manifest.get("version"),
+        manifest.get("build"),
+        manifest.get("build_label"),
+        manifest.get("name"),
+    ):
+        if isinstance(value, str):
+            match = re.search(r"\bB\d+\b", value, re.IGNORECASE)
+            if match:
+                return match.group(0).upper()
+    output = manifest.get("output")
+    if isinstance(output, dict):
+        for key in ("default_exe_name", "default_folder_name"):
+            value = output.get(key)
+            if isinstance(value, str):
+                match = re.search(r"\bB\d+\b", value, re.IGNORECASE)
+                if match:
+                    return match.group(0).upper()
+    return ""
+
+
 def estimate_wrapped_lines(text: str, pixel_width: int, measure_text: object) -> int:
     width = max(1, int(pixel_width))
     lines = 0
@@ -125,6 +204,7 @@ def build_apply_namespace(
     backup_dir: str | None = None,
     log: str | None = None,
     output_dir: str | None = None,
+    output_parent_dir: str | None = None,
     dry_run: bool = False,
     settings: dict[str, patcher.PatchSetting] | None = None,
     selected_settings: set[str] | None = None,
@@ -134,10 +214,15 @@ def build_apply_namespace(
     unknown = sorted(selected_settings - set(settings))
     if unknown:
         raise patcher.PatchError(f"Unknown selected setting(s): {', '.join(unknown)}")
+    blocked = [settings[setting_id] for setting_id in sorted(selected_settings) if settings[setting_id].blocked]
+    if blocked:
+        details = ", ".join(f"{setting.id}: {setting.readiness_reason}" for setting in blocked)
+        raise patcher.PatchError(f"Cannot select blocked setting(s): {details}")
     return Namespace(
-        game_dir=required_path(game_dir, "Game directory"),
+        game_dir=optional_path(game_dir),
         manifest=required_path(manifest, "Patch manifest"),
         output_dir=optional_path(output_dir),
+        output_parent_dir=optional_path(output_parent_dir),
         backup_dir=optional_path(backup_dir),
         log=optional_path(log),
         dry_run=bool(dry_run),
@@ -167,11 +252,13 @@ class VF2PatcherGUI:
         self.game_dir_var = tk.StringVar()
         self.manifest_var = tk.StringVar()
         self.backup_dir_var = tk.StringVar()
+        self.output_parent_dir_var = tk.StringVar()
         self.output_dir_var = tk.StringVar()
         self.log_path_var = tk.StringVar()
         self.restore_backup_var = tk.StringVar()
         self.restore_log_var = tk.StringVar()
-        self.status_var = tk.StringVar(value="Choose a vanilla VF2 folder and a patch manifest.")
+        self.status_var = tk.StringVar(value="Choose a vanilla VF2 folder, or choose an existing modded output folder, plus a patch manifest.")
+        self.version_var = tk.StringVar(value="Build: not loaded")
 
         self.settings: dict[str, patcher.PatchSetting] = {}
         self.setting_vars: dict[str, tk.BooleanVar] = {}
@@ -183,9 +270,11 @@ class VF2PatcherGUI:
         self.window_icon_image: tk.PhotoImage | None = None
         self.title_icon_image: tk.PhotoImage | None = None
 
+        self._load_saved_paths()
         self._load_icons()
         self._build_styles()
         self._build_layout()
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
     def _asset_path_candidates(self, name: str) -> list[Path]:
         script_dir = Path(__file__).resolve().parent
@@ -206,6 +295,15 @@ class VF2PatcherGUI:
                 except tk.TclError:
                     pass
 
+    def _load_saved_paths(self) -> None:
+        saved = load_saved_paths()
+        if saved.get("vanilla_game_dir"):
+            self.game_dir_var.set(saved["vanilla_game_dir"])
+        if saved.get("modded_output_dir"):
+            self.output_dir_var.set(saved["modded_output_dir"])
+        if saved.get("modded_output_parent_dir"):
+            self.output_parent_dir_var.set(saved["modded_output_parent_dir"])
+
         for path in self._asset_path_candidates(PATCHER_ICON_PNG):
             if path.is_file():
                 try:
@@ -223,6 +321,7 @@ class VF2PatcherGUI:
         style.configure("Section.TLabelframe.Label", font=("", 10, "bold"))
         style.configure("Muted.TLabel", foreground="#555555")
         style.configure("Status.TLabel", foreground="#333333")
+        style.configure("Link.TLabel", foreground="#0645ad")
 
     def _build_layout(self) -> None:
         root_frame = ttk.Frame(self.root, padding=12)
@@ -236,13 +335,38 @@ class VF2PatcherGUI:
         header.grid(row=0, column=0, sticky="ew", pady=(0, 10))
         header.columnconfigure(1, weight=1)
         if self.title_icon_image is not None:
-            ttk.Label(header, image=self.title_icon_image).grid(row=0, column=0, rowspan=2, sticky="w", padx=(0, 10))
+            ttk.Label(header, image=self.title_icon_image).grid(row=0, column=0, rowspan=4, sticky="w", padx=(0, 10))
         ttk.Label(header, text=APP_DISPLAY_NAME, style="Title.TLabel").grid(row=0, column=1, sticky="w")
+        ttk.Label(header, textvariable=self.version_var, style="Muted.TLabel").grid(row=0, column=2, sticky="e", padx=(12, 0))
         ttk.Label(
             header,
-            text="Created with Codex AI. Applies transparent JSON patch manifests to a user-provided vanilla VF2 PC install.",
+            text=PROJECT_CREATOR_MESSAGE,
             style="Muted.TLabel",
+            justify="left",
+            wraplength=660,
         ).grid(row=1, column=1, sticky="w", pady=(2, 0))
+        update_link = ttk.Label(
+            header,
+            text="Check for updates",
+            style="Link.TLabel",
+            cursor="hand2",
+        )
+        update_link.grid(row=1, column=2, sticky="e", padx=(12, 0), pady=(2, 0))
+        update_link.bind("<Button-1>", lambda _event: self._open_updates_url())
+        ttk.Label(
+            header,
+            text=SAVE_COMPATIBILITY_NOTE,
+            style="Muted.TLabel",
+            justify="left",
+            wraplength=660,
+        ).grid(row=2, column=1, columnspan=2, sticky="w", pady=(2, 0))
+        ttk.Label(
+            header,
+            text=CODEX_DISCLOSURE,
+            style="Muted.TLabel",
+            justify="left",
+            wraplength=660,
+        ).grid(row=3, column=1, columnspan=2, sticky="w", pady=(2, 0))
 
         self._build_file_section(root_frame).grid(row=1, column=0, sticky="ew")
         self._build_settings_section(root_frame).grid(row=2, column=0, sticky="nsew", pady=(10, 0))
@@ -253,11 +377,12 @@ class VF2PatcherGUI:
         frame = ttk.LabelFrame(parent, text="Patch Input", style="Section.TLabelframe", padding=10)
         frame.columnconfigure(1, weight=1)
 
-        self._path_row(frame, 0, "Vanilla game folder", self.game_dir_var, self._browse_game_dir)
+        self._path_row(frame, 0, "Vanilla game folder (optional if reconfiguring an existing modded folder)", self.game_dir_var, self._browse_game_dir)
         self._path_row(frame, 1, "Patch manifest", self.manifest_var, self._browse_manifest)
-        self._path_row(frame, 2, "Modded output folder", self.output_dir_var, self._browse_output_dir, optional=True)
-        self._path_row(frame, 3, "Backup folder", self.backup_dir_var, self._browse_backup_dir, optional=True)
-        self._path_row(frame, 4, "Patch log", self.log_path_var, self._browse_log_path, optional=True)
+        self._path_row(frame, 2, "Save modified folders under", self.output_parent_dir_var, self._browse_output_parent_dir, optional=True)
+        self._path_row(frame, 3, "Modded output folder", self.output_dir_var, self._browse_output_dir, optional=True)
+        self._path_row(frame, 4, "Backup folder", self.backup_dir_var, self._browse_backup_dir, optional=True)
+        self._path_row(frame, 5, "Patch log", self.log_path_var, self._browse_log_path, optional=True)
         return frame
 
     def _build_settings_section(self, parent: tk.Widget) -> ttk.LabelFrame:
@@ -274,7 +399,6 @@ class VF2PatcherGUI:
         self._button(controls, "Disable All", self.clear_all_settings).grid(row=0, column=3, padx=(0, 6))
         self._button(controls, "Enable All Main Patches", lambda: self.select_category_settings("main")).grid(row=1, column=0, padx=(0, 6), pady=(6, 0))
         self._button(controls, "Enable all Optional Content", lambda: self.select_category_settings("optional")).grid(row=1, column=1, padx=(0, 6), pady=(6, 0))
-        self._button(controls, "Enable all Experimental Patches", lambda: self.select_category_settings("experimental")).grid(row=1, column=2, padx=(0, 6), pady=(6, 0))
 
         outer = ttk.Frame(frame)
         outer.grid(row=1, column=0, sticky="nsew")
@@ -361,11 +485,18 @@ class VF2PatcherGUI:
         self.busy_controls.append(button)
         return button
 
+    def _open_updates_url(self) -> None:
+        try:
+            webbrowser.open(PATCHER_RELEASES_URL)
+        except Exception as exc:
+            self._set_error(f"Could not open update link: {exc}")
+
     def _browse_game_dir(self) -> None:
         path = filedialog.askdirectory(title="Select the vanilla VF2 game folder")
         if path:
             self.game_dir_var.set(path)
             self._auto_populate_output_dir()
+            self._save_current_paths()
 
     def _browse_manifest(self) -> None:
         path = filedialog.askopenfilename(
@@ -376,6 +507,7 @@ class VF2PatcherGUI:
             self.manifest_var.set(path)
             self.load_manifest_settings()
             self._auto_populate_output_dir()
+            self._save_current_paths()
 
     def _browse_backup_dir(self) -> None:
         path = filedialog.askdirectory(title="Select a backup output folder")
@@ -386,6 +518,17 @@ class VF2PatcherGUI:
         path = filedialog.askdirectory(title="Select the modded output folder")
         if path:
             self.output_dir_var.set(path)
+            self.output_parent_dir_var.set(str(Path(path).resolve().parent))
+            self._save_current_paths()
+
+    def _browse_output_parent_dir(self) -> None:
+        path = filedialog.askdirectory(title="Select where to save the modified VF2 folder")
+        if path:
+            self.output_parent_dir_var.set(path)
+            self.output_dir_var.set("")
+            self.last_auto_output_dir = ""
+            self._auto_populate_output_dir()
+            self._save_current_paths()
 
     def _browse_log_path(self) -> None:
         path = filedialog.asksaveasfilename(
@@ -422,6 +565,8 @@ class VF2PatcherGUI:
         self.settings = settings
         self.loaded_manifest_path = str(manifest_path)
         self.loaded_manifest_data = manifest if isinstance(manifest, dict) else None
+        build_label = manifest_build_label(manifest) if isinstance(manifest, dict) else ""
+        self.version_var.set(f"Build: {build_label}" if build_label else "Build: unknown")
         self.setting_vars = {}
         self.description_widgets = []
         for child in self.settings_inner.winfo_children():
@@ -435,14 +580,20 @@ class VF2PatcherGUI:
                 self._category_header(self.settings_inner, label, color).grid(row=row, column=0, sticky="ew", pady=(8 if row else 0, 4))
                 row += 1
                 for setting in category_settings:
-                    var = tk.BooleanVar(value=setting.default)
+                    var = tk.BooleanVar(value=setting.default and not setting.blocked)
                     self.setting_vars[setting.id] = var
                     item = ttk.Frame(self.settings_inner, padding=(0, 4))
                     item.grid(row=row, column=0, sticky="ew")
                     item.columnconfigure(0, weight=1)
-                    ttk.Checkbutton(item, text=setting.label, variable=var).grid(row=0, column=0, sticky="w")
-                    state = "default on" if setting.default else "default off"
-                    details = f"{setting.id} - {state} - {setting.description}" if setting.description else f"{setting.id} - {state}"
+                    checkbutton = ttk.Checkbutton(item, text=setting.label, variable=var)
+                    if setting.blocked:
+                        checkbutton.state(["disabled"])
+                    checkbutton.grid(row=0, column=0, sticky="w")
+                    if setting.blocked:
+                        details = f"{setting.id} - BLOCKED - {setting.readiness_reason}"
+                    else:
+                        state = "default on" if setting.default else "default off"
+                        details = f"{setting.id} - {state} - {setting.description}" if setting.description else f"{setting.id} - {state}"
                     self._markup_label(item, details).grid(row=1, column=0, sticky="ew", padx=(22, 0))
                     row += 1
         self.status_var.set(f"Loaded {len(settings)} setting(s) from {manifest_path.name}.")
@@ -528,11 +679,12 @@ class VF2PatcherGUI:
 
     def select_default_settings(self) -> None:
         for setting_id, var in self.setting_vars.items():
-            var.set(self.settings[setting_id].default)
+            setting = self.settings[setting_id]
+            var.set(setting.default and not setting.blocked)
 
     def select_all_settings(self) -> None:
-        for var in self.setting_vars.values():
-            var.set(True)
+        for setting_id, var in self.setting_vars.items():
+            var.set(not self.settings[setting_id].blocked)
 
     def clear_all_settings(self) -> None:
         for var in self.setting_vars.values():
@@ -541,19 +693,21 @@ class VF2PatcherGUI:
     def select_category_settings(self, category: str) -> None:
         for setting_id in setting_ids_for_category(self.settings, category):
             var = self.setting_vars.get(setting_id)
-            if var is not None:
+            if var is not None and not self.settings[setting_id].blocked:
                 var.set(True)
 
     def start_apply(self, *, dry_run: bool) -> None:
         if not self._ensure_manifest_settings_loaded():
             return
         self._auto_populate_output_dir()
+        self._save_current_paths()
         selected = {setting_id for setting_id, var in self.setting_vars.items() if var.get()}
         try:
             args = build_apply_namespace(
                 game_dir=self.game_dir_var.get(),
                 manifest=self.manifest_var.get(),
                 output_dir=self.output_dir_var.get(),
+                output_parent_dir=self.output_parent_dir_var.get(),
                 backup_dir=self.backup_dir_var.get(),
                 log=self.log_path_var.get(),
                 dry_run=dry_run,
@@ -570,7 +724,8 @@ class VF2PatcherGUI:
 
         if not dry_run and not messagebox.askyesno(
             f"Enable/Disable {APP_DISPLAY_NAME}",
-            "This will validate the vanilla game folder, then refresh the separate modded game folder and apply only the checked patches. Continue?",
+            "This will validate the selected folder, then enable checked patches and disable unchecked patches. "
+            "With a vanilla folder it refreshes the separate modded output folder first; with only a modded output folder it reconfigures that existing modded folder. Continue?",
         ):
             return
 
@@ -614,11 +769,23 @@ class VF2PatcherGUI:
                 if isinstance(raw_folder, str) and raw_folder.strip():
                     folder_name = raw_folder.strip()
         game_dir = Path(game_dir_text)
-        default_output = str((game_dir.parent / folder_name).resolve()) if folder_name else str(game_dir.resolve())
+        parent_text = clean_path_text(self.output_parent_dir_var.get())
+        parent_dir = Path(parent_text).resolve() if parent_text else game_dir.parent.resolve()
+        default_output = str((parent_dir / folder_name).resolve()) if folder_name else str(game_dir.resolve())
         current = clean_path_text(self.output_dir_var.get())
         if not current or current == self.last_auto_output_dir:
             self.output_dir_var.set(default_output)
             self.last_auto_output_dir = default_output
+
+    def _save_current_paths(self) -> None:
+        try:
+            save_saved_paths(
+                vanilla_game_dir=self.game_dir_var.get(),
+                modded_output_parent_dir=self.output_parent_dir_var.get(),
+                modded_output_dir=self.output_dir_var.get(),
+            )
+        except OSError as exc:
+            self._append_log(f"Could not save local patcher paths: {exc}\n")
 
     def _run_worker(self, label: str, func: object, *, args: object | None = None, dry_run: bool = False) -> None:
         self._set_busy(True)
@@ -665,6 +832,7 @@ class VF2PatcherGUI:
         self._set_busy(False)
         if success:
             self.status_var.set(f"{label} complete.")
+            self._save_current_paths()
             if summary and not dry_run:
                 self._show_apply_success(summary)
         else:
@@ -792,6 +960,10 @@ class VF2PatcherGUI:
             subprocess.Popen(["explorer", path])
         except Exception as exc:
             messagebox.showerror(APP_DISPLAY_NAME, f"Could not open path:\n{path}\n\n{exc}")
+
+    def _on_close(self) -> None:
+        self._save_current_paths()
+        self.root.destroy()
 
 
 def main(argv: list[str] | None = None) -> int:

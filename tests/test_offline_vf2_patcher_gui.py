@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
+import argparse
 import unittest
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,6 +12,42 @@ import offline_vf2_patcher_gui as gui
 
 
 class OfflineVF2PatcherGUITests(unittest.TestCase):
+    def test_prepare_output_dir_excludes_desktop_identifier_paths(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            source = root / "vanilla"
+            output = root / "VF2-Test-Modded"
+            sounds = source / "Sounds"
+            sounds.mkdir(parents=True)
+            (sounds / "keep.ogg").write_bytes(b"keep")
+            (sounds / "chime3bX-DESKTOP-J6OI2AP.ogg").write_bytes(b"exclude")
+            desktop_dir = source / "Images-DESKTOP-ABC123"
+            desktop_dir.mkdir()
+            (desktop_dir / "nested.png").write_bytes(b"exclude")
+
+            patcher.prepare_output_dir(
+                source,
+                output,
+                set(),
+                argparse.Namespace(progress_callback=lambda _message: None),
+            )
+
+            self.assertEqual((output / "Sounds" / "keep.ogg").read_bytes(), b"keep")
+            self.assertFalse((output / "Sounds" / "chime3bX-DESKTOP-J6OI2AP.ogg").exists())
+            self.assertFalse((output / "Images-DESKTOP-ABC123").exists())
+
+    def test_b150_creator_and_save_compatibility_messages_are_exact(self):
+        self.assertEqual(
+            gui.PROJECT_CREATOR_MESSAGE,
+            'Created by Lorsieab2. This is a passion project dedicated to improving the '
+            '"Virtual Families 2" experience!\n'
+            'No copyright infringement intended! Please support the original game creators! :)',
+        )
+        self.assertEqual(
+            gui.SAVE_COMPATIBILITY_NOTE,
+            "Vanilla Virtual Families 2 saves are compatible with the modded version!",
+        )
+
     def test_markup_segments_supports_bold_spans(self):
         self.assertEqual(
             gui.markup_segments("Adds **visible graphics** first."),
@@ -32,9 +70,9 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
                 default=False,
                 category="optional",
             ),
-            "settings_evict_button": patcher.PatchSetting(
-                id="settings_evict_button",
-                label="Settings Evict",
+            "experimental_feature": patcher.PatchSetting(
+                id="experimental_feature",
+                label="Experimental feature",
                 description="",
                 default=False,
                 category="experimental",
@@ -43,13 +81,18 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
 
         rows = gui.categorized_settings(settings)
 
-        self.assertEqual([row[0] for row in rows], ["main", "optional", "experimental"])
+        self.assertEqual(
+            [category[0] for category in gui.SETTING_CATEGORIES],
+            ["main", "optional"],
+        )
+        self.assertEqual([row[0] for row in rows], ["main", "optional", "other"])
+        self.assertNotIn("experimental", [row[0] for row in rows])
         self.assertEqual(rows[0][1:3], ("Main Patches", "#00802b"))
         self.assertEqual(rows[1][1:3], ("Optional Patches", "#000000"))
-        self.assertEqual(rows[2][1:3], ("Experimental/Not Working Patches", "#b00020"))
+        self.assertEqual(rows[2][1:3], ("Other Patches", "#000000"))
         self.assertEqual([setting.id for setting in rows[0][3]], ["core_executable"])
         self.assertEqual([setting.id for setting in rows[1][3]], ["custom_map"])
-        self.assertEqual([setting.id for setting in rows[2][3]], ["settings_evict_button"])
+        self.assertEqual([setting.id for setting in rows[2][3]], ["experimental_feature"])
 
     def test_setting_ids_for_category_handles_defaults(self):
         settings = {
@@ -100,6 +143,7 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
             game_dir="C:\\Games\\VF2",
             manifest="patches\\vf2.json",
             output_dir="",
+            output_parent_dir="D:\\VF2 Builds",
             backup_dir="",
             log=None,
             dry_run=True,
@@ -110,6 +154,7 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
         self.assertEqual(args.game_dir, "C:\\Games\\VF2")
         self.assertEqual(args.manifest, "patches\\vf2.json")
         self.assertIsNone(args.output_dir)
+        self.assertEqual(args.output_parent_dir, "D:\\VF2 Builds")
         self.assertIsNone(args.backup_dir)
         self.assertIsNone(args.log)
         self.assertTrue(args.dry_run)
@@ -153,6 +198,301 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
         self.assertEqual(args.backup_dir, "C:\\Games\\VF2\\.vf2_patch_backups\\example")
         self.assertIsNone(args.game_dir)
         self.assertIsNone(args.log)
+
+    def test_saved_paths_round_trip_local_settings_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = Path(tmp) / "patcher_local_settings.json"
+
+            gui.save_saved_paths(
+                vanilla_game_dir="C:\\Games\\Virtual Families 2",
+                modded_output_dir="C:\\Games\\VF2-B119-Modded",
+                settings_path=settings_path,
+            )
+
+            self.assertEqual(
+                gui.load_saved_paths(settings_path),
+                {
+                    "vanilla_game_dir": "C:\\Games\\Virtual Families 2",
+                    "modded_output_dir": "C:\\Games\\VF2-B119-Modded",
+                },
+            )
+
+            gui.save_saved_paths(
+                vanilla_game_dir="",
+                modded_output_dir="C:\\Games\\VF2-B120-Modded",
+                settings_path=settings_path,
+            )
+
+            self.assertEqual(
+                gui.load_saved_paths(settings_path),
+                {
+                    "vanilla_game_dir": "C:\\Games\\Virtual Families 2",
+                    "modded_output_dir": "C:\\Games\\VF2-B120-Modded",
+                },
+            )
+
+    def test_manifest_readiness_blocks_unready_rows_but_keeps_them_declared(self):
+        manifest = {
+            "setting_readiness": {
+                "stop_feature": {"status": "STOP", "reason": "native bytes not authenticated"},
+                "pending_feature": {"status": "pending", "runtime_ready": False, "reason": "awaiting readback"},
+                "unlinked_feature": {"link_status": "unlinked"},
+                "runtime_feature": {"runtime_ready": False},
+            },
+            "settings": [
+                {"id": "stop_feature", "default": True},
+                {"id": "pending_feature", "default": False},
+                {"id": "unlinked_feature", "default": False},
+                {"id": "runtime_feature", "default": False},
+                {"id": "ready_feature", "default": True, "runtime_ready": True, "linked": True},
+            ],
+        }
+
+        settings = patcher.manifest_settings(manifest)
+
+        self.assertEqual(
+            set(settings),
+            {"stop_feature", "pending_feature", "unlinked_feature", "runtime_feature", "ready_feature"},
+        )
+        self.assertTrue(settings["stop_feature"].blocked)
+        self.assertIn("manifest status=STOP", settings["stop_feature"].readiness_reason)
+        self.assertIn("runtime_ready=false", settings["pending_feature"].readiness_reason)
+        self.assertIn("manifest status=unlinked", settings["unlinked_feature"].readiness_reason or "")
+        self.assertIn("runtime_ready=false", settings["runtime_feature"].readiness_reason)
+        self.assertFalse(settings["ready_feature"].blocked)
+        self.assertEqual(
+            set(setting.id for _key, _label, _color, rows in gui.categorized_settings(settings) for setting in rows),
+            set(settings),
+        )
+        log = patcher.settings_log(settings, set())
+        self.assertIn("stop_feature", log["blocked"])
+        self.assertFalse(next(row for row in log["available"] if row["id"] == "stop_feature")["selectable"])
+        self.assertTrue(next(row for row in log["available"] if row["id"] == "ready_feature")["selectable"])
+
+    def test_enable_all_and_gui_selection_reject_blocked_settings(self):
+        manifest = {
+            "settings": [
+                {"id": "blocked_feature", "default": False, "status": "pending", "runtime_ready": False, "reason": "not linked"},
+                {"id": "ready_feature", "default": False},
+            ]
+        }
+        args = patcher.argparse.Namespace(
+            enable_all=True,
+            disable_all=False,
+            enable=None,
+            disable=None,
+        )
+
+        with self.assertRaisesRegex(patcher.PatchError, r"blocked_feature: .*runtime_ready=false"):
+            patcher.resolve_enabled_settings(manifest, args)
+
+        settings = patcher.manifest_settings(manifest)
+        with self.assertRaisesRegex(patcher.PatchError, r"Cannot select blocked setting\(s\): blocked_feature: .*"):
+            gui.build_apply_namespace(
+                game_dir="C:\\Games\\VF2",
+                manifest="patches\\vf2.json",
+                settings=settings,
+                selected_settings={"blocked_feature"},
+            )
+
+    def test_explicit_final_playtest_profile_allows_blocked_rows_only_with_profile_flag(self):
+        manifest = {
+            "final_playtest_profile": {
+                "id": "final_playtest_all_enabled",
+                "default_on": ["behavior_patches"],
+                "explicitly_default_off": ["no_ai_icons"],
+            },
+            "settings": [
+                {"id": "core_executable", "default": True},
+                {"id": "holiday_furniture", "default": True},
+                {
+                    "id": "behavior_patches",
+                    "default": False,
+                    "status": "pending",
+                    "runtime_ready": False,
+                    "linked": False,
+                    "reason": "readback pending",
+                },
+                {"id": "same_sex_marriage", "default": False},
+                {"id": "custom_lorsieab2_map_images", "default": False},
+                {"id": "transparent_menu_bar", "default": False},
+                {"id": "no_ai_icons", "default": True},
+            ],
+        }
+        normal_args = patcher.argparse.Namespace(
+            enable_all=True,
+            disable_all=False,
+            enable=None,
+            disable=None,
+        )
+        with self.assertRaisesRegex(patcher.PatchError, r"behavior_patches: .*runtime_ready=false"):
+            patcher.resolve_enabled_settings(manifest, normal_args)
+
+        playtest_args = patcher.argparse.Namespace(
+            enable_all=False,
+            disable_all=False,
+            enable=None,
+            disable=None,
+            final_playtest_all_enabled=True,
+        )
+        _settings, enabled = patcher.resolve_enabled_settings(manifest, playtest_args)
+        self.assertEqual(
+            enabled,
+            {"core_executable", "holiday_furniture", "behavior_patches"},
+        )
+
+    def test_final_playtest_profile_rejects_unknown_default_on_id(self):
+        args = patcher.argparse.Namespace(
+            enable_all=False,
+            disable_all=False,
+            enable=None,
+            disable=None,
+            final_playtest_all_enabled=True,
+        )
+        manifest = {
+            "final_playtest_profile": {
+                "id": "final_playtest_all_enabled",
+                "default_on": ["missing_feature"],
+            },
+            "settings": [{"id": "core_executable", "default": True}],
+        }
+        with self.assertRaisesRegex(
+            patcher.PatchError,
+            r"final_playtest_profile\.default_on references unknown setting\(s\): missing_feature",
+        ):
+            patcher.resolve_enabled_settings(manifest, args)
+
+    def test_final_playtest_profile_allows_unknown_explicitly_off_optional_id(self):
+        args = patcher.argparse.Namespace(
+            enable_all=False,
+            disable_all=False,
+            enable=None,
+            disable=None,
+            final_playtest_all_enabled=True,
+        )
+        manifest = {
+            "final_playtest_profile": {
+                "id": "final_playtest_all_enabled",
+                "explicitly_default_off": ["missing_visual_patch"],
+            },
+            "settings": [{"id": "core_executable", "default": True}],
+        }
+        _settings, enabled = patcher.resolve_enabled_settings(manifest, args)
+        self.assertEqual(enabled, {"core_executable"})
+
+    def test_final_playtest_flag_requires_explicit_manifest_profile(self):
+        manifest = {"settings": [{"id": "same_sex_marriage", "default": False}]}
+        args = patcher.argparse.Namespace(
+            enable_all=False,
+            disable_all=False,
+            enable=None,
+            disable=None,
+            final_playtest_all_enabled=True,
+        )
+        with self.assertRaisesRegex(patcher.PatchError, r"requires an explicit final_playtest_all_enabled"):
+            patcher.resolve_enabled_settings(manifest, args)
+
+    def test_island_events_ready_for_player_qa_is_selectable(self):
+        manifest = {
+            "settings": [
+                {
+                    "id": "island_events",
+                    "default": False,
+                    "readiness": {
+                        "status": "ready_for_player_qa",
+                        "runtime_ready": True,
+                        "linked": True,
+                        "reason": "Static and linked validation are complete; live player QA remains.",
+                    },
+                },
+                {"id": "blocked_feature", "default": False, "status": "pending", "runtime_ready": False},
+            ]
+        }
+        settings = patcher.manifest_settings(manifest)
+        self.assertFalse(settings["island_events"].blocked)
+        self.assertTrue(settings["blocked_feature"].blocked)
+
+        args = gui.build_apply_namespace(
+            game_dir="C:\\Games\\VF2",
+            manifest="patches\\vf2.json",
+            settings=settings,
+            selected_settings={"island_events"},
+        )
+        _, enabled = patcher.resolve_enabled_settings(manifest, args)
+        self.assertEqual(enabled, {"island_events"})
+        island_row = next(
+            row for row in patcher.settings_log(settings, enabled)["available"]
+            if row["id"] == "island_events"
+        )
+        self.assertTrue(island_row["selectable"])
+        self.assertEqual(island_row["readiness_status"], "ready_for_player_qa")
+        self.assertIsNone(island_row["readiness_reason"])
+        self.assertNotEqual(island_row["readiness_status"], "verified")
+
+    def test_gui_select_all_skips_blocked_settings(self):
+        settings = {
+            "blocked_feature": patcher.PatchSetting(
+                id="blocked_feature",
+                label="Blocked",
+                description="",
+                default=True,
+                readiness_status="STOP",
+                readiness_reason="manifest status=STOP; linked=false",
+            ),
+            "ready_feature": patcher.PatchSetting(
+                id="ready_feature",
+                label="Ready",
+                description="",
+                default=False,
+            ),
+        }
+
+        class FakeVar:
+            def __init__(self):
+                self.value = None
+
+            def set(self, value):
+                self.value = value
+
+        controller = object.__new__(gui.VF2PatcherGUI)
+        controller.settings = settings
+        controller.setting_vars = {setting_id: FakeVar() for setting_id in settings}
+        gui.VF2PatcherGUI.select_all_settings(controller)
+
+        self.assertFalse(controller.setting_vars["blocked_feature"].value)
+        self.assertTrue(controller.setting_vars["ready_feature"].value)
+
+    def test_saved_output_parent_path_round_trips_and_drives_namespace(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            settings_path = Path(tmp) / "patcher_local_settings.json"
+            gui.save_saved_paths(
+                modded_output_parent_dir="D:\\VF2 Builds",
+                modded_output_dir="D:\\VF2 Builds\\Virtual Families 2 - Modded",
+                settings_path=settings_path,
+            )
+            self.assertEqual(
+                gui.load_saved_paths(settings_path),
+                {
+                    "modded_output_parent_dir": "D:\\VF2 Builds",
+                    "modded_output_dir": "D:\\VF2 Builds\\Virtual Families 2 - Modded",
+                },
+            )
+
+    def test_update_link_points_to_standalone_patcher_releases_repo(self):
+        self.assertEqual(
+            gui.PATCHER_RELEASES_URL,
+            "https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases",
+        )
+
+    def test_manifest_build_label_prefers_explicit_build_number(self):
+        self.assertEqual(gui.manifest_build_label({"name": "Virtual Families 2 Restoration/Addition Patcher B119"}), "B119")
+        self.assertEqual(
+            gui.manifest_build_label(
+                {"output": {"default_exe_name": "Virtual Families 2 - Modded B120.exe"}}
+            ),
+            "B120",
+        )
+        self.assertEqual(gui.manifest_build_label({"name": "VF2 patcher"}), "")
 
 
 if __name__ == "__main__":
