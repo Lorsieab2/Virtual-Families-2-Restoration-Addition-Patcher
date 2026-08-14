@@ -17194,14 +17194,36 @@ def patch_graphics_manager(manifest):
     if obj.buf[curtain_draw_sec.raw_ptr + curtain_draw_sym.value : curtain_draw_sec.raw_ptr + curtain_draw_sym.value + 3] != b"\x55\x8B\xEC":
         raise RuntimeError("Unexpected theGraphicsManager::Draw prologue")
     curtain_helper = obj.append_undefined_symbol("_VF2ResolveRenovationCurtainImage")
+    # CRITICAL: this hook is spliced in immediately after Draw's
+    # "push ebp; mov ebp,esp" prologue, i.e. *before* the stock function
+    # body's own first use of ECX ("push esi; mov esi,ecx; ..." -- ECX is
+    # theGraphicsManager::Draw's implicit `this`). VF2ResolveRenovationCurtainImage
+    # is an ordinary __cdecl C function (not a hand-written asm trampoline),
+    # so it is free to leave anything in ECX/EAX/EDX -- and it does, since it
+    # calls other __thiscall member functions (theGraphicsManager::Get(),
+    # GetImageGrid(), etc.) that clobber ECX for their own `this` pointers.
+    # Without explicitly saving/restoring ECX around this call, the stock
+    # code immediately after runs with whatever ECX happened to hold after
+    # the resolver returned (observed live via a real crash dump + an IDA
+    # Pro attached-debugger trace: ECX/ESI left holding 0x21a, a leftover
+    # stock image id, not the CDecal/this pointer) and dereferences it as a
+    # pointer, crashing with an access violation on the very next frame the
+    # renovated closed-curtain image is drawn. Same bug class, same fix
+    # pattern, as the Bathroom 1/2 RefreshDecals grid-resolver hooks above --
+    # this is the third, previously-unpatched injection site: the general
+    # per-frame image draw path rather than the passive scene-load refresh
+    # path, which is why it was reachable specifically by rendering the
+    # physical curtain object (not just its store color-picker swatch).
     curtain_payload = (
+        b"\x51"               # push ecx (save `this`)
         b"\xFF\x75\x08"       # push image
         b"\xE8\x00\x00\x00\x00" # call selector
         b"\x83\xC4\x04"       # pop image argument
         b"\x89\x45\x08"       # replace image argument for stock Draw
+        b"\x59"               # pop ecx (restore `this`)
     )
     obj.insert_section_bytes(curtain_draw_sym.section, curtain_draw_insert, curtain_payload)
-    obj.append_relocation(curtain_draw_sym.section, curtain_draw_insert + 4, curtain_helper, IMAGE_REL_I386_REL32)
+    obj.append_relocation(curtain_draw_sym.section, curtain_draw_insert + 5, curtain_helper, IMAGE_REL_I386_REL32)
 
     new_image_max = ORIG_IMAGE_MAX + append_count
     new_scan_end = ORIG_IMAGE_COUNT * DESC_SIZE + append_count * DESC_SIZE

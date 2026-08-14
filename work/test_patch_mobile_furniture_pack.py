@@ -3462,12 +3462,31 @@ class MobileRenovationArtTests(unittest.TestCase):
                 draw = obj.symbol("?Draw@theGraphicsManager@@QAEXW4EImage@@HHMH@Z")
                 sec = obj.section(draw.section)
                 self.assertEqual(obj.buf[sec.raw_ptr + draw.value : sec.raw_ptr + draw.value + 3], b"\x55\x8B\xEC")
+                # Regression guard: the injected hook must save/restore ECX
+                # (theGraphicsManager::Draw's implicit `this`) around the
+                # call to the resolver, since that resolver is an ordinary
+                # __cdecl C function free to clobber ECX internally, and the
+                # stock Draw body immediately after depends on ECX still
+                # holding `this`. A real crash (garbage ECX/ESI, observed as
+                # a leftover stock image id) was traced to this exact hook
+                # missing that preservation -- see patch_graphics_manager.
+                insert = draw.value + 3
+                self.assertEqual(
+                    obj.buf[sec.raw_ptr + insert : sec.raw_ptr + insert + 1],
+                    b"\x51",
+                    "curtain draw hook must start with `push ecx` to save theGraphicsManager::Draw's `this`",
+                )
+                self.assertEqual(
+                    obj.buf[sec.raw_ptr + insert + 15 : sec.raw_ptr + insert + 16],
+                    b"\x59",
+                    "curtain draw hook must end with `pop ecx` to restore theGraphicsManager::Draw's `this`",
+                )
                 reloc_targets = []
                 for index in range(sec.nreloc):
                     vaddr, symbol_index, relocation_type = struct.unpack_from(
                         "<IIH", obj.buf, sec.reloc_ptr + index * 10
                     )
-                    if vaddr == draw.value + 7 and relocation_type == patcher.IMAGE_REL_I386_REL32:
+                    if vaddr == draw.value + 8 and relocation_type == patcher.IMAGE_REL_I386_REL32:
                         reloc_targets.append(obj.symbol_by_index[symbol_index].name)
                 self.assertIn("_VF2ResolveRenovationCurtainImage", reloc_targets)
         finally:
