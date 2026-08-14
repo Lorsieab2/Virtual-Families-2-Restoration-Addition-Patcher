@@ -11835,9 +11835,24 @@ extern "C" __declspec(naked) ldwImageGrid *__cdecl VF2ResolveBathroom1ClosedCurt
         // RefreshProps keeps the active CDecal instance in EDI at this
         // callsite. Pass that instance so Bathroom 1 cannot borrow a cached
         // grid from another decal object.
+        //
+        // CRITICAL: the native call site that reaches this hook has already
+        // executed "mov ecx, edi" to set up ECX as the CDecal `this` pointer
+        // for the *next* native instruction after this one returns (an
+        // AddDecal-style decal-slot insertion) - the same pattern already
+        // fixed for Bathroom 2's equivalent hook. ECX is caller-saved, so
+        // the Impl call below is free to clobber it; without saving and
+        // restoring ECX here, that next native instruction dereferences
+        // whatever ECX ends up holding (observed crashing on the raw stock
+        // image ID, 538/539, treated as a pointer) the moment a Bathroom 1
+        // closed-curtain decal is drawn with an active custom style. Passing
+        // EDI as the argument is unrelated to this and stays correct on its
+        // own; ECX still needs its own explicit save/restore.
+        push ecx
         push edi
         call VF2ResolveBathroom1ClosedCurtainGridImpl
         add esp, 4
+        pop ecx
         ret
     }}
 }}
