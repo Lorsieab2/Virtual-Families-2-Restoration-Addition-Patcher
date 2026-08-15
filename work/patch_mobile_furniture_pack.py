@@ -11929,10 +11929,10 @@ extern "C" __declspec(naked) ldwImageGrid *__cdecl VF2ResolveBathroom2ClosedCurt
         // closed-curtain image IDs, 538/539, left over from an internal
         // comparison) and dereferences it as if it were the CDecal
         // pointer, crashing with an access violation the moment a
-        // Bathroom 2 closed-curtain decal is drawn. Bathroom 1's
-        // equivalent hook does not need this: its call site depends on
-        // EDI afterward, and EDI is callee-saved, so it is already
-        // preserved by the normal calling convention.
+        // Bathroom 2 closed-curtain decal is drawn. Bathroom 1's hook
+        // above needs the same save/restore for the same reason: its
+        // callsite also does "mov ecx, edi" before the hooked push, so
+        // ECX (not EDI) is what the following AddDecal call needs.
         push ecx
         push esi
         call VF2ResolveBathroom2ClosedCurtainGridImpl
@@ -14586,9 +14586,51 @@ static int VF2AIBathroom2StyleIndex(int itemId) {{
     return VF2IsAIBathroom2Style(itemId) ? itemId - {AI_BATHROOM2_PC_ITEM_BASE} : -1;
 }}
 
+// Bathroom 2 curtain styles are cosmetic-only overlay rows layered on top of
+// the native second-bathroom renovation (item 0xE6); they must not be
+// purchasable until that native renovation is actually owned, or the style
+// would have nowhere real to render onto.
+static bool VF2NativeBathroom2Owned() {{
+    return InventoryManager.HaveUpgrade((EInventoryItem)0xE6);
+}}
+
+// Reads the live store scene through its own native singleton accessor
+// instead of threading a new parameter through HandlePurchaseItem's already
+// carefully offset-pinned dispatch hook (every byte inserted there shifts
+// several downstream hardcoded call offsets in the same function).
+class CScrollingStoreScene {{
+public:
+    static CScrollingStoreScene *Get();
+}};
+
+static void VF2ShowBathroom2RenovationRequiredMessage() {{
+    CScrollingStoreScene *scene = CScrollingStoreScene::Get();
+    if (!scene) return;
+    char okButton[] = "OK";
+    theMessageBoxDlg notice(
+        "Bathroom 2 must be renovated first before this can be bought.",
+        0,
+        false,
+        okButton,
+        0
+    );
+    notice.DoModal((ldwScene *)scene, false);
+}}
+
 static bool VF2ApplyAIBathroom2Style(int itemId) {{
     int index = VF2AIBathroom2StyleIndex(itemId);
     if (index < 0) return false;
+    if (!VF2NativeBathroom2Owned()) {{
+        // HandlePurchaseItem already deducted this row's price -- run
+        // through VF2ApplyPriceMultiplier exactly like CalcPrice does, so a
+        // 2x/5x/100x Cheat Upgrades price mode gets refunded in full instead
+        // of only the base catalog price. Refund it so a blocked purchase
+        // is a true no-op for the player instead of a partial charge.
+        int refund = VF2ApplyPriceMultiplier(kVF2AIBathroom2Prices[index]);
+        if (refund > 0) Money.Adjust((float)refund, false);
+        VF2ShowBathroom2RenovationRequiredMessage();
+        return true;
+    }}
     VF2NormalizeAIBathroom2Actives();
     if (VF2AIBathroom2IsActive(itemId)) {{
         *VF2AIBathroom2ActiveByte(itemId) = 0;
