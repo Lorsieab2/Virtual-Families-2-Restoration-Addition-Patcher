@@ -14606,10 +14606,12 @@ static bool VF2ApplyAIBathroom2Style(int itemId) {{
     int index = VF2AIBathroom2StyleIndex(itemId);
     if (index < 0) return false;
     if (!VF2NativeBathroom2Owned()) {{
-        // HandlePurchaseItem already deducted this row's catalog price
-        // before this hook runs; refund it so a blocked purchase is a true
-        // no-op for the player instead of a silent charge.
-        int refund = kVF2AIBathroom2Prices[index];
+        // HandlePurchaseItem already deducted this row's price -- run
+        // through VF2ApplyPriceMultiplier exactly like CalcPrice does, so a
+        // 2x/5x/100x Cheat Upgrades price mode gets refunded in full instead
+        // of only the base catalog price. Refund it so a blocked purchase
+        // is a true no-op for the player instead of a partial charge.
+        int refund = VF2ApplyPriceMultiplier(kVF2AIBathroom2Prices[index]);
         if (refund > 0) Money.Adjust((float)refund, false);
         VF2ShowBathroom2RenovationRequiredMessage();
         return true;

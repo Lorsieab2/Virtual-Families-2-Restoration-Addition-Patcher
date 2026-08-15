@@ -2778,7 +2778,16 @@ class MobileRenovationArtTests(unittest.TestCase):
         self.assertLess(refund_index, message_index)
         self.assertLess(message_index, block_return_index)
         self.assertLess(block_return_index, normalize_index)
-        self.assertIn("int refund = kVF2AIBathroom2Prices[index];", apply_template)
+        # Regression guard for a P1 finding: HandlePurchaseItem deducts the
+        # price *after* Cheat Upgrades' 2x/5x/100x multiplier is applied
+        # (CalcPrice already runs it through VF2ApplyPriceMultiplier), so
+        # the refund must run the same catalog price through the same
+        # multiplier or a blocked purchase under an active price mode would
+        # only give back a fraction of what was actually charged.
+        self.assertIn(
+            "int refund = VF2ApplyPriceMultiplier(kVF2AIBathroom2Prices[index]);",
+            apply_template,
+        )
 
     def test_ai_bathroom2_active_price_and_remove_gate_are_reachable(self):
         source = Path(patcher.__file__).read_text(encoding="ascii")
