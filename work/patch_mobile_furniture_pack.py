@@ -304,7 +304,6 @@ MARRIAGE_EMAIL_ITEM_ID = 0x132
 SAME_SEX_MARRIAGE_ITEM_ID = 0x14C
 SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID = 0x119
 SAME_SEX_MARRIAGE_CATALOG_PRICE = 10000
-SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID = 0x162
 MARRIAGE_CANDIDATE_REROLL_ITEM_ID = 0x152
 MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE = 10000
 MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION = ".vf2rero"
@@ -11778,14 +11777,10 @@ static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
         // must never inherit the generic owned/checkmark state.
         return kVF2VisibleSpecialUpgradeIconImageBase + 37;
     }}
-    if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x} &&
-        VF2SameSexMarriageToggleActive()) {{
-        return {SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID};
-    }}
-    if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x} &&
-        gVF2AllowMarriageCandidateReroll != 0) {{
-        return {SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID};
-    }}
+    // The marriage toggles (Enable Same-Sex Marriage, Allow Reroll of
+    // Marriage Candidates) keep their envelope artwork whether active or
+    // not.  Like Divorce Spouse above, they must never swap to the generic
+    // owned/checkmark icon.
     int index = VF2VisibleSpecialUpgradeIconFrame(itemId);
     return index < 0 ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -18570,7 +18565,7 @@ def patch_marriage_candidate_reroll(manifest):
             "item_id": hex(MARRIAGE_CANDIDATE_REROLL_ITEM_ID),
             "catalog_price": MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE,
             "icon_file": "cheat_marriage_email.png",
-            "active_state": "dedicated .vf2rero byte with existing checkmark renderer",
+            "active_state": "dedicated .vf2rero byte; store icon stays cheat_marriage_email.png",
             "inactive_state": "explicit catalog price 10000",
             "buy_again": "clears .vf2rero",
         },
@@ -18880,11 +18875,10 @@ def patch_same_sex_marriage(manifest):
             "price_source_item_id": hex(SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID),
             "price_source": "Health Plan catalog row 0x119",
             "active_price": 0,
-            "active_state": "gVF2SameSexMarriage runtime byte with checkmark.png",
+            "active_state": "gVF2SameSexMarriage runtime byte; store icon stays cheat_marriage_email.png",
             "inactive_state": "explicit catalog price",
             "inactive_icon": "cheat_marriage_email.png",
-            "active_icon": "checkmark.png",
-            "active_icon_id": hex(SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID),
+            "active_icon": "cheat_marriage_email.png",
         },
         "runtime_flag": {
             "symbol": SAME_SEX_MARRIAGE_FLAG_SYMBOL,
@@ -19311,11 +19305,10 @@ def patch_same_sex_marriage_legacy(manifest):
             "price_source_item_id": hex(SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID),
             "price_source": "Health Plan catalog row 0x119",
             "active_price": 0,
-            "active_state": "gVF2SameSexMarriage runtime byte with checkmark.png",
+            "active_state": "gVF2SameSexMarriage runtime byte; store icon stays cheat_marriage_email.png",
             "inactive_state": "explicit catalog price",
             "inactive_icon": "cheat_marriage_email.png",
-            "active_icon": "checkmark.png",
-            "active_icon_id": hex(SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID),
+            "active_icon": "cheat_marriage_email.png",
         },
         "update_parents_guard": parent_guard_manifest,
         "runtime_flag": {

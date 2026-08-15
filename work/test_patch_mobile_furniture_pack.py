@@ -11092,14 +11092,14 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertEqual(contract["inactive_price"], 10000)
                 self.assertEqual(contract["price_source"], "Health Plan catalog row 0x119")
                 self.assertEqual(contract["active_price"], 0)
-                self.assertIn("checkmark.png", contract["active_state"])
-                self.assertEqual(contract["active_icon"], "checkmark.png")
-                # Regression guard: 0x166 is the native ImageList entry for
-                # StatusBarSliceR.png, not a checkmark - that mismatch left
-                # this icon rendering as garbage/blank once purchased. The
-                # real stock checkmark.png entry is 0x162 (confirmed by
-                # reading the native image descriptor table directly).
-                self.assertEqual(contract["active_icon_id"], "0x162")
+                # The store icon stays the marriage envelope whether the toggle
+                # is active or not; it must never swap to the generic
+                # owned/checkmark artwork (players asked for the envelope to
+                # remain). Guard both the active-state note and the icons.
+                self.assertNotIn("checkmark", contract["active_state"])
+                self.assertEqual(contract["active_icon"], "cheat_marriage_email.png")
+                self.assertEqual(contract["active_icon"], contract["inactive_icon"])
+                self.assertNotIn("active_icon_id", contract)
                 self.assertEqual(contract["inactive_state"], "explicit catalog price")
         finally:
             patcher.PATCHED = old_patched
