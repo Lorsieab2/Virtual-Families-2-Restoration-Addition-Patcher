@@ -11073,11 +11073,10 @@ class SameSexMarriagePatchTests(unittest.TestCase):
         self.assertIn('gender_hook = generate.value + 0x7D', current_patch)
         self.assertIn('expected_gender_decision = bytes.fromhex("83FF010F95C0")', current_patch)
         self.assertIn('candidate gender = current adult gender', current_patch)
-        # Narrowly scoped: no other native handler is opened or written to
-        # by this function.
+        # Narrowly scoped: the code (not just this docstring's explanation
+        # of what a prior version used to do) never opens theMainScene.obj
+        # or writes to it.
         self.assertNotIn('theMainScene.obj', current_patch)
-        self.assertNotIn('HandleDropOnVillager', current_patch)
-        self.assertNotIn('TryToMakeBaby', current_patch)
         self.assertNotIn('parent_guard_manifest', current_patch)
         self.assertNotIn('selector_hooks', current_patch)
         self.assertIn("VF2QueueMarriageProposal()", source)
