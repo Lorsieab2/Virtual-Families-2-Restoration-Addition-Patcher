@@ -545,7 +545,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         self.assertEqual(contract["manual_dispatch"]["item_count"], 34)
         self.assertEqual(contract["manual_dispatch"]["family_count"], 17)
         self.assertEqual(contract["autonomous"]["item_count"], 23)
-        self.assertEqual(contract["autonomous"]["external_candidate_count"], 12)
+        self.assertEqual(contract["autonomous"]["external_candidate_count"], 13)
         self.assertEqual(
             contract["rejected_scope"]["decorative_only"],
             ["0x2ab", "0x2ac", "0x2bf", "0x2d4", "0x2d5"],
@@ -1902,7 +1902,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("if (roll < stockWeight) return false;", selector)
                 self.assertIn(
                     "2000, 2000, 2000, 2000, 2000,\n"
-                    "        3000, 12000, 3000, 12000, 2000, 3000, 2000",
+                    "        3000, 12000, 3000, 12000, 2000, 3000, 2000, 2000",
                     helper,
                 )
                 self.assertIn(
@@ -1915,7 +1915,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     helper,
                 )
                 self.assertIn(
-                    "for (int index = 0; index < 12; ++index)",
+                    "for (int index = 0; index < 13; ++index)",
                     helper,
                 )
                 self.assertIn(
@@ -1931,6 +1931,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     helper,
                 )
                 self.assertIn(
+                    'VF2SetActionLabel(villager, "Adjusting the ornaments");',
+                    helper,
+                )
+                self.assertIn(
                     "mobileWeights->weights[9]",
                     selector,
                 )
@@ -1940,6 +1944,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "mobileWeights->weights[11]",
+                    selector,
+                )
+                self.assertIn(
+                    "mobileWeights->weights[12]",
                     selector,
                 )
                 self.assertIn("treeAutonomousEligible", selector)
@@ -2274,6 +2282,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         ("0x19c", "0x88", 2000),
                         ("0x19e", "0x88", 3000),
                         ("0x19f", "0x88", 2000),
+                        ("0x19d", "0x88", 2000),
                     ],
                 )
                 external_ids = {
