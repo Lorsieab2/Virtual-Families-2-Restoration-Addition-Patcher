@@ -2750,53 +2750,131 @@ class MobileRenovationArtTests(unittest.TestCase):
         self.assertNotIn("gServicesList.*AI_BATHROOM2", source)
 
     def test_ai_bathroom2_styles_are_gated_behind_native_renovation(self):
-        source = Path(patcher.__file__).read_text(encoding="ascii")
-        self.assertIn(
-            "static bool VF2NativeBathroom2Owned() {{\n"
-            "    return InventoryManager.HaveUpgrade((EInventoryItem)0xE6);\n"
-            "}}",
-            source,
-        )
-        self.assertIn(
-            '"Bathroom 2 must be renovated first before this can be bought."',
-            source,
-        )
-        # The scene comes from the native CScrollingStoreScene singleton
-        # accessor rather than a new HandlePurchaseItem hook parameter: every
-        # byte inserted at that dispatch hook shifts several further
-        # hardcoded downstream call offsets in the same native function
-        # (verified the hard way -- adding one byte there broke the
-        # AddToStorage award-hook offset check).
-        self.assertIn("static CScrollingStoreScene *Get();", source)
-        self.assertIn("CScrollingStoreScene::Get();", source)
-        self.assertNotIn("VF2ApplyAIBathroom2Style(int itemId, void *scene)", source)
-        self.assertNotIn("VF2ApplyVisibleSpecialUpgrade(int itemId, void *scene)", source)
+        # Runs the real generator into a temp PATCHED dir and inspects the
+        # actual emitted vf2_special_upgrade_effects.cpp, rather than
+        # pattern-matching the Python source: this file assembles ~14,000
+        # lines of a single translation unit out of several concatenated
+        # f-string blocks written at different points in the generator, so a
+        # substring that looks right in the Python source can still land in
+        # the wrong position relative to a type's real definition and fail
+        # to compile. That exact class of bug (CInventoryManager only
+        # forward-declared at ai_bathroom2_cpp's insertion point, its full
+        # "public: bool HaveUpgrade(...); ..." definition landing hundreds
+        # of lines later) is what this test guards against.
+        old_patched = patcher.PATCHED
+        old_ai = patcher.ENABLE_AI_GENERATED_BATHROOM2
+        old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp = Path(tmp)
+                for object_name in ("InventoryManager.obj", "ScrollingStoreScene.obj"):
+                    shutil.copy2(patcher.SRC_OBJS / object_name, temp / object_name)
+                (temp / "vf2_special_upgrade_effects.cpp").write_text("", encoding="ascii")
+                patcher.PATCHED = temp
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
+                patcher.ENABLE_MOBILE_RENOVATIONS = True
+                # main() always calls patch_scrolling_store_scene (containing
+                # ai_bathroom2_cpp) before write_outfit_store_helpers.
+                # write_outfit_store_helpers strips any existing
+                # "VF2 generated special-upgrade helper section" -- including
+                # the one real CInventoryManager definition -- from whatever
+                # patch_scrolling_store_scene already wrote, then re-appends a
+                # fresh copy of that section at the very end. That's *why*
+                # anything patch_scrolling_store_scene inserts always lands
+                # before the real CInventoryManager definition textually, no
+                # matter what its own position looks like.
+                patcher.patch_scrolling_store_scene({})
+                patcher.write_outfit_store_helpers({})
+                source = (temp / "vf2_special_upgrade_effects.cpp").read_text(encoding="ascii")
 
-        apply_template = source.split(
-            "static bool VF2ApplyAIBathroom2Style(int itemId) {{",
-            1,
-        )[1].split("static int VF2GetAIBathroom2Price", 1)[0]
-        gate_index = apply_template.index("if (!VF2NativeBathroom2Owned()) {{")
-        refund_index = apply_template.index("Money.Adjust((float)refund, false);")
-        message_index = apply_template.index("VF2ShowBathroom2RenovationRequiredMessage();")
-        block_return_index = apply_template.index("return true;")
-        normalize_index = apply_template.index("VF2NormalizeAIBathroom2Actives();")
-        # The gate must run, refund, and message-and-block before any active
-        # style state is ever touched.
-        self.assertLess(gate_index, refund_index)
-        self.assertLess(refund_index, message_index)
-        self.assertLess(message_index, block_return_index)
-        self.assertLess(block_return_index, normalize_index)
-        # Regression guard for a P1 finding: HandlePurchaseItem deducts the
-        # price *after* Cheat Upgrades' 2x/5x/100x multiplier is applied
-        # (CalcPrice already runs it through VF2ApplyPriceMultiplier), so
-        # the refund must run the same catalog price through the same
-        # multiplier or a blocked purchase under an active price mode would
-        # only give back a fraction of what was actually charged.
-        self.assertIn(
-            "int refund = VF2ApplyPriceMultiplier(kVF2AIBathroom2Prices[index]);",
-            apply_template,
-        )
+            self.assertIn(
+                '"Bathroom 2 must be renovated first before this can be bought."',
+                source,
+            )
+            # The scene comes from the native CScrollingStoreScene singleton
+            # accessor rather than a new HandlePurchaseItem hook parameter:
+            # every byte inserted at that dispatch hook shifts several
+            # further hardcoded downstream call offsets in the same native
+            # function (verified the hard way -- adding one byte there broke
+            # the AddToStorage award-hook offset check).
+            self.assertIn("static CScrollingStoreScene *Get();", source)
+            self.assertIn("CScrollingStoreScene::Get();", source)
+            self.assertNotIn("VF2ApplyAIBathroom2Style(int itemId, void *scene)", source)
+            self.assertNotIn("VF2ApplyVisibleSpecialUpgrade(int itemId, void *scene)", source)
+
+            # VF2NativeBathroom2Owned must be forward-declared before
+            # VF2ApplyAIBathroom2Style calls it, but its real body -- the
+            # only thing in this file that calls a CInventoryManager method
+            # this early -- must be defined only after CInventoryManager's
+            # one full definition in this translation unit ("VF2 generated
+            # special-upgrade helper section"), or MSVC rejects it as an
+            # incomplete type.
+            forward_decl_index = source.index('extern "C" bool __cdecl VF2NativeBathroom2Owned();')
+            apply_call_index = source.index("static bool VF2ApplyAIBathroom2Style(int itemId) {")
+            # Same story for VF2ApplyPriceMultiplier: the refund inside
+            # VF2ApplyAIBathroom2Style also needs it forward-declared here,
+            # since it's a different translation-unit region than its own
+            # real definition.
+            self.assertLess(
+                source.index('extern "C" int __cdecl VF2ApplyPriceMultiplier(int price);'),
+                apply_call_index,
+            )
+            full_class_index = source.index(
+                "class CInventoryManager {\n"
+                "public:\n"
+                "    bool IsLocked(EInventoryItem item);\n"
+                "    bool HaveUpgrade(EInventoryItem item);"
+            )
+            real_def_index = source.index(
+                'extern "C" bool __cdecl VF2NativeBathroom2Owned() {\n'
+                "    return InventoryManager.HaveUpgrade((EInventoryItem)0xE6);\n"
+                "}"
+            )
+            self.assertLess(forward_decl_index, apply_call_index)
+            self.assertLess(full_class_index, real_def_index)
+            # And VF2ApplyPriceMultiplier's own real definition -- proven
+            # safe already, since pre-existing code calls it as a plain
+            # function from before this point -- anchors where the deferred
+            # body was inserted.
+            self.assertIn(
+                'extern "C" bool __cdecl VF2NativeBathroom2Owned() {\n'
+                "    return InventoryManager.HaveUpgrade((EInventoryItem)0xE6);\n"
+                "}\n"
+                "\n"
+                'extern "C" int __cdecl VF2ApplyPriceMultiplier(int price) {\n',
+                source,
+            )
+
+            apply_template = source.split(
+                "static bool VF2ApplyAIBathroom2Style(int itemId) {",
+                1,
+            )[1].split("static int VF2GetAIBathroom2Price", 1)[0]
+            gate_index = apply_template.index("if (!VF2NativeBathroom2Owned()) {")
+            refund_index = apply_template.index("Money.Adjust((float)refund, false);")
+            message_index = apply_template.index("VF2ShowBathroom2RenovationRequiredMessage();")
+            block_return_index = apply_template.index("return true;")
+            normalize_index = apply_template.index("VF2NormalizeAIBathroom2Actives();")
+            # The gate must run, refund, and message-and-block before any
+            # active style state is ever touched.
+            self.assertLess(gate_index, refund_index)
+            self.assertLess(refund_index, message_index)
+            self.assertLess(message_index, block_return_index)
+            self.assertLess(block_return_index, normalize_index)
+            # Regression guard for a P1 finding: HandlePurchaseItem deducts
+            # the price *after* Cheat Upgrades' 2x/5x/100x multiplier is
+            # applied (CalcPrice already runs it through
+            # VF2ApplyPriceMultiplier), so the refund must run the same
+            # catalog price through the same multiplier or a blocked
+            # purchase under an active price mode would only give back a
+            # fraction of what was actually charged.
+            self.assertIn(
+                "int refund = VF2ApplyPriceMultiplier(kVF2AIBathroom2Prices[index]);",
+                apply_template,
+            )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_ai
+            patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
 
     def test_ai_bathroom2_active_price_and_remove_gate_are_reachable(self):
         source = Path(patcher.__file__).read_text(encoding="ascii")

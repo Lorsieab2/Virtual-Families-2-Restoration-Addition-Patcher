@@ -1,0 +1,25 @@
+{
+  "matrix_id": "vf2-19-variant-toggle-matrix-v1",
+  "note": "Stable 19-variant feature-toggle matrix shared across releases. Flags map 1:1 to the generator's VF2_ENABLE_* environment variables (see work/build_matrix.ps1). mobile_renovations and ai_generated_bathroom2 are always paired: the mobile renovation renderer and the Bathroom 2 overlay ship or skip together in every existing variant.",
+  "variants": [
+    {"name": "core", "cheat_upgrades": false, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": false, "holiday_ornaments": false, "behavior_patches": false},
+    {"name": "behavior_patches", "cheat_upgrades": false, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": false, "holiday_ornaments": false, "behavior_patches": true},
+    {"name": "cheat_upgrades", "cheat_upgrades": true, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": false, "holiday_ornaments": false, "behavior_patches": false},
+    {"name": "cheat_upgrades_behavior_patches", "cheat_upgrades": true, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": false, "holiday_ornaments": false, "behavior_patches": true},
+    {"name": "cheat_upgrades_holiday_ornaments", "cheat_upgrades": true, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": false, "holiday_ornaments": true, "behavior_patches": false},
+    {"name": "cheat_upgrades_holiday_ornaments_behavior_patches", "cheat_upgrades": true, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": false, "holiday_ornaments": true, "behavior_patches": true},
+    {"name": "holiday_ornaments", "cheat_upgrades": false, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": false, "holiday_ornaments": true, "behavior_patches": false},
+    {"name": "holiday_ornaments_behavior_patches", "cheat_upgrades": false, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": false, "holiday_ornaments": true, "behavior_patches": true},
+    {"name": "island_events", "cheat_upgrades": false, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": true, "holiday_ornaments": false, "behavior_patches": false},
+    {"name": "island_events_behavior_patches", "cheat_upgrades": false, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": true, "holiday_ornaments": false, "behavior_patches": true},
+    {"name": "island_events_cheat_upgrades", "cheat_upgrades": true, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": true, "holiday_ornaments": false, "behavior_patches": false},
+    {"name": "island_events_cheat_upgrades_behavior_patches", "cheat_upgrades": true, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": true, "holiday_ornaments": false, "behavior_patches": true},
+    {"name": "island_events_cheat_upgrades_holiday_ornaments", "cheat_upgrades": true, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": true, "holiday_ornaments": true, "behavior_patches": false},
+    {"name": "island_events_cheat_upgrades_holiday_ornaments_behavior_patches", "cheat_upgrades": true, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": true, "holiday_ornaments": true, "behavior_patches": true},
+    {"name": "island_events_holiday_ornaments", "cheat_upgrades": false, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": true, "holiday_ornaments": true, "behavior_patches": false},
+    {"name": "island_events_holiday_ornaments_behavior_patches", "cheat_upgrades": false, "mobile_renovations": false, "ai_generated_bathroom2": false, "island_events": true, "holiday_ornaments": true, "behavior_patches": true},
+    {"name": "mobile_renovations", "cheat_upgrades": false, "mobile_renovations": true, "ai_generated_bathroom2": true, "island_events": false, "holiday_ornaments": false, "behavior_patches": false},
+    {"name": "cheat_upgrades_mobile_renovations", "cheat_upgrades": true, "mobile_renovations": true, "ai_generated_bathroom2": true, "island_events": false, "holiday_ornaments": false, "behavior_patches": false},
+    {"name": "final_all_enabled", "cheat_upgrades": true, "mobile_renovations": true, "ai_generated_bathroom2": true, "island_events": true, "holiday_ornaments": true, "behavior_patches": true}
+  ]
+}

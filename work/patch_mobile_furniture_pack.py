@@ -11449,6 +11449,17 @@ static void VF2RebuildOwnedRenovations() {{
     }}
 }}
 
+// Bathroom 2 curtain styles (ai_bathroom2_cpp, above patch_scrolling_store_scene's
+// own template) are cosmetic-only overlay rows layered on top of the native
+// second-bathroom renovation (item 0xE6); they must not be purchasable
+// until that native renovation is actually owned, or the style would have
+// nowhere real to render onto. Defined here, not where it's forward-declared
+// and called, because this is where CInventoryManager's one full definition
+// in this translation unit actually is.
+extern "C" bool __cdecl VF2NativeBathroom2Owned() {{
+    return InventoryManager.HaveUpgrade((EInventoryItem)0xE6);
+}}
+
 extern "C" int __cdecl VF2ApplyPriceMultiplier(int price) {{
     if (!kVF2EnableB150CheatUpgrades) return price;
     int multiplier = 1;
@@ -14544,6 +14555,17 @@ static const bool kVF2EnableAIBathroom2 = {"true" if ENABLE_AI_GENERATED_BATHROO
 {ai_bathroom2_prices_cpp}
 class CInventoryManager;
 extern CInventoryManager InventoryManager;
+// CInventoryManager is only forward-declared in this template (nothing here
+// has ever called a method on it -- only taken &InventoryManager's address
+// or forward-declared+called an opaque function like VF2ToggleB150PriceMode
+// above, whose own body lives elsewhere). VF2NativeBathroom2Owned follows
+// that same established pattern: forward-declared here where
+// ai_bathroom2_cpp needs to call it, defined for real down in
+// write_outfit_store_helpers's own output, right next to
+// VF2ApplyPriceMultiplier, where CInventoryManager's one full definition in
+// this file actually is.
+extern "C" bool __cdecl VF2NativeBathroom2Owned();
+extern "C" int __cdecl VF2ApplyPriceMultiplier(int price);
 
 static bool VF2IsAIBathroom2Style(int itemId) {{
     return kVF2EnableAIBathroom2 && itemId >= {AI_BATHROOM2_PC_ITEM_IDS[0]} &&
@@ -14584,14 +14606,6 @@ static void VF2RefreshRenovationCurtainDecals();
 
 static int VF2AIBathroom2StyleIndex(int itemId) {{
     return VF2IsAIBathroom2Style(itemId) ? itemId - {AI_BATHROOM2_PC_ITEM_BASE} : -1;
-}}
-
-// Bathroom 2 curtain styles are cosmetic-only overlay rows layered on top of
-// the native second-bathroom renovation (item 0xE6); they must not be
-// purchasable until that native renovation is actually owned, or the style
-// would have nowhere real to render onto.
-static bool VF2NativeBathroom2Owned() {{
-    return InventoryManager.HaveUpgrade((EInventoryItem)0xE6);
 }}
 
 // Reads the live store scene through its own native singleton accessor
