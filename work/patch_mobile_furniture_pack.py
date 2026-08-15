@@ -11786,15 +11786,14 @@ __VF2_VISIBLE_SPECIAL_UPGRADE_ICON_CASES__
 }}
 
 static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
-    if (itemId == {DIVORCE_SPOUSE_ITEM_ID:#x}) {{
-        // This one-shot action always uses its normal envelope artwork; it
-        // must never inherit the generic owned/checkmark state.
-        return kVF2VisibleSpecialUpgradeIconImageBase + 37;
-    }}
-    // The marriage toggles (Enable Same-Sex Marriage, Allow Reroll of
-    // Marriage Candidates) keep their envelope artwork whether active or
-    // not.  Like Divorce Spouse above, they must never swap to the generic
-    // owned/checkmark icon.
+    // Marriage Special Upgrades -- Force Marriage Email ({MARRIAGE_EMAIL_ITEM_ID:#x}),
+    // Divorce Spouse ({DIVORCE_SPOUSE_ITEM_ID:#x}), Enable Same-Sex Marriage
+    // ({SAME_SEX_MARRIAGE_ITEM_ID:#x}), and Allow Reroll of Marriage Candidates
+    // ({MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) -- always render the
+    // marriage-email envelope (cheat_marriage_email.png), whether the upgrade
+    // is purchased/active or not. They never swap to the generic owned/
+    // checkmark icon, and no visible Special Upgrade in this resolver uses the
+    // checkmark image: every row resolves through its own icon frame.
     int index = VF2VisibleSpecialUpgradeIconFrame(itemId);
     return index < 0 ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
