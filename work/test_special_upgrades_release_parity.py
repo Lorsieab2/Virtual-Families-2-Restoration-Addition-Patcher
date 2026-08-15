@@ -201,8 +201,15 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "static int VF2VisibleSpecialUpgradeIconFrame(int itemId)",
             self.helper,
         )
-        self.assertIn(
+        # Regression guard: the marriage toggles must NOT swap their store
+        # icon to the generic owned/checkmark artwork when active. The icon
+        # resolver keeps their envelope frame whether or not the toggle is on.
+        self.assertNotIn(
             "if (itemId == 0x14c &&\n        VF2SameSexMarriageToggleActive())",
+            self.helper,
+        )
+        self.assertNotIn(
+            "if (itemId == 0x152 &&\n        gVF2AllowMarriageCandidateReroll != 0)",
             self.helper,
         )
         self.assertIn("return 358;", self.helper)
