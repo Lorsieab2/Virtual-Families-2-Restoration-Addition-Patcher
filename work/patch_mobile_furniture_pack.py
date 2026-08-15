@@ -304,7 +304,6 @@ MARRIAGE_EMAIL_ITEM_ID = 0x132
 SAME_SEX_MARRIAGE_ITEM_ID = 0x14C
 SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID = 0x119
 SAME_SEX_MARRIAGE_CATALOG_PRICE = 10000
-SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID = 0x162
 MARRIAGE_CANDIDATE_REROLL_ITEM_ID = 0x152
 MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE = 10000
 MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION = ".vf2rero"
@@ -1672,6 +1671,20 @@ MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = (
         "weight": 2000,
         "object_enum": "eObjectXmasTree",
         "handler": "VF2HandleMobileKidBreakingTreeDecor",
+    },
+    {
+        # mobile_id inferred from the tree-cluster gap between AdmiringXmasTree
+        # (0x19C) and AdultWaterXMasTree (0x19E); not directly confirmed from
+        # a decoded SetMacro registration table entry. The behavior itself
+        # (VF2HandleMobileFixingTreeDecorations) is a byte-exact plan-sequence
+        # port verified from libVirtualFamilies2_x86.so disassembly, and the
+        # weight (2000) matches the AdmiringXmasTree/KidBreakingTreeDecor
+        # sibling default rather than an extracted mobile value.
+        "mobile_id": 0x19D,
+        "object": MOBILE_XMAS_TREE_OBJECT,
+        "weight": 2000,
+        "object_enum": "eObjectXmasTree",
+        "handler": "VF2HandleMobileFixingTreeDecorations",
     },
 )
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
@@ -11778,14 +11791,10 @@ static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
         // must never inherit the generic owned/checkmark state.
         return kVF2VisibleSpecialUpgradeIconImageBase + 37;
     }}
-    if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x} &&
-        VF2SameSexMarriageToggleActive()) {{
-        return {SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID};
-    }}
-    if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x} &&
-        gVF2AllowMarriageCandidateReroll != 0) {{
-        return {SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID};
-    }}
+    // The marriage toggles (Enable Same-Sex Marriage, Allow Reroll of
+    // Marriage Candidates) keep their envelope artwork whether active or
+    // not.  Like Divorce Spouse above, they must never swap to the generic
+    // owned/checkmark icon.
     int index = VF2VisibleSpecialUpgradeIconFrame(itemId);
     return index < 0 ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -13381,7 +13390,14 @@ extern "C" int __fastcall VF2ClassifyRomanticSpouseDrop(
     if (firstGender == secondGender) {
         return VF2SameSexMarriageToggleActive() ? 1 : 0;
     }
-    return VF2IsBehaviorSixChildPrivateTimeMarriage() ? 1 : 0;
+    // Reaching this classifier already proves the family is full: the drop
+    // detour sits behind HandleDropOnVillager's IsRoomToPopulate() gate, so
+    // there is no open offspring slot -- exactly "six children in the Family
+    // Tree" for a married couple. Gate the opposite-sex private-time route on
+    // Behavior Patches alone instead of re-reading the cached +0x1B4 count,
+    // which could momentarily disagree and drop a genuine six-child couple
+    // back onto the native "can't agree it's time to have a baby" argue.
+    return kVF2IncludeBehaviorGoals ? 1 : 0;
 }
 
 extern "C" bool __cdecl VF2SkipSameSexTryToMakeBaby() {
@@ -18570,7 +18586,7 @@ def patch_marriage_candidate_reroll(manifest):
             "item_id": hex(MARRIAGE_CANDIDATE_REROLL_ITEM_ID),
             "catalog_price": MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE,
             "icon_file": "cheat_marriage_email.png",
-            "active_state": "dedicated .vf2rero byte with existing checkmark renderer",
+            "active_state": "dedicated .vf2rero byte; store icon stays cheat_marriage_email.png",
             "inactive_state": "explicit catalog price 10000",
             "buy_again": "clears .vf2rero",
         },
@@ -18836,11 +18852,10 @@ def patch_same_sex_marriage(manifest):
             "price_source_item_id": hex(SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID),
             "price_source": "Health Plan catalog row 0x119",
             "active_price": 0,
-            "active_state": "gVF2SameSexMarriage runtime byte with checkmark.png",
+            "active_state": "gVF2SameSexMarriage runtime byte; store icon stays cheat_marriage_email.png",
             "inactive_state": "explicit catalog price",
             "inactive_icon": "cheat_marriage_email.png",
-            "active_icon": "checkmark.png",
-            "active_icon_id": hex(SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID),
+            "active_icon": "cheat_marriage_email.png",
         },
         "runtime_flag": {
             "symbol": SAME_SEX_MARRIAGE_FLAG_SYMBOL,
@@ -19375,11 +19390,10 @@ def patch_same_sex_marriage_legacy(manifest):
             "price_source_item_id": hex(SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID),
             "price_source": "Health Plan catalog row 0x119",
             "active_price": 0,
-            "active_state": "gVF2SameSexMarriage runtime byte with checkmark.png",
+            "active_state": "gVF2SameSexMarriage runtime byte; store icon stays cheat_marriage_email.png",
             "inactive_state": "explicit catalog price",
             "inactive_icon": "cheat_marriage_email.png",
-            "active_icon": "checkmark.png",
-            "active_icon_id": hex(SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID),
+            "active_icon": "cheat_marriage_email.png",
         },
         "update_parents_guard": parent_guard_manifest,
         "runtime_flag": {
@@ -23737,6 +23751,39 @@ static bool VF2HandleMobileKidBreakingTreeDecor(CVillager &villager)
     return true;
 }
 
+static bool VF2HandleMobileFixingTreeDecorations(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectXmasTree,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return true;
+    }
+
+    VF2SetActionLabel(villager, "Adjusting the ornaments");
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0xC7), 1.0f, eSoundTypeEffects);
+    plans->PlanToWork(ldwGameState::GetRandom(5) + 4);
+    plans->PlanToStopSound();
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0xB5), 1.0f, eSoundTypeEffects);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(3) + 2,
+        static_cast<EBodyPosition>(info.orientation != 0 ? 0x0A : 0x0D));
+    plans->PlanToStopSound();
+    plans->PlanToBend(ldwGameState::GetRandom(4) + 1, ePriorityNormal);
+    plans->PlanToWork(ldwGameState::GetRandom(8) + 3);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
 static void VF2RunMobileMenorah(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -23851,7 +23898,7 @@ static bool VF2VillagerDislikes(CVillager &villager, int like)
 
 struct VF2MobileExternalWeights {
     void *villager;
-    unsigned int weights[12];
+    unsigned int weights[13];
 };
 
 static VF2MobileExternalWeights gVF2MobileExternalWeights[30] = {};
@@ -23881,11 +23928,11 @@ static void VF2InitializeMobileExternalWeights(void *villager)
 {
     VF2MobileExternalWeights *record = VF2FindMobileExternalWeights(villager);
     record->villager = villager;
-    unsigned int bases[12] = {
+    unsigned int bases[13] = {
         2000, 2000, 2000, 2000, 2000,
-        3000, 12000, 3000, 12000, 2000, 3000, 2000
+        3000, 12000, 3000, 12000, 2000, 3000, 2000, 2000
     };
-    for (int index = 0; index < 12; ++index) {
+    for (int index = 0; index < 13; ++index) {
         record->weights[index] =
             VF2RandomizeMobileCandidateWeight(bases[index]);
     }
@@ -24038,6 +24085,14 @@ extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
             0x118,
             mobileWeights->weights[11],
             VF2HandleMobileKidBreakingTreeDecor,
+            treeAutonomousEligible
+        },
+        {
+            CContentMap::eObjectXmasTree,
+            0,
+            0x7FFFFFFF,
+            mobileWeights->weights[12],
+            VF2HandleMobileFixingTreeDecorations,
             treeAutonomousEligible
         },
     };
@@ -25125,6 +25180,17 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
                 "object": "0x88",
                 "weight": 2000,
                 "raw_age_max": "0x118",
+            },
+            {
+                # mobile_id inferred from the tree-cluster ID gap (see
+                # MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS); weight matches
+                # the AdmiringXmasTree/KidBreakingTreeDecor sibling default
+                # rather than an extracted mobile value. Neither is decoded
+                # from a SetMacro registration table entry.
+                "behavior": "FixingTreeDecorations",
+                "mobile_id": "0x19d",
+                "object": "0x88",
+                "weight": 2000,
             },
         ],
     }

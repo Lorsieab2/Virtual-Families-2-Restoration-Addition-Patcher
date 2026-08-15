@@ -545,7 +545,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         self.assertEqual(contract["manual_dispatch"]["item_count"], 34)
         self.assertEqual(contract["manual_dispatch"]["family_count"], 17)
         self.assertEqual(contract["autonomous"]["item_count"], 23)
-        self.assertEqual(contract["autonomous"]["external_candidate_count"], 12)
+        self.assertEqual(contract["autonomous"]["external_candidate_count"], 13)
         self.assertEqual(
             contract["rejected_scope"]["decorative_only"],
             ["0x2ab", "0x2ac", "0x2bf", "0x2d4", "0x2d5"],
@@ -1902,7 +1902,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("if (roll < stockWeight) return false;", selector)
                 self.assertIn(
                     "2000, 2000, 2000, 2000, 2000,\n"
-                    "        3000, 12000, 3000, 12000, 2000, 3000, 2000",
+                    "        3000, 12000, 3000, 12000, 2000, 3000, 2000, 2000",
                     helper,
                 )
                 self.assertIn(
@@ -1915,7 +1915,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     helper,
                 )
                 self.assertIn(
-                    "for (int index = 0; index < 12; ++index)",
+                    "for (int index = 0; index < 13; ++index)",
                     helper,
                 )
                 self.assertIn(
@@ -1931,6 +1931,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     helper,
                 )
                 self.assertIn(
+                    'VF2SetActionLabel(villager, "Adjusting the ornaments");',
+                    helper,
+                )
+                self.assertIn(
                     "mobileWeights->weights[9]",
                     selector,
                 )
@@ -1940,6 +1944,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "mobileWeights->weights[11]",
+                    selector,
+                )
+                self.assertIn(
+                    "mobileWeights->weights[12]",
                     selector,
                 )
                 self.assertIn("treeAutonomousEligible", selector)
@@ -2274,6 +2282,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         ("0x19c", "0x88", 2000),
                         ("0x19e", "0x88", 3000),
                         ("0x19f", "0x88", 2000),
+                        ("0x19d", "0x88", 2000),
                     ],
                 )
                 external_ids = {
@@ -11099,14 +11108,14 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertEqual(contract["inactive_price"], 10000)
                 self.assertEqual(contract["price_source"], "Health Plan catalog row 0x119")
                 self.assertEqual(contract["active_price"], 0)
-                self.assertIn("checkmark.png", contract["active_state"])
-                self.assertEqual(contract["active_icon"], "checkmark.png")
-                # Regression guard: 0x166 is the native ImageList entry for
-                # StatusBarSliceR.png, not a checkmark - that mismatch left
-                # this icon rendering as garbage/blank once purchased. The
-                # real stock checkmark.png entry is 0x162 (confirmed by
-                # reading the native image descriptor table directly).
-                self.assertEqual(contract["active_icon_id"], "0x162")
+                # The store icon stays the marriage envelope whether the toggle
+                # is active or not; it must never swap to the generic
+                # owned/checkmark artwork (players asked for the envelope to
+                # remain). Guard both the active-state note and the icons.
+                self.assertNotIn("checkmark", contract["active_state"])
+                self.assertEqual(contract["active_icon"], "cheat_marriage_email.png")
+                self.assertEqual(contract["active_icon"], contract["inactive_icon"])
+                self.assertNotIn("active_icon_id", contract)
                 self.assertEqual(contract["inactive_state"], "explicit catalog price")
         finally:
             patcher.PATCHED = old_patched
@@ -11238,7 +11247,9 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertIn("return VF2SameSexMarriageToggleActive() ? 1 : 0;", helper)
                 self.assertIn("static bool VF2IsBehaviorSixChildPrivateTimeMarriage()", helper)
                 self.assertIn("return *(int *)(family + 0x1B4) >= 6;", helper)
-                self.assertIn("return VF2IsBehaviorSixChildPrivateTimeMarriage() ? 1 : 0;", helper)
+                # Opposite-sex drop route now gates on Behavior Patches alone
+                # (the classifier already sits behind the native no-room gate).
+                self.assertIn("return kVF2IncludeBehaviorGoals ? 1 : 0;", helper)
                 self.assertIn("if (!((dropped == first && target == second)", helper)
 
                 pristine = CoffObject(patcher.SRC_OBJS / "theMainScene.obj")

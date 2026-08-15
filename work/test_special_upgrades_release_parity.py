@@ -201,8 +201,15 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "static int VF2VisibleSpecialUpgradeIconFrame(int itemId)",
             self.helper,
         )
-        self.assertIn(
+        # Regression guard: the marriage toggles must NOT swap their store
+        # icon to the generic owned/checkmark artwork when active. The icon
+        # resolver keeps their envelope frame whether or not the toggle is on.
+        self.assertNotIn(
             "if (itemId == 0x14c &&\n        VF2SameSexMarriageToggleActive())",
+            self.helper,
+        )
+        self.assertNotIn(
+            "if (itemId == 0x152 &&\n        gVF2AllowMarriageCandidateReroll != 0)",
             self.helper,
         )
         self.assertIn("return 358;", self.helper)
@@ -545,7 +552,11 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertIn("FamilyTree.GetCurrentFamily()", same_sex)
         self.assertIn("family + 0x1B4", same_sex)
         self.assertIn(">= 6", same_sex)
-        self.assertIn("return VF2IsBehaviorSixChildPrivateTimeMarriage() ? 1 : 0;", same_sex)
+        # The opposite-sex drop route gates on Behavior Patches alone: the
+        # classifier only runs behind the native no-room gate, so the family
+        # is already full. It must not re-read the +0x1B4 count there.
+        self.assertIn("return kVF2IncludeBehaviorGoals ? 1 : 0;", same_sex)
+        self.assertNotIn("return VF2IsBehaviorSixChildPrivateTimeMarriage() ? 1 : 0;", same_sex)
         self.assertIn("extern \"C\" bool __cdecl VF2SkipSameSexTryToMakeBaby()", same_sex)
         self.assertIn("return VF2IsSameSexMarriage() ||", same_sex)
         self.assertIn("VF2IsBehaviorSixChildPrivateTimeMarriage();", same_sex)
