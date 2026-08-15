@@ -10977,9 +10977,24 @@ public:
     if "static void VF2RefreshRenovationCurtainDecals() {" not in existing_helper:
         refresh_curtain_helper_definition = (
             "static void VF2RefreshRenovationCurtainDecals() {\n"
-            "    // Curtain grids are rebuilt by the normal game-load/restart path.\n"
-            "    // Never call CDecal refresh methods from a store click: Bathroom 2\n"
-            "    // previously entered that native path with an invalid live state.\n"
+            "    // A single call to RefreshDecals is sufficient for BOTH bathrooms.\n"
+            "    // Disassembly confirms CDecal::RefreshDecals always ends with a\n"
+            "    // compiler tail-call (mov ecx,esi; pop esi; jmp) directly into\n"
+            "    // CDecal::RefreshProps, passing the same `this` - RefreshProps has\n"
+            "    // no direct callers anywhere in the binary; it is only ever reached\n"
+            "    // this way. RefreshDecals always resets the full 256-slot decal\n"
+            "    // array via InitDecals before repopulating it, so this exactly\n"
+            "    // mirrors the native scene-activation sequence (confirmed via its\n"
+            "    // own real callers) and is idempotent no matter how many times a\n"
+            "    // player toggles a renovation in one session.\n"
+            "    //\n"
+            "    // The previous crash came from calling RefreshProps() directly and\n"
+            "    // independently of RefreshDecals: RefreshProps never resets the\n"
+            "    // array itself, and its most-used AddDecal overload has no bounds\n"
+            "    // check, so repeated live calls silently walked past the end of the\n"
+            "    // fixed-size array and corrupted adjacent memory. Never call\n"
+            "    // RefreshProps directly again; always go through RefreshDecals.\n"
+            "    Decal.RefreshDecals();\n"
             "}\n"
         )
     helper_path.write_text(
@@ -11178,6 +11193,7 @@ extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
     VF2NormalizeMobileRenovationActives();
     if (VF2MobileRenovationIsActive(itemId)) {{
         VF2SetMobileRenovationActive(itemId, false);
+        VF2RefreshRenovationCurtainDecals();
         theGameState::Get()->SaveCurrentGame();
         return true;
     }}
@@ -11192,6 +11208,7 @@ extern "C" bool __cdecl VF2ApplyMobileRenovationStyle(int itemId) {{
     }}
     VF2SetMobileRenovationActive(itemId, true);
     VF2MarkMobileRenovationEverPurchased(styleIndex);
+    VF2RefreshRenovationCurtainDecals();
     theGameState::Get()->SaveCurrentGame();
     return true;
 }}
@@ -11461,11 +11478,13 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
         // B2 visual rows clear only their direct persisted active byte;
         // purchase history remains intact for reversible reactivation.
         *VF2AIBathroom2ActiveByte(itemId) = 0;
+        VF2RefreshRenovationCurtainDecals();
     }} else if (VF2IsMobileRenovationStyle(itemId)) {{
         // Cosmetic room styles are not stock inventory records.  Remove only
         // their direct persisted active byte; the ever-purchased marker stays
         // set so reselecting the style remains free.
         VF2SetMobileRenovationActive(itemId, false);
+        VF2RefreshRenovationCurtainDecals();
     }} else if (itemId >= 0xE1 && itemId <= 0xEA) {{
         InventoryManager.ReturnOne((EInventoryItem)itemId);
         VF2RebuildOwnedRenovations();
@@ -14564,6 +14583,7 @@ static bool VF2ApplyAIBathroom2Style(int itemId) {{
         }}
         *VF2AIBathroom2ActiveByte(itemId) = 1;
     }}
+    VF2RefreshRenovationCurtainDecals();
     theGameState::Get()->SaveCurrentGame();
     return true;
 }}
