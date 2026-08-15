@@ -18743,133 +18743,89 @@ def patch_ldwscene_setactive_null_guard(manifest):
 
 
 def patch_same_sex_marriage(manifest):
-    """Install the post-spawn candidate flip and native private-time guards."""
+    """Set the marriage candidate's gender to match the current adult's.
+
+    Deliberately narrow: this patches exactly one native decision point --
+    the candidate-gender computation inside GeneratePeepCandidate -- and
+    touches no other native handler.
+
+    Disassembly of clean GeneratePeepCandidate confirms +0x56 already reads
+    the current single adult's gender (CVillager+0x6A58) into EDI, and at
+    +0x7D that same EDI is consumed by exactly two native instructions,
+    `cmp edi,1` then `setne al` (6 bytes total): stock always computes the
+    *opposite* of the adult's gender (al=1, i.e. spawn a female candidate,
+    precisely when the adult is not female, and vice versa) as the
+    argument later passed into the native candidate-spawn call. Nothing
+    else reads or writes EDI between +0x56 and +0x7D (confirmed by
+    disassembly, and independently guaranteed by EDI being callee-saved
+    across the two native calls in between), so it still holds the exact
+    adult-gender value the native scan produced.
+
+    This hook replaces only that 6-byte cmp+setne span with a flag-gated
+    choice: when disabled, an exact byte-for-byte replica of the native
+    "opposite" computation; when enabled, `mov eax,edi; and eax,1` --
+    a direct copy of the already-scanned adult gender (no new/duplicate
+    scan is added; the native read is reused as-is). Both paths rejoin
+    immediately after the replaced span, before the native spawn call
+    that consumes the result, so spawning, naming, appearance, and
+    proposal-control refresh all remain completely stock.
+
+    A previous version of this patch instead flipped the candidate's OWN
+    gender field after spawning it, and did so at a drifted field offset
+    ([edi+0x58] instead of the confirmed [edi+0x6A58]) -- corrupting an
+    unrelated candidate field whenever the flag was active. That version
+    also separately hooked HandleDropOnVillager (to route same-sex spouse
+    pairs into the native private-time sequence) and TryToMakeBaby (to
+    force 0% same-sex pregnancy). Neither is needed for gender-matching
+    and neither is touched here: this patch changes nothing about
+    romantic actions, pregnancy, or any other native handler.
+    """
     dating_path = PATCHED / "DatingScene.obj"
     dating = CoffObject(dating_path)
     generate_name = "?GeneratePeepCandidate@CDatingScene@@AAEXXZ"
     generate = dating.symbol(generate_name)
     generate_sec = dating.section(generate.section)
-    gender_hook = generate.value + 0x9B
+    gender_hook = generate.value + 0x7D
     gender_raw = generate_sec.raw_ptr + gender_hook
-    expected_post_spawn = bytes.fromhex("8D 8F 64 6A 00 00")
-    if bytes(dating.buf[gender_raw:gender_raw + len(expected_post_spawn)]) != expected_post_spawn:
-        raise RuntimeError("Dating post-spawn candidate anchor drifted")
+    expected_gender_decision = bytes.fromhex("83FF010F95C0")
+    if bytes(dating.buf[gender_raw:gender_raw + len(expected_gender_decision)]) != expected_gender_decision:
+        raise RuntimeError("Dating candidate gender-decision anchor drifted")
+
     flag_symbol = dating.append_undefined_symbol(SAME_SEX_MARRIAGE_FLAG_SYMBOL)
     gender_cave = generate_sec.raw_size
+    rejoin = gender_hook + len(expected_gender_decision)
     gender_trampoline = bytearray(
         b"\x80\x3D\0\0\0\0\x00"  # cmp byte ptr [same-sex flag],0
-        b"\x74\x09"                # disabled -> stock display setup
-        b"\x8B\x47\x58"            # eax = candidate gender
-        b"\x83\xF0\x01"            # flip 0 <-> 1
-        b"\x89\x47\x58"            # candidate->gender = flipped value
-        b"\x8D\x8F\x64\x6A\x00\x00"  # overwritten stock lea
-        b"\xE9\0\0\0\0"            # continue after the stock six-byte span
+        b"\x75\x00"                # nonzero (enabled) -> same-gender path
+        # disabled: exact replica of the overwritten native computation
+        b"\x83\xFF\x01"            # cmp edi,1
+        b"\x0F\x95\xC0"            # setne al   (al = adult is not female)
+        b"\xE9\0\0\0\0"          # -> rejoin
+        # enabled: candidate gender = adult gender (edi, already scanned by
+        # the native code above; reused, not rescanned)
+        b"\x8B\xC7"                # mov eax,edi
+        b"\x83\xE0\x01"            # and eax,1
+        b"\xE9\0\0\0\0"          # -> rejoin
     )
-    if len(gender_trampoline) != 29:
-        raise AssertionError("Post-spawn candidate gender trampoline size drifted")
-    struct.pack_into(
-        "<i", gender_trampoline, 25,
-        (gender_hook + len(expected_post_spawn)) - (gender_cave + len(gender_trampoline)),
-    )
+    if len(gender_trampoline) != 30:
+        raise AssertionError("Same-sex candidate gender trampoline size drifted")
+    struct.pack_into("<b", gender_trampoline, 8, 20 - 9)  # jne enabled (offset 20)
+    struct.pack_into("<i", gender_trampoline, 16, rejoin - (gender_cave + 20))
+    struct.pack_into("<i", gender_trampoline, 26, rejoin - (gender_cave + 30))
     dating.insert_section_bytes(generate_sec.index, gender_cave, bytes(gender_trampoline))
     dating.append_relocation(
         generate_sec.index, gender_cave + 2, flag_symbol, IMAGE_REL_I386_DIR32
     )
-    dating.buf[gender_raw:gender_raw + len(expected_post_spawn)] = (
+    generate = dating.symbol(generate_name)
+    generate_sec = dating.section(generate.section)
+    gender_raw = generate_sec.raw_ptr + gender_hook
+    dating.buf[gender_raw:gender_raw + len(expected_gender_decision)] = (
         b"\xE9" + struct.pack("<i", gender_cave - (gender_hook + 5)) + b"\x90"
     )
     dating.write(dating_path)
 
-    # IDA confirms the equal-gender private-time branch is selected at
-    # HandleDropOnVillager +0x218 and begins the private sequence at +0x26E.
-    # Replace only that two-byte conditional branch with a five-byte detour:
-    # the helper routes the exact enabled spouse pair to +0x26E, while every
-    # other case restores the original compare flags and executes the native
-    # branch and refusal/cooldown.
-    main_path = PATCHED / "theMainScene.obj"
-    main_obj = CoffObject(main_path)
-    drop_name = "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
-    drop = main_obj.symbol(drop_name)
-    drop_sec = main_obj.section(drop.section)
-    drop_hook = drop.value + 0x218
-    drop_raw = drop_sec.raw_ptr + drop_hook
-    if bytes(main_obj.buf[drop_raw:drop_raw + 2]) != b"\x74\x3C":
-        raise RuntimeError("Romantic spouse gender branch drifted")
-    drop_cave = drop_sec.raw_size
-    drop_trampoline = bytearray(
-        b"\x9C"                  # preserve native cmp flags
-        b"\x56"                  # push target villager (ESI)
-        b"\x8B\xCF"              # ecx = dropped villager
-        b"\xE8\0\0\0\0"        # classify exact eligible spouse pair
-        b"\x83\xF8\x01"        # private-romantic-time pair?
-        b"\x75\x06"              # not eligible -> restore and native JE
-        b"\x9D"                  # restore native cmp flags
-        b"\xE9\0\0\0\0"        # same-sex -> native private action +0x26E
-        b"\x9D"                  # restore native cmp flags
-        b"\x0F\x84\0\0\0\0"    # original native JE, widened to rel32: the
-                                  # original two-byte 74 3C encodes an 8-bit
-                                  # *relative* displacement, not an absolute
-                                  # target. Re-executing those same two bytes
-                                  # unmodified from this cave address (over
-                                  # 0x120 bytes further into the file than the
-                                  # original +0x218 site) would compute a
-                                  # completely different, out-of-section
-                                  # target instead of the intended +0x256,
-                                  # so the displacement must be recalculated
-                                  # for the new address; rel8 cannot reach
-                                  # +0x256 from here, hence 0F 84 (JE rel32).
-        b"\xE9\0\0\0\0"        # original fall-through +0x21A
-    )
-    if len(drop_trampoline) != 32:
-        raise AssertionError("Same-sex romantic branch trampoline size drifted")
-    struct.pack_into("<i", drop_trampoline, 16, (drop.value + 0x26E) - (drop_cave + 20))
-    struct.pack_into("<i", drop_trampoline, 23, (drop.value + 0x256) - (drop_cave + 27))
-    struct.pack_into("<i", drop_trampoline, 28, (drop.value + 0x21A) - (drop_cave + 32))
-    drop_helper = main_obj.append_undefined_symbol(ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL)
-    main_obj.insert_section_bytes(drop_sec.index, drop_cave, bytes(drop_trampoline))
-    main_obj.append_relocation(drop_sec.index, drop_cave + 5, drop_helper, IMAGE_REL_I386_REL32)
-    drop = main_obj.symbol(drop_name)
-    drop_sec = main_obj.section(drop.section)
-    main_obj.buf[drop_sec.raw_ptr + drop_hook:drop_sec.raw_ptr + drop_hook + 5] = (
-        b"\xE9" + struct.pack("<i", drop_cave - (drop_hook + 5))
-    )
-
-    # Keep TryToMakeBaby's native stack frame and all other routes intact, but
-    # return before its ChanceOfPregnancy/Impregnate path for same-sex spouses
-    # and the Behavior Patches six-child opposite-sex spouse rule.
-    try_name = "?TryToMakeBaby@theMainScene@@IAEXXZ"
-    try_func = main_obj.symbol(try_name)
-    try_sec = main_obj.section(try_func.section)
-    try_hook = try_func.value
-    expected_try_prefix = bytes.fromhex("55 8B EC 83 EC 08 53 56 89 4D FC")
-    if bytes(main_obj.buf[try_sec.raw_ptr + try_hook:try_sec.raw_ptr + try_hook + len(expected_try_prefix)]) != expected_try_prefix:
-        raise RuntimeError("TryToMakeBaby entry anchor drifted")
-    try_helper = main_obj.append_undefined_symbol(SAME_SEX_TRY_TO_MAKE_BABY_SKIP_HELPER_SYMBOL)
-    try_cave = try_sec.raw_size
-    try_trampoline = bytearray(
-        expected_try_prefix      # execute native frame setup first
-        +
-        b"\xE8\0\0\0\0"  # VF2SkipSameSexTryToMakeBaby
-        b"\x84\xC0"       # same-sex pair?
-        b"\x74\x02"       # no -> native body jump
-        b"\xC9\xC3"       # leave; return without pregnancy
-        b"\xE9\0\0\0\0" # native body after the prologue
-    )
-    if len(try_trampoline) != 27:
-        raise AssertionError("Same-sex TryToMakeBaby trampoline size drifted")
-    struct.pack_into("<i", try_trampoline, 12, 0)
-    struct.pack_into("<i", try_trampoline, 23, (try_hook + 0x0B) - (try_cave + len(try_trampoline)))
-    main_obj.insert_section_bytes(try_sec.index, try_cave, bytes(try_trampoline))
-    main_obj.append_relocation(try_sec.index, try_cave + 12, try_helper, IMAGE_REL_I386_REL32)
-    try_func = main_obj.symbol(try_name)
-    try_sec = main_obj.section(try_func.section)
-    main_obj.buf[try_sec.raw_ptr + try_hook:try_sec.raw_ptr + try_hook + 5] = (
-        b"\xE9" + struct.pack("<i", try_cave - (try_hook + 5))
-    )
-    main_obj.write(main_path)
-
     manifest["SameSexMarriage"] = {
-        "status": "default-off post-spawn candidate flip and native pregnancy guard installed",
+        "status": "candidate gender-decision hook installed; no other native handler touched",
         "offline_patcher_setting": "same_sex_marriage",
         "category": "optional",
         "default": False,
@@ -18895,24 +18851,134 @@ def patch_same_sex_marriage(manifest):
             "linked_location_status": "pending_link_metadata",
         },
         "candidate_gender": {
-            "status": "post-spawn field flip only",
-            "native_spawn_gender": "unchanged opposite-sex SpawnSpecificPeep argument",
-            "candidate_field": "CVillager+0x6A58",
-            "enabled": "flip the spawned candidate value 0 <-> 1",
-            "disabled": "stock candidate value",
-            "hook_offset": "+0x9B in clean DatingScene.obj",
+            "status": "native gender-decision computation replaced, gated by the flag",
+            "scan": "reuses the native adult-gender read already in EDI at this point (CVillager+0x6A58); no separate scan is added",
+            "disabled": "stock computation: setne al (candidate gender = opposite of the current adult)",
+            "enabled": "candidate gender = current adult gender (direct copy of the scanned value, masked to bit 0)",
+            "hook_offset": "+0x7D in clean DatingScene.obj (6-byte cmp+setne span only)",
+            "rejoin": "immediately after the replaced span, before the native spawn call that consumes this value; every later step (spawn, naming, appearance, proposal controls) is stock",
         },
-        "force_marriage_email": {
-            "status": "normal native proposal queue",
-            "queue": "eEmailMessageMarriageProposal (enum 2) only",
-            "scene_behavior": "stock Accept, Reject, close, proposal state, parent storage, and candidate selectors",
-        },
+        "not_touched": (
+            "HandleDropOnVillager (romantic/private-time routing), TryToMakeBaby "
+            "(pregnancy), and every other native handler are untouched by this "
+            "patch. A prior version hooked both in addition to gender; that "
+            "version's post-spawn gender write also used a drifted field offset "
+            "([edi+0x58] instead of [edi+0x6A58]) that corrupted an unrelated "
+            "candidate field whenever this flag was active. Both are removed."
+        ),
+        "stock_off_state": "byte-identical native candidate-gender computation when the flag is zero",
+    }
+    return
+
+
+def patch_behavior_six_child_private_time(manifest):
+    """Route the six-child opposite-sex spouse rule to native private time.
+
+    Extracted unchanged from a previous version of patch_same_sex_marriage,
+    where this installation was shared between two unrelated features. This
+    function now owns it exclusively: it is only called when Behavior
+    Patches is compiled in, and Same-Sex Marriage no longer installs or
+    depends on it (see patch_same_sex_marriage). The shared C++ helpers
+    (VF2ClassifyRomanticSpouseDrop, VF2SkipSameSexTryToMakeBaby) still also
+    recognize an active same-sex marriage pair on their own -- that is
+    existing, independent behavior of this hook, not something
+    Same-Sex Marriage's own patch installs or touches.
+
+    IDA confirms the equal-gender/eligible-pair private-time branch is
+    selected at HandleDropOnVillager +0x218 and begins the private
+    sequence at +0x26E. Replace only that two-byte conditional branch with
+    a five-byte detour: the helper routes the exact enabled spouse pair to
+    +0x26E, while every other case restores the original compare flags and
+    executes the native branch and refusal/cooldown.
+    """
+    main_path = PATCHED / "theMainScene.obj"
+    main_obj = CoffObject(main_path)
+    drop_name = "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
+    drop = main_obj.symbol(drop_name)
+    drop_sec = main_obj.section(drop.section)
+    drop_hook = drop.value + 0x218
+    drop_raw = drop_sec.raw_ptr + drop_hook
+    if bytes(main_obj.buf[drop_raw:drop_raw + 2]) != b"\x74\x3C":
+        raise RuntimeError("Romantic spouse gender branch drifted")
+    drop_cave = drop_sec.raw_size
+    drop_trampoline = bytearray(
+        b"\x9C"                  # preserve native cmp flags
+        b"\x56"                  # push target villager (ESI)
+        b"\x8B\xCF"              # ecx = dropped villager
+        b"\xE8\0\0\0\0"        # classify exact eligible spouse pair
+        b"\x83\xF8\x01"        # private-romantic-time pair?
+        b"\x75\x06"              # not eligible -> restore and native JE
+        b"\x9D"                  # restore native cmp flags
+        b"\xE9\0\0\0\0"        # eligible -> native private action +0x26E
+        b"\x9D"                  # restore native cmp flags
+        b"\x0F\x84\0\0\0\0"    # original native JE, widened to rel32: the
+                                  # original two-byte 74 3C encodes an 8-bit
+                                  # *relative* displacement, not an absolute
+                                  # target. Re-executing those same two bytes
+                                  # unmodified from this cave address (over
+                                  # 0x120 bytes further into the file than the
+                                  # original +0x218 site) would compute a
+                                  # completely different, out-of-section
+                                  # target instead of the intended +0x256,
+                                  # so the displacement must be recalculated
+                                  # for the new address; rel8 cannot reach
+                                  # +0x256 from here, hence 0F 84 (JE rel32).
+        b"\xE9\0\0\0\0"        # original fall-through +0x21A
+    )
+    if len(drop_trampoline) != 32:
+        raise AssertionError("Six-child romantic branch trampoline size drifted")
+    struct.pack_into("<i", drop_trampoline, 16, (drop.value + 0x26E) - (drop_cave + 20))
+    struct.pack_into("<i", drop_trampoline, 23, (drop.value + 0x256) - (drop_cave + 27))
+    struct.pack_into("<i", drop_trampoline, 28, (drop.value + 0x21A) - (drop_cave + 32))
+    drop_helper = main_obj.append_undefined_symbol(ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL)
+    main_obj.insert_section_bytes(drop_sec.index, drop_cave, bytes(drop_trampoline))
+    main_obj.append_relocation(drop_sec.index, drop_cave + 5, drop_helper, IMAGE_REL_I386_REL32)
+    drop = main_obj.symbol(drop_name)
+    drop_sec = main_obj.section(drop.section)
+    main_obj.buf[drop_sec.raw_ptr + drop_hook:drop_sec.raw_ptr + drop_hook + 5] = (
+        b"\xE9" + struct.pack("<i", drop_cave - (drop_hook + 5))
+    )
+
+    # Keep TryToMakeBaby's native stack frame and all other routes intact, but
+    # return before its ChanceOfPregnancy/Impregnate path for the six-child
+    # opposite-sex spouse rule (and, independently, for an active same-sex
+    # marriage pair -- see VF2SkipSameSexTryToMakeBaby).
+    try_name = "?TryToMakeBaby@theMainScene@@IAEXXZ"
+    try_func = main_obj.symbol(try_name)
+    try_sec = main_obj.section(try_func.section)
+    try_hook = try_func.value
+    expected_try_prefix = bytes.fromhex("55 8B EC 83 EC 08 53 56 89 4D FC")
+    if bytes(main_obj.buf[try_sec.raw_ptr + try_hook:try_sec.raw_ptr + try_hook + len(expected_try_prefix)]) != expected_try_prefix:
+        raise RuntimeError("TryToMakeBaby entry anchor drifted")
+    try_helper = main_obj.append_undefined_symbol(SAME_SEX_TRY_TO_MAKE_BABY_SKIP_HELPER_SYMBOL)
+    try_cave = try_sec.raw_size
+    try_trampoline = bytearray(
+        expected_try_prefix      # execute native frame setup first
+        +
+        b"\xE8\0\0\0\0"  # VF2SkipSameSexTryToMakeBaby
+        b"\x84\xC0"       # eligible pair?
+        b"\x74\x02"       # no -> native body jump
+        b"\xC9\xC3"       # leave; return without pregnancy
+        b"\xE9\0\0\0\0" # native body after the prologue
+    )
+    if len(try_trampoline) != 27:
+        raise AssertionError("Six-child TryToMakeBaby trampoline size drifted")
+    struct.pack_into("<i", try_trampoline, 12, 0)
+    struct.pack_into("<i", try_trampoline, 23, (try_hook + 0x0B) - (try_cave + len(try_trampoline)))
+    main_obj.insert_section_bytes(try_sec.index, try_cave, bytes(try_trampoline))
+    main_obj.append_relocation(try_sec.index, try_cave + 12, try_helper, IMAGE_REL_I386_REL32)
+    try_func = main_obj.symbol(try_name)
+    try_sec = main_obj.section(try_func.section)
+    main_obj.buf[try_sec.raw_ptr + try_hook:try_sec.raw_ptr + try_hook + 5] = (
+        b"\xE9" + struct.pack("<i", try_cave - (try_hook + 5))
+    )
+    main_obj.write(main_path)
+
+    manifest["BehaviorSixChildPrivateTime"] = {
+        "status": "installed",
+        "offline_patcher_setting": "behavior_patches",
         "romantic_action": {
-            "same_sex_spouse": "exact enabled spouse pair is routed to native private-time +0x26E",
-            "opposite_sex_spouse": "native route unchanged unless the Behavior Patches six-child rule is enabled",
-            "behavior_patches_six_child_opposite_sex": "Behavior Patches only: exact current-generation opposite-sex adult spouse pair with child count >= 6 is routed to native private-time +0x26E",
-            "non_spouse_or_invalid": "native refusal/argument route unchanged",
-            "unconditional_gender_branch_patch": False,
+            "condition": "exact current-generation opposite-sex adult spouse pair with child count >= 6 (or an independently active same-sex marriage pair; see SameSexMarriage)",
             "hook_offset": "+0x218 in clean theMainScene.obj",
             "native_private_time_offset": "+0x26E",
             "helper": ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL,
@@ -18920,13 +18986,11 @@ def patch_same_sex_marriage(manifest):
             "trampoline_size": len(drop_trampoline),
         },
         "pregnancy": {
-            "same_sex": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate",
-            "behavior_patches_six_child_opposite_sex": "0%; Behavior Patches six-child private time returns before ChanceOfPregnancy/Impregnate",
-            "opposite_sex_otherwise": "native TryToMakeBaby body unchanged",
+            "status": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate for the same eligible pairs",
             "hook_offset": "+0x0 in clean theMainScene.obj",
             "trampoline": hex(try_cave),
         },
-        "stock_off_state": "all native proposal, romantic, and pregnancy paths are retained when the flag is zero",
+        "stock_off_state": "native private-time and pregnancy routes are retained for every other pair",
     }
     return
 
@@ -29760,6 +29824,7 @@ def main():
         patch_radio_drop_behavior(manifest)
         patch_behavior_label_variants(manifest)
         patch_arcade_behavior_labels(manifest)
+        patch_behavior_six_child_private_time(manifest)
         manifest["BehaviorPatchesGate"] = {
             "enabled": True,
             "environment": "VF2_ENABLE_BEHAVIOR_PATCHES",
