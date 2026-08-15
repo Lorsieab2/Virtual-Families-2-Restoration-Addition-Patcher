@@ -206,14 +206,20 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "static int VF2VisibleSpecialUpgradeIconFrame(int itemId)",
             self.helper,
         )
-        self.assertIn(
+        # Regression guard: the marriage toggles must NOT swap their store
+        # icon to the generic owned/checkmark artwork when active. The icon
+        # resolver keeps their envelope frame whether or not the toggle is on.
+        self.assertNotIn(
             "if (itemId == 0x14c &&\n        VF2SameSexMarriageToggleActive())",
             self.helper,
         )
-        # The active same-sex toggle renders the stock checkmark.png image,
-        # ImageList entry 0x162 (=354). The earlier 0x166 (=358) was the wrong
-        # StatusBarSliceR.png entry that rendered blank once purchased.
-        self.assertIn("return 354;", self.helper)
+        self.assertNotIn(
+            "if (itemId == 0x152 &&\n        gVF2AllowMarriageCandidateReroll != 0)",
+            self.helper,
+        )
+        # No row swaps to the checkmark image anymore (0x162=354 / old 0x166=358).
+        self.assertNotIn("return 354;", self.helper)
+        self.assertNotIn("return 358;", self.helper)
         self.assertIn("case 0x14B: return 37;", self.helper)
         self.assertIn("case 0x14C: return 38;", self.helper)
         self.assertIn("case 0x152: return 39;", self.helper)
@@ -346,14 +352,13 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "static int VF2GetVisibleSpecialUpgradeIconImage",
             "static int VF2GetMobileRenovationIconImage",
         )
-        self.assertIn(
-            "if (itemId == 0x14b) {\n"
-            "        // This one-shot action always uses its normal envelope artwork; it\n"
-            "        // must never inherit the generic owned/checkmark state.\n"
-            "        return kVF2VisibleSpecialUpgradeIconImageBase + 37;\n"
-            "    }",
-            icon,
-        )
+        # Divorce Spouse (0x14B) no longer needs a resolver-specific block:
+        # every row, including all marriage upgrades, resolves through its icon
+        # frame (case 0x14B -> 37) and never swaps to the checkmark image.
+        self.assertIn("int index = VF2VisibleSpecialUpgradeIconFrame(itemId);", icon)
+        self.assertNotIn("return 354;", icon)
+        self.assertNotIn("VF2SameSexMarriageToggleActive()", icon)
+        self.assertNotIn("kVF2VisibleSpecialUpgradeIconImageBase + 37;", icon)
 
         availability = self._function_block(
             self.helper,
@@ -553,7 +558,11 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertIn("FamilyTree.GetCurrentFamily()", same_sex)
         self.assertIn("family + 0x1B4", same_sex)
         self.assertIn(">= 6", same_sex)
-        self.assertIn("return VF2IsBehaviorSixChildPrivateTimeMarriage() ? 1 : 0;", same_sex)
+        # The opposite-sex drop route gates on Behavior Patches alone: the
+        # classifier only runs behind the native no-room gate, so the family
+        # is already full. It must not re-read the +0x1B4 count there.
+        self.assertIn("return kVF2IncludeBehaviorGoals ? 1 : 0;", same_sex)
+        self.assertNotIn("return VF2IsBehaviorSixChildPrivateTimeMarriage() ? 1 : 0;", same_sex)
         self.assertIn("extern \"C\" bool __cdecl VF2SkipSameSexTryToMakeBaby()", same_sex)
         self.assertIn("return VF2IsSameSexMarriage() ||", same_sex)
         self.assertIn("VF2IsBehaviorSixChildPrivateTimeMarriage();", same_sex)

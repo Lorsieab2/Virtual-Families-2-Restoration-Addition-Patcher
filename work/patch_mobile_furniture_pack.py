@@ -304,7 +304,6 @@ MARRIAGE_EMAIL_ITEM_ID = 0x132
 SAME_SEX_MARRIAGE_ITEM_ID = 0x14C
 SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID = 0x119
 SAME_SEX_MARRIAGE_CATALOG_PRICE = 10000
-SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID = 0x162
 MARRIAGE_CANDIDATE_REROLL_ITEM_ID = 0x152
 MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE = 10000
 MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION = ".vf2rero"
@@ -1672,6 +1671,20 @@ MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = (
         "weight": 2000,
         "object_enum": "eObjectXmasTree",
         "handler": "VF2HandleMobileKidBreakingTreeDecor",
+    },
+    {
+        # mobile_id inferred from the tree-cluster gap between AdmiringXmasTree
+        # (0x19C) and AdultWaterXMasTree (0x19E); not directly confirmed from
+        # a decoded SetMacro registration table entry. The behavior itself
+        # (VF2HandleMobileFixingTreeDecorations) is a byte-exact plan-sequence
+        # port verified from libVirtualFamilies2_x86.so disassembly, and the
+        # weight (2000) matches the AdmiringXmasTree/KidBreakingTreeDecor
+        # sibling default rather than an extracted mobile value.
+        "mobile_id": 0x19D,
+        "object": MOBILE_XMAS_TREE_OBJECT,
+        "weight": 2000,
+        "object_enum": "eObjectXmasTree",
+        "handler": "VF2HandleMobileFixingTreeDecorations",
     },
 )
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
@@ -11773,19 +11786,14 @@ __VF2_VISIBLE_SPECIAL_UPGRADE_ICON_CASES__
 }}
 
 static int VF2GetVisibleSpecialUpgradeIconImage(int itemId) {{
-    if (itemId == {DIVORCE_SPOUSE_ITEM_ID:#x}) {{
-        // This one-shot action always uses its normal envelope artwork; it
-        // must never inherit the generic owned/checkmark state.
-        return kVF2VisibleSpecialUpgradeIconImageBase + 37;
-    }}
-    if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x} &&
-        VF2SameSexMarriageToggleActive()) {{
-        return {SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID};
-    }}
-    if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x} &&
-        gVF2AllowMarriageCandidateReroll != 0) {{
-        return {SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID};
-    }}
+    // Marriage Special Upgrades -- Force Marriage Email ({MARRIAGE_EMAIL_ITEM_ID:#x}),
+    // Divorce Spouse ({DIVORCE_SPOUSE_ITEM_ID:#x}), Enable Same-Sex Marriage
+    // ({SAME_SEX_MARRIAGE_ITEM_ID:#x}), and Allow Reroll of Marriage Candidates
+    // ({MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) -- always render the
+    // marriage-email envelope (cheat_marriage_email.png), whether the upgrade
+    // is purchased/active or not. They never swap to the generic owned/
+    // checkmark icon, and no visible Special Upgrade in this resolver uses the
+    // checkmark image: every row resolves through its own icon frame.
     int index = VF2VisibleSpecialUpgradeIconFrame(itemId);
     return index < 0 ? -1 : kVF2VisibleSpecialUpgradeIconImageBase + index;
 }}
@@ -13381,7 +13389,14 @@ extern "C" int __fastcall VF2ClassifyRomanticSpouseDrop(
     if (firstGender == secondGender) {
         return VF2SameSexMarriageToggleActive() ? 1 : 0;
     }
-    return VF2IsBehaviorSixChildPrivateTimeMarriage() ? 1 : 0;
+    // Reaching this classifier already proves the family is full: the drop
+    // detour sits behind HandleDropOnVillager's IsRoomToPopulate() gate, so
+    // there is no open offspring slot -- exactly "six children in the Family
+    // Tree" for a married couple. Gate the opposite-sex private-time route on
+    // Behavior Patches alone instead of re-reading the cached +0x1B4 count,
+    // which could momentarily disagree and drop a genuine six-child couple
+    // back onto the native "can't agree it's time to have a baby" argue.
+    return kVF2IncludeBehaviorGoals ? 1 : 0;
 }
 
 extern "C" bool __cdecl VF2SkipSameSexTryToMakeBaby() {
@@ -18570,7 +18585,7 @@ def patch_marriage_candidate_reroll(manifest):
             "item_id": hex(MARRIAGE_CANDIDATE_REROLL_ITEM_ID),
             "catalog_price": MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE,
             "icon_file": "cheat_marriage_email.png",
-            "active_state": "dedicated .vf2rero byte with existing checkmark renderer",
+            "active_state": "dedicated .vf2rero byte; store icon stays cheat_marriage_email.png",
             "inactive_state": "explicit catalog price 10000",
             "buy_again": "clears .vf2rero",
         },
@@ -18743,49 +18758,153 @@ def patch_ldwscene_setactive_null_guard(manifest):
 
 
 def patch_same_sex_marriage(manifest):
-    """Install the post-spawn candidate flip and native private-time guards."""
+    """Set the marriage candidate's gender to match the current adult's.
+
+    Deliberately narrow: this patches exactly one native decision point --
+    the candidate-gender computation inside GeneratePeepCandidate -- and
+    touches no other native handler.
+
+    Disassembly of clean GeneratePeepCandidate confirms +0x56 already reads
+    the current single adult's gender (CVillager+0x6A58) into EDI, and at
+    +0x7D that same EDI is consumed by exactly two native instructions,
+    `cmp edi,1` then `setne al` (6 bytes total): stock always computes the
+    *opposite* of the adult's gender (al=1, i.e. spawn a female candidate,
+    precisely when the adult is not female, and vice versa) as the
+    argument later passed into the native candidate-spawn call. Nothing
+    else reads or writes EDI between +0x56 and +0x7D (confirmed by
+    disassembly, and independently guaranteed by EDI being callee-saved
+    across the two native calls in between), so it still holds the exact
+    adult-gender value the native scan produced.
+
+    This hook replaces only that 6-byte cmp+setne span with a flag-gated
+    choice: when disabled, an exact byte-for-byte replica of the native
+    "opposite" computation; when enabled, `mov eax,edi; and eax,1` --
+    a direct copy of the already-scanned adult gender (no new/duplicate
+    scan is added; the native read is reused as-is). Both paths rejoin
+    immediately after the replaced span, before the native spawn call
+    that consumes the result, so spawning, naming, appearance, and
+    proposal-control refresh all remain completely stock.
+
+    A previous version of this patch instead flipped the candidate's OWN
+    gender field after spawning it, and did so at a drifted field offset
+    ([edi+0x58] instead of the confirmed [edi+0x6A58]) -- corrupting an
+    unrelated candidate field whenever the flag was active. That version
+    also separately hooked HandleDropOnVillager (to route same-sex spouse
+    pairs into the native private-time sequence) and TryToMakeBaby (to
+    force 0% same-sex pregnancy). Neither is needed for gender-matching
+    and neither is touched here: this patch changes nothing about
+    romantic actions, pregnancy, or any other native handler.
+    """
     dating_path = PATCHED / "DatingScene.obj"
     dating = CoffObject(dating_path)
     generate_name = "?GeneratePeepCandidate@CDatingScene@@AAEXXZ"
     generate = dating.symbol(generate_name)
     generate_sec = dating.section(generate.section)
-    gender_hook = generate.value + 0x9B
+    gender_hook = generate.value + 0x7D
     gender_raw = generate_sec.raw_ptr + gender_hook
-    expected_post_spawn = bytes.fromhex("8D 8F 64 6A 00 00")
-    if bytes(dating.buf[gender_raw:gender_raw + len(expected_post_spawn)]) != expected_post_spawn:
-        raise RuntimeError("Dating post-spawn candidate anchor drifted")
+    expected_gender_decision = bytes.fromhex("83FF010F95C0")
+    if bytes(dating.buf[gender_raw:gender_raw + len(expected_gender_decision)]) != expected_gender_decision:
+        raise RuntimeError("Dating candidate gender-decision anchor drifted")
+
     flag_symbol = dating.append_undefined_symbol(SAME_SEX_MARRIAGE_FLAG_SYMBOL)
     gender_cave = generate_sec.raw_size
+    rejoin = gender_hook + len(expected_gender_decision)
     gender_trampoline = bytearray(
         b"\x80\x3D\0\0\0\0\x00"  # cmp byte ptr [same-sex flag],0
-        b"\x74\x09"                # disabled -> stock display setup
-        b"\x8B\x47\x58"            # eax = candidate gender
-        b"\x83\xF0\x01"            # flip 0 <-> 1
-        b"\x89\x47\x58"            # candidate->gender = flipped value
-        b"\x8D\x8F\x64\x6A\x00\x00"  # overwritten stock lea
-        b"\xE9\0\0\0\0"            # continue after the stock six-byte span
+        b"\x75\x00"                # nonzero (enabled) -> same-gender path
+        # disabled: exact replica of the overwritten native computation
+        b"\x83\xFF\x01"            # cmp edi,1
+        b"\x0F\x95\xC0"            # setne al   (al = adult is not female)
+        b"\xE9\0\0\0\0"          # -> rejoin
+        # enabled: candidate gender = adult gender (edi, already scanned by
+        # the native code above; reused, not rescanned)
+        b"\x8B\xC7"                # mov eax,edi
+        b"\x83\xE0\x01"            # and eax,1
+        b"\xE9\0\0\0\0"          # -> rejoin
     )
-    if len(gender_trampoline) != 29:
-        raise AssertionError("Post-spawn candidate gender trampoline size drifted")
-    struct.pack_into(
-        "<i", gender_trampoline, 25,
-        (gender_hook + len(expected_post_spawn)) - (gender_cave + len(gender_trampoline)),
-    )
+    if len(gender_trampoline) != 30:
+        raise AssertionError("Same-sex candidate gender trampoline size drifted")
+    struct.pack_into("<b", gender_trampoline, 8, 20 - 9)  # jne enabled (offset 20)
+    struct.pack_into("<i", gender_trampoline, 16, rejoin - (gender_cave + 20))
+    struct.pack_into("<i", gender_trampoline, 26, rejoin - (gender_cave + 30))
     dating.insert_section_bytes(generate_sec.index, gender_cave, bytes(gender_trampoline))
     dating.append_relocation(
         generate_sec.index, gender_cave + 2, flag_symbol, IMAGE_REL_I386_DIR32
     )
-    dating.buf[gender_raw:gender_raw + len(expected_post_spawn)] = (
+    generate = dating.symbol(generate_name)
+    generate_sec = dating.section(generate.section)
+    gender_raw = generate_sec.raw_ptr + gender_hook
+    dating.buf[gender_raw:gender_raw + len(expected_gender_decision)] = (
         b"\xE9" + struct.pack("<i", gender_cave - (gender_hook + 5)) + b"\x90"
     )
     dating.write(dating_path)
 
-    # IDA confirms the equal-gender private-time branch is selected at
-    # HandleDropOnVillager +0x218 and begins the private sequence at +0x26E.
-    # Replace only that two-byte conditional branch with a five-byte detour:
-    # the helper routes the exact enabled spouse pair to +0x26E, while every
-    # other case restores the original compare flags and executes the native
-    # branch and refusal/cooldown.
+    manifest["SameSexMarriage"] = {
+        "status": "candidate gender-decision hook installed; no other native handler touched",
+        "offline_patcher_setting": "same_sex_marriage",
+        "category": "optional",
+        "default": False,
+        "runtime_hooks_installed": True,
+        "cheat_upgrade": {
+            "item_id": hex(SAME_SEX_MARRIAGE_ITEM_ID),
+            "inactive_price": SAME_SEX_MARRIAGE_CATALOG_PRICE,
+            "price_source_item_id": hex(SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID),
+            "price_source": "Health Plan catalog row 0x119",
+            "active_price": 0,
+            "active_state": "gVF2SameSexMarriage runtime byte; store icon stays cheat_marriage_email.png",
+            "inactive_state": "explicit catalog price",
+            "inactive_icon": "cheat_marriage_email.png",
+            "active_icon": "cheat_marriage_email.png",
+        },
+        "runtime_flag": {
+            "symbol": SAME_SEX_MARRIAGE_FLAG_SYMBOL,
+            "source_section": SAME_SEX_MARRIAGE_FLAG_SECTION,
+            "size": 1,
+            "default": "00",
+            "enabled": "01",
+            "linked_location_status": "pending_link_metadata",
+        },
+        "candidate_gender": {
+            "status": "native gender-decision computation replaced, gated by the flag",
+            "scan": "reuses the native adult-gender read already in EDI at this point (CVillager+0x6A58); no separate scan is added",
+            "disabled": "stock computation: setne al (candidate gender = opposite of the current adult)",
+            "enabled": "candidate gender = current adult gender (direct copy of the scanned value, masked to bit 0)",
+            "hook_offset": "+0x7D in clean DatingScene.obj (6-byte cmp+setne span only)",
+            "rejoin": "immediately after the replaced span, before the native spawn call that consumes this value; every later step (spawn, naming, appearance, proposal controls) is stock",
+        },
+        "not_touched": (
+            "HandleDropOnVillager (romantic/private-time routing), TryToMakeBaby "
+            "(pregnancy), and every other native handler are untouched by this "
+            "patch. A prior version hooked both in addition to gender; that "
+            "version's post-spawn gender write also used a drifted field offset "
+            "([edi+0x58] instead of [edi+0x6A58]) that corrupted an unrelated "
+            "candidate field whenever this flag was active. Both are removed."
+        ),
+        "stock_off_state": "byte-identical native candidate-gender computation when the flag is zero",
+    }
+    return
+
+
+def patch_behavior_six_child_private_time(manifest):
+    """Route the six-child opposite-sex spouse rule to native private time.
+
+    Extracted unchanged from a previous version of patch_same_sex_marriage,
+    where this installation was shared between two unrelated features. This
+    function now owns it exclusively: it is only called when Behavior
+    Patches is compiled in, and Same-Sex Marriage no longer installs or
+    depends on it (see patch_same_sex_marriage). The shared C++ helpers
+    (VF2ClassifyRomanticSpouseDrop, VF2SkipSameSexTryToMakeBaby) still also
+    recognize an active same-sex marriage pair on their own -- that is
+    existing, independent behavior of this hook, not something
+    Same-Sex Marriage's own patch installs or touches.
+
+    IDA confirms the equal-gender/eligible-pair private-time branch is
+    selected at HandleDropOnVillager +0x218 and begins the private
+    sequence at +0x26E. Replace only that two-byte conditional branch with
+    a five-byte detour: the helper routes the exact enabled spouse pair to
+    +0x26E, while every other case restores the original compare flags and
+    executes the native branch and refusal/cooldown.
+    """
     main_path = PATCHED / "theMainScene.obj"
     main_obj = CoffObject(main_path)
     drop_name = "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
@@ -18804,7 +18923,7 @@ def patch_same_sex_marriage(manifest):
         b"\x83\xF8\x01"        # private-romantic-time pair?
         b"\x75\x06"              # not eligible -> restore and native JE
         b"\x9D"                  # restore native cmp flags
-        b"\xE9\0\0\0\0"        # same-sex -> native private action +0x26E
+        b"\xE9\0\0\0\0"        # eligible -> native private action +0x26E
         b"\x9D"                  # restore native cmp flags
         b"\x0F\x84\0\0\0\0"    # original native JE, widened to rel32: the
                                   # original two-byte 74 3C encodes an 8-bit
@@ -18821,7 +18940,7 @@ def patch_same_sex_marriage(manifest):
         b"\xE9\0\0\0\0"        # original fall-through +0x21A
     )
     if len(drop_trampoline) != 32:
-        raise AssertionError("Same-sex romantic branch trampoline size drifted")
+        raise AssertionError("Six-child romantic branch trampoline size drifted")
     struct.pack_into("<i", drop_trampoline, 16, (drop.value + 0x26E) - (drop_cave + 20))
     struct.pack_into("<i", drop_trampoline, 23, (drop.value + 0x256) - (drop_cave + 27))
     struct.pack_into("<i", drop_trampoline, 28, (drop.value + 0x21A) - (drop_cave + 32))
@@ -18835,8 +18954,9 @@ def patch_same_sex_marriage(manifest):
     )
 
     # Keep TryToMakeBaby's native stack frame and all other routes intact, but
-    # return before its ChanceOfPregnancy/Impregnate path for same-sex spouses
-    # and the Behavior Patches six-child opposite-sex spouse rule.
+    # return before its ChanceOfPregnancy/Impregnate path for the six-child
+    # opposite-sex spouse rule (and, independently, for an active same-sex
+    # marriage pair -- see VF2SkipSameSexTryToMakeBaby).
     try_name = "?TryToMakeBaby@theMainScene@@IAEXXZ"
     try_func = main_obj.symbol(try_name)
     try_sec = main_obj.section(try_func.section)
@@ -18850,13 +18970,13 @@ def patch_same_sex_marriage(manifest):
         expected_try_prefix      # execute native frame setup first
         +
         b"\xE8\0\0\0\0"  # VF2SkipSameSexTryToMakeBaby
-        b"\x84\xC0"       # same-sex pair?
+        b"\x84\xC0"       # eligible pair?
         b"\x74\x02"       # no -> native body jump
         b"\xC9\xC3"       # leave; return without pregnancy
         b"\xE9\0\0\0\0" # native body after the prologue
     )
     if len(try_trampoline) != 27:
-        raise AssertionError("Same-sex TryToMakeBaby trampoline size drifted")
+        raise AssertionError("Six-child TryToMakeBaby trampoline size drifted")
     struct.pack_into("<i", try_trampoline, 12, 0)
     struct.pack_into("<i", try_trampoline, 23, (try_hook + 0x0B) - (try_cave + len(try_trampoline)))
     main_obj.insert_section_bytes(try_sec.index, try_cave, bytes(try_trampoline))
@@ -18868,51 +18988,11 @@ def patch_same_sex_marriage(manifest):
     )
     main_obj.write(main_path)
 
-    manifest["SameSexMarriage"] = {
-        "status": "default-off post-spawn candidate flip and native pregnancy guard installed",
-        "offline_patcher_setting": "same_sex_marriage",
-        "category": "optional",
-        "default": False,
-        "runtime_hooks_installed": True,
-        "cheat_upgrade": {
-            "item_id": hex(SAME_SEX_MARRIAGE_ITEM_ID),
-            "inactive_price": SAME_SEX_MARRIAGE_CATALOG_PRICE,
-            "price_source_item_id": hex(SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID),
-            "price_source": "Health Plan catalog row 0x119",
-            "active_price": 0,
-            "active_state": "gVF2SameSexMarriage runtime byte with checkmark.png",
-            "inactive_state": "explicit catalog price",
-            "inactive_icon": "cheat_marriage_email.png",
-            "active_icon": "checkmark.png",
-            "active_icon_id": hex(SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID),
-        },
-        "runtime_flag": {
-            "symbol": SAME_SEX_MARRIAGE_FLAG_SYMBOL,
-            "source_section": SAME_SEX_MARRIAGE_FLAG_SECTION,
-            "size": 1,
-            "default": "00",
-            "enabled": "01",
-            "linked_location_status": "pending_link_metadata",
-        },
-        "candidate_gender": {
-            "status": "post-spawn field flip only",
-            "native_spawn_gender": "unchanged opposite-sex SpawnSpecificPeep argument",
-            "candidate_field": "CVillager+0x6A58",
-            "enabled": "flip the spawned candidate value 0 <-> 1",
-            "disabled": "stock candidate value",
-            "hook_offset": "+0x9B in clean DatingScene.obj",
-        },
-        "force_marriage_email": {
-            "status": "normal native proposal queue",
-            "queue": "eEmailMessageMarriageProposal (enum 2) only",
-            "scene_behavior": "stock Accept, Reject, close, proposal state, parent storage, and candidate selectors",
-        },
+    manifest["BehaviorSixChildPrivateTime"] = {
+        "status": "installed",
+        "offline_patcher_setting": "behavior_patches",
         "romantic_action": {
-            "same_sex_spouse": "exact enabled spouse pair is routed to native private-time +0x26E",
-            "opposite_sex_spouse": "native route unchanged unless the Behavior Patches six-child rule is enabled",
-            "behavior_patches_six_child_opposite_sex": "Behavior Patches only: exact current-generation opposite-sex adult spouse pair with child count >= 6 is routed to native private-time +0x26E",
-            "non_spouse_or_invalid": "native refusal/argument route unchanged",
-            "unconditional_gender_branch_patch": False,
+            "condition": "exact current-generation opposite-sex adult spouse pair with child count >= 6 (or an independently active same-sex marriage pair; see SameSexMarriage)",
             "hook_offset": "+0x218 in clean theMainScene.obj",
             "native_private_time_offset": "+0x26E",
             "helper": ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL,
@@ -18920,13 +19000,11 @@ def patch_same_sex_marriage(manifest):
             "trampoline_size": len(drop_trampoline),
         },
         "pregnancy": {
-            "same_sex": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate",
-            "behavior_patches_six_child_opposite_sex": "0%; Behavior Patches six-child private time returns before ChanceOfPregnancy/Impregnate",
-            "opposite_sex_otherwise": "native TryToMakeBaby body unchanged",
+            "status": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate for the same eligible pairs",
             "hook_offset": "+0x0 in clean theMainScene.obj",
             "trampoline": hex(try_cave),
         },
-        "stock_off_state": "all native proposal, romantic, and pregnancy paths are retained when the flag is zero",
+        "stock_off_state": "native private-time and pregnancy routes are retained for every other pair",
     }
     return
 
@@ -19311,11 +19389,10 @@ def patch_same_sex_marriage_legacy(manifest):
             "price_source_item_id": hex(SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID),
             "price_source": "Health Plan catalog row 0x119",
             "active_price": 0,
-            "active_state": "gVF2SameSexMarriage runtime byte with checkmark.png",
+            "active_state": "gVF2SameSexMarriage runtime byte; store icon stays cheat_marriage_email.png",
             "inactive_state": "explicit catalog price",
             "inactive_icon": "cheat_marriage_email.png",
-            "active_icon": "checkmark.png",
-            "active_icon_id": hex(SAME_SEX_MARRIAGE_CHECKMARK_IMAGE_ID),
+            "active_icon": "cheat_marriage_email.png",
         },
         "update_parents_guard": parent_guard_manifest,
         "runtime_flag": {
@@ -23673,6 +23750,39 @@ static bool VF2HandleMobileKidBreakingTreeDecor(CVillager &villager)
     return true;
 }
 
+static bool VF2HandleMobileFixingTreeDecorations(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectXmasTree,
+            villager.FeetPos(),
+            info,
+            true,
+            0,
+            false)) {
+        return true;
+    }
+
+    VF2SetActionLabel(villager, "Adjusting the ornaments");
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0xC7), 1.0f, eSoundTypeEffects);
+    plans->PlanToWork(ldwGameState::GetRandom(5) + 4);
+    plans->PlanToStopSound();
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0xB5), 1.0f, eSoundTypeEffects);
+    plans->PlanToWait(
+        ldwGameState::GetRandom(3) + 2,
+        static_cast<EBodyPosition>(info.orientation != 0 ? 0x0A : 0x0D));
+    plans->PlanToStopSound();
+    plans->PlanToBend(ldwGameState::GetRandom(4) + 1, ePriorityNormal);
+    plans->PlanToWork(ldwGameState::GetRandom(8) + 3);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
 static void VF2RunMobileMenorah(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
@@ -23787,7 +23897,7 @@ static bool VF2VillagerDislikes(CVillager &villager, int like)
 
 struct VF2MobileExternalWeights {
     void *villager;
-    unsigned int weights[12];
+    unsigned int weights[13];
 };
 
 static VF2MobileExternalWeights gVF2MobileExternalWeights[30] = {};
@@ -23817,11 +23927,11 @@ static void VF2InitializeMobileExternalWeights(void *villager)
 {
     VF2MobileExternalWeights *record = VF2FindMobileExternalWeights(villager);
     record->villager = villager;
-    unsigned int bases[12] = {
+    unsigned int bases[13] = {
         2000, 2000, 2000, 2000, 2000,
-        3000, 12000, 3000, 12000, 2000, 3000, 2000
+        3000, 12000, 3000, 12000, 2000, 3000, 2000, 2000
     };
-    for (int index = 0; index < 12; ++index) {
+    for (int index = 0; index < 13; ++index) {
         record->weights[index] =
             VF2RandomizeMobileCandidateWeight(bases[index]);
     }
@@ -23974,6 +24084,14 @@ extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
             0x118,
             mobileWeights->weights[11],
             VF2HandleMobileKidBreakingTreeDecor,
+            treeAutonomousEligible
+        },
+        {
+            CContentMap::eObjectXmasTree,
+            0,
+            0x7FFFFFFF,
+            mobileWeights->weights[12],
+            VF2HandleMobileFixingTreeDecorations,
             treeAutonomousEligible
         },
     };
@@ -25061,6 +25179,17 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
                 "object": "0x88",
                 "weight": 2000,
                 "raw_age_max": "0x118",
+            },
+            {
+                # mobile_id inferred from the tree-cluster ID gap (see
+                # MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS); weight matches
+                # the AdmiringXmasTree/KidBreakingTreeDecor sibling default
+                # rather than an extracted mobile value. Neither is decoded
+                # from a SetMacro registration table entry.
+                "behavior": "FixingTreeDecorations",
+                "mobile_id": "0x19d",
+                "object": "0x88",
+                "weight": 2000,
             },
         ],
     }
@@ -29760,6 +29889,7 @@ def main():
         patch_radio_drop_behavior(manifest)
         patch_behavior_label_variants(manifest)
         patch_arcade_behavior_labels(manifest)
+        patch_behavior_six_child_private_time(manifest)
         manifest["BehaviorPatchesGate"] = {
             "enabled": True,
             "environment": "VF2_ENABLE_BEHAVIOR_PATCHES",

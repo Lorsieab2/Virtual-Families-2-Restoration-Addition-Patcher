@@ -545,7 +545,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         self.assertEqual(contract["manual_dispatch"]["item_count"], 34)
         self.assertEqual(contract["manual_dispatch"]["family_count"], 17)
         self.assertEqual(contract["autonomous"]["item_count"], 23)
-        self.assertEqual(contract["autonomous"]["external_candidate_count"], 12)
+        self.assertEqual(contract["autonomous"]["external_candidate_count"], 13)
         self.assertEqual(
             contract["rejected_scope"]["decorative_only"],
             ["0x2ab", "0x2ac", "0x2bf", "0x2d4", "0x2d5"],
@@ -1902,7 +1902,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn("if (roll < stockWeight) return false;", selector)
                 self.assertIn(
                     "2000, 2000, 2000, 2000, 2000,\n"
-                    "        3000, 12000, 3000, 12000, 2000, 3000, 2000",
+                    "        3000, 12000, 3000, 12000, 2000, 3000, 2000, 2000",
                     helper,
                 )
                 self.assertIn(
@@ -1915,7 +1915,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     helper,
                 )
                 self.assertIn(
-                    "for (int index = 0; index < 12; ++index)",
+                    "for (int index = 0; index < 13; ++index)",
                     helper,
                 )
                 self.assertIn(
@@ -1931,6 +1931,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     helper,
                 )
                 self.assertIn(
+                    'VF2SetActionLabel(villager, "Adjusting the ornaments");',
+                    helper,
+                )
+                self.assertIn(
                     "mobileWeights->weights[9]",
                     selector,
                 )
@@ -1940,6 +1944,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 self.assertIn(
                     "mobileWeights->weights[11]",
+                    selector,
+                )
+                self.assertIn(
+                    "mobileWeights->weights[12]",
                     selector,
                 )
                 self.assertIn("treeAutonomousEligible", selector)
@@ -2274,6 +2282,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         ("0x19c", "0x88", 2000),
                         ("0x19e", "0x88", 3000),
                         ("0x19f", "0x88", 2000),
+                        ("0x19d", "0x88", 2000),
                     ],
                 )
                 external_ids = {
@@ -10938,10 +10947,11 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 self.assertFalse(same_sex["default"])
                 self.assertEqual(
                     same_sex["candidate_gender"]["hook_offset"],
-                    "+0x9B in clean DatingScene.obj",
+                    "+0x7D in clean DatingScene.obj (6-byte cmp+setne span only)",
                 )
                 self.assertNotIn("update_parents_guard", same_sex)
-                self.assertNotIn("accept_safety", same_sex["force_marriage_email"])
+                self.assertNotIn("romantic_action", same_sex)
+                self.assertNotIn("pregnancy", same_sex)
         finally:
             patcher.PATCHED = old_patched
 
@@ -11054,15 +11064,21 @@ class DivorceSpouseContractTests(unittest.TestCase):
 
 
 class SameSexMarriagePatchTests(unittest.TestCase):
-    def test_candidate_flip_is_post_spawn_and_accept_path_is_stock(self):
+    def test_candidate_gender_decision_hook_and_accept_path_is_stock(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
-        self.assertIn('gender_hook = generate.value + 0x9B', source)
-        self.assertIn('expected_post_spawn = bytes.fromhex("8D 8F 64 6A 00 00")', source)
-        self.assertIn('candidate_field": "CVillager+0x6A58"', source)
-        self.assertIn('enabled": "flip the spawned candidate value 0 <-> 1"', source)
-        self.assertNotIn('gender_hook = generate.value + 0x7B', source[:source.index('def patch_same_sex_marriage_legacy')])
-        self.assertNotIn('parent_guard_manifest', source[:source.index('def patch_same_sex_marriage_legacy')])
-        self.assertNotIn('selector_hooks', source[:source.index('def patch_same_sex_marriage_legacy')])
+        current_patch = source[
+            source.index('def patch_same_sex_marriage(manifest):'):
+            source.index('def patch_behavior_six_child_private_time(manifest):')
+        ]
+        self.assertIn('gender_hook = generate.value + 0x7D', current_patch)
+        self.assertIn('expected_gender_decision = bytes.fromhex("83FF010F95C0")', current_patch)
+        self.assertIn('candidate gender = current adult gender', current_patch)
+        # Narrowly scoped: the code (not just this docstring's explanation
+        # of what a prior version used to do) never opens theMainScene.obj
+        # or writes to it.
+        self.assertNotIn('theMainScene.obj', current_patch)
+        self.assertNotIn('parent_guard_manifest', current_patch)
+        self.assertNotIn('selector_hooks', current_patch)
         self.assertIn("VF2QueueMarriageProposal()", source)
 
     def test_force_email_has_no_scene_override_and_accept_guard_is_mode_independent(self):
@@ -11092,19 +11108,19 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertEqual(contract["inactive_price"], 10000)
                 self.assertEqual(contract["price_source"], "Health Plan catalog row 0x119")
                 self.assertEqual(contract["active_price"], 0)
-                self.assertIn("checkmark.png", contract["active_state"])
-                self.assertEqual(contract["active_icon"], "checkmark.png")
-                # Regression guard: 0x166 is the native ImageList entry for
-                # StatusBarSliceR.png, not a checkmark - that mismatch left
-                # this icon rendering as garbage/blank once purchased. The
-                # real stock checkmark.png entry is 0x162 (confirmed by
-                # reading the native image descriptor table directly).
-                self.assertEqual(contract["active_icon_id"], "0x162")
+                # The store icon stays the marriage envelope whether the toggle
+                # is active or not; it must never swap to the generic
+                # owned/checkmark artwork (players asked for the envelope to
+                # remain). Guard both the active-state note and the icons.
+                self.assertNotIn("checkmark", contract["active_state"])
+                self.assertEqual(contract["active_icon"], "cheat_marriage_email.png")
+                self.assertEqual(contract["active_icon"], contract["inactive_icon"])
+                self.assertNotIn("active_icon_id", contract)
                 self.assertEqual(contract["inactive_state"], "explicit catalog price")
         finally:
             patcher.PATCHED = old_patched
 
-    def test_post_spawn_and_native_romantic_hooks_are_authenticated(self):
+    def test_gender_decision_hook_is_authenticated_and_no_other_object_touched(self):
         old_patched = patcher.PATCHED
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -11119,15 +11135,16 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
                 section = dating.section(handle.section)
                 self.assertEqual(bytes(dating.buf[section.raw_ptr + handle.value + 0x94:section.raw_ptr + handle.value + 0xAA]), bytes.fromhex("8B 88 B8 5C 02 00 89 88 BC 5C 02 00 C7 80 B8 5C 02 00 00 00 00 00"))
-                self.assertEqual(contract["candidate_gender"]["hook_offset"], "+0x9B in clean DatingScene.obj")
-                self.assertEqual(contract["force_marriage_email"]["scene_behavior"], "stock Accept, Reject, close, proposal state, parent storage, and candidate selectors")
+                self.assertEqual(contract["candidate_gender"]["hook_offset"], "+0x7D in clean DatingScene.obj (6-byte cmp+setne span only)")
+                self.assertIn("HandleDropOnVillager", contract["not_touched"])
+                self.assertIn("TryToMakeBaby", contract["not_touched"])
 
-                main = CoffObject(temp_root / "theMainScene.obj")
-                drop = main.symbol("?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z")
-                drop_sec = main.section(drop.section)
-                self.assertEqual(main.buf[drop_sec.raw_ptr + drop.value + 0x218], 0xE9)
-                self.assertEqual(contract["romantic_action"]["native_private_time_offset"], "+0x26E")
-                self.assertEqual(contract["romantic_action"]["unconditional_gender_branch_patch"], False)
+                # Narrowly scoped: theMainScene.obj is never opened, so it
+                # must remain byte-identical to a pristine copy.
+                self.assertEqual(
+                    (temp_root / "theMainScene.obj").read_bytes(),
+                    (patcher.SRC_OBJS / "theMainScene.obj").read_bytes(),
+                )
         finally:
             patcher.PATCHED = old_patched
 
@@ -11157,7 +11174,13 @@ class SameSexMarriagePatchTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
-    def test_private_romantic_adult_time_routes_only_enabled_same_sex_spouses(self):
+    def test_behavior_six_child_private_time_routes_only_eligible_spouses(self):
+        # This hook was previously installed (multiplexed together with
+        # gender-matching) by patch_same_sex_marriage. It is now owned
+        # exclusively by patch_behavior_six_child_private_time -- called
+        # only when Behavior Patches is compiled in -- so Same-Sex Marriage
+        # no longer installs or depends on any theMainScene.obj hook. The
+        # underlying trampoline bytes/helper are unchanged from before.
         old_patched = patcher.PATCHED
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -11166,11 +11189,10 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                     shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
                 patcher.PATCHED = temp_root
                 manifest = {}
-                patcher.patch_same_sex_marriage(manifest)
+                patcher.patch_behavior_six_child_private_time(manifest)
 
-                gate = manifest["SameSexMarriage"]["romantic_action"]
+                gate = manifest["BehaviorSixChildPrivateTime"]["romantic_action"]
                 self.assertEqual(gate["native_private_time_offset"], "+0x26E")
-                self.assertFalse(gate["unconditional_gender_branch_patch"])
 
                 main = CoffObject(temp_root / "theMainScene.obj")
                 drop = main.symbol(
@@ -11225,7 +11247,9 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertIn("return VF2SameSexMarriageToggleActive() ? 1 : 0;", helper)
                 self.assertIn("static bool VF2IsBehaviorSixChildPrivateTimeMarriage()", helper)
                 self.assertIn("return *(int *)(family + 0x1B4) >= 6;", helper)
-                self.assertIn("return VF2IsBehaviorSixChildPrivateTimeMarriage() ? 1 : 0;", helper)
+                # Opposite-sex drop route now gates on Behavior Patches alone
+                # (the classifier already sits behind the native no-room gate).
+                self.assertIn("return kVF2IncludeBehaviorGoals ? 1 : 0;", helper)
                 self.assertIn("if (!((dropped == first && target == second)", helper)
 
                 pristine = CoffObject(patcher.SRC_OBJS / "theMainScene.obj")
