@@ -14571,9 +14571,49 @@ static int VF2AIBathroom2StyleIndex(int itemId) {{
     return VF2IsAIBathroom2Style(itemId) ? itemId - {AI_BATHROOM2_PC_ITEM_BASE} : -1;
 }}
 
+// Bathroom 2 curtain styles are cosmetic-only overlay rows layered on top of
+// the native second-bathroom renovation (item 0xE6); they must not be
+// purchasable until that native renovation is actually owned, or the style
+// would have nowhere real to render onto.
+static bool VF2NativeBathroom2Owned() {{
+    return InventoryManager.HaveUpgrade((EInventoryItem)0xE6);
+}}
+
+// Reads the live store scene through its own native singleton accessor
+// instead of threading a new parameter through HandlePurchaseItem's already
+// carefully offset-pinned dispatch hook (every byte inserted there shifts
+// several downstream hardcoded call offsets in the same function).
+class CScrollingStoreScene {{
+public:
+    static CScrollingStoreScene *Get();
+}};
+
+static void VF2ShowBathroom2RenovationRequiredMessage() {{
+    CScrollingStoreScene *scene = CScrollingStoreScene::Get();
+    if (!scene) return;
+    char okButton[] = "OK";
+    theMessageBoxDlg notice(
+        "Bathroom 2 must be renovated first before this can be bought.",
+        0,
+        false,
+        okButton,
+        0
+    );
+    notice.DoModal((ldwScene *)scene, false);
+}}
+
 static bool VF2ApplyAIBathroom2Style(int itemId) {{
     int index = VF2AIBathroom2StyleIndex(itemId);
     if (index < 0) return false;
+    if (!VF2NativeBathroom2Owned()) {{
+        // HandlePurchaseItem already deducted this row's catalog price
+        // before this hook runs; refund it so a blocked purchase is a true
+        // no-op for the player instead of a silent charge.
+        int refund = kVF2AIBathroom2Prices[index];
+        if (refund > 0) Money.Adjust((float)refund, false);
+        VF2ShowBathroom2RenovationRequiredMessage();
+        return true;
+    }}
     VF2NormalizeAIBathroom2Actives();
     if (VF2AIBathroom2IsActive(itemId)) {{
         *VF2AIBathroom2ActiveByte(itemId) = 0;

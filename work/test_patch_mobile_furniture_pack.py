@@ -2740,6 +2740,46 @@ class MobileRenovationArtTests(unittest.TestCase):
         self.assertIn("theGraphicsManager::Draw image 538 substitution", source)
         self.assertNotIn("gServicesList.*AI_BATHROOM2", source)
 
+    def test_ai_bathroom2_styles_are_gated_behind_native_renovation(self):
+        source = Path(patcher.__file__).read_text(encoding="ascii")
+        self.assertIn(
+            "static bool VF2NativeBathroom2Owned() {{\n"
+            "    return InventoryManager.HaveUpgrade((EInventoryItem)0xE6);\n"
+            "}}",
+            source,
+        )
+        self.assertIn(
+            '"Bathroom 2 must be renovated first before this can be bought."',
+            source,
+        )
+        # The scene comes from the native CScrollingStoreScene singleton
+        # accessor rather than a new HandlePurchaseItem hook parameter: every
+        # byte inserted at that dispatch hook shifts several further
+        # hardcoded downstream call offsets in the same native function
+        # (verified the hard way -- adding one byte there broke the
+        # AddToStorage award-hook offset check).
+        self.assertIn("static CScrollingStoreScene *Get();", source)
+        self.assertIn("CScrollingStoreScene::Get();", source)
+        self.assertNotIn("VF2ApplyAIBathroom2Style(int itemId, void *scene)", source)
+        self.assertNotIn("VF2ApplyVisibleSpecialUpgrade(int itemId, void *scene)", source)
+
+        apply_template = source.split(
+            "static bool VF2ApplyAIBathroom2Style(int itemId) {{",
+            1,
+        )[1].split("static int VF2GetAIBathroom2Price", 1)[0]
+        gate_index = apply_template.index("if (!VF2NativeBathroom2Owned()) {{")
+        refund_index = apply_template.index("Money.Adjust((float)refund, false);")
+        message_index = apply_template.index("VF2ShowBathroom2RenovationRequiredMessage();")
+        block_return_index = apply_template.index("return true;")
+        normalize_index = apply_template.index("VF2NormalizeAIBathroom2Actives();")
+        # The gate must run, refund, and message-and-block before any active
+        # style state is ever touched.
+        self.assertLess(gate_index, refund_index)
+        self.assertLess(refund_index, message_index)
+        self.assertLess(message_index, block_return_index)
+        self.assertLess(block_return_index, normalize_index)
+        self.assertIn("int refund = kVF2AIBathroom2Prices[index];", apply_template)
+
     def test_ai_bathroom2_active_price_and_remove_gate_are_reachable(self):
         source = Path(patcher.__file__).read_text(encoding="ascii")
         price_body = source.split(
