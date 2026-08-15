@@ -97,12 +97,28 @@ try {
 
         # Fail closed on silent seed-state drift: if this variant was
         # configured with (or without) a seed, the generator's own record of
-        # what it actually did must agree.
+        # what it actually did must agree. A boolean-only check isn't enough:
+        # find_previous_build_source() falls back to scanning outputs\ for
+        # an unrelated older build if the configured path is missing/wrong-
+        # shaped, and that fallback also reports status "seeded from
+        # previous build" -- so also compare *which* seed was actually used
+        # against the one configured for this variant, not just whether one
+        # was used at all. The manifest redacts the local machine's absolute
+        # path prefix (writes "<local-source>/..." instead), so compare the
+        # trailing folder name rather than the full path.
         $seedStatus = $manifestObj.previous_build_seed.status
         $seedConfigured = [bool]$seedPath
         $seedUsed = ($seedStatus -eq "seeded from previous build")
         if ($seedConfigured -ne $seedUsed) {
             throw "Seed-state drift for $($config.name): configured=$seedConfigured, manifest reports status='$seedStatus'"
+        }
+        if ($seedConfigured) {
+            $expectedSeedName = ($seedPath.TrimEnd('/', '\') -split '[/\\]')[-1]
+            $actualSeedSource = [string]$manifestObj.previous_build_seed.source
+            $actualSeedName = ($actualSeedSource.TrimEnd('/', '\') -split '[/\\]')[-1]
+            if ($expectedSeedName -ne $actualSeedName) {
+                throw "Seed identity drift for $($config.name): configured '$seedPath' (name '$expectedSeedName') but manifest recorded source '$actualSeedSource' (name '$actualSeedName')"
+            }
         }
 
         if ($manifestObj.ScrollingStoreScene.price_multiplier.enabled -ne $config.cheat_upgrades) { throw "Cheat gate mismatch for $($config.name)" }
