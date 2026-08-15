@@ -6,6 +6,9 @@ This patcher makes a separate modded copy of your official Virtual Families 2
 folder. It checks that your original game folder looks correct before it
 changes anything.
 
+Check for updates:
+https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases
+
 1. Download and install the official Virtual Families 2 PC version.
 
 2. Unzip this patcher package anywhere you like.
@@ -38,7 +41,20 @@ changes anything.
 
 10. Run the clearly named modded EXE inside the new modded folder.
 
+Crash capture QA only (optional):
+The patcher never changes Windows Error Reporting settings or launches the
+game. If a test build crashes, copy crash-capture-manifest.template.json to a
+new file and fill in the absolute path, byte size, and SHA-256 of the exact
+modded EXE. Run vf2_crash_capture.py verify-exe first, then use its
+emit-wer-plan command to generate separate reviewable setup and restore scripts.
+They are inert until you choose to run them manually: run setup, reproduce and
+capture the crash, and then run restore. After a crash,
+record the dump/log sizes and hashes in the separate capture manifest, run
+validate-bundle, and only then emit the IDA JSON. Never substitute manifest.json
+for this exact-build crash manifest.
+
 Existing saves:
+Vanilla Virtual Families 2 saves are compatible with the modded version!
 The modded game uses its own save folder under Documents/LDW using the modded
 EXE name. To play existing saves in the modded game, copy the contents of your
 original Documents/LDW/Virtual Families 2 save folder into the modded save
