@@ -11921,10 +11921,10 @@ extern "C" __declspec(naked) ldwImageGrid *__cdecl VF2ResolveBathroom2ClosedCurt
         // closed-curtain image IDs, 538/539, left over from an internal
         // comparison) and dereferences it as if it were the CDecal
         // pointer, crashing with an access violation the moment a
-        // Bathroom 2 closed-curtain decal is drawn. Bathroom 1's
-        // equivalent hook does not need this: its call site depends on
-        // EDI afterward, and EDI is callee-saved, so it is already
-        // preserved by the normal calling convention.
+        // Bathroom 2 closed-curtain decal is drawn. Bathroom 1's hook
+        // above needs the same save/restore for the same reason: its
+        // callsite also does "mov ecx, edi" before the hooked push, so
+        // ECX (not EDI) is what the following AddDecal call needs.
         push ecx
         push esi
         call VF2ResolveBathroom2ClosedCurtainGridImpl
