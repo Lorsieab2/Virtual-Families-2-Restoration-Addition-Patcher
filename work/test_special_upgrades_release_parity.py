@@ -185,8 +185,13 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         )
         self.assertEqual(reroll_contract["reject"]["hook_offset"], "+0x85")
         self.assertIn("GeneratePeepCandidate", reroll_contract["reject"]["active_call"])
-        self.assertIn("+0xAC", reroll_contract["reject"]["active_continuation"])
-        self.assertIn("not cleared", reroll_contract["accept"])
+        self.assertIn("GeneratePeepCandidate", reroll_contract["reject"]["active_lifecycle"])
+        # Both the active and inactive paths rejoin the untouched native shared
+        # tail at HandleMessage +0x8C (there is no separate +0xAC continuation).
+        self.assertIn("+0x8C", reroll_contract["reject"]["rejoin"])
+        # Accept keeps the untouched stock path, so the reroll toggle is not
+        # cleared or duplicated when a candidate is accepted.
+        self.assertIn("byte-identical", reroll_contract["accept"])
         self.assertEqual(
             int(same_sex["description_string"], 16),
             patcher.same_sex_marriage_string_ids()[1],
@@ -205,7 +210,10 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             "if (itemId == 0x14c &&\n        VF2SameSexMarriageToggleActive())",
             self.helper,
         )
-        self.assertIn("return 358;", self.helper)
+        # The active same-sex toggle renders the stock checkmark.png image,
+        # ImageList entry 0x162 (=354). The earlier 0x166 (=358) was the wrong
+        # StatusBarSliceR.png entry that rendered blank once purchased.
+        self.assertIn("return 354;", self.helper)
         self.assertIn("case 0x14B: return 37;", self.helper)
         self.assertIn("case 0x14C: return 38;", self.helper)
         self.assertIn("case 0x152: return 39;", self.helper)
