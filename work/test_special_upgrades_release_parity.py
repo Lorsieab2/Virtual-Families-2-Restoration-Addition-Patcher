@@ -179,9 +179,12 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         reroll_contract = self.manifest["MarriageCandidateReroll"]
         self.assertEqual(reroll_contract["cheat_upgrade"]["item_id"], "0x152")
         self.assertEqual(reroll_contract["cheat_upgrade"]["catalog_price"], 10000)
+        # Persists at InventoryManager + itemId + 0x2A3 (the native save
+        # payload) instead of a free-standing custom PE section that native
+        # SaveCurrentGame()/Load() never restore.
         self.assertEqual(
-            reroll_contract["runtime_flag"]["source_section"],
-            ".vf2rero",
+            reroll_contract["runtime_flag"]["storage"],
+            "InventoryManager + 0x152 + 0x2A3 (same persisted-byte convention as mobile renovations/Bathroom 2)",
         )
         self.assertEqual(reroll_contract["reject"]["hook_offset"], "+0x85")
         self.assertIn("GeneratePeepCandidate", reroll_contract["reject"]["active_call"])
@@ -223,7 +226,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertIn("case 0x14B: return 37;", self.helper)
         self.assertIn("case 0x14C: return 38;", self.helper)
         self.assertIn("case 0x152: return 39;", self.helper)
-        self.assertIn("gVF2AllowMarriageCandidateReroll != 0", self.helper)
+        self.assertIn("VF2CheatToggleActiveByte(0x152) != 0", self.helper)
         self.assertNotIn(
             "int index = itemId - kVF2VisibleSpecialUpgradeFirstItem",
             self.helper,
@@ -542,8 +545,13 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertNotIn("kVF2CheatMarriageProposalActive", marriage)
         same_sex_toggle = self._case_block(self.helper[apply_start:], 0x14C)
         self.assertIn("VF2SameSexMarriageToggleActive()", same_sex_toggle)
-        self.assertIn("gVF2SameSexMarriage = 1;", same_sex_toggle)
-        self.assertIn("gVF2SameSexMarriage = 0;", same_sex_toggle)
+        # Persists at InventoryManager + 0x14C + 0x2A3 instead of a
+        # free-standing custom PE section that native
+        # SaveCurrentGame()/Load() never restore.
+        self.assertIn(
+            "*VF2CheatToggleActiveByte(0x14C) = VF2SameSexMarriageToggleActive() ? 0 : 1;",
+            same_sex_toggle,
+        )
         self.assertNotIn("InventoryManager.TakeOne((EInventoryItem)itemId);", same_sex_toggle)
         self.assertNotIn("InventoryManager.ReturnOne((EInventoryItem)itemId);", same_sex_toggle)
         same_sex = self._function_block(
