@@ -11732,7 +11732,7 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertEqual(data[drop.value + 0x1F2:drop.value + 0x1F4], b"\x75\x62")
                 self.assertEqual(data[drop.value + 0x218], 0xE9)
                 cave = int(gate["trampoline"], 16)
-                self.assertEqual(gate["trampoline_size"], 32)
+                self.assertEqual(gate["trampoline_size"], 39)
                 self.assertEqual(
                     data[cave:cave + 16],
                     bytes.fromhex("9C 56 8B CF E8 00 00 00 00 83 F8 01 75 06 9D E9"),
@@ -11749,8 +11749,26 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertEqual(data[cave + 21:cave + 23], b"\x0F\x84")
                 je_target = struct.unpack_from("<i", data, cave + 23)[0] + cave + 27
                 self.assertEqual(je_target, drop.value + 0x256)
-                fallthrough_target = struct.unpack_from("<i", data, cave + 28)[0] + cave + 32
-                self.assertEqual(fallthrough_target, drop.value + 0x21A)
+                # The fall-through must NOT re-enter at +0x21A. The 5-byte
+                # trampoline written over the 2-byte "74 3C" at +0x218 also
+                # consumed +0x21A..+0x21C, which held "push -1" (6A FF) and
+                # the opcode of "push 72Dh" (68 ...). Jumping back to +0x21A
+                # therefore executed this jump's own displacement bytes as
+                # code -- "add [eax],eax" followed by a write through a
+                # garbage absolute address, i.e. arbitrary memory
+                # corruption, reachable by dropping any two different-gender
+                # adults who are not the couple while the house is full.
+                # Both pushes must be reproduced in the cave, resuming at
+                # +0x221 (the first byte the trampoline did not overwrite).
+                self.assertEqual(
+                    data[cave + 27:cave + 34],
+                    bytes.fromhex("6A FF 68 2D 07 00 00"),
+                    "fall-through must reproduce the clobbered push -1 / push 72Dh",
+                )
+                fallthrough_target = struct.unpack_from("<i", data, cave + 35)[0] + cave + 39
+                self.assertEqual(fallthrough_target, drop.value + 0x221)
+                # +0x221 must be a real instruction boundary (mov ecx, imm32).
+                self.assertEqual(data[drop.value + 0x221], 0xB9)
                 self.assertEqual(gate["helper"], patcher.ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL)
                 targets = {}
                 for index in range(section.nreloc):
