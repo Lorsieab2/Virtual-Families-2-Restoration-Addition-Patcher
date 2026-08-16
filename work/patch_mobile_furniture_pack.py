@@ -19593,13 +19593,26 @@ def patch_behavior_six_child_private_time(manifest):
                                   # so the displacement must be recalculated
                                   # for the new address; rel8 cannot reach
                                   # +0x256 from here, hence 0F 84 (JE rel32).
-        b"\xE9\0\0\0\0"        # original fall-through +0x21A
+        # Fall-through (classifier declined AND genders differ). This must
+        # NOT jump back to +0x21A: the 5-byte trampoline installed over the
+        # 2-byte "74 3C" at +0x218 also consumed +0x21A..+0x21C, which held
+        # "push -1" (6A FF) and the opcode of "push 72Dh" (68 ...). Those
+        # bytes are now the tail of this jump's own displacement, so
+        # re-entering at +0x21A decoded as "add [eax],eax" followed by a
+        # write through a garbage absolute address -- arbitrary memory
+        # corruption, reachable by dropping any two different-gender adults
+        # who are not the couple while the house is full. Reproduce both
+        # clobbered pushes here and resume at +0x221, the first instruction
+        # the trampoline did not overwrite.
+        b"\x6A\xFF"              # push -1        (reproduced)
+        b"\x68\x2D\x07\x00\x00"  # push 72Dh      (reproduced)
+        b"\xE9\0\0\0\0"        # -> +0x221 (mov ecx, offset DealerSay)
     )
-    if len(drop_trampoline) != 32:
+    if len(drop_trampoline) != 39:
         raise AssertionError("Six-child romantic branch trampoline size drifted")
     struct.pack_into("<i", drop_trampoline, 16, (drop.value + 0x26E) - (drop_cave + 20))
     struct.pack_into("<i", drop_trampoline, 23, (drop.value + 0x256) - (drop_cave + 27))
-    struct.pack_into("<i", drop_trampoline, 28, (drop.value + 0x21A) - (drop_cave + 32))
+    struct.pack_into("<i", drop_trampoline, 35, (drop.value + 0x221) - (drop_cave + 39))
     drop_helper = main_obj.append_undefined_symbol(ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL)
     main_obj.insert_section_bytes(drop_sec.index, drop_cave, bytes(drop_trampoline))
     main_obj.append_relocation(drop_sec.index, drop_cave + 5, drop_helper, IMAGE_REL_I386_REL32)
