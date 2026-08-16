@@ -1,0 +1,147 @@
+# Bathroom 2 fixtures + same-sex private time: investigation state
+
+Findings from the 2026-08-16 session. Two bugs are **root-caused but
+deliberately not fixed yet**, because both fixes need a decision that
+shouldn't be made without in-game verification. Everything below is
+evidence, not speculation, unless explicitly marked as a hypothesis.
+
+---
+
+## 1. Bathroom 2 remodels break the Bathroom 2 fixtures
+
+### Symptom
+With a "Bathroom 2 Remodel" row active, villagers can no longer use
+Bathroom 2's shower, toilet, or sink.
+
+### Established by live-process experiment
+
+| State | Bathroom 2 fixtures |
+| --- | --- |
+| Native Bathroom 2 only (no remodel) | work |
+| A Bathroom 2 Remodel owned (`0x14D`-`0x151`) | **broken** |
+| A Bathroom 1 renovation also owned (e.g. Pink `0x140`) | work again |
+
+The decisive test: clearing **only** the owned byte in live memory --
+without refreshing decals and without saving -- restored the fixtures
+**while the remodel was still drawn on screen**. That isolates the cause
+to the stored flag, not to any visual/decal work.
+
+### Root cause
+`VF2AIBathroom2ActiveByte` stores each remodel's active flag at
+`InventoryManager + itemId + 0x2A3`, which is the game's **native
+owned-items array**. Setting it marks inventory items `0x14D`-`0x151` as
+owned as far as native code is concerned, and some native consumer reads
+that to decide Bathroom 2's fixture/room state.
+
+Ruled out along the way:
+- `VF2ApplyAIBathroom2Style` touches no ContentMap, hotspot, or
+  `ActivateCondemnedArea` state -- it is visual-only apart from this flag.
+- `VF2RebuildOwnedRenovations` is correctly bounded to `0xE1`-`0xEA` and
+  cannot pick up these rows.
+- House malfunctions use `Environment` props (`0x48/0x49/0x4A` for
+  bathroom 2), not inventory items, so that is not the collision.
+
+**Hypothesis (unconfirmed):** a native scan walks the owned array and
+takes the first match to resolve room state. With only a Bathroom 2
+remodel row set, the scan lands on an entry that yields invalid state for
+that room; a Bathroom 1 row set earlier in the array gives it a valid
+entry first, which is why Pink masks the bug.
+
+### Why it isn't fixed yet
+The fix is to move these five flags off the owned-items array into
+storage native code never scans. **There is no free persistent storage
+available**, which was verified rather than assumed:
+
+- `VF2PersistentHealthPlanAndRenovationMask` (Achievement record `0xA8`,
+  offset `0x08`) is fully allocated:
+  - bit 0: health plan entitlement
+  - bits 1-15: the 15 mobile renovations (`kVF2MobileRenovationPersistentShift = 1`)
+  - **bits 16-31: the "Oldest Villager" age record**
+    (`history = (history & 0xFFFFu) | (boundedAge << 16)`)
+- `VF2PersistentCheatAndPurchaseMask` (record `0xA8`, offset `0x04`) is
+  also full: bits 0-7 flags, bits 8-31 generation counter.
+
+An earlier plan to use bits 16-20 of the first mask would have silently
+corrupted the Oldest Villager record in every save.
+
+**Open decision:** claim a new Achievement record, repurpose offset `0x00`
+of record `0xA8` (currently unexamined), or find genuinely inert item ids.
+Whichever is chosen, the change must include **migration**: on load,
+transfer any set legacy byte into the new location and clear the old byte,
+so existing saves self-heal instead of silently losing a purchased
+remodel -- and so the fixtures unbreak for players already affected.
+
+Note the mobile renovation rows (`0x13C`-`0x14A`) and the two cheat
+toggles (`0x14C`, `0x152`) also live in this array, the latter
+deliberately (PR #12, for save persistence). Only the five Bathroom 2 rows
+should move; the others must keep working and need re-verification after.
+
+---
+
+## 2. Same-sex couples: "private romantic time" on drop
+
+### Requested behavior
+Dropping two same-sex spouses on each other should perform "having private
+romantic time" -- the same animations and timing as trying for a baby,
+with 0% pregnancy chance, always available regardless of child count, and
+never refused.
+
+### Native flow (`theMainScene::HandleDropOnVillager`, offsets from function start)
+
+```
++0x1E6  call IsRoomToPopulate
++0x1F2  jnz  -> +0x256      any of these four
++0x1FE  jl   -> +0x256      reach the private/
++0x20A  jl   -> +0x256      cooldown path
++0x218  jz   -> +0x256      <- SAME GENDER already jumps here
++0x21C  Say(StringId 1837)  <- only reached when genders DIFFER
++0x256  cooldown: cmp [gameState+0x25AE0], now
++0x26C  jnb  -> +0x2AB      cooldown not expired -> shake head + Say(1845)
++0x26E  NewBehavior(edi, 0x165) / NewBehavior(esi, 0x164)  <- PRIVATE TIME
+```
+
+Useful consequences:
+- Behaviors **357 / 356** (`0x165` / `0x164`) are the private-time pair.
+- Same-gender pairs **already bypass the child-count gate** natively, so
+  "regardless of # of children" needs no work.
+- The remaining native gate is the **cooldown** at `+0x266`.
+- String `1837` cannot be the reported "These villagers are both the same
+  gender." message, because it is only reachable when genders differ.
+
+### What already exists
+`patch_behavior_six_child_private_time` hooks `+0x218` and routes any pair
+the classifier accepts **directly to `+0x26E`**, which bypasses both the
+child-count gate and the cooldown, and `TryToMakeBaby` is separately
+hooked to skip pregnancy. So **all three requested behaviors are already
+satisfied whenever `VF2ClassifyRomanticSpouseDrop` returns 1.**
+
+The classifier returns 1 for a same-gender pair when the Same-Sex Marriage
+toggle is active -- but only if `VF2MarriagePair` resolves the couple *and*
+the dropped/target villagers are exactly that pair. That match is the
+prime suspect for why it isn't firing in play.
+
+### Blocked on
+The reported message "These villagers are both the same gender."
+(string data at `0x00C8AB30`) has **no code xrefs** -- it is resolved
+through a runtime-built string table, so its caller cannot be found
+statically. Identifying it needs live inspection: locate the pointer in
+the runtime string table to recover its StringId, then find the
+`CDealerSay::Say` call site using that id.
+
+Until that is known, any change here is guesswork. The tempting shortcut
+-- loosening the classifier to accept any two same-gender marriage-adults
+without requiring `VF2MarriagePair` to match -- would also let
+non-spouse adult pairs start romantic time, and must not be shipped
+without in-game verification.
+
+---
+
+## 3. Fixed this session (for context)
+
+- **PR #25**: arbitrary memory corruption in the romantic-drop trampoline.
+  The 5-byte hook at `+0x218` clobbered `push -1` / `push 72Dh` at
+  `+0x21A`-`+0x21C`, and the fall-through jumped back into its own jump
+  displacement, executing `add [eax],eax` then a write through a garbage
+  absolute address. Reachable by dropping any two different-gender
+  non-couple adults in a full house. Affects **opposite-sex** households
+  on a stock Behavior Patches build.
