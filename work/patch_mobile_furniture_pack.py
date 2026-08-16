@@ -323,6 +323,7 @@ INVENTORY_MANAGER_SYMBOL = "?InventoryManager@@3VCInventoryManager@@A"
 MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL = "_VF2ResolveSameSexMarriagePairForFinalization"
 MARRIAGE_FINALIZATION_FIRST_SYMBOL = "_gVF2MarriageFinalizationFirst"
 MARRIAGE_FINALIZATION_SECOND_SYMBOL = "_gVF2MarriageFinalizationSecond"
+VILLAGER_DETAILS_MARRIED_STATUS_HELPER_SYMBOL = "_VF2SameSexMarriedStatusForVillager"
 # These are native Flea Market rows, not added Special Upgrades rows.  Keep
 # their reversible behavior in one explicit set so availability, price, and
 # removal cannot drift apart again.
@@ -13428,6 +13429,25 @@ static bool VF2IsSameSexMarriage() {
         *(int *)((unsigned char *)second + 0x6A58);
 }
 
+// theVillagerScene::UpdateScene's "Married" status text only shows when
+// CVillagerManager::GetMatriarch() AND GetPatriarch() both return a
+// villager -- the same hard gender-blind check already fixed for Accept's
+// finalization gate (patch_marriage_finalization_for_same_sex). A same-sex
+// couple always leaves one of those two null (there is no opposite-gender
+// adult to find), so the details screen never shows "Married" for them,
+// even once the marriage is otherwise correctly recorded. Used as a
+// fallback for the specific villager currently being viewed, only when the
+// native check already failed.
+extern "C" bool __cdecl VF2SameSexMarriedStatusForVillager(CVillager *viewed) {
+    if (!viewed || !VF2SameSexMarriageToggleActive()) return false;
+    CVillager *first;
+    CVillager *second;
+    if (!VF2MarriagePair(first, second)) return false;
+    if (viewed != first && viewed != second) return false;
+    return *(int *)((unsigned char *)first + 0x6A58) ==
+        *(int *)((unsigned char *)second + 0x6A58);
+}
+
 static bool VF2IsBehaviorSixChildPrivateTimeMarriage() {
     if (!kVF2IncludeBehaviorGoals) return false;
 
@@ -19132,6 +19152,114 @@ def patch_marriage_finalization_for_same_sex(manifest):
             "adult not shown as married, and dropping the pair on each other "
             "argues instead of starting Private Romantic Time (all downstream "
             "of the family tree never being updated)."
+        ),
+    }
+    return
+
+
+def patch_villager_details_same_sex_married_status(manifest):
+    """Show "Married" on the details screen for a same-sex couple too.
+
+    theVillagerScene::UpdateScene decides which status string to show for
+    the currently-viewed adult with the exact same hard gender-blind check
+    patch_marriage_finalization_for_same_sex already fixed for Accept:
+    CVillagerManager::GetMatriarch() AND GetPatriarch() must both return a
+    villager. A same-sex couple always leaves one of those two null (there
+    is no opposite-gender adult in the current generation to find), so this
+    is a second, independent site with the identical bug -- reported live
+    as the same-sex adult's details screen never showing "Married".
+
+    Disassembly of clean theVillagerScene.obj confirms the exact span:
+    +0x225 is "cmp [ebp+var_20C],0 / jz +0x0E / cmp [ebp+var_210],0 / mov
+    eax,75Eh / jnz +5 / mov eax,75Fh" (28 bytes) -- var_20C/var_210 hold
+    Patriarch/Matriarch, computed just above; 0x75E/0x75F are the
+    "Married"/blank StringIds; var_208 holds the raw CVillager* being
+    viewed, computed even earlier and untouched by this span.
+
+    Hook only that 28-byte span: when both non-null, behavior is
+    byte-identical to stock (eax=0x75E). When either is null, additionally
+    try VF2SameSexMarriedStatusForVillager(viewed) (only succeeds when Same-
+    Sex Marriage is active and the viewed adult is one half of a resolvable
+    same-sex pair via VF2MarriagePair()) before falling back to the exact
+    same stock "not married" result (eax=0x75F) -- opposite-sex couples and
+    any case this hook doesn't recognize are unchanged.
+    """
+    scene_path = PATCHED / "theVillagerScene.obj"
+    scene = CoffObject(scene_path)
+    update_name = "?UpdateScene@theVillagerScene@@MAEXXZ"
+    update = scene.symbol(update_name)
+    section = scene.section(update.section)
+    guard_hook = update.value + 0x225
+    guard_raw = section.raw_ptr + guard_hook
+    expected_guard = bytes.fromhex(
+        "83BDF4FDFFFF00" "740E" "83BDF0FDFFFF00" "B85E070000" "7505" "B85F070000"
+    )
+    if bytes(scene.buf[guard_raw:guard_raw + len(expected_guard)]) != expected_guard:
+        raise RuntimeError("Villager details Matriarch/Patriarch married-status guard drifted")
+
+    rejoin_target = update.value + 0x241
+    helper = scene.append_undefined_symbol(VILLAGER_DETAILS_MARRIED_STATUS_HELPER_SYMBOL)
+
+    cave = section.raw_size
+    payload = bytearray(
+        b"\x83\xBD\xF4\xFD\xFF\xFF\x00"  # cmp [ebp+var_20C],0 (Patriarch)
+        b"\x74\x00"                        # jz fallback (offset 28)
+        b"\x83\xBD\xF0\xFD\xFF\xFF\x00"  # cmp [ebp+var_210],0 (Matriarch)
+        b"\x74\x00"                        # jz fallback (offset 28)
+        b"\xB8\x5E\x07\x00\x00"            # mov eax, 0x75E (native married)
+        b"\xE9\0\0\0\0"                  # -> rejoin
+        # fallback (offset 28): native check failed; try the same-sex pair
+        b"\xFF\xB5\xF8\xFD\xFF\xFF"        # push [ebp+var_208] (viewed villager)
+        b"\xE8\0\0\0\0"                  # call VF2SameSexMarriedStatusForVillager
+        b"\x83\xC4\x04"                    # caller cleanup
+        b"\x84\xC0"                        # test al,al
+        b"\x74\x00"                        # jz not_married (offset 56)
+        b"\xB8\x5E\x07\x00\x00"            # mov eax, 0x75E (same-sex fallback married)
+        b"\xE9\0\0\0\0"                  # -> rejoin
+        # not_married (offset 56):
+        b"\xB8\x5F\x07\x00\x00"            # mov eax, 0x75F (not married)
+        b"\xE9\0\0\0\0"                  # -> rejoin
+    )
+    if len(payload) != 66:
+        raise AssertionError("Villager details married-status cave size drifted")
+    struct.pack_into("<b", payload, 8, 28 - 9)      # jz@7 -> fallback(28)
+    struct.pack_into("<b", payload, 17, 28 - 18)    # jz@16 -> fallback(28)
+    struct.pack_into("<i", payload, 24, rejoin_target - (cave + 28))    # jmp@23 -> rejoin
+    struct.pack_into("<i", payload, 35, 0)          # call@34 rel32 filled by relocation below
+    struct.pack_into("<b", payload, 45, 56 - 46)    # jz@44 -> not_married(56)
+    struct.pack_into("<i", payload, 52, rejoin_target - (cave + 56))    # jmp@51 -> rejoin
+    struct.pack_into("<i", payload, 62, rejoin_target - (cave + 66))    # jmp@61 -> rejoin
+
+    scene.insert_section_bytes(section.index, cave, bytes(payload))
+    scene.append_relocation(section.index, cave + 35, helper, IMAGE_REL_I386_REL32)
+
+    scene._parse()
+    section = scene.section(update.section)
+    guard_raw = section.raw_ptr + guard_hook
+    scene.buf[guard_raw:guard_raw + len(expected_guard)] = (
+        b"\xE9" + struct.pack("<i", cave - (guard_hook + 5))
+        + b"\x90" * (len(expected_guard) - 5)
+    )
+    scene.write(scene_path)
+
+    manifest["VillagerDetailsSameSexMarriedStatus"] = {
+        "status": "installed",
+        "function": update_name,
+        "hook_offset": "+0x225",
+        "hook_span": "28 bytes (the Matriarch/Patriarch null-check guard only)",
+        "trampoline": hex(cave),
+        "helper": VILLAGER_DETAILS_MARRIED_STATUS_HELPER_SYMBOL,
+        "fallback_source": "VF2MarriagePair() via VF2SameSexMarriedStatusForVillager(), "
+            "gated on VF2SameSexMarriageToggleActive() and scoped to the specific "
+            "villager currently being viewed",
+        "stock_off_state": "byte-identical native Matriarch/Patriarch guard when Same-Sex "
+            "Marriage is inactive, the viewed adult isn't part of a resolvable pair, "
+            "or the pair is opposite-sex",
+        "reason": (
+            "theVillagerScene's details screen never showed \"Married\" for a "
+            "same-sex adult, because it runs the exact same hard gender-filtered "
+            "GetMatriarch()/GetPatriarch() check as Accept's finalization gate, "
+            "independently of whether the family tree record itself is correct."
         ),
     }
     return
@@ -30114,6 +30242,9 @@ def main():
     # HandleMessage that does need a hook for same-sex marriages to actually
     # register -- see patch_marriage_finalization_for_same_sex()'s docstring.
     patch_marriage_finalization_for_same_sex(manifest)
+    # A second, independent site with the identical Matriarch/Patriarch
+    # gender-blind check: the villager details screen's "Married" status.
+    patch_villager_details_same_sex_married_status(manifest)
     patch_force_successful_pregnancy_callsites(manifest)
     # The optional mortality curve is another exact-SHA dormant-byte hook.
     # Its zero .vf2mort default resumes the untouched stock mortality block.
