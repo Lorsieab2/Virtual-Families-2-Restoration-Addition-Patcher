@@ -11385,6 +11385,26 @@ class SameSexMarriagePatchTests(unittest.TestCase):
         self.assertNotIn('selector_hooks', current_patch)
         self.assertIn("VF2QueueMarriageProposal()", source)
 
+    def test_marriage_pair_fallback_is_gated_and_exact_pair_only(self):
+        # Regression guard: VF2MarriagePair's fallback (used when the
+        # family-tree record isn't populated yet -- the same-sex Accept
+        # finalization gap) used to pair "the first two qualifying resident
+        # adults" unconditionally, so any second active/employed resident
+        # (e.g. a grown adult child) was wrongly treated as the player's
+        # spouse. That blocked Force Marriage Email / Divorce Spouse for
+        # players with no spouse at all, and could misfire for opposite-sex
+        # households that never needed this fallback in the first place.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        pair_fn = source[
+            source.index('static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {'):
+            source.index('extern "C" CVillager *gVF2MarriageFinalizationFirst')
+        ]
+        self.assertIn("if (!VF2SameSexMarriageToggleActive()) return false;", pair_fn)
+        self.assertIn("CVillager *candidates[2] = {0, 0};", pair_fn)
+        self.assertIn("if (count != 2) return false;", pair_fn)
+        # The old unconditional "grab the first two" loop must be gone.
+        self.assertNotIn("} else if (villager != first) {", pair_fn)
+
     def test_force_email_has_no_scene_override_and_accept_guard_is_mode_independent(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         self.assertIn("static void VF2QueueMarriageProposal()", source)

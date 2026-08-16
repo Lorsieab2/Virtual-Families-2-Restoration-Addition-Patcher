@@ -13311,17 +13311,37 @@ static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {
         }
     }
 
+    // Same-sex marriages leave the family-tree record above unpopulated:
+    // native Accept finalization requires CVillagerManager::GetMatriarch()
+    // AND GetPatriarch() to both succeed, which is impossible for a
+    // same-sex pair (see VF2ResolveSameSexMarriagePairForFinalization).
+    // This fallback exists ONLY to bridge that gap for a freshly-married
+    // same-sex couple whose record hasn't been written yet, so it must
+    // never run for an opposite-sex household -- those always populate the
+    // record above via native code and never needed it. Previously this ran
+    // unconditionally and paired "the first two qualifying resident adults"
+    // regardless of relationship, so any second active, employed resident
+    // (a grown adult child, for example) was wrongly treated as the
+    // player's spouse -- blocking Force Marriage Email / Divorce Spouse /
+    // drop classification for players with no spouse at all.
+    if (!VF2SameSexMarriageToggleActive()) return false;
+
+    CVillager *candidates[2] = {0, 0};
+    int count = 0;
     for (int index = 0; index < 30; ++index) {
         CVillager *villager = VF2VillagerByIndex(index);
         if (!VF2MarriageAdult(villager)) continue;
-        if (!first) {
-            first = villager;
-        } else if (villager != first) {
-            second = villager;
-            return true;
-        }
+        if (count < 2) candidates[count] = villager;
+        ++count;
     }
-    return false;
+    // Only pair when exactly two qualifying adults are resident. A third
+    // (e.g. an adult child alongside a genuine same-sex couple) makes "the
+    // first two found" unreliable, so treat it as no established pair
+    // rather than guessing.
+    if (count != 2) return false;
+    first = candidates[0];
+    second = candidates[1];
+    return true;
 }
 
 extern "C" CVillager *gVF2MarriageFinalizationFirst = 0;
