@@ -5141,8 +5141,16 @@ def ai_bathroom2_store_icon_image_id(index, holiday_body_descriptor_count=0):
 
 
 MOBILE_RENOVATION_CURTAIN_COLOR_ORDER = ("black", "blue", "brown", "green", "pink")
-MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE = 539
-AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE = 538
+# Corrected 2026-08-16 from live-process verification of the running game's
+# own image table (entry layout [path][cols][rows]...[grid][id], stride 0x30):
+#   image 539 = "curtain_closed.png"         cached at CDecal+0x1924
+#   image 615 = "curtain_closed_southb.png"  cached at CDecal+0x1928
+#   image 575 = "kitchenGarbageFull.png"     cached at CDecal+0x1910
+# The previous values (539 for Bathroom 1, 538 for Bathroom 2) were both
+# wrong: 539 is the NORTH bathroom's curtain, and 538 is not a curtain at
+# all.  "southb" is the south (workshop-adjacent) bathroom -- Bathroom 1.
+MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE = 615
+AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE = 539
 MOBILE_RENOVATION_BATHROOM_CURTAIN_COLOR_BY_ITEM = {
     0x13C: "black",
     0x13D: "blue",
@@ -10881,9 +10889,15 @@ static const ldwColor kVF2Black = { 0xFF000000u };
         decal_type_preamble = r"""
 class CDecal {
 public:
-    unsigned char vf2_curtain_prefix[0x1910];
+    // Field offsets confirmed by reading the running game's own CDecal
+    // instance and cross-referencing each cached grid pointer against the
+    // live image table (2026-08-16):
+    //   +0x1924 -> image 539 "curtain_closed.png"        = NORTH bathroom
+    //   +0x1928 -> image 615 "curtain_closed_southb.png" = SOUTH/workshop
+    // The old layout also declared a field at +0x1910, which is actually
+    // image 575 "kitchenGarbageFull.png" -- not a curtain at all.
+    unsigned char vf2_curtain_prefix[0x1924];
     ldwImageGrid *bathroom2ClosedCurtainGrid;
-    unsigned char vf2_bathroom1_gap[0x10];
     ldwImageGrid *bathroom1ClosedCurtainGrid;
     void RefreshProps();
     void RefreshDecals();
@@ -11966,27 +11980,30 @@ static ldwImageGrid *VF2ResolveBathroom2ClosedCurtainGridImpl(CDecal *decal) {{
 
 extern "C" __declspec(naked) ldwImageGrid *__cdecl VF2ResolveBathroom2ClosedCurtainGrid() {{
     __asm {{
-        // RefreshDecals keeps the active CDecal instance in ESI at this
-        // callsite. Pass that instance so Bathroom 2 is resolved from its
-        // own cached stock grid and never from Bathroom 1's field.
+        // Bathroom 2 (the north/expansion bathroom) is now hooked at
+        // CDecal::RefreshProps+0x570, the site that pushes the cached
+        // grid at CDecal+0x1924 -- confirmed live to be image 539
+        // "curtain_closed.png", drawn at (1071, 212). It was previously
+        // hooked at RefreshDecals+0xB0B, which pushes CDecal+0x1910 --
+        // confirmed live to be image 575 "kitchenGarbageFull.png", i.e.
+        // the kitchen garbage sprite, not a curtain at all.
+        //
+        // RefreshProps keeps the active CDecal instance in EDI at this
+        // callsite (same as Bathroom 1's hook above), so EDI is what gets
+        // passed to the resolver.
         //
         // CRITICAL: the native call site that reaches this hook has
-        // already executed "mov ecx, esi" to set up ECX as the CDecal
+        // already executed "mov ecx, edi" to set up ECX as the CDecal
         // `this` pointer for the *next* native instruction after this one
-        // returns (an AddEntry-style decal-slot insertion). ECX is
+        // returns (an AddDecal-style decal-slot insertion). ECX is
         // caller-saved, so the Impl call below is free to leave anything
         // in it; without explicitly saving/restoring ECX here, that next
         // native instruction runs with whatever ECX happened to hold
-        // after the Impl call (observed in practice as one of the stock
-        // closed-curtain image IDs, 538/539, left over from an internal
-        // comparison) and dereferences it as if it were the CDecal
-        // pointer, crashing with an access violation the moment a
-        // Bathroom 2 closed-curtain decal is drawn. Bathroom 1's hook
-        // above needs the same save/restore for the same reason: its
-        // callsite also does "mov ecx, edi" before the hooked push, so
-        // ECX (not EDI) is what the following AddDecal call needs.
+        // after the Impl call and dereferences it as if it were the
+        // CDecal pointer, crashing with an access violation the moment a
+        // Bathroom 2 closed-curtain decal is drawn.
         push ecx
-        push esi
+        push edi
         call VF2ResolveBathroom2ClosedCurtainGridImpl
         add esp, 4
         pop ecx
@@ -16781,93 +16798,143 @@ def apply_second_bathroom_leaks(manifest):
 
 
 def patch_bathroom1_curtain_decal(manifest):
-    """Resolve the Bathroom 2 renovation curtain grid before native decal insertion.
+    """Route each bathroom's renovation curtain to its own native decal slot.
 
-    CRITICAL, found via live-process verification (2026-08-16): the
-    "Bathroom Remodel" (non-"2") catalog's curtain-color override used to
-    also install a hook here, at CDecal::RefreshProps+0x570 (case 71 of
-    RefreshProps' internal prop-slot switch). That hook's own machine code
-    was confirmed byte-correct and correctly wired to its resolver -- the
-    bug was never in the hook installation. It's that this particular
-    native decal slot is NOT the same physical bathroom as the one
-    "Bathroom Remodel"'s separate wallpaper/floor overlay system (a
-    completely independent, screen-anchor-based mechanism) targets: the
-    wallpaper/floor confirmed landing correctly in the original bathroom,
-    while this curtain slot was confirmed, live, in actual gameplay, to
-    render in the OTHER (native second/expansion) bathroom instead --
-    silently overriding that bathroom's curtain any time "Bathroom
-    Remodel" was purchased, even though nothing about Bathroom 2 was ever
-    touched by the player. There is no verified way yet to redirect this
-    hook to the correct physical slot, so it is removed outright: this
-    code path is left fully untouched (100% native), and "Bathroom
-    Remodel" no longer overrides any curtain at all, only wallpaper/floor,
-    as it always correctly did. Bathroom 2's own curtain-color system
-    (immediately below) is unrelated to this and untouched by this change.
+    Both hooks live in CDecal::RefreshProps, which passes a cached
+    ldwImageGrid* straight to AddDecal (theGraphicsManager::Draw's image
+    hook is never reached on this path), so the grid pointer has to be
+    substituted at the push itself.
+
+    Slot identification was done by reading the RUNNING game (2026-08-16):
+    each cached grid pointer in the live CDecal instance was matched
+    against the live image table, whose entries are 0x30 bytes laid out as
+    [path][cols][rows]...[grid][id]:
+
+      CDecal+0x1910 -> image 575 "kitchenGarbageFull.png"     (kitchen!)
+      CDecal+0x1924 -> image 539 "curtain_closed.png"         drawn (1071, 212)
+      CDecal+0x1928 -> image 615 "curtain_closed_southb.png"  drawn ( 807, 1540)
+
+    Cross-referenced against the room anchors (workshop (868,1519),
+    bathroom (563,1287)), +0x1928 is the south/workshop bathroom --
+    "Bathroom 1" -- and +0x1924 is the north/expansion bathroom --
+    "Bathroom 2".
+
+    Two real bugs are fixed by this mapping:
+
+    1. Bathroom 1's curtain override used to be installed at +0x570, the
+       push of CDecal+0x1924 -- the NORTH bathroom. Buying a Bathroom 1
+       colour visibly recoloured the wrong bathroom's curtain (reported
+       live), while Bathroom 1's own wallpaper/floor overlay -- a separate
+       screen-anchor mechanism -- correctly changed the south bathroom. It
+       now hooks +0x53A, the push of CDecal+0x1928.
+
+    2. Bathroom 2's curtain override was installed at
+       RefreshDecals+0xB0B, the push of CDecal+0x1910 -- which is the
+       kitchen garbage sprite, not a curtain. Buying a Bathroom 2 colour
+       would have replaced the full-kitchen-garbage image with a shower
+       curtain whenever that decal drew. It now hooks +0x570, the push of
+       CDecal+0x1924 (the north bathroom), and RefreshDecals is left
+       completely untouched.
+
+    Both hooked sites are inside RefreshProps and keep the active CDecal
+    instance in EDI, and both are preceded by "mov ecx, edi" for the
+    following AddDecal -- see the naked wrappers for the required ECX
+    save/restore.
     """
     obj = CoffObject(PATCHED / "Decal.obj")
+    refresh_props = obj.symbol("?RefreshProps@CDecal@@QAEXXZ")
+    section = obj.section(refresh_props.section)
+
+    def install(hook_offset, stock_push, helper_name, label):
+        raw = section.raw_ptr + refresh_props.value + hook_offset
+        if bytes(obj.buf[raw : raw + len(stock_push)]) != stock_push:
+            raise RuntimeError(
+                f"CDecal::RefreshProps {label} curtain grid push drifted "
+                f"at +{hook_offset:#x}"
+            )
+        helper = obj.append_undefined_symbol(helper_name)
+        # The six-byte stock grid push is exactly large enough for a
+        # resolver call followed by `push eax`, leaving the native AddDecal
+        # stack layout unchanged.
+        obj.buf[raw : raw + len(stock_push)] = b"\xE8\x00\x00\x00\x00\x50"
+        obj.append_relocation(
+            refresh_props.section,
+            refresh_props.value + hook_offset + 1,
+            helper,
+            IMAGE_REL_I386_REL32,
+        )
+
+    bathroom1_hook = None
+    if ENABLE_MOBILE_RENOVATIONS:
+        install(
+            0x53A,
+            b"\xFF\xB7\x28\x19\x00\x00",
+            "_VF2ResolveBathroom1ClosedCurtainGrid",
+            "Bathroom 1",
+        )
+        bathroom1_hook = {
+            "function": "?RefreshProps@CDecal@@QAEXXZ",
+            "offset": hex(0x53A),
+            "stock_bytes": "ff b7 28 19 00 00",
+            "replacement": "call _VF2ResolveBathroom1ClosedCurtainGrid; push eax",
+            "helper": "_VF2ResolveBathroom1ClosedCurtainGrid",
+            "cached_grid_offset": "0x1928",
+            "stock_image": hex(MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE),
+            "stock_image_file": "curtain_closed_southb.png",
+            "draw_position": [807, 1540],
+            "physical_room": "south/workshop-adjacent bathroom (Bathroom 1)",
+            "native_instance_register": "EDI",
+            "native_instance_passed_to_resolver": True,
+            "previous_offset": hex(0x570),
+            "reason": (
+                "was hooked at +0x570 (CDecal+0x1924), confirmed live to be "
+                "the NORTH bathroom's curtain -- it recoloured the wrong room"
+            ),
+        }
 
     bathroom2_hook = None
     if ENABLE_AI_GENERATED_BATHROOM2:
-        refresh_decals = obj.symbol("?RefreshDecals@CDecal@@QAEXXZ")
-        bathroom2_section = obj.section(refresh_decals.section)
-        bathroom2_hook_offset = refresh_decals.value + 0xB0B
-        bathroom2_stock_push = b"\xFF\xB6\x10\x19\x00\x00"
-        bathroom2_raw_offset = bathroom2_section.raw_ptr + bathroom2_hook_offset
-        if bytes(
-            obj.buf[bathroom2_raw_offset : bathroom2_raw_offset + len(bathroom2_stock_push)]
-        ) != bathroom2_stock_push:
-            raise RuntimeError(
-                "CDecal::RefreshDecals Bathroom 2 curtain grid push drifted"
-            )
-        bathroom2_helper = obj.append_undefined_symbol(
-            "_VF2ResolveBathroom2ClosedCurtainGrid"
-        )
-        obj.buf[
-            bathroom2_raw_offset : bathroom2_raw_offset + len(bathroom2_stock_push)
-        ] = b"\xE8\x00\x00\x00\x00\x50"
-        obj.append_relocation(
-            refresh_decals.section,
-            bathroom2_hook_offset + 1,
-            bathroom2_helper,
-            IMAGE_REL_I386_REL32,
+        install(
+            0x570,
+            b"\xFF\xB7\x24\x19\x00\x00",
+            "_VF2ResolveBathroom2ClosedCurtainGrid",
+            "Bathroom 2",
         )
         bathroom2_hook = {
-            "function": "?RefreshDecals@CDecal@@QAEXXZ",
-            "offset": hex(0xB0B),
-            "stock_bytes": bathroom2_stock_push.hex(" "),
+            "function": "?RefreshProps@CDecal@@QAEXXZ",
+            "offset": hex(0x570),
+            "stock_bytes": "ff b7 24 19 00 00",
             "replacement": "call _VF2ResolveBathroom2ClosedCurtainGrid; push eax",
             "helper": "_VF2ResolveBathroom2ClosedCurtainGrid",
-            "cached_grid_offset": "0x1910",
-            "fallback": "returns the native cached Bathroom 2 grid when inactive or unresolved",
-            "native_instance_register": "ESI",
+            "cached_grid_offset": "0x1924",
+            "stock_image": hex(AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE),
+            "stock_image_file": "curtain_closed.png",
+            "draw_position": [1071, 212],
+            "physical_room": "north/expansion bathroom (Bathroom 2)",
+            "native_instance_register": "EDI",
             "native_instance_passed_to_resolver": True,
+            "previous_offset": "RefreshDecals+0xb0b",
             "reason": (
-                "CDecal::RefreshDecals passes the cached Bathroom 2 grid directly "
-                "to AddDecal; theGraphicsManager::Draw image hook is not reached"
+                "was hooked at RefreshDecals+0xB0B (CDecal+0x1910), confirmed "
+                "live to be image 575 kitchenGarbageFull.png -- the kitchen "
+                "garbage sprite, not a curtain; RefreshDecals is now untouched"
             ),
         }
 
     obj.write(PATCHED / "Decal.obj")
     manifest["CDecal"] = {
-        "bathroom1_closed_curtain_grid_hook": {
-            "status": "removed",
-            "function": "?RefreshProps@CDecal@@QAEXXZ",
-            "offset": hex(0x570),
-            "reason": (
-                "Live-process verification (2026-08-16) confirmed this hook's "
-                "own machine code was byte-correct and correctly wired to its "
-                "resolver, but this native decal slot is a different physical "
-                "bathroom than the one 'Bathroom Remodel' (non-2)'s separate "
-                "wallpaper/floor overlay targets -- it was silently overriding "
-                "the OTHER (native second/expansion) bathroom's curtain any "
-                "time 'Bathroom Remodel' was purchased. No verified redirect "
-                "exists yet, so the hook is removed outright; this native "
-                "code path is left fully untouched (100% stock). 'Bathroom "
-                "Remodel' now only ever changes wallpaper/floor, never a "
-                "curtain, in either bathroom."
-            ),
-        }
+        "slot_identification": {
+            "method": "live process read of the running game's CDecal instance "
+                "cross-referenced against its own image table",
+            "verified": "2026-08-16",
+            "CDecal+0x1910": "image 575 kitchenGarbageFull.png (not a curtain)",
+            "CDecal+0x1924": "image 539 curtain_closed.png (north bathroom)",
+            "CDecal+0x1928": "image 615 curtain_closed_southb.png (south/workshop bathroom)",
+        },
+        "refresh_decals_untouched": True,
     }
+    if bathroom1_hook is not None:
+        manifest["CDecal"]["bathroom1_closed_curtain_grid_hook"] = bathroom1_hook
     if bathroom2_hook is not None:
         manifest["CDecal"]["bathroom2_closed_curtain_grid_hook"] = bathroom2_hook
 
@@ -26779,8 +26846,8 @@ def validate_mobile_renovation_renderer_contract(manifest):
             or "graphics->Draw((EImage)image" in store_helper_text
             or "0.12f" in store_helper_text
             or "VF2ResolveRenovationCurtainImage" not in store_helper_text
-            or "kVF2StockBathroom1ClosedCurtainImage = 539" not in store_helper_text
-            or "kVF2StockBathroom2ClosedCurtainImage = 538" not in store_helper_text
+            or f"kVF2StockBathroom1ClosedCurtainImage = {MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE}" not in store_helper_text
+            or f"kVF2StockBathroom2ClosedCurtainImage = {AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE}" not in store_helper_text
         ):
             raise RuntimeError("Mobile renovation store icon native DrawItem contract is not statically proven")
         runtime_dir = OUT / "Images" / "MobileRenovations"
