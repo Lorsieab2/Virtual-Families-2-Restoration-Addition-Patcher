@@ -8872,8 +8872,14 @@ def sync_mobile_renovation_art_sources(manifest):
         source = MOBILE_RENOVATION_ART_SOURCE_DIR / filename
         destination = target / filename
         if not source.is_file():
-            missing.append(str(source))
-            continue
+            # A missing source here used to only get recorded into
+            # manifest["mobile_renovation_art_sources"]["missing"] as a
+            # status string, with nothing downstream ever failing the
+            # build on it -- a stale checkout/bad seed could silently ship
+            # a build with a room style's wallpaper/floor overlay missing.
+            # Hard-fail instead, matching how the sibling Bathroom 2
+            # curtain copy loop below has always treated a missing source.
+            raise RuntimeError(f"Mobile renovation room style art is missing: {source}")
         shutil.copy2(source, destination)
         copied.append({
             "name": filename,
@@ -8894,8 +8900,14 @@ def sync_mobile_renovation_art_sources(manifest):
         source = MOBILE_RENOVATION_CURTAIN_SOURCE_DIR / filename
         destination = curtain_target / filename
         if not source.is_file():
-            curtain_missing.append(str(source))
-            continue
+            # Same hardening as the room-style loop above: a missing
+            # Bathroom 1 curtain-color source used to only get recorded as
+            # a manifest status string ("missing_sources"), never failing
+            # the build. That is how a stale/bad build could silently ship
+            # without one or more curtain colors while still linking
+            # cleanly and reporting success. Hard-fail instead, matching
+            # the Bathroom 2 curtain copy loop's existing behavior.
+            raise RuntimeError(f"Bathroom 1 curtain asset source is missing: {source}")
         data = source.read_bytes()
         digest = hashlib.sha256(data).hexdigest()
         if digest.lower() != spec["sha256"].lower() or read_png_size(source) != tuple(spec["size"]):
@@ -8941,8 +8953,10 @@ def sync_mobile_renovation_art_sources(manifest):
     for filename, spec in MOBILE_RENOVATION_USER_STORE_ICON_MAPPING.items():
         source = MOBILE_RENOVATION_USER_STORE_ICON_DIR / filename
         if not source.is_file():
-            user_icon_missing.append(str(source))
-            continue
+            # Same hardening as the room-style and curtain loops above:
+            # hard-fail instead of silently shipping a build missing a
+            # Bathroom 1 store icon, matching Bathroom 2's store icon loop.
+            raise RuntimeError(f"Mobile renovation store icon source is missing: {source}")
         digest = hashlib.sha256(source.read_bytes()).hexdigest().upper()
         if digest != spec["sha256"] or tuple(read_png_size(source) or ()) != tuple(spec["size"]):
             raise RuntimeError(f"Mobile renovation store icon identity mismatch: {source}")
