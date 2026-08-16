@@ -8205,13 +8205,18 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("eEmailMessageMarriageProposal = 2", source)
         self.assertIn("VF2QueueMarriageProposal();", source)
         self.assertIn("case 0x14C:", source)
-        self.assertIn("gVF2SameSexMarriage = 0;", source)
-        self.assertIn("gVF2SameSexMarriage = 1;", source)
+        self.assertIn(
+            "*VF2CheatToggleActiveByte(0x14C) = VF2SameSexMarriageToggleActive() ? 0 : 1;",
+            source,
+        )
         self.assertIn("state->EmailMessageInQueue(eEmailMessageMarriageProposal)", source)
         self.assertNotIn("gVF2CheatMarriageProposalScene = mode;", source)
         self.assertNotIn("static const unsigned char kVF2CheatMarriageProposalActive = 1", source)
         self.assertIn("VF2SameSexMarriageToggleActive()", source)
-        self.assertIn("return gVF2SameSexMarriage != 0;", source)
+        self.assertIn(
+            "return *VF2CheatToggleActiveByte({SAME_SEX_MARRIAGE_ITEM_ID:#x}) != 0;",
+            source,
+        )
         self.assertNotIn(
             "InventoryManager.HaveUpgrade((EInventoryItem){SAME_SEX_MARRIAGE_ITEM_ID:#x});",
             source,
@@ -10839,16 +10844,29 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
             "cheat_marriage_email.png",
         )
         source = Path(patcher.__file__).read_text(encoding="ascii")
-        self.assertEqual(patcher.MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION, ".vf2rero")
-        self.assertLessEqual(len(patcher.MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION), 8)
-        self.assertIn('#pragma section(".vf2rero", read, write)', source)
-        self.assertIn('__declspec(allocate(".vf2rero"))', source)
-        self.assertIn(
+        # Same-Sex Marriage and Marriage Candidate Reroll used to persist in a
+        # free-standing custom PE section (.vf2same / .vf2rero) that native
+        # SaveCurrentGame()/theGameState::Load never restore, so the toggle
+        # silently reset to 0 on every process relaunch/save reload even
+        # after being purchased. Both now persist at InventoryManager +
+        # itemId + 0x2A3 (the same convention already proven for mobile
+        # renovations/Bathroom 2), which is part of the native save payload.
+        self.assertNotIn('#pragma section(".vf2rero", read, write)', source)
+        self.assertNotIn(
             'volatile unsigned char gVF2AllowMarriageCandidateReroll = 0;',
+            source,
+        )
+        self.assertIn(
+            "extern \"C\" unsigned char *__cdecl VF2CheatToggleActiveByte(int itemId)",
+            source,
+        )
+        self.assertIn(
+            "return reinterpret_cast<unsigned char *>(&InventoryManager) + itemId + {CHEAT_TOGGLE_PERSISTED_BYTE_OFFSET:#x};",
             source,
         )
         self.assertIn("case 0x152:", source)
         self.assertIn("kVF2MarriageCandidateRerollCatalogPrice", source)
+        self.assertIn("*VF2CheatToggleActiveByte(0x152) =", source)
         self.assertNotIn("gVF2SameSexMarriage = gVF2AllowMarriageCandidateReroll", source)
 
     def test_generated_runtime_flags_are_independent_and_default_off(self):
@@ -10863,20 +10881,25 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 patcher.patch_scrolling_store_scene({})
                 helper_path = patcher.PATCHED / "vf2_special_upgrade_effects.cpp"
                 generated = helper_path.read_text(encoding="ascii")
-                self.assertIn('#pragma section(".vf2rero", read, write)', generated)
-                self.assertIn('__declspec(allocate(".vf2rero"))', generated)
-                self.assertIn(
+                self.assertNotIn('#pragma section(".vf2rero", read, write)', generated)
+                self.assertNotIn('#pragma section(".vf2same", read, write)', generated)
+                self.assertNotIn(
                     "volatile unsigned char gVF2AllowMarriageCandidateReroll = 0;",
                     generated,
                 )
-                self.assertIn(
+                self.assertNotIn(
                     "volatile unsigned char gVF2SameSexMarriage = 0;",
                     generated,
                 )
-                self.assertNotIn(
-                    "gVF2SameSexMarriage = gVF2AllowMarriageCandidateReroll",
+                self.assertIn(
+                    "extern \"C\" unsigned char *__cdecl VF2CheatToggleActiveByte(int itemId);",
                     generated,
                 )
+                # The two toggles write through different item-id addends
+                # (0x14C vs 0x152), so they remain independent bytes even
+                # though they share the same persisted-byte helper.
+                self.assertIn("*VF2CheatToggleActiveByte(0x14C) =", generated)
+                self.assertIn("*VF2CheatToggleActiveByte(0x152) =", generated)
         finally:
             patcher.PATCHED = old_patched
 
@@ -10923,7 +10946,14 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 cave_raw = section.raw_ptr + cave
                 cave_bytes = bytes(dating.buf[cave_raw:cave_raw + 70])
 
-                self.assertEqual(cave_bytes[0:7], bytes.fromhex("80 3D 00 00 00 00 00"))
+                # cave_bytes[2:6] holds the pre-relocation addend for the
+                # InventoryManager DIR32 relocation: itemId(0x152) + 0x2A3 =
+                # 0x3F5, little-endian, so the linked byte reads
+                # InventoryManager+0x152+0x2A3 -- the persisted-byte
+                # location this toggle now shares with mobile renovations/
+                # Bathroom 2, instead of the old free-standing .vf2rero
+                # custom section.
+                self.assertEqual(cave_bytes[0:7], bytes.fromhex("80 3D F5 03 00 00 00"))
                 self.assertEqual(cave_bytes[7:9], bytes.fromhex("74 31"))  # -> inactive (58)
                 self.assertEqual(
                     cave_bytes[9:17],
@@ -10999,7 +11029,7 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                             (vaddr, dating.symbol_by_index[symbol_index].name, relocation_type)
                         )
                 self.assertIn(
-                    (cave + 2, patcher.MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL,
+                    (cave + 2, patcher.INVENTORY_MANAGER_SYMBOL,
                      patcher.IMAGE_REL_I386_DIR32),
                     relocations,
                 )
@@ -11031,7 +11061,10 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 )
                 self.assertEqual(contract["cheat_upgrade"]["item_id"], "0x152")
                 self.assertEqual(contract["cheat_upgrade"]["catalog_price"], 10000)
-                self.assertEqual(contract["runtime_flag"]["source_section"], ".vf2rero")
+                self.assertEqual(
+                    contract["runtime_flag"]["storage"],
+                    "InventoryManager + 0x152 + 0x2A3 (same persisted-byte convention as mobile renovations/Bathroom 2)",
+                )
                 self.assertEqual(contract["reject"]["hook_offset"], "+0x85")
                 self.assertIn("CVillager+0x1BB84", contract["reject"]["active_lifecycle"])
                 self.assertIn("CDatingScene+0x10 to -1", contract["reject"]["active_lifecycle"])
@@ -11067,7 +11100,10 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 )
 
                 reroll = manifest["MarriageCandidateReroll"]
-                self.assertEqual(reroll["runtime_flag"]["source_section"], ".vf2rero")
+                self.assertEqual(
+                    reroll["runtime_flag"]["storage"],
+                    "InventoryManager + 0x152 + 0x2A3 (same persisted-byte convention as mobile renovations/Bathroom 2)",
+                )
                 self.assertIn("CDatingScene+0x10 to -1", reroll["reject"]["active_lifecycle"])
 
                 same_sex = manifest["SameSexMarriage"]
@@ -11271,8 +11307,13 @@ class SameSexMarriagePatchTests(unittest.TestCase):
         self.assertNotIn("VF2QueueCheatMarriageProposal", source)
         self.assertNotIn("VF2MaybeAddCheatMarriageExit", source)
         self.assertNotIn("VF2HandleCheatMarriageProposalExit", source)
-        self.assertIn("#pragma section(\".vf2same\", read, write)", source)
-        self.assertIn("volatile unsigned char gVF2SameSexMarriage = 0;", source)
+        # Persists at InventoryManager + 0x14C + 0x2A3 (part of the native
+        # save payload) instead of a free-standing custom PE section that
+        # native SaveCurrentGame()/Load() never restore.
+        self.assertNotIn("#pragma section(\".vf2same\", read, write)", source)
+        self.assertNotIn("volatile unsigned char gVF2SameSexMarriage = 0;", source)
+        self.assertIn("inventory_manager_symbol = dating.append_undefined_symbol(INVENTORY_MANAGER_SYMBOL)", source)
+        self.assertIn("same_sex_flag_addend = SAME_SEX_MARRIAGE_ITEM_ID + CHEAT_TOGGLE_PERSISTED_BYTE_OFFSET", source)
         self.assertIn("b\"\\x85\\xC0\"", source)
         self.assertIn("invalid_candidate", source)
 
