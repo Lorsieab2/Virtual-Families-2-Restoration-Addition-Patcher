@@ -11082,6 +11082,62 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
+    def test_marriage_finalization_pair_guard_coexists_with_reroll_and_same_sex(self):
+        # Regression coverage for a bug reported live: pressing Marry on a
+        # same-sex candidate showed no marriage announcement, the adult was
+        # never listed as married, and dropping the pair on each other
+        # argued instead of starting Private Romantic Time. Root cause:
+        # Accept's own Matriarch/Patriarch null-check guard (a hard gender
+        # filter) always leaves one side null for a same-gender pair, so the
+        # entire finalization block -- including CFamilyTree::UpdateParents
+        # and the life-event announcement -- silently no-ops.
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                for filename in (
+                    "DatingScene.obj",
+                    "VillagerManager.obj",
+                    "theMainScene.obj",
+                ):
+                    shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+                patcher.PATCHED = temp_root
+                manifest = {}
+                patcher.patch_marriage_candidate_reroll(manifest)
+                patcher.patch_same_sex_marriage(manifest)
+                patcher.patch_marriage_finalization_for_same_sex(manifest)
+
+                dating = CoffObject(temp_root / "DatingScene.obj")
+                handle = dating.symbol("?HandleMessage@CDatingScene@@UAE_NHJ@Z")
+                section = dating.section(handle.section)
+                base = section.raw_ptr + handle.value
+
+                # Reroll's own hook (+0x85) is untouched by this new patch.
+                self.assertEqual(dating.buf[base + 0x85], 0xE9)
+                # The new finalization guard hook (+0x142) is installed.
+                self.assertEqual(dating.buf[base + 0x142], 0xE9)
+                # And it doesn't overlap/clobber the finalization call chain
+                # (+0x152) or the shared skip landing point (+0x222) it
+                # jumps back into -- both must remain exactly stock.
+                self.assertEqual(
+                    bytes(dating.buf[base + 0x152:base + 0x158]),
+                    bytes.fromhex("E8 00 00 00 00 C7"),
+                )
+                self.assertEqual(
+                    bytes(dating.buf[base + 0x222:base + 0x229]),
+                    bytes.fromhex("C7 43 10 FF FF FF FF"),
+                )
+
+                finalization = manifest["MarriageFinalizationSameSex"]
+                self.assertEqual(finalization["status"], "installed")
+                self.assertEqual(finalization["hook_offset"], "+0x142")
+                self.assertEqual(
+                    finalization["helper"],
+                    "_VF2ResolveSameSexMarriagePairForFinalization",
+                )
+        finally:
+            patcher.PATCHED = old_patched
+
     def test_same_sex_patch_leaves_stock_proposal_state_commit_untouched(self):
         old_patched = patcher.PATCHED
         try:
