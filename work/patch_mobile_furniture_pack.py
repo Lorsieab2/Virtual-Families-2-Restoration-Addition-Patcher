@@ -320,6 +320,8 @@ MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL = "_gVF2AllowMarriageCandidateReroll"
 # which lives inside CInventoryManager and is part of the native save payload.
 CHEAT_TOGGLE_PERSISTED_BYTE_OFFSET = 0x2A3
 INVENTORY_MANAGER_SYMBOL = "?InventoryManager@@3VCInventoryManager@@A"
+SPOUSE_ACCESSOR_MATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingMatriarch"
+SPOUSE_ACCESSOR_PATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingPatriarch"
 MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL = "_VF2ResolveSameSexMarriagePairForFinalization"
 MARRIAGE_FINALIZATION_FIRST_SYMBOL = "_gVF2MarriageFinalizationFirst"
 MARRIAGE_FINALIZATION_SECOND_SYMBOL = "_gVF2MarriageFinalizationSecond"
@@ -13375,6 +13377,52 @@ static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {
     return true;
 }
 
+// Native CVillagerManager::GetMatriarch/GetPatriarch are byte-identical
+// gender scans (gender==1 vs gender==0) over the current generation's
+// resident, employed, living adults.  A household whose two spouses share a
+// gender can therefore only ever fill ONE of the two roles, and every native
+// system that asks for "the couple" through those two accessors silently
+// no-ops: 66 call sites across 19 functions -- pregnancy (CVillager::
+// Impregnate), theMainScene::TryToMakeBaby, CVillagerState::
+// UpdateHappinessState, CVillagerPlans::ProcessCurrentPlan, the banking
+// dialog, tutorial tips, four island-event CanFire considerers, and the
+// dating scene.
+//
+// These helpers are reached ONLY from each accessor's null-return path, so
+// the native scan always runs first and always wins; nothing changes for a
+// household where the scan succeeds (i.e. every opposite-sex couple).  Only
+// the failing side is back-filled.
+static CVillager *VF2FirstAdultWithGender(int gender) {{
+    for (int index = 0; index < 30; ++index) {{
+        CVillager *villager = VF2VillagerByIndex(index);
+        if (!VF2MarriageAdult(villager)) continue;
+        if (*(int *)((unsigned char *)villager + 0x6A58) == gender) return villager;
+    }}
+    return 0;
+}}
+
+// takenGender is the gender the OTHER accessor's native scan matches, so the
+// spouse it is about to return is excluded here.  Without that exclusion both
+// accessors could resolve to the same villager, and CFamilyTree::UpdateParents
+// would then record somebody as married to themselves.
+static CVillager *VF2OtherSpouse(int takenGender) {{
+    CVillager *first;
+    CVillager *second;
+    if (!VF2MarriagePair(first, second)) return 0;
+    CVillager *taken = VF2FirstAdultWithGender(takenGender);
+    if (first && first != taken) return first;
+    if (second && second != taken) return second;
+    return 0;
+}}
+
+extern "C" CVillager *__cdecl VF2ResolveMissingMatriarch() {{
+    return VF2OtherSpouse(0);
+}}
+
+extern "C" CVillager *__cdecl VF2ResolveMissingPatriarch() {{
+    return VF2OtherSpouse(1);
+}}
+
 extern "C" CVillager *gVF2MarriageFinalizationFirst = 0;
 extern "C" CVillager *gVF2MarriageFinalizationSecond = 0;
 
@@ -19126,6 +19174,117 @@ def patch_same_sex_marriage(manifest):
         "stock_off_state": "byte-identical native candidate-gender computation when the flag is zero",
     }
     return
+
+
+def patch_villager_manager_spouse_accessors(manifest):
+    """Back-fill the missing half of a couple in GetMatriarch/GetPatriarch.
+
+    CVillagerManager::GetMatriarch and GetPatriarch are byte-identical
+    scans except for one instruction -- "cmp dword ptr [esi-1512Ch], 1"
+    (gender==1, female) vs the same compare against 0 (male) -- over the
+    current generation's resident, employed, living adults. A couple whose
+    two spouses share a gender can only ever satisfy one of them, so the
+    other returns null and every native consumer of "the couple" quietly
+    does nothing.
+
+    A COFF relocation census over the pristine objects found 66 call sites
+    in 19 functions across 10 objects going through these two accessors,
+    including CVillager::Impregnate, theMainScene::TryToMakeBaby,
+    CVillagerState::UpdateHappinessState, CVillagerPlans::ProcessCurrentPlan,
+    CBankingDlg's constructor, CTutorialTip::IsWorldReadyForTip, and the
+    CanFire considerers of four island events. Hooking each of those
+    individually is unmaintainable; fixing the two accessors fixes all of
+    them at once.
+
+    The hook is deliberately placed on the NULL-RETURN path (+0x48,
+    "pop edi; pop esi; xor eax,eax; pop ebx; ret") rather than at the
+    function entry, so the native scan is never skipped -- only its failure
+    is back-filled. When the scan succeeds the function is byte-identical
+    to stock, which is every opposite-sex household. The cave reproduces
+    the same three pops (so the stack is restored exactly as stock did),
+    calls the resolver, and returns whatever it produced -- which is null
+    unless a genuine second spouse exists, in which case the accessor's
+    stock null result is returned unchanged.
+    """
+    path = PATCHED / "VillagerManager.obj"
+    obj = CoffObject(path)
+    stock_null_return = bytes.fromhex("5F5E33C05BC3")
+    accessors = (
+        (
+            "?GetMatriarch@CVillagerManager@@QAEPAVCVillager@@XZ",
+            SPOUSE_ACCESSOR_MATRIARCH_HELPER_SYMBOL,
+            "matriarch",
+        ),
+        (
+            "?GetPatriarch@CVillagerManager@@QAEPAVCVillager@@XZ",
+            SPOUSE_ACCESSOR_PATRIARCH_HELPER_SYMBOL,
+            "patriarch",
+        ),
+    )
+    records = {}
+    for name, helper_symbol, label in accessors:
+        function = obj.symbol(name)
+        section = obj.section(function.section)
+        hook = function.value + 0x48
+        raw = section.raw_ptr + hook
+        if bytes(obj.buf[raw:raw + len(stock_null_return)]) != stock_null_return:
+            raise RuntimeError(
+                f"CVillagerManager::Get{label.title()} null-return path drifted"
+            )
+        helper = obj.append_undefined_symbol(helper_symbol)
+        cave = section.raw_size
+        payload = bytearray(
+            b"\x5F"          # pop edi   ) restore exactly what the stock
+            b"\x5E"          # pop esi   ) null-return path popped, so the
+            b"\x5B"          # pop ebx   ) stack is identical either way
+            b"\xE8\0\0\0\0"  # call the resolver (cdecl, no arguments)
+            b"\xC3"          # ret with EAX = spouse, or 0 for stock behavior
+        )
+        if len(payload) != 9:
+            raise AssertionError("Spouse accessor cave size drifted")
+        obj.insert_section_bytes(section.index, cave, bytes(payload))
+        obj.append_relocation(section.index, cave + 4, helper, IMAGE_REL_I386_REL32)
+        # Appending to one COMDAT section shifts every later section's raw
+        # pointer, so re-resolve before writing the trampoline.
+        obj._parse()
+        section = obj.section(function.section)
+        raw = section.raw_ptr + hook
+        obj.buf[raw:raw + len(stock_null_return)] = (
+            b"\xE9" + struct.pack("<i", cave - (hook + 5)) + b"\x90"
+        )
+        records[label] = {
+            "function": name,
+            "hook_offset": hex(0x48),
+            "stock_bytes": stock_null_return.hex(" "),
+            "replacement": f"jmp cave; cave = pop edi/esi/ebx; call {helper_symbol}; ret",
+            "helper": helper_symbol,
+            "trampoline": hex(cave),
+            "hooked_path": "null-return only; the native gender scan is untouched",
+        }
+    obj.write(path)
+
+    manifest["SpouseAccessorBackfill"] = {
+        "status": "installed",
+        "reason": (
+            "GetMatriarch/GetPatriarch are hard gender filters, so a "
+            "same-gender couple can only ever fill one of the two roles and "
+            "every native consumer of 'the couple' no-ops for them"
+        ),
+        "census": {
+            "method": "COFF relocation scan over the pristine objects",
+            "call_sites": 66,
+            "functions": 19,
+            "objects": 10,
+        },
+        "native_scan_preserved": True,
+        "opposite_sex_behavior": "byte-identical to stock (scan succeeds, hook unreached)",
+        "distinctness_guarantee": (
+            "each resolver excludes whichever villager the other accessor's "
+            "native scan will return, so the two can never resolve to the "
+            "same person"
+        ),
+        "accessors": records,
+    }
 
 
 def patch_marriage_finalization_for_same_sex(manifest):
@@ -29887,6 +30046,10 @@ def main():
     # Accept's own Matriarch/Patriarch finalization guard is the one part of
     # HandleMessage that does need a hook for same-sex marriages to actually
     # register -- see patch_marriage_finalization_for_same_sex()'s docstring.
+    # Fixes "same-sex spouses aren't treated as spouses" at the root: both
+    # native spouse accessors back-fill their missing half, which covers all
+    # 66 call sites in one change instead of hooking 19 functions.
+    patch_villager_manager_spouse_accessors(manifest)
     patch_marriage_finalization_for_same_sex(manifest)
     # A second, independent site with the identical Matriarch/Patriarch
     # gender-blind check: the villager details screen's "Married" status.
