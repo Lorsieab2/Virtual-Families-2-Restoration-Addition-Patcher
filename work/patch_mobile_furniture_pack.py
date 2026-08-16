@@ -308,6 +308,9 @@ MARRIAGE_CANDIDATE_REROLL_ITEM_ID = 0x152
 MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE = 10000
 MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION = ".vf2rero"
 MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL = "_gVF2AllowMarriageCandidateReroll"
+MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL = "_VF2ResolveSameSexMarriagePairForFinalization"
+MARRIAGE_FINALIZATION_FIRST_SYMBOL = "_gVF2MarriageFinalizationFirst"
+MARRIAGE_FINALIZATION_SECOND_SYMBOL = "_gVF2MarriageFinalizationSecond"
 # These are native Flea Market rows, not added Special Upgrades rows.  Keep
 # their reversible behavior in one explicit set so availability, price, and
 # removal cannot drift apart again.
@@ -13298,6 +13301,44 @@ static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {
     return false;
 }
 
+extern "C" CVillager *gVF2MarriageFinalizationFirst = 0;
+extern "C" CVillager *gVF2MarriageFinalizationSecond = 0;
+
+// The stock Accept ("Marry") handler only finalizes a marriage -- money,
+// achievements, CFamilyTree::UpdateParents, and the life-event announcement
+// -- when CVillagerManager::GetMatriarch() AND GetPatriarch() both return a
+// villager. Disassembly of both confirms they are byte-identical except one
+// requires the scanned villager's gender field to equal 1 (female) and the
+// other 0 (male), so a same-sex marriage always leaves exactly one of them
+// null: there is no opposite-gender adult in the current generation to
+// find. The entire finalization block then silently no-ops -- no
+// announcement, the couple is never recorded married in the family tree,
+// and every system that depends on that record (VF2ClassifyRomanticSpouseDrop's
+// romantic-drop classification, "married" status) treats them as
+// strangers, which is also why dropping them on each other argues instead
+// of starting Private Romantic Time.
+//
+// This resolves the actual married pair through the same VF2MarriagePair()
+// fallback that VF2ClassifyRomanticSpouseDrop and VF2MarriageEmailUnavailable
+// already rely on, scoped to only run when Same-Sex Marriage is active so
+// opposite-sex behavior (however GetMatriarch/GetPatriarch might legitimately
+// fail for it, e.g. before any marriage has happened) is completely
+// unchanged. Once this runs, VF2MarriagePair()'s own family-tree-record
+// path also starts succeeding on later calls, since UpdateParents will have
+// actually populated it -- so the drop-classification gap resolves itself
+// without a separate fix.
+extern "C" bool __cdecl VF2ResolveSameSexMarriagePairForFinalization() {
+    gVF2MarriageFinalizationFirst = 0;
+    gVF2MarriageFinalizationSecond = 0;
+    if (!VF2SameSexMarriageToggleActive()) return false;
+    CVillager *first = 0;
+    CVillager *second = 0;
+    if (!VF2MarriagePair(first, second)) return false;
+    gVF2MarriageFinalizationFirst = first;
+    gVF2MarriageFinalizationSecond = second;
+    return true;
+}
+
 static bool VF2MarriageEmailUnavailable() {
     CVillager *first;
     CVillager *second;
@@ -18937,6 +18978,133 @@ def patch_same_sex_marriage(manifest):
             "candidate field whenever this flag was active. Both are removed."
         ),
         "stock_off_state": "byte-identical native candidate-gender computation when the flag is zero",
+    }
+    return
+
+
+def patch_marriage_finalization_for_same_sex(manifest):
+    """Let a same-sex marriage actually finalize when Accept is pressed.
+
+    patch_same_sex_marriage() deliberately leaves CDatingScene::HandleMessage
+    untouched -- Accept, Reject, and the shared tail all remain stock. That is
+    correct for candidate *generation*, but Accept's own finalization gate
+    (money, achievements, CFamilyTree::UpdateParents, and the marriage
+    life-event announcement) only runs when CVillagerManager::GetMatriarch()
+    AND GetPatriarch() both return non-null. Disassembly of both confirms
+    they are byte-identical except for one gender-equality check (Matriarch
+    requires gender==1, Patriarch requires gender==0) over the current
+    generation's adults, so once a same-sex marriage lets two adults share a
+    gender, one of these two accessors always comes back null and Accept
+    silently skips the whole block: no announcement, and the couple is never
+    recorded as married in the family tree (which is also why
+    VF2ClassifyRomanticSpouseDrop treats them as strangers afterward,
+    dropping them into the native argue instead of Private Romantic Time).
+
+    Confirmed via decompiled disassembly of the real HandleMessage: the
+    Accept path's `if (Matriarch && Patriarch)` guard compiles to
+    "test esi,esi / jz +0x220 / test edi,edi / jz +0x220" at +0x142 (ESI =
+    Matriarch, EDI = Patriarch), immediately followed by the finalization
+    call chain at +0x152 (theGameState::Get(), the achievement/money/
+    UpdateParents/QueueLifeEventPending sequence). +0x220 is the shared
+    "skip finalization" landing point Reject's own path already uses.
+
+    Hook only that 16-byte guard: when both non-null, behavior is
+    byte-identical to stock. When either is null, additionally try
+    VF2ResolveSameSexMarriagePairForFinalization() (only succeeds when Same-
+    Sex Marriage is active) to find the real pair via VF2MarriagePair()'s
+    existing fallback, and substitute it into ESI/EDI before falling into
+    the same untouched finalization call chain. If that also fails (Same-Sex
+    Marriage off, or no valid pair), take the exact same stock skip path as
+    before -- opposite-sex behavior, and any edge case this hook doesn't
+    recognize, is unchanged.
+    """
+    dating_path = PATCHED / "DatingScene.obj"
+    dating = CoffObject(dating_path)
+    handle_name = "?HandleMessage@CDatingScene@@UAE_NHJ@Z"
+    handle = dating.symbol(handle_name)
+    section = dating.section(handle.section)
+    guard_hook = handle.value + 0x142
+    guard_raw = section.raw_ptr + guard_hook
+    expected_guard = bytes.fromhex("85F60F84D800000085FF0F84D0000000")
+    if bytes(dating.buf[guard_raw:guard_raw + len(expected_guard)]) != expected_guard:
+        raise RuntimeError("Dating Accept Matriarch/Patriarch guard drifted")
+
+    finalize_target = handle.value + 0x152
+    skip_target = handle.value + 0x222
+
+    pair_helper = dating.append_undefined_symbol(
+        MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL
+    )
+    first_symbol = dating.append_undefined_symbol(
+        MARRIAGE_FINALIZATION_FIRST_SYMBOL
+    )
+    second_symbol = dating.append_undefined_symbol(
+        MARRIAGE_FINALIZATION_SECOND_SYMBOL
+    )
+
+    cave = section.raw_size
+    payload = bytearray(
+        b"\x85\xF6"          # test esi, esi
+        b"\x74\x00"          # jz check_fallback (offset 13)
+        b"\x85\xFF"          # test edi, edi
+        b"\x74\x00"          # jz check_fallback (offset 13)
+        b"\xE9\0\0\0\0"    # both non-null: jmp finalize (stock path)
+        # check_fallback (offset 13):
+        b"\xE8\0\0\0\0"    # call VF2ResolveSameSexMarriagePairForFinalization
+        b"\x84\xC0"          # test al, al
+        b"\x74\x00"          # jz fallback_failed (offset 39)
+        b"\x8B\x35\0\0\0\0"  # mov esi, [gVF2MarriageFinalizationFirst]
+        b"\x8B\x3D\0\0\0\0"  # mov edi, [gVF2MarriageFinalizationSecond]
+        b"\xE9\0\0\0\0"    # jmp finalize
+        # fallback_failed (offset 39):
+        b"\xE9\0\0\0\0"    # jmp skip (stock null-guard path)
+    )
+    if len(payload) != 44:
+        raise AssertionError("Marriage finalization pair cave size drifted")
+    struct.pack_into("<b", payload, 3, 13 - 4)
+    struct.pack_into("<b", payload, 7, 13 - 8)
+    struct.pack_into("<i", payload, 9, finalize_target - (cave + 13))
+    struct.pack_into("<b", payload, 21, 39 - 22)
+    struct.pack_into("<i", payload, 35, finalize_target - (cave + 39))
+    struct.pack_into("<i", payload, 40, skip_target - (cave + 44))
+
+    dating.insert_section_bytes(section.index, cave, bytes(payload))
+    dating.append_relocation(section.index, cave + 14, pair_helper, IMAGE_REL_I386_REL32)
+    dating.append_relocation(section.index, cave + 24, first_symbol, IMAGE_REL_I386_DIR32)
+    dating.append_relocation(section.index, cave + 30, second_symbol, IMAGE_REL_I386_DIR32)
+
+    dating._parse()
+    section = dating.section(handle.section)
+    guard_raw = section.raw_ptr + guard_hook
+    dating.buf[guard_raw:guard_raw + len(expected_guard)] = (
+        b"\xE9" + struct.pack("<i", cave - (guard_hook + 5))
+        + b"\x90" * (len(expected_guard) - 5)
+    )
+    dating.write(dating_path)
+
+    manifest["MarriageFinalizationSameSex"] = {
+        "status": "installed",
+        "function": handle_name,
+        "hook_offset": "+0x142",
+        "hook_span": "16 bytes (the Matriarch/Patriarch null-check guard only; "
+            "the finalization call chain at +0x152 and the shared skip path "
+            "at +0x222 are never touched)",
+        "trampoline": hex(cave),
+        "helper": MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL,
+        "fallback_source": "VF2MarriagePair() via VF2ResolveSameSexMarriagePairForFinalization(), "
+            "gated on VF2SameSexMarriageToggleActive()",
+        "stock_off_state": "byte-identical native Matriarch/Patriarch guard when Same-Sex "
+            "Marriage is inactive or VF2MarriagePair() finds no valid pair",
+        "reason": (
+            "Accept silently skipped money, achievements, "
+            "CFamilyTree::UpdateParents, and the marriage announcement for any "
+            "same-sex marriage, because GetMatriarch()/GetPatriarch() are hard "
+            "gender filters that can never both return non-null for a "
+            "same-gender pair. Reported live: no marriage announcement, the "
+            "adult not shown as married, and dropping the pair on each other "
+            "argues instead of starting Private Romantic Time (all downstream "
+            "of the family tree never being updated)."
+        ),
     }
     return
 
@@ -29909,11 +30077,15 @@ def main():
     # Wire it in for real.
     patch_marriage_candidate_reroll(manifest)
     # Same-sex support is a default-off runtime byte.  Its only proposal edit
-    # occurs after GetVillager returns the spawned candidate; HandleMessage,
-    # parent storage, selectors, and the native private-time target remain
-    # stock.  The shared drop classifier also admits the separate
-    # Behavior-Patches six-child opposite-sex rule.
+    # occurs after GetVillager returns the spawned candidate; parent storage,
+    # selectors, and the native private-time target remain stock.  The
+    # shared drop classifier also admits the separate Behavior-Patches
+    # six-child opposite-sex rule.
     patch_same_sex_marriage(manifest)
+    # Accept's own Matriarch/Patriarch finalization guard is the one part of
+    # HandleMessage that does need a hook for same-sex marriages to actually
+    # register -- see patch_marriage_finalization_for_same_sex()'s docstring.
+    patch_marriage_finalization_for_same_sex(manifest)
     patch_force_successful_pregnancy_callsites(manifest)
     # The optional mortality curve is another exact-SHA dormant-byte hook.
     # Its zero .vf2mort default resumes the untouched stock mortality block.
