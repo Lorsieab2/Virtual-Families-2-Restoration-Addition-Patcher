@@ -321,6 +321,8 @@ MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL = "_gVF2AllowMarriageCandidateReroll"
 CHEAT_TOGGLE_PERSISTED_BYTE_OFFSET = 0x2A3
 INVENTORY_MANAGER_SYMBOL = "?InventoryManager@@3VCInventoryManager@@A"
 SAME_SEX_EMBRACE_HELPER_SYMBOL = "_VF2AllowSameSexEmbrace"
+SAME_SEX_EMBRACE_BEHAVIOR_FIRST_SYMBOL = "_VF2PushEmbraceBehaviorFirst"
+SAME_SEX_EMBRACE_BEHAVIOR_SECOND_SYMBOL = "_VF2PushEmbraceBehaviorSecond"
 SPOUSE_ACCESSOR_MATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingMatriarch"
 SPOUSE_ACCESSOR_PATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingPatriarch"
 MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL = "_VF2ResolveSameSexMarriagePairForFinalization"
@@ -13617,10 +13619,16 @@ extern "C" int __fastcall VF2ClassifyRomanticSpouseDrop(
 // sequence. This lets exactly the married same-sex couple past that one
 // test; every other pair, and every later eligibility check in that
 // function, is left alone.
+// Set by VF2AllowSameSexEmbrace on every StartEmbrace evaluation, and read
+// by the behavior-id thunks further down that same call. StartEmbrace runs
+// to completion synchronously, so this cannot interleave.
+static bool gVF2SameSexEmbraceActive = false;
+
 extern "C" bool __cdecl VF2AllowSameSexEmbrace(
     CVillager *dropped,
     CVillager *target
 ) {
+    gVF2SameSexEmbraceActive = false;
     if (!dropped || !target) return false;
     if (!VF2SameSexMarriageToggleActive()) return false;
     CVillager *first;
@@ -13628,8 +13636,55 @@ extern "C" bool __cdecl VF2AllowSameSexEmbrace(
     if (!VF2MarriagePair(first, second)) return false;
     if (!((dropped == first && target == second) ||
           (dropped == second && target == first))) return false;
-    return *(int *)((unsigned char *)first + 0x6A58) ==
-        *(int *)((unsigned char *)second + 0x6A58);
+    if (*(int *)((unsigned char *)first + 0x6A58) !=
+        *(int *)((unsigned char *)second + 0x6A58)) return false;
+    gVF2SameSexEmbraceActive = true;
+    return true;
+}
+
+// StartEmbrace's success path issues behavior 358 ("Trying to Make A
+// Baby") to both partners. The private-romantic-time sequence the
+// six-child route uses is the 357/356 pair instead (see
+// HandleDropOnVillager +0x26E), which is the same animation and timing
+// with the baby-making framing removed. Swap only for the same-sex couple;
+// everyone else keeps 358 exactly as stock.
+extern "C" int __cdecl VF2EmbraceBehaviorFirst() {
+    return gVF2SameSexEmbraceActive ? 357 : 358;
+}
+
+extern "C" int __cdecl VF2EmbraceBehaviorSecond() {
+    return gVF2SameSexEmbraceActive ? 356 : 358;
+}
+
+// These replace a 5-byte "push 166h" in place, so they must reproduce
+// exactly its net effect: leave one dword on the stack and continue at the
+// following instruction. ECX holds the CVillager the imminent
+// CVillager::NewBehavior call is made on, so it must survive the cdecl
+// helper; EAX already had its value consumed by the preceding push.
+extern "C" __declspec(naked) void __cdecl VF2PushEmbraceBehaviorFirst() {
+    __asm {
+        pop edx
+        push ecx
+        push edx
+        call VF2EmbraceBehaviorFirst
+        pop edx
+        pop ecx
+        push eax
+        jmp edx
+    }
+}
+
+extern "C" __declspec(naked) void __cdecl VF2PushEmbraceBehaviorSecond() {
+    __asm {
+        pop edx
+        push ecx
+        push edx
+        call VF2EmbraceBehaviorSecond
+        pop edx
+        pop ecx
+        push eax
+        jmp edx
+    }
 }
 
 extern "C" bool __cdecl VF2SkipSameSexTryToMakeBaby() {
@@ -19365,6 +19420,34 @@ def patch_villager_same_sex_embrace(manifest):
     section = obj.section(function.section)
     raw = section.raw_ptr + hook
     obj.buf[raw:raw + 5] = b"\xE9" + struct.pack("<i", cave - (hook + 5))
+
+    # StartEmbrace's success path gives both partners behavior 358
+    # ("Trying to Make A Baby"). Route the same-sex couple to the
+    # 357/356 private-romantic-time pair instead -- the same animation and
+    # timing, without the baby-making framing. Each "push 166h" is replaced
+    # in place by a call to a naked thunk that pushes the resolved id, so
+    # the stack effect is identical and opposite-sex couples still get 358.
+    push_behavior = bytes.fromhex("6866010000")
+    behavior_sites = []
+    for offset, symbol in (
+        (0xD3 + 0x1AF, SAME_SEX_EMBRACE_BEHAVIOR_FIRST_SYMBOL),
+        (0xD3 + 0x1BD, SAME_SEX_EMBRACE_BEHAVIOR_SECOND_SYMBOL),
+    ):
+        site_raw = section.raw_ptr + function.value + offset
+        if bytes(obj.buf[site_raw:site_raw + 5]) != push_behavior:
+            raise RuntimeError(
+                f"CVillager::StartEmbrace behavior push drifted at +{offset:#x}"
+            )
+        thunk = obj.append_undefined_symbol(symbol)
+        obj.buf[site_raw:site_raw + 5] = b"\xE8\x00\x00\x00\x00"
+        obj.append_relocation(
+            section.index,
+            function.value + offset + 1,
+            thunk,
+            IMAGE_REL_I386_REL32,
+        )
+        behavior_sites.append({"offset": hex(offset), "thunk": symbol})
+
     obj.write(path)
 
     manifest["SameSexEmbrace"] = {
@@ -19390,6 +19473,21 @@ def patch_villager_same_sex_embrace(manifest):
             "theMainScene::HandleDropOnVillager's romantic block, and bailed "
             "on this test long before reaching behavior 358"
         ),
+        "behavior_swap": {
+            "stock": 358,
+            "same_sex": [357, 356],
+            "note": (
+                "358 is 'Trying to Make A Baby'; 357/356 are the "
+                "private-romantic-time pair used by HandleDropOnVillager "
+                "+0x26E -- same animation and timing, no baby-making framing"
+            ),
+            "mechanism": (
+                "each 5-byte 'push 166h' replaced in place by a call to a "
+                "naked thunk that pushes the resolved id, preserving ECX for "
+                "the imminent CVillager::NewBehavior call"
+            ),
+            "sites": behavior_sites,
+        },
     }
 
 
