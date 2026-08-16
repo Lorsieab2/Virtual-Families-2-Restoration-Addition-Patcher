@@ -16781,34 +16781,30 @@ def apply_second_bathroom_leaks(manifest):
 
 
 def patch_bathroom1_curtain_decal(manifest):
-    """Resolve both renovation curtain grids before native decal insertion."""
+    """Resolve the Bathroom 2 renovation curtain grid before native decal insertion.
+
+    CRITICAL, found via live-process verification (2026-08-16): the
+    "Bathroom Remodel" (non-"2") catalog's curtain-color override used to
+    also install a hook here, at CDecal::RefreshProps+0x570 (case 71 of
+    RefreshProps' internal prop-slot switch). That hook's own machine code
+    was confirmed byte-correct and correctly wired to its resolver -- the
+    bug was never in the hook installation. It's that this particular
+    native decal slot is NOT the same physical bathroom as the one
+    "Bathroom Remodel"'s separate wallpaper/floor overlay system (a
+    completely independent, screen-anchor-based mechanism) targets: the
+    wallpaper/floor confirmed landing correctly in the original bathroom,
+    while this curtain slot was confirmed, live, in actual gameplay, to
+    render in the OTHER (native second/expansion) bathroom instead --
+    silently overriding that bathroom's curtain any time "Bathroom
+    Remodel" was purchased, even though nothing about Bathroom 2 was ever
+    touched by the player. There is no verified way yet to redirect this
+    hook to the correct physical slot, so it is removed outright: this
+    code path is left fully untouched (100% native), and "Bathroom
+    Remodel" no longer overrides any curtain at all, only wallpaper/floor,
+    as it always correctly did. Bathroom 2's own curtain-color system
+    (immediately below) is unrelated to this and untouched by this change.
+    """
     obj = CoffObject(PATCHED / "Decal.obj")
-    refresh_props = obj.symbol("?RefreshProps@CDecal@@QAEXXZ")
-    section = obj.section(refresh_props.section)
-    hook_offset = refresh_props.value + 0x570
-    stock_push = b"\xFF\xB7\x24\x19\x00\x00"
-    raw_offset = section.raw_ptr + hook_offset
-    if bytes(obj.buf[raw_offset : raw_offset + len(stock_push)]) != stock_push:
-        raise RuntimeError(
-            "CDecal::RefreshProps Bathroom 1 curtain grid push drifted"
-        )
-    helper = obj.append_undefined_symbol(
-        "_VF2ResolveBathroom1ClosedCurtainGrid"
-    )
-    # Native RefreshProps keeps its CDecal instance in EDI at this exact
-    # instruction. The six-byte stock grid push is exactly large enough for
-    # a resolver call followed by `push eax`; the naked wrapper passes EDI as
-    # the resolver's CDecal argument and leaves the native AddDecal stack
-    # layout unchanged.
-    obj.buf[raw_offset : raw_offset + len(stock_push)] = (
-        b"\xE8\x00\x00\x00\x00\x50"
-    )
-    obj.append_relocation(
-        refresh_props.section,
-        hook_offset + 1,
-        helper,
-        IMAGE_REL_I386_REL32,
-    )
 
     bathroom2_hook = None
     if ENABLE_AI_GENERATED_BATHROOM2:
@@ -16854,21 +16850,22 @@ def patch_bathroom1_curtain_decal(manifest):
     obj.write(PATCHED / "Decal.obj")
     manifest["CDecal"] = {
         "bathroom1_closed_curtain_grid_hook": {
+            "status": "removed",
             "function": "?RefreshProps@CDecal@@QAEXXZ",
             "offset": hex(0x570),
-            "stock_bytes": stock_push.hex(" "),
-            "replacement": "call _VF2ResolveBathroom1ClosedCurtainGrid; push eax",
-            "helper": "_VF2ResolveBathroom1ClosedCurtainGrid",
-            "cached_grid_offset": "0x1924",
-            "fallback": "returns the native cached Bathroom 1 grid when inactive or unresolved",
-            "native_instance_register": "EDI",
-            "native_instance_passed_to_resolver": True,
             "reason": (
-                "CDecal::RefreshProps passes the cached grid directly to AddDecal; "
-                "theGraphicsManager::Draw image hook is not reached on this path"
+                "Live-process verification (2026-08-16) confirmed this hook's "
+                "own machine code was byte-correct and correctly wired to its "
+                "resolver, but this native decal slot is a different physical "
+                "bathroom than the one 'Bathroom Remodel' (non-2)'s separate "
+                "wallpaper/floor overlay targets -- it was silently overriding "
+                "the OTHER (native second/expansion) bathroom's curtain any "
+                "time 'Bathroom Remodel' was purchased. No verified redirect "
+                "exists yet, so the hook is removed outright; this native "
+                "code path is left fully untouched (100% stock). 'Bathroom "
+                "Remodel' now only ever changes wallpaper/floor, never a "
+                "curtain, in either bathroom."
             ),
-            "active_selector": "PC Bathroom 1 renovation item 0x13C-0x140 -> matching closed-curtain descriptor",
-            "stock_fallback": "image 0x21B / Images/curtain_closed_southb.png when no style is active or its descriptor cannot load",
         }
     }
     if bathroom2_hook is not None:
