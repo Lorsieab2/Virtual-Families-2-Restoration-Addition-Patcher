@@ -11382,6 +11382,126 @@ class DivorceSpouseContractTests(unittest.TestCase):
             self.assertNotIn(forbidden, divorce_helper)
 
 
+class SpouseAccessorBackfillTests(unittest.TestCase):
+    def test_both_accessors_backfill_only_on_the_null_return_path(self):
+        # CVillagerManager::GetMatriarch/GetPatriarch are byte-identical
+        # gender scans (gender==1 vs gender==0). A same-gender couple can
+        # only ever fill one of the two roles, so every native consumer of
+        # "the couple" no-ops for them -- a COFF relocation census found 66
+        # call sites in 19 functions across 10 objects. Fixing the two
+        # accessors fixes all of them at once.
+        #
+        # The hook must sit on the NULL-RETURN path (+0x48) and never at the
+        # entry, so the native scan always runs first and wins: an
+        # opposite-sex household must be byte-identical to stock.
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                patcher.PATCHED = root
+                shutil.copy2(
+                    patcher.SRC_OBJS / "VillagerManager.obj",
+                    root / "VillagerManager.obj",
+                )
+                manifest = {}
+                patcher.patch_villager_manager_spouse_accessors(manifest)
+
+                obj = CoffObject(root / "VillagerManager.obj")
+                pristine = CoffObject(patcher.SRC_OBJS / "VillagerManager.obj")
+                for name, helper in (
+                    ("?GetMatriarch@CVillagerManager@@QAEPAVCVillager@@XZ",
+                     "_VF2ResolveMissingMatriarch"),
+                    ("?GetPatriarch@CVillagerManager@@QAEPAVCVillager@@XZ",
+                     "_VF2ResolveMissingPatriarch"),
+                ):
+                    fn = obj.symbol(name)
+                    sec = obj.section(fn.section)
+                    raw = sec.raw_ptr + fn.value
+                    pfn = pristine.symbol(name)
+                    psec = pristine.section(pfn.section)
+                    praw = psec.raw_ptr + pfn.value
+
+                    # Everything before the null-return path -- the whole
+                    # gender scan -- must be untouched.
+                    self.assertEqual(
+                        bytes(obj.buf[raw:raw + 0x48]),
+                        bytes(pristine.buf[praw:praw + 0x48]),
+                        f"{name}: native scan must not be modified",
+                    )
+                    # ...and so must the success path that follows it.
+                    self.assertEqual(
+                        bytes(obj.buf[raw + 0x4E:raw + 0x58]),
+                        bytes(pristine.buf[praw + 0x4E:praw + 0x58]),
+                        f"{name}: success path must not be modified",
+                    )
+                    # The null-return path becomes a jmp to the cave.
+                    hook = bytes(obj.buf[raw + 0x48:raw + 0x4E])
+                    self.assertEqual(hook[0], 0xE9)
+                    self.assertEqual(hook[5], 0x90)
+                    cave_off = 0x48 + 5 + struct.unpack_from("<i", hook, 1)[0]
+                    self.assertEqual(
+                        bytes(obj.buf[raw + cave_off:raw + cave_off + 9]),
+                        b"\x5F\x5E\x5B\xE8\x00\x00\x00\x00\xC3",
+                        f"{name}: cave must pop edi/esi/ebx, call, ret",
+                    )
+                    targets = []
+                    for index in range(sec.nreloc):
+                        vaddr, sym, rtype = struct.unpack_from(
+                            "<IIH", obj.buf, sec.reloc_ptr + index * 10
+                        )
+                        if vaddr == cave_off + 4:
+                            targets.append(
+                                (obj.symbol_by_index[sym].name, rtype)
+                            )
+                    self.assertEqual(
+                        targets, [(helper, patcher.IMAGE_REL_I386_REL32)]
+                    )
+
+                contract = manifest["SpouseAccessorBackfill"]
+                self.assertEqual(contract["status"], "installed")
+                self.assertTrue(contract["native_scan_preserved"])
+                self.assertEqual(contract["census"]["call_sites"], 66)
+        finally:
+            patcher.PATCHED = old_patched
+
+    def test_resolvers_exclude_the_other_accessors_pick(self):
+        # Without excluding whoever the other accessor's native scan will
+        # return, both accessors could resolve to the same villager and
+        # CFamilyTree::UpdateParents would record someone married to
+        # themselves.
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                shutil.copy2(
+                    patcher.SRC_OBJS / "ScrollingStoreScene.obj",
+                    patcher.PATCHED / "ScrollingStoreScene.obj",
+                )
+                (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").write_text(
+                    "", encoding="ascii"
+                )
+                patcher.patch_scrolling_store_scene({})
+                src = (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").read_text(
+                    encoding="ascii"
+                )
+                self.assertIn("static CVillager *VF2FirstAdultWithGender(int gender)", src)
+                self.assertIn("static CVillager *VF2OtherSpouse(int takenGender)", src)
+                self.assertIn("CVillager *taken = VF2FirstAdultWithGender(takenGender);", src)
+                self.assertIn("if (first && first != taken) return first;", src)
+                self.assertIn("if (second && second != taken) return second;", src)
+                # Matriarch excludes the male the patriarch scan will take,
+                # and vice versa: the resolver's argument is the OTHER
+                # accessor's gender, not its own.
+                matriarch = src[src.index("VF2ResolveMissingMatriarch"):]
+                matriarch = matriarch[:matriarch.index("}")]
+                self.assertIn("VF2OtherSpouse(0)", matriarch)
+                patriarch = src[src.index("VF2ResolveMissingPatriarch"):]
+                patriarch = patriarch[:patriarch.index("}")]
+                self.assertIn("VF2OtherSpouse(1)", patriarch)
+        finally:
+            patcher.PATCHED = old_patched
+
+
 class SameSexMarriagePatchTests(unittest.TestCase):
     def test_candidate_gender_decision_hook_and_accept_path_is_stock(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
