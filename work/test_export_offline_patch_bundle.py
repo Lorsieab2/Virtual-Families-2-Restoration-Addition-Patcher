@@ -1106,6 +1106,38 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 hashes_by_setting["same_sex_marriage"],
             )
 
+    def test_same_sex_marriage_post_asset_patch_skips_persisted_byte_manifest(self):
+        # Same-Sex Marriage used to live in a free-standing custom PE
+        # section (.vf2same) purely so this exporter's exact-SHA post-asset
+        # patch could locate and flip it externally. That storage was
+        # replaced with a byte inside CInventoryManager
+        # (InventoryManager + itemId + 0x2A3) so the toggle actually
+        # persists across a process relaunch/save reload -- see
+        # patch_mobile_furniture_pack.py's VF2CheatToggleActiveByte(). The
+        # new manifest shape has no source_section for this technique to
+        # target, so the exporter must skip this one setting's external
+        # toggle cleanly (return no records) instead of raising and
+        # breaking the whole release build.
+        records = exporter.same_sex_marriage_post_asset_patches(
+            [],
+            output_exe_name="Virtual Families 2 - Modded.exe",
+            build_manifest_data={
+                "SameSexMarriage": {
+                    "runtime_hooks_installed": True,
+                    "runtime_flag": {
+                        "storage": "InventoryManager + 0x14C + 0x2A3 "
+                            "(same persisted-byte convention as mobile "
+                            "renovations/Bathroom 2)",
+                        "size": 1,
+                        "default": "00",
+                        "enabled": "01",
+                        "persistence": "part of the native save payload",
+                    },
+                }
+            },
+        )
+        self.assertEqual(records, [])
+
     def test_mobile_furniture_behavior_assets_export_and_restore_exact_maps(self):
         expected_hashes = {
             "Chaise_blue.png.fmap": "a92512d05b37824c234463c08076083349b12c5b0ef8d06cabdf4178415f26cf",

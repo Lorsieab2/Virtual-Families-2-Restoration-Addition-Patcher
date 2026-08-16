@@ -987,6 +987,21 @@ def same_sex_marriage_post_asset_patches(
         raise ValueError(
             "Build manifest has an invalid SameSexMarriage contract."
         )
+    if "source_section" not in runtime_flag:
+        # The toggle used to live in a free-standing, easy-to-locate 1-byte
+        # custom PE section (.vf2same) purely so this exact-SHA post-asset
+        # patch could find and flip it. Native SaveCurrentGame()/Load()
+        # never touched that section, so the toggle silently reset to 0 on
+        # every process relaunch/save reload -- see
+        # patch_mobile_furniture_pack.py's write_outfit_store_helpers()/
+        # VF2CheatToggleActiveByte(). It now persists at
+        # InventoryManager + itemId + 0x2A3 (part of the real save payload,
+        # like every other purchasable upgrade), which has no dedicated
+        # section for this SHA+offset technique to target. The in-game
+        # purchase toggle is unaffected and now actually persists; this
+        # bundle just no longer offers an external, no-purchase-required
+        # SHA-patch toggle for this one setting.
+        return []
     return setting_runtime_flag_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
