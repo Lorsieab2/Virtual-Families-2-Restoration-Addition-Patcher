@@ -3243,8 +3243,11 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertNotIn("0.12f", helper)
                 self.assertIn("left + (right - left) / 2", helper)
                 self.assertIn("top + (bottom - top) / 2", helper)
-                self.assertIn("kVF2StockBathroom1ClosedCurtainImage = 539;", helper)
-                self.assertIn("kVF2StockBathroom2ClosedCurtainImage = 538;", helper)
+                # Corrected from live image-table verification (2026-08-16):
+                # 615 = curtain_closed_southb.png (south/workshop = Bathroom 1),
+                # 539 = curtain_closed.png (north = Bathroom 2).
+                self.assertIn("kVF2StockBathroom1ClosedCurtainImage = 615;", helper)
+                self.assertIn("kVF2StockBathroom2ClosedCurtainImage = 539;", helper)
                 for item_id in (0x13C, 0x13D, 0x13E, 0x13F, 0x140):
                     self.assertIn(f"VF2MobileRenovationIsActive(0x{item_id:X})", helper)
                 for item_id in patcher.AI_BATHROOM2_PC_ITEM_IDS:
@@ -3589,8 +3592,8 @@ class MobileRenovationArtTests(unittest.TestCase):
                 manifest = {}
                 patcher.patch_graphics_manager(manifest)
                 hook = manifest["theGraphicsManager"]["renovation_closed_curtain_draw_hook"]
-                self.assertEqual(hook["stock_bathroom1_image"], "0x21b")
-                self.assertEqual(hook["stock_bathroom2_image"], "0x21a")
+                self.assertEqual(hook["stock_bathroom1_image"], "0x267")
+                self.assertEqual(hook["stock_bathroom2_image"], "0x21b")
                 self.assertTrue(hook["independent_state"])
                 self.assertEqual(len(manifest["theGraphicsManager"]["mobile_renovation_images"]["closed_curtain_descriptors"]), 5)
                 self.assertEqual(len(manifest["theGraphicsManager"]["ai_bathroom2_visual_images"]["closed_curtain_descriptors"]), 5)
@@ -3871,29 +3874,33 @@ class MobileRenovationArtTests(unittest.TestCase):
             "stock image/grid when no style is active or the selected custom descriptor cannot load",
         )
 
-    def test_bathroom1_curtain_hook_removed_refreshprops_stays_stock(self):
-        # Regression coverage for a bug confirmed live on 2026-08-16:
-        # "Bathroom Remodel" (non-"2")'s curtain-color override and its
-        # separate wallpaper/floor overlay system target two DIFFERENT
-        # physical bathrooms. The wallpaper/floor correctly lands on the
-        # original bathroom; the curtain hook (formerly installed at
-        # CDecal::RefreshProps+0x570) was confirmed, live, to silently
-        # override the OTHER (native second/expansion) bathroom's curtain
-        # instead, any time "Bathroom Remodel" was purchased -- even
-        # though the player never touched Bathroom 2. The hook's own
-        # machine code was correctly wired; the bug was that this native
-        # decal slot simply isn't the same room the wallpaper targets, and
-        # there's no verified way yet to redirect it. Fix: remove the hook
-        # outright. This asserts CDecal::RefreshProps+0x570 is left
-        # byte-identical to a pristine, unpatched copy.
+    def test_each_bathroom_curtain_hook_targets_its_own_decal_slot(self):
+        # Regression coverage for two bugs confirmed by reading the RUNNING
+        # game on 2026-08-16. Each cached grid pointer in the live CDecal
+        # instance was matched against the live image table:
+        #   CDecal+0x1910 -> image 575 "kitchenGarbageFull.png"
+        #   CDecal+0x1924 -> image 539 "curtain_closed.png"        (north)
+        #   CDecal+0x1928 -> image 615 "curtain_closed_southb.png" (south)
+        #
+        # 1. Bathroom 1's curtain hook used to sit at RefreshProps+0x570,
+        #    which pushes CDecal+0x1924 -- the NORTH bathroom. Buying a
+        #    Bathroom 1 colour recoloured the wrong room's curtain, while
+        #    its wallpaper/floor (a separate anchor-based mechanism)
+        #    correctly changed the south bathroom. It must hook +0x53A.
+        # 2. Bathroom 2's curtain hook used to sit at RefreshDecals+0xB0B,
+        #    which pushes CDecal+0x1910 -- the kitchen garbage sprite, not
+        #    a curtain at all. It must hook +0x570, and RefreshDecals must
+        #    be left completely untouched.
         old_patched = patcher.PATCHED
         old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
+        old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
         try:
             with tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 patcher.PATCHED = root
                 shutil.copy2(patcher.SRC_OBJS / "Decal.obj", patcher.PATCHED / "Decal.obj")
                 patcher.ENABLE_MOBILE_RENOVATIONS = True
+                patcher.ENABLE_AI_GENERATED_BATHROOM2 = True
                 (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").write_text(
                     "", encoding="ascii"
                 )
@@ -3901,30 +3908,71 @@ class MobileRenovationArtTests(unittest.TestCase):
                 manifest = {}
                 patcher.patch_bathroom1_curtain_decal(manifest)
 
-                hook = manifest["CDecal"]["bathroom1_closed_curtain_grid_hook"]
-                self.assertEqual(hook["status"], "removed")
+                b1 = manifest["CDecal"]["bathroom1_closed_curtain_grid_hook"]
+                b2 = manifest["CDecal"]["bathroom2_closed_curtain_grid_hook"]
+                self.assertEqual(b1["offset"], "0x53a")
+                self.assertEqual(b1["cached_grid_offset"], "0x1928")
+                self.assertEqual(b1["stock_image_file"], "curtain_closed_southb.png")
+                self.assertEqual(b2["offset"], "0x570")
+                self.assertEqual(b2["cached_grid_offset"], "0x1924")
+                self.assertEqual(b2["stock_image_file"], "curtain_closed.png")
+                # Both hooks live in RefreshProps, so both take EDI.
+                self.assertEqual(b1["function"], "?RefreshProps@CDecal@@QAEXXZ")
+                self.assertEqual(b2["function"], "?RefreshProps@CDecal@@QAEXXZ")
+                self.assertEqual(b1["native_instance_register"], "EDI")
+                self.assertEqual(b2["native_instance_register"], "EDI")
 
                 obj = CoffObject(patcher.PATCHED / "Decal.obj")
                 pristine = CoffObject(patcher.SRC_OBJS / "Decal.obj")
                 refresh_props = obj.symbol("?RefreshProps@CDecal@@QAEXXZ")
-                pristine_refresh_props = pristine.symbol("?RefreshProps@CDecal@@QAEXXZ")
                 sec = obj.section(refresh_props.section)
-                pristine_sec = pristine.section(pristine_refresh_props.section)
-                # The whole function must be byte-identical to a pristine,
-                # unpatched copy -- not just the former hook span -- since
-                # nothing should touch CDecal::RefreshProps anymore at all.
-                raw_start = sec.raw_ptr + refresh_props.value
-                pristine_raw_start = pristine_sec.raw_ptr + pristine_refresh_props.value
-                func_len = 0x1CEE - 0x1264 + 1  # from the clean disassembly's own bounds
+
+                # Each hook is a 5-byte call + `push eax`, replacing the
+                # 6-byte cached-grid push in place.
+                reloc_by_vaddr = {}
+                for index in range(sec.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH", obj.buf, sec.reloc_ptr + index * 10
+                    )
+                    reloc_by_vaddr[vaddr] = (
+                        obj.symbol_by_index[symbol_index].name, rtype
+                    )
+                for offset, helper in (
+                    (0x53A, "_VF2ResolveBathroom1ClosedCurtainGrid"),
+                    (0x570, "_VF2ResolveBathroom2ClosedCurtainGrid"),
+                ):
+                    raw = sec.raw_ptr + refresh_props.value + offset
+                    self.assertEqual(
+                        bytes(obj.buf[raw:raw + 6]),
+                        b"\xE8\x00\x00\x00\x00\x50",
+                        f"hook bytes wrong at RefreshProps+{offset:#x}",
+                    )
+                    self.assertEqual(
+                        reloc_by_vaddr.get(refresh_props.value + offset + 1),
+                        (helper, patcher.IMAGE_REL_I386_REL32),
+                    )
+
+                # RefreshDecals must be byte-identical to pristine: the old
+                # Bathroom 2 hook there was pointed at the kitchen garbage
+                # sprite and is gone entirely.
+                rd = obj.symbol("?RefreshDecals@CDecal@@QAEXXZ")
+                prd = pristine.symbol("?RefreshDecals@CDecal@@QAEXXZ")
+                rd_sec = obj.section(rd.section)
+                prd_sec = pristine.section(prd.section)
+                length = 0x1264 - 0x6F0  # clean disassembly's own bounds
                 self.assertEqual(
-                    bytes(obj.buf[raw_start:raw_start + func_len]),
-                    bytes(pristine.buf[pristine_raw_start:pristine_raw_start + func_len]),
+                    bytes(obj.buf[rd_sec.raw_ptr + rd.value:
+                                  rd_sec.raw_ptr + rd.value + length]),
+                    bytes(pristine.buf[prd_sec.raw_ptr + prd.value:
+                                       prd_sec.raw_ptr + prd.value + length]),
+                    "CDecal::RefreshDecals must remain completely stock",
                 )
         finally:
             patcher.PATCHED = old_patched
             patcher.ENABLE_MOBILE_RENOVATIONS = old_mobile
+            patcher.ENABLE_AI_GENERATED_BATHROOM2 = old_bathroom2
 
-    def test_bathroom2_refreshdecals_resolves_cached_grid_before_adddecal(self):
+    def test_bathroom2_refreshprops_resolves_cached_grid_before_adddecal(self):
         old_patched = patcher.PATCHED
         old_mobile = patcher.ENABLE_MOBILE_RENOVATIONS
         old_bathroom2 = patcher.ENABLE_AI_GENERATED_BATHROOM2
@@ -3944,31 +3992,31 @@ class MobileRenovationArtTests(unittest.TestCase):
                 source = (patcher.PATCHED / "vf2_special_upgrade_effects.cpp").read_text(
                     encoding="ascii"
                 )
-                self.assertIn("vf2_curtain_prefix[0x1910]", source)
-                self.assertIn("vf2_bathroom1_gap[0x10]", source)
+                # Struct layout corrected 2026-08-16 from live verification:
+                # the old +0x1910 field was kitchenGarbageFull.png, not a
+                # curtain. The two real curtain grids are adjacent at
+                # +0x1924 (north) and +0x1928 (south/workshop).
+                self.assertIn("vf2_curtain_prefix[0x1924]", source)
+                self.assertNotIn("vf2_bathroom1_gap", source)
                 self.assertIn("VF2ResolveBathroom2ClosedCurtainGridImpl", source)
                 hook = manifest["CDecal"]["bathroom2_closed_curtain_grid_hook"]
-                self.assertEqual(hook["function"], "?RefreshDecals@CDecal@@QAEXXZ")
-                self.assertEqual(hook["offset"], "0xb0b")
-                self.assertEqual(hook["cached_grid_offset"], "0x1910")
-                self.assertEqual(hook["native_instance_register"], "ESI")
+                self.assertEqual(hook["function"], "?RefreshProps@CDecal@@QAEXXZ")
+                self.assertEqual(hook["offset"], "0x570")
+                self.assertEqual(hook["cached_grid_offset"], "0x1924")
+                self.assertEqual(hook["native_instance_register"], "EDI")
                 self.assertTrue(hook["native_instance_passed_to_resolver"])
                 self.assertIn("VF2ResolveBathroom2ClosedCurtainGridImpl(CDecal *decal)", source)
-                self.assertIn("push esi", source)
+                self.assertIn("push edi", source)
                 # Regression guard for the P0 crash fixed after B162.1: the
-                # native RefreshDecals callsite already executed
-                # "mov ecx, esi" to set up ECX as the CDecal `this` pointer
-                # for the *next* native instruction (an AddEntry-style decal
-                # insertion) that runs after this hook returns. ECX is
-                # caller-saved, so the Impl call is free to clobber it; the
-                # naked wrapper must explicitly save/restore ECX around that
-                # call or the following native instruction dereferences
-                # garbage (observed crashing on the raw stock image ID,
-                # 538/539, treated as a pointer). Bathroom 1's equivalent
-                # wrapper does not need this since its callsite depends on
-                # EDI afterward, which is callee-saved.
+                # native callsite already executed "mov ecx, edi" to set up
+                # ECX as the CDecal `this` pointer for the *next* native
+                # instruction (an AddDecal-style decal insertion) that runs
+                # after this hook returns. ECX is caller-saved, so the Impl
+                # call is free to clobber it; the naked wrapper must
+                # explicitly save/restore ECX around that call or the
+                # following native instruction dereferences garbage.
                 wrapper_start = source.index("VF2ResolveBathroom2ClosedCurtainGrid()")
-                wrapper_body = source[wrapper_start:wrapper_start + 1500]
+                wrapper_body = source[wrapper_start:wrapper_start + 2400]
                 self.assertIn("push ecx", wrapper_body)
                 self.assertIn("pop ecx", wrapper_body)
                 self.assertLess(
@@ -3982,9 +4030,9 @@ class MobileRenovationArtTests(unittest.TestCase):
                     "ECX must be restored after the Impl call",
                 )
                 obj = CoffObject(patcher.PATCHED / "Decal.obj")
-                refresh_decals = obj.symbol("?RefreshDecals@CDecal@@QAEXXZ")
-                sec = obj.section(refresh_decals.section)
-                raw_offset = sec.raw_ptr + refresh_decals.value + 0xB0B
+                refresh_props = obj.symbol("?RefreshProps@CDecal@@QAEXXZ")
+                sec = obj.section(refresh_props.section)
+                raw_offset = sec.raw_ptr + refresh_props.value + 0x570
                 self.assertEqual(
                     bytes(obj.buf[raw_offset : raw_offset + 6]),
                     b"\xE8\x00\x00\x00\x00\x50",
@@ -3995,7 +4043,7 @@ class MobileRenovationArtTests(unittest.TestCase):
                         "<IIH", obj.buf, sec.reloc_ptr + index * 10
                     )
                     if (
-                        vaddr == refresh_decals.value + 0xB0C
+                        vaddr == refresh_props.value + 0x571
                         and relocation_type == patcher.IMAGE_REL_I386_REL32
                     ):
                         reloc_targets.append(obj.symbol_by_index[symbol_index].name)
@@ -4287,8 +4335,8 @@ class MobileRenovationArtTests(unittest.TestCase):
                     "DrawTinted(grid, drawX + 2, drawY + 2, 0, kVF2Black, 0.4f, 1.0f); "
                     "DrawTinted(grid, drawX + 4, drawY + 4, 0, kVF2Black, 0.4f, 1.0f); "
                     "window->Draw(grid, drawX, drawY, 0); "
-                    "VF2ResolveRenovationCurtainImage; kVF2StockBathroom1ClosedCurtainImage = 539; "
-                    "kVF2StockBathroom2ClosedCurtainImage = 538;",
+                    "VF2ResolveRenovationCurtainImage; kVF2StockBathroom1ClosedCurtainImage = 615; "
+                    "kVF2StockBathroom2ClosedCurtainImage = 539;",
                     encoding="ascii",
                 )
                 for name in patcher.MOBILE_RENOVATION_ART_FILES:
