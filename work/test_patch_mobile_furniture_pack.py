@@ -2749,6 +2749,56 @@ class MobileRenovationArtTests(unittest.TestCase):
         self.assertIn("theGraphicsManager::Draw image 538 substitution", source)
         self.assertNotIn("gServicesList.*AI_BATHROOM2", source)
 
+    def test_native_bathroom2_renovation_survives_and_gates_the_remodels(self):
+        # Two invariants pinned together, because the Bathroom 2 Remodel
+        # rows are only safe to ship if BOTH hold:
+        #
+        #   1. The base-game second-bathroom renovation (item 0xE6) is
+        #      never removed, re-purposed, or shadowed by the added rows.
+        #      It stays one of the ten native House Renovations
+        #      (0xE1-0xEA) with its stock purchase and load routes.
+        #   2. The five added "Bathroom 2 Remodel" rows cannot be bought
+        #      until 0xE6 is actually owned.
+        #
+        # If (1) ever broke, (2) would silently become unsatisfiable and
+        # the remodels would be permanently unpurchasable.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+
+        # (1) 0xE6 is a native renovation, distinct from the added rows.
+        self.assertIn(0xE6, range(0xE1, 0xEB))
+        self.assertNotIn(0xE6, patcher.AI_BATHROOM2_PC_ITEM_IDS)
+        self.assertNotIn(0xE6, patcher.MOBILE_RENOVATION_PC_ITEM_IDS)
+        # The added rows are a separate PC-only block and must never
+        # collide with the native renovation range.
+        for item_id in patcher.AI_BATHROOM2_PC_ITEM_IDS:
+            self.assertNotIn(item_id, range(0xE1, 0xEB))
+        # The native load-order contract still requires 0xE6 to be present;
+        # validate_native_mobile_renovation_contract hard-fails otherwise.
+        self.assertIn(
+            "[0xE9, 0xE7, 0xE4, 0xE8, 0xE3, 0xE5, 0xE2, 0xE1, 0xEA, 0xE6]",
+            source,
+        )
+
+        # (2) Ownership of 0xE6 is what the gate actually tests, read
+        # through the stock inventory route rather than any added state.
+        self.assertIn(
+            "return InventoryManager.HaveUpgrade((EInventoryItem)0xE6);",
+            source,
+        )
+        # The gate runs before any activation, and a blocked purchase is a
+        # true no-op: refunded through the same multiplier CalcPrice uses.
+        apply_block = source[source.index("static bool VF2ApplyAIBathroom2Style"):]
+        apply_block = apply_block[:apply_block.index("\nstatic ") + 1]
+        gate = apply_block.index("if (!VF2NativeBathroom2Owned()) {")
+        activate = apply_block.index("VF2AIBathroom2ActiveByte(itemId) = 1;")
+        self.assertLess(
+            gate, activate,
+            "the 0xE6 ownership gate must run before any style is activated",
+        )
+        self.assertIn("VF2ApplyPriceMultiplier(kVF2AIBathroom2Prices[index])", apply_block)
+        self.assertIn("Money.Adjust((float)refund, false);", apply_block)
+        self.assertIn("VF2ShowBathroom2RenovationRequiredMessage();", apply_block)
+
     def test_ai_bathroom2_styles_are_gated_behind_native_renovation(self):
         # Runs the real generator into a temp PATCHED dir and inspects the
         # actual emitted vf2_special_upgrade_effects.cpp, rather than
