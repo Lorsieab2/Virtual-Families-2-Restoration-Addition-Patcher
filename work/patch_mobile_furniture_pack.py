@@ -320,6 +320,7 @@ MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL = "_gVF2AllowMarriageCandidateReroll"
 # which lives inside CInventoryManager and is part of the native save payload.
 CHEAT_TOGGLE_PERSISTED_BYTE_OFFSET = 0x2A3
 INVENTORY_MANAGER_SYMBOL = "?InventoryManager@@3VCInventoryManager@@A"
+SAME_SEX_EMBRACE_HELPER_SYMBOL = "_VF2AllowSameSexEmbrace"
 SPOUSE_ACCESSOR_MATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingMatriarch"
 SPOUSE_ACCESSOR_PATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingPatriarch"
 MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL = "_VF2ResolveSameSexMarriagePairForFinalization"
@@ -13607,6 +13608,30 @@ extern "C" int __fastcall VF2ClassifyRomanticSpouseDrop(
     return kVF2IncludeBehaviorGoals ? 1 : 0;
 }
 
+// CVillager::StartEmbrace is what actually runs when one villager is
+// dropped on another for romance -- NOT theMainScene::HandleDropOnVillager's
+// romantic block, which is why that function's flow never explained the
+// refusal. StartEmbrace bails on an equal-gender test at +0xD1 with message
+// 1850 ("These villagers are both the same gender."), long before reaching
+// the couch/bed search and behavior 358 that make up the private-time
+// sequence. This lets exactly the married same-sex couple past that one
+// test; every other pair, and every later eligibility check in that
+// function, is left alone.
+extern "C" bool __cdecl VF2AllowSameSexEmbrace(
+    CVillager *dropped,
+    CVillager *target
+) {
+    if (!dropped || !target) return false;
+    if (!VF2SameSexMarriageToggleActive()) return false;
+    CVillager *first;
+    CVillager *second;
+    if (!VF2MarriagePair(first, second)) return false;
+    if (!((dropped == first && target == second) ||
+          (dropped == second && target == first))) return false;
+    return *(int *)((unsigned char *)first + 0x6A58) ==
+        *(int *)((unsigned char *)second + 0x6A58);
+}
+
 extern "C" bool __cdecl VF2SkipSameSexTryToMakeBaby() {
     return VF2IsSameSexMarriage() ||
         VF2IsBehaviorSixChildPrivateTimeMarriage();
@@ -19258,6 +19283,114 @@ def patch_same_sex_marriage(manifest):
         "stock_off_state": "byte-identical native candidate-gender computation when the flag is zero",
     }
     return
+
+
+def patch_villager_same_sex_embrace(manifest):
+    """Let a married same-sex couple past StartEmbrace's gender refusal.
+
+    Dropping one villager on another for romance runs
+    CVillager::StartEmbrace, NOT theMainScene::HandleDropOnVillager's
+    romantic block -- which is why tracing that block never explained the
+    reported refusal. StartEmbrace tests the two gender fields early and,
+    when they match, loads refusal message 1850 ("These villagers are both
+    the same gender.") and jumps to its shared say-and-return tail, long
+    before reaching the couch/bed search that ends in behavior 358, the
+    private-time sequence.
+
+    Confirmed layout in clean Villager.obj:
+
+        +0xC5  8B 83 58 6A 00 00   mov eax, [ebx+6A58h]   ; gender
+        +0xCB  3B 87 58 6A 00 00   cmp eax, [edi+6A58h]
+        +0xD1  75 0A               jnz +0xDD              ; differ -> proceed
+        +0xD3  BE 3A 07 00 00      mov esi, 1850
+        +0xD8  E9 CD 01 00 00      jmp +0x2AA             ; say refusal
+        +0xDD  8D 8B F4 6A 00 00   lea ecx, [ebx+6AF4h]   ; continue
+
+    The trampoline replaces the 2-byte jnz, which means it necessarily also
+    consumes three bytes of the following "mov esi, 1850" -- exactly the
+    over-write that caused arbitrary memory corruption in the romantic-drop
+    trampoline. The cave therefore reproduces that instruction and the jump
+    after it rather than re-entering the overwritten region.
+
+    Only the gender test is bypassed, and only for the resolved married
+    same-sex pair with the toggle active. Every other refusal in
+    StartEmbrace (age, pregnancy state, the random-chance checks) still
+    applies, and an opposite-sex drop is byte-identical to stock because the
+    helper returns false and the reproduced native jnz runs unchanged.
+    """
+    path = PATCHED / "Villager.obj"
+    obj = CoffObject(path)
+    function_name = "?StartEmbrace@CVillager@@IAEXXZ"
+    function = obj.symbol(function_name)
+    section = obj.section(function.section)
+    hook = function.value + 0xD1
+    raw = section.raw_ptr + hook
+    expected = bytes.fromhex("750ABE3A070000")
+    if bytes(obj.buf[raw:raw + len(expected)]) != expected:
+        raise RuntimeError(
+            "CVillager::StartEmbrace same-gender refusal branch drifted"
+        )
+    continue_target = function.value + 0xDD
+    # +0xD8 is "jmp rel32" to the shared say-and-return tail.
+    refusal_target = function.value + 0xD8 + 5 + struct.unpack_from(
+        "<i", bytes(obj.buf[raw + 7 + 1:raw + 7 + 5]), 0
+    )[0]
+
+    helper = obj.append_undefined_symbol(SAME_SEX_EMBRACE_HELPER_SYMBOL)
+    cave = section.raw_size
+    payload = bytearray(
+        b"\x9C"                  # pushf: preserve the native gender compare
+        b"\x53"                  # push ebx  (second argument)
+        b"\x57"                  # push edi  (first argument)
+        b"\xE8\0\0\0\0"        # call VF2AllowSameSexEmbrace(edi, ebx)
+        b"\x83\xC4\x08"          # cdecl cleanup
+        b"\x84\xC0"              # test al, al
+        b"\x74\x06"              # not allowed -> reproduce stock behavior
+        b"\x9D"                  # restore native flags
+        b"\xE9\0\0\0\0"        # allowed -> +0xDD, skipping the refusal
+        b"\x9D"                  # not allowed: restore native flags
+        b"\x0F\x85\0\0\0\0"    # the native jnz, widened to rel32
+        b"\xBE\x3A\x07\x00\x00"  # mov esi, 1850   (reproduced)
+        b"\xE9\0\0\0\0"        # jmp shared say-and-return (reproduced)
+    )
+    if len(payload) != 38:
+        raise AssertionError("Same-sex embrace cave size drifted")
+    struct.pack_into("<i", payload, 17, continue_target - (cave + 21))
+    struct.pack_into("<i", payload, 24, continue_target - (cave + 28))
+    struct.pack_into("<i", payload, 34, refusal_target - (cave + 38))
+
+    obj.insert_section_bytes(section.index, cave, bytes(payload))
+    obj.append_relocation(section.index, cave + 4, helper, IMAGE_REL_I386_REL32)
+    obj._parse()
+    section = obj.section(function.section)
+    raw = section.raw_ptr + hook
+    obj.buf[raw:raw + 5] = b"\xE9" + struct.pack("<i", cave - (hook + 5))
+    obj.write(path)
+
+    manifest["SameSexEmbrace"] = {
+        "status": "installed",
+        "function": function_name,
+        "hook_offset": hex(0xD1),
+        "stock_bytes": expected.hex(" "),
+        "helper": SAME_SEX_EMBRACE_HELPER_SYMBOL,
+        "trampoline": hex(cave),
+        "trampoline_size": len(payload),
+        "continue_target": hex(0xDD),
+        "refusal_message": 1850,
+        "reproduced_instructions": "mov esi, 1850; jmp shared say-and-return",
+        "native_registers": {"dropped": "EDI", "target": "EBX"},
+        "scope": (
+            "only the equal-gender test, and only for the resolved married "
+            "same-sex pair while the toggle is active; every later "
+            "StartEmbrace eligibility check still applies and an "
+            "opposite-sex drop is byte-identical to stock"
+        ),
+        "reason": (
+            "the romantic drop runs CVillager::StartEmbrace, not "
+            "theMainScene::HandleDropOnVillager's romantic block, and bailed "
+            "on this test long before reaching behavior 358"
+        ),
+    }
 
 
 def patch_villager_manager_spouse_accessors(manifest):
@@ -30146,6 +30279,9 @@ def main():
     # Fixes "same-sex spouses aren't treated as spouses" at the root: both
     # native spouse accessors back-fill their missing half, which covers all
     # 66 call sites in one change instead of hooking 19 functions.
+    # The romantic drop runs CVillager::StartEmbrace, which refuses a
+    # same-gender pair before reaching its private-time sequence.
+    patch_villager_same_sex_embrace(manifest)
     patch_villager_manager_spouse_accessors(manifest)
     patch_marriage_finalization_for_same_sex(manifest)
     # A second, independent site with the identical Matriarch/Patriarch
