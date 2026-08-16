@@ -11726,93 +11726,75 @@ class SameSexMarriagePatchTests(unittest.TestCase):
 
                 gate = manifest["BehaviorSixChildPrivateTime"]["romantic_action"]
                 self.assertEqual(gate["native_private_time_offset"], "+0x26E")
+                self.assertEqual(gate["hook_offset"], "+0x21A in clean theMainScene.obj")
 
                 main = CoffObject(temp_root / "theMainScene.obj")
+                pristine = CoffObject(patcher.SRC_OBJS / "theMainScene.obj")
                 drop = main.symbol(
                     "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
                 )
                 section = main.section(drop.section)
                 data = bytes(main.buf[section.raw_ptr:section.raw_ptr + section.raw_size])
-                self.assertEqual(data[drop.value + 0x218], 0xE9)
-                # The native six-child capacity branch remains intact.
-                self.assertEqual(data[drop.value + 0x1F2:drop.value + 0x1F4], b"\x75\x62")
-                self.assertEqual(data[drop.value + 0x218], 0xE9)
-                cave = int(gate["trampoline"], 16)
-                self.assertEqual(gate["trampoline_size"], 39)
-                self.assertEqual(
-                    data[cave:cave + 16],
-                    bytes.fromhex("9C 56 8B CF E8 00 00 00 00 83 F8 01 75 06 9D E9"),
-                )
-                # The original stock branch at +0x218 is a two-byte 74 3C
-                # (JE rel8), which encodes a *relative* displacement, not an
-                # absolute target. Re-executing those same two bytes
-                # unmodified from this cave (far past the original site)
-                # would compute a different, out-of-section target than the
-                # intended +0x256, so it must be widened to a six-byte JE
-                # rel32 (0F 84) with a freshly computed displacement instead
-                # of being copied byte-for-byte.
-                self.assertEqual(data[cave + 20:cave + 21], b"\x9D")
-                self.assertEqual(data[cave + 21:cave + 23], b"\x0F\x84")
-                je_target = struct.unpack_from("<i", data, cave + 23)[0] + cave + 27
-                self.assertEqual(je_target, drop.value + 0x256)
-                # The fall-through must NOT re-enter at +0x21A. The 5-byte
-                # trampoline written over the 2-byte "74 3C" at +0x218 also
-                # consumed +0x21A..+0x21C, which held "push -1" (6A FF) and
-                # the opcode of "push 72Dh" (68 ...). Jumping back to +0x21A
-                # therefore executed this jump's own displacement bytes as
-                # code -- "add [eax],eax" followed by a write through a
-                # garbage absolute address, i.e. arbitrary memory
-                # corruption, reachable by dropping any two different-gender
-                # adults who are not the couple while the house is full.
-                # Both pushes must be reproduced in the cave, resuming at
-                # +0x221 (the first byte the trampoline did not overwrite).
-                self.assertEqual(
-                    data[cave + 27:cave + 34],
-                    bytes.fromhex("6A FF 68 2D 07 00 00"),
-                    "fall-through must reproduce the clobbered push -1 / push 72Dh",
-                )
-                fallthrough_target = struct.unpack_from("<i", data, cave + 35)[0] + cave + 39
-                self.assertEqual(fallthrough_target, drop.value + 0x221)
-                # +0x221 must be a real instruction boundary (mov ecx, imm32).
-                self.assertEqual(data[drop.value + 0x221], 0xB9)
-                self.assertEqual(gate["helper"], patcher.ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL)
-                targets = {}
-                for index in range(section.nreloc):
-                    vaddr, symbol_index, relocation_type = struct.unpack_from(
-                        "<IIH", main.buf, section.reloc_ptr + index * 10
-                    )
-                    if vaddr == cave + 5:
-                        targets[vaddr] = (
-                            main.symbol_by_index[symbol_index].name,
-                            relocation_type,
-                        )
-                self.assertEqual(
-                    targets[cave + 5],
-                    (patcher.ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL, patcher.IMAGE_REL_I386_REL32),
-                )
-                helper = Path(patcher.__file__).read_text(encoding="utf-8")
-                self.assertIn("extern \"C\" int __fastcall VF2ClassifyRomanticSpouseDrop", helper)
-                self.assertIn("if (!dropped || !target) return 0;", helper)
-                self.assertIn("if (!VF2MarriagePair(first, second)) return 0;", helper)
-                self.assertIn("if (firstGender == secondGender) {", helper)
-                self.assertIn("return VF2SameSexMarriageToggleActive() ? 1 : 0;", helper)
-                self.assertIn("static bool VF2IsBehaviorSixChildPrivateTimeMarriage()", helper)
-                self.assertIn("return *(int *)(family + 0x1B4) >= 6;", helper)
-                # Opposite-sex drop route now gates on Behavior Patches alone
-                # (the classifier already sits behind the native no-room gate).
-                self.assertIn("return kVF2IncludeBehaviorGoals ? 1 : 0;", helper)
-                self.assertIn("if (!((dropped == first && target == second)", helper)
-
-                pristine = CoffObject(patcher.SRC_OBJS / "theMainScene.obj")
-                pristine_drop = pristine.symbol(
+                pdrop = pristine.symbol(
                     "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
                 )
-                pristine_section = pristine.section(pristine_drop.section)
-                pristine_data = bytes(
-                    pristine.buf[pristine_section.raw_ptr:pristine_section.raw_ptr + pristine_section.raw_size]
+                psec = pristine.section(pdrop.section)
+                pdata = bytes(pristine.buf[psec.raw_ptr:psec.raw_ptr + psec.raw_size])
+
+                # The rule now keys directly off the game's own refusal
+                # branch. +0x21A is reachable ONLY by falling through the
+                # +0x218 gender test, which is itself only reached after
+                # IsRoomToPopulate() returned false and both villagers
+                # passed the adult/career checks -- i.e. an opposite-sex
+                # adult couple whose family is full. So the refusal is
+                # simply replaced by a jump to the native
+                # private-romantic-time sequence.
+                self.assertEqual(data[drop.value + 0x21A], 0xE9)
+                target = struct.unpack_from(
+                    "<i", data, drop.value + 0x21B
+                )[0] + drop.value + 0x21F
+                self.assertEqual(target, drop.value + 0x26E)
+
+                # The +0x218 gender branch is left completely stock now --
+                # the previous hook detoured it and, because a 5-byte
+                # detour does not fit over a 2-byte branch, also clobbered
+                # the following "push -1"/"push 72Dh", which produced a
+                # memory-corrupting fall-through. Keying off the refusal
+                # branch needs no cave, helper or reproduced instructions.
+                self.assertEqual(
+                    data[drop.value + 0x218:drop.value + 0x21A],
+                    bytes.fromhex("74 3C"),
                 )
-                self.assertEqual(pristine_data[pristine_drop.value + 0x218:pristine_drop.value + 0x21A], b"\x74\x3C")
-                self.assertEqual(pristine_data[pristine_drop.value + 0x256:pristine_drop.value + 0x25B], b"\x8B\x43\x14\x8B\xC8")
+                self.assertEqual(
+                    data[drop.value + 0x1F2:drop.value + 0x1F4],
+                    bytes.fromhex("75 62"),
+                )
+                self.assertIsNone(gate["trampoline"])
+                self.assertIsNone(gate["helper"])
+                # Everything before the refusal must be byte-identical.
+                self.assertEqual(
+                    data[drop.value:drop.value + 0x21A],
+                    pdata[pdrop.value:pdrop.value + 0x21A],
+                )
+                # +0x221 must still be a real instruction boundary
+                # (mov ecx, imm32) -- nothing after the refusal is touched.
+                self.assertEqual(data[drop.value + 0x221], 0xB9)
+                # No relocation is added: the jump is section-internal.
+                self.assertEqual(section.nreloc, psec.nreloc)
+                self.assertEqual(
+                    pdata[pdrop.value + 0x218:pdrop.value + 0x21A],
+                    bytes.fromhex("74 3C"),
+                )
+                self.assertEqual(
+                    pdata[pdrop.value + 0x21A:pdrop.value + 0x21F],
+                    bytes.fromhex("6A FF 68 2D 07"),
+                    "the refusal block replaced by the jump must be the stock"
+                    " push -1 / push 72Dh",
+                )
+                self.assertEqual(
+                    pdata[pdrop.value + 0x256:pdrop.value + 0x25B],
+                    bytes.fromhex("8B 43 14 8B C8"),
+                )
         finally:
             patcher.PATCHED = old_patched
 
