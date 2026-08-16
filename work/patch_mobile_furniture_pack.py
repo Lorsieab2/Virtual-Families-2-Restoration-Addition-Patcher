@@ -11123,6 +11123,12 @@ static const int kVF2MobileRenovationPersistentRecordId = 0xA8;
 static const int kVF2MobileRenovationPersistentMaskOffset = 0x08;
 static const unsigned int kVF2MobileRenovationHealthPlanBit = 0x1u;
 static const int kVF2MobileRenovationPersistentShift = 1;
+// Bathroom 2 remodel active flags live here instead of the inventory
+// owned-items array. Same persistent record as the two masks above (0xA8,
+// proven to survive saves) but its unused first dword; offsets 0x04 and
+// 0x08 are the cheat/purchase and health-plan+renovation+oldest-villager
+// masks respectively, and every bit of both is already allocated.
+static const int kVF2AIBathroom2PersistentMaskOffset = 0x00;
 static const int kVF2MobileRenovationActiveByteOffset = 0x2A3;
 static const int kVF2MobileRenovationActiveItemMin = 0xE1;
 static const int kVF2MobileRenovationActiveItemMax = 0x1AC;
@@ -11140,7 +11146,7 @@ static bool VF2IsMobileRenovationStyle(int itemId) {{
 // Definitions are emitted in the special-upgrade helper below; these
 // declarations let the shared removal helper call that one canonical route.
 static bool VF2IsAIBathroom2Style(int itemId);
-static unsigned char *VF2AIBathroom2ActiveByte(int itemId);
+static void VF2SetAIBathroom2Active(int itemId, bool enabled);
 static bool VF2DivorceSpouseAvailable();
 
 static int VF2MobileRenovationStyleIndex(int itemId) {{
@@ -11180,6 +11186,15 @@ static unsigned int &VF2PersistentHealthPlanAndRenovationMask() {{
     unsigned char *record =
         (unsigned char *)&Achievement + kVF2MobileRenovationPersistentRecordId * 12;
     return *(unsigned int *)(record + kVF2MobileRenovationPersistentMaskOffset);
+}}
+
+// See kVF2AIBathroom2PersistentMaskOffset. Declared extern "C" to match
+// the forward declaration in the Bathroom 2 block, which is emitted
+// earlier in this translation unit.
+extern "C" unsigned int &VF2PersistentAIBathroom2Mask() {{
+    unsigned char *record =
+        (unsigned char *)&Achievement + kVF2MobileRenovationPersistentRecordId * 12;
+    return *(unsigned int *)(record + kVF2AIBathroom2PersistentMaskOffset);
 }}
 
 static bool VF2PersistentHealthPlanEntitlement() {{
@@ -11558,7 +11573,7 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
     if (VF2IsAIBathroom2Style(itemId)) {{
         // B2 visual rows clear only their direct persisted active byte;
         // purchase history remains intact for reversible reactivation.
-        *VF2AIBathroom2ActiveByte(itemId) = 0;
+        VF2SetAIBathroom2Active(itemId, false);
         VF2RefreshRenovationCurtainDecals();
     }} else if (VF2IsMobileRenovationStyle(itemId)) {{
         // Cosmetic room styles are not stock inventory records.  Remove only
@@ -14590,9 +14605,15 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
             VF2PersistentCheatAndPurchaseMask() & 0xFFFFFF00u;
         unsigned int healthPlanAndRenovations =
             VF2PersistentHealthPlanAndRenovationMask();
+        // Achievement.Reset() wipes the whole record array, including the
+        // scratch record 0xA8 these masks live in. The Bathroom 2 remodel
+        // flags share that record and must be preserved too, or resetting
+        // achievements would silently un-purchase them.
+        unsigned int aiBathroom2 = VF2PersistentAIBathroom2Mask();
         Achievement.Reset();
         VF2PersistentCheatAndPurchaseMask() = generation;
         VF2PersistentHealthPlanAndRenovationMask() = healthPlanAndRenovations;
+        VF2PersistentAIBathroom2Mask() = aiBathroom2;
         }
         break;
     case 0x125:
@@ -14750,14 +14771,49 @@ static bool VF2IsAIBathroom2Style(int itemId) {{
         itemId <= {AI_BATHROOM2_PC_ITEM_IDS[-1]};
 }}
 
-static unsigned char *VF2AIBathroom2ActiveByte(int itemId) {{
+// CRITICAL: these flags must NOT live in the native owned-items array at
+// InventoryManager + itemId + 0x2A3. Setting a byte there marks inventory
+// item 0x14D-0x151 as owned as far as native code is concerned, and that
+// makes the game treat Bathroom 2's shower/toilet/sink as unusable --
+// confirmed by live experiment: clearing only that byte (no decal refresh,
+// no save) restored the fixtures while the remodel was still drawn on
+// screen. A Bathroom 1 renovation row being owned masks the bug, which
+// suggests a native first-match scan over that array.
+//
+// They live instead in the unused first dword of persistent Achievement
+// record 0xA8 -- the same record whose other two dwords already hold the
+// cheat/purchase and health-plan+renovation masks, so it is proven to
+// survive saves. Every bit of both of those is allocated (bits 16-31 of
+// the renovation mask are the Oldest Villager age record), hence a
+// separate dword rather than spare bits.
+extern "C" unsigned int &VF2PersistentAIBathroom2Mask();
+
+static unsigned int VF2AIBathroom2Bit(int itemId) {{
+    if (!VF2IsAIBathroom2Style(itemId)) return 0u;
+    return 1u << (itemId - {AI_BATHROOM2_PC_ITEM_BASE});
+}}
+
+// The pre-fix storage location, retained only so saves written before this
+// change can be migrated off it (and, crucially, cleared -- an existing
+// save keeps its fixtures broken until that byte goes away).
+static unsigned char *VF2AIBathroom2LegacyActiveByte(int itemId) {{
     if (!VF2IsAIBathroom2Style(itemId)) return 0;
     return reinterpret_cast<unsigned char *>(&InventoryManager) + itemId + 0x2A3;
 }}
 
 extern "C" bool __cdecl VF2AIBathroom2IsActive(int itemId) {{
-    unsigned char *active = VF2AIBathroom2ActiveByte(itemId);
-    return active != 0 && *active != 0;
+    unsigned int bit = VF2AIBathroom2Bit(itemId);
+    return bit != 0u && (VF2PersistentAIBathroom2Mask() & bit) != 0u;
+}}
+
+static void VF2SetAIBathroom2Active(int itemId, bool enabled) {{
+    unsigned int bit = VF2AIBathroom2Bit(itemId);
+    if (bit == 0u) return;
+    unsigned int &mask = VF2PersistentAIBathroom2Mask();
+    mask = enabled ? (mask | bit) : (mask & ~bit);
+    // Never leave the legacy byte set: that is what breaks the fixtures.
+    unsigned char *legacy = VF2AIBathroom2LegacyActiveByte(itemId);
+    if (legacy != 0) *legacy = 0;
 }}
 
 static bool VF2NormalizeAIBathroom2Actives() {{
@@ -14765,11 +14821,20 @@ static bool VF2NormalizeAIBathroom2Actives() {{
     bool kept = false;
     for (int index = 0; index < 5; ++index) {{
         int itemId = {AI_BATHROOM2_PC_ITEM_BASE} + index;
+        // Migrate a pre-fix save: carry the legacy flag into the new mask
+        // and clear it, so the player keeps the remodel they bought and
+        // their Bathroom 2 fixtures start working again.
+        unsigned char *legacy = VF2AIBathroom2LegacyActiveByte(itemId);
+        if (legacy != 0 && *legacy != 0) {{
+            *legacy = 0;
+            VF2PersistentAIBathroom2Mask() |= VF2AIBathroom2Bit(itemId);
+            changed = true;
+        }}
         if (!VF2AIBathroom2IsActive(itemId)) continue;
         if (!kept) {{
             kept = true;
         }} else {{
-            *VF2AIBathroom2ActiveByte(itemId) = 0;
+            VF2SetAIBathroom2Active(itemId, false);
             changed = true;
         }}
     }}
@@ -14825,12 +14890,12 @@ static bool VF2ApplyAIBathroom2Style(int itemId) {{
     }}
     VF2NormalizeAIBathroom2Actives();
     if (VF2AIBathroom2IsActive(itemId)) {{
-        *VF2AIBathroom2ActiveByte(itemId) = 0;
+        VF2SetAIBathroom2Active(itemId, false);
     }} else {{
         for (int sibling = {AI_BATHROOM2_PC_ITEM_IDS[0]}; sibling <= {AI_BATHROOM2_PC_ITEM_IDS[-1]}; ++sibling) {{
-            if (sibling != itemId && VF2AIBathroom2IsActive(sibling)) *VF2AIBathroom2ActiveByte(sibling) = 0;
+            if (sibling != itemId && VF2AIBathroom2IsActive(sibling)) VF2SetAIBathroom2Active(sibling, false);
         }}
-        *VF2AIBathroom2ActiveByte(itemId) = 1;
+        VF2SetAIBathroom2Active(itemId, true);
     }}
     VF2RefreshRenovationCurtainDecals();
     theGameState::Get()->SaveCurrentGame();

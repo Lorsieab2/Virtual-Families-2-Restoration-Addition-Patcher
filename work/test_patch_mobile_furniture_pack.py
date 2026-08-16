@@ -2718,21 +2718,27 @@ class MobileRenovationArtTests(unittest.TestCase):
         )
         source = Path(patcher.__file__).read_text(encoding="ascii")
         self.assertIn("VF2IsAIBathroom2Style(itemId)", source)
-        self.assertIn("VF2AIBathroom2ActiveByte(itemId)", source)
+        # Active state moved off the native owned-items array (which
+        # broke Bathroom 2's fixtures) into persistent Achievement
+        # record 0xA8's unused first dword. The legacy byte accessor
+        # survives only to migrate and clear pre-fix saves.
+        self.assertIn("VF2SetAIBathroom2Active(int itemId, bool enabled)", source)
+        self.assertIn("VF2PersistentAIBathroom2Mask()", source)
+        self.assertIn("VF2AIBathroom2LegacyActiveByte(itemId)", source)
         self.assertIn("itemId + 0x2A3", source)
         self.assertIn("for (int sibling = {AI_BATHROOM2_PC_ITEM_IDS[0]};", source)
         self.assertIn("VF2GetAIBathroom2Price(itemId)", source)
-        self.assertIn("*VF2AIBathroom2ActiveByte(itemId) = 0;", source)
+        self.assertIn("VF2SetAIBathroom2Active(itemId, false);", source)
         apply_template = source.split(
             "static bool VF2ApplyAIBathroom2Style(int itemId) {{",
             1,
         )[1].split("static int VF2GetAIBathroom2Price", 1)[0]
         self.assertIn(
-            "if (sibling != itemId && VF2AIBathroom2IsActive(sibling)) *VF2AIBathroom2ActiveByte(sibling) = 0;",
+            "if (sibling != itemId && VF2AIBathroom2IsActive(sibling)) VF2SetAIBathroom2Active(sibling, false);",
             apply_template,
         )
         self.assertLess(
-            apply_template.index("*VF2AIBathroom2ActiveByte(itemId) = 1;"),
+            apply_template.index("VF2SetAIBathroom2Active(itemId, true);"),
             apply_template.index("theGameState::Get()->SaveCurrentGame();"),
         )
         remove_template = source.split(
@@ -2743,7 +2749,7 @@ class MobileRenovationArtTests(unittest.TestCase):
             1,
         )[0]
         self.assertIn("if (VF2IsAIBathroom2Style(itemId)) {{", remove_template)
-        self.assertIn("*VF2AIBathroom2ActiveByte(itemId) = 0;", remove_template)
+        self.assertIn("VF2SetAIBathroom2Active(itemId, false);", remove_template)
         self.assertIn("}} else if (VF2IsMobileRenovationStyle(itemId)) {{", remove_template)
         self.assertNotIn("remove_start = special_upgrade_helper_cpp.find", source)
         self.assertIn("theGraphicsManager::Draw image 538 substitution", source)
@@ -2790,7 +2796,7 @@ class MobileRenovationArtTests(unittest.TestCase):
         apply_block = source[source.index("static bool VF2ApplyAIBathroom2Style"):]
         apply_block = apply_block[:apply_block.index("\nstatic ") + 1]
         gate = apply_block.index("if (!VF2NativeBathroom2Owned()) {")
-        activate = apply_block.index("VF2AIBathroom2ActiveByte(itemId) = 1;")
+        activate = apply_block.index("VF2SetAIBathroom2Active(itemId, true);")
         self.assertLess(
             gate, activate,
             "the 0xE6 ownership gate must run before any style is activated",
