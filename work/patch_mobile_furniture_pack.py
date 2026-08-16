@@ -308,6 +308,18 @@ MARRIAGE_CANDIDATE_REROLL_ITEM_ID = 0x152
 MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE = 10000
 MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION = ".vf2rero"
 MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL = "_gVF2AllowMarriageCandidateReroll"
+
+# Both cheat-upgrade toggles above used to live only in a free-standing custom
+# PE section (.vf2same / .vf2rero).  Native SaveCurrentGame()/theGameState::Load
+# never touch those sections, so the byte silently reset to 0 on every process
+# relaunch even after being purchased -- the state looked "bought" in the store
+# (which read the same byte) but was already back off by the time a later
+# session tried to use it.  Fixed by storing both toggles at the same proven
+# per-item persisted-byte location already used by mobile renovations/Bathroom 2
+# (InventoryManager + itemId + 0x2A3, see kVF2MobileRenovationActiveByteOffset),
+# which lives inside CInventoryManager and is part of the native save payload.
+CHEAT_TOGGLE_PERSISTED_BYTE_OFFSET = 0x2A3
+INVENTORY_MANAGER_SYMBOL = "?InventoryManager@@3VCInventoryManager@@A"
 MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL = "_VF2ResolveSameSexMarriagePairForFinalization"
 MARRIAGE_FINALIZATION_FIRST_SYMBOL = "_gVF2MarriageFinalizationFirst"
 MARRIAGE_FINALIZATION_SECOND_SYMBOL = "_gVF2MarriageFinalizationSecond"
@@ -11049,11 +11061,22 @@ extern CInventoryManager InventoryManager;
 extern CFurnitureManager FurnitureManager;
 extern CVillagerManager VillagerManager;
 extern EInventoryItem gGoodiesList[];
+
+// Real definition; forward-declared earlier (before CInventoryManager/
+// InventoryManager are visible) as _VF2CheatToggleActiveByte.  Reuses the
+// same proven-safe per-item persisted byte convention as mobile renovations
+// and Bathroom 2 (InventoryManager + itemId + 0x2A3) so these two toggles are
+// part of the native save payload instead of a free-standing custom PE
+// section that native SaveCurrentGame()/Load() never restore.
+extern "C" unsigned char *__cdecl VF2CheatToggleActiveByte(int itemId) {{
+    return reinterpret_cast<unsigned char *>(&InventoryManager) + itemId + {CHEAT_TOGGLE_PERSISTED_BYTE_OFFSET:#x};
+}}
+
 extern "C" bool __cdecl VF2SameSexMarriageToggleActive() {{
-    // The dedicated runtime byte is authoritative. Inventory history is not
+    // The dedicated persisted byte is authoritative. Inventory history is not
     // state: using HaveUpgrade here would make ReturnOne leave the toggle
     // active after the second purchase.
-    return gVF2SameSexMarriage != 0;
+    return *VF2CheatToggleActiveByte({SAME_SEX_MARRIAGE_ITEM_ID:#x}) != 0;
 }}
 static const bool kVF2EnableB150CheatUpgrades = {"true" if ENABLE_CHEAT_UPGRADES else "false"};
 static const int kVF2SameSexMarriageCatalogPrice = {next(item["price"] for item in CHEAT_UPGRADE_ITEMS if item["item_id"] == SAME_SEX_MARRIAGE_ITEM_ID)};
@@ -11360,7 +11383,7 @@ static bool VF2B150UpgradeIsActive(int itemId) {{
         return VF2SameSexMarriageToggleActive();
     }}
     if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) {{
-        return gVF2AllowMarriageCandidateReroll != 0;
+        return *VF2CheatToggleActiveByte({MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) != 0;
     }}
     if (itemId == 0x115 || itemId == 0x116 ||
         itemId == 0x128 || itemId == 0x129 || itemId == 0x12A) {{
@@ -11492,12 +11515,12 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
     if (!VF2B150UpgradeIsActive(itemId)) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
     if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
-        gVF2SameSexMarriage = 0;
+        *VF2CheatToggleActiveByte(itemId) = 0;
         if (gameState) theGameState::Get()->SaveCurrentGame();
         return true;
     }}
     if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) {{
-        gVF2AllowMarriageCandidateReroll = 0;
+        *VF2CheatToggleActiveByte(itemId) = 0;
         if (gameState) theGameState::Get()->SaveCurrentGame();
         return true;
     }}
@@ -13187,6 +13210,13 @@ extern "C" void __cdecl VF2ResetB150PriceMode();
 extern "C" void __cdecl VF2TriggerAllHouseMalfunctions();
 extern "C" void __cdecl VF2FixAllHouseMalfunctions();
 extern "C" bool __cdecl VF2SameSexMarriageToggleActive();
+// Real definition lives in write_outfit_store_helpers()'s appended block,
+// where CInventoryManager/InventoryManager are already visible; only the
+// declaration is needed up here so the switch below can call it. Same-Sex
+// Marriage and Marriage Candidate Reroll both persist through this pointer
+// (InventoryManager + itemId + 0x2A3) instead of a free-standing custom PE
+// section, so the toggle survives a process relaunch/save reload.
+extern "C" unsigned char *__cdecl VF2CheatToggleActiveByte(int itemId);
 
 extern const int achievementOrder[];
 
@@ -13197,14 +13227,6 @@ volatile unsigned char gVF2HolidayFurnitureGoalsEnabled = 0;
 #pragma section(".vf2preg", read, write)
 extern "C" __declspec(allocate(".vf2preg"))
 volatile unsigned char gVF2AllowOlderPregnancies = 0;
-
-#pragma section(".vf2same", read, write)
-extern "C" __declspec(allocate(".vf2same"))
-volatile unsigned char gVF2SameSexMarriage = 0;
-
-#pragma section(".vf2rero", read, write)
-extern "C" __declspec(allocate(".vf2rero"))
-volatile unsigned char gVF2AllowMarriageCandidateReroll = 0;
 
 #pragma section(".vf2mort", read, write)
 extern "C" __declspec(allocate(".vf2mort"))
@@ -14501,16 +14523,12 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         VF2QueueMarriageProposal();
         break;
     case 0x14C:
-        if (VF2SameSexMarriageToggleActive()) {
-            gVF2SameSexMarriage = 0;
-        } else {
-            gVF2SameSexMarriage = 1;
-        }
+        *VF2CheatToggleActiveByte(0x14C) = VF2SameSexMarriageToggleActive() ? 0 : 1;
         theGameState::Get()->SaveCurrentGame();
         break;
     case 0x152:
-        gVF2AllowMarriageCandidateReroll =
-            gVF2AllowMarriageCandidateReroll != 0 ? 0 : 1;
+        *VF2CheatToggleActiveByte(0x152) =
+            *VF2CheatToggleActiveByte(0x152) != 0 ? 0 : 1;
         theGameState::Get()->SaveCurrentGame();
         break;
     case 0x133:
@@ -18616,13 +18634,17 @@ def patch_marriage_candidate_reroll(manifest):
     villager_manager_name = "?VillagerManager@@3VCVillagerManager@@A"
     get_villager = dating.symbol(get_villager_name)
     villager_manager = dating.symbol(villager_manager_name)
-    flag_symbol = dating.append_undefined_symbol(
-        MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL
-    )
+    # Reads the flag through InventoryManager + itemId + 0x2A3 (the same
+    # proven persisted-byte convention as mobile renovations/Bathroom 2)
+    # instead of the old free-standing .vf2rero custom section, so the
+    # toggle survives a process relaunch/save reload instead of silently
+    # resetting to 0.
+    inventory_manager_symbol = dating.append_undefined_symbol(INVENTORY_MANAGER_SYMBOL)
+    reroll_flag_addend = MARRIAGE_CANDIDATE_REROLL_ITEM_ID + CHEAT_TOGGLE_PERSISTED_BYTE_OFFSET
 
     cave = section.raw_size
     payload = bytearray(
-        b"\x80\x3D\0\0\0\0\x00"  # compare .vf2rero byte with zero
+        b"\x80\x3D\0\0\0\0\x00"  # compare InventoryManager+0x152+0x2A3 byte with zero
         + b"\x74\x00"              # inactive -> stock reset branch
         # GeneratePeepCandidate's authenticated native prologue deactivates
         # the old temporary villager through this exact manager lookup and
@@ -18653,10 +18675,11 @@ def patch_marriage_candidate_reroll(manifest):
     struct.pack_into("<b", payload, 31, 39 - 32)  # je reset (offset 39, fail closed)
     struct.pack_into("<i", payload, 54, shared_tail_offset - (cave + 58))
     struct.pack_into("<i", payload, 66, shared_tail_offset - (cave + 70))
+    struct.pack_into("<I", payload, 2, reroll_flag_addend)
 
     dating.insert_section_bytes(section.index, cave, bytes(payload))
     dating.append_relocation(
-        section.index, cave + 2, flag_symbol, IMAGE_REL_I386_DIR32
+        section.index, cave + 2, inventory_manager_symbol, IMAGE_REL_I386_DIR32
     )
     dating.append_relocation(
         section.index, cave + 19, villager_manager.index, IMAGE_REL_I386_DIR32
@@ -18682,17 +18705,16 @@ def patch_marriage_candidate_reroll(manifest):
             "item_id": hex(MARRIAGE_CANDIDATE_REROLL_ITEM_ID),
             "catalog_price": MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE,
             "icon_file": "cheat_marriage_email.png",
-            "active_state": "dedicated .vf2rero byte; store icon stays cheat_marriage_email.png",
+            "active_state": "persisted InventoryManager+0x152+0x2A3 byte; store icon stays cheat_marriage_email.png",
             "inactive_state": "explicit catalog price 10000",
-            "buy_again": "clears .vf2rero",
+            "buy_again": "clears the persisted byte",
         },
         "runtime_flag": {
-            "symbol": MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL,
-            "source_section": MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION,
+            "storage": "InventoryManager + 0x152 + 0x2A3 (same persisted-byte convention as mobile renovations/Bathroom 2)",
             "size": 1,
             "default": "00",
             "enabled": "01",
-            "linked_location_status": "pending_link_metadata",
+            "persistence": "part of the native save payload (CInventoryManager); survives process relaunch/save reload, unlike the prior free-standing .vf2rero custom section",
         },
         "reject": {
             "function": handle_name,
@@ -18903,11 +18925,17 @@ def patch_same_sex_marriage(manifest):
     if bytes(dating.buf[gender_raw:gender_raw + len(expected_gender_decision)]) != expected_gender_decision:
         raise RuntimeError("Dating candidate gender-decision anchor drifted")
 
-    flag_symbol = dating.append_undefined_symbol(SAME_SEX_MARRIAGE_FLAG_SYMBOL)
+    # Reads the flag through InventoryManager + itemId + 0x2A3 (the same
+    # proven persisted-byte convention as mobile renovations/Bathroom 2)
+    # instead of the old free-standing .vf2same custom section, so the
+    # toggle survives a process relaunch/save reload instead of silently
+    # resetting to 0.
+    inventory_manager_symbol = dating.append_undefined_symbol(INVENTORY_MANAGER_SYMBOL)
+    same_sex_flag_addend = SAME_SEX_MARRIAGE_ITEM_ID + CHEAT_TOGGLE_PERSISTED_BYTE_OFFSET
     gender_cave = generate_sec.raw_size
     rejoin = gender_hook + len(expected_gender_decision)
     gender_trampoline = bytearray(
-        b"\x80\x3D\0\0\0\0\x00"  # cmp byte ptr [same-sex flag],0
+        b"\x80\x3D\0\0\0\0\x00"  # cmp byte ptr [InventoryManager+0x14C+0x2A3],0
         b"\x75\x00"                # nonzero (enabled) -> same-gender path
         # disabled: exact replica of the overwritten native computation
         b"\x83\xFF\x01"            # cmp edi,1
@@ -18924,9 +18952,10 @@ def patch_same_sex_marriage(manifest):
     struct.pack_into("<b", gender_trampoline, 8, 20 - 9)  # jne enabled (offset 20)
     struct.pack_into("<i", gender_trampoline, 16, rejoin - (gender_cave + 20))
     struct.pack_into("<i", gender_trampoline, 26, rejoin - (gender_cave + 30))
+    struct.pack_into("<I", gender_trampoline, 2, same_sex_flag_addend)
     dating.insert_section_bytes(generate_sec.index, gender_cave, bytes(gender_trampoline))
     dating.append_relocation(
-        generate_sec.index, gender_cave + 2, flag_symbol, IMAGE_REL_I386_DIR32
+        generate_sec.index, gender_cave + 2, inventory_manager_symbol, IMAGE_REL_I386_DIR32
     )
     generate = dating.symbol(generate_name)
     generate_sec = dating.section(generate.section)
@@ -18948,18 +18977,17 @@ def patch_same_sex_marriage(manifest):
             "price_source_item_id": hex(SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID),
             "price_source": "Health Plan catalog row 0x119",
             "active_price": 0,
-            "active_state": "gVF2SameSexMarriage runtime byte; store icon stays cheat_marriage_email.png",
+            "active_state": "persisted InventoryManager+0x14C+0x2A3 byte; store icon stays cheat_marriage_email.png",
             "inactive_state": "explicit catalog price",
             "inactive_icon": "cheat_marriage_email.png",
             "active_icon": "cheat_marriage_email.png",
         },
         "runtime_flag": {
-            "symbol": SAME_SEX_MARRIAGE_FLAG_SYMBOL,
-            "source_section": SAME_SEX_MARRIAGE_FLAG_SECTION,
+            "storage": "InventoryManager + 0x14C + 0x2A3 (same persisted-byte convention as mobile renovations/Bathroom 2)",
             "size": 1,
             "default": "00",
             "enabled": "01",
-            "linked_location_status": "pending_link_metadata",
+            "persistence": "part of the native save payload (CInventoryManager); survives process relaunch/save reload, unlike the prior free-standing .vf2same custom section",
         },
         "candidate_gender": {
             "status": "native gender-decision computation replaced, gated by the flag",
