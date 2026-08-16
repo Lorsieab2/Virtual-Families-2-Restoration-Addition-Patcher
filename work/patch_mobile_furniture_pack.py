@@ -18791,6 +18791,11 @@ def patch_marriage_candidate_reroll(manifest):
     reject_hook = handle.value + 0x85
     reject_raw = section.raw_ptr + reject_hook
     shared_tail_offset = handle.value + 0x8C
+    # +0xAC is the function epilogue (mov ecx,[ebp-4]; security cookie check;
+    # mov esp,ebp; pop ebp; retn 8) -- i.e. everything the shared tail does
+    # AFTER its scene-close writes at +0x9A..+0xA9. Jumping here returns
+    # true without tearing the proposal scene down.
+    reroll_return_offset = handle.value + 0xAC
     expected_reset = bytes.fromhex("C7 43 10 FF FF FF FF")
     if bytes(dating.buf[reject_raw:reject_raw + len(expected_reset)]) != expected_reset:
         raise RuntimeError("Dating Reject stock scene-index-reset drifted")
@@ -18829,18 +18834,32 @@ def patch_marriage_candidate_reroll(manifest):
         + b"\xC7\x43\x10\xFF\xFF\xFF\xFF"  # scene index = -1 (same as stock)
         + b"\x8B\xCB"              # this = CDatingScene (EBX)
         + b"\xE8\0\0\0\0"          # GeneratePeepCandidate
-        + b"\xE9\0\0\0\0"          # active -> HandleMessage +0x8C shared tail
-        # inactive: exact stock scene-index reset, then the same shared tail
+        # The active path must NOT rejoin the +0x8C shared tail: that tail
+        # ends with "mov dword ptr [eax+0x25CB8], 0", which sets the current
+        # scene back to 0 and closes the whole proposal. Rejoining it threw
+        # the freshly-generated candidate away one instruction after making
+        # it -- observed live as "the proposal closed" and, because the
+        # rejection reaction at +0x6C has already run by then, as ordinary
+        # stock rejection behavior. Instead reproduce the tail's register
+        # restores, return true, and jump straight to the +0xAC epilogue,
+        # skipping only the scene-close writes so the proposal stays open
+        # showing the new candidate.
+        + b"\x5F"                  # pop edi
+        + b"\x5E"                  # pop esi
+        + b"\x5B"                  # pop ebx
+        + b"\xB0\x01"              # mov al, 1 (return true: message handled)
+        + b"\xE9\0\0\0\0"          # active -> HandleMessage +0xAC epilogue
+        # inactive: exact stock scene-index reset, then the stock shared tail
         + b"\xC7\x43\x10\xFF\xFF\xFF\xFF"
         + b"\xE9\0\0\0\0"          # stock -> HandleMessage +0x8C shared tail
     )
-    if len(payload) != 70:
+    if len(payload) != 75:
         raise AssertionError("Marriage Reject reroll cave size drifted")
-    struct.pack_into("<b", payload, 8, 58 - 9)   # je inactive (offset 58)
+    struct.pack_into("<b", payload, 8, 63 - 9)   # je inactive (offset 63)
     struct.pack_into("<b", payload, 16, 39 - 17)  # je reset (offset 39, skip deactivation)
     struct.pack_into("<b", payload, 31, 39 - 32)  # je reset (offset 39, fail closed)
-    struct.pack_into("<i", payload, 54, shared_tail_offset - (cave + 58))
-    struct.pack_into("<i", payload, 66, shared_tail_offset - (cave + 70))
+    struct.pack_into("<i", payload, 59, reroll_return_offset - (cave + 63))
+    struct.pack_into("<i", payload, 71, shared_tail_offset - (cave + 75))
     struct.pack_into("<I", payload, 2, reroll_flag_addend)
 
     dating.insert_section_bytes(section.index, cave, bytes(payload))

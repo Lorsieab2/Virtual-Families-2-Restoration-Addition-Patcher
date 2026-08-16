@@ -10959,7 +10959,7 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 contract = manifest["MarriageCandidateReroll"]
                 cave = int(contract["reject"]["trampoline"], 16)
                 cave_raw = section.raw_ptr + cave
-                cave_bytes = bytes(dating.buf[cave_raw:cave_raw + 70])
+                cave_bytes = bytes(dating.buf[cave_raw:cave_raw + 75])
 
                 # cave_bytes[2:6] holds the pre-relocation addend for the
                 # InventoryManager DIR32 relocation: itemId(0x152) + 0x2A3 =
@@ -10969,7 +10969,7 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 # Bathroom 2, instead of the old free-standing .vf2rero
                 # custom section.
                 self.assertEqual(cave_bytes[0:7], bytes.fromhex("80 3D F5 03 00 00 00"))
-                self.assertEqual(cave_bytes[7:9], bytes.fromhex("74 31"))  # -> inactive (58)
+                self.assertEqual(cave_bytes[7:9], bytes.fromhex("74 36"))  # -> inactive (63)
                 self.assertEqual(
                     cave_bytes[9:17],
                     bytes.fromhex("8B 43 10 83 F8 FF 74 16"),  # -> reset (39)
@@ -10989,20 +10989,34 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                 )
                 self.assertEqual(cave_bytes[46:48], bytes.fromhex("8B CB"))
                 self.assertEqual(cave_bytes[48], 0xE8)
-                self.assertEqual(cave_bytes[53], 0xE9)
+                # The active path must NOT rejoin the +0x8C shared tail: that
+                # tail ends with "mov dword ptr [eax+0x25CB8], 0", which sets
+                # the current scene to 0 and closes the whole proposal,
+                # discarding the candidate that was just generated one
+                # instruction earlier (observed live as "the proposal closed"
+                # / ordinary stock rejection). It instead restores the three
+                # registers the tail would have popped, returns true, and
+                # jumps to the +0xAC epilogue, skipping only the scene-close
+                # writes so the proposal stays open on the new candidate.
                 self.assertEqual(
-                    cave + 58 + struct.unpack_from("<i", cave_bytes, 54)[0],
-                    handle.value + 0x8C,
-                    "active path must rejoin at the untouched shared tail, not a duplicated/relocated copy",
+                    cave_bytes[53:58],
+                    bytes.fromhex("5F 5E 5B B0 01"),
+                    "active path must pop edi/esi/ebx and return true itself",
                 )
-                # inactive: (offset 58) exact stock scene-index reset, rejoin
+                self.assertEqual(cave_bytes[58], 0xE9)
                 self.assertEqual(
-                    cave_bytes[58:65],
+                    cave + 63 + struct.unpack_from("<i", cave_bytes, 59)[0],
+                    handle.value + 0xAC,
+                    "active path must return via the epilogue, NOT the scene-closing tail",
+                )
+                # inactive: (offset 63) exact stock scene-index reset, rejoin
+                self.assertEqual(
+                    cave_bytes[63:70],
                     bytes.fromhex("C7 43 10 FF FF FF FF"),
                 )
-                self.assertEqual(cave_bytes[65], 0xE9)
+                self.assertEqual(cave_bytes[70], 0xE9)
                 self.assertEqual(
-                    cave + 70 + struct.unpack_from("<i", cave_bytes, 66)[0],
+                    cave + 75 + struct.unpack_from("<i", cave_bytes, 71)[0],
                     handle.value + 0x8C,
                     "inactive path must rejoin at the untouched shared tail, not a duplicated/relocated copy",
                 )
