@@ -11174,6 +11174,91 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
+    def test_villager_details_married_status_hook_matches_derived_offsets(self):
+        # Regression coverage for a bug reported live: a same-sex adult's
+        # details screen never showed "Married", because
+        # theVillagerScene::UpdateScene runs the exact same hard
+        # gender-blind GetMatriarch()/GetPatriarch() check as Accept's own
+        # finalization guard -- an independent site with the identical bug,
+        # not fixed by patch_marriage_finalization_for_same_sex().
+        old_patched = patcher.PATCHED
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                temp_root = Path(tmp)
+                shutil.copy2(
+                    patcher.SRC_OBJS / "theVillagerScene.obj",
+                    temp_root / "theVillagerScene.obj",
+                )
+                patcher.PATCHED = temp_root
+                manifest = {}
+                patcher.patch_villager_details_same_sex_married_status(manifest)
+
+                scene = CoffObject(temp_root / "theVillagerScene.obj")
+                update = scene.symbol("?UpdateScene@theVillagerScene@@MAEXXZ")
+                section = scene.section(update.section)
+                guard_raw = section.raw_ptr + update.value + 0x225
+
+                # Only the 28-byte guard is hooked; a 5-byte jmp + 23 NOPs.
+                self.assertEqual(scene.buf[guard_raw], 0xE9)
+                self.assertEqual(
+                    bytes(scene.buf[guard_raw + 5:guard_raw + 28]),
+                    b"\x90" * 23,
+                )
+
+                contract = manifest["VillagerDetailsSameSexMarriedStatus"]
+                cave = int(contract["trampoline"], 16)
+                cave_raw = section.raw_ptr + cave
+                cave_bytes = bytes(scene.buf[cave_raw:cave_raw + 66])
+
+                # Both native null checks (Patriarch, then Matriarch) are
+                # replicated byte-for-byte; when both pass, eax=0x75E
+                # (native "Married") exactly like stock.
+                self.assertEqual(
+                    cave_bytes[0:23],
+                    bytes.fromhex(
+                        "83 BD F4 FD FF FF 00"  # cmp [ebp+var_20C],0
+                        "74 13"                    # jz fallback(28)
+                        "83 BD F0 FD FF FF 00"  # cmp [ebp+var_210],0
+                        "74 0A"                    # jz fallback(28)
+                        "B8 5E 07 00 00"            # mov eax,0x75E
+                    ),
+                )
+                # Fallback: push the viewed villager, call the same-sex
+                # helper, and only fall back to stock "not married"
+                # (0x75F) if that also fails.
+                self.assertEqual(
+                    cave_bytes[28:44],
+                    bytes.fromhex(
+                        "FF B5 F8 FD FF FF"        # push [ebp+var_208]
+                        "E8 00 00 00 00"            # call helper
+                        "83 C4 04"                  # add esp,4
+                        "84 C0"                      # test al,al
+                    ),
+                )
+                self.assertEqual(cave_bytes[56:61], bytes.fromhex("B8 5F 07 00 00"))
+
+                relocations = []
+                for index in range(section.nreloc):
+                    vaddr, symbol_index, rtype = struct.unpack_from(
+                        "<IIH", scene.buf, section.reloc_ptr + index * 10
+                    )
+                    if vaddr == cave + 35:
+                        relocations.append(
+                            (scene.symbol_by_index[symbol_index].name, rtype)
+                        )
+                self.assertEqual(
+                    relocations,
+                    [(
+                        "_VF2SameSexMarriedStatusForVillager",
+                        patcher.IMAGE_REL_I386_REL32,
+                    )],
+                )
+
+                self.assertEqual(contract["status"], "installed")
+                self.assertEqual(contract["hook_offset"], "+0x225")
+        finally:
+            patcher.PATCHED = old_patched
+
     def test_same_sex_patch_leaves_stock_proposal_state_commit_untouched(self):
         old_patched = patcher.PATCHED
         try:
