@@ -1,19 +1,20 @@
 """Export a release-ready offline patcher bundle from a finished matrix build.
 
-Exists because the exporter's default asset mode is wrong for a release and
-the mistake is invisible until someone installs the result.
+Exists because a bundle that cannot produce a complete install looks
+perfectly healthy until somebody actually installs it.
 
-`--asset-mode additive` exports only the assets the manifest references and
-sets `allow_missing_target`, so the bundle carries the patcher's *additions*
-and nothing else. Applied to a clean install that produces a game whose EXE
-indexes thousands of images the folder does not contain: the family tree
-renders with no background, sprites appear in the wrong places, and cursor
-art trails across the screen. B169 shipped that way -- 1263 asset patches
-where the complete build needs 6906 -- and it looked fine in every check
-that did not actually install it.
+B169 shipped with 1263 asset patches where the build makes 6650 additions,
+because `additive` used to export only the assets the manifest happened to
+name. Installing it left the patched EXE indexing thousands of images that
+were not in the folder: the family tree rendered with no background,
+sprites drew in the wrong places and cursor art trailed across the screen.
+Additive now means every asset the build adds to or changes in the base
+game, and this script refuses to hand over a bundle that falls short.
 
-Release bundles therefore use `--asset-mode full`, and this script asserts
-the result really can produce a complete install before it is packaged.
+`additive` is the right mode for a release: it carries every addition while
+skipping files byte-identical to the clean payload, which the player already
+has. `full` also works and additionally redistributes the untouched base
+game, which makes the download far larger for no benefit.
 
 Usage:
     python work/export_release_bundle.py --release B169 \
@@ -29,12 +30,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# A complete build carries roughly this much art. The additive bundle
-# carried 1607 images once applied, against 7305 for a correct install, so
-# a floor well above the additive figure catches the regression without
-# being brittle about exact counts.
+# A complete build adds 6650 images to the 655 a clean install has. The
+# broken additive export produced 1263 asset patches, so a floor well above
+# that catches the regression without being brittle about exact counts.
 MIN_PAYLOAD_IMAGES = 5000
 MIN_ASSET_PATCHES = 5000
+
+
+def declared_variants() -> list[str]:
+    """Variant names the matrix config declares, so none can be quietly skipped."""
+    config = json.loads(
+        (ROOT / "data" / "vf2" / "build-matrix-toggles.json").read_text(encoding="utf-8-sig")
+    )
+    return [v["name"] for v in config["variants"]]
 
 
 def main() -> int:
@@ -43,26 +51,38 @@ def main() -> int:
     parser.add_argument("--matrix-prefix", required=True,
                         help="Matrix output prefix, e.g. VF2-B169-matrix-20260817")
     parser.add_argument("--out-dir", help="Bundle output directory")
-    parser.add_argument("--asset-mode", default="full", choices=["additive", "all", "full"],
-                        help="Defaults to full; anything else is rejected for a release")
+    parser.add_argument("--asset-mode", default="additive", choices=["additive", "all", "full"],
+                        help="additive (default) ships every addition; full also "
+                             "redistributes the untouched base game")
     args = parser.parse_args()
-
-    if args.asset_mode != "full":
-        print(f"refusing to build a release bundle with --asset-mode {args.asset_mode}: "
-              "only 'full' carries the base game's art", file=sys.stderr)
-        return 2
 
     outputs = ROOT / "outputs"
     prefix = args.matrix_prefix + "-"
     exe = f"Virtual Families 2 - {args.release}.exe"
-    out_dir = Path(args.out_dir) if args.out_dir else outputs / f"VF2-{args.release}-Release-Bundle"
+    # Resolved once, absolutely: the exporter runs with cwd=ROOT while
+    # verify() runs in the caller's directory, so a relative --out-dir would
+    # be exported to one place and verified in another.
+    out_dir = (
+        Path(args.out_dir).resolve()
+        if args.out_dir
+        else outputs / f"VF2-{args.release}-Release-Bundle"
+    )
 
     variants = sorted(
         d.name[len(prefix):] for d in outputs.glob(prefix + "*")
         if d.is_dir() and "logs" not in d.name
     )
-    if "final_all_enabled" not in variants or "core" not in variants:
-        print(f"matrix output incomplete: found {len(variants)} variants", file=sys.stderr)
+    # Every variant the matrix declares must be present. Checking only
+    # core/final_all_enabled would let a bundle ship whose image counts
+    # verify fine off the all-enabled build, while
+    # select_exact_executable_overlays() rejects the user-selectable setting
+    # combination whose overlay never made it in.
+    declared = declared_variants()
+    absent = sorted(set(declared) - set(variants))
+    if absent:
+        detail = "\n  ".join(absent)
+        print(f"matrix output incomplete: {len(absent)} of {len(declared)} declared "
+              f"variants missing:\n  {detail}", file=sys.stderr)
         return 1
 
     exporter = ROOT / "work" / "export_offline_patch_bundle.py"
@@ -91,19 +111,29 @@ def main() -> int:
         "--name", args.release,
         "--force",
     ]
+    unwired = []
     for v in variants:
         if v in ("core", "final_all_enabled"):
             continue
         flag = "--" + v.replace("_", "-") + "-exe"
         if flag in flags:
             argv += [flag, exe_for(v)]
+        else:
+            unwired.append(v)
+    if unwired:
+        detail = "\n  ".join(unwired)
+        print(f"exporter has no flag for {len(unwired)} built variant(s); their "
+              f"overlays would be silently absent:\n  {detail}", file=sys.stderr)
+        return 1
 
     missing = [a for a in argv if a.endswith(".exe") and not Path(a).is_file()]
     if missing:
-        print("missing exe inputs:\n  " + "\n  ".join(missing), file=sys.stderr)
+        detail = "\n  ".join(missing)
+        print(f"missing exe inputs:\n  {detail}", file=sys.stderr)
         return 1
 
-    print(f"exporting {args.release} from {len(variants)} variants, asset-mode={args.asset_mode}")
+    print(f"exporting {args.release} from {len(variants)} variants, "
+          f"asset-mode={args.asset_mode}")
     result = subprocess.run([sys.executable, str(exporter)] + argv, cwd=ROOT)
     if result.returncode != 0:
         return result.returncode
@@ -122,26 +152,23 @@ def verify(out_dir: Path) -> int:
     asset_patches = summary["asset_patch_count"]
 
     problems = []
-    if summary["asset_mode"] != "full":
-        problems.append(f"asset_mode is {summary['asset_mode']!r}, not 'full'")
     if asset_patches < MIN_ASSET_PATCHES:
         problems.append(
-            f"only {asset_patches} asset patches; a complete build needs "
-            f"at least {MIN_ASSET_PATCHES}. An additive export produces about "
-            "1263, which installs a game missing most of its art."
+            f"only {asset_patches} asset patches; the build makes 6650 additions. "
+            "The broken additive export produced 1263, which installs a game "
+            "missing most of its art."
         )
     if payload_images < MIN_PAYLOAD_IMAGES:
         problems.append(
-            f"only {payload_images} payload images; expected at least "
-            f"{MIN_PAYLOAD_IMAGES}"
+            f"only {payload_images} payload images; expected at least {MIN_PAYLOAD_IMAGES}"
         )
 
     print(f"\nverify: asset_mode={summary['asset_mode']} "
           f"asset_patches={asset_patches} payload_images={payload_images}")
     if problems:
         print("BUNDLE REJECTED:", file=sys.stderr)
-        for p in problems:
-            print("  - " + p, file=sys.stderr)
+        for problem in problems:
+            print("  - " + problem, file=sys.stderr)
         return 1
     print("bundle looks complete")
     return 0
