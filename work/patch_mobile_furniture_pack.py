@@ -21696,13 +21696,29 @@ def sync_behavior_assets(manifest):
     sanitized = []
 
     def find_fmap_source(filename):
-        local = assets / filename
-        if local.exists():
-            return local
-        for source_dir in FMAP_SOURCE_DIRS + vanilla_payload_fmap_source_dirs():
+        # Checked-in and base-game sources are consulted BEFORE OUT/Assets.
+        # OUT/Assets is not neutral: when VF2_PREVIOUS_BUILD_DIR is set --
+        # which is how the matrix, and therefore every release, builds --
+        # seed_from_previous_build has already copied the previous release's
+        # Assets into it. Looking there first means a build reuses whatever
+        # the last release shipped and never consults the real source, which
+        # is exactly the carry-forward that let the VF3 TV sources go missing
+        # unnoticed from B164 to B168. All 35 donors resolve from the vanilla
+        # payload, so preferring it costs nothing and makes donor resolution
+        # identical in seeded and unseeded builds.
+        # Payload first, then the mobile OBB: these donors are desktop
+        # base-game assets, and the OBB's same-named fmap is not always the
+        # same file (work/assets/TextAsset's TVFlatScreenStd.png.fmap differs
+        # from the payload's, and it is the payload's that every shipped build
+        # has used). The OBB stays as the fallback for mobile-only fmaps the
+        # desktop payload does not carry.
+        for source_dir in vanilla_payload_fmap_source_dirs() + FMAP_SOURCE_DIRS:
             candidate = source_dir / filename
             if candidate.exists():
                 return candidate
+        local = assets / filename
+        if local.exists():
+            return local
         return None
 
     def copy_donor_fmap(target, donor, bucket):

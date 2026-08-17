@@ -6869,6 +6869,53 @@ class VF3TVSourceAssetProvenanceTests(unittest.TestCase):
             with self.subTest(item=item["short_description"]):
                 self.assertEqual(item.get("source_strip_frames"), 2)
 
+    def test_donor_lookup_prefers_real_sources_over_inherited_output(self):
+        # OUT/Assets is not a neutral cache: seed_from_previous_build copies
+        # the previous release's Assets into it whenever
+        # VF2_PREVIOUS_BUILD_DIR is set, which is how the matrix and every
+        # release build runs. If the lookup consults OUT first, a seeded build
+        # silently reuses the last release's donor and never touches the real
+        # source -- the carry-forward that hid the missing VF3 TV sources from
+        # B164 to B168 -- so the checked-in source must win.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        body = source[source.index("    def find_fmap_source(filename):"):]
+        body = body[:body.index("    def copy_donor_fmap(")]
+        loop_at = body.index("for source_dir in")
+        local_at = body.index("local = assets / filename")
+        self.assertLess(
+            loop_at,
+            local_at,
+            "find_fmap_source must consult the real sources before OUT/Assets,"
+            " which may hold the previous release's seeded copy",
+        )
+        # And the desktop payload must outrank the mobile OBB, whose
+        # same-named fmaps are not always the same file.
+        self.assertIn(
+            "for source_dir in vanilla_payload_fmap_source_dirs() + FMAP_SOURCE_DIRS:",
+            body,
+        )
+
+    def test_every_donor_fmap_resolves_from_the_vanilla_payload(self):
+        source = patcher.find_vanilla_runtime_payload_source()
+        if source is None:
+            self.skipTest("no vanilla runtime payload available in this checkout")
+        assets = source / "Assets"
+        donors = set()
+        for mapping in (
+            patcher.COUCH_FMAP_DONORS,
+            patcher.INVISIBLE_OUTDOOR_FMAP_DONORS,
+            patcher.INVISIBLE_TRANSPARENT_FMAP_DONORS,
+            patcher.VF3_TV_FMAP_DONORS,
+        ):
+            donors.update(mapping.values())
+        missing = sorted(d for d in donors if not (assets / d).is_file())
+        self.assertEqual(
+            missing,
+            [],
+            "every donor must resolve from the base-game payload, or preferring"
+            " it over the inherited output would drop donors",
+        )
+
     def test_stock_donor_fmaps_resolve_without_a_previous_release(self):
         # The vanilla payload is a hard requirement of every build path, so a
         # stock donor is always resolvable from it.
