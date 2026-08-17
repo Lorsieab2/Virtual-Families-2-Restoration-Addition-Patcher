@@ -1902,7 +1902,11 @@ def iter_candidate_assets(
         # Falls back to the manifest subset only when no base payload is
         # available to diff against, so the selection is never silently
         # empty.
-        if base_payload is not None and base_payload.is_dir():
+        # The clean index alone is enough to classify base-game files, so a
+        # missing or unavailable --base-payload must not send selection back
+        # to the manifest-referenced subset: that subset is the regression
+        # this whole change exists to fix.
+        if clean_base_game_index() or (base_payload is not None and base_payload.is_dir()):
             allowed_paths = None
         else:
             allowed_paths = {

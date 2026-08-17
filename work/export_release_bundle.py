@@ -23,6 +23,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -154,20 +155,51 @@ def verify(out_dir: Path, build_dir: Path) -> int:
     clean_index = json.loads(
         (ROOT / "data" / "vf2" / "clean-base-game-assets.json").read_text(encoding="utf-8-sig")
     )["files"]
-    installed = {k for k in clean_index if k.startswith(("Images/", "Assets/"))}
+
+    # Coverage is decided by CONTENT, not by path. Matching on paths alone
+    # would call a stock file "covered" by the clean install even when the
+    # build modified it and the bundle omitted the patch -- the installed
+    # game would silently keep the vanilla bytes and this gate would report
+    # success, which is exactly the kind of miss it exists to prevent.
+    supplied: dict[str, set[str]] = {}
+    # Invisible Furniture installs in two deliberate stages: the VISIBLE
+    # graphic ships first so the item can be placed at all, and the fully
+    # transparent version is an opt-in swap behind a second setting. Those
+    # paths therefore differ from the build on purpose until the player
+    # enables the swap, and the bundle does carry a patch for each.
+    staged: set[str] = set()
     for patch in manifest.get("asset_patches", []):
         target = (patch.get("output_file_path") or patch.get("file_path") or "")
         target = target.replace("\\", "/")
-        if target.startswith(("Images/", "Assets/")):
-            installed.add(target)
+        if not target.startswith(("Images/", "Assets/")):
+            continue
+        digest = patch.get("source_sha256")
+        if digest:
+            supplied.setdefault(target, set()).add(digest)
+        if "invisible_furniture_visible_graphics" in (patch.get("requires") or ()):
+            staged.add(target)
 
-    produced = {
-        p.relative_to(build_dir).as_posix()
+    produced_files = [
+        p
         for root in ("Images", "Assets")
         for p in (build_dir / root).rglob("*")
         if p.is_file() and p.suffix.lower() != ".bak"
-    }
-    missing = sorted(produced - installed)
+    ]
+    produced = {p.relative_to(build_dir).as_posix() for p in produced_files}
+
+    missing = []
+    for path in produced_files:
+        rel = path.relative_to(build_dir).as_posix()
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest in supplied.get(rel, ()):
+            continue                      # the bundle writes these exact bytes
+        entry = clean_index.get(rel)
+        if entry is not None and entry["sha256"] == digest:
+            continue                      # already present, unmodified
+        if rel in staged:
+            continue                      # visible-first Invisible Furniture stage
+        missing.append(rel)
+    missing.sort()
 
     by_root = {}
     for rel in missing:
@@ -176,7 +208,8 @@ def verify(out_dir: Path, build_dir: Path) -> int:
     print(f"\nverify: asset_mode={summary['asset_mode']} "
           f"asset_patches={summary['asset_patch_count']}")
     print(f"        build produces {len(produced)} Images/Assets files; "
-          f"a clean install + this bundle yields {len(installed & produced)} of them")
+          f"a clean install + this bundle reproduces {len(produced) - len(missing)} "
+          "of them byte-for-byte")
 
     if missing:
         print("BUNDLE REJECTED: the install would be missing files the build "

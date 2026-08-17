@@ -2867,10 +2867,6 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             exporter.validate_bundle_asset_sources(bundle, records)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class CleanBaseGameReferenceTests(unittest.TestCase):
     """The additive diff must never consult the working payload.
 
@@ -2916,3 +2912,7 @@ class CleanBaseGameReferenceTests(unittest.TestCase):
         body = source[start:source.index("\ndef ", start + 10)]
         self.assertIn("if matches_base_payload(rel, build_dir, base_payload):", body)
         self.assertNotIn("if base.is_file() and sha256_file(base) == source_sha:", body)
+
+
+if __name__ == "__main__":
+    unittest.main()
