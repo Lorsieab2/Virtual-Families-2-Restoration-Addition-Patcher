@@ -48,6 +48,12 @@
 !/work/assets/mobile_renovations/
 !/work/assets/mobile_renovations/*.png
 !/work/assets/mobile_renovations/*.md
+# VF3 TV sprite strips. Tracked because the alternative -- and what actually
+# happened from B164 to B168 -- is that they survive only inside the previous
+# release folder and get inherited forward by VF2_PREVIOUS_BUILD_DIR, which
+# means nothing notices when the real sources go missing.
+!/work/assets/vf3_tv_sprites/
+!/work/assets/vf3_tv_sprites/*.png
 # Game payloads and compiled artifacts are release assets or local inputs.
 *.apk
 *.xapk

@@ -526,6 +526,16 @@ VANILLA_RUNTIME_REQUIRED_DIRS = (
     "Sounds",
 )
 VANILLA_RUNTIME_SEED_DIRS = VANILLA_RUNTIME_REQUIRED_DIRS
+# Untouched base-game asset backup shipped in every release. It is pure
+# base-game content, so the vanilla payload is where it belongs -- but it used
+# to reach a build only by being inherited from the previous release via
+# VF2_PREVIOUS_BUILD_DIR, which meant an unseeded build could not produce it at
+# all and a seeded one just recopied whatever last shipped. Seeded when the
+# payload has it; validate_runtime_payload_contract stays the single place that
+# fails a build for it being absent, so there is one error surface, not two.
+VANILLA_RUNTIME_OPTIONAL_SEED_DIRS = (
+    "Original Virtual Families 2 Assets",
+)
 RUNTIME_ASSET_DIRS = (
     "Assets",
     "Images",
@@ -613,6 +623,20 @@ DESKTOP_RUNTIME_DLL_SOURCE_DIRS = (
 FMAP_SOURCE_DIRS = (
     ROOT / "work" / "vf2_obb" / "assets",
 )
+# Donor fmaps that exist in the base game are resolvable from the vanilla
+# runtime payload as well. Without this, the only way a stock donor such as
+# TVFlatScreenStd.png.fmap reached a build was by being inherited from the
+# previous release through VF2_PREVIOUS_BUILD_DIR -- so an unseeded build
+# (build_playtest.ps1 clears that variable) could not produce it at all, and a
+# seeded one silently shipped whatever the last release happened to contain.
+# The payload is a hard requirement of every build path, so preferring it over
+# release inheritance costs nothing and removes the carry-forward.
+def vanilla_payload_fmap_source_dirs():
+    source = find_vanilla_runtime_payload_source()
+    if source is None:
+        return ()
+    assets = source / "Assets"
+    return (assets,) if assets.is_dir() else ()
 VC90_CRT_ASSEMBLY_NAME = "Microsoft.VC90.CRT"
 VC90_CRT_REQUESTED_VERSION = "9.0.21022.8"
 VC90_CRT_PUBLIC_KEY_TOKEN = "1fc8b3b9a1e18e3b"
@@ -3987,7 +4011,8 @@ VF3_TV_ITEMS = [
         "item_type": 5,
         "short_description": "Large Flat Screen TV",
         "long_description": "A large flat screen TV from Virtual Families 3.",
-        "source_png": "FlatScreenLrg.png",
+        "source_png": "VF3LargeFlatScreenTV.png",
+        "source_strip_frames": 2,
         "animation_labels": ("Large", "LargeEast"),
     },
     {
@@ -4000,7 +4025,8 @@ VF3_TV_ITEMS = [
         "item_type": 5,
         "short_description": "Small Flat Screen TV",
         "long_description": "A small flat screen TV from Virtual Families 3.",
-        "source_png": "FlatScreenSmall.png",
+        "source_png": "VF3SmallFlatScreenTV.png",
+        "source_strip_frames": 2,
         "animation_labels": ("Small", "SmallEast"),
     },
     {
@@ -4875,6 +4901,21 @@ def sync_vanilla_runtime_payload(manifest):
             "files": count_files(dst),
         })
 
+    missing_seed_dirs = []
+    for dirname in VANILLA_RUNTIME_OPTIONAL_SEED_DIRS:
+        src = source / dirname
+        if not src.is_dir():
+            missing_seed_dirs.append(dirname)
+            continue
+        dst = OUT / dirname
+        shutil.copytree(src, dst, dirs_exist_ok=True)
+        copied_dirs.append({
+            "name": dirname,
+            "source": str(src),
+            "target": str(dst),
+            "files": count_files(dst),
+        })
+
     for filename in VANILLA_RUNTIME_REQUIRED_FILES + VANILLA_RUNTIME_OPTIONAL_FILES:
         src = source / filename
         if not src.is_file():
@@ -4895,9 +4936,11 @@ def sync_vanilla_runtime_payload(manifest):
         "source": str(source),
         "required_files": list(VANILLA_RUNTIME_REQUIRED_FILES),
         "required_dirs": list(VANILLA_RUNTIME_SEED_DIRS),
+        "optional_seed_dirs": list(VANILLA_RUNTIME_OPTIONAL_SEED_DIRS),
         "copied_files": copied_files,
         "copied_dirs": copied_dirs,
         "missing_root_files": missing_root_files,
+        "missing_seed_dirs": missing_seed_dirs,
         "runtime_note": "Every release folder must keep the full clean vanilla Images and Sounds payload beside the patched EXE; additive art is overlaid after this seed step. Root launcher files are copied when present and are still required by final release validation.",
     }
     filter_desktop_runtime_source_files(manifest)
@@ -21656,7 +21699,7 @@ def sync_behavior_assets(manifest):
         local = assets / filename
         if local.exists():
             return local
-        for source_dir in FMAP_SOURCE_DIRS:
+        for source_dir in FMAP_SOURCE_DIRS + vanilla_payload_fmap_source_dirs():
             candidate = source_dir / filename
             if candidate.exists():
                 return candidate

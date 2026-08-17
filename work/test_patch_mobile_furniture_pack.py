@@ -6835,6 +6835,51 @@ class VF3TVAnimationContractTests(unittest.TestCase):
         )
 
 
+class VF3TVSourceAssetProvenanceTests(unittest.TestCase):
+    """Every VF3 TV must build from a checked-in source, not from the last release.
+
+    These sprites and their donor fmap used to reach a build only because
+    build_matrix.ps1 points VF2_PREVIOUS_BUILD_DIR at the previous release and
+    the generator kept whatever it found already sitting in the output
+    directory ("kept_existing_target_missing_source"). Every shipped build
+    from B164 through B168 took that path, so the real sources had been gone
+    for weeks without anything noticing -- and an unseeded build
+    (build_playtest.ps1 clears that variable) could not produce the TVs at
+    all. Release-to-release inheritance is not a source of truth.
+    """
+
+    def test_every_vf3_tv_sprite_source_is_checked_in(self):
+        for item in patcher.VF3_TV_ITEMS:
+            source = patcher.VF3_SPRITE_WORKSPACE_DIR / item["source_png"]
+            with self.subTest(item=item["short_description"]):
+                self.assertTrue(
+                    source.is_file(),
+                    f"{item['short_description']} has no checked-in source sprite at"
+                    f" {source}; it would only build by inheriting the previous"
+                    " release's output",
+                )
+
+    def test_vf3_tv_sprite_sources_are_prebuilt_two_cell_strips(self):
+        # Saved as finished strips rather than single cells because the
+        # generator's mirroring path composites through an alpha mask, which
+        # is not idempotent -- rebuilding a strip from a cell that had already
+        # been through it would halve the alpha of every antialiased edge.
+        # Two-frame sources are copied verbatim, so output stays identical.
+        for item in patcher.VF3_TV_ITEMS:
+            with self.subTest(item=item["short_description"]):
+                self.assertEqual(item.get("source_strip_frames"), 2)
+
+    def test_stock_donor_fmaps_resolve_without_a_previous_release(self):
+        # The vanilla payload is a hard requirement of every build path, so a
+        # stock donor is always resolvable from it.
+        source = patcher.find_vanilla_runtime_payload_source()
+        if source is None:
+            self.skipTest("no vanilla runtime payload available in this checkout")
+        dirs = patcher.vanilla_payload_fmap_source_dirs()
+        self.assertEqual(dirs, (source / "Assets",))
+        self.assertTrue((dirs[0] / "TVFlatScreenStd.png.fmap").is_file())
+
+
 class VF3TVBehaviorContractTests(unittest.TestCase):
     def test_fmap_cell_value_preserves_stock_tv_object_payloads(self):
         self.assertEqual(patcher.vf3_tv_fmap_cell_value(0x003C6800, 0x003C0001, True), 0x003C6800)
