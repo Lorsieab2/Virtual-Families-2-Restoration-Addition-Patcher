@@ -1,0 +1,27 @@
+{
+  "release_name": "B169",
+  "output_prefix": "VF2-B169-matrix-20260817",
+  "exe_name": "Virtual Families 2 - B169.exe",
+  "note": "Seventeen pull requests since B168: #15-#30 and #33. B168 already contains #12, #13 and #14 -- its release config was added by #14 -- so those are not upgrade changes for an existing B168 user, and the same-sex marriage finalization hook is likewise ancestral to B168. Covers the bathroom curtain slot routing and Bathroom 1 renames (#19-#21), spouse-accessor back-fill so a same-sex spouse counts as matriarch/patriarch (#22), the VF2MarriagePair false-pairing fix (#16), marriage candidate reroll (#23), Bathroom 2 gating and fixtures (#24, #27), the HandleDropOnVillager memory-corruption fix (#25), VF3 TV assets built from checked-in sources instead of inherited from the previous release (#30), and private adult romantic time as a behaviour variation on 358 with the same-sex role split (#33), which reverted and replaced the earlier #28/#29 approach. Seeds carry static assets forward from the B168 matrix; the generator regenerates all patch content fresh from the current work/patch_mobile_furniture_pack.py.",
+  "seeds": {
+    "behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-behavior_patches",
+    "cheat_upgrades": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-cheat_upgrades",
+    "cheat_upgrades_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-cheat_upgrades_behavior_patches",
+    "cheat_upgrades_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-cheat_upgrades_holiday_ornaments",
+    "cheat_upgrades_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-cheat_upgrades_holiday_ornaments_behavior_patches",
+    "cheat_upgrades_mobile_renovations": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-cheat_upgrades_mobile_renovations",
+    "core": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-core",
+    "final_all_enabled": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-final_all_enabled",
+    "holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-holiday_ornaments",
+    "holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-holiday_ornaments_behavior_patches",
+    "island_events": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-island_events",
+    "island_events_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-island_events_behavior_patches",
+    "island_events_cheat_upgrades": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-island_events_cheat_upgrades",
+    "island_events_cheat_upgrades_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-island_events_cheat_upgrades_behavior_patches",
+    "island_events_cheat_upgrades_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-island_events_cheat_upgrades_holiday_ornaments",
+    "island_events_cheat_upgrades_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-island_events_cheat_upgrades_holiday_ornaments_behavior_patches",
+    "island_events_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-island_events_holiday_ornaments",
+    "island_events_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-island_events_holiday_ornaments_behavior_patches",
+    "mobile_renovations": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B168-matrix-20260816-mobile_renovations"
+  }
+}
