@@ -16,12 +16,15 @@ id 615), so a "first dword counts up" heuristic finds a false table.
 """
 from __future__ import annotations
 
+import argparse
 import json
 import struct
 import sys
 from pathlib import Path
 
-ROOT = Path(r"C:\Users\Owner\repos\Virtual-Families-2-Restoration-Addition-Patcher")
+# Derived from this script's own location so the audit works in any clone,
+# not just the checkout it was written in.
+ROOT = Path(__file__).resolve().parents[1]
 DESC_SIZE = 0x30
 ANCHOR_NAME = b"familytree_bg.jpg\x00"
 ANCHOR_INDEX = 611          # its index in image-descriptors.json
@@ -71,7 +74,7 @@ def reader(data: bytes):
 def audit(exe: Path, stock: list[dict]) -> tuple[list[str], list[str]]:
     data = exe.read_bytes()
     off2va, cstr = reader(data)
-    name = exe.parent.name.replace("VF2-B169-matrix-20260817-", "")
+    name = exe.parent.name.split("-matrix-", 1)[-1].split("-", 1)[-1]
 
     soff = data.find(ANCHOR_NAME)
     if soff < 0:
@@ -119,8 +122,21 @@ def audit(exe: Path, stock: list[dict]) -> tuple[list[str], list[str]]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--matrix-prefix", required=True,
+                        help="Matrix output prefix, e.g. VF2-B169-matrix-20260817")
+    args = parser.parse_args()
+
     stock = stock_records()
-    exes = sorted((ROOT / "outputs").glob("VF2-B169-matrix-20260817-*/*.exe"))
+    exes = sorted((ROOT / "outputs").glob(args.matrix_prefix + "-*/*.exe"))
+    # An empty glob has to fail. A guard that reports success having
+    # inspected nothing is worse than no guard at all, and this one exists
+    # because a wrong image id is otherwise invisible.
+    if not exes:
+        print(f"no variant executables matched {args.matrix_prefix!r} under "
+              f"{ROOT / 'outputs'}; nothing was audited", file=sys.stderr)
+        return 1
+
     ok_lines, all_problems = [], []
     for exe in exes:
         good, bad = audit(exe, stock)
