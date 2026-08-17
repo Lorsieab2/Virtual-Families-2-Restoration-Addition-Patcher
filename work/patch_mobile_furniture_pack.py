@@ -19557,17 +19557,18 @@ def patch_villager_same_sex_embrace(manifest):
             "on this test long before reaching behavior 358"
         ),
         "behavior_swap": {
+            "status": "removed; behaviour 358 is kept for every couple",
             "stock": 358,
-            "same_sex": [357, 356],
+            "same_sex": 358,
             "note": (
-                "358 is 'Trying to Make A Baby'; 357/356 are the "
-                "private-romantic-time pair used by HandleDropOnVillager "
-                "+0x26E -- same animation and timing, no baby-making framing"
-            ),
-            "mechanism": (
-                "each 5-byte 'push 166h' replaced in place by a call to a "
-                "naked thunk that pushes the resolved id, preserving ECX for "
-                "the imminent CVillager::NewBehavior call"
+                "an earlier version replaced each 'push 166h' with a thunk "
+                "that pushed 357/356 instead, to obtain a different label. "
+                "That routed the couple into a side sequence and caused a "
+                "run of failures. The label is a presentation concern and is "
+                "now a behaviour variation on 358 itself -- see "
+                "EmbraceRoleSplit and the CBehavior constructor retarget in "
+                "patch_behavior_label_variants -- so the couple keeps the "
+                "ordinary baby-making behaviour"
             ),
             "sites": behavior_sites,
         },
