@@ -3300,10 +3300,16 @@ class MobileRenovationArtTests(unittest.TestCase):
                 self.assertIn("left + (right - left) / 2", helper)
                 self.assertIn("top + (bottom - top) / 2", helper)
                 # Corrected from live image-table verification (2026-08-16):
-                # 615 = curtain_closed_southb.png (south/workshop = Bathroom 1),
-                # 539 = curtain_closed.png (north = Bathroom 2).
-                self.assertIn("kVF2StockBathroom1ClosedCurtainImage = 615;", helper)
-                self.assertIn("kVF2StockBathroom2ClosedCurtainImage = 539;", helper)
+                # Stock ids from data/vf2/image-descriptors.json:
+                #   539 = curtain_closed_southb.png (south/workshop = Bathroom 1)
+                #   538 = curtain_closed.png        (north = Bathroom 2)
+                # These were briefly 615/539, read from the RUNNING game's
+                # table. Runtime ids are shifted by the ~800 images the
+                # patcher appends, so 615 is familytree_bg.jpg in the stock
+                # table -- Bathroom 1's curtain colour was applied to the
+                # Family Tree background and that screen stopped drawing.
+                self.assertIn("kVF2StockBathroom1ClosedCurtainImage = 539;", helper)
+                self.assertIn("kVF2StockBathroom2ClosedCurtainImage = 538;", helper)
                 for item_id in (0x13C, 0x13D, 0x13E, 0x13F, 0x140):
                     self.assertIn(f"VF2MobileRenovationIsActive(0x{item_id:X})", helper)
                 for item_id in patcher.AI_BATHROOM2_PC_ITEM_IDS:
@@ -3648,8 +3654,10 @@ class MobileRenovationArtTests(unittest.TestCase):
                 manifest = {}
                 patcher.patch_graphics_manager(manifest)
                 hook = manifest["theGraphicsManager"]["renovation_closed_curtain_draw_hook"]
-                self.assertEqual(hook["stock_bathroom1_image"], "0x267")
-                self.assertEqual(hook["stock_bathroom2_image"], "0x21b")
+                # 0x21b = 539 curtain_closed_southb.png (Bathroom 1, south)
+                # 0x21a = 538 curtain_closed.png          (Bathroom 2, north)
+                self.assertEqual(hook["stock_bathroom1_image"], "0x21b")
+                self.assertEqual(hook["stock_bathroom2_image"], "0x21a")
                 self.assertTrue(hook["independent_state"])
                 self.assertEqual(len(manifest["theGraphicsManager"]["mobile_renovation_images"]["closed_curtain_descriptors"]), 5)
                 self.assertEqual(len(manifest["theGraphicsManager"]["ai_bathroom2_visual_images"]["closed_curtain_descriptors"]), 5)
@@ -3935,8 +3943,8 @@ class MobileRenovationArtTests(unittest.TestCase):
         # game on 2026-08-16. Each cached grid pointer in the live CDecal
         # instance was matched against the live image table:
         #   CDecal+0x1910 -> image 575 "kitchenGarbageFull.png"
-        #   CDecal+0x1924 -> image 539 "curtain_closed.png"        (north)
-        #   CDecal+0x1928 -> image 615 "curtain_closed_southb.png" (south)
+        #   CDecal+0x1924 -> image 538 "curtain_closed.png"         (north)
+        #   CDecal+0x1928 -> image 539 "curtain_closed_southb.png"  (south)
         #
         # 1. Bathroom 1's curtain hook used to sit at RefreshProps+0x570,
         #    which pushes CDecal+0x1924 -- the NORTH bathroom. Buying a
@@ -4391,8 +4399,8 @@ class MobileRenovationArtTests(unittest.TestCase):
                     "DrawTinted(grid, drawX + 2, drawY + 2, 0, kVF2Black, 0.4f, 1.0f); "
                     "DrawTinted(grid, drawX + 4, drawY + 4, 0, kVF2Black, 0.4f, 1.0f); "
                     "window->Draw(grid, drawX, drawY, 0); "
-                    "VF2ResolveRenovationCurtainImage; kVF2StockBathroom1ClosedCurtainImage = 615; "
-                    "kVF2StockBathroom2ClosedCurtainImage = 539;",
+                    "VF2ResolveRenovationCurtainImage; kVF2StockBathroom1ClosedCurtainImage = 539; "
+                    "kVF2StockBathroom2ClosedCurtainImage = 538;",
                     encoding="ascii",
                 )
                 for name in patcher.MOBILE_RENOVATION_ART_FILES:

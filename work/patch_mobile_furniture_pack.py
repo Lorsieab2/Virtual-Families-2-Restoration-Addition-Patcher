@@ -5191,16 +5191,74 @@ def ai_bathroom2_store_icon_image_id(index, holiday_body_descriptor_count=0):
 
 
 MOBILE_RENOVATION_CURTAIN_COLOR_ORDER = ("black", "blue", "brown", "green", "pink")
-# Corrected 2026-08-16 from live-process verification of the running game's
-# own image table (entry layout [path][cols][rows]...[grid][id], stride 0x30):
-#   image 539 = "curtain_closed.png"         cached at CDecal+0x1924
-#   image 615 = "curtain_closed_southb.png"  cached at CDecal+0x1928
-#   image 575 = "kitchenGarbageFull.png"     cached at CDecal+0x1910
-# The previous values (539 for Bathroom 1, 538 for Bathroom 2) were both
-# wrong: 539 is the NORTH bathroom's curtain, and 538 is not a curtain at
-# all.  "southb" is the south (workshop-adjacent) bathroom -- Bathroom 1.
-MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE = 615
-AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE = 539
+# These are STOCK image ids, taken from data/vf2/image-descriptors.json,
+# which is the table this patcher indexes:
+#   image 538 = "curtain_closed.png"          (index 609)
+#   image 539 = "curtain_closed_southb.png"   (index 610)
+# "southb" is the south (workshop-adjacent) bathroom -- Bathroom 1.
+#
+# On 2026-08-16 these were changed to 615/539 from a live-process read of
+# the RUNNING game's image table. That read was accurate but the ids were
+# not transferable: the running game is the PATCHED build, whose table has
+# been shifted by the thousands of images the patcher adds, so runtime ids
+# do not correspond to stock ids. Against the stock table, 615 is
+# "familytree_bg.jpg" -- so Bathroom 1's curtain colour was being written
+# over the Family Tree screen's background, which then failed to draw and
+# left the sprites on that screen smearing over an uncleared frame.
+#
+# The room mix-up that prompted that change was never about these ids. It
+# was fixed by routing each bathroom to its own decal slot in RefreshProps
+# (+0x53A for Bathroom 1, +0x570 for Bathroom 2), which is untouched here.
+#
+# Any future id verified against the running game must be translated back
+# to a stock id before being used here, or looked up in the descriptor
+# table instead.
+MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE = 539
+AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE = 538
+def validate_stock_image_ids():
+    """Every hard-coded stock image id must still name the file we think it does.
+
+    Bathroom 1's curtain id was changed to 615 from a live-process read of
+    the running game. Runtime ids are shifted by the images the patcher
+    adds, so against the stock table 615 is "familytree_bg.jpg": the curtain
+    colour was written over the Family Tree background for a whole day of
+    releases before anyone connected the two. A wrong id is invisible here
+    -- it patches something real, just not the thing intended -- so it has
+    to be checked against the table rather than trusted.
+    """
+    records = json.loads(
+        (ANALYSIS / "image-descriptors.json").read_text(encoding="utf-8-sig")
+    )
+    records = records["records"] if isinstance(records, dict) else records
+    by_id = {r["image_id"]: r.get("path") for r in records}
+
+    # Every hard-coded stock id in this file. New images are appended past
+    # ORIG_IMAGE_COUNT and so can never land on a stock slot; these three
+    # constants are the only way a stock entry gets touched at all.
+    errors: list[str] = []
+    expected = {
+        MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE: "curtain_closed_southb.png",
+        AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE: "curtain_closed.png",
+        LOCKED_IMAGE_ID: "locked.png",
+    }
+    if len(records) != ORIG_IMAGE_COUNT:
+        errors.append(
+            f"descriptor table has {len(records)} records, expected "
+            f"{ORIG_IMAGE_COUNT}; appended images would collide with stock ids"
+        )
+    for image_id, want in expected.items():
+        got = by_id.get(image_id)
+        if got != want:
+            errors.append(
+                f"image id {image_id} is {got!r} in image-descriptors.json, "
+                f"expected {want!r}"
+            )
+    if errors:
+        raise RuntimeError(
+            "Stock image id contract failed:\n- " + "\n- ".join(errors)
+        )
+
+
 MOBILE_RENOVATION_BATHROOM_CURTAIN_COLOR_BY_ITEM = {
     0x13C: "black",
     0x13D: "blue",
@@ -30526,6 +30584,7 @@ def main():
     }
     patch_mobile_sound_routes(manifest)
     seed_from_previous_build(manifest)
+    validate_stock_image_ids()
     sync_vanilla_runtime_payload(manifest)
     patch_furniture_manager(manifest)
     patch_added_furniture_click_aliases(manifest)
