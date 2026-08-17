@@ -6835,6 +6835,98 @@ class VF3TVAnimationContractTests(unittest.TestCase):
         )
 
 
+class VF3TVSourceAssetProvenanceTests(unittest.TestCase):
+    """Every VF3 TV must build from a checked-in source, not from the last release.
+
+    These sprites and their donor fmap used to reach a build only because
+    build_matrix.ps1 points VF2_PREVIOUS_BUILD_DIR at the previous release and
+    the generator kept whatever it found already sitting in the output
+    directory ("kept_existing_target_missing_source"). Every shipped build
+    from B164 through B168 took that path, so the real sources had been gone
+    for weeks without anything noticing -- and an unseeded build
+    (build_playtest.ps1 clears that variable) could not produce the TVs at
+    all. Release-to-release inheritance is not a source of truth.
+    """
+
+    def test_every_vf3_tv_sprite_source_is_checked_in(self):
+        for item in patcher.VF3_TV_ITEMS:
+            source = patcher.VF3_SPRITE_WORKSPACE_DIR / item["source_png"]
+            with self.subTest(item=item["short_description"]):
+                self.assertTrue(
+                    source.is_file(),
+                    f"{item['short_description']} has no checked-in source sprite at"
+                    f" {source}; it would only build by inheriting the previous"
+                    " release's output",
+                )
+
+    def test_vf3_tv_sprite_sources_are_prebuilt_two_cell_strips(self):
+        # Saved as finished strips rather than single cells because the
+        # generator's mirroring path composites through an alpha mask, which
+        # is not idempotent -- rebuilding a strip from a cell that had already
+        # been through it would halve the alpha of every antialiased edge.
+        # Two-frame sources are copied verbatim, so output stays identical.
+        for item in patcher.VF3_TV_ITEMS:
+            with self.subTest(item=item["short_description"]):
+                self.assertEqual(item.get("source_strip_frames"), 2)
+
+    def test_donor_lookup_prefers_real_sources_over_inherited_output(self):
+        # OUT/Assets is not a neutral cache: seed_from_previous_build copies
+        # the previous release's Assets into it whenever
+        # VF2_PREVIOUS_BUILD_DIR is set, which is how the matrix and every
+        # release build runs. If the lookup consults OUT first, a seeded build
+        # silently reuses the last release's donor and never touches the real
+        # source -- the carry-forward that hid the missing VF3 TV sources from
+        # B164 to B168 -- so the checked-in source must win.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        body = source[source.index("    def find_fmap_source(filename):"):]
+        body = body[:body.index("    def copy_donor_fmap(")]
+        loop_at = body.index("for source_dir in")
+        local_at = body.index("local = assets / filename")
+        self.assertLess(
+            loop_at,
+            local_at,
+            "find_fmap_source must consult the real sources before OUT/Assets,"
+            " which may hold the previous release's seeded copy",
+        )
+        # And the desktop payload must outrank the mobile OBB, whose
+        # same-named fmaps are not always the same file.
+        self.assertIn(
+            "for source_dir in vanilla_payload_fmap_source_dirs() + FMAP_SOURCE_DIRS:",
+            body,
+        )
+
+    def test_every_donor_fmap_resolves_from_the_vanilla_payload(self):
+        source = patcher.find_vanilla_runtime_payload_source()
+        if source is None:
+            self.skipTest("no vanilla runtime payload available in this checkout")
+        assets = source / "Assets"
+        donors = set()
+        for mapping in (
+            patcher.COUCH_FMAP_DONORS,
+            patcher.INVISIBLE_OUTDOOR_FMAP_DONORS,
+            patcher.INVISIBLE_TRANSPARENT_FMAP_DONORS,
+            patcher.VF3_TV_FMAP_DONORS,
+        ):
+            donors.update(mapping.values())
+        missing = sorted(d for d in donors if not (assets / d).is_file())
+        self.assertEqual(
+            missing,
+            [],
+            "every donor must resolve from the base-game payload, or preferring"
+            " it over the inherited output would drop donors",
+        )
+
+    def test_stock_donor_fmaps_resolve_without_a_previous_release(self):
+        # The vanilla payload is a hard requirement of every build path, so a
+        # stock donor is always resolvable from it.
+        source = patcher.find_vanilla_runtime_payload_source()
+        if source is None:
+            self.skipTest("no vanilla runtime payload available in this checkout")
+        dirs = patcher.vanilla_payload_fmap_source_dirs()
+        self.assertEqual(dirs, (source / "Assets",))
+        self.assertTrue((dirs[0] / "TVFlatScreenStd.png.fmap").is_file())
+
+
 class VF3TVBehaviorContractTests(unittest.TestCase):
     def test_fmap_cell_value_preserves_stock_tv_object_payloads(self):
         self.assertEqual(patcher.vf3_tv_fmap_cell_value(0x003C6800, 0x003C0001, True), 0x003C6800)
@@ -11726,93 +11818,75 @@ class SameSexMarriagePatchTests(unittest.TestCase):
 
                 gate = manifest["BehaviorSixChildPrivateTime"]["romantic_action"]
                 self.assertEqual(gate["native_private_time_offset"], "+0x26E")
+                self.assertEqual(gate["hook_offset"], "+0x21A in clean theMainScene.obj")
 
                 main = CoffObject(temp_root / "theMainScene.obj")
+                pristine = CoffObject(patcher.SRC_OBJS / "theMainScene.obj")
                 drop = main.symbol(
                     "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
                 )
                 section = main.section(drop.section)
                 data = bytes(main.buf[section.raw_ptr:section.raw_ptr + section.raw_size])
-                self.assertEqual(data[drop.value + 0x218], 0xE9)
-                # The native six-child capacity branch remains intact.
-                self.assertEqual(data[drop.value + 0x1F2:drop.value + 0x1F4], b"\x75\x62")
-                self.assertEqual(data[drop.value + 0x218], 0xE9)
-                cave = int(gate["trampoline"], 16)
-                self.assertEqual(gate["trampoline_size"], 39)
-                self.assertEqual(
-                    data[cave:cave + 16],
-                    bytes.fromhex("9C 56 8B CF E8 00 00 00 00 83 F8 01 75 06 9D E9"),
-                )
-                # The original stock branch at +0x218 is a two-byte 74 3C
-                # (JE rel8), which encodes a *relative* displacement, not an
-                # absolute target. Re-executing those same two bytes
-                # unmodified from this cave (far past the original site)
-                # would compute a different, out-of-section target than the
-                # intended +0x256, so it must be widened to a six-byte JE
-                # rel32 (0F 84) with a freshly computed displacement instead
-                # of being copied byte-for-byte.
-                self.assertEqual(data[cave + 20:cave + 21], b"\x9D")
-                self.assertEqual(data[cave + 21:cave + 23], b"\x0F\x84")
-                je_target = struct.unpack_from("<i", data, cave + 23)[0] + cave + 27
-                self.assertEqual(je_target, drop.value + 0x256)
-                # The fall-through must NOT re-enter at +0x21A. The 5-byte
-                # trampoline written over the 2-byte "74 3C" at +0x218 also
-                # consumed +0x21A..+0x21C, which held "push -1" (6A FF) and
-                # the opcode of "push 72Dh" (68 ...). Jumping back to +0x21A
-                # therefore executed this jump's own displacement bytes as
-                # code -- "add [eax],eax" followed by a write through a
-                # garbage absolute address, i.e. arbitrary memory
-                # corruption, reachable by dropping any two different-gender
-                # adults who are not the couple while the house is full.
-                # Both pushes must be reproduced in the cave, resuming at
-                # +0x221 (the first byte the trampoline did not overwrite).
-                self.assertEqual(
-                    data[cave + 27:cave + 34],
-                    bytes.fromhex("6A FF 68 2D 07 00 00"),
-                    "fall-through must reproduce the clobbered push -1 / push 72Dh",
-                )
-                fallthrough_target = struct.unpack_from("<i", data, cave + 35)[0] + cave + 39
-                self.assertEqual(fallthrough_target, drop.value + 0x221)
-                # +0x221 must be a real instruction boundary (mov ecx, imm32).
-                self.assertEqual(data[drop.value + 0x221], 0xB9)
-                self.assertEqual(gate["helper"], patcher.ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL)
-                targets = {}
-                for index in range(section.nreloc):
-                    vaddr, symbol_index, relocation_type = struct.unpack_from(
-                        "<IIH", main.buf, section.reloc_ptr + index * 10
-                    )
-                    if vaddr == cave + 5:
-                        targets[vaddr] = (
-                            main.symbol_by_index[symbol_index].name,
-                            relocation_type,
-                        )
-                self.assertEqual(
-                    targets[cave + 5],
-                    (patcher.ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL, patcher.IMAGE_REL_I386_REL32),
-                )
-                helper = Path(patcher.__file__).read_text(encoding="utf-8")
-                self.assertIn("extern \"C\" int __fastcall VF2ClassifyRomanticSpouseDrop", helper)
-                self.assertIn("if (!dropped || !target) return 0;", helper)
-                self.assertIn("if (!VF2MarriagePair(first, second)) return 0;", helper)
-                self.assertIn("if (firstGender == secondGender) {", helper)
-                self.assertIn("return VF2SameSexMarriageToggleActive() ? 1 : 0;", helper)
-                self.assertIn("static bool VF2IsBehaviorSixChildPrivateTimeMarriage()", helper)
-                self.assertIn("return *(int *)(family + 0x1B4) >= 6;", helper)
-                # Opposite-sex drop route now gates on Behavior Patches alone
-                # (the classifier already sits behind the native no-room gate).
-                self.assertIn("return kVF2IncludeBehaviorGoals ? 1 : 0;", helper)
-                self.assertIn("if (!((dropped == first && target == second)", helper)
-
-                pristine = CoffObject(patcher.SRC_OBJS / "theMainScene.obj")
-                pristine_drop = pristine.symbol(
+                pdrop = pristine.symbol(
                     "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
                 )
-                pristine_section = pristine.section(pristine_drop.section)
-                pristine_data = bytes(
-                    pristine.buf[pristine_section.raw_ptr:pristine_section.raw_ptr + pristine_section.raw_size]
+                psec = pristine.section(pdrop.section)
+                pdata = bytes(pristine.buf[psec.raw_ptr:psec.raw_ptr + psec.raw_size])
+
+                # The rule now keys directly off the game's own refusal
+                # branch. +0x21A is reachable ONLY by falling through the
+                # +0x218 gender test, which is itself only reached after
+                # IsRoomToPopulate() returned false and both villagers
+                # passed the adult/career checks -- i.e. an opposite-sex
+                # adult couple whose family is full. So the refusal is
+                # simply replaced by a jump to the native
+                # private-romantic-time sequence.
+                self.assertEqual(data[drop.value + 0x21A], 0xE9)
+                target = struct.unpack_from(
+                    "<i", data, drop.value + 0x21B
+                )[0] + drop.value + 0x21F
+                self.assertEqual(target, drop.value + 0x26E)
+
+                # The +0x218 gender branch is left completely stock now --
+                # the previous hook detoured it and, because a 5-byte
+                # detour does not fit over a 2-byte branch, also clobbered
+                # the following "push -1"/"push 72Dh", which produced a
+                # memory-corrupting fall-through. Keying off the refusal
+                # branch needs no cave, helper or reproduced instructions.
+                self.assertEqual(
+                    data[drop.value + 0x218:drop.value + 0x21A],
+                    bytes.fromhex("74 3C"),
                 )
-                self.assertEqual(pristine_data[pristine_drop.value + 0x218:pristine_drop.value + 0x21A], b"\x74\x3C")
-                self.assertEqual(pristine_data[pristine_drop.value + 0x256:pristine_drop.value + 0x25B], b"\x8B\x43\x14\x8B\xC8")
+                self.assertEqual(
+                    data[drop.value + 0x1F2:drop.value + 0x1F4],
+                    bytes.fromhex("75 62"),
+                )
+                self.assertIsNone(gate["trampoline"])
+                self.assertIsNone(gate["helper"])
+                # Everything before the refusal must be byte-identical.
+                self.assertEqual(
+                    data[drop.value:drop.value + 0x21A],
+                    pdata[pdrop.value:pdrop.value + 0x21A],
+                )
+                # +0x221 must still be a real instruction boundary
+                # (mov ecx, imm32) -- nothing after the refusal is touched.
+                self.assertEqual(data[drop.value + 0x221], 0xB9)
+                # No relocation is added: the jump is section-internal.
+                self.assertEqual(section.nreloc, psec.nreloc)
+                self.assertEqual(
+                    pdata[pdrop.value + 0x218:pdrop.value + 0x21A],
+                    bytes.fromhex("74 3C"),
+                )
+                self.assertEqual(
+                    pdata[pdrop.value + 0x21A:pdrop.value + 0x21F],
+                    bytes.fromhex("6A FF 68 2D 07"),
+                    "the refusal block replaced by the jump must be the stock"
+                    " push -1 / push 72Dh",
+                )
+                self.assertEqual(
+                    pdata[pdrop.value + 0x256:pdrop.value + 0x25B],
+                    bytes.fromhex("8B 43 14 8B C8"),
+                )
         finally:
             patcher.PATCHED = old_patched
 

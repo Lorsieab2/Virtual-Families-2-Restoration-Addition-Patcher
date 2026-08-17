@@ -109,16 +109,31 @@ Useful consequences:
   gender." message, because it is only reachable when genders differ.
 
 ### What already exists
-`patch_behavior_six_child_private_time` hooks `+0x218` and routes any pair
-the classifier accepts **directly to `+0x26E`**, which bypasses both the
-child-count gate and the cooldown, and `TryToMakeBaby` is separately
-hooked to skip pregnancy. So **all three requested behaviors are already
-satisfied whenever `VF2ClassifyRomanticSpouseDrop` returns 1.**
+`TryToMakeBaby` is hooked to skip pregnancy, so these drops are at 0%.
 
-The classifier returns 1 for a same-gender pair when the Same-Sex Marriage
-toggle is active -- but only if `VF2MarriagePair` resolves the couple *and*
-the dropped/target villagers are exactly that pair. That match is the
-prime suspect for why it isn't firing in play.
+**Superseded (kept because the reasoning matters):** this section used to
+describe `patch_behavior_six_child_private_time` hooking `+0x218` and
+routing any pair `VF2ClassifyRomanticSpouseDrop` accepted to `+0x26E`.
+The classifier only returned 1 when `VF2MarriagePair` resolved the couple
+*and* the dropped/target villagers were exactly that pair, which was
+correctly identified above as the prime suspect for it not firing in
+play. It was.
+
+The deeper problem was that the classifier re-derived, from scratch, the
+conditions the surrounding native code had just finished evaluating --
+and it was hooked at a site where a 5-byte detour does not fit over a
+2-byte `JE` (see §3). The hook now keys off the game's own refusal branch
+instead: `+0x21A` is reachable **only** by falling through the `+0x218`
+gender test, which is itself only reached after `IsRoomToPopulate()`
+returned false and both villagers passed the adult/career checks. That is
+precisely the condition the classifier was trying to reconstruct, already
+computed by the game. So the refusal is simply replaced by a jump to
+`+0x26E`, `+0x218` is left stock, and no cave, helper or reproduced
+instructions are needed.
+
+The general lesson: when a hook needs to know something, check whether
+the code it is hooking has already worked it out. Reaching a branch can
+be the answer.
 
 ### Blocked on
 The reported message "These villagers are both the same gender."
@@ -137,6 +152,17 @@ without in-game verification.
 ---
 
 ## 3. Fixed this session (for context)
+
+- **PR #30**: the VF3 TVs were never being built from source. The build
+  matrix points `VF2_PREVIOUS_BUILD_DIR` at the last release, and the
+  generator keeps a target it finds already sitting in the output
+  directory when the source is gone
+  (`kept_existing_target_missing_source`). Every retained manifest from
+  B164 through B168 records that for both flat screens --
+  `work/assets/vf3_source_sprites` had been missing for weeks and each
+  release just recopied the one before it. Worth remembering when
+  auditing any other asset: a shipped release is not evidence that an
+  asset can still be produced.
 
 - **PR #25**: arbitrary memory corruption in the romantic-drop trampoline.
   The 5-byte hook at `+0x218` clobbered `push -1` / `push 72Dh` at
