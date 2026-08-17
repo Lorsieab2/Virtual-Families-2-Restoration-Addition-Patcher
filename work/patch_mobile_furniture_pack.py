@@ -324,6 +324,7 @@ SAME_SEX_EMBRACE_HELPER_SYMBOL = "_VF2AllowSameSexEmbrace"
 SAME_SEX_EMBRACE_BEHAVIOR_FIRST_SYMBOL = "_VF2PushEmbraceBehaviorFirst"
 SAME_SEX_EMBRACE_BEHAVIOR_SECOND_SYMBOL = "_VF2PushEmbraceBehaviorSecond"
 SAME_SEX_EMBRACE_ACTIVE_SYMBOL = "_VF2SameSexEmbraceActive"
+EMBRACE_ROLE_HELPER_SYMBOL = "_VF2EmbraceRoleIsFemale"
 SPOUSE_ACCESSOR_MATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingMatriarch"
 SPOUSE_ACCESSOR_PATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingPatriarch"
 MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL = "_VF2ResolveSameSexMarriagePairForFinalization"
@@ -13749,6 +13750,41 @@ extern "C" bool __cdecl VF2SkipSameSexTryToMakeBaby() {
         VF2IsBehaviorSixChildPrivateTimeMarriage();
 }
 
+// CBehavior::GoInHouse -- behaviour 358's action -- splits the two halves of
+// the sequence on one test at +0x081:
+//
+//     cmp dword ptr [edi+6A58h], 1     ; gender
+//     jne -> +0x1FD                    ; not female -> the other role
+//
+// One partner spins, the other produces the roses, and which is which comes
+// from the gender field alone. A same-sex couple therefore takes the SAME
+// branch twice and both do the identical half.
+//
+// For a same-sex couple the role is decided by which partner the villager
+// is instead, so the pair still splits the two halves between them. Every
+// other couple keeps the stock gender answer exactly, including an
+// opposite-sex couple at six children: they have a gender to read, so there
+// is no reason to override it.
+extern "C" int __cdecl VF2EmbraceRoleIsFemale(void *villagerPtr) {
+    if (!villagerPtr) return 0;
+    int gender = *(int *)((unsigned char *)villagerPtr + 0x6A58);
+    int stock = (gender == 1) ? 1 : 0;
+
+    CVillager *first;
+    CVillager *second;
+    if (!VF2MarriagePair(first, second)) return stock;
+
+    int firstGender = *(int *)((unsigned char *)first + 0x6A58);
+    int secondGender = *(int *)((unsigned char *)second + 0x6A58);
+    if (firstGender != secondGender) return stock;
+    if (!VF2SameSexMarriageToggleActive()) return stock;
+
+    // Same-sex pair: hand the two halves out by partner slot.
+    if (villagerPtr == (void *)first) return 1;
+    if (villagerPtr == (void *)second) return 0;
+    return stock;
+}
+
 extern "C" void __cdecl VF2StoreTryForBabyCooldownMaybe(
     void *gameState,
     unsigned int deadline,
@@ -19478,93 +19514,22 @@ def patch_villager_same_sex_embrace(manifest):
     raw = section.raw_ptr + hook
     obj.buf[raw:raw + 5] = b"\xE9" + struct.pack("<i", cave - (hook + 5))
 
-    # Skip StartEmbrace's two random-chance refusals for the same-sex
-    # couple: message 1846 (mood/food gated) at +0x171 and 1851
-    # (eSayNoClick, "They can't agree it's time to have a baby") at +0x19D.
-    # The caller has already played the kiss sound by the time either
-    # fires, so a refusal reads as the sequence starting and then
-    # aborting, and the 1851 text is nonsense for a same-sex pair. Each
-    # refusal block is "mov esi, <id>; jmp <say>"; the 5-byte mov is
-    # replaced by a jump to a cave that continues past the refusal when
-    # the couple qualifies and otherwise reproduces the mov and the jmp
-    # verbatim. Non-random refusals (age, pregnancy, illness) are
-    # untouched, and opposite-sex couples keep both rolls exactly as stock.
+    # StartEmbrace's random-chance refusals at +0x171 and +0x19D are left
+    # completely stock. An earlier version jumped past them so a same-sex
+    # couple never refused, which meant a refusal it had genuinely rolled
+    # carried on into the rest of the sequence instead of ending the
+    # attempt. Base-game refusal behaviour, wording included, is correct.
     refusal_sites = []
-    for refusal_offset, message_id, continue_offset in (
-        (0x171, 1846, 0x17B),
-        (0x19D, 1851, 0x1A7),
-    ):
-        site = section.raw_ptr + function.value + refusal_offset
-        stock_mov = b"\xBE" + struct.pack("<I", message_id)
-        if bytes(obj.buf[site:site + 5]) != stock_mov:
-            raise RuntimeError(
-                f"StartEmbrace refusal {message_id} drifted at +{refusal_offset:#x}"
-            )
-        jmp_rel = struct.unpack_from("<i", bytes(obj.buf[site + 6:site + 10]), 0)[0]
-        say_target = function.value + refusal_offset + 10 + jmp_rel
-        active = obj.append_undefined_symbol(SAME_SEX_EMBRACE_ACTIVE_SYMBOL)
-        rcave = section.raw_size
-        rpayload = bytearray(
-            b"\x51"              # push ecx ) preserve caller-saved registers
-            b"\x52"              # push edx ) across the cdecl helper
-            b"\xE8\0\0\0\0"      # call VF2SameSexEmbraceActive
-            b"\x5A"              # pop edx
-            b"\x59"              # pop ecx
-            b"\x84\xC0"          # test al, al
-            b"\x74\x05"          # not a same-sex couple -> stock refusal
-            b"\xE9\0\0\0\0"      # qualifies -> continue past the refusal
-            + stock_mov          # mov esi, <id>   (reproduced)
-            + b"\xE9\0\0\0\0"    # jmp say-and-return (reproduced)
-        )
-        if len(rpayload) != 28:
-            raise AssertionError("StartEmbrace refusal cave size drifted")
-        struct.pack_into(
-            "<i", rpayload, 14,
-            (function.value + continue_offset) - (rcave + 18),
-        )
-        struct.pack_into("<i", rpayload, 24, say_target - (rcave + 28))
-        obj.insert_section_bytes(section.index, rcave, bytes(rpayload))
-        obj.append_relocation(section.index, rcave + 3, active, IMAGE_REL_I386_REL32)
-        obj._parse()
-        section = obj.section(function.section)
-        site = section.raw_ptr + function.value + refusal_offset
-        obj.buf[site:site + 5] = (
-            b"\xE9"
-            + struct.pack("<i", rcave - (function.value + refusal_offset + 5))
-        )
-        refusal_sites.append({
-            "offset": hex(refusal_offset),
-            "message": message_id,
-            "continue": hex(continue_offset),
-            "trampoline": hex(rcave),
-        })
 
     # StartEmbrace's success path gives both partners behavior 358
-    # ("Trying to Make A Baby"). Route the same-sex couple to the
-    # 357/356 private-romantic-time pair instead -- the same animation and
-    # timing, without the baby-making framing. Each "push 166h" is replaced
-    # in place by a call to a naked thunk that pushes the resolved id, so
-    # the stack effect is identical and opposite-sex couples still get 358.
-    push_behavior = bytes.fromhex("6866010000")
+    # ("Trying to Make A Baby") and that is deliberately LEFT ALONE. An
+    # earlier version swapped it for the 357/356 pair to get a different
+    # label, which routed the couple into a side sequence and caused a
+    # string of problems. The label is a presentation concern, so it is
+    # handled as a behaviour variation on 358 itself -- see
+    # patch_private_romantic_time_variation -- and the couple keeps the
+    # ordinary, well-tested baby-making path.
     behavior_sites = []
-    for offset, symbol in (
-        (0xD3 + 0x1AF, SAME_SEX_EMBRACE_BEHAVIOR_FIRST_SYMBOL),
-        (0xD3 + 0x1BD, SAME_SEX_EMBRACE_BEHAVIOR_SECOND_SYMBOL),
-    ):
-        site_raw = section.raw_ptr + function.value + offset
-        if bytes(obj.buf[site_raw:site_raw + 5]) != push_behavior:
-            raise RuntimeError(
-                f"CVillager::StartEmbrace behavior push drifted at +{offset:#x}"
-            )
-        thunk = obj.append_undefined_symbol(symbol)
-        obj.buf[site_raw:site_raw + 5] = b"\xE8\x00\x00\x00\x00"
-        obj.append_relocation(
-            section.index,
-            function.value + offset + 1,
-            thunk,
-            IMAGE_REL_I386_REL32,
-        )
-        behavior_sites.append({"offset": hex(offset), "thunk": symbol})
 
     obj.write(path)
 
@@ -19592,35 +19557,230 @@ def patch_villager_same_sex_embrace(manifest):
             "on this test long before reaching behavior 358"
         ),
         "behavior_swap": {
+            "status": "removed; behaviour 358 is kept for every couple",
             "stock": 358,
-            "same_sex": [357, 356],
+            "same_sex": 358,
             "note": (
-                "358 is 'Trying to Make A Baby'; 357/356 are the "
-                "private-romantic-time pair used by HandleDropOnVillager "
-                "+0x26E -- same animation and timing, no baby-making framing"
-            ),
-            "mechanism": (
-                "each 5-byte 'push 166h' replaced in place by a call to a "
-                "naked thunk that pushes the resolved id, preserving ECX for "
-                "the imminent CVillager::NewBehavior call"
+                "an earlier version replaced each 'push 166h' with a thunk "
+                "that pushed 357/356 instead, to obtain a different label. "
+                "That routed the couple into a side sequence and caused a "
+                "run of failures. The label is a presentation concern and is "
+                "now a behaviour variation on 358 itself -- see "
+                "EmbraceRoleSplit and the CBehavior constructor retarget in "
+                "patch_behavior_label_variants -- so the couple keeps the "
+                "ordinary baby-making behaviour"
             ),
             "sites": behavior_sites,
         },
-        "random_refusals_bypassed": {
+        "random_refusals": {
+            "status": "stock; not patched",
             "reason": (
-                "the caller plays the kiss sound before these fire, so a "
-                "random refusal reads as the sequence starting then "
-                "aborting; message 1851 (eSayNoClick, 'They can't agree "
-                "it's time to have a baby') is also nonsense for a "
-                "same-sex pair"
-            ),
-            "scope": (
-                "same-sex couple only; non-random refusals (age, pregnancy, "
-                "illness) still apply and opposite-sex couples keep both "
-                "rolls exactly as stock"
+                "every refusal in StartEmbrace, random or not, is left as "
+                "base-game code. An earlier version jumped past the two "
+                "random rolls so a same-sex couple never refused, which "
+                "meant a refusal it had genuinely rolled carried on into "
+                "the rest of the sequence instead of ending the attempt"
             ),
             "sites": refusal_sites,
         },
+    }
+
+
+def patch_embrace_role_split(manifest):
+    """Give a same-sex pair the two different halves of the 358 sequence.
+
+    CBehavior::GoInHouse picks which half a villager performs -- the spin or
+    the roses -- from one test at +0x081:
+
+        +0x081  83 BF 58 6A 00 00 01   cmp dword ptr [edi+6A58h], 1
+        +0x088  0F 85 ...              jne -> +0x1FD
+
+    Both partners run the same behaviour and rely on having different
+    genders to take opposite branches, so a same-sex couple takes the same
+    branch twice and both perform the identical half.
+
+    The 7-byte cmp is replaced with a jump to a cave that asks
+    VF2EmbraceRoleIsFemale instead and leaves ZF set the way the native cmp
+    would have, so the native jne immediately after is untouched and still
+    does the branching. The helper returns the stock gender answer for every
+    couple except a same-sex pair, where it hands the halves out by partner
+    slot.
+
+    The cave restores the flags AFTER popping the caller-saved registers,
+    because pops do not affect flags but the call does -- the cmp is
+    therefore the last thing executed before rejoining.
+    """
+    path = PATCHED / "Behavior.obj"
+    obj = CoffObject(path)
+    function_name = "?GoInHouse@CBehavior@@CAXAAVCVillager@@@Z"
+    function = obj.symbol(function_name)
+    section = obj.section(function.section)
+
+    hook = function.value + 0x081
+    raw = section.raw_ptr + hook
+    expected = bytes.fromhex("83 BF 58 6A 00 00 01")
+    if bytes(obj.buf[raw:raw + 7]) != expected:
+        raise RuntimeError(
+            "CBehavior::GoInHouse gender role test drifted at +0x081: "
+            + bytes(obj.buf[raw:raw + 7]).hex(" ")
+        )
+    if bytes(obj.buf[raw + 7:raw + 9]) != bytes.fromhex("0F85"):
+        raise RuntimeError("CBehavior::GoInHouse role branch drifted at +0x088")
+
+    helper = obj.append_undefined_symbol(EMBRACE_ROLE_HELPER_SYMBOL)
+    cave = section.raw_size
+    payload = bytearray(
+        b"\x51"              # push ecx ) caller-saved across the cdecl call
+        b"\x52"              # push edx )
+        b"\x57"             # push edi   (the villager, the helper's argument)
+        b"\xE8\0\0\0\0"      # call VF2EmbraceRoleIsFemale
+        b"\x83\xC4\x04"      # cdecl cleanup
+        b"\x5A"              # pop edx ) pops do not disturb flags, and the
+        b"\x59"              # pop ecx ) cmp below is what sets them
+        b"\x83\xF8\x01"      # cmp eax, 1   -> ZF exactly as the native cmp
+        b"\xE9\0\0\0\0"      # jmp +0x088, the untouched native jne
+    )
+    if len(payload) != 21:
+        raise AssertionError("Embrace role cave size drifted")
+    struct.pack_into("<i", payload, 17, (function.value + 0x088) - (cave + 21))
+
+    obj.insert_section_bytes(section.index, cave, bytes(payload))
+    obj.append_relocation(section.index, cave + 4, helper, IMAGE_REL_I386_REL32)
+    obj._parse()
+    section = obj.section(function.section)
+    raw = section.raw_ptr + hook
+    obj.buf[raw:raw + 7] = (
+        b"\xE9" + struct.pack("<i", cave - (hook + 5)) + b"\x90\x90"
+    )
+    obj.write(path)
+
+    manifest["EmbraceRoleSplit"] = {
+        "status": "installed",
+        "function": function_name,
+        "hook_offset": "+0x081",
+        "stock_bytes": expected.hex(" "),
+        "trampoline": hex(cave),
+        "trampoline_size": len(payload),
+        "resume": "+0x088 (the native jne, untouched)",
+        "helper": EMBRACE_ROLE_HELPER_SYMBOL,
+        "scope": (
+            "same-sex pair only; every other couple gets the stock gender "
+            "answer, so their two halves are unchanged"
+        ),
+        "reason": (
+            "both partners run behaviour 358 and rely on differing genders "
+            "to take opposite branches, so a same-sex pair performed the "
+            "same half twice"
+        ),
+    }
+
+
+def patch_six_child_private_time(manifest):
+    """Send a couple at six children down the ordinary romantic path.
+
+    theMainScene::HandleDropOnVillager gates the drop like this:
+
+        +0x1EB  call IsRoomToPopulate
+        +0x1F2  jne  -> +0x256      room available
+        +0x1F4  cmp/jl -> +0x256    age
+        +0x200  cmp/jl -> +0x256    age
+        +0x218  je   -> +0x256      same gender
+        +0x21A  push -1 / push 72Dh  <- the refusal, 7 dead bytes once
+                                        jumped over
+        +0x256  cooldown, then the romantic sequence
+
+    Every gate that lets the drop proceed jumps to +0x256, so the refusal
+    is replaced with a jump to that same target. The family being full is
+    then treated exactly like there being room, and everything downstream
+    -- the cooldown included -- runs stock.
+
+    An earlier version jumped to +0x26E instead, past the cooldown and
+    directly into the sequence. Landing mid-sequence skipped a gate the
+    native code always applies; +0x256 is the target the game itself uses.
+
+    No cave, helper or reproduced instructions: the seven bytes are
+    unreachable once jumped over, and +0x218's two-byte branch above it is
+    left completely alone.
+    """
+    path = PATCHED / "theMainScene.obj"
+    obj = CoffObject(path)
+    function_name = "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
+    function = obj.symbol(function_name)
+    section = obj.section(function.section)
+
+    hook = function.value + 0x21A
+    raw = section.raw_ptr + hook
+    expected = bytes.fromhex("6AFF682D070000")
+    if bytes(obj.buf[raw:raw + len(expected)]) != expected:
+        raise RuntimeError(
+            "theMainScene::HandleDropOnVillager six-child refusal drifted at +0x21A"
+        )
+    gate = bytes(obj.buf[section.raw_ptr + function.value + 0x218:
+                         section.raw_ptr + function.value + 0x21A])
+    if gate != bytes.fromhex("743C"):
+        raise RuntimeError(
+            "theMainScene::HandleDropOnVillager same-gender gate drifted at +0x218"
+        )
+
+    target = function.value + 0x256
+    obj.buf[raw:raw + 5] = b"\xE9" + struct.pack("<i", target - (hook + 5))
+
+    # 0% pregnancy. TryToMakeBaby keeps its native stack frame and every
+    # other route, but returns before ChanceOfPregnancy/Impregnate for a
+    # qualifying pair -- a same-sex marriage, or an opposite-sex couple
+    # already at six children. Both cases are couples that cannot be trying
+    # for a baby, which is the whole point of the relabelling.
+    try_name = "?TryToMakeBaby@theMainScene@@IAEXXZ"
+    try_func = obj.symbol(try_name)
+    try_sec = obj.section(try_func.section)
+    try_hook = try_func.value
+    expected_try_prefix = bytes.fromhex("55 8B EC 83 EC 08 53 56 89 4D FC")
+    if bytes(obj.buf[try_sec.raw_ptr + try_hook:
+                     try_sec.raw_ptr + try_hook + len(expected_try_prefix)]) != expected_try_prefix:
+        raise RuntimeError("TryToMakeBaby entry anchor drifted")
+    try_helper = obj.append_undefined_symbol(SAME_SEX_TRY_TO_MAKE_BABY_SKIP_HELPER_SYMBOL)
+    try_cave = try_sec.raw_size
+    try_trampoline = bytearray(
+        expected_try_prefix      # execute the native frame setup first
+        + b"\xE8\0\0\0\0"        # call VF2SkipSameSexTryToMakeBaby
+        b"\x84\xC0"              # eligible pair?
+        b"\x74\x02"              # no -> continue into the native body
+        b"\xC9\xC3"              # yes -> leave; return without pregnancy
+        b"\xE9\0\0\0\0"          # native body, after the reproduced prologue
+    )
+    if len(try_trampoline) != 27:
+        raise AssertionError("Private-time TryToMakeBaby trampoline size drifted")
+    struct.pack_into("<i", try_trampoline, 12, 0)
+    struct.pack_into(
+        "<i", try_trampoline, 23,
+        (try_hook + 0x0B) - (try_cave + len(try_trampoline)),
+    )
+    obj.insert_section_bytes(try_sec.index, try_cave, bytes(try_trampoline))
+    obj.append_relocation(try_sec.index, try_cave + 12, try_helper, IMAGE_REL_I386_REL32)
+    try_func = obj.symbol(try_name)
+    try_sec = obj.section(try_func.section)
+    obj.buf[try_sec.raw_ptr + try_hook:try_sec.raw_ptr + try_hook + 5] = (
+        b"\xE9" + struct.pack("<i", try_cave - (try_hook + 5))
+    )
+
+    obj.write(path)
+
+    manifest["SixChildPrivateTime"] = {
+        "status": "installed",
+        "function": function_name,
+        "hook_offset": "+0x21A",
+        "stock_bytes": expected.hex(" "),
+        "target": "+0x256",
+        "target_rationale": (
+            "the same target every native gate uses to let the drop proceed, "
+            "so the cooldown and the rest of the sequence still run"
+        ),
+        "same_gender_gate": "+0x218 left stock (74 3c)",
+        "label": (
+            "behaviour 358 is relabelled 'Having private adult romantic time' "
+            "by patch_behavior_label_variants"
+        ),
+        "pregnancy": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate",
     }
 
 
@@ -19966,130 +20126,6 @@ def patch_villager_details_same_sex_married_status(manifest):
             "GetMatriarch()/GetPatriarch() check as Accept's finalization gate, "
             "independently of whether the family tree record itself is correct."
         ),
-    }
-    return
-
-
-def patch_behavior_six_child_private_time(manifest):
-    """Turn the native "family is full" refusal into private romantic time.
-
-    theMainScene::HandleDropOnVillager reaches +0x21A only by falling
-    through the equal-gender test at +0x218, which is itself only reached
-    after IsRoomToPopulate() returned false and both villagers passed the
-    adult/career checks. In other words, arriving at +0x21A already means
-    exactly "an opposite-sex adult couple whose family is full" -- the
-    six-child circumstance -- as decided by the game's own checks. The
-    block there says eSayTooManyKids and plays the refusal.
-
-    So the rule keys directly off that native branch: replace the refusal
-    with a jump to +0x26E, the native private-romantic-time sequence
-    (behaviors 357/356) that the same branch structure already leads to
-    for other cases.
-
-    This replaces an earlier hook that instead detoured the +0x218
-    conditional branch itself and re-derived eligibility through
-    VF2ClassifyRomanticSpouseDrop. That approach misfired, needed the
-    native compare flags preserved across a helper call, had to widen the
-    original JE to rel32, and -- because a 5-byte detour does not fit over
-    a 2-byte branch -- also clobbered the following "push -1" and the
-    opcode of "push 72Dh", which caused a memory-corrupting fall-through
-    that had to be fixed separately. Keying off the refusal branch needs
-    none of that: +0x21A begins a 7-byte run (6A FF 68 2D 07 00 00) that
-    is dead once the jump is taken, so a plain 5-byte jump fits with no
-    cave, no helper, no flag juggling, and nothing reproduced.
-
-    The pregnancy skip below is unchanged and still installed: it is what
-    keeps both this rule and same-sex couples at 0% pregnancy.
-    """
-    main_path = PATCHED / "theMainScene.obj"
-    main_obj = CoffObject(main_path)
-    drop_name = "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
-    drop = main_obj.symbol(drop_name)
-    drop_sec = main_obj.section(drop.section)
-    refusal_hook = drop.value + 0x21A
-    refusal_raw = drop_sec.raw_ptr + refusal_hook
-    stock_refusal = bytes.fromhex("6AFF682D07")
-    if bytes(main_obj.buf[refusal_raw:refusal_raw + len(stock_refusal)]) != stock_refusal:
-        raise RuntimeError("Family-full refusal block drifted")
-    # The +0x218 gender branch is deliberately left stock now.
-    if bytes(main_obj.buf[drop_sec.raw_ptr + drop.value + 0x218:
-                          drop_sec.raw_ptr + drop.value + 0x21A]) != bytes.fromhex("743C"):
-        raise RuntimeError("Romantic spouse gender branch drifted")
-    private_time = drop.value + 0x26E
-    main_obj.buf[refusal_raw:refusal_raw + 5] = (
-        bytes.fromhex("E9") + struct.pack("<i", private_time - (refusal_hook + 5))
-    )
-
-    # Keep TryToMakeBaby's native stack frame and all other routes intact, but
-    # return before its ChanceOfPregnancy/Impregnate path for the six-child
-    # opposite-sex spouse rule (and, independently, for an active same-sex
-    # marriage pair -- see VF2SkipSameSexTryToMakeBaby).
-    try_name = "?TryToMakeBaby@theMainScene@@IAEXXZ"
-    try_func = main_obj.symbol(try_name)
-    try_sec = main_obj.section(try_func.section)
-    try_hook = try_func.value
-    expected_try_prefix = bytes.fromhex("55 8B EC 83 EC 08 53 56 89 4D FC")
-    if bytes(main_obj.buf[try_sec.raw_ptr + try_hook:try_sec.raw_ptr + try_hook + len(expected_try_prefix)]) != expected_try_prefix:
-        raise RuntimeError("TryToMakeBaby entry anchor drifted")
-    try_helper = main_obj.append_undefined_symbol(SAME_SEX_TRY_TO_MAKE_BABY_SKIP_HELPER_SYMBOL)
-    try_cave = try_sec.raw_size
-    try_trampoline = bytearray(
-        expected_try_prefix      # execute native frame setup first
-        +
-        b"\xE8\0\0\0\0"  # VF2SkipSameSexTryToMakeBaby
-        b"\x84\xC0"       # eligible pair?
-        b"\x74\x02"       # no -> native body jump
-        b"\xC9\xC3"       # leave; return without pregnancy
-        b"\xE9\0\0\0\0" # native body after the prologue
-    )
-    if len(try_trampoline) != 27:
-        raise AssertionError("Six-child TryToMakeBaby trampoline size drifted")
-    struct.pack_into("<i", try_trampoline, 12, 0)
-    struct.pack_into("<i", try_trampoline, 23, (try_hook + 0x0B) - (try_cave + len(try_trampoline)))
-    main_obj.insert_section_bytes(try_sec.index, try_cave, bytes(try_trampoline))
-    main_obj.append_relocation(try_sec.index, try_cave + 12, try_helper, IMAGE_REL_I386_REL32)
-    try_func = main_obj.symbol(try_name)
-    try_sec = main_obj.section(try_func.section)
-    main_obj.buf[try_sec.raw_ptr + try_hook:try_sec.raw_ptr + try_hook + 5] = (
-        b"\xE9" + struct.pack("<i", try_cave - (try_hook + 5))
-    )
-    main_obj.write(main_path)
-
-    manifest["BehaviorSixChildPrivateTime"] = {
-        "status": "installed",
-        "offline_patcher_setting": "behavior_patches",
-        "romantic_action": {
-            "condition": (
-                "whatever the game itself already decided: +0x21A is only "
-                "reachable by falling through the +0x218 gender test, which "
-                "is only reached after IsRoomToPopulate() returned false and "
-                "both villagers passed the adult/career checks -- i.e. an "
-                "opposite-sex adult couple whose family is full"
-            ),
-            "hook_offset": "+0x21A in clean theMainScene.obj",
-            "stock_bytes": "6a ff 68 2d 07",
-            "replacement": "jmp +0x26E",
-            "native_private_time_offset": "+0x26E",
-            "native_private_time_behaviors": [357, 356],
-            "replaced_refusal": "eSayTooManyKids (family is full)",
-            "gender_branch_left_stock": True,
-            "helper": None,
-            "trampoline": None,
-            "note": (
-                "no cave, helper, flag preservation or reproduced "
-                "instructions are needed: the 7-byte refusal block at +0x21A "
-                "is dead once the jump is taken, so a plain 5-byte jump fits "
-                "in place. Replaces an earlier hook that detoured the +0x218 "
-                "branch itself and re-derived eligibility through "
-                "VF2ClassifyRomanticSpouseDrop."
-            ),
-        },
-        "pregnancy": {
-            "status": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate for the same eligible pairs",
-            "hook_offset": "+0x0 in clean theMainScene.obj",
-            "trampoline": hex(try_cave),
-        },
-        "stock_off_state": "native private-time and pregnancy routes are retained for every other pair",
     }
     return
 
@@ -28088,6 +28124,7 @@ class CVillager;
 extern "C" void __cdecl VF2RandomBookshelfReading(CVillager &);
 extern "C" void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
 extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &);
+extern "C" void __cdecl VF2PrivateRomanticTimeLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTVLabel(CVillager &);
 extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &);
 extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &);
@@ -28142,6 +28179,7 @@ private:
     static void __cdecl DancingRadio(CVillager &);
     static void __cdecl ListenToRadio(CVillager &);
     static void __cdecl WatchTVDispatch(CVillager &);
+    static void __cdecl GoInHouse(CVillager &);
     static void __cdecl PlayingBoardGame(CVillager &);
     static void __cdecl GetADrink(CVillager &);
     static void __cdecl HeatUpFood(CVillager &);
@@ -28191,6 +28229,7 @@ private:
     friend void __cdecl VF2RandomBookshelfReading(CVillager &);
     friend void __cdecl VF2RandomRadioBehavior(CVillager &);
     friend void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
+    friend void __cdecl VF2PrivateRomanticTimeLabel(CVillager &);
     friend void __cdecl VF2RandomTVLabel(CVillager &);
     friend void __cdecl VF2RandomBoardGameLabel(CVillager &);
     friend void __cdecl VF2RandomDrinkLabel(CVillager &);
@@ -28795,6 +28834,36 @@ extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &villager)
         kVF2BehaviorLabels_radio_dance,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_radio_dance),
         remembered);
+}
+
+// "Having private adult romantic time" is a behaviour VARIATION on 358, the
+// stock "Trying to Make A Baby" behaviour -- not a separate sequence. The
+// couple takes the ordinary, well-tested baby-making path; only the label
+// differs, and pregnancy is suppressed separately in TryToMakeBaby.
+//
+// This replaced an earlier approach that swapped 358 for the native
+// 357/356 pair to get a different label. Routing the couple into that side
+// sequence caused a run of failures, so the presentation concern is now
+// solved with presentation machinery: the same CBehavior constructor
+// retarget that already gives Watching TV and Playing Board Games their
+// label variants.
+//
+// The test is computed from the villager on every call rather than from a
+// flag set at drop time. A refusal re-arms behaviour 137 and the drop can
+// run several times, so any stashed flag would go stale mid-chain.
+// Declared here because it is defined in another translation unit. Reusing
+// the very predicate that suppresses pregnancy guarantees the label and the
+// pregnancy rule can never disagree: a couple shown as having private adult
+// romantic time is exactly a couple that cannot conceive.
+extern "C" bool __cdecl VF2SkipSameSexTryToMakeBaby();
+
+extern "C" void __cdecl VF2PrivateRomanticTimeLabel(CVillager &villager)
+{
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::GoInHouse)) return;
+    if (!VF2SkipSameSexTryToMakeBaby()) return;
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    strncpy(behaviorLabel, "Having private adult romantic time", 0x27);
+    behaviorLabel[0x27] = '\\0';
 }
 
 extern "C" void __cdecl VF2RandomTVLabel(CVillager &villager)
@@ -29517,6 +29586,10 @@ def patch_behavior_label_variants(manifest):
         }
 
     changed = [
+        # Behaviour 358 keeps its native sequence; only its label varies,
+        # to "Having private adult romantic time" for a same-sex couple or an
+        # opposite-sex couple already at six children.
+        retarget(0x14B5, 0x166, "_VF2PrivateRomanticTimeLabel", "Private romantic time label variant"),
         retarget(0x332, 0x03E, "_VF2RandomTVLabel", "Watching TV label variants"),
         retarget(0xE8E, 0x107, "_VF2RandomBoardGameLabel", "Board game label variants"),
         retarget(0x11B, 0x019, "_VF2RandomDrinkLabel", "Getting a drink label variants"),
@@ -30513,8 +30586,12 @@ def main():
     # Fixes "same-sex spouses aren't treated as spouses" at the root: both
     # native spouse accessors back-fill their missing half, which covers all
     # 66 call sites in one change instead of hooking 19 functions.
-    # The romantic drop runs CVillager::StartEmbrace, which refuses a
-    # same-gender pair before reaching its private-time sequence.
+    # Same-sex couples: bypass only the same-gender refusal at +0xD1, so
+    # they reach StartEmbrace's ordinary success path and get behaviour 358,
+    # the stock baby-making behaviour. Nothing else in the function is
+    # touched -- every refusal, the entry animation and the sound call are
+    # base-game. The "private adult romantic time" wording is a label
+    # variation on 358 itself, not a different sequence.
     patch_villager_same_sex_embrace(manifest)
     patch_villager_manager_spouse_accessors(manifest)
     patch_marriage_finalization_for_same_sex(manifest)
@@ -30552,7 +30629,11 @@ def main():
         patch_radio_drop_behavior(manifest)
         patch_behavior_label_variants(manifest)
         patch_arcade_behavior_labels(manifest)
-        patch_behavior_six_child_private_time(manifest)
+        # A couple at six children takes the ordinary romantic path instead
+        # of refusing; the behaviour is relabelled rather than replaced.
+        patch_six_child_private_time(manifest)
+        # Same-sex partners take the two different halves of the sequence.
+        patch_embrace_role_split(manifest)
         manifest["BehaviorPatchesGate"] = {
             "enabled": True,
             "environment": "VF2_ENABLE_BEHAVIOR_PATCHES",

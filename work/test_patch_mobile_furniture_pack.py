@@ -11669,7 +11669,7 @@ class SameSexMarriagePatchTests(unittest.TestCase):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         current_patch = source[
             source.index('def patch_same_sex_marriage(manifest):'):
-            source.index('def patch_behavior_six_child_private_time(manifest):')
+            source.index('def patch_villager_same_sex_embrace(manifest):')
         ]
         self.assertIn('gender_hook = generate.value + 0x7D', current_patch)
         self.assertIn('expected_gender_decision = bytes.fromhex("83FF010F95C0")', current_patch)
@@ -11799,13 +11799,11 @@ class SameSexMarriagePatchTests(unittest.TestCase):
         finally:
             patcher.PATCHED = old_patched
 
-    def test_behavior_six_child_private_time_routes_only_eligible_spouses(self):
-        # This hook was previously installed (multiplexed together with
-        # gender-matching) by patch_same_sex_marriage. It is now owned
-        # exclusively by patch_behavior_six_child_private_time -- called
-        # only when Behavior Patches is compiled in -- so Same-Sex Marriage
-        # no longer installs or depends on any theMainScene.obj hook. The
-        # underlying trampoline bytes/helper are unchanged from before.
+    def test_six_child_private_time_uses_the_native_proceed_target(self):
+        # Every native gate that lets the drop proceed jumps to +0x256, so
+        # the six-child refusal is replaced with a jump to that same target.
+        # An earlier version jumped to +0x26E instead, landing past the
+        # cooldown and inside the sequence rather than at its start.
         old_patched = patcher.PATCHED
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -11814,81 +11812,58 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                     shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
                 patcher.PATCHED = temp_root
                 manifest = {}
-                patcher.patch_behavior_six_child_private_time(manifest)
+                patcher.patch_six_child_private_time(manifest)
 
-                gate = manifest["BehaviorSixChildPrivateTime"]["romantic_action"]
-                self.assertEqual(gate["native_private_time_offset"], "+0x26E")
-                self.assertEqual(gate["hook_offset"], "+0x21A in clean theMainScene.obj")
+                gate = manifest["SixChildPrivateTime"]
+                self.assertEqual(gate["hook_offset"], "+0x21A")
+                self.assertEqual(gate["target"], "+0x256")
 
                 main = CoffObject(temp_root / "theMainScene.obj")
-                pristine = CoffObject(patcher.SRC_OBJS / "theMainScene.obj")
                 drop = main.symbol(
                     "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
                 )
                 section = main.section(drop.section)
                 data = bytes(main.buf[section.raw_ptr:section.raw_ptr + section.raw_size])
-                pdrop = pristine.symbol(
-                    "?HandleDropOnVillager@theMainScene@@IAEXAAVCVillager@@@Z"
-                )
-                psec = pristine.section(pdrop.section)
-                pdata = bytes(pristine.buf[psec.raw_ptr:psec.raw_ptr + psec.raw_size])
 
-                # The rule now keys directly off the game's own refusal
-                # branch. +0x21A is reachable ONLY by falling through the
-                # +0x218 gender test, which is itself only reached after
-                # IsRoomToPopulate() returned false and both villagers
-                # passed the adult/career checks -- i.e. an opposite-sex
-                # adult couple whose family is full. So the refusal is
-                # simply replaced by a jump to the native
-                # private-romantic-time sequence.
                 self.assertEqual(data[drop.value + 0x21A], 0xE9)
                 target = struct.unpack_from(
                     "<i", data, drop.value + 0x21B
                 )[0] + drop.value + 0x21F
-                self.assertEqual(target, drop.value + 0x26E)
-
-                # The +0x218 gender branch is left completely stock now --
-                # the previous hook detoured it and, because a 5-byte
-                # detour does not fit over a 2-byte branch, also clobbered
-                # the following "push -1"/"push 72Dh", which produced a
-                # memory-corrupting fall-through. Keying off the refusal
-                # branch needs no cave, helper or reproduced instructions.
+                self.assertEqual(target, drop.value + 0x256)
+                # The same-gender gate above it stays stock: a 5-byte detour
+                # does not fit over a 2-byte branch, which is what caused the
+                # memory corruption in PR #25.
                 self.assertEqual(
                     data[drop.value + 0x218:drop.value + 0x21A],
                     bytes.fromhex("74 3C"),
                 )
-                self.assertEqual(
-                    data[drop.value + 0x1F2:drop.value + 0x1F4],
-                    bytes.fromhex("75 62"),
+                # Pregnancy is suppressed for the same qualifying pairs.
+                try_baby = main.symbol("?TryToMakeBaby@theMainScene@@IAEXXZ")
+                try_sec = main.section(try_baby.section)
+                try_data = bytes(
+                    main.buf[try_sec.raw_ptr:try_sec.raw_ptr + try_sec.raw_size]
                 )
-                self.assertIsNone(gate["trampoline"])
-                self.assertIsNone(gate["helper"])
-                # Everything before the refusal must be byte-identical.
-                self.assertEqual(
-                    data[drop.value:drop.value + 0x21A],
-                    pdata[pdrop.value:pdrop.value + 0x21A],
-                )
-                # +0x221 must still be a real instruction boundary
-                # (mov ecx, imm32) -- nothing after the refusal is touched.
-                self.assertEqual(data[drop.value + 0x221], 0xB9)
-                # No relocation is added: the jump is section-internal.
-                self.assertEqual(section.nreloc, psec.nreloc)
-                self.assertEqual(
-                    pdata[pdrop.value + 0x218:pdrop.value + 0x21A],
-                    bytes.fromhex("74 3C"),
-                )
-                self.assertEqual(
-                    pdata[pdrop.value + 0x21A:pdrop.value + 0x21F],
-                    bytes.fromhex("6A FF 68 2D 07"),
-                    "the refusal block replaced by the jump must be the stock"
-                    " push -1 / push 72Dh",
-                )
-                self.assertEqual(
-                    pdata[pdrop.value + 0x256:pdrop.value + 0x25B],
-                    bytes.fromhex("8B 43 14 8B C8"),
-                )
+                self.assertEqual(try_data[try_baby.value], 0xE9)
         finally:
             patcher.PATCHED = old_patched
+
+    def test_private_romantic_time_is_a_label_variation_on_358(self):
+        # The couple keeps behaviour 358, the stock baby-making behaviour;
+        # only its label changes. An earlier version swapped 358 for the
+        # native 357/356 pair, which routed them into a side sequence.
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            'retarget(0x14B5, 0x166, "_VF2PrivateRomanticTimeLabel"',
+            source,
+        )
+        self.assertIn(
+            'strncpy(behaviorLabel, "Having private adult romantic time", 0x27);',
+            source,
+        )
+        # The label reuses the very predicate that suppresses pregnancy, so
+        # the two can never disagree.
+        self.assertIn("if (!VF2SkipSameSexTryToMakeBaby()) return;", source)
+        self.assertNotIn("SAME_SEX_EMBRACE_BEHAVIOR_FIRST_SYMBOL)", source)
 
     def test_hook_is_installed_in_all_compile_time_layouts(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
