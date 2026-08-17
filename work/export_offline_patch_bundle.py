@@ -1814,11 +1814,26 @@ def is_full_payload_candidate(rel_path: Path) -> bool:
     return False
 
 
+def matches_base_payload(rel: Path, build_dir: Path, base_payload: Path) -> bool:
+    """True when the build's copy of `rel` is identical to the clean base game."""
+    base_file = base_payload / rel
+    build_file = build_dir / rel
+    if not base_file.is_file():
+        return False
+    if base_file.stat().st_size != build_file.stat().st_size:
+        return False
+    return (
+        hashlib.sha256(base_file.read_bytes()).digest()
+        == hashlib.sha256(build_file.read_bytes()).digest()
+    )
+
+
 def iter_candidate_assets(
     build_dir: Path,
     manifest_data: dict[str, Any],
     asset_mode: str,
     asset_filter: Callable[[Path], bool] | None = None,
+    base_payload: Path | None = None,
 ) -> list[Path]:
     if asset_mode == "full":
         paths: list[Path] = []
@@ -1844,11 +1859,29 @@ def iter_candidate_assets(
     roots = [build_dir / "Images", build_dir / "Assets"]
     allowed_paths: set[Path] | None = None
     if asset_mode == "additive":
-        allowed_paths = {
-            rel
-            for rel in collect_manifest_asset_paths(manifest_data)
-            if (build_dir / rel).is_file()
-        }
+        # Additive means every asset this build adds to or changes in the
+        # base game -- not the subset the manifest happens to name.
+        #
+        # It used to mean the latter, and the difference is not subtle: a
+        # complete build adds 6650 images to the 655 a clean install has,
+        # while the manifest-referenced subset is about 1263. Installing
+        # that left the patched EXE indexing thousands of images the folder
+        # did not contain, which is what shipped in B169 -- the family tree
+        # rendered with no background, sprites drew in the wrong places and
+        # cursor art trailed across the screen. Nothing was deleted; the
+        # additions simply never travelled.
+        #
+        # Falls back to the manifest subset only when no base payload is
+        # available to diff against, so the selection is never silently
+        # empty.
+        if base_payload is not None and base_payload.is_dir():
+            allowed_paths = None
+        else:
+            allowed_paths = {
+                rel
+                for rel in collect_manifest_asset_paths(manifest_data)
+                if (build_dir / rel).is_file()
+            }
 
     paths: list[Path] = []
     for root in roots:
@@ -1862,6 +1895,14 @@ def iter_candidate_assets(
                 if rel.suffix.lower() == ".bak":
                     continue
                 if allowed_paths is not None and rel not in allowed_paths:
+                    continue
+                if (
+                    asset_mode == "additive"
+                    and allowed_paths is None
+                    and base_payload is not None
+                    and matches_base_payload(rel, build_dir, base_payload)
+                ):
+                    # Unchanged base-game file: the player already has it.
                     continue
                 if asset_filter is not None and not asset_filter(rel):
                     continue
@@ -1880,7 +1921,9 @@ def export_asset_payloads(
 ) -> list[dict[str, Any]]:
     payload_root = bundle_dir / "payload"
     asset_patches: list[dict[str, Any]] = []
-    candidate_assets = iter_candidate_assets(build_dir, manifest_data, asset_mode, asset_filter)
+    candidate_assets = iter_candidate_assets(
+        build_dir, manifest_data, asset_mode, asset_filter, base_payload
+    )
     for dirname in SOURCE_ONLY_PAYLOAD_DIRS:
         source_root = build_dir / dirname
         if not source_root.is_dir():
