@@ -5232,11 +5232,20 @@ def validate_stock_image_ids():
     records = records["records"] if isinstance(records, dict) else records
     by_id = {r["image_id"]: r.get("path") for r in records}
 
+    # Every hard-coded stock id in this file. New images are appended past
+    # ORIG_IMAGE_COUNT and so can never land on a stock slot; these three
+    # constants are the only way a stock entry gets touched at all.
+    errors: list[str] = []
     expected = {
         MOBILE_RENOVATION_STOCK_CLOSED_CURTAIN_IMAGE: "curtain_closed_southb.png",
         AI_BATHROOM2_STOCK_CLOSED_CURTAIN_IMAGE: "curtain_closed.png",
+        LOCKED_IMAGE_ID: "locked.png",
     }
-    errors = []
+    if len(records) != ORIG_IMAGE_COUNT:
+        errors.append(
+            f"descriptor table has {len(records)} records, expected "
+            f"{ORIG_IMAGE_COUNT}; appended images would collide with stock ids"
+        )
     for image_id, want in expected.items():
         got = by_id.get(image_id)
         if got != want:
