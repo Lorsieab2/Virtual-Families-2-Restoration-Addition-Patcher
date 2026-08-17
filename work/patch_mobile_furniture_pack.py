@@ -30619,7 +30619,25 @@ def main():
     # Force Marriage Email is deliberately a normal queued proposal.  Do not
     # install the former cheat-only Reject reroll route; native Accept,
     # Reject, and close behavior must remain untouched.
-    patch_vf3_style_child_adoption_chooser(manifest)
+    # Adoption Services is deliberately left ENTIRELY BASE-GAME.
+    #
+    # patch_vf3_style_child_adoption_chooser replaced the stock spawn route in
+    # CScrollingStoreScene::HandleUpgrade (+0x57A) with a helper that put up a
+    # "baby or older child" message box and spawned the adoptee itself.
+    # Purchasing Adoption Services then crashed with an access violation
+    # whose faulting module was "unknown" at address 0x1D7 -- execution had
+    # left every loaded module, the signature of a call through a corrupted
+    # return address or function pointer rather than a bad data read.
+    #
+    # The helper also did not reproduce the stock call: the native route is
+    # SpawnSpecificPeep(age=1, gender=-1, body=0x3C) and the helper passed
+    # body=-1 with an explicit gender, and it constructed a
+    # theMessageBoxDlg in a 0x300-byte stack buffer standing in for a class
+    # whose real size is not pinned anywhere.
+    #
+    # Rather than guess at which of those was fatal, the whole route is
+    # reverted so HandleUpgrade's adoption path is byte-identical to stock.
+    # patch_vf3_style_child_adoption_chooser(manifest)
     # Crash fix: ldwScene::SetActive dereferences a null field_4 for one
     # native scene slot once a family reaches six children (see the
     # function docstring for the confirmed root cause). Always installed;
