@@ -30,13 +30,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# A complete build adds 6650 images to the 655 a clean install has. The
-# broken additive export produced 1263 asset patches, so a floor well above
-# that catches the regression without being brittle about exact counts.
-MIN_PAYLOAD_IMAGES = 5000
-MIN_ASSET_PATCHES = 5000
-
-
 def declared_variants() -> list[str]:
     """Variant names the matrix config declares, so none can be quietly skipped."""
     config = json.loads(
@@ -138,39 +131,63 @@ def main() -> int:
     if result.returncode != 0:
         return result.returncode
 
-    return verify(out_dir)
+    return verify(out_dir, outputs / (prefix + 'final_all_enabled'))
 
 
-def verify(out_dir: Path) -> int:
-    """Fail loudly if the bundle cannot produce a complete install."""
+def verify(out_dir: Path, build_dir: Path) -> int:
+    """Refuse a bundle that cannot reproduce the build on a clean install.
+
+    Count thresholds alone are not enough and have already let two broken
+    releases through. The first shipped 1263 asset patches and installed a
+    game missing 5700 images. The second shipped 6963 -- comfortably past
+    any count floor -- while only 121 of its 646 Assets additions came
+    along, so the fixtures and collision data were missing instead.
+
+    So this simulates the install rather than trusting totals: clean base
+    game plus everything the manifest writes must cover every Images and
+    Assets file the build produced. Anything the build has and the install
+    would not is listed by name.
+    """
     manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8-sig"))
     summary = manifest["export_summary"]
-    payload_images = sum(
-        1 for p in (out_dir / "payload").rglob("*")
-        if p.is_file() and "Images" in p.parts
-    )
-    asset_patches = summary["asset_patch_count"]
 
-    problems = []
-    if asset_patches < MIN_ASSET_PATCHES:
-        problems.append(
-            f"only {asset_patches} asset patches; the build makes 6650 additions. "
-            "The broken additive export produced 1263, which installs a game "
-            "missing most of its art."
-        )
-    if payload_images < MIN_PAYLOAD_IMAGES:
-        problems.append(
-            f"only {payload_images} payload images; expected at least {MIN_PAYLOAD_IMAGES}"
-        )
+    clean_index = json.loads(
+        (ROOT / "data" / "vf2" / "clean-base-game-assets.json").read_text(encoding="utf-8-sig")
+    )["files"]
+    installed = {k for k in clean_index if k.startswith(("Images/", "Assets/"))}
+    for patch in manifest.get("asset_patches", []):
+        target = (patch.get("output_file_path") or patch.get("file_path") or "")
+        target = target.replace("\\", "/")
+        if target.startswith(("Images/", "Assets/")):
+            installed.add(target)
+
+    produced = {
+        p.relative_to(build_dir).as_posix()
+        for root in ("Images", "Assets")
+        for p in (build_dir / root).rglob("*")
+        if p.is_file() and p.suffix.lower() != ".bak"
+    }
+    missing = sorted(produced - installed)
+
+    by_root = {}
+    for rel in missing:
+        by_root[rel.split("/")[0]] = by_root.get(rel.split("/")[0], 0) + 1
 
     print(f"\nverify: asset_mode={summary['asset_mode']} "
-          f"asset_patches={asset_patches} payload_images={payload_images}")
-    if problems:
-        print("BUNDLE REJECTED:", file=sys.stderr)
-        for problem in problems:
-            print("  - " + problem, file=sys.stderr)
+          f"asset_patches={summary['asset_patch_count']}")
+    print(f"        build produces {len(produced)} Images/Assets files; "
+          f"a clean install + this bundle yields {len(installed & produced)} of them")
+
+    if missing:
+        print("BUNDLE REJECTED: the install would be missing files the build "
+              f"produced ({by_root}):", file=sys.stderr)
+        for rel in missing[:20]:
+            print("  - " + rel, file=sys.stderr)
+        if len(missing) > 20:
+            print(f"  ... and {len(missing) - 20} more", file=sys.stderr)
         return 1
-    print("bundle looks complete")
+
+    print("bundle reproduces the build on a clean install")
     return 0
 
 

@@ -9,6 +9,7 @@ assets committed to git.
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
 import json
 import re
@@ -1814,18 +1815,45 @@ def is_full_payload_candidate(rel_path: Path) -> bool:
     return False
 
 
+CLEAN_BASE_GAME_ASSETS = (
+    Path(__file__).resolve().parents[1] / "data" / "vf2" / "clean-base-game-assets.json"
+)
+
+
+@functools.lru_cache(maxsize=1)
+def clean_base_game_index() -> dict[str, dict[str, Any]]:
+    """Hashes of a CLEAN install's Images and Assets, or {} when unavailable.
+
+    work/vanilla_runtime_payload is NOT usable for this. It has accumulated
+    603 patcher-added fmaps from previous builds, so an 845-file "vanilla"
+    Assets directory is compared against the build's 888 and concludes only
+    81 files are new. B169 shipped exactly that: 81 of the 646 Assets
+    additions, leaving the installed game without most of its fixture and
+    collision data.
+    """
+    if not CLEAN_BASE_GAME_ASSETS.is_file():
+        return {}
+    doc = json.loads(CLEAN_BASE_GAME_ASSETS.read_text(encoding="utf-8-sig"))
+    return doc.get("files", {})
+
+
 def matches_base_payload(rel: Path, build_dir: Path, base_payload: Path) -> bool:
-    """True when the build's copy of `rel` is identical to the clean base game."""
-    base_file = base_payload / rel
+    """True when the build's copy of `rel` is identical to the clean base game.
+
+    Checked against the recorded clean-install index, never against the
+    working payload, so a polluted payload cannot cause a real addition to
+    be treated as something the player already has.
+    """
+    index = clean_base_game_index()
+    if not index:
+        return False
+    entry = index.get(relative_posix(rel))
+    if entry is None:
+        return False
     build_file = build_dir / rel
-    if not base_file.is_file():
+    if entry["size"] != build_file.stat().st_size:
         return False
-    if base_file.stat().st_size != build_file.stat().st_size:
-        return False
-    return (
-        hashlib.sha256(base_file.read_bytes()).digest()
-        == hashlib.sha256(build_file.read_bytes()).digest()
-    )
+    return entry["sha256"] == hashlib.sha256(build_file.read_bytes()).hexdigest()
 
 
 def iter_candidate_assets(
@@ -1945,7 +1973,13 @@ def export_asset_payloads(
         base = base_payload / rel
         source_sha = sha256_file(source)
         source_size = source.stat().st_size
-        if base.is_file() and sha256_file(base) == source_sha:
+        # Compared against the recorded CLEAN install, not the working
+        # payload. The payload has accumulated 603 patcher-added fmaps from
+        # previous builds, and this check used to consult it directly -- so
+        # 528 genuine Assets additions were selected for export and then
+        # dropped here as "already in the base game". That is what shipped
+        # B169 with 121 of its 646 Assets additions.
+        if matches_base_payload(rel, build_dir, base_payload):
             continue
 
         payload_target = payload_root / rel
@@ -1989,10 +2023,18 @@ def export_asset_payloads(
                     f"Full {build_label} beta folder Invisible Furniture visible-graphics payload. "
                     "Enable this first so the furniture can be placed."
                 )
-        elif base.is_file():
-            record["expected_target_sha256"] = sha256_file(base)
-            record["expected_target_size"] = base.stat().st_size
-            record["overwrite_existing"] = True
+        else:
+            clean_entry = clean_base_game_index().get(relative_posix(rel))
+            if clean_entry is not None:
+                # The player's copy is the clean base game's, so state that
+                # expectation rather than the payload's possibly-patched one.
+                record["expected_target_sha256"] = clean_entry["sha256"]
+                record["expected_target_size"] = clean_entry["size"]
+                record["overwrite_existing"] = True
+            elif base.is_file():
+                record["expected_target_sha256"] = sha256_file(base)
+                record["expected_target_size"] = base.stat().st_size
+                record["overwrite_existing"] = True
         asset_patches.append(record)
     return asset_patches
 
