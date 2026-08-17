@@ -19478,66 +19478,12 @@ def patch_villager_same_sex_embrace(manifest):
     raw = section.raw_ptr + hook
     obj.buf[raw:raw + 5] = b"\xE9" + struct.pack("<i", cave - (hook + 5))
 
-    # Skip StartEmbrace's two random-chance refusals for the same-sex
-    # couple: message 1846 (mood/food gated) at +0x171 and 1851
-    # (eSayNoClick, "They can't agree it's time to have a baby") at +0x19D.
-    # The caller has already played the kiss sound by the time either
-    # fires, so a refusal reads as the sequence starting and then
-    # aborting, and the 1851 text is nonsense for a same-sex pair. Each
-    # refusal block is "mov esi, <id>; jmp <say>"; the 5-byte mov is
-    # replaced by a jump to a cave that continues past the refusal when
-    # the couple qualifies and otherwise reproduces the mov and the jmp
-    # verbatim. Non-random refusals (age, pregnancy, illness) are
-    # untouched, and opposite-sex couples keep both rolls exactly as stock.
+    # StartEmbrace's random-chance refusals at +0x171 and +0x19D are left
+    # completely stock. An earlier version jumped past them so a same-sex
+    # couple never refused, which meant a refusal it had genuinely rolled
+    # carried on into the rest of the sequence instead of ending the
+    # attempt. Base-game refusal behaviour, wording included, is correct.
     refusal_sites = []
-    for refusal_offset, message_id, continue_offset in (
-        (0x171, 1846, 0x17B),
-        (0x19D, 1851, 0x1A7),
-    ):
-        site = section.raw_ptr + function.value + refusal_offset
-        stock_mov = b"\xBE" + struct.pack("<I", message_id)
-        if bytes(obj.buf[site:site + 5]) != stock_mov:
-            raise RuntimeError(
-                f"StartEmbrace refusal {message_id} drifted at +{refusal_offset:#x}"
-            )
-        jmp_rel = struct.unpack_from("<i", bytes(obj.buf[site + 6:site + 10]), 0)[0]
-        say_target = function.value + refusal_offset + 10 + jmp_rel
-        active = obj.append_undefined_symbol(SAME_SEX_EMBRACE_ACTIVE_SYMBOL)
-        rcave = section.raw_size
-        rpayload = bytearray(
-            b"\x51"              # push ecx ) preserve caller-saved registers
-            b"\x52"              # push edx ) across the cdecl helper
-            b"\xE8\0\0\0\0"      # call VF2SameSexEmbraceActive
-            b"\x5A"              # pop edx
-            b"\x59"              # pop ecx
-            b"\x84\xC0"          # test al, al
-            b"\x74\x05"          # not a same-sex couple -> stock refusal
-            b"\xE9\0\0\0\0"      # qualifies -> continue past the refusal
-            + stock_mov          # mov esi, <id>   (reproduced)
-            + b"\xE9\0\0\0\0"    # jmp say-and-return (reproduced)
-        )
-        if len(rpayload) != 28:
-            raise AssertionError("StartEmbrace refusal cave size drifted")
-        struct.pack_into(
-            "<i", rpayload, 14,
-            (function.value + continue_offset) - (rcave + 18),
-        )
-        struct.pack_into("<i", rpayload, 24, say_target - (rcave + 28))
-        obj.insert_section_bytes(section.index, rcave, bytes(rpayload))
-        obj.append_relocation(section.index, rcave + 3, active, IMAGE_REL_I386_REL32)
-        obj._parse()
-        section = obj.section(function.section)
-        site = section.raw_ptr + function.value + refusal_offset
-        obj.buf[site:site + 5] = (
-            b"\xE9"
-            + struct.pack("<i", rcave - (function.value + refusal_offset + 5))
-        )
-        refusal_sites.append({
-            "offset": hex(refusal_offset),
-            "message": message_id,
-            "continue": hex(continue_offset),
-            "trampoline": hex(rcave),
-        })
 
     # StartEmbrace's success path gives both partners behavior 358
     # ("Trying to Make A Baby"). Route the same-sex couple to the
@@ -19606,18 +19552,14 @@ def patch_villager_same_sex_embrace(manifest):
             ),
             "sites": behavior_sites,
         },
-        "random_refusals_bypassed": {
+        "random_refusals": {
+            "status": "stock; not patched",
             "reason": (
-                "the caller plays the kiss sound before these fire, so a "
-                "random refusal reads as the sequence starting then "
-                "aborting; message 1851 (eSayNoClick, 'They can't agree "
-                "it's time to have a baby') is also nonsense for a "
-                "same-sex pair"
-            ),
-            "scope": (
-                "same-sex couple only; non-random refusals (age, pregnancy, "
-                "illness) still apply and opposite-sex couples keep both "
-                "rolls exactly as stock"
+                "every refusal in StartEmbrace, random or not, is left as "
+                "base-game code. An earlier version jumped past the two "
+                "random rolls so a same-sex couple never refused, which "
+                "meant a refusal it had genuinely rolled carried on into "
+                "the rest of the sequence instead of ending the attempt"
             ),
             "sites": refusal_sites,
         },
@@ -30513,9 +30455,23 @@ def main():
     # Fixes "same-sex spouses aren't treated as spouses" at the root: both
     # native spouse accessors back-fill their missing half, which covers all
     # 66 call sites in one change instead of hooking 19 functions.
-    # The romantic drop runs CVillager::StartEmbrace, which refuses a
-    # same-gender pair before reaching its private-time sequence.
-    patch_villager_same_sex_embrace(manifest)
+    # CVillager::StartEmbrace is deliberately NOT patched. Every hook that
+    # was applied to it -- the same-gender bypass, the 357/356 private-time
+    # behaviour ids, the random-refusal bypasses, the refusal rewording and
+    # the kiss-animation save/restore -- has been reverted at the user's
+    # request, so the function is byte-for-byte base-game.
+    #
+    # The reason the reverted work never solved the reported kiss sound: the
+    # kiss animation is played at StartEmbrace+0x3A, the function's first
+    # act, before ANY check runs, including the stock hunger gate at +0xB2.
+    # It is therefore audible on refusals in the unmodified game, and no
+    # amount of patching downstream of it changes that. Anyone picking this
+    # up again should start by establishing where that sound is actually
+    # emitted, which was never confirmed.
+    #
+    # Consequence of the revert: a same-gender pair refuses at +0xD1 again,
+    # so same-sex couples cannot embrace.
+    # patch_villager_same_sex_embrace(manifest)
     patch_villager_manager_spouse_accessors(manifest)
     patch_marriage_finalization_for_same_sex(manifest)
     # A second, independent site with the identical Matriarch/Patriarch
@@ -30552,7 +30508,15 @@ def main():
         patch_radio_drop_behavior(manifest)
         patch_behavior_label_variants(manifest)
         patch_arcade_behavior_labels(manifest)
-        patch_behavior_six_child_private_time(manifest)
+        # "Having private romantic time" is removed entirely at the user's
+        # request; this restored base-game behaviour everywhere it appeared.
+        # It routed the six-child refusal in
+        # theMainScene::HandleDropOnVillager into the native private-time
+        # sequence at +0x26E and suppressed pregnancy in TryToMakeBaby. Both
+        # are now stock: a couple at capacity refuses again, as the base game
+        # does. The companion 357/356 behaviour ids in CVillager::StartEmbrace
+        # are gone too, along with the rest of that function's hooks.
+        # patch_behavior_six_child_private_time(manifest)
         manifest["BehaviorPatchesGate"] = {
             "enabled": True,
             "environment": "VF2_ENABLE_BEHAVIOR_PATCHES",
