@@ -6835,6 +6835,101 @@ class VF3TVAnimationContractTests(unittest.TestCase):
         )
 
 
+class EmbraceSilentRefusalTests(unittest.TestCase):
+    """The kiss animation must be undone on refusal, but never deferred.
+
+    StartEmbrace plays it at +0x3A before any check runs -- earlier than even
+    the stock hunger gate at +0xB2 -- and CAnimControl::Play only marks it
+    pending, so the animation system starts it, with its sound, after the
+    function returns. Refusing pairs therefore kissed audibly first.
+
+    Deferring that entry call was tried and crashed the game: the refusal
+    tail hands both villagers behaviour 137, the embrace behaviour, whose
+    dispatcher entry is StartEmbrace itself, and a pending animation is what
+    stops it restarting immediately. These tests pin the shape that keeps an
+    animation pending at all times.
+    """
+
+    def _patch(self, temp_root):
+        for filename in ("Villager.obj", "VillagerManager.obj", "theMainScene.obj"):
+            shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+        old = patcher.PATCHED
+        patcher.PATCHED = temp_root
+        try:
+            manifest = {}
+            patcher.patch_embrace_silent_refusals(manifest)
+            return manifest, CoffObject(temp_root / "Villager.obj")
+        finally:
+            patcher.PATCHED = old
+
+    def test_entry_call_still_plays_something(self):
+        # Retargeted, not removed: the helper records the previous animation
+        # and then performs the real Play, so an animation stays pending.
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, obj = self._patch(Path(tmp))
+            function = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
+            section = obj.section(function.section)
+            found = {}
+            for index in range(section.nreloc):
+                vaddr, symbol_index, _ = struct.unpack_from(
+                    "<IIH", obj.buf, section.reloc_ptr + index * 10
+                )
+                if function.value <= vaddr < function.value + 0x2F5:
+                    found[vaddr - function.value] = obj.symbol_by_index[symbol_index].name
+            self.assertEqual(
+                found[0x3B], patcher.EMBRACE_SAVE_ANIM_HELPER_SYMBOL
+            )
+            # The sound call is not the culprit and must stay stock.
+            self.assertEqual(found[0x1AF], "?Play@CSound@@QAEXW4ESound@@@Z")
+            source = Path(patcher.__file__).read_text(encoding="utf-8")
+            self.assertIn("control->Play((EAnim)anim, flag, blend);", source)
+
+    def test_hook_is_on_the_refusal_tail_only(self):
+        # +0x2AA is refusal-only. The accept path pushes behaviour 0x166 at
+        # +0x290 and jumps to +0x2E3, past this hook, so an accepted embrace
+        # keeps its kiss.
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, obj = self._patch(Path(tmp))
+            function = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
+            section = obj.section(function.section)
+            data = bytes(obj.buf[section.raw_ptr:section.raw_ptr + section.raw_size])
+            self.assertEqual(data[function.value + 0x2AA], 0xE9)
+            self.assertEqual(
+                data[function.value + 0x295:function.value + 0x297],
+                bytes.fromhex("EB 4C"),
+                "the accept path's jump to +0x2E3 must stay stock",
+            )
+            hook = manifest["EmbraceSilentRefusals"]["refusal_tail_hook"]
+            self.assertEqual(hook["resume"], "+0x2B3")
+            self.assertEqual(hook["trampoline_size"], 19)
+
+    def test_cave_reproduces_the_three_clobbered_pushes(self):
+        # The 5-byte jump covers "push 0; push 0" and the first byte of
+        # "push 867h", so all three must be reproduced and control must
+        # resume at +0x2B3 rather than re-entering the overwritten region --
+        # the mistake that caused the memory corruption in PR #25.
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, obj = self._patch(Path(tmp))
+            function = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
+            section = obj.section(function.section)
+            data = bytes(obj.buf[section.raw_ptr:section.raw_ptr + section.raw_size])
+            cave = int(manifest["EmbraceSilentRefusals"]["refusal_tail_hook"]["trampoline"], 16)
+            self.assertEqual(data[cave], 0xE8)
+            self.assertEqual(
+                data[cave + 5:cave + 14],
+                bytes.fromhex("6A 00 6A 00 68 67 08 00 00"),
+            )
+            resume = struct.unpack_from("<i", data, cave + 15)[0] + cave + 19
+            self.assertEqual(resume, function.value + 0x2B3)
+
+    def test_restore_helper_replays_the_recorded_animation(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn("extern \"C\" void __cdecl VF2RestoreEmbraceAnim(void)", source)
+        self.assertIn("(EAnim)gVF2PreEmbraceAnim.anim", source)
+        self.assertIn("gVF2PreEmbraceAnim.blend", source)
+        self.assertIn("gVF2PreEmbraceAnim.valid = false;", source)
+
+
 class EmbraceRefusalWordingTests(unittest.TestCase):
     """A refusal must still refuse; only its wording may change.
 

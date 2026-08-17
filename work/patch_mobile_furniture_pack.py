@@ -324,6 +324,8 @@ SAME_SEX_EMBRACE_HELPER_SYMBOL = "_VF2AllowSameSexEmbrace"
 SAME_SEX_EMBRACE_BEHAVIOR_FIRST_SYMBOL = "_VF2PushEmbraceBehaviorFirst"
 SAME_SEX_EMBRACE_BEHAVIOR_SECOND_SYMBOL = "_VF2PushEmbraceBehaviorSecond"
 SAME_SEX_EMBRACE_ACTIVE_SYMBOL = "_VF2SameSexEmbraceActive"
+EMBRACE_SAVE_ANIM_HELPER_SYMBOL = "@VF2SaveThenPlayEmbraceKiss@20"
+EMBRACE_RESTORE_ANIM_HELPER_SYMBOL = "_VF2RestoreEmbraceAnim"
 SPOUSE_ACCESSOR_MATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingMatriarch"
 SPOUSE_ACCESSOR_PATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingPatriarch"
 MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL = "_VF2ResolveSameSexMarriagePairForFinalization"
@@ -13271,6 +13273,20 @@ public:
 
 extern CSound Sound;
 
+enum EAnim {
+    eAnimDummy = 0
+};
+
+// Declared so MSVC emits a reference to the stock
+// ?Play@CAnimControl@@QAEXW4EAnim@@_NM@Z. CAnimControl::Play only writes
+// fields -- the animation id at +0x00, the blend at +0x08, a flag at +0x10
+// and a pending marker at +0x18 -- and the animation system starts it, and
+// plays whatever sound it carries, after the calling function returns.
+class CAnimControl {
+public:
+    void Play(EAnim anim, bool flag, float blend);
+};
+
 class CTutorialTip {
 public:
     void Queue(StringId stringId, EGameScene scene, bool immediate);
@@ -13711,6 +13727,66 @@ extern "C" int __cdecl VF2EmbraceBehaviorFirst() {
 
 extern "C" int __cdecl VF2EmbraceBehaviorSecond() {
     return gVF2SameSexEmbraceActive ? 356 : 358;
+}
+
+// CVillager::StartEmbrace plays the kiss animation at +0x3A, its very first
+// act, before a single refusal check runs -- including the stock hunger gate
+// at +0xB2, which is the earliest one of all. CAnimControl::Play only marks
+// the animation pending; the animation system starts it, with its sound,
+// after StartEmbrace returns. So a refusing pair audibly kisses and then
+// argues, and that is base-game behaviour, not something the patcher added.
+//
+// The sound call at +0x1AE is NOT the culprit and is left alone: it already
+// sits after every check, so it never fires on a refusal.
+//
+// Deferring the entry animation was tried and crashed the game. That call is
+// load-bearing: the refusal tail hands both villagers behaviour 137, the
+// embrace behaviour, whose dispatcher entry is StartEmbrace itself, and a
+// pending animation is what stops it being started again immediately. With
+// no animation pending it recursed 1124 frames deep into a stack overflow.
+//
+// So the entry call is left exactly as stock and the kiss is instead undone
+// on the refusal path only: the pre-embrace animation is recorded before the
+// kiss replaces it, and re-asserted at the top of the shared refusal tail,
+// before the behaviour-137 handoff. The kiss is overwritten while still
+// pending, so it never starts and never makes its sound, and an animation
+// remains pending throughout, so the interlock still holds.
+struct SVF2PreEmbraceAnim {
+    CAnimControl *control;
+    int anim;
+    float blend;
+    unsigned char flag;
+    bool valid;
+};
+
+static SVF2PreEmbraceAnim gVF2PreEmbraceAnim = { nullptr, 0, 0.0f, 0, false };
+
+// __fastcall with an unused second parameter stands in for __thiscall: ECX
+// carries the animation control, EDX is ignored, the rest arrive on the
+// stack, and the callee cleans the same 12 bytes CAnimControl::Play does.
+extern "C" void __fastcall VF2SaveThenPlayEmbraceKiss(
+    CAnimControl *control, void *, int anim, bool flag, float blend)
+{
+    if (control) {
+        const unsigned char *fields = (const unsigned char *)control;
+        gVF2PreEmbraceAnim.control = control;
+        gVF2PreEmbraceAnim.anim = *(const int *)(fields + 0x00);
+        gVF2PreEmbraceAnim.blend = *(const float *)(fields + 0x08);
+        gVF2PreEmbraceAnim.flag = *(fields + 0x10);
+        gVF2PreEmbraceAnim.valid = true;
+        control->Play((EAnim)anim, flag, blend);
+    }
+}
+
+extern "C" void __cdecl VF2RestoreEmbraceAnim(void)
+{
+    if (gVF2PreEmbraceAnim.valid && gVF2PreEmbraceAnim.control) {
+        gVF2PreEmbraceAnim.control->Play(
+            (EAnim)gVF2PreEmbraceAnim.anim,
+            gVF2PreEmbraceAnim.flag != 0,
+            gVF2PreEmbraceAnim.blend);
+        gVF2PreEmbraceAnim.valid = false;
+    }
 }
 
 // These replace a 5-byte "push 166h" in place, so they must reproduce
@@ -19395,6 +19471,128 @@ def patch_same_sex_marriage(manifest):
         "stock_off_state": "byte-identical native candidate-gender computation when the flag is zero",
     }
     return
+
+
+def patch_embrace_silent_refusals(manifest):
+    """Undo the kiss animation when the embrace is refused, so it stays silent.
+
+    StartEmbrace plays the kiss animation at +0x3A, before any check runs --
+    earlier than even the stock hunger gate at +0xB2. CAnimControl::Play only
+    marks it pending; the animation system starts it, with its sound, after
+    StartEmbrace returns. So every refusal audibly kisses first. This is
+    base-game behaviour: the entry call and the hunger gate are both stock.
+
+    The sound call at +0x1AE is deliberately untouched -- it already sits
+    after every check and never fires on a refusal.
+
+    Two changes:
+
+    * +0x3B, an existing relocation, is retargeted so the entry call records
+      the animation that was playing before the kiss overwrote it, then
+      performs the real Play. Behaviour is otherwise identical to stock.
+    * +0x2AA, the top of the shared refusal tail, gets a trampoline that
+      re-asserts the recorded animation before the tail hands both villagers
+      behaviour 137. The kiss is overwritten while still pending, so it never
+      starts and never sounds.
+
+    +0x2AA is refusal-only. The success path pushes behaviour 0x166 at +0x290
+    and jumps straight to +0x2E3, past this hook, so an accepted embrace is
+    completely unaffected.
+
+    Keeping an animation pending is essential rather than incidental: the
+    tail's behaviour 137 is the embrace behaviour, dispatched back into
+    StartEmbrace, and a pending animation is what stops it restarting
+    immediately. An earlier attempt that deferred the entry call instead left
+    nothing pending and recursed 1124 frames into a stack overflow.
+    """
+    path = PATCHED / "Villager.obj"
+    obj = CoffObject(path)
+    function_name = "?StartEmbrace@CVillager@@IAEXXZ"
+    function = obj.symbol(function_name)
+    section = obj.section(function.section)
+
+    stock_anim_play = "?Play@CAnimControl@@QAEXW4EAnim@@_NM@Z"
+    entry_sites = []
+    for index in range(section.nreloc):
+        vaddr, symbol_index, _ = struct.unpack_from(
+            "<IIH", obj.buf, section.reloc_ptr + index * 10
+        )
+        if not (function.value <= vaddr < function.value + 0x2F5):
+            continue
+        if obj.symbol_by_index[symbol_index].name == stock_anim_play:
+            entry_sites.append(vaddr - function.value)
+    if entry_sites != [0x3B]:
+        raise RuntimeError(
+            "CVillager::StartEmbrace animation call sites drifted: expected "
+            f"exactly [0x3b], found {[hex(s) for s in entry_sites]}"
+        )
+
+    saver = obj.append_undefined_symbol(EMBRACE_SAVE_ANIM_HELPER_SYMBOL)
+    obj.retarget_relocation(
+        function.section, function.value + 0x3B, saver, IMAGE_REL_I386_REL32
+    )
+
+    # The refusal tail opens with "push 0; push 0; push 867h". A 5-byte jump
+    # covers both pushes and the first byte of the third, so the cave
+    # reproduces all three and resumes at +0x2B3 rather than re-entering the
+    # overwritten region.
+    hook = function.value + 0x2AA
+    raw = section.raw_ptr + hook
+    expected = bytes.fromhex("6A00") + bytes.fromhex("6A00") + bytes.fromhex("6867080000")
+    if bytes(obj.buf[raw:raw + len(expected)]) != expected:
+        raise RuntimeError(
+            "CVillager::StartEmbrace shared refusal tail drifted at +0x2AA"
+        )
+
+    restorer = obj.append_undefined_symbol(EMBRACE_RESTORE_ANIM_HELPER_SYMBOL)
+    cave = section.raw_size
+    payload = bytearray(
+        b"\xE8\0\0\0\0"          # call VF2RestoreEmbraceAnim (cdecl, no args)
+        b"\x6A\x00"              # push 0        ) the three reproduced
+        b"\x6A\x00"              # push 0        ) pushes the trampoline
+        b"\x68\x67\x08\x00\x00"  # push 867h     ) overwrote
+        b"\xE9\0\0\0\0"          # jmp +0x2B3
+    )
+    if len(payload) != 19:
+        raise AssertionError("Silent refusal cave size drifted")
+    struct.pack_into("<i", payload, 15, (function.value + 0x2B3) - (cave + 19))
+
+    obj.insert_section_bytes(section.index, cave, bytes(payload))
+    obj.append_relocation(section.index, cave + 1, restorer, IMAGE_REL_I386_REL32)
+    obj._parse()
+    section = obj.section(function.section)
+    raw = section.raw_ptr + hook
+    obj.buf[raw:raw + 5] = b"\xE9" + struct.pack("<i", cave - (hook + 5))
+
+    obj.write(path)
+    manifest["EmbraceSilentRefusals"] = {
+        "status": "kiss animation undone on refusal",
+        "function": function_name,
+        "entry_call": {
+            "offset": "+0x3B",
+            "from": stock_anim_play,
+            "to": EMBRACE_SAVE_ANIM_HELPER_SYMBOL,
+            "note": "records the pre-kiss animation, then performs the real Play",
+        },
+        "refusal_tail_hook": {
+            "offset": "+0x2AA",
+            "trampoline": hex(cave),
+            "trampoline_size": len(payload),
+            "resume": "+0x2B3",
+            "helper": EMBRACE_RESTORE_ANIM_HELPER_SYMBOL,
+            "reproduced_instructions": "push 0; push 0; push 867h",
+        },
+        "sound_call_untouched": "+0x1AE already sits after every check",
+        "success_path_untouched": (
+            "the accept path pushes behaviour 0x166 at +0x290 and jumps to "
+            "+0x2E3, past this hook"
+        ),
+        "reason": (
+            "the entry animation is played before any check, including the "
+            "stock hunger gate at +0xB2, so refusing pairs kissed audibly "
+            "first -- base-game behaviour, not patcher-introduced"
+        ),
+    }
 
 
 def patch_villager_same_sex_embrace(manifest):
@@ -30531,6 +30729,10 @@ def main():
     # The romantic drop runs CVillager::StartEmbrace, which refuses a
     # same-gender pair before reaching its private-time sequence.
     patch_villager_same_sex_embrace(manifest)
+    # The entry kiss animation is played before any refusal check, so a
+    # refusing pair kissed audibly and then argued. Undo it on the refusal
+    # tail. Must run after the same-sex patch: both open Villager.obj.
+    patch_embrace_silent_refusals(manifest)
     patch_villager_manager_spouse_accessors(manifest)
     patch_marriage_finalization_for_same_sex(manifest)
     # A second, independent site with the identical Matriarch/Patriarch
