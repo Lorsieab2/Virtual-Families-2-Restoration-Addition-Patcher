@@ -324,6 +324,7 @@ SAME_SEX_EMBRACE_HELPER_SYMBOL = "_VF2AllowSameSexEmbrace"
 SAME_SEX_EMBRACE_BEHAVIOR_FIRST_SYMBOL = "_VF2PushEmbraceBehaviorFirst"
 SAME_SEX_EMBRACE_BEHAVIOR_SECOND_SYMBOL = "_VF2PushEmbraceBehaviorSecond"
 SAME_SEX_EMBRACE_ACTIVE_SYMBOL = "_VF2SameSexEmbraceActive"
+EMBRACE_ROLE_HELPER_SYMBOL = "_VF2EmbraceRoleIsFemale"
 SPOUSE_ACCESSOR_MATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingMatriarch"
 SPOUSE_ACCESSOR_PATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingPatriarch"
 MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL = "_VF2ResolveSameSexMarriagePairForFinalization"
@@ -13749,6 +13750,41 @@ extern "C" bool __cdecl VF2SkipSameSexTryToMakeBaby() {
         VF2IsBehaviorSixChildPrivateTimeMarriage();
 }
 
+// CBehavior::GoInHouse -- behaviour 358's action -- splits the two halves of
+// the sequence on one test at +0x081:
+//
+//     cmp dword ptr [edi+6A58h], 1     ; gender
+//     jne -> +0x1FD                    ; not female -> the other role
+//
+// One partner spins, the other produces the roses, and which is which comes
+// from the gender field alone. A same-sex couple therefore takes the SAME
+// branch twice and both do the identical half.
+//
+// For a same-sex couple the role is decided by which partner the villager
+// is instead, so the pair still splits the two halves between them. Every
+// other couple keeps the stock gender answer exactly, including an
+// opposite-sex couple at six children: they have a gender to read, so there
+// is no reason to override it.
+extern "C" int __cdecl VF2EmbraceRoleIsFemale(void *villagerPtr) {
+    if (!villagerPtr) return 0;
+    int gender = *(int *)((unsigned char *)villagerPtr + 0x6A58);
+    int stock = (gender == 1) ? 1 : 0;
+
+    CVillager *first;
+    CVillager *second;
+    if (!VF2MarriagePair(first, second)) return stock;
+
+    int firstGender = *(int *)((unsigned char *)first + 0x6A58);
+    int secondGender = *(int *)((unsigned char *)second + 0x6A58);
+    if (firstGender != secondGender) return stock;
+    if (!VF2SameSexMarriageToggleActive()) return stock;
+
+    // Same-sex pair: hand the two halves out by partner slot.
+    if (villagerPtr == (void *)first) return 1;
+    if (villagerPtr == (void *)second) return 0;
+    return stock;
+}
+
 extern "C" void __cdecl VF2StoreTryForBabyCooldownMaybe(
     void *gameState,
     unsigned int deadline,
@@ -19546,6 +19582,95 @@ def patch_villager_same_sex_embrace(manifest):
             ),
             "sites": refusal_sites,
         },
+    }
+
+
+def patch_embrace_role_split(manifest):
+    """Give a same-sex pair the two different halves of the 358 sequence.
+
+    CBehavior::GoInHouse picks which half a villager performs -- the spin or
+    the roses -- from one test at +0x081:
+
+        +0x081  83 BF 58 6A 00 00 01   cmp dword ptr [edi+6A58h], 1
+        +0x088  0F 85 ...              jne -> +0x1FD
+
+    Both partners run the same behaviour and rely on having different
+    genders to take opposite branches, so a same-sex couple takes the same
+    branch twice and both perform the identical half.
+
+    The 7-byte cmp is replaced with a jump to a cave that asks
+    VF2EmbraceRoleIsFemale instead and leaves ZF set the way the native cmp
+    would have, so the native jne immediately after is untouched and still
+    does the branching. The helper returns the stock gender answer for every
+    couple except a same-sex pair, where it hands the halves out by partner
+    slot.
+
+    The cave restores the flags AFTER popping the caller-saved registers,
+    because pops do not affect flags but the call does -- the cmp is
+    therefore the last thing executed before rejoining.
+    """
+    path = PATCHED / "Behavior.obj"
+    obj = CoffObject(path)
+    function_name = "?GoInHouse@CBehavior@@CAXAAVCVillager@@@Z"
+    function = obj.symbol(function_name)
+    section = obj.section(function.section)
+
+    hook = function.value + 0x081
+    raw = section.raw_ptr + hook
+    expected = bytes.fromhex("83 BF 58 6A 00 00 01")
+    if bytes(obj.buf[raw:raw + 7]) != expected:
+        raise RuntimeError(
+            "CBehavior::GoInHouse gender role test drifted at +0x081: "
+            + bytes(obj.buf[raw:raw + 7]).hex(" ")
+        )
+    if bytes(obj.buf[raw + 7:raw + 9]) != bytes.fromhex("0F85"):
+        raise RuntimeError("CBehavior::GoInHouse role branch drifted at +0x088")
+
+    helper = obj.append_undefined_symbol(EMBRACE_ROLE_HELPER_SYMBOL)
+    cave = section.raw_size
+    payload = bytearray(
+        b"\x51"              # push ecx ) caller-saved across the cdecl call
+        b"\x52"              # push edx )
+        b"\x57"             # push edi   (the villager, the helper's argument)
+        b"\xE8\0\0\0\0"      # call VF2EmbraceRoleIsFemale
+        b"\x83\xC4\x04"      # cdecl cleanup
+        b"\x5A"              # pop edx ) pops do not disturb flags, and the
+        b"\x59"              # pop ecx ) cmp below is what sets them
+        b"\x83\xF8\x01"      # cmp eax, 1   -> ZF exactly as the native cmp
+        b"\xE9\0\0\0\0"      # jmp +0x088, the untouched native jne
+    )
+    if len(payload) != 21:
+        raise AssertionError("Embrace role cave size drifted")
+    struct.pack_into("<i", payload, 17, (function.value + 0x088) - (cave + 21))
+
+    obj.insert_section_bytes(section.index, cave, bytes(payload))
+    obj.append_relocation(section.index, cave + 4, helper, IMAGE_REL_I386_REL32)
+    obj._parse()
+    section = obj.section(function.section)
+    raw = section.raw_ptr + hook
+    obj.buf[raw:raw + 7] = (
+        b"\xE9" + struct.pack("<i", cave - (hook + 5)) + b"\x90\x90"
+    )
+    obj.write(path)
+
+    manifest["EmbraceRoleSplit"] = {
+        "status": "installed",
+        "function": function_name,
+        "hook_offset": "+0x081",
+        "stock_bytes": expected.hex(" "),
+        "trampoline": hex(cave),
+        "trampoline_size": len(payload),
+        "resume": "+0x088 (the native jne, untouched)",
+        "helper": EMBRACE_ROLE_HELPER_SYMBOL,
+        "scope": (
+            "same-sex pair only; every other couple gets the stock gender "
+            "answer, so their two halves are unchanged"
+        ),
+        "reason": (
+            "both partners run behaviour 358 and rely on differing genders "
+            "to take opposite branches, so a same-sex pair performed the "
+            "same half twice"
+        ),
     }
 
 
@@ -30506,6 +30631,8 @@ def main():
         # A couple at six children takes the ordinary romantic path instead
         # of refusing; the behaviour is relabelled rather than replaced.
         patch_six_child_private_time(manifest)
+        # Same-sex partners take the two different halves of the sequence.
+        patch_embrace_role_split(manifest)
         manifest["BehaviorPatchesGate"] = {
             "enabled": True,
             "environment": "VF2_ENABLE_BEHAVIOR_PATCHES",
