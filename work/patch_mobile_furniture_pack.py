@@ -324,8 +324,6 @@ SAME_SEX_EMBRACE_HELPER_SYMBOL = "_VF2AllowSameSexEmbrace"
 SAME_SEX_EMBRACE_BEHAVIOR_FIRST_SYMBOL = "_VF2PushEmbraceBehaviorFirst"
 SAME_SEX_EMBRACE_BEHAVIOR_SECOND_SYMBOL = "_VF2PushEmbraceBehaviorSecond"
 SAME_SEX_EMBRACE_ACTIVE_SYMBOL = "_VF2SameSexEmbraceActive"
-EMBRACE_DEFER_KISS_HELPER_SYMBOL = "@VF2DeferEmbraceKiss@20"
-EMBRACE_FLUSH_KISS_HELPER_SYMBOL = "@VF2PlayEmbraceKissThenSound@12"
 SPOUSE_ACCESSOR_MATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingMatriarch"
 SPOUSE_ACCESSOR_PATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingPatriarch"
 MARRIAGE_FINALIZATION_PAIR_HELPER_SYMBOL = "_VF2ResolveSameSexMarriagePairForFinalization"
@@ -13273,18 +13271,6 @@ public:
 
 extern CSound Sound;
 
-enum EAnim {
-    eAnimDummy = 0
-};
-
-// Declared so MSVC emits a reference to the stock
-// ?Play@CAnimControl@@QAEXW4EAnim@@_NM@Z, which the deferred embrace kiss
-// calls once the embrace is committed.
-class CAnimControl {
-public:
-    void Play(EAnim anim, bool flag, float blend);
-};
-
 class CTutorialTip {
 public:
     void Queue(StringId stringId, EGameScene scene, bool immediate);
@@ -13725,71 +13711,6 @@ extern "C" int __cdecl VF2EmbraceBehaviorFirst() {
 
 extern "C" int __cdecl VF2EmbraceBehaviorSecond() {
     return gVF2SameSexEmbraceActive ? 356 : 358;
-}
-
-// CVillager::StartEmbrace plays the kiss animation as its very first act,
-// at +0x3A, before a single refusal check has run:
-//
-//     +0x01C  push 0 / push 9
-//     +0x020  lea ecx, [edi+6B9Ch]
-//     +0x03A  call CAnimControl::Play      <- kiss animation and its sound
-//     +0x0B2..+0x19B   every refusal check, each jumping to the say tail
-//     +0x1AE  call CSound::Play(1Bh)       <- correctly on the committed path
-//
-// So a pair that goes on to argue has already leaned in and kissed audibly.
-// The sound at +0x1AE was never the problem; it is already gated. Skipping
-// individual refusals cannot fix this, because the animation fires before
-// any of them are evaluated -- the fix has to be to not start the animation
-// until the embrace is actually committed.
-//
-// Rather than rewrite instructions at either site, both calls are retargeted
-// through their existing relocations: the entry call records its arguments
-// and plays nothing, and the sound call plays the recorded animation first,
-// then the sound. Not one byte of StartEmbrace changes, so there is no
-// possibility of a mis-sized hook clobbering a following instruction.
-//
-// gVF2DeferredEmbraceAnim is only ever written at StartEmbrace's entry and
-// read at the sound call inside that same invocation, so it cannot be read
-// stale. A refusal simply leaves it set and unread until the next entry
-// overwrites it; it is never dereferenced in between.
-struct SVF2DeferredEmbraceAnim {
-    CAnimControl *control;
-    int anim;
-    bool flag;
-    float blend;
-};
-
-static SVF2DeferredEmbraceAnim gVF2DeferredEmbraceAnim = { nullptr, 0, false, 0.0f };
-
-// __fastcall with an unused second parameter is the standard stand-in for a
-// __thiscall taking three stack arguments: ECX carries the animation
-// control, EDX is ignored, the rest arrive on the stack, and the callee
-// cleans all 12 bytes -- exactly what the replaced CAnimControl::Play did.
-extern "C" void __fastcall VF2DeferEmbraceKiss(
-    CAnimControl *control, void *, int anim, bool flag, float blend)
-{
-    gVF2DeferredEmbraceAnim.control = control;
-    gVF2DeferredEmbraceAnim.anim = anim;
-    gVF2DeferredEmbraceAnim.flag = flag;
-    gVF2DeferredEmbraceAnim.blend = blend;
-}
-
-extern "C" void __fastcall VF2PlayEmbraceKissThenSound(
-    CSound *sound, void *, int soundId)
-{
-    if (gVF2DeferredEmbraceAnim.control) {
-        // Replay the exact arguments the native entry call would have used,
-        // rather than hard-coded ones, so this stays correct if the stock
-        // animation id or blend ever differs.
-        gVF2DeferredEmbraceAnim.control->Play(
-            (EAnim)gVF2DeferredEmbraceAnim.anim,
-            gVF2DeferredEmbraceAnim.flag,
-            gVF2DeferredEmbraceAnim.blend);
-        gVF2DeferredEmbraceAnim.control = nullptr;
-    }
-    if (sound) {
-        sound->Play((ESound)soundId);
-    }
 }
 
 // These replace a 5-byte "push 166h" in place, so they must reproduce
@@ -19476,99 +19397,6 @@ def patch_same_sex_marriage(manifest):
     return
 
 
-def patch_embrace_defer_kiss_animation(manifest):
-    """Don't play the kiss animation until the embrace is actually committed.
-
-    StartEmbrace plays it at +0x3A, its very first act, before a single
-    refusal check has run -- so a pair that goes on to argue has already
-    leaned in and kissed audibly. The sound call at +0x1AE was never the
-    problem: it already sits after every check. Suppressing individual
-    refusals cannot fix this either, because the animation fires before any
-    refusal is evaluated.
-
-    Both calls are redirected through their EXISTING relocations rather than
-    by rewriting instructions:
-
-        +0x03B  REL32 -> ?Play@CAnimControl@@QAEXW4EAnim@@_NM@Z
-        +0x1AF  REL32 -> ?Play@CSound@@QAEXW4ESound@@@Z
-
-    The entry call becomes VF2DeferEmbraceKiss, which records its arguments
-    and plays nothing; the sound call becomes VF2PlayEmbraceKissThenSound,
-    which plays the recorded animation and then the sound. Not one byte of
-    StartEmbrace's code changes, so there is no way for a mis-sized hook to
-    clobber a following instruction -- the failure mode that produced the
-    memory corruption in PR #25.
-
-    Both helpers are __fastcall with an unused second parameter, which is the
-    standard stand-in for __thiscall: ECX carries the object, EDX is ignored,
-    remaining arguments arrive on the stack, and the callee cleans exactly
-    what the replaced method cleaned (12 bytes for Play, 4 for the sound).
-
-    This is gender-neutral. Every refusal in StartEmbrace -- illness, age,
-    pregnancy state, both random-chance rolls, and the same-gender branch --
-    now happens silently, for every couple.
-    """
-    path = PATCHED / "Villager.obj"
-    obj = CoffObject(path)
-    function_name = "?StartEmbrace@CVillager@@IAEXXZ"
-    function = obj.symbol(function_name)
-    section = obj.section(function.section)
-
-    expected = {
-        0x03B: ("?Play@CAnimControl@@QAEXW4EAnim@@_NM@Z", EMBRACE_DEFER_KISS_HELPER_SYMBOL),
-        0x1AF: ("?Play@CSound@@QAEXW4ESound@@@Z", EMBRACE_FLUSH_KISS_HELPER_SYMBOL),
-    }
-
-    # Both call sites must be unique within the function, or retargeting one
-    # relocation would silently leave another path playing the stock sound.
-    found = {}
-    for index in range(section.nreloc):
-        vaddr, symbol_index, relocation_type = struct.unpack_from(
-            "<IIH", obj.buf, section.reloc_ptr + index * 10
-        )
-        if not (function.value <= vaddr < function.value + 0x2C8):
-            continue
-        name = obj.symbol_by_index[symbol_index].name
-        for stock_name, _ in expected.values():
-            if name == stock_name:
-                found.setdefault(stock_name, []).append(vaddr - function.value)
-
-    retargeted = []
-    for offset, (stock_name, helper_name) in sorted(expected.items()):
-        sites = found.get(stock_name, [])
-        if sites != [offset]:
-            raise RuntimeError(
-                f"CVillager::StartEmbrace {stock_name} call sites drifted: "
-                f"expected exactly [{offset:#x}], found "
-                f"{[hex(s) for s in sites]}"
-            )
-        helper = obj.append_undefined_symbol(helper_name)
-        obj.retarget_relocation(
-            function.section, function.value + offset, helper, IMAGE_REL_I386_REL32
-        )
-        retargeted.append({
-            "offset": f"+{offset:#05x}",
-            "from": stock_name,
-            "to": helper_name,
-        })
-
-    obj.write(path)
-    manifest["EmbraceDeferKissAnimation"] = {
-        "status": "kiss animation deferred to the committed embrace path",
-        "function": function_name,
-        "retargeted_calls": retargeted,
-        "instruction_bytes_changed": 0,
-        "reason": (
-            "StartEmbrace played the kiss animation at +0x3A before any refusal "
-            "check ran, so refusing pairs kissed audibly and then argued"
-        ),
-        "scope": (
-            "gender-neutral; every StartEmbrace refusal (illness, age, pregnancy, "
-            "both random rolls, same-gender) is now silent"
-        ),
-    }
-
-
 def patch_villager_same_sex_embrace(manifest):
     """Let a married same-sex couple past StartEmbrace's gender refusal.
 
@@ -19650,24 +19478,34 @@ def patch_villager_same_sex_embrace(manifest):
     raw = section.raw_ptr + hook
     obj.buf[raw:raw + 5] = b"\xE9" + struct.pack("<i", cave - (hook + 5))
 
-    # Skip StartEmbrace's two random-chance refusals for the same-sex
-    # couple: message 1846 (mood/food gated) at +0x171 and 1851
-    # (eSayNoClick, "They can't agree it's time to have a baby") at +0x19D.
-    # The caller has already played the kiss sound by the time either
-    # fires, so a refusal reads as the sequence starting and then
-    # aborting, and the 1851 text is nonsense for a same-sex pair. Each
-    # refusal block is "mov esi, <id>; jmp <say>"; the 5-byte mov is
-    # replaced by a jump to a cave that continues past the refusal when
-    # the couple qualifies and otherwise reproduces the mov and the jmp
-    # verbatim. Non-random refusals (age, pregnancy, illness) are
-    # untouched, and opposite-sex couples keep both rolls exactly as stock.
+    # Reword StartEmbrace's baby-specific random refusal for the same-sex
+    # couple. Message 1851 (eSayNoClick) at +0x19D reads "They can't agree
+    # it's time to have a baby.", which is nonsense for a pair that cannot
+    # be trying for one. Message 1846, already used by this same function
+    # for its other random refusal, reads "Too bad! They aren't in the mood.
+    # Try again a bit later." -- correct for any couple.
+    #
+    # ONLY the message id changes. An earlier version of this patch instead
+    # jumped PAST both refusals so the same-sex couple never refused, and
+    # that was the bug behind the reported kiss-sound-then-argue: a refusal
+    # is supposed to end the attempt, and the kiss sound sits at +0x1AE,
+    # AFTER these checks. Forcing the couple past a refusal it had genuinely
+    # rolled carried them into the sound and the rest of the sequence, then
+    # the attempt could still fail further along -- so the sound fired for
+    # an attempt that never should have continued. Natural refusals must
+    # refuse. That is base-game sequencing, and it is restored here: control
+    # flow is byte-for-byte stock, the refusal still jumps to the same
+    # say-and-return tail, and the sound is never reached.
+    #
+    # The other random refusal at +0x171 is left completely alone: its
+    # message is already generic, so it needed nothing.
     refusal_sites = []
-    for refusal_offset, message_id, continue_offset in (
-        (0x171, 1846, 0x17B),
-        (0x19D, 1851, 0x1A7),
+    for refusal_offset, message_id, same_sex_message_id in (
+        (0x19D, 1851, 1846),
     ):
         site = section.raw_ptr + function.value + refusal_offset
         stock_mov = b"\xBE" + struct.pack("<I", message_id)
+        same_sex_mov = b"\xBE" + struct.pack("<I", same_sex_message_id)
         if bytes(obj.buf[site:site + 5]) != stock_mov:
             raise RuntimeError(
                 f"StartEmbrace refusal {message_id} drifted at +{refusal_offset:#x}"
@@ -19682,18 +19520,14 @@ def patch_villager_same_sex_embrace(manifest):
             b"\xE8\0\0\0\0"      # call VF2SameSexEmbraceActive
             b"\x5A"              # pop edx
             b"\x59"              # pop ecx
-            b"\x84\xC0"          # test al, al
-            b"\x74\x05"          # not a same-sex couple -> stock refusal
-            b"\xE9\0\0\0\0"      # qualifies -> continue past the refusal
-            + stock_mov          # mov esi, <id>   (reproduced)
+            + stock_mov          # mov esi, <stock id>  (the default)
+            + b"\x84\xC0"        # test al, al   (mov leaves flags untouched)
+            b"\x74\x05"          # not same-sex -> keep the stock wording
+            + same_sex_mov       # same-sex -> reworded refusal
             + b"\xE9\0\0\0\0"    # jmp say-and-return (reproduced)
         )
         if len(rpayload) != 28:
             raise AssertionError("StartEmbrace refusal cave size drifted")
-        struct.pack_into(
-            "<i", rpayload, 14,
-            (function.value + continue_offset) - (rcave + 18),
-        )
         struct.pack_into("<i", rpayload, 24, say_target - (rcave + 28))
         obj.insert_section_bytes(section.index, rcave, bytes(rpayload))
         obj.append_relocation(section.index, rcave + 3, active, IMAGE_REL_I386_REL32)
@@ -19706,8 +19540,9 @@ def patch_villager_same_sex_embrace(manifest):
         )
         refusal_sites.append({
             "offset": hex(refusal_offset),
-            "message": message_id,
-            "continue": hex(continue_offset),
+            "stock_message": message_id,
+            "same_sex_message": same_sex_message_id,
+            "control_flow": "unchanged; the refusal still ends the attempt",
             "trampoline": hex(rcave),
         })
 
@@ -19778,18 +19613,26 @@ def patch_villager_same_sex_embrace(manifest):
             ),
             "sites": behavior_sites,
         },
-        "random_refusals_bypassed": {
+        "random_refusal_reworded": {
             "reason": (
-                "the caller plays the kiss sound before these fire, so a "
-                "random refusal reads as the sequence starting then "
-                "aborting; message 1851 (eSayNoClick, 'They can't agree "
-                "it's time to have a baby') is also nonsense for a "
-                "same-sex pair"
+                "message 1851 (eSayNoClick) reads \"They can't agree it's "
+                "time to have a baby.\", which is nonsense for a pair that "
+                "cannot be trying for one; 1846, already used by this same "
+                "function, reads \"Too bad! They aren't in the mood. Try "
+                "again a bit later.\" and fits any couple"
             ),
             "scope": (
-                "same-sex couple only; non-random refusals (age, pregnancy, "
-                "illness) still apply and opposite-sex couples keep both "
-                "rolls exactly as stock"
+                "wording only; control flow is byte-for-byte stock and the "
+                "refusal still ends the attempt, for every couple"
+            ),
+            "supersedes": (
+                "an earlier version jumped past both random refusals so the "
+                "same-sex couple never refused. The kiss sound is played at "
+                "+0x1AE, AFTER these checks, so forcing a couple past a "
+                "refusal they had genuinely rolled carried them into the "
+                "sound and the rest of the sequence, where the attempt "
+                "could still fail later -- the reported "
+                "kiss-sound-then-argue. Natural refusals must refuse."
             ),
             "sites": refusal_sites,
         },
@@ -30688,11 +30531,6 @@ def main():
     # The romantic drop runs CVillager::StartEmbrace, which refuses a
     # same-gender pair before reaching its private-time sequence.
     patch_villager_same_sex_embrace(manifest)
-    # StartEmbrace plays the kiss animation before any refusal is evaluated,
-    # so a refusing pair kissed audibly and then argued. Defer it to the
-    # committed path. Runs after the same-sex patch because both open
-    # Villager.obj and this one must see that file's final relocation table.
-    patch_embrace_defer_kiss_animation(manifest)
     patch_villager_manager_spouse_accessors(manifest)
     patch_marriage_finalization_for_same_sex(manifest)
     # A second, independent site with the identical Matriarch/Patriarch

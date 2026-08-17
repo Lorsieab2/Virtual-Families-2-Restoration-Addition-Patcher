@@ -6835,56 +6835,45 @@ class VF3TVAnimationContractTests(unittest.TestCase):
         )
 
 
-class EmbraceKissAnimationDeferralTests(unittest.TestCase):
-    """The kiss animation must not play before the refusal checks run.
+class EmbraceRefusalWordingTests(unittest.TestCase):
+    """A refusal must still refuse; only its wording may change.
 
-    StartEmbrace played it at +0x3A, its very first act, so a pair that went
-    on to argue had already leaned in and kissed audibly. The sound call at
-    +0x1AE was never at fault -- it already sits after every check -- and
-    suppressing individual refusals could not fix it, because the animation
-    fires before any refusal is evaluated.
+    An earlier version jumped PAST StartEmbrace's random refusals so a
+    same-sex couple never refused. That caused the reported
+    kiss-sound-then-argue: the kiss sound is played at +0x1AE, AFTER these
+    checks, so forcing a couple past a refusal it had genuinely rolled
+    carried them into the sound and the rest of the sequence, where the
+    attempt could still fail later. A natural refusal ends the attempt --
+    that is base-game sequencing.
     """
 
-    def _patched(self, temp_root):
-        for filename in ("Villager.obj",):
+    def _patch(self, temp_root):
+        for filename in ("Villager.obj", "VillagerManager.obj", "theMainScene.obj"):
             shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
         old = patcher.PATCHED
         patcher.PATCHED = temp_root
         try:
             manifest = {}
-            patcher.patch_embrace_defer_kiss_animation(manifest)
+            patcher.patch_villager_same_sex_embrace(manifest)
             return manifest, CoffObject(temp_root / "Villager.obj")
         finally:
             patcher.PATCHED = old
 
-    def _relocs(self, obj):
-        function = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
-        section = obj.section(function.section)
-        out = {}
-        for index in range(section.nreloc):
-            vaddr, symbol_index, _ = struct.unpack_from(
-                "<IIH", obj.buf, section.reloc_ptr + index * 10
-            )
-            if function.value <= vaddr < function.value + 0x2C8:
-                out[vaddr - function.value] = obj.symbol_by_index[symbol_index].name
-        return out
-
-    def test_both_calls_are_retargeted_to_the_deferring_helpers(self):
+    def test_only_the_baby_specific_message_is_reworded(self):
         with tempfile.TemporaryDirectory() as tmp:
-            manifest, obj = self._patched(Path(tmp))
-            relocs = self._relocs(obj)
-            self.assertEqual(relocs[0x03B], patcher.EMBRACE_DEFER_KISS_HELPER_SYMBOL)
-            self.assertEqual(relocs[0x1AF], patcher.EMBRACE_FLUSH_KISS_HELPER_SYMBOL)
-            self.assertEqual(
-                manifest["EmbraceDeferKissAnimation"]["instruction_bytes_changed"], 0
-            )
+            manifest, _ = self._patch(Path(tmp))
+            sites = manifest["SameSexEmbrace"]["random_refusal_reworded"]["sites"]
+            self.assertEqual(len(sites), 1, "only the 1851 refusal needs rewording")
+            site = sites[0]
+            self.assertEqual(site["offset"], hex(0x19D))
+            self.assertEqual(site["stock_message"], 1851)
+            self.assertEqual(site["same_sex_message"], 1846)
 
-    def test_no_instruction_byte_of_start_embrace_changes(self):
-        # The whole point of routing through relocations is that a mis-sized
-        # hook cannot clobber a following instruction -- the failure mode that
-        # produced the memory corruption in PR #25.
+    def test_the_other_random_refusal_is_left_completely_stock(self):
+        # +0x171 already uses the generic "aren't in the mood" wording, so it
+        # needs no patch at all.
         with tempfile.TemporaryDirectory() as tmp:
-            _, obj = self._patched(Path(tmp))
+            _, obj = self._patch(Path(tmp))
             pristine = CoffObject(patcher.SRC_OBJS / "Villager.obj")
             a = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
             sa = obj.section(a.section)
@@ -6893,54 +6882,40 @@ class EmbraceKissAnimationDeferralTests(unittest.TestCase):
             sb = pristine.section(b.section)
             db = bytes(pristine.buf[sb.raw_ptr:sb.raw_ptr + sb.raw_size])
             self.assertEqual(
-                da[a.value:a.value + 0x2C8],
-                db[b.value:b.value + 0x2C8],
+                da[a.value + 0x171:a.value + 0x176],
+                db[b.value + 0x171:b.value + 0x176],
             )
 
-    def test_rejects_a_second_sound_call_site(self):
-        # If a future build gains another CSound::Play in StartEmbrace,
-        # retargeting only the known one would leave a path that still plays
-        # the stock sound on a refusal, so the patch must refuse to proceed.
+    def test_the_cave_never_skips_the_refusal(self):
+        # The cave must fall through to the say-and-return tail on BOTH
+        # paths. If it ever regains a branch to the continue target, the
+        # couple resumes an attempt they refused and reaches the sound.
         with tempfile.TemporaryDirectory() as tmp:
-            temp_root = Path(tmp)
-            shutil.copy2(patcher.SRC_OBJS / "Villager.obj", temp_root / "Villager.obj")
-            obj = CoffObject(temp_root / "Villager.obj")
+            manifest, obj = self._patch(Path(tmp))
+            site = manifest["SameSexEmbrace"]["random_refusal_reworded"]["sites"][0]
+            self.assertEqual(
+                site["control_flow"],
+                "unchanged; the refusal still ends the attempt",
+            )
             function = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
             section = obj.section(function.section)
-            stock = None
-            for index in range(section.nreloc):
-                vaddr, symbol_index, _ = struct.unpack_from(
-                    "<IIH", obj.buf, section.reloc_ptr + index * 10
-                )
-                if vaddr == function.value + 0x1AF:
-                    stock = symbol_index
-            self.assertIsNotNone(stock)
-            obj.append_relocation(
-                function.section,
-                function.value + 0x100,
-                stock,
-                patcher.IMAGE_REL_I386_REL32,
+            data = bytes(obj.buf[section.raw_ptr:section.raw_ptr + section.raw_size])
+            cave = int(site["trampoline"], 16)
+            body = data[cave:cave + 28]
+            # Exactly one jump, at the very end, into the say tail.
+            self.assertEqual(body.count(b"\xE9"), 1)
+            self.assertEqual(body[23], 0xE9)
+            target = struct.unpack_from("<i", body, 24)[0] + cave + 28
+            continue_target = function.value + 0x1A7
+            self.assertNotEqual(
+                target, continue_target,
+                "the cave must not resume the sequence after a refusal",
             )
-            obj.write(temp_root / "Villager.obj")
-
-            old = patcher.PATCHED
-            patcher.PATCHED = temp_root
-            try:
-                with self.assertRaises(RuntimeError) as caught:
-                    patcher.patch_embrace_defer_kiss_animation({})
-                self.assertIn("call sites drifted", str(caught.exception))
-            finally:
-                patcher.PATCHED = old
-
-    def test_helpers_replay_the_recorded_arguments(self):
-        source = Path(patcher.__file__).read_text(encoding="utf-8")
-        self.assertIn("extern \"C\" void __fastcall VF2DeferEmbraceKiss(", source)
-        self.assertIn("extern \"C\" void __fastcall VF2PlayEmbraceKissThenSound(", source)
-        # Replaying the recorded arguments rather than hard-coded ones keeps
-        # this correct if the stock animation id or blend ever differs.
-        self.assertIn("(EAnim)gVF2DeferredEmbraceAnim.anim", source)
-        self.assertIn("gVF2DeferredEmbraceAnim.blend", source)
-        self.assertIn("gVF2DeferredEmbraceAnim.control = nullptr;", source)
+            # Both branches select a message, then share the one jump.
+            self.assertEqual(body[9], 0xBE)
+            self.assertEqual(struct.unpack_from("<I", body, 10)[0], 1851)
+            self.assertEqual(body[18], 0xBE)
+            self.assertEqual(struct.unpack_from("<I", body, 19)[0], 1846)
 
 
 class VF3TVSourceAssetProvenanceTests(unittest.TestCase):
