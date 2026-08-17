@@ -6835,6 +6835,114 @@ class VF3TVAnimationContractTests(unittest.TestCase):
         )
 
 
+class EmbraceKissAnimationDeferralTests(unittest.TestCase):
+    """The kiss animation must not play before the refusal checks run.
+
+    StartEmbrace played it at +0x3A, its very first act, so a pair that went
+    on to argue had already leaned in and kissed audibly. The sound call at
+    +0x1AE was never at fault -- it already sits after every check -- and
+    suppressing individual refusals could not fix it, because the animation
+    fires before any refusal is evaluated.
+    """
+
+    def _patched(self, temp_root):
+        for filename in ("Villager.obj",):
+            shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+        old = patcher.PATCHED
+        patcher.PATCHED = temp_root
+        try:
+            manifest = {}
+            patcher.patch_embrace_defer_kiss_animation(manifest)
+            return manifest, CoffObject(temp_root / "Villager.obj")
+        finally:
+            patcher.PATCHED = old
+
+    def _relocs(self, obj):
+        function = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
+        section = obj.section(function.section)
+        out = {}
+        for index in range(section.nreloc):
+            vaddr, symbol_index, _ = struct.unpack_from(
+                "<IIH", obj.buf, section.reloc_ptr + index * 10
+            )
+            if function.value <= vaddr < function.value + 0x2C8:
+                out[vaddr - function.value] = obj.symbol_by_index[symbol_index].name
+        return out
+
+    def test_both_calls_are_retargeted_to_the_deferring_helpers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, obj = self._patched(Path(tmp))
+            relocs = self._relocs(obj)
+            self.assertEqual(relocs[0x03B], patcher.EMBRACE_DEFER_KISS_HELPER_SYMBOL)
+            self.assertEqual(relocs[0x1AF], patcher.EMBRACE_FLUSH_KISS_HELPER_SYMBOL)
+            self.assertEqual(
+                manifest["EmbraceDeferKissAnimation"]["instruction_bytes_changed"], 0
+            )
+
+    def test_no_instruction_byte_of_start_embrace_changes(self):
+        # The whole point of routing through relocations is that a mis-sized
+        # hook cannot clobber a following instruction -- the failure mode that
+        # produced the memory corruption in PR #25.
+        with tempfile.TemporaryDirectory() as tmp:
+            _, obj = self._patched(Path(tmp))
+            pristine = CoffObject(patcher.SRC_OBJS / "Villager.obj")
+            a = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
+            sa = obj.section(a.section)
+            da = bytes(obj.buf[sa.raw_ptr:sa.raw_ptr + sa.raw_size])
+            b = pristine.symbol("?StartEmbrace@CVillager@@IAEXXZ")
+            sb = pristine.section(b.section)
+            db = bytes(pristine.buf[sb.raw_ptr:sb.raw_ptr + sb.raw_size])
+            self.assertEqual(
+                da[a.value:a.value + 0x2C8],
+                db[b.value:b.value + 0x2C8],
+            )
+
+    def test_rejects_a_second_sound_call_site(self):
+        # If a future build gains another CSound::Play in StartEmbrace,
+        # retargeting only the known one would leave a path that still plays
+        # the stock sound on a refusal, so the patch must refuse to proceed.
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = Path(tmp)
+            shutil.copy2(patcher.SRC_OBJS / "Villager.obj", temp_root / "Villager.obj")
+            obj = CoffObject(temp_root / "Villager.obj")
+            function = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
+            section = obj.section(function.section)
+            stock = None
+            for index in range(section.nreloc):
+                vaddr, symbol_index, _ = struct.unpack_from(
+                    "<IIH", obj.buf, section.reloc_ptr + index * 10
+                )
+                if vaddr == function.value + 0x1AF:
+                    stock = symbol_index
+            self.assertIsNotNone(stock)
+            obj.append_relocation(
+                function.section,
+                function.value + 0x100,
+                stock,
+                patcher.IMAGE_REL_I386_REL32,
+            )
+            obj.write(temp_root / "Villager.obj")
+
+            old = patcher.PATCHED
+            patcher.PATCHED = temp_root
+            try:
+                with self.assertRaises(RuntimeError) as caught:
+                    patcher.patch_embrace_defer_kiss_animation({})
+                self.assertIn("call sites drifted", str(caught.exception))
+            finally:
+                patcher.PATCHED = old
+
+    def test_helpers_replay_the_recorded_arguments(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn("extern \"C\" void __fastcall VF2DeferEmbraceKiss(", source)
+        self.assertIn("extern \"C\" void __fastcall VF2PlayEmbraceKissThenSound(", source)
+        # Replaying the recorded arguments rather than hard-coded ones keeps
+        # this correct if the stock animation id or blend ever differs.
+        self.assertIn("(EAnim)gVF2DeferredEmbraceAnim.anim", source)
+        self.assertIn("gVF2DeferredEmbraceAnim.blend", source)
+        self.assertIn("gVF2DeferredEmbraceAnim.control = nullptr;", source)
+
+
 class VF3TVSourceAssetProvenanceTests(unittest.TestCase):
     """Every VF3 TV must build from a checked-in source, not from the last release.
 
