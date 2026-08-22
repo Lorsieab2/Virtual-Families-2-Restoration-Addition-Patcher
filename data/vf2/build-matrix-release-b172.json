@@ -1,0 +1,27 @@
+{
+  "release_name": "B172",
+  "output_prefix": "VF2-B172-matrix-20260822",
+  "exe_name": "Virtual Families 2 - B172.exe",
+  "note": "Force Successful Pregnancy is no longer spent by an unlucky roll: while the one-shot is armed, StartEmbrace's two random refusals (1846 'not in the mood' and 1851 'can't agree') are skipped. Every other refusal reason -- hunger, under-age, pregnant/busy, illness, same gender, and the couch/bed check -- stays byte-for-byte base-game. Otherwise identical to B171.",
+  "seeds": {
+    "behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-behavior_patches",
+    "cheat_upgrades": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-cheat_upgrades",
+    "cheat_upgrades_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-cheat_upgrades_behavior_patches",
+    "cheat_upgrades_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-cheat_upgrades_holiday_ornaments",
+    "cheat_upgrades_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-cheat_upgrades_holiday_ornaments_behavior_patches",
+    "cheat_upgrades_mobile_renovations": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-cheat_upgrades_mobile_renovations",
+    "core": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-core",
+    "final_all_enabled": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-final_all_enabled",
+    "holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-holiday_ornaments",
+    "holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-holiday_ornaments_behavior_patches",
+    "island_events": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-island_events",
+    "island_events_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-island_events_behavior_patches",
+    "island_events_cheat_upgrades": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-island_events_cheat_upgrades",
+    "island_events_cheat_upgrades_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-island_events_cheat_upgrades_behavior_patches",
+    "island_events_cheat_upgrades_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-island_events_cheat_upgrades_holiday_ornaments",
+    "island_events_cheat_upgrades_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-island_events_cheat_upgrades_holiday_ornaments_behavior_patches",
+    "island_events_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-island_events_holiday_ornaments",
+    "island_events_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-island_events_holiday_ornaments_behavior_patches",
+    "mobile_renovations": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B171-matrix-20260817-mobile_renovations"
+  }
+}
