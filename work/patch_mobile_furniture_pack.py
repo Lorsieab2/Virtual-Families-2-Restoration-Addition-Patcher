@@ -324,6 +324,7 @@ SAME_SEX_EMBRACE_HELPER_SYMBOL = "_VF2AllowSameSexEmbrace"
 SAME_SEX_EMBRACE_BEHAVIOR_FIRST_SYMBOL = "_VF2PushEmbraceBehaviorFirst"
 SAME_SEX_EMBRACE_BEHAVIOR_SECOND_SYMBOL = "_VF2PushEmbraceBehaviorSecond"
 SAME_SEX_EMBRACE_ACTIVE_SYMBOL = "_VF2SameSexEmbraceActive"
+FORCE_PREGNANCY_ACTIVE_SYMBOL = "_VF2ForceSuccessfulPregnancyArmed"
 EMBRACE_ROLE_HELPER_SYMBOL = "_VF2EmbraceRoleIsFemale"
 SPOUSE_ACCESSOR_MATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingMatriarch"
 SPOUSE_ACCESSOR_PATRIARCH_HELPER_SYMBOL = "_VF2ResolveMissingPatriarch"
@@ -13677,6 +13678,24 @@ static bool VF2IsBehaviorSixChildPrivateTimeMarriage() {
 
     int firstGender = *(int *)((unsigned char *)first + 0x6A58);
     int secondGender = *(int *)((unsigned char *)second + 0x6A58);
+    // Opposite-sex only, and deliberately so.
+    //
+    // This was briefly made gender-agnostic on the theory that it denied the
+    // capacity route to a same-sex couple who had adopted six children. It
+    // does not: VF2SkipSameSexTryToMakeBaby's first operand is
+    // VF2IsSameSexMarriage(), which is true for ANY same-sex married pair
+    // while the toggle is active, at any child count. So an active same-sex
+    // couple already qualifies and this predicate never needs to speak for
+    // them.
+    //
+    // Dropping the guard only changed the DISABLED case. VF2MarriagePair
+    // still resolves a persisted same-sex pair after the toggle is turned
+    // off via buy-again, so this would have returned true while
+    // VF2IsSameSexMarriage() returned false -- leaving the label, the
+    // pregnancy skip and the cooldown suppression applying same-sex
+    // behaviour that the drop classifier, the role split and the
+    // StartEmbrace bypass all correctly refuse. An inconsistent half-on
+    // state, in exchange for nothing.
     if (firstGender == secondGender) return false;
 
     // CFamilyTree::EmptyOffspringSlots and AddOffspring use this native
@@ -13801,6 +13820,23 @@ extern "C" __declspec(naked) void __cdecl VF2PushEmbraceBehaviorSecond() {
         push eax
         jmp edx
     }
+}
+
+// True while the one-shot Force Successful Pregnancy upgrade is armed.
+//
+// While armed, the two random rolls in StartEmbrace are skipped so an
+// unlucky result cannot spend the one-shot: 1846 "not in the mood" and 1851
+// "can't agree". Both are pure GetRandom decisions about whether the couple
+// feels like it.
+//
+// Every other refusal is left exactly as the base game has it -- hunger,
+// under-age, pregnant/busy, illness, same gender, and the couch/bed check.
+// Declared here because its definition appears later in this same
+// translation unit.
+static unsigned int &VF2PersistentCheatAndPurchaseMask();
+
+extern "C" bool __cdecl VF2ForceSuccessfulPregnancyArmed() {
+    return (VF2PersistentCheatAndPurchaseMask() & 0x4u) != 0;
 }
 
 extern "C" bool __cdecl VF2SkipSameSexTryToMakeBaby() {
@@ -19489,6 +19525,127 @@ def patch_same_sex_marriage(manifest):
         "stock_off_state": "byte-identical native candidate-gender computation when the flag is zero",
     }
     return
+
+
+def patch_force_pregnancy_skips_refusals(manifest):
+    """While Force Successful Pregnancy is armed, don't let a mood roll refuse.
+
+    The upgrade is a one-shot: the player arms it expecting the next attempt
+    to work. StartEmbrace can still refuse for reasons that have nothing to do
+    with whether a pregnancy would succeed, so the armed shot gets spent
+    re-dropping the couple until the dice cooperate.
+
+    Exactly two refusals are skipped while armed -- the two random rolls,
+    and nothing else. Both share one shape: a 5-byte "mov esi, <StringId>"
+    followed by a jump to the shared say-and-return tail, each reached from
+    exactly one gate, so each has a single unambiguous resume point:
+
+        +0x171  1846 "not in the mood"  gate +0x16F je  -> resume +0x17B
+        +0x19D  1851 "can't agree"      gate +0x19B jge -> resume +0x1A7
+
+    These two are pure dice. The gate above each one calls GetRandom and
+    refuses on an unlucky result, so skipping it takes the very branch a
+    luckier roll would have taken -- no state is skipped, because the native
+    code had not yet done anything different.
+
+    Each mov becomes a jump to a cave that asks the helper and either
+    continues at that gate's own success target or reproduces the mov and the
+    jump verbatim. Nothing structural is bypassed: the couple takes the exact
+    branch a luckier roll would have taken, so there is no state the native
+    code has not already set up.
+
+    Every other refusal stays byte-for-byte base-game:
+
+      1857 too hungry -- a real need, not a mood.
+      1853 under-age  -- would put a child into the routine.
+      1849 pregnant/busy -- risks a second impregnation.
+      1847 illness    -- also reached from two different gates converging on
+                         one target, so a cave there would have no single
+                         resume point to return to.
+      1850 same gender -- the same-sex toggle's business, not this one's.
+      "they need a couch or a bed" -- the sequence genuinely needs furniture
+                         to link to.
+
+    When the upgrade is not armed every one of these paths is byte-for-byte
+    stock, because the cave falls through to the reproduced instructions.
+    """
+    path = PATCHED / "Villager.obj"
+    obj = CoffObject(path)
+    function_name = "?StartEmbrace@CVillager@@IAEXXZ"
+    function = obj.symbol(function_name)
+
+    sites = []
+    for refusal_offset, message_id, resume_offset in (
+        (0x171, 1846, 0x17B),
+        (0x19D, 1851, 0x1A7),
+    ):
+        section = obj.section(function.section)
+        site = section.raw_ptr + function.value + refusal_offset
+        stock_mov = b"\xBE" + struct.pack("<I", message_id)
+        if bytes(obj.buf[site:site + 5]) != stock_mov:
+            raise RuntimeError(
+                f"StartEmbrace refusal {message_id} drifted at +{refusal_offset:#x}"
+            )
+        if obj.buf[site + 5] != 0xE9:
+            raise RuntimeError(
+                f"StartEmbrace refusal {message_id} is not followed by a jmp "
+                f"at +{refusal_offset:#x}"
+            )
+        jmp_rel = struct.unpack_from("<i", bytes(obj.buf[site + 6:site + 10]), 0)[0]
+        say_target = function.value + refusal_offset + 10 + jmp_rel
+
+        armed = obj.append_undefined_symbol(FORCE_PREGNANCY_ACTIVE_SYMBOL)
+        cave = section.raw_size
+        payload = bytearray(
+            b"\x51"                # push ecx ) caller-saved across the cdecl
+            b"\x52"                # push edx ) helper call
+            b"\xE8\0\0\0\0"        # call VF2ForceSuccessfulPregnancyArmed
+            b"\x5A"                # pop edx
+            b"\x59"                # pop ecx
+            b"\x84\xC0"            # test al, al
+            b"\x74\x05"            # not armed -> stock refusal
+            b"\xE9\0\0\0\0"        # armed -> this gate's own success target
+            + stock_mov            # mov esi, <StringId>   (reproduced)
+            + b"\xE9\0\0\0\0"      # jmp say-and-return    (reproduced)
+        )
+        if len(payload) != 28:
+            raise AssertionError("Force-pregnancy refusal cave size drifted")
+        struct.pack_into(
+            "<i", payload, 14,
+            (function.value + resume_offset) - (cave + 18),
+        )
+        struct.pack_into("<i", payload, 24, say_target - (cave + 28))
+
+        obj.insert_section_bytes(section.index, cave, bytes(payload))
+        obj.append_relocation(section.index, cave + 3, armed, IMAGE_REL_I386_REL32)
+        obj._parse()
+        section = obj.section(function.section)
+        site = section.raw_ptr + function.value + refusal_offset
+        obj.buf[site:site + 5] = (
+            b"\xE9"
+            + struct.pack("<i", cave - (function.value + refusal_offset + 5))
+        )
+        sites.append({
+            "offset": hex(refusal_offset),
+            "message": message_id,
+            "resume": hex(resume_offset),
+            "trampoline": hex(cave),
+        })
+
+    obj.write(path)
+    manifest["ForcePregnancySkipsRefusals"] = {
+        "status": "installed",
+        "function": function_name,
+        "armed_by": "persistent cheat mask bit 0x4 (Force Successful Pregnancy)",
+        "sites": sites,
+        "skipped": "1846 not in the mood, 1851 can't agree -- the two random rolls only",
+        "not_skipped": (
+            "everything else is base-game: 1857 too hungry, 1853 under-age, "
+            "1849 pregnant/busy, 1847 illness, 1850 same gender, and the "
+            "couch/bed furniture check"
+        ),
+        "when_disarmed": "every path is byte-for-byte stock",
+    }
 
 
 def patch_villager_same_sex_embrace(manifest):
@@ -30670,6 +30827,10 @@ def main():
     # base-game. The "private adult romantic time" wording is a label
     # variation on 358 itself, not a different sequence.
     patch_villager_same_sex_embrace(manifest)
+    # Force Successful Pregnancy is a one-shot; don't let an unlucky random
+    # roll spend it. Only 1846 and 1851 are skipped; every other refusal
+    # reason stays base-game.
+    patch_force_pregnancy_skips_refusals(manifest)
     patch_villager_manager_spouse_accessors(manifest)
     patch_marriage_finalization_for_same_sex(manifest)
     # A second, independent site with the identical Matriarch/Patriarch
@@ -30717,11 +30878,11 @@ def main():
             "offline_patcher_setting": "behavior_patches",
             "six_child_private_romantic_time": {
                 "enabled": True,
-                "condition": "exact current-generation opposite-sex adult spouse pair with child count >= 6",
+                "condition": "exact current-generation opposite-sex adult spouse pair with child count >= 6; an active same-sex pair is covered at any child count by VF2IsSameSexMarriage()",
                 "child_count_field": "CFamilyTree current record +0x1B4",
-                "native_action": "HandleDropOnVillager +0x26E private-romantic-time sequence",
+                "native_action": "HandleDropOnVillager +0x21A refusal replaced with a jump to +0x256, the target every native gate uses to let the drop proceed",
                 "pregnancy": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate",
-                "argument": "native refusal/argument route is bypassed for this exact spouse pair",
+                "argument": "the native six-child refusal is bypassed for a spouse pair at capacity",
             },
         }
     else:
