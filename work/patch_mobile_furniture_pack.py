@@ -13675,9 +13675,14 @@ static bool VF2IsBehaviorSixChildPrivateTimeMarriage() {
     CVillager *second;
     if (!VF2MarriagePair(first, second)) return false;
 
-    int firstGender = *(int *)((unsigned char *)first + 0x6A58);
-    int secondGender = *(int *)((unsigned char *)second + 0x6A58);
-    if (firstGender == secondGender) return false;
+    // Deliberately gender-agnostic: the rule is "this couple's family is
+    // full", which is true of any married pair at capacity. It used to
+    // refuse same-gender pairs, which denied the six-child route to a
+    // same-sex couple who had ADOPTED six children -- they cannot conceive,
+    // so the one way they reach capacity was the one way this said no.
+    // Same-sex couples still qualify at any child count through
+    // VF2IsSameSexMarriage(); this simply stops the capacity rule from
+    // being the asymmetric one.
 
     // CFamilyTree::EmptyOffspringSlots and AddOffspring use this native
     // current-generation field for the six-child capacity check.
@@ -30717,11 +30722,11 @@ def main():
             "offline_patcher_setting": "behavior_patches",
             "six_child_private_romantic_time": {
                 "enabled": True,
-                "condition": "exact current-generation opposite-sex adult spouse pair with child count >= 6",
+                "condition": "current-generation married spouse pair whose family is full (child count >= 6), either gender combination",
                 "child_count_field": "CFamilyTree current record +0x1B4",
-                "native_action": "HandleDropOnVillager +0x26E private-romantic-time sequence",
+                "native_action": "HandleDropOnVillager +0x21A refusal replaced with a jump to +0x256, the target every native gate uses to let the drop proceed",
                 "pregnancy": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate",
-                "argument": "native refusal/argument route is bypassed for this exact spouse pair",
+                "argument": "the native six-child refusal is bypassed for a spouse pair at capacity",
             },
         }
     else:

@@ -11899,23 +11899,22 @@ class SameSexMarriagePatchTests(unittest.TestCase):
     def test_behavior_patches_six_child_private_time_contract_is_narrow(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         self.assertIn("if (!kVF2IncludeBehaviorGoals) return false;", source)
+        # Gender-agnostic on purpose: the rule is "this family is full",
+        # which is equally true of a same-sex couple who adopted six.
         self.assertIn(
-            "exact current-generation opposite-sex adult spouse pair with child count >= 6",
+            "current-generation married spouse pair whose family is full "
+            "(child count >= 6), either gender combination",
             source,
         )
         self.assertIn('"child_count_field": "CFamilyTree current record +0x1B4"', source)
-        self.assertIn(
-            '"native_action": "HandleDropOnVillager +0x26E private-romantic-time sequence"',
-            source,
-        )
+        self.assertIn('"native_action": "HandleDropOnVillager +0x21A refusal '
+                      'replaced with a jump to +0x256', source)
         self.assertIn(
             '"pregnancy": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate"',
             source,
         )
-        self.assertIn(
-            '"argument": "native refusal/argument route is bypassed for this exact spouse pair"',
-            source,
-        )
+        self.assertIn('"argument": "the native six-child refusal is bypassed '
+                      'for a spouse pair at capacity"', source)
         self.assertIn('"six_child_private_romantic_time": {', source)
         self.assertIn('"enabled": False,', source)
 
