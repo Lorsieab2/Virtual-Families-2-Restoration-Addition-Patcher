@@ -13799,3 +13799,98 @@ class RuntimePayloadContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ForcePregnancyRefusalSkipTests(unittest.TestCase):
+    """Only the two random rolls may be skipped; every other reason is stock.
+
+    The scope here is the whole point. Skipping a structural refusal would
+    let the routine start in a state the native code has not set up --
+    under-age would admit a child, pregnant/busy risks a second
+    impregnation -- so this pins exactly which offsets may move.
+    """
+
+    ONLY_SKIPPABLE = {0x171: 1846, 0x19D: 1851}
+    MUST_STAY_STOCK = {
+        0x0BB: "1857 too hungry",
+        0x297: "1849 pregnant/busy",
+        0x29E: "1853 under-age",
+        0x2A5: "1847 illness",
+    }
+
+    def _patch(self, temp_root):
+        for filename in ("Villager.obj", "VillagerManager.obj", "theMainScene.obj"):
+            shutil.copy2(patcher.SRC_OBJS / filename, temp_root / filename)
+        old = patcher.PATCHED
+        patcher.PATCHED = temp_root
+        try:
+            manifest = {}
+            patcher.patch_force_pregnancy_skips_refusals(manifest)
+            return manifest, CoffObject(temp_root / "Villager.obj")
+        finally:
+            patcher.PATCHED = old
+
+    def test_only_the_two_random_rolls_are_patched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, obj = self._patch(Path(tmp))
+            pristine = CoffObject(patcher.SRC_OBJS / "Villager.obj")
+            a = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
+            sa = obj.section(a.section)
+            da = bytes(obj.buf[sa.raw_ptr:sa.raw_ptr + sa.raw_size])
+            b = pristine.symbol("?StartEmbrace@CVillager@@IAEXXZ")
+            sb = pristine.section(b.section)
+            db = bytes(pristine.buf[sb.raw_ptr:sb.raw_ptr + sb.raw_size])
+
+            for offset, label in self.MUST_STAY_STOCK.items():
+                with self.subTest(refusal=label):
+                    self.assertEqual(
+                        da[a.value + offset:a.value + offset + 5],
+                        db[b.value + offset:b.value + offset + 5],
+                        f"{label} must remain base-game",
+                    )
+            for offset in self.ONLY_SKIPPABLE:
+                with self.subTest(offset=hex(offset)):
+                    self.assertEqual(da[a.value + offset], 0xE9)
+
+            sites = {int(s["offset"], 16): s["message"]
+                     for s in manifest["ForcePregnancySkipsRefusals"]["sites"]}
+            self.assertEqual(sites, self.ONLY_SKIPPABLE)
+
+    def test_each_cave_resumes_at_its_own_gate_target(self):
+        # The two refusals reach different success targets. Sharing one, or
+        # resuming at the wrong gate's, would drop the couple into the middle
+        # of a check they had not passed.
+        expected = {0x171: 0x17B, 0x19D: 0x1A7}
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, obj = self._patch(Path(tmp))
+            function = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
+            section = obj.section(function.section)
+            data = bytes(obj.buf[section.raw_ptr:section.raw_ptr + section.raw_size])
+            for site in manifest["ForcePregnancySkipsRefusals"]["sites"]:
+                offset = int(site["offset"], 16)
+                cave = int(site["trampoline"], 16)
+                resume = struct.unpack_from("<i", data, cave + 14)[0] + cave + 18
+                with self.subTest(offset=site["offset"]):
+                    self.assertEqual(resume - function.value, expected[offset])
+
+    def test_disarmed_path_reproduces_the_stock_refusal(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, obj = self._patch(Path(tmp))
+            function = obj.symbol("?StartEmbrace@CVillager@@IAEXXZ")
+            section = obj.section(function.section)
+            data = bytes(obj.buf[section.raw_ptr:section.raw_ptr + section.raw_size])
+            for site in manifest["ForcePregnancySkipsRefusals"]["sites"]:
+                cave = int(site["trampoline"], 16)
+                # ...mov esi, <StringId> reproduced, then the jump to the tail.
+                self.assertEqual(data[cave + 18], 0xBE)
+                self.assertEqual(
+                    struct.unpack_from("<I", data, cave + 19)[0], site["message"]
+                )
+                self.assertEqual(data[cave + 23], 0xE9)
+
+    def test_helper_reads_the_force_pregnancy_bit(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            'extern "C" bool __cdecl VF2ForceSuccessfulPregnancyArmed()', source
+        )
+        self.assertIn("VF2PersistentCheatAndPurchaseMask() & 0x4u", source)
