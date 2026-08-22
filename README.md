@@ -43,23 +43,30 @@ groups them.
 - **Text fixes** - miscellaneous string corrections.
 - **Add visible mobile version purchases** - Brokerage Account, Food Club, Health Plan, and Lucky Rock rows under Special Upgrades.
 
-**Optional patches** (off by default unless noted):
+**Optional patches.** Release bundles are exported with the all-enabled release
+profile, so several of these arrive **on** when you pick **Defaults** in the GUI
+— including **Cheat Upgrades**. Each is marked below. Uncheck anything you do
+not want and click **Enable/Disable Patches** to rebuild the modded folder
+without it.
+
 
 - **Add mobile furniture behaviors** (on) - ported actions for genuine mobile furniture: weather-aware loungers, the Patio Umbrella and tables, Picnic Table, Birthday furniture, and the Holiday pieces.
 - **Use mobile sound assets** (on) - stages the 67 hash-pinned mobile behavior sounds and repoints the four PC WAV routes that must load OGG.
-- **Add Holiday Ornaments collection** - 12 yard collectibles, six Collections Chest pages, the Ornamentologist and six-family goals, Lucky Rock rarity odds, and The Collector offer/sell handling.
-- **Add mobile-exclusive Island Events** - all 25 authenticated mobile-exclusive Island Event records with their text and choice/result dialogs.
-- **Add mobile room renovations** - 20 verified mobile renovation images (5 Bathroom 1, 5 Bathroom 2, 3 kitchen, 5 office, 2 workshop) at their exact room-map positions.
-- **2nd Bathroom Mobile-Style Renovations** - AI-generated Bathroom 2 art, hand-edited, based on the Bathroom 1 mobile renovations. Labeled with an art warning in the GUI.
+- **Add Holiday Ornaments collection** (on) - 12 yard collectibles, six Collections Chest pages, the Ornamentologist and six-family goals, Lucky Rock rarity odds, and The Collector offer/sell handling.
+- **Add mobile-exclusive Island Events** (on) - all 25 authenticated mobile-exclusive Island Event records with their text and choice/result dialogs.
+- **Add mobile room renovations** (on) - 20 verified mobile renovation images (5 Bathroom 1, 5 Bathroom 2, 3 kitchen, 5 office, 2 workshop) at their exact room-map positions.
+- **2nd Bathroom Mobile-Style Renovations** (on) - AI-generated Bathroom 2 art, hand-edited, based on the Bathroom 1 mobile renovations. Labeled with an art warning in the GUI.
 - **Allow Older Pregnancies** - normal fertility below 50, then a chance that tapers from 10% at 50 to a 0.1% floor at 69+; Next Generation also unlocks at 60 with a surviving child.
 - **Allow Same-Sex Marriage** - flips only the spawned candidate's gender field when the in-game Special Upgrade is on; same-sex spouses keep native private romantic time and never become pregnant.
 - **Older Villager Mortality Curve** - replaces only the annual old-age death roll with a calibrated curve that accelerates past effective age 110. No hard maximum age.
-- **Cheat Upgrades** - the cheat-only executable overlay: money, food, achievement/puzzle/collection, price, and malfunction rows, including Trigger and Fix all house malfunctions.
+- **Cheat Upgrades** (on) - the cheat-only executable overlay: money, food, achievement/puzzle/collection, price, and malfunction rows, including Trigger and Fix all house malfunctions.
 - **No AI Icons** - requires Cheat Upgrades; swaps the late Special Upgrade icons for non-AI artwork.
 - **Virtual Families 3 Furniture**, **Add Custom Couches and LDW Posters**, **Add Invisible Furniture - Visible Graphics** and its **Transparent Graphics** companion, **Invisible Workspace Upgrades**, **Lorsieab2's Custom Map Images**, **Transparent Menu Bar**, **Transparent Store Bar**, **Transparent Decor Tab**, **White Birds**, **Store Scroll Bar**, **Glowing Collectibles**, **Misc Graphics Fixes**, **Add loose optional visual mod graphics**, and **Add optional song mods** - asset and UI mods. Unchecking one and clicking **Enable/Disable Patches** rebuilds the modded folder without it.
 
-Every optional feature is absent when its setting is off, and base-game
-autonomous behavior choices and likelihoods are left alone. Several features are
+Entries marked **(on)** are enabled by the release profile the bundle ships
+with; everything else is off until you tick it. Every optional feature is absent
+when its setting is off, and base-game autonomous behavior choices and
+likelihoods are left alone. Several features are
 shipped with in-game QA still outstanding; `docs/REQUEST_LEDGER.md` records the
 per-request status and `docs/Transparency Log.txt` records the disclosures.
 
