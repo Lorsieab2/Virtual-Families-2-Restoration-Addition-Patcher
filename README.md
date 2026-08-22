@@ -4,6 +4,16 @@ Offline patcher and restoration/addition project for the official Windows versio
 
 Created with Codex AI in collaboration with Lorsieab2. This is a passion project dedicated to improving the *Virtual Families 2* experience. No copyright infringement is intended; please support the original game creators. :)
 
+## Which copy of the game this supports
+
+**This patcher targets the Windows build of *Virtual Families 2* downloaded from Last Day of Work's own website.** That is the only copy it is developed and tested against.
+
+It has **not** been tested against the Steam release, and whether that build matches has not been established. The patcher validates the installation you point it at and refuses to proceed if it does not recognise it, so an unsupported copy should fail safely rather than be corrupted — but nothing is promised beyond the LDW build.
+
+There is also no practical reason to get the game anywhere else: **all of LDW's PC games are free on their own website.** Download it from there and point the patcher at that installation.
+
+
+
 ## Download
 
 Download the newest patcher ZIP from the [official releases page](https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases). Release ZIPs and compiled game payloads are intentionally not committed to the source tree.
