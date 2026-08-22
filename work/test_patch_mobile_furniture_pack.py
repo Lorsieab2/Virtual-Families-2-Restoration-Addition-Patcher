@@ -11899,13 +11899,17 @@ class SameSexMarriagePatchTests(unittest.TestCase):
     def test_behavior_patches_six_child_private_time_contract_is_narrow(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
         self.assertIn("if (!kVF2IncludeBehaviorGoals) return false;", source)
-        # Gender-agnostic on purpose: the rule is "this family is full",
-        # which is equally true of a same-sex couple who adopted six.
+        # Opposite-sex only, on purpose. An active same-sex pair is already
+        # covered at any child count by VF2IsSameSexMarriage(), so dropping
+        # this guard would only make the predicate fire for a persisted
+        # same-sex pair after the toggle is switched off -- half-on
+        # behaviour the rest of the system correctly refuses.
         self.assertIn(
-            "current-generation married spouse pair whose family is full "
-            "(child count >= 6), either gender combination",
+            "exact current-generation opposite-sex adult spouse pair with "
+            "child count >= 6",
             source,
         )
+        self.assertIn("if (firstGender == secondGender) return false;", source)
         self.assertIn('"child_count_field": "CFamilyTree current record +0x1B4"', source)
         self.assertIn('"native_action": "HandleDropOnVillager +0x21A refusal '
                       'replaced with a jump to +0x256', source)

@@ -13676,14 +13676,27 @@ static bool VF2IsBehaviorSixChildPrivateTimeMarriage() {
     CVillager *second;
     if (!VF2MarriagePair(first, second)) return false;
 
-    // Deliberately gender-agnostic: the rule is "this couple's family is
-    // full", which is true of any married pair at capacity. It used to
-    // refuse same-gender pairs, which denied the six-child route to a
-    // same-sex couple who had ADOPTED six children -- they cannot conceive,
-    // so the one way they reach capacity was the one way this said no.
-    // Same-sex couples still qualify at any child count through
-    // VF2IsSameSexMarriage(); this simply stops the capacity rule from
-    // being the asymmetric one.
+    int firstGender = *(int *)((unsigned char *)first + 0x6A58);
+    int secondGender = *(int *)((unsigned char *)second + 0x6A58);
+    // Opposite-sex only, and deliberately so.
+    //
+    // This was briefly made gender-agnostic on the theory that it denied the
+    // capacity route to a same-sex couple who had adopted six children. It
+    // does not: VF2SkipSameSexTryToMakeBaby's first operand is
+    // VF2IsSameSexMarriage(), which is true for ANY same-sex married pair
+    // while the toggle is active, at any child count. So an active same-sex
+    // couple already qualifies and this predicate never needs to speak for
+    // them.
+    //
+    // Dropping the guard only changed the DISABLED case. VF2MarriagePair
+    // still resolves a persisted same-sex pair after the toggle is turned
+    // off via buy-again, so this would have returned true while
+    // VF2IsSameSexMarriage() returned false -- leaving the label, the
+    // pregnancy skip and the cooldown suppression applying same-sex
+    // behaviour that the drop classifier, the role split and the
+    // StartEmbrace bypass all correctly refuse. An inconsistent half-on
+    // state, in exchange for nothing.
+    if (firstGender == secondGender) return false;
 
     // CFamilyTree::EmptyOffspringSlots and AddOffspring use this native
     // current-generation field for the six-child capacity check.
@@ -30865,7 +30878,7 @@ def main():
             "offline_patcher_setting": "behavior_patches",
             "six_child_private_romantic_time": {
                 "enabled": True,
-                "condition": "current-generation married spouse pair whose family is full (child count >= 6), either gender combination",
+                "condition": "exact current-generation opposite-sex adult spouse pair with child count >= 6; an active same-sex pair is covered at any child count by VF2IsSameSexMarriage()",
                 "child_count_field": "CFamilyTree current record +0x1B4",
                 "native_action": "HandleDropOnVillager +0x21A refusal replaced with a jump to +0x256, the target every native gate uses to let the drop proceed",
                 "pregnancy": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate",
