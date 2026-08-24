@@ -8446,11 +8446,34 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("case 0x135:", source)
         self.assertIn("VF2CleanHouse();", source)
         self.assertIn("case 0x136:", source)
-        self.assertIn("itemId == 0x136", source)
+        # The six pregnancy one-shots stay purchasable while armed so a
+        # repurchase reaches the click handler and cancels them; 0x136 used
+        # to report unavailable here, which left no way to turn it back off.
+        self.assertIn(
+            "if (kVF2EnableB150CheatUpgrades && itemId >= 0x136 && itemId <= 0x13B) {{",
+            source,
+        )
         self.assertIn("(VF2PersistentCheatAndPurchaseMask() & 0x4u)", source)
-        self.assertIn("VF2PersistentCheatAndPurchaseMask() |= 0x4;", source)
-        for item_id in range(0x137, 0x13C):
+        self.assertIn(
+            "static void VF2ToggleOneShotUpgrade(unsigned int bit, unsigned int group) {",
+            source,
+        )
+        self.assertIn(
+            "mask = (mask & bit) ? (mask & ~bit) : ((mask & ~group) | bit);", source
+        )
+        # Each row toggles its own bit and clears the rows it is mutually
+        # exclusive with: male/female share 0x18, the litter sizes share
+        # 0xE0, and Force Successful Pregnancy stands alone.
+        for item_id, bit, group in (
+            (0x136, "0x4u", "0x4u"),
+            (0x137, "0x8u", "0x18u"),
+            (0x138, "0x10u", "0x18u"),
+            (0x139, "0x20u", "0xE0u"),
+            (0x13A, "0x40u", "0xE0u"),
+            (0x13B, "0x80u", "0xE0u"),
+        ):
             self.assertIn(f"case 0x{item_id:X}:", source)
+            self.assertIn(f"VF2ToggleOneShotUpgrade({bit}, {group});", source)
 
     def test_inventory_item_info_lock_snapshot_covers_authenticated_native_bounds(self):
         locks = patcher.inventory_item_info_generation_locks()

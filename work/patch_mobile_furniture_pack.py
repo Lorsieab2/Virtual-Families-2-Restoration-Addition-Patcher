@@ -299,6 +299,7 @@ SAME_SEX_MARRIAGE_FLAG_SYMBOL = "_gVF2SameSexMarriage"
 ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL = "@VF2ClassifyRomanticSpouseDrop@12"
 SAME_SEX_TRY_TO_MAKE_BABY_SKIP_HELPER_SYMBOL = "_VF2SkipSameSexTryToMakeBaby"
 ADOPTION_CHOOSER_HELPER_SYMBOL = "_VF2AdoptRandomChildChoice"
+ANTI_SPAM_REMOVE_HELPER_SYMBOL = "_VF2AntiSpamRemoveOnComputer"
 
 MARRIAGE_EMAIL_ITEM_ID = 0x132
 SAME_SEX_MARRIAGE_ITEM_ID = 0x14C
@@ -11819,12 +11820,16 @@ extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
         // VF2ApplyMobileRenovationStyle and perform a zero-price removal.
         return 1;
     }}
-    if (kVF2EnableB150CheatUpgrades && itemId == 0x136 &&
-        (VF2PersistentCheatAndPurchaseMask() & 0x4u)) {{
-        // The checkmark means the one-shot is already armed.  Keep the row
-        // visible but report no available purchase until a successful birth
-        // consumes and clears the flag.
-        return 0;
+    if (kVF2EnableB150CheatUpgrades && itemId >= 0x136 && itemId <= 0x13B) {{
+        // The pregnancy one-shots stay purchasable even while armed, so the
+        // click handler reaches VF2ToggleOneShotUpgrade and can cancel them
+        // -- the same reason the Bathroom 2 styles and mobile renovations
+        // above report availability while active.
+        //
+        // 0x136 used to return 0 here, which showed the checkmark but left
+        // no way to cancel: it clears only when Impregnate succeeds, so
+        // arming it and then changing your mind kept it armed indefinitely.
+        return 1;
     }}
     if (VF2IsReversibleStockUpgrade(itemId)) {{
         // The native list remembers both rows as one-purchase items even
@@ -12474,8 +12479,30 @@ def patch_main_scene_random_tip_click(manifest):
 class CDealerSay {
 public:
     void Say(StringId stringId, int gender);
+    // The native const char* overload, used by the stock "They need a couch
+    // or a bed..." message. Declared so a literal can be shown without
+    // adding a StringId to the runtime table.
+    void Say(const char *message);
 };
 extern CDealerSay DealerSay;
+
+// theMainScene::DispatchRotatingSundry installs Anti-spam Software when the
+// item is dropped on a computer hotspot: it sets gameState+0x6C, tells every
+// villager to react, and says StringId 0x246 "Anti-spam software installed!".
+//
+// Dropping it again while already installed re-ran the same branch, so the
+// upgrade could be bought and applied repeatedly with no way to take it off
+// from the computer. This reports whether the drop should uninstall instead,
+// and does the uninstall and its message when so.
+extern "C" bool __cdecl VF2AntiSpamRemoveOnComputer(void *gameState) {
+    unsigned char *state = (unsigned char *)gameState;
+    if (!state || state[0x6C] == 0) {
+        return false;   // not installed: let the stock install path run
+    }
+    state[0x6C] = 0;
+    DealerSay.Say("Anti-spam software removed!");
+    return true;
+}
 
 extern "C" bool __cdecl VF2TryRandomTipHouseHit(
     void *scene,
@@ -14788,6 +14815,23 @@ extern "C" int __cdecl VF2GetVisibleSpecialUpgradePrice(int itemId) {
     }
 }
 
+// Re-purchasing an armed one-shot cancels it; purchasing a different row in
+// the same mutually-exclusive group switches to that row instead.
+//
+// Without this there was no way to cancel one of these. They clear only when
+// the effect is actually consumed -- Force Successful Pregnancy clears when
+// Impregnate succeeds -- so arming one and then changing your mind left it
+// armed indefinitely, across generations, since the mask lives in a saved
+// Achievement record.
+//
+// `group` is the set of rows that are mutually exclusive with this one:
+// 0x18 for the male/female pair, 0xE0 for singleton/twins/triplets, and just
+// the bit itself for Force Successful Pregnancy, which stands alone.
+static void VF2ToggleOneShotUpgrade(unsigned int bit, unsigned int group) {
+    unsigned int &mask = VF2PersistentCheatAndPurchaseMask();
+    mask = (mask & bit) ? (mask & ~bit) : ((mask & ~group) | bit);
+}
+
 extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     if (VF2ApplyMobileRenovationStyle(itemId)) return;
     switch (itemId) {
@@ -14947,28 +14991,23 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     case 0x135:
         VF2CleanHouse();
         break;
-    case 0x136:
-        VF2PersistentCheatAndPurchaseMask() |= 0x4;
+    case 0x136:  // Force Successful Pregnancy -- stands alone
+        VF2ToggleOneShotUpgrade(0x4u, 0x4u);
         break;
-    case 0x137:
-        VF2PersistentCheatAndPurchaseMask() =
-            (VF2PersistentCheatAndPurchaseMask() & ~0x18u) | 0x8u;
+    case 0x137:  // Next Babies Male
+        VF2ToggleOneShotUpgrade(0x8u, 0x18u);
         break;
-    case 0x138:
-        VF2PersistentCheatAndPurchaseMask() =
-            (VF2PersistentCheatAndPurchaseMask() & ~0x18u) | 0x10u;
+    case 0x138:  // Next Babies Female
+        VF2ToggleOneShotUpgrade(0x10u, 0x18u);
         break;
-    case 0x139:
-        VF2PersistentCheatAndPurchaseMask() =
-            (VF2PersistentCheatAndPurchaseMask() & ~0xE0u) | 0x20u;
+    case 0x139:  // Next Pregnancy Singleton
+        VF2ToggleOneShotUpgrade(0x20u, 0xE0u);
         break;
-    case 0x13A:
-        VF2PersistentCheatAndPurchaseMask() =
-            (VF2PersistentCheatAndPurchaseMask() & ~0xE0u) | 0x40u;
+    case 0x13A:  // Next Pregnancy Twins
+        VF2ToggleOneShotUpgrade(0x40u, 0xE0u);
         break;
-    case 0x13B:
-        VF2PersistentCheatAndPurchaseMask() =
-            (VF2PersistentCheatAndPurchaseMask() & ~0xE0u) | 0x80u;
+    case 0x13B:  // Next Pregnancy Triplets
+        VF2ToggleOneShotUpgrade(0x80u, 0xE0u);
         break;
     case 0x14B:
         if (!VF2DivorceSpouse()) return;
@@ -19527,127 +19566,6 @@ def patch_same_sex_marriage(manifest):
     return
 
 
-def patch_force_pregnancy_skips_refusals(manifest):
-    """While Force Successful Pregnancy is armed, don't let a mood roll refuse.
-
-    The upgrade is a one-shot: the player arms it expecting the next attempt
-    to work. StartEmbrace can still refuse for reasons that have nothing to do
-    with whether a pregnancy would succeed, so the armed shot gets spent
-    re-dropping the couple until the dice cooperate.
-
-    Exactly two refusals are skipped while armed -- the two random rolls,
-    and nothing else. Both share one shape: a 5-byte "mov esi, <StringId>"
-    followed by a jump to the shared say-and-return tail, each reached from
-    exactly one gate, so each has a single unambiguous resume point:
-
-        +0x171  1846 "not in the mood"  gate +0x16F je  -> resume +0x17B
-        +0x19D  1851 "can't agree"      gate +0x19B jge -> resume +0x1A7
-
-    These two are pure dice. The gate above each one calls GetRandom and
-    refuses on an unlucky result, so skipping it takes the very branch a
-    luckier roll would have taken -- no state is skipped, because the native
-    code had not yet done anything different.
-
-    Each mov becomes a jump to a cave that asks the helper and either
-    continues at that gate's own success target or reproduces the mov and the
-    jump verbatim. Nothing structural is bypassed: the couple takes the exact
-    branch a luckier roll would have taken, so there is no state the native
-    code has not already set up.
-
-    Every other refusal stays byte-for-byte base-game:
-
-      1857 too hungry -- a real need, not a mood.
-      1853 under-age  -- would put a child into the routine.
-      1849 pregnant/busy -- risks a second impregnation.
-      1847 illness    -- also reached from two different gates converging on
-                         one target, so a cave there would have no single
-                         resume point to return to.
-      1850 same gender -- the same-sex toggle's business, not this one's.
-      "they need a couch or a bed" -- the sequence genuinely needs furniture
-                         to link to.
-
-    When the upgrade is not armed every one of these paths is byte-for-byte
-    stock, because the cave falls through to the reproduced instructions.
-    """
-    path = PATCHED / "Villager.obj"
-    obj = CoffObject(path)
-    function_name = "?StartEmbrace@CVillager@@IAEXXZ"
-    function = obj.symbol(function_name)
-
-    sites = []
-    for refusal_offset, message_id, resume_offset in (
-        (0x171, 1846, 0x17B),
-        (0x19D, 1851, 0x1A7),
-    ):
-        section = obj.section(function.section)
-        site = section.raw_ptr + function.value + refusal_offset
-        stock_mov = b"\xBE" + struct.pack("<I", message_id)
-        if bytes(obj.buf[site:site + 5]) != stock_mov:
-            raise RuntimeError(
-                f"StartEmbrace refusal {message_id} drifted at +{refusal_offset:#x}"
-            )
-        if obj.buf[site + 5] != 0xE9:
-            raise RuntimeError(
-                f"StartEmbrace refusal {message_id} is not followed by a jmp "
-                f"at +{refusal_offset:#x}"
-            )
-        jmp_rel = struct.unpack_from("<i", bytes(obj.buf[site + 6:site + 10]), 0)[0]
-        say_target = function.value + refusal_offset + 10 + jmp_rel
-
-        armed = obj.append_undefined_symbol(FORCE_PREGNANCY_ACTIVE_SYMBOL)
-        cave = section.raw_size
-        payload = bytearray(
-            b"\x51"                # push ecx ) caller-saved across the cdecl
-            b"\x52"                # push edx ) helper call
-            b"\xE8\0\0\0\0"        # call VF2ForceSuccessfulPregnancyArmed
-            b"\x5A"                # pop edx
-            b"\x59"                # pop ecx
-            b"\x84\xC0"            # test al, al
-            b"\x74\x05"            # not armed -> stock refusal
-            b"\xE9\0\0\0\0"        # armed -> this gate's own success target
-            + stock_mov            # mov esi, <StringId>   (reproduced)
-            + b"\xE9\0\0\0\0"      # jmp say-and-return    (reproduced)
-        )
-        if len(payload) != 28:
-            raise AssertionError("Force-pregnancy refusal cave size drifted")
-        struct.pack_into(
-            "<i", payload, 14,
-            (function.value + resume_offset) - (cave + 18),
-        )
-        struct.pack_into("<i", payload, 24, say_target - (cave + 28))
-
-        obj.insert_section_bytes(section.index, cave, bytes(payload))
-        obj.append_relocation(section.index, cave + 3, armed, IMAGE_REL_I386_REL32)
-        obj._parse()
-        section = obj.section(function.section)
-        site = section.raw_ptr + function.value + refusal_offset
-        obj.buf[site:site + 5] = (
-            b"\xE9"
-            + struct.pack("<i", cave - (function.value + refusal_offset + 5))
-        )
-        sites.append({
-            "offset": hex(refusal_offset),
-            "message": message_id,
-            "resume": hex(resume_offset),
-            "trampoline": hex(cave),
-        })
-
-    obj.write(path)
-    manifest["ForcePregnancySkipsRefusals"] = {
-        "status": "installed",
-        "function": function_name,
-        "armed_by": "persistent cheat mask bit 0x4 (Force Successful Pregnancy)",
-        "sites": sites,
-        "skipped": "1846 not in the mood, 1851 can't agree -- the two random rolls only",
-        "not_skipped": (
-            "everything else is base-game: 1857 too hungry, 1853 under-age, "
-            "1849 pregnant/busy, 1847 illness, 1850 same gender, and the "
-            "couch/bed furniture check"
-        ),
-        "when_disarmed": "every path is byte-for-byte stock",
-    }
-
-
 def patch_villager_same_sex_embrace(manifest):
     """Let a married same-sex couple past StartEmbrace's gender refusal.
 
@@ -19798,6 +19716,240 @@ def patch_villager_same_sex_embrace(manifest):
             ),
             "sites": refusal_sites,
         },
+    }
+
+
+def patch_force_pregnancy_skips_refusals(manifest):
+    """While Force Successful Pregnancy is armed, don't let a mood roll refuse.
+
+    The upgrade is a one-shot: the player arms it expecting the next attempt
+    to work. StartEmbrace can still refuse for reasons that have nothing to do
+    with whether a pregnancy would succeed, so the armed shot gets spent
+    re-dropping the couple until the dice cooperate.
+
+    Exactly two refusals are skipped while armed -- the two random rolls,
+    and nothing else. Both share one shape: a 5-byte "mov esi, <StringId>"
+    followed by a jump to the shared say-and-return tail, each reached from
+    exactly one gate, so each has a single unambiguous resume point:
+
+        +0x171  1846 "not in the mood"  gate +0x16F je  -> resume +0x17B
+        +0x19D  1851 "can't agree"      gate +0x19B jge -> resume +0x1A7
+
+    These two are pure dice. The gate above each one calls GetRandom and
+    refuses on an unlucky result, so skipping it takes the very branch a
+    luckier roll would have taken -- no state is skipped, because the native
+    code had not yet done anything different.
+
+    Each mov becomes a jump to a cave that asks the helper and either
+    continues at that gate's own success target or reproduces the mov and the
+    jump verbatim. Nothing structural is bypassed: the couple takes the exact
+    branch a luckier roll would have taken, so there is no state the native
+    code has not already set up.
+
+    Every other refusal stays byte-for-byte base-game:
+
+      1857 too hungry -- a real need, not a mood.
+      1853 under-age  -- would put a child into the routine.
+      1849 pregnant/busy -- risks a second impregnation.
+      1847 illness    -- also reached from two different gates converging on
+                         one target, so a cave there would have no single
+                         resume point to return to.
+      1850 same gender -- the same-sex toggle's business, not this one's.
+      "they need a couch or a bed" -- the sequence genuinely needs furniture
+                         to link to.
+
+    When the upgrade is not armed every one of these paths is byte-for-byte
+    stock, because the cave falls through to the reproduced instructions.
+    """
+    path = PATCHED / "Villager.obj"
+    obj = CoffObject(path)
+    function_name = "?StartEmbrace@CVillager@@IAEXXZ"
+    function = obj.symbol(function_name)
+
+    sites = []
+    for refusal_offset, message_id, resume_offset in (
+        (0x171, 1846, 0x17B),
+        (0x19D, 1851, 0x1A7),
+    ):
+        section = obj.section(function.section)
+        site = section.raw_ptr + function.value + refusal_offset
+        stock_mov = b"\xBE" + struct.pack("<I", message_id)
+        if bytes(obj.buf[site:site + 5]) != stock_mov:
+            raise RuntimeError(
+                f"StartEmbrace refusal {message_id} drifted at +{refusal_offset:#x}"
+            )
+        if obj.buf[site + 5] != 0xE9:
+            raise RuntimeError(
+                f"StartEmbrace refusal {message_id} is not followed by a jmp "
+                f"at +{refusal_offset:#x}"
+            )
+        jmp_rel = struct.unpack_from("<i", bytes(obj.buf[site + 6:site + 10]), 0)[0]
+        say_target = function.value + refusal_offset + 10 + jmp_rel
+
+        armed = obj.append_undefined_symbol(FORCE_PREGNANCY_ACTIVE_SYMBOL)
+        cave = section.raw_size
+        payload = bytearray(
+            b"\x51"                # push ecx ) caller-saved across the cdecl
+            b"\x52"                # push edx ) helper call
+            b"\xE8\0\0\0\0"        # call VF2ForceSuccessfulPregnancyArmed
+            b"\x5A"                # pop edx
+            b"\x59"                # pop ecx
+            b"\x84\xC0"            # test al, al
+            b"\x74\x05"            # not armed -> stock refusal
+            b"\xE9\0\0\0\0"        # armed -> this gate's own success target
+            + stock_mov            # mov esi, <StringId>   (reproduced)
+            + b"\xE9\0\0\0\0"      # jmp say-and-return    (reproduced)
+        )
+        if len(payload) != 28:
+            raise AssertionError("Force-pregnancy refusal cave size drifted")
+        struct.pack_into(
+            "<i", payload, 14,
+            (function.value + resume_offset) - (cave + 18),
+        )
+        struct.pack_into("<i", payload, 24, say_target - (cave + 28))
+
+        obj.insert_section_bytes(section.index, cave, bytes(payload))
+        obj.append_relocation(section.index, cave + 3, armed, IMAGE_REL_I386_REL32)
+        obj._parse()
+        section = obj.section(function.section)
+        site = section.raw_ptr + function.value + refusal_offset
+        obj.buf[site:site + 5] = (
+            b"\xE9"
+            + struct.pack("<i", cave - (function.value + refusal_offset + 5))
+        )
+        sites.append({
+            "offset": hex(refusal_offset),
+            "message": message_id,
+            "resume": hex(resume_offset),
+            "trampoline": hex(cave),
+        })
+
+    obj.write(path)
+    manifest["ForcePregnancySkipsRefusals"] = {
+        "status": "installed",
+        "function": function_name,
+        "armed_by": "persistent cheat mask bit 0x4 (Force Successful Pregnancy)",
+        "sites": sites,
+        "skipped": "1846 not in the mood, 1851 can't agree -- the two random rolls only",
+        "not_skipped": (
+            "everything else is base-game: 1857 too hungry, 1853 under-age, "
+            "1849 pregnant/busy, 1847 illness, 1850 same gender, and the "
+            "couch/bed furniture check"
+        ),
+        "when_disarmed": "every path is byte-for-byte stock",
+    }
+
+
+def patch_anti_spam_remove_on_computer(manifest):
+    """Dropping Anti-spam Software on a computer while installed removes it.
+
+    theMainScene::DispatchRotatingSundry handles the drop. Once the hotspot is
+    confirmed to be a computer it installs unconditionally:
+
+        +0x0AA  cmp eax, 0x12              hotspot 0x12 == computer
+        +0x0AD  jne +0x0F6                 not a computer -> Say(0x4C)
+        +0x0AF  mov eax, [ebx+0x14]        gameState
+        +0x0B2  mov ecx, VillagerManager
+        +0x0B7  push 0 / push 0 / push -1 / push 7 / push 7 / push 7Eh
+        +0x0C3  mov byte [eax+0x6C], 1     install flag
+        +0x0C7  call MakeAllVillagersDoIt
+        +0x0CC  Say(0x246) "Anti-spam software installed!"
+        +0x0DD  ToolTray::UseTool / ReturnTool
+
+    So re-dropping it while already installed just re-installed and repeated
+    the message, with no way to take it off from the computer.
+
+    The hook goes at +0x0B7, on the pushes, and NOT at +0x0AF: a 5-byte jump
+    there would land on the relocation at +0x0B3 (mov ecx, VillagerManager),
+    and the linker would then write that address straight through the jump
+    displacement. +0x0B7 has no relocation across it.
+
+    By that point EAX already holds gameState and ECX holds VillagerManager,
+    so the cave can test the install flag directly and either
+
+      * uninstall: clear the flag, say "Anti-spam software removed!", and
+        rejoin at +0x0DD so the tool is still consumed and returned, or
+      * install: reproduce the three clobbered pushes and rejoin at +0x0BD,
+        which pushes the rest and runs the stock install unchanged.
+
+    The tool is consumed on both paths, so a removal costs the item exactly
+    as an install does -- buy it again to put it back.
+    """
+    path = PATCHED / "theMainScene.obj"
+    obj = CoffObject(path)
+    function_name = "?DispatchRotatingSundry@theMainScene@@IAEXHW4EInventoryItem@@UldwPoint@@@Z"
+    function = obj.symbol(function_name)
+    section = obj.section(function.section)
+
+    hook = function.value + 0xB7
+    raw = section.raw_ptr + hook
+    expected = bytes.fromhex("6A 00 6A 00 6A FF")
+    if bytes(obj.buf[raw:raw + len(expected)]) != expected:
+        raise RuntimeError(
+            "theMainScene::DispatchRotatingSundry anti-spam install pushes "
+            "drifted at +0xB7: " + bytes(obj.buf[raw:raw + 6]).hex(" ")
+        )
+    if bytes(obj.buf[section.raw_ptr + function.value + 0xC3:
+                     section.raw_ptr + function.value + 0xC7]) != bytes.fromhex("C6 40 6C 01"):
+        raise RuntimeError("anti-spam install flag write drifted at +0xC3")
+
+    helper = obj.append_undefined_symbol(ANTI_SPAM_REMOVE_HELPER_SYMBOL)
+    cave = section.raw_size
+    payload = bytearray(
+        b"\x50"                  # push eax  ) the helper is cdecl and takes
+        b"\xE8\0\0\0\0"          # call VF2AntiSpamRemoveOnComputer(gameState)
+        b"\x83\xC4\x04"          # add esp, 4
+        b"\x84\xC0"              # test al, al
+        b"\x74\x05"              # not installed -> stock install path
+        b"\xE9\0\0\0\0"          # removed -> rejoin at +0xDD (UseTool)
+        b"\x8B\x43\x14"          # mov eax, [ebx+0x14]   restore gameState
+        b"\xB9\0\0\0\0"          # mov ecx, VillagerManager
+        b"\x6A\x00"              # push 0   ) the three pushes the
+        b"\x6A\x00"              # push 0   ) trampoline overwrote
+        b"\x6A\xFF"              # push -1  )
+        b"\xE9\0\0\0\0"          # jmp +0xBD
+    )
+    if len(payload) != 37:
+        raise AssertionError("Anti-spam cave size drifted")
+    struct.pack_into("<i", payload, 14, (function.value + 0xDD) - (cave + 18))
+    struct.pack_into("<i", payload, 33, (function.value + 0xBD) - (cave + 37))
+
+    obj.insert_section_bytes(section.index, cave, bytes(payload))
+    obj.append_relocation(section.index, cave + 2, helper, IMAGE_REL_I386_REL32)
+    # The reproduced "mov ecx, VillagerManager" needs its own absolute
+    # relocation, or ECX would be zero when the stock path resumes.
+    manager = obj.append_undefined_symbol("?VillagerManager@@3VCVillagerManager@@A")
+    obj.append_relocation(section.index, cave + 22, manager, IMAGE_REL_I386_DIR32)
+    obj._parse()
+    section = obj.section(function.section)
+    raw = section.raw_ptr + hook
+    obj.buf[raw:raw + 5] = b"\xE9" + struct.pack("<i", cave - (hook + 5))
+    # +0xBC is the orphaned second byte of the overwritten "push -1"; the cave
+    # never returns there, but leave it as a NOP rather than a stray 0xFF.
+    obj.buf[raw + 5] = 0x90
+    obj.write(path)
+
+    manifest["AntiSpamRemoveOnComputer"] = {
+        "status": "installed",
+        "function": function_name,
+        "hook_offset": "+0xB7",
+        "stock_bytes": expected.hex(" "),
+        "trampoline": hex(cave),
+        "trampoline_size": len(payload),
+        "install_resume": "+0xBD",
+        "removed_resume": "+0xDD (ToolTray::UseTool/ReturnTool)",
+        "helper": ANTI_SPAM_REMOVE_HELPER_SYMBOL,
+        "message": "Anti-spam software removed!",
+        "reason": (
+            "dropping the item on a computer while already installed re-ran "
+            "the stock install branch and repeated 'Anti-spam software "
+            "installed!', with no way to take the upgrade off"
+        ),
+        "not_hooked_at": (
+            "+0xAF, because a 5-byte jump there covers the relocation at "
+            "+0xB3 and the linker would write VillagerManager's address "
+            "through the jump displacement"
+        ),
     }
 
 
@@ -30831,6 +30983,9 @@ def main():
     # roll spend it. Only 1846 and 1851 are skipped; every other refusal
     # reason stays base-game.
     patch_force_pregnancy_skips_refusals(manifest)
+    # Dropping Anti-spam Software on a computer while it is already
+    # installed removes it instead of re-installing it.
+    patch_anti_spam_remove_on_computer(manifest)
     patch_villager_manager_spouse_accessors(manifest)
     patch_marriage_finalization_for_same_sex(manifest)
     # A second, independent site with the identical Matriarch/Patriarch
