@@ -8497,7 +8497,10 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[item_id],
                 "HealthPlan_icon.png",
             )
-            self.assertIn(item_id, patcher.CHEAT_UPGRADE_EXTRA_STRING_ORDER)
+            # Deliberately NOT in the position-keyed extra block, which grows
+            # upward into the fixed renovation string range.
+            self.assertNotIn(item_id, patcher.CHEAT_UPGRADE_EXTRA_STRING_ORDER)
+            self.assertIn(item_id, patcher.WELLBEING_CHEAT_ITEM_IDS)
 
         # Health Plan's own row keeps the icon it always had, and the new rows
         # were appended so no existing row's icon image id moved.
@@ -8533,6 +8536,40 @@ class OutfitStoreMappingTests(unittest.TestCase):
         self.assertIn("fields + 0x88 + infection * 4", cure)
         for forbidden in ("0x0C", "SetHealth", "SetHappiness", "0x54", "0x58"):
             self.assertNotIn(forbidden, cure)
+
+        # The wellbeing strings must not collide with any other block. The
+        # renovation range is fixed and starts one past the lounger refusal;
+        # allocating these from the position-keyed extra block handed them
+        # 3766-3775 while renovations already owned 3765-3794.
+        rows_by_id = {
+            item["item_id"]: index
+            for index, item in enumerate(patcher.CHEAT_UPGRADE_ITEMS)
+        }
+        renovation_last = patcher.mobile_renovation_string_ids_for(
+            patcher.MOBILE_RENOVATION_IMAGE_COUNT - 1
+        )[1]
+        reroll_last = patcher.marriage_candidate_reroll_string_ids()[1]
+        wellbeing_ids = []
+        for item_id in patcher.WELLBEING_CHEAT_ITEM_IDS:
+            pair = patcher.cheat_upgrade_string_ids_for_entry(rows_by_id[item_id])
+            wellbeing_ids.extend(pair)
+            for value in pair:
+                self.assertGreater(value, renovation_last)
+                self.assertGreater(value, reroll_last)
+        self.assertEqual(len(set(wellbeing_ids)), len(wellbeing_ids))
+        self.assertEqual(wellbeing_ids, sorted(wellbeing_ids))
+
+        # Adding these rows must not have moved any established string id.
+        self.assertEqual(
+            patcher.mobile_renovation_string_ids_for(0)[0],
+            patcher.mobile_lounger_bad_weather_string_id() + 1,
+        )
+
+        # VillagerExists does not mean alive: without a health check Max out
+        # Health Bar would revive a corpse still holding a resident slot.
+        self.assertIn(
+            "reinterpret_cast<unsigned char *>(state) + 0x0C) <= 0", source
+        )
 
         # Away villagers are not "in the house".
         self.assertIn(
