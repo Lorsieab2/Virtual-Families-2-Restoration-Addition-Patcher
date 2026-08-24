@@ -814,6 +814,15 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     DIVORCE_SPOUSE_ITEM_ID: DIVORCE_SPOUSE_ICON_FILE,
     SAME_SEX_MARRIAGE_ITEM_ID: "cheat_marriage_email.png",
     MARRIAGE_CANDIDATE_REROLL_ITEM_ID: "cheat_marriage_email.png",
+    # The five wellbeing rows reuse the stock Health Plan store icon. They are
+    # appended out of numeric order deliberately: icon image ids are derived
+    # from this mapping's insertion order, so inserting them next to 0x13B
+    # would shift the image id of every row below them.
+    0x153: "HealthPlan_icon.png",
+    0x154: "HealthPlan_icon.png",
+    0x155: "HealthPlan_icon.png",
+    0x156: "HealthPlan_icon.png",
+    0x157: "HealthPlan_icon.png",
 }
 # Kept as a named contract for manifests and downstream validators.  Late
 # rows now use concrete descriptors instead of an item-id alias.
@@ -1954,6 +1963,36 @@ CHEAT_UPGRADE_ITEMS = [
         "description": "Makes the next successful birth triplets when three child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Twins one-shot and clears after birth.",
         "price": 0,
     },
+    {
+        "item_id": 0x153,
+        "name": "Clear All Illnesses",
+        "description": "Cures every symptom and every infection for everyone currently in the house. Clears the same illness fields the game clears itself, and changes no other part of a villager.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x154,
+        "name": "Max out Happiness Bar",
+        "description": "Fills the Happiness bar for everyone currently in the house.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x155,
+        "name": "Max out Energy Bar",
+        "description": "Fills the Energy bar for everyone currently in the house.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x156,
+        "name": "Max out Fed Bar",
+        "description": "Fills the Fed bar for everyone currently in the house, so nobody is hungry.",
+        "price": 0,
+    },
+    {
+        "item_id": 0x157,
+        "name": "Max out Health Bar",
+        "description": "Fills the Health bar for everyone currently in the house. Does not revive anyone who has already died.",
+        "price": 0,
+    },
 ]
 CHEAT_UPGRADE_LEGACY_COUNT = 19
 CHEAT_UPGRADE_STRING_COUNT = CHEAT_UPGRADE_LEGACY_COUNT * 2
@@ -1965,6 +2004,14 @@ CHEAT_UPGRADE_EXTRA_STRING_ORDER = (
     0x136, 0x137, 0x138, 0x139, 0x13A, 0x13B,
     MARRIAGE_CANDIDATE_REROLL_ITEM_ID,
 )
+# The wellbeing rows are deliberately NOT in the tuple above. That block is
+# position-keyed from the Holiday footer and grows upward into the fixed
+# renovation string range, which starts one past the lounger refusal --
+# appending there would have handed 0x153-0x157 ids 3766-3775 while mobile
+# renovations already own 3765-3794, and each duplicated lookup id can only
+# resolve to one row. They get their own allocator past the last existing
+# block instead, exactly as Divorce, Same-Sex and Reroll each did.
+WELLBEING_CHEAT_ITEM_IDS = (0x153, 0x154, 0x155, 0x156, 0x157)
 HOLIDAY_ORNAMENT_COLLECTABLE_START = 0x9E
 HOLIDAY_ORNAMENT_COLLECTABLE_END = 0xA9
 HOLIDAY_ORNAMENT_COLLECTION_PAGE = 5
@@ -5413,6 +5460,15 @@ def ai_bathroom2_string_ids_for(index):
 def marriage_candidate_reroll_string_ids():
     first_id = ai_bathroom2_string_ids_for(len(AI_BATHROOM2_STYLE_CATALOG) - 1)[1] + 1
     return first_id, first_id + 1
+
+
+def wellbeing_cheat_string_ids_for(index):
+    if index < 0 or index >= len(WELLBEING_CHEAT_ITEM_IDS):
+        raise IndexError(f"wellbeing cheat string index is out of range: {index}")
+    # Reroll is the highest-allocated block, so the first genuinely free pair
+    # starts one past it. Chaining here keeps every established ID stable.
+    first_id = marriage_candidate_reroll_string_ids()[1] + 1
+    return first_id + index * 2, first_id + 1 + index * 2
 
 
 def divorce_spouse_string_ids():
@@ -9795,6 +9851,8 @@ def cheat_upgrade_string_ids_for_entry(entry_index):
         return same_sex_marriage_string_ids()
     if item_id == MARRIAGE_CANDIDATE_REROLL_ITEM_ID:
         return marriage_candidate_reroll_string_ids()
+    if item_id in WELLBEING_CHEAT_ITEM_IDS:
+        return wellbeing_cheat_string_ids_for(WELLBEING_CHEAT_ITEM_IDS.index(item_id))
     if entry_index < CHEAT_UPGRADE_LEGACY_COUNT:
         base = (
             ORIG_STRING_ONE_PAST_MAX
@@ -13091,10 +13149,21 @@ public:
     void Reset();
 };
 
+enum ECauseOfDeath {
+    eCauseOfDeathNone = 0
+};
+
 class CVillagerState {
 public:
     int FoodGroupsActive(bool includeOrganic);
     bool ChanceOfPregnancy(int motherAge, int fatherAge, int fatherFertility);
+    // Native setters. Each clamps only the LOW end (a value <= 0 becomes 1;
+    // SetHealth instead zeroes health and records the cause of death), so the
+    // maximum is the caller's responsibility -- see kVF2VillagerStatMaximum.
+    void SetEnergy(int value);
+    void SetHappiness(int value);
+    void SetHunger(int value);
+    void SetHealth(int value, ECauseOfDeath cause);
 };
 
 enum ECareerType {
@@ -14752,6 +14821,103 @@ static void VF2CleanHouse() {
     CollectableItem.RemoveAll((ECarrying)0x83);
 }
 
+// Villager stat bars run 0..100: CVillagerManager's own restore-to-full call
+// passes 100 to SetHealth, and UpdateEnergyState reads the same fields against
+// thresholds of 10, 70 and 90.  The native setters clamp only the low end, so
+// the ceiling has to come from here.
+static const int kVF2VillagerStatMaximum = 100;
+// Hunger is stored inverted: it counts how HUNGRY a villager is, not how fed.
+// Feeding is the proof -- every food drop in theMainScene calls
+// AdjustHunger with a negative amount (-2, -3, -4, -7), and UpdateEnergyState
+// penalises a villager whose hunger has climbed to 90.  A full Fed bar is
+// therefore the minimum of the range, which is also exactly where SetHunger's
+// own low clamp lands.
+static const int kVF2VillagerFedMaximum = 1;
+// The house holds at most 30 resident slots; this is the same bound the
+// existing resident scans use.
+static const int kVF2ResidentSlotCount = 30;
+
+static CVillagerState *VF2ResidentState(CVillager &resident) {
+    return reinterpret_cast<CVillagerState *>(
+        reinterpret_cast<unsigned char *>(&resident) + 0x6AF4);
+}
+
+// Clears every symptom and every infection from one villager, reproducing
+// exactly the two loops CVillagerState::Reset runs and nothing else -- Reset
+// itself goes on to overwrite health, age and a dozen unrelated fields, which
+// a cure must not do.
+//
+//   symptoms   7 flag bytes at +0x5C, 7 expiry dwords at +0x64
+//   infections 4 flag bytes at +0x84, 4 expiry dwords at +0x88
+//
+// The 16-bit field at +0x80 sits between the two blocks and is cleared by
+// Reset in the same breath as them; it is part of the illness state, so a
+// cure clears it too.  CVillagerState::IsSick reads precisely the seven
+// symptom flags, so zeroing them is what makes a villager well again.
+static void VF2ClearIllnesses(CVillagerState *state) {
+    if (!state) return;
+    unsigned char *fields = reinterpret_cast<unsigned char *>(state);
+    for (int symptom = 0; symptom < 7; ++symptom) {
+        fields[0x5C + symptom] = 0;
+        *reinterpret_cast<int *>(fields + 0x64 + symptom * 4) = 0;
+    }
+    *reinterpret_cast<unsigned short *>(fields + 0x80) = 0;
+    for (int infection = 0; infection < 4; ++infection) {
+        fields[0x84 + infection] = 0;
+        *reinterpret_cast<int *>(fields + 0x88 + infection * 4) = 0;
+    }
+}
+
+// eVF2ResidentStat picks which of the five house-wide cheats to apply while
+// walking the resident slots once.
+enum EVF2ResidentStat {
+    eVF2ResidentClearIllnesses = 0,
+    eVF2ResidentMaxHappiness,
+    eVF2ResidentMaxEnergy,
+    eVF2ResidentMaxFed,
+    eVF2ResidentMaxHealth
+};
+
+// Applies one stat cheat to everybody currently in the house.  Villagers who
+// are away are skipped (include_away = false), matching "all people in the
+// house".  Only the raw stat field is written: the stock food-drop path calls
+// AdjustHunger with no follow-up Update*State call, because the villager tick
+// recomputes the derived mood/behaviour state on its own.
+static void VF2ApplyResidentStat(EVF2ResidentStat stat) {
+    for (int index = 0; index < kVF2ResidentSlotCount; ++index) {
+        if (!VillagerManager.VillagerExists(index, false)) continue;
+        CVillagerState *state = VF2ResidentState(VillagerManager.GetVillager(index));
+        if (!state) continue;
+        // VillagerExists does not mean alive: a dead villager can still hold an
+        // active, non-away slot, which is why the Divorce row separately
+        // requires positive health at CVillager+0x6B00 -- the very same field
+        // as this state's health at +0x0C (0x6AF4 + 0x0C = 0x6B00).  Without
+        // this guard Max out Health Bar would hand a corpse 100 health and
+        // revive it, contradicting the row's own description.
+        if (*reinterpret_cast<int *>(
+                reinterpret_cast<unsigned char *>(state) + 0x0C) <= 0) {
+            continue;
+        }
+        switch (stat) {
+        case eVF2ResidentClearIllnesses:
+            VF2ClearIllnesses(state);
+            break;
+        case eVF2ResidentMaxHappiness:
+            state->SetHappiness(kVF2VillagerStatMaximum);
+            break;
+        case eVF2ResidentMaxEnergy:
+            state->SetEnergy(kVF2VillagerStatMaximum);
+            break;
+        case eVF2ResidentMaxFed:
+            state->SetHunger(kVF2VillagerFedMaximum);
+            break;
+        case eVF2ResidentMaxHealth:
+            state->SetHealth(kVF2VillagerStatMaximum, eCauseOfDeathNone);
+            break;
+        }
+    }
+}
+
 static void VF2ResetAntPuzzle() {
     theGameState::Get()->ResetWorldState(0x13);
     for (int prop = 0x4D; prop <= 0x54; ++prop) {
@@ -15008,6 +15174,21 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x13B:  // Next Pregnancy Triplets
         VF2ToggleOneShotUpgrade(0x80u, 0xE0u);
+        break;
+    case 0x153:  // Clear All Illnesses
+        VF2ApplyResidentStat(eVF2ResidentClearIllnesses);
+        break;
+    case 0x154:  // Max out Happiness Bar
+        VF2ApplyResidentStat(eVF2ResidentMaxHappiness);
+        break;
+    case 0x155:  // Max out Energy Bar
+        VF2ApplyResidentStat(eVF2ResidentMaxEnergy);
+        break;
+    case 0x156:  // Max out Fed Bar
+        VF2ApplyResidentStat(eVF2ResidentMaxFed);
+        break;
+    case 0x157:  // Max out Health Bar
+        VF2ApplyResidentStat(eVF2ResidentMaxHealth);
         break;
     case 0x14B:
         if (!VF2DivorceSpouse()) return;

@@ -8313,6 +8313,9 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 0x136,
                 0x137, 0x138,
             0x139, 0x13A, 0x13B,
+                # The five wellbeing rows are grouped together at the end of
+                # the store rather than wedged into the pregnancy group.
+                0x153, 0x154, 0x155, 0x156, 0x157,
         ],
         )
         self.assertEqual(item_ids.index(0x12E), item_ids.index(0x124) + 1)
@@ -8474,6 +8477,113 @@ class OutfitStoreMappingTests(unittest.TestCase):
         ):
             self.assertIn(f"case 0x{item_id:X}:", source)
             self.assertIn(f"VF2ToggleOneShotUpgrade({bit}, {group});", source)
+
+    def test_wellbeing_cheat_rows_use_native_setters_and_reset_illness_layout(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+
+        rows = {item["item_id"]: item for item in patcher.CHEAT_UPGRADE_ITEMS}
+        for item_id, name in (
+            (0x153, "Clear All Illnesses"),
+            (0x154, "Max out Happiness Bar"),
+            (0x155, "Max out Energy Bar"),
+            (0x156, "Max out Fed Bar"),
+            (0x157, "Max out Health Bar"),
+        ):
+            self.assertIn(item_id, rows)
+            self.assertEqual(rows[item_id]["name"], name)
+            self.assertEqual(rows[item_id]["price"], 0)
+            # Every row carries the stock Health Plan store icon.
+            self.assertEqual(
+                patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[item_id],
+                "HealthPlan_icon.png",
+            )
+            # Deliberately NOT in the position-keyed extra block, which grows
+            # upward into the fixed renovation string range.
+            self.assertNotIn(item_id, patcher.CHEAT_UPGRADE_EXTRA_STRING_ORDER)
+            self.assertIn(item_id, patcher.WELLBEING_CHEAT_ITEM_IDS)
+
+        # Health Plan's own row keeps the icon it always had, and the new rows
+        # were appended so no existing row's icon image id moved.
+        self.assertEqual(
+            patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x119], "HealthPlan_icon.png"
+        )
+        icon_ids = list(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
+        self.assertEqual(icon_ids[-5:], [0x153, 0x154, 0x155, 0x156, 0x157])
+
+        # The stat cheats go through the native setters rather than writing the
+        # stat fields directly, so the game's own low clamps still apply.
+        self.assertIn("state->SetHappiness(kVF2VillagerStatMaximum);", source)
+        self.assertIn("state->SetEnergy(kVF2VillagerStatMaximum);", source)
+        self.assertIn("state->SetHunger(kVF2VillagerFedMaximum);", source)
+        self.assertIn(
+            "state->SetHealth(kVF2VillagerStatMaximum, eCauseOfDeathNone);", source
+        )
+        self.assertIn("static const int kVF2VillagerStatMaximum = 100;", source)
+        # Hunger counts hunger, not fullness: a full Fed bar is the minimum.
+        self.assertIn("static const int kVF2VillagerFedMaximum = 1;", source)
+
+        # The cure reproduces exactly the two loops CVillagerState::Reset runs
+        # -- 7 symptom flags at +0x5C with dword expiries at +0x64, and 4
+        # infection flags at +0x84 with dword expiries at +0x88 -- and must not
+        # touch the health/age fields Reset goes on to overwrite.
+        end = chr(10) + "}" + chr(10)
+        cure = source.split("static void VF2ClearIllnesses(", 1)[1].split(end, 1)[0]
+        self.assertIn("for (int symptom = 0; symptom < 7; ++symptom)", cure)
+        self.assertIn("fields[0x5C + symptom] = 0;", cure)
+        self.assertIn("fields + 0x64 + symptom * 4", cure)
+        self.assertIn("for (int infection = 0; infection < 4; ++infection)", cure)
+        self.assertIn("fields[0x84 + infection] = 0;", cure)
+        self.assertIn("fields + 0x88 + infection * 4", cure)
+        for forbidden in ("0x0C", "SetHealth", "SetHappiness", "0x54", "0x58"):
+            self.assertNotIn(forbidden, cure)
+
+        # The wellbeing strings must not collide with any other block. The
+        # renovation range is fixed and starts one past the lounger refusal;
+        # allocating these from the position-keyed extra block handed them
+        # 3766-3775 while renovations already owned 3765-3794.
+        rows_by_id = {
+            item["item_id"]: index
+            for index, item in enumerate(patcher.CHEAT_UPGRADE_ITEMS)
+        }
+        renovation_last = patcher.mobile_renovation_string_ids_for(
+            patcher.MOBILE_RENOVATION_IMAGE_COUNT - 1
+        )[1]
+        reroll_last = patcher.marriage_candidate_reroll_string_ids()[1]
+        wellbeing_ids = []
+        for item_id in patcher.WELLBEING_CHEAT_ITEM_IDS:
+            pair = patcher.cheat_upgrade_string_ids_for_entry(rows_by_id[item_id])
+            wellbeing_ids.extend(pair)
+            for value in pair:
+                self.assertGreater(value, renovation_last)
+                self.assertGreater(value, reroll_last)
+        self.assertEqual(len(set(wellbeing_ids)), len(wellbeing_ids))
+        self.assertEqual(wellbeing_ids, sorted(wellbeing_ids))
+
+        # Adding these rows must not have moved any established string id.
+        self.assertEqual(
+            patcher.mobile_renovation_string_ids_for(0)[0],
+            patcher.mobile_lounger_bad_weather_string_id() + 1,
+        )
+
+        # VillagerExists does not mean alive: without a health check Max out
+        # Health Bar would revive a corpse still holding a resident slot.
+        self.assertIn(
+            "reinterpret_cast<unsigned char *>(state) + 0x0C) <= 0", source
+        )
+
+        # Away villagers are not "in the house".
+        self.assertIn(
+            "if (!VillagerManager.VillagerExists(index, false)) continue;", source
+        )
+        for item_id, stat in (
+            (0x153, "eVF2ResidentClearIllnesses"),
+            (0x154, "eVF2ResidentMaxHappiness"),
+            (0x155, "eVF2ResidentMaxEnergy"),
+            (0x156, "eVF2ResidentMaxFed"),
+            (0x157, "eVF2ResidentMaxHealth"),
+        ):
+            self.assertIn(f"case 0x{item_id:X}:", source)
+            self.assertIn(f"VF2ApplyResidentStat({stat});", source)
 
     def test_inventory_item_info_lock_snapshot_covers_authenticated_native_bounds(self):
         locks = patcher.inventory_item_info_generation_locks()
