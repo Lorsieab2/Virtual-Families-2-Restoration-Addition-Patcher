@@ -1930,37 +1930,37 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x136,
         "name": "Force Successful Pregnancy",
-        "description": "Makes the next eligible try-for-baby attempt pass its pregnancy roll. The one-shot remains armed until the native birth routine succeeds.",
+        "description": "Makes the next eligible try-for-baby attempt pass its pregnancy roll. The one-shot remains armed until the native birth routine succeeds. Buy it again to cancel it.",
         "price": 0,
     },
     {
         "item_id": 0x137,
         "name": "Next Babies Male",
-        "description": "Makes every baby in the next successful birth male. Replaces the Female one-shot and clears after birth.",
+        "description": "Makes every baby in the next successful birth male. Replaces the Female one-shot and clears after birth. Buy it again to cancel it.",
         "price": 0,
     },
     {
         "item_id": 0x138,
         "name": "Next Babies Female",
-        "description": "Makes every baby in the next successful birth female. Replaces the Male one-shot and clears after birth.",
+        "description": "Makes every baby in the next successful birth female. Replaces the Male one-shot and clears after birth. Buy it again to cancel it.",
         "price": 0,
     },
     {
         "item_id": 0x139,
         "name": "Next Pregnancy Singleton",
-        "description": "Makes the next successful birth one baby. Replaces the Twins or Triplets one-shot and clears after birth.",
+        "description": "Makes the next successful birth one baby. Replaces the Twins or Triplets one-shot and clears after birth. Buy it again to cancel it.",
         "price": 0,
     },
     {
         "item_id": 0x13A,
         "name": "Next Pregnancy Twins",
-        "description": "Makes the next successful birth twins when two child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Triplets one-shot and clears after birth.",
+        "description": "Makes the next successful birth twins when two child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Triplets one-shot and clears after birth. Buy it again to cancel it.",
         "price": 0,
     },
     {
         "item_id": 0x13B,
         "name": "Next Pregnancy Triplets",
-        "description": "Makes the next successful birth triplets when three child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Twins one-shot and clears after birth.",
+        "description": "Makes the next successful birth triplets when three child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Twins one-shot and clears after birth. Buy it again to cancel it.",
         "price": 0,
     },
     {
@@ -11321,6 +11321,7 @@ public:
     bool HaveUpgrade(EInventoryItem item);
     void TakeOne(EInventoryItem item);
     void ReturnOne(EInventoryItem item);
+    int GetNumAvailable(EInventoryItem item);
 public:
     char pad0[0x468];
     int maleOutfitBody;
@@ -11981,6 +11982,49 @@ extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
         return 1;
     }}
     return VF2OutfitBodyForItem(itemId) < 0 ? -1 : 1;
+}}
+
+// True while one of the six pregnancy one-shots is armed.  Kept separate from
+// VF2B150UpgradeIsActive on purpose: that predicate also gates
+// VF2RemoveOwnedUpgrade, and these rows must never take the ReturnOne removal
+// route -- they are cancelled by VF2ToggleOneShotUpgrade from the click
+// handler instead.
+static bool VF2OneShotUpgradeArmed(int itemId) {{
+    if (!kVF2EnableB150CheatUpgrades) return false;
+    unsigned int mask = VF2PersistentCheatAndPurchaseMask();
+    switch (itemId) {{
+    case 0x136: return (mask & 0x04u) != 0;   // Force Successful Pregnancy
+    case 0x137: return (mask & 0x08u) != 0;   // Next Babies Male
+    case 0x138: return (mask & 0x10u) != 0;   // Next Babies Female
+    case 0x139: return (mask & 0x20u) != 0;   // Next Pregnancy Singleton
+    case 0x13A: return (mask & 0x40u) != 0;   // Next Pregnancy Twins
+    case 0x13B: return (mask & 0x80u) != 0;   // Next Pregnancy Triplets
+    default: return false;
+    }}
+}}
+
+// CScrollingStoreScene::DrawVisibleStoreItem draws the owned checkmark (image
+// 0x27A) for any row whose GetNumAvailable is zero, and its click handler
+// treats the same zero as "not purchasable".  An armed one-shot needs both at
+// once: the checkmark so the player can see it is armed, and a live row so a
+// repurchase can still reach VF2ToggleOneShotUpgrade and cancel it.
+//
+// The draw and the click read GetNumAvailable through *different* call sites,
+// so only the draw's site is retargeted here.  This reports zero for an armed
+// one-shot -- drawing the checkmark -- while the click keeps seeing the real
+// answer and stays clickable.  Every other row delegates unchanged.
+//
+// __fastcall stands in for the native __thiscall: ECX carries `self`, EDX is
+// ignored, itemId arrives on the stack, and the callee cleans the same 4
+// bytes the native method does.
+extern "C" int __fastcall VF2StoreDrawNumAvailable(
+    CInventoryManager *self,
+    void *unused,
+    int itemId
+) {{
+    (void)unused;
+    if (VF2OneShotUpgradeArmed(itemId)) return 0;
+    return self->GetNumAvailable((EInventoryItem)itemId);
 }}
 
 extern "C" bool __cdecl VF2PurchaseOutfitStoreItem(int itemId) {{
@@ -12757,6 +12801,31 @@ def patch_scrolling_store_scene(manifest):
     draw_sym = obj.symbol("?DrawVisibleStoreItem@CScrollingStoreScene@@AAEXHHH@Z")
     lock_helper_sym = obj.append_undefined_symbol("_VF2DrawGenerationLock")
     obj.retarget_relocation(draw_sym.section, draw_sym.value + 0x354, lock_helper_sym, IMAGE_REL_I386_REL32)
+
+    # DrawVisibleStoreItem asks GetNumAvailable at +0x2C8 purely to decide
+    # whether to draw the owned checkmark (image 0x27A) at +0x2D1; the click
+    # handler asks the same method from its own separate call sites inside
+    # HandleMouse. Retargeting only this one lets an armed pregnancy one-shot
+    # show the checkmark while staying purchasable, so a repurchase can still
+    # reach VF2ToggleOneShotUpgrade and cancel it. Verified against the stock
+    # bytes first so a drifted anchor fails loudly instead of silently
+    # retargeting some unrelated call.
+    draw_section = obj.section(draw_sym.section)
+    checkmark_call = draw_sym.value + 0x2C8
+    checkmark_raw = draw_section.raw_ptr + checkmark_call
+    if obj.buf[checkmark_raw] != 0xE8:
+        raise RuntimeError(
+            "DrawVisibleStoreItem checkmark GetNumAvailable call drifted at +0x2C8"
+        )
+    # test eax,eax / jne short -- the checkmark gate the returned value feeds.
+    if bytes(obj.buf[checkmark_raw + 5:checkmark_raw + 8]) != bytes.fromhex("85C075"):
+        raise RuntimeError(
+            "DrawVisibleStoreItem checkmark gate drifted after the +0x2C8 call"
+        )
+    checkmark_helper_sym = obj.append_undefined_symbol("@VF2StoreDrawNumAvailable@12")
+    obj.retarget_relocation(
+        draw_sym.section, checkmark_call + 1, checkmark_helper_sym, IMAGE_REL_I386_REL32
+    )
 
     scene_draw_sym = obj.symbol("?DrawScene@CScrollingStoreScene@@MAEXXZ")
     scrollbar_draw_helper = obj.append_undefined_symbol("_VF2DrawStoreScrollbar")
@@ -16080,6 +16149,33 @@ def patch_string_manager(manifest):
             "key": "eString_NotFeelingClean",
             "symbol_prefix": "_vf2textfix_not_feeling_clean",
             "candidates": (b"Not feeling fresh", b"Not feeling clean"),
+        },
+        {
+            "old": "Anti-spam Software long description",
+            "new": (
+                "Prevents spam emails from arriving in your inbox. Must be "
+                "installed on the computer. Buy it again and drop it on the "
+                "computer to uninstall it."
+            ),
+            "key": "eString_AntiSpamLongDesc",
+            "symbol_prefix": "_vf2textfix_antispam_longdesc",
+            "candidates": (
+                b"Prevents spam emails from arriving in your inbox. Must be installed on the computer.",
+                b"Prevents spam emails from arriving in your inbox. Must be installed on the computer. Buy it again and drop it on the computer to uninstall it.",
+            ),
+        },
+        {
+            "old": "Rockhound Certificate long description",
+            "new": (
+                "This rare item enables the family to dig for and collect "
+                "fossils! Buy it again to remove it."
+            ),
+            "key": "eString_RockHoundCertificateLongDesc",
+            "symbol_prefix": "_vf2textfix_rockhound_longdesc",
+            "candidates": (
+                b"This rare item enables the family to dig for and collect fossils!",
+                b"This rare item enables the family to dig for and collect fossils! Buy it again to remove it.",
+            ),
         },
         {
             "old": "Settings Evict confirmation",

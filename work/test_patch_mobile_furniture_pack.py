@@ -8585,6 +8585,75 @@ class OutfitStoreMappingTests(unittest.TestCase):
             self.assertIn(f"case 0x{item_id:X}:", source)
             self.assertIn(f"VF2ApplyResidentStat({stat});", source)
 
+    def test_armed_one_shots_get_a_checkmark_without_losing_their_click(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+
+        # DrawVisibleStoreItem draws the owned checkmark (image 0x27A) when
+        # GetNumAvailable returns zero; HandleMouse treats the same zero as
+        # "not purchasable". Only the draw's call site may be retargeted, or
+        # an armed one-shot becomes uncancellable again.
+        self.assertIn(
+            'draw_sym.value + 0x354, lock_helper_sym, IMAGE_REL_I386_REL32', source
+        )
+        self.assertIn("checkmark_call = draw_sym.value + 0x2C8", source)
+        self.assertIn('bytes.fromhex("85C075")', source)
+        self.assertIn(
+            'checkmark_helper_sym = obj.append_undefined_symbol("@VF2StoreDrawNumAvailable@12")',
+            source,
+        )
+        self.assertIn(
+            "draw_sym.section, checkmark_call + 1, checkmark_helper_sym, IMAGE_REL_I386_REL32",
+            source,
+        )
+        # HandleMouse must never be retargeted for this.
+        self.assertNotIn("mouse_sym.value + 0x203", source)
+        self.assertNotIn("mouse_sym.value + 0x2AD", source)
+
+        # The draw helper reports zero only for an armed one-shot and
+        # delegates every other row to the native getter unchanged.
+        end = chr(10) + "}}" + chr(10)
+        helper = source.split(
+            "extern \"C\" int __fastcall VF2StoreDrawNumAvailable(", 1
+        )[1].split(end, 1)[0]
+        self.assertIn("if (VF2OneShotUpgradeArmed(itemId)) return 0;", helper)
+        self.assertIn("return self->GetNumAvailable((EInventoryItem)itemId);", helper)
+
+        # The armed predicate is deliberately separate from
+        # VF2B150UpgradeIsActive, which also gates VF2RemoveOwnedUpgrade:
+        # these rows are cancelled by the toggle, never by ReturnOne.
+        armed = source.split("static bool VF2OneShotUpgradeArmed(int itemId) {{", 1)[1].split(
+            end, 1
+        )[0]
+        for item_id, bit in (
+            (0x136, "0x04u"),
+            (0x137, "0x08u"),
+            (0x138, "0x10u"),
+            (0x139, "0x20u"),
+            (0x13A, "0x40u"),
+            (0x13B, "0x80u"),
+        ):
+            self.assertIn(f"case 0x{item_id:X}: return (mask & {bit}) != 0;", armed)
+        self.assertNotIn("ReturnOne", armed)
+
+        # Each one-shot row tells the player it can be cancelled.
+        rows = {item["item_id"]: item for item in patcher.CHEAT_UPGRADE_ITEMS}
+        for item_id in range(0x136, 0x13C):
+            self.assertTrue(
+                rows[item_id]["description"].endswith("Buy it again to cancel it."),
+                f"row {item_id:#x} does not document repurchase-to-cancel",
+            )
+
+        # Anti-spam and Rockhound say so in their native long descriptions.
+        self.assertIn("eString_AntiSpamLongDesc", source)
+        self.assertIn(
+            "Buy it again and drop it on the computer to uninstall it.", source
+        )
+        self.assertIn("eString_RockHoundCertificateLongDesc", source)
+        self.assertIn(
+            "This rare item enables the family to dig for and collect "
+            "fossils! Buy it again to remove it.",
+            source.replace(chr(10), " ").replace('"                "', ""),
+        )
     def _write(self, path, data=b"stock"):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
