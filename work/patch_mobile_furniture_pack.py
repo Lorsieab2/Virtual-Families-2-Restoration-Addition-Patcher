@@ -2003,10 +2003,15 @@ CHEAT_UPGRADE_EXTRA_STRING_ORDER = (
     0x12D, 0x12F, 0x135, 0x130, 0x131, 0x133, 0x134, 0x132,
     0x136, 0x137, 0x138, 0x139, 0x13A, 0x13B,
     MARRIAGE_CANDIDATE_REROLL_ITEM_ID,
-    # Appended, not inserted: these slots are keyed by position, so a new row
-    # has to land at the end or every later row's translated string moves.
-    0x153, 0x154, 0x155, 0x156, 0x157,
 )
+# The wellbeing rows are deliberately NOT in the tuple above. That block is
+# position-keyed from the Holiday footer and grows upward into the fixed
+# renovation string range, which starts one past the lounger refusal --
+# appending there would have handed 0x153-0x157 ids 3766-3775 while mobile
+# renovations already own 3765-3794, and each duplicated lookup id can only
+# resolve to one row. They get their own allocator past the last existing
+# block instead, exactly as Divorce, Same-Sex and Reroll each did.
+WELLBEING_CHEAT_ITEM_IDS = (0x153, 0x154, 0x155, 0x156, 0x157)
 HOLIDAY_ORNAMENT_COLLECTABLE_START = 0x9E
 HOLIDAY_ORNAMENT_COLLECTABLE_END = 0xA9
 HOLIDAY_ORNAMENT_COLLECTION_PAGE = 5
@@ -5455,6 +5460,15 @@ def ai_bathroom2_string_ids_for(index):
 def marriage_candidate_reroll_string_ids():
     first_id = ai_bathroom2_string_ids_for(len(AI_BATHROOM2_STYLE_CATALOG) - 1)[1] + 1
     return first_id, first_id + 1
+
+
+def wellbeing_cheat_string_ids_for(index):
+    if index < 0 or index >= len(WELLBEING_CHEAT_ITEM_IDS):
+        raise IndexError(f"wellbeing cheat string index is out of range: {index}")
+    # Reroll is the highest-allocated block, so the first genuinely free pair
+    # starts one past it. Chaining here keeps every established ID stable.
+    first_id = marriage_candidate_reroll_string_ids()[1] + 1
+    return first_id + index * 2, first_id + 1 + index * 2
 
 
 def divorce_spouse_string_ids():
@@ -9837,6 +9851,8 @@ def cheat_upgrade_string_ids_for_entry(entry_index):
         return same_sex_marriage_string_ids()
     if item_id == MARRIAGE_CANDIDATE_REROLL_ITEM_ID:
         return marriage_candidate_reroll_string_ids()
+    if item_id in WELLBEING_CHEAT_ITEM_IDS:
+        return wellbeing_cheat_string_ids_for(WELLBEING_CHEAT_ITEM_IDS.index(item_id))
     if entry_index < CHEAT_UPGRADE_LEGACY_COUNT:
         base = (
             ORIG_STRING_ONE_PAST_MAX
@@ -14872,6 +14888,16 @@ static void VF2ApplyResidentStat(EVF2ResidentStat stat) {
         if (!VillagerManager.VillagerExists(index, false)) continue;
         CVillagerState *state = VF2ResidentState(VillagerManager.GetVillager(index));
         if (!state) continue;
+        // VillagerExists does not mean alive: a dead villager can still hold an
+        // active, non-away slot, which is why the Divorce row separately
+        // requires positive health at CVillager+0x6B00 -- the very same field
+        // as this state's health at +0x0C (0x6AF4 + 0x0C = 0x6B00).  Without
+        // this guard Max out Health Bar would hand a corpse 100 health and
+        // revive it, contradicting the row's own description.
+        if (*reinterpret_cast<int *>(
+                reinterpret_cast<unsigned char *>(state) + 0x0C) <= 0) {
+            continue;
+        }
         switch (stat) {
         case eVF2ResidentClearIllnesses:
             VF2ClearIllnesses(state);
