@@ -3,7 +3,7 @@
 A build-payload fix and seven new Cheat Upgrades.
 
 The payload fix matters most, and it is the reason this release exists: every
-build now ships the base game's furniture footprint maps. Standalone builds had
+build now ships the base game's `Assets`. Standalone builds had
 been shipping without most of them, which meant villagers walked through
 furniture and hotspots stopped responding.
 
@@ -11,12 +11,16 @@ furniture and hotspots stopped responding.
 
 `Assets` was never seeded. `VANILLA_RUNTIME_REQUIRED_DIRS` is
 `("Images", "Sounds")`, so the only files a build put in `Assets` were the ones
-the generator writes itself. The base game's 242 files — the `.fmap` footprint
-maps that carry furniture collision and hotspot data — reached a build only by
-being inherited from the previous release through `VF2_PREVIOUS_BUILD_DIR`.
+the generator writes itself. The base game's 242 files reached a build only by
+being inherited from the previous release through `VF2_PREVIOUS_BUILD_DIR`. They are
+not all footprint maps: 235 are `.fmap` files carrying furniture collision and
+hotspot data, and the remaining seven are six `.dat` files and one `.swf` —
+`animpts.dat`, `anims.dat`, `cmap.dat`, `ldw_flash.swf`, `lsmap.dat`,
+`petanimpts.dat` and `wpts.dat`. The map and waypoint data among those is as
+load-bearing for pathing as the footprint maps are.
 
 `build_playtest.ps1` deliberately clears that variable, so a standalone build
-shipped **119 Assets instead of 242**, missing 207 footprint maps, while its own
+shipped **119 Assets instead of 242**, missing 207 stock files, while its own
 output claimed the folder "does not need anything from outside itself".
 
 **Installed releases were never affected.** The offline patcher applies onto a
@@ -65,10 +69,11 @@ amount — so a full Fed bar is the minimum of the range.
 
 `CVillagerManager::CureAllVillagers` looked like the obvious way to clear
 illnesses, but it is a one-byte `ret` in this build, so the cure reproduces the
-two loops `CVillagerState::Reset` runs and nothing else: 7 symptom flags at
-`+0x5C` with expiries at `+0x64`, 4 infection flags at `+0x84` with expiries at
-`+0x88`. It does not touch the health and age fields `Reset` goes on to
-overwrite.
+illness-state work `CVillagerState::Reset` does and nothing more: 7 symptom
+flags at `+0x5C` with expiries at `+0x64`, 4 infection flags at `+0x84` with
+expiries at `+0x88`, and the 16-bit field at `+0x80` that sits between the two
+blocks and that `Reset` clears in the same breath. It does not touch the health
+and age fields `Reset` goes on to overwrite.
 
 Two more rows toggle stock Flea Market ownership without needing to use the item
 on a computer:
