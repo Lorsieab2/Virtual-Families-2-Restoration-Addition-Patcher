@@ -8585,6 +8585,166 @@ class OutfitStoreMappingTests(unittest.TestCase):
             self.assertIn(f"case 0x{item_id:X}:", source)
             self.assertIn(f"VF2ApplyResidentStat({stat});", source)
 
+    def _write(self, path, data=b"stock"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+        return path
+
+    def _fake_index(self, tmp):
+        """A tiny stand-in for clean-base-game-assets.json."""
+        import hashlib
+
+        payload = {
+            "Assets/Chair.png.fmap": b"chair-map",
+            "Assets/Table.png.fmap": b"table-map",
+            "Images/thing.png": b"thing-art",
+        }
+        index = {}
+        for rel, data in payload.items():
+            self._write(tmp / rel, data)
+            index[rel] = {
+                "size": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+        return index
+
+    def test_base_game_guard_fails_when_a_stock_asset_goes_missing(self):
+        """The exact regression this guard exists for.
+
+        A build shipped 119 of 242 stock Assets because Assets was never
+        seeded -- stock .fmap footprint maps only arrived by inheritance from
+        the previous release. Missing footprint maps mean furniture has no
+        collision or hotspot data, so villagers walk through walls.
+        """
+        old_out = patcher.OUT
+        old_index = patcher.clean_base_game_index
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp)
+                index = self._fake_index(out)
+                patcher.OUT = out
+                patcher.clean_base_game_index = lambda: index
+
+                # Intact payload passes and records what it inspected.
+                manifest = {}
+                patcher.validate_base_game_payload_intact(manifest)
+                self.assertEqual(manifest["base_game_payload_intact"]["checked"], 3)
+                self.assertEqual(
+                    manifest["base_game_payload_intact"]["assets_checked"], 2
+                )
+
+                # Losing one stock footprint map must fail the build.
+                (out / "Assets/Table.png.fmap").unlink()
+                with self.assertRaises(RuntimeError) as caught:
+                    patcher.validate_base_game_payload_intact({})
+                self.assertIn("Table.png.fmap", str(caught.exception))
+                self.assertIn("missing", str(caught.exception))
+        finally:
+            patcher.OUT = old_out
+            patcher.clean_base_game_index = old_index
+
+    def test_base_game_guard_fails_on_an_undeclared_asset_edit(self):
+        old_out = patcher.OUT
+        old_index = patcher.clean_base_game_index
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp)
+                index = self._fake_index(out)
+                patcher.OUT = out
+                patcher.clean_base_game_index = lambda: index
+
+                (out / "Assets/Chair.png.fmap").write_bytes(b"tampered-map")
+                with self.assertRaises(RuntimeError) as caught:
+                    patcher.validate_base_game_payload_intact({})
+                self.assertIn("Chair.png.fmap", str(caught.exception))
+
+                # ...unless the build declares it replaced that map, which the
+                # mobile furniture behaviours legitimately do.
+                manifest = {
+                    "behavior_assets": {
+                        "couch_fmap_donors": [
+                            {"target": "Chair.png.fmap", "donor": "x", "source": "y"}
+                        ]
+                    }
+                }
+                patcher.validate_base_game_payload_intact(manifest)
+                self.assertIn(
+                    "Chair.png.fmap",
+                    manifest["base_game_payload_intact"]["declared_replacements"],
+                )
+
+                # Images are presence-only: optional visual mods replace stock
+                # art by design, so an edited image must NOT fail. Restore the
+                # tampered map first so this asserts the image rule alone.
+                self._write(out / "Assets/Chair.png.fmap", b"chair-map")
+                (out / "Images/thing.png").write_bytes(b"modded-art")
+                patcher.validate_base_game_payload_intact({})
+        finally:
+            patcher.OUT = old_out
+            patcher.clean_base_game_index = old_index
+
+    def test_mod_asset_guard_fails_on_a_dropped_or_vacuous_payload(self):
+        old_out = patcher.OUT
+        old_under = patcher.clean_base_game_files_under
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                out = Path(tmp)
+                patcher.OUT = out
+                patcher.clean_base_game_files_under = lambda d: {"Chair.png.fmap": {}}
+                self._write(out / "Assets/Chair.png.fmap", b"stock")
+                self._write(out / "Assets/Mobile.png.fmap", b"mod")
+
+                manifest = {
+                    "behavior_assets": {
+                        "couch_fmap_donors": [{"target": "Mobile.png.fmap"}],
+                        # Files listed as missing are deliberately absent and
+                        # must never be required to exist.
+                        "missing": [{"target": "Absent.png.fmap", "reason": "x"}],
+                    }
+                }
+                patcher.validate_mod_assets_present(manifest)
+                self.assertEqual(manifest["mod_assets_present"]["checked"], 1)
+                self.assertEqual(
+                    manifest["mod_assets_present"]["patch_supplied_in_payload"], 1
+                )
+
+                # Dropping a staged mod map fails.
+                (out / "Assets/Mobile.png.fmap").unlink()
+                with self.assertRaises(RuntimeError) as caught:
+                    patcher.validate_mod_assets_present(
+                        {"behavior_assets": {"d": [{"target": "Mobile.png.fmap"}]}}
+                    )
+                self.assertIn("Mobile.png.fmap", str(caught.exception))
+
+                # A guard that inspected nothing must fail rather than pass.
+                with self.assertRaises(RuntimeError) as caught:
+                    patcher.validate_mod_assets_present({"behavior_assets": {}})
+                self.assertIn("vacuously", str(caught.exception))
+
+                # Non-.fmap strays (vanilla payload pollution) fail too.
+                self._write(out / "Assets/Mobile.png.fmap", b"mod")
+                self._write(out / "Assets/stray.txt", b"junk")
+                with self.assertRaises(RuntimeError) as caught:
+                    patcher.validate_mod_assets_present(
+                        {"behavior_assets": {"d": [{"target": "Mobile.png.fmap"}]}}
+                    )
+                self.assertIn("stray.txt", str(caught.exception))
+        finally:
+            patcher.OUT = old_out
+            patcher.clean_base_game_files_under = old_under
+
+    def test_clean_index_still_describes_a_full_base_game_install(self):
+        index = patcher.clean_base_game_index()
+        assets = [k for k in index if k.startswith("Assets/")]
+        images = [k for k in index if k.startswith("Images/")]
+        self.assertEqual(len(assets), 242)
+        self.assertEqual(len(images), 655)
+        # Assets is not a wholesale-copied seed dir; it is seeded by manifest
+        # because the vanilla payload holds far more than a clean install.
+        self.assertNotIn("Assets", patcher.VANILLA_RUNTIME_SEED_DIRS)
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        self.assertIn("seed_stock_assets(source, manifest)", source)
+
     def test_inventory_item_info_lock_snapshot_covers_authenticated_native_bounds(self):
         locks = patcher.inventory_item_info_generation_locks()
 
@@ -13739,6 +13899,27 @@ class RuntimePayloadContractTests(unittest.TestCase):
             patcher.RUNTIME_MIN_IMAGE_FILE_COUNT = old_min_images
             patcher.RUNTIME_MIN_SOUND_FILE_COUNT = old_min_sounds
 
+    def install_stub_clean_index(self, asset_files=(), image_files=()):
+        """Swap in a small stand-in for clean-base-game-assets.json.
+
+        The real index names 897 files from a genuine install, which a
+        synthetic fixture cannot reproduce. Patching it keeps the asset
+        guards switched on -- they still verify presence and hashes -- while
+        letting the fixture stay small. Callers restore via addCleanup.
+        """
+        import hashlib
+
+        index = {}
+        for relative, data in list(asset_files) + list(image_files):
+            index[relative] = {
+                "size": len(data),
+                "sha256": hashlib.sha256(data).hexdigest(),
+            }
+        old_index = patcher.clean_base_game_index
+        patcher.clean_base_game_index = lambda: index
+        self.addCleanup(lambda: setattr(patcher, "clean_base_game_index", old_index))
+        return index
+
     def write_minimal_runtime_payload(self, root):
         for dirname in patcher.OFFICIAL_B93_RELEASE_REQUIRED_DIRS:
             (root / dirname).mkdir(parents=True)
@@ -13764,6 +13945,13 @@ class RuntimePayloadContractTests(unittest.TestCase):
                 (source / "Sounds").mkdir(parents=True)
                 (source / "Images" / "loading.jpg").write_bytes(b"image")
                 (source / "Sounds" / "button_click_switch.ogg").write_bytes(b"sound")
+                # Stock Assets are seeded from the clean index now, so the
+                # synthetic source has to be able to supply what it names.
+                self.install_stub_clean_index(
+                    asset_files=[("Assets/Chair.png.fmap", b"chair-map")]
+                )
+                (source / "Assets").mkdir(parents=True)
+                (source / "Assets" / "Chair.png.fmap").write_bytes(b"chair-map")
 
                 manifest = {}
                 patcher.sync_vanilla_runtime_payload(manifest)
@@ -13790,6 +13978,8 @@ class RuntimePayloadContractTests(unittest.TestCase):
                 patcher.VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS = (source,)
                 (source / "Images").mkdir(parents=True)
                 (source / "Sounds").mkdir(parents=True)
+                self.install_stub_clean_index()
+                (source / "Assets").mkdir(parents=True)
                 (source / "Images" / "MapX0Y2-DESKTOP-J6OI2AP.xcf").write_bytes(b"dev")
                 (source / "Images" / "MapX1y2-DESKTOP-J6OI2AP.xcf").write_bytes(b"dev")
                 (source / "Images" / "MapX0Y2.jpg").write_bytes(b"runtime")
@@ -13915,6 +14105,12 @@ class RuntimePayloadContractTests(unittest.TestCase):
         def run(root):
             manifest = {}
             self.write_minimal_runtime_payload(root)
+            # The base-game guard now checks payload contents, so the fixture
+            # declares a stock asset and supplies it byte-for-byte.
+            self.install_stub_clean_index(
+                asset_files=[("Assets/Chair.png.fmap", b"chair-map")]
+            )
+            (root / "Assets" / "Chair.png.fmap").write_bytes(b"chair-map")
 
             patcher.validate_runtime_payload_contract(manifest)
 
