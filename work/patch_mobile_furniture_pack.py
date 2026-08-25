@@ -4928,6 +4928,82 @@ def validate_clean_package(manifest):
     }
 
 
+CLEAN_BASE_GAME_INDEX_PATH = ROOT / "data" / "vf2" / "clean-base-game-assets.json"
+
+
+def clean_base_game_index():
+    """{relative posix path: {"size", "sha256"}} for a clean VF2 install."""
+    raw = json.loads(CLEAN_BASE_GAME_INDEX_PATH.read_text(encoding="utf-8-sig"))
+    return raw["files"]
+
+
+def clean_base_game_files_under(directory):
+    prefix = directory + "/"
+    return {
+        path[len(prefix):]: meta
+        for path, meta in clean_base_game_index().items()
+        if path.startswith(prefix)
+    }
+
+
+def sha256_of(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def seed_stock_assets(source, manifest):
+    """Copy exactly the base game's Assets, verified against the clean index.
+
+    Assets is deliberately NOT in VANILLA_RUNTIME_SEED_DIRS-style wholesale
+    copying: the vanilla payload directory holds 845 files, far more than the
+    242 a clean install has, so copying it wholesale would ship hundreds of
+    stray files. The clean index is the authority on which files belong and
+    what they must hash to, and every one is verified on the way in -- a
+    payload that cannot supply a byte-identical stock asset fails the build
+    rather than shipping a substitute.
+
+    Mod-supplied .fmap files are staged later (sync_behavior_assets and the
+    mobile furniture stager both run after this), so they still overwrite the
+    stock map for any furniture whose behaviour a patch replaces.
+    """
+    wanted = clean_base_game_files_under("Assets")
+    target = OUT / "Assets"
+    target.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    problems = []
+    for name, meta in sorted(wanted.items()):
+        src = source / "Assets" / name
+        if not src.is_file():
+            problems.append(f"missing from vanilla payload: Assets/{name}")
+            continue
+        if src.stat().st_size != meta["size"] or sha256_of(src) != meta["sha256"]:
+            problems.append(f"does not match the clean base game: Assets/{name}")
+            continue
+        shutil.copy2(src, target / name)
+        copied += 1
+    if problems:
+        raise RuntimeError(
+            "Stock Assets could not be seeded from the vanilla payload:\n- "
+            + "\n- ".join(problems)
+        )
+    manifest["stock_asset_seed"] = {
+        "status": "seeded",
+        "source": str(source / "Assets"),
+        "expected": len(wanted),
+        "copied": copied,
+        "reason": (
+            "Assets was never seeded; stock .fmap footprint maps only reached "
+            "a build by inheritance from the previous release, so any build "
+            "without VF2_PREVIOUS_BUILD_DIR shipped furniture with no "
+            "collision or hotspot data"
+        ),
+    }
+    return copied
+
+
 def sync_vanilla_runtime_payload(manifest):
     source = find_vanilla_runtime_payload_source()
     if source is None:
@@ -4950,6 +5026,10 @@ def sync_vanilla_runtime_payload(manifest):
             "target": str(dst),
             "files": count_files(dst),
         })
+
+    # Stock Assets are seeded by explicit manifest rather than by copying the
+    # directory, because the vanilla payload's Assets folder is not clean.
+    seed_stock_assets(source, manifest)
 
     missing_seed_dirs = []
     for dirname in VANILLA_RUNTIME_OPTIONAL_SEED_DIRS:
@@ -30768,6 +30848,185 @@ def validate_native_dryer_lint_fire_contract(manifest):
     }
 
 
+def validate_base_game_payload_intact(manifest):
+    """Every base-game file must survive the build.
+
+    This is the guard for the regression that produced it: a build shipped 119
+    of the 242 stock Assets, so furniture had no footprint maps -- villagers
+    walked through walls and hotspots stopped registering. Nothing checked
+    Assets contents before; the contract only asserted the directory existed.
+
+    Presence is required for every indexed file. Content is required to be
+    byte-identical for Assets EXCEPT where a patch legitimately replaces a
+    stock footprint map (the mobile furniture behaviours do exactly that), and
+    those replacements have to be declared by the build itself -- an
+    undeclared difference is a corruption and fails.
+
+    Images are presence-only: optional visual mods replace stock art by
+    design, and which ones depends on the enabled patch set.
+    """
+    index = clean_base_game_index()
+    declared = set()
+    for key in (
+        "mobile_furniture_behavior_assets",
+        "behavior_assets",
+    ):
+        section = manifest.get(key)
+        if not isinstance(section, dict):
+            continue
+        for subkey, entries in section.items():
+            # "missing" lists files the build deliberately did NOT write, so
+            # it declares nothing.
+            if subkey == "missing" or not isinstance(entries, list):
+                continue
+            for item in entries:
+                if isinstance(item, dict):
+                    # Donor records name the file they wrote as "target";
+                    # evidence records use "filename".
+                    for field in ("target", "filename"):
+                        value = item.get(field)
+                        if isinstance(value, str) and value.endswith(".fmap"):
+                            declared.add(value)
+                elif isinstance(item, str) and item.endswith(".fmap"):
+                    declared.add(item)
+
+    missing = []
+    altered = []
+    for relative, meta in sorted(index.items()):
+        path = OUT / relative
+        if not path.is_file():
+            missing.append(relative)
+            continue
+        if not relative.startswith("Assets/"):
+            continue
+        name = relative.split("/", 1)[1]
+        if name in declared:
+            continue
+        if path.stat().st_size != meta["size"] or sha256_of(path) != meta["sha256"]:
+            altered.append(relative)
+
+    if missing or altered:
+        lines = []
+        if missing:
+            lines.append(
+                f"{len(missing)} base-game file(s) are missing from the build: "
+                + ", ".join(missing[:12])
+                + (" ..." if len(missing) > 12 else "")
+            )
+        if altered:
+            lines.append(
+                f"{len(altered)} base-game asset(s) differ from a clean install "
+                "without the build declaring the replacement: "
+                + ", ".join(altered[:12])
+                + (" ..." if len(altered) > 12 else "")
+            )
+        raise RuntimeError("Base-game payload check failed:\n- " + "\n- ".join(lines))
+
+    manifest["base_game_payload_intact"] = {
+        "status": "validated",
+        "checked": len(index),
+        "assets_checked": sum(1 for k in index if k.startswith("Assets/")),
+        "images_checked": sum(1 for k in index if k.startswith("Images/")),
+        "declared_replacements": sorted(declared),
+        "guards": (
+            "every indexed base-game file must be present; stock Assets must "
+            "be byte-identical unless the build declared replacing them"
+        ),
+    }
+
+
+def validate_mod_assets_present(manifest):
+    """Every asset a patch actually staged must still be in the payload.
+
+    Mirror of validate_base_game_payload_intact: that guard restores and
+    protects the stock files, this one makes sure repairing them can never
+    quietly drop the mod-supplied maps layered on top.
+
+    The records are read by shape rather than by scanning for ".fmap"
+    anywhere, because two manifest sections list files that are deliberately
+    ABSENT -- behavior_assets["missing"] and the evidence items whose source
+    was missing from the supplied mobile OBB. Requiring those to exist would
+    fail every build.
+    """
+    staged = set()
+
+    behavior = manifest.get("behavior_assets")
+    if isinstance(behavior, dict):
+        for key, entries in behavior.items():
+            if key == "missing" or not isinstance(entries, list):
+                continue
+            for entry in entries:
+                target = entry.get("target") if isinstance(entry, dict) else None
+                if isinstance(target, str) and target.endswith(".fmap"):
+                    staged.add(target)
+
+    for section_name in ("MobileFurnitureBehaviorEvidence", "MobileGroupHolidayPCFmaps"):
+        section = manifest.get(section_name)
+        if not isinstance(section, dict):
+            continue
+        for entries in section.values():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                name = entry.get("filename")
+                status = str(entry.get("source_status", ""))
+                if not isinstance(name, str) or not name.endswith(".fmap"):
+                    continue
+                if status.startswith("missing"):
+                    continue
+                staged.add(name)
+
+    assets = OUT / "Assets"
+    missing = sorted(name for name in staged if not (assets / name).is_file())
+
+    # Anything in Assets that a clean install does not have is patch-supplied,
+    # and every one of those must be a footprint map. A stray file here means
+    # the vanilla payload's extra content (it holds far more than a clean
+    # install) leaked into the build.
+    stock = set(clean_base_game_files_under("Assets"))
+    strays = sorted(
+        path.name
+        for path in assets.iterdir()
+        if path.is_file() and path.name not in stock and path.suffix != ".fmap"
+    )
+
+    errors = []
+    if missing:
+        errors.append(
+            f"{len(missing)} patch-supplied asset(s) missing from the build: "
+            + ", ".join(missing[:12])
+            + (" ..." if len(missing) > 12 else "")
+        )
+    if strays:
+        errors.append(
+            f"{len(strays)} non-.fmap file(s) in Assets that a clean install does "
+            "not have: " + ", ".join(strays[:12]) + (" ..." if len(strays) > 12 else "")
+        )
+    # A guard that inspected nothing is worse than no guard: it reports success
+    # having checked zero files. If the behaviour stager ran, it staged maps.
+    if isinstance(behavior, dict) and not staged:
+        errors.append(
+            "the mod-asset guard found no staged assets to check even though "
+            "behavior_assets is present, so it would have passed vacuously"
+        )
+    if errors:
+        raise RuntimeError("Patch-supplied asset check failed:\n- " + "\n- ".join(errors))
+
+    manifest["mod_assets_present"] = {
+        "status": "validated",
+        "checked": len(staged),
+        "patch_supplied_in_payload": sum(
+            1 for path in assets.iterdir() if path.is_file() and path.name not in stock
+        ),
+        "guards": (
+            "every staged .fmap is present, and nothing but footprint maps is "
+            "added to Assets on top of the clean base game"
+        ),
+    }
+
+
 def validate_runtime_payload_contract(manifest):
     errors = []
     for filename in VANILLA_RUNTIME_REQUIRED_FILES:
@@ -30799,6 +31058,9 @@ def validate_runtime_payload_contract(manifest):
 
     if errors:
         raise RuntimeError("Runtime payload contract failed:\n- " + "\n- ".join(errors))
+
+    validate_base_game_payload_intact(manifest)
+    validate_mod_assets_present(manifest)
 
     manifest["runtime_payload_contract"] = {
         "status": "validated",
