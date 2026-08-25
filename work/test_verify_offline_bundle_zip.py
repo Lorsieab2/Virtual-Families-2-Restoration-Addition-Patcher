@@ -10,7 +10,18 @@ sys.path.insert(0, str(ROOT / "work"))
 import verify_offline_bundle_zip as verifier
 
 
-CANONICAL = ROOT / "outputs" / "VF2-B161-Repurchaseable-20260812.zip"
+def newest_release_zip():
+    """The most recent release ZIP present locally, if any.
+
+    This used to point at one B161 archive that is not in the repository, so
+    the gate failed for everyone regardless of correctness. Verifying whatever
+    release is actually on disk makes it a live check instead.
+    """
+    candidates = sorted(
+        (ROOT / "outputs").glob("VF2-B*-Release.zip"),
+        key=lambda path: path.stat().st_mtime,
+    )
+    return candidates[-1] if candidates else None
 
 
 class OfflineBundleZipVerifierTests(unittest.TestCase):
@@ -30,6 +41,7 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         self.assertNotIn("store_scroll_bar", verifier.ABSENT_ZERO_RECORD_SETTINGS)
 
     def test_verifier_requires_final_all_enabled_native_overlay(self):
+        # The contract is the toggle combination, not a release's filename.
         requires = frozenset({
             "core_executable",
             "behavior_patches",
@@ -38,17 +50,32 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
             "island_events",
             "mobile_renovations",
         })
-        self.assertEqual(
-            verifier.EXECUTABLE_VARIANTS[requires][0],
-            "payload/Virtual Families 2 - Modded B161 - Final All-Enabled Native.exe",
-        )
-        self.assertEqual(len(verifier.EXECUTABLE_VARIANTS), 19)
+        self.assertIn(requires, verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
+        self.assertEqual(len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS), 19)
+        # No release name may leak back into the pinned contract, or the
+        # verifier starts failing every release after that one again.
+        source = (ROOT / "work" / "verify_offline_bundle_zip.py").read_text(encoding="utf-8")
+        contract = source.split("EXECUTABLE_VARIANT_REQUIREMENTS = ", 1)[1].split("})", 1)[0]
+        self.assertNotRegex(contract, r"B\d+")
+        self.assertNotIn(".exe", contract)
 
-    def test_real_executable_variants_table_has_no_hash_collisions(self):
-        # Confirms the actual, currently-shipped EXECUTABLE_VARIANTS table
-        # this repository verifies against does not itself carry the B162
-        # defect (two different requires sets sharing one payload hash).
-        verifier._reject_executable_variant_hash_collisions(verifier.EXECUTABLE_VARIANTS)
+    def test_shipped_release_has_no_executable_hash_collisions(self):
+        # Confirms the release actually on disk does not carry the B162 defect
+        # (two different requires sets sharing one payload hash). The check now
+        # runs against real manifest records rather than a frozen table.
+        archive = newest_release_zip()
+        if archive is None:
+            self.skipTest("no release ZIP present in outputs/")
+        with zipfile.ZipFile(archive) as zipped:
+            root = zipped.namelist()[0].split("/", 1)[0]
+            manifest = json.loads(zipped.read(f"{root}/manifest.json"))
+        records = [
+            record
+            for record in manifest["asset_patches"]
+            if str(record.get("source_path", "")).lower().endswith(".exe")
+        ]
+        self.assertEqual(len(records), 19)
+        verifier._reject_executable_variant_hash_collisions(records)
 
     def test_rejects_two_requires_sets_sharing_one_executable_hash(self):
         # Reproduces the B162 defect at the level of the EXECUTABLE_VARIANTS
@@ -56,28 +83,34 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         # core_executable-only baseline and the Final All-Enabled Native
         # overlay must never resolve to the same payload hash.
         same_hash = "a" * 64
-        variants = {
-            frozenset({"core_executable"}): (
-                "payload/core.exe", same_hash, 100,
-            ),
-            frozenset({
-                "core_executable", "island_events", "cheat_upgrades",
-                "holiday_ornaments_collection", "behavior_patches", "mobile_renovations",
-            }): (
-                "payload/final-all-enabled.exe", same_hash, 100,
-            ),
-        }
+        records = [
+            {
+                "source_path": "payload/core.exe",
+                "source_sha256": same_hash,
+                "requires": ["core_executable"],
+            },
+            {
+                "source_path": "payload/final-all-enabled.exe",
+                "source_sha256": same_hash,
+                "requires": [
+                    "core_executable", "island_events", "cheat_upgrades",
+                    "holiday_ornaments_collection", "behavior_patches",
+                    "mobile_renovations",
+                ],
+            },
+        ]
         with self.assertRaisesRegex(ValueError, "share one payload hash"):
-            verifier._reject_executable_variant_hash_collisions(variants)
+            verifier._reject_executable_variant_hash_collisions(records)
 
         # Distinct hashes for distinct requires sets must not raise.
-        variants_ok = dict(variants)
-        variants_ok[frozenset({"core_executable"})] = ("payload/core.exe", "b" * 64, 100)
-        verifier._reject_executable_variant_hash_collisions(variants_ok)
+        records_ok = [dict(records[0], source_sha256="b" * 64), records[1]]
+        verifier._reject_executable_variant_hash_collisions(records_ok)
 
-    def test_canonical_archive_passes_all_contract_gates(self):
-        self.assertTrue(CANONICAL.is_file(), CANONICAL)
-        result = verifier.verify_archive(CANONICAL)
+    def test_shipped_release_passes_all_contract_gates(self):
+        archive = newest_release_zip()
+        if archive is None:
+            self.skipTest("no release ZIP present in outputs/")
+        result = verifier.verify_archive(archive)
         self.assertEqual(result["executable_variants"], 19)
         self.assertEqual(result["renovation_assets"], 35)
         self.assertEqual(result["sound_assets"], 67)
