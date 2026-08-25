@@ -7789,7 +7789,15 @@ class TextFixStringManagerTests(unittest.TestCase):
                 patcher.ENABLE_HOLIDAY_ORNAMENTS = old_ornaments
 
 class MobileSpecialUpgradeContractTests(unittest.TestCase):
-    def test_antispam_and_rockhound_are_reversible_stock_rows(self):
+    def test_antispam_and_rockhound_rows_are_base_game_with_ownership_cheats(self):
+        """The two Flea Market rows are stock; cheat rows own the flags.
+
+        Repurchase-to-remove is gone from the store rows themselves. The stock
+        Anti-spam install path requires computer hotspot 0x12, and a live
+        playtest reported the office computer as hotspot 66 with 0x12 absent
+        from the house, so a drop-based route could never work there. The
+        ownership flags moved to two Cheat Upgrades that need no hotspot.
+        """
         old_patched = patcher.PATCHED
         old_enabled = patcher.ENABLE_CHEAT_UPGRADES
         try:
@@ -7816,6 +7824,7 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
                         encoding="ascii"
                     )
 
+                    # The stock rows are still named, as the cheats' targets.
                     self.assertIn(
                         "static const int kVF2AntiSpamSoftwareItem = 51;",
                         source,
@@ -7824,14 +7833,13 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
                         "static const int kVF2RockhoundCertificateItem = 266;",
                         source,
                     )
-                    self.assertIn(
-                        "return itemId == kVF2AntiSpamSoftwareItem ||",
-                        source,
-                    )
-                    self.assertIn(
-                        "itemId == kVF2RockhoundCertificateItem;",
-                        source,
-                    )
+                    self.assertIn("static const int kVF2AntiSpamCheatItem = 0x158;", source)
+                    self.assertIn("static const int kVF2RockhoundCheatItem = 0x159;", source)
+
+                    # Not one shared resolver may special-case the stock rows
+                    # any more -- that is what made them non-base-game.
+                    self.assertNotIn("VF2IsReversibleStockUpgrade", source)
+                    self.assertNotIn("VF2IsReversibleStockUpgradeActive", source)
 
                     active = source.split(
                         "static bool VF2B150UpgradeIsActive(int itemId)",
@@ -7862,108 +7870,45 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
                         1,
                     )[0]
 
-                    self.assertIn("VF2IsReversibleStockUpgrade(itemId)", active)
-                    self.assertIn(
-                        "return VF2IsReversibleStockUpgradeActive(itemId);",
-                        active,
-                    )
-                    self.assertIn(
-                        "return VF2B150UpgradeIsActive(itemId) ? 0 : -1;",
-                        price,
-                    )
-                    self.assertIn(
-                        "if (itemId == kVF2AntiSpamSoftwareItem)",
-                        removal,
-                    )
-                    self.assertIn("gameState[0x6C] = 0;", removal)
-                    self.assertIn(
-                        "InventoryManager.ReturnOne((EInventoryItem)itemId);",
-                        removal,
-                    )
-                    self.assertIn(
-                        "VF2IsReversibleStockUpgrade(itemId)",
-                        availability,
-                    )
-                    self.assertIn(
-                        "Always expose the row so",
-                        availability,
-                    )
-                    self.assertIn("return 1;", availability)
-                    self.assertEqual(
-                        manifest["outfit_store_helpers"]["b150_cheat_upgrade_gate"][
-                            "reversible_stock_upgrades"
-                        ],
-                        {
-                            "category": "0x0F",
-                            "native_list": "gGoodiesList",
-                            "setting": "core_executable",
-                            "independent_of_cheat_upgrades": True,
-                            "items": [
-                                {
-                                    "item_id": "0x33",
-                                    "name": "Anti-Spam Software",
-                                    "active_flag": "theGameState + 0x6C",
-                                },
-                                {
-                                    "item_id": "0x10a",
-                                    "name": "Rockhound Certificate",
-                                    "active_flag": "InventoryManager.HaveUpgrade",
-                                },
-                            ],
-                            "active_price": 0,
-                            "available_when_active": 1,
-                            "removal_route": "VF2RemoveOwnedUpgrade before native purchase handling; always enabled for these two rows",
-                        },
-                    )
-                    self.assertEqual(
-                        manifest["outfit_store_helpers"]["b150_cheat_upgrade_gate"][
-                            "independent_effects"
-                        ],
-                        [
-                            "repurchase Rockhound/Anti-Spam to remove",
-                            "mobile renovation active-byte state and native 0xE1-0xEA renovation state are independent of Cheat Upgrades",
-                        ],
-                    )
-                    self.assertEqual(
-                        manifest["outfit_store_helpers"]["b150_cheat_upgrade_gate"][
-                            "enabled"
-                        ],
-                        enabled,
-                    )
+                    # Active state exists only so the store can checkmark the
+                    # cheat rows; the removal path never touches either flag.
+                    self.assertIn("VF2IsStockOwnershipCheat(itemId)", active)
+                    self.assertIn("return VF2StockOwnershipActive(itemId);", active)
+                    self.assertNotIn("kVF2AntiSpamSoftwareItem", removal)
+                    self.assertNotIn("gameState[0x6C] = 0;", removal)
+                    self.assertNotIn("kVF2AntiSpamSoftwareItem", price)
 
-                    obj = CoffObject(temp / "InventoryManager.obj")
-                    symbol = obj.symbol(
-                        "?GetNumAvailable@CInventoryManager@@QAEHW4EInventoryItem@@@Z"
+                    # The cheat rows stay purchasable so a repurchase toggles.
+                    self.assertIn("VF2IsStockOwnershipCheat(itemId)", availability)
+
+                    # The flags themselves: a save byte and native ownership.
+                    self.assertIn("gameState[0x6C] != 0;", source)
+                    self.assertIn(
+                        "gameState[0x6C] = gameState[0x6C] != 0 ? 0 : 1;", source
                     )
-                    section = obj.section(symbol.section)
-                    raw = section.raw_ptr + symbol.value
-                    self.assertEqual(
-                        bytes(obj.buf[raw : raw + 25]),
-                        bytes.fromhex(
-                            "55 8B EC 51 FF 75 08 E8 00 00 00 00 "
-                            "83 C4 04 59 83 F8 FF 74 04 5D C2 04 00"
-                        ),
-                    )
-                    relocs = [
-                        struct.unpack_from(
-                            "<IIH",
-                            obj.buf,
-                            section.reloc_ptr + index * 10,
-                        )
-                        for index in range(section.nreloc)
-                    ]
-                    helper = obj.symbol_by_name["_VF2GetOutfitStoreNumAvailable"]
-                    self.assertEqual(
-                        [
-                            vaddr
-                            for vaddr, symbol_index, _rtype in relocs
-                            if symbol_index == helper.index
-                        ],
-                        [0x08],
-                    )
+                    self.assertIn("InventoryManager.ReturnOne(stockItem);", source)
+                    self.assertIn("InventoryManager.TakeOne(stockItem);", source)
+
+                    # Nothing drops the item on a computer any more.
+                    self.assertNotIn("VF2AntiSpamRemoveOnComputer", source)
+                    self.assertNotIn("Anti-spam software removed!", source)
         finally:
             patcher.PATCHED = old_patched
             patcher.ENABLE_CHEAT_UPGRADES = old_enabled
+
+    def test_flea_market_rows_keep_their_stock_descriptions(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+        # The two native long descriptions must not be rewritten: the rows are
+        # base game, so their text is too.
+        self.assertNotIn("eString_AntiSpamLongDesc", source)
+        self.assertNotIn("eString_RockHoundCertificateLongDesc", source)
+        self.assertNotIn("Buy it again and drop it on the computer", source)
+        self.assertNotIn(
+            "collect fossils! Buy it again to remove it", source
+        )
+        # And the drop-on-computer patch is gone entirely.
+        self.assertFalse(hasattr(patcher, "patch_anti_spam_remove_on_computer"))
+        self.assertNotIn("ANTI_SPAM_REMOVE_HELPER_SYMBOL", source)
 
     def test_exact_effect_math_and_health_plan_persistence(self):
         source = Path(patcher.__file__).read_text(encoding="utf-8")
@@ -8316,6 +8261,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 # The five wellbeing rows are grouped together at the end of
                 # the store rather than wedged into the pregnancy group.
                 0x153, 0x154, 0x155, 0x156, 0x157,
+                0x158, 0x159,
         ],
         )
         self.assertEqual(item_ids.index(0x12E), item_ids.index(0x124) + 1)
@@ -8584,6 +8530,77 @@ class OutfitStoreMappingTests(unittest.TestCase):
         ):
             self.assertIn(f"case 0x{item_id:X}:", source)
             self.assertIn(f"VF2ApplyResidentStat({stat});", source)
+
+    def test_armed_one_shots_get_a_checkmark_without_losing_their_click(self):
+        source = Path(patcher.__file__).read_text(encoding="utf-8")
+
+        # DrawVisibleStoreItem draws the owned checkmark (image 0x27A) when
+        # GetNumAvailable returns zero; HandleMouse treats the same zero as
+        # "not purchasable". Only the draw's call site may be retargeted, or
+        # an armed one-shot becomes uncancellable again.
+        self.assertIn(
+            'draw_sym.value + 0x354, lock_helper_sym, IMAGE_REL_I386_REL32', source
+        )
+        self.assertIn("checkmark_call = draw_sym.value + 0x2C8", source)
+        self.assertIn('bytes.fromhex("85C075")', source)
+        self.assertIn(
+            'checkmark_helper_sym = obj.append_undefined_symbol("@VF2StoreDrawNumAvailable@12")',
+            source,
+        )
+        self.assertIn(
+            "draw_sym.section, checkmark_call + 1, checkmark_helper_sym, IMAGE_REL_I386_REL32",
+            source,
+        )
+        # HandleMouse must never be retargeted for this.
+        self.assertNotIn("mouse_sym.value + 0x203", source)
+        self.assertNotIn("mouse_sym.value + 0x2AD", source)
+
+        # The draw helper reports zero only for an armed one-shot and
+        # delegates every other row to the native getter unchanged.
+        end = chr(10) + "}}" + chr(10)
+        helper = source.split(
+            "extern \"C\" int __fastcall VF2StoreDrawNumAvailable(", 1
+        )[1].split(end, 1)[0]
+        self.assertIn("if (VF2OneShotUpgradeArmed(itemId)) return 0;", helper)
+        self.assertIn("return self->GetNumAvailable((EInventoryItem)itemId);", helper)
+
+        # The armed predicate is deliberately separate from
+        # VF2B150UpgradeIsActive, which also gates VF2RemoveOwnedUpgrade:
+        # these rows are cancelled by the toggle, never by ReturnOne.
+        armed = source.split("static bool VF2OneShotUpgradeArmed(int itemId) {{", 1)[1].split(
+            end, 1
+        )[0]
+        for item_id, bit in (
+            (0x136, "0x04u"),
+            (0x137, "0x08u"),
+            (0x138, "0x10u"),
+            (0x139, "0x20u"),
+            (0x13A, "0x40u"),
+            (0x13B, "0x80u"),
+        ):
+            self.assertIn(f"case 0x{item_id:X}: return (mask & {bit}) != 0;", armed)
+        # The ownership cheats are checkmarked from live state, not the mask,
+        # but still must not reach the ReturnOne removal route.
+        self.assertIn("VF2IsStockOwnershipCheat(itemId)", armed)
+        self.assertNotIn("ReturnOne", armed)
+
+        # Each one-shot row tells the player it can be cancelled.
+        rows = {item["item_id"]: item for item in patcher.CHEAT_UPGRADE_ITEMS}
+        for item_id in range(0x136, 0x13C):
+            self.assertTrue(
+                rows[item_id]["description"].endswith("Buy it again to cancel it."),
+                f"row {item_id:#x} does not document repurchase-to-cancel",
+            )
+
+        # The two Flea Market rows are base game now; their removal lives on
+        # dedicated cheat rows instead, covered by its own test.
+        # This switch block is not a format string, so the ids are literal.
+        self.assertIn("case 0x158:  // Anti-Spam Software ownership", source)
+        self.assertIn("case 0x159:  // Rockhound Certificate ownership", source)
+        self.assertIn("static void VF2ToggleStockOwnership(int cheatItemId);", source)
+        self.assertIn("VF2ToggleStockOwnership(itemId);", source)
+        self.assertEqual(patcher.ANTI_SPAM_OWNERSHIP_CHEAT_ITEM_ID, 0x158)
+        self.assertEqual(patcher.ROCKHOUND_OWNERSHIP_CHEAT_ITEM_ID, 0x159)
 
     def _write(self, path, data=b"stock"):
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -299,7 +299,6 @@ SAME_SEX_MARRIAGE_FLAG_SYMBOL = "_gVF2SameSexMarriage"
 ROMANTIC_SPOUSE_DROP_HELPER_SYMBOL = "@VF2ClassifyRomanticSpouseDrop@12"
 SAME_SEX_TRY_TO_MAKE_BABY_SKIP_HELPER_SYMBOL = "_VF2SkipSameSexTryToMakeBaby"
 ADOPTION_CHOOSER_HELPER_SYMBOL = "_VF2AdoptRandomChildChoice"
-ANTI_SPAM_REMOVE_HELPER_SYMBOL = "_VF2AntiSpamRemoveOnComputer"
 
 MARRIAGE_EMAIL_ITEM_ID = 0x132
 SAME_SEX_MARRIAGE_ITEM_ID = 0x14C
@@ -336,7 +335,11 @@ VILLAGER_DETAILS_MARRIED_STATUS_HELPER_SYMBOL = "_VF2SameSexMarriedStatusForVill
 # These are native Flea Market rows, not added Special Upgrades rows.  Keep
 # their reversible behavior in one explicit set so availability, price, and
 # removal cannot drift apart again.
-REVERSIBLE_STOCK_UPGRADE_IDS = (0x33, 0x10A)
+# The two stock Flea Market rows whose ownership the cheat rows below can
+# set or clear. The rows themselves stay entirely base game.
+STOCK_OWNERSHIP_ITEM_IDS = (0x33, 0x10A)
+ANTI_SPAM_OWNERSHIP_CHEAT_ITEM_ID = 0x158
+ROCKHOUND_OWNERSHIP_CHEAT_ITEM_ID = 0x159
 DIVORCE_SPOUSE_ITEM_ID = 0x14B
 DIVORCE_SPOUSE_WARNING = "WARNING: Permanently removes spouse from the Family Tree and House!"
 DIVORCE_SPOUSE_ICON_FILE = "cheat_marriage_email.png"
@@ -818,6 +821,16 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     # appended out of numeric order deliberately: icon image ids are derived
     # from this mapping's insertion order, so inserting them next to 0x13B
     # would shift the image id of every row below them.
+    # The stock Flea Market art for the two items these rows own, lifted from
+    # the grids the native draw actually uses.  CInventoryManager::DrawItem
+    # resolves the cell at the blit, not from the 0x24-byte item record: items
+    # below 0xE1 draw from InventoryItems.png (10x14) at
+    # (item - 4) * 2 + (state - 2), and items from 0xE1 up draw from
+    # home_grid.png (5x11) at item - 0xE1.  So Anti-spam Software (0x33) is
+    # cell 92 -- the disc with the red "spam" label -- and the Rockhound
+    # Certificate (0x10a) is cell 41, the certificate that reads "Rock Hound".
+    ANTI_SPAM_OWNERSHIP_CHEAT_ITEM_ID: "cheat_antispam_disk.png",
+    ROCKHOUND_OWNERSHIP_CHEAT_ITEM_ID: "cheat_rockhound_certificate.png",
     0x153: "HealthPlan_icon.png",
     0x154: "HealthPlan_icon.png",
     0x155: "HealthPlan_icon.png",
@@ -1930,37 +1943,37 @@ CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x136,
         "name": "Force Successful Pregnancy",
-        "description": "Makes the next eligible try-for-baby attempt pass its pregnancy roll. The one-shot remains armed until the native birth routine succeeds.",
+        "description": "Makes the next eligible try-for-baby attempt pass its pregnancy roll. The one-shot remains armed until the native birth routine succeeds. Buy it again to cancel it.",
         "price": 0,
     },
     {
         "item_id": 0x137,
         "name": "Next Babies Male",
-        "description": "Makes every baby in the next successful birth male. Replaces the Female one-shot and clears after birth.",
+        "description": "Makes every baby in the next successful birth male. Replaces the Female one-shot and clears after birth. Buy it again to cancel it.",
         "price": 0,
     },
     {
         "item_id": 0x138,
         "name": "Next Babies Female",
-        "description": "Makes every baby in the next successful birth female. Replaces the Male one-shot and clears after birth.",
+        "description": "Makes every baby in the next successful birth female. Replaces the Male one-shot and clears after birth. Buy it again to cancel it.",
         "price": 0,
     },
     {
         "item_id": 0x139,
         "name": "Next Pregnancy Singleton",
-        "description": "Makes the next successful birth one baby. Replaces the Twins or Triplets one-shot and clears after birth.",
+        "description": "Makes the next successful birth one baby. Replaces the Twins or Triplets one-shot and clears after birth. Buy it again to cancel it.",
         "price": 0,
     },
     {
         "item_id": 0x13A,
         "name": "Next Pregnancy Twins",
-        "description": "Makes the next successful birth twins when two child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Triplets one-shot and clears after birth.",
+        "description": "Makes the next successful birth twins when two child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Triplets one-shot and clears after birth. Buy it again to cancel it.",
         "price": 0,
     },
     {
         "item_id": 0x13B,
         "name": "Next Pregnancy Triplets",
-        "description": "Makes the next successful birth triplets when three child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Twins one-shot and clears after birth.",
+        "description": "Makes the next successful birth triplets when three child slots are available, otherwise safely uses the available capacity. Replaces the Singleton or Twins one-shot and clears after birth. Buy it again to cancel it.",
         "price": 0,
     },
     {
@@ -1993,6 +2006,18 @@ CHEAT_UPGRADE_ITEMS = [
         "description": "Fills the Health bar for everyone currently in the house. Does not revive anyone who has already died.",
         "price": 0,
     },
+    {
+        "item_id": ANTI_SPAM_OWNERSHIP_CHEAT_ITEM_ID,
+        "name": "Anti-Spam Software Ownership",
+        "description": "Installs or uninstalls the Anti-spam Software without using a computer. Buy it again to switch it back. The Flea Market item itself is unchanged.",
+        "price": 0,
+    },
+    {
+        "item_id": ROCKHOUND_OWNERSHIP_CHEAT_ITEM_ID,
+        "name": "Rockhound Certificate Ownership",
+        "description": "Grants or removes the Rockhound Certificate, which lets the family dig for fossils. Buy it again to switch it back. The Flea Market item itself is unchanged.",
+        "price": 0,
+    },
 ]
 CHEAT_UPGRADE_LEGACY_COUNT = 19
 CHEAT_UPGRADE_STRING_COUNT = CHEAT_UPGRADE_LEGACY_COUNT * 2
@@ -2012,6 +2037,12 @@ CHEAT_UPGRADE_EXTRA_STRING_ORDER = (
 # resolve to one row. They get their own allocator past the last existing
 # block instead, exactly as Divorce, Same-Sex and Reroll each did.
 WELLBEING_CHEAT_ITEM_IDS = (0x153, 0x154, 0x155, 0x156, 0x157)
+# Allocated after the wellbeing block for the same reason: the position-keyed
+# extra block grows into the fixed renovation string range.
+STOCK_OWNERSHIP_CHEAT_ITEM_IDS = (
+    ANTI_SPAM_OWNERSHIP_CHEAT_ITEM_ID,
+    ROCKHOUND_OWNERSHIP_CHEAT_ITEM_ID,
+)
 HOLIDAY_ORNAMENT_COLLECTABLE_START = 0x9E
 HOLIDAY_ORNAMENT_COLLECTABLE_END = 0xA9
 HOLIDAY_ORNAMENT_COLLECTION_PAGE = 5
@@ -5540,6 +5571,13 @@ def ai_bathroom2_string_ids_for(index):
 def marriage_candidate_reroll_string_ids():
     first_id = ai_bathroom2_string_ids_for(len(AI_BATHROOM2_STYLE_CATALOG) - 1)[1] + 1
     return first_id, first_id + 1
+
+
+def stock_ownership_cheat_string_ids_for(index):
+    if index < 0 or index >= len(STOCK_OWNERSHIP_CHEAT_ITEM_IDS):
+        raise IndexError(f"stock ownership cheat string index out of range: {index}")
+    first_id = wellbeing_cheat_string_ids_for(len(WELLBEING_CHEAT_ITEM_IDS) - 1)[1] + 1
+    return first_id + index * 2, first_id + 1 + index * 2
 
 
 def wellbeing_cheat_string_ids_for(index):
@@ -9933,6 +9971,10 @@ def cheat_upgrade_string_ids_for_entry(entry_index):
         return marriage_candidate_reroll_string_ids()
     if item_id in WELLBEING_CHEAT_ITEM_IDS:
         return wellbeing_cheat_string_ids_for(WELLBEING_CHEAT_ITEM_IDS.index(item_id))
+    if item_id in STOCK_OWNERSHIP_CHEAT_ITEM_IDS:
+        return stock_ownership_cheat_string_ids_for(
+            STOCK_OWNERSHIP_CHEAT_ITEM_IDS.index(item_id)
+        )
     if entry_index < CHEAT_UPGRADE_LEGACY_COUNT:
         base = (
             ORIG_STRING_ONE_PAST_MAX
@@ -11321,6 +11363,7 @@ public:
     bool HaveUpgrade(EInventoryItem item);
     void TakeOne(EInventoryItem item);
     void ReturnOne(EInventoryItem item);
+    int GetNumAvailable(EInventoryItem item);
 public:
     char pad0[0x468];
     int maleOutfitBody;
@@ -11621,32 +11664,58 @@ static const int kVF2AIBathroom2StoreIconImageBase = {ai_bathroom2_store_icon_im
 static const int kVF2MobileRenovationIconCellSize = {VISIBLE_SPECIAL_UPGRADE_ICON_CELL_SIZE};
 static const int kVF2FleaMarketCategory = 0x0F;
 static const int kVF2FleaMarketGoodiesCount = 0x24;
-static const int kVF2AntiSpamSoftwareItem = {REVERSIBLE_STOCK_UPGRADE_IDS[0]};
-static const int kVF2RockhoundCertificateItem = {REVERSIBLE_STOCK_UPGRADE_IDS[1]};
-static bool VF2IsReversibleStockUpgrade(int itemId) {{
-    return itemId == kVF2AntiSpamSoftwareItem ||
-        itemId == kVF2RockhoundCertificateItem;
+// The two Flea Market rows these cheats operate on. The rows themselves are
+// pure base game -- stock availability, stock one-purchase price, stock
+// descriptions, no repurchase-to-remove route. Only the cheat rows below
+// touch their ownership state.
+static const int kVF2AntiSpamSoftwareItem = {STOCK_OWNERSHIP_ITEM_IDS[0]};
+static const int kVF2RockhoundCertificateItem = {STOCK_OWNERSHIP_ITEM_IDS[1]};
+static const int kVF2AntiSpamCheatItem = {ANTI_SPAM_OWNERSHIP_CHEAT_ITEM_ID:#x};
+static const int kVF2RockhoundCheatItem = {ROCKHOUND_OWNERSHIP_CHEAT_ITEM_ID:#x};
+
+static bool VF2IsStockOwnershipCheat(int itemId) {{
+    return itemId == kVF2AntiSpamCheatItem || itemId == kVF2RockhoundCheatItem;
 }}
-static bool VF2IsReversibleStockUpgradeActive(int itemId) {{
+
+// Anti-spam ownership is a byte in the save (theGameState+0x6C, the same byte
+// the stock install writes); the Rockhound Certificate is ordinary native
+// inventory ownership.
+static bool VF2StockOwnershipActive(int cheatItemId) {{
     unsigned char* gameState = (unsigned char*)theGameState::Get();
-    if (itemId == kVF2AntiSpamSoftwareItem) {{
+    if (cheatItemId == kVF2AntiSpamCheatItem) {{
         return gameState && gameState[0x6C] != 0;
     }}
-    if (itemId == kVF2RockhoundCertificateItem) {{
-        return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
+    if (cheatItemId == kVF2RockhoundCheatItem) {{
+        return InventoryManager.HaveUpgrade(
+            (EInventoryItem)kVF2RockhoundCertificateItem);
     }}
     return false;
+}}
+
+static void VF2ToggleStockOwnership(int cheatItemId) {{
+    if (cheatItemId == kVF2AntiSpamCheatItem) {{
+        unsigned char* gameState = (unsigned char*)theGameState::Get();
+        if (!gameState) return;
+        gameState[0x6C] = gameState[0x6C] != 0 ? 0 : 1;
+        return;
+    }}
+    if (cheatItemId == kVF2RockhoundCheatItem) {{
+        EInventoryItem stockItem = (EInventoryItem)kVF2RockhoundCertificateItem;
+        if (InventoryManager.HaveUpgrade(stockItem)) {{
+            InventoryManager.ReturnOne(stockItem);
+        }} else {{
+            InventoryManager.TakeOne(stockItem);
+        }}
+    }}
 }}
 static int gVF2SyntheticOutfitToolInHand = 0;
 static int gVF2SyntheticOutfitToolInUse = 0;
 static int gVF2LastSyntheticOutfitByGender[2] = {{0, 0}};
 
 static bool VF2B150UpgradeIsActive(int itemId) {{
-    // These two native Flea Market rows remain reversible even when the
-    // optional Cheat Upgrades overlay is disabled.  Their persisted effect
-    // state is distinct from the native one-purchase availability state.
-    if (VF2IsReversibleStockUpgrade(itemId)) {{
-        return VF2IsReversibleStockUpgradeActive(itemId);
+    // The ownership cheat rows report active so the store can checkmark them.
+    if (VF2IsStockOwnershipCheat(itemId)) {{
+        return VF2StockOwnershipActive(itemId);
     }}
     // Bathroom 2 is visual-only House Renovations state. Its active byte
     // must remain visible to the shared removal hook even when Cheat
@@ -11685,9 +11754,6 @@ static bool VF2B150UpgradeIsActive(int itemId) {{
 }}
 
 extern "C" int __cdecl VF2GetB150UpgradePrice(int itemId) {{
-    if (VF2IsReversibleStockUpgrade(itemId)) {{
-        return VF2IsReversibleStockUpgradeActive(itemId) ? 0 : -1;
-    }}
     if (!kVF2EnableB150CheatUpgrades) return -1;
     if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
         return VF2B150UpgradeIsActive(itemId)
@@ -11802,8 +11868,7 @@ static void VF2DeactivateWorker(int workerId, int expiryOffset) {{
 extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
     if (!kVF2EnableB150CheatUpgrades && !kVF2EnableAIBathroom2 &&
         !VF2IsMobileRenovationStyle(itemId) &&
-        !(itemId >= 0xE1 && itemId <= 0xEA) &&
-        !VF2IsReversibleStockUpgrade(itemId)) return false;
+        !(itemId >= 0xE1 && itemId <= 0xEA)) return false;
     if (!VF2B150UpgradeIsActive(itemId)) return false;
     unsigned char* gameState = (unsigned char*)theGameState::Get();
     if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
@@ -11830,12 +11895,6 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
     }} else if (itemId >= 0xE1 && itemId <= 0xEA) {{
         InventoryManager.ReturnOne((EInventoryItem)itemId);
         VF2RebuildOwnedRenovations();
-    }} else if (VF2IsReversibleStockUpgrade(itemId)) {{
-        if (itemId == kVF2AntiSpamSoftwareItem) {{
-            if (gameState) gameState[0x6C] = 0;
-        }} else {{
-            InventoryManager.ReturnOne((EInventoryItem)itemId);
-        }}
     }} else {{
         InventoryManager.ReturnOne((EInventoryItem)itemId);
         if (itemId == 0x115) VF2DeactivateWorker(0x23, 0x25AF8);
@@ -11969,10 +12028,9 @@ extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
         // arming it and then changing your mind kept it armed indefinitely.
         return 1;
     }}
-    if (VF2IsReversibleStockUpgrade(itemId)) {{
-        // The native list remembers both rows as one-purchase items even
-        // after their persisted effect is cleared.  Always expose the row so
-        // a cleared save flag can be purchased again.
+    if (kVF2EnableB150CheatUpgrades && VF2IsStockOwnershipCheat(itemId)) {{
+        // Stay purchasable while active so a repurchase reaches
+        // VF2ToggleStockOwnership and can turn the flag back off.
         return 1;
     }}
     if (kVF2EnableB150CheatUpgrades &&
@@ -11981,6 +12039,51 @@ extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
         return 1;
     }}
     return VF2OutfitBodyForItem(itemId) < 0 ? -1 : 1;
+}}
+
+// True while one of the six pregnancy one-shots is armed.  Kept separate from
+// VF2B150UpgradeIsActive on purpose: that predicate also gates
+// VF2RemoveOwnedUpgrade, and these rows must never take the ReturnOne removal
+// route -- they are cancelled by VF2ToggleOneShotUpgrade from the click
+// handler instead.
+static bool VF2OneShotUpgradeArmed(int itemId) {{
+    if (!kVF2EnableB150CheatUpgrades) return false;
+    // The ownership cheats are checkmarked from live game state, not the mask.
+    if (VF2IsStockOwnershipCheat(itemId)) return VF2StockOwnershipActive(itemId);
+    unsigned int mask = VF2PersistentCheatAndPurchaseMask();
+    switch (itemId) {{
+    case 0x136: return (mask & 0x04u) != 0;   // Force Successful Pregnancy
+    case 0x137: return (mask & 0x08u) != 0;   // Next Babies Male
+    case 0x138: return (mask & 0x10u) != 0;   // Next Babies Female
+    case 0x139: return (mask & 0x20u) != 0;   // Next Pregnancy Singleton
+    case 0x13A: return (mask & 0x40u) != 0;   // Next Pregnancy Twins
+    case 0x13B: return (mask & 0x80u) != 0;   // Next Pregnancy Triplets
+    default: return false;
+    }}
+}}
+
+// CScrollingStoreScene::DrawVisibleStoreItem draws the owned checkmark (image
+// 0x27A) for any row whose GetNumAvailable is zero, and its click handler
+// treats the same zero as "not purchasable".  An armed one-shot needs both at
+// once: the checkmark so the player can see it is armed, and a live row so a
+// repurchase can still reach VF2ToggleOneShotUpgrade and cancel it.
+//
+// The draw and the click read GetNumAvailable through *different* call sites,
+// so only the draw's site is retargeted here.  This reports zero for an armed
+// one-shot -- drawing the checkmark -- while the click keeps seeing the real
+// answer and stays clickable.  Every other row delegates unchanged.
+//
+// __fastcall stands in for the native __thiscall: ECX carries `self`, EDX is
+// ignored, itemId arrives on the stack, and the callee cleans the same 4
+// bytes the native method does.
+extern "C" int __fastcall VF2StoreDrawNumAvailable(
+    CInventoryManager *self,
+    void *unused,
+    int itemId
+) {{
+    (void)unused;
+    if (VF2OneShotUpgradeArmed(itemId)) return 0;
+    return self->GetNumAvailable((EInventoryItem)itemId);
 }}
 
 extern "C" bool __cdecl VF2PurchaseOutfitStoreItem(int itemId) {{
@@ -12063,9 +12166,6 @@ extern "C" int __cdecl VF2ResolveOutfitBodyForApply(int stockItem, int villagerG
 }}
 
 extern "C" int __cdecl VF2GetOutfitStorePrice(int itemId) {{
-    if (VF2IsReversibleStockUpgrade(itemId)) {{
-        return VF2B150UpgradeIsActive(itemId) ? 0 : -1;
-    }}
     int body = VF2OutfitBodyForItem(itemId);
     if (body < 0) {{
         return -1;
@@ -12381,17 +12481,24 @@ extern "C" bool __cdecl VF2DrawOutfitStoreIconRect(
             "reversible_stock_upgrades": {
                 "category": "0x0F",
                 "native_list": "gGoodiesList",
-                "setting": "core_executable",
-                "independent_of_cheat_upgrades": True,
+                "setting": "cheat_upgrades",
+                "independent_of_cheat_upgrades": False,
+                "stock_rows_untouched": (
+                    "Flea Market rows 0x33 and 0x10a are entirely base game: "
+                    "stock availability, stock one-purchase price, stock "
+                    "descriptions, and no repurchase-to-remove route"
+                ),
                 "items": [
                     {
-                        "item_id": hex(REVERSIBLE_STOCK_UPGRADE_IDS[0]),
-                        "name": "Anti-Spam Software",
+                        "item_id": hex(ANTI_SPAM_OWNERSHIP_CHEAT_ITEM_ID),
+                        "name": "Anti-Spam Software (cheat toggle)",
+                        "stock_item": hex(STOCK_OWNERSHIP_ITEM_IDS[0]),
                         "active_flag": "theGameState + 0x6C",
                     },
                     {
-                        "item_id": hex(REVERSIBLE_STOCK_UPGRADE_IDS[1]),
-                        "name": "Rockhound Certificate",
+                        "item_id": hex(ROCKHOUND_OWNERSHIP_CHEAT_ITEM_ID),
+                        "name": "Rockhound Certificate (cheat toggle)",
+                        "stock_item": hex(STOCK_OWNERSHIP_ITEM_IDS[1]),
                         "active_flag": "InventoryManager.HaveUpgrade",
                     },
                 ],
@@ -12617,30 +12724,8 @@ def patch_main_scene_random_tip_click(manifest):
 class CDealerSay {
 public:
     void Say(StringId stringId, int gender);
-    // The native const char* overload, used by the stock "They need a couch
-    // or a bed..." message. Declared so a literal can be shown without
-    // adding a StringId to the runtime table.
-    void Say(const char *message);
 };
 extern CDealerSay DealerSay;
-
-// theMainScene::DispatchRotatingSundry installs Anti-spam Software when the
-// item is dropped on a computer hotspot: it sets gameState+0x6C, tells every
-// villager to react, and says StringId 0x246 "Anti-spam software installed!".
-//
-// Dropping it again while already installed re-ran the same branch, so the
-// upgrade could be bought and applied repeatedly with no way to take it off
-// from the computer. This reports whether the drop should uninstall instead,
-// and does the uninstall and its message when so.
-extern "C" bool __cdecl VF2AntiSpamRemoveOnComputer(void *gameState) {
-    unsigned char *state = (unsigned char *)gameState;
-    if (!state || state[0x6C] == 0) {
-        return false;   // not installed: let the stock install path run
-    }
-    state[0x6C] = 0;
-    DealerSay.Say("Anti-spam software removed!");
-    return true;
-}
 
 extern "C" bool __cdecl VF2TryRandomTipHouseHit(
     void *scene,
@@ -12757,6 +12842,31 @@ def patch_scrolling_store_scene(manifest):
     draw_sym = obj.symbol("?DrawVisibleStoreItem@CScrollingStoreScene@@AAEXHHH@Z")
     lock_helper_sym = obj.append_undefined_symbol("_VF2DrawGenerationLock")
     obj.retarget_relocation(draw_sym.section, draw_sym.value + 0x354, lock_helper_sym, IMAGE_REL_I386_REL32)
+
+    # DrawVisibleStoreItem asks GetNumAvailable at +0x2C8 purely to decide
+    # whether to draw the owned checkmark (image 0x27A) at +0x2D1; the click
+    # handler asks the same method from its own separate call sites inside
+    # HandleMouse. Retargeting only this one lets an armed pregnancy one-shot
+    # show the checkmark while staying purchasable, so a repurchase can still
+    # reach VF2ToggleOneShotUpgrade and cancel it. Verified against the stock
+    # bytes first so a drifted anchor fails loudly instead of silently
+    # retargeting some unrelated call.
+    draw_section = obj.section(draw_sym.section)
+    checkmark_call = draw_sym.value + 0x2C8
+    checkmark_raw = draw_section.raw_ptr + checkmark_call
+    if obj.buf[checkmark_raw] != 0xE8:
+        raise RuntimeError(
+            "DrawVisibleStoreItem checkmark GetNumAvailable call drifted at +0x2C8"
+        )
+    # test eax,eax / jne short -- the checkmark gate the returned value feeds.
+    if bytes(obj.buf[checkmark_raw + 5:checkmark_raw + 8]) != bytes.fromhex("85C075"):
+        raise RuntimeError(
+            "DrawVisibleStoreItem checkmark gate drifted after the +0x2C8 call"
+        )
+    checkmark_helper_sym = obj.append_undefined_symbol("@VF2StoreDrawNumAvailable@12")
+    obj.retarget_relocation(
+        draw_sym.section, checkmark_call + 1, checkmark_helper_sym, IMAGE_REL_I386_REL32
+    )
 
     scene_draw_sym = obj.symbol("?DrawScene@CScrollingStoreScene@@MAEXXZ")
     scrollbar_draw_helper = obj.append_undefined_symbol("_VF2DrawStoreScrollbar")
@@ -15078,6 +15188,10 @@ static void VF2ToggleOneShotUpgrade(unsigned int bit, unsigned int group) {
     mask = (mask & bit) ? (mask & ~bit) : ((mask & ~group) | bit);
 }
 
+// Defined later in this translation unit, where CInventoryManager and
+// theGameState are both fully visible.
+static void VF2ToggleStockOwnership(int cheatItemId);
+
 extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
     if (VF2ApplyMobileRenovationStyle(itemId)) return;
     switch (itemId) {
@@ -15269,6 +15383,10 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x157:  // Max out Health Bar
         VF2ApplyResidentStat(eVF2ResidentMaxHealth);
+        break;
+    case 0x158:  // Anti-Spam Software ownership
+    case 0x159:  // Rockhound Certificate ownership
+        VF2ToggleStockOwnership(itemId);
         break;
     case 0x14B:
         if (!VF2DivorceSpouse()) return;
@@ -20098,119 +20216,6 @@ def patch_force_pregnancy_skips_refusals(manifest):
             "couch/bed furniture check"
         ),
         "when_disarmed": "every path is byte-for-byte stock",
-    }
-
-
-def patch_anti_spam_remove_on_computer(manifest):
-    """Dropping Anti-spam Software on a computer while installed removes it.
-
-    theMainScene::DispatchRotatingSundry handles the drop. Once the hotspot is
-    confirmed to be a computer it installs unconditionally:
-
-        +0x0AA  cmp eax, 0x12              hotspot 0x12 == computer
-        +0x0AD  jne +0x0F6                 not a computer -> Say(0x4C)
-        +0x0AF  mov eax, [ebx+0x14]        gameState
-        +0x0B2  mov ecx, VillagerManager
-        +0x0B7  push 0 / push 0 / push -1 / push 7 / push 7 / push 7Eh
-        +0x0C3  mov byte [eax+0x6C], 1     install flag
-        +0x0C7  call MakeAllVillagersDoIt
-        +0x0CC  Say(0x246) "Anti-spam software installed!"
-        +0x0DD  ToolTray::UseTool / ReturnTool
-
-    So re-dropping it while already installed just re-installed and repeated
-    the message, with no way to take it off from the computer.
-
-    The hook goes at +0x0B7, on the pushes, and NOT at +0x0AF: a 5-byte jump
-    there would land on the relocation at +0x0B3 (mov ecx, VillagerManager),
-    and the linker would then write that address straight through the jump
-    displacement. +0x0B7 has no relocation across it.
-
-    By that point EAX already holds gameState and ECX holds VillagerManager,
-    so the cave can test the install flag directly and either
-
-      * uninstall: clear the flag, say "Anti-spam software removed!", and
-        rejoin at +0x0DD so the tool is still consumed and returned, or
-      * install: reproduce the three clobbered pushes and rejoin at +0x0BD,
-        which pushes the rest and runs the stock install unchanged.
-
-    The tool is consumed on both paths, so a removal costs the item exactly
-    as an install does -- buy it again to put it back.
-    """
-    path = PATCHED / "theMainScene.obj"
-    obj = CoffObject(path)
-    function_name = "?DispatchRotatingSundry@theMainScene@@IAEXHW4EInventoryItem@@UldwPoint@@@Z"
-    function = obj.symbol(function_name)
-    section = obj.section(function.section)
-
-    hook = function.value + 0xB7
-    raw = section.raw_ptr + hook
-    expected = bytes.fromhex("6A 00 6A 00 6A FF")
-    if bytes(obj.buf[raw:raw + len(expected)]) != expected:
-        raise RuntimeError(
-            "theMainScene::DispatchRotatingSundry anti-spam install pushes "
-            "drifted at +0xB7: " + bytes(obj.buf[raw:raw + 6]).hex(" ")
-        )
-    if bytes(obj.buf[section.raw_ptr + function.value + 0xC3:
-                     section.raw_ptr + function.value + 0xC7]) != bytes.fromhex("C6 40 6C 01"):
-        raise RuntimeError("anti-spam install flag write drifted at +0xC3")
-
-    helper = obj.append_undefined_symbol(ANTI_SPAM_REMOVE_HELPER_SYMBOL)
-    cave = section.raw_size
-    payload = bytearray(
-        b"\x50"                  # push eax  ) the helper is cdecl and takes
-        b"\xE8\0\0\0\0"          # call VF2AntiSpamRemoveOnComputer(gameState)
-        b"\x83\xC4\x04"          # add esp, 4
-        b"\x84\xC0"              # test al, al
-        b"\x74\x05"              # not installed -> stock install path
-        b"\xE9\0\0\0\0"          # removed -> rejoin at +0xDD (UseTool)
-        b"\x8B\x43\x14"          # mov eax, [ebx+0x14]   restore gameState
-        b"\xB9\0\0\0\0"          # mov ecx, VillagerManager
-        b"\x6A\x00"              # push 0   ) the three pushes the
-        b"\x6A\x00"              # push 0   ) trampoline overwrote
-        b"\x6A\xFF"              # push -1  )
-        b"\xE9\0\0\0\0"          # jmp +0xBD
-    )
-    if len(payload) != 37:
-        raise AssertionError("Anti-spam cave size drifted")
-    struct.pack_into("<i", payload, 14, (function.value + 0xDD) - (cave + 18))
-    struct.pack_into("<i", payload, 33, (function.value + 0xBD) - (cave + 37))
-
-    obj.insert_section_bytes(section.index, cave, bytes(payload))
-    obj.append_relocation(section.index, cave + 2, helper, IMAGE_REL_I386_REL32)
-    # The reproduced "mov ecx, VillagerManager" needs its own absolute
-    # relocation, or ECX would be zero when the stock path resumes.
-    manager = obj.append_undefined_symbol("?VillagerManager@@3VCVillagerManager@@A")
-    obj.append_relocation(section.index, cave + 22, manager, IMAGE_REL_I386_DIR32)
-    obj._parse()
-    section = obj.section(function.section)
-    raw = section.raw_ptr + hook
-    obj.buf[raw:raw + 5] = b"\xE9" + struct.pack("<i", cave - (hook + 5))
-    # +0xBC is the orphaned second byte of the overwritten "push -1"; the cave
-    # never returns there, but leave it as a NOP rather than a stray 0xFF.
-    obj.buf[raw + 5] = 0x90
-    obj.write(path)
-
-    manifest["AntiSpamRemoveOnComputer"] = {
-        "status": "installed",
-        "function": function_name,
-        "hook_offset": "+0xB7",
-        "stock_bytes": expected.hex(" "),
-        "trampoline": hex(cave),
-        "trampoline_size": len(payload),
-        "install_resume": "+0xBD",
-        "removed_resume": "+0xDD (ToolTray::UseTool/ReturnTool)",
-        "helper": ANTI_SPAM_REMOVE_HELPER_SYMBOL,
-        "message": "Anti-spam software removed!",
-        "reason": (
-            "dropping the item on a computer while already installed re-ran "
-            "the stock install branch and repeated 'Anti-spam software "
-            "installed!', with no way to take the upgrade off"
-        ),
-        "not_hooked_at": (
-            "+0xAF, because a 5-byte jump there covers the relocation at "
-            "+0xB3 and the linker would write VillagerManager's address "
-            "through the jump displacement"
-        ),
     }
 
 
@@ -31428,7 +31433,6 @@ def main():
     patch_force_pregnancy_skips_refusals(manifest)
     # Dropping Anti-spam Software on a computer while it is already
     # installed removes it instead of re-installing it.
-    patch_anti_spam_remove_on_computer(manifest)
     patch_villager_manager_spouse_accessors(manifest)
     patch_marriage_finalization_for_same_sex(manifest)
     # A second, independent site with the identical Matriarch/Patriarch
