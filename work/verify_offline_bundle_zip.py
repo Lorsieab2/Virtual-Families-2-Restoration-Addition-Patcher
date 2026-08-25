@@ -65,7 +65,51 @@ REQUIRED_RUNNERS = {
 # The apply runner is named for its release, so it is matched by shape rather
 # than pinned: pinning "Apply_B161_Patcher.bat" made every later release fail
 # this check for shipping its own correctly-named runner.
-APPLY_RUNNER_PATTERN = re.compile(r"^Apply_B\d+_Patcher\.bat$")
+# Same build-label grammar the exporter uses in infer_build_label(): point
+# releases are real -- B155.5 shipped -- so "B\d+" alone would reject a
+# valid Apply_B174.5_Patcher.bat.
+APPLY_RUNNER_PATTERN = re.compile(r"^Apply_B\d+(?:\.\d+)?_Patcher\.bat$")
+
+
+def _load_variant_identities(path: Path) -> dict[frozenset[str], tuple[str, int]]:
+    """Read compiled variant identities produced from the matrix build.
+
+    Independent of the archive being verified: manifest.json is written by the
+    bundle exporter alongside the payload it describes, so checking one against
+    the other only proves the bundle agrees with itself. An exporter that
+    selected the wrong-but-valid executable for a feature combination would
+    record that executable's hash too, and the bundle would verify clean.
+    """
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        _fail(f"variant identities file is unreadable: {exc}")
+    variants = raw.get("variants")
+    if not isinstance(variants, list) or not variants:
+        _fail("variant identities file lists no variants")
+    identities: dict[frozenset[str], tuple[str, int]] = {}
+    for entry in variants:
+        if not isinstance(entry, dict):
+            _fail("variant identities entry is not an object")
+        requires = entry.get("requires")
+        digest = str(entry.get("sha256", "")).lower()
+        size = entry.get("size")
+        if not isinstance(requires, list) or not all(isinstance(x, str) for x in requires):
+            _fail("variant identities entry has an invalid requires list")
+        if not re.fullmatch(r"[0-9a-f]{64}", digest) or not isinstance(size, int) or size <= 0:
+            _fail(f"variant identities entry for {sorted(requires)} has an invalid identity")
+        key = frozenset(requires)
+        if key in identities:
+            _fail(f"variant identities file lists {sorted(requires)} twice")
+        identities[key] = (digest, size)
+    if set(identities) != EXECUTABLE_VARIANT_REQUIREMENTS:
+        missing = sorted(sorted(x) for x in EXECUTABLE_VARIANT_REQUIREMENTS - set(identities))
+        extra = sorted(sorted(x) for x in set(identities) - EXECUTABLE_VARIANT_REQUIREMENTS)
+        _fail(
+            "variant identities do not cover the release contract; "
+            f"missing={missing} unexpected={extra}"
+        )
+    return identities
 
 
 def _fail(message: str) -> None:
@@ -185,12 +229,17 @@ def _verify_zip_inventory(zipped: zipfile.ZipFile, zip_path: Path) -> tuple[str,
     return root, set(names)
 
 
-def verify_archive(zip_path: Path | str) -> dict:
+def verify_archive(zip_path: Path | str, identities_path: Path | str | None = None) -> dict:
     """Verify one explicit archive and return a compact evidence summary."""
     path = Path(zip_path)
     archive_path = path
     if not path.is_file():
         _fail(f"ZIP does not exist: {path}")
+    identities = (
+        _load_variant_identities(Path(identities_path))
+        if identities_path is not None
+        else None
+    )
     with zipfile.ZipFile(path) as zipped:
         root, names = _verify_zip_inventory(zipped, path)
         manifest_bytes = _read_member(zipped, names, root, "manifest.json", "manifest")
@@ -264,6 +313,16 @@ def verify_archive(zip_path: Path | str) -> dict:
             # Identity is checked against the bytes actually in the ZIP rather
             # than a hash frozen at some past release.
             _verify_file_record(zipped, names, root, record, f"executable {source}")
+            if identities is not None:
+                expected_sha, expected_size = identities[requires]
+                if (
+                    str(record.get("source_sha256", "")).lower() != expected_sha
+                    or record.get("source_size") != expected_size
+                ):
+                    _fail(
+                        f"executable for {sorted(requires)} is not the binary the "
+                        f"build compiled for that combination ({source})"
+                    )
             if (
                 str(record.get("expected_target_sha256", "")).lower() != TARGET_SHA256
                 or record.get("expected_target_size") != TARGET_SIZE
@@ -391,6 +450,7 @@ def verify_archive(zip_path: Path | str) -> dict:
             "members": len(names),
             "target_sha256": TARGET_SHA256,
             "executable_variants": len(EXECUTABLE_VARIANT_REQUIREMENTS),
+            "variant_identities_authenticated": identities is not None,
             "executable_variants": len(exe_records),
             "renovation_assets": len(renovation_records),
             "sound_assets": len(sound_records),
@@ -403,9 +463,26 @@ def verify_archive(zip_path: Path | str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("zip_path", type=Path, help="explicit offline patcher ZIP to verify")
+    parser.add_argument(
+        "--identities",
+        type=Path,
+        help=(
+            "compiled variant identities from the matrix build "
+            "(work/export_release_variant_identities.py). Without this the "
+            "executables are only checked for internal consistency, because "
+            "the manifest is written by the same tool as the payload."
+        ),
+    )
+    parser.add_argument(
+        "--require-identities",
+        action="store_true",
+        help="fail unless --identities is supplied; use this when gating a release",
+    )
     args = parser.parse_args()
+    if args.require_identities and args.identities is None:
+        parser.error("--require-identities was given without --identities")
     try:
-        result = verify_archive(args.zip_path)
+        result = verify_archive(args.zip_path, args.identities)
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
         parser.error(str(exc))
     print(json.dumps(result, sort_keys=True))

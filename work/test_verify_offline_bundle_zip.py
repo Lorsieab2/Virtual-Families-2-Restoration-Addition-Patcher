@@ -1,3 +1,4 @@
+import re
 import sys
 import tempfile
 import unittest
@@ -9,19 +10,31 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "work"))
 import verify_offline_bundle_zip as verifier
 
+verifier_test_pattern = re.compile(r"^VF2-B(\d+)(?:\.(\d+))?-Release\.zip$")
+
+
+RELEASE_ZIP_PATTERN = re.compile(r"^VF2-B(\d+)(?:\.(\d+))?-Release\.zip$")
+
 
 def newest_release_zip():
-    """The most recent release ZIP present locally, if any.
+    """The highest-numbered release ZIP present locally, if any.
 
     This used to point at one B161 archive that is not in the repository, so
-    the gate failed for everyone regardless of correctness. Verifying whatever
-    release is actually on disk makes it a live check instead.
+    the gate failed for everyone regardless of correctness. It then briefly
+    picked by modification time, which identifies the most recently copied
+    file rather than the newest release -- downloading B173 after B174 would
+    have left the current artifact unchecked. Ordering is by parsed release
+    number, with point releases (B155.5) sorting after their base.
     """
-    candidates = sorted(
-        (ROOT / "outputs").glob("VF2-B*-Release.zip"),
-        key=lambda path: path.stat().st_mtime,
-    )
-    return candidates[-1] if candidates else None
+    best = None
+    for path in (ROOT / "outputs").glob("VF2-B*-Release.zip"):
+        match = RELEASE_ZIP_PATTERN.match(path.name)
+        if not match:
+            continue
+        key = (int(match.group(1)), int(match.group(2) or 0))
+        if best is None or key > best[0]:
+            best = (key, path)
+    return best[1] if best else None
 
 
 class OfflineBundleZipVerifierTests(unittest.TestCase):
@@ -117,6 +130,71 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         self.assertEqual(result["sound_restores"], 63)
         self.assertEqual(result["sound_removals"], 4)
         self.assertEqual(result["sound_routes"], 4)
+
+    def test_release_selection_prefers_highest_number_not_newest_file(self):
+        # Modification time identifies the most recently copied file, not the
+        # newest release: downloading B173 after B174 must not leave the
+        # current artifact unchecked.
+        import re as _re
+        names = ["VF2-B99-Release.zip", "VF2-B174-Release.zip", "VF2-B155.5-Release.zip"]
+        keys = []
+        for name in names:
+            m = verifier_test_pattern.match(name)
+            keys.append(((int(m.group(1)), int(m.group(2) or 0)), name))
+        self.assertEqual(max(keys)[1], "VF2-B174-Release.zip")
+        # A point release sorts above its own base.
+        self.assertGreater((155, 5), (155, 0))
+
+    def test_apply_runner_pattern_accepts_point_releases(self):
+        # The exporter's own grammar is B\d+(?:\.\d+)? and B155.5 shipped.
+        self.assertTrue(verifier.APPLY_RUNNER_PATTERN.match("Apply_B174_Patcher.bat"))
+        self.assertTrue(verifier.APPLY_RUNNER_PATTERN.match("Apply_B174.5_Patcher.bat"))
+        self.assertFalse(verifier.APPLY_RUNNER_PATTERN.match("Apply_Patcher.bat"))
+        self.assertFalse(verifier.APPLY_RUNNER_PATTERN.match("Apply_B174_Patcher.bat.txt"))
+
+    def test_identities_authenticate_variants_against_an_independent_source(self):
+        archive = newest_release_zip()
+        identities = ROOT / "data" / "vf2" / "release-identities-B174.json"
+        if archive is None or not identities.is_file():
+            self.skipTest("no release ZIP or identities file present")
+
+        # Without identities the executables are only self-consistent, and the
+        # summary has to say so rather than implying authentication.
+        plain = verifier.verify_archive(archive)
+        self.assertFalse(plain["variant_identities_authenticated"])
+
+        authenticated = verifier.verify_archive(archive, identities)
+        self.assertTrue(authenticated["variant_identities_authenticated"])
+
+        # Swapping two combinations' compiled identities is exactly the defect
+        # a self-consistency check cannot see, so it must fail.
+        payload = json.loads(identities.read_text(encoding="utf-8"))
+        first, second = payload["variants"][0], payload["variants"][-1]
+        first["sha256"], second["sha256"] = second["sha256"], first["sha256"]
+        first["size"], second["size"] = second["size"], first["size"]
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            swapped = Path(tmp.name) / "swapped.json"
+            swapped.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "not the binary the build compiled"):
+                verifier.verify_archive(archive, swapped)
+        finally:
+            tmp.cleanup()
+
+    def test_identities_must_cover_the_whole_release_contract(self):
+        identities = ROOT / "data" / "vf2" / "release-identities-B174.json"
+        if not identities.is_file():
+            self.skipTest("no identities file present")
+        payload = json.loads(identities.read_text(encoding="utf-8"))
+        payload["variants"] = payload["variants"][:-1]
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            short = Path(tmp.name) / "short.json"
+            short.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "do not cover the release contract"):
+                verifier._load_variant_identities(short)
+        finally:
+            tmp.cleanup()
 
     def _unsafe_archive(self, names):
         tmp = tempfile.TemporaryDirectory()
