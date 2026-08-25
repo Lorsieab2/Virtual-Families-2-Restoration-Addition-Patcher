@@ -8738,14 +8738,16 @@ class OutfitStoreMappingTests(unittest.TestCase):
                     patcher.validate_mod_assets_present({"behavior_assets": {}})
                 self.assertIn("vacuously", str(caught.exception))
 
-                # Non-.fmap strays (vanilla payload pollution) fail too.
+                # Extra non-stock files in Assets are NOT an error: patches
+                # legitimately stage mobile sound .ogg files, .dat and
+                # PkgInfo there, and a release-seeded build carries hundreds.
                 self._write(out / "Assets/Mobile.png.fmap", b"mod")
-                self._write(out / "Assets/stray.txt", b"junk")
-                with self.assertRaises(RuntimeError) as caught:
-                    patcher.validate_mod_assets_present(
-                        {"behavior_assets": {"d": [{"target": "Mobile.png.fmap"}]}}
-                    )
-                self.assertIn("stray.txt", str(caught.exception))
+                self._write(out / "Assets/BIRD2.ogg", b"sound")
+                manifest = {"behavior_assets": {"d": [{"target": "Mobile.png.fmap"}]}}
+                patcher.validate_mod_assets_present(manifest)
+                self.assertEqual(
+                    manifest["mod_assets_present"]["patch_supplied_in_payload"], 2
+                )
         finally:
             patcher.OUT = old_out
             patcher.clean_base_game_files_under = old_under

@@ -1,0 +1,27 @@
+{
+  "release_name": "B173",
+  "output_prefix": "VF2-B173-matrix-20260825",
+  "exe_name": "Virtual Families 2 - B173.exe",
+  "note": "Build payload fix plus new Cheat Upgrades. Every build now seeds the base game's 242 Assets from a verified clean-install index: they had only ever arrived by inheritance from the previous release, so a build made without that inheritance shipped furniture with no .fmap footprint maps -- villagers walked through walls and hotspots did not register. Two guards now fail the build if any base-game file is missing or an undeclared stock asset differs, and if any patch-supplied footprint map goes missing. New Cheat Upgrades: Clear All Illnesses and Max out Happiness / Energy / Fed / Health Bar, applied to everyone in the house; plus Anti-Spam Software Ownership and Rockhound Certificate Ownership toggles. The six pregnancy one-shots can now be cancelled by repurchasing them and show a checkmark while armed. Anti-spam Software and the Rockhound Certificate Flea Market rows are entirely base-game again, including their descriptions.",
+  "seeds": {
+    "behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-behavior_patches",
+    "cheat_upgrades": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-cheat_upgrades",
+    "cheat_upgrades_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-cheat_upgrades_behavior_patches",
+    "cheat_upgrades_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-cheat_upgrades_holiday_ornaments",
+    "cheat_upgrades_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-cheat_upgrades_holiday_ornaments_behavior_patches",
+    "cheat_upgrades_mobile_renovations": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-cheat_upgrades_mobile_renovations",
+    "core": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-core",
+    "final_all_enabled": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-final_all_enabled",
+    "holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-holiday_ornaments",
+    "holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-holiday_ornaments_behavior_patches",
+    "island_events": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-island_events",
+    "island_events_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-island_events_behavior_patches",
+    "island_events_cheat_upgrades": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-island_events_cheat_upgrades",
+    "island_events_cheat_upgrades_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-island_events_cheat_upgrades_behavior_patches",
+    "island_events_cheat_upgrades_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-island_events_cheat_upgrades_holiday_ornaments",
+    "island_events_cheat_upgrades_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-island_events_cheat_upgrades_holiday_ornaments_behavior_patches",
+    "island_events_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-island_events_holiday_ornaments",
+    "island_events_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-island_events_holiday_ornaments_behavior_patches",
+    "mobile_renovations": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B172-matrix-20260822-mobile_renovations"
+  }
+}
