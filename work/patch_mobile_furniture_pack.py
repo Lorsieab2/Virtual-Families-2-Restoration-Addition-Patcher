@@ -821,8 +821,16 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     # appended out of numeric order deliberately: icon image ids are derived
     # from this mapping's insertion order, so inserting them next to 0x13B
     # would shift the image id of every row below them.
-    ANTI_SPAM_OWNERSHIP_CHEAT_ITEM_ID: "cheat_marriage_email.png",
-    ROCKHOUND_OWNERSHIP_CHEAT_ITEM_ID: "fossil1.png",
+    # The stock Flea Market art for the two items these rows own, lifted from
+    # the grids the native draw actually uses.  CInventoryManager::DrawItem
+    # resolves the cell at the blit, not from the 0x24-byte item record: items
+    # below 0xE1 draw from InventoryItems.png (10x14) at
+    # (item - 4) * 2 + (state - 2), and items from 0xE1 up draw from
+    # home_grid.png (5x11) at item - 0xE1.  So Anti-spam Software (0x33) is
+    # cell 92 -- the disc with the red "spam" label -- and the Rockhound
+    # Certificate (0x10a) is cell 41, the certificate that reads "Rock Hound".
+    ANTI_SPAM_OWNERSHIP_CHEAT_ITEM_ID: "cheat_antispam_disk.png",
+    ROCKHOUND_OWNERSHIP_CHEAT_ITEM_ID: "cheat_rockhound_certificate.png",
     0x153: "HealthPlan_icon.png",
     0x154: "HealthPlan_icon.png",
     0x155: "HealthPlan_icon.png",
