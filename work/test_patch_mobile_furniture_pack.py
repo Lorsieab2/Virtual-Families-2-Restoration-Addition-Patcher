@@ -7883,11 +7883,29 @@ class MobileSpecialUpgradeContractTests(unittest.TestCase):
 
                     # The flags themselves: a save byte and native ownership.
                     self.assertIn("gameState[0x6C] != 0;", source)
-                    self.assertIn(
-                        "gameState[0x6C] = gameState[0x6C] != 0 ? 0 : 1;", source
-                    )
+                    self.assertIn("gameState[0x6C] = owned ? 1 : 0;", source)
                     self.assertIn("InventoryManager.ReturnOne(stockItem);", source)
                     self.assertIn("InventoryManager.TakeOne(stockItem);", source)
+
+                    # Buying an ACTIVE ownership row lands in the removal
+                    # route, because reporting active for the checkmark is
+                    # what routes the click there first. That route must clear
+                    # the stock flag; the generic tail would instead call
+                    # ReturnOne on the cheat row's own id and swallow the
+                    # click, leaving the checkmark stuck on.
+                    self.assertIn("VF2SetStockOwnership(itemId, false);", removal)
+                    self.assertIn("if (VF2IsStockOwnershipCheat(itemId))", removal)
+                    # Clearing must not be expressed as a toggle CALL here, or
+                    # a future caller could re-enable through the remove path.
+                    # (The explanatory comment names the toggle, so match the
+                    # call form rather than the bare identifier.)
+                    self.assertNotIn("VF2ToggleStockOwnership(itemId);", removal)
+                    # The toggle itself is defined in terms of the setter.
+                    self.assertIn(
+                        "VF2SetStockOwnership(cheatItemId, "
+                        "!VF2StockOwnershipActive(cheatItemId));",
+                        source,
+                    )
 
                     # Nothing drops the item on a computer any more.
                     self.assertNotIn("VF2AntiSpamRemoveOnComputer", source)

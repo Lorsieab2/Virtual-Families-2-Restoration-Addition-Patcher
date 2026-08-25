@@ -11692,21 +11692,26 @@ static bool VF2StockOwnershipActive(int cheatItemId) {{
     return false;
 }}
 
-static void VF2ToggleStockOwnership(int cheatItemId) {{
+static void VF2SetStockOwnership(int cheatItemId, bool owned) {{
     if (cheatItemId == kVF2AntiSpamCheatItem) {{
         unsigned char* gameState = (unsigned char*)theGameState::Get();
         if (!gameState) return;
-        gameState[0x6C] = gameState[0x6C] != 0 ? 0 : 1;
+        gameState[0x6C] = owned ? 1 : 0;
         return;
     }}
     if (cheatItemId == kVF2RockhoundCheatItem) {{
         EInventoryItem stockItem = (EInventoryItem)kVF2RockhoundCertificateItem;
-        if (InventoryManager.HaveUpgrade(stockItem)) {{
-            InventoryManager.ReturnOne(stockItem);
-        }} else {{
+        bool have = InventoryManager.HaveUpgrade(stockItem);
+        if (owned && !have) {{
             InventoryManager.TakeOne(stockItem);
+        }} else if (!owned && have) {{
+            InventoryManager.ReturnOne(stockItem);
         }}
     }}
+}}
+
+static void VF2ToggleStockOwnership(int cheatItemId) {{
+    VF2SetStockOwnership(cheatItemId, !VF2StockOwnershipActive(cheatItemId));
 }}
 static int gVF2SyntheticOutfitToolInHand = 0;
 static int gVF2SyntheticOutfitToolInUse = 0;
@@ -11878,6 +11883,19 @@ extern "C" bool __cdecl VF2RemoveOwnedUpgrade(int itemId) {{
     }}
     if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) {{
         *VF2CheatToggleActiveByte(itemId) = 0;
+        if (gameState) theGameState::Get()->SaveCurrentGame();
+        return true;
+    }}
+    if (VF2IsStockOwnershipCheat(itemId)) {{
+        // Buying an active row again lands here, not in the apply handler:
+        // reporting active for the checkmark is exactly what routes the click
+        // into this function first. Without this branch the generic tail below
+        // called ReturnOne on the CHEAT row's id (0x158/0x159) -- an item the
+        // inventory does not have -- then returned true, swallowing the click
+        // so VF2ToggleStockOwnership never ran and the checkmark never
+        // cleared. Clear the stock flag explicitly rather than toggling, so
+        // this path can only ever remove.
+        VF2SetStockOwnership(itemId, false);
         if (gameState) theGameState::Get()->SaveCurrentGame();
         return true;
     }}
