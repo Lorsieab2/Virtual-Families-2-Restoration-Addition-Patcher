@@ -126,7 +126,11 @@ try {
         if ($manifestObj.ai_generated_bathroom2_renovations.enabled -ne $config.ai_generated_bathroom2) { throw "Bathroom 2 gate mismatch for $($config.name)" }
         if ($config.mobile_renovations -and $manifestObj.HouseRenovations.new_count -ne 30) { throw "Native/mobile House Renovations count mismatch for $($config.name)" }
         if ($config.mobile_renovations -and $manifestObj.HouseRenovations.curtain_state_behavior.mode -ne "restart_only") { throw "Curtain restart contract missing for $($config.name)" }
-        $expectedSpecialRows = if ($config.cheat_upgrades) { 40 } else { 4 }
+        # Deliberate tripwire: bump this only when rows are added on purpose.
+        # 43 CHEAT_UPGRADE_ITEMS rows + the 4 mobile Special Upgrades.
+        # B173 added 7: the five wellbeing rows (0x153-0x157) and the two
+        # Flea Market ownership toggles (0x158-0x159).
+        $expectedSpecialRows = if ($config.cheat_upgrades) { 47 } else { 4 }
         if (@($manifestObj.VisibleSpecialUpgrades.added_items).Count -ne $expectedSpecialRows) { throw "Special Upgrades row count mismatch for $($config.name)" }
         $mobileSpecialRows = @($manifestObj.VisibleSpecialUpgrades.added_items | Where-Object { $_.item_id -in @("0x117", "0x118", "0x119", "0x11a") })
         if ($mobileSpecialRows.Count -ne 4) { throw "Mobile Special Upgrades rows missing for $($config.name)" }
