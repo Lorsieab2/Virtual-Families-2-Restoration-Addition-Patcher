@@ -1,0 +1,27 @@
+{
+  "release_name": "B174",
+  "output_prefix": "VF2-B174b-matrix-20260826",
+  "exe_name": "Virtual Families 2 - B174.exe",
+  "note": "In-place refresh of the B174 payload. Corrects two custom achievement descriptions so they describe what the player actually did: 0x6B \"Good boy!\" and 0x6C \"Bad dog!\" are awarded for praising or scolding a PERSON who is interacting with a pet, not the pet itself. Text only -- no code, ids, images, or behaviour change, and the achievements' trigger conditions are untouched.",
+  "seeds": {
+    "behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-behavior_patches",
+    "cheat_upgrades": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-cheat_upgrades",
+    "cheat_upgrades_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-cheat_upgrades_behavior_patches",
+    "cheat_upgrades_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-cheat_upgrades_holiday_ornaments",
+    "cheat_upgrades_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-cheat_upgrades_holiday_ornaments_behavior_patches",
+    "cheat_upgrades_mobile_renovations": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-cheat_upgrades_mobile_renovations",
+    "core": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-core",
+    "final_all_enabled": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-final_all_enabled",
+    "holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-holiday_ornaments",
+    "holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-holiday_ornaments_behavior_patches",
+    "island_events": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-island_events",
+    "island_events_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-island_events_behavior_patches",
+    "island_events_cheat_upgrades": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-island_events_cheat_upgrades",
+    "island_events_cheat_upgrades_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-island_events_cheat_upgrades_behavior_patches",
+    "island_events_cheat_upgrades_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-island_events_cheat_upgrades_holiday_ornaments",
+    "island_events_cheat_upgrades_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-island_events_cheat_upgrades_holiday_ornaments_behavior_patches",
+    "island_events_holiday_ornaments": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-island_events_holiday_ornaments",
+    "island_events_holiday_ornaments_behavior_patches": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-island_events_holiday_ornaments_behavior_patches",
+    "mobile_renovations": "C:/Users/Owner/repos/Virtual-Families-2-Restoration-Addition-Patcher/outputs/VF2-B174-matrix-20260825-mobile_renovations"
+  }
+}
