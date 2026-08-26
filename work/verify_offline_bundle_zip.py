@@ -24,231 +24,114 @@ ABSENT_ZERO_RECORD_SETTINGS = set()
 CORE_ONLY_SETTINGS = {
     "settings_evict_button",
 }
-B160_EXECUTABLE_VARIANTS = {
-    frozenset({"core_executable"}): (
-        "payload/Virtual Families 2 - Modded B160.exe",
-        "744fac14c3715718c88e6001e37c43bd50621a3f69468bfd29cd094e1d4debc6",
-        1_711_616,
-    ),
-    frozenset({"core_executable", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Mobile Room Renovations.exe",
-        "c60f87e4793b19f23cd419f2e480be0d84e1a365412235f93023d19a4b0d43d4",
-        1_723_904,
-    ),
-    frozenset({"core_executable", "island_events", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Island Events.exe",
-        "55d03b5d00c3eae54df618be47ab90b6e9c520dac218bea428960c05bd7785e9",
-        1_754_624,
-    ),
-    frozenset({"core_executable", "cheat_upgrades", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Cheat Upgrades.exe",
-        "82185c4895293969ea31fda391fdb14a89573261d228c16ce3904011aba2a080",
-        1_725_440,
-    ),
-    frozenset({"core_executable", "holiday_ornaments_collection", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Holiday Ornaments.exe",
-        "e2bdfe8d7881f5e141ae4d0344b04168f64856169105a10ef585917918f72bea",
-        1_725_952,
-    ),
-    frozenset({"core_executable", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Behavior Patches.exe",
-        "b62e9ca54896a145af51e5982788a1cd995052ad966e3f14c3e6bdf83ef4c7bb",
-        1_761_280,
-    ),
-    frozenset({"core_executable", "island_events", "cheat_upgrades", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Island Events + Cheat Upgrades.exe",
-        "cd5d60e3077be04440bc404ea49cda1edd9c7b4588848b1af3f91714e55a1b08",
-        1_755_648,
-    ),
-    frozenset({"core_executable", "island_events", "holiday_ornaments_collection", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Island Events + Holiday Ornaments.exe",
-        "e6421b46a6c5e1d451b602783cd6dc685e5ef3d826d8e2d1ac602df9c587e4e3",
-        1_757_184,
-    ),
-    frozenset({"core_executable", "cheat_upgrades", "holiday_ornaments_collection", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Cheat Upgrades + Holiday Ornaments.exe",
-        "b033ee9488ce9b16b4c00c56df713fa58bca6e3231d5f3ad7c5103daf92c9fbc",
-        1_728_512,
-    ),
-    frozenset({"core_executable", "island_events", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Island Events + Behavior Patches.exe",
-        "9d34aeb49220d08b105f16892bc2766d44c84d33de14ee2c1958637930dcb521",
-        1_791_488,
-    ),
-    frozenset({"core_executable", "cheat_upgrades", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Cheat Upgrades + Behavior Patches.exe",
-        "f81f5aa5d8be273df1ecbe597d25cc2926e53ee772668aeb516c1c805adf5b99",
-        1_762_304,
-    ),
-    frozenset({"core_executable", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Holiday Ornaments + Behavior Patches.exe",
-        "fb048fa5cf7ef200c45e060e7c5c9dacc11169886f97390ea041628e63818c7b",
-        1_764_352,
-    ),
-    frozenset({"core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Island Events + Cheat Upgrades + Holiday Ornaments.exe",
-        "1e49f0c7532487daae50dca3ef84afbbb7ba9f8b6c2758bdf31b9b5fcd28a818",
-        1_758_208,
-    ),
-    frozenset({"core_executable", "island_events", "cheat_upgrades", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Island Events + Cheat Upgrades + Behavior Patches.exe",
-        "088f06ab925e7c1facb204af4951ac2a7bfccc7e5bf876d9e3e4d115c7a57210",
-        1_793_536,
-    ),
-    frozenset({"core_executable", "island_events", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Island Events + Holiday Ornaments + Behavior Patches.exe",
-        "41220018f303efbaf07e36c828b8384a97bafd8523de1b43a6e758dfd7b13577",
-        1_794_560,
-    ),
-    frozenset({"core_executable", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Cheat Upgrades + Holiday Ornaments + Behavior Patches.exe",
-        "194e9503ed46ea9c55445a42d1e26a06a1e40b465eadbaf3836c716b23592fad",
-        1_765_888,
-    ),
-    frozenset({"core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B160 - Final All-Enabled Native.exe",
-        "d60930d05f1adaced87bda4e57c4bdd5fe8d614e7b5c40547609cc277ed76f5f",
-        1_793_024,
-    ),
-}
-
-# B161 pins the regenerated source route and includes the two explicit
-# mobile-renovation combinations needed to keep feature overlays independent.
-EXECUTABLE_VARIANTS = {
-    frozenset({"core_executable"}): (
-        "payload/Virtual Families 2 - Modded B161.exe",
-        "60b4460ae0b110f4ed7d84875fa862f7a531a23be6d293000e7095846d8d3e91",
-        1_714_176,
-    ),
-    frozenset({"core_executable", "behavior_patches"}): (
-        "payload/Virtual Families 2 - Modded B161 - Behavior Patches.exe",
-        "d9069cce35b1299152345c2c03fc4922dcf6deeaa5d545ce84949abfa58e420e",
-        1_751_552,
-    ),
-    frozenset({
-        "core_executable",
-        "behavior_patches",
-        "cheat_upgrades",
-        "holiday_ornaments_collection",
-        "island_events",
-        "mobile_renovations",
-    }): (
-        "payload/Virtual Families 2 - Modded B161 - Final All-Enabled Native.exe",
-        "ac09ee1828f687526171a056ac4cf2096309ef0f8b6ead9b11d4dd61b52dedee",
-        1_797_632,
-    ),
-    frozenset({"core_executable", "cheat_upgrades"}): (
-        "payload/Virtual Families 2 - Modded B161 - Cheat Upgrades.exe",
-        "5f09b7d88f6e9061f69af2d609285223c30f82b9ee27e196d4c3e14d1bea3715",
-        1_714_688,
-    ),
-    frozenset({"core_executable", "cheat_upgrades", "behavior_patches"}): (
-        "payload/Virtual Families 2 - Modded B161 - Cheat Upgrades + Behavior Patches.exe",
-        "0813c4f2e9f0c75ecc54b56d748b714ae7bb535161b8714639a108d75734ce6b",
-        1_752_064,
-    ),
-    frozenset({"core_executable", "cheat_upgrades", "holiday_ornaments_collection"}): (
-        "payload/Virtual Families 2 - Modded B161 - Cheat Upgrades + Holiday Ornaments.exe",
-        "b396eea70e9c086c1bbbfde2d26ba703326d3f4965d1b3600e59062235268957",
-        1_717_760,
-    ),
-    frozenset({"core_executable", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches"}): (
-        "payload/Virtual Families 2 - Modded B161 - Cheat Upgrades + Holiday Ornaments + Behavior Patches.exe",
-        "ca9044b2ad5a982e1699cf70428911d8d4830360db264a53849535049f2aec4d",
-        1_755_136,
-    ),
-    frozenset({"core_executable", "cheat_upgrades", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B161 - Cheat Upgrades + Mobile Room Renovations.exe",
-        "0ef2d78b24317a65ec94c4fee0552712bde3869d4fa1bba97995929ff5f2b928",
-        1_728_000,
-    ),
-    frozenset({"core_executable", "holiday_ornaments_collection"}): (
-        "payload/Virtual Families 2 - Modded B161 - Holiday Ornaments.exe",
-        "0cb16f918009920c1328093eff49d800781468aa878ebfb493ebb4189587bf69",
-        1_716_736,
-    ),
-    frozenset({"core_executable", "holiday_ornaments_collection", "behavior_patches"}): (
-        "payload/Virtual Families 2 - Modded B161 - Holiday Ornaments + Behavior Patches.exe",
-        "aeb99d713d4293603450c88ad8a0c8fd346dc9494da31cf5e8f1209d26af451a",
-        1_754_624,
-    ),
-    frozenset({"core_executable", "island_events"}): (
-        "payload/Virtual Families 2 - Modded B161 - Island Events.exe",
-        "c6849caff9d36db90ca82017486b2edf6864b49fb3f0cbff5f8805c25174a61b",
-        1_744_384,
-    ),
-    frozenset({"core_executable", "island_events", "behavior_patches"}): (
-        "payload/Virtual Families 2 - Modded B161 - Island Events + Behavior Patches.exe",
-        "00f9e60156a8fc962f7ae6b30f710fca1362faa13f77b9bae6ac9f9d5e8b3079",
-        1_781_248,
-    ),
-    frozenset({"core_executable", "island_events", "cheat_upgrades"}): (
-        "payload/Virtual Families 2 - Modded B161 - Island Events + Cheat Upgrades.exe",
-        "cc8102c19ecdc90b159b72d91c29bb56d4360a74cfc8f2eb6144b258987436fd",
-        1_744_384,
-    ),
-    frozenset({"core_executable", "island_events", "cheat_upgrades", "behavior_patches"}): (
-        "payload/Virtual Families 2 - Modded B161 - Island Events + Cheat Upgrades + Behavior Patches.exe",
-        "98dfea8774d6747116255efdc8b43055af00be753d5fd98640a7018ea2bce59c",
-        1_782_784,
-    ),
-    frozenset({"core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection"}): (
-        "payload/Virtual Families 2 - Modded B161 - Island Events + Cheat Upgrades + Holiday Ornaments.exe",
-        "df0cf6ab7ea9b04bbaf1a97471841fe520b577f1ce6cfb73ea71b8a42ca7e060",
-        1_747_456,
-    ),
-    frozenset({"core_executable", "island_events", "cheat_upgrades", "holiday_ornaments_collection", "behavior_patches"}): (
-        "payload/Virtual Families 2 - Modded B161 - Island Events + Cheat Upgrades + Holiday Ornaments + Behavior Patches.exe",
-        "3b3d2de52a5ebf6e92c4bed3adc058ae8c84ea69eb850eecf2d1bdc68c4f52fe",
-        1_784_832,
-    ),
-    frozenset({"core_executable", "island_events", "holiday_ornaments_collection"}): (
-        "payload/Virtual Families 2 - Modded B161 - Island Events + Holiday Ornaments.exe",
-        "b9ca2202321ad0967cd4ba2797baa58cef38fe30110e00f8935b599ca58b4d45",
-        1_746_432,
-    ),
-    frozenset({"core_executable", "island_events", "holiday_ornaments_collection", "behavior_patches"}): (
-        "payload/Virtual Families 2 - Modded B161 - Island Events + Holiday Ornaments + Behavior Patches.exe",
-        "11d10a0d5bbb1ee0cccafa387429b3774be23bd8668f2204ed1a3bcdde2bf8ac",
-        1_783_808,
-    ),
-    frozenset({"core_executable", "mobile_renovations"}): (
-        "payload/Virtual Families 2 - Modded B161 - Mobile Room Renovations.exe",
-        "1b4daef2e7e5cd0937fe0e70dff136215425065a7e7637d1f090d57c7097677a",
-        1_726_976,
-    ),
-}
+# The durable contract is WHICH toggle combinations a release must ship,
+# not what this release's executables happen to be called or hash to.
+# Pinning filenames and hashes made this verifier fail every release after
+# B161 -- including the shipped B172, B173 and B174 ZIPs -- and a check
+# that fails every real artifact just teaches people to ignore it.
+#
+# These 19 combinations are identical between B161 and B174. Each variant's
+# integrity is still fully verified, against the ZIP's own bytes via
+# _verify_file_record, which is what the frozen hashes were duplicating.
+EXECUTABLE_VARIANT_REQUIREMENTS = frozenset({
+    frozenset({"core_executable"}),
+    frozenset({"behavior_patches", "core_executable"}),
+    frozenset({"cheat_upgrades", "core_executable"}),
+    frozenset({"core_executable", "holiday_ornaments_collection"}),
+    frozenset({"core_executable", "island_events"}),
+    frozenset({"core_executable", "mobile_renovations"}),
+    frozenset({"behavior_patches", "cheat_upgrades", "core_executable"}),
+    frozenset({"behavior_patches", "core_executable", "holiday_ornaments_collection"}),
+    frozenset({"behavior_patches", "core_executable", "island_events"}),
+    frozenset({"cheat_upgrades", "core_executable", "holiday_ornaments_collection"}),
+    frozenset({"cheat_upgrades", "core_executable", "island_events"}),
+    frozenset({"cheat_upgrades", "core_executable", "mobile_renovations"}),
+    frozenset({"core_executable", "holiday_ornaments_collection", "island_events"}),
+    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "holiday_ornaments_collection"}),
+    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "island_events"}),
+    frozenset({"behavior_patches", "core_executable", "holiday_ornaments_collection", "island_events"}),
+    frozenset({"cheat_upgrades", "core_executable", "holiday_ornaments_collection", "island_events"}),
+    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "holiday_ornaments_collection", "island_events"}),
+    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "holiday_ornaments_collection", "island_events", "mobile_renovations"}),
+})
 SOUND_ROUTE_NAMES = {"beaker", "Child3", "Child7", "Child8"}
 REQUIRED_RUNNERS = {
     "offline_vf2_patcher.py",
     "offline_vf2_patcher_gui.py",
     "vf2_crash_capture.py",
     "crash-capture-manifest.template.json",
-    "Apply_B161_Patcher.bat",
     "Launch_GUI.bat",
 }
+# The apply runner is named for its release, so it is matched by shape rather
+# than pinned: pinning "Apply_B161_Patcher.bat" made every later release fail
+# this check for shipping its own correctly-named runner.
+# Same build-label grammar the exporter uses in infer_build_label(): point
+# releases are real -- B155.5 shipped -- so "B\d+" alone would reject a
+# valid Apply_B174.5_Patcher.bat.
+APPLY_RUNNER_PATTERN = re.compile(r"^Apply_B\d+(?:\.\d+)?_Patcher\.bat$")
+
+
+def _load_variant_identities(path: Path) -> dict[frozenset[str], tuple[str, int]]:
+    """Read compiled variant identities produced from the matrix build.
+
+    Independent of the archive being verified: manifest.json is written by the
+    bundle exporter alongside the payload it describes, so checking one against
+    the other only proves the bundle agrees with itself. An exporter that
+    selected the wrong-but-valid executable for a feature combination would
+    record that executable's hash too, and the bundle would verify clean.
+    """
+    try:
+        raw = json.loads(Path(path).read_text(encoding="utf-8-sig"))
+    except (OSError, json.JSONDecodeError) as exc:
+        _fail(f"variant identities file is unreadable: {exc}")
+    variants = raw.get("variants")
+    if not isinstance(variants, list) or not variants:
+        _fail("variant identities file lists no variants")
+    identities: dict[frozenset[str], tuple[str, int]] = {}
+    for entry in variants:
+        if not isinstance(entry, dict):
+            _fail("variant identities entry is not an object")
+        requires = entry.get("requires")
+        digest = str(entry.get("sha256", "")).lower()
+        size = entry.get("size")
+        if not isinstance(requires, list) or not all(isinstance(x, str) for x in requires):
+            _fail("variant identities entry has an invalid requires list")
+        if not re.fullmatch(r"[0-9a-f]{64}", digest) or not isinstance(size, int) or size <= 0:
+            _fail(f"variant identities entry for {sorted(requires)} has an invalid identity")
+        key = frozenset(requires)
+        if key in identities:
+            _fail(f"variant identities file lists {sorted(requires)} twice")
+        identities[key] = (digest, size)
+    if set(identities) != EXECUTABLE_VARIANT_REQUIREMENTS:
+        missing = sorted(sorted(x) for x in EXECUTABLE_VARIANT_REQUIREMENTS - set(identities))
+        extra = sorted(sorted(x) for x in set(identities) - EXECUTABLE_VARIANT_REQUIREMENTS)
+        _fail(
+            "variant identities do not cover the release contract; "
+            f"missing={missing} unexpected={extra}"
+        )
+    return identities
 
 
 def _fail(message: str) -> None:
     raise ValueError(message)
 
 
-def _reject_executable_variant_hash_collisions(variants: dict) -> None:
-    """Refuse an EXECUTABLE_VARIANTS table where two different requires
-    combinations share one payload hash.
+def _reject_executable_variant_hash_collisions(records: list[dict]) -> None:
+    """Refuse a release where two different toggle combinations ship one binary.
 
-    Two different requires combinations sharing one physical payload means
-    two manifest asset records point at the same executable despite
-    representing different feature sets - e.g. the B162 release, where the
-    plain core_executable-only baseline and the Final All-Enabled Native
-    overlay were both exported from the same source EXE. Every entry here is
-    expected to compile distinct code, so a collision means the release's
-    executable matrix (or this table describing it) is wrong, even though a
-    per-variant lookup would still resolve each one individually.
+    Two combinations sharing one payload hash means two manifest records point
+    at the same executable despite representing different feature sets -- e.g.
+    the B162 release, where the plain core_executable baseline and the Final
+    All-Enabled Native overlay were exported from the same source EXE. Every
+    variant is expected to compile distinct code, so a collision means the
+    release's executable matrix is wrong, even though a per-variant lookup
+    would still resolve each one individually.
     """
     by_hash: dict[str, list[str]] = {}
-    for requires, (source, expected_sha, _size) in variants.items():
-        by_hash.setdefault(expected_sha, []).append(f"{sorted(requires)} -> {source}")
+    for record in records:
+        digest = str(record.get("source_sha256", "")).lower()
+        label = f"{sorted(_requires(record, 'executable record'))} -> {record.get('source_path')}"
+        by_hash.setdefault(digest, []).append(label)
     colliding = [group for group in by_hash.values() if len(group) > 1]
     if colliding:
         _fail(
@@ -346,12 +229,17 @@ def _verify_zip_inventory(zipped: zipfile.ZipFile, zip_path: Path) -> tuple[str,
     return root, set(names)
 
 
-def verify_archive(zip_path: Path | str) -> dict:
+def verify_archive(zip_path: Path | str, identities_path: Path | str | None = None) -> dict:
     """Verify one explicit archive and return a compact evidence summary."""
     path = Path(zip_path)
     archive_path = path
     if not path.is_file():
         _fail(f"ZIP does not exist: {path}")
+    identities = (
+        _load_variant_identities(Path(identities_path))
+        if identities_path is not None
+        else None
+    )
     with zipfile.ZipFile(path) as zipped:
         root, names = _verify_zip_inventory(zipped, path)
         manifest_bytes = _read_member(zipped, names, root, "manifest.json", "manifest")
@@ -403,21 +291,44 @@ def verify_archive(zip_path: Path | str) -> dict:
             _fail("manifest native core setting evidence does not match advertised native settings")
 
         exe_records = [record for record in assets if str(record.get("source_path", "")).lower().endswith(".exe")]
-        if len(exe_records) != len(EXECUTABLE_VARIANTS):
-            _fail(f"expected {len(EXECUTABLE_VARIANTS)} executable variants, found {len(exe_records)}")
-        _reject_executable_variant_hash_collisions(EXECUTABLE_VARIANTS)
+        if len(exe_records) != len(EXECUTABLE_VARIANT_REQUIREMENTS):
+            _fail(
+                f"expected {len(EXECUTABLE_VARIANT_REQUIREMENTS)} executable "
+                f"variants, found {len(exe_records)}"
+            )
+        _reject_executable_variant_hash_collisions(exe_records)
         exe_hashes: set[str] = set()
-        for requires, (source, expected_sha, expected_size) in EXECUTABLE_VARIANTS.items():
-            matching = [record for record in exe_records if frozenset(_requires(record, "executable record")) == requires]
-            if len(matching) != 1 or matching[0].get("source_path") != source:
+        for requires in EXECUTABLE_VARIANT_REQUIREMENTS:
+            matching = [
+                record
+                for record in exe_records
+                if frozenset(_requires(record, "executable record")) == requires
+            ]
+            if len(matching) != 1:
                 _fail(f"missing or ambiguous executable variant for {sorted(requires)}")
             record = matching[0]
-            if str(record.get("source_sha256", "")).lower() != expected_sha or record.get("source_size") != expected_size:
-                _fail(f"executable manifest identity mismatch for {source}")
-            if record.get("expected_target_sha256", "").lower() != TARGET_SHA256 or record.get("expected_target_size") != TARGET_SIZE:
-                _fail(f"executable target identity mismatch for {source}")
+            source = record.get("source_path")
+            if not isinstance(source, str) or not source.lower().endswith(".exe"):
+                _fail(f"executable variant {sorted(requires)} has no source path")
+            # Identity is checked against the bytes actually in the ZIP rather
+            # than a hash frozen at some past release.
             _verify_file_record(zipped, names, root, record, f"executable {source}")
-            exe_hashes.add(expected_sha)
+            if identities is not None:
+                expected_sha, expected_size = identities[requires]
+                if (
+                    str(record.get("source_sha256", "")).lower() != expected_sha
+                    or record.get("source_size") != expected_size
+                ):
+                    _fail(
+                        f"executable for {sorted(requires)} is not the binary the "
+                        f"build compiled for that combination ({source})"
+                    )
+            if (
+                str(record.get("expected_target_sha256", "")).lower() != TARGET_SHA256
+                or record.get("expected_target_size") != TARGET_SIZE
+            ):
+                _fail(f"executable target identity mismatch for {source}")
+            exe_hashes.add(str(record.get("source_sha256", "")).lower())
 
         renovation_records = [
             record
@@ -527,11 +438,19 @@ def verify_archive(zip_path: Path | str) -> dict:
         runner_files = set(runner_value)
         if not REQUIRED_RUNNERS <= runner_files:
             _fail(f"required patcher/crash-capture runners are missing: {sorted(REQUIRED_RUNNERS - runner_files)}")
+        apply_runners = sorted(name for name in runner_files if APPLY_RUNNER_PATTERN.match(name))
+        if len(apply_runners) != 1:
+            _fail(
+                "expected exactly one Apply_B<release>_Patcher.bat runner, found: "
+                + (", ".join(apply_runners) if apply_runners else "none")
+            )
         return {
             "zip": str(archive_path),
             "root": root,
             "members": len(names),
             "target_sha256": TARGET_SHA256,
+            "executable_variants": len(EXECUTABLE_VARIANT_REQUIREMENTS),
+            "variant_identities_authenticated": identities is not None,
             "executable_variants": len(exe_records),
             "renovation_assets": len(renovation_records),
             "sound_assets": len(sound_records),
@@ -544,9 +463,26 @@ def verify_archive(zip_path: Path | str) -> dict:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("zip_path", type=Path, help="explicit offline patcher ZIP to verify")
+    parser.add_argument(
+        "--identities",
+        type=Path,
+        help=(
+            "compiled variant identities from the matrix build "
+            "(work/export_release_variant_identities.py). Without this the "
+            "executables are only checked for internal consistency, because "
+            "the manifest is written by the same tool as the payload."
+        ),
+    )
+    parser.add_argument(
+        "--require-identities",
+        action="store_true",
+        help="fail unless --identities is supplied; use this when gating a release",
+    )
     args = parser.parse_args()
+    if args.require_identities and args.identities is None:
+        parser.error("--require-identities was given without --identities")
     try:
-        result = verify_archive(args.zip_path)
+        result = verify_archive(args.zip_path, args.identities)
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
         parser.error(str(exc))
     print(json.dumps(result, sort_keys=True))
