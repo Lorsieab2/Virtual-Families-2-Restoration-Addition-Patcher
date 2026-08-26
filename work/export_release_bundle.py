@@ -39,6 +39,28 @@ def declared_variants() -> list[str]:
     return [v["name"] for v in config["variants"]]
 
 
+def write_variant_identities(matrix_prefix: str, release: str) -> Path:
+    """Emit the independent identity file for this release's variants."""
+    sys.path.insert(0, str(ROOT / "work"))
+    import export_release_variant_identities as identities
+
+    records = identities.collect(matrix_prefix)
+    payload = {
+        "note": (
+            "Compiled identity of every executable variant, read from the "
+            "matrix build outputs rather than from the bundle that is being "
+            "verified. Feed to verify_offline_bundle_zip.py --identities."
+        ),
+        "release": release,
+        "matrix_prefix": matrix_prefix,
+        "variants": records,
+    }
+    out = ROOT / "data" / "vf2" / f"release-identities-{release}.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(payload, indent=2) + chr(10), encoding="utf-8")
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--release", required=True, help="Release name, e.g. B169")
@@ -220,7 +242,22 @@ def verify(out_dir: Path, build_dir: Path) -> int:
             print(f"  ... and {len(missing) - 20} more", file=sys.stderr)
         return 1
 
+    # Record what each feature combination actually compiled to, read from the
+    # matrix outputs rather than from the bundle. verify_offline_bundle_zip.py
+    # cannot authenticate the executables from manifest.json alone: this
+    # exporter writes both the payload and the hashes describing it, so one
+    # checked against the other only proves the bundle agrees with itself.
+    # Emitting it here means every release has an independent identity source
+    # without anyone having to remember a separate command.
+    identities_path = write_variant_identities(args.matrix_prefix, args.release)
+    print(f"recorded independent variant identities -> {identities_path}")
+
     print("bundle reproduces the build on a clean install")
+    print(
+        "gate the packaged ZIP with:" + chr(10) +
+        f"  python work/verify_offline_bundle_zip.py <zip> "
+        f"--identities {identities_path} --require-identities"
+    )
     return 0
 
 
