@@ -81,7 +81,11 @@ def main() -> int:
     out_dir = (
         Path(args.out_dir).resolve()
         if args.out_dir
-        else outputs / f"VF2-{args.release}-Release-Bundle"
+        # Named to match the archive stem: verify_offline_bundle_zip.py
+        # requires the ZIP root to equal the archive name, so a
+        # "-Release-Bundle" directory had to be renamed by hand before
+        # packaging B173 and B174.
+        else outputs / f"VF2-{args.release}-Release"
     )
 
     variants = sorted(
@@ -154,10 +158,15 @@ def main() -> int:
     if result.returncode != 0:
         return result.returncode
 
-    return verify(out_dir, outputs / (prefix + 'final_all_enabled'))
+    return verify(
+        out_dir,
+        outputs / (prefix + 'final_all_enabled'),
+        args.matrix_prefix,
+        args.release,
+    )
 
 
-def verify(out_dir: Path, build_dir: Path) -> int:
+def verify(out_dir: Path, build_dir: Path, matrix_prefix: str, release: str) -> int:
     """Refuse a bundle that cannot reproduce the build on a clean install.
 
     Count thresholds alone are not enough and have already let two broken
@@ -249,7 +258,7 @@ def verify(out_dir: Path, build_dir: Path) -> int:
     # checked against the other only proves the bundle agrees with itself.
     # Emitting it here means every release has an independent identity source
     # without anyone having to remember a separate command.
-    identities_path = write_variant_identities(args.matrix_prefix, args.release)
+    identities_path = write_variant_identities(matrix_prefix, release)
     print(f"recorded independent variant identities -> {identities_path}")
 
     print("bundle reproduces the build on a clean install")

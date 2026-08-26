@@ -47,12 +47,26 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    bundle = Path(args.bundle_dir) if args.bundle_dir else (
-        ROOT / "outputs" / f"VF2-{args.release}-Release"
+    # Resolved before any subprocess runs: the children run with cwd=ROOT, so
+    # a caller-relative path validated here would mean a different directory
+    # once packaging starts.
+    bundle = (
+        Path(args.bundle_dir).resolve()
+        if args.bundle_dir
+        else ROOT / "outputs" / f"VF2-{args.release}-Release"
     )
-    archive = Path(args.zip) if args.zip else bundle.with_suffix(".zip")
-    identities = Path(args.identities) if args.identities else (
-        ROOT / "data" / "vf2" / f"release-identities-{args.release}.json"
+    # Appended rather than with_suffix(): point releases are real, and
+    # Path("VF2-B155.5-Release").with_suffix(".zip") yields "VF2-B155.zip"
+    # because it treats ".5-Release" as the suffix.
+    archive = (
+        Path(args.zip).resolve()
+        if args.zip
+        else bundle.parent / (bundle.name + ".zip")
+    )
+    identities = (
+        Path(args.identities).resolve()
+        if args.identities
+        else ROOT / "data" / "vf2" / f"release-identities-{args.release}.json"
     )
 
     if not bundle.is_dir():
@@ -60,10 +74,10 @@ def main() -> int:
         return 1
     # The verifier requires the ZIP's root folder to match the archive stem, so
     # catch the mismatch here rather than after packaging 179 MB.
-    if bundle.name != archive.stem:
+    if archive.name != bundle.name + ".zip":
         print(
-            f"bundle directory name {bundle.name!r} must match archive stem "
-            f"{archive.stem!r}, or the ZIP root will not verify",
+            f"archive {archive.name!r} must be named {bundle.name + '.zip'!r} "
+            "to match the bundle directory, or the ZIP root will not verify",
             file=sys.stderr,
         )
         return 1
@@ -97,7 +111,7 @@ def main() -> int:
         ]
     )
     if verified.returncode != 0:
-        rejected = archive.with_suffix(".zip.REJECTED")
+        rejected = archive.parent / (archive.name + ".REJECTED")
         try:
             archive.replace(rejected)
         except OSError:
