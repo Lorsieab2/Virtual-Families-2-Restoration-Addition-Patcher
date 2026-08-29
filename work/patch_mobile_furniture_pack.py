@@ -25616,21 +25616,8 @@ extern "C" void __cdecl VF2MobileNappingCouch(CVillager &villager)
 extern "C" void __cdecl VF2MobileRestingBody(CVillager &villager)
 {
     sFurnitureInfo2 info = {};
-    // RestingBody (0x127) is the one universal "sit down" slot every manual
-    // drop and every spontaneous pick funnels through -- unlike
-    // ReadingBook/NappingCouch, which each have their own dedicated
-    // EBehavior id and only fire when the AI specifically wants that
-    // activity. Unconditionally trying to link a chaise here meant that as
-    // soon as a household owned even one chaise anywhere, EVERY sit-down
-    // instance was hijacked into this branch's two hardcoded strings,
-    // starving out the full randomized label pool (__VF2_REST_FALLBACK__)
-    // for every other couch/chair/bed in the house. Gate the chaise attempt
-    // itself so most instances still reach the varied pool; the chaise
-    // flavor stays an occasional possibility rather than the only outcome
-    // whenever a chaise happens to exist.
     if (gVF2MobileFurnitureBehaviors == 0 ||
         !VF2WeatherAllowsOutdoorFurniture() ||
-        ldwGameState::GetRandom(2) != 0 ||
         !VF2TryLinkMobileChaise(villager, info)) {
         __VF2_REST_FALLBACK__
         return;
@@ -28830,6 +28817,7 @@ extern "C" void __cdecl VF2RandomKidsTableLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTeenHomeworkLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTeenOnlineTestLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &);
+extern "C" void __cdecl VF2RandomUseCouchLabel(CVillager &);
 extern "C" void __cdecl VF2RandomPetLabel(CVillager &);
 extern "C" void __cdecl VF2RandomShowerLabel(CVillager &);
 extern "C" void __cdecl VF2RandomNorthShowerLabel(CVillager &);
@@ -28884,6 +28872,7 @@ private:
     static void __cdecl TeenHomework(CVillager &);
     static void __cdecl TeenOnlineExam(CVillager &);
     static void __cdecl RestingBody(CVillager &);
+    static void __cdecl UseCouch(CVillager &);
     static void __cdecl Petting(CVillager &);
     static void __cdecl Shower(CVillager &);
     static void __cdecl NorthShower(CVillager &);
@@ -28935,6 +28924,7 @@ private:
     friend void __cdecl VF2RandomTeenHomeworkLabel(CVillager &);
     friend void __cdecl VF2RandomTeenOnlineTestLabel(CVillager &);
     friend void __cdecl VF2RandomSitDownLabel(CVillager &);
+    friend void __cdecl VF2RandomUseCouchLabel(CVillager &);
     friend void __cdecl VF2RandomPetLabel(CVillager &);
     friend void __cdecl VF2RandomShowerLabel(CVillager &);
     friend void __cdecl VF2RandomNorthShowerLabel(CVillager &);
@@ -29967,10 +29957,11 @@ static int VF2CurrentSitDownLabel(CVillager &villager)
     return VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_teen_male, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_teen_male));
 }
 
-extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &villager)
+// Applies the sit-down label pools for whichever villager kind this is.
+// Shared by the autonomous RestingBody route and the manual couch-drop
+// UseCouch route so both stay in sync.
+static void VF2ApplySitDownLabelPools(CVillager &villager, int remembered)
 {
-    int remembered = VF2CurrentSitDownLabel(villager);
-    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RestingBody)) return;
     if (VF2IsAdult19OrOlder(villager) && VF2HasCareer(villager)) {
         VF2ApplyRememberedOrRandomLabels3(
             villager,
@@ -30017,6 +30008,34 @@ extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &villager)
         kVF2BehaviorLabels_sit_down_school,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_school),
         remembered);
+}
+
+extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentSitDownLabel(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RestingBody)) return;
+    VF2ApplySitDownLabelPools(villager, remembered);
+}
+
+// Manually dropping a villager on a couch/chair does NOT run RestingBody
+// (0x127). CHotSpot::Couch calls NewBehavior(0x189) -> CBehavior::UseCouch,
+// which writes its label directly: eSayNeedSitDown (0x7e4, "Needs to sit
+// down") when energy > 0x23, or eString_GettingSomeSleep (0xf5) below that.
+// Only the sit-down branch may take the varied pool -- "Getting some sleep"
+// is a genuinely different activity and keeps its own native label. When the
+// couch lookup fails, UseCouch says "There's nowhere to sit!" without
+// touching the label at all, and that is left alone too.
+static const int kVF2NeedSitDownStringId = 0x7e4;
+
+extern "C" void __cdecl VF2RandomUseCouchLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentSitDownLabel(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::UseCouch)) return;
+    char const *sitDown =
+        theStringManager::Get()->GetString((StringId)kVF2NeedSitDownStringId);
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    if (!VF2LabelTextEqual(behaviorLabel, sitDown)) return;
+    VF2ApplySitDownLabelPools(villager, remembered);
 }
 
 extern "C" void __cdecl VF2RandomPetLabel(CVillager &villager)
@@ -30295,6 +30314,12 @@ def patch_behavior_label_variants(manifest):
         retarget(0x4AA, 0x0C0, "_VF2RandomTeenHomeworkLabel", "Teen homework label variants"),
         retarget(0x4BB, 0x0C1, "_VF2RandomTeenOnlineTestLabel", "Teen online test label variants"),
         retarget(0x108C, 0x127, "_VF2RandomSitDownLabel", "Sit-down/rest label variants"),
+        # The manual couch/chair drop route: CHotSpot::Couch -> NewBehavior
+        # (0x189) -> CBehavior::UseCouch. This is what actually runs when the
+        # player drops a villager on a couch or chair; 0x127 above is only the
+        # autonomous route, which is why retargeting 0x127 alone left every
+        # manual drop showing the stock "Needs to sit down".
+        retarget(0x1708, 0x189, "_VF2RandomUseCouchLabel", "Couch-drop sit-down label variants"),
         retarget(0x1886, 0x19A, "_VF2RandomPetLabel", "Petting label variants"),
         retarget(0x2A6, 0x034, "_VF2RandomShowerLabel", "Shower/bath label variants"),
         retarget(0x831, 0x016, "_VF2RandomNorthShowerLabel", "North shower/bath label variants"),

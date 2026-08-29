@@ -7147,32 +7147,27 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     labels = dict(patcher.BEHAVIOR_LABEL_GROUPS)[group]
                     self.assertTrue(labels, f"{group} label pool is empty")
 
-                # Regression guard: with Mobile Furniture Behaviors enabled,
-                # VF2MobileRestingBody becomes the actual handler for 0x127
-                # (see test_patch_mobile_furniture_behavior_macros_installed
-                # -- that override is intentional and untouched here). It
-                # used to try VF2TryLinkMobileChaise unconditionally, and
-                # since that call links to *any* chaise anywhere in the
-                # household rather than one relevant to this specific
-                # villager, owning a single chaise silently hijacked every
-                # sit-down instance in the house into its own two hardcoded
-                # strings ("Catching some rays" / "Needs to sit down"),
-                # permanently starving out the randomized label pool above.
-                # The chaise attempt must be gated so most instances still
-                # reach __VF2_REST_FALLBACK__.
-                resting_body_start = helper_source.index(
-                    "extern \"C\" void __cdecl VF2MobileRestingBody(CVillager &villager)"
+                # Manually dropping a villager on a couch/chair does NOT go
+                # through RestingBody (0x127). CHotSpot::Couch calls
+                # NewBehavior(0x189) -> CBehavior::UseCouch, which writes
+                # eSayNeedSitDown (0x7e4, "Needs to sit down") directly when
+                # energy > 0x23, and eString_GettingSomeSleep (0xf5) below
+                # that. Only the sit-down branch may take the varied pool --
+                # "Getting some sleep" is a different activity and must keep
+                # its own native label.
+                use_couch = next(
+                    row for row in manifest["behavior_label_variants"]["changed"]
+                    if row["behavior_id"] == "0x189"
                 )
-                resting_body_end = helper_source.index(
-                    "extern \"C\" void __cdecl VF2MobileStudyingOnPatio", resting_body_start
-                )
-                resting_body_source = helper_source[resting_body_start:resting_body_end]
-                chaise_check = resting_body_source.index("!VF2TryLinkMobileChaise")
-                gate_check = resting_body_source.index("gVF2MobileFurnitureBehaviors == 0")
-                self.assertLess(gate_check, chaise_check)
+                self.assertEqual(use_couch["helper"], "_VF2RandomUseCouchLabel")
+                self.assertEqual(use_couch["constructor_offset"], "0x1708")
                 self.assertIn(
-                    "ldwGameState::GetRandom(2) != 0",
-                    resting_body_source[gate_check:chaise_check],
+                    "extern \"C\" void __cdecl VF2RandomUseCouchLabel(CVillager &villager)",
+                    helper_source,
+                )
+                self.assertIn(
+                    "static const int kVF2NeedSitDownStringId = 0x7e4;",
+                    helper_source,
                 )
             finally:
                 patcher.PATCHED = old_patched
