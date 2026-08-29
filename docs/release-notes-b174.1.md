@@ -26,6 +26,16 @@ populate that record via native code and never needed this fallback at all.
 only pairs two people when the household has *exactly* two qualifying
 adults -- not just "the first two found."
 
+**What this does not fix.** The exact-two rule removes the guess only when a
+*third* qualifying adult is present. It still does not establish that the two
+candidates are married to each other, so the specific case named above -- an
+unmarried player plus one grown, employed adult child, and nobody else --
+still counts exactly two and still pairs them. Force Marriage Email remains
+unavailable in that household. Closing that gap needs a real relationship
+test, which this fallback cannot use: it exists precisely because the
+family-tree marriage record is unpopulated for a same-sex pair. Left as-is
+rather than guessed at, and recorded here instead of being claimed fixed.
+
 ## Missing cheat-row art
 
 `cheat_antispam_disk.png` and `cheat_rockhound_certificate.png` were
