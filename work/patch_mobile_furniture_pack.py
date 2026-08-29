@@ -25616,8 +25616,21 @@ extern "C" void __cdecl VF2MobileNappingCouch(CVillager &villager)
 extern "C" void __cdecl VF2MobileRestingBody(CVillager &villager)
 {
     sFurnitureInfo2 info = {};
+    // RestingBody (0x127) is the one universal "sit down" slot every manual
+    // drop and every spontaneous pick funnels through -- unlike
+    // ReadingBook/NappingCouch, which each have their own dedicated
+    // EBehavior id and only fire when the AI specifically wants that
+    // activity. Unconditionally trying to link a chaise here meant that as
+    // soon as a household owned even one chaise anywhere, EVERY sit-down
+    // instance was hijacked into this branch's two hardcoded strings,
+    // starving out the full randomized label pool (__VF2_REST_FALLBACK__)
+    // for every other couch/chair/bed in the house. Gate the chaise attempt
+    // itself so most instances still reach the varied pool; the chaise
+    // flavor stays an occasional possibility rather than the only outcome
+    // whenever a chaise happens to exist.
     if (gVF2MobileFurnitureBehaviors == 0 ||
         !VF2WeatherAllowsOutdoorFurniture() ||
+        ldwGameState::GetRandom(2) != 0 ||
         !VF2TryLinkMobileChaise(villager, info)) {
         __VF2_REST_FALLBACK__
         return;
