@@ -37,6 +37,18 @@ def newest_release_zip():
     return best[1] if best else None
 
 
+def newest_release_identities():
+    """Return the independent identities for the release selected above."""
+    archive = newest_release_zip()
+    if archive is None:
+        return None
+    match = RELEASE_ZIP_PATTERN.match(archive.name)
+    if match is None:
+        return None
+    point = f".{match.group(2)}" if match.group(2) else ""
+    return ROOT / "data" / "vf2" / f"release-identities-B{match.group(1)}{point}.json"
+
+
 class OfflineBundleZipVerifierTests(unittest.TestCase):
     def test_summary_zip_field_uses_archive_input_not_asset_path(self):
         source = (ROOT / "work" / "verify_offline_bundle_zip.py").read_text(encoding="utf-8")
@@ -154,7 +166,7 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
 
     def test_identities_authenticate_variants_against_an_independent_source(self):
         archive = newest_release_zip()
-        identities = ROOT / "data" / "vf2" / "release-identities-B174.json"
+        identities = newest_release_identities()
         if archive is None or not identities.is_file():
             self.skipTest("no release ZIP or identities file present")
 
@@ -182,8 +194,8 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
             tmp.cleanup()
 
     def test_identities_must_cover_the_whole_release_contract(self):
-        identities = ROOT / "data" / "vf2" / "release-identities-B174.json"
-        if not identities.is_file():
+        identities = newest_release_identities()
+        if identities is None or not identities.is_file():
             self.skipTest("no identities file present")
         payload = json.loads(identities.read_text(encoding="utf-8"))
         payload["variants"] = payload["variants"][:-1]
