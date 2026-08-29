@@ -13797,6 +13797,14 @@ static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {
     // (e.g. an adult child alongside a genuine same-sex couple) makes "the
     // first two found" unreliable, so treat it as no established pair
     // rather than guessing.
+    //
+    // Known residual gap: this narrows the guess but does not establish that
+    // the two are married. An unmarried player plus one grown, employed
+    // adult child still counts exactly two and is still paired here. Closing
+    // that needs a real relationship test, which this fallback by definition
+    // cannot use -- it runs only when the family-tree marriage record is
+    // unpopulated, so there is no record to consult. Left rather than
+    // guessed at; see docs/release-notes-b174.1.md.
     if (count != 2) return false;
     first = candidates[0];
     second = candidates[1];
