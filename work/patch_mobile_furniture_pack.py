@@ -23345,13 +23345,17 @@ def patch_mobile_furniture_behavior_dispatch(manifest):
     behavior_fallback_decls = ""
     nap_fallback = "CBehavior::NappingCouch(villager);"
     rest_fallback = "CBehavior::RestingBody(villager);"
+    chaise_sit_down_variants = ""
     computer_drop_dispatch = "    if (HandleDropOnHotSpot(villager)) return true;"
     if ENABLE_BEHAVIOR_PATCHES:
         behavior_fallback_decls = r'''
 extern "C" void __cdecl VF2RandomNapDreamLabel(CVillager &);
-extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &);
+extern "C" void __cdecl VF2RandomRestingBodyLabel(CVillager &);
+extern "C" void __cdecl VF2ApplySitDownLabelVariants(CVillager &);
 '''.strip()
         nap_fallback = "VF2RandomNapDreamLabel(villager);"
+        rest_fallback = "VF2RandomRestingBodyLabel(villager);"
+        chaise_sit_down_variants = "        VF2ApplySitDownLabelVariants(villager);"
         computer_drop_dispatch = r'''
     bool handled = HandleDropOnHotSpot(villager);
     if (handled) {
@@ -23771,6 +23775,7 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     int happiness = 0;
     int energyGain = 0;
     ECarrying carrying = static_cast<ECarrying>(0);
+    bool applySitDownLabelVariants = false;
     if (roll < 20) {
         VF2SetActionLabel(villager, "Relaxing on lounger");
         duration = ldwGameState::GetRandom(15) + 15;
@@ -23790,6 +23795,7 @@ static bool VF2HandleMobileChaise(CVillager &villager)
         VF2SetActionLabel(villager, "Needs to sit down");
         duration = ldwGameState::GetRandom(15) + 15;
         energyGain = 3;
+        applySitDownLabelVariants = true;
     } else if (roll < 80 + napWeight) {
         VF2SetActionLabel(villager, "Taking a nap");
         duration = ldwGameState::GetRandom(5) + 5;
@@ -23813,6 +23819,9 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     if (happiness) plans->PlanToIncHappinessTrend(happiness);
     if (energyGain) plans->PlanToIncEnergy(energyGain);
     plans->StartNewBehavior(villager);
+    if (applySitDownLabelVariants) {
+__VF2_CHAISE_SIT_DOWN_VARIANTS__
+    }
     return true;
 }
 
@@ -25637,6 +25646,7 @@ extern "C" void __cdecl VF2MobileRestingBody(CVillager &villager)
         VF2PlanLinkedChaiseAction(
             villager, info, "Needs to sit down", ldwGameState::GetRandom(15) + 15,
             static_cast<ECarrying>(0), 0, 0, 3);
+__VF2_RESTING_BODY_CHAISE_SIT_DOWN_VARIANTS__
     }
 }
 
@@ -25737,6 +25747,13 @@ __VF2_COMPUTER_DROP_DISPATCH__
     )
     helper_source = helper_source.replace("__VF2_NAP_FALLBACK__", nap_fallback)
     helper_source = helper_source.replace("__VF2_REST_FALLBACK__", rest_fallback)
+    helper_source = helper_source.replace(
+        "__VF2_CHAISE_SIT_DOWN_VARIANTS__", chaise_sit_down_variants
+    )
+    helper_source = helper_source.replace(
+        "__VF2_RESTING_BODY_CHAISE_SIT_DOWN_VARIANTS__",
+        chaise_sit_down_variants,
+    )
     helper_path.write_text(helper_source, encoding="ascii")
 
     obj_path = PATCHED / "theMainScene.obj"
@@ -25772,6 +25789,42 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "source_section": MOBILE_FURNITURE_BEHAVIOR_FLAG_SECTION,
             "size": 1,
             "default": "00",
+        },
+        "seating_behavior_cross_apply": {
+            "canonical_sit_down_variant_helper": (
+                "_VF2ApplySitDownLabelVariants"
+                if ENABLE_BEHAVIOR_PATCHES
+                else None
+            ),
+            "manual_chaise_needs_to_sit_down": ENABLE_BEHAVIOR_PATCHES,
+            "autonomous_chaise_needs_to_sit_down": ENABLE_BEHAVIOR_PATCHES,
+            "resting_body_stock_fallback": (
+                "_VF2RandomRestingBodyLabel"
+                if ENABLE_BEHAVIOR_PATCHES
+                else "CBehavior::RestingBody"
+            ),
+            "couch_chair_sit_down_route": (
+                "CBehavior::UseCouch (0x189) -> _VF2RandomUseCouchLabel"
+                if ENABLE_BEHAVIOR_PATCHES
+                else "CBehavior::UseCouch (0x189)"
+            ),
+            "resting_body_native_label_family": {
+                "behavior": "CBehavior::RestingBody (0x127)",
+                "string_ids": ["0x17d", "0x17e", "0x17f"],
+                "texts": ["Resting", "Resting legs", "Resting tired feet"],
+                "shared_pool_condition": (
+                    "native RestingBody changed to one of these labels"
+                    if ENABLE_BEHAVIOR_PATCHES
+                    else "native RestingBody labels remain untouched"
+                ),
+            },
+            "resting_body_route_matrix": {
+                "behavior_patches_off_mobile_flag_off": "CBehavior::RestingBody",
+                "behavior_patches_off_mobile_flag_on": "VF2MobileRestingBody -> chaise plan or CBehavior::RestingBody fallback",
+                "behavior_patches_on_mobile_flag_off": "VF2MobileRestingBody -> VF2RandomRestingBodyLabel -> CBehavior::RestingBody",
+                "behavior_patches_on_mobile_flag_on": "VF2MobileRestingBody -> chaise plan or VF2RandomRestingBodyLabel fallback",
+            },
+            "native_plan_and_furniture_target_preserved": True,
         },
         "manual_drop_only_whole_household": {
             "handlers": list(MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_HANDLERS),
@@ -26664,6 +26717,73 @@ def validate_mobile_furniture_runtime_bindings(manifest):
         raise RuntimeError("Mobile furniture behavior flag symbol drifted")
     if runtime_flag.get("default") != "00" or runtime_flag.get("size") != 1:
         raise RuntimeError("Mobile furniture behavior flag is not default-off")
+    behavior_patches_enabled = bool(
+        manifest.get("BehaviorPatchesGate", {}).get("enabled")
+    )
+    cross_apply = behavior_contract.get("seating_behavior_cross_apply")
+    expected_cross_apply = {
+        "canonical_sit_down_variant_helper": (
+            "_VF2ApplySitDownLabelVariants"
+            if behavior_patches_enabled
+            else None
+        ),
+        "manual_chaise_needs_to_sit_down": behavior_patches_enabled,
+        "autonomous_chaise_needs_to_sit_down": behavior_patches_enabled,
+        "resting_body_stock_fallback": (
+            "_VF2RandomRestingBodyLabel"
+            if behavior_patches_enabled
+            else "CBehavior::RestingBody"
+        ),
+        "couch_chair_sit_down_route": (
+            "CBehavior::UseCouch (0x189) -> _VF2RandomUseCouchLabel"
+            if behavior_patches_enabled
+            else "CBehavior::UseCouch (0x189)"
+        ),
+        "resting_body_native_label_family": {
+            "behavior": "CBehavior::RestingBody (0x127)",
+            "string_ids": ["0x17d", "0x17e", "0x17f"],
+            "texts": ["Resting", "Resting legs", "Resting tired feet"],
+            "shared_pool_condition": (
+                "native RestingBody changed to one of these labels"
+                if behavior_patches_enabled
+                else "native RestingBody labels remain untouched"
+            ),
+        },
+        "resting_body_route_matrix": {
+            "behavior_patches_off_mobile_flag_off": "CBehavior::RestingBody",
+            "behavior_patches_off_mobile_flag_on": "VF2MobileRestingBody -> chaise plan or CBehavior::RestingBody fallback",
+            "behavior_patches_on_mobile_flag_off": "VF2MobileRestingBody -> VF2RandomRestingBodyLabel -> CBehavior::RestingBody",
+            "behavior_patches_on_mobile_flag_on": "VF2MobileRestingBody -> chaise plan or VF2RandomRestingBodyLabel fallback",
+        },
+        "native_plan_and_furniture_target_preserved": True,
+    }
+    if cross_apply != expected_cross_apply:
+        raise RuntimeError("Mobile seating behavior cross-apply contract drifted")
+    if behavior_patches_enabled:
+        if helper_text.count("VF2RandomRestingBodyLabel(villager);") < 1:
+            raise RuntimeError(
+                "Behavior-Patches RestingBody fallback binding is incomplete"
+            )
+        if helper_text.count("VF2ApplySitDownLabelVariants(villager);") != 2:
+            raise RuntimeError(
+                "Behavior-Patches chaise sit-down variant binding is incomplete"
+            )
+        if "__VF2_CHAISE_SIT_DOWN_VARIANTS__" in helper_text:
+            raise RuntimeError("Mobile chaise seating placeholder was not resolved")
+        if "__VF2_RESTING_BODY_CHAISE_SIT_DOWN_VARIANTS__" in helper_text:
+            raise RuntimeError(
+                "Mobile RestingBody chaise seating placeholder was not resolved"
+            )
+    else:
+        for marker in (
+            "VF2RandomRestingBodyLabel(villager);",
+            "VF2ApplySitDownLabelVariants(villager);",
+        ):
+            if marker in helper_text:
+                raise RuntimeError(
+                    "Behavior-Patches seating helper leaked into disabled build: "
+                    f"{marker}"
+                )
     validate_mobile_furniture_autonomous_scope()
     whole_household_contract = behavior_contract.get(
         "manual_drop_only_whole_household"
@@ -26888,6 +27008,7 @@ def validate_mobile_furniture_runtime_bindings(manifest):
             "manual_dispatch": True,
             "autonomous_selector": True,
         },
+        "seating_behavior_cross_apply": cross_apply,
         "rejected_scope": {
             "decorative_only": [hex(item_id) for item_id in sorted(decorative_ids)],
             "rendered_only_unproven": [hex(item_id) for item_id in sorted(rendered_ids)],
@@ -28822,6 +28943,7 @@ extern "C" void __cdecl VF2TrampolineLabel(CVillager &);
 extern "C" void __cdecl VF2RandomKidsTableLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTeenHomeworkLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTeenOnlineTestLabel(CVillager &);
+extern "C" void __cdecl VF2RandomRestingBodyLabel(CVillager &);
 extern "C" void __cdecl VF2RandomUseCouchLabel(CVillager &);
 extern "C" void __cdecl VF2RandomPetLabel(CVillager &);
 extern "C" void __cdecl VF2RandomShowerLabel(CVillager &);
@@ -28854,6 +28976,7 @@ private:
     static void __cdecl WorkWorkshop(CVillager &);
     static void __cdecl DrawingOnEasel(CVillager &);
     static void __cdecl NappingCouch(CVillager &);
+    static void __cdecl RestingBody(CVillager &);
     static void __cdecl TeachingFirstWords(CVillager &);
     static void __cdecl HaveBreakfast(CVillager &);
     static void __cdecl WateringFlowers(CVillager &);
@@ -28927,6 +29050,7 @@ private:
     friend void __cdecl VF2RandomKidsTableLabel(CVillager &);
     friend void __cdecl VF2RandomTeenHomeworkLabel(CVillager &);
     friend void __cdecl VF2RandomTeenOnlineTestLabel(CVillager &);
+    friend void __cdecl VF2RandomRestingBodyLabel(CVillager &);
     friend void __cdecl VF2RandomUseCouchLabel(CVillager &);
     friend void __cdecl VF2RandomPetLabel(CVillager &);
     friend void __cdecl VF2RandomShowerLabel(CVillager &);
@@ -30013,18 +30137,61 @@ static void VF2ApplySitDownLabelPools(CVillager &villager, int remembered)
         remembered);
 }
 
+static const int kVF2NeedSitDownStringId = 0x7e4;
+// Native CBehavior::RestingBody (0x127) chooses one of these three labels
+// before it plans its ordinary furniture rest.  They are distinct from
+// UseCouch's 0x7e4 "Needs to sit down" result; keep the distinction explicit
+// so the fallback wrapper cannot silently become a no-op.
+static const int kVF2RestingBodyNativeLabelIds[] = {0x17D, 0x17E, 0x17F};
+
+static bool VF2IsRestingBodyNativeLabel(CVillager &villager)
+{
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    for (int index = 0; index < 3; ++index) {
+        char const *nativeLabel = theStringManager::Get()->GetString(
+            (StringId)kVF2RestingBodyNativeLabelIds[index]);
+        if (VF2LabelTextEqual(behaviorLabel, nativeLabel)) return true;
+    }
+    return false;
+}
+
+// Shared label-only entry point for custom furniture plans.  The mobile
+// chaise handlers have already built and started their exact plan sequence;
+// calling a native behavior wrapper here would replace that sequence.  Keep
+// the selection/cache logic in this Behavior-Patches helper and expose only
+// the presentation step to the mobile helper object.
+extern "C" void __cdecl VF2ApplySitDownLabelVariants(CVillager &villager)
+{
+    int remembered = VF2CurrentSitDownLabel(villager);
+    VF2ApplySitDownLabelPools(villager, remembered);
+}
+
+// RestingBody is the stock autonomous fallback for ordinary couches, chairs,
+// and other sittable furniture when the mobile chaise branch does not take
+// the action. Preserve that native route, then apply the same canonical
+// sit-down pool used by UseCouch only when RestingBody actually emitted one
+// of its three native resting labels (0x17d/0x17e/0x17f). This keeps the
+// behavior available across both native furniture families without routing a
+// couch through a chaise or changing another native RestingBody label.
+extern "C" void __cdecl VF2RandomRestingBodyLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentSitDownLabel(villager);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RestingBody)) return;
+    if (!VF2IsRestingBodyNativeLabel(villager)) return;
+    VF2ApplySitDownLabelPools(villager, remembered);
+}
+
 // The sit-down action is CBehavior::UseCouch (0x189), reached from
 // CHotSpot::Couch on a manual couch/chair drop and from its own autonomous
-// candidate. RestingBody (0x127) is a separate mobile behavior owned by the
-// Mobile Furniture Behaviors patch and is not involved.
-// which writes its label directly: eSayNeedSitDown (0x7e4, "Needs to sit
+// candidate. RestingBody (0x127) remains a separate native fallback, and the
+// Mobile Furniture Behaviors patch calls its dedicated wrapper when a chaise
+// plan was not selected. UseCouch writes its label directly:
+// eSayNeedSitDown (0x7e4, "Needs to sit
 // down") when energy > 0x23, or eString_GettingSomeSleep (0xf5) below that.
 // Only the sit-down branch may take the varied pool -- "Getting some sleep"
 // is a genuinely different activity and keeps its own native label. When the
 // couch lookup fails, UseCouch says "There's nowhere to sit!" without
 // touching the label at all, and that is left alone too.
-static const int kVF2NeedSitDownStringId = 0x7e4;
-
 extern "C" void __cdecl VF2RandomUseCouchLabel(CVillager &villager)
 {
     int remembered = VF2CurrentSitDownLabel(villager);
@@ -30189,7 +30356,8 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
             "checking weight (0x046; all ages; native scale targeting)",
             "teaching first words/infant-care variants (0x11F; nursing mothers carrying babies)",
             "petting label variants remain available through manual/native routes but Petting is not spontaneous",
-            "needs-to-sit-down variants (0x189 UseCouch; manual couch/chair drop and autonomous; native couch and age gates retained)",
+            "needs-to-sit-down variants (0x189 UseCouch; manual couch/chair drop and autonomous; native couch and age gates retained; shared label-only helper is available to the chaise plan)",
+            "RestingBody (0x127) remains native for non-chaise fallback; its shared wrapper changes the label only when native RestingBody emits one of stock 0x17d/0x17e/0x17f Resting/Resting legs/Resting tired feet labels",
             "TV, drink, heat-food, snack, meal-prep, web, video game, reading, telescope, workout, career, shower, bathroom sink/grooming, coffee/tea, cocktail, pool, sandbox, toy-train, and snow-play label variants",
         ],
         "hammock_behavior": {
@@ -30312,10 +30480,12 @@ def patch_behavior_label_variants(manifest):
         retarget(0x4AA, 0x0C0, "_VF2RandomTeenHomeworkLabel", "Teen homework label variants"),
         retarget(0x4BB, 0x0C1, "_VF2RandomTeenOnlineTestLabel", "Teen online test label variants"),
         # The sit-down action is CBehavior::UseCouch (0x189): CHotSpot::Couch
-        # runs it on a manual couch/chair drop, and VF2EnableAutonomousCandidates
-        # enables it as its own candidate so the AI picks it too. It does not
-        # depend on RestingBody (0x127), which stays owned by the Mobile
-        # Furniture Behaviors patch alone.
+        # runs it on a manual couch/chair drop, and
+        # VF2EnableAutonomousCandidates enables it as its own candidate so the
+        # AI picks it too. RestingBody (0x127) is kept as a separate native
+        # fallback for the Mobile Furniture chaise route; its wrapper only
+        # shares this pool when native RestingBody emitted one of its exact
+        # stock "Resting", "Resting legs", or "Resting tired feet" labels.
         retarget(0x1708, 0x189, "_VF2RandomUseCouchLabel", "Sit-down label variants"),
         retarget(0x1886, 0x19A, "_VF2RandomPetLabel", "Petting label variants"),
         retarget(0x2A6, 0x034, "_VF2RandomShowerLabel", "Shower/bath label variants"),

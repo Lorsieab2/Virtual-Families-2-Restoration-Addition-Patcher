@@ -553,6 +553,32 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         self.assertEqual(len(contract["rejected_scope"]["rendered_only_unproven"]), 24)
         self.assertTrue(contract["stock_off_gate"]["manual_dispatch"])
         self.assertTrue(contract["stock_off_gate"]["autonomous_selector"])
+        self.assertEqual(
+            contract["seating_behavior_cross_apply"],
+            {
+                "canonical_sit_down_variant_helper": None,
+                "manual_chaise_needs_to_sit_down": False,
+                "autonomous_chaise_needs_to_sit_down": False,
+                "resting_body_stock_fallback": "CBehavior::RestingBody",
+                "couch_chair_sit_down_route": "CBehavior::UseCouch (0x189)",
+                "resting_body_native_label_family": {
+                    "behavior": "CBehavior::RestingBody (0x127)",
+                    "string_ids": ["0x17d", "0x17e", "0x17f"],
+                    "texts": ["Resting", "Resting legs", "Resting tired feet"],
+                    "shared_pool_condition": "native RestingBody labels remain untouched",
+                },
+                "resting_body_route_matrix": {
+                    "behavior_patches_off_mobile_flag_off": "CBehavior::RestingBody",
+                    "behavior_patches_off_mobile_flag_on": "VF2MobileRestingBody -> chaise plan or CBehavior::RestingBody fallback",
+                    "behavior_patches_on_mobile_flag_off": "VF2MobileRestingBody -> VF2RandomRestingBodyLabel -> CBehavior::RestingBody",
+                    "behavior_patches_on_mobile_flag_on": "VF2MobileRestingBody -> chaise plan or VF2RandomRestingBodyLabel fallback",
+                },
+                "native_plan_and_furniture_target_preserved": True,
+            },
+        )
+        # The source-level disabled-build assertions are covered in the
+        # feature-combination test below; the temporary helper is gone after
+        # the patcher path is restored here.
 
     def test_family_wide_mobile_routes_are_manual_drop_only(self):
         expected_handlers = {
@@ -2048,6 +2074,136 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             patcher.PATCHED = old_patched
             patcher.ENABLE_BEHAVIOR_PATCHES = old_behavior_patches
 
+    def test_seating_mobile_furniture_alone_has_no_behavior_helper_references(self):
+        old_patched = patcher.PATCHED
+        old_behavior_patches = patcher.ENABLE_BEHAVIOR_PATCHES
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                patcher.ENABLE_BEHAVIOR_PATCHES = False
+                shutil.copy2(
+                    patcher.SRC_OBJS / "theMainScene.obj",
+                    patcher.PATCHED / "theMainScene.obj",
+                )
+                manifest = {}
+                patcher.patch_mobile_furniture_behavior_dispatch(manifest)
+                helper = (
+                    patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp"
+                ).read_text(encoding="ascii")
+                self.assertNotIn("VF2RandomRestingBodyLabel", helper)
+                self.assertNotIn("VF2ApplySitDownLabelVariants", helper)
+                self.assertIn("CBehavior::RestingBody(villager);", helper)
+                self.assertIn('"Needs to sit down"', helper)
+                self.assertIn('"Catching some rays"', helper)
+                self.assertNotIn("__VF2_", helper)
+                self.assertEqual(
+                    manifest["MobileFurnitureBehaviors"][
+                        "seating_behavior_cross_apply"
+                    ],
+                    {
+                        "canonical_sit_down_variant_helper": None,
+                        "manual_chaise_needs_to_sit_down": False,
+                        "autonomous_chaise_needs_to_sit_down": False,
+                        "resting_body_stock_fallback": "CBehavior::RestingBody",
+                        "couch_chair_sit_down_route": "CBehavior::UseCouch (0x189)",
+                        "resting_body_native_label_family": {
+                            "behavior": "CBehavior::RestingBody (0x127)",
+                            "string_ids": ["0x17d", "0x17e", "0x17f"],
+                            "texts": ["Resting", "Resting legs", "Resting tired feet"],
+                            "shared_pool_condition": "native RestingBody labels remain untouched",
+                        },
+                        "resting_body_route_matrix": {
+                            "behavior_patches_off_mobile_flag_off": "CBehavior::RestingBody",
+                            "behavior_patches_off_mobile_flag_on": "VF2MobileRestingBody -> chaise plan or CBehavior::RestingBody fallback",
+                            "behavior_patches_on_mobile_flag_off": "VF2MobileRestingBody -> VF2RandomRestingBodyLabel -> CBehavior::RestingBody",
+                            "behavior_patches_on_mobile_flag_on": "VF2MobileRestingBody -> chaise plan or VF2RandomRestingBodyLabel fallback",
+                        },
+                        "native_plan_and_furniture_target_preserved": True,
+                    },
+                )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_BEHAVIOR_PATCHES = old_behavior_patches
+
+    def test_seating_behavior_both_enabled_reuses_pool_without_replacing_chaise_plan(self):
+        old_patched = patcher.PATCHED
+        old_behavior_patches = patcher.ENABLE_BEHAVIOR_PATCHES
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                patcher.PATCHED = Path(tmp)
+                patcher.ENABLE_BEHAVIOR_PATCHES = True
+                shutil.copy2(
+                    patcher.SRC_OBJS / "theMainScene.obj",
+                    patcher.PATCHED / "theMainScene.obj",
+                )
+                manifest = {}
+                patcher.patch_mobile_furniture_behavior_dispatch(manifest)
+                mobile_helper = (
+                    patcher.PATCHED / "vf2_mobile_furniture_behaviors.cpp"
+                ).read_text(encoding="ascii")
+                self.assertIn(
+                    'extern "C" void __cdecl VF2RandomRestingBodyLabel(CVillager &);',
+                    mobile_helper,
+                )
+                self.assertIn(
+                    'extern "C" void __cdecl VF2ApplySitDownLabelVariants(CVillager &);',
+                    mobile_helper,
+                )
+                self.assertIn(
+                    "VF2RandomRestingBodyLabel(villager);", mobile_helper
+                )
+                self.assertEqual(
+                    mobile_helper.count("VF2ApplySitDownLabelVariants(villager);"),
+                    2,
+                )
+                self.assertEqual(
+                    manifest["MobileFurnitureBehaviors"][
+                        "seating_behavior_cross_apply"
+                    ]["resting_body_native_label_family"],
+                    {
+                        "behavior": "CBehavior::RestingBody (0x127)",
+                        "string_ids": ["0x17d", "0x17e", "0x17f"],
+                        "texts": ["Resting", "Resting legs", "Resting tired feet"],
+                        "shared_pool_condition": "native RestingBody changed to one of these labels",
+                    },
+                )
+                manual_start = mobile_helper.index(
+                    "static bool VF2HandleMobileChaise(CVillager &villager)"
+                )
+                manual_end = mobile_helper.index(
+                    "static bool VF2HandleMobilePatioUmbrella", manual_start
+                )
+                manual = mobile_helper[manual_start:manual_end]
+                self.assertIn("applySitDownLabelVariants = true;", manual)
+                self.assertLess(
+                    manual.index("plans->StartNewBehavior(villager);"),
+                    manual.index("VF2ApplySitDownLabelVariants(villager);"),
+                )
+                rest_start = mobile_helper.index(
+                    "extern \"C\" void __cdecl VF2MobileRestingBody(CVillager &villager)"
+                )
+                rest_end = mobile_helper.index(
+                    "extern \"C\" void __cdecl VF2MobileStudyingOnPatio",
+                    rest_start,
+                )
+                resting = mobile_helper[rest_start:rest_end]
+                self.assertLess(
+                    resting.index("VF2PlanLinkedChaiseAction(", resting.index("else {")),
+                    resting.index("VF2ApplySitDownLabelVariants(villager);"),
+                )
+                self.assertIn(
+                    "if (gVF2MobileFurnitureBehaviors == 0 ||",
+                    resting,
+                )
+                self.assertIn(
+                    "VF2RandomRestingBodyLabel(villager);",
+                    resting,
+                )
+                self.assertNotIn("__VF2_", mobile_helper)
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_BEHAVIOR_PATCHES = old_behavior_patches
+
     def test_mobile_chaise_autonomous_macros_are_final_exact_retargets(self):
         old_patched = patcher.PATCHED
         try:
@@ -2082,6 +2238,161 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
         finally:
             patcher.PATCHED = old_patched
+
+    def test_seating_feature_combination_links_macro_gate_and_fallback_routes(self):
+        old_patched = patcher.PATCHED
+        old_behavior_patches = patcher.ENABLE_BEHAVIOR_PATCHES
+        try:
+            combinations = (
+                (False, False, "behavior_patches_off_mobile_flag_off"),
+                (False, True, "behavior_patches_off_mobile_flag_on"),
+                (True, False, "behavior_patches_on_mobile_flag_off"),
+                (True, True, "behavior_patches_on_mobile_flag_on"),
+            )
+            for behavior_patches_enabled, mobile_flag_enabled, route_key in combinations:
+                with self.subTest(
+                    behavior_patches_enabled=behavior_patches_enabled,
+                    mobile_flag_enabled=mobile_flag_enabled,
+                ):
+                    with tempfile.TemporaryDirectory() as tmp:
+                        patcher.PATCHED = Path(tmp)
+                        patcher.ENABLE_BEHAVIOR_PATCHES = behavior_patches_enabled
+                        for filename in (
+                            "theMainScene.obj",
+                            "Behavior.obj",
+                        ):
+                            shutil.copy2(
+                                patcher.SRC_OBJS / filename,
+                                patcher.PATCHED / filename,
+                            )
+                        manifest = {
+                            "BehaviorPatchesGate": {
+                                "enabled": behavior_patches_enabled,
+                            },
+                        }
+                        patcher.patch_mobile_furniture_behavior_dispatch(manifest)
+                        if behavior_patches_enabled:
+                            for filename in ("Villager.obj", "VillagerAI.obj"):
+                                shutil.copy2(
+                                    patcher.SRC_OBJS / filename,
+                                    patcher.PATCHED / filename,
+                                )
+                            patcher.patch_spontaneous_behaviors(manifest)
+                            patcher.patch_behavior_label_variants(manifest)
+                        patcher.patch_mobile_furniture_behavior_macros(manifest)
+                        helper = (
+                            patcher.PATCHED
+                            / "vf2_mobile_furniture_behaviors.cpp"
+                        ).read_text(encoding="ascii")
+                        if behavior_patches_enabled:
+                            self.assertIn(
+                                "VF2RandomRestingBodyLabel(villager);",
+                                helper,
+                            )
+                            self.assertEqual(
+                                helper.count(
+                                    "VF2ApplySitDownLabelVariants(villager);"
+                                ),
+                                2,
+                            )
+                            self.assertNotIn(
+                                "CBehavior::RestingBody(villager);",
+                                helper,
+                            )
+                        else:
+                            self.assertIn(
+                                "CBehavior::RestingBody(villager);",
+                                helper,
+                            )
+                            self.assertNotIn(
+                                "VF2RandomRestingBodyLabel(villager);",
+                                helper,
+                            )
+                            self.assertNotIn(
+                                "VF2ApplySitDownLabelVariants(villager);",
+                                helper,
+                            )
+                            self.assertNotIn("__VF2_", helper)
+
+                        obj = CoffObject(patcher.PATCHED / "Behavior.obj")
+                        ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+                        sec = obj.section(ctor.section)
+                        targets = {}
+                        for index in range(sec.nreloc):
+                            vaddr, symbol_index, rtype = struct.unpack_from(
+                                "<IIH", obj.buf, sec.reloc_ptr + index * 10
+                            )
+                            if vaddr == ctor.value + 0x108D:
+                                targets["resting_body"] = (
+                                    obj.symbol_by_index[symbol_index].name,
+                                    rtype,
+                                )
+                            if vaddr == ctor.value + 0x1709:
+                                targets["use_couch"] = (
+                                    obj.symbol_by_index[symbol_index].name,
+                                    rtype,
+                                )
+                        # The constructor always points at the mobile wrapper;
+                        # its runtime byte selects native fallback when Mobile
+                        # Furniture is off, and Behavior Patches selects the
+                        # RestingBody wrapper inside that fallback when present.
+                        self.assertEqual(
+                            targets["resting_body"],
+                            ("_VF2MobileRestingBody", patcher.IMAGE_REL_I386_DIR32),
+                        )
+                        expected_use_couch = (
+                            "_VF2RandomUseCouchLabel"
+                            if behavior_patches_enabled
+                            else "?UseCouch@CBehavior@@CAXAAVCVillager@@@Z"
+                        )
+                        self.assertEqual(
+                            targets["use_couch"],
+                            (expected_use_couch, patcher.IMAGE_REL_I386_DIR32),
+                        )
+                        # Behavior Patches also has to export the UseCouch and
+                        # RestingBody wrappers in the linked generated source;
+                        # Mobile Furniture alone must not introduce either.
+                        if behavior_patches_enabled:
+                            variants = (
+                                patcher.PATCHED
+                                / "vf2_spontaneous_behaviors.cpp"
+                            ).read_text(encoding="ascii")
+                            self.assertIn(
+                                "VF2RandomUseCouchLabel(CVillager &villager)",
+                                variants,
+                            )
+                            self.assertIn(
+                                "VF2RandomRestingBodyLabel(CVillager &villager)",
+                                variants,
+                            )
+                        else:
+                            self.assertFalse(
+                                (patcher.PATCHED / "vf2_spontaneous_behaviors.cpp").exists()
+                            )
+                        expected_route = (
+                            "CBehavior::RestingBody"
+                            if not behavior_patches_enabled and not mobile_flag_enabled
+                            else (
+                                "VF2MobileRestingBody -> chaise plan or CBehavior::RestingBody fallback"
+                                if not behavior_patches_enabled
+                                else (
+                                    "VF2MobileRestingBody -> chaise plan or VF2RandomRestingBodyLabel fallback"
+                                    if mobile_flag_enabled
+                                    else "VF2MobileRestingBody -> VF2RandomRestingBodyLabel -> CBehavior::RestingBody"
+                                )
+                            )
+                        )
+                        self.assertEqual(
+                            manifest["MobileFurnitureBehaviors"][
+                                "seating_behavior_cross_apply"
+                            ]["resting_body_route_matrix"][
+                                route_key
+                            ],
+                            expected_route,
+                        )
+        finally:
+            patcher.PATCHED = old_patched
+            patcher.ENABLE_BEHAVIOR_PATCHES = old_behavior_patches
 
     def test_mobile_patio_prop_hook_retargets_only_set_prop_call(self):
         old_patched = patcher.PATCHED
@@ -7131,8 +7442,14 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     [row["behavior_id"] for row in manifest["behavior_label_variants"]["changed"]],
                 )
 
-                helper_source = Path(patcher.__file__).read_text(encoding="utf-8")
-                # Behavior Patches must not define a RestingBody wrapper.
+                # Inspect the generated helper itself, not just the Python
+                # template, so the linked source contract is covered.
+                helper_source = helper
+                # Behavior Patches exposes a RestingBody wrapper for the
+                # native fallback used by Mobile Furniture when both
+                # features are enabled. It only varies the exact stock
+                # RestingBody label family; other native labels remain
+                # untouched.
                 self.assertNotIn(
                     "extern \"C\" void __cdecl VF2RandomSitDownLabel(CVillager &villager)",
                     helper_source,
@@ -7154,7 +7471,10 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 # energy > 0x23, and eString_GettingSomeSleep (0xf5) below
                 # that. Only the sit-down branch may take the varied pool --
                 # "Getting some sleep" is a different activity and must keep
-                # its own native label.
+                # its own native label. The same pool is also exposed as a
+                # label-only helper for the custom chaise plan, while the
+                # native RestingBody route remains the fallback for ordinary
+                # couch/chair furniture.
                 use_couch = next(
                     row for row in manifest["behavior_label_variants"]["changed"]
                     if row["behavior_id"] == "0x189"
@@ -7169,6 +7489,49 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     "static const int kVF2NeedSitDownStringId = 0x7e4;",
                     helper_source,
                 )
+                self.assertIn(
+                    "extern \"C\" void __cdecl VF2RandomRestingBodyLabel(CVillager &villager)",
+                    helper_source,
+                )
+                self.assertIn(
+                    "static void __cdecl RestingBody(CVillager &);",
+                    helper_source,
+                )
+                self.assertIn(
+                    "friend void __cdecl VF2RandomRestingBodyLabel(CVillager &);",
+                    helper_source,
+                )
+                self.assertIn(
+                    "extern \"C\" void __cdecl VF2ApplySitDownLabelVariants(CVillager &villager)",
+                    helper_source,
+                )
+                self.assertIn(
+                    "extern \"C\" void __cdecl VF2RandomRestingBodyLabel(CVillager &villager)",
+                    helper_source,
+                )
+                # RestingBody keeps its native label families unless it
+                # actually emits one of the three native resting labels
+                # guarded by the shared sit-down pool.
+                resting_wrapper_start = helper_source.index(
+                    "extern \"C\" void __cdecl VF2RandomRestingBodyLabel(CVillager &villager)"
+                )
+                resting_wrapper_end = helper_source.index(
+                    "extern \"C\" void __cdecl VF2RandomUseCouchLabel",
+                    resting_wrapper_start,
+                )
+                resting_wrapper = helper_source[
+                    resting_wrapper_start:resting_wrapper_end
+                ]
+                self.assertIn(
+                    "VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RestingBody)",
+                    resting_wrapper,
+                )
+                self.assertIn(
+                    "kVF2RestingBodyNativeLabelIds[] = {0x17D, 0x17E, 0x17F};",
+                    helper_source,
+                )
+                self.assertIn("VF2IsRestingBodyNativeLabel(villager)", resting_wrapper)
+                self.assertNotIn("kVF2NeedSitDownStringId", resting_wrapper)
             finally:
                 patcher.PATCHED = old_patched
 
