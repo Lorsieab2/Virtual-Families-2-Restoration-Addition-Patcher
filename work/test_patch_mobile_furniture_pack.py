@@ -7096,7 +7096,7 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     helper,
                 )
                 self.assertIn(
-                    "EnableAllAgesAutonomousCandidateWithWeight(data, 0x127, 450); // RestingBody / Needs to sit down",
+                    "EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down, native couch+age gates retained",
                     helper,
                 )
                 self.assertIn("EnableNursingMotherAutonomousCandidateWithWeight(data, 0x11F, 450)", helper)
@@ -7122,18 +7122,18 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     if row["behavior_id"] == "0x11f"
                 )
                 self.assertEqual(infant["helper"], "_VF2RandomInfantCareLabel")
-                # 0x127 = RestingBody / "Needs to sit down" -- byte-verified
-                # against real Behavior.obj like every other entry here, but
-                # previously had no assertion naming it specifically.
-                sit_down = next(
-                    row for row in manifest["behavior_label_variants"]["changed"]
-                    if row["behavior_id"] == "0x127"
+                # The sit-down action is CBehavior::UseCouch (0x189), not
+                # RestingBody (0x127). Behavior Patches must not retarget
+                # 0x127 at all -- that macro belongs to the Mobile Furniture
+                # Behaviors patch (_VF2MobileRestingBody).
+                self.assertNotIn(
+                    "0x127",
+                    [row["behavior_id"] for row in manifest["behavior_label_variants"]["changed"]],
                 )
-                self.assertEqual(sit_down["helper"], "_VF2RandomSitDownLabel")
-                self.assertEqual(sit_down["constructor_offset"], "0x108c")
 
                 helper_source = Path(patcher.__file__).read_text(encoding="utf-8")
-                self.assertIn(
+                # Behavior Patches must not define a RestingBody wrapper.
+                self.assertNotIn(
                     "extern \"C\" void __cdecl VF2RandomSitDownLabel(CVillager &villager)",
                     helper_source,
                 )
@@ -7147,9 +7147,9 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     labels = dict(patcher.BEHAVIOR_LABEL_GROUPS)[group]
                     self.assertTrue(labels, f"{group} label pool is empty")
 
-                # Manually dropping a villager on a couch/chair does NOT go
-                # through RestingBody (0x127). CHotSpot::Couch calls
-                # NewBehavior(0x189) -> CBehavior::UseCouch, which writes
+                # The sit-down action is CBehavior::UseCouch (0x189) for both
+                # the manual couch/chair drop (CHotSpot::Couch) and its own
+                # autonomous candidate. UseCouch writes
                 # eSayNeedSitDown (0x7e4, "Needs to sit down") directly when
                 # energy > 0x23, and eString_GettingSomeSleep (0xf5) below
                 # that. Only the sit-down branch may take the varied pool --
@@ -7195,7 +7195,7 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                 self.assertIn("extern CNight Night;", helper)
                 self.assertIn("Night.AIIsDayTime()", helper)
                 self.assertIn("playhouse[0xCD] = (unsigned char)daytimeAllowsPlayhouse;", helper)
-                self.assertIn("EnableAllAgesAutonomousCandidateWithWeight(data, 0x127, 450); // RestingBody / Needs to sit down", helper)
+                self.assertIn("EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down, native couch+age gates retained", helper)
                 actions = " ".join(manifest["spontaneous_behaviors"]["actions"])
                 self.assertIn("playing quietly at kids table", actions)
                 self.assertIn("non-adults", actions)

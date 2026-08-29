@@ -23344,7 +23344,6 @@ extern "C" void __cdecl VF2RandomNapDreamLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &);
 '''.strip()
         nap_fallback = "VF2RandomNapDreamLabel(villager);"
-        rest_fallback = "VF2RandomSitDownLabel(villager);"
         computer_drop_dispatch = r'''
     bool handled = HandleDropOnHotSpot(villager);
     if (handled) {
@@ -26164,7 +26163,6 @@ def patch_mobile_furniture_behavior_macros(manifest):
     }
     if ENABLE_BEHAVIOR_PATCHES:
         allowed_targets[0x0721].add("_VF2RandomNapDreamLabel")
-        allowed_targets[0x108C].add("_VF2RandomSitDownLabel")
     for offset, behavior_id, helper_name, note in specs:
         expected = b"\x68\0\0\0\0\x68" + struct.pack("<I", behavior_id)
         raw = sec.raw_ptr + ctor.value + offset
@@ -28816,7 +28814,6 @@ extern "C" void __cdecl VF2TrampolineLabel(CVillager &);
 extern "C" void __cdecl VF2RandomKidsTableLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTeenHomeworkLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTeenOnlineTestLabel(CVillager &);
-extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &);
 extern "C" void __cdecl VF2RandomUseCouchLabel(CVillager &);
 extern "C" void __cdecl VF2RandomPetLabel(CVillager &);
 extern "C" void __cdecl VF2RandomShowerLabel(CVillager &);
@@ -28871,7 +28868,6 @@ private:
     static void __cdecl ChildrenPlayAtKidsTable(CVillager &);
     static void __cdecl TeenHomework(CVillager &);
     static void __cdecl TeenOnlineExam(CVillager &);
-    static void __cdecl RestingBody(CVillager &);
     static void __cdecl UseCouch(CVillager &);
     static void __cdecl Petting(CVillager &);
     static void __cdecl Shower(CVillager &);
@@ -28923,7 +28919,6 @@ private:
     friend void __cdecl VF2RandomKidsTableLabel(CVillager &);
     friend void __cdecl VF2RandomTeenHomeworkLabel(CVillager &);
     friend void __cdecl VF2RandomTeenOnlineTestLabel(CVillager &);
-    friend void __cdecl VF2RandomSitDownLabel(CVillager &);
     friend void __cdecl VF2RandomUseCouchLabel(CVillager &);
     friend void __cdecl VF2RandomPetLabel(CVillager &);
     friend void __cdecl VF2RandomShowerLabel(CVillager &);
@@ -29958,8 +29953,8 @@ static int VF2CurrentSitDownLabel(CVillager &villager)
 }
 
 // Applies the sit-down label pools for whichever villager kind this is.
-// Shared by the autonomous RestingBody route and the manual couch-drop
-// UseCouch route so both stay in sync.
+// Used by the UseCouch sit-down route: the manual couch/chair drop and
+// the autonomous candidate.
 static void VF2ApplySitDownLabelPools(CVillager &villager, int remembered)
 {
     if (VF2IsAdult19OrOlder(villager) && VF2HasCareer(villager)) {
@@ -30010,15 +30005,10 @@ static void VF2ApplySitDownLabelPools(CVillager &villager, int remembered)
         remembered);
 }
 
-extern "C" void __cdecl VF2RandomSitDownLabel(CVillager &villager)
-{
-    int remembered = VF2CurrentSitDownLabel(villager);
-    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RestingBody)) return;
-    VF2ApplySitDownLabelPools(villager, remembered);
-}
-
-// Manually dropping a villager on a couch/chair does NOT run RestingBody
-// (0x127). CHotSpot::Couch calls NewBehavior(0x189) -> CBehavior::UseCouch,
+// The sit-down action is CBehavior::UseCouch (0x189), reached from
+// CHotSpot::Couch on a manual couch/chair drop and from its own autonomous
+// candidate. RestingBody (0x127) is a separate mobile behavior owned by the
+// Mobile Furniture Behaviors patch and is not involved.
 // which writes its label directly: eSayNeedSitDown (0x7e4, "Needs to sit
 // down") when energy > 0x23, or eString_GettingSomeSleep (0xf5) below that.
 // Only the sit-down branch may take the varied pool -- "Getting some sleep"
@@ -30128,7 +30118,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableChildOnlyAutonomousCandidateWithWeight(data, 0x00B, 450); // ChildrenPlayOffice / Driving like a grownup variants
     EnableAutonomousCandidateWithWeight(data, 0x0C0, 450); // TeenHomework, retain stock age/object gates
     EnableAutonomousCandidateWithWeight(data, 0x0C1, 450); // TeenOnlineExam, retain stock age/object gates
-    EnableAllAgesAutonomousCandidateWithWeight(data, 0x127, 450); // RestingBody / Needs to sit down
+    EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down, native couch+age gates retained
     EnableAutonomousCandidateWithWeight(data, 0x083, 350); // NappingCouch / Dreaming variants
     EnableAutonomousCandidateWithWeight(data, 0x0D6, 450); // HaveBreakfast
     EnableAutonomousCandidateWithWeight(data, 0x075, 450); // WateringFlowers
@@ -30191,7 +30181,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
             "checking weight (0x046; all ages; native scale targeting)",
             "teaching first words/infant-care variants (0x11F; nursing mothers carrying babies)",
             "petting label variants remain available through manual/native routes but Petting is not spontaneous",
-            "needs-to-sit-down/rest variants (0x127; all ages; native sittable/bed targeting)",
+            "needs-to-sit-down variants (0x189 UseCouch; manual couch/chair drop and autonomous; native couch and age gates retained)",
             "TV, drink, heat-food, snack, meal-prep, web, video game, reading, telescope, workout, career, shower, bathroom sink/grooming, coffee/tea, cocktail, pool, sandbox, toy-train, and snow-play label variants",
         ],
         "hammock_behavior": {
@@ -30313,13 +30303,12 @@ def patch_behavior_label_variants(manifest):
         retarget(0x1125, 0x130, "_VF2RandomKidsTableLabel", "Kids table label variants"),
         retarget(0x4AA, 0x0C0, "_VF2RandomTeenHomeworkLabel", "Teen homework label variants"),
         retarget(0x4BB, 0x0C1, "_VF2RandomTeenOnlineTestLabel", "Teen online test label variants"),
-        retarget(0x108C, 0x127, "_VF2RandomSitDownLabel", "Sit-down/rest label variants"),
-        # The manual couch/chair drop route: CHotSpot::Couch -> NewBehavior
-        # (0x189) -> CBehavior::UseCouch. This is what actually runs when the
-        # player drops a villager on a couch or chair; 0x127 above is only the
-        # autonomous route, which is why retargeting 0x127 alone left every
-        # manual drop showing the stock "Needs to sit down".
-        retarget(0x1708, 0x189, "_VF2RandomUseCouchLabel", "Couch-drop sit-down label variants"),
+        # The sit-down action is CBehavior::UseCouch (0x189): CHotSpot::Couch
+        # runs it on a manual couch/chair drop, and VF2EnableAutonomousCandidates
+        # enables it as its own candidate so the AI picks it too. It does not
+        # depend on RestingBody (0x127), which stays owned by the Mobile
+        # Furniture Behaviors patch alone.
+        retarget(0x1708, 0x189, "_VF2RandomUseCouchLabel", "Sit-down label variants"),
         retarget(0x1886, 0x19A, "_VF2RandomPetLabel", "Petting label variants"),
         retarget(0x2A6, 0x034, "_VF2RandomShowerLabel", "Shower/bath label variants"),
         retarget(0x831, 0x016, "_VF2RandomNorthShowerLabel", "North shower/bath label variants"),
