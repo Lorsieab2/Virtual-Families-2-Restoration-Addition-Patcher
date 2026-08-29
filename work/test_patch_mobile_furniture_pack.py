@@ -7122,6 +7122,30 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     if row["behavior_id"] == "0x11f"
                 )
                 self.assertEqual(infant["helper"], "_VF2RandomInfantCareLabel")
+                # 0x127 = RestingBody / "Needs to sit down" -- byte-verified
+                # against real Behavior.obj like every other entry here, but
+                # previously had no assertion naming it specifically.
+                sit_down = next(
+                    row for row in manifest["behavior_label_variants"]["changed"]
+                    if row["behavior_id"] == "0x127"
+                )
+                self.assertEqual(sit_down["helper"], "_VF2RandomSitDownLabel")
+                self.assertEqual(sit_down["constructor_offset"], "0x108c")
+
+                helper_source = Path(patcher.__file__).read_text(encoding="utf-8")
+                self.assertIn(
+                    "extern \"C\" void __cdecl VF2RandomSitDownLabel(CVillager &villager)",
+                    helper_source,
+                )
+                # Every label pool the sit-down variant draws from must be
+                # non-empty, or a real villager could hit an out-of-bounds
+                # random pick at runtime.
+                for group in (
+                    "sit_down_general", "sit_down_adult", "sit_down_work",
+                    "sit_down_school", "sit_down_teen_female", "sit_down_teen_male",
+                ):
+                    labels = dict(patcher.BEHAVIOR_LABEL_GROUPS)[group]
+                    self.assertTrue(labels, f"{group} label pool is empty")
             finally:
                 patcher.PATCHED = old_patched
 
