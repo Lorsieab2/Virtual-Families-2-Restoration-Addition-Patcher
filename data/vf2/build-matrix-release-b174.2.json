@@ -1,0 +1,27 @@
+{
+  "release_name": "B174.2",
+  "output_prefix": "VF2-B174.2-matrix-20260829",
+  "exe_name": "Virtual Families 2 - B174.2.exe",
+  "note": "Point release on top of B174.1. Fixes the sit-down action's behavior variations. Dropping a villager on a couch or chair runs CBehavior::UseCouch (0x189) via CHotSpot::Couch, which was never given a label wrapper, so every manual drop showed the stock \"Needs to sit down\". Behavior 0x189 is now retargeted to a wrapper that applies the sit-down label pool, and is enabled as its own autonomous candidate so the AI picks it too. RestingBody (0x127) is untouched by Behavior Patches and remains owned and enabled by the Mobile Furniture Behaviors patch. Otherwise identical to B174.1.",
+  "seeds": {
+    "core": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-core",
+    "behavior_patches": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-behavior_patches",
+    "cheat_upgrades": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-cheat_upgrades",
+    "cheat_upgrades_behavior_patches": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-cheat_upgrades_behavior_patches",
+    "cheat_upgrades_holiday_ornaments": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-cheat_upgrades_holiday_ornaments",
+    "cheat_upgrades_holiday_ornaments_behavior_patches": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-cheat_upgrades_holiday_ornaments_behavior_patches",
+    "holiday_ornaments": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-holiday_ornaments",
+    "holiday_ornaments_behavior_patches": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-holiday_ornaments_behavior_patches",
+    "island_events": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-island_events",
+    "island_events_behavior_patches": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-island_events_behavior_patches",
+    "island_events_cheat_upgrades": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-island_events_cheat_upgrades",
+    "island_events_cheat_upgrades_behavior_patches": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-island_events_cheat_upgrades_behavior_patches",
+    "island_events_cheat_upgrades_holiday_ornaments": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-island_events_cheat_upgrades_holiday_ornaments",
+    "island_events_cheat_upgrades_holiday_ornaments_behavior_patches": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-island_events_cheat_upgrades_holiday_ornaments_behavior_patches",
+    "island_events_holiday_ornaments": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-island_events_holiday_ornaments",
+    "island_events_holiday_ornaments_behavior_patches": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-island_events_holiday_ornaments_behavior_patches",
+    "mobile_renovations": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-mobile_renovations",
+    "cheat_upgrades_mobile_renovations": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-cheat_upgrades_mobile_renovations",
+    "final_all_enabled": "C:/Users/Owner/Documents/Codex/VF2-mobile-furniture-behaviors-wt/outputs/VF2-B174.1-matrix-20260829-final_all_enabled"
+  }
+}
