@@ -9,7 +9,7 @@
         "behavior_patches",
         "core_executable"
       ],
-      "sha256": "e81ec1b5df4aad47dd0bc98596f8c3cadd45196d5b36062bc5e3a92c88cbc87e",
+      "sha256": "70ed66f76c4839e07dcb38b116eae95c7712ed6ee1895854dfe8ba008e92879b",
       "size": 1754624
     },
     {
@@ -18,7 +18,7 @@
         "cheat_upgrades",
         "core_executable"
       ],
-      "sha256": "cdc5bfa46b2165775c7059363e4247a63b4e1179b637e7d68a218f9bc12fe798",
+      "sha256": "66174ca0085b9ebc5a3ccad685f7c81c06b140277572985a5f4884f1cbc3c689",
       "size": 1716736
     },
     {
@@ -28,7 +28,7 @@
         "cheat_upgrades",
         "core_executable"
       ],
-      "sha256": "b4b6ba36a27aae203b0e4ae0ea78bdf7ed6426137d76b1b26bda75d18dd04a3b",
+      "sha256": "ed6c42f13e88cd763328a3efe5760baf37d9a6b776a83f4c0cab2644b7d34a5f",
       "size": 1754624
     },
     {
@@ -38,7 +38,7 @@
         "core_executable",
         "holiday_ornaments_collection"
       ],
-      "sha256": "629ddef74dd551fadb196f8c573100fe6001831c84c1f46dc6aaf3d266b51527",
+      "sha256": "0d0cd8aaed3f9a5eeabd70227512da66c6a6e879ec123c5e7fbf68068584b846",
       "size": 1720320
     },
     {
@@ -49,7 +49,7 @@
         "core_executable",
         "holiday_ornaments_collection"
       ],
-      "sha256": "d083ae978c57e1168084563cfaca6b1c11a6b03f6b61ffffda0d2a5864f46d73",
+      "sha256": "67b2b3e42ee4e61772b39f56b5c19f48721f3621707f78dbdf4fb06e3ceeb454",
       "size": 1757696
     },
     {
@@ -59,7 +59,7 @@
         "core_executable",
         "mobile_renovations"
       ],
-      "sha256": "31a2f5f303a8a0a1b17431c0a5127e41b2ce67ec7d5adb3ab331deb9b24d3d60",
+      "sha256": "04a3261e1e294c1d889125343fe71ac0b14d353f6c93d63046b1032258f329a3",
       "size": 1731072
     },
     {
@@ -67,7 +67,7 @@
       "requires": [
         "core_executable"
       ],
-      "sha256": "e23f745417945fafa3f50dc86d3c32789e5f6a9c73d106074fe2fa154de59e90",
+      "sha256": "4320573ba16058cf53f58a9f5fd93bed172e0a3ef980eee312dfff9a5f4698c9",
       "size": 1716224
     },
     {
@@ -80,7 +80,7 @@
         "island_events",
         "mobile_renovations"
       ],
-      "sha256": "8a00c64ac07cef7772b2de1465b7d3bbffdada252e65a86baf173bd99c4092e7",
+      "sha256": "ddf17b54017307f2ddc046fa1959efaeb222f96d9c02dc7d0aeb4f1cd044a064",
       "size": 1801216
     },
     {
@@ -89,7 +89,7 @@
         "core_executable",
         "holiday_ornaments_collection"
       ],
-      "sha256": "50bce8c2d061d72e3495f29f25811c00d5f02494649e4725979d64af117f351e",
+      "sha256": "967a3200a2f762194bf56ab11e13d3b7fb4c26b7d88b1424bedc3b16c8841554",
       "size": 1718784
     },
     {
@@ -99,7 +99,7 @@
         "core_executable",
         "holiday_ornaments_collection"
       ],
-      "sha256": "d4268b88095fac0743648bd0d3d60ff4bbd6624af354cd02bcf2d61f0e5782f9",
+      "sha256": "87780c3f239a62d0a99c2c108a6f71d799af60ac7a952ab5317f8262215aaba0",
       "size": 1757184
     },
     {
@@ -108,7 +108,7 @@
         "core_executable",
         "island_events"
       ],
-      "sha256": "6a5fc7b8ded5ef4efd616399e0ec1319b21d19e7c0542e4b91b01148eec78589",
+      "sha256": "8a8f9a7797a93b28c90db42751709dcb35cf28ce7c83c7adef5c0f2cc69930be",
       "size": 1745920
     },
     {
@@ -118,7 +118,7 @@
         "core_executable",
         "island_events"
       ],
-      "sha256": "f0001148eb4e5ed79c40c5179b7c7b22e7ecef670a425131a9fa33f2e0bf5fd3",
+      "sha256": "9c0ff98f8e5a89605a22fd0fb65a36055672fcd2a3f85c6fd7881bcb997bd39a",
       "size": 1783808
     },
     {
@@ -128,7 +128,7 @@
         "core_executable",
         "island_events"
       ],
-      "sha256": "0305b89beaa3ded674d4feae22f6511dbca30f6c736031be318d54d53dce9ea8",
+      "sha256": "776c6ae539246cfe8e6ee64c87343253585219c2478815c51b4f1afad8cf5006",
       "size": 1746944
     },
     {
@@ -139,7 +139,7 @@
         "core_executable",
         "island_events"
       ],
-      "sha256": "cddef5cc5824ce0175be801d8d6380548aa1bc7904896ae18dbfc705e4472282",
+      "sha256": "6b9107fc04cd0a4e9256a6b1ccf02f2adb17881ccee00707e9a4a975b413d120",
       "size": 1785344
     },
     {
@@ -150,7 +150,7 @@
         "holiday_ornaments_collection",
         "island_events"
       ],
-      "sha256": "11836289fefafac21d51342c10a39aa4747455893acc44836484834ac24838c4",
+      "sha256": "98fbe16d38bcacd1713061dbc7f11c37993ebf028baeba849520505c65d2a299",
       "size": 1750016
     },
     {
@@ -162,7 +162,7 @@
         "holiday_ornaments_collection",
         "island_events"
       ],
-      "sha256": "8f885fe795cf8295e57e9926f1d5df104c4f2e894b9bdd84f228dc9c3d7a2c8d",
+      "sha256": "c210edc60f5b89e7873f3b2440ad9cfdfc1b19a3e1b9d309be77b05b3194642e",
       "size": 1787392
     },
     {
@@ -172,7 +172,7 @@
         "holiday_ornaments_collection",
         "island_events"
       ],
-      "sha256": "504debd91037e74e37fa0b52c9358b186acb320b552a93444fdf8c1843f16a66",
+      "sha256": "e5ed495075309de271eba185cd70a96e1ab9228bf2143f2995d0e18adc7cb0ab",
       "size": 1748992
     },
     {
@@ -183,7 +183,7 @@
         "holiday_ornaments_collection",
         "island_events"
       ],
-      "sha256": "2ce04588eba3e833ef05513739d10e39814c88f269b64434408a711ed18c05c8",
+      "sha256": "cfb705cfa8b34e01d6cd6db8855bbe489044a2a324904b29308a01459b390710",
       "size": 1786880
     },
     {
@@ -192,7 +192,7 @@
         "core_executable",
         "mobile_renovations"
       ],
-      "sha256": "7e924054b0ddfce8f73c7e8325b37f6ca1d60685016b8e9b500530c21036eb7e",
+      "sha256": "afbd24edd144bee8c4c546aeddd427fe343c4bf11bdd06f3cda2abe5fd7f1882",
       "size": 1730048
     }
   ]
