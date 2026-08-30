@@ -50,9 +50,12 @@ non-chaise route.
 The behavior-label macro table is untouched, so Behavior Patches still does not
 retarget `0x127`; that macro remains owned by Mobile Furniture Behaviors.
 
-**Not verified in game.** The binary-contract tests covering this helper need
-the gitignored `work/desktop_obj_files`, so the new candidate row has not been
-compiled or observed. Confirming it needs a playtest build with Behavior
+**Compiled and verified in the binary, not observed in game.** The shipped
+executable writes the RestingBody candidate twice -- weight 450 from
+`VF2EnableAutonomousCandidates`, then 2000 from
+`VF2EnableMobileFurnitureCandidates`, which is the last call it makes before
+returning. B174.3's binary contains one such write. What that does not show is a
+villager actually choosing the behavior, which needs a playtest with Behavior
 Patches on and Mobile Furniture Behaviors off.
 
 ## Playtest builds now set every selected runtime gate
@@ -85,10 +88,10 @@ Note that this changes what a default all-enabled playtest contains: Older
 Villager Mortality and Allow Older Pregnancies are experimental rule changes
 that are default-off in the GUI and will now be on unless opted out.
 
-`enable_runtime_flag.py` was exercised against the actual shipped B174.3
-executable: all five sections flip `00` to `01` and read back `01`. The
-`build_playtest.ps1` wiring itself has not been run, since a build needs MSVC
-plus the four gitignored support directories.
+Both were exercised for real. `enable_runtime_flag.py` was run against the
+shipped B174.3 executable, where all five sections flip `00` to `01` and read
+back `01`; and the `build_playtest.ps1` wiring produced B175, whose five gate
+sections all read `01` in the published artifact.
 
 ### Playtest executable name and save folders
 

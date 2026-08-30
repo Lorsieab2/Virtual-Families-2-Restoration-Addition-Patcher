@@ -297,6 +297,9 @@ exist in neither this repository nor the vanilla payload, and reach a build only
 by inheriting from a previous build output. `work/build_playtest.ps1` takes that
 predecessor with `-PreviousBuildDir` and validates both it and the produced
 build against the recorded inventory in `data/vf2/inherited-only-images.json`.
-Omitting the flag produces a build that is missing all 635.
+Omitting the flag does not reliably produce an unseeded build: the generator
+also scans `outputs/` for an older one, and whichever seed it resolves is
+reported after generation. A build that genuinely inherits from nothing is
+missing all 635.
 
 The GUI modules need a Python build with `tkinter` available.
