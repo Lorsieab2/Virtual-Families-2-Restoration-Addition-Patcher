@@ -2925,10 +2925,6 @@ class CleanBaseGameReferenceTests(unittest.TestCase):
         self.assertNotIn("if base.is_file() and sha256_file(base) == source_sha:", body)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class TestSuiteCopiesInSyncTests(unittest.TestCase):
     """tests/ and work/ hold the same suites and must not drift apart.
 
@@ -2965,3 +2961,7 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
                     f"tests/{name} has drifted from work/{name}; "
                     "sync the two rather than editing one.",
                 )
+
+
+if __name__ == "__main__":
+    unittest.main()
