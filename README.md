@@ -18,7 +18,7 @@ Download the newest patcher ZIP from the [official releases page](https://github
 
 Vanilla *Virtual Families 2* saves are compatible with the modded version. The patcher creates a separate modded game folder by default and does not overwrite the selected vanilla installation.
 
-Note that VF2 derives its save folder from the executable's own filename (`Documents\<exe name>\`). A modded or playtest EXE with a different filename therefore starts with its own empty save folder rather than continuing an existing family.
+Note that VF2 derives its save folder from the executable's own filename: saves live in `Documents\LDW\<exe name>\`, where `<exe name>` is the executable's filename with its extension removed. A modded or playtest EXE with a different filename therefore starts with its own empty save folder rather than continuing an existing family.
 
 ## What the patcher does
 
@@ -104,10 +104,11 @@ disclosures.
 
 ## Cheat Upgrades in detail
 
-Enabling **Cheat Upgrades** adds 43 rows under Special Upgrades. All are priced
-at 0 coins. Rows described as toggles or one-shots are cancelled by buying them
-again, an armed one-shot shows a checkmark, and arming one clears the rows it is
-mutually exclusive with.
+Enabling **Cheat Upgrades** adds 43 rows under Special Upgrades. All are free
+except two: **Enable Same-Sex Marriage** and **Allow Reroll of Marriage
+Candidates** each cost 10,000 coins. Rows described as toggles or one-shots are
+cancelled by buying them again, an armed one-shot shows a checkmark, and arming
+one clears the rows it is mutually exclusive with.
 
 **Money**
 
@@ -169,8 +170,8 @@ The Dryer lint fire remains a legitimate native random malfunction and requires 
 | Row | Effect |
 | --- | --- |
 | Force Marriage Email | Queues a normal base-game marriage proposal with native candidate rules. |
-| Enable Same-Sex Marriage | Toggle. Enables same-sex marriage candidates. Requires the Allow Same-Sex Marriage patch. |
-| Allow Reroll of Marriage Candidates | Toggle. Lets Reject generate a new candidate until Accept is clicked. |
+| Enable Same-Sex Marriage | **10,000 coins.** Toggle. Enables same-sex marriage candidates. Requires the Allow Same-Sex Marriage patch. |
+| Allow Reroll of Marriage Candidates | **10,000 coins.** Toggle. Lets Reject generate a new candidate until Accept is clicked. |
 | Divorce Spouse | One-shot action. **WARNING: permanently removes the spouse from the Family Tree and House.** |
 
 **Pregnancy one-shots**
