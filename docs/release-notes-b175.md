@@ -190,8 +190,11 @@ that inheritance unconditionally, so a build from a clean checkout omitted every
 one of them while still reporting success.
 
 The measured inventory is now recorded in
-`data/vf2/inherited-only-images.json` and the build validates both the seed and
-its own output against the full list. That makes the dependency visible and
-enforced; it does not remove it. Every release still depends on the chain of
+`data/vf2/inherited-only-images.json` and the build checks the full list twice:
+the seed in preflight, and its own output after generation. A build that
+resolved a seed and still came up short fails. A build that resolved no seed is
+still allowed -- that is a legitimate thing to ask for -- but it now reports in
+red how many of the 635 it is missing and how to inherit them, instead of
+finishing quietly. That makes the dependency visible; it does not remove it. Every release still depends on the chain of
 prior artifacts, and closing that gap means either committing those 635 files or
 regenerating them from their original sources.
