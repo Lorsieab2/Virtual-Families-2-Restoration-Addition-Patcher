@@ -214,7 +214,13 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
             tmp.cleanup()
 
     def test_identities_must_cover_the_whole_release_contract(self):
-        identities = newest_release_identities() or newest_identities_on_disk()
+        # Prefer the archive's own identities, but only when that file really
+        # exists: newest_release_identities returns a Path for a release whose
+        # identities have not been written yet, which is truthy and would skip
+        # this test at the exact moment a new release lands.
+        identities = newest_release_identities()
+        if identities is None or not identities.is_file():
+            identities = newest_identities_on_disk()
         if identities is None or not identities.is_file():
             self.skipTest("no identities file present")
         payload = json.loads(identities.read_text(encoding="utf-8"))
