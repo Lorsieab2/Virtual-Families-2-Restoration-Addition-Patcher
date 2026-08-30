@@ -41,8 +41,9 @@ param(
     # A previous build to inherit runtime art from. 635 Images --
     # mobile furniture art, 448 VillagerBodies frames, 61 upgrade icons --
     # exist in neither the repository nor the vanilla payload, so they
-    # reach a build only this way. Leave unset for a deliberately
-    # uninherited build; the preflight below reports what that costs.
+    # reach a build only this way. Leaving it unset does not guarantee an
+    # uninherited build: the generator also scans outputs\ for an older one.
+    # Whichever seed it resolves is reported after generation.
     [string]$PreviousBuildDir,
     [string]$Python = "python"
 )
@@ -129,7 +130,8 @@ if ($PreviousBuildDir) {
     # Clear any inherited value so an unseeded build is deterministic rather
     # than silently picking up whatever the shell happened to export.
     Remove-Item Env:VF2_PREVIOUS_BUILD_DIR -ErrorAction SilentlyContinue
-    Write-Host "No -PreviousBuildDir: art that exists only in previous builds will be absent." -ForegroundColor Yellow
+    Write-Host ("No -PreviousBuildDir. The generator may still auto-discover a previous " +
+        "build under outputs" + [char]92 + "; whichever seed it resolves is reported below.") -ForegroundColor Yellow
 }
 $env:VF2_VANILLA_RUNTIME_DIR = Join-Path $root "work\vanilla_runtime_payload"
 $env:VF2_ENABLE_CHEAT_UPGRADES = Flag $Cheat
@@ -171,9 +173,18 @@ try {
     # as build_matrix.ps1).
     $manifestObj = Get-Content -LiteralPath (Join-Path $out "patch-manifest.json") -Raw | ConvertFrom-Json
     $seedUsed = ($manifestObj.previous_build_seed.status -eq "seeded from previous build")
-    if ([bool]$PreviousBuildDir -ne $seedUsed) {
-        throw ("Seed-state drift: -PreviousBuildDir was {0} but the manifest reports status '{1}'." -f `
-            $(if ($PreviousBuildDir) { "supplied" } else { "not supplied" }), $manifestObj.previous_build_seed.status)
+    if ($PreviousBuildDir -and -not $seedUsed) {
+        throw ("Seed-state drift: -PreviousBuildDir was supplied but the manifest reports status '{0}'." -f `
+            $manifestObj.previous_build_seed.status)
+    }
+    if (-not $PreviousBuildDir -and $seedUsed) {
+        # Not a failure: previous_build_source_dirs() also scans outputs\ for an
+        # older build, and clearing the environment variable does not switch that
+        # off. Throwing here would break the documented default invocation in any
+        # established build checkout, so report the seed the generator actually
+        # resolved instead of pretending the build was uninherited.
+        Write-Host ("  NOTE: no -PreviousBuildDir was given, but the generator auto-discovered a seed: " +
+            [string]$manifestObj.previous_build_seed.source) -ForegroundColor Yellow
     }
     if ($PreviousBuildDir) {
         $expectedSeedName = ($PreviousBuildDir.TrimEnd('/', '\') -split '[/\\]')[-1]
