@@ -30,6 +30,7 @@ param(
     [bool]$IslandEvents = $true,
     [bool]$HolidayOrnaments = $true,
     [bool]$BehaviorPatches = $true,
+    [bool]$MobileFurnitureBehaviors = $true,
     [string]$Python = "python"
 )
 
@@ -129,6 +130,13 @@ try {
     if ($LASTEXITCODE -ne 0) {
         Get-Content -LiteralPath $linkLog -Tail 40
         throw "Compile/link failed (exit $LASTEXITCODE). Last 40 lines of $linkLog printed above."
+    }
+    if ($MobileFurnitureBehaviors) {
+        $linkedExe = Join-Path $out $ExeName
+        & $Python "work\enable_runtime_flag.py" $linkedExe ".vf2beh"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not enable the mobile-furniture runtime gate in the playtest executable."
+        }
     }
 }
 finally {
