@@ -203,9 +203,9 @@ $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
 $saveRoot = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "LDW"
 $saveFolder = Join-Path $saveRoot ([IO.Path]::GetFileNameWithoutExtension($ExeName))
 $saveState = if (Test-Path -LiteralPath $saveFolder) {
-    "existing folder, this build continues that family"
+    "that folder already exists on this build machine"
 } else {
-    "does not exist yet, this build starts a new family"
+    "no such folder on this build machine"
 }
 
 Write-Host ""
@@ -214,7 +214,10 @@ Write-Host "  $exe"
 Write-Host "  $((Get-Item $exe).Length) bytes, SHA256 $hash"
 Write-Host ""
 Write-Host "  Saves: $saveFolder"
-Write-Host "         ($saveState)"
+Write-Host "         VF2 derives this from the executable filename, so the same"
+Write-Host "         relative path applies on whatever machine runs the build."
+Write-Host "         ($saveState -- existence alone does not prove it holds a family,"
+Write-Host "          and says nothing about a machine this build is handed off to.)"
 Write-Host ""
 Write-Host "This is a complete standalone folder ($out) -- copy the whole" -ForegroundColor Green
 Write-Host "thing to hand it off; it does not need anything from outside itself." -ForegroundColor Green
