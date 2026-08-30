@@ -24,7 +24,7 @@
 param(
     [string]$OutName,
     # VF2 derives its save folder from the executable filename
-    # (Documents\<exe name>), so changing this name per build strands the
+    # (Documents\LDW\<exe name>), so changing this name per build strands the
     # previous playtest family in an old folder. Keep one stable name.
     [string]$ExeName = "Virtual Families 2 Modded Playtest 2.exe",
     [bool]$Cheat = $true,
