@@ -123,27 +123,21 @@ try {
         throw "Generator reported success but patch-manifest.json is missing from $out."
     }
     if ($MobileFurnitureBehaviors) {
-        # Restore only the four previously validated chaise behavior maps.
-        # The generator's base payload intentionally contains rendered-only
-        # maps, which makes LinkPeepToFurniture reject a manual lounger drop.
-        $chaiseMapSource = Join-Path $root "patcher_assets\optional_patches\mobile_furniture_behaviors\pc_fmaps"
+        # The runtime byte gates the complete implemented mobile-furniture
+        # dispatcher. Restore its exact validated map set atomically; the
+        # generator's base payload intentionally contains rendered-only maps.
+        $behaviorMapSource = Join-Path $root "patcher_assets\optional_patches\mobile_furniture_behaviors\pc_fmaps"
         $assetDestination = Join-Path $out "Assets"
-        $chaiseMapNames = @(
-            "Chaise_blue.png.fmap",
-            "Chaise_brown.png.fmap",
-            "Chaise_green.png.fmap",
-            "Chaise_red.png.fmap"
-        )
-        foreach ($name in $chaiseMapNames) {
-            $sourceMap = Join-Path $chaiseMapSource $name
-            $targetMap = Join-Path $assetDestination $name
-            if (-not (Test-Path -LiteralPath $sourceMap -PathType Leaf)) {
-                throw "Validated chaise behavior map is missing: $sourceMap"
-            }
-            Copy-Item -LiteralPath $sourceMap -Destination $targetMap -Force
-            if ((Get-FileHash -LiteralPath $sourceMap -Algorithm SHA256).Hash -ne
+        $behaviorMaps = Get-ChildItem -LiteralPath $behaviorMapSource -Filter "*.fmap" -File
+        if ($behaviorMaps.Count -ne 34) {
+            throw "Expected 34 validated mobile-furniture behavior maps, found $($behaviorMaps.Count)."
+        }
+        foreach ($sourceMap in $behaviorMaps) {
+            $targetMap = Join-Path $assetDestination $sourceMap.Name
+            Copy-Item -LiteralPath $sourceMap.FullName -Destination $targetMap -Force
+            if ((Get-FileHash -LiteralPath $sourceMap.FullName -Algorithm SHA256).Hash -ne
                 (Get-FileHash -LiteralPath $targetMap -Algorithm SHA256).Hash) {
-                throw "Chaise behavior map copy drifted: $name"
+                throw "Mobile-furniture behavior map copy drifted: $($sourceMap.Name)"
             }
         }
     }
