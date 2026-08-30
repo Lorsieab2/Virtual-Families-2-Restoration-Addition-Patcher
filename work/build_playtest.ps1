@@ -23,7 +23,10 @@
 # matrix variant), since that's what playtest requests almost always want.
 param(
     [string]$OutName,
-    [string]$ExeName = "Virtual Families 2 - Playtest Build.exe",
+    # VF2 derives its save folder from the executable filename
+    # (Documents\LDW\<exe name>), so changing this name per build strands the
+    # previous playtest family in an old folder. Keep one stable name.
+    [string]$ExeName = "Virtual Families 2 Modded Playtest 2.exe",
     [bool]$Cheat = $true,
     [bool]$MobileRenovations = $true,
     [bool]$AIBathroom2 = $true,
@@ -31,6 +34,10 @@ param(
     [bool]$HolidayOrnaments = $true,
     [bool]$BehaviorPatches = $true,
     [bool]$MobileFurnitureBehaviors = $true,
+    [bool]$HolidayFurnitureGoals = $true,
+    [bool]$AllowOlderPregnancies = $true,
+    [bool]$OlderVillagerMortality = $true,
+    [bool]$StoreScrollBar = $true,
     [string]$Python = "python"
 )
 
@@ -150,12 +157,33 @@ try {
         Get-Content -LiteralPath $linkLog -Tail 40
         throw "Compile/link failed (exit $LASTEXITCODE). Last 40 lines of $linkLog printed above."
     }
-    if ($MobileFurnitureBehaviors) {
-        $linkedExe = Join-Path $out $ExeName
-        & $Python "work\enable_runtime_flag.py" $linkedExe ".vf2beh"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not enable the mobile-furniture runtime gate in the playtest executable."
+    # Every optional feature behind a one-byte runtime gate is dormant in a
+    # freshly linked executable: the linker writes 00 and only the offline
+    # patcher flips it when the player ticks that setting. A playtest build has
+    # no patcher step, so each selected gate has to be set here or the feature
+    # ships present-but-off -- which is what made earlier "all enabled"
+    # playtests silently omit Holiday Furniture goals, Allow Older Pregnancies,
+    # the Older Villager Mortality curve, and the Store Scroll Bar.
+    $linkedExe = Join-Path $out $ExeName
+    $runtimeFlags = [ordered]@{
+        ".vf2beh"  = @($MobileFurnitureBehaviors, "mobile furniture behaviors")
+        ".vf2goal" = @($HolidayFurnitureGoals, "Holiday Furniture goals")
+        ".vf2preg" = @($AllowOlderPregnancies, "Allow Older Pregnancies")
+        ".vf2mort" = @($OlderVillagerMortality, "Older Villager Mortality curve")
+        ".vf2scrl" = @($StoreScrollBar, "Store Scroll Bar")
+    }
+    foreach ($section in $runtimeFlags.Keys) {
+        $selected = $runtimeFlags[$section][0]
+        $label = $runtimeFlags[$section][1]
+        if (-not $selected) {
+            Write-Host ("  {0} left at 00 ({1} not selected)" -f $section, $label)
+            continue
         }
+        & $Python "work\enable_runtime_flag.py" $linkedExe $section
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not enable the $label runtime gate ($section) in the playtest executable."
+        }
+        Write-Host ("  {0} set to 01 ({1})" -f $section, $label) -ForegroundColor Green
     }
 }
 finally {
@@ -167,10 +195,29 @@ if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
     throw "Link reported success but the executable is missing: $exe"
 }
 $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+
+# VF2 derives its save folder from the executable filename, so any build whose
+# -ExeName differs from the last one silently starts an empty family instead of
+# continuing the existing one. Print the exact folder this build will use, and
+# say whether it already holds saves, so a name change can never be silent.
+$saveRoot = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "LDW"
+$saveFolder = Join-Path $saveRoot ([IO.Path]::GetFileNameWithoutExtension($ExeName))
+$saveState = if (Test-Path -LiteralPath $saveFolder) {
+    "that folder already exists on this build machine"
+} else {
+    "no such folder on this build machine"
+}
+
 Write-Host ""
 Write-Host "Build OK:" -ForegroundColor Green
 Write-Host "  $exe"
 Write-Host "  $((Get-Item $exe).Length) bytes, SHA256 $hash"
+Write-Host ""
+Write-Host "  Saves: $saveFolder"
+Write-Host "         VF2 derives this from the executable filename, so the same"
+Write-Host "         relative path applies on whatever machine runs the build."
+Write-Host "         ($saveState -- existence alone does not prove it holds a family,"
+Write-Host "          and says nothing about a machine this build is handed off to.)"
 Write-Host ""
 Write-Host "This is a complete standalone folder ($out) -- copy the whole" -ForegroundColor Green
 Write-Host "thing to hand it off; it does not need anything from outside itself." -ForegroundColor Green
