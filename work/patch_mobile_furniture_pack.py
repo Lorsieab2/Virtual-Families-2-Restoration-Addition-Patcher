@@ -23346,6 +23346,7 @@ def patch_mobile_furniture_behavior_dispatch(manifest):
     nap_fallback = "CBehavior::NappingCouch(villager);"
     rest_fallback = "CBehavior::RestingBody(villager);"
     chaise_sit_down_variants = ""
+    chaise_plan_sit_down_variants = ""
     computer_drop_dispatch = "    if (HandleDropOnHotSpot(villager)) return true;"
     if ENABLE_BEHAVIOR_PATCHES:
         behavior_fallback_decls = r'''
@@ -23355,7 +23356,15 @@ extern "C" void __cdecl VF2ApplySitDownLabelVariants(CVillager &);
 '''.strip()
         nap_fallback = "VF2RandomNapDreamLabel(villager);"
         rest_fallback = "VF2RandomRestingBodyLabel(villager);"
+        # Apply the shared label pool before the chaise plan is started.  The
+        # previous implementation called it after StartNewBehavior, which
+        # invalidated the active chaise plan and made the whole route fail.
         chaise_sit_down_variants = "        VF2ApplySitDownLabelVariants(villager);"
+        chaise_plan_sit_down_variants = """
+    if (strncmp(label, \"Needs to sit down\", 0x12) == 0) {
+        VF2ApplySitDownLabelVariants(villager);
+    }
+""".strip("\\n")
         computer_drop_dispatch = r'''
     bool handled = HandleDropOnHotSpot(villager);
     if (handled) {
@@ -23818,10 +23827,10 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     if (dirtiness) plans->PlanToIncDirtiness(dirtiness);
     if (happiness) plans->PlanToIncHappinessTrend(happiness);
     if (energyGain) plans->PlanToIncEnergy(energyGain);
-    plans->StartNewBehavior(villager);
     if (applySitDownLabelVariants) {
 __VF2_CHAISE_SIT_DOWN_VARIANTS__
     }
+    plans->StartNewBehavior(villager);
     return true;
 }
 
@@ -25584,6 +25593,7 @@ static void VF2PlanLinkedChaiseAction(
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
     plans->ForgetPlans(villager, false);
     VF2SetActionLabel(villager, label);
+__VF2_CHAISE_PLAN_SIT_DOWN_VARIANTS__
     plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
     if (carrying != static_cast<ECarrying>(0)) plans->PlanToCarry(carrying);
     if (info.orientation == 1) {
@@ -25646,7 +25656,6 @@ extern "C" void __cdecl VF2MobileRestingBody(CVillager &villager)
         VF2PlanLinkedChaiseAction(
             villager, info, "Needs to sit down", ldwGameState::GetRandom(15) + 15,
             static_cast<ECarrying>(0), 0, 0, 3);
-__VF2_RESTING_BODY_CHAISE_SIT_DOWN_VARIANTS__
     }
 }
 
@@ -25751,8 +25760,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
         "__VF2_CHAISE_SIT_DOWN_VARIANTS__", chaise_sit_down_variants
     )
     helper_source = helper_source.replace(
-        "__VF2_RESTING_BODY_CHAISE_SIT_DOWN_VARIANTS__",
-        chaise_sit_down_variants,
+        "__VF2_CHAISE_PLAN_SIT_DOWN_VARIANTS__", chaise_plan_sit_down_variants
     )
     helper_path.write_text(helper_source, encoding="ascii")
 
