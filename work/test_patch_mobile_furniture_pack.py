@@ -2176,8 +2176,8 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 manual = mobile_helper[manual_start:manual_end]
                 self.assertIn("applySitDownLabelVariants = true;", manual)
                 self.assertLess(
-                    manual.index("plans->StartNewBehavior(villager);"),
                     manual.index("VF2ApplySitDownLabelVariants(villager);"),
+                    manual.index("plans->StartNewBehavior(villager);"),
                 )
                 rest_start = mobile_helper.index(
                     "extern \"C\" void __cdecl VF2MobileRestingBody(CVillager &villager)"
@@ -2187,9 +2187,8 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     rest_start,
                 )
                 resting = mobile_helper[rest_start:rest_end]
-                self.assertLess(
-                    resting.index("VF2PlanLinkedChaiseAction(", resting.index("else {")),
-                    resting.index("VF2ApplySitDownLabelVariants(villager);"),
+                self.assertNotIn(
+                    "VF2ApplySitDownLabelVariants(villager);", resting
                 )
                 self.assertIn(
                     "if (gVF2MobileFurnitureBehaviors == 0 ||",
