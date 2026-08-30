@@ -34,7 +34,9 @@ an unfilled exact-build manifest template for optional crash QA. Neither the
 patcher nor that helper changes the registry or launches VF2; any generated WER
 instructions must be reviewed and run manually by the player.
 
-The game's own save-writing path is left alone. `theGameState::SaveCurrentGame` and the per-class `SaveState` serializers are not modified, and the build asserts their stock byte spans and record counts so the on-disk save format cannot drift. The load path is extended additively only: wrappers run the native `LoadState` first and then reconcile achievements or re-apply the autonomous behavior table in memory.
+The game's own save-writing path is left alone. `theGameState::SaveCurrentGame` and the per-class `SaveState` serializers are not modified, and the build asserts their stock byte spans and record counts.
+
+The load path is mostly extended by wrappers that run the native `LoadState` first and then reconcile achievements or re-apply the autonomous behavior table in memory. There is one exception: with custom achievements included, five byte spans inside `CAchievement::LoadState` are rewritten so that the reserved-tail validation and clearing ranges cover the custom achievement IDs instead of the stock ones. That changes which ID range the loader validates and clears, not the layout of the record it reads.
 
 ## What's included
 
@@ -106,9 +108,13 @@ disclosures.
 
 Enabling **Cheat Upgrades** adds 43 rows under Special Upgrades. All are free
 except two: **Enable Same-Sex Marriage** and **Allow Reroll of Marriage
-Candidates** each cost 10,000 coins. Rows described as toggles or one-shots are
-cancelled by buying them again, an armed one-shot shows a checkmark, and arming
-one clears the rows it is mutually exclusive with.
+Candidates** each cost 10,000 coins.
+
+The toggle rows and the armed pregnancy one-shots are cancelled by buying them
+again: an armed one-shot shows a checkmark, and arming one clears the rows it is
+mutually exclusive with. **Divorce Spouse is not one of them.** It takes effect
+the moment you buy it and saves immediately, so there is nothing to cancel and
+buying it again will not bring the spouse back.
 
 **Money**
 
@@ -206,11 +212,16 @@ The two Flea Market rows themselves are untouched base game, and both are indepe
 
 ## Behavior Patches in detail
 
-**Behavior Patches** does two things: it adds behaviors to the villager AI's
-autonomous candidate table, and it varies the visible action text of behaviors
-that already exist. Every candidate keeps its native object search, walking,
-animation, sound, and failure handling — only selection eligibility and the
-displayed label change.
+**Behavior Patches** mainly does two things: it adds behaviors to the villager
+AI's autonomous candidate table, and it varies the visible action text of
+behaviors that already exist. For those two, the candidate keeps its native
+object search, walking, animation, sound, and failure handling, and only
+selection eligibility and the displayed label change.
+
+Three parts of the patch go further than that, and are described in
+**Substantive changes** below: the hammock rest builds its own plan sequence,
+six-child private romantic time changes an outcome, and the computer drop gains
+a choice it did not have.
 
 **Made autonomously selectable**
 
@@ -228,7 +239,13 @@ Grouped visible-label variants are applied to the native TV, web, video game, ra
 
 The sit-down pool is shared: the couch/chair route, the chaise route, and RestingBody's own resting labels (`Resting`, `Resting legs`, `Resting tired feet`) all draw from the same age/career/gender-aware label set. RestingBody's wrapper only substitutes a label when the native behavior actually emitted one of its three stock resting labels, so no other native label is disturbed.
 
-Behavior Patches also adds spontaneous sitting, weight checks, and nursing-mother lessons, and native private romantic time for six-child opposite-sex spouse pairs, with no pregnancy and no argument.
+**Substantive changes**
+
+These three do more than change eligibility or wording:
+
+- **Hammock rest** (`0x23`) is retargeted to a helper that builds its own plan sequence rather than reusing the native one. It links to the hammock, picks the getting-in pose and sleep animation strip to match the placed hammock's orientation, then rests for a randomised interval. Only Sunny and Cloudy weather allow it. The manual hammock drop (`0x24`) stays native.
+- **Six-child private romantic time.** Stock `theMainScene::HandleDropOnVillager` refuses the drop when the family is full. That refusal is replaced with a jump to the same target every passing gate already uses, so an opposite-sex spouse pair at six children runs the ordinary romantic sequence — stock cooldown included — instead of being turned away. No cave and no reproduced instructions; the seven refusal bytes are simply unreachable, and the age and same-gender gates above are untouched.
+- **Manual computer drop.** When a drop on a computer would have produced ordinary web browsing, a coin flip switches it to playing a video game instead. The stock email, repair, career-work and sickness computer routes are reserved before that point and are not affected, and no autonomous candidate weight changes.
 
 ## Source layout
 
