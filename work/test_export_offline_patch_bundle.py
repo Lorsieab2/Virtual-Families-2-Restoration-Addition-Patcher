@@ -640,6 +640,17 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             )
 
     def test_mobile_sound_assets_stage_pinned_oggs(self):
+        # The restore records this asserts are built by hashing each original
+        # PC sound in the base payload, so without work/vanilla_runtime_payload
+        # (gitignored, absent from a fresh clone) every record comes back with
+        # no restore_source_path and the assertion below reads as a product
+        # failure. Skip on the missing input instead, the way the release-ZIP
+        # tests in this suite already do.
+        if not exporter.DEFAULT_BASE_PAYLOAD.is_dir():
+            self.skipTest(
+                "work/vanilla_runtime_payload is not present; "
+                "cannot compute sound restore records"
+            )
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             bundle = tmp / "bundle"
@@ -2912,6 +2923,44 @@ class CleanBaseGameReferenceTests(unittest.TestCase):
         body = source[start:source.index("\ndef ", start + 10)]
         self.assertIn("if matches_base_payload(rel, build_dir, base_payload):", body)
         self.assertNotIn("if base.is_file() and sha256_file(base) == source_sha:", body)
+
+
+class TestSuiteCopiesInSyncTests(unittest.TestCase):
+    """tests/ and work/ hold the same suites and must not drift apart.
+
+    They already did: PR #36 changed the additive diff to classify base-game
+    files from the recorded clean install rather than the supplied payload and
+    updated the work/ copy's expectation, but not the tests/ copy. tests/ then
+    asserted the old behaviour and failed for months, which is indistinguishable
+    from a real regression and trains everyone to ignore a red suite.
+
+    The only sanctioned difference is which tool tree a suite points at: tests/
+    exercises the shipped src/ copies, work/ exercises the development ones.
+    """
+
+    # name -> True when the two copies must be byte-identical.
+    SUITES = {
+        "test_export_offline_patch_bundle.py": True,
+        "test_offline_vf2_patcher.py": False,
+        "test_offline_vf2_patcher_gui.py": False,
+    }
+
+    def test_tests_copy_matches_the_work_copy(self):
+        for name, identical in self.SUITES.items():
+            with self.subTest(suite=name):
+                work_text = (ROOT / "work" / name).read_text(encoding="utf-8")
+                tests_text = (ROOT / "tests" / name).read_text(encoding="utf-8")
+                expected = work_text
+                if not identical:
+                    # These two import the tool under test; tests/ takes the
+                    # shipped src/ copy. Nothing else may differ.
+                    expected = work_text.replace('ROOT / "work"', 'ROOT / "src"')
+                self.assertEqual(
+                    tests_text,
+                    expected,
+                    f"tests/{name} has drifted from work/{name}; "
+                    "sync the two rather than editing one.",
+                )
 
 
 if __name__ == "__main__":

@@ -640,6 +640,17 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             )
 
     def test_mobile_sound_assets_stage_pinned_oggs(self):
+        # The restore records this asserts are built by hashing each original
+        # PC sound in the base payload, so without work/vanilla_runtime_payload
+        # (gitignored, absent from a fresh clone) every record comes back with
+        # no restore_source_path and the assertion below reads as a product
+        # failure. Skip on the missing input instead, the way the release-ZIP
+        # tests in this suite already do.
+        if not exporter.DEFAULT_BASE_PAYLOAD.is_dir():
+            self.skipTest(
+                "work/vanilla_runtime_payload is not present; "
+                "cannot compute sound restore records"
+            )
         with tempfile.TemporaryDirectory() as tmp:
             tmp = Path(tmp)
             bundle = tmp / "bundle"
@@ -1106,6 +1117,38 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
                 hashes_by_setting["same_sex_marriage"],
             )
 
+    def test_same_sex_marriage_post_asset_patch_skips_persisted_byte_manifest(self):
+        # Same-Sex Marriage used to live in a free-standing custom PE
+        # section (.vf2same) purely so this exporter's exact-SHA post-asset
+        # patch could locate and flip it externally. That storage was
+        # replaced with a byte inside CInventoryManager
+        # (InventoryManager + itemId + 0x2A3) so the toggle actually
+        # persists across a process relaunch/save reload -- see
+        # patch_mobile_furniture_pack.py's VF2CheatToggleActiveByte(). The
+        # new manifest shape has no source_section for this technique to
+        # target, so the exporter must skip this one setting's external
+        # toggle cleanly (return no records) instead of raising and
+        # breaking the whole release build.
+        records = exporter.same_sex_marriage_post_asset_patches(
+            [],
+            output_exe_name="Virtual Families 2 - Modded.exe",
+            build_manifest_data={
+                "SameSexMarriage": {
+                    "runtime_hooks_installed": True,
+                    "runtime_flag": {
+                        "storage": "InventoryManager + 0x14C + 0x2A3 "
+                            "(same persisted-byte convention as mobile "
+                            "renovations/Bathroom 2)",
+                        "size": 1,
+                        "default": "00",
+                        "enabled": "01",
+                        "persistence": "part of the native save payload",
+                    },
+                }
+            },
+        )
+        self.assertEqual(records, [])
+
     def test_mobile_furniture_behavior_assets_export_and_restore_exact_maps(self):
         expected_hashes = {
             "Chaise_blue.png.fmap": "a92512d05b37824c234463c08076083349b12c5b0ef8d06cabdf4178415f26cf",
@@ -1249,7 +1292,15 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
 
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             asset_by_path = {row["file_path"]: row for row in manifest["asset_patches"]}
-            self.assertNotIn("Images/Furniture/Unchanged.png", asset_by_path)
+            # Shipped, not skipped. "Identical to the supplied base payload"
+            # is no longer sufficient to call a file one the player already
+            # has: work/vanilla_runtime_payload accumulated 603 patcher-added
+            # fmaps from previous builds, so that rule dropped 528 genuine
+            # additions and shipped a release without its fixture data. Only
+            # the recorded clean-install index (data/vf2/
+            # clean-base-game-assets.json) can classify a file as base-game,
+            # and this synthetic path is not in it.
+            self.assertIn("Images/Furniture/Unchanged.png", asset_by_path)
             self.assertNotIn("Images/Furniture/Transient.png.pre-frame-pad.bak", asset_by_path)
             self.assertEqual(asset_by_path["Images/Furniture/CandyCane.png"]["requires"], ["holiday_furniture"])
             self.assertEqual(asset_by_path["Images/Furniture/CouchNeonPurpleStd.png"]["requires"], ["custom_couches_ldw_posters"])
@@ -2825,6 +2876,91 @@ class ExportOfflinePatchBundleTests(unittest.TestCase):
             self.assertTrue((bundle / records[0]["source_path"]).is_file())
             self.assertFalse(second.exists())
             exporter.validate_bundle_asset_sources(bundle, records)
+
+
+class CleanBaseGameReferenceTests(unittest.TestCase):
+    """The additive diff must never consult the working payload.
+
+    Two releases shipped broken because it did. work/vanilla_runtime_payload
+    has accumulated 603 patcher-added fmaps from previous builds, so its
+    "vanilla" Assets directory holds 845 files where a clean install has
+    242. Diffing against it classified 528 genuine additions as files the
+    player already had.
+    """
+
+    def test_clean_base_index_matches_a_real_clean_install(self):
+        doc = json.loads(
+            (ROOT / "data" / "vf2" / "clean-base-game-assets.json").read_text(
+                encoding="utf-8-sig"
+            )
+        )
+        # A clean Virtual Families 2 install, not a patched one.
+        self.assertEqual(doc["counts"]["Images"], 655)
+        self.assertEqual(doc["counts"]["Assets"], 242)
+        for entry in doc["files"].values():
+            self.assertIn("sha256", entry)
+            self.assertIn("size", entry)
+
+    def test_working_payload_is_not_used_as_the_clean_reference(self):
+        source = (ROOT / "work" / "export_offline_patch_bundle.py").read_text(
+            encoding="utf-8"
+        )
+        start = source.index("def matches_base_payload(")
+        body = source[start:source.index("\ndef ", start + 10)]
+        # It must consult the recorded clean index...
+        self.assertIn("clean_base_game_index()", body)
+        # ...and must not hash the payload copy to decide "already present".
+        self.assertNotIn("base_payload / rel", body)
+
+    def test_export_skip_uses_the_clean_reference_too(self):
+        # The selector was fixed first and the bug survived, because a second
+        # check further down still compared against the payload and dropped
+        # what the selector had correctly included.
+        source = (ROOT / "work" / "export_offline_patch_bundle.py").read_text(
+            encoding="utf-8"
+        )
+        start = source.index("def export_asset_payloads(")
+        body = source[start:source.index("\ndef ", start + 10)]
+        self.assertIn("if matches_base_payload(rel, build_dir, base_payload):", body)
+        self.assertNotIn("if base.is_file() and sha256_file(base) == source_sha:", body)
+
+
+class TestSuiteCopiesInSyncTests(unittest.TestCase):
+    """tests/ and work/ hold the same suites and must not drift apart.
+
+    They already did: PR #36 changed the additive diff to classify base-game
+    files from the recorded clean install rather than the supplied payload and
+    updated the work/ copy's expectation, but not the tests/ copy. tests/ then
+    asserted the old behaviour and failed for months, which is indistinguishable
+    from a real regression and trains everyone to ignore a red suite.
+
+    The only sanctioned difference is which tool tree a suite points at: tests/
+    exercises the shipped src/ copies, work/ exercises the development ones.
+    """
+
+    # name -> True when the two copies must be byte-identical.
+    SUITES = {
+        "test_export_offline_patch_bundle.py": True,
+        "test_offline_vf2_patcher.py": False,
+        "test_offline_vf2_patcher_gui.py": False,
+    }
+
+    def test_tests_copy_matches_the_work_copy(self):
+        for name, identical in self.SUITES.items():
+            with self.subTest(suite=name):
+                work_text = (ROOT / "work" / name).read_text(encoding="utf-8")
+                tests_text = (ROOT / "tests" / name).read_text(encoding="utf-8")
+                expected = work_text
+                if not identical:
+                    # These two import the tool under test; tests/ takes the
+                    # shipped src/ copy. Nothing else may differ.
+                    expected = work_text.replace('ROOT / "work"', 'ROOT / "src"')
+                self.assertEqual(
+                    tests_text,
+                    expected,
+                    f"tests/{name} has drifted from work/{name}; "
+                    "sync the two rather than editing one.",
+                )
 
 
 if __name__ == "__main__":
