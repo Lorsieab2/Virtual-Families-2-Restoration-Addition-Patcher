@@ -109,18 +109,32 @@ if ($PreviousBuildDir) {
         throw ("PreviousBuildDir has no patch-manifest.json, so it is not a build output " +
             "(a vanilla runtime payload cannot supply inheritance-only art): $PreviousBuildDir")
     }
-    $cleanIndexPath = Join-Path (Join-Path (Join-Path $root "data") "vf2") "clean-base-game-assets.json"
-    $cleanImageCount = 0
-    if (Test-Path -LiteralPath $cleanIndexPath) {
-        $cleanImageCount = [int](Get-Content -LiteralPath $cleanIndexPath -Raw | ConvertFrom-Json).counts.Images
+    # An aggregate count is not enough either: an earlier *uninherited* playtest
+    # output has Images, Sounds and a patch-manifest.json, and its 6672 generated
+    # images comfortably exceed a clean install's 655, yet it is missing every one
+    # of the inheritance-only files. Chaining from it would pass every check above
+    # and still ship without the art. So require files that were measured as
+    # absent from an uninherited build. Representative, not exhaustive -- enough
+    # to tell a real inherited build from one that cannot pass the art on.
+    $inheritanceOnlyProbes = @(
+        "Images/Furniture/Balloons_birthday.png",
+        "Images/Furniture/Birthday_banner.png",
+        "Images/Furniture/Birthday_cake.png",
+        "Images/EastCPUAnimLg.jpg"
+    )
+    $missingProbes = @()
+    foreach ($probe in $inheritanceOnlyProbes) {
+        $probePath = Join-Path $PreviousBuildDir ($probe -replace "/", [string][char]92)
+        if (-not (Test-Path -LiteralPath $probePath -PathType Leaf)) {
+            $missingProbes += $probe
+        }
     }
-    $seedImageCount = @(Get-ChildItem -LiteralPath (Join-Path $PreviousBuildDir "Images") -Recurse -File -ErrorAction SilentlyContinue).Count
-    if ($cleanImageCount -gt 0 -and $seedImageCount -le $cleanImageCount) {
-        throw ("PreviousBuildDir carries no art beyond a clean install " +
-            "($seedImageCount Images vs $cleanImageCount in a clean base game), " +
-            "so it cannot supply the inheritance-only art: $PreviousBuildDir")
+    if ($missingProbes.Count -gt 0) {
+        throw ("PreviousBuildDir is missing inheritance-only art, so it cannot pass it on " +
+            "(it looks like an uninherited build output): $PreviousBuildDir`n  missing: " +
+            ($missingProbes -join ", "))
     }
-    Write-Host "  seed carries $seedImageCount Images (clean base game has $cleanImageCount)"
+    Write-Host ("  seed carries the inheritance-only art ({0}/{0} probes present)" -f $inheritanceOnlyProbes.Count)
     $PreviousBuildDir = (Resolve-Path -LiteralPath $PreviousBuildDir).Path
 }
 
