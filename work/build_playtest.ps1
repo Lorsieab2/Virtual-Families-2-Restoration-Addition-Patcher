@@ -82,6 +82,25 @@ if (-not (Test-Path -LiteralPath $vcvarsall)) {
     throw "MSVC vcvarsall.bat not found at expected path: $vcvarsall (build_b119.bat hardcodes this -- update both if VS moves)."
 }
 
+# A previous build supplied here has to be validated before anything is
+# created: throwing after $out exists leaves an abandoned directory that the
+# reuse guard below then rejects, so a corrected -PreviousBuildDir could not be
+# retried with the same -OutName. Require the runtime subdirectories too --
+# find_previous_build_source() silently ignores a directory without them and
+# falls through to scanning outputs\\ or to building unseeded, which is the
+# exact silent-miss this parameter exists to prevent.
+if ($PreviousBuildDir) {
+    if (-not (Test-Path -LiteralPath $PreviousBuildDir -PathType Container)) {
+        throw "PreviousBuildDir does not exist: $PreviousBuildDir"
+    }
+    foreach ($needed in @("Images", "Sounds")) {
+        if (-not (Test-Path -LiteralPath (Join-Path $PreviousBuildDir $needed) -PathType Container)) {
+            throw "PreviousBuildDir is not a usable build output (missing $needed): $PreviousBuildDir"
+        }
+    }
+    $PreviousBuildDir = (Resolve-Path -LiteralPath $PreviousBuildDir).Path
+}
+
 # ---- Output location.
 if (-not $OutName) {
     $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -104,11 +123,8 @@ $env:VF2_PATCH_OUT = $out
 $env:VF2_BUILD_OUT = $out
 $env:VF2_OUTPUT_EXE = $ExeName
 if ($PreviousBuildDir) {
-    if (-not (Test-Path -LiteralPath $PreviousBuildDir -PathType Container)) {
-        throw "PreviousBuildDir does not exist: $PreviousBuildDir"
-    }
-    $env:VF2_PREVIOUS_BUILD_DIR = (Resolve-Path -LiteralPath $PreviousBuildDir).Path
-    Write-Host "Inheriting runtime art from: $env:VF2_PREVIOUS_BUILD_DIR" -ForegroundColor Cyan
+    $env:VF2_PREVIOUS_BUILD_DIR = $PreviousBuildDir
+    Write-Host "Inheriting runtime art from: $PreviousBuildDir" -ForegroundColor Cyan
 } else {
     # Clear any inherited value so an unseeded build is deterministic rather
     # than silently picking up whatever the shell happened to export.
@@ -145,6 +161,28 @@ try {
     }
     if (-not (Test-Path (Join-Path $out "patch-manifest.json"))) {
         throw "Generator reported success but patch-manifest.json is missing from $out."
+    }
+
+    # Fail closed on silent seed drift. find_previous_build_source() falls back
+    # to scanning outputs\\ for an unrelated older build, and that fallback also
+    # reports status "seeded from previous build" -- so compare which seed was
+    # actually used, not just whether one was. The manifest redacts the local
+    # absolute path prefix, so compare the trailing folder name (same approach
+    # as build_matrix.ps1).
+    $manifestObj = Get-Content -LiteralPath (Join-Path $out "patch-manifest.json") -Raw | ConvertFrom-Json
+    $seedUsed = ($manifestObj.previous_build_seed.status -eq "seeded from previous build")
+    if ([bool]$PreviousBuildDir -ne $seedUsed) {
+        throw ("Seed-state drift: -PreviousBuildDir was {0} but the manifest reports status '{1}'." -f `
+            $(if ($PreviousBuildDir) { "supplied" } else { "not supplied" }), $manifestObj.previous_build_seed.status)
+    }
+    if ($PreviousBuildDir) {
+        $expectedSeedName = ($PreviousBuildDir.TrimEnd('/', '\') -split '[/\\]')[-1]
+        $actualSeedSource = [string]$manifestObj.previous_build_seed.source
+        $actualSeedName = ($actualSeedSource.TrimEnd('/', '\') -split '[/\\]')[-1]
+        if ($expectedSeedName -ne $actualSeedName) {
+            throw "Seed identity drift: asked for '$PreviousBuildDir' (name '$expectedSeedName') but the manifest recorded source '$actualSeedSource' (name '$actualSeedName')."
+        }
+        Write-Host "  seed verified: $actualSeedName" -ForegroundColor Green
     }
     if ($MobileFurnitureBehaviors) {
         # The runtime byte gates the complete implemented mobile-furniture
