@@ -122,6 +122,31 @@ try {
     if (-not (Test-Path (Join-Path $out "patch-manifest.json"))) {
         throw "Generator reported success but patch-manifest.json is missing from $out."
     }
+    if ($MobileFurnitureBehaviors) {
+        # Restore only the four previously validated chaise behavior maps.
+        # The generator's base payload intentionally contains rendered-only
+        # maps, which makes LinkPeepToFurniture reject a manual lounger drop.
+        $chaiseMapSource = Join-Path $root "patcher_assets\optional_patches\mobile_furniture_behaviors\pc_fmaps"
+        $assetDestination = Join-Path $out "Assets"
+        $chaiseMapNames = @(
+            "Chaise_blue.png.fmap",
+            "Chaise_brown.png.fmap",
+            "Chaise_green.png.fmap",
+            "Chaise_red.png.fmap"
+        )
+        foreach ($name in $chaiseMapNames) {
+            $sourceMap = Join-Path $chaiseMapSource $name
+            $targetMap = Join-Path $assetDestination $name
+            if (-not (Test-Path -LiteralPath $sourceMap -PathType Leaf)) {
+                throw "Validated chaise behavior map is missing: $sourceMap"
+            }
+            Copy-Item -LiteralPath $sourceMap -Destination $targetMap -Force
+            if ((Get-FileHash -LiteralPath $sourceMap -Algorithm SHA256).Hash -ne
+                (Get-FileHash -LiteralPath $targetMap -Algorithm SHA256).Hash) {
+                throw "Chaise behavior map copy drifted: $name"
+            }
+        }
+    }
 
     Write-Host "[2/2] Compiling and linking (this calls vcvarsall.bat x86 + cl + link)..." -ForegroundColor Cyan
     Get-ChildItem -LiteralPath $out -Filter "*.exe" -File -ErrorAction SilentlyContinue | Remove-Item -Force
