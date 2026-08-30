@@ -23363,7 +23363,7 @@ extern "C" void __cdecl VF2ApplySitDownLabelVariants(CVillager &);
     if (strncmp(label, \"Needs to sit down\", 0x12) == 0) {
         VF2ApplySitDownLabelVariants(villager);
     }
-""".strip("\\n")
+""".strip("\n")
         computer_drop_dispatch = r'''
     bool handled = HandleDropOnHotSpot(villager);
     if (handled) {
