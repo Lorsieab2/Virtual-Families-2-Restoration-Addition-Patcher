@@ -50,24 +50,28 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# One probe per category, each the alphabetically first file measured as
-# present in an inherited build and absent from an uninherited one. The
-# measured split is VillagerBodies 448, Furniture 93, Upgrades 61, root 25,
-# OutfitIcons 8 -- 635 total. Covering every category means a seed that lost
-# any one tree is rejected rather than silently dropping it.
-$inheritanceOnlyProbes = @(
-    "Images/VillagerBodies/Female/Body_50/actions/Frame00.png",
-    "Images/Furniture/Balloons_birthday.png",
-    "Images/Upgrades/invisible images/2ndMoitor_NE.png",
-    "Images/OutfitIcons/Female_Body_50.png",
-    "Images/EastCPUAnimLg.jpg"
-)
+# Images that reach a build only by inheriting from a previous build output.
+# They exist in neither the repository nor work/vanilla_runtime_payload, so an
+# unseeded build omits every one of them and still reports success. The measured
+# inventory is recorded in data/vf2/inherited-only-images.json; validating the
+# whole list rather than a sample means a seed that lost any single file is
+# rejected instead of silently dropping it.
+$inheritedOnlyIndexPath = Join-Path (Join-Path (Join-Path $PSScriptRoot "..") "data") "vf2"
+$inheritedOnlyIndexPath = Join-Path $inheritedOnlyIndexPath "inherited-only-images.json"
+if (-not (Test-Path -LiteralPath $inheritedOnlyIndexPath)) {
+    throw "Missing inherited-art inventory: $inheritedOnlyIndexPath"
+}
+$inheritedOnlyImages = @((Get-Content -LiteralPath $inheritedOnlyIndexPath -Raw | ConvertFrom-Json).files |
+    ForEach-Object { "Images/$_" })
+if ($inheritedOnlyImages.Count -eq 0) {
+    throw "Inherited-art inventory is empty: $inheritedOnlyIndexPath"
+}
 
 function Get-MissingInheritedArt([string]$Root) {
     $missing = @()
-    foreach ($probe in $inheritanceOnlyProbes) {
-        $probePath = Join-Path $Root ($probe -replace "/", [string][char]92)
-        if (-not (Test-Path -LiteralPath $probePath -PathType Leaf)) { $missing += $probe }
+    foreach ($rel in $inheritedOnlyImages) {
+        $path = Join-Path $Root ($rel -replace "/", [string][char]92)
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { $missing += $rel }
     }
     return $missing
 }
@@ -142,10 +146,11 @@ if ($PreviousBuildDir) {
     $missingProbes = Get-MissingInheritedArt $PreviousBuildDir
     if ($missingProbes.Count -gt 0) {
         throw ("PreviousBuildDir is missing inheritance-only art, so it cannot pass it on " +
-            "(it looks like an uninherited build output): $PreviousBuildDir`n  missing: " +
-            ($missingProbes -join ", "))
+            "(it looks like an uninherited build output): $PreviousBuildDir`n  missing " +
+            "$($missingProbes.Count) of $($inheritedOnlyImages.Count), first: " +
+            (($missingProbes | Select-Object -First 3) -join ", "))
     }
-    Write-Host ("  seed carries the inheritance-only art ({0}/{0} probes present)" -f $inheritanceOnlyProbes.Count)
+    Write-Host ("  seed carries all {0} inheritance-only images" -f $inheritedOnlyImages.Count)
     $PreviousBuildDir = (Resolve-Path -LiteralPath $PreviousBuildDir).Path
 }
 
@@ -241,10 +246,11 @@ try {
     if ($seedUsed) {
         $missingInOutput = Get-MissingInheritedArt $out
         if ($missingInOutput.Count -gt 0) {
-            throw ("The build was seeded from '{0}' but is still missing inheritance-only art: {1}" -f `
-                [string]$manifestObj.previous_build_seed.source, ($missingInOutput -join ", "))
+            throw ("The build was seeded from '{0}' but is missing {1} of {2} inheritance-only images, first: {3}" -f `
+                [string]$manifestObj.previous_build_seed.source, $missingInOutput.Count,
+                $inheritedOnlyImages.Count, (($missingInOutput | Select-Object -First 3) -join ", "))
         }
-        Write-Host "  build carries the inheritance-only art" -ForegroundColor Green
+        Write-Host ("  build carries all {0} inheritance-only images" -f $inheritedOnlyImages.Count) -ForegroundColor Green
     }
     if ($PreviousBuildDir) {
         $expectedSeedName = ($PreviousBuildDir.TrimEnd('/', '\') -split '[/\\]')[-1]
