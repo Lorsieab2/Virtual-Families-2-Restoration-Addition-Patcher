@@ -116,10 +116,16 @@ if ($PreviousBuildDir) {
     # and still ship without the art. So require files that were measured as
     # absent from an uninherited build. Representative, not exhaustive -- enough
     # to tell a real inherited build from one that cannot pass the art on.
+    # One probe per category, each the alphabetically first file measured as
+    # present in an inherited build and absent from an uninherited one. The
+    # measured split is VillagerBodies 448, Furniture 93, Upgrades 61, root 25,
+    # OutfitIcons 8 -- 635 total. Covering every category means a seed that lost
+    # any one tree is rejected rather than silently dropping it.
     $inheritanceOnlyProbes = @(
+        "Images/VillagerBodies/Female/Body_50/actions/Frame00.png",
         "Images/Furniture/Balloons_birthday.png",
-        "Images/Furniture/Birthday_banner.png",
-        "Images/Furniture/Birthday_cake.png",
+        "Images/Upgrades/invisible images/2ndMoitor_NE.png",
+        "Images/OutfitIcons/Female_Body_50.png",
         "Images/EastCPUAnimLg.jpg"
     )
     $missingProbes = @()
