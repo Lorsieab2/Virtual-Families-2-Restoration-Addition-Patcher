@@ -195,10 +195,26 @@ if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) {
     throw "Link reported success but the executable is missing: $exe"
 }
 $hash = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash
+
+# VF2 derives its save folder from the executable filename, so any build whose
+# -ExeName differs from the last one silently starts an empty family instead of
+# continuing the existing one. Print the exact folder this build will use, and
+# say whether it already holds saves, so a name change can never be silent.
+$saveRoot = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "LDW"
+$saveFolder = Join-Path $saveRoot ([IO.Path]::GetFileNameWithoutExtension($ExeName))
+$saveState = if (Test-Path -LiteralPath $saveFolder) {
+    "existing folder, this build continues that family"
+} else {
+    "does not exist yet, this build starts a new family"
+}
+
 Write-Host ""
 Write-Host "Build OK:" -ForegroundColor Green
 Write-Host "  $exe"
 Write-Host "  $((Get-Item $exe).Length) bytes, SHA256 $hash"
+Write-Host ""
+Write-Host "  Saves: $saveFolder"
+Write-Host "         ($saveState)"
 Write-Host ""
 Write-Host "This is a complete standalone folder ($out) -- copy the whole" -ForegroundColor Green
 Write-Host "thing to hand it off; it does not need anything from outside itself." -ForegroundColor Green
