@@ -30,6 +30,7 @@ param(
     [bool]$IslandEvents = $true,
     [bool]$HolidayOrnaments = $true,
     [bool]$BehaviorPatches = $true,
+    [bool]$MobileFurnitureBehaviors = $true,
     [string]$Python = "python"
 )
 
@@ -121,6 +122,25 @@ try {
     if (-not (Test-Path (Join-Path $out "patch-manifest.json"))) {
         throw "Generator reported success but patch-manifest.json is missing from $out."
     }
+    if ($MobileFurnitureBehaviors) {
+        # The runtime byte gates the complete implemented mobile-furniture
+        # dispatcher. Restore its exact validated map set atomically; the
+        # generator's base payload intentionally contains rendered-only maps.
+        $behaviorMapSource = Join-Path $root "patcher_assets\optional_patches\mobile_furniture_behaviors\pc_fmaps"
+        $assetDestination = Join-Path $out "Assets"
+        $behaviorMaps = Get-ChildItem -LiteralPath $behaviorMapSource -Filter "*.fmap" -File
+        if ($behaviorMaps.Count -ne 34) {
+            throw "Expected 34 validated mobile-furniture behavior maps, found $($behaviorMaps.Count)."
+        }
+        foreach ($sourceMap in $behaviorMaps) {
+            $targetMap = Join-Path $assetDestination $sourceMap.Name
+            Copy-Item -LiteralPath $sourceMap.FullName -Destination $targetMap -Force
+            if ((Get-FileHash -LiteralPath $sourceMap.FullName -Algorithm SHA256).Hash -ne
+                (Get-FileHash -LiteralPath $targetMap -Algorithm SHA256).Hash) {
+                throw "Mobile-furniture behavior map copy drifted: $($sourceMap.Name)"
+            }
+        }
+    }
 
     Write-Host "[2/2] Compiling and linking (this calls vcvarsall.bat x86 + cl + link)..." -ForegroundColor Cyan
     Get-ChildItem -LiteralPath $out -Filter "*.exe" -File -ErrorAction SilentlyContinue | Remove-Item -Force
@@ -129,6 +149,13 @@ try {
     if ($LASTEXITCODE -ne 0) {
         Get-Content -LiteralPath $linkLog -Tail 40
         throw "Compile/link failed (exit $LASTEXITCODE). Last 40 lines of $linkLog printed above."
+    }
+    if ($MobileFurnitureBehaviors) {
+        $linkedExe = Join-Path $out $ExeName
+        & $Python "work\enable_runtime_flag.py" $linkedExe ".vf2beh"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not enable the mobile-furniture runtime gate in the playtest executable."
+        }
     }
 }
 finally {

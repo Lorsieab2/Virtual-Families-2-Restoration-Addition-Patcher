@@ -23356,9 +23356,8 @@ extern "C" void __cdecl VF2ApplySitDownLabelVariants(CVillager &);
 '''.strip()
         nap_fallback = "VF2RandomNapDreamLabel(villager);"
         rest_fallback = "VF2RandomRestingBodyLabel(villager);"
-        # Apply the shared label pool before the chaise plan is started.  The
-        # previous implementation called it after StartNewBehavior, which
-        # invalidated the active chaise plan and made the whole route fail.
+        # The shared helper is label/cache-only. Apply it after the preserved
+        # chaise plan starts so the variation binds to the active behavior.
         chaise_sit_down_variants = "        VF2ApplySitDownLabelVariants(villager);"
         chaise_plan_sit_down_variants = """
     if (strncmp(label, \"Needs to sit down\", 0x12) == 0) {
@@ -23827,10 +23826,10 @@ static bool VF2HandleMobileChaise(CVillager &villager)
     if (dirtiness) plans->PlanToIncDirtiness(dirtiness);
     if (happiness) plans->PlanToIncHappinessTrend(happiness);
     if (energyGain) plans->PlanToIncEnergy(energyGain);
+    plans->StartNewBehavior(villager);
     if (applySitDownLabelVariants) {
 __VF2_CHAISE_SIT_DOWN_VARIANTS__
     }
-    plans->StartNewBehavior(villager);
     return true;
 }
 
@@ -25593,7 +25592,6 @@ static void VF2PlanLinkedChaiseAction(
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
     plans->ForgetPlans(villager, false);
     VF2SetActionLabel(villager, label);
-__VF2_CHAISE_PLAN_SIT_DOWN_VARIANTS__
     plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
     if (carrying != static_cast<ECarrying>(0)) plans->PlanToCarry(carrying);
     if (info.orientation == 1) {
@@ -25605,6 +25603,7 @@ __VF2_CHAISE_PLAN_SIT_DOWN_VARIANTS__
     if (happiness) plans->PlanToIncHappinessTrend(happiness);
     if (energy) plans->PlanToIncEnergy(energy);
     plans->StartNewBehavior(villager);
+__VF2_CHAISE_PLAN_SIT_DOWN_VARIANTS__
 }
 
 extern "C" void __cdecl VF2MobileReadingBook(CVillager &villager)

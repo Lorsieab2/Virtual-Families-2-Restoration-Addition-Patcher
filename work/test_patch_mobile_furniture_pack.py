@@ -2175,9 +2175,21 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 )
                 manual = mobile_helper[manual_start:manual_end]
                 self.assertIn("applySitDownLabelVariants = true;", manual)
-                self.assertLess(
+                self.assertGreater(
                     manual.index("VF2ApplySitDownLabelVariants(villager);"),
                     manual.index("plans->StartNewBehavior(villager);"),
+                )
+                linked_start = mobile_helper.index(
+                    "static void VF2PlanLinkedChaiseAction("
+                )
+                linked_end = mobile_helper.index(
+                    'extern "C" void __cdecl VF2MobileReadingBook',
+                    linked_start,
+                )
+                linked = mobile_helper[linked_start:linked_end]
+                self.assertGreater(
+                    linked.index("VF2ApplySitDownLabelVariants(villager);"),
+                    linked.index("plans->StartNewBehavior(villager);"),
                 )
                 rest_start = mobile_helper.index(
                     "extern \"C\" void __cdecl VF2MobileRestingBody(CVillager &villager)"
