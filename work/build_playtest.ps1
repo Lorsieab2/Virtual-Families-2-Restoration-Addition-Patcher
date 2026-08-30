@@ -99,6 +99,28 @@ if ($PreviousBuildDir) {
             throw "PreviousBuildDir is not a usable build output (missing $needed): $PreviousBuildDir"
         }
     }
+    # Images + Sounds also describes workanilla_runtime_payload, which holds
+    # none of the inheritance-only art this option exists to carry forward.
+    # Seeding from it would satisfy the manifest checks below and still produce
+    # a green build with the furniture, body and upgrade art missing. A real
+    # build output is distinguishable two ways: it has a patch-manifest.json,
+    # and its Images tree is larger than a clean install's.
+    if (-not (Test-Path -LiteralPath (Join-Path $PreviousBuildDir "patch-manifest.json") -PathType Leaf)) {
+        throw ("PreviousBuildDir has no patch-manifest.json, so it is not a build output " +
+            "(a vanilla runtime payload cannot supply inheritance-only art): $PreviousBuildDir")
+    }
+    $cleanIndexPath = Join-Path (Join-Path (Join-Path $root "data") "vf2") "clean-base-game-assets.json"
+    $cleanImageCount = 0
+    if (Test-Path -LiteralPath $cleanIndexPath) {
+        $cleanImageCount = [int](Get-Content -LiteralPath $cleanIndexPath -Raw | ConvertFrom-Json).counts.Images
+    }
+    $seedImageCount = @(Get-ChildItem -LiteralPath (Join-Path $PreviousBuildDir "Images") -Recurse -File -ErrorAction SilentlyContinue).Count
+    if ($cleanImageCount -gt 0 -and $seedImageCount -le $cleanImageCount) {
+        throw ("PreviousBuildDir carries no art beyond a clean install " +
+            "($seedImageCount Images vs $cleanImageCount in a clean base game), " +
+            "so it cannot supply the inheritance-only art: $PreviousBuildDir")
+    }
+    Write-Host "  seed carries $seedImageCount Images (clean base game has $cleanImageCount)"
     $PreviousBuildDir = (Resolve-Path -LiteralPath $PreviousBuildDir).Path
 }
 
