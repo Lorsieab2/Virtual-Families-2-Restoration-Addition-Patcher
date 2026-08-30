@@ -1,6 +1,6 @@
 # VF2 Restoration + Addition Patcher Request Ledger
 
-Last reconciled: 2026-07-12
+Last reconciled: 2026-08-30
 Published baseline: B153 (`2963ba2`, release
 `B153-restoration-addition-patcher`)
 
@@ -161,6 +161,9 @@ and reset only through their documented reset action.
 | Designated GitHub repository only | Shipped / automated-verified | B152 branch/release is in Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher. |
 | Complete changelog and Transparency Log | Ongoing invariant | Required before every release. |
 | GitHub publishing/latest release asset only | Ongoing invariant | Commit/push source, verify latest ZIP digest, delete obsolete local release archives. |
+| RestingBody autonomous under Behavior Patches | Shipped / in-game QA pending | B175 restores 0x127 to VF2EnableAutonomousCandidates as an all-ages candidate at weight 450, before the VF2EnableMobileFurnitureCandidates call that raises it to 2000 when .vf2beh is set. PR #60 had removed it, leaving the behavior and its resting labels unselectable whenever Mobile Furniture Behaviors was off. Verified in the linked binary (two candidate writes, 450 then 2000). No villager has been observed choosing it in game. |
+| All-enabled playtest actually enables every runtime gate | Shipped / in-game QA pending | B174.2 and B174.3 shipped with .vf2goal, .vf2preg, .vf2mort and .vf2scrl still 00 despite the artifact name, so Holiday Furniture goals, Allow Older Pregnancies, the Older Villager Mortality curve and the Store Scroll Bar were present but dormant. build_playtest.ps1 now drives all five from enable_runtime_flag.py and prints each. B175 reads 01 for all five. Note this makes two default-off experimental options on by default in a playtest artifact. |
+| Reproducible build from source | Partial | 635 runtime images (VillagerBodies 448, Furniture 93, Upgrades 61, root 25, OutfitIcons 8) exist in neither the repository nor work/vanilla_runtime_payload and reach a build only by inheriting from a previous build output. build_playtest.ps1 takes that predecessor with -PreviousBuildDir and validates both the seed and the produced build against data/vf2/inherited-only-images.json, so the dependency is now recorded and enforced rather than silent. It is not removed: every release still depends on the chain of prior artifacts. Closing it means committing those files or regenerating them from their original sources. |
 
 ## Mandatory uncertainty audit
 

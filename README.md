@@ -41,7 +41,7 @@ The load path is mostly extended by wrappers that run the native `LoadState` fir
 ## What's included
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. As of B174.2 it offers the 36 settings below, grouped
+the release you downloaded. As of B175 it offers the 36 settings below, grouped
 the way the GUI groups them.
 
 ### Main patches (on by default)
@@ -290,5 +290,13 @@ The `work/` binary-contract tests additionally need the gitignored local build
 support directories (`work/desktop_obj_files`, `work/vanilla_runtime_payload`,
 `work/generated_import_libs`, `work/desktop_runtime_dlls`); without them those
 tests fail on missing inputs rather than on a real regression.
+
+A build also cannot be reproduced from source alone. 635 runtime images -- most
+of the VillagerBodies frames, the mobile furniture art, and the upgrade icons --
+exist in neither this repository nor the vanilla payload, and reach a build only
+by inheriting from a previous build output. `work/build_playtest.ps1` takes that
+predecessor with `-PreviousBuildDir` and validates both it and the produced
+build against the recorded inventory in `data/vf2/inherited-only-images.json`.
+Omitting the flag produces a build that is missing all 635.
 
 The GUI modules need a Python build with `tkinter` available.
