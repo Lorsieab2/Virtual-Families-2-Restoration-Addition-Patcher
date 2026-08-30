@@ -9,6 +9,12 @@
 /node_modules/
 /.venv/
 
+# Python bytecode caches. /work/** already excludes work's, but src/ and
+# tests/ are tracked trees, so running the suites leaves __pycache__ dirs
+# sitting in `git status` where a `git add -A` can sweep them in.
+__pycache__/
+*.py[cod]
+
 # Build logs, link maps, and locally generated binary/object trees.
 /*.log
 /work/*.log
