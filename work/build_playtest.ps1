@@ -38,6 +38,12 @@ param(
     [bool]$AllowOlderPregnancies = $true,
     [bool]$OlderVillagerMortality = $true,
     [bool]$StoreScrollBar = $true,
+    # A previous build to inherit runtime art from. 635 Images --
+    # mobile furniture art, 448 VillagerBodies frames, 61 upgrade icons --
+    # exist in neither the repository nor the vanilla payload, so they
+    # reach a build only this way. Leave unset for a deliberately
+    # uninherited build; the preflight below reports what that costs.
+    [string]$PreviousBuildDir,
     [string]$Python = "python"
 )
 
@@ -97,7 +103,18 @@ function Flag([bool]$value) { if ($value) { "1" } else { "0" } }
 $env:VF2_PATCH_OUT = $out
 $env:VF2_BUILD_OUT = $out
 $env:VF2_OUTPUT_EXE = $ExeName
-Remove-Item Env:VF2_PREVIOUS_BUILD_DIR -ErrorAction SilentlyContinue
+if ($PreviousBuildDir) {
+    if (-not (Test-Path -LiteralPath $PreviousBuildDir -PathType Container)) {
+        throw "PreviousBuildDir does not exist: $PreviousBuildDir"
+    }
+    $env:VF2_PREVIOUS_BUILD_DIR = (Resolve-Path -LiteralPath $PreviousBuildDir).Path
+    Write-Host "Inheriting runtime art from: $env:VF2_PREVIOUS_BUILD_DIR" -ForegroundColor Cyan
+} else {
+    # Clear any inherited value so an unseeded build is deterministic rather
+    # than silently picking up whatever the shell happened to export.
+    Remove-Item Env:VF2_PREVIOUS_BUILD_DIR -ErrorAction SilentlyContinue
+    Write-Host "No -PreviousBuildDir: art that exists only in previous builds will be absent." -ForegroundColor Yellow
+}
 $env:VF2_VANILLA_RUNTIME_DIR = Join-Path $root "work\vanilla_runtime_payload"
 $env:VF2_ENABLE_CHEAT_UPGRADES = Flag $Cheat
 $env:VF2_ENABLE_MOBILE_RENOVATIONS = Flag $MobileRenovations
