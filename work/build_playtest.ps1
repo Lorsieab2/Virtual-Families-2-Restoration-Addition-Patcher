@@ -49,6 +49,29 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# One probe per category, each the alphabetically first file measured as
+# present in an inherited build and absent from an uninherited one. The
+# measured split is VillagerBodies 448, Furniture 93, Upgrades 61, root 25,
+# OutfitIcons 8 -- 635 total. Covering every category means a seed that lost
+# any one tree is rejected rather than silently dropping it.
+$inheritanceOnlyProbes = @(
+    "Images/VillagerBodies/Female/Body_50/actions/Frame00.png",
+    "Images/Furniture/Balloons_birthday.png",
+    "Images/Upgrades/invisible images/2ndMoitor_NE.png",
+    "Images/OutfitIcons/Female_Body_50.png",
+    "Images/EastCPUAnimLg.jpg"
+)
+
+function Get-MissingInheritedArt([string]$Root) {
+    $missing = @()
+    foreach ($probe in $inheritanceOnlyProbes) {
+        $probePath = Join-Path $Root ($probe -replace "/", [string][char]92)
+        if (-not (Test-Path -LiteralPath $probePath -PathType Leaf)) { $missing += $probe }
+    }
+    return $missing
+}
+
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $root
 
@@ -116,25 +139,7 @@ if ($PreviousBuildDir) {
     # and still ship without the art. So require files that were measured as
     # absent from an uninherited build. Representative, not exhaustive -- enough
     # to tell a real inherited build from one that cannot pass the art on.
-    # One probe per category, each the alphabetically first file measured as
-    # present in an inherited build and absent from an uninherited one. The
-    # measured split is VillagerBodies 448, Furniture 93, Upgrades 61, root 25,
-    # OutfitIcons 8 -- 635 total. Covering every category means a seed that lost
-    # any one tree is rejected rather than silently dropping it.
-    $inheritanceOnlyProbes = @(
-        "Images/VillagerBodies/Female/Body_50/actions/Frame00.png",
-        "Images/Furniture/Balloons_birthday.png",
-        "Images/Upgrades/invisible images/2ndMoitor_NE.png",
-        "Images/OutfitIcons/Female_Body_50.png",
-        "Images/EastCPUAnimLg.jpg"
-    )
-    $missingProbes = @()
-    foreach ($probe in $inheritanceOnlyProbes) {
-        $probePath = Join-Path $PreviousBuildDir ($probe -replace "/", [string][char]92)
-        if (-not (Test-Path -LiteralPath $probePath -PathType Leaf)) {
-            $missingProbes += $probe
-        }
-    }
+    $missingProbes = Get-MissingInheritedArt $PreviousBuildDir
     if ($missingProbes.Count -gt 0) {
         throw ("PreviousBuildDir is missing inheritance-only art, so it cannot pass it on " +
             "(it looks like an uninherited build output): $PreviousBuildDir`n  missing: " +
@@ -227,6 +232,19 @@ try {
         # resolved instead of pretending the build was uninherited.
         Write-Host ("  NOTE: no -PreviousBuildDir was given, but the generator auto-discovered a seed: " +
             [string]$manifestObj.previous_build_seed.source) -ForegroundColor Yellow
+    }
+
+    # Whichever seed was used, explicit or auto-discovered, the point of using
+    # one is the inheritance-only art. Assert it reached the build rather than
+    # trusting the input: an auto-discovered seed is never preflighted, so this
+    # is the only check that covers it.
+    if ($seedUsed) {
+        $missingInOutput = Get-MissingInheritedArt $out
+        if ($missingInOutput.Count -gt 0) {
+            throw ("The build was seeded from '{0}' but is still missing inheritance-only art: {1}" -f `
+                [string]$manifestObj.previous_build_seed.source, ($missingInOutput -join ", "))
+        }
+        Write-Host "  build carries the inheritance-only art" -ForegroundColor Green
     }
     if ($PreviousBuildDir) {
         $expectedSeedName = ($PreviousBuildDir.TrimEnd('/', '\') -split '[/\\]')[-1]
