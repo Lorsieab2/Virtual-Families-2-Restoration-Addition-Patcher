@@ -17,7 +17,7 @@ There is also no practical reason to get the game anywhere else: **all of LDW's 
 The [releases page](https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases) carries two different kinds of asset, and only one of them is the patcher:
 
 - **`VF2-B<version>-Release.zip` is the patcher.** This is what you want. It contains `Launch_GUI.bat` and the manifest the GUI reads, and you point it at your own VF2 installation. Take the newest one.
-- **`VF2-B<version>-Playtest-All-Enabled.zip` is not a patcher.** It is a complete pre-patched game folder with every option already turned on, built for testing a specific change. There is no GUI and nothing to configure. A playtest artifact may be marked "Latest" while the newest patcher bundle is an earlier version, so check the filename rather than the Latest badge.
+- **`VF2-B<version>-Playtest-All-Enabled.zip` is not a patcher.** It is a complete pre-patched game folder built for testing a specific change. There is no GUI and nothing to configure. Despite the name it is not literally every option: `build_playtest.ps1` and `build_matrix.ps1` both hold **Use mobile sound assets** off, so a playtest keeps the stock WAV sound routes. It also turns on the two experimental rule changes (Allow Older Pregnancies, Older Villager Mortality Curve) that are default-off in the GUI. A playtest artifact may be marked "Latest" while the newest patcher bundle is an earlier version, so check the filename rather than the Latest badge.
 
 Release ZIPs and compiled game payloads are intentionally not committed to the source tree.
 
