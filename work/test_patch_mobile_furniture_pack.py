@@ -7421,6 +7421,18 @@ class SpontaneousBehaviorContractTests(unittest.TestCase):
                     "EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down, native couch+age gates retained",
                     helper,
                 )
+                # RestingBody is autonomous under Behavior Patches alone, so
+                # it is selectable with Mobile Furniture Behaviors off. The
+                # mobile enabler runs last, so its weight 2000 still wins when
+                # that patch is on.
+                self.assertIn(
+                    "EnableAllAgesAutonomousCandidateWithWeight(data, 0x127, 450); // RestingBody / resting + sit-down variants",
+                    helper,
+                )
+                self.assertLess(
+                    helper.index("EnableAllAgesAutonomousCandidateWithWeight(data, 0x127, 450)"),
+                    helper.index("VF2EnableMobileFurnitureCandidates(villager);"),
+                )
                 self.assertIn("EnableNursingMotherAutonomousCandidateWithWeight(data, 0x11F, 450)", helper)
                 self.assertIn("*(unsigned int *)(candidate + 0x4C) = 0x168;", helper)
                 self.assertIn("candidate[0xA3] = 1;", helper)

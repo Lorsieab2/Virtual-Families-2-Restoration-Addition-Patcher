@@ -30302,6 +30302,11 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAutonomousCandidateWithWeight(data, 0x0C1, 450); // TeenOnlineExam, retain stock age/object gates
     EnableAutonomousCandidateWithWeight(data, 0x189, 450); // UseCouch / sit-down, native couch+age gates retained
     EnableAutonomousCandidateWithWeight(data, 0x083, 350); // NappingCouch / Dreaming variants
+    // RestingBody's own resting family (0x17d/0x17e/0x17f) plus the shared
+    // sit-down pool. Behavior Patches owns this row so the behavior is
+    // selectable with Mobile Furniture Behaviors off; when that patch is on,
+    // VF2EnableMobileFurnitureCandidates runs last and restores weight 2000.
+    EnableAllAgesAutonomousCandidateWithWeight(data, 0x127, 450); // RestingBody / resting + sit-down variants
     EnableAutonomousCandidateWithWeight(data, 0x0D6, 450); // HaveBreakfast
     EnableAutonomousCandidateWithWeight(data, 0x075, 450); // WateringFlowers
     EnableAutonomousCandidateWithWeight(data, 0x076, 450); // WateringRoses
@@ -30364,7 +30369,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
             "teaching first words/infant-care variants (0x11F; nursing mothers carrying babies)",
             "petting label variants remain available through manual/native routes but Petting is not spontaneous",
             "needs-to-sit-down variants (0x189 UseCouch; manual couch/chair drop and autonomous; native couch and age gates retained; shared label-only helper is available to the chaise plan)",
-            "RestingBody (0x127) remains native for non-chaise fallback; its shared wrapper changes the label only when native RestingBody emits one of stock 0x17d/0x17e/0x17f Resting/Resting legs/Resting tired feet labels",
+            "resting variants (0x127 RestingBody; autonomous for all ages at weight 450, raised to the mobile weight 2000 when Mobile Furniture Behaviors is on; native sittable targeting and plans retained; its shared wrapper changes the label only when native RestingBody emits one of stock 0x17d/0x17e/0x17f Resting/Resting legs/Resting tired feet labels)",
             "TV, drink, heat-food, snack, meal-prep, web, video game, reading, telescope, workout, career, shower, bathroom sink/grooming, coffee/tea, cocktail, pool, sandbox, toy-train, and snow-play label variants",
         ],
         "hammock_behavior": {
