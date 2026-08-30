@@ -49,6 +49,26 @@ def newest_release_identities():
     return ROOT / "data" / "vf2" / f"release-identities-B{match.group(1)}{point}.json"
 
 
+def newest_identities_on_disk():
+    """The highest-numbered identities file committed to the repo.
+
+    The contract test below checks the shape of an identities file, not its
+    agreement with any archive, so tying it to a release ZIP would silence it
+    entirely in a clean checkout -- outputs/ is gitignored, so there is never
+    an archive there in CI. Pick by parsed release number for the same reason
+    newest_release_zip does.
+    """
+    best = None
+    for path in (ROOT / "data" / "vf2").glob("release-identities-B*.json"):
+        match = re.match(r"^release-identities-B(\d+)(?:\.(\d+))?\.json$", path.name)
+        if not match:
+            continue
+        key = (int(match.group(1)), int(match.group(2) or 0))
+        if best is None or key > best[0]:
+            best = (key, path)
+    return best[1] if best else None
+
+
 class OfflineBundleZipVerifierTests(unittest.TestCase):
     def test_summary_zip_field_uses_archive_input_not_asset_path(self):
         source = (ROOT / "work" / "verify_offline_bundle_zip.py").read_text(encoding="utf-8")
@@ -194,7 +214,7 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
             tmp.cleanup()
 
     def test_identities_must_cover_the_whole_release_contract(self):
-        identities = newest_release_identities()
+        identities = newest_release_identities() or newest_identities_on_disk()
         if identities is None or not identities.is_file():
             self.skipTest("no identities file present")
         payload = json.loads(identities.read_text(encoding="utf-8"))
