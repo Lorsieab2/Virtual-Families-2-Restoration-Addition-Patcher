@@ -2,10 +2,28 @@
 
 Point release on top of B174.2.
 
-**This release is source-only until it is rebuilt.** Two of the three changes
-below only take effect in a freshly compiled executable, so the existing
-B174.2/B174.3 artifact does not contain them. Nothing here has been seen
-running in the game.
+**Built and published.** `VF2-B175-Playtest-All-Enabled.zip`, artifact SHA-256
+`8D53B71451B4D7A743375B9FCF460EBDD9931A467117D89B7C9931D2B0E79682`, executable
+SHA-256 `9F768DC9761CBD2AFD0073C440522184B2939D12EFBB98FA2C655862997DCBAB`.
+Built from `main` at `31b8f8c` and seeded from B174.3, per the rule that a new
+build starts from the most recent previous one.
+
+Verified at the binary and asset level: all five runtime gate sections read
+`01`; the RestingBody candidate table is written twice (450, then 2000 from the
+mobile enabler that runs last) where B174.3's binary has one such write; 34/34
+mobile-furniture behavior maps are byte-identical to `pc_fmaps`; and all 635
+inheritance-only images are present, with Images, Assets, Sounds, Original
+Virtual Families 2 Assets and OptionalVisualMods each matching B174.3 exactly.
+
+**"All-Enabled" is not literal.** `build_playtest.ps1` and `build_matrix.ps1`
+both hold `VF2_ENABLE_MOBILE_SOUND_ASSETS` at `0`, so this artifact keeps the
+stock WAV sound routes and does not carry the 67 mobile behavior sounds. What it
+does turn on that the GUI leaves off by default is Allow Older Pregnancies and
+the Older Villager Mortality curve.
+
+**Nothing here has been seen running in the game.** In-game confirmation is
+still required, in particular that villagers autonomously choose RestingBody and
+that the four newly enabled gates behave as expected.
 
 ## RestingBody is autonomous again, under Behavior Patches
 
@@ -38,9 +56,12 @@ non-chaise route.
 The behavior-label macro table is untouched, so Behavior Patches still does not
 retarget `0x127`; that macro remains owned by Mobile Furniture Behaviors.
 
-**Not verified in game.** The binary-contract tests covering this helper need
-the gitignored `work/desktop_obj_files`, so the new candidate row has not been
-compiled or observed. Confirming it needs a playtest build with Behavior
+**Compiled and verified in the binary, not observed in game.** The shipped
+executable writes the RestingBody candidate twice -- weight 450 from
+`VF2EnableAutonomousCandidates`, then 2000 from
+`VF2EnableMobileFurnitureCandidates`, which is the last call it makes before
+returning. B174.3's binary contains one such write. What that does not show is a
+villager actually choosing the behavior, which needs a playtest with Behavior
 Patches on and Mobile Furniture Behaviors off.
 
 ## Playtest builds now set every selected runtime gate
@@ -73,10 +94,10 @@ Note that this changes what a default all-enabled playtest contains: Older
 Villager Mortality and Allow Older Pregnancies are experimental rule changes
 that are default-off in the GUI and will now be on unless opted out.
 
-`enable_runtime_flag.py` was exercised against the actual shipped B174.3
-executable: all five sections flip `00` to `01` and read back `01`. The
-`build_playtest.ps1` wiring itself has not been run, since a build needs MSVC
-plus the four gitignored support directories.
+Both were exercised for real. `enable_runtime_flag.py` was run against the
+shipped B174.3 executable, where all five sections flip `00` to `01` and read
+back `01`; and the `build_playtest.ps1` wiring produced B175, whose five gate
+sections all read `01` in the published artifact.
 
 ### Playtest executable name and save folders
 
@@ -154,11 +175,32 @@ silently corrected:
   ordering -- verified by disassembly, `StartNewBehavior` at `0x4b25ee` followed
   by the guarded `VF2ApplySitDownLabelVariants` call at `0x4b25ff` -- so the
   content claim happens to hold even though the build claim does not.
-- Both are still drafts. The published "Latest" release remains B174.1.
+- B174.3 has since been published, with its notes corrected to record that the
+  asset was re-uploaded rather than rebuilt, and that four of its runtime gates
+  were still `00`. The B174.2 draft is left in place as the duplicate it is.
 
-No `data/vf2/build-matrix-release-b175.json` is included. Those configs record
-absolute seed paths to the previous build's output directories on the build
-machine, which cannot be known from the repository, and inventing them would
-record a build that never happened. Write it at build time from the real B174.2
-output directories, per the no-regression rule that a new build seeds from the
-most recent previous build.
+No `data/vf2/build-matrix-release-b175.json` is included. Those configs are for
+the 19-variant patcher matrix; B175 is a single all-enabled playtest artifact
+built by `build_playtest.ps1`, which takes its seed from `-PreviousBuildDir`
+rather than from a matrix config.
+
+## The inherited-art dependency
+
+Producing B175 surfaced the reason a playtest build cannot be reproduced from
+source alone. 635 images -- 448 VillagerBodies frames, 93 Furniture images
+including the mobile Birthday art whose `.fmap` the same build stages, 61
+Upgrades icons, 25 root images and 8 OutfitIcons -- exist in neither the
+repository nor `work/vanilla_runtime_payload`. They reach a build only by
+inheriting from a previous build output, and `build_playtest.ps1` used to clear
+that inheritance unconditionally, so a build from a clean checkout omitted every
+one of them while still reporting success.
+
+The measured inventory is now recorded in
+`data/vf2/inherited-only-images.json` and the build checks the full list twice:
+the seed in preflight, and its own output after generation. A build that
+resolved a seed and still came up short fails. A build that resolved no seed is
+still allowed -- that is a legitimate thing to ask for -- but it now reports in
+red how many of the 635 it is missing and how to inherit them, instead of
+finishing quietly. That makes the dependency visible; it does not remove it. Every release still depends on the chain of
+prior artifacts, and closing that gap means either committing those 635 files or
+regenerating them from their original sources.

@@ -14,7 +14,12 @@ There is also no practical reason to get the game anywhere else: **all of LDW's 
 
 ## Download
 
-Download the newest patcher ZIP from the [official releases page](https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases). Release ZIPs and compiled game payloads are intentionally not committed to the source tree.
+The [releases page](https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases) carries two different kinds of asset, and only one of them is the patcher:
+
+- **`VF2-B<version>-Release.zip` is the patcher.** This is what you want. It contains `Launch_GUI.bat` and the manifest the GUI reads, and you point it at your own VF2 installation. Take the newest one.
+- **`VF2-B<version>-Playtest-All-Enabled.zip` is not a patcher.** It is a complete pre-patched game folder built for testing a specific change. There is no GUI and nothing to configure. Despite the name it is not literally every option: `build_playtest.ps1` and `build_matrix.ps1` both hold **Use mobile sound assets** off, so a playtest keeps the stock WAV sound routes. It also turns on the two experimental rule changes (Allow Older Pregnancies, Older Villager Mortality Curve) that are default-off in the GUI. A playtest artifact may be marked "Latest" while the newest patcher bundle is an earlier version, so check the filename rather than the Latest badge.
+
+Release ZIPs and compiled game payloads are intentionally not committed to the source tree.
 
 Vanilla *Virtual Families 2* saves are compatible with the modded version. The patcher creates a separate modded game folder by default and does not overwrite the selected vanilla installation.
 
@@ -41,7 +46,8 @@ The load path is mostly extended by wrappers that run the native `LoadState` fir
 ## What's included
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. As of B174.2 it offers the 36 settings below, grouped
+the release you downloaded. As of B174.1, the newest patcher bundle, it offers
+the 36 settings below, grouped
 the way the GUI groups them.
 
 ### Main patches (on by default)
@@ -290,5 +296,16 @@ The `work/` binary-contract tests additionally need the gitignored local build
 support directories (`work/desktop_obj_files`, `work/vanilla_runtime_payload`,
 `work/generated_import_libs`, `work/desktop_runtime_dlls`); without them those
 tests fail on missing inputs rather than on a real regression.
+
+A build also cannot be reproduced from source alone. 635 runtime images -- most
+of the VillagerBodies frames, the mobile furniture art, and the upgrade icons --
+exist in neither this repository nor the vanilla payload, and reach a build only
+by inheriting from a previous build output. `work/build_playtest.ps1` takes that
+predecessor with `-PreviousBuildDir` and checks both it and the produced build
+against the recorded inventory in `data/vf2/inherited-only-images.json`.
+Omitting the flag does not reliably produce an unseeded build: the generator
+also scans `outputs/` for an older one, and whichever seed it resolves is
+reported after generation. A build that genuinely inherits from nothing is
+missing all 635, and says so in red rather than finishing quietly.
 
 The GUI modules need a Python build with `tkinter` available.

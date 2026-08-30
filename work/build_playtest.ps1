@@ -243,14 +243,24 @@ try {
     # one is the inheritance-only art. Assert it reached the build rather than
     # trusting the input: an auto-discovered seed is never preflighted, so this
     # is the only check that covers it.
-    if ($seedUsed) {
-        $missingInOutput = Get-MissingInheritedArt $out
-        if ($missingInOutput.Count -gt 0) {
-            throw ("The build was seeded from '{0}' but is missing {1} of {2} inheritance-only images, first: {3}" -f `
-                [string]$manifestObj.previous_build_seed.source, $missingInOutput.Count,
-                $inheritedOnlyImages.Count, (($missingInOutput | Select-Object -First 3) -join ", "))
-        }
+    # Check the output whether or not a seed was resolved. Gating this on
+    # $seedUsed meant a genuinely unseeded build skipped it entirely and still
+    # reported success while missing every inherited image -- the original bug.
+    # An unseeded build is a legitimate thing to ask for, so it warns rather
+    # than throwing; a seeded one that still came up short is a real failure.
+    $missingInOutput = Get-MissingInheritedArt $out
+    if ($missingInOutput.Count -eq 0) {
         Write-Host ("  build carries all {0} inheritance-only images" -f $inheritedOnlyImages.Count) -ForegroundColor Green
+    } elseif ($seedUsed) {
+        throw ("The build was seeded from '{0}' but is missing {1} of {2} inheritance-only images, first: {3}" -f `
+            [string]$manifestObj.previous_build_seed.source, $missingInOutput.Count,
+            $inheritedOnlyImages.Count, (($missingInOutput | Select-Object -First 3) -join ", "))
+    } else {
+        Write-Host ("  WARNING: no seed was resolved, so this build is missing {0} of {1} " -f `
+            $missingInOutput.Count, $inheritedOnlyImages.Count) -ForegroundColor Red
+        Write-Host ("           inheritance-only images (first: {0})." -f `
+            (($missingInOutput | Select-Object -First 3) -join ", ")) -ForegroundColor Red
+        Write-Host "           Pass -PreviousBuildDir <previous build> to inherit them." -ForegroundColor Red
     }
     if ($PreviousBuildDir) {
         $expectedSeedName = ($PreviousBuildDir.TrimEnd('/', '\') -split '[/\\]')[-1]
