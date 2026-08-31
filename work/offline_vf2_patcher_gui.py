@@ -568,6 +568,17 @@ class VF2PatcherGUI:
             # load makes the window look permanently busy, which is the exact
             # impression the wait message exists to prevent.
             self._clear_please_wait()
+            # The placeholder destroys the setting controls, so the loaded
+            # state has to go with them. Keeping it would let
+            # _ensure_manifest_settings_loaded() treat the previous manifest as
+            # still current if its path came back, and Apply would then read
+            # BooleanVars belonging to widgets that no longer exist -- applying
+            # a hidden selection nobody could see.
+            self.settings = {}
+            self.setting_vars = {}
+            self.loaded_manifest_path = None
+            self.loaded_manifest_data = None
+            self.version_var.set("Build: unknown")
             self._render_settings_placeholder("Load a manifest to see toggleable patch settings.")
             self._set_error(f"Could not load manifest settings: {exc}")
             return False

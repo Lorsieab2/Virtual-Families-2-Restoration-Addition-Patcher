@@ -573,6 +573,36 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
             self.app.log_text.get("1.0", "end"),
         )
 
+    def test_a_failed_load_cannot_leave_a_hidden_selection_applyable(self):
+        """A failed load must invalidate the previously loaded manifest.
+
+        Rendering the placeholder destroys the setting controls. If the
+        loaded-manifest state survived, restoring the old path would make
+        _ensure_manifest_settings_loaded() treat it as current, and Apply
+        would read BooleanVars belonging to widgets that no longer exist --
+        applying a selection nobody could see or change.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            good = self._manifest(tmp)
+            self.app.manifest_var.set(str(good))
+            self.assertTrue(self.app.load_manifest_settings())
+            loaded = self.app.loaded_manifest_path
+            self.assertIsNotNone(loaded)
+
+            missing = Path(tmp) / "gone.json"
+            self.app.manifest_var.set(str(missing))
+            self.assertFalse(self.app.load_manifest_settings())
+
+            # Nothing may survive that a later Apply could read.
+            self.assertIsNone(self.app.loaded_manifest_path)
+            self.assertEqual(self.app.setting_vars, {})
+            self.assertEqual(self.app.settings, {})
+
+            # Restoring the original path must force a real reload.
+            self.app.manifest_var.set(str(good))
+            self.assertTrue(self.app._ensure_manifest_settings_loaded())
+            self.assertEqual(self.app.loaded_manifest_path, loaded)
+
     def test_a_destroyed_label_does_not_raise(self):
         # Forcing a redraw flushes queued idle resizes for labels a reload has
         # already destroyed.
