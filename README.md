@@ -46,9 +46,13 @@ The load path is mostly extended by wrappers that run the native `LoadState` fir
 ## What's included
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. As of B174.1, the newest patcher bundle, it offers
-the 36 settings below, grouped
-the way the GUI groups them.
+the release you downloaded. As of B176 it offers 35 settings, grouped the way
+the GUI groups them.
+
+Two of the entries below are described for completeness but are **not** offered
+by the bundle: **Allow Same-Sex Marriage** (reachable in game through its Cheat
+Upgrade row instead, since its toggle moved to a persisted save byte) and
+**Transparent Store Bar**. Both have been absent since at least B174.1.
 
 ### Main patches (on by default)
 
