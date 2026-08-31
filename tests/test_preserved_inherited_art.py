@@ -235,3 +235,75 @@ def test_build_playtest_validates_runtime_art_only():
     script = (REPO / "work" / "build_playtest.ps1").read_text(encoding="utf-8")
     assert "non_runtime_files" in script
     assert "$nonRuntimeInherited.ContainsKey($_)" in script
+
+
+def _run_seeded(step, store, index, out, seeded):
+    step["SEEDED_INHERITED_ART"] = dict(seeded)
+    return _run(step, store, index, out)
+
+
+def test_stale_seed_bytes_are_replaced_from_the_store(step, tmp_path):
+    """A seed must not decide the build's output.
+
+    Anything a predecessor supplied and no generator touched is checked
+    against the tracked digest, so identical source cannot produce different
+    output depending on which seed was found.
+    """
+    good, stale = b"canonical art", b"stale predecessor art"
+    digest = _hashlib.sha256(good).hexdigest()
+    store, index, out = _tree(tmp_path, {"Thing.png": good}, ["Thing.png"], {"Thing.png": digest})
+    (out / "Images" / "Thing.png").write_bytes(stale)
+    record = _run_seeded(
+        step, store, index, out, {"Thing.png": _hashlib.sha256(stale).hexdigest()}
+    )
+    assert record["replaced_from_seed"] == 1
+    assert (out / "Images" / "Thing.png").read_bytes() == good
+
+
+def test_a_generator_overwriting_seeded_art_is_left_alone(step, tmp_path):
+    """Generated output is authoritative even when it differs from the store.
+
+    The holiday generator rebuilds 448 villager-body frames from tracked
+    source art and 249 of them differ from the historical copies. Reverting
+    those would silently undo the regeneration.
+    """
+    seeded, generated, canonical = b"seed bytes", b"REGENERATED", b"canonical art"
+    digest = _hashlib.sha256(canonical).hexdigest()
+    store, index, out = _tree(
+        tmp_path, {"Thing.png": canonical}, ["Thing.png"], {"Thing.png": digest}
+    )
+    (out / "Images" / "Thing.png").write_bytes(generated)
+    record = _run_seeded(
+        step, store, index, out, {"Thing.png": _hashlib.sha256(seeded).hexdigest()}
+    )
+    assert record["replaced_from_seed"] == 0
+    assert record["already_present"] == 1
+    assert (out / "Images" / "Thing.png").read_bytes() == generated
+
+
+def test_non_runtime_files_a_seed_dragged_in_are_removed(step, tmp_path):
+    """Filtering validation is not enough -- the files have to go.
+
+    A seed copies its whole Images tree, so a seeded standalone folder
+    otherwise keeps ~47 MB of editing sources an unseeded one omits.
+    """
+    names = ["Map.xcf", "Real.png"]
+    payload = b"x"
+    store, index, out = _tree(
+        tmp_path, {n: payload for n in names}, names,
+        {n: _hashlib.sha256(payload).hexdigest() for n in names},
+    )
+    index.write_text(
+        _json.dumps({"files": names, "non_runtime_files": ["Map.xcf"]}), encoding="utf-8"
+    )
+    (out / "Images" / "Map.xcf").write_bytes(b"seeded working file")
+    record = _run_seeded(step, store, index, out, {})
+    assert record["removed_non_runtime"] == 1
+    assert not (out / "Images" / "Map.xcf").exists()
+
+
+def test_the_seed_snapshot_is_taken_before_any_generator_runs():
+    source = (REPO / "work" / "patch_mobile_furniture_pack.py").read_text(encoding="utf-8")
+    snapshot = source.index("    snapshot_seeded_inherited_art()")
+    assert source.index("    seed_from_previous_build(manifest)") < snapshot
+    assert snapshot < source.index("        sync_holiday_body_runtime_frames(manifest)")

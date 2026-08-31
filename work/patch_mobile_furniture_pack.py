@@ -4735,6 +4735,29 @@ def previous_build_source_dirs():
 
 
 
+# Digests of the inheritance-only art a seed brought in, captured before any
+# generator runs.  Comparing against this is how the build tells "these bytes
+# came from a predecessor" from "this build produced this file": several
+# functions write into Images/VillagerBodies, so hooking individual writers
+# would quietly miss whichever one was added next.
+SEEDED_INHERITED_ART = {}
+
+
+def snapshot_seeded_inherited_art():
+    """Record what the seed supplied, before any generator overwrites it."""
+    SEEDED_INHERITED_ART.clear()
+    if not INHERITED_ONLY_INDEX.is_file():
+        return
+    index = json.loads(INHERITED_ONLY_INDEX.read_text(encoding="utf-8"))
+    non_runtime = set(index.get("non_runtime_files", []))
+    for rel in index["files"]:
+        if rel in non_runtime:
+            continue
+        seeded = OUT / "Images" / rel
+        if seeded.is_file():
+            SEEDED_INHERITED_ART[rel] = hashlib.sha256(seeded.read_bytes()).hexdigest()
+
+
 PRESERVED_INHERITED_ART = ROOT / "patcher_assets" / "inherited_runtime_images"
 INHERITED_ONLY_INDEX = ROOT / "data" / "vf2" / "inherited-only-images.json"
 
@@ -4799,12 +4822,52 @@ def restore_preserved_inherited_art(manifest):
     non_runtime = set(index.get("non_runtime_files", []))
     wanted = [rel for rel in index["files"] if rel not in non_runtime]
 
-    restored, already_present = [], []
+    # A seed copies its whole Images tree in, editing sources included.
+    # Filtering them out of validation only hides them; they have to be
+    # removed, or a seeded standalone folder still ships ~47 MB of working
+    # files that an unseeded one correctly omits.
+    removed_non_runtime = []
+    for rel in sorted(non_runtime):
+        stale = OUT / "Images" / rel
+        if stale.is_file():
+            stale.unlink()
+            removed_non_runtime.append(rel)
+
+    restored, already_present, replaced = [], [], []
     missing_from_store, corrupt, undigested = [], [], []
     for rel in wanted:
         target = OUT / "Images" / rel
         if target.is_file():
-            already_present.append(rel)
+            # Generated art is authoritative and left alone.  Anything else
+            # present came from a seed, and trusting it makes the build's
+            # output depend on which predecessor it happened to find, so it is
+            # checked against the tracked digest and replaced when it differs.
+            expected = digests.get(rel)
+            seeded_digest = SEEDED_INHERITED_ART.get(rel)
+            if expected is None or seeded_digest is None:
+                # Not carried in by the seed, so this build produced it.
+                already_present.append(rel)
+                continue
+            current = hashlib.sha256(target.read_bytes()).hexdigest()
+            if current != seeded_digest:
+                # A generator rewrote what the seed supplied; generated output
+                # is authoritative and must never be reverted to the tracked
+                # copy of what some earlier build produced.
+                already_present.append(rel)
+                continue
+            if current == expected:
+                already_present.append(rel)
+                continue
+            source = PRESERVED_INHERITED_ART / rel
+            if not source.is_file():
+                missing_from_store.append(rel)
+                continue
+            payload = source.read_bytes()
+            if hashlib.sha256(payload).hexdigest() != expected:
+                corrupt.append(rel)
+                continue
+            target.write_bytes(payload)
+            replaced.append(rel)
             continue
         source = PRESERVED_INHERITED_ART / rel
         if not source.is_file():
@@ -4856,6 +4919,8 @@ def restore_preserved_inherited_art(manifest):
         wanted=len(wanted),
         skipped_non_runtime=len(non_runtime),
         restored=len(restored),
+        replaced_from_seed=len(replaced),
+        removed_non_runtime=len(removed_non_runtime),
         already_present=len(already_present),
         missing_from_store=[],
         note=(
@@ -4866,8 +4931,9 @@ def restore_preserved_inherited_art(manifest):
     )
     print(
         f"preserved inherited art: {len(restored)} restored, "
+        f"{len(replaced)} replaced from seed, "
         f"{len(already_present)} already present, "
-        f"{len(missing_from_store)} not in store"
+        f"{len(removed_non_runtime)} non-runtime removed"
     )
 
 
@@ -31654,6 +31720,7 @@ def main():
     }
     patch_mobile_sound_routes(manifest)
     seed_from_previous_build(manifest)
+    snapshot_seeded_inherited_art()
     validate_stock_image_ids()
     sync_vanilla_runtime_payload(manifest)
     patch_furniture_manager(manifest)
