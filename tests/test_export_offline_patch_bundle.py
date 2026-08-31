@@ -2965,6 +2965,80 @@ class MobileSoundBuilderFlagTests(unittest.TestCase):
         )
 
 
+class NonRuntimeSourceExclusionTests(unittest.TestCase):
+    """Editing sources must not reach a release payload.
+
+    B176 shipped 30 .xcf GIMP project files -- 49,028,504 uncompressed bytes,
+    43,823,872 compressed, 24.7% of that entire download -- because the payload
+    walk rejected only .bak. SDL_image cannot decode a .xcf and nothing in the
+    engine's asset tables names one, so they were pure inherited weight.
+    """
+
+    def test_xcf_and_bak_are_both_excluded(self):
+        self.assertEqual(
+            exporter.NON_RUNTIME_SOURCE_SUFFIXES, {".bak", ".xcf"}
+        )
+
+    def test_nested_upgrade_source_folders_are_excluded(self):
+        """The two working folders inside Images/Upgrades are not runtime art.
+
+        The engine loads Images/Upgrades/<name>.png. These subfolders are the
+        swap source and the restore backup for Invisible Workspace Upgrades;
+        the exporter already installs the real swap flat and ships the same
+        files under OptionalVisualMods, so copying the folders put 61
+        unreadable files into every install.
+        """
+        for rel, expected in (
+            (Path("Images/Upgrades/invisible images/toolwall.png"), True),
+            (Path("Images/Upgrades/original images/toolwall.png"), True),
+            (Path("Images/Upgrades/toolwall.png"), False),
+            (Path("Images/Furniture/Balloons_birthday.png"), False),
+            (Path("Images/Furniture/BlackBookshelf.xcf"), True),
+        ):
+            with self.subTest(path=str(rel)):
+                self.assertEqual(exporter.is_non_runtime_source_path(rel), expected)
+
+    def test_full_mode_walk_also_excludes_non_runtime_sources(self):
+        """--asset-mode full returns from its own branch, so it needs the check too.
+
+        is_full_payload_candidate accepts every PNG under Images, so without
+        this the working folders and .xcf files reappear in full bundles -- and
+        the release verifier now omits them from its expected set, so nothing
+        would have reported it. Exercised through the walk rather than by
+        reading the source, so it cannot pass on a moved code block.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            build = Path(tmp)
+            keep = build / "Images" / "Upgrades" / "toolwall.png"
+            drop_a = build / "Images" / "Upgrades" / "invisible images" / "toolwall.png"
+            drop_b = build / "Images" / "Upgrades" / "original images" / "toolwall.png"
+            drop_c = build / "Images" / "Furniture" / "BlackBookshelf.xcf"
+            for path in (keep, drop_a, drop_b, drop_c):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"x")
+            found = {
+                p.relative_to(build).as_posix()
+                for p in exporter.iter_candidate_assets(build, {}, "full")
+            }
+        self.assertIn("Images/Upgrades/toolwall.png", found)
+        for excluded in (
+            "Images/Upgrades/invisible images/toolwall.png",
+            "Images/Upgrades/original images/toolwall.png",
+            "Images/Furniture/BlackBookshelf.xcf",
+        ):
+            self.assertNotIn(excluded, found)
+
+    def test_payload_walk_uses_the_shared_suffix_set(self):
+        source = (ROOT / "work" / "export_offline_patch_bundle.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "if rel.suffix.lower() in NON_RUNTIME_SOURCE_SUFFIXES:", source
+        )
+        # The old single-suffix test must not survive alongside it.
+        self.assertNotIn('if rel.suffix.lower() == ".bak":', source)
+
+
 class TestSuiteCopiesInSyncTests(unittest.TestCase):
     """tests/ and work/ hold the same suites and must not drift apart.
 

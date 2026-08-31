@@ -507,7 +507,7 @@ VF3_SPRITE_WORKSPACE_DIR = ROOT / "work" / "assets" / "vf3_tv_sprites"
 VF3_TV_ANIMATION_ASSET_DIR = ROOT / "work" / "assets" / "vf3_tv_animations"
 TRANSPARENT_STORE_BAR_SOURCE_DIR = ROOT / "work" / "assets" / "transparent_store_bar"
 INVISIBLE_OUTDOOR_SPRITE_SOURCE_DIR = ROOT / "work" / "invisible_outdoor_furniture_sprites"
-HOLIDAY_OUTFIT_ARCHIVE = ROOT / "work" / "assets" / "holiday_outfits" / "Holiday Outfits.zip"
+HOLIDAY_OUTFIT_ARCHIVE = ROOT / "data" / "vf2" / "source_assets" / "Holiday Outfits.zip"
 GENERATED_VILLAGER_BODIES = ROOT / "generated" / "VillagerBodies"
 HOLIDAY_DETAIL_BODY_SOURCE_DIR = ROOT / "work" / "assets" / "holiday_detail_bodies"
 FALLBACK_HOLIDAY_BODY_BUILD = ROOT / "outputs" / "VF2-Mobile-Furniture-With-Island-Events-B56-Holiday-Body-Lookup-Test"
@@ -6449,18 +6449,11 @@ def _normalize_holiday_body_frame(source_image, target_template):
 
 
 def _image_source_roots():
-    roots = [OUT / "Images"]
-    outputs = ROOT / "outputs"
-    if outputs.exists():
-        roots.extend(
-            build / "Images"
-            for build in sorted(
-                outputs.glob("VF2-Mobile-Furniture-With-Island-Events-B*"),
-                key=lambda path: path.stat().st_mtime,
-                reverse=True,
-            )
-        )
-    roots.append(FALLBACK_HOLIDAY_BODY_BUILD / "Images")
+    # Only immutable source payloads may supply templates.  Never search the
+    # build output or a previous build: those directories may already contain
+    # seeded generated files, which would make an unseeded build appear
+    # reproducible while silently copying its predecessor.
+    roots = [source / "Images" for source in VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS]
 
     unique = []
     seen = set()
@@ -6487,6 +6480,8 @@ def _find_source_image(sheet_name, min_width=0, min_height=0):
 
 def sync_holiday_body_types(manifest):
     """Append complete action/body/sit rows for four additive holiday bodies."""
+    if not HOLIDAY_OUTFIT_ARCHIVE.is_file():
+        raise FileNotFoundError(f"Missing tracked holiday outfit source: {HOLIDAY_OUTFIT_ARCHIVE}")
     appended = []
     missing = []
     issues = []
@@ -6529,18 +6524,9 @@ def sync_holiday_body_types(manifest):
                             frame_targets = []
                             for frame_number in range(first_frame, last_frame + 1):
                                 role_frame = frame_number - first_frame
-                                generated_frame = (
-                                    GENERATED_VILLAGER_BODIES
-                                    / gender_title
-                                    / f"Body_{body_value:02d}"
-                                    / f"{gender_title}_Body_{body_value:02d}_{role}_Frame_{role_frame:02d}.png"
-                                )
                                 normalized = None
                                 source_kind = None
-                                if generated_frame.exists():
-                                    normalized = Image.open(generated_frame).convert("RGBA")
-                                    source_kind = "generated"
-                                elif archive:
+                                if archive:
                                     archive_name = (
                                         f"Holiday Outfits/{archive_folder}/{prefix}{set_id:02d}_{frame_number:04d}.png"
                                     )
@@ -6557,11 +6543,11 @@ def sync_holiday_body_types(manifest):
                                             normalized = _normalize_holiday_body_frame(mobile_frame, template)
                                             source_kind = "archive"
                                 if normalized is None:
-                                    missing.append(str(generated_frame))
+                                    missing.append(archive_name)
                                     continue
                                 if normalized.size != (HOLIDAY_BODY_CELL_SIZE, HOLIDAY_BODY_CELL_SIZE):
                                     issues.append({
-                                        "frame": str(generated_frame),
+                                        "frame": archive_name,
                                         "reason": f"expected 91x91, got {normalized.size}",
                                     })
                                     continue
@@ -6624,6 +6610,8 @@ def sync_holiday_body_runtime_frames(manifest):
     Stock spritesheets remain untouched; the helper applies the saved crop
     offsets when drawing each one-cell image.
     """
+    if not HOLIDAY_OUTFIT_ARCHIVE.is_file():
+        raise FileNotFoundError(f"Missing tracked holiday outfit source: {HOLIDAY_OUTFIT_ARCHIVE}")
     output_root = OUT / "Images" / "VillagerBodies"
     frames = []
     missing = []
@@ -6654,11 +6642,6 @@ def sync_holiday_body_runtime_frames(manifest):
                     with Image.open(template_sheet).convert("RGBA") as existing:
                         for body_value, source_set in zip(HOLIDAY_BODY_VALUES, HOLIDAY_BODY_SET_IDS):
                             gender_title = gender.title()
-                            fallback_sheet, fallback_skips = _find_source_image(
-                                sheet_name,
-                                min_width=HOLIDAY_BODY_CELL_SIZE * role_spec["columns"],
-                                min_height=(body_value + 1) * HOLIDAY_BODY_CELL_SIZE,
-                            )
                             for frame_number in range(first_frame, last_frame + 1):
                                 role_frame = frame_number - first_frame
                                 template_box = (
@@ -6670,48 +6653,13 @@ def sync_holiday_body_runtime_frames(manifest):
                                 template = existing.crop(template_box)
                                 normalized = None
                                 source_kind = None
-                                generated_frame = (
-                                    GENERATED_VILLAGER_BODIES
-                                    / gender_title
-                                    / f"Body_{body_value:02d}"
-                                    / f"{gender_title}_Body_{body_value:02d}_{role}_Frame_{role_frame:02d}.png"
-                                )
-                                existing_runtime_frame = (
-                                    output_root
-                                    / gender_title
-                                    / f"Body_{body_value:02d}"
-                                    / role
-                                    / f"Frame{role_frame:02d}.png"
-                                )
                                 archive_name = f"Holiday Outfits/{archive_folder}/{prefix}{source_set:02d}_{frame_number:04d}.png"
-                                if generated_frame.exists():
-                                    normalized = Image.open(generated_frame).convert("RGBA")
-                                    source_kind = "generated_frame"
-                                elif existing_runtime_frame.exists():
-                                    with Image.open(existing_runtime_frame).convert("RGBA") as existing_frame:
-                                        normalized = _normalize_holiday_body_frame(existing_frame, template)
-                                    source_kind = "existing_runtime_frame"
-                                elif archive and archive_name in archive_names:
+                                if archive and archive_name in archive_names:
                                     with Image.open(BytesIO(archive.read(archive_name))).convert("RGBA") as mobile_frame:
                                         normalized = _normalize_holiday_body_frame(mobile_frame, template)
                                     source_kind = "holiday_archive"
-                                else:
-                                    if fallback_sheet:
-                                        if fallback_sheet not in sheet_cache:
-                                            sheet_cache[fallback_sheet] = Image.open(fallback_sheet).convert("RGBA")
-                                        fallback = sheet_cache[fallback_sheet]
-                                        box = (
-                                            role_frame * HOLIDAY_BODY_CELL_SIZE,
-                                            body_value * HOLIDAY_BODY_CELL_SIZE,
-                                            (role_frame + 1) * HOLIDAY_BODY_CELL_SIZE,
-                                            (body_value + 1) * HOLIDAY_BODY_CELL_SIZE,
-                                        )
-                                        normalized = fallback.crop(box)
-                                        source_kind = f"expanded_sheet:{fallback_sheet}"
                                 if normalized is None:
-                                    missing.append(str(generated_frame))
                                     missing.append(archive_name)
-                                    missing.extend(fallback_skips)
                                     continue
                                 bbox = _alpha_bbox(normalized)
                                 canvas_size = list(normalized.size)
