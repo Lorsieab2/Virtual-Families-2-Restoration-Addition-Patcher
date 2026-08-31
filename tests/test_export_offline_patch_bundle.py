@@ -2965,6 +2965,31 @@ class MobileSoundBuilderFlagTests(unittest.TestCase):
         )
 
 
+class NonRuntimeSourceExclusionTests(unittest.TestCase):
+    """Editing sources must not reach a release payload.
+
+    B176 shipped 30 .xcf GIMP project files -- 49,028,504 uncompressed bytes,
+    43,823,872 compressed, 24.7% of that entire download -- because the payload
+    walk rejected only .bak. SDL_image cannot decode a .xcf and nothing in the
+    engine's asset tables names one, so they were pure inherited weight.
+    """
+
+    def test_xcf_and_bak_are_both_excluded(self):
+        self.assertEqual(
+            exporter.NON_RUNTIME_SOURCE_SUFFIXES, {".bak", ".xcf"}
+        )
+
+    def test_payload_walk_uses_the_shared_suffix_set(self):
+        source = (ROOT / "work" / "export_offline_patch_bundle.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "if rel.suffix.lower() in NON_RUNTIME_SOURCE_SUFFIXES:", source
+        )
+        # The old single-suffix test must not survive alongside it.
+        self.assertNotIn('if rel.suffix.lower() == ".bak":', source)
+
+
 class TestSuiteCopiesInSyncTests(unittest.TestCase):
     """tests/ and work/ hold the same suites and must not drift apart.
 
