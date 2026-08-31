@@ -4734,6 +4734,93 @@ def previous_build_source_dirs():
     return unique
 
 
+
+PRESERVED_INHERITED_ART = ROOT / "patcher_assets" / "inherited_runtime_images"
+INHERITED_ONLY_INDEX = ROOT / "data" / "vf2" / "inherited-only-images.json"
+
+
+def restore_preserved_inherited_art(manifest):
+    """Supply inheritance-only images from the tracked store, not a predecessor.
+
+    Some runtime images existed in neither the repository nor the vanilla
+    payload, so they reached a build only by being copied out of the previous
+    build's output.  That made every release depend on an unbroken chain of
+    prior artifacts and made a build from a clean clone impossible.
+
+    The files themselves are tracked under patcher_assets/inherited_runtime_images
+    with recorded digests; until now nothing consumed them from there.  This
+    fills in whatever is still missing after seeding and after the generators
+    have run, so the chain is no longer required.
+
+    Deliberately last and non-destructive: an image that a generator produced
+    from source art -- the holiday bodies rebuilt from the tracked archive --
+    is already present and is left exactly as generated.  This only supplies
+    what would otherwise be absent, and every file it writes is verified
+    against its recorded digest, so a corrupted store fails the build instead
+    of silently shipping bad art.
+    """
+    record = manifest.setdefault("preserved_inherited_art", {})
+    if not PRESERVED_INHERITED_ART.is_dir() or not INHERITED_ONLY_INDEX.is_file():
+        record.update(
+            status="unavailable",
+            note=(
+                "No tracked inherited-art store; this build can only get these "
+                "images by inheriting from a previous build output."
+            ),
+        )
+        return
+
+    digests = {}
+    sums = PRESERVED_INHERITED_ART / "SHA256SUMS.json"
+    if sums.is_file():
+        digests = json.loads(sums.read_text(encoding="utf-8")).get("files", {})
+    wanted = json.loads(INHERITED_ONLY_INDEX.read_text(encoding="utf-8"))["files"]
+
+    restored, already_present, missing_from_store, corrupt = [], [], [], []
+    for rel in wanted:
+        target = OUT / "Images" / rel
+        if target.is_file():
+            already_present.append(rel)
+            continue
+        source = PRESERVED_INHERITED_ART / rel
+        if not source.is_file():
+            missing_from_store.append(rel)
+            continue
+        payload = source.read_bytes()
+        expected = digests.get(rel)
+        if expected is not None and hashlib.sha256(payload).hexdigest() != expected:
+            corrupt.append(rel)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+        restored.append(rel)
+
+    if corrupt:
+        raise SystemExit(
+            "Preserved inherited art does not match its recorded digests: "
+            + ", ".join(sorted(corrupt)[:10])
+        )
+
+    record.update(
+        status="ok",
+        source=str(PRESERVED_INHERITED_ART.relative_to(ROOT)).replace(chr(92), "/"),
+        wanted=len(wanted),
+        restored=len(restored),
+        already_present=len(already_present),
+        missing_from_store=sorted(missing_from_store),
+        note=(
+            "Images supplied from the tracked store rather than a previous "
+            "build output. already_present were produced by this build's own "
+            "generators or carried in by a seed and were left untouched."
+        ),
+    )
+    print(
+        f"preserved inherited art: {len(restored)} restored, "
+        f"{len(already_present)} already present, "
+        f"{len(missing_from_store)} not in store"
+    )
+
+
 def find_previous_build_source():
     for root in previous_build_source_dirs():
         if root.is_dir() and (root / "Images").is_dir() and (root / "Sounds").is_dir():
@@ -31815,6 +31902,10 @@ def main():
             "stock_drop_gate_preserved": True,
         }
     validate_invisible_kids_table_behavior_contract(manifest)
+    # After every generator, so images rebuilt from tracked source art keep
+    # whatever the generator produced and only genuine gaps are filled, and
+    # before the payload/package validation that checks the finished tree.
+    restore_preserved_inherited_art(manifest)
     remove_legacy_package_dirs(manifest)
     validate_runtime_payload_contract(manifest)
     validate_clean_package(manifest)
