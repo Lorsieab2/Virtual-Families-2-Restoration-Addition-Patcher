@@ -177,7 +177,7 @@
    "name": "behavior_patches_mobile_renovations",
    "cheat_upgrades": false,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": false,
    "holiday_ornaments": false,
    "behavior_patches": true
@@ -186,7 +186,7 @@
    "name": "holiday_ornaments_mobile_renovations",
    "cheat_upgrades": false,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": false,
    "holiday_ornaments": true,
    "behavior_patches": false
@@ -195,7 +195,7 @@
    "name": "island_events_mobile_renovations",
    "cheat_upgrades": false,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": true,
    "holiday_ornaments": false,
    "behavior_patches": false
@@ -204,7 +204,7 @@
    "name": "cheat_upgrades_behavior_patches_mobile_renovations",
    "cheat_upgrades": true,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": false,
    "holiday_ornaments": false,
    "behavior_patches": true
@@ -213,7 +213,7 @@
    "name": "holiday_ornaments_behavior_patches_mobile_renovations",
    "cheat_upgrades": false,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": false,
    "holiday_ornaments": true,
    "behavior_patches": true
@@ -222,7 +222,7 @@
    "name": "island_events_behavior_patches_mobile_renovations",
    "cheat_upgrades": false,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": true,
    "holiday_ornaments": false,
    "behavior_patches": true
@@ -231,7 +231,7 @@
    "name": "cheat_upgrades_holiday_ornaments_mobile_renovations",
    "cheat_upgrades": true,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": false,
    "holiday_ornaments": true,
    "behavior_patches": false
@@ -240,7 +240,7 @@
    "name": "island_events_cheat_upgrades_mobile_renovations",
    "cheat_upgrades": true,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": true,
    "holiday_ornaments": false,
    "behavior_patches": false
@@ -249,7 +249,7 @@
    "name": "island_events_holiday_ornaments_mobile_renovations",
    "cheat_upgrades": false,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": true,
    "holiday_ornaments": true,
    "behavior_patches": false
@@ -258,7 +258,7 @@
    "name": "cheat_upgrades_holiday_ornaments_behavior_patches_mobile_renovations",
    "cheat_upgrades": true,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": false,
    "holiday_ornaments": true,
    "behavior_patches": true
@@ -267,7 +267,7 @@
    "name": "island_events_cheat_upgrades_behavior_patches_mobile_renovations",
    "cheat_upgrades": true,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": true,
    "holiday_ornaments": false,
    "behavior_patches": true
@@ -276,7 +276,7 @@
    "name": "island_events_holiday_ornaments_behavior_patches_mobile_renovations",
    "cheat_upgrades": false,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": true,
    "holiday_ornaments": true,
    "behavior_patches": true
@@ -285,7 +285,7 @@
    "name": "island_events_cheat_upgrades_holiday_ornaments_mobile_renovations",
    "cheat_upgrades": true,
    "mobile_renovations": true,
-   "ai_generated_bathroom2": false,
+   "ai_generated_bathroom2": true,
    "island_events": true,
    "holiday_ornaments": true,
    "behavior_patches": false
