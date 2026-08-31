@@ -76,6 +76,10 @@ __pycache__/
 *.swf
 *.xcf
 
+# Tracked source archive used to regenerate holiday villager body frames.
+!data/vf2/source_assets/
+!data/vf2/source_assets/Holiday Outfits.zip
+
 # Exception: the preserved inherited runtime art. 30 of those 635 files are
 # .xcf GIMP originals, and the blanket rule above is why they never entered the
 # repository -- they survived only inside previous build outputs. They are the
