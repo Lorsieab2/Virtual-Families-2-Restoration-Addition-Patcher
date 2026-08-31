@@ -78,7 +78,7 @@ try {
         $env:VF2_ENABLE_CHEAT_UPGRADES = Flag $config.cheat_upgrades
         $env:VF2_ENABLE_MOBILE_RENOVATIONS = Flag $config.mobile_renovations
         $env:VF2_ENABLE_AI_GENERATED_BATHROOM2 = Flag $config.ai_generated_bathroom2
-        $env:VF2_ENABLE_MOBILE_SOUND_ASSETS = "0"
+        $env:VF2_ENABLE_MOBILE_SOUND_ASSETS = "1"
         $env:VF2_ENABLE_ISLAND_EVENTS = Flag $config.island_events
         $env:VF2_ENABLE_HOLIDAY_ORNAMENTS = Flag $config.holiday_ornaments
         $env:VF2_ENABLE_BEHAVIOR_PATCHES = Flag $config.behavior_patches

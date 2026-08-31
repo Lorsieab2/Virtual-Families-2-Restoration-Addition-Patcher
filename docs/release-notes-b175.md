@@ -15,11 +15,12 @@ mobile-furniture behavior maps are byte-identical to `pc_fmaps`; and all 635
 inheritance-only images are present, with Images, Assets, Sounds, Original
 Virtual Families 2 Assets and OptionalVisualMods each matching B174.3 exactly.
 
-**"All-Enabled" is not literal.** `build_playtest.ps1` and `build_matrix.ps1`
-both hold `VF2_ENABLE_MOBILE_SOUND_ASSETS` at `0`, so this artifact keeps the
-stock WAV sound routes and does not carry the 67 mobile behavior sounds. What it
-does turn on that the GUI leaves off by default is Allow Older Pregnancies and
-the Older Villager Mortality curve.
+**Mobile sound assets.** New playtest builds set
+`VF2_ENABLE_MOBILE_SOUND_ASSETS=1`, staging all 67 hash-pinned mobile behavior
+sounds and applying the four validated WAV-to-OGG route replacements. B175
+predates this builder change and retains the stock WAV routes; a new playtest
+build is required to include the sounds. Allow Older Pregnancies and the Older
+Villager Mortality curve remain enabled in playtests as documented.
 
 **Nothing here has been seen running in the game.** In-game confirmation is
 still required, in particular that villagers autonomously choose RestingBody and
