@@ -12,35 +12,6 @@ It has **not** been tested against the Steam release, and whether that build mat
 
 There is also no practical reason to get the game anywhere else: **all of LDW's PC games are free on their own website.** Download it from there and point the patcher at that installation.
 
-## Requirements
-
-Everything the patcher needs beyond the game itself:
-
-| | |
-| --- | --- |
-| **Windows** | The patcher edits a Windows executable and ships a `.bat` launcher. There is no macOS or Linux build. |
-| **Python 3.9 or newer, with `tkinter`** | Not bundled -- install it from [python.org](https://www.python.org/downloads/) if you do not have it. Keep the **tcl/tk and IDLE** component ticked in the installer (it is on by default); the GUI will not start without it. `Launch_GUI.bat` tries `py -3` first and falls back to `python`. Developed and tested on 3.14. |
-| **An official VF2 install** | The Windows build from Last Day of Work's own website, unmodified. See [Which copy of the game this supports](#which-copy-of-the-game-this-supports). |
-| **About 500 MB of free disk space** | The patcher writes a separate modded copy rather than editing your install: a ~110 MB vanilla folder produces a ~210 MB modded folder, and the extracted patcher bundle is another ~200 MB. |
-
-**No extra Python packages are needed.** The patcher and its GUI use only the
-standard library, so there is nothing to `pip install`.
-
-Administrator rights are not required, but install the game somewhere your own
-account can write. A game folder under `C:\Program Files` is read-only for
-normal users, and the patcher cannot create its backups or output folder there.
-
-If your antivirus quarantines the patched executable, that is a false positive
-on a modified game binary; restore it and add an exclusion for the modded
-folder. Nothing in the bundle contacts the network.
-
-### If the window looks frozen
-
-It is working. The patcher checks every file in your install before it writes
-anything, and on a full release that pass takes a while with little on screen.
-It says **Please wait** in the status bar and the run log while it does this.
-Give it a minute before assuming it has hung.
-
 ## Download
 
 The [releases page](https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases) carries two different kinds of asset, and only one of them is the patcher:
