@@ -26,11 +26,71 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import verify_offline_bundle_zip
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def run(argv: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)
+
+
+
+
+def quarantine(archive: Path, reason: str) -> int:
+    """Move a rejected archive aside so it cannot be published by mistake.
+
+    Every gate failure has to do this, not just the verifier's.  A check that
+    reports a bad bundle but leaves it sitting at the normal publishable
+    filename is a check a later manual upload step walks straight past, which
+    is the exact accident the gate exists to prevent.
+    """
+    rejected = archive.parent / (archive.name + ".REJECTED")
+    print(reason, file=sys.stderr)
+    try:
+        archive.replace(rejected)
+    except OSError as exc:
+        # Never claim a move that did not happen.  Saying "moved to
+        # VF2-B177-Release.zip" while the rejected bundle sits at exactly that
+        # publishable name is worse than saying nothing, because it reads as
+        # the fail-safe having worked.
+        print(
+            f"RELEASE GATE FAILED -- and the archive could NOT be quarantined: "
+            f"{exc}",
+            file=sys.stderr,
+        )
+        print(
+            f"WARNING: {archive} REMAINS AT ITS PUBLISHABLE FILENAME. Move or "
+            "delete it by hand before uploading anything.",
+            file=sys.stderr,
+        )
+        return 1
+    print(
+        f"RELEASE GATE FAILED -- archive moved to {rejected.name} so it "
+        "cannot be uploaded by mistake",
+        file=sys.stderr,
+    )
+    return 1
+
+
+def incomplete_variant_coverage(shipped_variants: object) -> str | None:
+    """Reject a release that does not cover every combination the matrix builds.
+
+    verify_offline_bundle_zip deliberately checks an archive against its own
+    release's contract, so retained older ZIPs still verify.  That makes "did
+    we build all of them?" a question only the gate can ask, at the moment a
+    release is made.  Without this, a matrix run that stopped short -- B174.2
+    stopped at 14 of 19 -- produces a short bundle that otherwise gates clean.
+    """
+    expected = len(verify_offline_bundle_zip.EXECUTABLE_VARIANT_REQUIREMENTS)
+    if shipped_variants == expected:
+        return None
+    return (
+        f"release ships {shipped_variants} executable variants but the matrix "
+        f"defines {expected}; every combination must be built before a release "
+        "is gated"
+    )
 
 
 def main() -> int:
@@ -111,23 +171,21 @@ def main() -> int:
         ]
     )
     if verified.returncode != 0:
-        rejected = archive.parent / (archive.name + ".REJECTED")
-        try:
-            archive.replace(rejected)
-        except OSError:
-            rejected = archive
-        print(verified.stdout + verified.stderr, file=sys.stderr)
-        print(
-            f"RELEASE GATE FAILED -- archive moved to {rejected.name} so it "
-            "cannot be uploaded by mistake",
-            file=sys.stderr,
-        )
-        return 1
+        return quarantine(archive, verified.stdout + verified.stderr)
 
     summary = json.loads(verified.stdout)
+    # A new release must cover every combination the matrix can build.  The
+    # verifier deliberately checks an archive against its own release's
+    # contract so retained older ZIPs still verify, which means "did we build
+    # all of them?" has to be asserted here, at the point a release is made.
+    # Without this, a matrix run that silently stopped short -- B174.2 stopped
+    # at 14 of 19 -- would produce a short bundle that gates clean.
+    incomplete = incomplete_variant_coverage(summary.get("executable_variants"))
+    if incomplete is not None:
+        return quarantine(archive, incomplete)
+
     if not summary.get("variant_identities_authenticated"):
-        print("gate did not authenticate variant identities", file=sys.stderr)
-        return 1
+        return quarantine(archive, "gate did not authenticate variant identities")
     print(json.dumps(summary, indent=2, sort_keys=True))
     print(f"RELEASE GATE PASSED -- {archive} is ready to publish")
     return 0

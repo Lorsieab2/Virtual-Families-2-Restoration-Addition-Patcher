@@ -30,30 +30,37 @@ CORE_ONLY_SETTINGS = {
 # B161 -- including the shipped B172, B173 and B174 ZIPs -- and a check
 # that fails every real artifact just teaches people to ignore it.
 #
-# These 19 combinations are identical between B161 and B174. Each variant's
-# integrity is still fully verified, against the ZIP's own bytes via
-# _verify_file_record, which is what the frozen hashes were duplicating.
-EXECUTABLE_VARIANT_REQUIREMENTS = frozenset({
-    frozenset({"core_executable"}),
-    frozenset({"behavior_patches", "core_executable"}),
-    frozenset({"cheat_upgrades", "core_executable"}),
-    frozenset({"core_executable", "holiday_ornaments_collection"}),
-    frozenset({"core_executable", "island_events"}),
-    frozenset({"core_executable", "mobile_renovations"}),
-    frozenset({"behavior_patches", "cheat_upgrades", "core_executable"}),
-    frozenset({"behavior_patches", "core_executable", "holiday_ornaments_collection"}),
-    frozenset({"behavior_patches", "core_executable", "island_events"}),
-    frozenset({"cheat_upgrades", "core_executable", "holiday_ornaments_collection"}),
-    frozenset({"cheat_upgrades", "core_executable", "island_events"}),
-    frozenset({"cheat_upgrades", "core_executable", "mobile_renovations"}),
-    frozenset({"core_executable", "holiday_ornaments_collection", "island_events"}),
-    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "holiday_ornaments_collection"}),
-    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "island_events"}),
-    frozenset({"behavior_patches", "core_executable", "holiday_ornaments_collection", "island_events"}),
-    frozenset({"cheat_upgrades", "core_executable", "holiday_ornaments_collection", "island_events"}),
-    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "holiday_ornaments_collection", "island_events"}),
-    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "holiday_ornaments_collection", "island_events", "mobile_renovations"}),
-})
+# Derived from data/vf2/build-matrix-toggles.json rather than duplicated here.
+# The list was hand-maintained, so adding the Mobile Renovations combinations
+# the matrix had never built would have made this verifier reject every one of
+# them as unexpected and fail the release gate for the very release that fixed
+# the gap. The matrix is the single source of truth for which combinations a
+# release must ship; each variant's integrity is still verified against the
+# archive's own bytes by _verify_file_record.
+_MATRIX_TOGGLE_RENAMES = {"holiday_ornaments": "holiday_ornaments_collection"}
+_MATRIX_NON_EXECUTABLE_TOGGLES = {"ai_generated_bathroom2"}
+
+
+def _matrix_variant_requirements() -> frozenset[frozenset[str]]:
+    config = json.loads(
+        (Path(__file__).resolve().parents[1] / "data" / "vf2" / "build-matrix-toggles.json").read_text(
+            encoding="utf-8-sig"
+        )
+    )
+    combos = set()
+    for variant in config["variants"]:
+        requires = {"core_executable"}
+        for key, enabled in variant.items():
+            if key == "name" or not isinstance(enabled, bool) or not enabled:
+                continue
+            if key in _MATRIX_NON_EXECUTABLE_TOGGLES:
+                continue
+            requires.add(_MATRIX_TOGGLE_RENAMES.get(key, key))
+        combos.add(frozenset(requires))
+    return frozenset(combos)
+
+
+EXECUTABLE_VARIANT_REQUIREMENTS = _matrix_variant_requirements()
 SOUND_ROUTE_NAMES = {"beaker", "Child3", "Child7", "Child8"}
 REQUIRED_RUNNERS = {
     "offline_vf2_patcher.py",
@@ -102,15 +109,76 @@ def _load_variant_identities(path: Path) -> dict[frozenset[str], tuple[str, int]
         if key in identities:
             _fail(f"variant identities file lists {sorted(requires)} twice")
         identities[key] = (digest, size)
-    if set(identities) != EXECUTABLE_VARIANT_REQUIREMENTS:
-        missing = sorted(sorted(x) for x in EXECUTABLE_VARIANT_REQUIREMENTS - set(identities))
-        extra = sorted(sorted(x) for x in set(identities) - EXECUTABLE_VARIANT_REQUIREMENTS)
+    unknown = sorted(sorted(x) for x in set(identities) - EXECUTABLE_VARIANT_REQUIREMENTS)
+    if unknown:
         _fail(
-            "variant identities do not cover the release contract; "
-            f"missing={missing} unexpected={extra}"
+            "variant identities list combinations the matrix never builds; "
+            f"unexpected={unknown}"
         )
     return identities
 
+
+
+def _release_sort_key(label: str) -> tuple[int, int]:
+    """Order release labels: B174 < B174.1 < B176 < B177."""
+    match = re.fullmatch(r"B(\d+)(?:\.(\d+))?", label)
+    if not match:
+        raise ValueError(f"not a release label: {label}")
+    return int(match.group(1)), int(match.group(2) or 0)
+
+
+def _historical_contract_before(label: str) -> frozenset[frozenset[str]] | None:
+    """The contract used by releases that predate per-release identity files.
+
+    B161 through B173 shipped before release-identities-<release>.json
+    existed.  Without this, verifying one of those retained archives has no
+    contract to check against and falls through to the current matrix, which
+    rejects its perfectly valid 19 executable records.
+
+    The combinations are tracked data, not inferred at runtime: guessing them
+    from today's matrix -- "the ones that do not need mobile_renovations" --
+    would happen to be right today and drift silently the next time the matrix
+    grows.
+    """
+    path = Path(__file__).resolve().parents[1] / "data" / "vf2" / "historical-release-contracts.json"
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
+        boundary = _release_sort_key(str(raw["applies_to_releases_before"]))
+        if _release_sort_key(label) >= boundary:
+            return None
+        combos = {frozenset(entry) for entry in raw["combinations"]}
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return None
+    return frozenset(combos) or None
+
+
+def _tracked_contract_for(root: str) -> frozenset[frozenset[str]] | None:
+    """The contract a retained archive shipped with, from its own release.
+
+    An archive names its release in its root directory ("VF2-B176-Release").
+    Releases from B174 onward track their own identities; earlier ones predate
+    that file and fall back to the recorded historical contract.  Either way a
+    retained archive verifies against what it actually shipped, instead of
+    having the current matrix applied to a release that predates it.  This
+    fixes the contract only; the summary still reports
+    variant_identities_authenticated false, because the caller did not ask for
+    the bytes to be authenticated against an independent source.
+    """
+    match = re.match(r"^VF2-(B\d+(?:\.\d+)?)-Release$", root)
+    if not match:
+        return None
+    label = match.group(1)
+    path = Path(__file__).resolve().parents[1] / "data" / "vf2" / f"release-identities-{label}.json"
+    if not path.is_file():
+        return _historical_contract_before(label)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
+        combos = {frozenset(entry["requires"]) for entry in raw["variants"]}
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return None
+    return frozenset(combos) or None
 
 def _fail(message: str) -> None:
     raise ValueError(message)
@@ -229,8 +297,33 @@ def _verify_zip_inventory(zipped: zipfile.ZipFile, zip_path: Path) -> tuple[str,
     return root, set(names)
 
 
-def verify_archive(zip_path: Path | str, identities_path: Path | str | None = None) -> dict:
-    """Verify one explicit archive and return a compact evidence summary."""
+def verify_archive(
+    zip_path: Path | str,
+    identities_path: Path | str | None = None,
+    require_complete: bool = False,
+) -> dict:
+    """Verify one explicit archive and return a compact evidence summary.
+
+    The executable contract is the archive's own, not whatever the matrix
+    builds today.  A release is a finished artifact: B174, B174.1 and B176
+    each correctly shipped the 19 combinations that existed when they were
+    built, so checking them against the current 32-combination matrix would
+    report every retained archive as broken and, worse, teach people that a
+    failing verifier is normal.  When an identities file is supplied it pins
+    that release's combinations and is used as the contract; those
+    combinations must still all be ones the matrix knows how to build, so a
+    hand-edited identities file cannot invent a combination or quietly drop
+    one and pass.
+
+    Completeness -- that a *new* release covers every combination the matrix
+    can build -- is what require_complete asks for.  It is set by
+    --require-identities, because that flag is advertised as the release gate
+    by this tool's help and by export_release_bundle.py; without it, a
+    truncated bundle whose identities file omitted the same combination would
+    authenticate cleanly through the advertised path and only be caught by
+    gate_release_zip.py.  Verifying a retained older release is the case that
+    must not demand completeness, and that path does not pass the flag.
+    """
     path = Path(zip_path)
     archive_path = path
     if not path.is_file():
@@ -242,6 +335,17 @@ def verify_archive(zip_path: Path | str, identities_path: Path | str | None = No
     )
     with zipfile.ZipFile(path) as zipped:
         root, names = _verify_zip_inventory(zipped, path)
+        if identities is not None:
+            requirements = frozenset(identities)
+        else:
+            requirements = _tracked_contract_for(root) or EXECUTABLE_VARIANT_REQUIREMENTS
+        if require_complete and requirements != EXECUTABLE_VARIANT_REQUIREMENTS:
+            missing = sorted(sorted(x) for x in EXECUTABLE_VARIANT_REQUIREMENTS - requirements)
+            extra = sorted(sorted(x) for x in requirements - EXECUTABLE_VARIANT_REQUIREMENTS)
+            _fail(
+                "release does not cover every combination the matrix builds; "
+                f"missing={missing} unexpected={extra}"
+            )
         manifest_bytes = _read_member(zipped, names, root, "manifest.json", "manifest")
         try:
             manifest = json.loads(manifest_bytes)
@@ -291,14 +395,14 @@ def verify_archive(zip_path: Path | str, identities_path: Path | str | None = No
             _fail("manifest native core setting evidence does not match advertised native settings")
 
         exe_records = [record for record in assets if str(record.get("source_path", "")).lower().endswith(".exe")]
-        if len(exe_records) != len(EXECUTABLE_VARIANT_REQUIREMENTS):
+        if len(exe_records) != len(requirements):
             _fail(
-                f"expected {len(EXECUTABLE_VARIANT_REQUIREMENTS)} executable "
+                f"expected {len(requirements)} executable "
                 f"variants, found {len(exe_records)}"
             )
         _reject_executable_variant_hash_collisions(exe_records)
         exe_hashes: set[str] = set()
-        for requires in EXECUTABLE_VARIANT_REQUIREMENTS:
+        for requires in requirements:
             matching = [
                 record
                 for record in exe_records
@@ -449,7 +553,7 @@ def verify_archive(zip_path: Path | str, identities_path: Path | str | None = No
             "root": root,
             "members": len(names),
             "target_sha256": TARGET_SHA256,
-            "executable_variants": len(EXECUTABLE_VARIANT_REQUIREMENTS),
+            "executable_variants": len(requirements),
             "variant_identities_authenticated": identities is not None,
             "executable_variants": len(exe_records),
             "renovation_assets": len(renovation_records),
@@ -476,13 +580,19 @@ def main() -> int:
     parser.add_argument(
         "--require-identities",
         action="store_true",
-        help="fail unless --identities is supplied; use this when gating a release",
+        help=(
+            "fail unless --identities is supplied, and require the release to "
+            "cover every combination the matrix builds; use this when gating a "
+            "release"
+        ),
     )
     args = parser.parse_args()
     if args.require_identities and args.identities is None:
         parser.error("--require-identities was given without --identities")
     try:
-        result = verify_archive(args.zip_path, args.identities)
+        result = verify_archive(
+        args.zip_path, args.identities, require_complete=args.require_identities
+    )
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
         parser.error(str(exc))
     print(json.dumps(result, sort_keys=True))

@@ -69,6 +69,22 @@ def newest_identities_on_disk():
     return best[1] if best else None
 
 
+def contract_size_for(archive):
+    """How many executable variants *that* archive is supposed to carry.
+
+    outputs/ may retain B174 or B176, which correctly shipped 19
+    combinations.  Comparing whatever archive happens to be newest against
+    today's matrix makes these release-oriented tests fail on a perfectly
+    valid retained release, so the contract comes from that release's own
+    tracked identities file when one exists.
+    """
+    identities = newest_release_identities()
+    if identities is not None and identities.is_file():
+        return len(json.loads(identities.read_text(encoding="utf-8-sig"))["variants"])
+    return len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
+
+
+
 class OfflineBundleZipVerifierTests(unittest.TestCase):
     def test_summary_zip_field_uses_archive_input_not_asset_path(self):
         source = (ROOT / "work" / "verify_offline_bundle_zip.py").read_text(encoding="utf-8")
@@ -96,13 +112,44 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
             "mobile_renovations",
         })
         self.assertIn(requires, verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
-        self.assertEqual(len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS), 19)
-        # No release name may leak back into the pinned contract, or the
-        # verifier starts failing every release after that one again.
+        # Derived from the matrix, not restated here: a hardcoded count made
+        # this test fail the moment the matrix gained the 13 Mobile Renovations
+        # combinations it had never built.
+        matrix = json.loads(
+            (ROOT / "data" / "vf2" / "build-matrix-toggles.json").read_text(
+                encoding="utf-8-sig"
+            )
+        )
+        self.assertEqual(
+            len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS),
+            len({
+                frozenset(
+                    {"core_executable"}
+                    | {
+                        {"holiday_ornaments": "holiday_ornaments_collection"}.get(k, k)
+                        for k, v in variant.items()
+                        if k not in ("name", "ai_generated_bathroom2")
+                        and isinstance(v, bool)
+                        and v
+                    }
+                )
+                for variant in matrix["variants"]
+            }),
+        )
+        # No release name may leak back into the contract, or the verifier
+        # starts failing every release after that one again. The contract is
+        # now derived from the matrix rather than written out as a literal, so
+        # the region to police is the derivation itself.
         source = (ROOT / "work" / "verify_offline_bundle_zip.py").read_text(encoding="utf-8")
-        contract = source.split("EXECUTABLE_VARIANT_REQUIREMENTS = ", 1)[1].split("})", 1)[0]
-        self.assertNotRegex(contract, r"B\d+")
-        self.assertNotIn(".exe", contract)
+        derivation = source.split("def _matrix_variant_requirements", 1)[1].split(
+            "\n\n\n", 1
+        )[0]
+        self.assertNotRegex(derivation, r"B\d+")
+        self.assertNotIn(".exe", derivation)
+        # And the contract must not be a hand-written literal again.
+        self.assertIn(
+            "EXECUTABLE_VARIANT_REQUIREMENTS = _matrix_variant_requirements()", source
+        )
 
     def test_shipped_release_has_no_executable_hash_collisions(self):
         # Confirms the release actually on disk does not carry the B162 defect
@@ -119,7 +166,9 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
             for record in manifest["asset_patches"]
             if str(record.get("source_path", "")).lower().endswith(".exe")
         ]
-        self.assertEqual(len(records), 19)
+        # The archive's own contract, not today's matrix: a retained B174 or
+        # B176 correctly carries 19 and must stay testable.
+        self.assertEqual(len(records), contract_size_for(archive))
         verifier._reject_executable_variant_hash_collisions(records)
 
     def test_rejects_two_requires_sets_sharing_one_executable_hash(self):
@@ -155,8 +204,12 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         archive = newest_release_zip()
         if archive is None:
             self.skipTest("no release ZIP present in outputs/")
-        result = verifier.verify_archive(archive)
-        self.assertEqual(result["executable_variants"], 19)
+        identities = newest_release_identities()
+        result = verifier.verify_archive(
+            archive,
+            identities if identities is not None and identities.is_file() else None,
+        )
+        self.assertEqual(result["executable_variants"], contract_size_for(archive))
         self.assertEqual(result["renovation_assets"], 35)
         self.assertEqual(result["sound_assets"], 67)
         self.assertEqual(result["sound_restores"], 63)
@@ -213,24 +266,83 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         finally:
             tmp.cleanup()
 
-    def test_identities_must_cover_the_whole_release_contract(self):
-        # Prefer the archive's own identities, but only when that file really
-        # exists: newest_release_identities returns a Path for a release whose
-        # identities have not been written yet, which is truthy and would skip
-        # this test at the exact moment a new release lands.
+    def test_short_identities_cannot_authenticate_a_full_archive(self):
+        """Dropping a variant must still fail -- now caught against the archive.
+
+        _load_variant_identities no longer rejects a short file outright,
+        because a retained older release legitimately pins fewer combinations
+        than today's matrix builds.  The guarantee moved rather than went
+        away: a short identities file no longer describes the archive in front
+        of it, so verify_archive fails on the count.  Completeness of a *new*
+        release is asserted by work/gate_release_zip.py.
+        """
         identities = newest_release_identities()
         if identities is None or not identities.is_file():
             identities = newest_identities_on_disk()
         if identities is None or not identities.is_file():
             self.skipTest("no identities file present")
-        payload = json.loads(identities.read_text(encoding="utf-8"))
+        archive = newest_release_zip()
+        if archive is None or not archive.is_file():
+            self.skipTest("no release archive present")
+        payload = json.loads(identities.read_text(encoding="utf-8-sig"))
         payload["variants"] = payload["variants"][:-1]
         tmp = tempfile.TemporaryDirectory()
         try:
             short = Path(tmp.name) / "short.json"
             short.write_text(json.dumps(payload), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "do not cover the release contract"):
-                verifier._load_variant_identities(short)
+            with self.assertRaisesRegex(ValueError, "executable variants, found"):
+                verifier.verify_archive(archive, short)
+        finally:
+            tmp.cleanup()
+
+    def test_retained_older_release_verifies_against_its_own_contract(self):
+        """A finished release keeps the contract it shipped with.
+
+        B174, B174.1 and B176 each correctly shipped the 19 combinations that
+        existed when they were built.  Deriving the contract globally from
+        today's 32-combination matrix reported every retained archive as
+        broken, which is both wrong and the fastest way to teach people that a
+        failing verifier is normal.
+        """
+        identities_dir = ROOT / "data" / "vf2"
+        historical = sorted(
+            path
+            for path in identities_dir.glob("release-identities-B*.json")
+            if len(json.loads(path.read_text(encoding="utf-8-sig"))["variants"])
+            < len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
+        )
+        if not historical:
+            self.skipTest("no pre-32-variant identities file is tracked")
+        for path in historical:
+            with self.subTest(identities=path.name):
+                loaded = verifier._load_variant_identities(path)
+                shipped = len(json.loads(path.read_text(encoding="utf-8-sig"))["variants"])
+                self.assertEqual(len(loaded), shipped)
+                self.assertLess(len(loaded), len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS))
+                # Every combination it pins must still be one the matrix can
+                # build, so a hand-edited file cannot invent one and pass.
+                self.assertTrue(set(loaded) <= verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
+
+    def test_identities_naming_a_combination_the_matrix_cannot_build_fail_closed(self):
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            path = Path(tmp.name) / "identities.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "variants": [
+                            {
+                                "requires": ["core_executable", "not_a_real_toggle"],
+                                "sha256": "0" * 64,
+                                "size": 1,
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "never builds"):
+                verifier._load_variant_identities(path)
         finally:
             tmp.cleanup()
 
@@ -274,6 +386,122 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
                         verifier.verify_archive(path)
                 finally:
                     tmp.cleanup()
+
+    def test_archive_contract_resolves_from_its_own_release_label(self):
+        """A retained archive verifies even when no identities file is passed.
+
+        Otherwise the current matrix is applied to a release that predates it
+        and every retained B174/B176 ZIP reports as broken.
+        """
+        identities_dir = ROOT / "data" / "vf2"
+        seen = 0
+        for path in sorted(identities_dir.glob("release-identities-B*.json")):
+            label = path.stem.replace("release-identities-", "")
+            shipped = len(json.loads(path.read_text(encoding="utf-8-sig"))["variants"])
+            with self.subTest(release=label):
+                resolved = verifier._tracked_contract_for(f"VF2-{label}-Release")
+                self.assertIsNotNone(resolved)
+                self.assertEqual(len(resolved), shipped)
+                seen += 1
+        self.assertTrue(seen, "no tracked release identities files found")
+
+    def test_releases_predating_identity_files_keep_their_contract(self):
+        """B161-B173 shipped before per-release identity files existed.
+
+        Without a recorded historical contract, verifying one of those
+        retained archives falls through to the current matrix and rejects its
+        valid 19 executable records.
+        """
+        historical = json.loads(
+            (ROOT / "data" / "vf2" / "historical-release-contracts.json").read_text(
+                encoding="utf-8-sig"
+            )
+        )
+        expected = len(historical["combinations"])
+        self.assertEqual(expected, 19)
+        for label in ("B161", "B165", "B172", "B173"):
+            with self.subTest(release=label):
+                resolved = verifier._tracked_contract_for(f"VF2-{label}-Release")
+                self.assertIsNotNone(resolved)
+                self.assertEqual(len(resolved), expected)
+                self.assertTrue(resolved <= verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
+
+    def test_historical_contract_matches_the_earliest_tracked_identities(self):
+        """Its provenance, asserted rather than trusted.
+
+        The recorded historical combinations are the contract B174, B174.1 and
+        B176 all shipped; if that stops being true the recorded table is wrong.
+        """
+        historical = {
+            frozenset(entry)
+            for entry in json.loads(
+                (ROOT / "data" / "vf2" / "historical-release-contracts.json").read_text(
+                    encoding="utf-8-sig"
+                )
+            )["combinations"]
+        }
+        for label in ("B174", "B174.1", "B176"):
+            path = ROOT / "data" / "vf2" / f"release-identities-{label}.json"
+            if not path.is_file():
+                continue
+            with self.subTest(release=label):
+                shipped = {
+                    frozenset(entry["requires"])
+                    for entry in json.loads(path.read_text(encoding="utf-8-sig"))["variants"]
+                }
+                self.assertEqual(shipped, historical)
+
+    def test_release_label_ordering(self):
+        self.assertLess(verifier._release_sort_key("B174"), verifier._release_sort_key("B174.1"))
+        self.assertLess(verifier._release_sort_key("B174.1"), verifier._release_sort_key("B176"))
+        self.assertLess(verifier._release_sort_key("B99"), verifier._release_sort_key("B161"))
+        for bad in ("", "junk", "174", "B", "Bx"):
+            with self.subTest(label=bad):
+                with self.assertRaises(ValueError):
+                    verifier._release_sort_key(bad)
+
+    def test_unknown_or_malformed_root_falls_back_to_the_matrix(self):
+        for root in ("VF2-B999-Release", "junk", "", "VF2--Release"):
+            with self.subTest(root=root):
+                self.assertIsNone(verifier._tracked_contract_for(root))
+
+    def test_advertised_gate_path_rejects_a_truncated_release(self):
+        """--require-identities must be as strict as gate_release_zip.py.
+
+        Both this tool's help and export_release_bundle.py advertise
+        --require-identities as the release gate.  A bundle and an identities
+        file that omit the same valid combination agree with each other, so
+        without a completeness check the advertised path authenticates a
+        truncated release and only the separate gate catches it.
+        """
+        archive = newest_release_zip()
+        identities = newest_release_identities()
+        if archive is None or identities is None or not identities.is_file():
+            self.skipTest("no release ZIP or identities file present")
+        shipped = json.loads(identities.read_text(encoding="utf-8-sig"))
+        if len(shipped["variants"]) != len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS):
+            self.skipTest("newest release is not a complete build")
+
+        # Sanity: the untruncated release passes the advertised path.
+        verifier.verify_archive(archive, identities, require_complete=True)
+
+        payload = dict(shipped, variants=shipped["variants"][:-1])
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            short = Path(tmp.name) / "short.json"
+            short.write_text(json.dumps(payload), encoding="utf-8")
+            # Without completeness this is only caught by the archive count.
+            with self.assertRaises(ValueError):
+                verifier.verify_archive(archive, short)
+            # The advertised gate must name the real problem.
+            with self.assertRaisesRegex(ValueError, "every combination the matrix builds"):
+                verifier.verify_archive(archive, short, require_complete=True)
+        finally:
+            tmp.cleanup()
+
+    def test_require_identities_sets_completeness_on_the_cli(self):
+        source = Path(verifier.__file__).read_text(encoding="utf-8")
+        self.assertIn("require_complete=args.require_identities", source)
 
 
 if __name__ == "__main__":
