@@ -150,7 +150,11 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
             for record in manifest["asset_patches"]
             if str(record.get("source_path", "")).lower().endswith(".exe")
         ]
-        self.assertEqual(len(records), 19)
+        # Derived, not pinned: a 32-variant release would otherwise fail this
+        # release-oriented test before the collision check even ran.
+        self.assertEqual(
+            len(records), len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
+        )
         verifier._reject_executable_variant_hash_collisions(records)
 
     def test_rejects_two_requires_sets_sharing_one_executable_hash(self):
