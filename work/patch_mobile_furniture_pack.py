@@ -25581,6 +25581,20 @@ extern "C" void __cdecl VF2MobileNappingCouch(CVillager &villager)
         __VF2_NAP_FALLBACK__
         return;
     }
+    // The manual lounger route escalates a nap into full sleep as energy
+    // drops, weighting nap by (70 - energy) and sleep by (45 - energy) * 3.
+    // Autonomy only ever offered the nap, so "Getting some sleep" could not
+    // be reached without dragging the villager onto the lounger. Choose
+    // between them here with those same weights, so the two routes agree.
+    int napWeight = energyValue < 70 ? 70 - energyValue : 0;
+    int sleepWeight = energyValue < 45 ? (45 - energyValue) * 3 : 0;
+    if (sleepWeight > 0 &&
+        ldwGameState::GetRandom(napWeight + sleepWeight) >= napWeight) {
+        VF2PlanLinkedChaiseAction(
+            villager, info, "Getting some sleep", ldwGameState::GetRandom(10) + 10,
+            static_cast<ECarrying>(0), 2, 0, 10);
+        return;
+    }
     VF2PlanLinkedChaiseAction(
         villager, info, "Taking a nap", ldwGameState::GetRandom(5) + 5,
         static_cast<ECarrying>(0), 2, 0, ldwGameState::GetRandom(5) + 7);
@@ -25599,11 +25613,21 @@ extern "C" void __cdecl VF2MobileRestingBody(CVillager &villager)
         VF2PlanLinkedChaiseAction(
             villager, info, "Catching some rays", ldwGameState::GetRandom(10) + 10,
             static_cast<ECarrying>(0), 4, 1, 2);
-    } else {
-        VF2PlanLinkedChaiseAction(
-            villager, info, "Needs to sit down", ldwGameState::GetRandom(15) + 15,
-            static_cast<ECarrying>(0), 0, 0, 3);
+        return;
     }
+    // "Relaxing on lounger" was reachable only by dragging a villager onto
+    // the lounger. The manual route gives it and "Needs to sit down" equal
+    // weight, so split the remaining case evenly rather than inventing a
+    // ratio. Its parameters are the manual route's, unchanged.
+    if (ldwGameState::GetRandom(2) == 0) {
+        VF2PlanLinkedChaiseAction(
+            villager, info, "Relaxing on lounger", ldwGameState::GetRandom(15) + 15,
+            static_cast<ECarrying>(0), 4, 1, 2);
+        return;
+    }
+    VF2PlanLinkedChaiseAction(
+        villager, info, "Needs to sit down", ldwGameState::GetRandom(15) + 15,
+        static_cast<ECarrying>(0), 0, 0, 3);
 }
 
 extern "C" void __cdecl VF2MobileStudyingOnPatio(CVillager &villager)
