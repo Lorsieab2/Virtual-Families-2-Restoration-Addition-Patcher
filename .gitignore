@@ -76,6 +76,12 @@ __pycache__/
 *.swf
 *.xcf
 
+# Exception: the preserved inherited runtime art. 30 of those 635 files are
+# .xcf GIMP originals, and the blanket rule above is why they never entered the
+# repository -- they survived only inside previous build outputs. They are the
+# source material for regenerating this art, so they must be tracked here.
+!patcher_assets/inherited_runtime_images/**
+
 # Preserve editable project source/configuration only from historical folders.
 /Unneeded crap/**
 !/Unneeded crap/**/*.md
