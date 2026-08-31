@@ -47,11 +47,25 @@ def quarantine(archive: Path, reason: str) -> int:
     is the exact accident the gate exists to prevent.
     """
     rejected = archive.parent / (archive.name + ".REJECTED")
+    print(reason, file=sys.stderr)
     try:
         archive.replace(rejected)
-    except OSError:
-        rejected = archive
-    print(reason, file=sys.stderr)
+    except OSError as exc:
+        # Never claim a move that did not happen.  Saying "moved to
+        # VF2-B177-Release.zip" while the rejected bundle sits at exactly that
+        # publishable name is worse than saying nothing, because it reads as
+        # the fail-safe having worked.
+        print(
+            f"RELEASE GATE FAILED -- and the archive could NOT be quarantined: "
+            f"{exc}",
+            file=sys.stderr,
+        )
+        print(
+            f"WARNING: {archive} REMAINS AT ITS PUBLISHABLE FILENAME. Move or "
+            "delete it by hand before uploading anything.",
+            file=sys.stderr,
+        )
+        return 1
     print(
         f"RELEASE GATE FAILED -- archive moved to {rejected.name} so it "
         "cannot be uploaded by mistake",

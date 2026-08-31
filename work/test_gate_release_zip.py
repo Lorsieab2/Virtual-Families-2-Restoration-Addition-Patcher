@@ -7,6 +7,8 @@ against its own release's contract so retained older ZIPs still verify.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import sys
 import tempfile
 import unittest
@@ -71,6 +73,41 @@ class QuarantineTests(unittest.TestCase):
         after_package = body.split("verified =")[1]
         self.assertNotIn("return 1", after_package)
         self.assertEqual(after_package.count("return quarantine(archive"), 3)
+
+    def test_a_failed_quarantine_warns_instead_of_claiming_a_move(self):
+        """A move that did not happen must never be reported as one.
+
+        The archive stays at its publishable filename in that case, so a
+        message saying it was "moved to VF2-B177-Release.zip" reads as the
+        fail-safe having worked and is worse than saying nothing.
+        """
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            archive = Path(tmp.name) / "VF2-B999-Release.zip"
+            archive.write_bytes(b"bundle")
+            original = Path.replace
+
+            def refuse(self, target):
+                raise OSError("archive is locked")
+
+            err = io.StringIO()
+            Path.replace = refuse
+            try:
+                with contextlib.redirect_stderr(err):
+                    code = gate.quarantine(archive, "because")
+            finally:
+                Path.replace = original
+
+            self.assertEqual(code, 1)
+            message = err.getvalue()
+            self.assertIn("could NOT be quarantined", message)
+            self.assertIn("REMAINS AT ITS PUBLISHABLE FILENAME", message)
+            self.assertNotIn("archive moved to", message)
+            # And the bundle really is still there, unharmed.
+            self.assertTrue(archive.is_file())
+            self.assertEqual(archive.read_bytes(), b"bundle")
+        finally:
+            tmp.cleanup()
 
 
 if __name__ == "__main__":
