@@ -30,30 +30,37 @@ CORE_ONLY_SETTINGS = {
 # B161 -- including the shipped B172, B173 and B174 ZIPs -- and a check
 # that fails every real artifact just teaches people to ignore it.
 #
-# These 19 combinations are identical between B161 and B174. Each variant's
-# integrity is still fully verified, against the ZIP's own bytes via
-# _verify_file_record, which is what the frozen hashes were duplicating.
-EXECUTABLE_VARIANT_REQUIREMENTS = frozenset({
-    frozenset({"core_executable"}),
-    frozenset({"behavior_patches", "core_executable"}),
-    frozenset({"cheat_upgrades", "core_executable"}),
-    frozenset({"core_executable", "holiday_ornaments_collection"}),
-    frozenset({"core_executable", "island_events"}),
-    frozenset({"core_executable", "mobile_renovations"}),
-    frozenset({"behavior_patches", "cheat_upgrades", "core_executable"}),
-    frozenset({"behavior_patches", "core_executable", "holiday_ornaments_collection"}),
-    frozenset({"behavior_patches", "core_executable", "island_events"}),
-    frozenset({"cheat_upgrades", "core_executable", "holiday_ornaments_collection"}),
-    frozenset({"cheat_upgrades", "core_executable", "island_events"}),
-    frozenset({"cheat_upgrades", "core_executable", "mobile_renovations"}),
-    frozenset({"core_executable", "holiday_ornaments_collection", "island_events"}),
-    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "holiday_ornaments_collection"}),
-    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "island_events"}),
-    frozenset({"behavior_patches", "core_executable", "holiday_ornaments_collection", "island_events"}),
-    frozenset({"cheat_upgrades", "core_executable", "holiday_ornaments_collection", "island_events"}),
-    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "holiday_ornaments_collection", "island_events"}),
-    frozenset({"behavior_patches", "cheat_upgrades", "core_executable", "holiday_ornaments_collection", "island_events", "mobile_renovations"}),
-})
+# Derived from data/vf2/build-matrix-toggles.json rather than duplicated here.
+# The list was hand-maintained, so adding the Mobile Renovations combinations
+# the matrix had never built would have made this verifier reject every one of
+# them as unexpected and fail the release gate for the very release that fixed
+# the gap. The matrix is the single source of truth for which combinations a
+# release must ship; each variant's integrity is still verified against the
+# archive's own bytes by _verify_file_record.
+_MATRIX_TOGGLE_RENAMES = {"holiday_ornaments": "holiday_ornaments_collection"}
+_MATRIX_NON_EXECUTABLE_TOGGLES = {"ai_generated_bathroom2"}
+
+
+def _matrix_variant_requirements() -> frozenset[frozenset[str]]:
+    config = json.loads(
+        (Path(__file__).resolve().parents[1] / "data" / "vf2" / "build-matrix-toggles.json").read_text(
+            encoding="utf-8-sig"
+        )
+    )
+    combos = set()
+    for variant in config["variants"]:
+        requires = {"core_executable"}
+        for key, enabled in variant.items():
+            if key == "name" or not isinstance(enabled, bool) or not enabled:
+                continue
+            if key in _MATRIX_NON_EXECUTABLE_TOGGLES:
+                continue
+            requires.add(_MATRIX_TOGGLE_RENAMES.get(key, key))
+        combos.add(frozenset(requires))
+    return frozenset(combos)
+
+
+EXECUTABLE_VARIANT_REQUIREMENTS = _matrix_variant_requirements()
 SOUND_ROUTE_NAMES = {"beaker", "Child3", "Child7", "Child8"}
 REQUIRED_RUNNERS = {
     "offline_vf2_patcher.py",

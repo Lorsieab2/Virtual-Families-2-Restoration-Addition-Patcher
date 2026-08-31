@@ -96,13 +96,44 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
             "mobile_renovations",
         })
         self.assertIn(requires, verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
-        self.assertEqual(len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS), 19)
-        # No release name may leak back into the pinned contract, or the
-        # verifier starts failing every release after that one again.
+        # Derived from the matrix, not restated here: a hardcoded count made
+        # this test fail the moment the matrix gained the 13 Mobile Renovations
+        # combinations it had never built.
+        matrix = json.loads(
+            (ROOT / "data" / "vf2" / "build-matrix-toggles.json").read_text(
+                encoding="utf-8-sig"
+            )
+        )
+        self.assertEqual(
+            len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS),
+            len({
+                frozenset(
+                    {"core_executable"}
+                    | {
+                        {"holiday_ornaments": "holiday_ornaments_collection"}.get(k, k)
+                        for k, v in variant.items()
+                        if k not in ("name", "ai_generated_bathroom2")
+                        and isinstance(v, bool)
+                        and v
+                    }
+                )
+                for variant in matrix["variants"]
+            }),
+        )
+        # No release name may leak back into the contract, or the verifier
+        # starts failing every release after that one again. The contract is
+        # now derived from the matrix rather than written out as a literal, so
+        # the region to police is the derivation itself.
         source = (ROOT / "work" / "verify_offline_bundle_zip.py").read_text(encoding="utf-8")
-        contract = source.split("EXECUTABLE_VARIANT_REQUIREMENTS = ", 1)[1].split("})", 1)[0]
-        self.assertNotRegex(contract, r"B\d+")
-        self.assertNotIn(".exe", contract)
+        derivation = source.split("def _matrix_variant_requirements", 1)[1].split(
+            "\n\n\n", 1
+        )[0]
+        self.assertNotRegex(derivation, r"B\d+")
+        self.assertNotIn(".exe", derivation)
+        # And the contract must not be a hand-written literal again.
+        self.assertIn(
+            "EXECUTABLE_VARIANT_REQUIREMENTS = _matrix_variant_requirements()", source
+        )
 
     def test_shipped_release_has_no_executable_hash_collisions(self):
         # Confirms the release actually on disk does not carry the B162 defect
