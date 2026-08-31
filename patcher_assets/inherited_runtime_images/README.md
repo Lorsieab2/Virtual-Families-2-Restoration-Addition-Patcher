@@ -21,11 +21,19 @@ location". That was wrong, and the error is recorded here rather than left
 standing.
 
 **61 of the 635 were already tracked**, byte-for-byte, under
-`patcher_assets/optional_patches/invisible_workspace_upgrades/`. All 61 are the
-`Upgrades/invisible images/*` entries, and all 61 are byte-identical to a single
-transparent placeholder already in the repository. They are 61 filenames of the
-same image, not 61 distinct pieces of art, so that whole category is trivially
-regenerable by copying one tracked file to the required names.
+`patcher_assets/optional_patches/invisible_workspace_upgrades/`.
+
+They are not one image repeated, and a regeneration step must not treat them
+that way. `SHA256SUMS.json` splits them cleanly:
+
+- the **31** `Upgrades/invisible images/*` entries share a **single** digest —
+  one transparent placeholder under 31 names, so those are reproducible by
+  copying one tracked file;
+- the **30** `Upgrades/original images/*` entries have **30 distinct** digests.
+  They are the visible upgrade artwork used to restore the stock look when the
+  optional patch is turned off, and each must come from its own corresponding
+  tracked file. Copying the placeholder over these would replace the restore
+  art with transparent images.
 
 The inventory count of 635 is correct. What was overstated is how much of it was
 genuinely untracked: **574**, not 635.
@@ -36,7 +44,7 @@ genuinely untracked: **574**, not 635.
 | --- | --- | --- |
 | `VillagerBodies/` | 448 | Holiday outfit bodies 50-53, 56 frames each. A generator exists (`sync_holiday_body_runtime_frames`); its source archive was missing. |
 | `Furniture/` | 93 | Mobile furniture art, including the Birthday set. |
-| `Upgrades/` | 61 | 31 "invisible images", 30 "original images". All 61 duplicate one tracked transparent placeholder. |
+| `Upgrades/` | 61 | 31 "invisible images" (one shared placeholder digest) plus 30 "original images" (30 distinct digests, the restore artwork). All 61 already tracked, but only the 31 are interchangeable. |
 | root | 25 | Map art and working files, mostly `.xcf`. |
 | `OutfitIcons/` | 8 | |
 
