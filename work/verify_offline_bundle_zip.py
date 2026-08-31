@@ -118,6 +118,36 @@ def _load_variant_identities(path: Path) -> dict[frozenset[str], tuple[str, int]
     return identities
 
 
+
+def _tracked_contract_for(root: str) -> frozenset[frozenset[str]] | None:
+    """The contract a retained archive shipped with, from its own release.
+
+    An archive names its release in its root directory ("VF2-B176-Release"),
+    and the repository tracks that release's identities.  Resolving the
+    contract from those means a retained B174 or B176 verifies correctly even
+    when the caller passes no identities file -- otherwise the current matrix
+    is applied to a release that predates it and every retained archive looks
+    broken.  This fixes the contract only; the summary still reports
+    variant_identities_authenticated false, because the caller did not ask for
+    the bytes to be authenticated against an independent source.
+    """
+    match = re.match(r"^VF2-(B\d+(?:\.\d+)?)-Release$", root)
+    if not match:
+        return None
+    path = Path(__file__).resolve().parents[1] / "data" / "vf2" / f"release-identities-{match.group(1)}.json"
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
+        combos = {
+            frozenset(entry["requires"])
+            for entry in raw["variants"]
+        }
+    except (OSError, json.JSONDecodeError, KeyError, TypeError):
+        return None
+    return frozenset(combos) or None
+
+
 def _fail(message: str) -> None:
     raise ValueError(message)
 
@@ -262,11 +292,12 @@ def verify_archive(zip_path: Path | str, identities_path: Path | str | None = No
         if identities_path is not None
         else None
     )
-    requirements = (
-        frozenset(identities) if identities is not None else EXECUTABLE_VARIANT_REQUIREMENTS
-    )
     with zipfile.ZipFile(path) as zipped:
         root, names = _verify_zip_inventory(zipped, path)
+        if identities is not None:
+            requirements = frozenset(identities)
+        else:
+            requirements = _tracked_contract_for(root) or EXECUTABLE_VARIANT_REQUIREMENTS
         manifest_bytes = _read_member(zipped, names, root, "manifest.json", "manifest")
         try:
             manifest = json.loads(manifest_bytes)

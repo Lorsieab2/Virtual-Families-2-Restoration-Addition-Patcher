@@ -69,6 +69,22 @@ def newest_identities_on_disk():
     return best[1] if best else None
 
 
+def contract_size_for(archive):
+    """How many executable variants *that* archive is supposed to carry.
+
+    outputs/ may retain B174 or B176, which correctly shipped 19
+    combinations.  Comparing whatever archive happens to be newest against
+    today's matrix makes these release-oriented tests fail on a perfectly
+    valid retained release, so the contract comes from that release's own
+    tracked identities file when one exists.
+    """
+    identities = newest_release_identities()
+    if identities is not None and identities.is_file():
+        return len(json.loads(identities.read_text(encoding="utf-8-sig"))["variants"])
+    return len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
+
+
+
 class OfflineBundleZipVerifierTests(unittest.TestCase):
     def test_summary_zip_field_uses_archive_input_not_asset_path(self):
         source = (ROOT / "work" / "verify_offline_bundle_zip.py").read_text(encoding="utf-8")
@@ -150,11 +166,9 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
             for record in manifest["asset_patches"]
             if str(record.get("source_path", "")).lower().endswith(".exe")
         ]
-        # Derived, not pinned: a 32-variant release would otherwise fail this
-        # release-oriented test before the collision check even ran.
-        self.assertEqual(
-            len(records), len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
-        )
+        # The archive's own contract, not today's matrix: a retained B174 or
+        # B176 correctly carries 19 and must stay testable.
+        self.assertEqual(len(records), contract_size_for(archive))
         verifier._reject_executable_variant_hash_collisions(records)
 
     def test_rejects_two_requires_sets_sharing_one_executable_hash(self):
@@ -190,11 +204,12 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         archive = newest_release_zip()
         if archive is None:
             self.skipTest("no release ZIP present in outputs/")
-        result = verifier.verify_archive(archive)
-        self.assertEqual(
-            result["executable_variants"],
-            len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS),
+        identities = newest_release_identities()
+        result = verifier.verify_archive(
+            archive,
+            identities if identities is not None and identities.is_file() else None,
         )
+        self.assertEqual(result["executable_variants"], contract_size_for(archive))
         self.assertEqual(result["renovation_assets"], 35)
         self.assertEqual(result["sound_assets"], 67)
         self.assertEqual(result["sound_restores"], 63)
@@ -371,6 +386,29 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
                         verifier.verify_archive(path)
                 finally:
                     tmp.cleanup()
+
+    def test_archive_contract_resolves_from_its_own_release_label(self):
+        """A retained archive verifies even when no identities file is passed.
+
+        Otherwise the current matrix is applied to a release that predates it
+        and every retained B174/B176 ZIP reports as broken.
+        """
+        identities_dir = ROOT / "data" / "vf2"
+        seen = 0
+        for path in sorted(identities_dir.glob("release-identities-B*.json")):
+            label = path.stem.replace("release-identities-", "")
+            shipped = len(json.loads(path.read_text(encoding="utf-8-sig"))["variants"])
+            with self.subTest(release=label):
+                resolved = verifier._tracked_contract_for(f"VF2-{label}-Release")
+                self.assertIsNotNone(resolved)
+                self.assertEqual(len(resolved), shipped)
+                seen += 1
+        self.assertTrue(seen, "no tracked release identities files found")
+
+    def test_unknown_or_malformed_root_falls_back_to_the_matrix(self):
+        for root in ("VF2-B999-Release", "junk", "", "VF2--Release"):
+            with self.subTest(root=root):
+                self.assertIsNone(verifier._tracked_contract_for(root))
 
 
 if __name__ == "__main__":
