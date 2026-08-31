@@ -251,24 +251,83 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         finally:
             tmp.cleanup()
 
-    def test_identities_must_cover_the_whole_release_contract(self):
-        # Prefer the archive's own identities, but only when that file really
-        # exists: newest_release_identities returns a Path for a release whose
-        # identities have not been written yet, which is truthy and would skip
-        # this test at the exact moment a new release lands.
+    def test_short_identities_cannot_authenticate_a_full_archive(self):
+        """Dropping a variant must still fail -- now caught against the archive.
+
+        _load_variant_identities no longer rejects a short file outright,
+        because a retained older release legitimately pins fewer combinations
+        than today's matrix builds.  The guarantee moved rather than went
+        away: a short identities file no longer describes the archive in front
+        of it, so verify_archive fails on the count.  Completeness of a *new*
+        release is asserted by work/gate_release_zip.py.
+        """
         identities = newest_release_identities()
         if identities is None or not identities.is_file():
             identities = newest_identities_on_disk()
         if identities is None or not identities.is_file():
             self.skipTest("no identities file present")
-        payload = json.loads(identities.read_text(encoding="utf-8"))
+        archive = newest_release_zip()
+        if archive is None or not archive.is_file():
+            self.skipTest("no release archive present")
+        payload = json.loads(identities.read_text(encoding="utf-8-sig"))
         payload["variants"] = payload["variants"][:-1]
         tmp = tempfile.TemporaryDirectory()
         try:
             short = Path(tmp.name) / "short.json"
             short.write_text(json.dumps(payload), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "do not cover the release contract"):
-                verifier._load_variant_identities(short)
+            with self.assertRaisesRegex(ValueError, "executable variants, found"):
+                verifier.verify_archive(archive, short)
+        finally:
+            tmp.cleanup()
+
+    def test_retained_older_release_verifies_against_its_own_contract(self):
+        """A finished release keeps the contract it shipped with.
+
+        B174, B174.1 and B176 each correctly shipped the 19 combinations that
+        existed when they were built.  Deriving the contract globally from
+        today's 32-combination matrix reported every retained archive as
+        broken, which is both wrong and the fastest way to teach people that a
+        failing verifier is normal.
+        """
+        identities_dir = ROOT / "data" / "vf2"
+        historical = sorted(
+            path
+            for path in identities_dir.glob("release-identities-B*.json")
+            if len(json.loads(path.read_text(encoding="utf-8-sig"))["variants"])
+            < len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
+        )
+        if not historical:
+            self.skipTest("no pre-32-variant identities file is tracked")
+        for path in historical:
+            with self.subTest(identities=path.name):
+                loaded = verifier._load_variant_identities(path)
+                shipped = len(json.loads(path.read_text(encoding="utf-8-sig"))["variants"])
+                self.assertEqual(len(loaded), shipped)
+                self.assertLess(len(loaded), len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS))
+                # Every combination it pins must still be one the matrix can
+                # build, so a hand-edited file cannot invent one and pass.
+                self.assertTrue(set(loaded) <= verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
+
+    def test_identities_naming_a_combination_the_matrix_cannot_build_fail_closed(self):
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            path = Path(tmp.name) / "identities.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "variants": [
+                            {
+                                "requires": ["core_executable", "not_a_real_toggle"],
+                                "sha256": "0" * 64,
+                                "size": 1,
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "never builds"):
+                verifier._load_variant_identities(path)
         finally:
             tmp.cleanup()
 

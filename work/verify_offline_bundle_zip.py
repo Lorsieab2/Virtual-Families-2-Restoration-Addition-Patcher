@@ -109,12 +109,11 @@ def _load_variant_identities(path: Path) -> dict[frozenset[str], tuple[str, int]
         if key in identities:
             _fail(f"variant identities file lists {sorted(requires)} twice")
         identities[key] = (digest, size)
-    if set(identities) != EXECUTABLE_VARIANT_REQUIREMENTS:
-        missing = sorted(sorted(x) for x in EXECUTABLE_VARIANT_REQUIREMENTS - set(identities))
-        extra = sorted(sorted(x) for x in set(identities) - EXECUTABLE_VARIANT_REQUIREMENTS)
+    unknown = sorted(sorted(x) for x in set(identities) - EXECUTABLE_VARIANT_REQUIREMENTS)
+    if unknown:
         _fail(
-            "variant identities do not cover the release contract; "
-            f"missing={missing} unexpected={extra}"
+            "variant identities list combinations the matrix never builds; "
+            f"unexpected={unknown}"
         )
     return identities
 
@@ -237,7 +236,23 @@ def _verify_zip_inventory(zipped: zipfile.ZipFile, zip_path: Path) -> tuple[str,
 
 
 def verify_archive(zip_path: Path | str, identities_path: Path | str | None = None) -> dict:
-    """Verify one explicit archive and return a compact evidence summary."""
+    """Verify one explicit archive and return a compact evidence summary.
+
+    The executable contract is the archive's own, not whatever the matrix
+    builds today.  A release is a finished artifact: B174, B174.1 and B176
+    each correctly shipped the 19 combinations that existed when they were
+    built, so checking them against the current 32-combination matrix would
+    report every retained archive as broken and, worse, teach people that a
+    failing verifier is normal.  When an identities file is supplied it pins
+    that release's combinations and is used as the contract; those
+    combinations must still all be ones the matrix knows how to build, so a
+    hand-edited identities file cannot invent a combination or quietly drop
+    one and pass.
+
+    Completeness -- that a *new* release covers every combination the matrix
+    can build -- is asserted by work/gate_release_zip.py at build time, which
+    is the only point where "all of them" is a meaningful requirement.
+    """
     path = Path(zip_path)
     archive_path = path
     if not path.is_file():
@@ -246,6 +261,9 @@ def verify_archive(zip_path: Path | str, identities_path: Path | str | None = No
         _load_variant_identities(Path(identities_path))
         if identities_path is not None
         else None
+    )
+    requirements = (
+        frozenset(identities) if identities is not None else EXECUTABLE_VARIANT_REQUIREMENTS
     )
     with zipfile.ZipFile(path) as zipped:
         root, names = _verify_zip_inventory(zipped, path)
@@ -298,14 +316,14 @@ def verify_archive(zip_path: Path | str, identities_path: Path | str | None = No
             _fail("manifest native core setting evidence does not match advertised native settings")
 
         exe_records = [record for record in assets if str(record.get("source_path", "")).lower().endswith(".exe")]
-        if len(exe_records) != len(EXECUTABLE_VARIANT_REQUIREMENTS):
+        if len(exe_records) != len(requirements):
             _fail(
-                f"expected {len(EXECUTABLE_VARIANT_REQUIREMENTS)} executable "
+                f"expected {len(requirements)} executable "
                 f"variants, found {len(exe_records)}"
             )
         _reject_executable_variant_hash_collisions(exe_records)
         exe_hashes: set[str] = set()
-        for requires in EXECUTABLE_VARIANT_REQUIREMENTS:
+        for requires in requirements:
             matching = [
                 record
                 for record in exe_records
@@ -456,7 +474,7 @@ def verify_archive(zip_path: Path | str, identities_path: Path | str | None = No
             "root": root,
             "members": len(names),
             "target_sha256": TARGET_SHA256,
-            "executable_variants": len(EXECUTABLE_VARIANT_REQUIREMENTS),
+            "executable_variants": len(requirements),
             "variant_identities_authenticated": identities is not None,
             "executable_variants": len(exe_records),
             "renovation_assets": len(renovation_records),

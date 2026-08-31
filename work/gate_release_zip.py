@@ -26,11 +26,34 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import verify_offline_bundle_zip
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def run(argv: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)
+
+
+
+def incomplete_variant_coverage(shipped_variants: object) -> str | None:
+    """Reject a release that does not cover every combination the matrix builds.
+
+    verify_offline_bundle_zip deliberately checks an archive against its own
+    release's contract, so retained older ZIPs still verify.  That makes "did
+    we build all of them?" a question only the gate can ask, at the moment a
+    release is made.  Without this, a matrix run that stopped short -- B174.2
+    stopped at 14 of 19 -- produces a short bundle that otherwise gates clean.
+    """
+    expected = len(verify_offline_bundle_zip.EXECUTABLE_VARIANT_REQUIREMENTS)
+    if shipped_variants == expected:
+        return None
+    return (
+        f"release ships {shipped_variants} executable variants but the matrix "
+        f"defines {expected}; every combination must be built before a release "
+        "is gated"
+    )
 
 
 def main() -> int:
@@ -125,6 +148,17 @@ def main() -> int:
         return 1
 
     summary = json.loads(verified.stdout)
+    # A new release must cover every combination the matrix can build.  The
+    # verifier deliberately checks an archive against its own release's
+    # contract so retained older ZIPs still verify, which means "did we build
+    # all of them?" has to be asserted here, at the point a release is made.
+    # Without this, a matrix run that silently stopped short -- B174.2 stopped
+    # at 14 of 19 -- would produce a short bundle that gates clean.
+    incomplete = incomplete_variant_coverage(summary.get("executable_variants"))
+    if incomplete is not None:
+        print(incomplete, file=sys.stderr)
+        return 1
+
     if not summary.get("variant_identities_authenticated"):
         print("gate did not authenticate variant identities", file=sys.stderr)
         return 1
