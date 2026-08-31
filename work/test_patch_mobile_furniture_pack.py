@@ -1334,6 +1334,8 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         "Taking a nap",
                         "Studying on the lounger",
                         "Needs to sit down",
+                        "Relaxing on lounger",
+                        "Getting some sleep",
                     ],
                 )
                 umbrella = contract["implemented_families"][1]

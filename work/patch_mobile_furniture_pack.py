@@ -25854,6 +25854,8 @@ __VF2_COMPUTER_DROP_DISPATCH__
                 "Taking a nap",
                 "Studying on the lounger",
                 "Needs to sit down",
+                "Relaxing on lounger",
+                "Getting some sleep",
             ],
             "translated_refusal_strings": {
                 "unreachable": "0xb7",
