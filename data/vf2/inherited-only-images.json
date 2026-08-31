@@ -739,9 +739,20 @@
   "Upgrades/original images/superFridge_NW.png",
   "Upgrades/original images/toolbox.png",
   "Upgrades/original images/toolwall.png",
+  "alt massage table 2 mapx1y1.jpg",
+  "alt massage table mapx1y1.jpg",
   "eastCPUAnimLg.xcf",
+  "mainToolTrayoriginal.png",
+  "main_BGoriginal.png",
   "westCPUAnimLg.xcf"
  ],
  "non_runtime_note": "Entries in files[] that are editing/working sources rather than runtime art: GIMP .xcf sources and the Images/Upgrades 'invisible images' / 'original images' working folders. The engine never loads them and the offline bundle deliberately excludes them, so a build must not be required to produce them and must not restore them. Classified by work/export_offline_patch_bundle.is_non_runtime_source_path, which a test re-derives so this list cannot drift from the exporter.",
- "runtime_count": 544
+ "runtime_count": 540,
+ "non_runtime_extra_files": [
+  "alt massage table 2 mapx1y1.jpg",
+  "alt massage table mapx1y1.jpg",
+  "mainToolTrayoriginal.png",
+  "main_BGoriginal.png"
+ ],
+ "non_runtime_extra_note": "Editing copies the exporter's suffix/folder rule cannot recognise, listed by name. The two 'alt massage table' files are alternate takes of MapX1Y1 and the two '*original.png' files are backups of mainToolTray.png and main_BG.png. No runtime reference to any of these four names exists anywhere in the repository; the engine loads the canonical MapX1Y1.jpg, mainToolTray_ws.png and main_BG_ws.png instead."
 }

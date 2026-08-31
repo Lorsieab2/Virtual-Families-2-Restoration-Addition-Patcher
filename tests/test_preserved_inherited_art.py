@@ -188,12 +188,18 @@ def test_non_runtime_split_matches_the_exporter_classifier():
 
     index = _json.loads(INDEX.read_text(encoding="utf-8"))
     recorded = set(index["non_runtime_files"])
+    extras = set(index["non_runtime_extra_files"])
     derived = {
         rel
         for rel in index["files"]
         if is_non_runtime_source_path(_Path("Images") / rel)
     }
-    assert recorded == derived
+    # Everything the exporter's rule catches must be recorded, and the only
+    # additions are the named editing copies its suffix/folder rule cannot
+    # recognise -- so the list still cannot quietly drift from that rule.
+    assert derived <= recorded
+    assert recorded - derived == extras
+    assert extras <= set(index["files"])
     assert index["runtime_count"] == len(index["files"]) - len(recorded)
 
 
