@@ -2925,6 +2925,46 @@ class CleanBaseGameReferenceTests(unittest.TestCase):
         self.assertNotIn("if base.is_file() and sha256_file(base) == source_sha:", body)
 
 
+class MobileSoundBuilderFlagTests(unittest.TestCase):
+    """Where VF2_ENABLE_MOBILE_SOUND_ASSETS may be turned on, and where it must not be.
+
+    The playtest builder has no patcher step, so it bakes the four .wav->.ogg
+    routes into the executable at link time. The matrix builder must not: its
+    executables are what the patcher bundle ships, and the exporter applies
+    those same routes as exact-SHA post-asset patches keyed on the stock .wav
+    strings. A pre-routed matrix executable makes that export fail outright --
+
+        ValueError: Expected exactly one beaker.wav route in <exe>
+
+    -- because allow_prelinked_ogg is only enabled for the playtest export path
+    (final_playtest_all_enabled). It would also make "Use mobile sound assets"
+    one-way: with the routes baked in, unticking it could not restore the stock
+    .wav routes.
+    """
+
+    def _flag_values(self, name):
+        """Every value assigned to the env var in one builder script."""
+        text = (ROOT / "work" / name).read_text(encoding="utf-8")
+        values = []
+        for line in text.splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("$env:VF2_ENABLE_MOBILE_SOUND_ASSETS"):
+                continue
+            values.append(stripped.split("=", 1)[1].strip().strip('"'))
+        return values
+
+    def test_playtest_builder_enables_mobile_sound_assets(self):
+        self.assertEqual(self._flag_values("build_playtest.ps1"), ["1"])
+
+    def test_matrix_builder_leaves_mobile_sound_assets_to_the_patcher(self):
+        self.assertEqual(
+            self._flag_values("build_matrix.ps1"),
+            ["0"],
+            "build_matrix.ps1 must leave VF2_ENABLE_MOBILE_SOUND_ASSETS at 0; "
+            "pre-routed executables break mobile_sound_assets_post_asset_patches.",
+        )
+
+
 class TestSuiteCopiesInSyncTests(unittest.TestCase):
     """tests/ and work/ hold the same suites and must not drift apart.
 
