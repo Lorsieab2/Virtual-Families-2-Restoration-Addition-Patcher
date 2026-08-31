@@ -3435,5 +3435,60 @@ class OfflineVF2PatcherTests(unittest.TestCase):
             self.assertEqual(game_file.read_bytes(), bytes([1, 0x99, 3, 4]))
 
 
+class ShippedRunnerPythonFloorTests(unittest.TestCase):
+    """The shipped runners must run on the Python the README advertises.
+
+    datetime.UTC is a 3.11 alias, and using it made a normal validate/apply
+    run raise AttributeError on 3.9 and 3.10 -- versions the tool is otherwise
+    perfectly happy on. Nothing catches that at import time, because the call
+    only runs mid-patch.
+    """
+
+    RUNNERS = ("offline_vf2_patcher.py", "offline_vf2_patcher_gui.py")
+
+    # attribute/module names that do not exist on 3.9
+    TOO_NEW = {
+        "datetime.UTC": "3.11",
+        "_dt.UTC": "3.11",
+        "tomllib": "3.11",
+        "ExceptionGroup": "3.11",
+        "itertools.pairwise": "3.10",
+        "zoneinfo": "3.9 stdlib but not on 3.8",
+    }
+
+    def _sources(self):
+        for tree in ("src", "work"):
+            for name in self.RUNNERS:
+                path = ROOT / tree / name
+                if path.is_file():
+                    yield path
+
+    def test_no_construct_newer_than_the_documented_minimum(self):
+        import re
+
+        for path in self._sources():
+            text = path.read_text(encoding="utf-8")
+            # strip comments so an explanatory note about the alias does not trip this
+            code = re.sub(r"(?m)#.*$", "", text)
+            for token, version in self.TOO_NEW.items():
+                with self.subTest(file=path.name, token=token):
+                    self.assertNotIn(
+                        token,
+                        code,
+                        f"{path} uses {token}, which needs Python {version}",
+                    )
+
+    def test_no_match_statement(self):
+        import ast
+
+        for path in self._sources():
+            with self.subTest(file=path.name):
+                tree = ast.parse(path.read_text(encoding="utf-8"))
+                self.assertFalse(
+                    [n for n in ast.walk(tree) if n.__class__.__name__ == "Match"],
+                    f"{path} uses a match statement, which needs Python 3.10",
+                )
+
+
 if __name__ == "__main__":
     unittest.main()
