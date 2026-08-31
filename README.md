@@ -26,20 +26,38 @@ Everything the patcher needs beyond the game itself:
 **No extra Python packages are needed.** The patcher and its GUI use only the
 standard library, so there is nothing to `pip install`.
 
-Administrator rights are not required, but install the game somewhere your own
-account can write. A game folder under `C:\Program Files` is read-only for
-normal users, and the patcher cannot create its backups or output folder there.
+Administrator rights are not required, and your game install does not have to
+be writable. The patcher copies from it and writes a separate modded folder, so
+an install under `C:\Program Files` is fine -- use **Save modified folders
+under** in the GUI to put the output somewhere your own account can write.
+Backups default to a location under that output folder.
 
-If your antivirus quarantines the patched executable, that is a false positive
-on a modified game binary; restore it and add an exclusion for the modded
-folder. Nothing in the bundle contacts the network.
+Patching itself is offline: no step of validating, patching, or restoring
+contacts the network. The one exception is the **Check for updates** link in
+the GUI header, which opens the releases page in your browser when you click
+it.
+
+If your antivirus quarantines the patcher or the patched executable, do not
+simply override it. Confirm first that you downloaded the ZIP from this
+project's own releases page, and where the release notes publish a SHA-256 for
+the asset, compare it:
+
+```
+certutil -hashfile VF2-B<version>-Release.zip SHA256
+```
+
+If it matches the published value, you have the file that was released, and a
+warning about a modified game binary is expected -- you can then restore it and
+exclude the modded output folder. If it does not match, or the release you are
+using does not publish one, leave the file quarantined and ask on the issue
+tracker: a modified executable is also exactly what a real infection looks
+like, and that is not a judgement to make from the warning alone.
 
 ### If the window looks frozen
 
-It is working. The patcher checks every file in your install before it writes
-anything, and on a full release that pass takes a while with little on screen.
-It says **Please wait** in the status bar and the run log while it does this.
-Give it a minute before assuming it has hung.
+It is probably working. The patcher checks every file in your install before it
+writes anything, and on a full release that pass takes a while with little
+appearing on screen. Give it a minute before assuming it has hung.
 
 ## Download
 
