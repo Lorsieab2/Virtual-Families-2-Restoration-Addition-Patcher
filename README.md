@@ -301,10 +301,13 @@ support directories (`work/desktop_obj_files`, `work/vanilla_runtime_payload`,
 `work/generated_import_libs`, `work/desktop_runtime_dlls`); without them those
 tests fail on missing inputs rather than on a real regression.
 
-A build also cannot be reproduced from source alone. 635 runtime images -- most
+A build still cannot be reproduced from source alone. 635 runtime images -- most
 of the VillagerBodies frames, the mobile furniture art, and the upgrade icons --
-exist in neither this repository nor the vanilla payload, and reach a build only
-by inheriting from a previous build output. `work/build_playtest.ps1` takes that
+reach a build only by inheriting from a previous build output. All 635 are now
+preserved under `patcher_assets/inherited_runtime_images`, so they can no longer
+be lost, but no build consumes them from there yet. Of those, 574 previously
+existed in no tracked location at all; the other 61 were already tracked
+elsewhere and only their runtime copies arrived by inheritance. `work/build_playtest.ps1` takes that
 predecessor with `-PreviousBuildDir` and checks both it and the produced build
 against the recorded inventory in `data/vf2/inherited-only-images.json`.
 Omitting the flag does not reliably produce an unseeded build: the generator
