@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "work"))
+sys.path.insert(0, str(ROOT / "src"))
 import offline_vf2_patcher as patcher
 import offline_vf2_patcher_gui as gui
 
@@ -493,6 +493,94 @@ class OfflineVF2PatcherGUITests(unittest.TestCase):
             "B120",
         )
         self.assertEqual(gui.manifest_build_label({"name": "VF2 patcher"}), "")
+
+
+class PleaseWaitFeedbackTests(unittest.TestCase):
+    """The window must say it is working before it blocks.
+
+    load_manifest_settings() runs on the Tk main thread, so nothing redraws
+    until it returns; and during a run every print() the patcher makes is
+    captured and only shown at the end, so the log stays empty through the
+    verification pass. Both look like a frozen window.
+    """
+
+    def setUp(self):
+        try:
+            import tkinter as tk
+        except ImportError:  # pragma: no cover - tkinter is part of CPython
+            self.skipTest("tkinter is not available")
+        try:
+            self.root = tk.Tk()
+        except Exception:
+            self.skipTest("no display available for Tk")
+        self.root.withdraw()
+        self.app = gui.VF2PatcherGUI(self.root)
+        self.shown = []
+        original = self.app._render_settings_placeholder
+
+        def spy(text):
+            self.shown.append(text)
+            return original(text)
+
+        self.app._render_settings_placeholder = spy
+
+    def tearDown(self):
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+    def _manifest(self, tmp):
+        path = Path(tmp) / "manifest.json"
+        path.write_text('{"target_files": [], "settings": []}', encoding="utf-8")
+        return path
+
+    def test_loading_shows_a_wait_message_before_it_blocks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.app.manifest_var.set(str(self._manifest(tmp)))
+            self.assertTrue(self.app.load_manifest_settings())
+        waits = [text for text in self.shown if "Please wait" in text]
+        self.assertTrue(waits, "no wait message was rendered before loading")
+        self.assertNotIn("Please wait", self.app.status_var.get())
+
+    def test_the_busy_cursor_is_always_restored(self):
+        # Including on failure: a window left on the watch cursor looks
+        # permanently busy, which is the impression this feature removes.
+        with tempfile.TemporaryDirectory() as tmp:
+            self.app.manifest_var.set(str(self._manifest(tmp)))
+            self.app.load_manifest_settings()
+            self.assertEqual(self.root.cget("cursor"), "")
+            self.app.manifest_var.set(str(Path(tmp) / "missing.json"))
+            self.assertFalse(self.app.load_manifest_settings())
+            self.assertEqual(self.root.cget("cursor"), "")
+
+    def test_a_failed_load_recovers(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self.app.manifest_var.set(str(Path(tmp) / "missing.json"))
+            self.assertFalse(self.app.load_manifest_settings())
+            self.app.manifest_var.set(str(self._manifest(tmp)))
+            self.assertTrue(self.app.load_manifest_settings())
+
+    def test_a_run_says_it_is_working_before_the_log_fills(self):
+        self.app._run_worker("Dry Run", lambda: None, dry_run=True)
+        self.assertIn("please wait", self.app.status_var.get().lower())
+        for _ in range(50):
+            self.root.update()
+            if "Please wait - checking your game files" in self.app.log_text.get("1.0", "end"):
+                break
+        self.assertIn(
+            "Please wait - checking your game files",
+            self.app.log_text.get("1.0", "end"),
+        )
+
+    def test_a_destroyed_label_does_not_raise(self):
+        # Forcing a redraw flushes queued idle resizes for labels a reload has
+        # already destroyed.
+        import tkinter as tk
+
+        widget = tk.Text(self.root)
+        widget.destroy()
+        self.app._resize_markup_label(widget)
 
 
 if __name__ == "__main__":
