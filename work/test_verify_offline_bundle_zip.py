@@ -191,7 +191,10 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
         if archive is None:
             self.skipTest("no release ZIP present in outputs/")
         result = verifier.verify_archive(archive)
-        self.assertEqual(result["executable_variants"], 19)
+        self.assertEqual(
+            result["executable_variants"],
+            len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS),
+        )
         self.assertEqual(result["renovation_assets"], 35)
         self.assertEqual(result["sound_assets"], 67)
         self.assertEqual(result["sound_restores"], 63)
