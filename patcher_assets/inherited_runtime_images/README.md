@@ -1,9 +1,13 @@
 # Inherited-only runtime art
 
-635 image files that a build produces but the repository could not. They existed
-only inside previous build output folders and reached each new build by being
-copied forward from the last one, so the whole set depended on that chain never
-breaking.
+635 image files that a build produces. **574 of them existed in no tracked
+location** -- they lived only inside previous build output folders and reached
+each new build by being copied forward from the last one, so those depended on
+that chain never breaking.
+
+The remaining **61** were already tracked elsewhere in the repository; it was
+only their runtime copies that arrived by inheritance. See the correction below
+for why that distinction matters when regenerating them.
 
 Copied here from the verified B176 build. `SHA256SUMS.json` records every digest
 so later drift is detectable. The matching inventory, which the build validates
