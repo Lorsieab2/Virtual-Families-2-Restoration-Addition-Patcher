@@ -119,34 +119,66 @@ def _load_variant_identities(path: Path) -> dict[frozenset[str], tuple[str, int]
 
 
 
+def _release_sort_key(label: str) -> tuple[int, int]:
+    """Order release labels: B174 < B174.1 < B176 < B177."""
+    match = re.fullmatch(r"B(\d+)(?:\.(\d+))?", label)
+    if not match:
+        raise ValueError(f"not a release label: {label}")
+    return int(match.group(1)), int(match.group(2) or 0)
+
+
+def _historical_contract_before(label: str) -> frozenset[frozenset[str]] | None:
+    """The contract used by releases that predate per-release identity files.
+
+    B161 through B173 shipped before release-identities-<release>.json
+    existed.  Without this, verifying one of those retained archives has no
+    contract to check against and falls through to the current matrix, which
+    rejects its perfectly valid 19 executable records.
+
+    The combinations are tracked data, not inferred at runtime: guessing them
+    from today's matrix -- "the ones that do not need mobile_renovations" --
+    would happen to be right today and drift silently the next time the matrix
+    grows.
+    """
+    path = Path(__file__).resolve().parents[1] / "data" / "vf2" / "historical-release-contracts.json"
+    if not path.is_file():
+        return None
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8-sig"))
+        boundary = _release_sort_key(str(raw["applies_to_releases_before"]))
+        if _release_sort_key(label) >= boundary:
+            return None
+        combos = {frozenset(entry) for entry in raw["combinations"]}
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return None
+    return frozenset(combos) or None
+
+
 def _tracked_contract_for(root: str) -> frozenset[frozenset[str]] | None:
     """The contract a retained archive shipped with, from its own release.
 
-    An archive names its release in its root directory ("VF2-B176-Release"),
-    and the repository tracks that release's identities.  Resolving the
-    contract from those means a retained B174 or B176 verifies correctly even
-    when the caller passes no identities file -- otherwise the current matrix
-    is applied to a release that predates it and every retained archive looks
-    broken.  This fixes the contract only; the summary still reports
+    An archive names its release in its root directory ("VF2-B176-Release").
+    Releases from B174 onward track their own identities; earlier ones predate
+    that file and fall back to the recorded historical contract.  Either way a
+    retained archive verifies against what it actually shipped, instead of
+    having the current matrix applied to a release that predates it.  This
+    fixes the contract only; the summary still reports
     variant_identities_authenticated false, because the caller did not ask for
     the bytes to be authenticated against an independent source.
     """
     match = re.match(r"^VF2-(B\d+(?:\.\d+)?)-Release$", root)
     if not match:
         return None
-    path = Path(__file__).resolve().parents[1] / "data" / "vf2" / f"release-identities-{match.group(1)}.json"
+    label = match.group(1)
+    path = Path(__file__).resolve().parents[1] / "data" / "vf2" / f"release-identities-{label}.json"
     if not path.is_file():
-        return None
+        return _historical_contract_before(label)
     try:
         raw = json.loads(path.read_text(encoding="utf-8-sig"))
-        combos = {
-            frozenset(entry["requires"])
-            for entry in raw["variants"]
-        }
+        combos = {frozenset(entry["requires"]) for entry in raw["variants"]}
     except (OSError, json.JSONDecodeError, KeyError, TypeError):
         return None
     return frozenset(combos) or None
-
 
 def _fail(message: str) -> None:
     raise ValueError(message)

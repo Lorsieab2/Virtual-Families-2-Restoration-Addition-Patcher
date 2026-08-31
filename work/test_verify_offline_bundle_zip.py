@@ -405,6 +405,61 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
                 seen += 1
         self.assertTrue(seen, "no tracked release identities files found")
 
+    def test_releases_predating_identity_files_keep_their_contract(self):
+        """B161-B173 shipped before per-release identity files existed.
+
+        Without a recorded historical contract, verifying one of those
+        retained archives falls through to the current matrix and rejects its
+        valid 19 executable records.
+        """
+        historical = json.loads(
+            (ROOT / "data" / "vf2" / "historical-release-contracts.json").read_text(
+                encoding="utf-8-sig"
+            )
+        )
+        expected = len(historical["combinations"])
+        self.assertEqual(expected, 19)
+        for label in ("B161", "B165", "B172", "B173"):
+            with self.subTest(release=label):
+                resolved = verifier._tracked_contract_for(f"VF2-{label}-Release")
+                self.assertIsNotNone(resolved)
+                self.assertEqual(len(resolved), expected)
+                self.assertTrue(resolved <= verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
+
+    def test_historical_contract_matches_the_earliest_tracked_identities(self):
+        """Its provenance, asserted rather than trusted.
+
+        The recorded historical combinations are the contract B174, B174.1 and
+        B176 all shipped; if that stops being true the recorded table is wrong.
+        """
+        historical = {
+            frozenset(entry)
+            for entry in json.loads(
+                (ROOT / "data" / "vf2" / "historical-release-contracts.json").read_text(
+                    encoding="utf-8-sig"
+                )
+            )["combinations"]
+        }
+        for label in ("B174", "B174.1", "B176"):
+            path = ROOT / "data" / "vf2" / f"release-identities-{label}.json"
+            if not path.is_file():
+                continue
+            with self.subTest(release=label):
+                shipped = {
+                    frozenset(entry["requires"])
+                    for entry in json.loads(path.read_text(encoding="utf-8-sig"))["variants"]
+                }
+                self.assertEqual(shipped, historical)
+
+    def test_release_label_ordering(self):
+        self.assertLess(verifier._release_sort_key("B174"), verifier._release_sort_key("B174.1"))
+        self.assertLess(verifier._release_sort_key("B174.1"), verifier._release_sort_key("B176"))
+        self.assertLess(verifier._release_sort_key("B99"), verifier._release_sort_key("B161"))
+        for bad in ("", "junk", "174", "B", "Bx"):
+            with self.subTest(label=bad):
+                with self.assertRaises(ValueError):
+                    verifier._release_sort_key(bad)
+
     def test_unknown_or_malformed_root_falls_back_to_the_matrix(self):
         for root in ("VF2-B999-Release", "junk", "", "VF2--Release"):
             with self.subTest(root=root):
