@@ -265,7 +265,11 @@ def _verify_zip_inventory(zipped: zipfile.ZipFile, zip_path: Path) -> tuple[str,
     return root, set(names)
 
 
-def verify_archive(zip_path: Path | str, identities_path: Path | str | None = None) -> dict:
+def verify_archive(
+    zip_path: Path | str,
+    identities_path: Path | str | None = None,
+    require_complete: bool = False,
+) -> dict:
     """Verify one explicit archive and return a compact evidence summary.
 
     The executable contract is the archive's own, not whatever the matrix
@@ -280,8 +284,13 @@ def verify_archive(zip_path: Path | str, identities_path: Path | str | None = No
     one and pass.
 
     Completeness -- that a *new* release covers every combination the matrix
-    can build -- is asserted by work/gate_release_zip.py at build time, which
-    is the only point where "all of them" is a meaningful requirement.
+    can build -- is what require_complete asks for.  It is set by
+    --require-identities, because that flag is advertised as the release gate
+    by this tool's help and by export_release_bundle.py; without it, a
+    truncated bundle whose identities file omitted the same combination would
+    authenticate cleanly through the advertised path and only be caught by
+    gate_release_zip.py.  Verifying a retained older release is the case that
+    must not demand completeness, and that path does not pass the flag.
     """
     path = Path(zip_path)
     archive_path = path
@@ -298,6 +307,13 @@ def verify_archive(zip_path: Path | str, identities_path: Path | str | None = No
             requirements = frozenset(identities)
         else:
             requirements = _tracked_contract_for(root) or EXECUTABLE_VARIANT_REQUIREMENTS
+        if require_complete and requirements != EXECUTABLE_VARIANT_REQUIREMENTS:
+            missing = sorted(sorted(x) for x in EXECUTABLE_VARIANT_REQUIREMENTS - requirements)
+            extra = sorted(sorted(x) for x in requirements - EXECUTABLE_VARIANT_REQUIREMENTS)
+            _fail(
+                "release does not cover every combination the matrix builds; "
+                f"missing={missing} unexpected={extra}"
+            )
         manifest_bytes = _read_member(zipped, names, root, "manifest.json", "manifest")
         try:
             manifest = json.loads(manifest_bytes)
@@ -532,13 +548,19 @@ def main() -> int:
     parser.add_argument(
         "--require-identities",
         action="store_true",
-        help="fail unless --identities is supplied; use this when gating a release",
+        help=(
+            "fail unless --identities is supplied, and require the release to "
+            "cover every combination the matrix builds; use this when gating a "
+            "release"
+        ),
     )
     args = parser.parse_args()
     if args.require_identities and args.identities is None:
         parser.error("--require-identities was given without --identities")
     try:
-        result = verify_archive(args.zip_path, args.identities)
+        result = verify_archive(
+        args.zip_path, args.identities, require_complete=args.require_identities
+    )
     except (OSError, ValueError, zipfile.BadZipFile) as exc:
         parser.error(str(exc))
     print(json.dumps(result, sort_keys=True))

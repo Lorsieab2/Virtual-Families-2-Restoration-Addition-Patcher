@@ -410,6 +410,44 @@ class OfflineBundleZipVerifierTests(unittest.TestCase):
             with self.subTest(root=root):
                 self.assertIsNone(verifier._tracked_contract_for(root))
 
+    def test_advertised_gate_path_rejects_a_truncated_release(self):
+        """--require-identities must be as strict as gate_release_zip.py.
+
+        Both this tool's help and export_release_bundle.py advertise
+        --require-identities as the release gate.  A bundle and an identities
+        file that omit the same valid combination agree with each other, so
+        without a completeness check the advertised path authenticates a
+        truncated release and only the separate gate catches it.
+        """
+        archive = newest_release_zip()
+        identities = newest_release_identities()
+        if archive is None or identities is None or not identities.is_file():
+            self.skipTest("no release ZIP or identities file present")
+        shipped = json.loads(identities.read_text(encoding="utf-8-sig"))
+        if len(shipped["variants"]) != len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS):
+            self.skipTest("newest release is not a complete build")
+
+        # Sanity: the untruncated release passes the advertised path.
+        verifier.verify_archive(archive, identities, require_complete=True)
+
+        payload = dict(shipped, variants=shipped["variants"][:-1])
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            short = Path(tmp.name) / "short.json"
+            short.write_text(json.dumps(payload), encoding="utf-8")
+            # Without completeness this is only caught by the archive count.
+            with self.assertRaises(ValueError):
+                verifier.verify_archive(archive, short)
+            # The advertised gate must name the real problem.
+            with self.assertRaisesRegex(ValueError, "every combination the matrix builds"):
+                verifier.verify_archive(archive, short, require_complete=True)
+        finally:
+            tmp.cleanup()
+
+    def test_require_identities_sets_completeness_on_the_cli(self):
+        source = Path(verifier.__file__).read_text(encoding="utf-8")
+        self.assertIn("require_complete=args.require_identities", source)
+
 
 if __name__ == "__main__":
     unittest.main()
