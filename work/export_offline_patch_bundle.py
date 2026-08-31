@@ -58,6 +58,28 @@ FINAL_PLAYTEST_NATIVE_REQUIRES = [
 # uncompressed bytes, 43,823,872 compressed -- 24.7% of that entire download.
 NON_RUNTIME_SOURCE_SUFFIXES = {".bak", ".xcf"}
 
+# Working folders a build leaves inside Images/ that the game never reads. The
+# engine loads Images/Upgrades/<name>.png; these two subfolders are the swap
+# source and the restore backup for the Invisible Workspace Upgrades option.
+# The exporter already installs the real swap flat from
+# patcher_assets/optional_patches/invisible_workspace_upgrades and ships the
+# same files under OptionalVisualMods, so copying the folders themselves put 61
+# unreadable files into every install. B176 shipped 93 Images/Upgrades targets
+# where only 32 are runtime.
+NON_RUNTIME_SOURCE_DIRS = {
+    ("Images", "Upgrades", "invisible images"),
+    ("Images", "Upgrades", "original images"),
+}
+
+
+def is_non_runtime_source_path(rel) -> bool:
+    """True when a build-relative path is an editing source, not runtime art."""
+    if rel.suffix.lower() in NON_RUNTIME_SOURCE_SUFFIXES:
+        return True
+    parts = tuple(rel.parts)
+    return any(parts[: len(prefix)] == prefix for prefix in NON_RUNTIME_SOURCE_DIRS)
+
+
 
 EXCLUDED_FULL_PAYLOAD_FILES = {
     "patch-manifest.json",
@@ -1931,7 +1953,7 @@ def iter_candidate_assets(
                 rel = path.relative_to(build_dir)
                 if is_desktop_runtime_source_file(rel):
                     continue
-                if rel.suffix.lower() in NON_RUNTIME_SOURCE_SUFFIXES:
+                if is_non_runtime_source_path(rel):
                     continue
                 if allowed_paths is not None and rel not in allowed_paths:
                     continue

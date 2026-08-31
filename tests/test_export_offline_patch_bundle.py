@@ -2979,6 +2979,25 @@ class NonRuntimeSourceExclusionTests(unittest.TestCase):
             exporter.NON_RUNTIME_SOURCE_SUFFIXES, {".bak", ".xcf"}
         )
 
+    def test_nested_upgrade_source_folders_are_excluded(self):
+        """The two working folders inside Images/Upgrades are not runtime art.
+
+        The engine loads Images/Upgrades/<name>.png. These subfolders are the
+        swap source and the restore backup for Invisible Workspace Upgrades;
+        the exporter already installs the real swap flat and ships the same
+        files under OptionalVisualMods, so copying the folders put 61
+        unreadable files into every install.
+        """
+        for rel, expected in (
+            (Path("Images/Upgrades/invisible images/toolwall.png"), True),
+            (Path("Images/Upgrades/original images/toolwall.png"), True),
+            (Path("Images/Upgrades/toolwall.png"), False),
+            (Path("Images/Furniture/Balloons_birthday.png"), False),
+            (Path("Images/Furniture/BlackBookshelf.xcf"), True),
+        ):
+            with self.subTest(path=str(rel)):
+                self.assertEqual(exporter.is_non_runtime_source_path(rel), expected)
+
     def test_payload_walk_uses_the_shared_suffix_set(self):
         source = (ROOT / "work" / "export_offline_patch_bundle.py").read_text(
             encoding="utf-8"
