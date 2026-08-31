@@ -37,6 +37,29 @@ def run(argv: list[str]) -> subprocess.CompletedProcess:
 
 
 
+
+def quarantine(archive: Path, reason: str) -> int:
+    """Move a rejected archive aside so it cannot be published by mistake.
+
+    Every gate failure has to do this, not just the verifier's.  A check that
+    reports a bad bundle but leaves it sitting at the normal publishable
+    filename is a check a later manual upload step walks straight past, which
+    is the exact accident the gate exists to prevent.
+    """
+    rejected = archive.parent / (archive.name + ".REJECTED")
+    try:
+        archive.replace(rejected)
+    except OSError:
+        rejected = archive
+    print(reason, file=sys.stderr)
+    print(
+        f"RELEASE GATE FAILED -- archive moved to {rejected.name} so it "
+        "cannot be uploaded by mistake",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def incomplete_variant_coverage(shipped_variants: object) -> str | None:
     """Reject a release that does not cover every combination the matrix builds.
 
@@ -134,18 +157,7 @@ def main() -> int:
         ]
     )
     if verified.returncode != 0:
-        rejected = archive.parent / (archive.name + ".REJECTED")
-        try:
-            archive.replace(rejected)
-        except OSError:
-            rejected = archive
-        print(verified.stdout + verified.stderr, file=sys.stderr)
-        print(
-            f"RELEASE GATE FAILED -- archive moved to {rejected.name} so it "
-            "cannot be uploaded by mistake",
-            file=sys.stderr,
-        )
-        return 1
+        return quarantine(archive, verified.stdout + verified.stderr)
 
     summary = json.loads(verified.stdout)
     # A new release must cover every combination the matrix can build.  The
@@ -156,12 +168,10 @@ def main() -> int:
     # at 14 of 19 -- would produce a short bundle that gates clean.
     incomplete = incomplete_variant_coverage(summary.get("executable_variants"))
     if incomplete is not None:
-        print(incomplete, file=sys.stderr)
-        return 1
+        return quarantine(archive, incomplete)
 
     if not summary.get("variant_identities_authenticated"):
-        print("gate did not authenticate variant identities", file=sys.stderr)
-        return 1
+        return quarantine(archive, "gate did not authenticate variant identities")
     print(json.dumps(summary, indent=2, sort_keys=True))
     print(f"RELEASE GATE PASSED -- {archive} is ready to publish")
     return 0

@@ -8,6 +8,7 @@ against its own release's contract so retained older ZIPs still verify.
 from __future__ import annotations
 
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -38,6 +39,38 @@ class VariantCoverageTests(unittest.TestCase):
         for shipped in (None, "32", -1):
             with self.subTest(shipped=shipped):
                 self.assertIsNotNone(gate.incomplete_variant_coverage(shipped))
+
+
+class QuarantineTests(unittest.TestCase):
+    """A rejected bundle must not stay at the publishable filename.
+
+    Reporting a bad archive but leaving it in place is a check a later
+    manual upload step walks straight past.
+    """
+
+    def test_rejected_archive_is_moved_aside(self):
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            archive = Path(tmp.name) / "VF2-B999-Release.zip"
+            archive.write_bytes(b"not a real bundle")
+            code = gate.quarantine(archive, "because")
+            self.assertEqual(code, 1)
+            self.assertFalse(archive.exists())
+            moved = archive.parent / (archive.name + ".REJECTED")
+            self.assertTrue(moved.is_file())
+            self.assertEqual(moved.read_bytes(), b"not a real bundle")
+        finally:
+            tmp.cleanup()
+
+    def test_every_gate_failure_path_quarantines(self):
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        body = source.split("def main(")[1]
+        # Any bare `return 1` after packaging would leave a rejected bundle
+        # sitting at the publishable name; failures must go through
+        # quarantine() instead.
+        after_package = body.split("verified =")[1]
+        self.assertNotIn("return 1", after_package)
+        self.assertEqual(after_package.count("return quarantine(archive"), 3)
 
 
 if __name__ == "__main__":
