@@ -78,3 +78,97 @@ def test_build_consumes_the_store_and_never_overwrites_generated_art():
     # appears earlier in the file as a "def" line.
     assert source.index("        sync_holiday_body_runtime_frames(manifest)") < call
     assert source.index("    validate_clean_package(manifest)", body_end) > call
+
+
+# --- behavioural: exercise the step rather than reading its source ---------
+#
+# The module runs a full build when executed as a script, so it is compiled
+# and exec'd once here with __name__ set to something other than "__main__",
+# and the three paths it reads are redirected at a temporary tree.
+
+import hashlib as _hashlib
+import json as _json
+import tempfile
+from pathlib import Path as _Path
+
+import pytest
+
+
+def _load_step():
+    source = (REPO / "work" / "patch_mobile_furniture_pack.py").read_text(encoding="utf-8")
+    namespace = {
+        "__name__": "patch_pack_under_test",
+        "__file__": str(REPO / "work" / "patch_mobile_furniture_pack.py"),
+    }
+    exec(compile(source, "patch_mobile_furniture_pack.py", "exec"), namespace)
+    return namespace
+
+
+@pytest.fixture(scope="module")
+def step():
+    return _load_step()
+
+
+def _run(step, store, index, out):
+    step["PRESERVED_INHERITED_ART"] = store
+    step["INHERITED_ONLY_INDEX"] = index
+    step["OUT"] = out
+    manifest = {}
+    step["restore_preserved_inherited_art"](manifest)
+    return manifest["preserved_inherited_art"]
+
+
+def _tree(tmp_path, files, index_names, digests):
+    store = tmp_path / "store"
+    store.mkdir()
+    for name, payload in files.items():
+        target = store / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+    (store / "SHA256SUMS.json").write_text(_json.dumps({"files": digests}), encoding="utf-8")
+    index = tmp_path / "index.json"
+    index.write_text(_json.dumps({"files": index_names}), encoding="utf-8")
+    out = tmp_path / "out"
+    (out / "Images").mkdir(parents=True)
+    return store, index, out
+
+
+def test_missing_from_store_stops_the_build(step, tmp_path):
+    store, index, out = _tree(tmp_path, {}, ["Gone.png"], {})
+    with pytest.raises(SystemExit) as caught:
+        _run(step, store, index, out)
+    assert "absent from both the build and the tracked store" in str(caught.value)
+
+
+def test_a_file_with_no_recorded_digest_is_never_written(step, tmp_path):
+    store, index, out = _tree(tmp_path, {"Thing.png": b"art"}, ["Thing.png"], {})
+    with pytest.raises(SystemExit) as caught:
+        _run(step, store, index, out)
+    assert "no recorded digest" in str(caught.value)
+    assert not (out / "Images" / "Thing.png").exists()
+
+
+def test_a_corrupted_file_is_never_written(step, tmp_path):
+    store, index, out = _tree(tmp_path, {"Thing.png": b"art"}, ["Thing.png"], {"Thing.png": "0" * 64})
+    with pytest.raises(SystemExit) as caught:
+        _run(step, store, index, out)
+    assert "does not match its recorded digest" in str(caught.value)
+    assert not (out / "Images" / "Thing.png").exists()
+
+
+def test_a_verified_file_is_restored(step, tmp_path):
+    digest = _hashlib.sha256(b"art").hexdigest()
+    store, index, out = _tree(tmp_path, {"Thing.png": b"art"}, ["Thing.png"], {"Thing.png": digest})
+    record = _run(step, store, index, out)
+    assert record["restored"] == 1
+    assert (out / "Images" / "Thing.png").read_bytes() == b"art"
+
+
+def test_generated_art_is_never_overwritten(step, tmp_path):
+    digest = _hashlib.sha256(b"art").hexdigest()
+    store, index, out = _tree(tmp_path, {"Thing.png": b"art"}, ["Thing.png"], {"Thing.png": digest})
+    (out / "Images" / "Thing.png").write_bytes(b"GENERATED FROM SOURCE")
+    record = _run(step, store, index, out)
+    assert record["restored"] == 0
+    assert record["already_present"] == 1
+    assert (out / "Images" / "Thing.png").read_bytes() == b"GENERATED FROM SOURCE"

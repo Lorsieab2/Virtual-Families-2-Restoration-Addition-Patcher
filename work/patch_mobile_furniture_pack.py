@@ -4739,6 +4739,15 @@ PRESERVED_INHERITED_ART = ROOT / "patcher_assets" / "inherited_runtime_images"
 INHERITED_ONLY_INDEX = ROOT / "data" / "vf2" / "inherited-only-images.json"
 
 
+
+def _repo_relative(path):
+    """Repo-relative path for the manifest, absolute if it sits outside."""
+    try:
+        return str(path.relative_to(ROOT)).replace(chr(92), "/")
+    except ValueError:
+        return str(path).replace(chr(92), "/")
+
+
 def restore_preserved_inherited_art(manifest):
     """Supply inheritance-only images from the tracked store, not a predecessor.
 
@@ -4776,7 +4785,8 @@ def restore_preserved_inherited_art(manifest):
         digests = json.loads(sums.read_text(encoding="utf-8")).get("files", {})
     wanted = json.loads(INHERITED_ONLY_INDEX.read_text(encoding="utf-8"))["files"]
 
-    restored, already_present, missing_from_store, corrupt = [], [], [], []
+    restored, already_present = [], []
+    missing_from_store, corrupt, undigested = [], [], []
     for rel in wanted:
         target = OUT / "Images" / rel
         if target.is_file():
@@ -4786,28 +4796,53 @@ def restore_preserved_inherited_art(manifest):
         if not source.is_file():
             missing_from_store.append(rel)
             continue
-        payload = source.read_bytes()
         expected = digests.get(rel)
-        if expected is not None and hashlib.sha256(payload).hexdigest() != expected:
+        if expected is None:
+            # No recorded digest means nothing vouches for these bytes, so
+            # writing them anyway would make the integrity check decorative.
+            undigested.append(rel)
+            continue
+        payload = source.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != expected:
             corrupt.append(rel)
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(payload)
         restored.append(rel)
 
+    # Every one of these means the finished build would be missing art the
+    # index says it needs, or would contain art nothing vouches for. The
+    # runtime validation downstream counts images in aggregate and would not
+    # notice either, which is the silent miss this inventory exists to catch.
+    problems = []
+    if missing_from_store:
+        problems.append(
+            f"absent from both the build and the tracked store "
+            f"({len(missing_from_store)}): {', '.join(sorted(missing_from_store)[:10])}"
+        )
     if corrupt:
+        problems.append(
+            f"does not match its recorded digest "
+            f"({len(corrupt)}): {', '.join(sorted(corrupt)[:10])}"
+        )
+    if undigested:
+        problems.append(
+            f"has no recorded digest in SHA256SUMS.json "
+            f"({len(undigested)}): {', '.join(sorted(undigested)[:10])}"
+        )
+    if problems:
         raise SystemExit(
-            "Preserved inherited art does not match its recorded digests: "
-            + ", ".join(sorted(corrupt)[:10])
+            "Inheritance-only art cannot be supplied for this build -- "
+            + "; ".join(problems)
         )
 
     record.update(
         status="ok",
-        source=str(PRESERVED_INHERITED_ART.relative_to(ROOT)).replace(chr(92), "/"),
+        source=_repo_relative(PRESERVED_INHERITED_ART),
         wanted=len(wanted),
         restored=len(restored),
         already_present=len(already_present),
-        missing_from_store=sorted(missing_from_store),
+        missing_from_store=[],
         note=(
             "Images supplied from the tracked store rather than a previous "
             "build output. already_present were produced by this build's own "
