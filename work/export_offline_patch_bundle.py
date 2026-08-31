@@ -1902,6 +1902,8 @@ def iter_candidate_assets(
             rel_text = relative_posix(rel)
             if is_desktop_runtime_source_file(rel):
                 continue
+            if is_non_runtime_source_path(rel):
+                continue
             if rel_text in EXCLUDED_FULL_PAYLOAD_FILES:
                 continue
             if len(rel.parts) == 1 and rel.name.lower() in patched_exe_candidates:
