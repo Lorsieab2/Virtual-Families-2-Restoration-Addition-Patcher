@@ -61,7 +61,18 @@ $inheritedOnlyIndexPath = Join-Path $inheritedOnlyIndexPath "inherited-only-imag
 if (-not (Test-Path -LiteralPath $inheritedOnlyIndexPath)) {
     throw "Missing inherited-art inventory: $inheritedOnlyIndexPath"
 }
-$inheritedOnlyImages = @((Get-Content -LiteralPath $inheritedOnlyIndexPath -Raw | ConvertFrom-Json).files |
+$inheritedOnlyIndex = Get-Content -LiteralPath $inheritedOnlyIndexPath -Raw | ConvertFrom-Json
+# Editing sources -- .xcf files and the Upgrades "invisible images" /
+# "original images" working folders -- are recorded in the historical
+# inventory but are not runtime art. The engine never loads them and the
+# offline bundle excludes them, so a build is not required to produce them and
+# validating them here would fail every build that correctly omits them.
+$nonRuntimeInherited = @{}
+foreach ($rel in @($inheritedOnlyIndex.non_runtime_files)) {
+    if ($rel) { $nonRuntimeInherited[$rel] = $true }
+}
+$inheritedOnlyImages = @($inheritedOnlyIndex.files |
+    Where-Object { -not $nonRuntimeInherited.ContainsKey($_) } |
     ForEach-Object { "Images/$_" })
 if ($inheritedOnlyImages.Count -eq 0) {
     throw "Inherited-art inventory is empty: $inheritedOnlyIndexPath"

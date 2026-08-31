@@ -172,3 +172,66 @@ def test_generated_art_is_never_overwritten(step, tmp_path):
     assert record["restored"] == 0
     assert record["already_present"] == 1
     assert (out / "Images" / "Thing.png").read_bytes() == b"GENERATED FROM SOURCE"
+
+
+def test_non_runtime_split_matches_the_exporter_classifier():
+    """The recorded split must not drift from the exporter's own rule.
+
+    The bundle exporter decides what is editing source rather than runtime
+    art; if this list and that rule disagree, a build restores files the
+    bundle then refuses to ship, or omits ones it needs.
+    """
+    import sys
+
+    sys.path.insert(0, str(REPO / "work"))
+    from export_offline_patch_bundle import is_non_runtime_source_path
+
+    index = _json.loads(INDEX.read_text(encoding="utf-8"))
+    recorded = set(index["non_runtime_files"])
+    derived = {
+        rel
+        for rel in index["files"]
+        if is_non_runtime_source_path(_Path("Images") / rel)
+    }
+    assert recorded == derived
+    assert index["runtime_count"] == len(index["files"]) - len(recorded)
+
+
+def test_non_runtime_sources_are_never_restored(step, tmp_path):
+    """.xcf and the Upgrades working folders are ~47 MB of editing sources."""
+    payload = b"working file"
+    digest = _hashlib.sha256(payload).hexdigest()
+    names = ["Map.xcf", "Upgrades/invisible images/Thing.png", "Real.png"]
+    store, index, out = _tree(
+        tmp_path,
+        {name: payload for name in names},
+        names,
+        {name: digest for name in names},
+    )
+    index.write_text(
+        _json.dumps({"files": names, "non_runtime_files": names[:2]}), encoding="utf-8"
+    )
+    record = _run(step, store, index, out)
+    assert record["restored"] == 1
+    assert record["skipped_non_runtime"] == 2
+    assert (out / "Images" / "Real.png").is_file()
+    assert not (out / "Images" / "Map.xcf").exists()
+    assert not (out / "Images" / "Upgrades" / "invisible images" / "Thing.png").exists()
+
+
+def test_a_broken_checkout_stops_the_build(step, tmp_path):
+    store, index, out = _tree(tmp_path, {}, [], {})
+    for missing in (store, index):
+        with pytest.raises(SystemExit) as caught:
+            if missing is store:
+                _run(step, tmp_path / "no-store", index, out)
+            else:
+                _run(step, store, tmp_path / "no-index.json", out)
+        assert "missing from this checkout" in str(caught.value)
+
+
+def test_build_playtest_validates_runtime_art_only():
+    """Otherwise it fails every build that correctly omits editing sources."""
+    script = (REPO / "work" / "build_playtest.ps1").read_text(encoding="utf-8")
+    assert "non_runtime_files" in script
+    assert "$nonRuntimeInherited.ContainsKey($_)" in script

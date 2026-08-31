@@ -4769,21 +4769,35 @@ def restore_preserved_inherited_art(manifest):
     of silently shipping bad art.
     """
     record = manifest.setdefault("preserved_inherited_art", {})
-    if not PRESERVED_INHERITED_ART.is_dir() or not INHERITED_ONLY_INDEX.is_file():
-        record.update(
-            status="unavailable",
-            note=(
-                "No tracked inherited-art store; this build can only get these "
-                "images by inheriting from a previous build output."
-            ),
+    # Both are tracked, so their absence means a broken or partial checkout.
+    # Continuing would let an unseeded build finish without art the index says
+    # it needs: the downstream validation counts images in aggregate and would
+    # not notice, which is the silent miss this step exists to remove.
+    missing_inputs = [
+        str(path)
+        for path, ok in (
+            (PRESERVED_INHERITED_ART, PRESERVED_INHERITED_ART.is_dir()),
+            (INHERITED_ONLY_INDEX, INHERITED_ONLY_INDEX.is_file()),
         )
-        return
+        if not ok
+    ]
+    if missing_inputs:
+        raise SystemExit(
+            "Inheritance-only art inputs are missing from this checkout: "
+            + ", ".join(missing_inputs)
+        )
 
     digests = {}
     sums = PRESERVED_INHERITED_ART / "SHA256SUMS.json"
     if sums.is_file():
         digests = json.loads(sums.read_text(encoding="utf-8")).get("files", {})
-    wanted = json.loads(INHERITED_ONLY_INDEX.read_text(encoding="utf-8"))["files"]
+    index = json.loads(INHERITED_ONLY_INDEX.read_text(encoding="utf-8"))
+    # Editing sources -- .xcf files and the Upgrades working folders -- are
+    # recorded in the historical inventory but are not runtime art. The engine
+    # never loads them and the offline bundle excludes them, so restoring them
+    # would push ~47 MB of working files into every standalone build.
+    non_runtime = set(index.get("non_runtime_files", []))
+    wanted = [rel for rel in index["files"] if rel not in non_runtime]
 
     restored, already_present = [], []
     missing_from_store, corrupt, undigested = [], [], []
@@ -4840,6 +4854,7 @@ def restore_preserved_inherited_art(manifest):
         status="ok",
         source=_repo_relative(PRESERVED_INHERITED_ART),
         wanted=len(wanted),
+        skipped_non_runtime=len(non_runtime),
         restored=len(restored),
         already_present=len(already_present),
         missing_from_store=[],
