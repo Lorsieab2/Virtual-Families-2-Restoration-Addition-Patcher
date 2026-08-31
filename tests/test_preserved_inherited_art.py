@@ -237,8 +237,9 @@ def test_build_playtest_validates_runtime_art_only():
     assert "$nonRuntimeInherited.ContainsKey($_)" in script
 
 
-def _run_seeded(step, store, index, out, seeded):
+def _run_seeded(step, store, index, out, seeded, generated=()):
     step["SEEDED_INHERITED_ART"] = dict(seeded)
+    step["GENERATED_RUNTIME_IMAGES"] = set(generated)
     return _run(step, store, index, out)
 
 
@@ -274,7 +275,9 @@ def test_a_generator_overwriting_seeded_art_is_left_alone(step, tmp_path):
     )
     (out / "Images" / "Thing.png").write_bytes(generated)
     record = _run_seeded(
-        step, store, index, out, {"Thing.png": _hashlib.sha256(seeded).hexdigest()}
+        step, store, index, out,
+        {"Thing.png": _hashlib.sha256(seeded).hexdigest()},
+        generated=["Thing.png"],
     )
     assert record["replaced_from_seed"] == 0
     assert record["already_present"] == 1
@@ -307,3 +310,59 @@ def test_the_seed_snapshot_is_taken_before_any_generator_runs():
     snapshot = source.index("    snapshot_seeded_inherited_art()")
     assert source.index("    seed_from_previous_build(manifest)") < snapshot
     assert snapshot < source.index("        sync_holiday_body_runtime_frames(manifest)")
+
+
+def test_a_generator_rewriting_identical_bytes_is_still_authoritative(step, tmp_path):
+    """The case a byte comparison cannot see.
+
+    When the seed already holds the generator's deterministic output, the
+    next run writes exactly the same bytes. Inferring "was this generated?"
+    from a content change answers no, and the file is then reverted to the
+    historical store copy -- which for the 249 regenerated holiday frames
+    means a build seeded from the previous release silently undoes the
+    regeneration. Generator writes are tracked, so this is not inferred.
+    """
+    generated, canonical = b"REGENERATED", b"historical copy"
+    digest = _hashlib.sha256(canonical).hexdigest()
+    store, index, out = _tree(
+        tmp_path, {"Thing.png": canonical}, ["Thing.png"], {"Thing.png": digest}
+    )
+    # Seed already contains the generator's output; this run rewrites it byte
+    # for byte, so seeded_digest == current and nothing changed on disk.
+    (out / "Images" / "Thing.png").write_bytes(generated)
+    record = _run_seeded(
+        step, store, index, out,
+        {"Thing.png": _hashlib.sha256(generated).hexdigest()},
+        generated=["Thing.png"],
+    )
+    assert record["replaced_from_seed"] == 0
+    assert (out / "Images" / "Thing.png").read_bytes() == generated
+
+
+def test_seed_bytes_with_no_recorded_digest_stop_the_build(step, tmp_path):
+    """An incomplete digest manifest must not be fail-open for seeds either."""
+    store, index, out = _tree(tmp_path, {"Thing.png": b"art"}, ["Thing.png"], {})
+    (out / "Images" / "Thing.png").write_bytes(b"unverified seed bytes")
+    with pytest.raises(SystemExit) as caught:
+        _run_seeded(step, store, index, out, {"Thing.png": _hashlib.sha256(b"unverified seed bytes").hexdigest()})
+    assert "no recorded digest" in str(caught.value)
+
+
+def test_every_villager_body_writer_records_its_output():
+    """A writer added later must not silently bypass generator tracking."""
+    source = (REPO / "work" / "patch_mobile_furniture_pack.py").read_text(encoding="utf-8")
+    lines = source.split(chr(10))
+    saves = [
+        i
+        for i, line in enumerate(lines)
+        if ".save(target)" in line or ".save(dst)" in line
+    ]
+    unrecorded = []
+    for i in saves:
+        window = chr(10).join(lines[max(0, i - 40) : i])
+        writes_bodies = 'OUT / "Images" / "VillagerBodies"' in window or (
+            "output_root" in lines[i - 1] or "body_dir" in lines[i - 1]
+        )
+        if writes_bodies and "record_generated_image" not in lines[i + 1]:
+            unrecorded.append(i + 1)
+    assert not unrecorded, f"VillagerBodies writers not recorded, at lines {unrecorded}"

@@ -4742,6 +4742,21 @@ def previous_build_source_dirs():
 # would quietly miss whichever one was added next.
 SEEDED_INHERITED_ART = {}
 
+# Runtime images this build's generators wrote, relative to OUT/Images.
+# Tracked explicitly rather than inferred from a byte change: when the seed
+# already holds the generator's deterministic output the bytes are identical,
+# so "did the content change" answers the wrong question and would revert
+# valid regenerated frames to their historical copies.
+GENERATED_RUNTIME_IMAGES = set()
+
+
+def record_generated_image(path):
+    """Note that a generator wrote this file, so it is authoritative."""
+    try:
+        GENERATED_RUNTIME_IMAGES.add(Path(path).relative_to(OUT / "Images").as_posix())
+    except ValueError:
+        pass
+
 
 def snapshot_seeded_inherited_art():
     """Record what the seed supplied, before any generator overwrites it."""
@@ -4842,20 +4857,18 @@ def restore_preserved_inherited_art(manifest):
             # present came from a seed, and trusting it makes the build's
             # output depend on which predecessor it happened to find, so it is
             # checked against the tracked digest and replaced when it differs.
+            if rel in GENERATED_RUNTIME_IMAGES or rel not in SEEDED_INHERITED_ART:
+                # Written by a generator this run, or not supplied by the seed
+                # at all -- either way this build produced it, and generated
+                # output is authoritative.
+                already_present.append(rel)
+                continue
             expected = digests.get(rel)
-            seeded_digest = SEEDED_INHERITED_ART.get(rel)
-            if expected is None or seeded_digest is None:
-                # Not carried in by the seed, so this build produced it.
-                already_present.append(rel)
+            if expected is None:
+                # Seed bytes with nothing to check them against.
+                undigested.append(rel)
                 continue
-            current = hashlib.sha256(target.read_bytes()).hexdigest()
-            if current != seeded_digest:
-                # A generator rewrote what the seed supplied; generated output
-                # is authoritative and must never be reverted to the tracked
-                # copy of what some earlier build produced.
-                already_present.append(rel)
-                continue
-            if current == expected:
+            if hashlib.sha256(target.read_bytes()).hexdigest() == expected:
                 already_present.append(rel)
                 continue
             source = PRESERVED_INHERITED_ART / rel
@@ -6591,6 +6604,7 @@ def sync_separated_villager_sheets(manifest):
                             )
                             target = body_dir / f"Frame{frame_index:02d}.png"
                             sheet.crop(box).save(target)
+                            record_generated_image(target)
                         body_frames.append({
                             "gender": gender,
                             "body_type": body_type,
@@ -6876,6 +6890,7 @@ def sync_holiday_body_runtime_frames(manifest):
                                 )
                                 dst.parent.mkdir(parents=True, exist_ok=True)
                                 normalized.save(dst)
+                                record_generated_image(dst)
                                 frames.append({
                                     "gender": gender,
                                     "body_value": body_value,
@@ -6995,6 +7010,7 @@ def sync_holiday_detail_body_frames(manifest):
                     dst = output_root / gender_title / f"Body_{body_value:02d}" / "Frame00.png"
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     normalized.save(dst)
+                    record_generated_image(dst)
                     frames.append({
                         "gender": gender,
                         "body_value": body_value,
