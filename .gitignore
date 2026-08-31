@@ -80,7 +80,13 @@ __pycache__/
 # .xcf GIMP originals, and the blanket rule above is why they never entered the
 # repository -- they survived only inside previous build outputs. They are the
 # source material for regenerating this art, so they must be tracked here.
-!patcher_assets/inherited_runtime_images/**
+# Scoped to the file types actually preserved: a bare /** here would also
+# un-ignore future .exe, .dll, .zip and .obj files under this directory.
+!patcher_assets/inherited_runtime_images/**/*.xcf
+!patcher_assets/inherited_runtime_images/**/*.png
+!patcher_assets/inherited_runtime_images/**/*.jpg
+!patcher_assets/inherited_runtime_images/SHA256SUMS.json
+!patcher_assets/inherited_runtime_images/README.md
 
 # Preserve editable project source/configuration only from historical folders.
 /Unneeded crap/**
