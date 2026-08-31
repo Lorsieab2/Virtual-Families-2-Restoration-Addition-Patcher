@@ -218,7 +218,7 @@ def verify(out_dir: Path, build_dir: Path, matrix_prefix: str, release: str) -> 
         for root in ("Images", "Assets")
         for p in (build_dir / root).rglob("*")
         if p.is_file()
-        and p.suffix.lower() not in exporter.NON_RUNTIME_SOURCE_SUFFIXES
+        and not exporter.is_non_runtime_source_path(p.relative_to(build_dir))
     ]
     produced = {p.relative_to(build_dir).as_posix() for p in produced_files}
 
