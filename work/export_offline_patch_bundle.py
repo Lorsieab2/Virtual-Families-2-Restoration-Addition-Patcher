@@ -52,6 +52,13 @@ FINAL_PLAYTEST_NATIVE_REQUIRES = [
     "island_events",
     "mobile_renovations",
 ]
+# Editing sources and backups that a build leaves in Images/ but the game never
+# reads. .xcf is a GIMP project file; SDL_image cannot decode one, and nothing
+# in the engine's asset tables names one. B176 shipped 30 of them: 49,028,504
+# uncompressed bytes, 43,823,872 compressed -- 24.7% of that entire download.
+NON_RUNTIME_SOURCE_SUFFIXES = {".bak", ".xcf"}
+
+
 EXCLUDED_FULL_PAYLOAD_FILES = {
     "patch-manifest.json",
     "VF2_INTERNAL_WORKINGS_SUMMARY.txt",
@@ -1924,7 +1931,7 @@ def iter_candidate_assets(
                 rel = path.relative_to(build_dir)
                 if is_desktop_runtime_source_file(rel):
                     continue
-                if rel.suffix.lower() == ".bak":
+                if rel.suffix.lower() in NON_RUNTIME_SOURCE_SUFFIXES:
                     continue
                 if allowed_paths is not None and rel not in allowed_paths:
                     continue

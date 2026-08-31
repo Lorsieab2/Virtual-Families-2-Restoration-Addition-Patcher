@@ -31,6 +31,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import export_offline_patch_bundle as exporter  # noqa: E402  (needs ROOT/sys.path first)
+
 def declared_variants() -> list[str]:
     """Variant names the matrix config declares, so none can be quietly skipped."""
     config = json.loads(
@@ -214,7 +217,8 @@ def verify(out_dir: Path, build_dir: Path, matrix_prefix: str, release: str) -> 
         p
         for root in ("Images", "Assets")
         for p in (build_dir / root).rglob("*")
-        if p.is_file() and p.suffix.lower() != ".bak"
+        if p.is_file()
+        and p.suffix.lower() not in exporter.NON_RUNTIME_SOURCE_SUFFIXES
     ]
     produced = {p.relative_to(build_dir).as_posix() for p in produced_files}
 
