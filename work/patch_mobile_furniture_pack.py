@@ -32046,6 +32046,14 @@ def main():
             "body_values": list(HOLIDAY_BODY_VALUES),
         }
     sync_desktop_runtime_dlls(manifest)
+    # The reference sets glob the invisible sprites that exist, so the
+    # sprites have to be generated first. With the collection running
+    # ahead of them, a clean or seeded build produced OptionalVisualMods
+    # folders that omitted every newly added invisible item, and the
+    # transparent-graphics setting then had nothing to swap -- leaving the
+    # base art visible on furniture that is meant to be invisible.
+    sync_invisible_outdoor_sprites(manifest)
+    sync_transparent_base_furniture_sprites(manifest)
     sync_invisible_furniture_reference_sets(manifest)
     sync_optional_visual_mod_sources(manifest)
     sync_mobile_renovation_art_sources(manifest)
@@ -32070,8 +32078,6 @@ def main():
     sync_vf3_living_room_sprite_strips(manifest)
     sync_vf3_tv_sprite_strips(manifest)
     sync_vf3_tv_animation_sheets(manifest)
-    sync_invisible_outdoor_sprites(manifest)
-    sync_transparent_base_furniture_sprites(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
         sync_separated_villager_sheets(manifest)
         manifest["holiday_body_types"] = {

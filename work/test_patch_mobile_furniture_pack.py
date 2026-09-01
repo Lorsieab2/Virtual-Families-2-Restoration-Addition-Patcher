@@ -14664,6 +14664,41 @@ class RefusalStringIdContractTests(unittest.TestCase):
         self.assertIn('lounger_weather_text = "Don\'t like the weather!"', self.SOURCE)
 
 
+class InvisibleReferenceSetOrderingTests(unittest.TestCase):
+    """Sprites must exist before the reference sets glob them.
+
+    sync_invisible_furniture_reference_sets() collects whichever
+    Invisible*.png files are on disk. Running it before the sprites are
+    generated produced OptionalVisualMods folders that omitted every newly
+    added invisible item, so the transparent-graphics setting had nothing to
+    swap and the base art stayed visible on furniture meant to be invisible.
+    """
+
+    SOURCE = (
+        Path(__file__).resolve().parents[1] / "work" / "patch_mobile_furniture_pack.py"
+    ).read_text(encoding="utf-8")
+
+    def _call_index(self, name):
+        needle = "    " + name + "(manifest)"
+        index = self.SOURCE.index(needle, self.SOURCE.index("def main("))
+        return index
+
+    def test_sprites_are_generated_before_the_reference_sets(self):
+        outdoor = self._call_index("sync_invisible_outdoor_sprites")
+        transparent = self._call_index("sync_transparent_base_furniture_sprites")
+        reference = self._call_index("sync_invisible_furniture_reference_sets")
+        self.assertLess(outdoor, reference)
+        self.assertLess(transparent, reference)
+
+    def test_every_invisible_item_can_reach_the_reference_sets(self):
+        # Each item's sprite name is what the reference-set glob matches, so a
+        # new item with no generated sprite silently drops out.
+        for item in (*patcher.INVISIBLE_OUTDOOR_ITEMS, *patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS):
+            with self.subTest(item=item["name"]):
+                self.assertTrue(item["name"].startswith("Invisible"))
+                self.assertIn("base_png" if "base_png" in item else "source_png", item)
+
+
 if __name__ == "__main__":
     unittest.main()
 
