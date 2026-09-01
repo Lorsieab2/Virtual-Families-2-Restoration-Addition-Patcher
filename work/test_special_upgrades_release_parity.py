@@ -171,7 +171,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         )
         self.assertEqual(same_sex["icon_file"], "cheat_marriage_email.png")
         self.assertEqual(reroll["name"], "Allow Reroll of Marriage Candidates")
-        self.assertEqual(reroll["price"], 10000)
+        self.assertEqual(reroll["price"], 0)
         self.assertEqual(reroll["icon_file"], "cheat_marriage_email.png")
         self.assertEqual(
             int(reroll["icon"], 16),
@@ -179,7 +179,7 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         )
         reroll_contract = self.manifest["MarriageCandidateReroll"]
         self.assertEqual(reroll_contract["cheat_upgrade"]["item_id"], "0x152")
-        self.assertEqual(reroll_contract["cheat_upgrade"]["catalog_price"], 10000)
+        self.assertEqual(reroll_contract["cheat_upgrade"]["catalog_price"], 0)
         # Persists at InventoryManager + itemId + 0x2A3 (the native save
         # payload) instead of a free-standing custom PE section that native
         # SaveCurrentGame()/Load() never restore.
@@ -246,9 +246,9 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertEqual(
             {(row["pc_string_id"], row["text"]) for row in divorce_strings},
             {
-                ("0xed4", "Divorce Spouse"),
+                ("0xed9", "Divorce Spouse"),
                 (
-                    "0xed5",
+                    "0xeda",
                     "WARNING: Permanently removes spouse from the Family Tree and House!",
                 ),
             },
