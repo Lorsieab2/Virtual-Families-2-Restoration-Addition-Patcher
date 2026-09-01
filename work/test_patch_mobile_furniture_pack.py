@@ -14602,6 +14602,64 @@ class RuntimePayloadContractTests(unittest.TestCase):
         self.with_temp_runtime(run)
 
 
+class RefusalStringIdContractTests(unittest.TestCase):
+    """Refusal strings must point at rows that exist.
+
+    eStringPicnicBadWeather was 0x02, an unrelated early string, so dropping
+    a villager on the picnic table in bad weather showed the "your family has
+    bought so many things" message instead of a refusal.
+    """
+
+    SOURCE = (
+        Path(__file__).resolve().parents[1] / "work" / "patch_mobile_furniture_pack.py"
+    ).read_text(encoding="utf-8")
+
+    def _enum(self):
+        start = self.SOURCE.index("eStringBadWeather")
+        end = self.SOURCE.index("};", start)
+        return self.SOURCE[start:end]
+
+    def test_picnic_bad_weather_uses_the_generated_row(self):
+        enum = self._enum()
+        line = next(
+            row for row in enum.splitlines() if "eStringPicnicBadWeather" in row
+        )
+        self.assertIn("__VF2_LOUNGER_BAD_WEATHER_STRING_ID__", line)
+
+    def test_no_refusal_string_is_a_bogus_low_id(self):
+        # The floor is the lowest id actually in use and known to render
+        # correctly -- eStringCannotReachFurniture, 0xb7 -- rather than a
+        # round number I picked. 0x02 sat far below every real refusal.
+        import re
+
+        known_good_floor = 0xB7
+        seen = {}
+        for row in self._enum().splitlines():
+            match = re.match(r"\s*(eString\w+)\s*=\s*(0x[0-9A-Fa-f]+)\s*,?\s*$", row)
+            if not match:
+                continue
+            seen[match.group(1)] = int(match.group(2), 16)
+        self.assertIn("eStringCannotReachFurniture", seen)
+        self.assertEqual(seen["eStringCannotReachFurniture"], known_good_floor)
+        for name, value in seen.items():
+            with self.subTest(constant=name):
+                self.assertGreaterEqual(
+                    value,
+                    known_good_floor,
+                    f"{name} = {hex(value)} is below every refusal id in use",
+                )
+
+    def test_both_picnic_paths_refuse_with_the_same_string(self):
+        # Preparing a picnic and eating at the table both refuse on weather.
+        self.assertEqual(
+            self.SOURCE.count("VF2PlanPatioRefusal(plans, villager, eStringPicnicBadWeather)"),
+            2,
+        )
+
+    def test_the_generated_row_text_is_the_weather_refusal(self):
+        self.assertIn('lounger_weather_text = "Don\'t like the weather!"', self.SOURCE)
+
+
 class SpontaneousLoungerBehaviorTests(unittest.TestCase):
     """Every lounger label must be reachable without dragging a villager.
 
@@ -14672,6 +14730,10 @@ class SpontaneousLoungerBehaviorTests(unittest.TestCase):
             'extern "C" void __cdecl VF2MobileReadingBook(CVillager &villager)'
         )
         self.assertIn("__VF2_CHAISE_PLAN_SIT_DOWN_VARIANTS__", self.SOURCE[start:end])
+
+
+if __name__ == "__main__":
+    unittest.main()
 
 
 if __name__ == "__main__":
