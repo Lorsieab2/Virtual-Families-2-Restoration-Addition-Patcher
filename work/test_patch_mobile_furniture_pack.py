@@ -14600,6 +14600,74 @@ class RuntimePayloadContractTests(unittest.TestCase):
         self.with_temp_runtime(run)
 
 
+class PlayingTrainLabelWiringTests(unittest.TestCase):
+    """The chasing labels belong to Playing train, not the Toy Train Table.
+
+    "The floor is lava!", "Playing tag", "Duck Duck Goose", "Chasing people"
+    and "Running around the house" describe children chasing each other --
+    CBehavior::KidPlayTrain (0x10B). They were wired to ToyTrainTableForKids
+    (0x198), the furniture action, so a child sitting at the train table
+    announced that the floor was lava.
+    """
+
+    def _ctor_entries(self):
+        import struct
+
+        obj = patcher.CoffObject(patcher.PATCHED / "Behavior.obj")
+        ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+        sec = obj.section(ctor.section)
+        relocs = {}
+        for i in range(sec.nreloc):
+            vaddr, symidx, _rtype = struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + i * 10)
+            relocs[vaddr] = obj.symbol_by_index[symidx].name
+        return obj, ctor, sec, relocs
+
+    def test_the_chasing_labels_target_kid_play_train(self):
+        import struct
+
+        obj, ctor, sec, relocs = self._ctor_entries()
+        raw = sec.raw_ptr + ctor.value + 0xED2
+        self.assertEqual(obj.buf[raw : raw + 5], b"\x68\x00\x00\x00\x00")
+        self.assertEqual(obj.buf[raw + 5], 0x68)
+        self.assertEqual(struct.unpack_from("<I", obj.buf, raw + 6)[0], 0x10B)
+        # PATCHED holds whichever state the last build left: pristine before a
+        # run, our helper after one. Both are correct; what must never change
+        # is that this slot is behaviour 0x10B and belongs to KidPlayTrain.
+        target = relocs.get(ctor.value + 0xED2 + 1, "")
+        self.assertTrue(
+            "KidPlayTrain" in target or target == "_VF2RandomPlayTrainLabel",
+            f"0x10B slot points at an unexpected handler: {target}",
+        )
+
+    def test_the_train_table_slot_is_a_different_behavior(self):
+        import struct
+
+        obj, ctor, sec, relocs = self._ctor_entries()
+        raw = sec.raw_ptr + ctor.value + 0x1864
+        self.assertEqual(struct.unpack_from("<I", obj.buf, raw + 6)[0], 0x198)
+        target = relocs.get(ctor.value + 0x1864 + 1, "")
+        self.assertIn(
+            "ToyTrainTableForKids",
+            target,
+            "the train table must run natively again, not through the chasing "
+            f"label helper (found {target})",
+        )
+
+    def test_the_helper_wraps_the_chasing_behavior(self):
+        source = (
+            Path(__file__).resolve().parents[1] / "work" / "patch_mobile_furniture_pack.py"
+        ).read_text(encoding="utf-8")
+        start = source.index("void __cdecl VF2RandomPlayTrainLabel(CVillager &villager)")
+        body = source[start : source.index(chr(10) + "extern", start + 5)]
+        self.assertIn("CBehavior::KidPlayTrain", body)
+        self.assertIn("kVF2BehaviorLabels_train_child", body)
+        self.assertNotIn("ToyTrainTableForKids", body)
+        self.assertIn(
+            'retarget(0xED2, 0x10B, "_VF2RandomPlayTrainLabel"', source
+        )
+        self.assertNotIn('0x198, "_VF2RandomToyTrainLabel"', source)
+
+
 if __name__ == "__main__":
     unittest.main()
 
