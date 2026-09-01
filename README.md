@@ -12,6 +12,54 @@ It has **not** been tested against the Steam release, and whether that build mat
 
 There is also no practical reason to get the game anywhere else: **all of LDW's PC games are free on their own website.** Download it from there and point the patcher at that installation.
 
+## Requirements
+
+Everything the patcher needs beyond the game itself:
+
+| | |
+| --- | --- |
+| **Windows** | The patcher edits a Windows executable and ships a `.bat` launcher. There is no macOS or Linux build. |
+| **Python 3.9 or newer, with `tkinter`** | Not bundled -- install it from [python.org](https://www.python.org/downloads/) if you do not have it. Keep the **tcl/tk and IDLE** component ticked in the installer (it is on by default); the GUI will not start without it. `Launch_GUI.bat` uses the `py` launcher when it is installed and `python` otherwise. Developed and tested on 3.14. |
+| **An official VF2 install** | The Windows build from Last Day of Work's own website, unmodified. See [Which copy of the game this supports](#which-copy-of-the-game-this-supports). |
+| **About 500 MB of free disk space** | The patcher writes a separate modded copy rather than editing your install: a ~110 MB vanilla folder produces a ~210 MB modded folder, and the extracted patcher bundle is another ~200 MB. |
+
+**No extra Python packages are needed.** The patcher and its GUI use only the
+standard library, so there is nothing to `pip install`.
+
+Administrator rights are not required, and your game install does not have to
+be writable. The patcher copies from it and writes a separate modded folder, so
+an install under `C:\Program Files` is fine -- use **Save modified folders
+under** in the GUI to put the output somewhere your own account can write.
+Backups default to a location under that output folder.
+
+Patching itself is offline: no step of validating, patching, or restoring
+contacts the network. The one exception is the **Check for updates** link in
+the GUI header, which opens the releases page in your browser when you click
+it.
+
+If your antivirus quarantines the patcher or the patched executable, do not
+simply override it. Confirm first that you downloaded the ZIP from this
+project's own releases page, and where the release notes publish a SHA-256 for
+the asset, compare it:
+
+```
+certutil -hashfile VF2-B<version>-Release.zip SHA256
+```
+
+If it matches the published value, you have the file that was released, and a
+warning about a modified game binary is expected -- you can then restore it and
+exclude the modded output folder. If it does not match, or the release you are
+using does not publish one, leave the file quarantined and ask on the issue
+tracker: a modified executable is also exactly what a real infection looks
+like, and that is not a judgement to make from the warning alone.
+
+### If the window looks frozen
+
+It is probably working. Before writing anything, the patcher verifies every
+file it is going to patch -- thousands of records on a full release -- and that
+pass takes a while with little appearing on screen. Give it a minute before
+assuming it has hung.
+
 ## Download
 
 The [releases page](https://github.com/Lorsieab2/Virtual-Families-2-Restoration-Addition-Patcher/releases) carries two different kinds of asset, and only one of them is the patcher:
