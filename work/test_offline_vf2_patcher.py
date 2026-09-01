@@ -3453,7 +3453,6 @@ class ShippedRunnerPythonFloorTests(unittest.TestCase):
         "tomllib": "3.11",
         "ExceptionGroup": "3.11",
         "itertools.pairwise": "3.10",
-        "zoneinfo": "3.9 stdlib but not on 3.8",
     }
 
     def _sources(self):
