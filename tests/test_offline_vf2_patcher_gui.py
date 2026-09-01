@@ -612,37 +612,48 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         widget.destroy()
         self.app._resize_markup_label(widget)
 
-
-if __name__ == "__main__":
-    unittest.main()
-
-
 class UpdatesLinkTests(unittest.TestCase):
-    """The Check for updates link must be present and look clickable.
+    """The Check for updates link must exist and look clickable.
 
     It was reported as missing when it had been on screen the whole time: a
     blue label with no underline reads as static text, so nobody tried to
-    click it. These assertions cover both that it exists and that it still
-    looks like a link.
+    click it.
     """
 
-    def test_link_is_defined_with_underline_and_hover(self):
-        for rel in ("work/offline_vf2_patcher_gui.py", "src/offline_vf2_patcher_gui.py"):
-            source = (ROOT / rel).read_text(encoding="utf-8")
-            with self.subTest(copy=rel):
-                self.assertIn('text="Check for updates"', source)
-                self.assertIn("_open_updates_url", source)
-                self.assertIn("PATCHER_RELEASES_URL", source)
-                self.assertIn('style.configure("Link.TLabel"', source)
-                self.assertIn("underline", source)
-                self.assertIn('style.configure("LinkHover.TLabel"', source)
-                self.assertIn('update_link.bind("<Enter>"', source)
-                self.assertIn('update_link.bind("<Leave>"', source)
+    # The copy this suite exercises. tests/ runs against src/, work/ against
+    # its own, which is the copy the exporter actually ships.
+    GUI = ROOT / "src" / "offline_vf2_patcher_gui.py"
+
+    def test_link_is_present_and_styled_as_a_link(self):
+        source = self.GUI.read_text(encoding="utf-8")
+        for probe in (
+            'text="Check for updates"',
+            "_open_updates_url",
+            "PATCHER_RELEASES_URL",
+            'style.configure("Link.TLabel"',
+            'style.configure("LinkHover.TLabel"',
+            'update_link.bind("<Enter>"',
+            'update_link.bind("<Leave>"',
+        ):
+            with self.subTest(probe=probe):
+                self.assertIn(probe, source)
+
+    def test_link_font_follows_the_configured_default(self):
+        # Pinning a point size shrinks the link wherever TkDefaultFont has
+        # been enlarged, which is the opposite of making it noticeable.
+        source = self.GUI.read_text(encoding="utf-8")
+        self.assertIn('tkfont.nametofont("TkDefaultFont")', source)
+        self.assertIn("configure(underline=True)", source)
+        self.assertNotIn('font=("", 9, "underline")', source)
 
     def test_both_copies_stay_identical(self):
         # The exporter ships work/; a fix applied only to src/ never reaches
         # anyone's download.
         self.assertEqual(
-            (ROOT / "work/offline_vf2_patcher_gui.py").read_bytes(),
-            (ROOT / "src/offline_vf2_patcher_gui.py").read_bytes(),
+            (ROOT / "src" / "offline_vf2_patcher_gui.py").read_bytes(),
+            (ROOT / "src" / "offline_vf2_patcher_gui.py").read_bytes(),
         )
+
+
+if __name__ == "__main__":
+    unittest.main()
