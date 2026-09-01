@@ -458,9 +458,16 @@ The optional lounge family also adds four runtime-gated autonomous candidates
 without growing the fixed behavior table. `ReadingBook` (`0x12B`, weight 1500) and
 `NappingCouch` (`0x83`, weight 3000) retain their good-weather chaise branches.
 Reading preserves the recovered mobile 30-percent roll; nap scales from zero at
-energy 70 to that 30-percent maximum at energy 1. Desktop `RestingBody` (`0x127`, weight 2000) is the
-safe in-range carrier for the mobile Sunbathing plan and the native Needs to sit
-down outcome: daytime chooses between them, while nighttime permits only sitting.
+energy 70 to that 30-percent maximum at energy 1, and below energy 45 it can
+escalate to `Getting some sleep`, weighting nap by `70 - energy` and sleep by
+`(45 - energy) * 3` exactly as the manual drop route does. Desktop
+`RestingBody` (`0x127`, weight 2000) is the safe in-range carrier for the
+mobile Sunbathing plan, `Relaxing on lounger`, and the native Needs to sit down
+outcome: daytime picks Sunbathing on a coin flip and otherwise splits evenly
+between relaxing and sitting, so it has three daytime outcomes; nighttime
+splits evenly between relaxing and sitting. `Relaxing on lounger` and
+`Getting some sleep` were previously reachable only from the manual drop route,
+which is why autonomy now covers all six of its labels.
 `StudyingOnPatio` (`0xC2`, weight 450) carries the requested
 `Studying on the lounger` extension; that label and weight are patch choices, not
 claims of an exact mobile chaise-study route. With `.vf2beh` zero, each constructor

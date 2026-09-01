@@ -1335,6 +1335,8 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         "Taking a nap",
                         "Studying on the lounger",
                         "Needs to sit down",
+                        "Relaxing on lounger",
+                        "Getting some sleep",
                     ],
                 )
                 umbrella = contract["implemented_families"][1]
@@ -14787,6 +14789,82 @@ class ImageTemplateRootTests(unittest.TestCase):
         for legacy in patcher.LEGACY_OUTPUT_RUNTIME_PAYLOAD_SOURCE_DIRS:
             with self.subTest(legacy=legacy.name):
                 self.assertNotIn(str(legacy / "Images").lower(), roots)
+
+
+class SpontaneousLoungerBehaviorTests(unittest.TestCase):
+    """Every lounger label must be reachable without dragging a villager.
+
+    The manual drop route (VF2HandleMobileChaise) picks among six labels.
+    Autonomy went through four behavior helpers that between them offered
+    only four of those, so "Relaxing on lounger" and "Getting some sleep"
+    could be seen only by dropping a villager onto the lounger.
+    """
+
+    SOURCE = (
+        Path(__file__).resolve().parents[1] / "work" / "patch_mobile_furniture_pack.py"
+    ).read_text(encoding="utf-8")
+
+    def _helper(self, name):
+        start = self.SOURCE.index('void __cdecl ' + name + '(CVillager &villager)')
+        end = self.SOURCE.index(chr(10) + 'extern "C"', start + 5)
+        return self.SOURCE[start:end]
+
+    def _manual_handler(self):
+        start = self.SOURCE.index("static bool VF2HandleMobileChaise(CVillager &villager)")
+        end = self.SOURCE.index(chr(10) + "static bool VF2HandleMobilePatioUmbrella", start)
+        return self.SOURCE[start:end]
+
+    def test_every_manual_lounger_label_is_reachable_autonomously(self):
+        manual = self._manual_handler()
+        autonomous = "".join(
+            self._helper(name)
+            for name in (
+                "VF2MobileReadingBook",
+                "VF2MobileNappingCouch",
+                "VF2MobileRestingBody",
+                "VF2MobileStudyingOnPatio",
+            )
+        )
+        labels = (
+            "Relaxing on lounger",
+            "Reading a book",
+            "Studying on the lounger",
+            "Needs to sit down",
+            "Taking a nap",
+            "Getting some sleep",
+        )
+        for label in labels:
+            with self.subTest(label=label):
+                self.assertIn(label, manual, "label left the manual route")
+                self.assertIn(label, autonomous, "label cannot be chosen autonomously")
+
+    def test_autonomous_sleep_uses_the_manual_routes_energy_weights(self):
+        helper = self._helper("VF2MobileNappingCouch")
+        self.assertIn("70 - energyValue", helper)
+        self.assertIn("(45 - energyValue) * 3", helper)
+        self.assertIn("Getting some sleep", helper)
+        # Sleep stays an escalation, never the ordinary outcome.
+        self.assertIn("sleepWeight > 0", helper)
+
+    def test_autonomous_lounger_actions_keep_the_manual_parameters(self):
+        rest = self._helper("VF2MobileRestingBody")
+        self.assertIn('"Relaxing on lounger", ldwGameState::GetRandom(15) + 15,', rest)
+        self.assertIn("static_cast<ECarrying>(0), 4, 1, 2);", rest)
+        sleep = self._helper("VF2MobileNappingCouch")
+        self.assertIn('"Getting some sleep", ldwGameState::GetRandom(10) + 10,', sleep)
+        self.assertIn("static_cast<ECarrying>(0), 2, 0, 10);", sleep)
+
+    def test_sit_down_variants_still_apply_on_the_autonomous_route(self):
+        start = self.SOURCE.index("static void VF2PlanLinkedChaiseAction")
+        # The definition, not the forward declaration that appears earlier.
+        end = self.SOURCE.index(
+            'extern "C" void __cdecl VF2MobileReadingBook(CVillager &villager)'
+        )
+        self.assertIn("__VF2_CHAISE_PLAN_SIT_DOWN_VARIANTS__", self.SOURCE[start:end])
+
+
+if __name__ == "__main__":
+    unittest.main()
 
 
 if __name__ == "__main__":
