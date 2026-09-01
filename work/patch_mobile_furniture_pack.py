@@ -3747,6 +3747,63 @@ VF3_LIVING_ROOM_BATCH_02_ITEMS = [
     },
 ]
 
+# Furniture this patcher adds that the base game does not have. Art lives in
+# patcher_assets/new_furniture_art with recorded digests; the fmap is borrowed
+# from the stock counterpart whose behaviour each item reuses, and all three of
+# those maps ship in the vanilla payload, so placing one never depends on an
+# external OBB.
+#
+# Prices are the counterpart's own, read out of the game's furniture table
+# (?itemInfo@@3PAUsFurnitureInfo@@A, 108-byte stride, price at +8) rather than
+# invented: Treadmill 3150, Pool Table 12000, Yoga Gear 150.
+NEW_FURNITURE_ITEMS = [
+    {
+        "name": "ExerciseBikeStd",
+        "item_id": 0x32C,
+        "donor": 0x217,          # Treadmill
+        "list": "gAccessories",
+        "price": 3150,           # the Treadmill's own price
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Exercise Bike",
+        "long_description": "Get a great cardio workout without leaving the house!",
+        "art_png": "ExerciseBikeStd.png",
+        "donor_fmap": "TreadmillStd.png.fmap",
+        "section_name": "Accessory/Small Decor",
+    },
+    {
+        "name": "HomeGymSystemStd",
+        "item_id": 0x32D,
+        "donor": 0x220,          # Yoga Equipment
+        "list": "gAccessories",
+        "price": 3150,
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Home Gym System",
+        "long_description": "This all-in-one home gym system provides the ultimate total-body workout.",
+        "art_png": "HomeGymSystemStd.png",
+        "donor_fmap": "YogaGearStd.png.fmap",
+        "section_name": "Accessory/Small Decor",
+    },
+    {
+        "name": "PingPongTableStd",
+        "item_id": 0x32E,
+        "donor": 0x20C,          # Pool Table
+        "list": "gFurniture5",
+        "price": 12000,          # the Pool Table's own price
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Ping-Pong Table",
+        "long_description": "Rally back and forth with a friend on this ping-pong table.",
+        "art_png": "PingPongTableStd.png",
+        "donor_fmap": "PoolTableStd.png.fmap",
+        "section_name": "Furniture/Placeable",
+    },
+]
+
+NEW_FURNITURE_ART_DIR = ROOT / "patcher_assets" / "new_furniture_art"
+
+
 INVISIBLE_OUTDOOR_ITEMS = [
     {
         "name": "InvisibleKiddiePool",
@@ -4235,6 +4292,13 @@ COUCH_FMAP_DONORS = {
     "SofaStriped.png.fmap": "SofaWhiteStd.png.fmap",
     "FloweredLoveseat.png.fmap": "SofaWhiteStd.png.fmap",
 }
+# Each new item borrows the behaviour map of the stock item it is modelled on.
+# All three donors ship in the vanilla payload, so placing one never depends on
+# an external OBB or on mobile behaviour cells the desktop tables cannot use.
+NEW_FURNITURE_FMAP_DONORS = {
+    f"{item['name']}.png.fmap": item["donor_fmap"]
+    for item in NEW_FURNITURE_ITEMS
+}
 INVISIBLE_OUTDOOR_FMAP_DONORS = {
     f"{item['name']}.png.fmap": item["donor_fmap"]
     for item in INVISIBLE_OUTDOOR_ITEMS
@@ -4388,6 +4452,27 @@ def load_mobile_rows():
             "section_name": "General Appliances",
             "section_number": 5,
             "custom_pack": "VF3 living room import batch 02",
+        }
+        items.append((item["short_description"], item["donor"], item["list"], path))
+        data_by_path[path] = data
+    for item in NEW_FURNITURE_ITEMS:
+        path = f"Furniture/{item['name']}.png"
+        data = {
+            "mobile_row": None,
+            "mobile_source_id": None,
+            "mobile_item_id": item["item_id"],
+            "price": item["price"],
+            "lock_generation": item["lock_generation"],
+            "item_type": item["item_type"],
+            "mobile_short_id": 0,
+            "mobile_long_id": 0,
+            "short_symbol": f"eString_{item['name']}ShortDesc",
+            "long_symbol": f"eString_{item['name']}LongDesc",
+            "short_description": item["short_description"],
+            "long_description": item["long_description"],
+            "section_name": item["section_name"],
+            "section_number": -1,
+            "custom_pack": "New furniture batch 01",
         }
         items.append((item["short_description"], item["donor"], item["list"], path))
         data_by_path[path] = data
@@ -4878,6 +4963,48 @@ def _repo_relative(path):
         return str(path.relative_to(ROOT)).replace(chr(92), "/")
     except ValueError:
         return str(path).replace(chr(92), "/")
+
+
+
+def install_new_furniture_art(manifest):
+    """Copy the sprites for furniture the base game does not have.
+
+    Every file is checked against its recorded digest before it is written, so
+    a replaced or truncated sprite fails the build instead of shipping a
+    broken store item. The art is tracked in the repository rather than
+    inherited from a previous build, so a clean clone produces these items.
+    """
+    record = manifest.setdefault("new_furniture_art", {})
+    sums_path = NEW_FURNITURE_ART_DIR / "SHA256SUMS.json"
+    digests = {}
+    if sums_path.is_file():
+        digests = json.loads(sums_path.read_text(encoding="utf-8")).get("files", {})
+    installed, problems = [], []
+    for item in NEW_FURNITURE_ITEMS:
+        source = NEW_FURNITURE_ART_DIR / item["art_png"]
+        if not source.is_file():
+            problems.append(f"{item['art_png']} is missing from {NEW_FURNITURE_ART_DIR}")
+            continue
+        expected = digests.get(item["art_png"])
+        payload = source.read_bytes()
+        if expected is None:
+            problems.append(f"{item['art_png']} has no recorded digest")
+            continue
+        if hashlib.sha256(payload).hexdigest() != expected:
+            problems.append(f"{item['art_png']} does not match its recorded digest")
+            continue
+        target = OUT / "Images" / "Furniture" / f"{item['name']}.png"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+        installed.append(item["name"])
+    if problems:
+        raise SystemExit("New furniture art cannot be installed -- " + "; ".join(problems))
+    record.update(
+        status="ok",
+        source=_repo_relative(NEW_FURNITURE_ART_DIR),
+        installed=installed,
+    )
+    print(f"new furniture art: {len(installed)} sprites installed")
 
 
 def restore_preserved_inherited_art(manifest):
@@ -22759,6 +22886,8 @@ def sync_behavior_assets(manifest):
 
     for target, donor in COUCH_FMAP_DONORS.items():
         copy_donor_fmap(target, donor, copied)
+    for target, donor in NEW_FURNITURE_FMAP_DONORS.items():
+        copy_donor_fmap(target, donor, copied)
     for target, donor in INVISIBLE_OUTDOOR_FMAP_DONORS.items():
         copy_donor_fmap(target, donor, invisible_outdoor_copied)
     for target, donor in INVISIBLE_TRANSPARENT_FMAP_DONORS.items():
@@ -32290,6 +32419,7 @@ def main():
     # After every generator, so images rebuilt from tracked source art keep
     # whatever the generator produced and only genuine gaps are filled, and
     # before the payload/package validation that checks the finished tree.
+    install_new_furniture_art(manifest)
     restore_preserved_inherited_art(manifest)
     remove_legacy_package_dirs(manifest)
     validate_runtime_payload_contract(manifest)
