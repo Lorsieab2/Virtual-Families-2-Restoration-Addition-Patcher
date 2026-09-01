@@ -2063,8 +2063,8 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID = 0x54
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
-CUSTOM_ACHIEVEMENT_LAST_ID = 0xA7
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xA7
+CUSTOM_ACHIEVEMENT_LAST_ID = 0xA9
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xA9
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -2092,6 +2092,9 @@ CUSTOM_ACHIEVEMENT_DISCIPLINE_LAST_ID = 0xA4
 CUSTOM_ACHIEVEMENT_PROPS_ID = 0xA5
 CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID = 0xA6
 CUSTOM_ACHIEVEMENT_TURTLE_ID = 0xA7
+# Praised while carrying one of the two deliberately absurd rare labels.
+CUSTOM_ACHIEVEMENT_RARE_COFFEE_ID = 0xA8
+CUSTOM_ACHIEVEMENT_RARE_BURGER_ID = 0xA9
 CUSTOM_ACHIEVEMENT_TIGHT_SHIP_ID = 0x30
 CUSTOM_ACHIEVEMENT_ICON_ID = 0x1ED
 CUSTOM_ACHIEVEMENT_TARGET = 1
@@ -2169,6 +2172,8 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0xA5, "behavior", "Props to you", "You completed Tight Ship and all five additional discipline goals."),
     (0xA6, "vf3_furniture", "Furnishing the Future", "You bought a Virtual Families 3 furniture item."),
     (0xA7, "pet", "Slow and Steady", "Have a turtle in the house."),
+    (0xA8, "behavior", "Kirk Strayer", "You praised someone who was drinking a particularly complicated coffee order."),
+    (0xA9, "behavior", "Bubble Bass", "You praised someone who was eating a particularly complicated burger order."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -2246,6 +2251,10 @@ FORCE_PREGNANCY_BIRTH_HELPER_SYMBOL = "@VF2ImpregnateAndClearForce@28"
 FORCED_BIRTH_COUNT_HELPER_SYMBOL = "_VF2ApplyForcedBirthCount"
 FORCED_BABY_GENDER_HELPER_SYMBOL = "@VF2SpawnBirthPeepWithForcedGender@56"
 CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS = {
+    # The two rare joke labels. Both are already about a 1-in-80 roll inside a
+    # low-weight behavior, so catching one mid-praise is the point.
+    "Making a Half-Caff Double-Shot Leviathan Latte-Espresso with Heavy Cream": 0xA8,
+    "Eating a Double Triple Bossy Deluxe on a raft, four-by-four, animal style, with extra shingles, a shimmy and a squeeze and light axle grease that cries, burns and swims": 0xA9,
     "Watching cat videos": 0x66,
     "Posting on VideoTube": 0x67,
     "Playing Virtual Families": 0x68,
@@ -3032,6 +3041,15 @@ BEHAVIOR_LABEL_GROUPS = [
             (
                 "eString_MakingLeviathanLatte",
                 "Making a Half-Caff Double-Shot Leviathan Latte-Espresso with Heavy Cream",
+            ),
+        ],
+    ),
+    (
+        "burger_rare",
+        [
+            (
+                "eString_EatingBossyDeluxe",
+                "Eating a Double Triple Bossy Deluxe on a raft, four-by-four, animal style, with extra shingles, a shimmy and a squeeze and light axle grease that cries, burns and swims",
             ),
         ],
     ),
@@ -29179,6 +29197,7 @@ extern "C" void __cdecl VF2RandomNorthShowerLabel(CVillager &);
 extern "C" void __cdecl VF2RandomCoffeeLabel(CVillager &);
 extern "C" void __cdecl VF2RandomBigCoffeeLabel(CVillager &);
 extern "C" void __cdecl VF2RandomCocktailLabel(CVillager &);
+extern "C" void __cdecl VF2RandomBigBurgerLabel(CVillager &);
 class CBehavior {
 private:
     static void __cdecl ReadMagazine(CVillager &);
@@ -29235,6 +29254,7 @@ private:
     static void __cdecl MakeCoffee(CVillager &);
     static void __cdecl MakingAVanillaSoyDecafGrandeLatte(CVillager &);
     static void __cdecl HavingACocktail(CVillager &);
+    static void __cdecl EatingABurger(CVillager &);
     friend void __cdecl VF2RandomBookshelfReading(CVillager &);
     friend void __cdecl VF2RandomRadioBehavior(CVillager &);
     friend void __cdecl VF2LieInHammockAnchoredRest(CVillager &);
@@ -29287,6 +29307,7 @@ private:
     friend void __cdecl VF2RandomCoffeeLabel(CVillager &);
     friend void __cdecl VF2RandomBigCoffeeLabel(CVillager &);
     friend void __cdecl VF2RandomCocktailLabel(CVillager &);
+    friend void __cdecl VF2RandomBigBurgerLabel(CVillager &);
 };
 
 class ldwGameState {
@@ -30466,6 +30487,22 @@ extern "C" void __cdecl VF2RandomCoffeeLabel(CVillager &villager)
     VF2ApplyCoffeeLabel(villager, remembered);
 }
 
+// The burger counterpart of the rare latte: same 1-in-80 roll on top of the
+// same low candidate weight, so it turns up about as often as the Leviathan
+// Latte does. Falling through leaves the native "Eating a burger" label.
+extern "C" void __cdecl VF2RandomBigBurgerLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_burger_rare, VF2_LABEL_COUNT(kVF2BehaviorLabels_burger_rare));
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::EatingABurger)) return;
+    if (remembered) {
+        VF2SetBehaviorLabel(villager, remembered);
+        return;
+    }
+    if (ldwGameState::GetRandom(80) == 0) {
+        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_burger_rare, VF2_LABEL_COUNT(kVF2BehaviorLabels_burger_rare));
+    }
+}
+
 extern "C" void __cdecl VF2RandomBigCoffeeLabel(CVillager &villager)
 {
     int remembered = VF2CurrentCoffeeLabel(villager);
@@ -30519,6 +30556,7 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     CloneAutonomousCandidateWithWeight(data, 0x034, 0x016, 450); // North shower, with stock shower gates
     EnableAutonomousCandidateWithWeight(data, 0x0D3, 450); // Coffee/tea variants
     EnableAutonomousCandidateWithWeight(data, 0x0D9, 150); // Rare grande-latte variants
+    EnableAutonomousCandidateWithWeight(data, 0x0D8, 150); // Rare burger variant, matched to the latte
     EnableAutonomousCandidateWithWeight(data, 0x094, 300); // Cocktail variants
     EnableAutonomousCandidateWithWeight(data, 0x199, 450); // Trampoline text/behavior route
     EnableAutonomousCandidateWithWeight(data, 0x107, 450); // PlayingBoardGame, retain stock object gates
@@ -30714,6 +30752,7 @@ def patch_behavior_label_variants(manifest):
         retarget(0xE9F, 0x108, "_VF2RandomSnowLabel", "Snow play label variants"),
         retarget(0x1842, 0x196, "_VF2RandomSandboxLabel", "Sandbox label variants"),
         retarget(0xED2, 0x10B, "_VF2RandomPlayTrainLabel", "Playing train label variants"),
+        retarget(0xAD6, 0x0D8, "_VF2RandomBigBurgerLabel", "Rare burger label variant"),
         retarget(0x09D, 0x00B, "_VF2RandomDrivingChildLabel", "Child driving label variants"),
         retarget(0x1875, 0x199, "_VF2TrampolineLabel", "Trampoline label text fix"),
         retarget(0x1125, 0x130, "_VF2RandomKidsTableLabel", "Kids table label variants"),
