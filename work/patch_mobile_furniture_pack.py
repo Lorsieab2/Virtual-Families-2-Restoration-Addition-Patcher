@@ -29133,7 +29133,7 @@ extern "C" void __cdecl VF2RandomPoolLabel(CVillager &);
 extern "C" void __cdecl VF2RandomPlayhouseLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSnowLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSandboxLabel(CVillager &);
-extern "C" void __cdecl VF2RandomToyTrainLabel(CVillager &);
+extern "C" void __cdecl VF2RandomPlayTrainLabel(CVillager &);
 extern "C" void __cdecl VF2RandomDrivingChildLabel(CVillager &);
 extern "C" void __cdecl VF2TrampolineLabel(CVillager &);
 extern "C" void __cdecl VF2RandomKidsTableLabel(CVillager &);
@@ -29190,6 +29190,7 @@ private:
     static void __cdecl PlayingInSnow(CVillager &);
     static void __cdecl ToySandbox(CVillager &);
     static void __cdecl ToyTrainTableForKids(CVillager &);
+    static void __cdecl KidPlayTrain(CVillager &);
     static void __cdecl ChildrenPlayOffice(CVillager &);
     static void __cdecl ToyTrampoline(CVillager &);
     static void __cdecl ChildrenPlayAtKidsTable(CVillager &);
@@ -29240,7 +29241,7 @@ private:
     friend void __cdecl VF2RandomPlayhouseLabel(CVillager &);
     friend void __cdecl VF2RandomSnowLabel(CVillager &);
     friend void __cdecl VF2RandomSandboxLabel(CVillager &);
-    friend void __cdecl VF2RandomToyTrainLabel(CVillager &);
+    friend void __cdecl VF2RandomPlayTrainLabel(CVillager &);
     friend void __cdecl VF2RandomDrivingChildLabel(CVillager &);
     friend void __cdecl VF2TrampolineLabel(CVillager &);
     friend void __cdecl VF2RandomKidsTableLabel(CVillager &);
@@ -30207,10 +30208,16 @@ extern "C" void __cdecl VF2RandomSandboxLabel(CVillager &villager)
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_sandbox, VF2_LABEL_COUNT(kVF2BehaviorLabels_sandbox), remembered);
 }
 
-extern "C" void __cdecl VF2RandomToyTrainLabel(CVillager &villager)
+// These labels -- tag, Duck Duck Goose, chasing, running around the house --
+// describe children chasing each other, which is CBehavior::KidPlayTrain
+// (0x10B, "Playing train"). They were wired to ToyTrainTableForKids (0x198),
+// the Toy Train Table furniture action, so a child sitting at the train table
+// announced that the floor was lava. The two behaviours are unrelated beyond
+// the word "train".
+extern "C" void __cdecl VF2RandomPlayTrainLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_train_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_train_child));
-    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::ToyTrainTableForKids)) return;
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::KidPlayTrain)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_train_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_train_child), remembered);
 }
 
@@ -30674,7 +30681,7 @@ def patch_behavior_label_variants(manifest):
         retarget(0xD18, 0x11E, "_VF2RandomPlayhouseLabel", "Playhouse/playground label variants"),
         retarget(0xE9F, 0x108, "_VF2RandomSnowLabel", "Snow play label variants"),
         retarget(0x1842, 0x196, "_VF2RandomSandboxLabel", "Sandbox label variants"),
-        retarget(0x1864, 0x198, "_VF2RandomToyTrainLabel", "Toy train/table label variants"),
+        retarget(0xED2, 0x10B, "_VF2RandomPlayTrainLabel", "Playing train label variants"),
         retarget(0x09D, 0x00B, "_VF2RandomDrivingChildLabel", "Child driving label variants"),
         retarget(0x1875, 0x199, "_VF2TrampolineLabel", "Trampoline label text fix"),
         retarget(0x1125, 0x130, "_VF2RandomKidsTableLabel", "Kids table label variants"),

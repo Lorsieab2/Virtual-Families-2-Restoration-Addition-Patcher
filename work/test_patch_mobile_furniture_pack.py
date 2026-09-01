@@ -14657,6 +14657,90 @@ class RefusalStringIdContractTests(unittest.TestCase):
 
     def test_the_generated_row_text_is_the_weather_refusal(self):
         self.assertIn('lounger_weather_text = "Don\'t like the weather!"', self.SOURCE)
+class PlayingTrainLabelWiringTests(unittest.TestCase):
+    """The chasing labels belong to Playing train, not the Toy Train Table.
+
+    "The floor is lava!", "Playing tag", "Duck Duck Goose", "Chasing people"
+    and "Running around the house" describe children chasing each other --
+    CBehavior::KidPlayTrain (0x10B). They were wired to ToyTrainTableForKids
+    (0x198), the furniture action, so a child sitting at the train table
+    announced that the floor was lava.
+    """
+
+    def _ctor_entries(self):
+        """Read the behaviour table from a pristine copy, not the build output.
+
+        work/patched_mobile_furniture_pack_objs is gitignored and exists only
+        after a build, so reading it made these tests depend on whatever state
+        the last run left behind -- or fail outright with FileNotFoundError.
+        Copy the source object and apply the patch, as the other
+        binary-contract tests do.
+        """
+        import struct
+
+        old_patched = patcher.PATCHED
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            patcher.PATCHED = Path(tmp.name)
+            shutil.copy2(
+                patcher.SRC_OBJS / "Behavior.obj", patcher.PATCHED / "Behavior.obj"
+            )
+            patcher.patch_behavior_label_variants({})
+            obj = CoffObject(patcher.PATCHED / "Behavior.obj")
+            ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+            sec = obj.section(ctor.section)
+            relocs = {}
+            for i in range(sec.nreloc):
+                vaddr, symidx, _rtype = struct.unpack_from(
+                    "<IIH", obj.buf, sec.reloc_ptr + i * 10
+                )
+                relocs[vaddr] = obj.symbol_by_index[symidx].name
+            return bytes(obj.buf), ctor, sec, relocs
+        finally:
+            patcher.PATCHED = old_patched
+            tmp.cleanup()
+
+    def test_the_chasing_labels_target_kid_play_train(self):
+        import struct
+
+        buf, ctor, sec, relocs = self._ctor_entries()
+        raw = sec.raw_ptr + ctor.value + 0xED2
+        self.assertEqual(buf[raw : raw + 5], b"\x68\x00\x00\x00\x00")
+        self.assertEqual(buf[raw + 5], 0x68)
+        self.assertEqual(struct.unpack_from("<I", buf, raw + 6)[0], 0x10B)
+        # The fixture applies the patch to a pristine copy, so this slot
+        # must now be our helper -- not whatever a previous build left.
+        self.assertEqual(
+            relocs.get(ctor.value + 0xED2 + 1), "_VF2RandomPlayTrainLabel"
+        )
+
+    def test_the_train_table_slot_is_a_different_behavior(self):
+        import struct
+
+        buf, ctor, sec, relocs = self._ctor_entries()
+        raw = sec.raw_ptr + ctor.value + 0x1864
+        self.assertEqual(struct.unpack_from("<I", buf, raw + 6)[0], 0x198)
+        target = relocs.get(ctor.value + 0x1864 + 1, "")
+        self.assertIn(
+            "ToyTrainTableForKids",
+            target,
+            "the train table must run natively again, not through the chasing "
+            f"label helper (found {target})",
+        )
+
+    def test_the_helper_wraps_the_chasing_behavior(self):
+        source = (
+            Path(__file__).resolve().parents[1] / "work" / "patch_mobile_furniture_pack.py"
+        ).read_text(encoding="utf-8")
+        start = source.index("void __cdecl VF2RandomPlayTrainLabel(CVillager &villager)")
+        body = source[start : source.index(chr(10) + "extern", start + 5)]
+        self.assertIn("CBehavior::KidPlayTrain", body)
+        self.assertIn("kVF2BehaviorLabels_train_child", body)
+        self.assertNotIn("ToyTrainTableForKids", body)
+        self.assertIn(
+            'retarget(0xED2, 0x10B, "_VF2RandomPlayTrainLabel"', source
+        )
+        self.assertNotIn('0x198, "_VF2RandomToyTrainLabel"', source)
 
 
 class ImageTemplateRootTests(unittest.TestCase):
