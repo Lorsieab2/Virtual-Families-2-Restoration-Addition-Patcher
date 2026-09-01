@@ -12518,7 +12518,10 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertEqual(contract["active_icon"], "cheat_marriage_email.png")
                 self.assertEqual(contract["active_icon"], contract["inactive_icon"])
                 self.assertNotIn("active_icon_id", contract)
-                self.assertEqual(contract["inactive_state"], "explicit catalog price")
+                self.assertEqual(
+                    contract["inactive_state"],
+                    "free Cheat Upgrade row; explicit catalog price 0",
+                )
         finally:
             patcher.PATCHED = old_patched
 

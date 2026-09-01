@@ -19853,7 +19853,7 @@ def patch_marriage_candidate_reroll(manifest):
             "catalog_price": MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE,
             "icon_file": "cheat_marriage_email.png",
             "active_state": "persisted InventoryManager+0x152+0x2A3 byte; store icon stays cheat_marriage_email.png",
-            "inactive_state": "explicit catalog price 10000",
+            "inactive_state": "free Cheat Upgrade row; explicit catalog price 0",
             "buy_again": "clears the persisted byte",
         },
         "runtime_flag": {
@@ -20121,11 +20121,13 @@ def patch_same_sex_marriage(manifest):
         "cheat_upgrade": {
             "item_id": hex(SAME_SEX_MARRIAGE_ITEM_ID),
             "inactive_price": SAME_SEX_MARRIAGE_CATALOG_PRICE,
-            "price_source_item_id": hex(SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID),
+            # No price_source_item_id: the row is free, so it no longer derives
+            # its price from Health Plan and pointing at 0x119 would invite a
+            # consumer to read a relationship that no longer exists.
             "price_source": "free Cheat Upgrade row; the Health Plan price it once matched is unchanged",
             "active_price": 0,
             "active_state": "persisted InventoryManager+0x14C+0x2A3 byte; store icon stays cheat_marriage_email.png",
-            "inactive_state": "explicit catalog price",
+            "inactive_state": "free Cheat Upgrade row; explicit catalog price 0",
             "inactive_icon": "cheat_marriage_email.png",
             "active_icon": "cheat_marriage_email.png",
         },
