@@ -303,9 +303,13 @@ ADOPTION_CHOOSER_HELPER_SYMBOL = "_VF2AdoptRandomChildChoice"
 MARRIAGE_EMAIL_ITEM_ID = 0x132
 SAME_SEX_MARRIAGE_ITEM_ID = 0x14C
 SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID = 0x119
-SAME_SEX_MARRIAGE_CATALOG_PRICE = 10000
+# Cheat Upgrades are free. Only these two ever charged, and both now cost
+# nothing like the other 41 rows. The paid Special Upgrades the base game
+# ships -- Brokerage Account, Health Plan, Food Club, Lucky Rock -- are not
+# cheat rows and keep their prices.
+SAME_SEX_MARRIAGE_CATALOG_PRICE = 0
 MARRIAGE_CANDIDATE_REROLL_ITEM_ID = 0x152
-MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE = 10000
+MARRIAGE_CANDIDATE_REROLL_CATALOG_PRICE = 0
 MARRIAGE_CANDIDATE_REROLL_FLAG_SECTION = ".vf2rero"
 MARRIAGE_CANDIDATE_REROLL_FLAG_SYMBOL = "_gVF2AllowMarriageCandidateReroll"
 
@@ -20118,7 +20122,7 @@ def patch_same_sex_marriage(manifest):
             "item_id": hex(SAME_SEX_MARRIAGE_ITEM_ID),
             "inactive_price": SAME_SEX_MARRIAGE_CATALOG_PRICE,
             "price_source_item_id": hex(SAME_SEX_MARRIAGE_PRICE_SOURCE_ITEM_ID),
-            "price_source": "Health Plan catalog row 0x119",
+            "price_source": "free Cheat Upgrade row; the Health Plan price it once matched is unchanged",
             "active_price": 0,
             "active_state": "persisted InventoryManager+0x14C+0x2A3 byte; store icon stays cheat_marriage_email.png",
             "inactive_state": "explicit catalog price",

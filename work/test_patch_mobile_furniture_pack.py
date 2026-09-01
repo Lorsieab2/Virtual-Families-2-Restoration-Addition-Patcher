@@ -8606,7 +8606,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         )
         self.assertEqual(rows[0x132]["price"], 0)
         self.assertEqual(rows[0x14C]["price"], patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE)
-        self.assertEqual(patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE, 10000)
+        self.assertEqual(patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE, 0)
         self.assertEqual(rows[0x11B]["price"], 0)
         self.assertEqual(rows[0x133]["name"], "Max out sock pile")
         self.assertIn("maximum signed integer", rows[0x133]["description"])
@@ -11773,7 +11773,7 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
         row = rows[patcher.MARRIAGE_CANDIDATE_REROLL_ITEM_ID]
         self.assertEqual(patcher.MARRIAGE_CANDIDATE_REROLL_ITEM_ID, 0x152)
         self.assertEqual(row["name"], "Allow Reroll of Marriage Candidates")
-        self.assertEqual(row["price"], 10000)
+        self.assertEqual(row["price"], 0)
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x152],
             "cheat_marriage_email.png",
@@ -12009,7 +12009,7 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                     bytes.fromhex("8B C8 C6 80 84 BB 01 00 01"),
                 )
                 self.assertEqual(contract["cheat_upgrade"]["item_id"], "0x152")
-                self.assertEqual(contract["cheat_upgrade"]["catalog_price"], 10000)
+                self.assertEqual(contract["cheat_upgrade"]["catalog_price"], 0)
                 self.assertEqual(
                     contract["runtime_flag"]["storage"],
                     "InventoryManager + 0x152 + 0x2A3 (same persisted-byte convention as mobile renovations/Bathroom 2)",
@@ -12502,8 +12502,11 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 patcher.patch_same_sex_marriage(manifest)
                 contract = manifest["SameSexMarriage"]["cheat_upgrade"]
                 self.assertEqual(contract["item_id"], "0x14c")
-                self.assertEqual(contract["inactive_price"], 10000)
-                self.assertEqual(contract["price_source"], "Health Plan catalog row 0x119")
+                self.assertEqual(contract["inactive_price"], 0)
+                self.assertEqual(
+                    contract["price_source"],
+                    "free Cheat Upgrade row; the Health Plan price it once matched is unchanged",
+                )
                 self.assertEqual(contract["active_price"], 0)
                 # The store icon stays the marriage envelope whether the toggle
                 # is active or not; it must never swap to the generic
