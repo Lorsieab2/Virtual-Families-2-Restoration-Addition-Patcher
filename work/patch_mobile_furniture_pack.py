@@ -2866,6 +2866,12 @@ BEHAVIOR_LABEL_GROUPS = [
         ],
     ),
     (
+        "quick_workout",
+        [
+            ("eString_DoingYoga", "Doing yoga"),
+        ],
+    ),
+    (
         "career",
         [
             ("eString_PracticingCareerSkills", "Practicing career skills"),
@@ -29161,6 +29167,7 @@ extern "C" void __cdecl VF2RandomMendingLabel(CVillager &);
 extern "C" void __cdecl VF2RandomIroningLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTelescopeLabel(CVillager &);
 extern "C" void __cdecl VF2RandomWorkoutLabel(CVillager &);
+extern "C" void __cdecl VF2RandomQuickWorkoutLabel(CVillager &);
 extern "C" void __cdecl VF2RandomKitchenCareerDispatchLabel(CVillager &);
 extern "C" void __cdecl VF2RandomKitchenCareerLabel(CVillager &);
 extern "C" void __cdecl VF2RandomOfficeCareerLabel(CVillager &);
@@ -29217,6 +29224,7 @@ private:
     static void __cdecl IroningShirt(CVillager &);
     static void __cdecl UseTelescope(CVillager &);
     static void __cdecl WorkingOut(CVillager &);
+    static void __cdecl QuickWorkout(CVillager &);
     static void __cdecl WorkKitchenDispatch(CVillager &);
     static void __cdecl WorkKitchen0(CVillager &);
     static void __cdecl OfficeCarreerWork(CVillager &);
@@ -29271,6 +29279,7 @@ private:
     friend void __cdecl VF2RandomIroningLabel(CVillager &);
     friend void __cdecl VF2RandomTelescopeLabel(CVillager &);
     friend void __cdecl VF2RandomWorkoutLabel(CVillager &);
+    friend void __cdecl VF2RandomQuickWorkoutLabel(CVillager &);
     friend void __cdecl VF2RandomKitchenCareerDispatchLabel(CVillager &);
     friend void __cdecl VF2RandomKitchenCareerLabel(CVillager &);
     friend void __cdecl VF2RandomOfficeCareerLabel(CVillager &);
@@ -30018,6 +30027,23 @@ extern "C" void __cdecl VF2RandomTelescopeLabel(CVillager &villager)
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_telescope, VF2_LABEL_COUNT(kVF2BehaviorLabels_telescope), remembered);
 }
 
+// Quick workout sometimes reads as yoga. Unlike the WorkingOut variants,
+// which always replace their native label, this keeps the stock "Quick
+// workout" as the other half of a coin flip so the original outcome does not
+// disappear.
+extern "C" void __cdecl VF2RandomQuickWorkoutLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_quick_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_quick_workout));
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::QuickWorkout)) return;
+    if (remembered) {
+        VF2SetBehaviorLabel(villager, remembered);
+        return;
+    }
+    if (ldwGameState::GetRandom(2) == 0) {
+        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_quick_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_quick_workout));
+    }
+}
+
 extern "C" void __cdecl VF2RandomWorkoutLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_workout));
@@ -30729,6 +30755,7 @@ def patch_behavior_label_variants(manifest):
         retarget(0x7DC, 0x08E, "_VF2RandomIroningLabel", "Ironing clothes label"),
         retarget(0xD07, 0x11D, "_VF2RandomTelescopeLabel", "Telescope label variants"),
         retarget(0x3CC, 0x04A, "_VF2RandomWorkoutLabel", "Workout label variants"),
+        retarget(0x7A9, 0x08B, "_VF2RandomQuickWorkoutLabel", "Quick workout / yoga label variant"),
         retarget(0x3B0, 0x047, "_VF2RandomKitchenCareerDispatchLabel", "Kitchen career label variants"),
         retarget(0x3BE, 0x048, "_VF2RandomKitchenCareerLabel", "Kitchen career label variants"),
         retarget(0x225, 0x02C, "_VF2RandomOfficeCareerLabel", "Office career label variants"),
