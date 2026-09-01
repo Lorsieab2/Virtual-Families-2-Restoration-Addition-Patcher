@@ -3749,6 +3749,66 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "donor_fmap": "PoolLargeStd.png.fmap",
     },
     {
+        "name": "InvisiblePicnicTable",
+        "item_id": 0x328,
+        # Donor is the native record the mobile Picnic Table itself clones
+        # (DONOR_BY_PATH). The mobile item is not a native record, so it
+        # cannot be a donor; price stays the counterpart's 450.
+        "donor": 0x1D8,
+        "list": "gFurniture5",
+        "price": 450,
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Invisible Picnic Table",
+        "long_description": "An invisible picnic table for decorating purposes.",
+        "source_png": "Picnic_table.png",
+        "base_png": "Picnic_table.png",
+        "donor_fmap": "Picnic_table.png.fmap",
+    },
+    {
+        "name": "InvisiblePatioTable",
+        "item_id": 0x329,
+        "donor": 0x1D8,
+        "list": "gFurniture5",
+        "price": 850,
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Invisible Patio Table",
+        "long_description": "An invisible patio table for decorating purposes.",
+        "source_png": "Patio_table.png",
+        "base_png": "Patio_table.png",
+        "donor_fmap": "Patio_table.png.fmap",
+    },
+    {
+        "name": "InvisibleYogaEquipment",
+        "item_id": 0x32A,
+        "donor": 0x220,
+        "list": "gFurniture5",
+        "price": 150,
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Invisible Yoga Equipment",
+        "long_description": "Invisible yoga equipment for decorating purposes.",
+        "source_png": "YogaGearStd.png",
+        "base_png": "YogaGearStd.png",
+        "donor_fmap": "YogaGearStd.png.fmap",
+    },
+    {
+        "name": "InvisibleLounger",
+        "item_id": 0x32B,
+        # Chaise_brown's native donor; the Brown Lounger's own price is 250.
+        "donor": 0x26F,
+        "list": "gFurniture5",
+        "price": 250,
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Invisible Lounger",
+        "long_description": "An invisible lounger for decorating purposes.",
+        "source_png": "Chaise_brown.png",
+        "base_png": "Chaise_brown.png",
+        "donor_fmap": "Chaise_brown.png.fmap",
+    },
+    {
         "name": "InvisibleHammock",
         "item_id": 0x30C,
         "donor": 0x1E1,
@@ -6229,7 +6289,27 @@ def sync_invisible_outdoor_sprites(manifest):
     missing = []
     issues = []
     for item in INVISIBLE_OUTDOOR_ITEMS:
+        # Several bases are themselves inheritance-only art, so in an unseeded
+        # build they are not in the output yet when this runs. Fall back to the
+        # tracked store and then the vanilla payload rather than silently
+        # skipping the item, which produced an invisible-furniture entry with
+        # no sprite behind it.
         base_src = OUT / "Images" / "Furniture" / item["base_png"]
+        if not base_src.exists():
+            for candidate in (
+                ROOT
+                / "patcher_assets"
+                / "inherited_runtime_images"
+                / "Furniture"
+                / item["base_png"],
+                *(
+                    source / "Images" / "Furniture" / item["base_png"]
+                    for source in VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS
+                ),
+            ):
+                if candidate.is_file():
+                    base_src = candidate
+                    break
         dst = OUT / "Images" / "Furniture" / f"{item['name']}.png"
         original_dst = dst.with_name(dst.name + "ORIGINAL")
         if not base_src.exists():
@@ -31282,10 +31362,17 @@ def validate_custom_achievement_award_hook_objects(manifest):
     purchase_data, purchase_sym, purchase_sec = function_data(
         store_obj, "?HandlePurchaseItem@CScrollingStoreScene@@AAEXXZ"
     )
+    # The leading compare is `cmp eax, <first id past the last item>`, which
+    # the store patch rewrites whenever items are added. Pinning 0x328 here
+    # made adding any item fail this contract as a "call window drifted",
+    # which names the symptom and not the cause. Derive the bound the way the
+    # patch does, so the check tracks real drift rather than the item count.
+    store_item_bound = max(item_id_for(index) for index in range(len(ITEMS))) + 1
     expected_purchase_window = (
-        b"\x3D\x28\x03\x00\x00\x7D\x39\x50"
-        b"\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00"
-        b"\xE8\x00\x00\x00\x00\x8B\xC8\xE8\x00\x00\x00\x00"
+        b"\x3D" + struct.pack("<I", store_item_bound)
+        + b"\x7D\x39\x50"
+        + b"\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00"
+        + b"\xE8\x00\x00\x00\x00\x8B\xC8\xE8\x00\x00\x00\x00"
     )
     if purchase_data[0x2D0:0x2EE] != expected_purchase_window:
         errors.append("HandlePurchaseItem purchase-award call window drifted")

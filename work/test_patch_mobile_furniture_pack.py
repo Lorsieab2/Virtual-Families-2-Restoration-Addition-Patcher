@@ -8103,12 +8103,16 @@ class TextFixStringManagerTests(unittest.TestCase):
                         by_id_role[(achievement_id, "description")]["text"],
                         description,
                     )
-                self.assertEqual(patcher.custom_achievement_string_base(), 0xE05)
+                # These ids sit after the store-item string block, which is sized
+                # by len(ITEMS), so every added store item moves them by two. They
+                # stay pinned exactly: the point is to catch a shift nobody
+                # intended, not to forbid adding items.
+                self.assertEqual(patcher.custom_achievement_string_base(), 0xE0D)
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE44
+                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE4C
                 )
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE94
+                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE9C
                 )
                 reserved = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8123,7 +8127,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 self.assertEqual(reserved, [])
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xE95, 0xE96, 0xE97),
+                    (0xE9D, 0xE9E, 0xE9F),
                 )
                 lounger_rows = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8179,7 +8183,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xE95, 0xE96, 0xE97),
+                    (0xE9D, 0xE9E, 0xE9F),
                 )
                 footer_rows = [
                     row
@@ -8197,11 +8201,11 @@ class TextFixStringManagerTests(unittest.TestCase):
                         for row in footer_rows
                     ],
                     [
-                        (0xE95, "common", "eSayCommonOrnaments",
+                        (0xE9D, "common", "eSayCommonOrnaments",
                          " of 4 common ornaments found."),
-                        (0xE96, "uncommon", "eSayUncommonOrnaments",
+                        (0xE9E, "uncommon", "eSayUncommonOrnaments",
                          " of 4 uncommon ornaments found."),
-                        (0xE97, "rare", "eSayRareOrnaments",
+                        (0xE9F, "rare", "eSayRareOrnaments",
                          " of 4 rare ornaments found."),
                     ],
                 )
@@ -9942,7 +9946,9 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     data[0x2D0:0x2EE],
-                    b"\x3D\x28\x03\x00\x00\x7D\x39\x50"
+                    b"\x3D" + struct.pack("<I", max(
+                        patcher.item_id_for(i) for i in range(len(patcher.ITEMS))
+                    ) + 1) + b"\x7D\x39\x50"
                     b"\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00"
                     b"\xE8\x00\x00\x00\x00\x8B\xC8\xE8\x00\x00\x00\x00",
                 )
@@ -10860,7 +10866,7 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                     patcher.custom_achievement_purchase_dispatch(item_id, False, True),
                     (None, 0),
                 )
-        for item_id in (0, 0x1AD, 0x2D3, 0x328, 0x7FFFFFFF):
+        for item_id in (0, 0x1AD, 0x2D3, 0x32C, 0x7FFFFFFF):
             self.assertEqual(
                 patcher.custom_achievement_purchase_dispatch(item_id, True, True, 0x2),
                 (None, 0x2),
@@ -12241,10 +12247,10 @@ class DivorceSpouseContractTests(unittest.TestCase):
         self.assertEqual(patcher.DIVORCE_SPOUSE_ITEM_ID, 0x14B)
         self.assertEqual(patcher.DIVORCE_SPOUSE_CATALOG_PRICE, 0)
         self.assertEqual(row["price"], patcher.DIVORCE_SPOUSE_CATALOG_PRICE)
-        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xED3, 0xED4))
+        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xEDB, 0xEDC))
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x14B),
-            0x32F,
+            0x333,
         )
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x14B],
