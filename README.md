@@ -19,7 +19,7 @@ Everything the patcher needs beyond the game itself:
 | | |
 | --- | --- |
 | **Windows** | The patcher edits a Windows executable and ships a `.bat` launcher. There is no macOS or Linux build. |
-| **Python 3.9 or newer, with `tkinter`** | Not bundled -- install it from [python.org](https://www.python.org/downloads/) if you do not have it. Keep the **tcl/tk and IDLE** component ticked in the installer (it is on by default); the GUI will not start without it. `Launch_GUI.bat` tries `py -3` first and falls back to `python`. Developed and tested on 3.14. |
+| **Python 3.9 or newer, with `tkinter`** | Not bundled -- install it from [python.org](https://www.python.org/downloads/) if you do not have it. Keep the **tcl/tk and IDLE** component ticked in the installer (it is on by default); the GUI will not start without it. `Launch_GUI.bat` uses the `py` launcher when it is installed and `python` otherwise. Developed and tested on 3.14. |
 | **An official VF2 install** | The Windows build from Last Day of Work's own website, unmodified. See [Which copy of the game this supports](#which-copy-of-the-game-this-supports). |
 | **About 500 MB of free disk space** | The patcher writes a separate modded copy rather than editing your install: a ~110 MB vanilla folder produces a ~210 MB modded folder, and the extracted patcher bundle is another ~200 MB. |
 
@@ -55,9 +55,10 @@ like, and that is not a judgement to make from the warning alone.
 
 ### If the window looks frozen
 
-It is probably working. The patcher checks every file in your install before it
-writes anything, and on a full release that pass takes a while with little
-appearing on screen. Give it a minute before assuming it has hung.
+It is probably working. Before writing anything, the patcher verifies every
+file it is going to patch -- thousands of records on a full release -- and that
+pass takes a while with little appearing on screen. Give it a minute before
+assuming it has hung.
 
 ## Download
 
