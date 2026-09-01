@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+sys.path.insert(0, str(ROOT / "work"))
 import offline_vf2_patcher as patcher
 import offline_vf2_patcher_gui as gui
 
@@ -615,3 +615,34 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class UpdatesLinkTests(unittest.TestCase):
+    """The Check for updates link must be present and look clickable.
+
+    It was reported as missing when it had been on screen the whole time: a
+    blue label with no underline reads as static text, so nobody tried to
+    click it. These assertions cover both that it exists and that it still
+    looks like a link.
+    """
+
+    def test_link_is_defined_with_underline_and_hover(self):
+        for rel in ("work/offline_vf2_patcher_gui.py", "src/offline_vf2_patcher_gui.py"):
+            source = (ROOT / rel).read_text(encoding="utf-8")
+            with self.subTest(copy=rel):
+                self.assertIn('text="Check for updates"', source)
+                self.assertIn("_open_updates_url", source)
+                self.assertIn("PATCHER_RELEASES_URL", source)
+                self.assertIn('style.configure("Link.TLabel"', source)
+                self.assertIn("underline", source)
+                self.assertIn('style.configure("LinkHover.TLabel"', source)
+                self.assertIn('update_link.bind("<Enter>"', source)
+                self.assertIn('update_link.bind("<Leave>"', source)
+
+    def test_both_copies_stay_identical(self):
+        # The exporter ships work/; a fix applied only to src/ never reaches
+        # anyone's download.
+        self.assertEqual(
+            (ROOT / "work/offline_vf2_patcher_gui.py").read_bytes(),
+            (ROOT / "src/offline_vf2_patcher_gui.py").read_bytes(),
+        )
