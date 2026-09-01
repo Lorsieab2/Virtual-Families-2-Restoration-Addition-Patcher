@@ -6766,7 +6766,22 @@ def _image_source_roots():
     # build output or a previous build: those directories may already contain
     # seeded generated files, which would make an unseeded build appear
     # reproducible while silently copying its predecessor.
-    roots = [source / "Images" for source in VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS]
+    # Honour a payload supplied through VF2_VANILLA_RUNTIME_DIR, the way
+    # sync_vanilla_runtime_payload() already does. Reading only the hardcoded
+    # workspace directory meant a build that configured its clean payload
+    # externally found no templates here at all, so the holiday generators
+    # silently omitted all 448 body frames and 8 detail frames and then wrote
+    # descriptors pointing at files that were never created.
+    #
+    # The legacy *output* fallbacks stay excluded even when their opt-in flag
+    # is set: those are previous build outputs, and this list must never
+    # search one.
+    configured = [
+        source
+        for source in vanilla_runtime_payload_source_dirs()
+        if source not in LEGACY_OUTPUT_RUNTIME_PAYLOAD_SOURCE_DIRS
+    ]
+    roots = [source / "Images" for source in configured]
 
     unique = []
     seen = set()
@@ -25903,6 +25918,20 @@ extern "C" void __cdecl VF2MobileNappingCouch(CVillager &villager)
         __VF2_NAP_FALLBACK__
         return;
     }
+    // The manual lounger route escalates a nap into full sleep as energy
+    // drops, weighting nap by (70 - energy) and sleep by (45 - energy) * 3.
+    // Autonomy only ever offered the nap, so "Getting some sleep" could not
+    // be reached without dragging the villager onto the lounger. Choose
+    // between them here with those same weights, so the two routes agree.
+    int napWeight = energyValue < 70 ? 70 - energyValue : 0;
+    int sleepWeight = energyValue < 45 ? (45 - energyValue) * 3 : 0;
+    if (sleepWeight > 0 &&
+        ldwGameState::GetRandom(napWeight + sleepWeight) >= napWeight) {
+        VF2PlanLinkedChaiseAction(
+            villager, info, "Getting some sleep", ldwGameState::GetRandom(10) + 10,
+            static_cast<ECarrying>(0), 2, 0, 10);
+        return;
+    }
     VF2PlanLinkedChaiseAction(
         villager, info, "Taking a nap", ldwGameState::GetRandom(5) + 5,
         static_cast<ECarrying>(0), 2, 0, ldwGameState::GetRandom(5) + 7);
@@ -25921,11 +25950,21 @@ extern "C" void __cdecl VF2MobileRestingBody(CVillager &villager)
         VF2PlanLinkedChaiseAction(
             villager, info, "Catching some rays", ldwGameState::GetRandom(10) + 10,
             static_cast<ECarrying>(0), 4, 1, 2);
-    } else {
-        VF2PlanLinkedChaiseAction(
-            villager, info, "Needs to sit down", ldwGameState::GetRandom(15) + 15,
-            static_cast<ECarrying>(0), 0, 0, 3);
+        return;
     }
+    // "Relaxing on lounger" was reachable only by dragging a villager onto
+    // the lounger. The manual route gives it and "Needs to sit down" equal
+    // weight, so split the remaining case evenly rather than inventing a
+    // ratio. Its parameters are the manual route's, unchanged.
+    if (ldwGameState::GetRandom(2) == 0) {
+        VF2PlanLinkedChaiseAction(
+            villager, info, "Relaxing on lounger", ldwGameState::GetRandom(15) + 15,
+            static_cast<ECarrying>(0), 4, 1, 2);
+        return;
+    }
+    VF2PlanLinkedChaiseAction(
+        villager, info, "Needs to sit down", ldwGameState::GetRandom(15) + 15,
+        static_cast<ECarrying>(0), 0, 0, 3);
 }
 
 extern "C" void __cdecl VF2MobileStudyingOnPatio(CVillager &villager)
@@ -26152,6 +26191,8 @@ __VF2_COMPUTER_DROP_DISPATCH__
                 "Taking a nap",
                 "Studying on the lounger",
                 "Needs to sit down",
+                "Relaxing on lounger",
+                "Getting some sleep",
             ],
             "translated_refusal_strings": {
                 "unreachable": "0xb7",
@@ -29214,7 +29255,7 @@ extern "C" void __cdecl VF2RandomPoolLabel(CVillager &);
 extern "C" void __cdecl VF2RandomPlayhouseLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSnowLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSandboxLabel(CVillager &);
-extern "C" void __cdecl VF2RandomToyTrainLabel(CVillager &);
+extern "C" void __cdecl VF2RandomPlayTrainLabel(CVillager &);
 extern "C" void __cdecl VF2RandomDrivingChildLabel(CVillager &);
 extern "C" void __cdecl VF2TrampolineLabel(CVillager &);
 extern "C" void __cdecl VF2RandomKidsTableLabel(CVillager &);
@@ -29271,6 +29312,7 @@ private:
     static void __cdecl PlayingInSnow(CVillager &);
     static void __cdecl ToySandbox(CVillager &);
     static void __cdecl ToyTrainTableForKids(CVillager &);
+    static void __cdecl KidPlayTrain(CVillager &);
     static void __cdecl ChildrenPlayOffice(CVillager &);
     static void __cdecl ToyTrampoline(CVillager &);
     static void __cdecl ChildrenPlayAtKidsTable(CVillager &);
@@ -29321,7 +29363,7 @@ private:
     friend void __cdecl VF2RandomPlayhouseLabel(CVillager &);
     friend void __cdecl VF2RandomSnowLabel(CVillager &);
     friend void __cdecl VF2RandomSandboxLabel(CVillager &);
-    friend void __cdecl VF2RandomToyTrainLabel(CVillager &);
+    friend void __cdecl VF2RandomPlayTrainLabel(CVillager &);
     friend void __cdecl VF2RandomDrivingChildLabel(CVillager &);
     friend void __cdecl VF2TrampolineLabel(CVillager &);
     friend void __cdecl VF2RandomKidsTableLabel(CVillager &);
@@ -30288,10 +30330,16 @@ extern "C" void __cdecl VF2RandomSandboxLabel(CVillager &villager)
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_sandbox, VF2_LABEL_COUNT(kVF2BehaviorLabels_sandbox), remembered);
 }
 
-extern "C" void __cdecl VF2RandomToyTrainLabel(CVillager &villager)
+// These labels -- tag, Duck Duck Goose, chasing, running around the house --
+// describe children chasing each other, which is CBehavior::KidPlayTrain
+// (0x10B, "Playing train"). They were wired to ToyTrainTableForKids (0x198),
+// the Toy Train Table furniture action, so a child sitting at the train table
+// announced that the floor was lava. The two behaviours are unrelated beyond
+// the word "train".
+extern "C" void __cdecl VF2RandomPlayTrainLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_train_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_train_child));
-    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::ToyTrainTableForKids)) return;
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::KidPlayTrain)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_train_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_train_child), remembered);
 }
 
@@ -30755,7 +30803,7 @@ def patch_behavior_label_variants(manifest):
         retarget(0xD18, 0x11E, "_VF2RandomPlayhouseLabel", "Playhouse/playground label variants"),
         retarget(0xE9F, 0x108, "_VF2RandomSnowLabel", "Snow play label variants"),
         retarget(0x1842, 0x196, "_VF2RandomSandboxLabel", "Sandbox label variants"),
-        retarget(0x1864, 0x198, "_VF2RandomToyTrainLabel", "Toy train/table label variants"),
+        retarget(0xED2, 0x10B, "_VF2RandomPlayTrainLabel", "Playing train label variants"),
         retarget(0x09D, 0x00B, "_VF2RandomDrivingChildLabel", "Child driving label variants"),
         retarget(0x1875, 0x199, "_VF2TrampolineLabel", "Trampoline label text fix"),
         retarget(0x1125, 0x130, "_VF2RandomKidsTableLabel", "Kids table label variants"),

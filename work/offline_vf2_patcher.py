@@ -135,7 +135,11 @@ ProgressCallback = Callable[[str], None]
 
 
 def utc_now() -> str:
-    return _dt.datetime.now(_dt.UTC).replace(microsecond=0).isoformat()
+    # datetime.UTC is a 3.11 alias for datetime.timezone.utc. Using the alias
+    # made a normal validate/apply run raise AttributeError on 3.9 and 3.10,
+    # which are otherwise fine for this tool, so it raised the real minimum to
+    # 3.11 for no benefit.
+    return _dt.datetime.now(_dt.timezone.utc).replace(microsecond=0).isoformat()
 
 
 def read_json(path: Path) -> dict[str, Any]:
