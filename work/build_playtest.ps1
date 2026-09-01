@@ -61,7 +61,18 @@ $inheritedOnlyIndexPath = Join-Path $inheritedOnlyIndexPath "inherited-only-imag
 if (-not (Test-Path -LiteralPath $inheritedOnlyIndexPath)) {
     throw "Missing inherited-art inventory: $inheritedOnlyIndexPath"
 }
-$inheritedOnlyImages = @((Get-Content -LiteralPath $inheritedOnlyIndexPath -Raw | ConvertFrom-Json).files |
+$inheritedOnlyIndex = Get-Content -LiteralPath $inheritedOnlyIndexPath -Raw | ConvertFrom-Json
+# Editing sources -- .xcf files and the Upgrades "invisible images" /
+# "original images" working folders -- are recorded in the historical
+# inventory but are not runtime art. The engine never loads them and the
+# offline bundle excludes them, so a build is not required to produce them and
+# validating them here would fail every build that correctly omits them.
+$nonRuntimeInherited = @{}
+foreach ($rel in @($inheritedOnlyIndex.non_runtime_files)) {
+    if ($rel) { $nonRuntimeInherited[$rel] = $true }
+}
+$inheritedOnlyImages = @($inheritedOnlyIndex.files |
+    Where-Object { -not $nonRuntimeInherited.ContainsKey($_) } |
     ForEach-Object { "Images/$_" })
 if ($inheritedOnlyImages.Count -eq 0) {
     throw "Inherited-art inventory is empty: $inheritedOnlyIndexPath"
@@ -143,14 +154,18 @@ if ($PreviousBuildDir) {
     # and still ship without the art. So require files that were measured as
     # absent from an uninherited build. Representative, not exhaustive -- enough
     # to tell a real inherited build from one that cannot pass the art on.
+    #
+    # A seed no longer has to be complete: restore_preserved_inherited_art()
+    # supplies anything it lacks from the tracked store, and verifies it. This
+    # used to abort the build, which now needlessly refuses a partial or older
+    # seed the build handles perfectly well. Still reported, because a seed
+    # missing art usually means the wrong directory was passed.
     $missingProbes = Get-MissingInheritedArt $PreviousBuildDir
     if ($missingProbes.Count -gt 0) {
-        throw ("PreviousBuildDir is missing inheritance-only art, so it cannot pass it on " +
-            "(it looks like an uninherited build output): $PreviousBuildDir`n  missing " +
-            "$($missingProbes.Count) of $($inheritedOnlyImages.Count), first: " +
-            (($missingProbes | Select-Object -First 3) -join ", "))
+        Write-Host ("  seed is missing {0} of {1} inheritance-only images; they will be supplied from patcher_assets/inherited_runtime_images" -f $missingProbes.Count, $inheritedOnlyImages.Count) -ForegroundColor Yellow
+    } else {
+        Write-Host ("  seed carries all {0} inheritance-only images" -f $inheritedOnlyImages.Count)
     }
-    Write-Host ("  seed carries all {0} inheritance-only images" -f $inheritedOnlyImages.Count)
     $PreviousBuildDir = (Resolve-Path -LiteralPath $PreviousBuildDir).Path
 }
 
