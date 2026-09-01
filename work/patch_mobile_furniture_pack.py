@@ -6670,7 +6670,22 @@ def _image_source_roots():
     # build output or a previous build: those directories may already contain
     # seeded generated files, which would make an unseeded build appear
     # reproducible while silently copying its predecessor.
-    roots = [source / "Images" for source in VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS]
+    # Honour a payload supplied through VF2_VANILLA_RUNTIME_DIR, the way
+    # sync_vanilla_runtime_payload() already does. Reading only the hardcoded
+    # workspace directory meant a build that configured its clean payload
+    # externally found no templates here at all, so the holiday generators
+    # silently omitted all 448 body frames and 8 detail frames and then wrote
+    # descriptors pointing at files that were never created.
+    #
+    # The legacy *output* fallbacks stay excluded even when their opt-in flag
+    # is set: those are previous build outputs, and this list must never
+    # search one.
+    configured = [
+        source
+        for source in vanilla_runtime_payload_source_dirs()
+        if source not in LEGACY_OUTPUT_RUNTIME_PAYLOAD_SOURCE_DIRS
+    ]
+    roots = [source / "Images" for source in configured]
 
     unique = []
     seen = set()
