@@ -23627,7 +23627,14 @@ enum EPropEnum {
 enum StringId {
     eStringPlayingWithToys = 0xF0,
     eStringBadWeather = __VF2_LOUNGER_BAD_WEATHER_STRING_ID__,
-    eStringPicnicBadWeather = 0x02,
+    // Was 0x02, which is an unrelated early string -- dropping a villager on
+    // the picnic table in bad weather showed the "your family has bought so
+    // many things" message instead of a refusal. There is one added
+    // bad-weather row, "Don't like the weather!", and both picnic paths use
+    // it like the lounger does. Left as a distinct name so the picnic sites
+    // stay readable, but resolved from the same generated id so it cannot
+    // drift from the row that actually exists.
+    eStringPicnicBadWeather = __VF2_LOUNGER_BAD_WEATHER_STRING_ID__,
     eStringCannotReachFurniture = 0xB7,
     eStringTooYoung = 0x73D,
     eStringWorriedAboutFood = 0xA41,
