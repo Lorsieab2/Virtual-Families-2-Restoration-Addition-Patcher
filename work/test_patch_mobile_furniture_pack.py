@@ -8106,12 +8106,12 @@ class TextFixStringManagerTests(unittest.TestCase):
                         by_id_role[(achievement_id, "description")]["text"],
                         description,
                     )
-                self.assertEqual(patcher.custom_achievement_string_base(), 0xE0F)
+                self.assertEqual(patcher.custom_achievement_string_base(), 0xE19)
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE4E
+                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE58
                 )
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE9E
+                    patcher.custom_achievement_string_ids(0xA7)[1], 0xEA8
                 )
                 reserved = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8126,7 +8126,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 self.assertEqual(reserved, [])
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xEA3, 0xEA4, 0xEA5),
+                    (0xEAD, 0xEAE, 0xEAF),
                 )
                 lounger_rows = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8182,7 +8182,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xEA3, 0xEA4, 0xEA5),
+                    (0xEAD, 0xEAE, 0xEAF),
                 )
                 footer_rows = [
                     row
@@ -8200,11 +8200,11 @@ class TextFixStringManagerTests(unittest.TestCase):
                         for row in footer_rows
                     ],
                     [
-                        (0xEA3, "common", "eSayCommonOrnaments",
+                        (0xEAD, "common", "eSayCommonOrnaments",
                          " of 4 common ornaments found."),
-                        (0xEA4, "uncommon", "eSayUncommonOrnaments",
+                        (0xEAE, "uncommon", "eSayUncommonOrnaments",
                          " of 4 uncommon ornaments found."),
-                        (0xEA5, "rare", "eSayRareOrnaments",
+                        (0xEAF, "rare", "eSayRareOrnaments",
                          " of 4 rare ornaments found."),
                     ],
                 )
@@ -12246,7 +12246,7 @@ class DivorceSpouseContractTests(unittest.TestCase):
         self.assertEqual(patcher.DIVORCE_SPOUSE_ITEM_ID, 0x14B)
         self.assertEqual(patcher.DIVORCE_SPOUSE_CATALOG_PRICE, 0)
         self.assertEqual(row["price"], patcher.DIVORCE_SPOUSE_CATALOG_PRICE)
-        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xEE1, 0xEE2))
+        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xEEB, 0xEEC))
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x14B),
             0x333,
