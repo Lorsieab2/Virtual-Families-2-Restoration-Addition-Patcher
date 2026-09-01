@@ -3,6 +3,7 @@ import ast
 import copy
 import hashlib
 import json
+import os
 import shutil
 import struct
 import tempfile
@@ -1334,6 +1335,8 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                         "Taking a nap",
                         "Studying on the lounger",
                         "Needs to sit down",
+                        "Relaxing on lounger",
+                        "Getting some sleep",
                     ],
                 )
                 umbrella = contract["implemented_families"][1]
@@ -14598,6 +14601,267 @@ class RuntimePayloadContractTests(unittest.TestCase):
                 patcher.validate_runtime_payload_contract(manifest)
 
         self.with_temp_runtime(run)
+
+
+class RefusalStringIdContractTests(unittest.TestCase):
+    """Refusal strings must point at rows that exist.
+
+    eStringPicnicBadWeather was 0x02, an unrelated early string, so dropping
+    a villager on the picnic table in bad weather showed the "your family has
+    bought so many things" message instead of a refusal.
+    """
+
+    SOURCE = (
+        Path(__file__).resolve().parents[1] / "work" / "patch_mobile_furniture_pack.py"
+    ).read_text(encoding="utf-8")
+
+    def _enum(self):
+        start = self.SOURCE.index("eStringBadWeather")
+        end = self.SOURCE.index("};", start)
+        return self.SOURCE[start:end]
+
+    def test_picnic_bad_weather_uses_the_generated_row(self):
+        enum = self._enum()
+        line = next(
+            row for row in enum.splitlines() if "eStringPicnicBadWeather" in row
+        )
+        self.assertIn("__VF2_LOUNGER_BAD_WEATHER_STRING_ID__", line)
+
+    def test_no_refusal_string_is_a_bogus_low_id(self):
+        # The floor is the lowest id actually in use and known to render
+        # correctly -- eStringCannotReachFurniture, 0xb7 -- rather than a
+        # round number I picked. 0x02 sat far below every real refusal.
+        import re
+
+        known_good_floor = 0xB7
+        seen = {}
+        for row in self._enum().splitlines():
+            match = re.match(r"\s*(eString\w+)\s*=\s*(0x[0-9A-Fa-f]+)\s*,?\s*$", row)
+            if not match:
+                continue
+            seen[match.group(1)] = int(match.group(2), 16)
+        self.assertIn("eStringCannotReachFurniture", seen)
+        self.assertEqual(seen["eStringCannotReachFurniture"], known_good_floor)
+        for name, value in seen.items():
+            with self.subTest(constant=name):
+                self.assertGreaterEqual(
+                    value,
+                    known_good_floor,
+                    f"{name} = {hex(value)} is below every refusal id in use",
+                )
+
+    def test_both_picnic_paths_refuse_with_the_same_string(self):
+        # Preparing a picnic and eating at the table both refuse on weather.
+        self.assertEqual(
+            self.SOURCE.count("VF2PlanPatioRefusal(plans, villager, eStringPicnicBadWeather)"),
+            2,
+        )
+
+    def test_the_generated_row_text_is_the_weather_refusal(self):
+        self.assertIn('lounger_weather_text = "Don\'t like the weather!"', self.SOURCE)
+class PlayingTrainLabelWiringTests(unittest.TestCase):
+    """The chasing labels belong to Playing train, not the Toy Train Table.
+
+    "The floor is lava!", "Playing tag", "Duck Duck Goose", "Chasing people"
+    and "Running around the house" describe children chasing each other --
+    CBehavior::KidPlayTrain (0x10B). They were wired to ToyTrainTableForKids
+    (0x198), the furniture action, so a child sitting at the train table
+    announced that the floor was lava.
+    """
+
+    def _ctor_entries(self):
+        """Read the behaviour table from a pristine copy, not the build output.
+
+        work/patched_mobile_furniture_pack_objs is gitignored and exists only
+        after a build, so reading it made these tests depend on whatever state
+        the last run left behind -- or fail outright with FileNotFoundError.
+        Copy the source object and apply the patch, as the other
+        binary-contract tests do.
+        """
+        import struct
+
+        old_patched = patcher.PATCHED
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            patcher.PATCHED = Path(tmp.name)
+            shutil.copy2(
+                patcher.SRC_OBJS / "Behavior.obj", patcher.PATCHED / "Behavior.obj"
+            )
+            patcher.patch_behavior_label_variants({})
+            obj = CoffObject(patcher.PATCHED / "Behavior.obj")
+            ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+            sec = obj.section(ctor.section)
+            relocs = {}
+            for i in range(sec.nreloc):
+                vaddr, symidx, _rtype = struct.unpack_from(
+                    "<IIH", obj.buf, sec.reloc_ptr + i * 10
+                )
+                relocs[vaddr] = obj.symbol_by_index[symidx].name
+            return bytes(obj.buf), ctor, sec, relocs
+        finally:
+            patcher.PATCHED = old_patched
+            tmp.cleanup()
+
+    def test_the_chasing_labels_target_kid_play_train(self):
+        import struct
+
+        buf, ctor, sec, relocs = self._ctor_entries()
+        raw = sec.raw_ptr + ctor.value + 0xED2
+        self.assertEqual(buf[raw : raw + 5], b"\x68\x00\x00\x00\x00")
+        self.assertEqual(buf[raw + 5], 0x68)
+        self.assertEqual(struct.unpack_from("<I", buf, raw + 6)[0], 0x10B)
+        # The fixture applies the patch to a pristine copy, so this slot
+        # must now be our helper -- not whatever a previous build left.
+        self.assertEqual(
+            relocs.get(ctor.value + 0xED2 + 1), "_VF2RandomPlayTrainLabel"
+        )
+
+    def test_the_train_table_slot_is_a_different_behavior(self):
+        import struct
+
+        buf, ctor, sec, relocs = self._ctor_entries()
+        raw = sec.raw_ptr + ctor.value + 0x1864
+        self.assertEqual(struct.unpack_from("<I", buf, raw + 6)[0], 0x198)
+        target = relocs.get(ctor.value + 0x1864 + 1, "")
+        self.assertIn(
+            "ToyTrainTableForKids",
+            target,
+            "the train table must run natively again, not through the chasing "
+            f"label helper (found {target})",
+        )
+
+    def test_the_helper_wraps_the_chasing_behavior(self):
+        source = (
+            Path(__file__).resolve().parents[1] / "work" / "patch_mobile_furniture_pack.py"
+        ).read_text(encoding="utf-8")
+        start = source.index("void __cdecl VF2RandomPlayTrainLabel(CVillager &villager)")
+        body = source[start : source.index(chr(10) + "extern", start + 5)]
+        self.assertIn("CBehavior::KidPlayTrain", body)
+        self.assertIn("kVF2BehaviorLabels_train_child", body)
+        self.assertNotIn("ToyTrainTableForKids", body)
+        self.assertIn(
+            'retarget(0xED2, 0x10B, "_VF2RandomPlayTrainLabel"', source
+        )
+        self.assertNotIn('0x198, "_VF2RandomToyTrainLabel"', source)
+
+
+class ImageTemplateRootTests(unittest.TestCase):
+    """Template lookup must follow the payload the build was configured with.
+
+    sync_vanilla_runtime_payload() honours VF2_VANILLA_RUNTIME_DIR, but the
+    template roots read a hardcoded workspace directory. A build supplying its
+    clean payload externally therefore found no templates, and the holiday
+    generators omitted all 448 body frames and 8 detail frames while still
+    writing descriptors that pointed at files nothing had created.
+    """
+
+    def test_configured_payload_is_searched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = Path(tmp)
+            (payload / "Images").mkdir()
+            old = os.environ.get("VF2_VANILLA_RUNTIME_DIR")
+            os.environ["VF2_VANILLA_RUNTIME_DIR"] = str(payload)
+            try:
+                roots = patcher._image_source_roots()
+            finally:
+                if old is None:
+                    os.environ.pop("VF2_VANILLA_RUNTIME_DIR", None)
+                else:
+                    os.environ["VF2_VANILLA_RUNTIME_DIR"] = old
+            self.assertIn(payload / "Images", roots)
+
+    def test_previous_build_outputs_are_never_searched(self):
+        # The legacy fallbacks are previous build outputs. Even with their
+        # opt-in flag set they must stay out, or an unseeded build could copy
+        # its predecessor and look reproducible.
+        old_env = os.environ.get("VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK")
+        os.environ["VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK"] = "1"
+        try:
+            roots = {str(root).lower() for root in patcher._image_source_roots()}
+        finally:
+            if old_env is None:
+                os.environ.pop("VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK", None)
+            else:
+                os.environ["VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK"] = old_env
+        for legacy in patcher.LEGACY_OUTPUT_RUNTIME_PAYLOAD_SOURCE_DIRS:
+            with self.subTest(legacy=legacy.name):
+                self.assertNotIn(str(legacy / "Images").lower(), roots)
+
+
+class SpontaneousLoungerBehaviorTests(unittest.TestCase):
+    """Every lounger label must be reachable without dragging a villager.
+
+    The manual drop route (VF2HandleMobileChaise) picks among six labels.
+    Autonomy went through four behavior helpers that between them offered
+    only four of those, so "Relaxing on lounger" and "Getting some sleep"
+    could be seen only by dropping a villager onto the lounger.
+    """
+
+    SOURCE = (
+        Path(__file__).resolve().parents[1] / "work" / "patch_mobile_furniture_pack.py"
+    ).read_text(encoding="utf-8")
+
+    def _helper(self, name):
+        start = self.SOURCE.index('void __cdecl ' + name + '(CVillager &villager)')
+        end = self.SOURCE.index(chr(10) + 'extern "C"', start + 5)
+        return self.SOURCE[start:end]
+
+    def _manual_handler(self):
+        start = self.SOURCE.index("static bool VF2HandleMobileChaise(CVillager &villager)")
+        end = self.SOURCE.index(chr(10) + "static bool VF2HandleMobilePatioUmbrella", start)
+        return self.SOURCE[start:end]
+
+    def test_every_manual_lounger_label_is_reachable_autonomously(self):
+        manual = self._manual_handler()
+        autonomous = "".join(
+            self._helper(name)
+            for name in (
+                "VF2MobileReadingBook",
+                "VF2MobileNappingCouch",
+                "VF2MobileRestingBody",
+                "VF2MobileStudyingOnPatio",
+            )
+        )
+        labels = (
+            "Relaxing on lounger",
+            "Reading a book",
+            "Studying on the lounger",
+            "Needs to sit down",
+            "Taking a nap",
+            "Getting some sleep",
+        )
+        for label in labels:
+            with self.subTest(label=label):
+                self.assertIn(label, manual, "label left the manual route")
+                self.assertIn(label, autonomous, "label cannot be chosen autonomously")
+
+    def test_autonomous_sleep_uses_the_manual_routes_energy_weights(self):
+        helper = self._helper("VF2MobileNappingCouch")
+        self.assertIn("70 - energyValue", helper)
+        self.assertIn("(45 - energyValue) * 3", helper)
+        self.assertIn("Getting some sleep", helper)
+        # Sleep stays an escalation, never the ordinary outcome.
+        self.assertIn("sleepWeight > 0", helper)
+
+    def test_autonomous_lounger_actions_keep_the_manual_parameters(self):
+        rest = self._helper("VF2MobileRestingBody")
+        self.assertIn('"Relaxing on lounger", ldwGameState::GetRandom(15) + 15,', rest)
+        self.assertIn("static_cast<ECarrying>(0), 4, 1, 2);", rest)
+        sleep = self._helper("VF2MobileNappingCouch")
+        self.assertIn('"Getting some sleep", ldwGameState::GetRandom(10) + 10,', sleep)
+        self.assertIn("static_cast<ECarrying>(0), 2, 0, 10);", sleep)
+
+    def test_sit_down_variants_still_apply_on_the_autonomous_route(self):
+        start = self.SOURCE.index("static void VF2PlanLinkedChaiseAction")
+        # The definition, not the forward declaration that appears earlier.
+        end = self.SOURCE.index(
+            'extern "C" void __cdecl VF2MobileReadingBook(CVillager &villager)'
+        )
+        self.assertIn("__VF2_CHAISE_PLAN_SIT_DOWN_VARIANTS__", self.SOURCE[start:end])
+
+
+if __name__ == "__main__":
+    unittest.main()
 
 
 if __name__ == "__main__":
