@@ -3,6 +3,7 @@ import ast
 import copy
 import hashlib
 import json
+import os
 import shutil
 import struct
 import tempfile
@@ -14656,6 +14657,49 @@ class RefusalStringIdContractTests(unittest.TestCase):
 
     def test_the_generated_row_text_is_the_weather_refusal(self):
         self.assertIn('lounger_weather_text = "Don\'t like the weather!"', self.SOURCE)
+
+
+class ImageTemplateRootTests(unittest.TestCase):
+    """Template lookup must follow the payload the build was configured with.
+
+    sync_vanilla_runtime_payload() honours VF2_VANILLA_RUNTIME_DIR, but the
+    template roots read a hardcoded workspace directory. A build supplying its
+    clean payload externally therefore found no templates, and the holiday
+    generators omitted all 448 body frames and 8 detail frames while still
+    writing descriptors that pointed at files nothing had created.
+    """
+
+    def test_configured_payload_is_searched(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = Path(tmp)
+            (payload / "Images").mkdir()
+            old = os.environ.get("VF2_VANILLA_RUNTIME_DIR")
+            os.environ["VF2_VANILLA_RUNTIME_DIR"] = str(payload)
+            try:
+                roots = patcher._image_source_roots()
+            finally:
+                if old is None:
+                    os.environ.pop("VF2_VANILLA_RUNTIME_DIR", None)
+                else:
+                    os.environ["VF2_VANILLA_RUNTIME_DIR"] = old
+            self.assertIn(payload / "Images", roots)
+
+    def test_previous_build_outputs_are_never_searched(self):
+        # The legacy fallbacks are previous build outputs. Even with their
+        # opt-in flag set they must stay out, or an unseeded build could copy
+        # its predecessor and look reproducible.
+        old_env = os.environ.get("VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK")
+        os.environ["VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK"] = "1"
+        try:
+            roots = {str(root).lower() for root in patcher._image_source_roots()}
+        finally:
+            if old_env is None:
+                os.environ.pop("VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK", None)
+            else:
+                os.environ["VF2_ALLOW_LEGACY_OUTPUT_RUNTIME_FALLBACK"] = old_env
+        for legacy in patcher.LEGACY_OUTPUT_RUNTIME_PAYLOAD_SOURCE_DIRS:
+            with self.subTest(legacy=legacy.name):
+                self.assertNotIn(str(legacy / "Images").lower(), roots)
 
 
 if __name__ == "__main__":
