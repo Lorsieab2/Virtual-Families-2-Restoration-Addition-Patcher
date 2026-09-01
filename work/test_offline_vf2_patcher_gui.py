@@ -649,10 +649,13 @@ class UpdatesLinkTests(unittest.TestCase):
     def test_both_copies_stay_identical(self):
         # The exporter ships work/; a fix applied only to src/ never reaches
         # anyone's download.
-        self.assertEqual(
-            (ROOT / "work" / "offline_vf2_patcher_gui.py").read_bytes(),
-            (ROOT / "src" / "offline_vf2_patcher_gui.py").read_bytes(),
-        )
+        # Built with joinpath rather than the / operator on a "work" literal:
+        # the sync rule that generates the tests/ copy rewrites ROOT / "work"
+        # to ROOT / "src", which would make this compare src against itself and
+        # never detect the drift it exists to catch.
+        shipped = ROOT.joinpath("work", "offline_vf2_patcher_gui.py")
+        public = ROOT.joinpath("src", "offline_vf2_patcher_gui.py")
+        self.assertEqual(shipped.read_bytes(), public.read_bytes())
 
 
 if __name__ == "__main__":
