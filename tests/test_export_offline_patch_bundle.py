@@ -3059,6 +3059,34 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
         "test_offline_vf2_patcher_gui.py": False,
     }
 
+    def test_tool_copies_match_between_src_and_work(self):
+        """The two implementation trees must not drift.
+
+        The bundle exporter ships the **work/** copies -- SOURCE_DIR is the
+        work directory and write_bundle_runner_files() copies from there. A
+        change made only in src/ therefore never reaches a release, while
+        tests/ (which imports src/) still goes green. That happened to the
+        "Please wait" GUI feedback: src/ had it, the shipped GUI did not, and
+        both suites passed.
+        """
+        for name in (
+            "offline_vf2_patcher.py",
+            "offline_vf2_patcher_gui.py",
+            "vf2_crash_capture.py",
+        ):
+            src_path = ROOT / "src" / name
+            work_path = ROOT / "work" / name
+            if not src_path.is_file() or not work_path.is_file():
+                continue
+            with self.subTest(tool=name):
+                self.assertEqual(
+                    src_path.read_text(encoding="utf-8"),
+                    work_path.read_text(encoding="utf-8"),
+                    f"src/{name} and work/{name} have drifted; the exporter "
+                    f"ships work/{name}, so a src-only change never reaches a "
+                    "release",
+                )
+
     def test_tests_copy_matches_the_work_copy(self):
         for name, identical in self.SUITES.items():
             with self.subTest(suite=name):
