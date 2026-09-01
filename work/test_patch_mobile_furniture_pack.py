@@ -8106,16 +8106,12 @@ class TextFixStringManagerTests(unittest.TestCase):
                         by_id_role[(achievement_id, "description")]["text"],
                         description,
                     )
-                # These ids sit after the store-item string block, which is sized
-                # by len(ITEMS), so every added store item moves them by two. They
-                # stay pinned exactly: the point is to catch a shift nobody
-                # intended, not to forbid adding items.
-                self.assertEqual(patcher.custom_achievement_string_base(), 0xE0D)
+                self.assertEqual(patcher.custom_achievement_string_base(), 0xE0F)
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE4C
+                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE4E
                 )
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE9C
+                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE9E
                 )
                 reserved = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8130,7 +8126,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 self.assertEqual(reserved, [])
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xE9D, 0xE9E, 0xE9F),
+                    (0xEA3, 0xEA4, 0xEA5),
                 )
                 lounger_rows = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8186,7 +8182,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xE9D, 0xE9E, 0xE9F),
+                    (0xEA3, 0xEA4, 0xEA5),
                 )
                 footer_rows = [
                     row
@@ -8204,11 +8200,11 @@ class TextFixStringManagerTests(unittest.TestCase):
                         for row in footer_rows
                     ],
                     [
-                        (0xE9D, "common", "eSayCommonOrnaments",
+                        (0xEA3, "common", "eSayCommonOrnaments",
                          " of 4 common ornaments found."),
-                        (0xE9E, "uncommon", "eSayUncommonOrnaments",
+                        (0xEA4, "uncommon", "eSayUncommonOrnaments",
                          " of 4 uncommon ornaments found."),
-                        (0xE9F, "rare", "eSayRareOrnaments",
+                        (0xEA5, "rare", "eSayRareOrnaments",
                          " of 4 rare ornaments found."),
                     ],
                 )
@@ -8612,7 +8608,7 @@ class OutfitStoreMappingTests(unittest.TestCase):
         )
         self.assertEqual(rows[0x132]["price"], 0)
         self.assertEqual(rows[0x14C]["price"], patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE)
-        self.assertEqual(patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE, 10000)
+        self.assertEqual(patcher.SAME_SEX_MARRIAGE_CATALOG_PRICE, 0)
         self.assertEqual(rows[0x11B]["price"], 0)
         self.assertEqual(rows[0x133]["name"], "Max out sock pile")
         self.assertIn("maximum signed integer", rows[0x133]["description"])
@@ -11781,7 +11777,7 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
         row = rows[patcher.MARRIAGE_CANDIDATE_REROLL_ITEM_ID]
         self.assertEqual(patcher.MARRIAGE_CANDIDATE_REROLL_ITEM_ID, 0x152)
         self.assertEqual(row["name"], "Allow Reroll of Marriage Candidates")
-        self.assertEqual(row["price"], 10000)
+        self.assertEqual(row["price"], 0)
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x152],
             "cheat_marriage_email.png",
@@ -12017,7 +12013,7 @@ class MarriageCandidateRerollContractTests(unittest.TestCase):
                     bytes.fromhex("8B C8 C6 80 84 BB 01 00 01"),
                 )
                 self.assertEqual(contract["cheat_upgrade"]["item_id"], "0x152")
-                self.assertEqual(contract["cheat_upgrade"]["catalog_price"], 10000)
+                self.assertEqual(contract["cheat_upgrade"]["catalog_price"], 0)
                 self.assertEqual(
                     contract["runtime_flag"]["storage"],
                     "InventoryManager + 0x152 + 0x2A3 (same persisted-byte convention as mobile renovations/Bathroom 2)",
@@ -12250,7 +12246,7 @@ class DivorceSpouseContractTests(unittest.TestCase):
         self.assertEqual(patcher.DIVORCE_SPOUSE_ITEM_ID, 0x14B)
         self.assertEqual(patcher.DIVORCE_SPOUSE_CATALOG_PRICE, 0)
         self.assertEqual(row["price"], patcher.DIVORCE_SPOUSE_CATALOG_PRICE)
-        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xEDB, 0xEDC))
+        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xEE1, 0xEE2))
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x14B),
             0x333,
@@ -12510,8 +12506,11 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 patcher.patch_same_sex_marriage(manifest)
                 contract = manifest["SameSexMarriage"]["cheat_upgrade"]
                 self.assertEqual(contract["item_id"], "0x14c")
-                self.assertEqual(contract["inactive_price"], 10000)
-                self.assertEqual(contract["price_source"], "Health Plan catalog row 0x119")
+                self.assertEqual(contract["inactive_price"], 0)
+                self.assertEqual(
+                    contract["price_source"],
+                    "free Cheat Upgrade row; the Health Plan price it once matched is unchanged",
+                )
                 self.assertEqual(contract["active_price"], 0)
                 # The store icon stays the marriage envelope whether the toggle
                 # is active or not; it must never swap to the generic
@@ -12521,7 +12520,10 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                 self.assertEqual(contract["active_icon"], "cheat_marriage_email.png")
                 self.assertEqual(contract["active_icon"], contract["inactive_icon"])
                 self.assertNotIn("active_icon_id", contract)
-                self.assertEqual(contract["inactive_state"], "explicit catalog price")
+                self.assertEqual(
+                    contract["inactive_state"],
+                    "free Cheat Upgrade row; explicit catalog price 0",
+                )
         finally:
             patcher.PATCHED = old_patched
 
@@ -13323,7 +13325,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         table_sec = achievement.section(table.section)
                         self.assertEqual(
                             (table_sec.raw_size - table.value) // patcher.ACHIEVEMENT_ROW_SIZE,
-                            0xA8,
+                            0xAA,
                         )
                         for achievement_id, _group, _title, _description in patcher.custom_achievement_capacity_row_specs():
                             title_id, description_id = patcher.custom_achievement_string_ids(achievement_id)
@@ -13429,7 +13431,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         )
                         self.assertEqual(
                             draw_data[0x3EB:0x3FE],
-                            b"\x81\xFF\xA7\x00\x00\x00\x77\x08"
+                            b"\x81\xFF\xA9\x00\x00\x00\x77\x08"
                             b"\x8D\x0C\x7F\x8A\x0C\x8E\xEB\x02\x32\xC9\xE9",
                         )
                         self.assertEqual(
@@ -13444,7 +13446,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         self.assertEqual(draw_data[0x196:0x19A], b"\x90" * 4)
                         self.assertEqual(
                             draw_data[0x402:0x40A],
-                            b"\x81\xFF\xA7\x00\x00\x00\x0F\x87",
+                            b"\x81\xFF\xA9\x00\x00\x00\x0F\x87",
                         )
                         self.assertEqual(
                             0x40E + struct.unpack_from("<i", draw_data, 0x40A)[0],
@@ -13472,7 +13474,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         self.assertEqual(
                             manifest["CustomAchievements"]["draw_bounds"],
                             {
-                                "last_visible_id": "0xa7",
+                                "last_visible_id": "0xa9",
                                 "comparison": "unsigned imm32",
                                 "short_guard": {
                                     "source": "0xd8",
@@ -14240,7 +14242,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "collection_master_target": 6,
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
-                    "physical_row_count": 0xA8,
+                    "physical_row_count": 0xAA,
                     "visible_count_flag_0": 123,
                     "visible_count_flag_1": 142,
                     "notify_queue_bound": 0x5F,
@@ -14866,10 +14868,6 @@ class SpontaneousLoungerBehaviorTests(unittest.TestCase):
         self.assertIn("__VF2_CHAISE_PLAN_SIT_DOWN_VARIANTS__", self.SOURCE[start:end])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class InvisibleReferenceSetOrderingTests(unittest.TestCase):
     """Sprites must exist before the reference sets glob them.
 
@@ -14903,7 +14901,6 @@ class InvisibleReferenceSetOrderingTests(unittest.TestCase):
             with self.subTest(item=item["name"]):
                 self.assertTrue(item["name"].startswith("Invisible"))
                 self.assertIn("base_png" if "base_png" in item else "source_png", item)
-
 
 class InvisibleDonorMapAvailabilityTests(unittest.TestCase):
     """A donor map must exist in a clean install, not just in this workspace.
@@ -14961,6 +14958,14 @@ class InvisibleDonorMapAvailabilityTests(unittest.TestCase):
             )
         }
         self.assertFalse(absent & donated)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+if __name__ == "__main__":
+    unittest.main()
 
 
 if __name__ == "__main__":

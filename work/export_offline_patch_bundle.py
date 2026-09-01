@@ -3140,12 +3140,25 @@ if not exist "%VF2_EXE%" (
   pause
   exit /b 1
 )
+rem py.exe existing does not mean it has a Python 3 registered, so try it and
+rem fall back on failure rather than committing to a branch up front.
+set "VF2_PY="
 where py >nul 2>nul
 if %ERRORLEVEL%==0 (
-  py -3 "%SCRIPT_DIR%offline_vf2_patcher.py" apply --exe "%VF2_EXE%" --manifest "%SCRIPT_DIR%manifest.json"
-) else (
-  python "%SCRIPT_DIR%offline_vf2_patcher.py" apply --exe "%VF2_EXE%" --manifest "%SCRIPT_DIR%manifest.json"
+  py -3 -c "import sys" >nul 2>nul
+  if not errorlevel 1 set "VF2_PY=py -3"
 )
+if not defined VF2_PY (
+  where python >nul 2>nul
+  if %ERRORLEVEL%==0 set "VF2_PY=python"
+)
+if not defined VF2_PY (
+  echo Could not find Python 3. Install it from https://www.python.org/downloads/
+  echo and keep the "tcl/tk and IDLE" component ticked.
+  pause
+  exit /b 1
+)
+%VF2_PY% "%SCRIPT_DIR%offline_vf2_patcher.py" apply --exe "%VF2_EXE%" --manifest "%SCRIPT_DIR%manifest.json"
 echo.
 pause
 ''',
@@ -3156,12 +3169,25 @@ pause
         r'''@echo off
 setlocal
 set "SCRIPT_DIR=%~dp0"
+rem py.exe existing does not mean it has a Python 3 registered, so try it and
+rem fall back on failure rather than committing to a branch up front.
+set "VF2_PY="
 where py >nul 2>nul
 if %ERRORLEVEL%==0 (
-  py -3 "%SCRIPT_DIR%offline_vf2_patcher_gui.py" "%SCRIPT_DIR%manifest.json"
-) else (
-  python "%SCRIPT_DIR%offline_vf2_patcher_gui.py" "%SCRIPT_DIR%manifest.json"
+  py -3 -c "import sys" >nul 2>nul
+  if not errorlevel 1 set "VF2_PY=py -3"
 )
+if not defined VF2_PY (
+  where python >nul 2>nul
+  if %ERRORLEVEL%==0 set "VF2_PY=python"
+)
+if not defined VF2_PY (
+  echo Could not find Python 3. Install it from https://www.python.org/downloads/
+  echo and keep the "tcl/tk and IDLE" component ticked.
+  pause
+  exit /b 1
+)
+%VF2_PY% "%SCRIPT_DIR%offline_vf2_patcher_gui.py" "%SCRIPT_DIR%manifest.json"
 ''',
         encoding="ascii",
         newline="\r\n",
