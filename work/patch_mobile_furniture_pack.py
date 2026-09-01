@@ -9143,6 +9143,22 @@ def sync_invisible_furniture_reference_sets(manifest):
             transparent = image.with_name(image.name + "ORIGINAL")
             source_name = INVISIBLE_BASE_GRAPHIC_SOURCE_BY_NAME.get(image.stem)
             visible_source = (OUT / "Images" / "Furniture" / source_name) if source_name else image
+            if source_name and not visible_source.exists():
+                # Several bases are inheritance-only, so on an unseeded build
+                # they are not in OUT yet. Resolving them only under OUT
+                # dropped those items from the Base Graphics folder, which is
+                # what players restore their visible art from after applying
+                # the transparent setting -- leaving them stuck invisible.
+                for candidate in (
+                    ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture" / source_name,
+                    *(
+                        payload / "Images" / "Furniture" / source_name
+                        for payload in VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS
+                    ),
+                ):
+                    if candidate.is_file():
+                        visible_source = candidate
+                        break
             if name == "Invisible Furniture - Transparent":
                 if transparent.exists():
                     shutil.copy2(transparent, target / image.name)
