@@ -554,11 +554,32 @@ class VF2PatcherGUI:
             self.restore_log_var.set(path)
 
     def load_manifest_settings(self) -> bool:
+        # Painted before the work starts, not after: this runs on the Tk main
+        # thread, so nothing redraws until it returns and an empty settings
+        # panel reads as a frozen window.  update_idletasks() is what actually
+        # puts these on screen.
+        self._show_please_wait("Please wait - loading patches...")
         try:
             manifest_path = Path(required_path(self.manifest_var.get(), "Patch manifest")).resolve()
             manifest = patcher.read_json(manifest_path)
             settings = patcher.manifest_settings(manifest)
         except Exception as exc:
+            # Restore the cursor here too: leaving it on "watch" after a failed
+            # load makes the window look permanently busy, which is the exact
+            # impression the wait message exists to prevent.
+            self._clear_please_wait()
+            # The placeholder destroys the setting controls, so the loaded
+            # state has to go with them. Keeping it would let
+            # _ensure_manifest_settings_loaded() treat the previous manifest as
+            # still current if its path came back, and Apply would then read
+            # BooleanVars belonging to widgets that no longer exist -- applying
+            # a hidden selection nobody could see.
+            self.settings = {}
+            self.setting_vars = {}
+            self.loaded_manifest_path = None
+            self.loaded_manifest_data = None
+            self.version_var.set("Build: unknown")
+            self._render_settings_placeholder("Load a manifest to see toggleable patch settings.")
             self._set_error(f"Could not load manifest settings: {exc}")
             return False
 
@@ -596,6 +617,7 @@ class VF2PatcherGUI:
                         details = f"{setting.id} - {state} - {setting.description}" if setting.description else f"{setting.id} - {state}"
                     self._markup_label(item, details).grid(row=1, column=0, sticky="ew", padx=(22, 0))
                     row += 1
+        self._clear_please_wait()
         self.status_var.set(f"Loaded {len(settings)} setting(s) from {manifest_path.name}.")
         self._append_log(f"Loaded manifest settings: {manifest_path}\n")
         self._auto_populate_output_dir()
@@ -644,6 +666,14 @@ class VF2PatcherGUI:
         )
 
     def _resize_markup_label(self, widget: tk.Text) -> None:
+        # Reloading a manifest destroys these labels while their idle
+        # resize callbacks are still queued, and forcing a redraw makes
+        # that flush sooner. A dead widget here is expected, not an error.
+        try:
+            if not widget.winfo_exists():
+                return
+        except tk.TclError:
+            return
         text = getattr(widget, "_vf2_description_text", "")
         normal_font = getattr(widget, "_vf2_normal_font", tkfont.nametofont("TkDefaultFont"))
         width = widget.winfo_width() - 4
@@ -671,6 +701,22 @@ class VF2PatcherGUI:
         if units:
             self.settings_canvas.yview_scroll(units, "units")
         return "break"
+
+    def _show_please_wait(self, text: str) -> None:
+        """Show a wait message and force it on screen before a blocking step."""
+        self.status_var.set(text)
+        self._render_settings_placeholder(text)
+        try:
+            self.root.configure(cursor="watch")
+            self.root.update_idletasks()
+        except tk.TclError:
+            pass
+
+    def _clear_please_wait(self) -> None:
+        try:
+            self.root.configure(cursor="")
+        except tk.TclError:
+            pass
 
     def _render_settings_placeholder(self, text: str) -> None:
         for child in self.settings_inner.winfo_children():
@@ -789,8 +835,17 @@ class VF2PatcherGUI:
 
     def _run_worker(self, label: str, func: object, *, args: object | None = None, dry_run: bool = False) -> None:
         self._set_busy(True)
-        self.status_var.set(f"{label} running...")
+        self.status_var.set(f"{label} running - please wait...")
         self._append_log(f"\n== {label} ==\n")
+        # Everything the patcher print()s is captured and only shown when
+        # the run finishes, so the log stays empty right through the
+        # verification pass. On a full release that is a long silent wait
+        # with nothing on screen to say the patcher is still working.
+        self._append_log(
+            "Please wait - checking your game files and preparing the patches.\n"
+            "This can take a minute on a full release, and the window may\n"
+            "look idle while it works.\n"
+        )
 
         def worker() -> None:
             stdout = io.StringIO()

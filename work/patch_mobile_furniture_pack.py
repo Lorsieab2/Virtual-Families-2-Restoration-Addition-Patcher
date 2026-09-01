@@ -4734,6 +4734,222 @@ def previous_build_source_dirs():
     return unique
 
 
+
+# Digests of the inheritance-only art a seed brought in, captured before any
+# generator runs.  Comparing against this is how the build tells "these bytes
+# came from a predecessor" from "this build produced this file": several
+# functions write into Images/VillagerBodies, so hooking individual writers
+# would quietly miss whichever one was added next.
+SEEDED_INHERITED_ART = {}
+
+# Runtime images this build's generators wrote, relative to OUT/Images.
+# Tracked explicitly rather than inferred from a byte change: when the seed
+# already holds the generator's deterministic output the bytes are identical,
+# so "did the content change" answers the wrong question and would revert
+# valid regenerated frames to their historical copies.
+GENERATED_RUNTIME_IMAGES = set()
+
+
+def record_generated_image(path):
+    """Note that a generator wrote this file, so it is authoritative."""
+    try:
+        GENERATED_RUNTIME_IMAGES.add(Path(path).relative_to(OUT / "Images").as_posix())
+    except ValueError:
+        pass
+
+
+def snapshot_seeded_inherited_art():
+    """Record what the seed supplied, before any generator overwrites it."""
+    SEEDED_INHERITED_ART.clear()
+    if not INHERITED_ONLY_INDEX.is_file():
+        return
+    index = json.loads(INHERITED_ONLY_INDEX.read_text(encoding="utf-8"))
+    non_runtime = set(index.get("non_runtime_files", []))
+    for rel in index["files"]:
+        if rel in non_runtime:
+            continue
+        seeded = OUT / "Images" / rel
+        if seeded.is_file():
+            SEEDED_INHERITED_ART[rel] = hashlib.sha256(seeded.read_bytes()).hexdigest()
+
+
+PRESERVED_INHERITED_ART = ROOT / "patcher_assets" / "inherited_runtime_images"
+INHERITED_ONLY_INDEX = ROOT / "data" / "vf2" / "inherited-only-images.json"
+
+
+
+def _repo_relative(path):
+    """Repo-relative path for the manifest, absolute if it sits outside."""
+    try:
+        return str(path.relative_to(ROOT)).replace(chr(92), "/")
+    except ValueError:
+        return str(path).replace(chr(92), "/")
+
+
+def restore_preserved_inherited_art(manifest):
+    """Supply inheritance-only images from the tracked store, not a predecessor.
+
+    Some runtime images existed in neither the repository nor the vanilla
+    payload, so they reached a build only by being copied out of the previous
+    build's output.  That made every release depend on an unbroken chain of
+    prior artifacts and made a build from a clean clone impossible.
+
+    The files themselves are tracked under patcher_assets/inherited_runtime_images
+    with recorded digests; until now nothing consumed them from there.  This
+    fills in whatever is still missing after seeding and after the generators
+    have run, so the chain is no longer required.
+
+    Deliberately last and non-destructive: an image that a generator produced
+    from source art -- the holiday bodies rebuilt from the tracked archive --
+    is already present and is left exactly as generated.  This only supplies
+    what would otherwise be absent, and every file it writes is verified
+    against its recorded digest, so a corrupted store fails the build instead
+    of silently shipping bad art.
+    """
+    record = manifest.setdefault("preserved_inherited_art", {})
+    # Both are tracked, so their absence means a broken or partial checkout.
+    # Continuing would let an unseeded build finish without art the index says
+    # it needs: the downstream validation counts images in aggregate and would
+    # not notice, which is the silent miss this step exists to remove.
+    missing_inputs = [
+        str(path)
+        for path, ok in (
+            (PRESERVED_INHERITED_ART, PRESERVED_INHERITED_ART.is_dir()),
+            (INHERITED_ONLY_INDEX, INHERITED_ONLY_INDEX.is_file()),
+        )
+        if not ok
+    ]
+    if missing_inputs:
+        raise SystemExit(
+            "Inheritance-only art inputs are missing from this checkout: "
+            + ", ".join(missing_inputs)
+        )
+
+    digests = {}
+    sums = PRESERVED_INHERITED_ART / "SHA256SUMS.json"
+    if sums.is_file():
+        digests = json.loads(sums.read_text(encoding="utf-8")).get("files", {})
+    index = json.loads(INHERITED_ONLY_INDEX.read_text(encoding="utf-8"))
+    # Editing sources -- .xcf files and the Upgrades working folders -- are
+    # recorded in the historical inventory but are not runtime art. The engine
+    # never loads them and the offline bundle excludes them, so restoring them
+    # would push ~47 MB of working files into every standalone build.
+    non_runtime = set(index.get("non_runtime_files", []))
+    wanted = [rel for rel in index["files"] if rel not in non_runtime]
+
+    # A seed copies its whole Images tree in, editing sources included.
+    # Filtering them out of validation only hides them; they have to be
+    # removed, or a seeded standalone folder still ships ~47 MB of working
+    # files that an unseeded one correctly omits.
+    removed_non_runtime = []
+    for rel in sorted(non_runtime):
+        stale = OUT / "Images" / rel
+        if stale.is_file():
+            stale.unlink()
+            removed_non_runtime.append(rel)
+
+    restored, already_present, replaced = [], [], []
+    missing_from_store, corrupt, undigested = [], [], []
+    for rel in wanted:
+        target = OUT / "Images" / rel
+        if target.is_file():
+            # Generated art is authoritative and left alone.  Anything else
+            # present came from a seed, and trusting it makes the build's
+            # output depend on which predecessor it happened to find, so it is
+            # checked against the tracked digest and replaced when it differs.
+            if rel in GENERATED_RUNTIME_IMAGES or rel not in SEEDED_INHERITED_ART:
+                # Written by a generator this run, or not supplied by the seed
+                # at all -- either way this build produced it, and generated
+                # output is authoritative.
+                already_present.append(rel)
+                continue
+            expected = digests.get(rel)
+            if expected is None:
+                # Seed bytes with nothing to check them against.
+                undigested.append(rel)
+                continue
+            if hashlib.sha256(target.read_bytes()).hexdigest() == expected:
+                already_present.append(rel)
+                continue
+            source = PRESERVED_INHERITED_ART / rel
+            if not source.is_file():
+                missing_from_store.append(rel)
+                continue
+            payload = source.read_bytes()
+            if hashlib.sha256(payload).hexdigest() != expected:
+                corrupt.append(rel)
+                continue
+            target.write_bytes(payload)
+            replaced.append(rel)
+            continue
+        source = PRESERVED_INHERITED_ART / rel
+        if not source.is_file():
+            missing_from_store.append(rel)
+            continue
+        expected = digests.get(rel)
+        if expected is None:
+            # No recorded digest means nothing vouches for these bytes, so
+            # writing them anyway would make the integrity check decorative.
+            undigested.append(rel)
+            continue
+        payload = source.read_bytes()
+        if hashlib.sha256(payload).hexdigest() != expected:
+            corrupt.append(rel)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+        restored.append(rel)
+
+    # Every one of these means the finished build would be missing art the
+    # index says it needs, or would contain art nothing vouches for. The
+    # runtime validation downstream counts images in aggregate and would not
+    # notice either, which is the silent miss this inventory exists to catch.
+    problems = []
+    if missing_from_store:
+        problems.append(
+            f"absent from both the build and the tracked store "
+            f"({len(missing_from_store)}): {', '.join(sorted(missing_from_store)[:10])}"
+        )
+    if corrupt:
+        problems.append(
+            f"does not match its recorded digest "
+            f"({len(corrupt)}): {', '.join(sorted(corrupt)[:10])}"
+        )
+    if undigested:
+        problems.append(
+            f"has no recorded digest in SHA256SUMS.json "
+            f"({len(undigested)}): {', '.join(sorted(undigested)[:10])}"
+        )
+    if problems:
+        raise SystemExit(
+            "Inheritance-only art cannot be supplied for this build -- "
+            + "; ".join(problems)
+        )
+
+    record.update(
+        status="ok",
+        source=_repo_relative(PRESERVED_INHERITED_ART),
+        wanted=len(wanted),
+        skipped_non_runtime=len(non_runtime),
+        restored=len(restored),
+        replaced_from_seed=len(replaced),
+        removed_non_runtime=len(removed_non_runtime),
+        already_present=len(already_present),
+        missing_from_store=[],
+        note=(
+            "Images supplied from the tracked store rather than a previous "
+            "build output. already_present were produced by this build's own "
+            "generators or carried in by a seed and were left untouched."
+        ),
+    )
+    print(
+        f"preserved inherited art: {len(restored)} restored, "
+        f"{len(replaced)} replaced from seed, "
+        f"{len(already_present)} already present, "
+        f"{len(removed_non_runtime)} non-runtime removed"
+    )
+
+
 def find_previous_build_source():
     for root in previous_build_source_dirs():
         if root.is_dir() and (root / "Images").is_dir() and (root / "Sounds").is_dir():
@@ -6388,6 +6604,7 @@ def sync_separated_villager_sheets(manifest):
                             )
                             target = body_dir / f"Frame{frame_index:02d}.png"
                             sheet.crop(box).save(target)
+                            record_generated_image(target)
                         body_frames.append({
                             "gender": gender,
                             "body_type": body_type,
@@ -6673,6 +6890,7 @@ def sync_holiday_body_runtime_frames(manifest):
                                 )
                                 dst.parent.mkdir(parents=True, exist_ok=True)
                                 normalized.save(dst)
+                                record_generated_image(dst)
                                 frames.append({
                                     "gender": gender,
                                     "body_value": body_value,
@@ -6792,6 +7010,7 @@ def sync_holiday_detail_body_frames(manifest):
                     dst = output_root / gender_title / f"Body_{body_value:02d}" / "Frame00.png"
                     dst.parent.mkdir(parents=True, exist_ok=True)
                     normalized.save(dst)
+                    record_generated_image(dst)
                     frames.append({
                         "gender": gender,
                         "body_value": body_value,
@@ -23408,7 +23627,14 @@ enum EPropEnum {
 enum StringId {
     eStringPlayingWithToys = 0xF0,
     eStringBadWeather = __VF2_LOUNGER_BAD_WEATHER_STRING_ID__,
-    eStringPicnicBadWeather = 0x02,
+    // Was 0x02, which is an unrelated early string -- dropping a villager on
+    // the picnic table in bad weather showed the "your family has bought so
+    // many things" message instead of a refusal. There is one added
+    // bad-weather row, "Don't like the weather!", and both picnic paths use
+    // it like the lounger does. Left as a distinct name so the picnic sites
+    // stay readable, but resolved from the same generated id so it cannot
+    // drift from the row that actually exists.
+    eStringPicnicBadWeather = __VF2_LOUNGER_BAD_WEATHER_STRING_ID__,
     eStringCannotReachFurniture = 0xB7,
     eStringTooYoung = 0x73D,
     eStringWorriedAboutFood = 0xA41,
@@ -31524,6 +31750,7 @@ def main():
     }
     patch_mobile_sound_routes(manifest)
     seed_from_previous_build(manifest)
+    snapshot_seeded_inherited_art()
     validate_stock_image_ids()
     sync_vanilla_runtime_payload(manifest)
     patch_furniture_manager(manifest)
@@ -31822,6 +32049,10 @@ def main():
             "stock_drop_gate_preserved": True,
         }
     validate_invisible_kids_table_behavior_contract(manifest)
+    # After every generator, so images rebuilt from tracked source art keep
+    # whatever the generator produced and only genuine gaps are filled, and
+    # before the payload/package validation that checks the finished tree.
+    restore_preserved_inherited_art(manifest)
     remove_legacy_package_dirs(manifest)
     validate_runtime_payload_contract(manifest)
     validate_clean_package(manifest)

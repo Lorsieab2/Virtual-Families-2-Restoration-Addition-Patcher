@@ -14600,6 +14600,62 @@ class RuntimePayloadContractTests(unittest.TestCase):
         self.with_temp_runtime(run)
 
 
+class RefusalStringIdContractTests(unittest.TestCase):
+    """Refusal strings must point at rows that exist.
+
+    eStringPicnicBadWeather was 0x02, an unrelated early string, so dropping
+    a villager on the picnic table in bad weather showed the "your family has
+    bought so many things" message instead of a refusal.
+    """
+
+    SOURCE = (
+        Path(__file__).resolve().parents[1] / "work" / "patch_mobile_furniture_pack.py"
+    ).read_text(encoding="utf-8")
+
+    def _enum(self):
+        start = self.SOURCE.index("eStringBadWeather")
+        end = self.SOURCE.index("};", start)
+        return self.SOURCE[start:end]
+
+    def test_picnic_bad_weather_uses_the_generated_row(self):
+        enum = self._enum()
+        line = next(
+            row for row in enum.splitlines() if "eStringPicnicBadWeather" in row
+        )
+        self.assertIn("__VF2_LOUNGER_BAD_WEATHER_STRING_ID__", line)
+
+    def test_no_refusal_string_is_a_bogus_low_id(self):
+        # The floor is the lowest id actually in use and known to render
+        # correctly -- eStringCannotReachFurniture, 0xb7 -- rather than a
+        # round number I picked. 0x02 sat far below every real refusal.
+        import re
+
+        known_good_floor = 0xB7
+        seen = {}
+        for row in self._enum().splitlines():
+            match = re.match(r"\s*(eString\w+)\s*=\s*(0x[0-9A-Fa-f]+)\s*,?\s*$", row)
+            if not match:
+                continue
+            seen[match.group(1)] = int(match.group(2), 16)
+        self.assertIn("eStringCannotReachFurniture", seen)
+        self.assertEqual(seen["eStringCannotReachFurniture"], known_good_floor)
+        for name, value in seen.items():
+            with self.subTest(constant=name):
+                self.assertGreaterEqual(
+                    value,
+                    known_good_floor,
+                    f"{name} = {hex(value)} is below every refusal id in use",
+                )
+
+    def test_both_picnic_paths_refuse_with_the_same_string(self):
+        # Preparing a picnic and eating at the table both refuse on weather.
+        self.assertEqual(
+            self.SOURCE.count("VF2PlanPatioRefusal(plans, villager, eStringPicnicBadWeather)"),
+            2,
+        )
+
+    def test_the_generated_row_text_is_the_weather_refusal(self):
+        self.assertIn('lounger_weather_text = "Don\'t like the weather!"', self.SOURCE)
 class PlayingTrainLabelWiringTests(unittest.TestCase):
     """The chasing labels belong to Playing train, not the Toy Train Table.
 
@@ -14611,40 +14667,58 @@ class PlayingTrainLabelWiringTests(unittest.TestCase):
     """
 
     def _ctor_entries(self):
+        """Read the behaviour table from a pristine copy, not the build output.
+
+        work/patched_mobile_furniture_pack_objs is gitignored and exists only
+        after a build, so reading it made these tests depend on whatever state
+        the last run left behind -- or fail outright with FileNotFoundError.
+        Copy the source object and apply the patch, as the other
+        binary-contract tests do.
+        """
         import struct
 
-        obj = patcher.CoffObject(patcher.PATCHED / "Behavior.obj")
-        ctor = obj.symbol("??0CBehavior@@QAE@XZ")
-        sec = obj.section(ctor.section)
-        relocs = {}
-        for i in range(sec.nreloc):
-            vaddr, symidx, _rtype = struct.unpack_from("<IIH", obj.buf, sec.reloc_ptr + i * 10)
-            relocs[vaddr] = obj.symbol_by_index[symidx].name
-        return obj, ctor, sec, relocs
+        old_patched = patcher.PATCHED
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            patcher.PATCHED = Path(tmp.name)
+            shutil.copy2(
+                patcher.SRC_OBJS / "Behavior.obj", patcher.PATCHED / "Behavior.obj"
+            )
+            patcher.patch_behavior_label_variants({})
+            obj = CoffObject(patcher.PATCHED / "Behavior.obj")
+            ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+            sec = obj.section(ctor.section)
+            relocs = {}
+            for i in range(sec.nreloc):
+                vaddr, symidx, _rtype = struct.unpack_from(
+                    "<IIH", obj.buf, sec.reloc_ptr + i * 10
+                )
+                relocs[vaddr] = obj.symbol_by_index[symidx].name
+            return bytes(obj.buf), ctor, sec, relocs
+        finally:
+            patcher.PATCHED = old_patched
+            tmp.cleanup()
 
     def test_the_chasing_labels_target_kid_play_train(self):
         import struct
 
-        obj, ctor, sec, relocs = self._ctor_entries()
+        buf, ctor, sec, relocs = self._ctor_entries()
         raw = sec.raw_ptr + ctor.value + 0xED2
-        self.assertEqual(obj.buf[raw : raw + 5], b"\x68\x00\x00\x00\x00")
-        self.assertEqual(obj.buf[raw + 5], 0x68)
-        self.assertEqual(struct.unpack_from("<I", obj.buf, raw + 6)[0], 0x10B)
-        # PATCHED holds whichever state the last build left: pristine before a
-        # run, our helper after one. Both are correct; what must never change
-        # is that this slot is behaviour 0x10B and belongs to KidPlayTrain.
-        target = relocs.get(ctor.value + 0xED2 + 1, "")
-        self.assertTrue(
-            "KidPlayTrain" in target or target == "_VF2RandomPlayTrainLabel",
-            f"0x10B slot points at an unexpected handler: {target}",
+        self.assertEqual(buf[raw : raw + 5], b"\x68\x00\x00\x00\x00")
+        self.assertEqual(buf[raw + 5], 0x68)
+        self.assertEqual(struct.unpack_from("<I", buf, raw + 6)[0], 0x10B)
+        # The fixture applies the patch to a pristine copy, so this slot
+        # must now be our helper -- not whatever a previous build left.
+        self.assertEqual(
+            relocs.get(ctor.value + 0xED2 + 1), "_VF2RandomPlayTrainLabel"
         )
 
     def test_the_train_table_slot_is_a_different_behavior(self):
         import struct
 
-        obj, ctor, sec, relocs = self._ctor_entries()
+        buf, ctor, sec, relocs = self._ctor_entries()
         raw = sec.raw_ptr + ctor.value + 0x1864
-        self.assertEqual(struct.unpack_from("<I", obj.buf, raw + 6)[0], 0x198)
+        self.assertEqual(struct.unpack_from("<I", buf, raw + 6)[0], 0x198)
         target = relocs.get(ctor.value + 0x1864 + 1, "")
         self.assertIn(
             "ToyTrainTableForKids",
