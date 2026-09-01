@@ -321,7 +321,11 @@ class VF2PatcherGUI:
         style.configure("Section.TLabelframe.Label", font=("", 10, "bold"))
         style.configure("Muted.TLabel", foreground="#555555")
         style.configure("Status.TLabel", foreground="#333333")
-        style.configure("Link.TLabel", foreground="#0645ad")
+        # Underlined, because a blue label with no underline reads as static
+        # text. The link was reported as missing when it had been on screen
+        # the whole time; it simply did not look clickable.
+        style.configure("Link.TLabel", foreground="#0645ad", font=("", 9, "underline"))
+        style.configure("LinkHover.TLabel", foreground="#c5350b", font=("", 9, "underline"))
 
     def _build_layout(self) -> None:
         root_frame = ttk.Frame(self.root, padding=12)
@@ -353,6 +357,8 @@ class VF2PatcherGUI:
         )
         update_link.grid(row=1, column=2, sticky="e", padx=(12, 0), pady=(2, 0))
         update_link.bind("<Button-1>", lambda _event: self._open_updates_url())
+        update_link.bind("<Enter>", lambda _event: update_link.configure(style="LinkHover.TLabel"))
+        update_link.bind("<Leave>", lambda _event: update_link.configure(style="Link.TLabel"))
         ttk.Label(
             header,
             text=SAVE_COMPATIBILITY_NOTE,
