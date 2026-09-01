@@ -4630,6 +4630,11 @@ def safety_fmap_reason(manifest_item):
     path = manifest_item["path"]
     if Path(path).name + ".fmap" in COUCH_FMAP_DONORS:
         return None
+    if Path(path).name + ".fmap" in NEW_FURNITURE_FMAP_DONORS:
+        # These carry a stock item's own map on purpose -- that inheritance is
+        # the whole point of the item. Falling through would zero the grid and
+        # leave the bike, gym and ping-pong table rendered-only.
+        return None
     if Path(path).name + ".fmap" in INVISIBLE_OUTDOOR_FMAP_DONORS:
         return None
     if Path(path).name + ".fmap" in INVISIBLE_TRANSPARENT_FMAP_DONORS:
@@ -32393,6 +32398,11 @@ def main():
     sync_behavior_assets(manifest)
     sync_vf3_tv_fmaps(manifest)
     restore_supplied_game_table_sprites(manifest)
+    # Before the normaliser: it pads sheet widths to an exact multiple of
+    # the frame count, and HomeGymSystemStd is 259px across two frames, so
+    # installing afterwards would leave the two orientations sliced at the
+    # wrong boundary.
+    install_new_furniture_art(manifest)
     normalize_added_furniture_sheets(manifest)
     # Seeded and additive runtime assets may both contribute files; remove
     # development-source names only from known runtime asset directories
@@ -32419,7 +32429,6 @@ def main():
     # After every generator, so images rebuilt from tracked source art keep
     # whatever the generator produced and only genuine gaps are filled, and
     # before the payload/package validation that checks the finished tree.
-    install_new_furniture_art(manifest)
     restore_preserved_inherited_art(manifest)
     remove_legacy_package_dirs(manifest)
     validate_runtime_payload_contract(manifest)
