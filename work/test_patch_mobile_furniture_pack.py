@@ -8104,12 +8104,12 @@ class TextFixStringManagerTests(unittest.TestCase):
                         by_id_role[(achievement_id, "description")]["text"],
                         description,
                     )
-                self.assertEqual(patcher.custom_achievement_string_base(), 0xE05)
+                self.assertEqual(patcher.custom_achievement_string_base(), 0xE06)
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE44
+                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE45
                 )
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE94
+                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE95
                 )
                 reserved = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8124,7 +8124,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 self.assertEqual(reserved, [])
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xE95, 0xE96, 0xE97),
+                    (0xE9A, 0xE9B, 0xE9C),
                 )
                 lounger_rows = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8180,7 +8180,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xE95, 0xE96, 0xE97),
+                    (0xE9A, 0xE9B, 0xE9C),
                 )
                 footer_rows = [
                     row
@@ -8198,11 +8198,11 @@ class TextFixStringManagerTests(unittest.TestCase):
                         for row in footer_rows
                     ],
                     [
-                        (0xE95, "common", "eSayCommonOrnaments",
+                        (0xE9A, "common", "eSayCommonOrnaments",
                          " of 4 common ornaments found."),
-                        (0xE96, "uncommon", "eSayUncommonOrnaments",
+                        (0xE9B, "uncommon", "eSayUncommonOrnaments",
                          " of 4 uncommon ornaments found."),
-                        (0xE97, "rare", "eSayRareOrnaments",
+                        (0xE9C, "rare", "eSayRareOrnaments",
                          " of 4 rare ornaments found."),
                     ],
                 )
@@ -12242,7 +12242,7 @@ class DivorceSpouseContractTests(unittest.TestCase):
         self.assertEqual(patcher.DIVORCE_SPOUSE_ITEM_ID, 0x14B)
         self.assertEqual(patcher.DIVORCE_SPOUSE_CATALOG_PRICE, 0)
         self.assertEqual(row["price"], patcher.DIVORCE_SPOUSE_CATALOG_PRICE)
-        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xED3, 0xED4))
+        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xED8, 0xED9))
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x14B),
             0x32F,
@@ -13315,7 +13315,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         table_sec = achievement.section(table.section)
                         self.assertEqual(
                             (table_sec.raw_size - table.value) // patcher.ACHIEVEMENT_ROW_SIZE,
-                            0xA8,
+                            0xAA,
                         )
                         for achievement_id, _group, _title, _description in patcher.custom_achievement_capacity_row_specs():
                             title_id, description_id = patcher.custom_achievement_string_ids(achievement_id)
@@ -13421,7 +13421,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         )
                         self.assertEqual(
                             draw_data[0x3EB:0x3FE],
-                            b"\x81\xFF\xA7\x00\x00\x00\x77\x08"
+                            b"\x81\xFF\xA9\x00\x00\x00\x77\x08"
                             b"\x8D\x0C\x7F\x8A\x0C\x8E\xEB\x02\x32\xC9\xE9",
                         )
                         self.assertEqual(
@@ -13436,7 +13436,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         self.assertEqual(draw_data[0x196:0x19A], b"\x90" * 4)
                         self.assertEqual(
                             draw_data[0x402:0x40A],
-                            b"\x81\xFF\xA7\x00\x00\x00\x0F\x87",
+                            b"\x81\xFF\xA9\x00\x00\x00\x0F\x87",
                         )
                         self.assertEqual(
                             0x40E + struct.unpack_from("<i", draw_data, 0x40A)[0],
@@ -13464,7 +13464,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         self.assertEqual(
                             manifest["CustomAchievements"]["draw_bounds"],
                             {
-                                "last_visible_id": "0xa7",
+                                "last_visible_id": "0xa9",
                                 "comparison": "unsigned imm32",
                                 "short_guard": {
                                     "source": "0xd8",
@@ -14232,7 +14232,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "collection_master_target": 6,
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
-                    "physical_row_count": 0xA8,
+                    "physical_row_count": 0xAA,
                     "visible_count_flag_0": 123,
                     "visible_count_flag_1": 142,
                     "notify_queue_bound": 0x5F,
