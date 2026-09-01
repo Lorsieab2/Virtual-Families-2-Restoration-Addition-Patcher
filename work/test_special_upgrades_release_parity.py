@@ -246,9 +246,9 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertEqual(
             {(row["pc_string_id"], row["text"]) for row in divorce_strings},
             {
-                ("0xed9", "Divorce Spouse"),
+                ("0xee1", "Divorce Spouse"),
                 (
-                    "0xeda",
+                    "0xee2",
                     "WARNING: Permanently removes spouse from the Family Tree and House!",
                 ),
             },

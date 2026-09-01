@@ -3777,6 +3777,72 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "donor_fmap": "PoolLargeStd.png.fmap",
     },
     {
+        "name": "InvisiblePicnicTable",
+        "item_id": 0x328,
+        # Donor is the native record the mobile Picnic Table itself clones
+        # (DONOR_BY_PATH). The mobile item is not a native record, so it
+        # cannot be a donor; price stays the counterpart's 450.
+        "donor": 0x1D8,
+        "list": "gFurniture5",
+        "price": 450,
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Invisible Picnic Table",
+        "long_description": "An invisible picnic table for decorating purposes.",
+        "source_png": "Picnic_table.png",
+        "base_png": "Picnic_table.png",
+        # Picnic_table.png.fmap is NOT in a clean install -- it only exists in
+        # workspaces that already carry mobile extracts, so inheriting it made
+        # a clean vanilla-only build record the map as missing and finish
+        # anyway. Use the native donor's own map: it ships with the game and
+        # is desktop-native, so it can never be one of the mobile maps ruled
+        # incompatible with the desktop hotspot tables.
+        "donor_fmap": "TableRoundWhiteStd.png.fmap",
+    },
+    {
+        "name": "InvisiblePatioTable",
+        "item_id": 0x329,
+        "donor": 0x1D8,
+        "list": "gFurniture5",
+        "price": 850,
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Invisible Patio Table",
+        "long_description": "An invisible patio table for decorating purposes.",
+        "source_png": "Patio_table.png",
+        "base_png": "Patio_table.png",
+        "donor_fmap": "TableRoundWhiteStd.png.fmap",
+    },
+    {
+        "name": "InvisibleYogaEquipment",
+        "item_id": 0x32A,
+        "donor": 0x220,
+        "list": "gFurniture5",
+        "price": 150,
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Invisible Yoga Equipment",
+        "long_description": "Invisible yoga equipment for decorating purposes.",
+        "source_png": "YogaGearStd.png",
+        "base_png": "YogaGearStd.png",
+        "donor_fmap": "YogaGearStd.png.fmap",
+    },
+    {
+        "name": "InvisibleLounger",
+        "item_id": 0x32B,
+        # Chaise_brown's native donor; the Brown Lounger's own price is 250.
+        "donor": 0x26F,
+        "list": "gFurniture5",
+        "price": 250,
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Invisible Lounger",
+        "long_description": "An invisible lounger for decorating purposes.",
+        "source_png": "Chaise_brown.png",
+        "base_png": "Chaise_brown.png",
+        "donor_fmap": "CouchGreen.png.fmap",
+    },
+    {
         "name": "InvisibleHammock",
         "item_id": 0x30C,
         "donor": 0x1E1,
@@ -6473,7 +6539,37 @@ def sync_invisible_outdoor_sprites(manifest):
     missing = []
     issues = []
     for item in INVISIBLE_OUTDOOR_ITEMS:
+        # Several bases are themselves inheritance-only art, so in an unseeded
+        # build they are not in the output yet when this runs. Fall back to the
+        # tracked store and then the vanilla payload rather than silently
+        # skipping the item, which produced an invisible-furniture entry with
+        # no sprite behind it.
+        # For inheritance-only bases prefer the tracked store over whatever a
+        # seed left in the output: seeded copies are only authenticated later,
+        # and a stale or corrupted one would otherwise be baked into the
+        # invisible variant and its reference-set copy while the visible
+        # counterpart gets corrected.
+        tracked_base = (
+            ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture" / item["base_png"]
+        )
         base_src = OUT / "Images" / "Furniture" / item["base_png"]
+        if tracked_base.is_file():
+            base_src = tracked_base
+        if not base_src.exists():
+            for candidate in (
+                ROOT
+                / "patcher_assets"
+                / "inherited_runtime_images"
+                / "Furniture"
+                / item["base_png"],
+                *(
+                    source / "Images" / "Furniture" / item["base_png"]
+                    for source in VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS
+                ),
+            ):
+                if candidate.is_file():
+                    base_src = candidate
+                    break
         dst = OUT / "Images" / "Furniture" / f"{item['name']}.png"
         original_dst = dst.with_name(dst.name + "ORIGINAL")
         if not base_src.exists():
@@ -9075,6 +9171,22 @@ def sync_invisible_furniture_reference_sets(manifest):
             transparent = image.with_name(image.name + "ORIGINAL")
             source_name = INVISIBLE_BASE_GRAPHIC_SOURCE_BY_NAME.get(image.stem)
             visible_source = (OUT / "Images" / "Furniture" / source_name) if source_name else image
+            if source_name and not visible_source.exists():
+                # Several bases are inheritance-only, so on an unseeded build
+                # they are not in OUT yet. Resolving them only under OUT
+                # dropped those items from the Base Graphics folder, which is
+                # what players restore their visible art from after applying
+                # the transparent setting -- leaving them stuck invisible.
+                for candidate in (
+                    ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture" / source_name,
+                    *(
+                        payload / "Images" / "Furniture" / source_name
+                        for payload in VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS
+                    ),
+                ):
+                    if candidate.is_file():
+                        visible_source = candidate
+                        break
             if name == "Invisible Furniture - Transparent":
                 if transparent.exists():
                     shutil.copy2(transparent, target / image.name)
@@ -31628,10 +31740,17 @@ def validate_custom_achievement_award_hook_objects(manifest):
     purchase_data, purchase_sym, purchase_sec = function_data(
         store_obj, "?HandlePurchaseItem@CScrollingStoreScene@@AAEXXZ"
     )
+    # The leading compare is `cmp eax, <first id past the last item>`, which
+    # the store patch rewrites whenever items are added. Pinning 0x328 here
+    # made adding any item fail this contract as a "call window drifted",
+    # which names the symptom and not the cause. Derive the bound the way the
+    # patch does, so the check tracks real drift rather than the item count.
+    store_item_bound = max(item_id_for(index) for index in range(len(ITEMS))) + 1
     expected_purchase_window = (
-        b"\x3D\x28\x03\x00\x00\x7D\x39\x50"
-        b"\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00"
-        b"\xE8\x00\x00\x00\x00\x8B\xC8\xE8\x00\x00\x00\x00"
+        b"\x3D" + struct.pack("<I", store_item_bound)
+        + b"\x7D\x39\x50"
+        + b"\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00"
+        + b"\xE8\x00\x00\x00\x00\x8B\xC8\xE8\x00\x00\x00\x00"
     )
     if purchase_data[0x2D0:0x2EE] != expected_purchase_window:
         errors.append("HandlePurchaseItem purchase-award call window drifted")
@@ -32079,6 +32198,14 @@ def main():
             "body_values": list(HOLIDAY_BODY_VALUES),
         }
     sync_desktop_runtime_dlls(manifest)
+    # The reference sets glob the invisible sprites that exist, so the
+    # sprites have to be generated first. With the collection running
+    # ahead of them, a clean or seeded build produced OptionalVisualMods
+    # folders that omitted every newly added invisible item, and the
+    # transparent-graphics setting then had nothing to swap -- leaving the
+    # base art visible on furniture that is meant to be invisible.
+    sync_invisible_outdoor_sprites(manifest)
+    sync_transparent_base_furniture_sprites(manifest)
     sync_invisible_furniture_reference_sets(manifest)
     sync_optional_visual_mod_sources(manifest)
     sync_mobile_renovation_art_sources(manifest)
@@ -32103,8 +32230,6 @@ def main():
     sync_vf3_living_room_sprite_strips(manifest)
     sync_vf3_tv_sprite_strips(manifest)
     sync_vf3_tv_animation_sheets(manifest)
-    sync_invisible_outdoor_sprites(manifest)
-    sync_transparent_base_furniture_sprites(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
         sync_separated_villager_sheets(manifest)
         manifest["holiday_body_types"] = {

@@ -8106,12 +8106,12 @@ class TextFixStringManagerTests(unittest.TestCase):
                         by_id_role[(achievement_id, "description")]["text"],
                         description,
                     )
-                self.assertEqual(patcher.custom_achievement_string_base(), 0xE07)
+                self.assertEqual(patcher.custom_achievement_string_base(), 0xE0F)
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE46
+                    patcher.custom_achievement_string_ids(0x7F)[1], 0xE4E
                 )
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE96
+                    patcher.custom_achievement_string_ids(0xA7)[1], 0xE9E
                 )
                 reserved = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8126,7 +8126,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 self.assertEqual(reserved, [])
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xE9B, 0xE9C, 0xE9D),
+                    (0xEA3, 0xEA4, 0xEA5),
                 )
                 lounger_rows = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8182,7 +8182,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-                    (0xE9B, 0xE9C, 0xE9D),
+                    (0xEA3, 0xEA4, 0xEA5),
                 )
                 footer_rows = [
                     row
@@ -8200,11 +8200,11 @@ class TextFixStringManagerTests(unittest.TestCase):
                         for row in footer_rows
                     ],
                     [
-                        (0xE9B, "common", "eSayCommonOrnaments",
+                        (0xEA3, "common", "eSayCommonOrnaments",
                          " of 4 common ornaments found."),
-                        (0xE9C, "uncommon", "eSayUncommonOrnaments",
+                        (0xEA4, "uncommon", "eSayUncommonOrnaments",
                          " of 4 uncommon ornaments found."),
-                        (0xE9D, "rare", "eSayRareOrnaments",
+                        (0xEA5, "rare", "eSayRareOrnaments",
                          " of 4 rare ornaments found."),
                     ],
                 )
@@ -9945,7 +9945,9 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     data[0x2D0:0x2EE],
-                    b"\x3D\x28\x03\x00\x00\x7D\x39\x50"
+                    b"\x3D" + struct.pack("<I", max(
+                        patcher.item_id_for(i) for i in range(len(patcher.ITEMS))
+                    ) + 1) + b"\x7D\x39\x50"
                     b"\xB9\x00\x00\x00\x00\xE8\x00\x00\x00\x00"
                     b"\xE8\x00\x00\x00\x00\x8B\xC8\xE8\x00\x00\x00\x00",
                 )
@@ -10863,7 +10865,7 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                     patcher.custom_achievement_purchase_dispatch(item_id, False, True),
                     (None, 0),
                 )
-        for item_id in (0, 0x1AD, 0x2D3, 0x328, 0x7FFFFFFF):
+        for item_id in (0, 0x1AD, 0x2D3, 0x32C, 0x7FFFFFFF):
             self.assertEqual(
                 patcher.custom_achievement_purchase_dispatch(item_id, True, True, 0x2),
                 (None, 0x2),
@@ -12244,10 +12246,10 @@ class DivorceSpouseContractTests(unittest.TestCase):
         self.assertEqual(patcher.DIVORCE_SPOUSE_ITEM_ID, 0x14B)
         self.assertEqual(patcher.DIVORCE_SPOUSE_CATALOG_PRICE, 0)
         self.assertEqual(row["price"], patcher.DIVORCE_SPOUSE_CATALOG_PRICE)
-        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xED9, 0xEDA))
+        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xEE1, 0xEE2))
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x14B),
-            0x32F,
+            0x333,
         )
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x14B],
@@ -14864,6 +14866,102 @@ class SpontaneousLoungerBehaviorTests(unittest.TestCase):
             'extern "C" void __cdecl VF2MobileReadingBook(CVillager &villager)'
         )
         self.assertIn("__VF2_CHAISE_PLAN_SIT_DOWN_VARIANTS__", self.SOURCE[start:end])
+
+
+class InvisibleReferenceSetOrderingTests(unittest.TestCase):
+    """Sprites must exist before the reference sets glob them.
+
+    sync_invisible_furniture_reference_sets() collects whichever
+    Invisible*.png files are on disk. Running it before the sprites are
+    generated produced OptionalVisualMods folders that omitted every newly
+    added invisible item, so the transparent-graphics setting had nothing to
+    swap and the base art stayed visible on furniture meant to be invisible.
+    """
+
+    SOURCE = (
+        Path(__file__).resolve().parents[1] / "work" / "patch_mobile_furniture_pack.py"
+    ).read_text(encoding="utf-8")
+
+    def _call_index(self, name):
+        needle = "    " + name + "(manifest)"
+        index = self.SOURCE.index(needle, self.SOURCE.index("def main("))
+        return index
+
+    def test_sprites_are_generated_before_the_reference_sets(self):
+        outdoor = self._call_index("sync_invisible_outdoor_sprites")
+        transparent = self._call_index("sync_transparent_base_furniture_sprites")
+        reference = self._call_index("sync_invisible_furniture_reference_sets")
+        self.assertLess(outdoor, reference)
+        self.assertLess(transparent, reference)
+
+    def test_every_invisible_item_can_reach_the_reference_sets(self):
+        # Each item's sprite name is what the reference-set glob matches, so a
+        # new item with no generated sprite silently drops out.
+        for item in (*patcher.INVISIBLE_OUTDOOR_ITEMS, *patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS):
+            with self.subTest(item=item["name"]):
+                self.assertTrue(item["name"].startswith("Invisible"))
+                self.assertIn("base_png" if "base_png" in item else "source_png", item)
+
+class InvisibleDonorMapAvailabilityTests(unittest.TestCase):
+    """A donor map must exist in a clean install, not just in this workspace.
+
+    Picnic_table.png.fmap, Patio_table.png.fmap and Chaise_brown.png.fmap are
+    absent from a clean official install -- they appear only in workspaces
+    that already carry mobile extracts. Inheriting one made a vanilla-only
+    build record the map as missing and finish anyway, shipping an item with
+    no behavior map, while this machine looked fine.
+    """
+
+    def _clean_files(self):
+        return set(
+            json.loads(
+                (Path(__file__).resolve().parents[1] / "data" / "vf2" / "clean-base-game-assets.json").read_text(
+                    encoding="utf-8"
+                )
+            )["files"]
+        )
+
+    def test_every_invisible_donor_map_ships_with_the_game(self):
+        clean = self._clean_files()
+        for item in (
+            *patcher.INVISIBLE_OUTDOOR_ITEMS,
+            *patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS,
+        ):
+            donor = item.get("donor_fmap")
+            if not donor:
+                continue
+            with self.subTest(item=item["name"], donor=donor):
+                self.assertIn(
+                    f"Assets/{donor}",
+                    clean,
+                    f"{item['name']} donates {donor}, which a clean install "
+                    "does not contain",
+                )
+
+    def test_the_three_known_absent_maps_are_not_donated(self):
+        absent = {
+            "Picnic_table.png.fmap",
+            "Patio_table.png.fmap",
+            "Chaise_brown.png.fmap",
+        }
+        clean = self._clean_files()
+        for name in absent:
+            with self.subTest(map=name):
+                # Guard the premise: if one of these ever ships with the game,
+                # this test is protecting against nothing.
+                self.assertNotIn(f"Assets/{name}", clean)
+        donated = {
+            item.get("donor_fmap")
+            for item in (
+                *patcher.INVISIBLE_OUTDOOR_ITEMS,
+                *patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS,
+            )
+        }
+        self.assertFalse(absent & donated)
+
+
+if __name__ == "__main__":
+    unittest.main()
 
 
 if __name__ == "__main__":
