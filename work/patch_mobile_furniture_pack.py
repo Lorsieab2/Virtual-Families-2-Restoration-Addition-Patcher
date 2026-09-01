@@ -3763,7 +3763,13 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "long_description": "An invisible picnic table for decorating purposes.",
         "source_png": "Picnic_table.png",
         "base_png": "Picnic_table.png",
-        "donor_fmap": "Picnic_table.png.fmap",
+        # Picnic_table.png.fmap is NOT in a clean install -- it only exists in
+        # workspaces that already carry mobile extracts, so inheriting it made
+        # a clean vanilla-only build record the map as missing and finish
+        # anyway. Use the native donor's own map: it ships with the game and
+        # is desktop-native, so it can never be one of the mobile maps ruled
+        # incompatible with the desktop hotspot tables.
+        "donor_fmap": "TableRoundWhiteStd.png.fmap",
     },
     {
         "name": "InvisiblePatioTable",
@@ -3777,7 +3783,7 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "long_description": "An invisible patio table for decorating purposes.",
         "source_png": "Patio_table.png",
         "base_png": "Patio_table.png",
-        "donor_fmap": "Patio_table.png.fmap",
+        "donor_fmap": "TableRoundWhiteStd.png.fmap",
     },
     {
         "name": "InvisibleYogaEquipment",
@@ -3806,7 +3812,7 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "long_description": "An invisible lounger for decorating purposes.",
         "source_png": "Chaise_brown.png",
         "base_png": "Chaise_brown.png",
-        "donor_fmap": "Chaise_brown.png.fmap",
+        "donor_fmap": "CouchGreen.png.fmap",
     },
     {
         "name": "InvisibleHammock",
@@ -6510,7 +6516,17 @@ def sync_invisible_outdoor_sprites(manifest):
         # tracked store and then the vanilla payload rather than silently
         # skipping the item, which produced an invisible-furniture entry with
         # no sprite behind it.
+        # For inheritance-only bases prefer the tracked store over whatever a
+        # seed left in the output: seeded copies are only authenticated later,
+        # and a stale or corrupted one would otherwise be baked into the
+        # invisible variant and its reference-set copy while the visible
+        # counterpart gets corrected.
+        tracked_base = (
+            ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture" / item["base_png"]
+        )
         base_src = OUT / "Images" / "Furniture" / item["base_png"]
+        if tracked_base.is_file():
+            base_src = tracked_base
         if not base_src.exists():
             for candidate in (
                 ROOT

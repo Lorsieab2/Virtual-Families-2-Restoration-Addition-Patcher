@@ -14699,6 +14699,64 @@ class InvisibleReferenceSetOrderingTests(unittest.TestCase):
                 self.assertIn("base_png" if "base_png" in item else "source_png", item)
 
 
+class InvisibleDonorMapAvailabilityTests(unittest.TestCase):
+    """A donor map must exist in a clean install, not just in this workspace.
+
+    Picnic_table.png.fmap, Patio_table.png.fmap and Chaise_brown.png.fmap are
+    absent from a clean official install -- they appear only in workspaces
+    that already carry mobile extracts. Inheriting one made a vanilla-only
+    build record the map as missing and finish anyway, shipping an item with
+    no behavior map, while this machine looked fine.
+    """
+
+    def _clean_files(self):
+        return set(
+            json.loads(
+                (Path(__file__).resolve().parents[1] / "data" / "vf2" / "clean-base-game-assets.json").read_text(
+                    encoding="utf-8"
+                )
+            )["files"]
+        )
+
+    def test_every_invisible_donor_map_ships_with_the_game(self):
+        clean = self._clean_files()
+        for item in (
+            *patcher.INVISIBLE_OUTDOOR_ITEMS,
+            *patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS,
+        ):
+            donor = item.get("donor_fmap")
+            if not donor:
+                continue
+            with self.subTest(item=item["name"], donor=donor):
+                self.assertIn(
+                    f"Assets/{donor}",
+                    clean,
+                    f"{item['name']} donates {donor}, which a clean install "
+                    "does not contain",
+                )
+
+    def test_the_three_known_absent_maps_are_not_donated(self):
+        absent = {
+            "Picnic_table.png.fmap",
+            "Patio_table.png.fmap",
+            "Chaise_brown.png.fmap",
+        }
+        clean = self._clean_files()
+        for name in absent:
+            with self.subTest(map=name):
+                # Guard the premise: if one of these ever ships with the game,
+                # this test is protecting against nothing.
+                self.assertNotIn(f"Assets/{name}", clean)
+        donated = {
+            item.get("donor_fmap")
+            for item in (
+                *patcher.INVISIBLE_OUTDOOR_ITEMS,
+                *patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS,
+            )
+        }
+        self.assertFalse(absent & donated)
+
+
 if __name__ == "__main__":
     unittest.main()
 
