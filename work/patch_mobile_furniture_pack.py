@@ -632,6 +632,13 @@ DESKTOP_RUNTIME_DLL_SOURCE_DIRS = (
 )
 FMAP_SOURCE_DIRS = (
     ROOT / "work" / "vf2_obb" / "assets",
+    # The proven PC-safe maps the patcher ships for the chaise family. These
+    # are tracked in the repository, so a donor taken from here is resolvable
+    # in a clean checkout without the OBB. A donor only has to be readable at
+    # build time -- copy_donor_fmap writes the bytes out under the borrowing
+    # item's own name -- so using one does not make the borrower depend on the
+    # optional Mobile Furniture Behaviors patch at runtime.
+    ROOT / "patcher_assets" / "optional_patches" / "mobile_furniture_behaviors" / "pc_fmaps",
 )
 # Donor fmaps that exist in the base game are resolvable from the vanilla
 # runtime payload as well. Without this, the only way a stock donor such as
@@ -1513,7 +1520,16 @@ MOBILE_FURNITURE_IMPLEMENTED_ROUTE_SPECS = (
         ),
     },
 )
+INVISIBLE_SPA_LOUNGER_ITEM_ID = 0x32F
 MOBILE_FURNITURE_MANUAL_BINDING_SPECS = (
+    {
+        # Checked before the chaise family: the spa lounger shares the chaise
+        # object, so the ordinary lounger route would otherwise swallow it.
+        "name": "invisible_spa_lounger",
+        "item_ids": (INVISIBLE_SPA_LOUNGER_ITEM_ID,),
+        "handler": "VF2HandleMobileInvisibleSpaLounger",
+        "literal_ids": (INVISIBLE_SPA_LOUNGER_ITEM_ID,),
+    },
     {
         "name": "chaise",
         "item_ids": MOBILE_CHAISE_ITEM_IDS,
@@ -3941,7 +3957,28 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "long_description": "An invisible lounger for decorating purposes.",
         "source_png": "Chaise_brown.png",
         "base_png": "Chaise_brown.png",
-        "donor_fmap": "CouchGreen.png.fmap",
+        # The lounger's own map, not a couch's: a couch seats villagers at
+        # different cells, so borrowing one put them in the wrong place. The
+        # chaise map is the PC-safe one this patcher already ships and
+        # validates (19x14 grid, verified object and slot cells).
+        "donor_fmap": "Chaise_brown.png.fmap",
+    },
+    {
+        # Same base as the Invisible Lounger, but its own item so the spa
+        # routes can tell the two apart: dropping an adult here is what starts
+        # a treatment, and that must not happen on an ordinary lounger.
+        "name": "InvisibleSpaLounger",
+        "item_id": 0x32F,
+        "donor": 0x26F,
+        "list": "gFurniture5",
+        "price": 250,
+        "lock_generation": 12,
+        "item_type": 1,
+        "short_description": "Invisible Spa Lounger",
+        "long_description": "This special invisible lounger allows villagers to \"give\" and \"receive\" spa treatments! (For roleplaying purposes)",
+        "source_png": "Chaise_brown.png",
+        "base_png": "Chaise_brown.png",
+        "donor_fmap": "Chaise_brown.png.fmap",
     },
     {
         "name": "InvisibleHammock",
@@ -23863,7 +23900,13 @@ def _parse_mobile_route_item_id(value, context):
         item_id = value if isinstance(value, int) else int(str(value), 0)
     except (TypeError, ValueError) as exc:
         raise RuntimeError(f"{context} has an invalid item ID: {value!r}") from exc
-    if not 0x2AA <= item_id <= 0x2E8:
+    # The mobile furniture band, plus the one invisible item that legitimately
+    # routes through this dispatcher. Named explicitly rather than widening the
+    # band, so a typo in a mobile route id is still caught.
+    if not (
+        0x2AA <= item_id <= 0x2E8
+        or item_id == INVISIBLE_SPA_LOUNGER_ITEM_ID
+    ):
         raise RuntimeError(f"{context} has out-of-scope item ID {item_id:#x}")
     return item_id
 
@@ -26442,6 +26485,130 @@ protected:
     bool const VF2HandleDropOnMobileFurniture(CVillager &);
 };
 
+// ---- Invisible Spa Lounger -------------------------------------------------
+// Manual drop only, adults only. Dropping an adult on a free lounger starts a
+// treatment; dropping one while somebody is already receiving turns the second
+// adult into the one giving it, with the matching label.
+//
+// Labels are written directly the way every other manual handler here does it,
+// rather than through the behavior-label groups: those arrays live in another
+// translation unit, and a treatment label is never chosen autonomously.
+
+static char const *const kVF2SpaReceivingLabels[] = {
+    "Getting pampered",
+    "Getting a manicure",
+    "Getting a pedicure",
+    "Getting a facial",
+    "Getting a massage",
+    "Getting a body scrub",
+    "Getting a mud mask",
+    "Getting a body mask",
+    "Relaxing in the spa",
+};
+
+// Index N pairs with index N above.
+static char const *const kVF2SpaGivingLabels[] = {
+    "Giving a relaxing pampering session",
+    "Giving a manicure",
+    "Giving a pedicure",
+    "Giving a facial",
+    "Giving a massage",
+    "Giving a body scrub",
+    "Giving a mud mask",
+    "Giving a body mask",
+    "Performing spa treatments",
+};
+
+static int const kVF2SpaTreatmentCount = 9;
+
+// Same arithmetic as VF2VillagerByIndex, which lives in another translation
+// unit: CVillagerManager keeps 30 villagers at +0x1CC70, stride 0x1CC0C.
+static CVillager *VF2SpaVillagerByIndex(int index)
+{
+    if (index < 0 || index >= 30) return 0;
+    return reinterpret_cast<CVillager *>(
+        reinterpret_cast<unsigned char *>(&VillagerManager)
+        + 0x1CC70 + index * 0x1CC0C);
+}
+
+static bool VF2SpaAdult(CVillager &villager)
+{
+    // Age is stored in units of 20 per displayed year, so 18 years is 360.
+    return *reinterpret_cast<int *>(
+               reinterpret_cast<unsigned char *>(&villager) + 0x6A54) >= 360;
+}
+
+static int VF2SpaReceivingIndex(CVillager &villager)
+{
+    char const *label = reinterpret_cast<char const *>(&villager) + 0x1BBA8;
+    for (int index = 0; index < kVF2SpaTreatmentCount; ++index) {
+        if (strncmp(label, kVF2SpaReceivingLabels[index], 0x27) == 0) {
+            return index;
+        }
+    }
+    return -1;
+}
+
+static bool VF2SpaOccupantIndex(CVillager &dropped, CVillager **outOccupant)
+{
+    for (int slot = 0; slot < 30; ++slot) {
+        CVillager *occupant = VF2SpaVillagerByIndex(slot);
+        if (!occupant || occupant == &dropped) continue;
+        if (!VF2SpaAdult(*occupant)) continue;
+        if (VF2SpaReceivingIndex(*occupant) < 0) continue;
+        if (outOccupant) *outOccupant = occupant;
+        return true;
+    }
+    return false;
+}
+
+static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+
+    // A child dropped onto a lounger somebody is already using refuses out
+    // loud, the same way the stock game turns down anything age-gated. On an
+    // empty lounger there is nothing to refuse, so the drop falls through to
+    // stock handling instead of producing a message out of nowhere.
+    if (!VF2SpaAdult(villager)) {
+        if (!VF2SpaOccupantIndex(villager, 0)) return false;
+        plans->ForgetPlans(villager, false);
+        VF2PlanChaiseRefusal(plans, villager, eStringTooYoung);
+        return true;
+    }
+
+    // Somebody already on the lounger? Then this adult performs the matching
+    // treatment: the index of what they are receiving is the index of what
+    // this one gives.
+    for (int slot = 0; slot < 30; ++slot) {
+        CVillager *occupant = VF2SpaVillagerByIndex(slot);
+        if (!occupant || occupant == &villager) continue;
+        if (!VF2SpaAdult(*occupant)) continue;
+        int receiving = VF2SpaReceivingIndex(*occupant);
+        if (receiving < 0) continue;
+
+        plans->ForgetPlans(villager, false);
+        VF2SetActionLabel(villager, kVF2SpaGivingLabels[receiving]);
+        plans->PlanToGo(
+            CContentMap::eObjectChaise, eSpeedNormal, ePriorityNormal, false);
+        plans->PlanToWork(ldwGameState::GetRandom(3) + 4);
+        plans->StartNewBehavior(villager);
+        return true;
+    }
+
+    // Nobody on it, so this adult takes it and receives a treatment.
+    plans->ForgetPlans(villager, false);
+    VF2SetActionLabel(
+        villager,
+        kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
+    plans->PlanToGo(
+        CContentMap::eObjectChaise, eSpeedNormal, ePriorityNormal, false);
+    plans->PlanToWait(ldwGameState::GetRandom(3) + 4, eBodyPositionChaise);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
+
 bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
 {
     ldwPoint sample = villager.FeetPos();
@@ -26449,6 +26616,7 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
     int candidate = VF2FurnitureItemAtPoint(sample);
 __VF2_COMPUTER_DROP_DISPATCH__
     if (gVF2MobileFurnitureBehaviors == 0) return false;
+    if (candidate == 0x32F) return VF2HandleMobileInvisibleSpaLounger(villager);
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     if (candidate == 0x2E6) return VF2HandleMobilePatioTable(villager);
@@ -26926,6 +27094,39 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "mobile_candidate_weight": 2000,
             "desktop_implementation": "exact guarded manual plan-sequence port",
             "stock_tables_extended": False,
+        }, {
+            "name": "invisible spa lounger",
+            "item_ids": [hex(INVISIBLE_SPA_LOUNGER_ITEM_ID)],
+            "labels": [
+                "Getting pampered",
+                "Getting a manicure",
+                "Getting a pedicure",
+                "Getting a facial",
+                "Getting a massage",
+                "Getting a body scrub",
+                "Getting a mud mask",
+                "Getting a body mask",
+                "Relaxing in the spa",
+                "Giving a relaxing pampering session",
+                "Giving a manicure",
+                "Giving a pedicure",
+                "Giving a facial",
+                "Giving a massage",
+                "Giving a body scrub",
+                "Giving a mud mask",
+                "Giving a body mask",
+                "Performing spa treatments",
+            ],
+            "object": hex(0x17),
+            "manual_drop_only": True,
+            "manual_drop_supported": True,
+            "autonomous": False,
+            "minimum_age_years": 18,
+            "desktop_implementation": (
+                "drop an adult on a free lounger to receive a treatment; drop "
+                "one while somebody is already receiving and they give the "
+                "matching treatment instead"
+            ),
         }],
         "stock_behavior_table_extended": False,
         "stock_hotspot_table_extended": False,
@@ -27417,7 +27618,7 @@ def validate_mobile_furniture_runtime_bindings(manifest):
     actual_manual_ids.update(chaise_spec["item_ids"])
     if actual_manual_ids != expected_manual_ids:
         raise RuntimeError(
-            "Manual mobile furniture bindings do not cover exactly the 34 "
+            "Manual mobile furniture bindings do not cover exactly the 35 "
             f"implemented IDs: {[hex(item_id) for item_id in sorted(actual_manual_ids)]}"
         )
     expected_handlers = Counter(
@@ -27733,7 +27934,7 @@ def validate_mobile_furniture_runtime_bindings(manifest):
         raise RuntimeError("Mobile behavior macro stock fallbacks are not preserved")
 
     manifest["MobileFurnitureRuntimeBindings"] = {
-        "status": "validated exact 34-row manual and applicable autonomous bindings",
+        "status": "validated exact 35-row manual and applicable autonomous bindings",
         "manual_dispatch": {
             "item_count": len(expected_manual_ids),
             "item_ids": [hex(item_id) for item_id in sorted(expected_manual_ids)],
