@@ -8716,6 +8716,9 @@ class OutfitStoreMappingTests(unittest.TestCase):
                 # the store rather than wedged into the pregnancy group.
                 0x153, 0x154, 0x155, 0x156, 0x157,
                 0x158, 0x159,
+                # Details-screen rows carry their own icon descriptors, so they
+                # take part in the shared generation-lock routing like the rest.
+                0x15A, 0x15B,
         ],
         )
         self.assertEqual(item_ids.index(0x12E), item_ids.index(0x124) + 1)
@@ -8908,7 +8911,24 @@ class OutfitStoreMappingTests(unittest.TestCase):
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x119], "HealthPlan_icon.png"
         )
         icon_ids = list(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES)
-        self.assertEqual(icon_ids[-5:], [0x153, 0x154, 0x155, 0x156, 0x157])
+        # The wellbeing rows sit together, immediately after every row that
+        # predates them. Checked by position within the table rather than as
+        # the final five entries: later rows may be appended after them, and
+        # what matters is that none of these five moved.
+        first = icon_ids.index(0x153)
+        self.assertEqual(
+            icon_ids[first:first + 5], [0x153, 0x154, 0x155, 0x156, 0x157]
+        )
+        # Consecutive image ids, so appending later rows cannot split the block.
+        wellbeing = [
+            patcher.visible_special_upgrade_icon_id_for(item)
+            for item in (0x153, 0x154, 0x155, 0x156, 0x157)
+        ]
+        self.assertEqual(
+            wellbeing,
+            list(range(wellbeing[0], wellbeing[0] + 5)),
+            "wellbeing icon image ids must stay contiguous when rows are appended",
+        )
 
         # The stat cheats go through the native setters rather than writing the
         # stat fields directly, so the game's own low clamps still apply.

@@ -769,6 +769,17 @@ VF3_TV_ANIMATION_SCREEN_BOXES = {
     "FathersFavorite": (8, 10, 90, 62),
     "FathersFavoriteEast": (8, 10, 90, 62),
 }
+# Details-screen rows. They act on the selected villager, so they belong on
+# the per-villager upgrade lists rather than in the global cheat store.
+SET_AGE_18_CHEAT_ITEM_ID = 0x15A
+ADD_RUNNING_LIKE_CHEAT_ITEM_ID = 0x15B
+# 360 game time units is displayed as 18 years old.
+VF2_AGE_18_TIME_UNITS = 360
+# 'running' is index 0x1D of the 120-entry like list the game keeps at string
+# id 0x7AF and reads through CLikeList::GetListAsString.
+VF2_RUNNING_LIKE_ID = 0x1D
+DETAILS_VILLAGER_CHEAT_ITEM_IDS = (SET_AGE_18_CHEAT_ITEM_ID, ADD_RUNNING_LIKE_CHEAT_ITEM_ID)
+
 VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x117: "BrokerUpgrade_icon.png",
     0x118: "FoodClub_icon.png",
@@ -840,6 +851,11 @@ VISIBLE_SPECIAL_UPGRADE_ICON_FILES = {
     0x155: "HealthPlan_icon.png",
     0x156: "HealthPlan_icon.png",
     0x157: "HealthPlan_icon.png",
+    # Their own descriptors rather than aliases: every row needs a distinct
+    # image id even when two rows draw the same art, which is exactly what the
+    # wellbeing rows above already do with HealthPlan_icon.png.
+    SET_AGE_18_CHEAT_ITEM_ID: "HealthPlan_icon.png",
+    ADD_RUNNING_LIKE_CHEAT_ITEM_ID: "HealthPlan_icon.png",
 }
 # Kept as a named contract for manifests and downstream validators.  Late
 # rows now use concrete descriptors instead of an item-id alias.
@@ -1763,6 +1779,7 @@ MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = (
     },
 )
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
+
 CHEAT_UPGRADE_ITEMS = [
     {
         "item_id": 0x11B,
@@ -2021,6 +2038,23 @@ CHEAT_UPGRADE_ITEMS = [
         "name": "Rockhound Certificate Ownership",
         "description": "Grants or removes the Rockhound Certificate, which lets the family dig for fossils. Buy it again to switch it back. The Flea Market item itself is unchanged.",
         "price": 0,
+    },
+    {
+        # details_only rows are not added to gServicesList; they are appended to
+        # the per-villager upgrade lists the Details screen reads instead, so
+        # they act on the villager whose screen is open.
+        "item_id": SET_AGE_18_CHEAT_ITEM_ID,
+        "name": "Set Age to 18",
+        "description": "Sets this villager's age to exactly 18 years old. Nobody else is affected.",
+        "price": 0,
+        "details_only": True,
+    },
+    {
+        "item_id": ADD_RUNNING_LIKE_CHEAT_ITEM_ID,
+        "name": "Add Running Like",
+        "description": "Gives this villager a liking for running, and clears the matching dislike. Does nothing when every like slot is already full.",
+        "price": 0,
+        "details_only": True,
     },
 ]
 CHEAT_UPGRADE_LEGACY_COUNT = 19
@@ -6023,6 +6057,16 @@ def ai_bathroom2_string_ids_for(index):
 def marriage_candidate_reroll_string_ids():
     first_id = ai_bathroom2_string_ids_for(len(AI_BATHROOM2_STYLE_CATALOG) - 1)[1] + 1
     return first_id, first_id + 1
+
+
+def details_villager_cheat_string_ids_for(index):
+    if index < 0 or index >= len(DETAILS_VILLAGER_CHEAT_ITEM_IDS):
+        raise IndexError(f"details villager cheat string index out of range: {index}")
+    # Chained one past the stock-ownership block, which is currently the
+    # highest allocated pair. Chaining rather than picking a literal keeps
+    # every established ID stable when an earlier block grows.
+    first_id = stock_ownership_cheat_string_ids_for(len(STOCK_OWNERSHIP_CHEAT_ITEM_IDS) - 1)[1] + 1
+    return first_id + index * 2, first_id + 1 + index * 2
 
 
 def stock_ownership_cheat_string_ids_for(index):
@@ -10433,6 +10477,10 @@ def cheat_upgrade_string_ids_for_entry(entry_index):
         return same_sex_marriage_string_ids()
     if item_id == MARRIAGE_CANDIDATE_REROLL_ITEM_ID:
         return marriage_candidate_reroll_string_ids()
+    if item_id in DETAILS_VILLAGER_CHEAT_ITEM_IDS:
+        return details_villager_cheat_string_ids_for(
+            DETAILS_VILLAGER_CHEAT_ITEM_IDS.index(item_id)
+        )
     if item_id in WELLBEING_CHEAT_ITEM_IDS:
         return wellbeing_cheat_string_ids_for(WELLBEING_CHEAT_ITEM_IDS.index(item_id))
     if item_id in STOCK_OWNERSHIP_CHEAT_ITEM_IDS:
@@ -11169,6 +11217,108 @@ def patch_inventory_manager(manifest):
     }
 
 
+
+PEEP_CATEGORY_COUNT_SYMBOL = (
+    "?GetCategoryItemCount@CInventoryManager@@QAEHW4EInventoryCategory@@@Z"
+)
+PEEP_UPGRADE_LIST_SYMBOLS = (
+    ("?gAdultPeepUpgradeList@@3PAW4EInventoryItem@@A", 5),
+    ("?gKidPeepUpgradeList@@3PAW4EInventoryItem@@A", 4),
+)
+
+
+def extend_peep_upgrade_lists(obj, manifest):
+    """Put the Details-screen rows on the per-villager upgrade lists.
+
+    The lists are plain arrays, but their length lives in the dispatcher as a
+    `cmp esi, N` immediate rather than a terminator, so appending entries
+    without widening that bound would leave the new rows unreachable. Both are
+    changed together here.
+    """
+    added = list(DETAILS_VILLAGER_CHEAT_ITEM_IDS)
+    record = manifest.setdefault("details_villager_cheats", {})
+    if not ENABLE_CHEAT_UPGRADES:
+        record.update(status="disabled by Cheat Upgrades gate", added=[])
+        return
+    grown = []
+    for symbol_name, native_count in PEEP_UPGRADE_LIST_SYMBOLS:
+        sym = obj.symbol(symbol_name)
+        sec = obj.section(sym.section)
+        raw_at = sec.raw_ptr + sym.value
+        existing = list(struct.unpack_from(f"<{native_count}I", obj.buf, raw_at))
+        if existing[-len(added):] == added:
+            continue
+        insert_off = sym.value + native_count * 4
+        obj.insert_section_bytes(
+            sym.section, insert_off, struct.pack(f"<{len(added)}I", *added)
+        )
+        # Widen the dispatcher's index bound for this list. The case reads
+        #   cmp esi, <count-1> / ja default / mov eax, [esi*4 + <list>]
+        # so the immediate is found by walking back from the relocation that
+        # points at this array rather than by hardcoding an offset.
+        bound_patched = False
+        for section_index, section in enumerate(obj.sections):
+            if getattr(section, "name", "") != ".text$mn":
+                continue
+            for reloc_index in range(section.nreloc):
+                reloc_value, symbol_index, _ = struct.unpack_from(
+                    "<IIH", obj.buf, section.reloc_ptr + reloc_index * 10
+                )
+                if obj.symbol_by_index[symbol_index].name != symbol_name:
+                    continue
+                # cmp esi, imm8 (83 FE nn) sits 0x0C bytes before the reloc:
+                #   83 FE nn | 0F 87 rel32 | 8B 04 B5 <reloc>
+                probe = section.raw_ptr + reloc_value - 0x0C
+                if obj.buf[probe:probe + 2] != bytes((0x83, 0xFE)):
+                    continue
+                if obj.buf[probe + 2] != native_count - 1:
+                    continue
+                obj.buf[probe + 2] = native_count - 1 + len(added)
+                bound_patched = True
+                break
+            if bound_patched:
+                break
+        if not bound_patched:
+            raise SystemExit(
+                f"Could not widen the index bound for {symbol_name}; the rows "
+                "would be appended but unreachable."
+            )
+        # The screen asks GetCategoryItemCount how many rows there are before
+        # it asks for any of them, so widening the item accessor alone leaves
+        # the appended rows unreachable. Its per-category return immediate is
+        #   B8 <count> 00 00 00 | 5E | 5D | C2 04 00
+        # and must be matched exactly once inside that function.
+        count_sym = obj.symbol(PEEP_CATEGORY_COUNT_SYMBOL)
+        count_sec = obj.section(count_sym.section)
+        count_start = count_sec.raw_ptr + count_sym.value
+        window = bytes(obj.buf[count_start:count_start + 0x200])
+        needle = bytes((0xB8, native_count, 0, 0, 0, 0x5E, 0x5D, 0xC2, 0x04, 0x00))
+        if window.count(needle) != 1:
+            raise SystemExit(
+                f"Expected exactly one 'return {native_count}' in "
+                f"{PEEP_CATEGORY_COUNT_SYMBOL} for {symbol_name}; found "
+                f"{window.count(needle)}. Refusing to guess which to widen."
+            )
+        obj.buf[count_start + window.index(needle) + 1] = native_count + len(added)
+        grown.append({
+            "list": symbol_name.split("@")[0][1:],
+            "bound_widened_to": native_count - 1 + len(added),
+            "count_widened_to": native_count + len(added),
+            "native_entries": native_count,
+            "entries_after": native_count + len(added),
+            "appended": [hex(item) for item in added],
+        })
+    record.update(
+        status="ok",
+        added=[hex(item) for item in added],
+        lists=grown,
+        note=(
+            "Rows appended to the per-villager upgrade lists the Details "
+            "screen reads. The dispatcher's index bounds are widened to match."
+        ),
+    )
+
+
 def patch_visible_special_upgrades(manifest):
     obj = CoffObject(PATCHED / "InventoryManager.obj")
 
@@ -11180,7 +11330,13 @@ def patch_visible_special_upgrades(manifest):
         raise RuntimeError(f"Unexpected visible Special Upgrades base list: {[hex(x) for x in original_visible_ids]}")
 
     added_service_ids = MOBILE_SPECIAL_UPGRADE_ITEM_IDS + (
-        [item["item_id"] for item in CHEAT_UPGRADE_ITEMS] if ENABLE_CHEAT_UPGRADES else []
+        [
+            item["item_id"]
+            for item in CHEAT_UPGRADE_ITEMS
+            if not item.get("details_only")
+        ]
+        if ENABLE_CHEAT_UPGRADES
+        else []
     )
     insert_off = services_sym.value + len(original_visible_ids) * 4
     existing_after = list(struct.unpack_from(f"<{len(added_service_ids)}I", obj.buf, services_sec.raw_ptr + insert_off))
@@ -11189,6 +11345,9 @@ def patch_visible_special_upgrades(manifest):
         obj.insert_section_bytes(services_sym.section, insert_off, struct.pack(f"<{len(added_service_ids)}I", *added_service_ids))
         inserted = True
 
+    # Put the Details-screen rows on the per-villager lists before the item
+    # records are written, so the array growth and the records stay in step.
+    extend_peep_upgrade_lists(obj, manifest)
     iteminfo_sym = obj.symbol(INVENTORY_ITEMINFO)
     iteminfo_sec = obj.section(iteminfo_sym.section)
     iteminfo_raw = iteminfo_sec.raw_ptr + iteminfo_sym.value
@@ -14197,6 +14356,71 @@ static CVillager *VF2VillagerByIndex(int index) {
     );
 }
 
+// Declared locally: this translation unit does not include the mobile-event
+// header where these live. Same layout and same mangled names, so the linker
+// resolves them to the one implementation.
+enum ELike { eLikeUnusedForUpgrades = 0 };
+
+class CLikeList {
+public:
+    const bool Add(ELike like);
+};
+
+class CDislikeList {
+public:
+    const bool Remove(ELike like);
+};
+
+static CLikeList *VF2UpgradeVillagerLikes(CVillager *villager) {
+    if (!villager) return 0;
+    return (CLikeList *)((unsigned char *)villager + 0x1BC34);
+}
+
+static CDislikeList *VF2UpgradeVillagerDislikes(CVillager *villager) {
+    if (!villager) return 0;
+    return (CDislikeList *)((unsigned char *)villager + 0x1BC40);
+}
+
+
+// The villager whose Details screen is open. theGameState keeps the selected
+// index at +0x25CC4 -- the same field the native price code reads when it
+// scales item 0x10F by a per-villager value -- and -1 means nothing selected.
+static CVillager *VF2SelectedVillager() {
+    unsigned char *state = (unsigned char *)theGameState::Get();
+    if (!state) return 0;
+    int index = *(int *)(state + 0x25CC4);
+    if (index < 0) return 0;
+    return VF2VillagerByIndex(index);
+}
+
+// Age lives at CVillager+0x6A54 in game time units; 360 reads as 18 years old.
+static bool VF2SetSelectedVillagerAge(int timeUnits) {
+    CVillager *villager = VF2SelectedVillager();
+    if (!villager) return false;
+    *(int *)((unsigned char *)villager + 0x6A54) = timeUnits;
+    return true;
+}
+
+// CLikeList::Add returns false when every slot is taken, which is exactly the
+// "does nothing when there is no free slot" behaviour asked for. The matching
+// dislike is cleared either way so the two cannot contradict each other.
+static bool VF2AddSelectedVillagerLike(int like) {
+    CVillager *villager = VF2SelectedVillager();
+    if (!villager) return false;
+    CLikeList *likes = VF2UpgradeVillagerLikes(villager);
+    if (!likes) return false;
+    if (!likes->Add((ELike)like)) {
+        // Every slot is taken. Leave the villager exactly as they were --
+        // clearing the dislike here would be a change the row claims not to
+        // make, and a later save would persist it.
+        return false;
+    }
+    CDislikeList *dislikes = VF2UpgradeVillagerDislikes(villager);
+    if (dislikes) dislikes->Remove((ELike)like);
+    return true;
+}
+
+
 static bool VF2MarriageAdult(CVillager *villager) {
     if (!villager) return false;
     unsigned char *raw = (unsigned char *)villager;
@@ -15873,6 +16097,12 @@ extern "C" void __cdecl VF2ApplyVisibleSpecialUpgrade(int itemId) {
         break;
     case 0x157:  // Max out Health Bar
         VF2ApplyResidentStat(eVF2ResidentMaxHealth);
+        break;
+    case 0x15A:  // Set Age to 18 -- acts on the selected villager only
+        if (!VF2SetSelectedVillagerAge(360)) return;
+        break;
+    case 0x15B:  // Add Running Like -- acts on the selected villager only
+        if (!VF2AddSelectedVillagerLike(0x1D)) return;
         break;
     case 0x158:  // Anti-Spam Software ownership
     case 0x159:  // Rockhound Certificate ownership

@@ -21,6 +21,10 @@ EXPECTED_CHEAT_IDS = (
     0x136, 0x137, 0x138,
     0x139, 0x13A, 0x13B,
     0x153, 0x154, 0x155, 0x156, 0x157, 0x158, 0x159,
+    # Details-screen rows. They act on the selected villager and are kept
+    # off the store services list, but they are still cheat rows and must
+    # reach the purchase dispatch like every other one.
+    0x15A, 0x15B,
 )
 LATE_CHEAT_IDS = tuple(range(0x12E, 0x13C))
 WEATHER_REFUSAL_TEXT = "Don't like the weather!"
@@ -113,7 +117,12 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertTrue(set(cheat_ids).issubset(rows))
         self.assertEqual(
             visible["new_count"],
-            6 + len(patcher.MOBILE_SPECIAL_UPGRADE_ITEM_IDS) + len(EXPECTED_CHEAT_IDS),
+            # The Details-screen rows are deliberately kept off the store's
+            # services list, so they are not part of its visible count.
+            6
+            + len(patcher.MOBILE_SPECIAL_UPGRADE_ITEM_IDS)
+            + len(EXPECTED_CHEAT_IDS)
+            - len(patcher.DETAILS_VILLAGER_CHEAT_ITEM_IDS),
         )
         self.assertEqual(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_ALIASES, {})
         self.assertEqual(
