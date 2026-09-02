@@ -12601,6 +12601,53 @@ static int VF2OutfitStoreEntryIndex(int itemId) {{
     return -1;
 }}
 
+// ---- Hairstyle rows -------------------------------------------------------
+// The game has no hairstyle tool, so hairstyles ride the outfit tool.
+// Applying that tool is one instruction, mov [villager+0x6A84], value, and the
+// head sits immediately before the body at +0x6A80 -- confirmed from the
+// villager to peep-record copy, where 0x6A80 lands on record+0x20 (head) and
+// 0x6A84 on record+0x24 (body). Both tool arms call the thunks below, which
+// pick the field instead of always writing the body.
+static const int kVF2HeadStoreFemaleBase = 0x480;
+static const int kVF2HeadStoreMaleBase = 0x4C0;
+static const int kVF2HeadStoreValueCount = 50;
+static const int kVF2VillagerHeadOffset = 0x6A80;
+static const int kVF2VillagerBodyOffset = 0x6A84;
+static int gVF2LastSyntheticHeadByGender[2] = {{0, 0}};
+
+static int VF2HeadValueForItem(int itemId) {{
+    int value = itemId - kVF2HeadStoreFemaleBase;
+    if (value >= 0 && value < kVF2HeadStoreValueCount) return value;
+    value = itemId - kVF2HeadStoreMaleBase;
+    if (value >= 0 && value < kVF2HeadStoreValueCount) return value;
+    return -1;
+}}
+
+static int VF2HeadGenderForItem(int itemId) {{
+    if (itemId - kVF2HeadStoreFemaleBase >= 0 &&
+        itemId - kVF2HeadStoreFemaleBase < kVF2HeadStoreValueCount) return 0;
+    if (itemId - kVF2HeadStoreMaleBase >= 0 &&
+        itemId - kVF2HeadStoreMaleBase < kVF2HeadStoreValueCount) return 1;
+    return -1;
+}}
+
+extern "C" void __cdecl VF2ApplyOutfitToolField(
+    void *villagerPtr, int value, int gender) {{
+    unsigned char *villager = (unsigned char *)villagerPtr;
+    if (!villager) return;
+    int selected = (gender == 0 || gender == 1)
+        ? gVF2LastSyntheticHeadByGender[gender]
+        : 0;
+    int head = selected ? VF2HeadValueForItem(selected) : -1;
+    if (head >= 0) {{
+        // A hairstyle is selected, so this use of the tool changes the head
+        // and leaves the body exactly as it was.
+        *(int *)(villager + kVF2VillagerHeadOffset) = head;
+        return;
+    }}
+    *(int *)(villager + kVF2VillagerBodyOffset) = value;
+}}
+
 static int VF2OutfitBodyForItem(int itemId) {{
     int index = VF2OutfitStoreEntryIndex(itemId);
     return index < 0 ? -1 : index % kVF2OutfitStoreBodyCount;
@@ -12638,6 +12685,35 @@ static void VF2SetStockOutfitBodyForSyntheticItem(int itemId) {{
 
 static int VF2SelectedSyntheticOutfitFromToolTray();
 
+
+// The villager the outfit tool is being applied to. CVillagerManager::MakeInFocus
+// writes that villager's index to theGameState+0x25CC4 immediately before the
+// apply path calls GetOutfit, so the target is already recorded by the time
+// this hook runs. -1 means nothing is in focus.
+static unsigned char *VF2OutfitToolTargetVillager() {{
+    unsigned char *state = (unsigned char *)theGameState::Get();
+    if (!state) return 0;
+    int index = *(int *)(state + 0x25CC4);
+    if (index < 0 || index >= 30) return 0;
+    return (unsigned char *)&VillagerManager + 0x1CC70 + index * 0x1CC0C;
+}}
+
+// A hairstyle rides the outfit tool: write the head here and hand back the
+// villager's current body, so the stock write that follows puts the body back
+// exactly as it was. Nothing on the apply path is retargeted -- that callsite
+// replacement is what crashed in B96 and has stayed disabled since.
+static int VF2ApplyPendingHairstyle(int stockGender) {{
+    if (stockGender < 0 || stockGender > 1) return -1;
+    int selected = gVF2LastSyntheticHeadByGender[stockGender];
+    if (!selected) return -1;
+    int head = VF2HeadValueForItem(selected);
+    if (head < 0) return -1;
+    unsigned char *villager = VF2OutfitToolTargetVillager();
+    if (!villager) return -1;
+    *(int *)(villager + kVF2VillagerHeadOffset) = head;
+    return *(int *)(villager + kVF2VillagerBodyOffset);
+}}
+
 extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
     int body = VF2OutfitBodyForItem(itemId);
     if (body >= 0) {{
@@ -12657,6 +12733,10 @@ extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
         }}
     }}
     int stockGender = itemId == kVF2FemaleOutfitTrayItem ? 0 : (itemId == kVF2MaleOutfitTrayItem ? 1 : -1);
+    int hairstyleBody = VF2ApplyPendingHairstyle(stockGender);
+    if (hairstyleBody >= 0) {{
+        return hairstyleBody;
+    }}
     if (stockGender >= 0) {{
         int selected = gVF2LastSyntheticOutfitByGender[stockGender];
         if (selected && VF2OutfitStockTrayItemForItem(selected) == itemId) {{
@@ -13335,6 +13415,7 @@ def patch_main_scene_outfit_body_apply(manifest):
         patch_stock_getoutfit(0xCE3, 0x49, 0),
         patch_stock_getoutfit(0xD83, 0x4A, 1),
     ]
+
     obj.write(PATCHED / "theMainScene.obj")
     manifest["outfit_apply_body_resolver"] = {
         "status": "theMainScene outfit apply resolves selected synthetic tray item before writing villager body",
