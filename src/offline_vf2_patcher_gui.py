@@ -11,6 +11,7 @@ import re
 import subprocess
 import threading
 import traceback
+import tkinter.font as tkfont
 import webbrowser
 from argparse import Namespace
 from pathlib import Path
@@ -321,7 +322,18 @@ class VF2PatcherGUI:
         style.configure("Section.TLabelframe.Label", font=("", 10, "bold"))
         style.configure("Muted.TLabel", foreground="#555555")
         style.configure("Status.TLabel", foreground="#333333")
-        style.configure("Link.TLabel", foreground="#0645ad")
+        # Underlined, because a blue label with no underline reads as static
+        # text. The link was reported as missing when it had been on screen
+        # the whole time; it simply did not look clickable.
+        # Underline the default font rather than pinning a size. Hardcoding 9pt
+        # would shrink the link on setups where TkDefaultFont has been enlarged
+        # for readability, while every label around it stayed large -- the
+        # opposite of making it easier to notice.
+        link_font = tkfont.nametofont("TkDefaultFont").copy()
+        link_font.configure(underline=True)
+        self._link_font = link_font
+        style.configure("Link.TLabel", foreground="#0645ad", font=link_font)
+        style.configure("LinkHover.TLabel", foreground="#c5350b", font=link_font)
 
     def _build_layout(self) -> None:
         root_frame = ttk.Frame(self.root, padding=12)
@@ -353,6 +365,8 @@ class VF2PatcherGUI:
         )
         update_link.grid(row=1, column=2, sticky="e", padx=(12, 0), pady=(2, 0))
         update_link.bind("<Button-1>", lambda _event: self._open_updates_url())
+        update_link.bind("<Enter>", lambda _event: update_link.configure(style="LinkHover.TLabel"))
+        update_link.bind("<Leave>", lambda _event: update_link.configure(style="Link.TLabel"))
         ttk.Label(
             header,
             text=SAVE_COMPATIBILITY_NOTE,
