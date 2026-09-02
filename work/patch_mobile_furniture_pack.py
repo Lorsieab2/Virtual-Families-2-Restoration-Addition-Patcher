@@ -16669,6 +16669,15 @@ def patch_string_manager(manifest):
             ),
         },
         {
+            # The store section holds hairstyles as well as outfits, so the
+            # heading undersells what is in it.
+            "old": "Clothing",
+            "new": "Clothing and Hairstyles",
+            "key": "eString_StoreClothingAndHairstyles",
+            "symbol_prefix": "_vf2textfix_store_clothing_hairstyles",
+            "candidates": (b"Clothing", b"Clothing and Hairstyles"),
+        },
+        {
             "old": "Cooking like mommy",
             "new": "Cooking like a grownup",
             "key": "eString_CookingLikeAGrownup",
