@@ -541,10 +541,10 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         contract = manifest["MobileFurnitureRuntimeBindings"]
         self.assertEqual(
             contract["status"],
-            "validated exact 34-row manual and applicable autonomous bindings",
+            "validated exact 35-row manual and applicable autonomous bindings",
         )
-        self.assertEqual(contract["manual_dispatch"]["item_count"], 34)
-        self.assertEqual(contract["manual_dispatch"]["family_count"], 17)
+        self.assertEqual(contract["manual_dispatch"]["item_count"], 35)
+        self.assertEqual(contract["manual_dispatch"]["family_count"], 18)
         self.assertEqual(contract["autonomous"]["item_count"], 23)
         self.assertEqual(contract["autonomous"]["external_candidate_count"], 13)
         self.assertEqual(
@@ -664,7 +664,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     1,
                 )
                 helper_path.write_text(helper, encoding="ascii")
-                with self.assertRaisesRegex(RuntimeError, "exactly the 34 implemented IDs"):
+                with self.assertRaisesRegex(RuntimeError, "exactly the 35 implemented IDs"):
                     patcher.validate_mobile_furniture_runtime_bindings(manifest)
             finally:
                 patcher.PATCHED = old_patched
@@ -8106,12 +8106,12 @@ class TextFixStringManagerTests(unittest.TestCase):
                         by_id_role[(achievement_id, "description")]["text"],
                         description,
                     )
-                self.assertEqual(patcher.custom_achievement_string_base(), 0xe1f)
+                self.assertEqual(patcher.custom_achievement_string_base(), 0xe21)
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0x7F)[1], 0xe5e
+                    patcher.custom_achievement_string_ids(0x7F)[1], 0xe60
                 )
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0xA7)[1], 0xeae
+                    patcher.custom_achievement_string_ids(0xA7)[1], 0xeb0
                 )
                 reserved = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8126,7 +8126,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 self.assertEqual(reserved, [])
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-            (0xeb3, 0xeb4, 0xeb5),
+            (0xeb5, 0xeb6, 0xeb7),
                 )
                 lounger_rows = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8182,7 +8182,7 @@ class TextFixStringManagerTests(unittest.TestCase):
                 )
                 self.assertEqual(
                     patcher.holiday_ornament_collection_footer_string_ids(),
-            (0xeb3, 0xeb4, 0xeb5),
+            (0xeb5, 0xeb6, 0xeb7),
                 )
                 footer_rows = [
                     row
@@ -8200,11 +8200,11 @@ class TextFixStringManagerTests(unittest.TestCase):
                         for row in footer_rows
                     ],
                     [
-                        (0xeb3, "common", "eSayCommonOrnaments",
+                        (0xeb5, "common", "eSayCommonOrnaments",
                          " of 4 common ornaments found."),
-                        (0xeb4, "uncommon", "eSayUncommonOrnaments",
+                        (0xeb6, "uncommon", "eSayUncommonOrnaments",
                          " of 4 uncommon ornaments found."),
-                        (0xeb5, "rare", "eSayRareOrnaments",
+                        (0xeb7, "rare", "eSayRareOrnaments",
                          " of 4 rare ornaments found."),
                     ],
                 )
@@ -12246,10 +12246,10 @@ class DivorceSpouseContractTests(unittest.TestCase):
         self.assertEqual(patcher.DIVORCE_SPOUSE_ITEM_ID, 0x14B)
         self.assertEqual(patcher.DIVORCE_SPOUSE_CATALOG_PRICE, 0)
         self.assertEqual(row["price"], patcher.DIVORCE_SPOUSE_CATALOG_PRICE)
-        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xef1, 0xef2))
+        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xef3, 0xef4))
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x14B),
-            0x336,
+            0x337,
         )
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x14B],
@@ -14903,13 +14903,20 @@ class InvisibleReferenceSetOrderingTests(unittest.TestCase):
                 self.assertIn("base_png" if "base_png" in item else "source_png", item)
 
 class InvisibleDonorMapAvailabilityTests(unittest.TestCase):
-    """A donor map must exist in a clean install, not just in this workspace.
+    """A donor map must be resolvable in a clean checkout, not just here.
 
     Picnic_table.png.fmap, Patio_table.png.fmap and Chaise_brown.png.fmap are
-    absent from a clean official install -- they appear only in workspaces
-    that already carry mobile extracts. Inheriting one made a vanilla-only
-    build record the map as missing and finish anyway, shipping an item with
-    no behavior map, while this machine looked fine.
+    absent from a clean official install -- they appear only in workspaces that
+    already carry mobile extracts. Donating one from an extract made a
+    vanilla-only build record the map as missing and finish anyway, shipping an
+    item with no behavior map, while this machine looked fine.
+
+    "Resolvable" is deliberately wider than "ships with the game": the patcher
+    tracks proven PC-safe maps of its own under patcher_assets, and a donor
+    taken from there is present in any checkout. A donor only has to be
+    readable at build time, since copy_donor_fmap writes the bytes out under
+    the borrowing item's own name -- so borrowing one does not make the
+    borrower depend on an optional patch at runtime.
     """
 
     def _clean_files(self):
@@ -14921,8 +14928,23 @@ class InvisibleDonorMapAvailabilityTests(unittest.TestCase):
             )["files"]
         )
 
-    def test_every_invisible_donor_map_ships_with_the_game(self):
+    def _tracked_donor_maps(self):
+        root = Path(__file__).resolve().parents[1]
+        tracked = set()
+        for source in patcher.FMAP_SOURCE_DIRS:
+            if not source.is_dir():
+                continue
+            try:
+                source.relative_to(root)
+            except ValueError:
+                # Outside the repository, so a clean checkout would not have it.
+                continue
+            tracked.update(path.name for path in source.glob("*.fmap"))
+        return tracked
+
+    def test_every_invisible_donor_map_is_resolvable_in_a_clean_checkout(self):
         clean = self._clean_files()
+        tracked = self._tracked_donor_maps()
         for item in (
             *patcher.INVISIBLE_OUTDOOR_ITEMS,
             *patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS,
@@ -14931,20 +14953,21 @@ class InvisibleDonorMapAvailabilityTests(unittest.TestCase):
             if not donor:
                 continue
             with self.subTest(item=item["name"], donor=donor):
-                self.assertIn(
-                    f"Assets/{donor}",
-                    clean,
-                    f"{item['name']} donates {donor}, which a clean install "
-                    "does not contain",
+                self.assertTrue(
+                    f"Assets/{donor}" in clean or donor in tracked,
+                    f"{item['name']} donates {donor}, which is neither in a "
+                    "clean install nor tracked in the repository, so a "
+                    "vanilla-only build would ship it with no behavior map",
                 )
 
-    def test_the_three_known_absent_maps_are_not_donated(self):
+    def test_absent_maps_are_only_donated_when_the_patcher_tracks_them(self):
         absent = {
             "Picnic_table.png.fmap",
             "Patio_table.png.fmap",
             "Chaise_brown.png.fmap",
         }
         clean = self._clean_files()
+        tracked = self._tracked_donor_maps()
         for name in absent:
             with self.subTest(map=name):
                 # Guard the premise: if one of these ever ships with the game,
@@ -14957,19 +14980,14 @@ class InvisibleDonorMapAvailabilityTests(unittest.TestCase):
                 *patcher.INVISIBLE_TRANSPARENT_BASE_ITEMS,
             )
         }
-        self.assertFalse(absent & donated)
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
-if __name__ == "__main__":
-    unittest.main()
-
-
-if __name__ == "__main__":
-    unittest.main()
+        for name in absent & donated:
+            with self.subTest(donated=name):
+                self.assertIn(
+                    name,
+                    tracked,
+                    f"{name} is donated but absent from both the game and the "
+                    "repository",
+                )
 
 
 class ForcePregnancyRefusalSkipTests(unittest.TestCase):
