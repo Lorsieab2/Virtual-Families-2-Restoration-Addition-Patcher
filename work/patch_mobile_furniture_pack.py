@@ -11218,6 +11218,9 @@ def patch_inventory_manager(manifest):
 
 
 
+PEEP_CATEGORY_COUNT_SYMBOL = (
+    "?GetCategoryItemCount@CInventoryManager@@QAEHW4EInventoryCategory@@@Z"
+)
 PEEP_UPGRADE_LIST_SYMBOLS = (
     ("?gAdultPeepUpgradeList@@3PAW4EInventoryItem@@A", 5),
     ("?gKidPeepUpgradeList@@3PAW4EInventoryItem@@A", 4),
@@ -11280,9 +11283,27 @@ def extend_peep_upgrade_lists(obj, manifest):
                 f"Could not widen the index bound for {symbol_name}; the rows "
                 "would be appended but unreachable."
             )
+        # The screen asks GetCategoryItemCount how many rows there are before
+        # it asks for any of them, so widening the item accessor alone leaves
+        # the appended rows unreachable. Its per-category return immediate is
+        #   B8 <count> 00 00 00 | 5E | 5D | C2 04 00
+        # and must be matched exactly once inside that function.
+        count_sym = obj.symbol(PEEP_CATEGORY_COUNT_SYMBOL)
+        count_sec = obj.section(count_sym.section)
+        count_start = count_sec.raw_ptr + count_sym.value
+        window = bytes(obj.buf[count_start:count_start + 0x200])
+        needle = bytes((0xB8, native_count, 0, 0, 0, 0x5E, 0x5D, 0xC2, 0x04, 0x00))
+        if window.count(needle) != 1:
+            raise SystemExit(
+                f"Expected exactly one 'return {native_count}' in "
+                f"{PEEP_CATEGORY_COUNT_SYMBOL} for {symbol_name}; found "
+                f"{window.count(needle)}. Refusing to guess which to widen."
+            )
+        obj.buf[count_start + window.index(needle) + 1] = native_count + len(added)
         grown.append({
             "list": symbol_name.split("@")[0][1:],
             "bound_widened_to": native_count - 1 + len(added),
+            "count_widened_to": native_count + len(added),
             "native_entries": native_count,
             "entries_after": native_count + len(added),
             "appended": [hex(item) for item in added],
@@ -14386,11 +14407,17 @@ static bool VF2SetSelectedVillagerAge(int timeUnits) {
 static bool VF2AddSelectedVillagerLike(int like) {
     CVillager *villager = VF2SelectedVillager();
     if (!villager) return false;
-    CDislikeList *dislikes = VF2UpgradeVillagerDislikes(villager);
-    if (dislikes) dislikes->Remove((ELike)like);
     CLikeList *likes = VF2UpgradeVillagerLikes(villager);
     if (!likes) return false;
-    return likes->Add((ELike)like);
+    if (!likes->Add((ELike)like)) {
+        // Every slot is taken. Leave the villager exactly as they were --
+        // clearing the dislike here would be a change the row claims not to
+        // make, and a later save would persist it.
+        return false;
+    }
+    CDislikeList *dislikes = VF2UpgradeVillagerDislikes(villager);
+    if (dislikes) dislikes->Remove((ELike)like);
+    return true;
 }
 
 
