@@ -19555,8 +19555,6 @@ def patch_custom_achievements(manifest):
         new_completion_raw = set_complete_sec.raw_ptr + new_completion_branch
         if achievement_obj.buf[new_completion_raw : new_completion_raw + 2] != b"\x75\x0B":
             raise RuntimeError("Unexpected SetComplete new-completion branch")
-        # Already-complete achievements enter at +0x95 and skip the hook.
-        achievement_obj.buf[new_completion_raw + 1] = 0x0D
         increment_sym = achievement_obj.symbol("?IncrementProgress@CAchievement@@QAEXW4EAchievement@@H@Z").index
         collection_meta_payload = (
             b"\xEB\x10"
@@ -19566,6 +19564,13 @@ def patch_custom_achievements(manifest):
         achievement_obj.insert_section_bytes(
             set_complete_sym.section, set_complete_insert, collection_meta_payload
         )
+        # Already-complete achievements enter at +0x95 and skip the hook. This
+        # runs after the insert so insert_section_bytes' branch fix-up still
+        # sees the original displacement; re-pointing first would look like a
+        # jump into old code that had moved, and get shifted a second time.
+        set_complete_sec = achievement_obj.section(set_complete_sym.section)
+        new_completion_raw = set_complete_sec.raw_ptr + new_completion_branch
+        achievement_obj.buf[new_completion_raw + 1] = 0x0D
         achievement_obj.append_relocation(
             set_complete_sym.section,
             set_complete_insert + 0x0E,
