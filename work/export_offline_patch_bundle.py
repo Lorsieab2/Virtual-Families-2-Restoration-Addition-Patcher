@@ -3144,13 +3144,13 @@ rem py.exe existing does not mean it has a Python 3 registered, so try it and
 rem fall back on failure rather than committing to a branch up front.
 set "VF2_PY="
 where py >nul 2>nul
-if %ERRORLEVEL%==0 (
+if not errorlevel 1 (
   py -3 -c "import sys" >nul 2>nul
   if not errorlevel 1 set "VF2_PY=py -3"
 )
 if not defined VF2_PY (
   where python >nul 2>nul
-  if %ERRORLEVEL%==0 set "VF2_PY=python"
+  if not errorlevel 1 set "VF2_PY=python"
 )
 if not defined VF2_PY (
   echo Could not find Python 3. Install it from https://www.python.org/downloads/
@@ -3173,13 +3173,13 @@ rem py.exe existing does not mean it has a Python 3 registered, so try it and
 rem fall back on failure rather than committing to a branch up front.
 set "VF2_PY="
 where py >nul 2>nul
-if %ERRORLEVEL%==0 (
+if not errorlevel 1 (
   py -3 -c "import sys" >nul 2>nul
   if not errorlevel 1 set "VF2_PY=py -3"
 )
 if not defined VF2_PY (
   where python >nul 2>nul
-  if %ERRORLEVEL%==0 set "VF2_PY=python"
+  if not errorlevel 1 set "VF2_PY=python"
 )
 if not defined VF2_PY (
   echo Could not find Python 3. Install it from https://www.python.org/downloads/
