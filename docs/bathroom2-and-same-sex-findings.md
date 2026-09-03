@@ -1,9 +1,18 @@
 # Bathroom 2 fixtures + same-sex private time: investigation state
 
-Findings from the 2026-08-16 session. Two bugs are **root-caused but
-deliberately not fixed yet**, because both fixes need a decision that
-shouldn't be made without in-game verification. Everything below is
-evidence, not speculation, unless explicitly marked as a hypothesis.
+Findings from the 2026-08-16 session.
+
+The Bathroom 2 fixture bug is **root-caused**. The same-sex private-time
+bug was **not**, at the time of writing: the classifier match was the
+prime suspect and needed live confirmation, which §3 says in as many
+words. Calling both root-caused invited later work to build on an
+unverified hypothesis, so this says which is which.
+
+Everything below is evidence, not speculation, unless explicitly marked
+as a hypothesis.
+
+**Historical.** Both bugs have since been fixed; this is kept for the
+reasoning and the addresses, not as a description of current behaviour.
 
 ---
 
@@ -49,8 +58,11 @@ entry first, which is why Pink masks the bug.
 
 ### Why it isn't fixed yet
 The fix is to move these five flags off the owned-items array into
-storage native code never scans. **There is no free persistent storage
-available**, which was verified rather than assumed:
+storage native code never scans. **No free bits remain in the two masks
+audited here** -- which is not the same as there being no free persistent
+storage anywhere, and the next steps below look at exactly that (record
+`0xA8` offset `0x00`, or claiming another achievement record). What was
+verified rather than assumed is that both audited masks are full:
 
 - `VF2PersistentHealthPlanAndRenovationMask` (Achievement record `0xA8`,
   offset `0x08`) is fully allocated:
@@ -110,6 +122,15 @@ Useful consequences:
 
 ### What already exists
 `TryToMakeBaby` is hooked to skip pregnancy, so these drops are at 0%.
+
+**Prerequisite, as written:** this applied only to executables built with
+Behavior Patches. `main()` called `patch_behavior_six_child_private_time`
+only under `ENABLE_BEHAVIOR_PATCHES`, while Same-Sex Marriage is an
+independently selectable setting, so with Behavior Patches off neither
+the classifier detour nor the `TryToMakeBaby` early return was installed
+and this paragraph did not describe that supported configuration. That
+gap was closed later: the pregnancy guard is its own patch now, installed
+with the embrace hook rather than with the optional behaviour patches.
 
 **Superseded (kept because the reasoning matters):** this section used to
 describe `patch_behavior_six_child_private_time` hooking `+0x218` and
