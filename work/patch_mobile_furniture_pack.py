@@ -3915,13 +3915,15 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "long_description": "An invisible picnic table for decorating purposes.",
         "source_png": "Picnic_table.png",
         "base_png": "Picnic_table.png",
-        # Picnic_table.png.fmap is NOT in a clean install -- it only exists in
-        # workspaces that already carry mobile extracts, so inheriting it made
-        # a clean vanilla-only build record the map as missing and finish
-        # anyway. Use the native donor's own map: it ships with the game and
-        # is desktop-native, so it can never be one of the mobile maps ruled
-        # incompatible with the desktop hotspot tables.
-        "donor_fmap": "TableRoundWhiteStd.png.fmap",
+        # Its own map, not the round table's. A .fmap defines collision,
+        # selection and seat anchors, so borrowing the round table's 12x11
+        # grid gave a much larger table a much smaller footprint -- and
+        # swapping the graphic to transparent does not correct geometry.
+        # Picnic_table.png.fmap is absent from a clean install, but the
+        # desktop-safe copy this patcher ships and validates (22x16, unsafe
+        # behaviour cells stripped, four seat anchors) is tracked in
+        # pc_fmaps, which is on the donor search path.
+        "donor_fmap": "Picnic_table.png.fmap",
     },
     {
         "name": "InvisiblePatioTable",
@@ -3935,7 +3937,9 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "long_description": "An invisible patio table for decorating purposes.",
         "source_png": "Patio_table.png",
         "base_png": "Patio_table.png",
-        "donor_fmap": "TableRoundWhiteStd.png.fmap",
+        # Its own 19x17 desktop-safe map from pc_fmaps, for the same reason as
+        # the picnic table above.
+        "donor_fmap": "Patio_table.png.fmap",
     },
     {
         "name": "InvisibleYogaEquipment",
@@ -5046,6 +5050,35 @@ def snapshot_seeded_inherited_art():
 
 
 PRESERVED_INHERITED_ART = ROOT / "patcher_assets" / "inherited_runtime_images"
+
+
+def authentic_inherited_furniture_source(source_name):
+    """The tracked copy of a furniture image, but only if it matches its digest.
+
+    Callers that resolve art out of OUT are trusting whatever a previous
+    release happened to contain. restore_preserved_inherited_art() repairs the
+    active image later, so anything copied before it runs -- the Base Graphics
+    reference set, for one -- keeps the stale bytes and can reinstall them.
+    Choosing by authenticity rather than by existence removes that ordering
+    dependency entirely.
+
+    Returns None when the name is not inheritance-only, when the store lacks a
+    digest for it, or when the tracked bytes do not match; the caller then
+    falls back to its usual search rather than being blocked.
+    """
+    tracked = PRESERVED_INHERITED_ART / "Furniture" / source_name
+    if not tracked.is_file():
+        return None
+    sums = PRESERVED_INHERITED_ART / "SHA256SUMS.json"
+    if not sums.is_file():
+        return None
+    digests = json.loads(sums.read_text(encoding="utf-8")).get("files", {})
+    expected = digests.get(f"Furniture/{source_name}") or digests.get(source_name)
+    if not expected:
+        return None
+    if hashlib.sha256(tracked.read_bytes()).hexdigest() != expected:
+        return None
+    return tracked
 INHERITED_ONLY_INDEX = ROOT / "data" / "vf2" / "inherited-only-images.json"
 
 
@@ -9401,6 +9434,16 @@ def sync_invisible_furniture_reference_sets(manifest):
             transparent = image.with_name(image.name + "ORIGINAL")
             source_name = INVISIBLE_BASE_GRAPHIC_SOURCE_BY_NAME.get(image.stem)
             visible_source = (OUT / "Images" / "Furniture" / source_name) if source_name else image
+            if source_name:
+                # Prefer the digest-verified tracked copy over whatever a seed
+                # left in OUT. A seeded build can inherit a corrupted Picnic,
+                # Patio or Chaise image; restore_preserved_inherited_art()
+                # fixes the active art, but it runs after this, so the Base
+                # Graphics reference would keep the bad bytes and hand them
+                # back when a player restores their visible art.
+                authentic = authentic_inherited_furniture_source(source_name)
+                if authentic is not None:
+                    visible_source = authentic
             if source_name and not visible_source.exists():
                 # Several bases are inheritance-only, so on an unseeded build
                 # they are not in OUT yet. Resolving them only under OUT
