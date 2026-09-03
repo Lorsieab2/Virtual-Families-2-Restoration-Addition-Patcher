@@ -264,12 +264,14 @@ class CoffObject:
         starts, branches, covered = _decode_code_section(code_before)
         # The decoder stops at the first byte it cannot read, so anything past
         # `covered` is unexamined and might hide a branch we would fail to
-        # retarget. A short unreadable tail is alignment padding -- MSVC leaves
-        # up to 15 bytes, and InventoryManager.obj ends on a lone 0x03 -- so
-        # that much is tolerated, but only when everything up to the insertion
-        # point was read and the remainder is genuinely at the end.
+        # retarget. Tolerating a tail "because it looks like padding" would be
+        # guessing, so the only tail accepted is one too small to hold a
+        # branch at all: the shortest relative branch is two bytes, so a single
+        # trailing byte provably cannot be one. InventoryManager.obj ends on
+        # exactly that -- a lone 0x03 after its last instruction. Anything
+        # longer, or anything before the insertion point, is refused.
         tail = len(code_before) - covered
-        if tail and (covered < section_offset or tail >= 16):
+        if tail and (covered < section_offset or tail >= 2):
             raise ValueError(
                 f"only decoded {covered:#x} of {len(code_before):#x} bytes of "
                 f"{sec.name}; refusing to grow a section whose branches cannot "

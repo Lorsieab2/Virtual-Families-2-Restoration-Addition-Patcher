@@ -143,6 +143,23 @@ class TestInsertKeepsBranchesAimed(unittest.TestCase):
         with self.assertRaises(ValueError):
             obj.insert_section_bytes(1, 0x40, NOP * 0x20)
 
+    def test_a_single_undecodable_trailing_byte_is_tolerated(self):
+        # The shortest relative branch is two bytes, so one trailing byte
+        # provably cannot hide one. InventoryManager.obj ends on exactly this.
+        code = bytes((0xEB, 0x10)) + NOP * 0x20 + bytes((0x03,))
+        obj = _obj(b".text$mn", code)
+        obj.insert_section_bytes(1, 0x10, NOP * 4)
+        rel = struct.unpack_from("<b", _code_of(obj), 1)[0]
+        self.assertEqual(2 + rel, 2 + 0x10 + 4)
+
+    def test_a_two_byte_undecodable_tail_is_refused(self):
+        # Two bytes is enough for a rel8 branch, so it can no longer be
+        # dismissed as padding.
+        code = NOP * 0x20 + bytes((0xFF, 0xFF))
+        obj = _obj(b".text$mn", code)
+        with self.assertRaises(ValueError):
+            obj.insert_section_bytes(1, 0x10, NOP * 4)
+
     def test_undecodable_section_is_refused_rather_than_half_checked(self):
         # If the decoder cannot account for every byte it cannot promise it saw
         # every branch, so growing the section is refused outright.
