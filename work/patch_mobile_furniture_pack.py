@@ -30781,9 +30781,9 @@ extern CFurnitureManager FurnitureManager;
 // PtOnFurniture is private; the same friend shim the mobile-furniture block
 // uses reaches it without changing the native class.
 int __cdecl VF2BehaviorPtOnFurnitureIndex(CFurnitureManager &manager, ldwPoint point)
-{{
+{
     return manager.PtOnFurniture(point);
-}}
+}
 
 static bool AnyHammockInWorld()
 {
@@ -31600,12 +31600,12 @@ extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &villager)
 // array yields the specific item, which is what tells a Ping-Pong Table apart
 // from a stock Pool Table when both answer to EObject 0x36.
 static bool VF2LinkedFurnitureItemIs(CVillager &villager, int itemId)
-{{
-    sFurnitureInfo2 info = {{}};
+{
+    sFurnitureInfo2 info = {};
     if (!FurnitureManager.LinkPeepToFurniture(
-            (CContentMap::EObject)0x36, &villager, info, true, 0, 0)) {{
+            (CContentMap::EObject)0x36, &villager, info, true, 0, 0)) {
         return false;
-    }}
+    }
     int slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, info.point);
     unsigned char *manager = (unsigned char *)&FurnitureManager;
     int count = *(int *)(manager + 0x1004);
@@ -31613,7 +31613,7 @@ static bool VF2LinkedFurnitureItemIs(CVillager &villager, int itemId)
     unsigned char *record = manager + 0x1008 + slot * 0x40;
     if ((*(unsigned int *)(record + 0x0C) & 1) == 0) return false;
     return *(int *)record == itemId;
-}}
+}
 
 // The Ping-Pong Table borrows the Pool Table's behaviour wholesale, so without
 // this its users would be labelled "Playing pool". Both tables answer to
@@ -31632,12 +31632,12 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
     // not enough: with both tables placed it would answer yes for the
     // ping-pong table even when the villager walked to the pool table.
     bool pingPong = VF2LinkedFurnitureItemIs(
-        villager, {PING_PONG_TABLE_ITEM_ID:#x});
+        villager, __VF2_PING_PONG_TABLE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingPooltable)) return;
-    if (!pingPong) {{
+    if (!pingPong) {
         // A stock pool table: leave the native label exactly as it was.
         return;
-    }}
+    }
     VF2ApplyRememberedOrRandomLabel(
         villager, kVF2BehaviorLabels_ping_pong,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong), remembered);
@@ -32341,6 +32341,9 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     VF2EnableMobileFurnitureCandidates(villager);
 }
 '''.strip() + "\n"
+    helper_cpp = helper_cpp.replace(
+        "__VF2_PING_PONG_TABLE_ITEM_ID__", f"{PING_PONG_TABLE_ITEM_ID:#x}"
+    )
     helper_cpp = helper_cpp.replace("__VF2_BEHAVIOR_LABEL_ARRAYS__", behavior_label_arrays)
     helper_cpp = helper_cpp.replace("__VF2_PRAISE_AWARD_CASES__", praise_award_cases_cpp)
     helper_cpp = helper_cpp.replace("__VF2_SCOLD_AWARD_CASES__", scold_award_cases_cpp)

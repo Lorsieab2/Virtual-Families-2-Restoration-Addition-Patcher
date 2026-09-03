@@ -92,13 +92,55 @@ class TestTheWrapperIsInstalled(unittest.TestCase):
         self.assertLess(probe, native)
 
 
+class TestTheEmittedCIsValid(unittest.TestCase):
+    """The generated C, not the Python that generates it.
+
+    vf2_spontaneous_behaviors.cpp is built from a RAW string with named
+    __VF2_*__ placeholders substituted afterwards -- not an f-string. Writing
+    f-string conventions into it ({NAME:#x} and doubled braces) produces source
+    that reads correctly in Python and does not compile: the ping-pong helper
+    shipped a literal {PING_PONG_TABLE_ITEM_ID:#x} and failed the
+    behavior_patches variant with C2065. Only a real build compiles this file,
+    so assert the emitted text here instead.
+    """
+
+    def test_no_unsubstituted_placeholders_reach_the_c(self):
+        src = _source()
+        start = src.index("static bool VF2LinkedFurnitureItemIs")
+        end = src.index("VF2RandomDrinkLabel(CVillager &villager)")
+        block = src[start:end]
+        self.assertNotIn(
+            "{PING_PONG_TABLE_ITEM_ID", block,
+            "an f-string placeholder in a raw-string block is emitted literally",
+        )
+        self.assertIn("__VF2_PING_PONG_TABLE_ITEM_ID__", block)
+
+    def test_the_placeholder_is_actually_substituted(self):
+        src = _source()
+        self.assertIn(
+            '"__VF2_PING_PONG_TABLE_ITEM_ID__", f"{PING_PONG_TABLE_ITEM_ID:#x}"',
+            src,
+            "the placeholder must be replaced when the helper source is built",
+        )
+
+    def test_the_block_uses_single_braces(self):
+        # Doubled braces are the f-string escape; in a raw string they emit as
+        # literal "{{" and "}}", which is not C.
+        src = _source()
+        start = src.index("static bool VF2LinkedFurnitureItemIs")
+        end = src.index("VF2RandomDrinkLabel(CVillager &villager)")
+        block = src[start:end]
+        self.assertNotIn("{{", block)
+        self.assertNotIn("}}", block)
+
+
 class TestTheFurnitureProbe(unittest.TestCase):
     def test_it_matches_the_ping_pong_item_id(self):
         self.assertEqual(patcher.PING_PONG_TABLE_ITEM_ID, 0x32E)
         # The generated C interpolates the constant, so the literal appears in
         # the f-string template as the placeholder rather than the value.
         self.assertIn(
-            "villager, {PING_PONG_TABLE_ITEM_ID:#x})",
+            "villager, __VF2_PING_PONG_TABLE_ITEM_ID__)",
             _source(),
             "the wrapper must compare against the derived item id",
         )
@@ -116,7 +158,7 @@ class TestTheFurnitureProbe(unittest.TestCase):
         # record+0x10 is an orientation index, not a point, so the lookup goes
         # through PtOnFurniture rather than matching coordinates by hand.
         body = re.search(
-            r"VF2LinkedFurnitureItemIs\(CVillager &villager, int itemId\)\n\{\{(.*?)\n\}\}",
+            r"VF2LinkedFurnitureItemIs\(CVillager &villager, int itemId\)\n\{(.*?)\n\}",
             _source(), re.S,
         )
         self.assertIsNotNone(body)
@@ -132,7 +174,7 @@ class TestTheFurnitureProbe(unittest.TestCase):
 
     def test_the_probe_bounds_the_slot(self):
         text = re.search(
-            r"VF2LinkedFurnitureItemIs\(CVillager &villager, int itemId\)\n\{\{(.*?)\n\}\}",
+            r"VF2LinkedFurnitureItemIs\(CVillager &villager, int itemId\)\n\{(.*?)\n\}",
             _source(), re.S,
         ).group(1)
         self.assertIn("slot < 0 || slot >= count", text)
