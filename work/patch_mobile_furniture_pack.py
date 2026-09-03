@@ -20683,11 +20683,17 @@ def patch_custom_achievements(manifest):
     scene_obj.write(PATCHED / "AchievementsScene.obj")
 
     stock_visible_count = 0x5F
+    # Must match VF2AchievementVisibleCountInternal exactly: 26 original
+    # behaviour goals plus the two rare joke-label Order goals, which are
+    # behaviour goals too and are appended to the visible order alongside
+    # them. Reporting 26 here made the manifest disagree with the executable
+    # and truncated the visible order that release diagnostics read.
+    behavior_goal_visible_count = 28
     compile_visible_count = (
         stock_visible_count
         + (1 if ENABLE_HOLIDAY_ORNAMENTS else 0)
         + 6
-        + (26 if ENABLE_BEHAVIOR_PATCHES else 0)
+        + (behavior_goal_visible_count if ENABLE_BEHAVIOR_PATCHES else 0)
         + 3
         + 2
         + 5
@@ -20791,7 +20797,17 @@ def patch_custom_achievements(manifest):
             HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET if ENABLE_HOLIDAY_ORNAMENTS else 12
         ),
         "notification_queue_count": HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT,
-        "save_state_note": "Save/Reset keep 0x125 records; LoadState preserves rows 0x00-0xA8 (0xA8 is the hidden Taters mask) and validates only 0xA9-0x124.",
+        # Derived from the same reserved_first/reserved_count the patch itself
+        # installs, so the note cannot describe a boundary the loader does not
+        # use. Hardcoding it left this claiming the pre-move tail while
+        # save_layout above reported the real one -- two persistence contracts
+        # in one manifest.
+        "save_state_note": (
+            f"Save/Reset keep 0x125 records; LoadState preserves rows 0x00-"
+            f"{reserved_first - 1:#x} (0x{CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID:X} "
+            f"is the hidden Taters mask) and validates only "
+            f"{reserved_first:#x}-0x124 ({reserved_count:#x} records)."
+        ),
     }
 
 
