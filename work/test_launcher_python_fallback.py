@@ -64,14 +64,20 @@ class TestLauncherPythonFallback(unittest.TestCase):
             self.assertIn('set "VF2_PY=python"', block)
             self.assertIn("where python >nul 2>nul", block)
 
-    def test_the_fallback_confirms_it_found_python_3(self):
+    def test_both_probes_hold_the_documented_3_9_floor(self):
         # `where python` also matches Python 2 and the Windows Store execution
-        # alias, which exits without running anything. Both would be accepted
-        # on the strength of `where` alone, so the interpreter has to be asked.
+        # alias, which exits without running anything, so the interpreter has
+        # to be asked. 3.9 is the floor the README states and the GUI needs:
+        # it calls str.removeprefix, which 3.8 does not have.
         for block in _probe_blocks():
-            self.assertIn("sys.version_info[0] >= 3", block)
-            probe = block.index("sys.version_info[0] >= 3")
-            assign = block.index('set "VF2_PY=python"')
+            self.assertEqual(
+                block.count("sys.version_info >= (3, 9)"), 2,
+                "both the py -3 probe and the python fallback must check it",
+            )
+            self.assertNotIn("sys.version_info[0]", block,
+                             "a major-version-only check lets 3.8 through")
+            probe = block.index("sys.version_info >= (3, 9)")
+            assign = block.index('set "VF2_PY=py -3"')
             self.assertLess(probe, assign,
                             "the version check must run before VF2_PY is set")
 
