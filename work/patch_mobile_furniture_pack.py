@@ -15857,6 +15857,14 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
     if (kVF2IncludeBehaviorGoals) {
         completed += VF2CountCompletedAchievements(achievement, 0x66, 0x6C);
         completed += VF2CountCompletedAchievements(achievement, 0x93, 0xA5);
+        // The two Order goals are behaviour goals but not contiguous with the
+        // rest: 0xA8 is the purchase/pregnancy/renovation scratch record and is
+        // deliberately skipped, so they sit at 0xA9 and 0xAA. Counting the
+        // range alone made VF2AchievementVisibleCountInternal's +28 disagree
+        // with a maximum of 26 completions, so the Goals screen could never
+        // read "all complete".
+        if (achievement->IsComplete((EAchievement)0xA9)) ++completed;
+        if (achievement->IsComplete((EAchievement)0xAA)) ++completed;
     }
     completed += VF2CountCompletedAchievements(achievement, 0x80, 0x92);
     if (achievement->IsComplete((EAchievement)0xA6)) ++completed;
@@ -20756,8 +20764,8 @@ def patch_custom_achievements(manifest):
             ),
             "purchase_mask_meaning": {"0x1": "item 0x2cf", "0x2": "item 0x2cc"},
             "health_plan_entitlement_field": "record+0x8 nonzero",
-            "reserved_tail_first_id": "0xa9",
-            "reserved_tail_record_count": 0x7C,
+            "reserved_tail_first_id": hex(reserved_first),
+            "reserved_tail_record_count": reserved_count,
             "signed_imm8_0x80_used": False,
         },
         "meta_targets": {
