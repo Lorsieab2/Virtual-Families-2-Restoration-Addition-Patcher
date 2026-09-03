@@ -16337,8 +16337,20 @@ static unsigned int VF2AIBathroom2Bit(int itemId) {{
 // The pre-fix storage location, retained only so saves written before this
 // change can be migrated off it (and, crucially, cleared -- an existing
 // save keeps its fixtures broken until that byte goes away).
+// Range only, deliberately NOT VF2IsAIBathroom2Style. That test folds in
+// kVF2EnableAIBathroom2, so in a build with the remodel disabled this returned
+// null and the fixture-breaking legacy byte was never cleared -- leaving a
+// player who had bought a Bathroom 2 remodel with an unusable shower, toilet
+// and sink precisely when they turned the feature off. The disabled build must
+// still clean up after the enabled one; only migrating INTO the active mask
+// depends on the gate.
+static bool VF2IsAIBathroom2ItemId(int itemId) {{
+    return itemId >= {AI_BATHROOM2_PC_ITEM_IDS[0]} &&
+        itemId <= {AI_BATHROOM2_PC_ITEM_IDS[-1]};
+}}
+
 static unsigned char *VF2AIBathroom2LegacyActiveByte(int itemId) {{
-    if (!VF2IsAIBathroom2Style(itemId)) return 0;
+    if (!VF2IsAIBathroom2ItemId(itemId)) return 0;
     return reinterpret_cast<unsigned char *>(&InventoryManager) + itemId + 0x2A3;
 }}
 
@@ -16367,9 +16379,17 @@ static bool VF2NormalizeAIBathroom2Actives() {{
         // their Bathroom 2 fixtures start working again.
         unsigned char *legacy = VF2AIBathroom2LegacyActiveByte(itemId);
         if (legacy != 0 && *legacy != 0) {{
+            // Clearing happens either way: the byte is what breaks the
+            // fixtures, and it is just as broken in a build with the remodel
+            // switched off.
             *legacy = 0;
-            VF2PersistentAIBathroom2Mask() |= VF2AIBathroom2Bit(itemId);
             changed = true;
+            // Carrying it into the active mask is the part that means "you
+            // still own this remodel", so that only happens where the remodel
+            // exists.
+            if (VF2IsAIBathroom2Style(itemId)) {{
+                VF2PersistentAIBathroom2Mask() |= VF2AIBathroom2Bit(itemId);
+            }}
         }}
         if (!VF2AIBathroom2IsActive(itemId)) continue;
         if (!kept) {{
@@ -20528,9 +20548,14 @@ def patch_marriage_candidate_reroll(manifest):
                 "CDatingScene+0x10 to -1, then call GeneratePeepCandidate"
             ),
             "active_call": generate_name,
-            "rejoin": "both active and inactive paths jump to HandleMessage "
-                "+0x8C, the untouched native shared tail also used directly "
-                "by Accept",
+            "rejoin": (
+                "inactive path jumps to HandleMessage +0x8C, the untouched "
+                "native shared tail also used directly by Accept; the active "
+                "path reproduces that tail's register restores and jumps to "
+                "the +0xAC epilogue instead, because +0x8C ends with "
+                "'mov dword ptr [eax+0x25CB8], 0' -- rejoining it closed the "
+                "proposal one instruction after generating the new candidate"
+            ),
         },
         "accept": "byte-identical stock code path; no longer touched or "
             "duplicated by this hook",
