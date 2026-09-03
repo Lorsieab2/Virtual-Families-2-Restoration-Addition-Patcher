@@ -21175,6 +21175,76 @@ def patch_embrace_role_split(manifest):
     }
 
 
+def patch_same_sex_pregnancy_guard(manifest):
+    """Hold a same-sex marriage to its promised 0% pregnancy rate.
+
+    TryToMakeBaby keeps its native stack frame and every other route, but
+    returns before ChanceOfPregnancy/Impregnate for a qualifying pair -- a
+    same-sex marriage, or an opposite-sex couple already at six children.
+    Neither can be trying for a baby.
+
+    This is installed unconditionally, alongside the embrace hook it protects.
+    It used to live inside patch_six_child_private_time, which main() runs only
+    when Behavior Patches is on -- so in the behaviour-disabled executable an
+    enabled same-sex couple reached behaviour 358 and the unguarded
+    TryToMakeBaby, the spouse accessors handed the native gender-blind
+    ChanceOfPregnancy/Impregnate two adults, and a pregnancy could start.
+    """
+    path = PATCHED / "theMainScene.obj"
+    obj = CoffObject(path)
+    # 0% pregnancy. TryToMakeBaby keeps its native stack frame and every
+    # other route, but returns before ChanceOfPregnancy/Impregnate for a
+    # qualifying pair -- a same-sex marriage, or an opposite-sex couple
+    # already at six children. Both cases are couples that cannot be trying
+    # for a baby, which is the whole point of the relabelling.
+    try_name = "?TryToMakeBaby@theMainScene@@IAEXXZ"
+    try_func = obj.symbol(try_name)
+    try_sec = obj.section(try_func.section)
+    try_hook = try_func.value
+    expected_try_prefix = bytes.fromhex("55 8B EC 83 EC 08 53 56 89 4D FC")
+    if bytes(obj.buf[try_sec.raw_ptr + try_hook:
+                     try_sec.raw_ptr + try_hook + len(expected_try_prefix)]) != expected_try_prefix:
+        raise RuntimeError("TryToMakeBaby entry anchor drifted")
+    try_helper = obj.append_undefined_symbol(SAME_SEX_TRY_TO_MAKE_BABY_SKIP_HELPER_SYMBOL)
+    try_cave = try_sec.raw_size
+    try_trampoline = bytearray(
+        expected_try_prefix      # execute the native frame setup first
+        + b"\xE8\0\0\0\0"        # call VF2SkipSameSexTryToMakeBaby
+        b"\x84\xC0"              # eligible pair?
+        b"\x74\x02"              # no -> continue into the native body
+        b"\xC9\xC3"              # yes -> leave; return without pregnancy
+        b"\xE9\0\0\0\0"          # native body, after the reproduced prologue
+    )
+    if len(try_trampoline) != 27:
+        raise AssertionError("Private-time TryToMakeBaby trampoline size drifted")
+    struct.pack_into("<i", try_trampoline, 12, 0)
+    struct.pack_into(
+        "<i", try_trampoline, 23,
+        (try_hook + 0x0B) - (try_cave + len(try_trampoline)),
+    )
+    obj.insert_section_bytes(try_sec.index, try_cave, bytes(try_trampoline))
+    obj.append_relocation(try_sec.index, try_cave + 12, try_helper, IMAGE_REL_I386_REL32)
+    try_func = obj.symbol(try_name)
+    try_sec = obj.section(try_func.section)
+    obj.buf[try_sec.raw_ptr + try_hook:try_sec.raw_ptr + try_hook + 5] = (
+        b"\xE9" + struct.pack("<i", try_cave - (try_hook + 5))
+    )
+
+    obj.write(path)
+
+    manifest["SameSexPregnancyGuard"] = {
+        "status": "installed",
+        "function": "?TryToMakeBaby@theMainScene@@IAEXXZ",
+        "helper": SAME_SEX_TRY_TO_MAKE_BABY_SKIP_HELPER_SYMBOL,
+        "gate": "always -- installed with the same-sex embrace hook, not with "
+                "the optional Behavior Patches",
+        "effect": (
+            "returns before ChanceOfPregnancy/Impregnate for a same-sex "
+            "marriage or an opposite-sex couple already at six children"
+        ),
+    }
+
+
 def patch_six_child_private_time(manifest):
     """Send a couple at six children down the ordinary romantic path.
 
@@ -21225,44 +21295,6 @@ def patch_six_child_private_time(manifest):
     target = function.value + 0x256
     obj.buf[raw:raw + 5] = b"\xE9" + struct.pack("<i", target - (hook + 5))
 
-    # 0% pregnancy. TryToMakeBaby keeps its native stack frame and every
-    # other route, but returns before ChanceOfPregnancy/Impregnate for a
-    # qualifying pair -- a same-sex marriage, or an opposite-sex couple
-    # already at six children. Both cases are couples that cannot be trying
-    # for a baby, which is the whole point of the relabelling.
-    try_name = "?TryToMakeBaby@theMainScene@@IAEXXZ"
-    try_func = obj.symbol(try_name)
-    try_sec = obj.section(try_func.section)
-    try_hook = try_func.value
-    expected_try_prefix = bytes.fromhex("55 8B EC 83 EC 08 53 56 89 4D FC")
-    if bytes(obj.buf[try_sec.raw_ptr + try_hook:
-                     try_sec.raw_ptr + try_hook + len(expected_try_prefix)]) != expected_try_prefix:
-        raise RuntimeError("TryToMakeBaby entry anchor drifted")
-    try_helper = obj.append_undefined_symbol(SAME_SEX_TRY_TO_MAKE_BABY_SKIP_HELPER_SYMBOL)
-    try_cave = try_sec.raw_size
-    try_trampoline = bytearray(
-        expected_try_prefix      # execute the native frame setup first
-        + b"\xE8\0\0\0\0"        # call VF2SkipSameSexTryToMakeBaby
-        b"\x84\xC0"              # eligible pair?
-        b"\x74\x02"              # no -> continue into the native body
-        b"\xC9\xC3"              # yes -> leave; return without pregnancy
-        b"\xE9\0\0\0\0"          # native body, after the reproduced prologue
-    )
-    if len(try_trampoline) != 27:
-        raise AssertionError("Private-time TryToMakeBaby trampoline size drifted")
-    struct.pack_into("<i", try_trampoline, 12, 0)
-    struct.pack_into(
-        "<i", try_trampoline, 23,
-        (try_hook + 0x0B) - (try_cave + len(try_trampoline)),
-    )
-    obj.insert_section_bytes(try_sec.index, try_cave, bytes(try_trampoline))
-    obj.append_relocation(try_sec.index, try_cave + 12, try_helper, IMAGE_REL_I386_REL32)
-    try_func = obj.symbol(try_name)
-    try_sec = obj.section(try_func.section)
-    obj.buf[try_sec.raw_ptr + try_hook:try_sec.raw_ptr + try_hook + 5] = (
-        b"\xE9" + struct.pack("<i", try_cave - (try_hook + 5))
-    )
-
     obj.write(path)
 
     manifest["SixChildPrivateTime"] = {
@@ -21280,7 +21312,11 @@ def patch_six_child_private_time(manifest):
             "behaviour 358 is relabelled 'Having private adult romantic time' "
             "by patch_behavior_label_variants"
         ),
-        "pregnancy": "0%; TryToMakeBaby returns before ChanceOfPregnancy/Impregnate",
+        "pregnancy": (
+            "0%, but installed separately: see SameSexPregnancyGuard, which "
+            "ships with the embrace hook so the rate holds in builds that "
+            "have this behaviour patch turned off"
+        ),
     }
 
 
@@ -32788,6 +32824,10 @@ def main():
     # base-game. The "private adult romantic time" wording is a label
     # variation on 358 itself, not a different sequence.
     patch_villager_same_sex_embrace(manifest)
+    # Installed with the embrace hook, never with the optional behaviour
+    # patches: the couples it protects exist in every build that has the
+    # embrace.
+    patch_same_sex_pregnancy_guard(manifest)
     # Force Successful Pregnancy is a one-shot; don't let an unlucky random
     # roll spend it. Only 1846 and 1851 are skipped; every other refusal
     # reason stays base-game.

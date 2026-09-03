@@ -12639,13 +12639,26 @@ class SameSexMarriagePatchTests(unittest.TestCase):
                     data[drop.value + 0x218:drop.value + 0x21A],
                     bytes.fromhex("74 3C"),
                 )
-                # Pregnancy is suppressed for the same qualifying pairs.
-                try_baby = main.symbol("?TryToMakeBaby@theMainScene@@IAEXXZ")
-                try_sec = main.section(try_baby.section)
-                try_data = bytes(
-                    main.buf[try_sec.raw_ptr:try_sec.raw_ptr + try_sec.raw_size]
+                # Pregnancy suppression is a separate patch now, so this one
+                # must leave TryToMakeBaby alone: it ships with the embrace
+                # hook rather than with the optional behaviour patches.
+                untouched = CoffObject(temp_root / "theMainScene.obj")
+                try_baby = untouched.symbol("?TryToMakeBaby@theMainScene@@IAEXXZ")
+                try_sec = untouched.section(try_baby.section)
+                self.assertNotEqual(
+                    untouched.buf[try_sec.raw_ptr + try_baby.value], 0xE9,
+                    "the six-child patch must not install the pregnancy guard",
                 )
-                self.assertEqual(try_data[try_baby.value], 0xE9)
+
+                # Applying the guard installs it, whatever the behaviour gate.
+                patcher.patch_same_sex_pregnancy_guard(manifest)
+                guarded = CoffObject(temp_root / "theMainScene.obj")
+                try_baby = guarded.symbol("?TryToMakeBaby@theMainScene@@IAEXXZ")
+                try_sec = guarded.section(try_baby.section)
+                self.assertEqual(guarded.buf[try_sec.raw_ptr + try_baby.value], 0xE9)
+                self.assertEqual(
+                    manifest["SameSexPregnancyGuard"]["status"], "installed"
+                )
         finally:
             patcher.PATCHED = old_patched
 
