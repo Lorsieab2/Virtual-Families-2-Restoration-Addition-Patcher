@@ -13351,8 +13351,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
                 (False, False, 122, 141, 5, 12),
                 (True, False, 123, 142, 6, 13),
-                (False, True, 148, 167, 5, 12),
-                (True, True, 149, 168, 6, 13),
+                # The behaviour rows gain two: the visible count now includes
+                # the two Order goals, matching the runtime helper's +28.
+                (False, True, 150, 169, 5, 12),
+                (True, True, 151, 170, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
