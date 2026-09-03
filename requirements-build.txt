@@ -1,0 +1,8 @@
+# Build-time only. The offline patcher that ships to players needs nothing
+# beyond the Python standard library; this file is for building the patched
+# executables from work/.
+#
+# capstone decodes a code section before it is grown, so the relative branches
+# that span the insertion point can be re-encoded. Without it a grown .text
+# section silently keeps stale displacements and the game crashes on startup.
+capstone>=5.0

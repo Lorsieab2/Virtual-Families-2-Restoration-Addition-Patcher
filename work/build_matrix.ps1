@@ -30,6 +30,14 @@ $vanillaRuntime = Join-Path $root "work\vanilla_runtime_payload"
 if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
     throw "Python runtime not found: $Python"
 }
+
+# coff_patch decodes a code section before growing it, so the relative branches
+# spanning the insertion point can be re-encoded. Checking here fails the whole
+# matrix in a second instead of on the first variant's generation step.
+& $Python -c "import capstone" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    throw "capstone is not installed for $Python. Run: $Python -m pip install -r requirements-build.txt"
+}
 if (-not (Test-Path -LiteralPath $vanillaRuntime -PathType Container)) {
     throw "work\vanilla_runtime_payload not found -- populate it with a verified vanilla VF2 install before building."
 }

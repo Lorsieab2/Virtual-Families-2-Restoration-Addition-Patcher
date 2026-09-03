@@ -2,12 +2,62 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
 import struct
+import sys
 
 
 IMAGE_REL_I386_DIR32 = 0x0006
 IMAGE_SYM_CLASS_EXTERNAL = 2
 IMAGE_SYM_CLASS_STATIC = 3
+
+
+def _decode_code_section(code: bytes):
+    """Decode a code section into (instruction starts, relative branches, bytes covered).
+
+    Relative displacements are resolved by the compiler inside a single
+    section, so they carry no relocation record. Nothing else in this file
+    knows about them, which is why growing a code section used to silently
+    break every branch that spanned the insertion point.
+
+    Branches are identified by Capstone's jump/call groups and an immediate
+    operand rather than by opcode byte, so a legally prefixed branch is not
+    missed, and the displacement field is taken from the instruction encoding
+    so a prefix or a 16-bit form does not shift it out from under us. The far
+    forms (`ljmp` / `lcall`) take an absolute destination and are skipped.
+    """
+    try:
+        from capstone import Cs, CS_ARCH_X86, CS_MODE_32, CS_GRP_CALL, CS_GRP_JUMP
+        from capstone.x86 import X86_OP_IMM
+    except ImportError as exc:  # pragma: no cover - environment problem
+        raise ImportError(
+            "capstone is required to grow a code section safely: the relative "
+            "branches spanning the insertion point have to be decoded before "
+            "they can be re-encoded. Install it with "
+            "`python -m pip install -r requirements-build.txt`."
+        ) from exc
+
+    md = Cs(CS_ARCH_X86, CS_MODE_32)
+    md.detail = True
+    starts = set()
+    branches = []
+    covered = 0
+    for ins in md.disasm(code, 0):
+        starts.add(ins.address)
+        covered = ins.address + ins.size
+        if not ins.operands or ins.mnemonic in ("ljmp", "lcall"):
+            continue
+        op = ins.operands[0]
+        if op.type != X86_OP_IMM:
+            continue
+        if not (ins.group(CS_GRP_JUMP) or ins.group(CS_GRP_CALL)):
+            continue
+        disp_off = ins.encoding.imm_offset
+        disp_size = ins.encoding.imm_size
+        if not disp_off or disp_size not in (1, 2, 4):
+            continue
+        branches.append((ins.address, ins.size, disp_off, disp_size, op.imm))
+    return starts, branches, covered
 
 
 @dataclass
@@ -123,7 +173,8 @@ class CoffObject:
                 struct.pack_into("<H", self.buf, aux_off + 4, self.section(sec_index).nreloc)
                 struct.pack_into("<H", self.buf, aux_off + 6, 0)
 
-    def insert_section_bytes(self, sec_index: int, section_offset: int, payload: bytes):
+    def insert_section_bytes(self, sec_index: int, section_offset: int, payload: bytes,
+                             fix_relative_branches: bool = True):
         if not payload:
             return
         sec = self.section(sec_index)
@@ -131,7 +182,21 @@ class CoffObject:
             raise ValueError("section_offset out of range")
         insert_at = sec.raw_ptr + section_offset
         delta = len(payload)
+        code_before = None
+        relocated_before = None
+        if (fix_relative_branches and sec.name.startswith(".text")
+                and sec.raw_ptr and section_offset < sec.raw_size):
+            code_before = bytes(self.buf[sec.raw_ptr:sec.raw_ptr + sec.raw_size])
+            relocated_before = set()
+            reloc_at = sec.reloc_ptr
+            for _ in range(sec.nreloc):
+                relocated_before.add(struct.unpack_from("<I", self.buf, reloc_at)[0])
+                reloc_at += 10
         self.buf[insert_at:insert_at] = payload
+        if code_before is not None:
+            self._retarget_relative_branches(
+                sec, section_offset, delta, code_before, relocated_before
+            )
 
         # Update section headers.
         for s in self.sections:
@@ -181,6 +246,81 @@ class CoffObject:
         self._parse()
         self._patch_section_aux_lengths(sec_index, delta)
         self._parse()
+
+    def _retarget_relative_branches(self, sec, section_offset: int, delta: int,
+                                    code_before: bytes, relocated: set):
+        """Keep intra-section jumps pointing at the same instructions after a grow.
+
+        Inserting bytes in the middle of a code section leaves every relative
+        displacement that spans the insertion point short by ``delta``, so the
+        branch lands mid-instruction. That is the VF2 startup crash: CVillagerAI's
+        early-out jumped one byte into the tail of a `jne`, the decoder
+        desynchronised, and the caller resumed with a null `this`.
+
+        Old offsets map onto new ones by shifting everything at or after the
+        insertion point, so each branch is re-encoded from the mapped source and
+        target rather than guessed at.
+        """
+        starts, branches, covered = _decode_code_section(code_before)
+        # The decoder stops at the first byte it cannot read, so anything past
+        # `covered` is unexamined and might hide a branch we would fail to
+        # retarget. Tolerating a tail "because it looks like padding" would be
+        # guessing, so the only tail accepted is one too small to hold a
+        # branch at all: the shortest relative branch is two bytes, so a single
+        # trailing byte provably cannot be one. InventoryManager.obj ends on
+        # exactly that -- a lone 0x03 after its last instruction. Anything
+        # longer, or anything before the insertion point, is refused.
+        tail = len(code_before) - covered
+        if tail and (covered < section_offset or tail >= 2):
+            raise ValueError(
+                f"only decoded {covered:#x} of {len(code_before):#x} bytes of "
+                f"{sec.name}; refusing to grow a section whose branches cannot "
+                "all be accounted for"
+            )
+        if section_offset not in starts and section_offset != len(code_before):
+            raise ValueError(
+                f"insert at {section_offset:#x} is not an instruction boundary "
+                f"in {sec.name}"
+            )
+
+        def moved_position(offset: int) -> int:
+            return offset + delta if offset >= section_offset else offset
+
+        def moved_target(offset: int) -> int:
+            # A branch aimed exactly at the insertion point is entering the
+            # bytes being inserted, which is how these hooks are threaded in;
+            # only destinations past it are old code that has shifted.
+            return offset + delta if offset > section_offset else offset
+
+        limits = {1: (-128, 127), 2: (-32768, 32767), 4: (-(1 << 31), (1 << 31) - 1)}
+        formats = {1: "<b", 2: "<h", 4: "<i"}
+
+        for ins_off, ins_len, disp_off, disp_size, target in branches:
+            if ins_off + disp_off in relocated:
+                # Filled in by the linker: a zero placeholder, not ours to touch.
+                continue
+            # The end of an instruction follows its own start. Mapping the end
+            # offset independently would shift a branch that ends exactly at the
+            # insertion point, cancelling out the target's shift and dropping it
+            # into the payload.
+            new_end = moved_position(ins_off) + ins_len
+            new_disp = moved_target(target) - new_end
+            if new_disp == target - (ins_off + ins_len):
+                continue
+            low, high = limits[disp_size]
+            if not low <= new_disp <= high:
+                raise ValueError(
+                    f"growing {sec.name} by {delta} pushes the {disp_size * 8}-bit "
+                    f"branch at {ins_off:#x} out of range ({new_disp}); it needs a "
+                    "wider form"
+                )
+            if os.environ.get("VF2_TRACE_BRANCH_FIX"):
+                print(f"[branchfix] {sec.name} ins@{ins_off:#x} -> {new_disp:#x} "
+                      f"(target {target:#x})", file=sys.stderr)
+            struct.pack_into(
+                formats[disp_size], self.buf,
+                sec.raw_ptr + moved_position(ins_off) + disp_off, new_disp,
+            )
 
     def grow_bss_section(self, sec_index: int, section_offset: int, size: int):
         if size <= 0:
