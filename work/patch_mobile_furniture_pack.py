@@ -3845,6 +3845,27 @@ NEW_FURNITURE_ITEMS = [
         "donor_fmap": "YogaGearStd.png.fmap",
         "section_name": "Accessory/Small Decor",
     },
+    {
+        # Dropped from the store on request, but the furniture record stays.
+        # A save written by a build that had it still names item 0x32E, and
+        # CFurnitureManager::LoadState hands an unknown id to
+        # LookupFurnitureInfo, which falls back to the first furniture record --
+        # the placed table would come back as an unrelated object with the
+        # wrong art, footprint and behaviour. "list": None keeps the record
+        # loadable while leaving it out of every store section.
+        "name": "PingPongTableStd",
+        "item_id": 0x32E,
+        "donor": 0x20C,          # Pool Table
+        "list": None,
+        "price": 12000,          # the Pool Table's own price
+        "lock_generation": 4,
+        "item_type": 5,
+        "short_description": "Ping-Pong Table",
+        "long_description": "Rally back and forth with a friend on this ping-pong table.",
+        "art_png": "PingPongTableStd.png",
+        "donor_fmap": "PoolTableStd.png.fmap",
+        "section_name": "Furniture/Placeable",
+    },
 ]
 
 NEW_FURNITURE_ART_DIR = ROOT / "patcher_assets" / "new_furniture_art"
@@ -10928,6 +10949,10 @@ def patch_inventory_manager(manifest):
     obj = CoffObject(PATCHED / "InventoryManager.obj")
     by_list = {}
     for idx, item in enumerate(ITEMS):
+        if item[2] is None:
+            # A tombstone: the furniture record exists so old saves resolve,
+            # but the item belongs to no store section.
+            continue
         by_list.setdefault(item[2], []).append(item_id_for(idx))
     for pet in PET_STORE_ADDITIONS:
         by_list.setdefault(pet["list"], []).append(pet["item_id"])
