@@ -111,7 +111,9 @@ def _validate_furniture(image: LinkedPE, manifest: dict, furniture_enabled: bool
     _require(manual.get("stock_first") is True, f"{image.path}: stock-first dispatch is not preserved")
     _require(manual.get("stock_false_fallthrough") is True, f"{image.path}: stock false fallthrough is not preserved")
     _require(autonomous.get("item_count") == 23, f"{image.path}: autonomous item count drifted")
-    _require(autonomous.get("external_candidate_count") == 12, f"{image.path}: autonomous candidate count drifted")
+    # 13 since FixingTreeDecorations (0x19D) was enabled as an autonomous
+    # candidate. Pinned at 12 this rejected every otherwise-valid build.
+    _require(autonomous.get("external_candidate_count") == 13, f"{image.path}: autonomous candidate count drifted")
 
     evidence = manifest.get("MobileFurnitureBehaviorEvidence", {})
     _require(evidence.get("mobile_item_count") == 63, f"{image.path}: mobile furniture record count drifted")
