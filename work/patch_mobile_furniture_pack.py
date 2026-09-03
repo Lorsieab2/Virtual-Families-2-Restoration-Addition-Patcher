@@ -676,6 +676,33 @@ OUTFIT_STORE_BODY_VALUES = OUTFIT_BASE_BODY_VALUES + HOLIDAY_BODY_VALUES
 OUTFIT_STORE_ENTRY_COUNT = len(OUTFIT_STORE_GENDERS) * len(OUTFIT_STORE_BODY_VALUES)
 OUTFIT_STORE_PRICE = 75
 OUTFIT_STORE_HOLIDAY_PRICE = 500
+# Hairstyle (head) store rows. These mirror the outfit rows exactly: the same
+# gClothingList registration, the same icon/descriptor pipeline and the same
+# tool-tray selection route, differing only in which villager field the tool
+# writes -- head at +0x6A80 instead of body at +0x6A84.
+#
+# The bases sit above the outfit ranges (female 0x400-0x435, male 0x440-0x475)
+# and are the values the generated C already expects in
+# kVF2HeadStore{Female,Male}Base.
+HEAD_STORE_GENDERS = OUTFIT_STORE_GENDERS
+HEAD_STORE_GENDER_ITEM_BASES = {
+    "female": 0x480,
+    "male": 0x4C0,
+}
+# The head sheets are 24 frames wide by 50 heads tall, so there are exactly 50
+# selectable hairstyles per gender -- the count the generated C pins as
+# kVF2HeadStoreValueCount.
+HEAD_STORE_VALUE_COUNT = 50
+HEAD_STORE_HEAD_VALUES = tuple(range(HEAD_STORE_VALUE_COUNT))
+HEAD_STORE_ENTRY_COUNT = len(HEAD_STORE_GENDERS) * len(HEAD_STORE_HEAD_VALUES)
+HEAD_STORE_PRICE = OUTFIT_STORE_PRICE
+# Front-facing frame of the 24-frame head row, used for the store icon.
+HEAD_STORE_ICON_FRAME = 5
+HEAD_STORE_ICON_SOURCE_SHEETS = {
+    "female": "female_heads00.png",
+    "male": "male_heads00.png",
+}
+HEAD_STORE_CELL_SIZE = (28, 56)
 HOLIDAY_BODY_CELL_SIZE = 91
 HOLIDAY_BODY_ROLE_SPECS = [
     {
@@ -2554,6 +2581,27 @@ CHARACTER_SHEET_SPECS = {
         "original_grid": (2, 50),
     },
 }
+# The head store is sized from the real sheets: 50 head rows of 24 frames at
+# 28x56. Checking it here means a sheet change cannot silently desync the store
+# row count, the icon crops or the generated kVF2HeadStoreValueCount.
+for _head_sheet in ("female_heads", "male_heads"):
+    _spec = CHARACTER_SHEET_SPECS[_head_sheet]
+    if _spec["original_grid"][1] != HEAD_STORE_VALUE_COUNT:
+        raise RuntimeError(
+            f"{_head_sheet} has {_spec['original_grid'][1]} head rows but the "
+            f"head store is sized for {HEAD_STORE_VALUE_COUNT}"
+        )
+    if tuple(_spec["cell_size"]) != HEAD_STORE_CELL_SIZE:
+        raise RuntimeError(
+            f"{_head_sheet} cell size {_spec['cell_size']} does not match the "
+            f"head store's {HEAD_STORE_CELL_SIZE}"
+        )
+    if HEAD_STORE_ICON_FRAME >= _spec["original_grid"][0]:
+        raise RuntimeError(
+            f"head icon frame {HEAD_STORE_ICON_FRAME} is outside "
+            f"{_head_sheet}'s {_spec['original_grid'][0]} frames"
+        )
+
 ORIG_STRING_COUNT = 0xA5D
 ORIG_STRING_ONE_PAST_MAX = 0xA69
 ORIG_STRING_GET_MAX_MINUS_ONE = 0xA67
@@ -5774,6 +5822,48 @@ def outfit_store_entry_index(gender, body_value):
     return OUTFIT_STORE_GENDERS.index(gender) * len(OUTFIT_STORE_BODY_VALUES) + OUTFIT_STORE_BODY_VALUES.index(body_value)
 
 
+def head_item_id_for_head(gender, head_value):
+    return HEAD_STORE_GENDER_ITEM_BASES[gender] + head_value
+
+
+def head_for_item(item_id):
+    for gender, base in HEAD_STORE_GENDER_ITEM_BASES.items():
+        head_value = item_id - base
+        if head_value in HEAD_STORE_HEAD_VALUES:
+            return gender, head_value
+    return None
+
+
+def head_store_entry_index(gender, head_value):
+    return (
+        HEAD_STORE_GENDERS.index(gender) * len(HEAD_STORE_HEAD_VALUES)
+        + HEAD_STORE_HEAD_VALUES.index(head_value)
+    )
+
+
+def head_store_entries():
+    """The hairstyle rows, one per head value per gender.
+
+    Mirrors outfit_store_entries(): same shape, same section, so both feed the
+    identical gClothingList registration and icon pipeline.
+    """
+    entries = []
+    for gender in HEAD_STORE_GENDERS:
+        gender_title = gender.title()
+        for head_value in HEAD_STORE_HEAD_VALUES:
+            entries.append({
+                "entry_index": head_store_entry_index(gender, head_value),
+                "item_id": head_item_id_for_head(gender, head_value),
+                "gender": gender,
+                "head_value": head_value,
+                "name": f"{gender_title} Hairstyle {head_value:02d}",
+                "price": HEAD_STORE_PRICE,
+                "lock_generation": 0,
+                "source": "head sheet row",
+            })
+    return entries
+
+
 def outfit_store_entries():
     entries = []
     for gender in OUTFIT_STORE_GENDERS:
@@ -5998,6 +6088,32 @@ def outfit_icon_path(gender, body_value):
     return f"OutfitIcons/{gender.title()}_Body_{body_value:02d}.png"
 
 
+def head_icon_image_base(holiday_body_descriptor_count=0):
+    """Hairstyle store icons, appended after every existing image block.
+
+    Appending rather than inserting keeps every id already assigned above
+    unchanged, so adding the hairstyle rows cannot shift the outfit icons,
+    renovation art or Bathroom 2 descriptors.
+    """
+    base = renovation_curtain_image_base(holiday_body_descriptor_count)
+    if ENABLE_MOBILE_RENOVATIONS:
+        base += len(MOBILE_RENOVATION_CURTAIN_COLOR_ORDER)
+    if ENABLE_AI_GENERATED_BATHROOM2:
+        base += len(MOBILE_RENOVATION_CURTAIN_COLOR_ORDER)
+    return base
+
+
+def head_icon_image_id(gender, head_value, holiday_body_descriptor_count=0):
+    return (
+        head_icon_image_base(holiday_body_descriptor_count)
+        + head_store_entry_index(gender, head_value)
+    )
+
+
+def head_icon_path(gender, head_value):
+    return f"HairstyleIcons/{gender.title()}_Head_{head_value:02d}.png"
+
+
 def holiday_ornament_collection_image_base(holiday_body_descriptor_count=0):
     return (
         mobile_renovation_image_base(holiday_body_descriptor_count)
@@ -6140,6 +6256,20 @@ def divorce_spouse_string_ids():
 def same_sex_marriage_string_ids():
     first_id = divorce_spouse_string_ids()[1] + 1
     return first_id, first_id + 1
+
+
+def head_store_string_base():
+    """First string id for the hairstyle rows.
+
+    Appended after every existing block so adding hairstyles cannot shift any
+    id already assigned -- the same reason their image ids go last.
+    """
+    return same_sex_marriage_string_ids()[1] + 1
+
+
+def head_string_ids_for_entry(entry_index):
+    base = head_store_string_base() + entry_index * 2
+    return base, base + 1
 
 
 def villager_body_image_base():
@@ -7434,6 +7564,106 @@ def _find_outfit_icon_action_frame(gender, body_value):
             f"{HOLIDAY_BODY_CELL_SIZE}x{required_height}"
         )
     return None, None, missing
+
+
+def _find_head_icon_sheet(gender, head_value):
+    """Locate a head sheet big enough to hold this head row.
+
+    Mirrors _find_outfit_icon_action_frame, but heads use their own 28x56 cell
+    and a fixed front-facing frame rather than the sheet's last column.
+    """
+    sheet_name = HEAD_STORE_ICON_SOURCE_SHEETS[gender]
+    cell_w, cell_h = HEAD_STORE_CELL_SIZE
+    required_height = (head_value + 1) * cell_h
+    required_width = (HEAD_STORE_ICON_FRAME + 1) * cell_w
+    missing = []
+    for root in _outfit_icon_source_roots():
+        candidate = root / sheet_name
+        if not candidate.exists():
+            continue
+        size = read_png_size(candidate)
+        if not size:
+            missing.append(f"{candidate}: unreadable PNG size")
+            continue
+        if size[0] >= required_width and size[1] >= required_height:
+            return candidate, missing
+        missing.append(
+            f"{candidate}: size {size}, required at least "
+            f"{required_width}x{required_height}"
+        )
+    return None, missing
+
+
+def sync_head_store_icon_art(manifest):
+    """Generate one store-preview icon per added hairstyle row.
+
+    Every icon is cut from the game's own head sheet -- the front-facing frame
+    of that head's row -- so the store shows the real hairstyle art. No icon is
+    drawn or generated from anything else.
+    """
+    from PIL import Image
+
+    output_root = OUT / "Images" / "HairstyleIcons"
+    output_root.mkdir(parents=True, exist_ok=True)
+    entries = []
+    missing = []
+    issues = []
+    sheet_cache = {}
+    cell_w, cell_h = HEAD_STORE_CELL_SIZE
+    holiday_desc = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
+
+    try:
+        for entry in head_store_entries():
+            gender = entry["gender"]
+            head_value = entry["head_value"]
+            target = output_root / f"{gender.title()}_Head_{head_value:02d}.png"
+            source, skipped = _find_head_icon_sheet(gender, head_value)
+            if not source:
+                missing.append(HEAD_STORE_ICON_SOURCE_SHEETS[gender])
+                missing.extend(skipped)
+                continue
+            if source not in sheet_cache:
+                sheet_cache[source] = Image.open(source).convert("RGBA")
+            sheet = sheet_cache[source]
+            icon = sheet.crop((
+                HEAD_STORE_ICON_FRAME * cell_w,
+                head_value * cell_h,
+                (HEAD_STORE_ICON_FRAME + 1) * cell_w,
+                (head_value + 1) * cell_h,
+            ))
+            icon.save(target)
+            entries.append({
+                "item_id": hex(entry["item_id"]),
+                "gender": gender,
+                "head_value": head_value,
+                "image_id": hex(head_icon_image_id(gender, head_value, holiday_desc)),
+                "path": str(target.relative_to(OUT / "Images")).replace("\\", "/"),
+                "source": str(source),
+                "source_kind": "head_sheet_front_frame",
+                "source_frame": HEAD_STORE_ICON_FRAME,
+                "size": list(icon.size),
+            })
+    except Exception as exc:
+        issues.append({"reason": str(exc)})
+    finally:
+        for image in sheet_cache.values():
+            image.close()
+
+    manifest["head_store_icons"] = {
+        "status": "generated" if len(entries) == HEAD_STORE_ENTRY_COUNT else "partial_or_failed",
+        "root": str(output_root),
+        "image_base": hex(head_icon_image_base(holiday_desc)),
+        "source_rule": {
+            "sheets": HEAD_STORE_ICON_SOURCE_SHEETS,
+            "frame": f"frame {HEAD_STORE_ICON_FRAME} (front-facing) of the 24-frame row",
+            "cell": list(HEAD_STORE_CELL_SIZE),
+        },
+        "expected_count": HEAD_STORE_ENTRY_COUNT,
+        "generated_count": len(entries),
+        "entries": entries,
+        "missing": missing,
+        "issues": issues,
+    }
 
 
 def sync_outfit_store_icon_art(manifest):
@@ -10958,6 +11188,11 @@ def patch_inventory_manager(manifest):
         by_list.setdefault(pet["list"], []).append(pet["item_id"])
     outfit_entries = outfit_store_entries()
     outfit_ids = [entry["item_id"] for entry in outfit_entries]
+    # Hairstyle rows share the Clothing and Hairstyles section with the
+    # outfits, so they extend the same list in the same insertion.
+    head_entries = head_store_entries()
+    head_ids = [entry["item_id"] for entry in head_entries]
+    clothing_ids = outfit_ids + head_ids
 
     list_manifest = {}
     # Insert from highest section offset to lowest to reduce offset surprises.
@@ -10977,17 +11212,19 @@ def patch_inventory_manager(manifest):
 
     clothing_sym = obj.symbol(GCLOTHINGLIST)
     clothing_old_count = 6
-    clothing_new_count = clothing_old_count + len(outfit_ids)
+    clothing_new_count = clothing_old_count + len(clothing_ids)
     holiday_desc_count = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
     obj.insert_section_bytes(
         clothing_sym.section,
         clothing_sym.value + clothing_old_count * 4,
-        struct.pack("<" + "I" * len(outfit_ids), *outfit_ids),
+        struct.pack("<" + "I" * len(clothing_ids), *clothing_ids),
     )
     list_manifest["gClothingList"] = {
         "old_count": clothing_old_count,
         "new_count": clothing_new_count,
-        "added_ids": [hex(x) for x in outfit_ids],
+        "added_ids": [hex(x) for x in clothing_ids],
+        "outfit_ids": [hex(x) for x in outfit_ids],
+        "hairstyle_ids": [hex(x) for x in head_ids],
     }
 
     new_max = max_item_offset()
@@ -11031,9 +11268,38 @@ def patch_inventory_manager(manifest):
     item_sec = obj.section(item_sym.section)
     clothing_bounds_off = item_sym.value + 0x313
     clothing_bounds_raw = item_sec.raw_ptr + clothing_bounds_off
-    if obj.buf[clothing_bounds_raw : clothing_bounds_raw + 3] != b"\x83\xFE\x05":
+    # cmp esi,5 / ja $LN55 -- the clothing category's bounds check.
+    #
+    # This must not stay in the 3-byte "83 FE ib" form once the category
+    # holds more than 128 rows. That encoding sign-extends its imm8, so a max
+    # index of 213 would be written as 0xD5 and compared as 0xFFFFFFD5; the
+    # JA that follows is unsigned, so the guard would admit almost any index
+    # and GetCategoryItem would read past the end of gClothingList. The whole
+    # compare is rewritten as the 6-byte "81 FE id" form, which carries a
+    # real 32-bit immediate, and the 6-byte JA after it is re-emitted with
+    # its original rel32 so the branch still lands on $LN55.
+    clothing_max_index = clothing_new_count - 1
+    original = bytes(obj.buf[clothing_bounds_raw : clothing_bounds_raw + 9])
+    if original[:3] != b"\x83\xFE\x05" or original[3:5] != b"\x0F\x87":
         raise RuntimeError("Unexpected GetCategoryItem clothing bounds bytes")
-    obj.buf[clothing_bounds_raw : clothing_bounds_raw + 3] = b"\x83\xFE" + bytes([clothing_new_count - 1])
+    ja_rel32 = struct.unpack_from("<i", original, 5)[0]
+    widened = (
+        b"\x81\xFE" + struct.pack("<I", clothing_max_index)
+        + b"\x0F\x87" + struct.pack("<i", ja_rel32)
+    )
+    # 12 bytes replace 9, so the extra 3 are inserted rather than written
+    # over the instruction that follows.
+    obj.buf[clothing_bounds_raw : clothing_bounds_raw + 9] = widened[:9]
+    obj.insert_section_bytes(item_sym.section, clothing_bounds_off + 9, widened[9:])
+    clothing_bounds_patch = {
+        "function": "CInventoryManager::GetCategoryItem",
+        "offset": hex(0x313),
+        "old_bytes": original[:9].hex(),
+        "new_bytes": widened.hex(),
+        "max_index": clothing_max_index,
+        "encoding": "81 FE id (32-bit immediate)",
+        "reason": "83 FE ib sign-extends its immediate, which disables the guard past 128 rows",
+    }
 
     count_sym = obj.symbol(GET_CATEGORY_ITEM_COUNT)
     count_sec = obj.section(count_sym.section)
@@ -11230,6 +11496,19 @@ def patch_inventory_manager(manifest):
             "new_count": clothing_new_count,
             "body_values": list(OUTFIT_STORE_BODY_VALUES),
             "genders": list(OUTFIT_STORE_GENDERS),
+            "clothing_bounds_patch": clothing_bounds_patch,
+            "hairstyle_items": [
+                {
+                    "item_id": hex(entry["item_id"]),
+                    "gender": entry["gender"],
+                    "head_value": entry["head_value"],
+                    "name": entry["name"],
+                    "price": entry["price"],
+                    "source": entry["source"],
+                    "icon_image_id": hex(head_icon_image_id(entry["gender"], entry["head_value"], holiday_desc_count)),
+                }
+                for entry in head_entries
+            ],
             "items": [
                 {
                     "item_id": hex(entry["item_id"]),
@@ -12324,6 +12603,8 @@ static const int kVF2MaleOutfitTrayItem = 0x49;
 static const int kVF2FemaleOutfitTrayItem = 0x4A;
 static const int kVF2OutfitStoreShortStringBase = {first_short};
 static const int kVF2OutfitStoreIconImageBase = {outfit_icon_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
+static const int kVF2HeadStoreIconImageBase = {head_icon_image_base(holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0)};
+static const int kVF2HeadStoreShortStringBase = {head_store_string_base()};
 static const int kVF2OutfitStoreIconCellSize = {HOLIDAY_BODY_CELL_SIZE};
 static const int kVF2VisibleSpecialUpgradeFirstItem = {min(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)};
 static const int kVF2VisibleSpecialUpgradeCount = {len(VISIBLE_SPECIAL_UPGRADE_ICON_FILES)};
@@ -12612,6 +12893,92 @@ static int VF2OutfitStoreEntryIndex(int itemId) {{
     return -1;
 }}
 
+// ---- Hairstyle rows -------------------------------------------------------
+// The game has no hairstyle tool, so hairstyles ride the outfit tool.
+// Applying that tool is one instruction, mov [villager+0x6A84], value, and the
+// head sits immediately before the body at +0x6A80 -- confirmed from the
+// villager to peep-record copy, where 0x6A80 lands on record+0x20 (head) and
+// 0x6A84 on record+0x24 (body). Both tool arms call the thunks below, which
+// pick the field instead of always writing the body.
+static const int kVF2HeadStoreFemaleBase = {HEAD_STORE_GENDER_ITEM_BASES["female"]};
+static const int kVF2HeadStoreMaleBase = {HEAD_STORE_GENDER_ITEM_BASES["male"]};
+static const int kVF2HeadStoreValueCount = {HEAD_STORE_VALUE_COUNT};
+static const int kVF2VillagerHeadOffset = 0x6A80;
+static const int kVF2VillagerBodyOffset = 0x6A84;
+static int gVF2LastSyntheticHeadByGender[2] = {{0, 0}};
+
+static int VF2HeadValueForItem(int itemId) {{
+    int value = itemId - kVF2HeadStoreFemaleBase;
+    if (value >= 0 && value < kVF2HeadStoreValueCount) return value;
+    value = itemId - kVF2HeadStoreMaleBase;
+    if (value >= 0 && value < kVF2HeadStoreValueCount) return value;
+    return -1;
+}}
+
+static int VF2HeadGenderForItem(int itemId) {{
+    if (itemId - kVF2HeadStoreFemaleBase >= 0 &&
+        itemId - kVF2HeadStoreFemaleBase < kVF2HeadStoreValueCount) return 0;
+    if (itemId - kVF2HeadStoreMaleBase >= 0 &&
+        itemId - kVF2HeadStoreMaleBase < kVF2HeadStoreValueCount) return 1;
+    return -1;
+}}
+
+// Field-picking thunk for the *callsite-replacement* route: hook the single
+// mov [villager+0x6A84], value instruction and let it write the head instead
+// when a hairstyle is pending. It is deliberately NOT installed. Replacing
+// that final-apply callsite is exactly what made generated Outfit-section
+// items crash on apply in B96, and it has stayed disabled since; the shipped
+// route instead goes through VF2ApplyPendingHairstyle, which writes the head
+// from the resolver and hands the stock write back the body it already had.
+//
+// Kept because it is the tested shape to use if the callsite is ever made
+// safe, and because it documents which field each arm of the tool touches.
+extern "C" void __cdecl VF2ApplyOutfitToolField(
+    void *villagerPtr, int value, int gender) {{
+    unsigned char *villager = (unsigned char *)villagerPtr;
+    if (!villager) return;
+    int selected = (gender == 0 || gender == 1)
+        ? gVF2LastSyntheticHeadByGender[gender]
+        : 0;
+    int head = selected ? VF2HeadValueForItem(selected) : -1;
+    if (head >= 0) {{
+        // A hairstyle is selected, so this use of the tool changes the head
+        // and leaves the body exactly as it was.
+        *(int *)(villager + kVF2VillagerHeadOffset) = head;
+        return;
+    }}
+    *(int *)(villager + kVF2VillagerBodyOffset) = value;
+}}
+
+// Records a hairstyle selection. This is the write half that
+// gVF2LastSyntheticHeadByGender was missing: without it every reader below
+// could only ever see 0 and return -1, which is why the mechanism was inert.
+// It mirrors VF2SetStockOutfitBodyForSyntheticItem exactly, except that a head
+// has no InventoryManager mirror field -- the value is carried to the apply
+// path in this array alone.
+static void VF2SetSelectedHeadForSyntheticItem(int itemId) {{
+    int gender = VF2HeadGenderForItem(itemId);
+    if (gender < 0) {{
+        return;
+    }}
+    gVF2LastSyntheticHeadByGender[gender] = itemId;
+    // A hairstyle and an outfit are mutually exclusive uses of the one tool,
+    // so selecting a hairstyle clears any outfit pending for that gender.
+    // Otherwise the outfit branch in VF2GetOutfitStoreBodyValue, which is
+    // tested first, would keep winning and the hairstyle would never apply.
+    gVF2LastSyntheticOutfitByGender[gender] = 0;
+}}
+
+// The stock tool-tray item a hairstyle rides on. Hairstyles have no tool of
+// their own, so they borrow the outfit tool for their gender.
+static int VF2HeadStockTrayItemForItem(int itemId) {{
+    int gender = VF2HeadGenderForItem(itemId);
+    if (gender < 0) {{
+        return -1;
+    }}
+    return gender == 0 ? kVF2FemaleOutfitTrayItem : kVF2MaleOutfitTrayItem;
+}}
+
 static int VF2OutfitBodyForItem(int itemId) {{
     int index = VF2OutfitStoreEntryIndex(itemId);
     return index < 0 ? -1 : index % kVF2OutfitStoreBodyCount;
@@ -12648,12 +13015,60 @@ static void VF2SetStockOutfitBodyForSyntheticItem(int itemId) {{
 }}
 
 static int VF2SelectedSyntheticOutfitFromToolTray();
+static int VF2SelectedSyntheticHeadFromToolTray();
 
+
+// The villager the outfit tool is being applied to. CVillagerManager::MakeInFocus
+// writes that villager's index to theGameState+0x25CC4 immediately before the
+// apply path calls GetOutfit, so the target is already recorded by the time
+// this hook runs. -1 means nothing is in focus.
+static unsigned char *VF2OutfitToolTargetVillager() {{
+    unsigned char *state = (unsigned char *)theGameState::Get();
+    if (!state) return 0;
+    int index = *(int *)(state + 0x25CC4);
+    if (index < 0 || index >= 30) return 0;
+    return (unsigned char *)&VillagerManager + 0x1CC70 + index * 0x1CC0C;
+}}
+
+// A hairstyle rides the outfit tool: write the head here and hand back the
+// villager's current body, so the stock write that follows puts the body back
+// exactly as it was. Nothing on the apply path is retargeted -- that callsite
+// replacement is what crashed in B96 and has stayed disabled since.
+static int VF2ApplyPendingHairstyle(int stockGender) {{
+    if (stockGender < 0 || stockGender > 1) return -1;
+    // Prefer what the tray is holding right now; fall back to the last
+    // recorded selection for this gender.
+    int selected = VF2SelectedSyntheticHeadFromToolTray();
+    if (!selected || VF2HeadGenderForItem(selected) != stockGender) {{
+        selected = gVF2LastSyntheticHeadByGender[stockGender];
+    }}
+    if (!selected) return -1;
+    int head = VF2HeadValueForItem(selected);
+    if (head < 0) return -1;
+    unsigned char *villager = VF2OutfitToolTargetVillager();
+    if (!villager) return -1;
+    *(int *)(villager + kVF2VillagerHeadOffset) = head;
+    return *(int *)(villager + kVF2VillagerBodyOffset);
+}}
 
 extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
     int body = VF2OutfitBodyForItem(itemId);
     if (body >= 0) {{
         return body;
+    }}
+
+    int stockGender = itemId == kVF2FemaleOutfitTrayItem ? 0 : (itemId == kVF2MaleOutfitTrayItem ? 1 : -1);
+
+    // What the tray is holding right now wins over anything recorded earlier,
+    // whether it is a hairstyle or an outfit. Checking the live hairstyle
+    // first matters because the two share this one tool: if an outfit were
+    // tested first, a hairstyle picked afterwards could never take effect.
+    int liveHead = VF2SelectedSyntheticHeadFromToolTray();
+    if (liveHead && VF2HeadStockTrayItemForItem(liveHead) == itemId) {{
+        int hairstyleBody = VF2ApplyPendingHairstyle(stockGender);
+        if (hairstyleBody >= 0) {{
+            return hairstyleBody;
+        }}
     }}
 
     int liveSelected = VF2SelectedSyntheticOutfitFromToolTray();
@@ -12668,7 +13083,12 @@ extern "C" int __cdecl VF2GetOutfitStoreBodyValue(int itemId) {{
             return VF2OutfitBodyForItem(selected);
         }}
     }}
-    int stockGender = itemId == kVF2FemaleOutfitTrayItem ? 0 : (itemId == kVF2MaleOutfitTrayItem ? 1 : -1);
+    // No live selection: fall back to the last hairstyle recorded for this
+    // gender before the last outfit, mirroring the order above.
+    int hairstyleBody = VF2ApplyPendingHairstyle(stockGender);
+    if (hairstyleBody >= 0) {{
+        return hairstyleBody;
+    }}
     if (stockGender >= 0) {{
         int selected = gVF2LastSyntheticOutfitByGender[stockGender];
         if (selected && VF2OutfitStockTrayItemForItem(selected) == itemId) {{
@@ -12777,6 +13197,16 @@ extern "C" int __fastcall VF2StoreDrawNumAvailable(
 }}
 
 extern "C" bool __cdecl VF2PurchaseOutfitStoreItem(int itemId) {{
+    // A hairstyle row buys exactly like an outfit row: record the selection,
+    // put the item in the tool tray, save. It rides the same outfit tool, so
+    // there is no separate tool to add.
+    if (VF2HeadValueForItem(itemId) >= 0) {{
+        VF2SetSelectedHeadForSyntheticItem(itemId);
+        ToolTray.AddItem((EInventoryItem)itemId, 1);
+        theGameState::Get()->SaveCurrentGame();
+        return true;
+    }}
+
     int body = VF2OutfitBodyForItem(itemId);
     if (body < 0) {{
         return false;
@@ -12809,15 +13239,36 @@ extern "C" int __cdecl VF2NormalizeOutfitToolInHand(void* tray, int activeFlagOf
     }}
 
     int itemId = *(int*)(base + slot * 8);
+    int headStockItem = VF2HeadStockTrayItemForItem(itemId);
+    if (headStockItem >= 0) {{
+        // A hairstyle is in hand. It rides the outfit tool, so report that
+        // tool to the caller and record which head it should write.
+        if (selectedSlot) *selectedSlot = itemId;
+        VF2SetSelectedHeadForSyntheticItem(itemId);
+        return headStockItem;
+    }}
+
     int stockItem = VF2OutfitStockTrayItemForItem(itemId);
     if (stockItem >= 0) {{
         if (selectedSlot) *selectedSlot = itemId;
         VF2SetStockOutfitBodyForSyntheticItem(itemId);
+        // An outfit and a hairstyle are mutually exclusive uses of the one
+        // tool, so picking an outfit clears any pending hairstyle.
+        int outfitGender = VF2OutfitGenderForItem(itemId);
+        if (outfitGender >= 0) gVF2LastSyntheticHeadByGender[outfitGender] = 0;
         return stockItem;
     }}
 
-    if (itemId == kVF2FemaleOutfitTrayItem) gVF2LastSyntheticOutfitByGender[0] = 0;
-    if (itemId == kVF2MaleOutfitTrayItem) gVF2LastSyntheticOutfitByGender[1] = 0;
+    // The bare stock tool: neither a synthetic outfit nor a hairstyle is
+    // pending for that gender any more.
+    if (itemId == kVF2FemaleOutfitTrayItem) {{
+        gVF2LastSyntheticOutfitByGender[0] = 0;
+        gVF2LastSyntheticHeadByGender[0] = 0;
+    }}
+    if (itemId == kVF2MaleOutfitTrayItem) {{
+        gVF2LastSyntheticOutfitByGender[1] = 0;
+        gVF2LastSyntheticHeadByGender[1] = 0;
+    }}
     if (selectedSlot) *selectedSlot = 0;
     return itemId;
 }}
@@ -12834,8 +13285,31 @@ static int VF2SelectedSyntheticOutfitFromToolTray() {{
     return 0;
 }}
 
+// The hairstyle counterpart: which head row, if any, is the tool currently
+// holding. Read live from the tray so a selection made this session is seen
+// even before any normalisation pass has recorded it.
+static int VF2SelectedSyntheticHeadFromToolTray() {{
+    unsigned char* base = (unsigned char*)&ToolTray;
+    int slot = *(int*)(base + 0xA0);
+    if (slot >= 0 && slot < 9 && (base[0xA4] || base[0xA5])) {{
+        int itemId = *(int*)(base + slot * 8);
+        if (VF2HeadValueForItem(itemId) >= 0) {{
+            return itemId;
+        }}
+    }}
+    return 0;
+}}
+
 extern "C" int __cdecl VF2ResolveOutfitBodyForApply(int stockItem, int villagerGender) {{
     int stockGender = stockItem == kVF2FemaleOutfitTrayItem ? 0 : (stockItem == kVF2MaleOutfitTrayItem ? 1 : -1);
+    // A pending hairstyle writes the head here and hands back the villager's
+    // existing body, so the stock body write that follows is a no-op. Same
+    // contract as the VF2GetOutfitStoreBodyValue arm, for the apply route that
+    // reaches the tool this way instead.
+    int hairstyleBody = VF2ApplyPendingHairstyle(stockGender);
+    if (hairstyleBody >= 0) {{
+        return hairstyleBody;
+    }}
     int selected = VF2SelectedSyntheticOutfitFromToolTray();
     if (selected && VF2OutfitStockTrayItemForItem(selected) == stockItem) {{
         return VF2OutfitBodyForItem(selected);
@@ -12855,7 +13329,20 @@ extern "C" int __cdecl VF2ResolveOutfitBodyForApply(int stockItem, int villagerG
     return villagerGender == 0 ? InventoryManager.maleOutfitBody : InventoryManager.femaleOutfitBody;
 }}
 
+// Hairstyle rows sit in the same store section as the outfits and use the
+// same accessors, keyed on their own 0x480/0x4C0 ranges.
+static int VF2HeadStoreEntryIndex(int itemId) {{
+    int gender = VF2HeadGenderForItem(itemId);
+    if (gender < 0) return -1;
+    int head = VF2HeadValueForItem(itemId);
+    if (head < 0) return -1;
+    return gender * kVF2HeadStoreValueCount + head;
+}}
+
 extern "C" int __cdecl VF2GetOutfitStorePrice(int itemId) {{
+    if (VF2HeadValueForItem(itemId) >= 0) {{
+        return {HEAD_STORE_PRICE};
+    }}
     int body = VF2OutfitBodyForItem(itemId);
     if (body < 0) {{
         return -1;
@@ -12865,6 +13352,7 @@ extern "C" int __cdecl VF2GetOutfitStorePrice(int itemId) {{
 
 extern "C" int __cdecl VF2GetOutfitStoreLockGeneration(int itemId) {{
     if (gVF2UnlockEverythingInStore != 0) return 0;
+    if (VF2HeadValueForItem(itemId) >= 0) return 0;
     return VF2OutfitBodyForItem(itemId) < 0 ? -1 : 0;
 }}
 
@@ -12882,16 +13370,28 @@ extern "C" int __cdecl VF2GetOutfitStoreLockState(int itemId) {{
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreShortDesc(int itemId) {{
+    int headIndex = VF2HeadStoreEntryIndex(itemId);
+    if (headIndex >= 0) {{
+        return kVF2HeadStoreShortStringBase + headIndex * 2;
+    }}
     int index = VF2OutfitStoreEntryIndex(itemId);
     return index < 0 ? -1 : kVF2OutfitStoreShortStringBase + index * 2;
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreLongDesc(int itemId) {{
+    int headIndex = VF2HeadStoreEntryIndex(itemId);
+    if (headIndex >= 0) {{
+        return kVF2HeadStoreShortStringBase + headIndex * 2 + 1;
+    }}
     int index = VF2OutfitStoreEntryIndex(itemId);
     return index < 0 ? -1 : kVF2OutfitStoreShortStringBase + index * 2 + 1;
 }}
 
 extern "C" int __cdecl VF2GetOutfitStoreIconImage(int itemId) {{
+    int headIndex = VF2HeadStoreEntryIndex(itemId);
+    if (headIndex >= 0) {{
+        return kVF2HeadStoreIconImageBase + headIndex;
+    }}
     int index = VF2OutfitStoreEntryIndex(itemId);
     return index < 0 ? -1 : kVF2OutfitStoreIconImageBase + index;
 }}
@@ -16727,6 +17227,40 @@ def patch_string_manager(manifest):
                 "text": text,
             })
 
+    for entry in head_store_entries():
+        short_id, long_id = head_string_ids_for_entry(entry["entry_index"])
+        gender_title = entry["gender"].title()
+        rows = [
+            (
+                short_id,
+                f"eString_{gender_title}Hairstyle{entry['head_value']:02d}ShortDesc",
+                entry["name"],
+                "short",
+            ),
+            (
+                long_id,
+                f"eString_{gender_title}Hairstyle{entry['head_value']:02d}LongDesc",
+                f"Adds {entry['gender']} villager hairstyle {entry['head_value']} to the Clothing and Hairstyles store.",
+                "long",
+            ),
+        ]
+        for string_id, key, text, role in rows:
+            key_sym = f"_vf2hairstr_key_{string_id:X}"
+            text_sym = f"_vf2hairstr_text_{string_id:X}"
+            helper_lines.append(f'const char {key_sym[1:]}[] = "{c_string(key)}";')
+            helper_lines.append(f'const char {text_sym[1:]}[] = "{c_string(text)}";')
+            new_rows.append((string_id, key_sym, text_sym))
+            string_manifest.append({
+                "pc_string_id": hex(string_id),
+                "source": "hairstyle store entry",
+                "item_id": hex(entry["item_id"]),
+                "gender": entry["gender"],
+                "head_value": entry["head_value"],
+                "role": role,
+                "key": key,
+                "text": text,
+            })
+
     if ENABLE_BEHAVIOR_PATCHES:
         for index, (key, text) in enumerate(BEHAVIOR_LABELS):
             string_id = behavior_label_string_id_for(index)
@@ -18583,6 +19117,8 @@ def patch_graphics_manager(manifest):
         + (len(AI_BATHROOM2_STYLE_CATALOG) * 2 if ENABLE_AI_GENERATED_BATHROOM2 else 0)
         + (len(MOBILE_RENOVATION_CURTAIN_COLOR_ORDER) if ENABLE_MOBILE_RENOVATIONS else 0)
         + (len(MOBILE_RENOVATION_CURTAIN_COLOR_ORDER) if ENABLE_AI_GENERATED_BATHROOM2 else 0)
+        # Hairstyle store icons are appended last, after every block above.
+        + HEAD_STORE_ENTRY_COUNT
     )
     if append_count:
         obj.insert_section_bytes(img_sym.section, img_sym.value + ORIG_IMAGE_COUNT * DESC_SIZE, b"\0" * (append_count * DESC_SIZE))
@@ -18795,6 +19331,32 @@ def patch_graphics_manager(manifest):
             "item_id": hex(entry["item_id"]),
             "gender": entry["gender"],
             "body_value": entry["body_value"],
+            "image_id": hex(image_id),
+            "path": path,
+            "symbol": sym,
+            "grid": [1, 1],
+        })
+
+    head_icon_desc_manifest = []
+    for entry in head_store_entries():
+        image_id = head_icon_image_id(entry["gender"], entry["head_value"], holiday_desc_count)
+        path = head_icon_path(entry["gender"], entry["head_value"])
+        vals = plain_image_donor[:]
+        vals[0] = image_id
+        vals[1] = 0
+        vals[2] = 1
+        vals[3] = 1
+        desc_off = img_sym.value + image_id * DESC_SIZE
+        img_sec = obj.section(img_sym.section)
+        obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack("<" + "I" * (DESC_SIZE // 4), *vals)
+        sym = f"_vf2hairicon_{entry['gender']}_{entry['head_value']:02d}_png"
+        helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+        symidx = obj.append_undefined_symbol(sym)
+        obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+        head_icon_desc_manifest.append({
+            "item_id": hex(entry["item_id"]),
+            "gender": entry["gender"],
+            "head_value": entry["head_value"],
             "image_id": hex(image_id),
             "path": path,
             "symbol": sym,
@@ -19128,6 +19690,11 @@ def patch_graphics_manager(manifest):
             "image_base": hex(outfit_icon_image_base(holiday_desc_count)),
             "image_count": OUTFIT_STORE_ENTRY_COUNT,
             "descriptors": outfit_icon_desc_manifest,
+        },
+        "head_store_icons": {
+            "image_base": hex(head_icon_image_base(holiday_desc_count)),
+            "image_count": HEAD_STORE_ENTRY_COUNT,
+            "descriptors": head_icon_desc_manifest,
         },
         "mobile_renovation_images": {
             "enabled": ENABLE_MOBILE_RENOVATIONS,
@@ -32809,6 +33376,7 @@ def main():
     sync_ai_generated_bathroom2_assets(manifest)
     sync_mobile_sound_assets(manifest)
     sync_outfit_store_icon_art(manifest)
+    sync_head_store_icon_art(manifest)
     sync_visible_special_upgrade_icon_art(manifest)
     if ENABLE_HOLIDAY_ORNAMENTS:
         sync_holiday_ornament_collection_art(manifest)
