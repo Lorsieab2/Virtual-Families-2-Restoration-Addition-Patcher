@@ -15145,6 +15145,31 @@ static bool VF2IsCurrentGenerationChild(CVillager *villager) {
     return false;
 }
 
+// The couple as the family tree actually records them, with no fallback.
+//
+// VF2MarriagePair deliberately falls back to the two qualifying resident
+// adults when the parent record is unpopulated, because native Accept
+// finalization cannot write that record for a same-sex pair and the hook has
+// to bridge the gap. That fallback is right for finalizing and wrong for
+// describing: a spawned proposal candidate is one of those two adults before
+// Accept has run, so anything that asks "are these two married?" through
+// VF2MarriagePair answers yes for a proposal that was never accepted.
+//
+// Callers that report a state rather than establish one use this instead.
+static bool VF2RecordedMarriagePair(CVillager *&first, CVillager *&second) {
+    first = 0;
+    second = 0;
+
+    int generation = *(int *)((unsigned char *)&FamilyTree + 4);
+    if (generation <= 0) return false;
+    unsigned char *record =
+        (unsigned char *)&FamilyTree + generation * 0x6C8 - 0x6C0;
+    if (!record[0x1E] || !record[0xF6]) return false;
+    first = VF2VillagerByPersistentId(*(int *)(record + 0x2C));
+    second = VF2VillagerByPersistentId(*(int *)(record + 0x104));
+    return first && second && first != second;
+}
+
 static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {
     first = 0;
     second = 0;
@@ -15373,7 +15398,10 @@ extern "C" bool __cdecl VF2SameSexMarriedStatusForVillager(CVillager *viewed) {
     if (!viewed || !VF2SameSexMarriageToggleActive()) return false;
     CVillager *first;
     CVillager *second;
-    if (!VF2MarriagePair(first, second)) return false;
+    // Recorded, not resolved. Details is describing a marriage, so it must
+    // wait for UpdateParents to have written one -- otherwise an open or
+    // abandoned proposal made the original adult read as "Married".
+    if (!VF2RecordedMarriagePair(first, second)) return false;
     if (viewed != first && viewed != second) return false;
     return *(int *)((unsigned char *)first + 0x6A58) ==
         *(int *)((unsigned char *)second + 0x6A58);
