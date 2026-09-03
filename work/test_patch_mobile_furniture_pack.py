@@ -13357,7 +13357,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                             )
                             self.assertEqual(
                                 row,
-                                (achievement_id, 1, 0x1ED, 0, title_id, description_id, 0),
+                                (achievement_id, 1, 0x1ED, 0, title_id, description_id,
+                                 patcher.CUSTOM_ACHIEVEMENT_COIN_REWARDS.get(achievement_id, 0)),
                             )
                         self.assertEqual(
                             struct.unpack_from(

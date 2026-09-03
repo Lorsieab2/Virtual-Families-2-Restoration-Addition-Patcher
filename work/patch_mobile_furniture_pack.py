@@ -2222,9 +2222,17 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0xA5, "behavior", "Props to you", "You completed Tight Ship and all five additional discipline goals."),
     (0xA6, "vf3_furniture", "Furnishing the Future", "You bought a Virtual Families 3 furniture item."),
     (0xA7, "pet", "Slow and Steady", "Have a turtle in the house."),
-    (0xA8, "behavior", "Kirk Strayer", "You praised someone who was drinking a particularly complicated coffee order."),
-    (0xA9, "behavior", "Bubble Bass", "You praised someone who was eating a particularly complicated burger order."),
+    (0xA8, "behavior", "Kirk Strayer's Order", "You praised someone who was drinking a particularly complicated coffee order."),
+    (0xA9, "behavior", "Bubble Bass's Order", "You praised someone who was eating a particularly complicated burger order."),
 ]
+
+# An achievementList row's last field is its coin reward. CAchievement::Update
+# reads achievementList[id].reward and pays 25 when it is zero, so every custom
+# goal so far has quietly paid the default. These two pay 100.
+CUSTOM_ACHIEVEMENT_COIN_REWARDS = {
+    0xA8: 100,
+    0xA9: 100,
+}
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
     0x2EB: 0x61,
@@ -8304,10 +8312,13 @@ def validate_holiday_ornament_native_contract(manifest):
             0,
             title_id,
             description_id,
-            0,
+            CUSTOM_ACHIEVEMENT_COIN_REWARDS.get(achievement_id, 0),
         )
         if row != expected_row:
-            errors.append(f"achievementList row {achievement_id:#x} is not the exact B152 record")
+            errors.append(
+                f"achievementList row {achievement_id:#x} is not the record it "
+                "should be (id, target, icon, 0, title, description, reward)"
+            )
 
     load_data, _load_state_sym, _load_state_sec = function_bytes(
         achievement_obj,
@@ -19356,7 +19367,7 @@ def patch_custom_achievements(manifest):
             0,
             title_id,
             description_id,
-            0,
+            CUSTOM_ACHIEVEMENT_COIN_REWARDS.get(achievement_id, 0),
         ))
     if [row[0] for row in rows] != list(range(0x5F, CUSTOM_ACHIEVEMENT_LAST_ID + 1)):
         raise RuntimeError("Custom achievement rows are not dense through reserved capacity")
