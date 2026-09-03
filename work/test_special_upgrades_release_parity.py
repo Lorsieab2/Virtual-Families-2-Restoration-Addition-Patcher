@@ -71,6 +71,43 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             patcher.PATCHED / "vf2_special_upgrade_effects.cpp"
         ).read_text(encoding="ascii")
 
+    def _function_body(self, name):
+        """The braces-balanced body of one generated C++ function.
+
+        Assertions about "the icon resolver" have to be scoped to it. Searching
+        the whole translation unit let a persisted-state check inside the
+        resolver pass because the same string legitimately appears in the
+        toggle helper.
+        """
+        start = None
+        cursor = 0
+        while True:
+            found = self.helper.find(name + "(", cursor)
+            if found < 0:
+                break
+            cursor = found + 1
+            close = self.helper.find(")", found)
+            if close < 0:
+                continue
+            tail = self.helper[close + 1:close + 40].lstrip()
+            # A definition's parameter list is followed by its body; a call or
+            # a forward declaration is followed by a semicolon or an operator.
+            if tail.startswith("{"):
+                start = self.helper.rfind(chr(10), 0, found) + 1
+                break
+        if start is None:
+            raise AssertionError(f"no definition of {name}")
+        brace = self.helper.index("{", start)
+        depth = 0
+        for index in range(brace, len(self.helper)):
+            if self.helper[index] == "{":
+                depth += 1
+            elif self.helper[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    return self.helper[start:index + 1]
+        raise AssertionError(f"unbalanced braces in {name}")
+
     @classmethod
     def tearDownClass(cls):
         patcher.PATCHED = cls._old_patched
@@ -236,7 +273,28 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
         self.assertIn("case 0x14B: return 37;", self.helper)
         self.assertIn("case 0x14C: return 38;", self.helper)
         self.assertIn("case 0x152: return 39;", self.helper)
-        self.assertIn("VF2CheatToggleActiveByte(0x152) != 0", self.helper)
+        # The persisted accessor belongs to the ACTIVE-state helper, not to the
+        # icon resolver. Asserting it merely exists anywhere in the file let a
+        # regression written as
+        #     if (itemId == 0x152 && *VF2CheatToggleActiveByte(0x152) != 0)
+        # inside the icon resolver pass, because the negative assertion above
+        # forbids only the obsolete gVF2AllowMarriageCandidateReroll form. Scope
+        # the positive check to the active helper and forbid the accessor
+        # inside the icon resolver outright.
+        self.assertIn(
+            "VF2CheatToggleActiveByte(0x152) != 0",
+            self._function_body("VF2ApplyVisibleSpecialUpgrade"),
+        )
+        for resolver in (
+            "VF2VisibleSpecialUpgradeIconFrame",
+            "VF2VisibleSpecialUpgradeIconSourceItem",
+            "VF2GetVisibleSpecialUpgradeIconImage",
+        ):
+            self.assertNotIn(
+                "VF2CheatToggleActiveByte(0x152)", self._function_body(resolver),
+                f"{resolver} must not vary the reroll row's artwork by "
+                "persisted state",
+            )
         self.assertNotIn(
             "int index = itemId - kVF2VisibleSpecialUpgradeFirstItem",
             self.helper,

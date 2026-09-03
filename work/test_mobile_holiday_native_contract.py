@@ -91,7 +91,9 @@ class MobileHolidayNativeContractTests(unittest.TestCase):
             "VF2HandleMobileXmasTreeGroup",
             "VF2HandleMobileDreidelGroup",
             "VF2HandleMobileMenorahGroup",
-            "0x19D",
+            # 0x19D is deliberately absent from this list: FixingTreeDecorations
+            # is now an enabled autonomous candidate, so forbidding it here
+            # failed builds that correctly include it.
             "0x1A0",
             "0x1A2",
             "0x1A3",
