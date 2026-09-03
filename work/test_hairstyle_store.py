@@ -120,6 +120,38 @@ class TestHairstyleStringsAreAppended(unittest.TestCase):
         self.assertGreater(base, patcher.same_sex_marriage_string_ids()[1])
         self.assertGreater(base, patcher.divorce_spouse_string_ids()[1])
 
+    def test_the_base_clears_every_other_string_block(self):
+        # The rows take 200 ids. Basing them on the same-sex marriage pair
+        # alone collided with AI Bathroom 2, which starts at that same id, and
+        # swallowed the marriage-reroll, wellbeing, stock-ownership and
+        # details-cheat blocks that chain on after it.
+        base = patcher.head_store_string_base()
+        others = {
+            "same_sex_marriage": patcher.same_sex_marriage_string_ids()[1],
+            "divorce_spouse": patcher.divorce_spouse_string_ids()[1],
+            "marriage_reroll": patcher.marriage_candidate_reroll_string_ids()[1],
+            "ai_bathroom2": patcher.ai_bathroom2_string_ids_for(
+                len(patcher.AI_BATHROOM2_STYLE_CATALOG) - 1
+            )[1],
+            "wellbeing_cheat": patcher.wellbeing_cheat_string_ids_for(
+                len(patcher.WELLBEING_CHEAT_ITEM_IDS) - 1
+            )[1],
+            "stock_ownership_cheat": patcher.stock_ownership_cheat_string_ids_for(
+                len(patcher.STOCK_OWNERSHIP_CHEAT_ITEM_IDS) - 1
+            )[1],
+            "details_villager_cheat": patcher.details_villager_cheat_string_ids_for(
+                len(patcher.DETAILS_VILLAGER_CHEAT_ITEM_IDS) - 1
+            )[1],
+            "mobile_renovation": patcher.mobile_renovation_string_ids_for(
+                patcher.MOBILE_RENOVATION_IMAGE_COUNT - 1
+            )[1],
+        }
+        for name, last in others.items():
+            self.assertGreater(
+                base, last,
+                f"a hairstyle string id would collide with {name}",
+            )
+
     def test_two_strings_per_row_with_no_overlap(self):
         seen = set()
         for entry in patcher.head_store_entries():

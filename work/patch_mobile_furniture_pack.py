@@ -6315,10 +6315,34 @@ def same_sex_marriage_string_ids():
 def head_store_string_base():
     """First string id for the hairstyle rows.
 
-    Appended after every existing block so adding hairstyles cannot shift any
-    id already assigned -- the same reason their image ids go last.
+    The hairstyle rows take 200 ids, so they must start after the genuine
+    highest allocation -- not merely after the same-sex marriage pair. Several
+    blocks are allocated from that same pair (AI Bathroom 2 starts at exactly
+    the same id) and the marriage-reroll, wellbeing, stock-ownership and
+    details-cheat blocks chain on after it. Starting at the pair would have
+    made any matrix variant with Bathroom 2 or Cheat Upgrades enabled emit
+    duplicate string ids, so one feature's text resolved to another's.
+
+    The maximum is computed from the blocks themselves rather than written
+    down, so a block added or grown above cannot silently collide with these.
     """
-    return same_sex_marriage_string_ids()[1] + 1
+    allocated = [
+        same_sex_marriage_string_ids()[1],
+        divorce_spouse_string_ids()[1],
+        marriage_candidate_reroll_string_ids()[1],
+        holiday_ornament_collection_footer_string_ids()[-1],
+        custom_achievement_string_base(),
+        details_villager_cheat_string_ids_for(
+            len(DETAILS_VILLAGER_CHEAT_ITEM_IDS) - 1
+        )[1],
+        stock_ownership_cheat_string_ids_for(
+            len(STOCK_OWNERSHIP_CHEAT_ITEM_IDS) - 1
+        )[1],
+        wellbeing_cheat_string_ids_for(len(WELLBEING_CHEAT_ITEM_IDS) - 1)[1],
+        ai_bathroom2_string_ids_for(len(AI_BATHROOM2_STYLE_CATALOG) - 1)[1],
+        mobile_renovation_string_ids_for(MOBILE_RENOVATION_IMAGE_COUNT - 1)[1],
+    ]
+    return max(allocated) + 1
 
 
 def head_string_ids_for_entry(entry_index):
@@ -11347,10 +11371,24 @@ def patch_inventory_manager(manifest):
         b"\x81\xFE" + struct.pack("<I", clothing_max_index)
         + b"\x0F\x87" + struct.pack("<i", ja_rel32)
     )
-    # 12 bytes replace 9, so the extra 3 are inserted rather than written
-    # over the instruction that follows.
-    obj.buf[clothing_bounds_raw : clothing_bounds_raw + 9] = widened[:9]
-    obj.insert_section_bytes(item_sym.section, clothing_bounds_off + 9, widened[9:])
+    # 12 bytes replace 9, so three have to be inserted. Insert them FIRST,
+    # while the original cmp/ja pair is still intact: insert_section_bytes
+    # decodes the section to re-aim the branches that span the insertion, and
+    # it requires the insertion point to be an instruction boundary. Writing
+    # the widened pair first would leave a half-formed "ja" straddling that
+    # point -- its last three bytes still belonging to the next instruction --
+    # and the decode would reject it, stopping every build here.
+    #
+    # The gap goes immediately after the intact 9 bytes, which is a real
+    # boundary, and the branch fix-up then treats the original "ja" as ending
+    # before it. Once the section has grown, the full 12-byte sequence is
+    # written over the 9 original bytes plus the 3 new ones.
+    obj.insert_section_bytes(
+        item_sym.section, clothing_bounds_off + 9, bytes([0x90]) * 3
+    )
+    item_sec = obj.section(item_sym.section)
+    clothing_bounds_raw = item_sec.raw_ptr + clothing_bounds_off
+    obj.buf[clothing_bounds_raw : clothing_bounds_raw + 12] = widened
     clothing_bounds_patch = {
         "function": "CInventoryManager::GetCategoryItem",
         "offset": hex(0x313),
@@ -13206,6 +13244,13 @@ extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
     if (kVF2EnableB150CheatUpgrades &&
         (itemId == 0x115 || itemId == 0x116 ||
         itemId == 0x128 || itemId == 0x129 || itemId == 0x12A)) {{
+        return 1;
+    }}
+    // Hairstyle rows are registered in gClothingList alongside the outfits,
+    // so the store asks about them too. Without this they would fall through
+    // to the native getter, whose metadata table has no entry for the
+    // synthetic 0x480-0x4F1 ids.
+    if (VF2HeadValueForItem(itemId) >= 0) {{
         return 1;
     }}
     return VF2OutfitBodyForItem(itemId) < 0 ? -1 : 1;
