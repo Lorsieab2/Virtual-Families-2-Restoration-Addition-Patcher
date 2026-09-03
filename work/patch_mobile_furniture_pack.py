@@ -631,14 +631,20 @@ DESKTOP_RUNTIME_DLL_SOURCE_DIRS = (
     ROOT / "Unneeded crap" / "VF2-Desktop-Object-Analysis",
 )
 FMAP_SOURCE_DIRS = (
-    ROOT / "work" / "vf2_obb" / "assets",
-    # The proven PC-safe maps the patcher ships for the chaise family. These
-    # are tracked in the repository, so a donor taken from here is resolvable
-    # in a clean checkout without the OBB. A donor only has to be readable at
-    # build time -- copy_donor_fmap writes the bytes out under the borrowing
-    # item's own name -- so using one does not make the borrower depend on the
-    # optional Mobile Furniture Behaviors patch at runtime.
+    # The proven PC-safe maps the patcher ships. These are tracked in the
+    # repository, so a donor taken from here is resolvable in a clean checkout
+    # without the OBB. A donor only has to be readable at build time --
+    # copy_donor_fmap writes the bytes out under the borrowing item's own name
+    # -- so using one does not make the borrower depend on the optional Mobile
+    # Furniture Behaviors patch at runtime.
+    #
+    # This comes FIRST deliberately. With the OBB ahead of it, a workspace that
+    # happened to have an extract shipped the raw mobile map -- unsupported
+    # hotspot and object cells included -- while a clean checkout shipped the
+    # sanitised one. Two builds of the same commit then differed in behaviour
+    # data, and only the untested one reached anybody with an OBB.
     ROOT / "patcher_assets" / "optional_patches" / "mobile_furniture_behaviors" / "pc_fmaps",
+    ROOT / "work" / "vf2_obb" / "assets",
 )
 # Donor fmaps that exist in the base game are resolvable from the vanilla
 # runtime payload as well. Without this, the only way a stock donor such as
@@ -3984,7 +3990,10 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "list": "gFurniture5",
         "price": 250,
         "lock_generation": 12,
-        "item_type": 1,
+        # Type 5 like its donor and like the sibling Invisible Lounger. Type 1
+        # belongs to the Kiddie Pool and the Full Size Pool alone, so type 1
+        # here had native furniture logic treating a chaise as a pool.
+        "item_type": 5,
         "short_description": "Invisible Spa Lounger",
         "long_description": "This special invisible lounger allows villagers to \"give\" and \"receive\" spa treatments! (For roleplaying purposes)",
         "source_png": "Chaise_brown.png",
@@ -24522,7 +24531,10 @@ extern "C" void __fastcall VF2PatioSetPropAndTrack(
     }
 }
 
-static int VF2FurnitureItemAtPoint(ldwPoint point)
+// The placed-furniture slot under a point, or -1. This is per-instance, so two
+// copies of the same item are distinguishable -- which is what scopes a drop to
+// the piece of furniture actually under the villager.
+static int VF2FurnitureSlotAtPoint(ldwPoint point)
 {
     int index = VF2PtOnFurnitureIndex(FurnitureManager, point);
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
@@ -24530,7 +24542,28 @@ static int VF2FurnitureItemAtPoint(ldwPoint point)
     if (index < 0 || index >= count) return -1;
     unsigned char *record = manager + 0x1008 + index * 0x40;
     if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) return -1;
-    return *reinterpret_cast<int *>(record);
+    return index;
+}
+
+static int VF2FurnitureItemAtSlot(int slot)
+{
+    if (slot < 0) return -1;
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    return *reinterpret_cast<int *>(manager + 0x1008 + slot * 0x40);
+}
+
+static int VF2FurnitureItemAtPoint(ldwPoint point)
+{
+    return VF2FurnitureItemAtSlot(VF2FurnitureSlotAtPoint(point));
+}
+
+// The furniture slot a villager is standing on, sampled the same way the drop
+// path samples the villager being dropped.
+static int VF2FurnitureSlotUnderVillager(CVillager &villager)
+{
+    ldwPoint sample = villager.FeetPos();
+    sample.y -= 10;
+    return VF2FurnitureSlotAtPoint(sample);
 }
 
 static bool VF2IsMobileChaise(int item)
@@ -26605,13 +26638,19 @@ static int VF2SpaReceivingIndex(CVillager &villager)
     return -1;
 }
 
-static bool VF2SpaOccupantIndex(CVillager &dropped, CVillager **outOccupant)
+// Whoever is receiving a treatment on ONE particular lounger. Without the slot
+// check this matched anybody receiving anywhere, so dropping onto a second,
+// empty lounger started a giving action -- or refused a child -- because of
+// somebody using the first one, and PlanToGo could walk to a third chaise.
+static bool VF2SpaOccupantIndex(CVillager &dropped, int loungerSlot, CVillager **outOccupant)
 {
+    if (loungerSlot < 0) return false;
     for (int slot = 0; slot < 30; ++slot) {
         CVillager *occupant = VF2SpaVillagerByIndex(slot);
         if (!occupant || occupant == &dropped) continue;
         if (!VF2SpaAdult(*occupant)) continue;
         if (VF2SpaReceivingIndex(*occupant) < 0) continue;
+        if (VF2FurnitureSlotUnderVillager(*occupant) != loungerSlot) continue;
         if (outOccupant) *outOccupant = occupant;
         return true;
     }
@@ -26621,27 +26660,28 @@ static bool VF2SpaOccupantIndex(CVillager &dropped, CVillager **outOccupant)
 static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
 {
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    // Which lounger this is, not merely that it is one. Sampled exactly as the
+    // dispatcher samples the drop, so it resolves to the same placed slot.
+    int const loungerSlot = VF2FurnitureSlotUnderVillager(villager);
 
     // A child dropped onto a lounger somebody is already using refuses out
     // loud, the same way the stock game turns down anything age-gated. On an
     // empty lounger there is nothing to refuse, so the drop falls through to
     // stock handling instead of producing a message out of nowhere.
     if (!VF2SpaAdult(villager)) {
-        if (!VF2SpaOccupantIndex(villager, 0)) return false;
+        if (!VF2SpaOccupantIndex(villager, loungerSlot, 0)) return false;
         plans->ForgetPlans(villager, false);
         VF2PlanChaiseRefusal(plans, villager, eStringTooYoung);
         return true;
     }
 
-    // Somebody already on the lounger? Then this adult performs the matching
+    // Somebody already on THIS lounger? Then this adult performs the matching
     // treatment: the index of what they are receiving is the index of what
-    // this one gives.
-    for (int slot = 0; slot < 30; ++slot) {
-        CVillager *occupant = VF2SpaVillagerByIndex(slot);
-        if (!occupant || occupant == &villager) continue;
-        if (!VF2SpaAdult(*occupant)) continue;
+    // this one gives. Scoped to the dropped-on lounger, so a second lounger
+    // standing empty is treated as empty.
+    CVillager *occupant = 0;
+    if (VF2SpaOccupantIndex(villager, loungerSlot, &occupant)) {
         int receiving = VF2SpaReceivingIndex(*occupant);
-        if (receiving < 0) continue;
 
         plans->ForgetPlans(villager, false);
         VF2SetActionLabel(villager, kVF2SpaGivingLabels[receiving]);
@@ -26652,7 +26692,7 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
         return true;
     }
 
-    // Nobody on it, so this adult takes it and receives a treatment.
+    // Nobody on this one, so this adult takes it and receives a treatment.
     plans->ForgetPlans(villager, false);
     VF2SetActionLabel(
         villager,
@@ -26671,8 +26711,15 @@ bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
     sample.y -= 10;
     int candidate = VF2FurnitureItemAtPoint(sample);
 __VF2_COMPUTER_DROP_DISPATCH__
-    if (gVF2MobileFurnitureBehaviors == 0) return false;
+    // The Invisible Spa Lounger is a custom item, not ported mobile furniture,
+    // and the Mobile Furniture Behaviors setting says in so many words that
+    // invisible and custom furniture is excluded from it. Its store
+    // description promises the treatments unconditionally, so it is routed
+    // ahead of that gate rather than quietly doing nothing when the setting is
+    // off. It is manual-drop only and adds no autonomous behaviour, so nothing
+    // about it depends on the ported-furniture routes below.
     if (candidate == 0x32F) return VF2HandleMobileInvisibleSpaLounger(villager);
+    if (gVF2MobileFurnitureBehaviors == 0) return false;
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     if (candidate == 0x2E6) return VF2HandleMobilePatioTable(villager);
@@ -27173,7 +27220,10 @@ __VF2_COMPUTER_DROP_DISPATCH__
                 "Giving a body mask",
                 "Performing spa treatments",
             ],
-            "object": hex(0x17),
+            # The handler and the PC fmap both target eObjectChaise. 0x17 is
+            # eBodyPositionChaise, a different enum, so advertising it made the
+            # release manifest's family binding wrong.
+            "object": hex(MOBILE_CHAISE_OBJECT),
             "manual_drop_only": True,
             "manual_drop_supported": True,
             "autonomous": False,
