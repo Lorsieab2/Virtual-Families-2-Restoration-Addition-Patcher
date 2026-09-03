@@ -3845,20 +3845,6 @@ NEW_FURNITURE_ITEMS = [
         "donor_fmap": "YogaGearStd.png.fmap",
         "section_name": "Accessory/Small Decor",
     },
-    {
-        "name": "PingPongTableStd",
-        "item_id": 0x32E,
-        "donor": 0x20C,          # Pool Table
-        "list": "gFurniture5",
-        "price": 12000,          # the Pool Table's own price
-        "lock_generation": 4,
-        "item_type": 5,
-        "short_description": "Ping-Pong Table",
-        "long_description": "Rally back and forth with a friend on this ping-pong table.",
-        "art_png": "PingPongTableStd.png",
-        "donor_fmap": "PoolTableStd.png.fmap",
-        "section_name": "Furniture/Placeable",
-    },
 ]
 
 NEW_FURNITURE_ART_DIR = ROOT / "patcher_assets" / "new_furniture_art"
@@ -4714,7 +4700,7 @@ def safety_fmap_reason(manifest_item):
     if Path(path).name + ".fmap" in NEW_FURNITURE_FMAP_DONORS:
         # These carry a stock item's own map on purpose -- that inheritance is
         # the whole point of the item. Falling through would zero the grid and
-        # leave the bike, gym and ping-pong table rendered-only.
+        # leave the bike and the gym system rendered-only.
         return None
     if Path(path).name + ".fmap" in INVISIBLE_OUTDOOR_FMAP_DONORS:
         return None
