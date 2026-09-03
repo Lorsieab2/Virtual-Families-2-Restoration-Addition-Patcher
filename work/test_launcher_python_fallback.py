@@ -64,6 +64,17 @@ class TestLauncherPythonFallback(unittest.TestCase):
             self.assertIn('set "VF2_PY=python"', block)
             self.assertIn("where python >nul 2>nul", block)
 
+    def test_the_fallback_confirms_it_found_python_3(self):
+        # `where python` also matches Python 2 and the Windows Store execution
+        # alias, which exits without running anything. Both would be accepted
+        # on the strength of `where` alone, so the interpreter has to be asked.
+        for block in _probe_blocks():
+            self.assertIn("sys.version_info[0] >= 3", block)
+            probe = block.index("sys.version_info[0] >= 3")
+            assign = block.index('set "VF2_PY=python"')
+            self.assertLess(probe, assign,
+                            "the version check must run before VF2_PY is set")
+
 
 if __name__ == "__main__":
     unittest.main()

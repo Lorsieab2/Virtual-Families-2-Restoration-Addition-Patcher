@@ -3149,8 +3149,14 @@ if not errorlevel 1 (
   if not errorlevel 1 set "VF2_PY=py -3"
 )
 if not defined VF2_PY (
+  rem `where python` succeeding proves nothing: it also matches Python 2 and
+  rem the Windows Store execution alias, which exits without running anything.
+  rem Ask the interpreter itself, the same way the py -3 probe above does.
   where python >nul 2>nul
-  if not errorlevel 1 set "VF2_PY=python"
+  if not errorlevel 1 (
+    python -c "import sys; sys.exit(0 if sys.version_info[0] >= 3 else 1)" >nul 2>nul
+    if not errorlevel 1 set "VF2_PY=python"
+  )
 )
 if not defined VF2_PY (
   echo Could not find Python 3. Install it from https://www.python.org/downloads/
@@ -3178,8 +3184,14 @@ if not errorlevel 1 (
   if not errorlevel 1 set "VF2_PY=py -3"
 )
 if not defined VF2_PY (
+  rem `where python` succeeding proves nothing: it also matches Python 2 and
+  rem the Windows Store execution alias, which exits without running anything.
+  rem Ask the interpreter itself, the same way the py -3 probe above does.
   where python >nul 2>nul
-  if not errorlevel 1 set "VF2_PY=python"
+  if not errorlevel 1 (
+    python -c "import sys; sys.exit(0 if sys.version_info[0] >= 3 else 1)" >nul 2>nul
+    if not errorlevel 1 set "VF2_PY=python"
+  )
 )
 if not defined VF2_PY (
   echo Could not find Python 3. Install it from https://www.python.org/downloads/
