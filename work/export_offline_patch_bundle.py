@@ -907,6 +907,25 @@ def runtime_flag_variant_for_exe(
     }
 
 
+def _is_persisted_byte_flag(runtime_flag: dict[str, Any]) -> bool:
+    """Does this contract positively describe the persisted-byte storage?
+
+    The toggle moved out of a free-standing .vf2same PE section and into the
+    native save payload, so its contract legitimately has no source_section.
+    Recognising that by the ABSENCE of a key meant a malformed contract -- a
+    misspelled source_section, say -- looked identical to the new format and
+    the setting was quietly dropped from the bundle. Require the new shape to
+    say what it is instead.
+    """
+    if not isinstance(runtime_flag.get("storage"), str):
+        return False
+    if runtime_flag.get("size") != 1:
+        return False
+    return isinstance(runtime_flag.get("default"), str) and isinstance(
+        runtime_flag.get("enabled"), str
+    )
+
+
 def setting_runtime_flag_post_asset_patches(
     executable_sources: list[Path],
     *,
@@ -1017,7 +1036,7 @@ def same_sex_marriage_post_asset_patches(
         raise ValueError(
             "Build manifest has an invalid SameSexMarriage contract."
         )
-    if "source_section" not in runtime_flag:
+    if "source_section" not in runtime_flag and _is_persisted_byte_flag(runtime_flag):
         # The toggle used to live in a free-standing, easy-to-locate 1-byte
         # custom PE section (.vf2same) purely so this exact-SHA post-asset
         # patch could find and flip it. Native SaveCurrentGame()/Load()
@@ -1032,6 +1051,17 @@ def same_sex_marriage_post_asset_patches(
         # bundle just no longer offers an external, no-purchase-required
         # SHA-patch toggle for this one setting.
         return []
+    if "source_section" not in runtime_flag:
+        # Absent source_section AND not recognisable as the persisted-byte
+        # form. Treating that as "the new format" would silently drop the
+        # setting from the bundle, which is how a typo in source_section, or a
+        # half-written contract, would ship a release missing a setting with no
+        # error anywhere. Fail closed, as this did before the storage change.
+        raise ValueError(
+            "Build manifest has an invalid SameSexMarriage runtime flag "
+            "contract: no source_section, and not the persisted-byte form "
+            "(storage/size/default/enabled)."
+        )
     return setting_runtime_flag_post_asset_patches(
         executable_sources,
         output_exe_name=output_exe_name,
