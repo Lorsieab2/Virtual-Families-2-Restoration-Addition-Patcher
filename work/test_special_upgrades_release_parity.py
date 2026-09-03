@@ -310,12 +310,17 @@ class SpecialUpgradesReleaseParityTests(unittest.TestCase):
             row for row in self.manifest["theStringManager"]["strings"]
             if row.get("item_id") == "0x14b"
         ]
+        divorce_title_id, divorce_warning_id = patcher.divorce_spouse_string_ids()
         self.assertEqual(
             {(row["pc_string_id"], row["text"]) for row in divorce_strings},
+            # Derived, not pinned. Every id after the behaviour-label table is
+            # a function of len(BEHAVIOR_LABELS), so adding two ping-pong
+            # labels moved these by two and left this test asserting 0xef3 and
+            # 0xef4 against a build emitting 0xef5 and 0xef6.
             {
-                ("0xef3", "Divorce Spouse"),
+                (hex(divorce_title_id), "Divorce Spouse"),
                 (
-                    "0xef4",
+                    hex(divorce_warning_id),
             "WARNING: Permanently removes spouse from the Family Tree and House!",
                 ),
             },
