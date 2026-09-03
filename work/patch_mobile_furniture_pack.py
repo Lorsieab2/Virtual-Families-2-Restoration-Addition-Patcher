@@ -14542,6 +14542,35 @@ static CVillager *VF2VillagerByPersistentId(int peepId) {
     return 0;
 }
 
+// A recorded child of the current generation, by persistent id.
+//
+// The family record's layout is already established by
+// VF2ReconcileFamilyTreeAppearance and by VF2MarriagePair itself: the two
+// parent SPeepRecords sit at +0x04 and +0xDC, the child count at +0x1B4, and
+// the children at +0x1B8 with a 0xD8 stride. Each SPeepRecord carries its
+// validity flag at +0x1A and its persistent id at +0x28 -- which is exactly
+// what VF2MarriagePair reads as record[0x1E]/record+0x2C for the first parent
+// and record[0xF6]/record+0x104 for the second.
+//
+// Children are recorded even when the marriage record's parent slots are not,
+// so this works in precisely the case the pair fallback runs in.
+static bool VF2IsCurrentGenerationChild(CVillager *villager) {
+    if (!villager) return false;
+    int peepId = *(int *)((unsigned char *)villager + 0x1BB48);
+    unsigned char *treeData = (unsigned char *)&FamilyTree;
+    int generations = *(int *)(treeData + 0x04);
+    if (generations <= 0 || generations > 30) return false;
+    unsigned char *family = treeData + 0x08 + (generations - 1) * 0x6C8;
+    int children = *(int *)(family + 0x1B4);
+    if (children < 0) children = 0;
+    if (children > 6) children = 6;
+    for (int child = 0; child < children; ++child) {
+        unsigned char *record = family + 0x1B8 + child * 0xD8;
+        if (record[0x1A] && *(int *)(record + 0x28) == peepId) return true;
+    }
+    return false;
+}
+
 static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {
     first = 0;
     second = 0;
@@ -14580,6 +14609,13 @@ static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {
     for (int index = 0; index < 30; ++index) {
         CVillager *villager = VF2VillagerByIndex(index);
         if (!VF2MarriageAdult(villager)) continue;
+        // A grown, employed child living at home qualifies as an adult on
+        // every test above, and counting alone cannot tell them apart from a
+        // spouse. The family record lists children even when its parent slots
+        // are empty, so this is a real relationship test rather than another
+        // guess: anyone recorded as a child of this generation is not the
+        // player's spouse.
+        if (VF2IsCurrentGenerationChild(villager)) continue;
         if (count < 2) candidates[count] = villager;
         ++count;
     }
@@ -14588,13 +14624,11 @@ static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {
     // first two found" unreliable, so treat it as no established pair
     // rather than guessing.
     //
-    // Known residual gap: this narrows the guess but does not establish that
-    // the two are married. An unmarried player plus one grown, employed
-    // adult child still counts exactly two and is still paired here. Closing
-    // that needs a real relationship test, which this fallback by definition
-    // cannot use -- it runs only when the family-tree marriage record is
-    // unpopulated, so there is no record to consult. Left rather than
-    // guessed at; see docs/release-notes-b174.1.md.
+    // Recorded children are excluded above, so the long-standing gap where an
+    // unmarried player plus one grown, employed adult child counted as exactly
+    // two and got paired is closed. The record's child list is populated even
+    // when its parent slots are not, which is the situation this fallback runs
+    // in, so the test is available exactly when it is needed.
     if (count != 2) return false;
     first = candidates[0];
     second = candidates[1];
