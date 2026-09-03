@@ -30804,21 +30804,16 @@ extern "C" void __cdecl VF2RandomTelescopeLabel(CVillager &villager)
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_telescope, VF2_LABEL_COUNT(kVF2BehaviorLabels_telescope), remembered);
 }
 
-// Quick workout sometimes reads as yoga. Unlike the WorkingOut variants,
-// which always replace their native label, this keeps the stock "Quick
-// workout" as the other half of a coin flip so the original outcome does not
-// disappear.
+// Quick workout sometimes reads as yoga. The shared helper already keeps the
+// stock "Quick workout" as the other half of the coin flip: it rolls
+// GetRandom(count + 1) and treats roll 0 as "leave the native label alone",
+// which for this one-entry group is an even split. Rolling again here made it
+// a quarter, not a half.
 extern "C" void __cdecl VF2RandomQuickWorkoutLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_quick_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_quick_workout));
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::QuickWorkout)) return;
-    if (remembered) {
-        VF2SetBehaviorLabel(villager, remembered);
-        return;
-    }
-    if (ldwGameState::GetRandom(2) == 0) {
-        VF2ApplyRandomLabel(villager, kVF2BehaviorLabels_quick_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_quick_workout));
-    }
+    VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_quick_workout, VF2_LABEL_COUNT(kVF2BehaviorLabels_quick_workout), remembered);
 }
 
 extern "C" void __cdecl VF2RandomWorkoutLabel(CVillager &villager)
