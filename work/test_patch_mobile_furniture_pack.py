@@ -8118,15 +8118,27 @@ class TextFixStringManagerTests(unittest.TestCase):
                     if row.get("source")
                     == "custom achievement reserved capacity"
                 ]
-                self.assertEqual(len(reserved), 0)
+                # 0xA8 is a deliberate hole: it is
+                # CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID's scratch record,
+                # so the coffee goal was moved to 0xAA rather than share it.
+                # The row still has to exist for id * sizeof(row) indexing, and
+                # it gets empty reserved-capacity strings like any unused slot.
                 self.assertEqual(
                     {int(row["achievement_id"], 16) for row in reserved},
-                        set(),
+                    {patcher.CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID},
                 )
-                self.assertEqual(reserved, [])
+                self.assertEqual(len(reserved), 2)
+                for row in reserved:
+                    self.assertEqual(row["text"], "")
+                # Derived, not pinned. Every id after the behaviour-label
+                # table is a function of len(BEHAVIOR_LABELS), so adding
+                # labels shifts these; pinning them means each new label has
+                # to remember to come back and edit this line.
+                footer_ids = patcher.holiday_ornament_collection_footer_string_ids()
+                self.assertEqual(len(footer_ids), 3)
                 self.assertEqual(
-                    patcher.holiday_ornament_collection_footer_string_ids(),
-            (0xeb7, 0xeb8, 0xeb9),
+                    list(footer_ids),
+                    [footer_ids[0], footer_ids[0] + 1, footer_ids[0] + 2],
                 )
                 lounger_rows = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8180,9 +8192,15 @@ class TextFixStringManagerTests(unittest.TestCase):
                         "text": "Ornaments",
                     }],
                 )
+                # Derived, not pinned. Every id after the behaviour-label
+                # table is a function of len(BEHAVIOR_LABELS), so adding
+                # labels shifts these; pinning them means each new label has
+                # to remember to come back and edit this line.
+                footer_ids = patcher.holiday_ornament_collection_footer_string_ids()
+                self.assertEqual(len(footer_ids), 3)
                 self.assertEqual(
-                    patcher.holiday_ornament_collection_footer_string_ids(),
-            (0xeb7, 0xeb8, 0xeb9),
+                    list(footer_ids),
+                    [footer_ids[0], footer_ids[0] + 1, footer_ids[0] + 2],
                 )
                 footer_rows = [
                     row
@@ -8200,11 +8218,11 @@ class TextFixStringManagerTests(unittest.TestCase):
                         for row in footer_rows
                     ],
                     [
-                        (0xeb7, "common", "eSayCommonOrnaments",
+                        (footer_ids[0], "common", "eSayCommonOrnaments",
                          " of 4 common ornaments found."),
-                        (0xeb8, "uncommon", "eSayUncommonOrnaments",
+                        (footer_ids[1], "uncommon", "eSayUncommonOrnaments",
                          " of 4 uncommon ornaments found."),
-                        (0xeb9, "rare", "eSayRareOrnaments",
+                        (footer_ids[2], "rare", "eSayRareOrnaments",
                          " of 4 rare ornaments found."),
                     ],
                 )
@@ -10660,7 +10678,13 @@ class CustomAchievementAwardDispatchTests(unittest.TestCase):
                         load_section.raw_ptr + load.value + 0x8B
                     ]
                 )
-                self.assertEqual(load_data[0x51:0x57], b"\x81\xF9\x7C\x00\x00\x00")
+                # Validated tail length, derived: 0x125 total records minus the first
+                # reserved one, so adding a goal moves it automatically.
+                reserved_count = 0x125 - patcher.CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID
+                self.assertEqual(
+                    load_data[0x51:0x57],
+                    bytes((0x81, 0xF9)) + struct.pack('<I', reserved_count),
+                )
                 for function_name, count_offset in (
                     ("?SaveState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z", 0x06),
                     ("?Reset@CAchievement@@QAEXXZ", 0x09),
@@ -12266,7 +12290,19 @@ class DivorceSpouseContractTests(unittest.TestCase):
         self.assertEqual(patcher.DIVORCE_SPOUSE_ITEM_ID, 0x14B)
         self.assertEqual(patcher.DIVORCE_SPOUSE_CATALOG_PRICE, 0)
         self.assertEqual(row["price"], patcher.DIVORCE_SPOUSE_CATALOG_PRICE)
-        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xef5, 0xef6))
+        # Derived, not pinned: these sit after the behaviour-label table, so
+        # every added label moves them. Assert the contract -- a consecutive
+        # pair immediately after the same-sex marriage pair -- rather than the
+        # literal values.
+        divorce_ids = patcher.divorce_spouse_string_ids()
+        self.assertEqual(len(divorce_ids), 2)
+        self.assertEqual(divorce_ids[1], divorce_ids[0] + 1)
+        self.assertEqual(
+            divorce_ids[0],
+            patcher.mobile_renovation_string_ids_for(
+                patcher.MOBILE_RENOVATION_IMAGE_COUNT - 1
+            )[1] + 1,
+        )
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x14B),
             0x337,
@@ -13339,8 +13375,10 @@ class HolidayOrnamentGateTests(unittest.TestCase):
             for ornaments, behavior, count_off, count_on, master_target, goal_target in (
                 (False, False, 122, 141, 5, 12),
                 (True, False, 123, 142, 6, 13),
-                (False, True, 148, 167, 5, 12),
-                (True, True, 149, 168, 6, 13),
+                # The behaviour rows gain two: the visible count now includes
+                # the two Order goals, matching the runtime helper's +28.
+                (False, True, 150, 169, 5, 12),
+                (True, True, 151, 170, 6, 13),
             ):
                 with self.subTest(ornaments=ornaments, behavior=behavior):
                     with tempfile.TemporaryDirectory() as tmp:
@@ -13358,7 +13396,9 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         table_sec = achievement.section(table.section)
                         self.assertEqual(
                             (table_sec.raw_size - table.value) // patcher.ACHIEVEMENT_ROW_SIZE,
-                            0xAA,
+                            # One row per defined achievement. Derived rather
+                            # than pinned: adding a goal legitimately grows it.
+                            patcher.CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID,
                         )
                         for achievement_id, _group, _title, _description in patcher.custom_achievement_capacity_row_specs():
                             title_id, description_id = patcher.custom_achievement_string_ids(achievement_id)
@@ -13370,7 +13410,8 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                             )
                             self.assertEqual(
                                 row,
-                                (achievement_id, 1, 0x1ED, 0, title_id, description_id, 0),
+                                (achievement_id, 1, 0x1ED, 0, title_id, description_id,
+                                 patcher.CUSTOM_ACHIEVEMENT_COIN_REWARDS.get(achievement_id, 0)),
                             )
                         self.assertEqual(
                             struct.unpack_from(
@@ -13394,9 +13435,32 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         load = achievement.symbol("?LoadState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z")
                         load_sec = achievement.section(load.section)
                         load_data = bytes(achievement.buf[load_sec.raw_ptr + load.value : load_sec.raw_ptr + load.value + 0x8B])
-                        self.assertEqual(load_data[0x39:0x45], b"\x8D\x4E\x00\x8D\x83\xEC\x07\x00\x00\x80\x38\x00")
-                        self.assertEqual(load_data[0x51:0x57], b"\x81\xF9\x7C\x00\x00\x00")
-                        self.assertEqual(load_data[0x62:0x6D], b"\x8D\x83\xEC\x07\x00\x00\xB9\x7C\x00\x00\x00")
+                        # Boundary derived from the last defined achievement: the first
+                        # reserved record's byte offset is reserved_first * 12.
+                        reserved_offset = patcher.CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID * 12
+                        self.assertEqual(
+                            load_data[0x39:0x45],
+                            bytes((0x8D, 0x4E, 0x00, 0x8D, 0x83))
+                            + struct.pack('<I', reserved_offset)
+                            + bytes((0x80, 0x38, 0x00)),
+                        )
+                        # Validated tail length, derived: 0x125 total records minus the first
+                        # reserved one, so adding a goal moves it automatically.
+                        reserved_count = 0x125 - patcher.CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID
+                        self.assertEqual(
+                            load_data[0x51:0x57],
+                            bytes((0x81, 0xF9)) + struct.pack('<I', reserved_count),
+                        )
+                        # The clear span uses the same two derived numbers, so
+                        # it moves with the reserved boundary instead of being
+                        # a second place to forget when a goal is added.
+                        self.assertEqual(
+                            load_data[0x62:0x6D],
+                            bytes((0x8D, 0x83))
+                            + struct.pack('<I', reserved_offset)
+                            + bytes((0xB9,))
+                            + struct.pack('<I', reserved_count),
+                        )
 
                         set_complete = achievement.symbol(
                             "?SetComplete@CAchievement@@QAEXW4EAchievement@@@Z"
@@ -13462,10 +13526,14 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                             0xD8 + 5 + struct.unpack_from("<i", draw_data, 0xD9)[0],
                             0x3EB,
                         )
+                        # The upper bound is the last defined goal, so adding
+                        # one moves it here too rather than silently clipping
+                        # the new row out of the draw range.
                         self.assertEqual(
                             draw_data[0x3EB:0x3FE],
-                            b"\x81\xFF\xA9\x00\x00\x00\x77\x08"
-                            b"\x8D\x0C\x7F\x8A\x0C\x8E\xEB\x02\x32\xC9\xE9",
+                            bytes((0x81, 0xFF))
+                            + struct.pack('<I', patcher.CUSTOM_ACHIEVEMENT_LAST_ID)
+                            + bytes((0x77, 0x08, 0x8D, 0x0C, 0x7F, 0x8A, 0x0C, 0x8E, 0xEB, 0x02, 0x32, 0xC9, 0xE9)),
                         )
                         self.assertEqual(
                             0x3FD + 5 + struct.unpack_from("<i", draw_data, 0x3FE)[0],
@@ -13479,7 +13547,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         self.assertEqual(draw_data[0x196:0x19A], b"\x90" * 4)
                         self.assertEqual(
                             draw_data[0x402:0x40A],
-                            b"\x81\xFF\xA9\x00\x00\x00\x0F\x87",
+                            bytes((0x81, 0xFF)) + struct.pack('<I', patcher.CUSTOM_ACHIEVEMENT_LAST_ID) + bytes((0x0F, 0x87)),
                         )
                         self.assertEqual(
                             0x40E + struct.unpack_from("<i", draw_data, 0x40A)[0],
@@ -13507,7 +13575,7 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         self.assertEqual(
                             manifest["CustomAchievements"]["draw_bounds"],
                             {
-                                "last_visible_id": "0xa9",
+                                "last_visible_id": hex(patcher.CUSTOM_ACHIEVEMENT_LAST_ID),
                                 "comparison": "unsigned imm32",
                                 "short_guard": {
                                     "source": "0xd8",
@@ -13561,12 +13629,25 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                         expected.extend(range(0x80, 0x92))
                         expected.append(0xA6)
                         expected.append(0xA7)
+                        if behavior:
+                            # Both fire from praising a rare behaviour label,
+                            # so they are only shown when Behavior Patches
+                            # supplies those labels.
+                            expected.append(patcher.CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID)
+                            expected.append(patcher.CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID)
                         expected.extend(range(0x6D, 0x80))
                         expected.append(0x92)
                         self.assertEqual(order, expected)
-                        self.assertEqual(order[-40:-22], list(range(0x80, 0x92)))
-                        self.assertEqual(order[-22], 0xA6)
-                        self.assertEqual(order[-21], 0xA7)
+                        orders = 2 if behavior else 0
+                        self.assertEqual(order[-40 - orders:-22 - orders], list(range(0x80, 0x92)))
+                        self.assertEqual(order[-22 - orders], 0xA6)
+                        self.assertEqual(order[-21 - orders], 0xA7)
+                        if behavior:
+                            self.assertEqual(
+                                order[-20 - orders:-20],
+                                [patcher.CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID,
+                                 patcher.CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID],
+                            )
                         self.assertEqual(order[-20:-1], list(range(0x6D, 0x80)))
                         self.assertEqual(order[-1], 0x92)
                         order_contract = manifest["CustomAchievements"][
@@ -14275,7 +14356,9 @@ class HolidayOrnamentGateTests(unittest.TestCase):
                     "collection_master_target": 6,
                     "goal_collector_target": 13,
                     "ornamentologist_target": 12,
-                    "physical_row_count": 0xAA,
+                    # One row per defined achievement; derived so adding a
+                    # goal moves it instead of failing this contract.
+                    "physical_row_count": patcher.CUSTOM_ACHIEVEMENT_LAST_ID + 1,
                     "visible_count_flag_0": 123,
                     "visible_count_flag_1": 142,
                     "notify_queue_bound": 0x5F,

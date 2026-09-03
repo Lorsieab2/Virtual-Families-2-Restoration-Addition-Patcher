@@ -2146,8 +2146,14 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID = 0x54
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
-CUSTOM_ACHIEVEMENT_LAST_ID = 0xA9
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xA9
+CUSTOM_ACHIEVEMENT_LAST_ID = 0xAA
+# The two rare joke-label goals. Kirk Strayer sits at 0xAA rather than 0xA8:
+# that record is the purchase-mask scratch record and also the mobile
+# renovation persistent record, so a real achievement there would collide
+# with the Taters bits, pregnancy controls and renovation state.
+CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID = 0xA9
+CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID = 0xAA
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xAA
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -2255,8 +2261,8 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0xA5, "behavior", "Props to you", "You completed Tight Ship and all five additional discipline goals."),
     (0xA6, "vf3_furniture", "Furnishing the Future", "You bought a Virtual Families 3 furniture item."),
     (0xA7, "pet", "Slow and Steady", "Have a turtle in the house."),
-    (0xA8, "behavior", "Kirk Strayer", "You praised someone who was drinking a particularly complicated coffee order."),
-    (0xA9, "behavior", "Bubble Bass", "You praised someone who was eating a particularly complicated burger order."),
+    (0xAA, "behavior", "Kirk Strayer's Order", "You praised someone who was drinking a particularly complicated coffee order."),
+    (0xA9, "behavior", "Bubble Bass's Order", "You praised someone who was eating a particularly complicated burger order."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -2336,8 +2342,11 @@ FORCED_BABY_GENDER_HELPER_SYMBOL = "@VF2SpawnBirthPeepWithForcedGender@56"
 CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS = {
     # The two rare joke labels. Both are already about a 1-in-80 roll inside a
     # low-weight behavior, so catching one mid-praise is the point.
-    "Making a Half-Caff Double-Shot Leviathan Latte-Espresso with Heavy Cream": 0xA8,
-    "Eating a Double Triple Bossy Deluxe on a raft, four-by-four, animal style, with extra shingles, a shimmy and a squeeze and light axle grease that cries, burns and swims": 0xA9,
+    # Truncated to the 0x27 bytes the villager label slot actually holds.
+    # These two labels are 72 and 168 characters, so comparing the full
+    # string could never match and neither goal could ever fire.
+    "Making a Half-Caff Double-Shot Leviatha": 0xAA,
+    "Eating a Double Triple Bossy Deluxe on ": 0xA9,
     "Watching cat videos": 0x66,
     "Posting on VideoTube": 0x67,
     "Playing Virtual Families": 0x68,
@@ -2485,6 +2494,14 @@ HOLIDAY_ORNAMENT_SPAWN_RECTS = [
     ("__xmm@0000026f0000019d0000017800000098", (0x098, 0x178, 0x19D, 0x26F)),
     ("__xmm@0000075000000137000005680000008d", (0x08D, 0x568, 0x137, 0x750)),
 ]
+
+# An achievementList row's last field is its coin reward. CAchievement::Update
+# reads achievementList[id].reward and pays 25 when it is zero, so every custom
+# goal so far has quietly paid the default. These two pay 100.
+CUSTOM_ACHIEVEMENT_COIN_REWARDS = {
+    CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID: 100,
+    CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID: 100,
+}
 HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT = ROOT / "work" / "vf2_obb" / "assets" / "tp225.dat"
 HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR = ROOT / "work" / "vf2_obb" / "assets" / "tp225.pvr"
 HOLIDAY_ORNAMENT_BACKGROUND_FILENAME = "collection-ornaments_background.png"
@@ -8612,7 +8629,7 @@ def validate_holiday_ornament_native_contract(manifest):
             0,
             title_id,
             description_id,
-            0,
+            CUSTOM_ACHIEVEMENT_COIN_REWARDS.get(achievement_id, 0),
         )
         if row != expected_row:
             errors.append(f"achievementList row {achievement_id:#x} is not the exact B152 record")
@@ -8621,10 +8638,19 @@ def validate_holiday_ornament_native_contract(manifest):
         achievement_obj,
         "?LoadState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z",
     )
+    _reserved_offset = CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID * 12
+    _reserved_count = 0x125 - CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID
     for needle, label in (
-        (b"\x8D\x4E\x00\x8D\x83\xEC\x07\x00\x00", "reserved-tail start 0xA9"),
-        (b"\x81\xF9\x7C\x00\x00\x00", "reserved-tail scan count 0x7C"),
-        (b"\x8D\x83\xEC\x07\x00\x00\xB9\x7C\x00\x00\x00", "reserved-tail clear span"),
+        # Derived from the last defined achievement, so adding a goal moves this
+        # boundary too. Pinned at 0xA9/0x7C these fired the moment the two
+        # joke-label goals were defined past the old edge.
+        (bytes((0x8D, 0x4E, 0x00, 0x8D, 0x83)) + struct.pack('<I', _reserved_offset),
+         f"reserved-tail start {CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID:#x}"),
+        (bytes((0x81, 0xF9)) + struct.pack('<I', _reserved_count),
+         f"reserved-tail scan count {_reserved_count:#x}"),
+        (bytes((0x8D, 0x83)) + struct.pack('<I', _reserved_offset)
+         + bytes((0xB9,)) + struct.pack('<I', _reserved_count),
+         "reserved-tail clear span"),
     ):
         if needle not in load_data:
             errors.append(f"CAchievement::LoadState missing {label}")
@@ -15727,7 +15753,10 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 static int VF2AchievementVisibleCountInternal() {
     int count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2 + 1 + 1 + 1;
     if (kVF2IncludeOrnamentologistGoal) ++count;
-    if (kVF2IncludeBehaviorGoals) count += 26;
+    // 26 original behaviour goals plus the two rare joke-label goals
+    // (Bubble Bass's Order, Kirk Strayer's Order), which are behaviour
+    // goals too and are appended to the visible order alongside them.
+    if (kVF2IncludeBehaviorGoals) count += 28;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
     return count;
 }
@@ -15768,6 +15797,14 @@ extern "C" int __cdecl VF2AchievementsCompleteVisible(CAchievement *achievement)
     if (kVF2IncludeBehaviorGoals) {
         completed += VF2CountCompletedAchievements(achievement, 0x66, 0x6C);
         completed += VF2CountCompletedAchievements(achievement, 0x93, 0xA5);
+        // The two Order goals are behaviour goals but not contiguous with the
+        // rest: 0xA8 is the purchase/pregnancy/renovation scratch record and is
+        // deliberately skipped, so they sit at 0xA9 and 0xAA. Counting the
+        // range alone made VF2AchievementVisibleCountInternal's +28 disagree
+        // with a maximum of 26 completions, so the Goals screen could never
+        // read "all complete".
+        if (achievement->IsComplete((EAchievement)0xA9)) ++completed;
+        if (achievement->IsComplete((EAchievement)0xAA)) ++completed;
     }
     completed += VF2CountCompletedAchievements(achievement, 0x80, 0x92);
     if (achievement->IsComplete((EAchievement)0xA6)) ++completed;
@@ -20131,7 +20168,7 @@ def patch_custom_achievements(manifest):
             0,
             title_id,
             description_id,
-            0,
+            CUSTOM_ACHIEVEMENT_COIN_REWARDS.get(achievement_id, 0),
         ))
     if [row[0] for row in rows] != list(range(0x5F, CUSTOM_ACHIEVEMENT_LAST_ID + 1)):
         raise RuntimeError("Custom achievement rows are not dense through reserved capacity")
@@ -20170,19 +20207,28 @@ def patch_custom_achievements(manifest):
     )
 
     # Stock LoadState treats every nonzero row from 0x5F onward as reserved.
-    # Preserve rows through hidden persisted slot 0xA8, which stores the
-    # two-bit Taters purchase mask. Validate/clear only IDs 0xA9-0x124.
+    # Preserve every defined row, then validate/clear only the reserved tail.
+    # The boundary is derived from CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID rather
+    # than written as a literal: it was pinned at 0xA9 and silently dropped the
+    # two rare joke-label goals on reload once they were defined past it.
+    reserved_first = CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID
+    reserved_offset = reserved_first * 12
+    reserved_count = 0x125 - reserved_first
     load_sym = achievement_obj.symbol(
         "?LoadState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z"
     )
     load_sec = achievement_obj.section(load_sym.section)
     load_raw = load_sec.raw_ptr + load_sym.value
     load_patches = (
-        (0x39, b"\x8D\x4E\x5F", b"\x8D\x4E\x00"),
-        (0x3C, b"\x8D\x83\x74\x04\x00\x00", b"\x8D\x83\xEC\x07\x00\x00"),
-        (0x51, b"\x81\xF9\x25\x01\x00\x00", b"\x81\xF9\x7C\x00\x00\x00"),
-        (0x62, b"\x8D\x83\x5C\x04\x00\x00", b"\x8D\x83\xEC\x07\x00\x00"),
-        (0x68, b"\xB9\xC8\x00\x00\x00", b"\xB9\x7C\x00\x00\x00"),
+        (0x39, bytes((0x8D, 0x4E, 0x5F)), bytes((0x8D, 0x4E, 0x00))),
+        (0x3C, bytes((0x8D, 0x83, 0x74, 0x04, 0x00, 0x00)),
+         bytes((0x8D, 0x83)) + struct.pack("<I", reserved_offset)),
+        (0x51, bytes((0x81, 0xF9, 0x25, 0x01, 0x00, 0x00)),
+         bytes((0x81, 0xF9)) + struct.pack("<I", reserved_count)),
+        (0x62, bytes((0x8D, 0x83, 0x5C, 0x04, 0x00, 0x00)),
+         bytes((0x8D, 0x83)) + struct.pack("<I", reserved_offset)),
+        (0x68, bytes((0xB9, 0xC8, 0x00, 0x00, 0x00)),
+         bytes((0xB9,)) + struct.pack("<I", reserved_count)),
     )
     for offset, expected, replacement in load_patches:
         if achievement_obj.buf[load_raw + offset : load_raw + offset + len(expected)] != expected:
@@ -20444,6 +20490,12 @@ def patch_custom_achievements(manifest):
     )
     appended_order.append(CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID)
     appended_order.append(CUSTOM_ACHIEVEMENT_TURTLE_ID)
+    if ENABLE_BEHAVIOR_PATCHES:
+        # Both fire from a praise on a rare behaviour label, so they only make
+        # sense when Behavior Patches supplies those labels. Without this they
+        # were materialised but never shown on the Goals screen.
+        appended_order.append(CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID)
+        appended_order.append(CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID)
     appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
     )
@@ -20571,11 +20623,17 @@ def patch_custom_achievements(manifest):
     scene_obj.write(PATCHED / "AchievementsScene.obj")
 
     stock_visible_count = 0x5F
+    # Must match VF2AchievementVisibleCountInternal exactly: 26 original
+    # behaviour goals plus the two rare joke-label Order goals, which are
+    # behaviour goals too and are appended to the visible order alongside
+    # them. Reporting 26 here made the manifest disagree with the executable
+    # and truncated the visible order that release diagnostics read.
+    behavior_goal_visible_count = 28
     compile_visible_count = (
         stock_visible_count
         + (1 if ENABLE_HOLIDAY_ORNAMENTS else 0)
         + 6
-        + (26 if ENABLE_BEHAVIOR_PATCHES else 0)
+        + (behavior_goal_visible_count if ENABLE_BEHAVIOR_PATCHES else 0)
         + 3
         + 2
         + 5
@@ -20652,8 +20710,8 @@ def patch_custom_achievements(manifest):
             ),
             "purchase_mask_meaning": {"0x1": "item 0x2cf", "0x2": "item 0x2cc"},
             "health_plan_entitlement_field": "record+0x8 nonzero",
-            "reserved_tail_first_id": "0xa9",
-            "reserved_tail_record_count": 0x7C,
+            "reserved_tail_first_id": hex(reserved_first),
+            "reserved_tail_record_count": reserved_count,
             "signed_imm8_0x80_used": False,
         },
         "meta_targets": {
@@ -20679,7 +20737,17 @@ def patch_custom_achievements(manifest):
             HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET if ENABLE_HOLIDAY_ORNAMENTS else 12
         ),
         "notification_queue_count": HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT,
-        "save_state_note": "Save/Reset keep 0x125 records; LoadState preserves rows 0x00-0xA8 (0xA8 is the hidden Taters mask) and validates only 0xA9-0x124.",
+        # Derived from the same reserved_first/reserved_count the patch itself
+        # installs, so the note cannot describe a boundary the loader does not
+        # use. Hardcoding it left this claiming the pre-move tail while
+        # save_layout above reported the real one -- two persistence contracts
+        # in one manifest.
+        "save_state_note": (
+            f"Save/Reset keep 0x125 records; LoadState preserves rows 0x00-"
+            f"{reserved_first - 1:#x} (0x{CUSTOM_ACHIEVEMENT_PURCHASE_MASK_RECORD_ID:X} "
+            f"is the hidden Taters mask) and validates only "
+            f"{reserved_first:#x}-0x124 ({reserved_count:#x} records)."
+        ),
     }
 
 
