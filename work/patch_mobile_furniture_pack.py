@@ -3136,6 +3136,17 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_MakingSnowSculptures", "Making snow sculptures"),
         ],
     ),
+    # Appended last so no established label id shifts. The Ping-Pong Table
+    # borrows the Pool Table's behaviour, which would otherwise label its
+    # users as playing pool; VF2RandomPooltableLabel picks between the two
+    # groups by looking at which table the villager actually walked to.
+    (
+        "ping_pong",
+        [
+            ("eString_PlayingPingPong", "Playing ping-pong"),
+            ("eString_RallyingBackAndForth", "Rallying back and forth"),
+        ],
+    ),
 ]
 BEHAVIOR_LABELS = [
     entry
@@ -3866,6 +3877,14 @@ NEW_FURNITURE_ITEMS = [
         "section_name": "Furniture/Placeable",
     },
 ]
+
+# The Ping-Pong Table's item id, referenced by the behaviour-label wrapper that
+# tells it apart from a stock Pool Table (both answer to EObject 0x36).
+PING_PONG_TABLE_ITEM_ID = next(
+    item["item_id"]
+    for item in NEW_FURNITURE_ITEMS
+    if item["name"] == "PingPongTableStd"
+)
 
 NEW_FURNITURE_ART_DIR = ROOT / "patcher_assets" / "new_furniture_art"
 
@@ -29991,13 +30010,26 @@ __VF2_SCOLD_AWARD_CASES__
     plans->ForgetPlans(villager, force);
 }
 
+class CFurnitureManager;
+int __cdecl VF2BehaviorPtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
+
 class CFurnitureManager {
+private:
+    int PtOnFurniture(ldwPoint);
+    friend int __cdecl VF2BehaviorPtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
 public:
     bool IsInWorld(EInventoryItem item);
     bool LinkPeepToFurniture(CContentMap::EObject object, CVillager *villager, sFurnitureInfo2 &info, bool a, int b, bool c);
 };
 
 extern CFurnitureManager FurnitureManager;
+
+// PtOnFurniture is private; the same friend shim the mobile-furniture block
+// uses reaches it without changing the native class.
+int __cdecl VF2BehaviorPtOnFurnitureIndex(CFurnitureManager &manager, ldwPoint point)
+{{
+    return manager.PtOnFurniture(point);
+}}
 
 static bool AnyHammockInWorld()
 {
@@ -30038,6 +30070,7 @@ extern "C" void __cdecl VF2RandomRadioBehavior(CVillager &);
 extern "C" void __cdecl VF2PrivateRomanticTimeLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTVLabel(CVillager &);
 extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &);
+extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &);
 extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &);
 extern "C" void __cdecl VF2RandomHeatFoodLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSnacksLabel(CVillager &);
@@ -30095,6 +30128,7 @@ private:
     static void __cdecl WatchTVDispatch(CVillager &);
     static void __cdecl GoInHouse(CVillager &);
     static void __cdecl PlayingBoardGame(CVillager &);
+    static void __cdecl PlayingPooltable(CVillager &);
     static void __cdecl GetADrink(CVillager &);
     static void __cdecl HeatUpFood(CVillager &);
     static void __cdecl LookingForSnacksDispatch(CVillager &);
@@ -30150,6 +30184,7 @@ private:
     friend void __cdecl VF2PrivateRomanticTimeLabel(CVillager &);
     friend void __cdecl VF2RandomTVLabel(CVillager &);
     friend void __cdecl VF2RandomBoardGameLabel(CVillager &);
+    friend void __cdecl VF2RandomPooltableLabel(CVillager &);
     friend void __cdecl VF2RandomDrinkLabel(CVillager &);
     friend void __cdecl VF2RandomHeatFoodLabel(CVillager &);
     friend void __cdecl VF2RandomSnacksLabel(CVillager &);
@@ -30799,6 +30834,59 @@ extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &villager)
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_board_game, VF2_LABEL_COUNT(kVF2BehaviorLabels_board_game));
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingBoardGame)) return;
     VF2ApplyRememberedOrRandomLabel(villager, kVF2BehaviorLabels_board_game, VF2_LABEL_COUNT(kVF2BehaviorLabels_board_game), remembered);
+}
+
+// Is the villager's linked 0x36 table the given item?
+//
+// LinkPeepToFurniture reports the placed table this villager is bound to, as
+// a world point. The placed-furniture array behind that point is the same one
+// CFurnitureManager::PtOnFurniture walks: count at +0x1004, records from
+// +0x1008 with a 0x40 stride, the item id first in each record, the in-world
+// flag at +0x0C and the position at +0x10. Matching the point against that
+// array yields the specific item, which is what tells a Ping-Pong Table apart
+// from a stock Pool Table when both answer to EObject 0x36.
+static bool VF2LinkedFurnitureItemIs(CVillager &villager, int itemId)
+{{
+    sFurnitureInfo2 info = {{}};
+    if (!FurnitureManager.LinkPeepToFurniture(
+            (CContentMap::EObject)0x36, &villager, info, true, 0, 0)) {{
+        return false;
+    }}
+    int slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, info.point);
+    unsigned char *manager = (unsigned char *)&FurnitureManager;
+    int count = *(int *)(manager + 0x1004);
+    if (slot < 0 || slot >= count) return false;
+    unsigned char *record = manager + 0x1008 + slot * 0x40;
+    if ((*(unsigned int *)(record + 0x0C) & 1) == 0) return false;
+    return *(int *)record == itemId;
+}}
+
+// The Ping-Pong Table borrows the Pool Table's behaviour wholesale, so without
+// this its users would be labelled "Playing pool". Both tables answer to
+// EObject 0x36, so the behaviour itself cannot tell them apart -- but the
+// placed-furniture record under the villager's feet can, and the villager has
+// already walked to the table by the time the native behaviour returns.
+//
+// Stock pool tables keep their stock labels untouched.
+extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(
+        villager, kVF2BehaviorLabels_ping_pong,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong));
+    // Ask which 0x36 table this villager is linked to BEFORE running the
+    // behaviour, while the link is the one the plan will use. IsInWorld is
+    // not enough: with both tables placed it would answer yes for the
+    // ping-pong table even when the villager walked to the pool table.
+    bool pingPong = VF2LinkedFurnitureItemIs(
+        villager, {PING_PONG_TABLE_ITEM_ID:#x});
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingPooltable)) return;
+    if (!pingPong) {{
+        // A stock pool table: leave the native label exactly as it was.
+        return;
+    }}
+    VF2ApplyRememberedOrRandomLabel(
+        villager, kVF2BehaviorLabels_ping_pong,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong), remembered);
 }
 
 extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &villager)
@@ -31621,6 +31709,10 @@ def patch_behavior_label_variants(manifest):
         retarget(0x14B5, 0x166, "_VF2PrivateRomanticTimeLabel", "Private romantic time label variant"),
         retarget(0x332, 0x03E, "_VF2RandomTVLabel", "Watching TV label variants"),
         retarget(0xE8E, 0x107, "_VF2RandomBoardGameLabel", "Board game label variants"),
+        # The Ping-Pong Table borrows this behaviour from the Pool Table, so
+        # the wrapper relabels it only when the linked table really is the
+        # ping-pong one. A stock pool table keeps its stock label.
+        retarget(0xDE4, 0x099, "_VF2RandomPooltableLabel", "Ping-pong label variants on the Ping-Pong Table"),
         retarget(0x11B, 0x019, "_VF2RandomDrinkLabel", "Getting a drink label variants"),
         retarget(0xAB4, 0x0D5, "_VF2RandomHeatFoodLabel", "Heating up some food label variants"),
         retarget(0x1C3, 0x025, "_VF2RandomSnacksLabel", "Looking for snacks label variants"),
