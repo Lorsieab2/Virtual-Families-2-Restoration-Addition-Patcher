@@ -5954,56 +5954,6 @@ def outfit_store_entries():
     return entries
 
 
-# Hairstyle rows for the Clothing and Hairstyles section. Modelled on the
-# outfit rows: same store handling and price, but they set the villager's head
-# instead of the body. 50 per gender, from the head descriptors, whose raw_u32
-# reads [image_id, 0, 24, 50] -- 24 frames across 50 heads.
-HEAD_STORE_GENDER_ITEM_BASES = {
-    "female": 0x480,
-    "male": 0x4C0,
-}
-HEAD_STORE_VALUE_COUNT = 50
-HEAD_STORE_VALUES = tuple(range(HEAD_STORE_VALUE_COUNT))
-HEAD_STORE_ENTRY_COUNT = len(OUTFIT_STORE_GENDERS) * HEAD_STORE_VALUE_COUNT
-
-
-def head_item_id_for(gender, head_value):
-    return HEAD_STORE_GENDER_ITEM_BASES[gender] + head_value
-
-
-def head_store_gender_and_value(item_id):
-    for gender, base in HEAD_STORE_GENDER_ITEM_BASES.items():
-        head_value = item_id - base
-        if head_value in HEAD_STORE_VALUES:
-            return gender, head_value
-    return None, None
-
-
-def head_store_entry_index(gender, head_value):
-    return (
-        OUTFIT_STORE_GENDERS.index(gender) * HEAD_STORE_VALUE_COUNT
-        + HEAD_STORE_VALUES.index(head_value)
-    )
-
-
-def head_store_entries():
-    entries = []
-    for gender in OUTFIT_STORE_GENDERS:
-        title = gender.title()
-        for head_value in HEAD_STORE_VALUES:
-            entries.append({
-                "entry_index": head_store_entry_index(gender, head_value),
-                "item_id": head_item_id_for(gender, head_value),
-                "gender": gender,
-                "head_value": head_value,
-                "name": f"{title} Hairstyle {head_value:02d}",
-                "price": OUTFIT_STORE_PRICE,
-                "lock_generation": 0,
-                "source": "hairstyle row",
-            })
-    return entries
-
-
 def image_id_for(idx):
     return ORIG_IMAGE_MAX + 1 + idx
 
@@ -6448,44 +6398,6 @@ def villager_detail_body_image_index(gender, body_value):
 
 def villager_detail_body_image_id(gender, body_value):
     return villager_detail_body_image_base() + villager_detail_body_image_index(gender, body_value)
-
-
-# Hairstyle store icons are appended after every existing descriptor block, so
-# adding them cannot shift an image id that something else already pins. The
-# icons themselves are ordinary PNGs under Images/OutfitIcons -- no executable
-# space is used for the art.
-HEAD_STORE_ICON_FRAME = 5
-HEAD_STORE_ICON_SHEETS = {
-    "female": "female_heads00.png",
-    "male": "male_heads00.png",
-}
-HEAD_STORE_ICON_COLUMNS = 24
-HEAD_STORE_ICON_ROWS = 50
-
-
-def head_icon_image_base(holiday_body_descriptor_count=0):
-    # One past the last id any other block can hand out. Every count is added
-    # unconditionally: gating any of them on a setting would move these ids
-    # between matrix variants, and an image id has to mean the same thing in
-    # every executable.
-    renovation_tail = (
-        mobile_renovation_image_base(holiday_body_descriptor_count)
-        + MOBILE_RENOVATION_IMAGE_COUNT
-    )
-    ornament_tail = holiday_ornament_collection_background_image_id(
-        holiday_body_descriptor_count
-    ) + 1
-    bathroom_tail = ai_bathroom2_store_icon_image_base(
-        holiday_body_descriptor_count
-    ) + len(AI_BATHROOM2_STYLE_CATALOG)
-    return max(renovation_tail, ornament_tail, bathroom_tail)
-
-
-def head_icon_image_id(gender, head_value, holiday_body_descriptor_count=0):
-    return (
-        head_icon_image_base(holiday_body_descriptor_count)
-        + head_store_entry_index(gender, head_value)
-    )
 
 
 def holiday_body_descriptor_count():
