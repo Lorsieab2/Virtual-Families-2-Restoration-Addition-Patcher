@@ -8130,9 +8130,15 @@ class TextFixStringManagerTests(unittest.TestCase):
                 self.assertEqual(len(reserved), 2)
                 for row in reserved:
                     self.assertEqual(row["text"], "")
+                # Derived, not pinned. Every id after the behaviour-label
+                # table is a function of len(BEHAVIOR_LABELS), so adding
+                # labels shifts these; pinning them means each new label has
+                # to remember to come back and edit this line.
+                footer_ids = patcher.holiday_ornament_collection_footer_string_ids()
+                self.assertEqual(len(footer_ids), 3)
                 self.assertEqual(
-                    patcher.holiday_ornament_collection_footer_string_ids(),
-            (0xeb7, 0xeb8, 0xeb9),
+                    list(footer_ids),
+                    [footer_ids[0], footer_ids[0] + 1, footer_ids[0] + 2],
                 )
                 lounger_rows = [
                     row for row in manifest["theStringManager"]["strings"]
@@ -8186,9 +8192,15 @@ class TextFixStringManagerTests(unittest.TestCase):
                         "text": "Ornaments",
                     }],
                 )
+                # Derived, not pinned. Every id after the behaviour-label
+                # table is a function of len(BEHAVIOR_LABELS), so adding
+                # labels shifts these; pinning them means each new label has
+                # to remember to come back and edit this line.
+                footer_ids = patcher.holiday_ornament_collection_footer_string_ids()
+                self.assertEqual(len(footer_ids), 3)
                 self.assertEqual(
-                    patcher.holiday_ornament_collection_footer_string_ids(),
-            (0xeb7, 0xeb8, 0xeb9),
+                    list(footer_ids),
+                    [footer_ids[0], footer_ids[0] + 1, footer_ids[0] + 2],
                 )
                 footer_rows = [
                     row
@@ -8206,11 +8218,11 @@ class TextFixStringManagerTests(unittest.TestCase):
                         for row in footer_rows
                     ],
                     [
-                        (0xeb7, "common", "eSayCommonOrnaments",
+                        (footer_ids[0], "common", "eSayCommonOrnaments",
                          " of 4 common ornaments found."),
-                        (0xeb8, "uncommon", "eSayUncommonOrnaments",
+                        (footer_ids[1], "uncommon", "eSayUncommonOrnaments",
                          " of 4 uncommon ornaments found."),
-                        (0xeb9, "rare", "eSayRareOrnaments",
+                        (footer_ids[2], "rare", "eSayRareOrnaments",
                          " of 4 rare ornaments found."),
                     ],
                 )
@@ -12278,7 +12290,19 @@ class DivorceSpouseContractTests(unittest.TestCase):
         self.assertEqual(patcher.DIVORCE_SPOUSE_ITEM_ID, 0x14B)
         self.assertEqual(patcher.DIVORCE_SPOUSE_CATALOG_PRICE, 0)
         self.assertEqual(row["price"], patcher.DIVORCE_SPOUSE_CATALOG_PRICE)
-        self.assertEqual(patcher.divorce_spouse_string_ids(), (0xef5, 0xef6))
+        # Derived, not pinned: these sit after the behaviour-label table, so
+        # every added label moves them. Assert the contract -- a consecutive
+        # pair immediately after the same-sex marriage pair -- rather than the
+        # literal values.
+        divorce_ids = patcher.divorce_spouse_string_ids()
+        self.assertEqual(len(divorce_ids), 2)
+        self.assertEqual(divorce_ids[1], divorce_ids[0] + 1)
+        self.assertEqual(
+            divorce_ids[0],
+            patcher.mobile_renovation_string_ids_for(
+                patcher.MOBILE_RENOVATION_IMAGE_COUNT - 1
+            )[1] + 1,
+        )
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x14B),
             0x337,
