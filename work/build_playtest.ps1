@@ -118,9 +118,9 @@ if (-not (Get-Command $Python -ErrorAction SilentlyContinue)) {
 # coff_patch decodes a code section before growing it, so the relative branches
 # spanning the insertion point can be re-encoded. Without capstone that step
 # raises deep inside generation, long after the slow parts have run.
-& $Python -c "import capstone" 2>$null
+& $Python -c "import capstone, PIL" 2>$null
 if ($LASTEXITCODE -ne 0) {
-    throw "capstone is not installed for $Python. Run: $Python -m pip install -r requirements-build.txt"
+    throw "Build dependencies are missing for $Python (capstone and/or Pillow). Run: $Python -m pip install -r requirements-build.txt"
 }
 
 $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"

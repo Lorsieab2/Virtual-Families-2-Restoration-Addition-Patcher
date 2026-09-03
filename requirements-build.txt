@@ -6,3 +6,9 @@
 # that span the insertion point can be re-encoded. Without it a grown .text
 # section silently keeps stale displacements and the game crashes on startup.
 capstone>=5.0
+
+# Pillow is imported unconditionally by the generator's icon and sprite passes
+# (PIL.Image in ~27 places), so a clean build machine fails at the first icon
+# step without it. It was missing here for the same reason capstone was: both
+# happen to be installed on the machines this has been built on.
+Pillow>=9.0
