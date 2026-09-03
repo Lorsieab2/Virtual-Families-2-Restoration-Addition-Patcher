@@ -12,36 +12,52 @@ IMAGE_SYM_CLASS_EXTERNAL = 2
 IMAGE_SYM_CLASS_STATIC = 3
 
 
-def _relative_branches(code: bytes):
-    """Yield (ins_offset, ins_len, disp_offset, disp_size, target) for every
-    instruction in ``code`` that jumps or calls a *relative* destination.
+def _decode_code_section(code: bytes):
+    """Decode a code section into (instruction starts, relative branches, bytes covered).
 
-    These displacements are resolved by the compiler inside a single section,
-    so they carry no relocation record. Nothing else in this file knows about
-    them, which is why growing a code section used to silently break every
-    branch that spanned the insertion point.
+    Relative displacements are resolved by the compiler inside a single
+    section, so they carry no relocation record. Nothing else in this file
+    knows about them, which is why growing a code section used to silently
+    break every branch that spanned the insertion point.
+
+    Branches are identified by Capstone's jump/call groups and an immediate
+    operand rather than by opcode byte, so a legally prefixed branch is not
+    missed, and the displacement field is taken from the instruction encoding
+    so a prefix or a 16-bit form does not shift it out from under us. The far
+    forms (`ljmp` / `lcall`) take an absolute destination and are skipped.
     """
-    from capstone import Cs, CS_ARCH_X86, CS_MODE_32
-    from capstone.x86 import X86_OP_IMM
+    try:
+        from capstone import Cs, CS_ARCH_X86, CS_MODE_32, CS_GRP_CALL, CS_GRP_JUMP
+        from capstone.x86 import X86_OP_IMM
+    except ImportError as exc:  # pragma: no cover - environment problem
+        raise ImportError(
+            "capstone is required to grow a code section safely: the relative "
+            "branches spanning the insertion point have to be decoded before "
+            "they can be re-encoded. Install it with "
+            "`python -m pip install -r requirements-build.txt`."
+        ) from exc
 
     md = Cs(CS_ARCH_X86, CS_MODE_32)
     md.detail = True
+    starts = set()
+    branches = []
+    covered = 0
     for ins in md.disasm(code, 0):
-        if not ins.operands:
+        starts.add(ins.address)
+        covered = ins.address + ins.size
+        if not ins.operands or ins.mnemonic in ("ljmp", "lcall"):
             continue
         op = ins.operands[0]
         if op.type != X86_OP_IMM:
             continue
-        opc = ins.bytes[0]
-        if opc in (0xE8, 0xE9):                      # call rel32 / jmp rel32
-            disp_off, disp_size = 1, 4
-        elif opc == 0x0F and 0x80 <= ins.bytes[1] <= 0x8F:   # jcc rel32
-            disp_off, disp_size = 2, 4
-        elif 0x70 <= opc <= 0x7F or opc in (0xEB, 0xE0, 0xE1, 0xE2, 0xE3):
-            disp_off, disp_size = 1, 1               # jcc/jmp/loop/jecxz rel8
-        else:
+        if not (ins.group(CS_GRP_JUMP) or ins.group(CS_GRP_CALL)):
             continue
-        yield ins.address, ins.size, disp_off, disp_size, op.imm
+        disp_off = ins.encoding.imm_offset
+        disp_size = ins.encoding.imm_size
+        if not disp_off or disp_size not in (1, 2, 4):
+            continue
+        branches.append((ins.address, ins.size, disp_off, disp_size, op.imm))
+    return starts, branches, covered
 
 
 @dataclass
@@ -235,17 +251,36 @@ class CoffObject:
                                     code_before: bytes, relocated: set):
         """Keep intra-section jumps pointing at the same instructions after a grow.
 
-        Relative branches are not relocations, so inserting bytes in the middle
-        of a code section leaves every displacement that spans the insertion
-        point short by ``delta``. A branch then lands mid-instruction, which
-        desynchronises the decoder and corrupts the frame -- the cause of the
-        VF2 startup crash traced to VillagerAI.obj, where CVillagerAI's
-        early-out jumped one byte into the tail of a `jne`.
+        Inserting bytes in the middle of a code section leaves every relative
+        displacement that spans the insertion point short by ``delta``, so the
+        branch lands mid-instruction. That is the VF2 startup crash: CVillagerAI's
+        early-out jumped one byte into the tail of a `jne`, the decoder
+        desynchronised, and the caller resumed with a null `this`.
 
-        The old offsets map onto the new ones by shifting everything at or
-        after the insertion point, so each branch is simply re-encoded from the
-        mapped source and target rather than guessed at.
+        Old offsets map onto new ones by shifting everything at or after the
+        insertion point, so each branch is re-encoded from the mapped source and
+        target rather than guessed at.
         """
+        starts, branches, covered = _decode_code_section(code_before)
+        # The decoder stops at the first byte it cannot read, so anything past
+        # `covered` is unexamined and might hide a branch we would fail to
+        # retarget. A short unreadable tail is alignment padding -- MSVC leaves
+        # up to 15 bytes, and InventoryManager.obj ends on a lone 0x03 -- so
+        # that much is tolerated, but only when everything up to the insertion
+        # point was read and the remainder is genuinely at the end.
+        tail = len(code_before) - covered
+        if tail and (covered < section_offset or tail >= 16):
+            raise ValueError(
+                f"only decoded {covered:#x} of {len(code_before):#x} bytes of "
+                f"{sec.name}; refusing to grow a section whose branches cannot "
+                "all be accounted for"
+            )
+        if section_offset not in starts and section_offset != len(code_before):
+            raise ValueError(
+                f"insert at {section_offset:#x} is not an instruction boundary "
+                f"in {sec.name}"
+            )
+
         def moved_position(offset: int) -> int:
             return offset + delta if offset >= section_offset else offset
 
@@ -255,34 +290,34 @@ class CoffObject:
             # only destinations past it are old code that has shifted.
             return offset + delta if offset > section_offset else offset
 
-        # Displacements that carry a relocation are filled in by the linker,
-        # not by us: they sit in the object as zero placeholders and must be
-        # left exactly as they are. ``relocated`` was collected before the
-        # insert, so its offsets line up with ``code_before``.
-        for ins_off, ins_len, disp_off, disp_size, target in _relative_branches(code_before):
+        limits = {1: (-128, 127), 2: (-32768, 32767), 4: (-(1 << 31), (1 << 31) - 1)}
+        formats = {1: "<b", 2: "<h", 4: "<i"}
+
+        for ins_off, ins_len, disp_off, disp_size, target in branches:
             if ins_off + disp_off in relocated:
+                # Filled in by the linker: a zero placeholder, not ours to touch.
                 continue
-            if ins_off < section_offset < ins_off + ins_len:
-                raise ValueError(
-                    f"insert at {section_offset:#x} splits the instruction at "
-                    f"{ins_off:#x} in {sec.name}"
-                )
-            new_end = moved_position(ins_off + ins_len)
+            # The end of an instruction follows its own start. Mapping the end
+            # offset independently would shift a branch that ends exactly at the
+            # insertion point, cancelling out the target's shift and dropping it
+            # into the payload.
+            new_end = moved_position(ins_off) + ins_len
             new_disp = moved_target(target) - new_end
-            old_disp = target - (ins_off + ins_len)
-            if new_disp == old_disp:
+            if new_disp == target - (ins_off + ins_len):
                 continue
-            if disp_size == 1 and not (-128 <= new_disp <= 127):
+            low, high = limits[disp_size]
+            if not low <= new_disp <= high:
                 raise ValueError(
-                    f"growing {sec.name} by {delta} pushes the rel8 branch at "
-                    f"{ins_off:#x} out of range ({new_disp}); it needs a rel32 form"
+                    f"growing {sec.name} by {delta} pushes the {disp_size * 8}-bit "
+                    f"branch at {ins_off:#x} out of range ({new_disp}); it needs a "
+                    "wider form"
                 )
             if os.environ.get("VF2_TRACE_BRANCH_FIX"):
-                print(f"[branchfix] {sec.name} ins@{ins_off:#x} disp {old_disp:#x} -> "
-                      f"{new_disp:#x} (target {target:#x})", file=sys.stderr)
-            fmt = "<b" if disp_size == 1 else "<i"
+                print(f"[branchfix] {sec.name} ins@{ins_off:#x} -> {new_disp:#x} "
+                      f"(target {target:#x})", file=sys.stderr)
             struct.pack_into(
-                fmt, self.buf, sec.raw_ptr + moved_position(ins_off) + disp_off, new_disp
+                formats[disp_size], self.buf,
+                sec.raw_ptr + moved_position(ins_off) + disp_off, new_disp,
             )
 
     def grow_bss_section(self, sec_index: int, section_offset: int, size: int):
