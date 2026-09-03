@@ -2146,8 +2146,14 @@ HOLIDAY_ORNAMENT_GOAL_COLLECTOR_ID = 0x54
 HOLIDAY_ORNAMENT_GOAL_COLLECTOR_TARGET = 13
 HOLIDAY_ORNAMENT_NOTIFICATION_QUEUE_COUNT = 0x5F
 CUSTOM_ACHIEVEMENT_FIRST_ID = 0x60
-CUSTOM_ACHIEVEMENT_LAST_ID = 0xA9
-CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xA9
+CUSTOM_ACHIEVEMENT_LAST_ID = 0xAA
+# The two rare joke-label goals. Kirk Strayer sits at 0xAA rather than 0xA8:
+# that record is the purchase-mask scratch record and also the mobile
+# renovation persistent record, so a real achievement there would collide
+# with the Taters bits, pregnancy controls and renovation state.
+CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID = 0xA9
+CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID = 0xAA
+CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID = 0xAA
 CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID = CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID + 1
 CUSTOM_ACHIEVEMENT_GENERAL_END = 0x65
 CUSTOM_ACHIEVEMENT_BEHAVIOR_FIRST = 0x66
@@ -2255,8 +2261,8 @@ CUSTOM_ACHIEVEMENT_ROW_SPECS = [
     (0xA5, "behavior", "Props to you", "You completed Tight Ship and all five additional discipline goals."),
     (0xA6, "vf3_furniture", "Furnishing the Future", "You bought a Virtual Families 3 furniture item."),
     (0xA7, "pet", "Slow and Steady", "Have a turtle in the house."),
-    (0xA8, "behavior", "Kirk Strayer", "You praised someone who was drinking a particularly complicated coffee order."),
-    (0xA9, "behavior", "Bubble Bass", "You praised someone who was eating a particularly complicated burger order."),
+    (0xAA, "behavior", "Kirk Strayer's Order", "You praised someone who was drinking a particularly complicated coffee order."),
+    (0xA9, "behavior", "Bubble Bass's Order", "You praised someone who was eating a particularly complicated burger order."),
 ]
 CUSTOM_ACHIEVEMENT_GENERAL_PURCHASE_GOALS = {
     0x2EA: 0x60,
@@ -2336,8 +2342,11 @@ FORCED_BABY_GENDER_HELPER_SYMBOL = "@VF2SpawnBirthPeepWithForcedGender@56"
 CUSTOM_ACHIEVEMENT_PRAISE_LABEL_GOALS = {
     # The two rare joke labels. Both are already about a 1-in-80 roll inside a
     # low-weight behavior, so catching one mid-praise is the point.
-    "Making a Half-Caff Double-Shot Leviathan Latte-Espresso with Heavy Cream": 0xA8,
-    "Eating a Double Triple Bossy Deluxe on a raft, four-by-four, animal style, with extra shingles, a shimmy and a squeeze and light axle grease that cries, burns and swims": 0xA9,
+    # Truncated to the 0x27 bytes the villager label slot actually holds.
+    # These two labels are 72 and 168 characters, so comparing the full
+    # string could never match and neither goal could ever fire.
+    "Making a Half-Caff Double-Shot Leviatha": 0xAA,
+    "Eating a Double Triple Bossy Deluxe on ": 0xA9,
     "Watching cat videos": 0x66,
     "Posting on VideoTube": 0x67,
     "Playing Virtual Families": 0x68,
@@ -2485,6 +2494,14 @@ HOLIDAY_ORNAMENT_SPAWN_RECTS = [
     ("__xmm@0000026f0000019d0000017800000098", (0x098, 0x178, 0x19D, 0x26F)),
     ("__xmm@0000075000000137000005680000008d", (0x08D, 0x568, 0x137, 0x750)),
 ]
+
+# An achievementList row's last field is its coin reward. CAchievement::Update
+# reads achievementList[id].reward and pays 25 when it is zero, so every custom
+# goal so far has quietly paid the default. These two pay 100.
+CUSTOM_ACHIEVEMENT_COIN_REWARDS = {
+    CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID: 100,
+    CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID: 100,
+}
 HOLIDAY_ORNAMENT_MOBILE_ATLAS_DAT = ROOT / "work" / "vf2_obb" / "assets" / "tp225.dat"
 HOLIDAY_ORNAMENT_MOBILE_ATLAS_PVR = ROOT / "work" / "vf2_obb" / "assets" / "tp225.pvr"
 HOLIDAY_ORNAMENT_BACKGROUND_FILENAME = "collection-ornaments_background.png"
@@ -5937,6 +5954,56 @@ def outfit_store_entries():
     return entries
 
 
+# Hairstyle rows for the Clothing and Hairstyles section. Modelled on the
+# outfit rows: same store handling and price, but they set the villager's head
+# instead of the body. 50 per gender, from the head descriptors, whose raw_u32
+# reads [image_id, 0, 24, 50] -- 24 frames across 50 heads.
+HEAD_STORE_GENDER_ITEM_BASES = {
+    "female": 0x480,
+    "male": 0x4C0,
+}
+HEAD_STORE_VALUE_COUNT = 50
+HEAD_STORE_VALUES = tuple(range(HEAD_STORE_VALUE_COUNT))
+HEAD_STORE_ENTRY_COUNT = len(OUTFIT_STORE_GENDERS) * HEAD_STORE_VALUE_COUNT
+
+
+def head_item_id_for(gender, head_value):
+    return HEAD_STORE_GENDER_ITEM_BASES[gender] + head_value
+
+
+def head_store_gender_and_value(item_id):
+    for gender, base in HEAD_STORE_GENDER_ITEM_BASES.items():
+        head_value = item_id - base
+        if head_value in HEAD_STORE_VALUES:
+            return gender, head_value
+    return None, None
+
+
+def head_store_entry_index(gender, head_value):
+    return (
+        OUTFIT_STORE_GENDERS.index(gender) * HEAD_STORE_VALUE_COUNT
+        + HEAD_STORE_VALUES.index(head_value)
+    )
+
+
+def head_store_entries():
+    entries = []
+    for gender in OUTFIT_STORE_GENDERS:
+        title = gender.title()
+        for head_value in HEAD_STORE_VALUES:
+            entries.append({
+                "entry_index": head_store_entry_index(gender, head_value),
+                "item_id": head_item_id_for(gender, head_value),
+                "gender": gender,
+                "head_value": head_value,
+                "name": f"{title} Hairstyle {head_value:02d}",
+                "price": OUTFIT_STORE_PRICE,
+                "lock_generation": 0,
+                "source": "hairstyle row",
+            })
+    return entries
+
+
 def image_id_for(idx):
     return ORIG_IMAGE_MAX + 1 + idx
 
@@ -6381,6 +6448,44 @@ def villager_detail_body_image_index(gender, body_value):
 
 def villager_detail_body_image_id(gender, body_value):
     return villager_detail_body_image_base() + villager_detail_body_image_index(gender, body_value)
+
+
+# Hairstyle store icons are appended after every existing descriptor block, so
+# adding them cannot shift an image id that something else already pins. The
+# icons themselves are ordinary PNGs under Images/OutfitIcons -- no executable
+# space is used for the art.
+HEAD_STORE_ICON_FRAME = 5
+HEAD_STORE_ICON_SHEETS = {
+    "female": "female_heads00.png",
+    "male": "male_heads00.png",
+}
+HEAD_STORE_ICON_COLUMNS = 24
+HEAD_STORE_ICON_ROWS = 50
+
+
+def head_icon_image_base(holiday_body_descriptor_count=0):
+    # One past the last id any other block can hand out. Every count is added
+    # unconditionally: gating any of them on a setting would move these ids
+    # between matrix variants, and an image id has to mean the same thing in
+    # every executable.
+    renovation_tail = (
+        mobile_renovation_image_base(holiday_body_descriptor_count)
+        + MOBILE_RENOVATION_IMAGE_COUNT
+    )
+    ornament_tail = holiday_ornament_collection_background_image_id(
+        holiday_body_descriptor_count
+    ) + 1
+    bathroom_tail = ai_bathroom2_store_icon_image_base(
+        holiday_body_descriptor_count
+    ) + len(AI_BATHROOM2_STYLE_CATALOG)
+    return max(renovation_tail, ornament_tail, bathroom_tail)
+
+
+def head_icon_image_id(gender, head_value, holiday_body_descriptor_count=0):
+    return (
+        head_icon_image_base(holiday_body_descriptor_count)
+        + head_store_entry_index(gender, head_value)
+    )
 
 
 def holiday_body_descriptor_count():
@@ -8612,7 +8717,7 @@ def validate_holiday_ornament_native_contract(manifest):
             0,
             title_id,
             description_id,
-            0,
+            CUSTOM_ACHIEVEMENT_COIN_REWARDS.get(achievement_id, 0),
         )
         if row != expected_row:
             errors.append(f"achievementList row {achievement_id:#x} is not the exact B152 record")
@@ -8621,10 +8726,19 @@ def validate_holiday_ornament_native_contract(manifest):
         achievement_obj,
         "?LoadState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z",
     )
+    _reserved_offset = CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID * 12
+    _reserved_count = 0x125 - CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID
     for needle, label in (
-        (b"\x8D\x4E\x00\x8D\x83\xEC\x07\x00\x00", "reserved-tail start 0xA9"),
-        (b"\x81\xF9\x7C\x00\x00\x00", "reserved-tail scan count 0x7C"),
-        (b"\x8D\x83\xEC\x07\x00\x00\xB9\x7C\x00\x00\x00", "reserved-tail clear span"),
+        # Derived from the last defined achievement, so adding a goal moves this
+        # boundary too. Pinned at 0xA9/0x7C these fired the moment the two
+        # joke-label goals were defined past the old edge.
+        (bytes((0x8D, 0x4E, 0x00, 0x8D, 0x83)) + struct.pack('<I', _reserved_offset),
+         f"reserved-tail start {CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID:#x}"),
+        (bytes((0x81, 0xF9)) + struct.pack('<I', _reserved_count),
+         f"reserved-tail scan count {_reserved_count:#x}"),
+        (bytes((0x8D, 0x83)) + struct.pack('<I', _reserved_offset)
+         + bytes((0xB9,)) + struct.pack('<I', _reserved_count),
+         "reserved-tail clear span"),
     ):
         if needle not in load_data:
             errors.append(f"CAchievement::LoadState missing {label}")
@@ -15699,7 +15813,10 @@ extern "C" int __cdecl VF2RollOlderVillagerMortality(
 static int VF2AchievementVisibleCountInternal() {
     int count = 0x5F + 6 + 3 + 2 + 5 + 6 + 2 + 1 + 1 + 1;
     if (kVF2IncludeOrnamentologistGoal) ++count;
-    if (kVF2IncludeBehaviorGoals) count += 26;
+    // 26 original behaviour goals plus the two rare joke-label goals
+    // (Bubble Bass's Order, Kirk Strayer's Order), which are behaviour
+    // goals too and are appended to the visible order alongside them.
+    if (kVF2IncludeBehaviorGoals) count += 28;
     if (gVF2HolidayFurnitureGoalsEnabled != 0) count += 19;
     return count;
 }
@@ -20103,7 +20220,7 @@ def patch_custom_achievements(manifest):
             0,
             title_id,
             description_id,
-            0,
+            CUSTOM_ACHIEVEMENT_COIN_REWARDS.get(achievement_id, 0),
         ))
     if [row[0] for row in rows] != list(range(0x5F, CUSTOM_ACHIEVEMENT_LAST_ID + 1)):
         raise RuntimeError("Custom achievement rows are not dense through reserved capacity")
@@ -20142,19 +20259,28 @@ def patch_custom_achievements(manifest):
     )
 
     # Stock LoadState treats every nonzero row from 0x5F onward as reserved.
-    # Preserve rows through hidden persisted slot 0xA8, which stores the
-    # two-bit Taters purchase mask. Validate/clear only IDs 0xA9-0x124.
+    # Preserve every defined row, then validate/clear only the reserved tail.
+    # The boundary is derived from CUSTOM_ACHIEVEMENT_DEFINED_LAST_ID rather
+    # than written as a literal: it was pinned at 0xA9 and silently dropped the
+    # two rare joke-label goals on reload once they were defined past it.
+    reserved_first = CUSTOM_ACHIEVEMENT_RESERVED_FIRST_ID
+    reserved_offset = reserved_first * 12
+    reserved_count = 0x125 - reserved_first
     load_sym = achievement_obj.symbol(
         "?LoadState@CAchievement@@QAE?B_NAAUSSaveState@1@@Z"
     )
     load_sec = achievement_obj.section(load_sym.section)
     load_raw = load_sec.raw_ptr + load_sym.value
     load_patches = (
-        (0x39, b"\x8D\x4E\x5F", b"\x8D\x4E\x00"),
-        (0x3C, b"\x8D\x83\x74\x04\x00\x00", b"\x8D\x83\xEC\x07\x00\x00"),
-        (0x51, b"\x81\xF9\x25\x01\x00\x00", b"\x81\xF9\x7C\x00\x00\x00"),
-        (0x62, b"\x8D\x83\x5C\x04\x00\x00", b"\x8D\x83\xEC\x07\x00\x00"),
-        (0x68, b"\xB9\xC8\x00\x00\x00", b"\xB9\x7C\x00\x00\x00"),
+        (0x39, bytes((0x8D, 0x4E, 0x5F)), bytes((0x8D, 0x4E, 0x00))),
+        (0x3C, bytes((0x8D, 0x83, 0x74, 0x04, 0x00, 0x00)),
+         bytes((0x8D, 0x83)) + struct.pack("<I", reserved_offset)),
+        (0x51, bytes((0x81, 0xF9, 0x25, 0x01, 0x00, 0x00)),
+         bytes((0x81, 0xF9)) + struct.pack("<I", reserved_count)),
+        (0x62, bytes((0x8D, 0x83, 0x5C, 0x04, 0x00, 0x00)),
+         bytes((0x8D, 0x83)) + struct.pack("<I", reserved_offset)),
+        (0x68, bytes((0xB9, 0xC8, 0x00, 0x00, 0x00)),
+         bytes((0xB9,)) + struct.pack("<I", reserved_count)),
     )
     for offset, expected, replacement in load_patches:
         if achievement_obj.buf[load_raw + offset : load_raw + offset + len(expected)] != expected:
@@ -20416,6 +20542,12 @@ def patch_custom_achievements(manifest):
     )
     appended_order.append(CUSTOM_ACHIEVEMENT_VF3_FURNITURE_ID)
     appended_order.append(CUSTOM_ACHIEVEMENT_TURTLE_ID)
+    if ENABLE_BEHAVIOR_PATCHES:
+        # Both fire from a praise on a rare behaviour label, so they only make
+        # sense when Behavior Patches supplies those labels. Without this they
+        # were materialised but never shown on the Goals screen.
+        appended_order.append(CUSTOM_ACHIEVEMENT_BURGER_ORDER_ID)
+        appended_order.append(CUSTOM_ACHIEVEMENT_COFFEE_ORDER_ID)
     appended_order.extend(
         range(CUSTOM_ACHIEVEMENT_HOLIDAY_FIRST, CUSTOM_ACHIEVEMENT_HOLIDAY_LAST + 1)
     )
