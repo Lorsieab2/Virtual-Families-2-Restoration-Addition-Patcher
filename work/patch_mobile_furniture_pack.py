@@ -13121,6 +13121,21 @@ extern "C" __declspec(naked) ldwImageGrid *__cdecl VF2ResolveBathroom2ClosedCurt
 }}
 
 extern "C" int __cdecl VF2ResolveRenovationCurtainImage(int image) {{
+    // The legacy-byte cleanup has to happen even when the remodel is
+    // disabled, and every path that normally reaches it is gated on
+    // kVF2EnableAIBathroom2: VF2DrawAIBathroom2 returns before normalizing,
+    // and the Bathroom 2 arm below is only taken when the feature is on. So
+    // a save written by an enabled build kept its fixture-breaking byte -- and
+    // its shower, toilet and sink stayed unusable -- precisely when the player
+    // turned the feature off, which is the case this cleanup exists for.
+    //
+    // This resolver is spliced into theGraphicsManager::Draw unconditionally,
+    // so it is the one place that runs in both builds. Normalizing here is
+    // safe with the remodel off because clearing the legacy byte no longer
+    // implies migrating into the active mask -- that half stays gated.
+    if (!kVF2EnableAIBathroom2) {{
+        VF2NormalizeAIBathroom2ActivesAndSave();
+    }}
     if (image == kVF2StockBathroom1ClosedCurtainImage) {{
         return kVF2EnableMobileRenovations
             ? VF2ResolveBathroom1ClosedCurtainImageForDraw()
