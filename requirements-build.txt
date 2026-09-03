@@ -6,3 +6,9 @@
 # that span the insertion point can be re-encoded. Without it a grown .text
 # section silently keeps stale displacements and the game crashes on startup.
 capstone>=5.0
+
+# Pillow generates the store icon art -- the outfit icons cut from the body
+# sheets and the hairstyle icons cut from the head sheets -- along with the
+# holiday body frames and the renovation art. The generator imports PIL.Image
+# unconditionally, so a build machine without it stops at the first icon pass.
+Pillow>=10.0

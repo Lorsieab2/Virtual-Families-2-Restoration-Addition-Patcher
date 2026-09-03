@@ -74,6 +74,22 @@ class TestClothingBoundsWidth(unittest.TestCase):
         widened = _widened(213, struct.unpack_from("<i", STOCK_JA, 2)[0])
         self.assertEqual(len(widened) - len(STOCK_BOUNDS + STOCK_JA), 3)
 
+    def test_the_gap_is_inserted_before_the_widened_bytes_are_written(self):
+        # insert_section_bytes decodes the section and requires the insertion
+        # point to be an instruction boundary. Writing the 12-byte pair into
+        # the 9 original bytes first would leave a half-formed "ja" straddling
+        # that point -- its last three bytes still belonging to the following
+        # instruction -- and the decode would reject it, stopping every build.
+        path = patcher.ROOT / "work" / "patch_mobile_furniture_pack.py"
+        src = path.read_text(encoding="utf-8")
+        insert_at = src.index("clothing_bounds_off + 9, bytes([0x90])")
+        write_at = src.index("clothing_bounds_raw + 12] = widened")
+        self.assertLess(
+            insert_at, write_at,
+            "the three-byte gap must be inserted while the original cmp/ja "
+            "pair is still a valid instruction sequence",
+        )
+
     def test_the_grower_re_aims_branches_across_the_insertion(self):
         # A branch that jumps over the insertion point must still land on the
         # same instruction afterwards.
