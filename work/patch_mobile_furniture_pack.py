@@ -21238,9 +21238,24 @@ def patch_same_sex_pregnancy_guard(manifest):
         "helper": SAME_SEX_TRY_TO_MAKE_BABY_SKIP_HELPER_SYMBOL,
         "gate": "always -- installed with the same-sex embrace hook, not with "
                 "the optional Behavior Patches",
+        # The helper is VF2IsSameSexMarriage() || VF2IsBehaviorSixChildPrivate
+        # TimeMarriage(), and the second operand returns false outright when
+        # Behavior Patches is off. Claiming the six-child half unconditionally
+        # contradicted the disabled BehaviorPatchesGate entry, which says that
+        # pregnancy route is stock.
         "effect": (
-            "returns before ChanceOfPregnancy/Impregnate for a same-sex "
-            "marriage or an opposite-sex couple already at six children"
+            "returns before ChanceOfPregnancy/Impregnate for a same-sex marriage"
+            + (
+                ", or an opposite-sex couple already at six children"
+                if ENABLE_BEHAVIOR_PATCHES
+                else ""
+            )
+        ),
+        "six_child_effect": (
+            "included" if ENABLE_BEHAVIOR_PATCHES else
+            "not included: VF2IsBehaviorSixChildPrivateTimeMarriage() is false "
+            "without Behavior Patches, so an opposite-sex couple at six "
+            "children keeps the stock pregnancy route"
         ),
     }
 
