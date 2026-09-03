@@ -14569,6 +14569,12 @@ static bool VF2IsCurrentGenerationChild(CVillager *villager) {
     int generations = *(int *)(treeData + 0x04);
     if (generations <= 0 || generations > 30) return false;
     unsigned char *family = treeData + 0x08 + (generations - 1) * 0x6C8;
+    // The native CFamilyTree::GetCurrentFamily computes this same address --
+    // generations * 0x6C8 - 0x6C0 from the tree, which is identical to
+    // 0x08 + (generations - 1) * 0x6C8 -- and then rejects the record unless
+    // its leading validity byte is set, returning null. Apply the same gate,
+    // so an uninitialised current family is not read as a child list.
+    if (!family[0x00]) return false;
     int children = *(int *)(family + 0x1B4);
     if (children < 0) children = 0;
     if (children > 6) children = 6;
