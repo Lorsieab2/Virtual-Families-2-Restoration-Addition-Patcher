@@ -75,5 +75,15 @@ sign-extends. With 114 rows it still fit. With 214 it would have inverted the
 guard entirely and let the store read past the end of its own list. It is now a
 real 32-bit compare.
 
+The Same-Sex Marriage runtime-flag check used to treat a *missing*
+`source_section` key as "this flag lives in the save payload, nothing to
+verify" — so a misspelled or half-written contract looked exactly like the
+legitimate case and passed. It now fails closed.
+
+A ping-pong helper was written with f-string syntax inside a raw-string
+template, so the generated C carried a literal placeholder and would not
+compile in any build with Behaviour Patches enabled. Caught by the matrix
+build; the tests now assert the emitted C rather than the Python that emits it.
+
 The build also declares Pillow alongside capstone, so a clean machine that
 follows the documented install can actually build.
