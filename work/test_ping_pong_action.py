@@ -27,12 +27,19 @@ class TestPingPongLabels(unittest.TestCase):
         labels = [text for _key, text in patcher.BEHAVIOR_LABELS[start:end]]
         self.assertEqual(labels, ["Playing ping-pong"])
 
-    def test_the_group_is_appended_last(self):
-        # Inserting it anywhere else would shift every established label id.
-        last_group = patcher.BEHAVIOR_LABEL_GROUPS[-1][0]
-        self.assertEqual(last_group, "ping_pong")
-        start, end = patcher.BEHAVIOR_LABEL_GROUP_RANGES["ping_pong"]
-        self.assertEqual(end, len(patcher.BEHAVIOR_LABELS))
+    def test_the_group_is_appended_after_the_established_ones(self):
+        # What matters is that it was APPENDED, not that it is still last --
+        # the exercise bike groups were added after it. Inserting a group in
+        # the middle is what would shift every established label id.
+        names = [name for name, _entries in patcher.BEHAVIOR_LABEL_GROUPS]
+        self.assertIn("ping_pong", names)
+        # Every group that existed before it still starts where it did, which
+        # is what "appended" buys: the snow group is the last of the original
+        # set and must still precede this one.
+        self.assertLess(names.index("snow"), names.index("ping_pong"))
+        start, _end = patcher.BEHAVIOR_LABEL_GROUP_RANGES["ping_pong"]
+        snow_start, snow_end = patcher.BEHAVIOR_LABEL_GROUP_RANGES["snow"]
+        self.assertEqual(start, snow_end)
 
     def test_the_label_ids_clear_the_blocks_that_follow_them(self):
         ids = patcher.behavior_label_string_ids_for_group("ping_pong")

@@ -1741,7 +1741,11 @@ def validate_mobile_furniture_autonomous_scope():
         )
 
     external_ids = {
-        int(spec["mobile_id"]) for spec in MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS
+        # Specs for this patcher's own items carry no mobile_id -- there is no
+        # mobile row for them to collide with, which is what this check is for.
+        int(spec["mobile_id"])
+        for spec in MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS
+        if spec["mobile_id"] is not None
     }
     id_overlap = external_ids.intersection(
         MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_MOBILE_IDS
@@ -1849,6 +1853,17 @@ MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = (
         "weight": 2000,
         "object_enum": "eObjectXmasTree",
         "handler": "VF2HandleMobileFixingTreeDecorations",
+    },
+    {
+        # This patcher's own item, not a ported mobile row, so it has no
+        # mobile_id. Only the RECEIVING half is autonomous: giving a treatment
+        # needs a second villager already receiving on that same lounger,
+        # which autonomous selection cannot arrange.
+        "mobile_id": None,
+        "object": MOBILE_CHAISE_OBJECT,
+        "weight": 2000,
+        "object_enum": "eObjectChaise",
+        "handler": "VF2HandleMobileSpaLoungerReceiving",
     },
 )
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
@@ -25383,6 +25398,8 @@ extern CDealerSay DealerSay;
 extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
 extern "C" int __cdecl strncmp(char const *, char const *, unsigned int);
 static void VF2InitializeMobileExternalWeights(void *villager);
+// Declared here because the autonomous candidate table below names it.
+static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager);
 
 static unsigned char gVF2PatioDrinksOn = 0;
 static unsigned int gVF2PatioDrinksDeadline = 0;
@@ -27060,7 +27077,7 @@ static bool VF2VillagerDislikes(CVillager &villager, int like)
 
 struct VF2MobileExternalWeights {
     void *villager;
-    unsigned int weights[13];
+    unsigned int weights[14];
 };
 
 static VF2MobileExternalWeights gVF2MobileExternalWeights[30] = {};
@@ -27090,11 +27107,15 @@ static void VF2InitializeMobileExternalWeights(void *villager)
 {
     VF2MobileExternalWeights *record = VF2FindMobileExternalWeights(villager);
     record->villager = villager;
-    unsigned int bases[13] = {
+    unsigned int bases[14] = {
         2000, 2000, 2000, 2000, 2000,
-        3000, 12000, 3000, 12000, 2000, 3000, 2000, 2000
+        3000, 12000, 3000, 12000, 2000, 3000, 2000, 2000,
+        // Spa lounger, receiving half only. Same base weight as the other
+        // relax-on-a-chaise candidates -- it is one adult choosing to go and
+        // be pampered, not a rare event.
+        2000
     };
-    for (int index = 0; index < 13; ++index) {
+    for (int index = 0; index < 14; ++index) {
         record->weights[index] =
             VF2RandomizeMobileCandidateWeight(bases[index]);
     }
@@ -27256,6 +27277,18 @@ extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
             mobileWeights->weights[12],
             VF2HandleMobileFixingTreeDecorations,
             treeAutonomousEligible
+        },
+        {
+            // Adults only, and only the receiving half -- see
+            // VF2HandleMobileSpaLoungerReceiving for why giving cannot be
+            // autonomous. The handler itself refuses an occupied lounger, so
+            // a villager never walks over to one somebody is already using.
+            CContentMap::eObjectChaise,
+            0x118,
+            0x7FFFFFFF,
+            mobileWeights->weights[13],
+            VF2HandleMobileSpaLoungerReceiving,
+            true
         },
     };
 
@@ -27661,6 +27694,38 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
     return true;
 }
 
+// The RECEIVING half, chosen autonomously.
+//
+// Only this half can be autonomous. Giving a treatment requires a second
+// villager already receiving one on that same lounger, and autonomous
+// selection picks one villager at a time with no way to arrange a pair -- so
+// an autonomous "giving" would have villagers miming a massage at an empty
+// chair. Receiving has no such requirement: one adult, one free lounger.
+//
+// Adults only, matching the manual route. A free lounger is required, so a
+// villager never walks over to one that is already occupied; the give side
+// stays a deliberate manual drop.
+static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
+{
+    if (!VF2SpaAdult(villager)) return false;
+
+    // Somebody already on this lounger means this would be the giving half,
+    // which is manual-drop only. Refuse rather than mislabel it.
+    int const loungerSlot = VF2FurnitureSlotUnderVillager(villager);
+    if (VF2SpaOccupantIndex(villager, loungerSlot, 0)) return false;
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    VF2SetActionLabel(
+        villager,
+        kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
+    plans->PlanToGo(
+        CContentMap::eObjectChaise, eSpeedNormal, ePriorityNormal, false);
+    plans->PlanToWait(ldwGameState::GetRandom(3) + 4, eBodyPositionChaise);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
 
 bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
 {
@@ -27684,22 +27749,13 @@ __VF2_COMPUTER_DROP_DISPATCH__
         return VF2HandleMobileInvisibleSpaLounger(villager);
     }
 
-    // Added furniture inherits its DONOR's drop behaviour.
-    //
-    // This dispatcher matches on item id, and until now only 0x32F was listed
-    // -- so every other item this patcher adds did nothing at all when a
-    // villager was dropped on it, however complete its record and behaviour
-    // map were. That is why the Exercise Bike, the Home Gym System, the
-    // Ping-Pong Table and every invisible item were inert: nothing ever asked
-    // them to act.
-    //
-    // Each id below routes to the handler its donor already uses, so the
-    // added item behaves exactly like the base-game furniture it was modelled
-    // on. These sit ahead of the Mobile Furniture Behaviors gate because they
-    // are this patcher's own items, not ported mobile rows, and that setting
-    // says in so many words that invisible and custom furniture is outside
-    // its scope.
-
+    // Added furniture inherits its DONOR's drop behaviour. This dispatcher
+    // matches on item id, and for a long time only 0x32F was listed -- so
+    // every other item this patcher adds did nothing at all when a villager
+    // was dropped on it, however complete its record and behaviour map were.
+    // Each added id now shares the route of the stock item it was modelled on,
+    // which is why they appear in the conditions below rather than in routes
+    // of their own.
     if (gVF2MobileFurnitureBehaviors == 0) return false;
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
@@ -28225,9 +28281,19 @@ __VF2_COMPUTER_DROP_DISPATCH__
             # eBodyPositionChaise, a different enum, so advertising it made the
             # release manifest's family binding wrong.
             "object": hex(MOBILE_CHAISE_OBJECT),
-            "manual_drop_only": True,
+            # The GIVING half is manual-drop only: it needs a second villager
+            # already receiving on that same lounger, which autonomous
+            # selection cannot arrange. The receiving half IS autonomous.
+            "manual_drop_only": False,
             "manual_drop_supported": True,
-            "autonomous": False,
+            "manual_drop_supported": True,
+            "autonomous": True,
+            "autonomous_half": "receiving only",
+            "autonomous_status": (
+                "one adult choosing a free lounger to be pampered on; the "
+                "giving half stays a manual drop because it requires a second "
+                "villager already receiving on that same lounger"
+            ),
             "minimum_age_years": 18,
             "desktop_implementation": (
                 "drop an adult on a free lounger to receive a treatment; drop "
@@ -28641,6 +28707,17 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
                 "object": "0x88",
                 "weight": 2000,
             },
+                    {
+                # This patcher's own item, so no mobile_id: there is no mobile
+                # row for it. Receiving half only -- giving needs a second
+                # villager already receiving on that same lounger, which
+                # autonomous selection cannot arrange.
+                "behavior": "SpaLoungerReceiving",
+                "mobile_id": None,
+                "object": hex(MOBILE_CHAISE_OBJECT),
+                "weight": 2000,
+                "raw_age_min": "0x118",
+            },
         ],
     }
 
@@ -28916,7 +28993,13 @@ def validate_mobile_furniture_runtime_bindings(manifest):
     actual_external = []
     for index, row in enumerate(external_rows):
         try:
-            mobile_id = int(str(row["mobile_id"]), 0)
+            # A row for one of this patcher's own items has no mobile_id --
+            # there is no mobile row for it. Kept as None rather than invented,
+            # so the manifest never implies a mobile provenance it lacks.
+            raw_mobile_id = row["mobile_id"]
+            mobile_id = (
+                None if raw_mobile_id is None else int(str(raw_mobile_id), 0)
+            )
             object_id = int(str(row["object"]), 0)
             weight_value = row.get("weight")
             if weight_value is None:
@@ -28926,7 +29009,7 @@ def validate_mobile_furniture_runtime_bindings(manifest):
             raise RuntimeError(
                 f"Mobile external autonomous row {index} is malformed"
             ) from exc
-        if mobile_id in forbidden_external_ids:
+        if mobile_id is not None and mobile_id in forbidden_external_ids:
             raise RuntimeError(
                 "Family-wide mobile behavior ID entered autonomous manifest: "
                 f"{mobile_id:#x}"
@@ -29027,6 +29110,18 @@ def validate_mobile_furniture_runtime_bindings(manifest):
         behavior_ids = family.get("mobile_behavior_ids")
         if behavior_ids is None:
             behavior_ids = [family.get("mobile_behavior_id")]
+        # A family for one of this patcher's OWN items has no mobile behaviour
+        # id -- there is no mobile behaviour it was ported from. Its external
+        # candidate is still checked below by object, so it is verified rather
+        # than skipped; only the id-matching half does not apply.
+        behavior_ids = [value for value in behavior_ids if value is not None]
+        if not behavior_ids:
+            if not any(row[1] == object_id for row in actual_external):
+                raise RuntimeError(
+                    f"Autonomous family {family.get('name')} lacks an external "
+                    f"binding for object {object_id:#x}"
+                )
+            continue
         if family.get("autonomous_base_weights"):
             required_behavior_ids = [int(str(value), 0) for value in behavior_ids]
         else:
