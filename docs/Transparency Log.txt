@@ -1400,7 +1400,19 @@ B180 picnic and patio props not shipped
   0x55 and ePropPatioDrinks is 0x56, both out of range. The fall-through path
   writes through [ecx + prop*16 + 0x7C], so passing either would corrupt memory
   rather than fail cleanly. The existing external-state approach was avoiding a
-  crash. Raising the bound is possible but was not attempted for this build.
+  crash.
+- The bound was examined again for B180 to see whether it could simply be
+  raised. It cannot, and the reason is worth recording so the question is not
+  reopened as a one-byte change. The compare at Environment.obj+0xAB33 is
+  `83 FF 54`, and raising it to 0x56 is indeed a single byte. But the three
+  instructions that follow are `0F 87` (ja, past the end), `0F B6 87 <reloc>`
+  (movzx eax, byte ptr [edi + index table]) and `FF 24 85 <reloc>` (jmp dword
+  ptr [eax*4 + jump table]). This is a compiler-generated jump table, and both
+  displacements are relocations resolved at link time. Admitting 0x55 and 0x56
+  would read two entries past the end of the byte index table and jump through
+  whatever followed. Doing it properly means extending both tables and writing
+  case bodies for two props that have no desktop art and no desktop handler --
+  a feature, not a bound adjustment.
 
 B180 verification method
 - Generated .cpp files are compiled individually (cl /c /EHsc) after each
