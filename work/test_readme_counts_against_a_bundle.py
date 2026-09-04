@@ -38,8 +38,6 @@ def _current_release() -> str | None:
     a failure that was two releases stale, which is the same wrong-authority
     mistake these tests exist to catch.
     """
-    for path in sorted((ROOT / "data" / "vf2").glob("release-identities-B*.json")):
-        pass
     identities = sorted(
         (ROOT / "data" / "vf2").glob("release-identities-B*.json"),
         key=lambda p: int(re.search(r"B(\d+)", p.name).group(1)),
