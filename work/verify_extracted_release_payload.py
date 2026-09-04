@@ -15,6 +15,7 @@ Counts come from B179's bundle, which is a real shipped archive: 32
 executables, 100 hairstyle icons, 113 furniture PNGs.
 """
 import hashlib
+import json
 import pathlib
 import shutil
 import struct
@@ -83,7 +84,8 @@ def main():
     print(f"\nexecutables      : {len(exes)}")
     print(f"hairstyle icons  : {len(icons)}")
     print(f"furniture PNGs   : {len(furniture)}")
-    print(f"lounger maps     : {len(maps)} of {len(LOUNGER_MAPS)}")
+    # Counted after manifest resolution below, so report it there instead:
+    # a raw payload count is misleading when identical files are collapsed.
 
     # Presence first. Checking contents of an empty set passes vacuously.
     if len(exes) < MIN_EXECUTABLES:
@@ -94,9 +96,49 @@ def main():
         problems.append(
             f"only {len(furniture)} furniture PNGs, expected {MIN_FURNITURE_PNGS}"
         )
+    # The lounger maps must be INSTALLED, which is not the same as being
+    # present in the payload under their own names. The exporter collapses
+    # byte-identical payload files and points several manifest records at one
+    # canonical copy, so asking "is SpaLoungerStd.png.fmap in the payload"
+    # gets the wrong answer -- and it became the wrong answer precisely
+    # BECAUSE the desktop-safe map fix made all three lounger maps identical.
+    # The manifest is the authority on what a player ends up with.
+    manifest_path = next(EXTRACT.rglob("manifest.json"), None)
+    if manifest_path is None:
+        problems.append("manifest.json is not in the bundle")
+        installed = {}
+    else:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        installed = {
+            record["file_path"]: record
+            for record in manifest.get("asset_patches", [])
+            if "file_path" in record
+        }
+
     for name in LOUNGER_MAPS:
-        if name not in maps:
-            problems.append(f"{name} is not in the payload at all")
+        target = f"Assets/{name}"
+        record = installed.get(target)
+        if record is None:
+            problems.append(f"{target} is not installed by the manifest")
+            continue
+        # Resolve the canonical payload file the record points at.
+        candidates = [
+            p for p in EXTRACT.rglob(pathlib.PurePosixPath(
+                record["source_path"]).name)
+            if p.as_posix().endswith(record["source_path"])
+        ]
+        if not candidates:
+            problems.append(
+                f"{target}: manifest points at {record['source_path']}, "
+                "which is not in the payload"
+            )
+            continue
+        maps[name] = candidates[0]
+
+    print(
+        f"lounger maps     : {len(maps)} of {len(LOUNGER_MAPS)} resolved "
+        "through the manifest"
+    )
 
     # Labels: the removed one must appear in no executable; the added ones must
     # appear in the behaviour-carrying builds. Every variant ships in one ZIP,
