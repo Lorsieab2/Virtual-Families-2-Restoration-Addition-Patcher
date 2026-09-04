@@ -162,6 +162,50 @@ class TestTransparencyLogMatchesTheBuild(unittest.TestCase):
         )
 
 
+class TestTheDocumentedPropBoundIsReal(unittest.TestCase):
+    """The prop bound is asserted against Environment.obj, not from memory."""
+
+    OBJ = ROOT / "work" / "desktop_obj_files" / "Environment.obj"
+
+    def test_setprop_still_rejects_the_two_props_we_need(self):
+        if not self.OBJ.is_file():
+            self.skipTest(
+                "Environment.obj is a gitignored build input; not present here"
+            )
+        data = self.OBJ.read_bytes()
+        # cmp edi, 54h -- the bound the docs quote.
+        pattern = b"\x83\xff\x54"
+        hits = [
+            i for i in range(len(data) - len(pattern) + 1)
+            if data[i:i + len(pattern)] == pattern
+        ]
+        # Refuse to guess. A checker that picks the first of several matches is
+        # worse than no checker.
+        self.assertEqual(
+            len(hits), 1,
+            f"expected exactly one `cmp edi,54h`, found {len(hits)}",
+        )
+        # Followed by a JA -- short (77) or near (0F 87). Reading a fixed
+        # offset would be wrong if the encoding changed, so accept either.
+        after = data[hits[0] + len(pattern):hits[0] + len(pattern) + 2]
+        self.assertTrue(
+            after[:1] == b"\x77" or after[:2] == b"\x0f\x87",
+            f"expected a JA after the compare, found {after.hex()}",
+        )
+        # And the two props really do fall outside it.
+        self.assertGreater(0x55, 0x54, "ePropPicnicReady is out of range")
+        self.assertGreater(0x56, 0x54, "ePropPatioDrinks is out of range")
+
+    def test_the_docs_quote_the_bound_that_is_actually_there(self):
+        ledger = LEDGER.read_text(encoding="utf-8")
+        transparency = TRANSPARENCY.read_text(encoding="utf-8")
+        for name, text in (("ledger", ledger), ("transparency", transparency)):
+            with self.subTest(doc=name):
+                self.assertIn("0x55", text)
+                self.assertIn("0x56", text)
+                self.assertIn("54h", text)
+
+
 class TestReadmeMatchesTheBuild(unittest.TestCase):
     def test_it_describes_the_added_furniture_counts(self):
         text = README.read_text(encoding="utf-8")
