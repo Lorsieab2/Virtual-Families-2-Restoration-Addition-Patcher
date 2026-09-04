@@ -262,11 +262,13 @@ class TestTheChecksumExampleMatchesTheRecommendedAsset(unittest.TestCase):
     """
 
     def test_the_command_names_the_archive_the_readme_recommends(self):
-        recommended = re.search(r"`(VF2-B\d+(?:\.\d+)?-Release-r\d+\.zip)`", README)
-        self.assertIsNotNone(
-            recommended, "the README no longer names a recommended archive"
-        )
-        name = recommended.group(1)
+        named = re.findall(r"`(VF2-B\d+(?:\.\d+)?-Release-r(\d+)\.zip)`", README)
+        self.assertTrue(named, "the README no longer names a recommended archive")
+        # Take the HIGHEST revision named, not the first. The README's own rule
+        # is "take the highest revision", so the check has to follow the same
+        # rule -- otherwise a future page that mentions an older revision
+        # earlier in the prose would pin the command to the wrong file.
+        name = max(named, key=lambda pair: int(pair[1]))[0]
         command = re.search(r"certutil -hashfile (\S+) SHA256", README)
         self.assertIsNotNone(command, "the checksum example is gone")
         self.assertEqual(
