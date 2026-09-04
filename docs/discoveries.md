@@ -2844,7 +2844,7 @@
   not yet proven.
 - The PC-safe `Patio_table.png.fmap` retains EObject cells across `(7..12,12)`
   and both proven seat anchors `(3,8)` and `(13,8)`. Its SHA-256 is
-  `0a60f9c579554876c15ae416d20fc313947f73ce3fb2a3a4eeb222beac6aab5d`.
+  `7c253287702c895a84260c199dab311d32934ae186ec89526e5bb8673b44cbba`.
 - At this checkpoint, mobile autonomous behaviors `0x1B6` and `0x1B7`
   exceeded the PC table and no regression-safe paired surrogate was proven.
   The exact manual routes therefore landed first without indexing those IDs

@@ -104,8 +104,8 @@ MOBILE_PATIO_TABLE_PC_CELLS = (
     (7, 12), (8, 12), (9, 12), (10, 12), (11, 12), (12, 12),
 )
 MOBILE_PATIO_TABLE_PC_SEAT_CELLS = {
-    (3, 8): 0x00049801,
-    (13, 8): 0x0004A001,
+    (3, 8): 0x00009801,
+    (13, 8): 0x0000A001,
 }
 MOBILE_PICNIC_TABLE_ITEM_ID = 0x2E8
 MOBILE_PICNIC_TABLE_OBJECT = 0x97
@@ -660,6 +660,32 @@ def vanilla_payload_fmap_source_dirs():
         return ()
     assets = source / "Assets"
     return (assets,) if assets.is_dir() else ()
+def desktop_safe_fmap_source(donor):
+    """The desktop-safe map for a donor that has one, else None.
+
+    A donor Mobile Furniture Behaviors also ships has two maps: the
+    rendered-only base map in the vanilla payload, which is the raw mobile
+    file, and the desktop-safe one in pc_fmaps. The patch installs the
+    desktop-safe map over the donor's OWN name -- but only for the 34 names it
+    owns. A borrowing item's copy is written under the BORROWER's name, which
+    that pass never visits, so a borrower kept the raw mobile cells.
+
+    Those are the cells the behavior ledger forbids installing on the desktop:
+    the desktop tables carry no handler for markers like 0x01B00000, and the
+    peep-slot anchor stays at the untranslated mobile 0x01B09800 instead of the
+    desktop 0x00009800 -- and without the translated anchor FindPeepSlot
+    rejects every chair. That is why a villager dropped on a Spa Lounger lay in
+    the wrong position or changed behaviour at once, while the ordinary
+    Loungers, which use the donor's own name and so did get the desktop-safe
+    map, behaved correctly.
+
+    The donor's own file is deliberately left alone: it is the base map a
+    release restores when the patch is disabled.
+    """
+    safe = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / donor
+    return safe if safe.is_file() else None
+
+
 VC90_CRT_ASSEMBLY_NAME = "Microsoft.VC90.CRT"
 VC90_CRT_REQUESTED_VERSION = "9.0.21022.8"
 VC90_CRT_PUBLIC_KEY_TOKEN = "1fc8b3b9a1e18e3b"
@@ -24248,14 +24274,22 @@ def sync_behavior_assets(manifest):
         donor_dst = assets / donor
         if src.resolve() != donor_dst.resolve():
             shutil.copy2(src, donor_dst)
+        borrowed = desktop_safe_fmap_source(donor) or src
         dst = assets / target
-        shutil.copy2(src, dst)
-        bucket.append({
+        shutil.copy2(borrowed, dst)
+        record = {
             "target": target,
             "donor": donor,
-            "source": str(src),
+            "source": str(borrowed),
             "bytes": dst.stat().st_size,
-        })
+        }
+        if borrowed != src:
+            record["donor_own_source"] = str(src)
+            record["reason"] = (
+                "the donor also ships a desktop-safe map; the borrower takes "
+                "that rather than the donor's raw mobile base map"
+            )
+        bucket.append(record)
 
     for target, donor in COUCH_FMAP_DONORS.items():
         copy_donor_fmap(target, donor, copied)

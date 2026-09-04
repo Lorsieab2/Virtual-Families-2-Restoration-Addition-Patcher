@@ -877,7 +877,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         self.assertEqual(len(data), 1340)
         self.assertEqual(
             hashlib.sha256(data).hexdigest(),
-            "0a60f9c579554876c15ae416d20fc313947f73ce3fb2a3a4eeb222beac6aab5d",
+            "7c253287702c895a84260c199dab311d32934ae186ec89526e5bb8673b44cbba",
         )
         width, height = struct.unpack_from("<ii", data, 24)
         values = [
