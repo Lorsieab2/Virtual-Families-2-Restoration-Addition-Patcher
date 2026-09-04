@@ -1490,6 +1490,36 @@ B180 payload deduplication and what a release check must ask
   payload check answers whether the correct map ARRIVES. Neither substitutes
   for the other, and the second is the one that speaks for what a player gets.
 
+B180 r2 corrected-text asset, added alongside the original
+- The overstated description above is player-visible text, so B180 carries a
+  SECOND archive with it corrected: VF2-B180-Release-r2.zip, SHA-256
+  FA4304114A9065EC7ED0A42AC50B6E8754D351AD390E17BD7FAD3E0F6027B8E8.
+- The original VF2-B180-Release.zip stays attached and unmodified. This is an
+  addition, not a replacement: replacing it would mean deleting a published
+  ZIP, and no release asset is ever deleted here. It also means the version
+  players already downloaded remains available and verifiable.
+- r2 was produced by REPACKING the published archive rather than rebuilding
+  the matrix. A rebuild would risk producing binaries differing from the 32
+  already gated and already downloaded; a repack cannot, because every other
+  member is copied byte for byte. Verified: 7,459 members in the same order,
+  exactly 2 differing -- manifest.json and Transparency Log.txt -- and all 32
+  executable SHA-256s still matching release-identities-B180.json.
+- Established before repacking, because "text-only" is a comfortable claim to
+  make: the manifest is not self-hashed, the bundle carries no signature
+  member, `description` is display-only with no asset record referencing it,
+  and the release gate reads `settings` for `id` alone. The gate DOES verify
+  every payload file against the source_sha256 its record declares, so the
+  repack rewrites description strings and no record field.
+- The gate requires the ZIP root folder to equal the archive name, so r2's
+  root is renamed to match. Checked first that the manifest never references
+  its own root: zero occurrences, so no record path changes meaning.
+- r2 passes the release gate (32 variants, identities authenticated) and the
+  extracted-payload verification independently.
+- The disclosure above is NOT retired by r2 and has no expiry condition. The
+  original asset remains attached and downloadable, so the overstated text is
+  still something a player can receive; the historical fact that B180 shipped
+  it stays true regardless of what r2 says.
+
 B180 shipped an overstated count in one setting description
 - The description for "Add mobile room renovations" says the patch overlays 20
   verified mobile renovation images, counting 5 Bathroom 1 and 5 Bathroom 2
@@ -1528,6 +1558,52 @@ B180 verification method
 - Preceding canonical archive: outputs/VF2-B179-Release.zip, SHA-256
   9A3043E9EC6D1EE430DAEE712F993B13FEE88E5B9F813753E71B02A2E6ECCD93.
 - No B180 bundle is linked, packaged, or published at the time of this entry.
+- SUPERSEDED: the line above was true when written, before packaging. B180 was
+  subsequently built, packaged and published as a prerelease. The original
+  sentence is kept rather than deleted, for the same reason the original ZIP is
+  kept when a corrected one is added: what was said at the time is part of what
+  a transparency log is for. See the entry below.
+
+B180 shipped artifact
+- Published as a PRERELEASE on 2026-09-04: VF2-B180-Release.zip, 144,428,060
+  bytes, 7,459 members, SHA-256
+  31195169252C441AF2C77EDA3AC660E42F2784049F00FE69D75DBF8C8FCA21B7.
+- All 32 matrix variants linked with 32 distinct executable SHA-256s. The
+  release gate independently rejects a matrix where two toggle combinations
+  share one binary, a guard added after B162 shipped exactly that.
+- The published asset was downloaded back and its SHA-256 compared against the
+  local bundle: identical. The extracted-payload verification was then re-run
+  against that downloaded copy rather than the local one, because a matching
+  digest proves the archive arrived intact and not that the fixes are in it.
+  A second session repeated the download and reached the same digest
+  independently.
+- Confirmed in the downloaded payload: 32 executables, 100 hairstyle icons at
+  56x56, and all three lounger maps resolving through the manifest to the
+  desktop-safe map sha b0126fa4d054 with the translated 0x9800 anchor. No
+  executable carries the removed "Rallying back and forth" label.
+- B179 was converted to a draft with PATCH draft=true, keeping its ZIP. No
+  release and no asset was deleted. All 94 releases were audited afterwards:
+  none has zero assets.
+
+B180 a verification that reported a correct bundle broken
+- Worth recording because the artifact was fine and the measurement was wrong,
+  which is harder to notice than the reverse.
+- The extracted-payload check first reported both Spa Lounger placement maps
+  missing from the archive. They were not missing. The exporter collapses
+  byte-identical payload files and points several manifest records at one
+  canonical copy, so the manifest installs one file to all three lounger
+  names. Asking "is this file in the payload" answers a question about storage
+  layout; "does the manifest install it" is what determines what a player ends
+  up with.
+- This was a LATENT defect rather than one the desktop-safe map fix
+  introduced. B179's manifest already had 220 source files serving more than
+  one target each. The check was always wrong and simply had no lounger to be
+  wrong about until that fix made the three maps identical.
+- The corrected version was re-validated against B179 and finds MORE there
+  than the version it replaced, because it now resolves InvisibleSpaLounger
+  through the manifest as well. That matters: the easiest way to make a
+  verification pass is to weaken it, so a corrected checker that suddenly
+  passes has to be shown to have got stricter.
 
 B180 borrowed placement maps and the two kinds of borrower
 - A defect that shipped in B179 was found and fixed: an item borrowing a donor
