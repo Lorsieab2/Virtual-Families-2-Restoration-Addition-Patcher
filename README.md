@@ -143,7 +143,8 @@ Upgrades**. Each is marked below. Uncheck anything you do not want and click
 
 - **Virtual Families 3 Furniture** - VF3 furniture imports, including the plaid/striped/flowered living-room set.
 - **Add Custom Couches and LDW Posters** - custom couch colourways and the LDW poster set.
-- **Add Invisible Furniture - Visible Graphics** and **Swap Invisible Furniture Graphics with Transparent Graphics** - the invisible furniture set, with a companion setting that swaps in fully transparent art.
+- **Add Invisible Furniture - Visible Graphics** and **Swap Invisible Furniture Graphics with Transparent Graphics** - the invisible furniture set, with a companion setting that swaps in fully transparent art. Eight outdoor pieces: the Kiddie Pool, Full-Size Pool, Hammock, Picnic Table, Patio Table, Yoga Equipment, Lounger, and Spa Lounger. Each borrows a base-game donor's placement map byte for byte, so villagers should treat it as they treat the piece it was cut from.
+- **Four new visible furniture items** - Exercise Bike, Home Gym System, Ping-Pong Table, and Spa Lounger. These are ordinary store items with their own art, each built on the same donor arrangement as the invisible pieces above.
 - **Invisible Workspace Upgrades** - invisible variants of the workspace upgrade props.
 - **Lorsieab2's Custom Map Images** - replacement map art.
 - **Transparent Menu Bar**, **Transparent Store Bar**, **Transparent Decor Tab** - UI chrome transparency.
@@ -266,6 +267,33 @@ The Dryer lint fire remains a legitimate native random malfunction and requires 
 | Anti-Spam Software Ownership | Installs or uninstalls the Anti-spam Software without using a computer. Buy again to switch it back. |
 | Rockhound Certificate Ownership | Grants or removes the Rockhound Certificate, which lets the family dig for fossils. Buy again to switch it back. |
 
+### Which store rows show a checkmark
+
+The store draws a checkmark on any row it has nothing left to sell. For rows
+whose "active" is a state you can be in and come out of, purchase history is
+the wrong question, so those rows are answered from live game state instead:
+
+- The four Special Upgrades, each checked against the state it actually sets --
+  Brokerage Account against the banking interest rate, Food Club and Lucky Rock
+  against their own flags, and Health Plan against the saved entitlement.
+- Unlock Everything In The Store, checked by asking whether every lock is in
+  fact open.
+- The three price multipliers and Reset Price Multiplier. These are mutually
+  exclusive, so at most one multiplier ticks, and Reset ticks when none is in
+  force.
+- Enable Same-Sex Marriage and Allow Reroll Of Marriage Candidates, both plain
+  toggles.
+- Force Successful Pregnancy, Next Babies Male/Female, and Next Pregnancy
+  Singleton/Twins/Triplets, read from the armed-cheat mask.
+- Anti-Spam Software and Rockhound Certificate ownership, read from the game's
+  own ownership state rather than from the purchase.
+- Every house renovation -- the ten native rows, and both added renovation
+  catalogues, each of which carries its own active byte.
+
+Only the drawing is affected. The click path still reads the real answer, so a
+reversible row stays clickable: buying Unlock Everything a second time restores
+the locks, and buying a different multiplier still switches to it.
+
 The two Flea Market rows themselves are untouched base game, and both are independently repurchaseable in every patched executable — including saves where the effect flag is already cleared. Elsewhere, rebuying the Maid or Gardener fires that worker, and rebuying an owned house renovation returns it and rebuilds the native content map so it can be purchased again.
 
 ## Behavior Patches in detail
@@ -296,6 +324,25 @@ a choice it did not have.
 Grouped visible-label variants are applied to the native TV, web, video game, radio, reading, petting, mending, ironing, telescope, workout, career, shower/bath, coffee/tea, cocktail, pool, sandbox, toy train, playground, and snow-play routes. The wrappers preserve the original behavior plans and only change the displayed action text.
 
 The sit-down pool is shared: the couch/chair route, the chaise route, and RestingBody's own resting labels (`Resting`, `Resting legs`, `Resting tired feet`) all draw from the same age/career/gender-aware label set. RestingBody's wrapper only substitutes a label when the native behavior actually emitted one of its three stock resting labels, so no other native label is disturbed.
+
+**Labels for the added furniture**
+
+Three of the added items borrow a base-game machine whose label would otherwise
+name the wrong thing. Each wrapper looks at which piece of furniture the
+villager actually walked to, so a stock machine keeps its stock label:
+
+- The Ping-Pong Table borrows the Pool Table's behaviour, which labelled its
+  users "playing pool". It now says **Playing ping-pong**.
+- The Exercise Bike borrows the Treadmill's two behaviours, which labelled its
+  users as walking or running on a treadmill.
+  Walking now says **Using the exercise bike**, and running says
+  **Doing high-intensity cycling**. The animations are deliberately left as
+  they are.
+
+The furniture is identified by reading the placed furniture record the villager
+linked to and comparing its item id, rather than by asking which furniture the
+villager *could* use -- that second question reserves a link as a side effect,
+which is why an earlier attempt mislabelled ordinary pool games.
 
 **Substantive changes**
 

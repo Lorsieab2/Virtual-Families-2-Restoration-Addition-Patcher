@@ -645,6 +645,14 @@ B162_CHANGELOG_LINES = (
     "- B162 Special Upgrades: Keeps the six stock rows, adds four mobile Special Upgrade rows in mobile-enabled overlays, and adds the 36 cheat-upgrade rows when Cheat Upgrades is enabled. The final all-enabled overlay exposes 46 total Special Upgrade rows.",
     "- B162 verification: Rebuilt all 19 native/mobile overlay combinations with unique executable SHA-256 hashes, manifest checks for native-row preservation, restart-only curtain behavior, renovation counts, and Special Upgrade counts. Static and package checks do not replace the required player launch, purchase, restart, save/reload, and Bathroom 2 crash-reproduction checks.",
 )
+B180_CHANGELOG_LINES = (
+    "- B180 added furniture drop routing: The drop dispatcher routes on item id, and only the Invisible Spa Lounger had a route, so the other added pieces placed correctly and then had nothing asking them to act. Routes were added for the Invisible Picnic Table, Invisible Patio Table, Invisible Lounger and the new visible Spa Lounger. The Invisible Lounger is folded into the chaise test so it inherits every chaise behavior rather than a copy of one.",
+    "- B180 stock-donor furniture: The Invisible Kiddie Pool, Invisible Full-Size Pool, Invisible Hammock, Invisible Yoga Equipment, Exercise Bike, Home Gym System and Ping-Pong Table borrow stock desktop furniture, whose drop handling runs through the native hotspot path ahead of this dispatcher. Their placement-map cell vocabularies are byte-identical to the donor maps. Player confirmation that these seven act on a drop is outstanding and is not claimed.",
+    "- B180 action labels: The Ping-Pong Table reads \"Playing ping-pong\" instead of playing pool, and the Exercise Bike reads \"Using the exercise bike\" and \"Doing high-intensity cycling\" instead of the treadmill labels. Animations are unchanged. Each wrapper reads the placed furniture record the villager linked to, so a stock Pool Table or Treadmill keeps its stock labels. The \"Rallying back and forth\" label was removed.",
+    "- B180 store checkmarks: Rows whose active state is reversible are checkmarked from live game state at the draw site only: the four Special Upgrades, Unlock Everything In The Store, the three price multipliers and Reset Price Multiplier, both marriage toggles, the pregnancy cheat rows, Anti-Spam and Rockhound ownership, the ten native house renovations, and both added renovation catalogues. The click path still reads the real answer, so reversible rows stay clickable.",
+    "- B180 hairstyle icons and Spa Lounger: Hairstyle store icons are cut at frame 5 of 12 on a 56x56 visual frame rather than on the engine 28x56 indexing cell, which had been removing half of every head. A visible Spa Lounger was added alongside the invisible one and shares its route; its receiving half is autonomously selectable and resolves an actual free spa lounger before committing, while the giving half stays a manual drop because it needs a second villager already receiving.",
+    "- B180 picnic and patio props: Not shipped. CEnvironment::SetProp accepts prop ids 0x00-0x54 only, and the picnic and patio drink props are 0x55 and 0x56, so passing either would write out of bounds rather than fail cleanly.",
+)
 INVALID_INSTALL_MESSAGE = (
     "No valid Virtual Families 2 Installation detected! Are you sure you downloaded it from the official website?\n\n"
     "Links:\n"
@@ -3275,6 +3283,10 @@ B151 changelog
 B162 changelog
 --------------
 {chr(10).join(B162_CHANGELOG_LINES)}
+
+B180 changelog
+--------------
+{chr(10).join(B180_CHANGELOG_LINES)}
 """,
         encoding="ascii",
         newline="\r\n",
@@ -3625,6 +3637,7 @@ def write_transparency_log(bundle_dir: Path, manifest: dict[str, Any]) -> str:
             *B150_CHANGELOG_LINES,
             *B151_CHANGELOG_LINES,
             *B162_CHANGELOG_LINES,
+            *B180_CHANGELOG_LINES,
             "- B153 game build: Restores the F5-gated native debugger and editor selectors in every executable layout. VF2 internal keys are F4=0x3FD, F5=0x3FE, F6=0x3FF, F7=0x400, Up=0x3EE, and Down=0x3EF.",
             "- B153 game build: Corrects debugger input-hook false fallthrough from JE +4 to JE +6, preventing the prior house-load access violation while keeping unhandled input on the stock route.",
             "- B153 validation: Rebuilds and validates all 16 feature combinations, including unique hashes, debugger hook/key maps, eight Holiday-positive/eight Holiday-negative layouts, reversible exact-SHA runtime toggles, the age-50+ pregnancy cooldown bypass, and the sigma-3/70%-cap mortality helper.",
