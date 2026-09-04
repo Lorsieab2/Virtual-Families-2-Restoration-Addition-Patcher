@@ -256,32 +256,66 @@ class ReadmeCountsTests(unittest.TestCase):
         )
         self.assertIn(f"{len(ornaments)} yard collectibles", description)
 
-    def test_the_shipped_divergence_is_disclosed_not_just_fixed(self):
-        """A defect that reached players is disclosed, not silently corrected.
-
-        The renovation description was fixed at source after B180 shipped, so
-        every automated check is green while a published bundle still carries
-        the wrong text. That is exactly the state in which a disclosure gets
-        forgotten -- nothing fails to remind anyone. The Transparency Log has
-        to say so for as long as the divergence exists.
-        """
-        shipped = next(
-            (s["description"] for s in self.manifest["settings"]
-             if s["id"] == "mobile_renovations"), ""
-        )
-        source = next(
-            s["description"] for s in exporter.SETTINGS
-            if s["id"] == "mobile_renovations"
-        )
-        if shipped and shipped != source:
-            log = (ROOT / "docs" / "Transparency Log.txt").read_text(encoding="utf-8")
-            self.assertIn(
-                "B180 shipped an overstated count in one setting description",
-                log,
-                "a published bundle diverges from source and the Transparency "
-                "Log does not disclose it",
-            )
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DisclosureOfShippedDefectsTests(unittest.TestCase):
+    """The disclosure guard must not depend on having a bundle.
+
+    It first lived inside the bundle-backed class, so on a clean checkout --
+    where outputs/ and *.zip are gitignored -- the whole class skipped and
+    deleting the disclosure passed the suite. A guard that only runs on the
+    one machine holding a release archive is not a guard; it is the same
+    vacuous pass this file was written to eliminate, reintroduced by putting
+    a check behind a precondition it does not need.
+
+    Nothing here reads a build artifact. B180 is published and immutable, so
+    the fact it shipped an overstated renovation count is a fixed historical
+    fact, checkable from the repository alone.
+    """
+
+    LOG = ROOT / "docs" / "Transparency Log.txt"
+    ENTRY = "B180 shipped an overstated count in one setting description"
+
+    def test_the_b180_overstatement_stays_disclosed(self):
+        log = self.LOG.read_text(encoding="utf-8")
+        self.assertIn(
+            self.ENTRY, log,
+            "B180 shipped a player-visible overstatement; the Transparency Log "
+            "must say so, whether or not a bundle is available to check",
+        )
+
+    def test_the_disclosure_says_what_was_wrong_and_what_was_not(self):
+        """A disclosure that only admits fault is not usable.
+
+        A reader needs the real number, and needs to know their install is not
+        affected -- otherwise the honest thing reads as a bigger problem than
+        it is.
+        """
+        log = self.LOG.read_text(encoding="utf-8")
+        # Fail with the reason rather than an IndexError from the split below:
+        # a missing entry is the sibling test's business, not a crash here.
+        self.assertIn(self.ENTRY, log, "the disclosure entry is gone")
+        entry = log.split(self.ENTRY)[1].split(chr(10) + "B180 ")[0]
+        for token in ("15", "20", "Bathroom 2"):
+            with self.subTest(token):
+                self.assertIn(token, entry)
+        self.assertIn(
+            "no asset", entry.lower(),
+            "the entry must state that nothing a player receives behaves "
+            "differently, or it overstates the defect in the other direction",
+        )
+
+    def test_the_source_now_carries_the_corrected_count(self):
+        # The disclosure claims it is fixed at source. Check that, so the log
+        # cannot describe a repair that was never made.
+        description = next(
+            row["description"] for row in exporter.SETTINGS
+            if row["id"] == "mobile_renovations"
+        )
+        self.assertIn("15 verified mobile renovation images", description)
+        self.assertNotIn("20 verified", description)
+
