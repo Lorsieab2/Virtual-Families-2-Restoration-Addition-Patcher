@@ -3245,6 +3245,23 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_PlayingPingPong", "Playing ping-pong"),
         ],
     ),
+    # The Exercise Bike borrows the Treadmill's two behaviours, so without
+    # these its users are labelled "walking on the treadmill" and "running on
+    # the treadmill". One label each, chosen by which table -- sorry, which
+    # machine -- the villager actually walked to. A stock Treadmill keeps its
+    # stock labels.
+    (
+        "exercise_bike_walk",
+        [
+            ("eString_UsingTheExerciseBike", "Using the exercise bike"),
+        ],
+    ),
+    (
+        "exercise_bike_run",
+        [
+            ("eString_DoingHighIntensityCycling", "Doing high-intensity cycling"),
+        ],
+    ),
 ]
 BEHAVIOR_LABELS = [
     entry
@@ -30974,6 +30991,8 @@ extern "C" void __cdecl VF2PrivateRomanticTimeLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTVLabel(CVillager &);
 extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &);
 extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &);
+extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &);
+extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &);
 extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &);
 extern "C" void __cdecl VF2RandomHeatFoodLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSnacksLabel(CVillager &);
@@ -31032,6 +31051,8 @@ private:
     static void __cdecl GoInHouse(CVillager &);
     static void __cdecl PlayingBoardGame(CVillager &);
     static void __cdecl PlayingPooltable(CVillager &);
+    static void __cdecl WorkoutTreadmill(CVillager &);
+    static void __cdecl RunningOnTreadmill(CVillager &);
     static void __cdecl GetADrink(CVillager &);
     static void __cdecl HeatUpFood(CVillager &);
     static void __cdecl LookingForSnacksDispatch(CVillager &);
@@ -31088,6 +31109,8 @@ private:
     friend void __cdecl VF2RandomTVLabel(CVillager &);
     friend void __cdecl VF2RandomBoardGameLabel(CVillager &);
     friend void __cdecl VF2RandomPooltableLabel(CVillager &);
+    friend void __cdecl VF2RandomTreadmillWalkLabel(CVillager &);
+    friend void __cdecl VF2RandomTreadmillRunLabel(CVillager &);
     friend void __cdecl VF2RandomDrinkLabel(CVillager &);
     friend void __cdecl VF2RandomHeatFoodLabel(CVillager &);
     friend void __cdecl VF2RandomSnacksLabel(CVillager &);
@@ -31809,6 +31832,43 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
         VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong), remembered);
 }
 
+// The Exercise Bike borrows the Treadmill's two behaviours, so its users were
+// labelled "walking on the treadmill" and "running on the treadmill". Both
+// machines answer to the same object, so the label is chosen by which one the
+// villager actually walked to -- resolved exactly the way the native behaviour
+// resolves it, with FindFurniture from the villager's feet.
+//
+// A stock Treadmill keeps its stock labels, and the plan itself is untouched:
+// same walk, same animations, same duration. Only the words change, which is
+// what was asked for.
+extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(
+        villager, kVF2BehaviorLabels_exercise_bike_walk,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
+    bool bike = VF2LinkedFurnitureItemIs(
+        villager, __VF2_EXERCISE_BIKE_ITEM_ID__);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkoutTreadmill)) return;
+    if (!bike) return;
+    VF2ApplyRememberedOrRandomLabel(
+        villager, kVF2BehaviorLabels_exercise_bike_walk,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk), remembered);
+}
+
+extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(
+        villager, kVF2BehaviorLabels_exercise_bike_run,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
+    bool bike = VF2LinkedFurnitureItemIs(
+        villager, __VF2_EXERCISE_BIKE_ITEM_ID__);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RunningOnTreadmill)) return;
+    if (!bike) return;
+    VF2ApplyRememberedOrRandomLabel(
+        villager, kVF2BehaviorLabels_exercise_bike_run,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run), remembered);
+}
+
 extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_drink, VF2_LABEL_COUNT(kVF2BehaviorLabels_drink));
@@ -32510,6 +32570,10 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     helper_cpp = helper_cpp.replace(
         "__VF2_PING_PONG_TABLE_ITEM_ID__", f"{PING_PONG_TABLE_ITEM_ID:#x}"
     )
+    helper_cpp = helper_cpp.replace(
+        "__VF2_EXERCISE_BIKE_ITEM_ID__",
+        f"{furniture_item_id_by_name('ExerciseBikeStd'):#x}",
+    )
     helper_cpp = helper_cpp.replace("__VF2_BEHAVIOR_LABEL_ARRAYS__", behavior_label_arrays)
     helper_cpp = helper_cpp.replace("__VF2_PRAISE_AWARD_CASES__", praise_award_cases_cpp)
     helper_cpp = helper_cpp.replace("__VF2_SCOLD_AWARD_CASES__", scold_award_cases_cpp)
@@ -32636,6 +32700,11 @@ def patch_behavior_label_variants(manifest):
         # the wrapper relabels it only when the linked table really is the
         # ping-pong one. A stock pool table keeps its stock label.
         retarget(0xDE4, 0x099, "_VF2RandomPooltableLabel", "Ping-pong label variants on the Ping-Pong Table"),
+        # The Exercise Bike borrows both Treadmill behaviours, so both are
+        # wrapped. A stock Treadmill keeps its stock labels; only a villager
+        # on the bike is relabelled.
+        retarget(0x3DA, 0x049, "_VF2RandomTreadmillWalkLabel", "Exercise bike label on the walking treadmill behaviour"),
+        retarget(0xB5E, 0x0E0, "_VF2RandomTreadmillRunLabel", "Exercise bike label on the running treadmill behaviour"),
         retarget(0x11B, 0x019, "_VF2RandomDrinkLabel", "Getting a drink label variants"),
         retarget(0xAB4, 0x0D5, "_VF2RandomHeatFoodLabel", "Heating up some food label variants"),
         retarget(0x1C3, 0x025, "_VF2RandomSnacksLabel", "Looking for snacks label variants"),
