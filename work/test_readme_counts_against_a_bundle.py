@@ -225,6 +225,32 @@ class ReadmeCountsTests(unittest.TestCase):
         )
         self.assertIn(f"{len(ornaments)} yard collectibles", description)
 
+    def test_the_shipped_divergence_is_disclosed_not_just_fixed(self):
+        """A defect that reached players is disclosed, not silently corrected.
+
+        The renovation description was fixed at source after B180 shipped, so
+        every automated check is green while a published bundle still carries
+        the wrong text. That is exactly the state in which a disclosure gets
+        forgotten -- nothing fails to remind anyone. The Transparency Log has
+        to say so for as long as the divergence exists.
+        """
+        shipped = next(
+            (s["description"] for s in self.manifest["settings"]
+             if s["id"] == "mobile_renovations"), ""
+        )
+        source = next(
+            s["description"] for s in exporter.SETTINGS
+            if s["id"] == "mobile_renovations"
+        )
+        if shipped and shipped != source:
+            log = (ROOT / "docs" / "Transparency Log.txt").read_text(encoding="utf-8")
+            self.assertIn(
+                "B180 shipped an overstated count in one setting description",
+                log,
+                "a published bundle diverges from source and the Transparency "
+                "Log does not disclose it",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
