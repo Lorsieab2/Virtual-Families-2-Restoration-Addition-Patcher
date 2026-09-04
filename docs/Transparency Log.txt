@@ -1414,3 +1414,50 @@ B180 verification method
 - Preceding canonical archive: outputs/VF2-B179-Release.zip, SHA-256
   9A3043E9EC6D1EE430DAEE712F993B13FEE88E5B9F813753E71B02A2E6ECCD93.
 - No B180 bundle is linked, packaged, or published at the time of this entry.
+
+B180 borrowed placement maps and the two kinds of borrower
+- A defect that shipped in B179 was found and fixed: an item borrowing a donor
+  that Mobile Furniture Behaviors implements was written the donor's RAW MOBILE
+  map rather than the desktop-safe one. Those donors ship two maps -- the
+  rendered-only base map in the vanilla payload, and the desktop-safe map in
+  pc_fmaps -- and the patch installed the desktop-safe map over each donor's OWN
+  name only. A borrower's copy is written under the BORROWER's name, which that
+  pass never visited.
+- Confirmed in the shipped B179 build: Chaise_brown.png.fmap, used by the
+  ordinary Loungers, carries no non-zero cells, while InvisibleSpaLounger and
+  InvisibleLounger each carry 111 cells of 0x01B00000, 31 of 0x01B00001, and the
+  untranslated mobile peep anchor 0x01B09800 in place of the desktop 0x00009800.
+  The behavior ledger records that without the translated anchor the desktop
+  FindPeepSlot path rejects every chair, which is exactly the reported symptom:
+  a villager lay in the wrong position or changed behaviour immediately.
+- Four maps change and no others: InvisibleLounger, InvisibleSpaLounger,
+  InvisiblePatioTable and InvisiblePicnicTable. Each now matches its visible
+  counterpart byte for byte. The visible Spa Lounger 0x330 is covered by the
+  same table without a separate change.
+- The donor's own file is deliberately left untouched, because it is the base
+  map a release restores when the patch is disabled.
+- Separately, the patio table's two seat anchors were carrying a stray object
+  type in bits 16-31 (0x00049801 and 0x0004A001); they are now 0x00009801 and
+  0x0000A001, matching the desktop-safe form.
+
+B180 why the seven stock-donor items are a different case
+- The seven items that rely on the native hotspot path -- Invisible Kiddie Pool,
+  Invisible Full-Size Pool, Invisible Hammock, Invisible Yoga Equipment,
+  Exercise Bike, Home Gym System and Ping-Pong Table -- are NOT affected by the
+  defect above, and the reason is structural rather than a judgement call.
+- They borrow STOCK DESKTOP furniture, which Mobile Furniture Behaviors does not
+  implement. There is therefore no pc_fmaps entry for their donors, no second
+  map, and nothing to translate. Their maps were compared against the donor maps
+  in the shipped B179 build and are byte-identical in every case.
+- Cell values such as 0x00200000 and 0x01180000 appear in these maps, but they
+  appear in the STOCK donors themselves -- TreadmillStd, YogaGearStd and
+  PoolTableStd all carry them natively -- so they are ordinary desktop values
+  the engine has always handled, not the mobile markers the ledger forbids.
+  Chaise_brown, by contrast, carries none at all, which is what made the
+  borrowed mobile cells on the loungers conspicuous.
+- A test pins this: if any of those seven donors ever gains a pc_fmaps entry, it
+  joins the family the fix above covers and the test fails rather than letting
+  the wrong map ship silently. The mirror case is pinned too, so the check
+  cannot pass merely because a directory is empty or misnamed.
+- Player confirmation that these seven act on a drop remains outstanding and is
+  still not claimed.

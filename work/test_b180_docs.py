@@ -132,6 +132,59 @@ class TestTheEmittedDispatcherAgreesWithTheDocs(unittest.TestCase):
                 )
 
 
+class TestTheStockDonorsAreNotTheChaiseCase(unittest.TestCase):
+    """The seven stock-donor items are not affected by the #135 defect.
+
+    #135 fixed borrowers of donors that Mobile Furniture Behaviors implements:
+    those donors ship two maps, and the borrower was taking the raw mobile one.
+    The seven here borrow stock desktop furniture, which that patch does not
+    implement, so no second map exists and there is nothing to translate.
+    """
+
+    PC_FMAPS = (
+        ROOT / "patcher_assets" / "optional_patches" /
+        "mobile_furniture_behaviors" / "pc_fmaps"
+    )
+
+    def _donor_fmap(self, name):
+        for table in (
+            patcher.NEW_FURNITURE_ITEMS, patcher.INVISIBLE_OUTDOOR_ITEMS
+        ):
+            for item in table:
+                if item["name"] == name:
+                    return item.get("donor_fmap")
+        raise KeyError(name)
+
+    def test_no_stock_donor_has_a_desktop_safe_map_to_take(self):
+        # This is the whole reason they are a different case. If one of these
+        # donors ever gains a pc_fmaps entry, it joins the #135 family and this
+        # test fails rather than letting it ship the wrong map silently.
+        if not self.PC_FMAPS.is_dir():
+            self.skipTest("pc_fmaps directory is not present in this tree")
+        for name in sorted(UNROUTED):
+            donor = self._donor_fmap(name)
+            with self.subTest(item=name, donor=donor):
+                self.assertIsNotNone(donor, f"{name} has no donor_fmap")
+                self.assertFalse(
+                    (self.PC_FMAPS / donor).is_file(),
+                    f"{donor} now ships a desktop-safe map, so {name} must "
+                    f"take that instead of the donor's own file -- see #135",
+                )
+
+    def test_the_routed_borrowers_do_have_one(self):
+        # The mirror image, so the test above cannot pass by the directory
+        # simply being empty or misnamed.
+        if not self.PC_FMAPS.is_dir():
+            self.skipTest("pc_fmaps directory is not present in this tree")
+        for name in ("InvisibleLounger", "InvisibleSpaLounger"):
+            donor = self._donor_fmap(name)
+            with self.subTest(item=name, donor=donor):
+                self.assertTrue(
+                    (self.PC_FMAPS / donor).is_file(),
+                    f"{donor} should ship a desktop-safe map",
+                )
+
+
 class TestTransparencyLogMatchesTheBuild(unittest.TestCase):
     def test_it_records_the_b180_sections(self):
         text = TRANSPARENCY.read_text(encoding="utf-8")
