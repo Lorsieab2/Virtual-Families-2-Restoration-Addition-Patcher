@@ -101,5 +101,54 @@ class TestDeclarationOrder(unittest.TestCase):
         self.assertLess(decl, use)
 
 
+class TestTheEmittedCHasTheCheckmarkWiring(unittest.TestCase):
+    """Read the generated file: placeholders only resolve at emit time."""
+
+    EMITTED = (
+        patcher.ROOT / "work" / "patched_mobile_furniture_pack_objs" /
+        "vf2_special_upgrade_effects.cpp"
+    )
+
+    def setUp(self):
+        if not self.EMITTED.is_file():
+            self.skipTest(f"{self.EMITTED.name} has not been generated here")
+        self.text = self.EMITTED.read_text(encoding="utf-8")
+        start = self.text.index("static bool VF2StoreRowShowsActive(int itemId)")
+        self.body = self.text[start:self.text.index("\n}", start)]
+
+    def test_no_placeholder_survived(self):
+        # The failure this guards against emits the brace form literally and
+        # is invisible to every test that reads the Python.
+        self.assertNotIn("__VF2_", self.body)
+        # An unsubstituted f-string placeholder looks like {NAME} or
+        # {NAME:#x}. Ordinary C braces never contain an identifier followed
+        # by a closing brace on the same line with no code between.
+        leftovers = re.findall(r"\{[A-Z_][A-Z0-9_]*(?::[^}]*)?\}", self.body)
+        self.assertEqual(leftovers, [], f"unsubstituted placeholders: {leftovers}")
+
+    def test_the_toggle_ids_resolved_to_real_numbers(self):
+        same_sex = f"{patcher.SAME_SEX_MARRIAGE_ITEM_ID:#x}"
+        reroll = f"{patcher.MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}"
+        self.assertIn(same_sex, self.body.lower())
+        self.assertIn(reroll, self.body.lower())
+
+    def test_it_is_wired_into_the_draw_site_only(self):
+        # Draw returns 0 so the checkmark appears; the click path must keep
+        # reading the real answer or reversible rows stop being clickable.
+        self.assertIn("if (VF2StoreRowShowsActive(itemId)) return 0;", self.text)
+        self.assertEqual(
+            self.text.count("VF2StoreRowShowsActive(itemId)"), 1,
+            "the helper should be consulted at exactly one call site -- the "
+            "draw hook. Wiring it into the click path too would stop rebuying "
+            "Unlock Everything from restoring the locks.",
+        )
+
+    def test_the_reset_multiplier_row_is_the_negation_of_the_three(self):
+        # Reset ticks only when none of the three multipliers is in force.
+        for item in ("0x128", "0x129", "0x12A"):
+            with self.subTest(multiplier=item):
+                self.assertIn(item.lower(), self.body.lower())
+
+
 if __name__ == "__main__":
     unittest.main()
