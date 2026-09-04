@@ -587,6 +587,30 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         finally:
             wait.close()
 
+    def test_the_modal_grab_is_real_not_best_effort(self):
+        # A grab that quietly fails leaves the controls live, and a
+        # double-click on Apply could start two patch workers against the same
+        # output folder. The window waits for visibility and then grabs for
+        # real, so a failure here is an error rather than a silent no-op.
+        wait = gui.WaitWindow(self.root, "Please wait", "Please wait" + ELLIPSIS)
+        try:
+            self.assertEqual(str(wait.grab_current()), str(wait))
+        finally:
+            wait.close()
+
+    def test_centering_keeps_negative_virtual_desktop_coordinates(self):
+        # On a monitor left of or above the primary one the parent's root
+        # coordinates are legitimately negative. Clamping to zero would throw
+        # the popup onto the primary display while it holds a modal grab, so
+        # the app would look frozen with the explanation on another screen.
+        source = Path(gui.__file__).read_text(encoding="utf-8")
+        centre = source[source.index("def _center"):source.index("def close")]
+        self.assertNotIn("max(0, x)", centre)
+        self.assertNotIn("max(0, y)", centre)
+        # The screen-centred fallback still clamps: there a negative value
+        # really would be off-screen.
+        self.assertIn("max(0, (self.winfo_screenwidth()", centre)
+
     def test_a_failure_in_the_work_surfaces_on_the_main_thread(self):
         # Captured on the worker and re-raised here, otherwise it vanishes
         # into the thread and the caller sees a silent success.

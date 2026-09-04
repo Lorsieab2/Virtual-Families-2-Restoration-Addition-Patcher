@@ -248,6 +248,9 @@ def build_restore_namespace(*, backup_dir: str, game_dir: str | None = None, log
 # enough that the bar animates smoothly, large enough not to spin the CPU.
 WAIT_POLL_SECONDS = 0.03
 
+# How long to keep retrying the modal grab before giving up loudly.
+GRAB_TIMEOUT_SECONDS = 2.0
+
 
 class WaitWindow(tk.Toplevel):
     """A modal wait popup with a moving progress bar.
@@ -281,9 +284,7 @@ class WaitWindow(tk.Toplevel):
             self.transient(parent)
         self._center(parent)
         if modal:
-            # Blocks a second click on Apply while the first run is going.
-            with contextlib.suppress(tk.TclError):
-                self.grab_set()
+            self._take_grab()
         with contextlib.suppress(tk.TclError):
             self.update()
 
@@ -295,12 +296,44 @@ class WaitWindow(tk.Toplevel):
         except tk.TclError:
             viewable = False
         if viewable:
+            # Deliberately NOT clamped to zero. On a monitor left of or above
+            # the primary one these coordinates are legitimately negative, and
+            # clamping would throw the popup onto the primary display while it
+            # holds a modal grab -- the app would look frozen with the
+            # explanation on another screen.
             x = parent.winfo_rootx() + (parent.winfo_width() - width) // 2
             y = parent.winfo_rooty() + (parent.winfo_height() - height) // 2
         else:
-            x = (self.winfo_screenwidth() - width) // 2
-            y = (self.winfo_screenheight() - height) // 2
-        self.geometry(f"+{max(0, x)}+{max(0, y)}")
+            # No parent to sit on, so centre on the primary screen. Here a
+            # negative value would mean off-screen, so clamp.
+            x = max(0, (self.winfo_screenwidth() - width) // 2)
+            y = max(0, (self.winfo_screenheight() - height) // 2)
+        self.geometry(f"+{x}+{y}")
+
+    def _take_grab(self) -> None:
+        """Grab input, retrying until the window manager has mapped us.
+
+        The grab is what stops a second click on Apply starting a second patch
+        worker against the same output folder, so a silently-failed grab is
+        not acceptable -- it leaves the controls live.
+
+        grab_set() raises TclError while the window is not yet viewable, and
+        wait_visibility() is the obvious fix but blocks forever when the
+        window never becomes viewable, which is exactly what happens when the
+        parent is withdrawn. So this retries against a deadline and gives up
+        loudly rather than either hanging or continuing ungrabbed.
+        """
+        deadline = time.monotonic() + GRAB_TIMEOUT_SECONDS
+        while True:
+            try:
+                self.grab_set()
+                return
+            except tk.TclError:
+                if time.monotonic() >= deadline:
+                    raise
+                with contextlib.suppress(tk.TclError):
+                    self.update()
+                time.sleep(WAIT_POLL_SECONDS)
 
     def close(self) -> None:
         with contextlib.suppress(tk.TclError):
