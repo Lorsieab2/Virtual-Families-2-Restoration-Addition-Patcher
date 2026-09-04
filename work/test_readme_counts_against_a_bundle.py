@@ -17,11 +17,19 @@ It is skipped rather than failed where neither exists -- a machine with no
 build output cannot answer the question, and pretending otherwise is how the
 suite went red for everyone once already.
 """
+from __future__ import annotations
+
 import json
 import re
+import sys
 import unittest
 import zipfile
 from pathlib import Path
+
+# Run either as `python -m unittest test_...` from work/ or as
+# `python -m unittest work.test_...` from the repo root; the latter puts the
+# repo root on sys.path rather than work/, so the sibling import needs help.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import export_offline_patch_bundle as exporter
 
@@ -38,12 +46,18 @@ def _current_release() -> str | None:
     a failure that was two releases stale, which is the same wrong-authority
     mistake these tests exist to catch.
     """
+    def label(path):
+        return re.search(r"B(\d+(?:\.\d+)*)", path.name).group(1)
+
+    def order(path):
+        # B180.1 sorts after B180, and B99 before B100.
+        return tuple(int(part) for part in label(path).split("."))
+
     identities = sorted(
-        (ROOT / "data" / "vf2").glob("release-identities-B*.json"),
-        key=lambda p: int(re.search(r"B(\d+)", p.name).group(1)),
+        (ROOT / "data" / "vf2").glob("release-identities-B*.json"), key=order
     )
     if identities:
-        return re.search(r"B(\d+)", identities[-1].name).group(0)
+        return "B" + label(identities[-1])
     return None
 
 
@@ -56,12 +70,20 @@ def _manifest():
     from.
     """
     current = _current_release()
+    def archive_label(path):
+        found = re.search(r"(B\d+(?:\.\d+)*)-Release", path.name)
+        return found.group(1) if found else ""
+
     for archive in sorted(
         ROOT.rglob("VF2-B*-Release.zip"),
-        key=lambda p: int(re.search(r"B(\d+)", p.name).group(1)),
+        key=lambda p: tuple(
+            int(x) for x in (archive_label(p) or "B0")[1:].split(".")
+        ),
         reverse=True,
     ):
-        if current and current not in archive.name:
+        # Compare the COMPLETE label: "B180" is a prefix of "B180.1", so a
+        # substring test would accept the stale base release as current.
+        if current and archive_label(archive) != current:
             continue
         try:
             with zipfile.ZipFile(archive) as bundle:
@@ -78,7 +100,7 @@ def _manifest():
         # older archive. Anything naming a different release is skipped;
         # anything naming no release at all is a working build of the current
         # tree and is accepted.
-        stamped = re.search(r"B(\d+)", path.parent.name)
+        stamped = re.search(r"B\d+(?:\.\d+)*", path.parent.name)
         if stamped and current and stamped.group(0) != current:
             continue
         try:
@@ -202,12 +224,21 @@ class ReadmeCountsTests(unittest.TestCase):
             s["description"] for s in exporter.SETTINGS
             if s["id"] == "mobile_renovations"
         )
-        if shipped and shipped != source:
-            self.assertIn(
-                "20 verified", shipped,
-                "the shipped bundle diverges from source in an unexpected way; "
-                "the only known divergence is B180's renovation count",
-            )
+        if not shipped or shipped == source:
+            return
+        # The exception is B180's alone. Left unconditional it would excuse the
+        # SAME stale wording in any future bundle -- the exact divergence this
+        # is meant to detect -- because shipped != source would still hold.
+        self.assertEqual(
+            _current_release(), "B180",
+            f"{self.source} diverges from source; only B180 is known to, and "
+            "a later bundle must match the exporter rather than inherit its "
+            "exception",
+        )
+        self.assertIn(
+            "20 verified", shipped,
+            "B180's divergence is its renovation count and nothing else",
+        )
 
     def test_the_ornament_count_in_its_description_is_right(self):
         """Checked because it is the same shape, and it is correct.
@@ -226,5 +257,65 @@ class ReadmeCountsTests(unittest.TestCase):
         self.assertIn(f"{len(ornaments)} yard collectibles", description)
 
 
+
 if __name__ == "__main__":
     unittest.main()
+
+
+class DisclosureOfShippedDefectsTests(unittest.TestCase):
+    """The disclosure guard must not depend on having a bundle.
+
+    It first lived inside the bundle-backed class, so on a clean checkout --
+    where outputs/ and *.zip are gitignored -- the whole class skipped and
+    deleting the disclosure passed the suite. A guard that only runs on the
+    one machine holding a release archive is not a guard; it is the same
+    vacuous pass this file was written to eliminate, reintroduced by putting
+    a check behind a precondition it does not need.
+
+    Nothing here reads a build artifact. B180 is published and immutable, so
+    the fact it shipped an overstated renovation count is a fixed historical
+    fact, checkable from the repository alone.
+    """
+
+    LOG = ROOT / "docs" / "Transparency Log.txt"
+    ENTRY = "B180 shipped an overstated count in one setting description"
+
+    def test_the_b180_overstatement_stays_disclosed(self):
+        log = self.LOG.read_text(encoding="utf-8")
+        self.assertIn(
+            self.ENTRY, log,
+            "B180 shipped a player-visible overstatement; the Transparency Log "
+            "must say so, whether or not a bundle is available to check",
+        )
+
+    def test_the_disclosure_says_what_was_wrong_and_what_was_not(self):
+        """A disclosure that only admits fault is not usable.
+
+        A reader needs the real number, and needs to know their install is not
+        affected -- otherwise the honest thing reads as a bigger problem than
+        it is.
+        """
+        log = self.LOG.read_text(encoding="utf-8")
+        # Fail with the reason rather than an IndexError from the split below:
+        # a missing entry is the sibling test's business, not a crash here.
+        self.assertIn(self.ENTRY, log, "the disclosure entry is gone")
+        entry = log.split(self.ENTRY)[1].split(chr(10) + "B180 ")[0]
+        for token in ("15", "20", "Bathroom 2"):
+            with self.subTest(token):
+                self.assertIn(token, entry)
+        self.assertIn(
+            "no asset", entry.lower(),
+            "the entry must state that nothing a player receives behaves "
+            "differently, or it overstates the defect in the other direction",
+        )
+
+    def test_the_source_now_carries_the_corrected_count(self):
+        # The disclosure claims it is fixed at source. Check that, so the log
+        # cannot describe a repair that was never made.
+        description = next(
+            row["description"] for row in exporter.SETTINGS
+            if row["id"] == "mobile_renovations"
+        )
+        self.assertIn("15 verified mobile renovation images", description)
+        self.assertNotIn("20 verified", description)
+
