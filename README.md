@@ -129,7 +129,7 @@ Upgrades**. Each is marked below. Uncheck anything you do not want and click
 - **Use mobile sound assets** (on) - stages the 67 hash-pinned mobile behavior sounds and repoints the four PC WAV routes that must load OGG.
 - **Add Holiday Ornaments collection** (on) - 12 yard collectibles, six Collections Chest pages, the Ornamentologist and six-family goals, Lucky Rock rarity odds, and The Collector offer/sell handling.
 - **Add mobile-exclusive Island Events** (on) - all 25 authenticated mobile-exclusive Island Event records with their text and choice/result dialogs.
-- **Add mobile room renovations** (on) - 20 verified mobile renovation images (5 Bathroom 1, 5 Bathroom 2, 3 kitchen, 5 office, 2 workshop) at their exact room-map positions.
+- **Add mobile room renovations** (on) - 15 verified mobile renovation images (5 Bathroom 1, 3 kitchen, 5 office, 2 workshop) at their exact room-map positions, plus their store icons and the five shower-curtain variants. Bathroom 2's own art is not here: it is AI-generated and ships under **2nd Bathroom Mobile-Style Renovations** instead, so that a player who declines the AI art still gets every genuine mobile renovation.
 - **2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)** (on) - AI-generated Bathroom 2 art, hand-edited, based on the Bathroom 1 mobile renovations. Labeled with an art warning in the GUI.
 - **Cheat Upgrades** (on) - the cheat-only executable overlay, adding 43 Special Upgrade rows. See [Cheat Upgrades in detail](#cheat-upgrades-in-detail).
 
