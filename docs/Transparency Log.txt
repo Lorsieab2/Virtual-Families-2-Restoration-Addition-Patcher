@@ -1414,6 +1414,53 @@ B180 picnic and patio props not shipped
   case bodies for two props that have no desktop art and no desktop handler --
   a feature, not a bound adjustment.
 
+B180 patcher GUI "Please wait" window
+- The patcher copies whole game folders and renders patched bytes on the Tk
+  main thread, so the main window stops repainting and Windows relabels it
+  "(Not Responding)". Nothing is wrong when that happens, but it reads as a
+  crash and players close the patcher mid-copy. B180 adopts the Virtual
+  Villagers Fun Patcher's wait window, which gives that pause a face: a modal
+  window reading "Please wait... / Loading the patches." over an indeterminate
+  progress bar, with the work moved onto a worker thread so the event loop
+  keeps painting.
+- The close button on that window is deliberately inert. The work cannot be
+  cancelled partway without leaving a half-copied game folder behind.
+- Two defects were found in the port during review and fixed here, and both are
+  worth recording because the second is a live bug in the patcher it came from
+  and has been reported back to that project:
+  - The modal grab was taken inside a bare try/except that swallowed TclError.
+    Tk refuses the grab until the window manager has made the window viewable,
+    so a failure left every control underneath live: the window still looked
+    modal while a double-click on Apply could start two patch workers against
+    the same output folder. It now retries against a two-second deadline and
+    raises if the grab never lands. The obvious repair, wait_visibility(), is
+    NOT used: it blocks forever when the window never becomes viewable, which
+    is exactly what a withdrawn parent produces, and it hung the GUI suite.
+  - Centring clamped the computed position to zero. On a multi-monitor desktop
+    a window on a screen left of or above the primary display has legitimately
+    negative root coordinates, so clamping threw the wait window onto the
+    primary monitor - the worst case for a window holding a modal grab, since
+    the application then appears locked while the thing explaining why sits on
+    a screen the player may not be looking at. Only the screen-centred fallback
+    is clamped now.
+
+B180 test suite: inputs a checkout cannot have
+- main was red before B180, and had been for some time. Five failures, none of
+  them a real regression: tests reaching for files excluded by .gitignore, so
+  they could never pass anywhere but on the machine that produced those files.
+- One of them read two IDA exports in setUpClass, which killed the whole test
+  class - including an assertion needing nothing but the patcher source, which
+  had therefore never run on any machine. It runs now.
+- These now skip with a message naming the exact file they want, and assert
+  exactly as before when the file is present. Nothing is weakened where the
+  input exists. This is recorded because muting a failing test is the kind of
+  change that deserves to be visible: a suite red on every machine but one is
+  indistinguishable from a real regression, and it trains everyone to scroll
+  past a red result, which is how five of these accumulated.
+- The mobile sound contract's four routes were re-verified against the real
+  OBB rather than merely skipped: the four OGGs were unpacked from the
+  1.7.16 APK and their sizes and SHA-256s still match the pinned contract.
+
 B180 verification method
 - Generated .cpp files are compiled individually (cl /c /EHsc) after each
   change. Three defects this cycle were invisible to source-reading tests and

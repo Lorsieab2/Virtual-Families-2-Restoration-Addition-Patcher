@@ -94,7 +94,7 @@ The load path is mostly extended by wrappers that run the native `LoadState` fir
 ## What's included
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. As of B176 it offers 35 settings, grouped the way
+the release you downloaded. As of B180 it offers 36 settings, grouped the way
 the GUI groups them.
 
 Two of the entries below are described for completeness but are **not** offered
@@ -124,12 +124,12 @@ Upgrades**. Each is marked below. Uncheck anything you do not want and click
 
 **Gameplay and content**
 
-- **Add mobile furniture behaviors** (on) - ported actions for genuine mobile furniture: weather-aware loungers, the Patio Umbrella and tables, Picnic Table, Birthday furniture, and the Holiday pieces. Ships 34 behavior maps and is gated by a one-byte `.vf2beh` runtime flag that is zero until the setting is enabled.
+- **Add mobile furniture behaviors** (on) - ported actions for genuine mobile furniture: weather-aware loungers, the Patio Umbrella and tables, Picnic Table, Birthday furniture, and the Holiday pieces. Ships 34 behavior maps and is gated by a one-byte `.vf2beh` runtime flag that is zero until the setting is enabled. It also carries the spa treatments on the two Spa Loungers - see [Spa treatments](#spa-treatments).
 - **Use mobile sound assets** (on) - stages the 67 hash-pinned mobile behavior sounds and repoints the four PC WAV routes that must load OGG.
 - **Add Holiday Ornaments collection** (on) - 12 yard collectibles, six Collections Chest pages, the Ornamentologist and six-family goals, Lucky Rock rarity odds, and The Collector offer/sell handling.
 - **Add mobile-exclusive Island Events** (on) - all 25 authenticated mobile-exclusive Island Event records with their text and choice/result dialogs.
 - **Add mobile room renovations** (on) - 20 verified mobile renovation images (5 Bathroom 1, 5 Bathroom 2, 3 kitchen, 5 office, 2 workshop) at their exact room-map positions.
-- **2nd Bathroom Mobile-Style Renovations** (on) - AI-generated Bathroom 2 art, hand-edited, based on the Bathroom 1 mobile renovations. Labeled with an art warning in the GUI.
+- **2nd Bathroom Mobile-Style Renovations (AI-Generated Art Warning)** (on) - AI-generated Bathroom 2 art, hand-edited, based on the Bathroom 1 mobile renovations. Labeled with an art warning in the GUI.
 - **Cheat Upgrades** (on) - the cheat-only executable overlay, adding 43 Special Upgrade rows. See [Cheat Upgrades in detail](#cheat-upgrades-in-detail).
 
 **Experimental rule changes** (each is a separate default-off one-byte runtime flag)
@@ -143,8 +143,8 @@ Upgrades**. Each is marked below. Uncheck anything you do not want and click
 
 - **Virtual Families 3 Furniture** - VF3 furniture imports, including the plaid/striped/flowered living-room set.
 - **Add Custom Couches and LDW Posters** - custom couch colourways and the LDW poster set.
-- **Add Invisible Furniture - Visible Graphics** and **Swap Invisible Furniture Graphics with Transparent Graphics** - the invisible furniture set, with a companion setting that swaps in fully transparent art. Eight outdoor pieces: the Kiddie Pool, Full-Size Pool, Hammock, Picnic Table, Patio Table, Yoga Equipment, Lounger, and Spa Lounger. Each borrows a base-game donor's placement map byte for byte, so villagers should treat it as they treat the piece it was cut from.
-- **Four new visible furniture items** - Exercise Bike, Home Gym System, Ping-Pong Table, and Spa Lounger. These are ordinary store items with their own art, each built on the same donor arrangement as the invisible pieces above.
+- **Add Invisible Furniture - Visible Graphics** and **Swap Invisible Furniture Graphics with Transparent Graphics** - the invisible furniture set, with a companion setting that swaps in fully transparent art. Eight outdoor pieces: the Kiddie Pool, Full-Size Pool, Hammock, Picnic Table, Patio Table, Yoga Equipment, Lounger, and Spa Lounger. Each borrows its donor's placement map byte for byte, so villagers treat it as they treat the piece it was cut from. Before B180 that was true only of the donors the base game ships: a borrower whose donor is one of the 34 maps Mobile Furniture Behaviors implements silently received the raw mobile map instead of the desktop-safe one, which is why villagers used the invisible Spa Lounger and Lounger wrongly.
+- **Four new visible furniture items** - Exercise Bike, Home Gym System, Ping-Pong Table, and Spa Lounger. These are ordinary store items with their own art, each built on the same donor arrangement as the invisible pieces above. Until B180 none of them did anything when a villager was dropped on one: this patcher's drop dispatcher matches on item id, and only the Invisible Spa Lounger was ever listed, so every other added piece had no route at all. Their records and placement maps were correct and simply never consulted. B180 gives the **Spa Lounger** a route of its own. The **Exercise Bike**, **Home Gym System** and **Ping-Pong Table** instead rely on the game's own hotspot path, through the stock item each was modelled on; that path is structurally in place but no player has confirmed those three act on a drop, and this release does not claim they do.
 - **Invisible Workspace Upgrades** - invisible variants of the workspace upgrade props.
 - **Lorsieab2's Custom Map Images** - replacement map art.
 - **Transparent Menu Bar**, **Transparent Store Bar**, **Transparent Decor Tab** - UI chrome transparency.
@@ -295,6 +295,36 @@ reversible row stays clickable: buying Unlock Everything a second time restores
 the locks, and buying a different multiplier still switches to it.
 
 The two Flea Market rows themselves are untouched base game, and both are independently repurchaseable in every patched executable — including saves where the effect flag is already cleared. Elsewhere, rebuying the Maid or Gardener fires that worker, and rebuying an owned house renovation returns it and rebuilds the native content map so it can be purchased again.
+
+## Spa treatments
+
+Dropping an adult on a **Spa Lounger** or an **Invisible Spa Lounger** starts a
+treatment. One villager receives and another gives, and the two halves are
+deliberately not symmetrical: receiving can also start on its own through the
+autonomous table, while giving is manual-drop only. Giving needs a second
+villager already receiving on that same lounger, and autonomous selection picks
+one villager at a time, so an autonomous giver would mime a massage at an empty
+chair. That asymmetry is intended, not a gap.
+
+The route is locked to those two items by item id, in two independent places -
+the drop dispatcher and the slot finder. Both matter. Every lounger in the game,
+stock and mobile alike, answers to the same `eObjectChaise` object, so gating on
+the object alone would send a villager to whichever chaise happened to be
+nearest and have them mime a treatment on it. The slot finder walks the placed
+furniture array and resolves an actual free Spa Lounger before anything is
+committed.
+
+A treatment runs for the same duration form as a nap, `GetRandom(5) + 5`, shared
+by both halves, and pays dirtiness and energy on the way out. The receiving
+villager takes the nap's own posture, chosen from the placed lounger's
+orientation rather than assumed, so a lounger set the other way round does not
+have someone lying across its arm. `gulpahh_01.ogg` plays periodically through
+the treatment, on the cadence shape the native refreshing-drink behavior uses.
+
+One honesty note on the duration: it was written to the nap's pattern, and the
+byte-level provenance was not re-confirmed against a native `TakingANap` symbol,
+which does not appear under that name in the checked-in disassembly. Treat it as
+matching the nap's form rather than as read out of the native routine.
 
 ## Behavior Patches in detail
 
