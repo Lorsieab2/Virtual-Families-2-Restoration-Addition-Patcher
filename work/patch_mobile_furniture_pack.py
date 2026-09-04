@@ -30793,12 +30793,21 @@ __VF2_SCOLD_AWARD_CASES__
 class CFurnitureManager;
 int __cdecl VF2BehaviorPtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
 
+// The behaviours block forward-declares CVillager, so the one member the
+// furniture probe needs is declared here rather than pulling in the whole
+// class. CBehavior::PlayingPooltable calls exactly this before FindFurniture.
+class CVillager {
+public:
+    ldwPoint const FeetPos() const;
+};
+
 class CFurnitureManager {
 private:
     int PtOnFurniture(ldwPoint);
     friend int __cdecl VF2BehaviorPtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
 public:
     bool IsInWorld(EInventoryItem item);
+    bool FindFurniture(CContentMap::EObject object, ldwPoint point, sFurnitureInfo2 &info, bool a, int b, bool c);
     bool LinkPeepToFurniture(CContentMap::EObject object, CVillager *villager, sFurnitureInfo2 &info, bool a, int b, bool c);
 };
 
@@ -31627,9 +31636,26 @@ extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &villager)
 // from a stock Pool Table when both answer to EObject 0x36.
 static bool VF2LinkedFurnitureItemIs(CVillager &villager, int itemId)
 {
+    // Ask the question CBehavior::PlayingPooltable itself asks, with the same
+    // call and the same arguments:
+    //
+    //   FeetPos(); FindFurniture(0x36, feet, info, true, 0, 0)
+    //
+    // An earlier version called LinkPeepToFurniture instead. That was wrong
+    // twice over: it MUTATES state by reserving a link, so calling it ahead of
+    // the native behaviour stole the reservation the behaviour was about to
+    // make, and it answers "which table can this villager be given" rather
+    // than "which table is this villager at" -- so with both tables placed it
+    // could name the wrong one. That is why a villager at a Ping-Pong Table
+    // was still labelled "Playing pool".
+    //
+    // FindFurniture is a read-only nearest-match query from the villager's
+    // feet, so asking it costs nothing and returns exactly what the plan will
+    // use.
+    ldwPoint feet = villager.FeetPos();
     sFurnitureInfo2 info = {};
-    if (!FurnitureManager.LinkPeepToFurniture(
-            (CContentMap::EObject)0x36, &villager, info, true, 0, 0)) {
+    if (!FurnitureManager.FindFurniture(
+            (CContentMap::EObject)0x36, feet, info, true, 0, 0)) {
         return false;
     }
     int slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, info.point);
