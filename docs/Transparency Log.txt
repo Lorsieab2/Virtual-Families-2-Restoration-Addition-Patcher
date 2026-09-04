@@ -1527,8 +1527,12 @@ B180 verification method
   written as placeholders that only resolve at emit time.
 - Preceding canonical archive: outputs/VF2-B179-Release.zip, SHA-256
   9A3043E9EC6D1EE430DAEE712F993B13FEE88E5B9F813753E71B02A2E6ECCD93.
-- SUPERSEDED: that line was written before packaging. B180 was subsequently
-  built, packaged and published; see the entry below.
+- No B180 bundle is linked, packaged, or published at the time of this entry.
+- SUPERSEDED: the line above was true when written, before packaging. B180 was
+  subsequently built, packaged and published as a prerelease. The original
+  sentence is kept rather than deleted, for the same reason the original ZIP is
+  kept when a corrected one is added: what was said at the time is part of what
+  a transparency log is for. See the entry below.
 
 B180 shipped artifact
 - Published as a PRERELEASE on 2026-09-04: VF2-B180-Release.zip, 144,428,060

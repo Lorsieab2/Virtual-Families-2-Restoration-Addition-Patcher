@@ -209,22 +209,25 @@ class TestTransparencyLogMatchesTheBuild(unittest.TestCase):
         self.assertIn("0x55", text)
         self.assertIn("0x56", text)
 
-    def test_the_unbuilt_claim_is_marked_superseded_once_a_bundle_exists(self):
+    def test_the_unbuilt_claim_is_kept_and_marked_superseded(self):
         """The log said no bundle was packaged. That was true when written.
 
-        Once the archive exists, that sentence is false, and a transparency
-        log asserting something false about its own release is worse than one
-        that says nothing. The original line is kept for the record but must
-        carry the correction beside it.
+        B180 is published, so that sentence is now false, and a transparency
+        log asserting something untrue about its own release is worse than one
+        that says nothing. The original line is KEPT -- deleting it would erase
+        what was said at the time, which is the opposite of what the log is
+        for, and the same principle as keeping the original ZIP when a
+        corrected one is added -- and must carry the correction beside it.
+
+        Deliberately NOT conditional on the archive existing. An earlier
+        version required the correction only when outputs/ held a build, so it
+        passed on this machine and would have failed on a clean checkout. A
+        check that only runs where the artifact happens to live is not a
+        check; B180 being published is a fixed historical fact, readable from
+        the repository alone.
         """
         text = TRANSPARENCY.read_text(encoding="utf-8")
-        archive = ROOT / "outputs" / "VF2-B180-Release.zip"
-        if not archive.is_file():
-            # No bundle yet, so the original claim still stands.
-            self.assertIn(
-                "No B180 bundle is linked, packaged, or published", text
-            )
-            return
+        self.assertIn("No B180 bundle is linked, packaged, or published", text)
         self.assertIn("SUPERSEDED", text)
         self.assertIn("B180 shipped artifact", text)
 
