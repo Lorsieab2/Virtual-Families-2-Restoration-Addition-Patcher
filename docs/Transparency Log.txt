@@ -1528,6 +1528,13 @@ B180 verification method
 - Preceding canonical archive: outputs/VF2-B179-Release.zip, SHA-256
   9A3043E9EC6D1EE430DAEE712F993B13FEE88E5B9F813753E71B02A2E6ECCD93.
 - No B180 bundle is linked, packaged, or published at the time of this entry.
+  SUPERSEDED: that line was true when written and is no longer. B180 was
+  packaged and published as a prerelease on 2026-09-04 --
+  VF2-B180-Release.zip, 144,428,060 bytes, 7,459 members, SHA-256
+  31195169252C441AF2C77EDA3AC660E42F2784049F00FE69D75DBF8C8FCA21B7,
+  verified by downloading the published asset back and comparing it to the
+  local bundle. The original sentence is kept rather than deleted so the
+  record shows what was claimed and when, not only what is true now.
 
 B180 borrowed placement maps and the two kinds of borrower
 - A defect that shipped in B179 was found and fixed: an item borrowing a donor

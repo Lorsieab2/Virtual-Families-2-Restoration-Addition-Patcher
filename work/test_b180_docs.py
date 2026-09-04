@@ -208,11 +208,30 @@ class TestTransparencyLogMatchesTheBuild(unittest.TestCase):
         self.assertIn("0x55", text)
         self.assertIn("0x56", text)
 
-    def test_it_does_not_claim_an_unbuilt_bundle(self):
+    def test_the_unbuilt_claim_carries_its_correction(self):
+        """The log said no bundle was packaged. That is now false.
+
+        This test used to assert that sentence was PRESENT, which was right
+        while it was true and became a test enforcing a false statement the
+        moment B180 was published -- a transparency log asserting something
+        untrue about its own release is worse than one saying nothing.
+
+        The sentence is kept rather than deleted, so the record shows what was
+        claimed and when. What the test requires now is the correction beside
+        it. Deleting the line would also pass a naive "is it still claimed"
+        check while destroying the history, which is the same reasoning behind
+        keeping the original ZIP attached rather than replacing it.
+        """
         text = TRANSPARENCY.read_text(encoding="utf-8")
+        claim = "No B180 bundle is linked, packaged, or published"
+        self.assertIn(claim, text, "the original claim must be kept for the record")
+        after = text.split(claim, 1)[1][:600]
         self.assertIn(
-            "No B180 bundle is linked, packaged, or published", text
+            "SUPERSEDED", after,
+            "the claim is false now and must carry its correction beside it",
         )
+        # The correction has to be checkable, not just an admission.
+        self.assertIn("31195169252C441AF2C77EDA3AC660E42F2784049F00FE69D75DBF8C8FCA21B7", after)
 
 
 class TestTheDocumentedPropBoundIsReal(unittest.TestCase):
