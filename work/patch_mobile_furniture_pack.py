@@ -27634,6 +27634,50 @@ protected:
 // rather than through the behavior-label groups: those arrays live in another
 // translation unit, and a treatment label is never chosen autonomously.
 
+// How a spa treatment actually plays out, shared by the manual drop and the
+// autonomous receiving route so both look the same.
+//
+// Duration and posture come from the chaise "Taking a nap" branch, which is
+// what was asked for: GetRandom(5) + 5, lying down when the lounger faces one
+// way and sitting in the chaise pose when it faces the other. Reading the
+// orientation out of sFurnitureInfo2 rather than assuming one is what keeps a
+// villager from lying across the arm of a lounger placed the other way round.
+//
+// The gulp-and-sigh, eSound_GulpAhh_01 (0x101), is the same sound and the same
+// cadence the native "Having a refreshing drink" uses: a stretch of animation,
+// then the sound, repeated. Timing follows that behaviour rather than a number
+// picked here.
+static void VF2PlanSpaTreatment(
+    CVillagerPlans *plans, CVillager &villager, sFurnitureInfo2 const &info)
+{
+    (void)villager;
+    int const total = ldwGameState::GetRandom(5) + 5;
+    // Three sighs across the treatment, spaced the way the drink behaviour
+    // spaces them. A treatment shorter than the spacing simply gets fewer.
+    int remaining = total;
+    for (int pass = 0; pass < 3 && remaining > 0; ++pass) {
+        int slice = remaining > 2 ? 2 : remaining;
+        if (info.orientation == 1) {
+            plans->PlanToWait(slice, eBodyPositionChaise);
+        } else {
+            plans->PlanToLieDown(slice);
+        }
+        remaining -= slice;
+        plans->PlanToPlaySound(
+            static_cast<ESound>(0x101), 1.0f, eSoundTypeEffects);
+    }
+    if (remaining > 0) {
+        if (info.orientation == 1) {
+            plans->PlanToWait(remaining, eBodyPositionChaise);
+        } else {
+            plans->PlanToLieDown(remaining);
+        }
+    }
+    // A treatment is restful, so it pays the nap's own energy and dirtiness.
+    plans->PlanToIncDirtiness(2);
+    plans->PlanToIncEnergy(ldwGameState::GetRandom(5) + 7);
+}
+
 static char const *const kVF2SpaReceivingLabels[] = {
     "Getting pampered",
     "Getting a manicure",
@@ -27744,13 +27788,20 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
     }
 
     // Nobody on this one, so this adult takes it and receives a treatment.
+    // Link to the lounger first: the plan needs its orientation to choose
+    // between lying down and the chaise pose, and its point to walk to.
+    sFurnitureInfo2 receiveInfo = {};
+    if (!FurnitureManager.LinkPeepToFurniture(
+            CContentMap::eObjectChaise, &villager, receiveInfo, true, 0,
+            false)) {
+        return false;
+    }
     plans->ForgetPlans(villager, false);
     VF2SetActionLabel(
         villager,
         kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
-    plans->PlanToGo(
-        CContentMap::eObjectChaise, eSpeedNormal, ePriorityNormal, false);
-    plans->PlanToWait(ldwGameState::GetRandom(3) + 4, eBodyPositionChaise);
+    plans->PlanToGo(receiveInfo.point, eSpeedNormal, ePriorityNormal);
+    VF2PlanSpaTreatment(plans, villager, receiveInfo);
     plans->StartNewBehavior(villager);
     return true;
 }
@@ -27766,23 +27817,59 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
 // Adults only, matching the manual route. A free lounger is required, so a
 // villager never walks over to one that is already occupied; the give side
 // stays a deliberate manual drop.
+// A placed, in-world spa lounger -- either the invisible one or the visible
+// sibling -- or -1.
+//
+// This has to resolve an ACTUAL spa lounger. Both spa loungers share
+// eObjectChaise with every stock and mobile lounger, so a candidate gated on
+// the object alone becomes eligible whenever any chaise exists, and the
+// villager then walks to whichever chaise is nearest and mimes a spa treatment
+// on it. Checking occupancy at the villager's current position cannot prevent
+// that: it samples where they are standing now, before any destination has
+// been chosen.
+static int VF2FindFreeSpaLoungerSlot(CVillager &villager)
+{
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x400) return -1;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        int itemId = *reinterpret_cast<int *>(record);
+        if (itemId != __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ &&
+            itemId != __VF2_SPA_LOUNGER_ITEM_ID__) {
+            continue;
+        }
+        // Free means nobody is already receiving on THIS lounger. A taken one
+        // is the giving half's business, and that stays a manual drop.
+        if (VF2SpaOccupantIndex(villager, slot, 0)) continue;
+        return slot;
+    }
+    return -1;
+}
+
 static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
 {
     if (!VF2SpaAdult(villager)) return false;
 
-    // Somebody already on this lounger means this would be the giving half,
-    // which is manual-drop only. Refuse rather than mislabel it.
-    int const loungerSlot = VF2FurnitureSlotUnderVillager(villager);
-    if (VF2SpaOccupantIndex(villager, loungerSlot, 0)) return false;
+    // Resolve a real, free spa lounger BEFORE committing to anything. Without
+    // this the villager would head for the nearest ordinary chaise.
+    int const loungerSlot = VF2FindFreeSpaLoungerSlot(villager);
+    if (loungerSlot < 0) return false;
+
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.LinkPeepToFurniture(
+            CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
+        return false;
+    }
 
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
     plans->ForgetPlans(villager, false);
     VF2SetActionLabel(
         villager,
         kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
-    plans->PlanToGo(
-        CContentMap::eObjectChaise, eSpeedNormal, ePriorityNormal, false);
-    plans->PlanToWait(ldwGameState::GetRandom(3) + 4, eBodyPositionChaise);
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    VF2PlanSpaTreatment(plans, villager, info);
     plans->StartNewBehavior(villager);
     return true;
 }
@@ -27872,6 +27959,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
     # wrong item -- or, worse, silently at nothing, which is what left every
     # one of these inert.
     for _placeholder, _item_name in (
+        ("__VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__", "InvisibleSpaLounger"),
         ("__VF2_SPA_LOUNGER_ITEM_ID__", "SpaLoungerStd"),
         ("__VF2_INVISIBLE_PICNIC_TABLE__", "InvisiblePicnicTable"),
         ("__VF2_INVISIBLE_PATIO_TABLE__", "InvisiblePatioTable"),
@@ -31927,12 +32015,19 @@ extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &villager)
 // flag at +0x0C and the position at +0x10. Matching the point against that
 // array yields the specific item, which is what tells a Ping-Pong Table apart
 // from a stock Pool Table when both answer to EObject 0x36.
-static bool VF2LinkedFurnitureItemIs(CVillager &villager, int itemId)
+static bool VF2LinkedFurnitureItemIs(
+    CVillager &villager, int object, int itemId)
 {
-    // Ask the question CBehavior::PlayingPooltable itself asks, with the same
-    // call and the same arguments:
+    // Ask the question the native behaviour itself asks, with the same call
+    // and the same arguments:
     //
-    //   FeetPos(); FindFurniture(0x36, feet, info, true, 0, 0)
+    //   FeetPos(); FindFurniture(object, feet, info, true, 0, 0)
+    //
+    // The OBJECT is a parameter because it differs per behaviour and getting
+    // it wrong fails silently: PlayingPooltable searches object 0x36, while
+    // WorkoutTreadmill and RunningOnTreadmill both search 0x04. Hardcoding
+    // 0x36 made the bike probe search for a pool table, never match, and
+    // leave the treadmill labels in place -- a fix that quietly did nothing.
     //
     // An earlier version called LinkPeepToFurniture instead. That was wrong
     // twice over: it MUTATES state by reserving a link, so calling it ahead of
@@ -31948,7 +32043,7 @@ static bool VF2LinkedFurnitureItemIs(CVillager &villager, int itemId)
     ldwPoint feet = villager.FeetPos();
     sFurnitureInfo2 info = {};
     if (!FurnitureManager.FindFurniture(
-            (CContentMap::EObject)0x36, feet, info, true, 0, 0)) {
+            (CContentMap::EObject)object, feet, info, true, 0, 0)) {
         return false;
     }
     int slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, info.point);
@@ -31976,8 +32071,9 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
     // behaviour, while the link is the one the plan will use. IsInWorld is
     // not enough: with both tables placed it would answer yes for the
     // ping-pong table even when the villager walked to the pool table.
+    // 0x36 is the object PlayingPooltable searches.
     bool pingPong = VF2LinkedFurnitureItemIs(
-        villager, __VF2_PING_PONG_TABLE_ITEM_ID__);
+        villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingPooltable)) return;
     if (!pingPong) {
         // A stock pool table: leave the native label exactly as it was.
@@ -32002,8 +32098,9 @@ extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
     int remembered = VF2CurrentLabelInGroup(
         villager, kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
+    // 0x04 is the object both treadmill behaviours search -- NOT 0x36.
     bool bike = VF2LinkedFurnitureItemIs(
-        villager, __VF2_EXERCISE_BIKE_ITEM_ID__);
+        villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkoutTreadmill)) return;
     if (!bike) return;
     VF2ApplyRememberedOrRandomLabel(
@@ -32016,8 +32113,9 @@ extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
     int remembered = VF2CurrentLabelInGroup(
         villager, kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
+    // 0x04 is the object both treadmill behaviours search -- NOT 0x36.
     bool bike = VF2LinkedFurnitureItemIs(
-        villager, __VF2_EXERCISE_BIKE_ITEM_ID__);
+        villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RunningOnTreadmill)) return;
     if (!bike) return;
     VF2ApplyRememberedOrRandomLabel(

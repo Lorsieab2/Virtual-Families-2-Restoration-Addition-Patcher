@@ -147,7 +147,7 @@ class TestTheFurnitureProbe(unittest.TestCase):
         # The generated C interpolates the constant, so the literal appears in
         # the f-string template as the placeholder rather than the value.
         self.assertIn(
-            "villager, __VF2_PING_PONG_TABLE_ITEM_ID__)",
+            "villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__)",
             _source(),
             "the wrapper must compare against the derived item id",
         )
@@ -165,7 +165,7 @@ class TestTheFurnitureProbe(unittest.TestCase):
         # record+0x10 is an orientation index, not a point, so the lookup goes
         # through PtOnFurniture rather than matching coordinates by hand.
         body = re.search(
-            r"VF2LinkedFurnitureItemIs\(CVillager &villager, int itemId\)\n\{(.*?)\n\}",
+            r"VF2LinkedFurnitureItemIs\(\n    CVillager &villager, int object, int itemId\)\n\{(.*?)\n\}",
             _source(), re.S,
         )
         self.assertIsNotNone(body)
@@ -181,7 +181,7 @@ class TestTheFurnitureProbe(unittest.TestCase):
 
     def test_the_probe_bounds_the_slot(self):
         text = re.search(
-            r"VF2LinkedFurnitureItemIs\(CVillager &villager, int itemId\)\n\{(.*?)\n\}",
+            r"VF2LinkedFurnitureItemIs\(\n    CVillager &villager, int object, int itemId\)\n\{(.*?)\n\}",
             _source(), re.S,
         ).group(1)
         self.assertIn("slot < 0 || slot >= count", text)

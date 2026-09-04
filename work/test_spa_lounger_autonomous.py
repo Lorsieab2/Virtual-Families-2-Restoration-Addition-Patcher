@@ -46,16 +46,42 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         self.assertIsNone(spec["mobile_id"])
         self.assertEqual(spec["object"], patcher.MOBILE_CHAISE_OBJECT)
 
-    def test_it_refuses_an_occupied_lounger(self):
-        # A villager must never walk over to a lounger somebody is already
-        # using -- that would be the giving half, which stays a manual drop.
+    def test_it_resolves_a_real_free_spa_lounger_first(self):
+        # Checking occupancy where the villager currently STANDS is useless:
+        # it samples a position chosen before any destination exists. The
+        # candidate must resolve an actual free spa lounger up front, or a
+        # villager walks to the nearest ordinary chaise and mimes a treatment
+        # on it -- both spa loungers share eObjectChaise with every stock and
+        # mobile lounger.
         src = _source()
         start = src.index(
             "static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)\n{"
         )
         body = src[start:src.index("\n}", start)]
-        self.assertIn("if (VF2SpaOccupantIndex(villager, loungerSlot, 0)) return false;", body)
         self.assertIn("if (!VF2SpaAdult(villager)) return false;", body)
+        self.assertIn("VF2FindFreeSpaLoungerSlot(villager)", body)
+        self.assertIn("if (loungerSlot < 0) return false;", body)
+
+    def test_the_finder_accepts_only_the_two_spa_loungers(self):
+        src = _source()
+        start = src.index("static int VF2FindFreeSpaLoungerSlot(CVillager &villager)")
+        body = src[start:src.index("\n}", start)]
+        self.assertIn("__VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__", body)
+        self.assertIn("__VF2_SPA_LOUNGER_ITEM_ID__", body)
+        # And free means free: a lounger somebody is receiving on is the
+        # giving half's business, which stays a manual drop.
+        self.assertIn("if (VF2SpaOccupantIndex(villager, slot, 0)) continue;", body)
+
+    def test_the_treatment_matches_the_nap(self):
+        # Duration, posture and the gulp-and-sigh all come from the game's own
+        # values rather than invented ones.
+        src = _source()
+        start = src.index("static void VF2PlanSpaTreatment(")
+        body = src[start:src.index("\n}", start)]
+        self.assertIn("ldwGameState::GetRandom(5) + 5", body)   # the nap's duration
+        self.assertIn("PlanToLieDown", body)                    # the nap's posture
+        self.assertIn("info.orientation == 1", body)            # chosen per lounger
+        self.assertIn("static_cast<ESound>(0x101)", body)       # gulpahh_01.ogg
 
     def test_the_giving_labels_are_never_used_autonomously(self):
         src = _source()
