@@ -10,6 +10,7 @@ import math
 import re
 import subprocess
 import threading
+import time
 import traceback
 import tkinter.font as tkfont
 import webbrowser
@@ -241,6 +242,107 @@ def build_restore_namespace(*, backup_dir: str, game_dir: str | None = None, log
         game_dir=optional_path(game_dir),
         log=optional_path(log),
     )
+
+
+# How often the main thread pumps the event loop while a worker runs. Small
+# enough that the bar animates smoothly, large enough not to spin the CPU.
+WAIT_POLL_SECONDS = 0.03
+
+# How long to keep retrying the modal grab before giving up loudly.
+GRAB_TIMEOUT_SECONDS = 2.0
+
+
+class WaitWindow(tk.Toplevel):
+    """A modal wait popup with a moving progress bar.
+
+    Ported from the Virtual Villagers Fun Patcher (src/vv_fun_patcher_gui.py,
+    class WaitWindow and App._run_with_wait) at the owner's request, who
+    prefers its behaviour to the status line this replaces.
+
+    Why a window with a bar rather than a label: the patcher copies whole game
+    folders and renders patched bytes, and when that runs on the Tk main thread
+    the window stops repainting and Windows relabels it "(Not Responding)".
+    Nothing is wrong when that happens, but it reads as a crash. This gives the
+    wait a face that says otherwise.
+    """
+
+    def __init__(self, parent: tk.Misc, title: str, message: str, modal: bool = True) -> None:
+        super().__init__(parent)
+        self._modal = modal
+        self.title(title)
+        self.resizable(False, False)
+        # The X does nothing on purpose: the work cannot be cancelled part way
+        # without leaving a half-copied game folder behind.
+        self.protocol("WM_DELETE_WINDOW", lambda: None)
+        frame = ttk.Frame(self, padding=28)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text=message, justify="center").pack()
+        self._bar = ttk.Progressbar(frame, mode="indeterminate", length=300)
+        self._bar.pack(pady=(18, 0))
+        self._bar.start(12)
+        if modal:
+            self.transient(parent)
+        self._center(parent)
+        if modal:
+            self._take_grab()
+        with contextlib.suppress(tk.TclError):
+            self.update()
+
+    def _center(self, parent: tk.Misc) -> None:
+        self.update_idletasks()
+        width, height = self.winfo_width(), self.winfo_height()
+        try:
+            viewable = bool(parent.winfo_viewable())
+        except tk.TclError:
+            viewable = False
+        if viewable:
+            # Deliberately NOT clamped to zero. On a monitor left of or above
+            # the primary one these coordinates are legitimately negative, and
+            # clamping would throw the popup onto the primary display while it
+            # holds a modal grab -- the app would look frozen with the
+            # explanation on another screen.
+            x = parent.winfo_rootx() + (parent.winfo_width() - width) // 2
+            y = parent.winfo_rooty() + (parent.winfo_height() - height) // 2
+        else:
+            # No parent to sit on, so centre on the primary screen. Here a
+            # negative value would mean off-screen, so clamp.
+            x = max(0, (self.winfo_screenwidth() - width) // 2)
+            y = max(0, (self.winfo_screenheight() - height) // 2)
+        self.geometry(f"+{x}+{y}")
+
+    def _take_grab(self) -> None:
+        """Grab input, retrying until the window manager has mapped us.
+
+        The grab is what stops a second click on Apply starting a second patch
+        worker against the same output folder, so a silently-failed grab is
+        not acceptable -- it leaves the controls live.
+
+        grab_set() raises TclError while the window is not yet viewable, and
+        wait_visibility() is the obvious fix but blocks forever when the
+        window never becomes viewable, which is exactly what happens when the
+        parent is withdrawn. So this retries against a deadline and gives up
+        loudly rather than either hanging or continuing ungrabbed.
+        """
+        deadline = time.monotonic() + GRAB_TIMEOUT_SECONDS
+        while True:
+            try:
+                self.grab_set()
+                return
+            except tk.TclError:
+                if time.monotonic() >= deadline:
+                    raise
+                with contextlib.suppress(tk.TclError):
+                    self.update()
+                time.sleep(WAIT_POLL_SECONDS)
+
+    def close(self) -> None:
+        with contextlib.suppress(tk.TclError):
+            self._bar.stop()
+        if self._modal:
+            with contextlib.suppress(tk.TclError):
+                self.grab_release()
+        with contextlib.suppress(tk.TclError):
+            self.destroy()
 
 
 class VF2PatcherGUI:
@@ -568,19 +670,25 @@ class VF2PatcherGUI:
             self.restore_log_var.set(path)
 
     def load_manifest_settings(self) -> bool:
-        # Painted before the work starts, not after: this runs on the Tk main
-        # thread, so nothing redraws until it returns and an empty settings
-        # panel reads as a frozen window.  update_idletasks() is what actually
-        # puts these on screen.
-        self._show_please_wait("Please wait - loading patches...")
+        # The reading and parsing happen on a worker while a wait popup keeps
+        # the window painting. Tk values are read here, on the main thread, and
+        # the worker closes over plain strings -- touching Tk from the thread
+        # is not safe.
+        manifest_text = self.manifest_var.get()
+
+        def load():
+            path = Path(required_path(manifest_text, "Patch manifest")).resolve()
+            data = patcher.read_json(path)
+            return path, data, patcher.manifest_settings(data)
+
         try:
-            manifest_path = Path(required_path(self.manifest_var.get(), "Patch manifest")).resolve()
-            manifest = patcher.read_json(manifest_path)
-            settings = patcher.manifest_settings(manifest)
+            manifest_path, manifest, settings = self._run_with_wait(
+                "Please wait…\n\nLoading the patches.", load
+            )
         except Exception as exc:
-            # Restore the cursor here too: leaving it on "watch" after a failed
-            # load makes the window look permanently busy, which is the exact
-            # impression the wait message exists to prevent.
+            # The wait popup is already closed by _run_with_wait's finally;
+            # this only clears the older status-line/cursor state so a failed
+            # load does not leave the window looking busy.
             self._clear_please_wait()
             # The placeholder destroys the setting controls, so the loaded
             # state has to go with them. Keeping it would let
@@ -715,6 +823,51 @@ class VF2PatcherGUI:
         if units:
             self.settings_canvas.yview_scroll(units, "units")
         return "break"
+
+    def _run_with_wait(self, message: str, work):
+        """Run `work` off the main thread while a wait popup keeps painting.
+
+        Ported from the VV patcher's App._run_with_wait. A single
+        update_idletasks() before a blocking call is what produces a grey
+        rectangle -- the window has to keep pumping for the whole run, which
+        means the work has to be somewhere else.
+
+        `work` MUST NOT touch Tk. Read Tk variables on the main thread first
+        and close over plain values; reading them from another thread is not
+        safe.
+        """
+        wait = WaitWindow(self.root, "Please wait", message)
+        # The popup's own X is disabled, but that does nothing for the ROOT
+        # window. While this pumps the event loop, closing the app from the
+        # title bar or taskbar would destroy every widget and leave the worker
+        # running against a dead UI.
+        previous_close = self.root.protocol("WM_DELETE_WINDOW")
+        self.root.protocol("WM_DELETE_WINDOW", lambda: None)
+        outcome: dict[str, object] = {}
+
+        def run() -> None:
+            try:
+                outcome["value"] = work()
+            except BaseException as exc:  # surfaced on the main thread below
+                outcome["error"] = exc
+
+        worker = threading.Thread(target=run, daemon=True)
+        worker.start()
+        try:
+            while worker.is_alive():
+                with contextlib.suppress(tk.TclError):
+                    self.root.update()
+                time.sleep(WAIT_POLL_SECONDS)
+            worker.join()
+        finally:
+            wait.close()
+            with contextlib.suppress(tk.TclError):
+                self.root.protocol("WM_DELETE_WINDOW", previous_close)
+        if "error" in outcome:
+            # Re-raised here so a failure inside `work` surfaces normally
+            # instead of vanishing into the thread.
+            raise outcome["error"]
+        return outcome.get("value")
 
     def _show_please_wait(self, text: str) -> None:
         """Show a wait message and force it on screen before a blocking step."""
@@ -856,9 +1009,9 @@ class VF2PatcherGUI:
         # verification pass. On a full release that is a long silent wait
         # with nothing on screen to say the patcher is still working.
         self._append_log(
-            "Please wait - checking your game files and preparing the patches.\n"
-            "This can take a minute on a full release, and the window may\n"
-            "look idle while it works.\n"
+            "Please wait…\n\n"
+            "Checking your game files and preparing the patches.\n"
+            "This can take a minute on a full release.\n"
         )
 
         def worker() -> None:
