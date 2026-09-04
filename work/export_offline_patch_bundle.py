@@ -398,7 +398,7 @@ SETTINGS = [
     {
         "id": "mobile_renovations",
         "label": "Add mobile room renovations",
-        "description": "Optional patch: overlays 20 verified mobile renovation images (5 Bathroom 1 styles, 5 Bathroom 2 styles, 3 kitchen, 5 office, and 2 workshop) at their exact 1:1 room-map positions. The stock map remains unchanged when this setting is disabled.",
+        "description": "Optional patch: overlays 15 verified mobile renovation images (5 Bathroom 1 styles, 3 kitchen, 5 office, and 2 workshop) at their exact 1:1 room-map positions, with their store icons and shower-curtain variants. Bathroom 2 styles are AI-generated and ship under their own setting instead. The stock map remains unchanged when this setting is disabled.",
         "default": False,
         "category": "optional",
     },

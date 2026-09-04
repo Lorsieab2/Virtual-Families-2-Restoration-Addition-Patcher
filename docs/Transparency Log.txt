@@ -1490,6 +1490,32 @@ B180 payload deduplication and what a release check must ask
   payload check answers whether the correct map ARRIVES. Neither substitutes
   for the other, and the second is the one that speaks for what a player gets.
 
+B180 shipped an overstated count in one setting description
+- The description for "Add mobile room renovations" says the patch overlays 20
+  verified mobile renovation images, counting 5 Bathroom 1 and 5 Bathroom 2
+  styles together. The setting installs 15: 5 Bathroom 1, 3 kitchen, 5 office
+  and 2 workshop. Bathroom 2's art is AI-generated, gated on the separate
+  "2nd Bathroom Mobile-Style Renovations" setting, and shipped under that
+  setting alone.
+- This is disclosed rather than quietly corrected because the text is
+  player-visible in two places: the patcher GUI shows it next to the checkbox,
+  and the bundle's own Transparency Log.txt reproduces it. A player who
+  declines the AI art would have read a promise of five images they will not
+  get and did not ask for.
+- Scope is exactly that text. Verified in the published archive: no asset, no
+  executable and no patch record is affected -- the 7571 asset records, 9
+  post-asset records and 32 executables are unchanged by it, and the setting
+  installs precisely the files it always installed. Nothing a player receives
+  behaves differently; the sentence describing it was wrong.
+- Corrected at source after B180 was published. A published bundle cannot be
+  edited, so B180 keeps the old wording and the next release carries the
+  right one.
+- Found by checking every numeric claim in the documentation against the
+  published archive rather than against the source that generated it. Two
+  README counts were wrong the same way in the same pass. The holiday
+  ornaments description was checked identically and is correct at 12, which is
+  now pinned so a later pass does not "fix" a right number.
+
 B180 verification method
 - Generated .cpp files are compiled individually (cl /c /EHsc) after each
   change. Three defects this cycle were invisible to source-reading tests and
