@@ -1490,6 +1490,36 @@ B180 payload deduplication and what a release check must ask
   payload check answers whether the correct map ARRIVES. Neither substitutes
   for the other, and the second is the one that speaks for what a player gets.
 
+B180 r2 corrected-text asset, added alongside the original
+- The overstated description above is player-visible text, so B180 carries a
+  SECOND archive with it corrected: VF2-B180-Release-r2.zip, SHA-256
+  FA4304114A9065EC7ED0A42AC50B6E8754D351AD390E17BD7FAD3E0F6027B8E8.
+- The original VF2-B180-Release.zip stays attached and unmodified. This is an
+  addition, not a replacement: replacing it would mean deleting a published
+  ZIP, and no release asset is ever deleted here. It also means the version
+  players already downloaded remains available and verifiable.
+- r2 was produced by REPACKING the published archive rather than rebuilding
+  the matrix. A rebuild would risk producing binaries differing from the 32
+  already gated and already downloaded; a repack cannot, because every other
+  member is copied byte for byte. Verified: 7,459 members in the same order,
+  exactly 2 differing -- manifest.json and Transparency Log.txt -- and all 32
+  executable SHA-256s still matching release-identities-B180.json.
+- Established before repacking, because "text-only" is a comfortable claim to
+  make: the manifest is not self-hashed, the bundle carries no signature
+  member, `description` is display-only with no asset record referencing it,
+  and the release gate reads `settings` for `id` alone. The gate DOES verify
+  every payload file against the source_sha256 its record declares, so the
+  repack rewrites description strings and no record field.
+- The gate requires the ZIP root folder to equal the archive name, so r2's
+  root is renamed to match. Checked first that the manifest never references
+  its own root: zero occurrences, so no record path changes meaning.
+- r2 passes the release gate (32 variants, identities authenticated) and the
+  extracted-payload verification independently.
+- The disclosure above is NOT retired by r2 and has no expiry condition. The
+  original asset remains attached and downloadable, so the overstated text is
+  still something a player can receive; the historical fact that B180 shipped
+  it stays true regardless of what r2 says.
+
 B180 shipped an overstated count in one setting description
 - The description for "Add mobile room renovations" says the patch overlays 20
   verified mobile renovation images, counting 5 Bathroom 1 and 5 Bathroom 2
