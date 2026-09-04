@@ -100,20 +100,28 @@ def main():
     # present in the payload under their own names. The exporter collapses
     # byte-identical payload files and points several manifest records at one
     # canonical copy, so asking "is SpaLoungerStd.png.fmap in the payload"
-    # gets the wrong answer -- and it became the wrong answer precisely
-    # BECAUSE the desktop-safe map fix made all three lounger maps identical.
-    # The manifest is the authority on what a player ends up with.
+    # gets the wrong answer. This is a LATENT defect, not one the
+    # desktop-safe map fix introduced: B179's manifest already had 220 source
+    # files serving more than one target each. The by-name check was always
+    # wrong; it simply had no lounger to be wrong about until that fix made
+    # the three maps identical. The manifest is the authority on what a
+    # player ends up with.
     manifest_path = next(EXTRACT.rglob("manifest.json"), None)
     if manifest_path is None:
         problems.append("manifest.json is not in the bundle")
         installed = {}
     else:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        installed = {
-            record["file_path"]: record
-            for record in manifest.get("asset_patches", [])
-            if "file_path" in record
-        }
+        # Read BOTH record lists. post_asset_patches is a separate list that
+        # runs after the asset pass, and a target sitting there would be
+        # reported as "not installed" by a resolver that only reads
+        # asset_patches -- a false alarm on a correct bundle, which is the
+        # same class of mistake as the by-name check this replaced.
+        installed = {}
+        for key in ("asset_patches", "post_asset_patches"):
+            for record in manifest.get(key, []):
+                if "file_path" in record:
+                    installed.setdefault(record["file_path"], record)
 
     for name in LOUNGER_MAPS:
         target = f"Assets/{name}"
@@ -139,6 +147,23 @@ def main():
         f"lounger maps     : {len(maps)} of {len(LOUNGER_MAPS)} resolved "
         "through the manifest"
     )
+
+    # Resolving proves they install; equal digests prove they install the SAME
+    # map. That is the actual claim the desktop-safe fix makes, and without it
+    # three loungers could each resolve to a different file and still pass.
+    lounger_digests = {
+        name: installed[f"Assets/{name}"].get("source_sha256", "")
+        for name in LOUNGER_MAPS
+        if f"Assets/{name}" in installed
+    }
+    if len(lounger_digests) == len(LOUNGER_MAPS):
+        distinct = set(lounger_digests.values())
+        if len(distinct) != 1:
+            problems.append(
+                f"loungers install different maps: {lounger_digests}"
+            )
+        else:
+            print(f"                   all three share {distinct.pop()[:12]}")
 
     # Labels: the removed one must appear in no executable; the added ones must
     # appear in the behaviour-carrying builds. Every variant ships in one ZIP,
