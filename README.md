@@ -37,6 +37,14 @@ contacts the network. The one exception is the **Check for updates** link in
 the GUI header, which opens the releases page in your browser when you click
 it.
 
+**If a release carries more than one archive, take the highest revision.**
+B180 has two: `VF2-B180-Release.zip` and `VF2-B180-Release-r2.zip`. Take
+**r2**. They differ in exactly two files -- `manifest.json` and
+`Transparency Log.txt` -- because one setting's description overstated what
+it installs; all 32 executables are byte-identical between them. The
+original is kept attached rather than replaced so anyone who already
+downloaded it can still verify what they have.
+
 If your antivirus quarantines the patcher or the patched executable, do not
 simply override it. Confirm first that you downloaded the ZIP from this
 project's own releases page, and where the release notes publish a SHA-256 for

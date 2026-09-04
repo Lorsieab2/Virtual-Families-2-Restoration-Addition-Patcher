@@ -1538,8 +1538,16 @@ B180 shipped an overstated count in one setting description
   installs precisely the files it always installed. Nothing a player receives
   behaves differently; the sentence describing it was wrong.
 - Corrected at source after B180 was published. A published bundle cannot be
-  edited, so B180 keeps the old wording and the next release carries the
-  right one.
+  edited, so the original VF2-B180-Release.zip keeps the old wording. A
+  corrected archive was added to the same B180 release rather than
+  replacing it: VF2-B180-Release-r2.zip, 145,127,486 bytes, SHA-256
+  FA4304114A9065EC7ED0A42AC50B6E8754D351AD390E17BD7FAD3E0F6027B8E8.
+  PLAYERS SHOULD DOWNLOAD r2. It differs from the original in exactly two
+  members -- manifest.json and Transparency Log.txt -- and all 32
+  executables are byte-identical to the original and match
+  release-identities-B180.json exactly, so it changes what the patcher
+  SAYS and nothing about what it does. The original is kept attached so
+  anyone who already downloaded it can still verify what they have.
 - Found by checking every numeric claim in the documentation against the
   published archive rather than against the source that generated it. Two
   README counts were wrong the same way in the same pass. The holiday
@@ -1562,7 +1570,13 @@ B180 verification method
   subsequently built, packaged and published as a prerelease. The original
   sentence is kept rather than deleted, for the same reason the original ZIP is
   kept when a corrected one is added: what was said at the time is part of what
-  a transparency log is for. See the entry below.
+  a transparency log is for. The published artifact is
+  VF2-B180-Release.zip, SHA-256
+  31195169252C441AF2C77EDA3AC660E42F2784049F00FE69D75DBF8C8FCA21B7,
+  named here so this correction identifies its own subject rather than
+  relying on a later entry. See that entry below for the full record, and
+  note that a corrected VF2-B180-Release-r2.zip was later added to the
+  same release; players should download r2.
 
 B180 shipped artifact
 - Published as a PRERELEASE on 2026-09-04: VF2-B180-Release.zip, 144,428,060
