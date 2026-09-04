@@ -26,8 +26,17 @@ ADDED = [
 # Removed on the owner's request; must appear in NO variant.
 REMOVED = [b"Rallying back and forth"]
 
+EXPECTED_VARIANTS = 32
+
 
 def variants():
+    """Only variants that have actually linked.
+
+    A matrix build SEEDS each variant folder from the previous release before
+    regenerating it, so a variant that has not linked yet still holds the
+    previous release's files. Yielding those would check B179's assets and
+    report its defects against B180.
+    """
     for d in sorted(ROOT.glob(f"{PREFIX}-*")):
         if d.name.endswith("-logs"):
             continue
@@ -80,7 +89,18 @@ def main():
         for p in problems:
             print("  -", p)
         return 1
-    print("\nall checks passed on the variants built so far")
+    # A partial matrix passing quietly is the dangerous direction at release
+    # time, so it gets its own exit code rather than a clean 0.
+    if len(rows) != EXPECTED_VARIANTS:
+        print(
+            f"\nPARTIAL MATRIX: {len(rows)} of {EXPECTED_VARIANTS} variants "
+            "linked. Checks passed on those, but this is NOT a release-ready "
+            "result -- unlinked variants still hold the previous release's "
+            "files."
+        )
+        return 2
+
+    print(f"\nall checks passed on all {EXPECTED_VARIANTS} variants")
     return 0
 
 
