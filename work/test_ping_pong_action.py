@@ -25,7 +25,7 @@ class TestPingPongLabels(unittest.TestCase):
         self.assertIn("ping_pong", patcher.BEHAVIOR_LABEL_GROUP_RANGES)
         start, end = patcher.BEHAVIOR_LABEL_GROUP_RANGES["ping_pong"]
         labels = [text for _key, text in patcher.BEHAVIOR_LABELS[start:end]]
-        self.assertEqual(labels, ["Playing ping-pong", "Rallying back and forth"])
+        self.assertEqual(labels, ["Playing ping-pong"])
 
     def test_the_group_is_appended_last(self):
         # Inserting it anywhere else would shift every established label id.
@@ -36,7 +36,7 @@ class TestPingPongLabels(unittest.TestCase):
 
     def test_the_label_ids_clear_the_blocks_that_follow_them(self):
         ids = patcher.behavior_label_string_ids_for_group("ping_pong")
-        self.assertEqual(len(ids), 2)
+        self.assertEqual(len(ids), 1)
         self.assertLess(
             max(ids), patcher.holiday_ornament_collection_title_string_id(),
             "the label ids must stay below the ornament/achievement block",

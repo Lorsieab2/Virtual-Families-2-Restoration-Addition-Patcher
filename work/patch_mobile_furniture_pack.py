@@ -702,12 +702,26 @@ HEAD_STORE_VALUE_COUNT = 50
 HEAD_STORE_HEAD_VALUES = tuple(range(HEAD_STORE_VALUE_COUNT))
 HEAD_STORE_ENTRY_COUNT = len(HEAD_STORE_GENDERS) * len(HEAD_STORE_HEAD_VALUES)
 HEAD_STORE_PRICE = OUTFIT_STORE_PRICE
-# Front-facing frame of the 24-frame head row, used for the store icon.
+# The store icon is cut from the head sheet's VISUAL frame, which is not the
+# same as the engine's cell.
+#
+# CHARACTER_SHEET_SPECS describes the sheet the way the engine indexes it:
+# 24 columns of 28x56. But the drawn heads are ~31px wide and centred on
+# 56px-wide slots, so a 28px cut lands in the middle of a head and slices it
+# in half -- which is exactly what the first shipped icons did. Reading the
+# fully-transparent gutters out of a row shows the real boundaries: 12 frames
+# of 56x56, each holding one complete head.
+#
+# Frame 5 of those 12 is the front-facing pose.
 HEAD_STORE_ICON_FRAME = 5
+HEAD_STORE_ICON_CELL_SIZE = (56, 56)
+HEAD_STORE_ICON_FRAME_COUNT = 12
 HEAD_STORE_ICON_SOURCE_SHEETS = {
     "female": "female_heads00.png",
     "male": "male_heads00.png",
 }
+# The engine's own cell, kept for the consistency check against
+# CHARACTER_SHEET_SPECS. Icons use HEAD_STORE_ICON_CELL_SIZE instead.
 HEAD_STORE_CELL_SIZE = (28, 56)
 HOLIDAY_BODY_CELL_SIZE = 91
 HOLIDAY_BODY_ROLE_SPECS = [
@@ -2619,10 +2633,20 @@ for _head_sheet in ("female_heads", "male_heads"):
             f"{_head_sheet} cell size {_spec['cell_size']} does not match the "
             f"head store's {HEAD_STORE_CELL_SIZE}"
         )
-    if HEAD_STORE_ICON_FRAME >= _spec["original_grid"][0]:
+    # The icon frame indexes the 56px VISUAL frames, not the engine's 28px
+    # cells, so check it against that count and check the two views agree on
+    # the row's total width.
+    if HEAD_STORE_ICON_FRAME >= HEAD_STORE_ICON_FRAME_COUNT:
         raise RuntimeError(
-            f"head icon frame {HEAD_STORE_ICON_FRAME} is outside "
-            f"{_head_sheet}'s {_spec['original_grid'][0]} frames"
+            f"head icon frame {HEAD_STORE_ICON_FRAME} is outside the "
+            f"{HEAD_STORE_ICON_FRAME_COUNT} visual frames"
+        )
+    if (HEAD_STORE_ICON_FRAME_COUNT * HEAD_STORE_ICON_CELL_SIZE[0]
+            != _spec["original_grid"][0] * _spec["cell_size"][0]):
+        raise RuntimeError(
+            f"{_head_sheet}: {HEAD_STORE_ICON_FRAME_COUNT} visual frames of "
+            f"{HEAD_STORE_ICON_CELL_SIZE[0]}px do not span the same row as "
+            f"{_spec['original_grid'][0]} cells of {_spec['cell_size'][0]}px"
         )
 
 ORIG_STRING_COUNT = 0xA5D
@@ -3209,7 +3233,6 @@ BEHAVIOR_LABEL_GROUPS = [
         "ping_pong",
         [
             ("eString_PlayingPingPong", "Playing ping-pong"),
-            ("eString_RallyingBackAndForth", "Rallying back and forth"),
         ],
     ),
 ]
@@ -7668,7 +7691,7 @@ def _find_head_icon_sheet(gender, head_value):
     and a fixed front-facing frame rather than the sheet's last column.
     """
     sheet_name = HEAD_STORE_ICON_SOURCE_SHEETS[gender]
-    cell_w, cell_h = HEAD_STORE_CELL_SIZE
+    cell_w, cell_h = HEAD_STORE_ICON_CELL_SIZE
     required_height = (head_value + 1) * cell_h
     required_width = (HEAD_STORE_ICON_FRAME + 1) * cell_w
     missing = []
@@ -7704,7 +7727,7 @@ def sync_head_store_icon_art(manifest):
     missing = []
     issues = []
     sheet_cache = {}
-    cell_w, cell_h = HEAD_STORE_CELL_SIZE
+    cell_w, cell_h = HEAD_STORE_ICON_CELL_SIZE
     holiday_desc = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
 
     try:
@@ -7750,8 +7773,11 @@ def sync_head_store_icon_art(manifest):
         "image_base": hex(head_icon_image_base(holiday_desc)),
         "source_rule": {
             "sheets": HEAD_STORE_ICON_SOURCE_SHEETS,
-            "frame": f"frame {HEAD_STORE_ICON_FRAME} (front-facing) of the 24-frame row",
-            "cell": list(HEAD_STORE_CELL_SIZE),
+            "frame": (
+                f"visual frame {HEAD_STORE_ICON_FRAME} (front-facing) of the "
+                f"{HEAD_STORE_ICON_FRAME_COUNT} 56px frames"
+            ),
+            "cell": list(HEAD_STORE_ICON_CELL_SIZE),
         },
         "expected_count": HEAD_STORE_ENTRY_COUNT,
         "generated_count": len(entries),
