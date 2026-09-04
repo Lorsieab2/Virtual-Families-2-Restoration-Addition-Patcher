@@ -160,5 +160,54 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                 )
 
 
+class TestStockDonorBorrowersMatchTheirDonors(unittest.TestCase):
+    """The seven stock-donor items must ship their donor's map exactly.
+
+    These are the items that rely on the game's native hotspot path rather
+    than this patcher's drop dispatcher. That only works if the placement data
+    they carry IS the donor's, so this checks the built artifact rather than
+    the manifest that says which donor they name.
+
+    It does NOT establish that a villager dropped on one of these acts. That
+    is a separate claim and no playtest has confirmed it.
+    """
+
+    BORROWERS = {
+        "InvisibleYogaEquipment.png.fmap": "YogaGearStd.png.fmap",
+        "HomeGymSystemStd.png.fmap": "YogaGearStd.png.fmap",
+        "ExerciseBikeStd.png.fmap": "TreadmillStd.png.fmap",
+        "PingPongTableStd.png.fmap": "PoolTableStd.png.fmap",
+        "InvisibleHammock.png.fmap": "HammockStd.png.fmap",
+        "InvisibleKiddiePool.png.fmap": "PoolChildrensStd.png.fmap",
+        "InvisibleFullSizePool.png.fmap": "PoolLargeStd.png.fmap",
+    }
+
+    def setUp(self):
+        self.builds = list(_finished_builds())
+        if not self.builds:
+            self.skipTest("no finished current-release build output")
+
+    def test_each_borrower_is_byte_identical_to_its_donor(self):
+        checked = 0
+        for build in self.builds:
+            assets = build / "Assets"
+            for borrower, donor in self.BORROWERS.items():
+                bp, dp = assets / borrower, assets / donor
+                if not (bp.is_file() and dp.is_file()):
+                    continue
+                with self.subTest(build=build.name, fmap=borrower):
+                    self.assertEqual(
+                        hashlib.sha256(bp.read_bytes()).hexdigest(),
+                        hashlib.sha256(dp.read_bytes()).hexdigest(),
+                        f"{borrower} no longer matches {donor}; the native "
+                        "hotspot path depends on it carrying the donor's map",
+                    )
+                    checked += 1
+        self.assertGreater(
+            checked, 0,
+            "found no borrower/donor pairs to compare -- a vacuous pass",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
