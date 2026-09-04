@@ -728,12 +728,26 @@ HEAD_STORE_VALUE_COUNT = 50
 HEAD_STORE_HEAD_VALUES = tuple(range(HEAD_STORE_VALUE_COUNT))
 HEAD_STORE_ENTRY_COUNT = len(HEAD_STORE_GENDERS) * len(HEAD_STORE_HEAD_VALUES)
 HEAD_STORE_PRICE = OUTFIT_STORE_PRICE
-# Front-facing frame of the 24-frame head row, used for the store icon.
+# The store icon is cut from the head sheet's VISUAL frame, which is not the
+# same as the engine's cell.
+#
+# CHARACTER_SHEET_SPECS describes the sheet the way the engine indexes it:
+# 24 columns of 28x56. But the drawn heads are ~31px wide and centred on
+# 56px-wide slots, so a 28px cut lands in the middle of a head and slices it
+# in half -- which is exactly what the first shipped icons did. Reading the
+# fully-transparent gutters out of a row shows the real boundaries: 12 frames
+# of 56x56, each holding one complete head.
+#
+# Frame 5 of those 12 is the front-facing pose.
 HEAD_STORE_ICON_FRAME = 5
+HEAD_STORE_ICON_CELL_SIZE = (56, 56)
+HEAD_STORE_ICON_FRAME_COUNT = 12
 HEAD_STORE_ICON_SOURCE_SHEETS = {
     "female": "female_heads00.png",
     "male": "male_heads00.png",
 }
+# The engine's own cell, kept for the consistency check against
+# CHARACTER_SHEET_SPECS. Icons use HEAD_STORE_ICON_CELL_SIZE instead.
 HEAD_STORE_CELL_SIZE = (28, 56)
 HOLIDAY_BODY_CELL_SIZE = 91
 HOLIDAY_BODY_ROLE_SPECS = [
@@ -1580,18 +1594,26 @@ MOBILE_FURNITURE_IMPLEMENTED_ROUTE_SPECS = (
     },
 )
 INVISIBLE_SPA_LOUNGER_ITEM_ID = 0x32F
+SPA_LOUNGER_ITEM_ID = 0x330
+INVISIBLE_PICNIC_TABLE_ITEM_ID = 0x328
+INVISIBLE_PATIO_TABLE_ITEM_ID = 0x329
+INVISIBLE_LOUNGER_ITEM_ID = 0x32B
 MOBILE_FURNITURE_MANUAL_BINDING_SPECS = (
     {
         # Checked before the chaise family: the spa lounger shares the chaise
         # object, so the ordinary lounger route would otherwise swallow it.
         "name": "invisible_spa_lounger",
-        "item_ids": (INVISIBLE_SPA_LOUNGER_ITEM_ID,),
+        # Both loungers -- invisible and visible -- are the same item with
+        # different art, so they share one handler and one route.
+        "item_ids": (INVISIBLE_SPA_LOUNGER_ITEM_ID, SPA_LOUNGER_ITEM_ID),
         "handler": "VF2HandleMobileInvisibleSpaLounger",
-        "literal_ids": (INVISIBLE_SPA_LOUNGER_ITEM_ID,),
+        "literal_ids": (INVISIBLE_SPA_LOUNGER_ITEM_ID, SPA_LOUNGER_ITEM_ID),
     },
     {
         "name": "chaise",
-        "item_ids": MOBILE_CHAISE_ITEM_IDS,
+        # The Invisible Lounger is folded into VF2IsMobileChaise itself, so it
+        # inherits every chaise behaviour rather than needing its own route.
+        "item_ids": tuple(MOBILE_CHAISE_ITEM_IDS) + (INVISIBLE_LOUNGER_ITEM_ID,),
         "handler": "VF2HandleMobileChaise",
         "condition_marker": "VF2IsMobileChaise(candidate)",
         "literal_ids": (),
@@ -1604,15 +1626,17 @@ MOBILE_FURNITURE_MANUAL_BINDING_SPECS = (
     },
     {
         "name": "patio_table",
-        "item_ids": (MOBILE_PATIO_TABLE_ITEM_ID,),
+        # The Invisible Patio Table shares this handler and this route.
+        "item_ids": (MOBILE_PATIO_TABLE_ITEM_ID, INVISIBLE_PATIO_TABLE_ITEM_ID),
         "handler": "VF2HandleMobilePatioTable",
-        "literal_ids": (MOBILE_PATIO_TABLE_ITEM_ID,),
+        "literal_ids": (MOBILE_PATIO_TABLE_ITEM_ID, INVISIBLE_PATIO_TABLE_ITEM_ID),
     },
     {
         "name": "picnic_table",
-        "item_ids": (MOBILE_PICNIC_TABLE_ITEM_ID,),
+        # The Invisible Picnic Table shares this handler and this route.
+        "item_ids": (MOBILE_PICNIC_TABLE_ITEM_ID, INVISIBLE_PICNIC_TABLE_ITEM_ID),
         "handler": "VF2HandleMobilePicnicTable",
-        "literal_ids": (MOBILE_PICNIC_TABLE_ITEM_ID,),
+        "literal_ids": (MOBILE_PICNIC_TABLE_ITEM_ID, INVISIBLE_PICNIC_TABLE_ITEM_ID),
     },
     {
         "name": "birthday_cake",
@@ -1743,7 +1767,11 @@ def validate_mobile_furniture_autonomous_scope():
         )
 
     external_ids = {
-        int(spec["mobile_id"]) for spec in MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS
+        # Specs for this patcher's own items carry no mobile_id -- there is no
+        # mobile row for them to collide with, which is what this check is for.
+        int(spec["mobile_id"])
+        for spec in MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS
+        if spec["mobile_id"] is not None
     }
     id_overlap = external_ids.intersection(
         MOBILE_FURNITURE_MANUAL_ONLY_WHOLE_HOUSEHOLD_MOBILE_IDS
@@ -1851,6 +1879,17 @@ MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS = (
         "weight": 2000,
         "object_enum": "eObjectXmasTree",
         "handler": "VF2HandleMobileFixingTreeDecorations",
+    },
+    {
+        # This patcher's own item, not a ported mobile row, so it has no
+        # mobile_id. Only the RECEIVING half is autonomous: giving a treatment
+        # needs a second villager already receiving on that same lounger,
+        # which autonomous selection cannot arrange.
+        "mobile_id": None,
+        "object": MOBILE_CHAISE_OBJECT,
+        "weight": 2000,
+        "object_enum": "eObjectChaise",
+        "handler": "VF2HandleMobileSpaLoungerReceiving",
     },
 )
 MOBILE_SPECIAL_UPGRADE_ITEM_IDS = [0x117, 0x118, 0x119, 0x11A]
@@ -2645,10 +2684,20 @@ for _head_sheet in ("female_heads", "male_heads"):
             f"{_head_sheet} cell size {_spec['cell_size']} does not match the "
             f"head store's {HEAD_STORE_CELL_SIZE}"
         )
-    if HEAD_STORE_ICON_FRAME >= _spec["original_grid"][0]:
+    # The icon frame indexes the 56px VISUAL frames, not the engine's 28px
+    # cells, so check it against that count and check the two views agree on
+    # the row's total width.
+    if HEAD_STORE_ICON_FRAME >= HEAD_STORE_ICON_FRAME_COUNT:
         raise RuntimeError(
-            f"head icon frame {HEAD_STORE_ICON_FRAME} is outside "
-            f"{_head_sheet}'s {_spec['original_grid'][0]} frames"
+            f"head icon frame {HEAD_STORE_ICON_FRAME} is outside the "
+            f"{HEAD_STORE_ICON_FRAME_COUNT} visual frames"
+        )
+    if (HEAD_STORE_ICON_FRAME_COUNT * HEAD_STORE_ICON_CELL_SIZE[0]
+            != _spec["original_grid"][0] * _spec["cell_size"][0]):
+        raise RuntimeError(
+            f"{_head_sheet}: {HEAD_STORE_ICON_FRAME_COUNT} visual frames of "
+            f"{HEAD_STORE_ICON_CELL_SIZE[0]}px do not span the same row as "
+            f"{_spec['original_grid'][0]} cells of {_spec['cell_size'][0]}px"
         )
 
 ORIG_STRING_COUNT = 0xA5D
@@ -3235,7 +3284,23 @@ BEHAVIOR_LABEL_GROUPS = [
         "ping_pong",
         [
             ("eString_PlayingPingPong", "Playing ping-pong"),
-            ("eString_RallyingBackAndForth", "Rallying back and forth"),
+        ],
+    ),
+    # The Exercise Bike borrows the Treadmill's two behaviours, so without
+    # these its users are labelled "walking on the treadmill" and "running on
+    # the treadmill". One label each, chosen by which table -- sorry, which
+    # machine -- the villager actually walked to. A stock Treadmill keeps its
+    # stock labels.
+    (
+        "exercise_bike_walk",
+        [
+            ("eString_UsingTheExerciseBike", "Using the exercise bike"),
+        ],
+    ),
+    (
+        "exercise_bike_run",
+        [
+            ("eString_DoingHighIntensityCycling", "Doing high-intensity cycling"),
         ],
     ),
 ]
@@ -3965,6 +4030,27 @@ NEW_FURNITURE_ITEMS = [
         "long_description": "Rally back and forth with a friend on this ping-pong table.",
         "art_png": "PingPongTableStd.png",
         "donor_fmap": "PoolTableStd.png.fmap",
+        "section_name": "Furniture/Placeable",
+    },
+    {
+        # The visible sibling of the Invisible Spa Lounger: same donor, same
+        # behaviour map, same drop handler, just with art. Both route to
+        # VF2HandleMobileInvisibleSpaLounger, so the give/receive treatments
+        # are identical -- the only difference is that you can see this one.
+        "name": "SpaLoungerStd",
+        "item_id": 0x330,
+        "donor": 0x26F,          # Chaise, as the invisible one uses
+        "list": "gFurniture5",
+        "price": 250,            # the invisible sibling's own price
+        "lock_generation": 12,
+        # Type 5 like the donor and like both invisible loungers. Type 1
+        # belongs to the pools alone, and using it here had native furniture
+        # logic treating a chaise as a pool.
+        "item_type": 5,
+        "short_description": "Spa Lounger",
+        "long_description": "This lounger allows villagers to \"give\" and \"receive\" spa treatments!",
+        "art_png": "SpaLoungerStd.png",
+        "donor_fmap": "Chaise_brown.png.fmap",
         "section_name": "Furniture/Placeable",
     },
 ]
@@ -5919,6 +6005,21 @@ def outfit_store_entry_index(gender, body_value):
     return OUTFIT_STORE_GENDERS.index(gender) * len(OUTFIT_STORE_BODY_VALUES) + OUTFIT_STORE_BODY_VALUES.index(body_value)
 
 
+def furniture_item_id_by_name(name):
+    """Item id of an added furniture record, by its record name.
+
+    Drop routes are matched on item id, so they must never be written as
+    literals: a renumbering would leave a route pointing at the wrong item, or
+    at nothing at all -- which is exactly how every added item ended up inert
+    while its record and behaviour map were perfectly correct.
+    """
+    for table in (NEW_FURNITURE_ITEMS, INVISIBLE_OUTDOOR_ITEMS):
+        for item in table:
+            if item["name"] == name:
+                return item["item_id"]
+    raise KeyError(f"no added furniture record named {name!r}")
+
+
 def head_item_id_for_head(gender, head_value):
     return HEAD_STORE_GENDER_ITEM_BASES[gender] + head_value
 
@@ -7694,7 +7795,7 @@ def _find_head_icon_sheet(gender, head_value):
     and a fixed front-facing frame rather than the sheet's last column.
     """
     sheet_name = HEAD_STORE_ICON_SOURCE_SHEETS[gender]
-    cell_w, cell_h = HEAD_STORE_CELL_SIZE
+    cell_w, cell_h = HEAD_STORE_ICON_CELL_SIZE
     required_height = (head_value + 1) * cell_h
     required_width = (HEAD_STORE_ICON_FRAME + 1) * cell_w
     missing = []
@@ -7730,7 +7831,7 @@ def sync_head_store_icon_art(manifest):
     missing = []
     issues = []
     sheet_cache = {}
-    cell_w, cell_h = HEAD_STORE_CELL_SIZE
+    cell_w, cell_h = HEAD_STORE_ICON_CELL_SIZE
     holiday_desc = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
 
     try:
@@ -7776,8 +7877,11 @@ def sync_head_store_icon_art(manifest):
         "image_base": hex(head_icon_image_base(holiday_desc)),
         "source_rule": {
             "sheets": HEAD_STORE_ICON_SOURCE_SHEETS,
-            "frame": f"frame {HEAD_STORE_ICON_FRAME} (front-facing) of the 24-frame row",
-            "cell": list(HEAD_STORE_CELL_SIZE),
+            "frame": (
+                f"visual frame {HEAD_STORE_ICON_FRAME} (front-facing) of the "
+                f"{HEAD_STORE_ICON_FRAME_COUNT} 56px frames"
+            ),
+            "cell": list(HEAD_STORE_ICON_CELL_SIZE),
         },
         "expected_count": HEAD_STORE_ENTRY_COUNT,
         "generated_count": len(entries),
@@ -13313,6 +13417,61 @@ extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
 // VF2RemoveOwnedUpgrade, and these rows must never take the ReturnOne removal
 // route -- they are cancelled by VF2ToggleOneShotUpgrade from the click
 // handler instead.
+// Rows that are checkmarked from LIVE GAME STATE rather than from purchase
+// history, because owning one is a state you can be in and come out of.
+//
+// The store draws its checkmark for any row whose GetNumAvailable is zero, so
+// reporting zero here is what makes the tick appear. The click keeps seeing
+// the real answer through a different call site, so a row stays clickable --
+// which matters for the reversible ones: buying Unlock Everything again
+// restores the locks, and buying a price multiplier again switches to it.
+// Defined later in this unit; declared here because the row check below needs
+// it. Ordering like this is valid Python and invalid C, and no source-reading
+// test catches it -- only compiling the generated file does.
+static bool VF2AllStoreLocksUnlocked();
+
+static bool VF2StoreRowShowsActive(int itemId) {{
+    switch (itemId) {{
+    // The four visible Special Upgrades. Each is checked against the state it
+    // actually sets, the same test VF2GetVisibleSpecialUpgradePrice uses to
+    // make an owned row free.
+    case 0x117: return Money.bankingInterest > 0.1001f;   // Brokerage Account
+    case 0x118: return FoodStore.haveFoodClub != 0;       // Food Club
+    case 0x119: return VF2PersistentHealthPlanEntitlement() != 0;  // Health Plan
+    case 0x11A: return CollectableItem.luckyRockActive != 0;       // Lucky Rock
+    case 0x123: return VF2AllStoreLocksUnlocked();  // Unlock everything
+    default: break;
+    }}
+    // Native House Renovations are ordinary owned upgrades.
+    if (itemId >= 0xE1 && itemId <= 0xEA) {{
+        return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
+    }}
+    // Both renovation catalogues carry their own active byte.
+    if (VF2IsAIBathroom2Style(itemId)) return VF2AIBathroom2IsActive(itemId);
+    if (VF2IsMobileRenovationStyle(itemId)) {{
+        return VF2MobileRenovationIsActive(itemId);
+    }}
+    if (!kVF2EnableB150CheatUpgrades) return false;
+    // Same-sex marriage and the marriage-candidate reroll are toggles.
+    if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
+        return VF2SameSexMarriageToggleActive();
+    }}
+    if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) {{
+        return *VF2CheatToggleActiveByte({MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) != 0;
+    }}
+    // The price multipliers are mutually exclusive, so at most one of these
+    // ticks; Reset Price Multiplier ticks when none of them is in force.
+    if (itemId == 0x128 || itemId == 0x129 || itemId == 0x12A) {{
+        return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
+    }}
+    if (itemId == 0x12C) {{
+        return !InventoryManager.HaveUpgrade((EInventoryItem)0x128) &&
+               !InventoryManager.HaveUpgrade((EInventoryItem)0x129) &&
+               !InventoryManager.HaveUpgrade((EInventoryItem)0x12A);
+    }}
+    return false;
+}}
+
 static bool VF2OneShotUpgradeArmed(int itemId) {{
     if (!kVF2EnableB150CheatUpgrades) return false;
     // The ownership cheats are checkmarked from live game state, not the mask.
@@ -13350,6 +13509,12 @@ extern "C" int __fastcall VF2StoreDrawNumAvailable(
 ) {{
     (void)unused;
     if (VF2OneShotUpgradeArmed(itemId)) return 0;
+    // Rows whose "active" is live game state rather than purchase history --
+    // the Special Upgrades, Unlock Everything, the price multipliers, the
+    // marriage toggles and both renovation catalogues. Reporting zero draws
+    // the checkmark; the click path reads the real answer elsewhere, so a
+    // reversible row stays clickable.
+    if (VF2StoreRowShowsActive(itemId)) return 0;
     return self->GetNumAvailable((EInventoryItem)itemId);
 }}
 
@@ -24851,12 +25016,23 @@ def _parse_mobile_route_item_id(value, context):
         item_id = value if isinstance(value, int) else int(str(value), 0)
     except (TypeError, ValueError) as exc:
         raise RuntimeError(f"{context} has an invalid item ID: {value!r}") from exc
-    # The mobile furniture band, plus the one invisible item that legitimately
-    # routes through this dispatcher. Named explicitly rather than widening the
-    # band, so a typo in a mobile route id is still caught.
+    # The mobile furniture band, plus the items this patcher adds that
+    # legitimately route through this dispatcher. Each is named explicitly
+    # rather than widening the band, so a typo in a mobile route id is still
+    # caught -- which is the whole point of the check.
+    #
+    # These additions are all cases where an added item shares a donor's
+    # behaviour: the invisible tables and lounger are the stock items without
+    # art, and the visible Spa Lounger is the invisible one with art.
     if not (
         0x2AA <= item_id <= 0x2E8
-        or item_id == INVISIBLE_SPA_LOUNGER_ITEM_ID
+        or item_id in (
+            INVISIBLE_SPA_LOUNGER_ITEM_ID,
+            SPA_LOUNGER_ITEM_ID,
+            INVISIBLE_PICNIC_TABLE_ITEM_ID,
+            INVISIBLE_PATIO_TABLE_ITEM_ID,
+            INVISIBLE_LOUNGER_ITEM_ID,
+        )
     ):
         raise RuntimeError(f"{context} has out-of-scope item ID {item_id:#x}")
     return item_id
@@ -25317,6 +25493,8 @@ extern CDealerSay DealerSay;
 extern "C" char *__cdecl strncpy(char *, char const *, unsigned int);
 extern "C" int __cdecl strncmp(char const *, char const *, unsigned int);
 static void VF2InitializeMobileExternalWeights(void *villager);
+// Declared here because the autonomous candidate table below names it.
+static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager);
 
 static unsigned char gVF2PatioDrinksOn = 0;
 static unsigned int gVF2PatioDrinksDeadline = 0;
@@ -25454,6 +25632,11 @@ static int VF2FurnitureSlotUnderVillager(CVillager &villager)
 
 static bool VF2IsMobileChaise(int item)
 {
+    // The Invisible Lounger is a chaise with no art: same donor, same
+    // behaviour map, same handler. Folding it into the family here rather
+    // than giving it a route of its own means it picks up every chaise
+    // behaviour automatically, including any added later.
+    if (item == __VF2_INVISIBLE_LOUNGER__) return true;
     return item >= 0x2DE && item <= 0x2E1;
 }
 
@@ -26989,7 +27172,7 @@ static bool VF2VillagerDislikes(CVillager &villager, int like)
 
 struct VF2MobileExternalWeights {
     void *villager;
-    unsigned int weights[13];
+    unsigned int weights[14];
 };
 
 static VF2MobileExternalWeights gVF2MobileExternalWeights[30] = {};
@@ -27019,11 +27202,15 @@ static void VF2InitializeMobileExternalWeights(void *villager)
 {
     VF2MobileExternalWeights *record = VF2FindMobileExternalWeights(villager);
     record->villager = villager;
-    unsigned int bases[13] = {
+    unsigned int bases[14] = {
         2000, 2000, 2000, 2000, 2000,
-        3000, 12000, 3000, 12000, 2000, 3000, 2000, 2000
+        3000, 12000, 3000, 12000, 2000, 3000, 2000, 2000,
+        // Spa lounger, receiving half only. Same base weight as the other
+        // relax-on-a-chaise candidates -- it is one adult choosing to go and
+        // be pampered, not a rare event.
+        2000
     };
-    for (int index = 0; index < 13; ++index) {
+    for (int index = 0; index < 14; ++index) {
         record->weights[index] =
             VF2RandomizeMobileCandidateWeight(bases[index]);
     }
@@ -27185,6 +27372,18 @@ extern "C" bool __cdecl VF2TryStartMobileFurnitureAutonomous(
             mobileWeights->weights[12],
             VF2HandleMobileFixingTreeDecorations,
             treeAutonomousEligible
+        },
+        {
+            // Adults only, and only the receiving half -- see
+            // VF2HandleMobileSpaLoungerReceiving for why giving cannot be
+            // autonomous. The handler itself refuses an occupied lounger, so
+            // a villager never walks over to one somebody is already using.
+            CContentMap::eObjectChaise,
+            0x118,
+            0x7FFFFFFF,
+            mobileWeights->weights[13],
+            VF2HandleMobileSpaLoungerReceiving,
+            true
         },
     };
 
@@ -27469,6 +27668,50 @@ protected:
 // rather than through the behavior-label groups: those arrays live in another
 // translation unit, and a treatment label is never chosen autonomously.
 
+// How a spa treatment actually plays out, shared by the manual drop and the
+// autonomous receiving route so both look the same.
+//
+// Duration and posture come from the chaise "Taking a nap" branch, which is
+// what was asked for: GetRandom(5) + 5, lying down when the lounger faces one
+// way and sitting in the chaise pose when it faces the other. Reading the
+// orientation out of sFurnitureInfo2 rather than assuming one is what keeps a
+// villager from lying across the arm of a lounger placed the other way round.
+//
+// The gulp-and-sigh, eSound_GulpAhh_01 (0x101), is the same sound and the same
+// cadence the native "Having a refreshing drink" uses: a stretch of animation,
+// then the sound, repeated. Timing follows that behaviour rather than a number
+// picked here.
+static void VF2PlanSpaTreatment(
+    CVillagerPlans *plans, CVillager &villager, sFurnitureInfo2 const &info)
+{
+    (void)villager;
+    int const total = ldwGameState::GetRandom(5) + 5;
+    // Three sighs across the treatment, spaced the way the drink behaviour
+    // spaces them. A treatment shorter than the spacing simply gets fewer.
+    int remaining = total;
+    for (int pass = 0; pass < 3 && remaining > 0; ++pass) {
+        int slice = remaining > 2 ? 2 : remaining;
+        if (info.orientation == 1) {
+            plans->PlanToWait(slice, eBodyPositionChaise);
+        } else {
+            plans->PlanToLieDown(slice);
+        }
+        remaining -= slice;
+        plans->PlanToPlaySound(
+            static_cast<ESound>(0x101), 1.0f, eSoundTypeEffects);
+    }
+    if (remaining > 0) {
+        if (info.orientation == 1) {
+            plans->PlanToWait(remaining, eBodyPositionChaise);
+        } else {
+            plans->PlanToLieDown(remaining);
+        }
+    }
+    // A treatment is restful, so it pays the nap's own energy and dirtiness.
+    plans->PlanToIncDirtiness(2);
+    plans->PlanToIncEnergy(ldwGameState::GetRandom(5) + 7);
+}
+
 static char const *const kVF2SpaReceivingLabels[] = {
     "Getting pampered",
     "Getting a manicure",
@@ -27579,13 +27822,88 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
     }
 
     // Nobody on this one, so this adult takes it and receives a treatment.
+    // Link to the lounger first: the plan needs its orientation to choose
+    // between lying down and the chaise pose, and its point to walk to.
+    sFurnitureInfo2 receiveInfo = {};
+    if (!FurnitureManager.LinkPeepToFurniture(
+            CContentMap::eObjectChaise, &villager, receiveInfo, true, 0,
+            false)) {
+        return false;
+    }
     plans->ForgetPlans(villager, false);
     VF2SetActionLabel(
         villager,
         kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
-    plans->PlanToGo(
-        CContentMap::eObjectChaise, eSpeedNormal, ePriorityNormal, false);
-    plans->PlanToWait(ldwGameState::GetRandom(3) + 4, eBodyPositionChaise);
+    plans->PlanToGo(receiveInfo.point, eSpeedNormal, ePriorityNormal);
+    VF2PlanSpaTreatment(plans, villager, receiveInfo);
+    plans->StartNewBehavior(villager);
+    return true;
+}
+
+// The RECEIVING half, chosen autonomously.
+//
+// Only this half can be autonomous. Giving a treatment requires a second
+// villager already receiving one on that same lounger, and autonomous
+// selection picks one villager at a time with no way to arrange a pair -- so
+// an autonomous "giving" would have villagers miming a massage at an empty
+// chair. Receiving has no such requirement: one adult, one free lounger.
+//
+// Adults only, matching the manual route. A free lounger is required, so a
+// villager never walks over to one that is already occupied; the give side
+// stays a deliberate manual drop.
+// A placed, in-world spa lounger -- either the invisible one or the visible
+// sibling -- or -1.
+//
+// This has to resolve an ACTUAL spa lounger. Both spa loungers share
+// eObjectChaise with every stock and mobile lounger, so a candidate gated on
+// the object alone becomes eligible whenever any chaise exists, and the
+// villager then walks to whichever chaise is nearest and mimes a spa treatment
+// on it. Checking occupancy at the villager's current position cannot prevent
+// that: it samples where they are standing now, before any destination has
+// been chosen.
+static int VF2FindFreeSpaLoungerSlot(CVillager &villager)
+{
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x400) return -1;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        int itemId = *reinterpret_cast<int *>(record);
+        if (itemId != __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ &&
+            itemId != __VF2_SPA_LOUNGER_ITEM_ID__) {
+            continue;
+        }
+        // Free means nobody is already receiving on THIS lounger. A taken one
+        // is the giving half's business, and that stays a manual drop.
+        if (VF2SpaOccupantIndex(villager, slot, 0)) continue;
+        return slot;
+    }
+    return -1;
+}
+
+static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
+{
+    if (!VF2SpaAdult(villager)) return false;
+
+    // Resolve a real, free spa lounger BEFORE committing to anything. Without
+    // this the villager would head for the nearest ordinary chaise.
+    int const loungerSlot = VF2FindFreeSpaLoungerSlot(villager);
+    if (loungerSlot < 0) return false;
+
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.LinkPeepToFurniture(
+            CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
+        return false;
+    }
+
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    plans->ForgetPlans(villager, false);
+    VF2SetActionLabel(
+        villager,
+        kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
+    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    VF2PlanSpaTreatment(plans, villager, info);
     plans->StartNewBehavior(villager);
     return true;
 }
@@ -27604,12 +27922,34 @@ __VF2_COMPUTER_DROP_DISPATCH__
     // ahead of that gate rather than quietly doing nothing when the setting is
     // off. It is manual-drop only and adds no autonomous behaviour, so nothing
     // about it depends on the ported-furniture routes below.
-    if (candidate == 0x32F) return VF2HandleMobileInvisibleSpaLounger(villager);
+    // Both spa loungers, invisible and visible, are the same item with
+    // different art. Routed ahead of the Mobile Furniture Behaviors gate
+    // because their store descriptions promise the treatments
+    // unconditionally, and ahead of the chaise family because they share the
+    // chaise object and the ordinary lounger route would swallow them.
+    if (candidate == 0x32F || candidate == __VF2_SPA_LOUNGER_ITEM_ID__) {
+        return VF2HandleMobileInvisibleSpaLounger(villager);
+    }
+
+    // Added furniture inherits its DONOR's drop behaviour. This dispatcher
+    // matches on item id, and for a long time only 0x32F was listed -- so
+    // every other item this patcher adds did nothing at all when a villager
+    // was dropped on it, however complete its record and behaviour map were.
+    // Each added id now shares the route of the stock item it was modelled on,
+    // which is why they appear in the conditions below rather than in routes
+    // of their own.
     if (gVF2MobileFurnitureBehaviors == 0) return false;
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
-    if (candidate == 0x2E6) return VF2HandleMobilePatioTable(villager);
-    if (candidate == 0x2E8) return VF2HandleMobilePicnicTable(villager);
+    // The invisible tables are the same items without art -- same donor,
+    // same behaviour map, same handler -- so they join the stock route
+    // rather than getting one of their own.
+    if (candidate == 0x2E6 || candidate == __VF2_INVISIBLE_PATIO_TABLE__) {
+        return VF2HandleMobilePatioTable(villager);
+    }
+    if (candidate == 0x2E8 || candidate == __VF2_INVISIBLE_PICNIC_TABLE__) {
+        return VF2HandleMobilePicnicTable(villager);
+    }
     if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
     if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
     if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
@@ -27648,6 +27988,20 @@ __VF2_COMPUTER_DROP_DISPATCH__
     helper_source = helper_source.replace(
         "__VF2_COMPUTER_DROP_DISPATCH__", computer_drop_dispatch
     )
+    # Added furniture routes to its donor's drop handler. The ids come from
+    # the item tables so a renumbering cannot leave a route pointing at the
+    # wrong item -- or, worse, silently at nothing, which is what left every
+    # one of these inert.
+    for _placeholder, _item_name in (
+        ("__VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__", "InvisibleSpaLounger"),
+        ("__VF2_SPA_LOUNGER_ITEM_ID__", "SpaLoungerStd"),
+        ("__VF2_INVISIBLE_PICNIC_TABLE__", "InvisiblePicnicTable"),
+        ("__VF2_INVISIBLE_PATIO_TABLE__", "InvisiblePatioTable"),
+        ("__VF2_INVISIBLE_LOUNGER__", "InvisibleLounger"),
+    ):
+        helper_source = helper_source.replace(
+            _placeholder, f"{furniture_item_id_by_name(_item_name):#x}"
+        )
     helper_source = helper_source.replace("__VF2_NAP_FALLBACK__", nap_fallback)
     helper_source = helper_source.replace("__VF2_REST_FALLBACK__", rest_fallback)
     helper_source = helper_source.replace(
@@ -27748,7 +28102,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
         },
         "implemented_families": [{
             "name": "mobile lounge chairs",
-            "item_ids": [hex(item) for item in MOBILE_CHAISE_ITEM_IDS],
+            "item_ids": [hex(item) for item in tuple(MOBILE_CHAISE_ITEM_IDS) + (INVISIBLE_LOUNGER_ITEM_ID,)],
             "label": "Relaxing on lounger",
             "object": hex(MOBILE_CHAISE_OBJECT),
             "manual_drop_only": False,
@@ -27795,7 +28149,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "desktop_implementation": "exact direct plan-sequence port",
         }, {
             "name": "mobile Patio Table",
-            "item_ids": [hex(MOBILE_PATIO_TABLE_ITEM_ID)],
+            "item_ids": [hex(MOBILE_PATIO_TABLE_ITEM_ID), hex(INVISIBLE_PATIO_TABLE_ITEM_ID)],
             "labels": [
                 "Getting some drinks",
                 "Having a refreshing drink",
@@ -27835,7 +28189,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "stock_tables_extended": False,
         }, {
             "name": "mobile Picnic Table",
-            "item_ids": [hex(MOBILE_PICNIC_TABLE_ITEM_ID)],
+            "item_ids": [hex(MOBILE_PICNIC_TABLE_ITEM_ID), hex(INVISIBLE_PICNIC_TABLE_ITEM_ID)],
             "labels": [
                 "Preparing a picnic",
                 "Having a picnic",
@@ -28085,7 +28439,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "stock_tables_extended": False,
         }, {
             "name": "invisible spa lounger",
-            "item_ids": [hex(INVISIBLE_SPA_LOUNGER_ITEM_ID)],
+            "item_ids": [hex(INVISIBLE_SPA_LOUNGER_ITEM_ID), hex(SPA_LOUNGER_ITEM_ID)],
             "labels": [
                 "Getting pampered",
                 "Getting a manicure",
@@ -28110,9 +28464,19 @@ __VF2_COMPUTER_DROP_DISPATCH__
             # eBodyPositionChaise, a different enum, so advertising it made the
             # release manifest's family binding wrong.
             "object": hex(MOBILE_CHAISE_OBJECT),
-            "manual_drop_only": True,
+            # The GIVING half is manual-drop only: it needs a second villager
+            # already receiving on that same lounger, which autonomous
+            # selection cannot arrange. The receiving half IS autonomous.
+            "manual_drop_only": False,
             "manual_drop_supported": True,
-            "autonomous": False,
+            "manual_drop_supported": True,
+            "autonomous": True,
+            "autonomous_half": "receiving only",
+            "autonomous_status": (
+                "one adult choosing a free lounger to be pampered on; the "
+                "giving half stays a manual drop because it requires a second "
+                "villager already receiving on that same lounger"
+            ),
             "minimum_age_years": 18,
             "desktop_implementation": (
                 "drop an adult on a free lounger to receive a treatment; drop "
@@ -28526,6 +28890,17 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
                 "object": "0x88",
                 "weight": 2000,
             },
+                    {
+                # This patcher's own item, so no mobile_id: there is no mobile
+                # row for it. Receiving half only -- giving needs a second
+                # villager already receiving on that same lounger, which
+                # autonomous selection cannot arrange.
+                "behavior": "SpaLoungerReceiving",
+                "mobile_id": None,
+                "object": hex(MOBILE_CHAISE_OBJECT),
+                "weight": 2000,
+                "raw_age_min": "0x118",
+            },
         ],
     }
 
@@ -28610,7 +28985,8 @@ def validate_mobile_furniture_runtime_bindings(manifest):
     actual_manual_ids.update(chaise_spec["item_ids"])
     if actual_manual_ids != expected_manual_ids:
         raise RuntimeError(
-            "Manual mobile furniture bindings do not cover exactly the 35 "
+            "Manual mobile furniture bindings do not cover exactly the "
+            f"{len(expected_manual_ids)} "
             f"implemented IDs: {[hex(item_id) for item_id in sorted(actual_manual_ids)]}"
         )
     expected_handlers = Counter(
@@ -28800,7 +29176,13 @@ def validate_mobile_furniture_runtime_bindings(manifest):
     actual_external = []
     for index, row in enumerate(external_rows):
         try:
-            mobile_id = int(str(row["mobile_id"]), 0)
+            # A row for one of this patcher's own items has no mobile_id --
+            # there is no mobile row for it. Kept as None rather than invented,
+            # so the manifest never implies a mobile provenance it lacks.
+            raw_mobile_id = row["mobile_id"]
+            mobile_id = (
+                None if raw_mobile_id is None else int(str(raw_mobile_id), 0)
+            )
             object_id = int(str(row["object"]), 0)
             weight_value = row.get("weight")
             if weight_value is None:
@@ -28810,7 +29192,7 @@ def validate_mobile_furniture_runtime_bindings(manifest):
             raise RuntimeError(
                 f"Mobile external autonomous row {index} is malformed"
             ) from exc
-        if mobile_id in forbidden_external_ids:
+        if mobile_id is not None and mobile_id in forbidden_external_ids:
             raise RuntimeError(
                 "Family-wide mobile behavior ID entered autonomous manifest: "
                 f"{mobile_id:#x}"
@@ -28898,12 +29280,31 @@ def validate_mobile_furniture_runtime_bindings(manifest):
             for value in family["item_ids"]
         }
         autonomous_item_ids.update(item_ids)
-        if item_ids == set(MOBILE_CHAISE_ITEM_IDS):
+        # The chaise family, with or without the Invisible Lounger folded in.
+        # That item is a chaise with no art -- same donor, same behaviour map,
+        # same handler -- so it belongs to this family rather than forming one
+        # of its own, and the family is skipped here for the same reason it
+        # always was.
+        if item_ids == set(MOBILE_CHAISE_ITEM_IDS) or item_ids == (
+            set(MOBILE_CHAISE_ITEM_IDS) | {INVISIBLE_LOUNGER_ITEM_ID}
+        ):
             continue
         object_id = int(str(family["object"]), 0)
         behavior_ids = family.get("mobile_behavior_ids")
         if behavior_ids is None:
             behavior_ids = [family.get("mobile_behavior_id")]
+        # A family for one of this patcher's OWN items has no mobile behaviour
+        # id -- there is no mobile behaviour it was ported from. Its external
+        # candidate is still checked below by object, so it is verified rather
+        # than skipped; only the id-matching half does not apply.
+        behavior_ids = [value for value in behavior_ids if value is not None]
+        if not behavior_ids:
+            if not any(row[1] == object_id for row in actual_external):
+                raise RuntimeError(
+                    f"Autonomous family {family.get('name')} lacks an external "
+                    f"binding for object {object_id:#x}"
+                )
+            continue
         if family.get("autonomous_base_weights"):
             required_behavior_ids = [int(str(value), 0) for value in behavior_ids]
         else:
@@ -30801,12 +31202,21 @@ __VF2_SCOLD_AWARD_CASES__
 class CFurnitureManager;
 int __cdecl VF2BehaviorPtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
 
+// The behaviours block forward-declares CVillager, so the one member the
+// furniture probe needs is declared here rather than pulling in the whole
+// class. CBehavior::PlayingPooltable calls exactly this before FindFurniture.
+class CVillager {
+public:
+    ldwPoint const FeetPos() const;
+};
+
 class CFurnitureManager {
 private:
     int PtOnFurniture(ldwPoint);
     friend int __cdecl VF2BehaviorPtOnFurnitureIndex(CFurnitureManager &, ldwPoint);
 public:
     bool IsInWorld(EInventoryItem item);
+    bool FindFurniture(CContentMap::EObject object, ldwPoint point, sFurnitureInfo2 &info, bool a, int b, bool c);
     bool LinkPeepToFurniture(CContentMap::EObject object, CVillager *villager, sFurnitureInfo2 &info, bool a, int b, bool c);
 };
 
@@ -30859,6 +31269,8 @@ extern "C" void __cdecl VF2PrivateRomanticTimeLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTVLabel(CVillager &);
 extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &);
 extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &);
+extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &);
+extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &);
 extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &);
 extern "C" void __cdecl VF2RandomHeatFoodLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSnacksLabel(CVillager &);
@@ -30917,6 +31329,8 @@ private:
     static void __cdecl GoInHouse(CVillager &);
     static void __cdecl PlayingBoardGame(CVillager &);
     static void __cdecl PlayingPooltable(CVillager &);
+    static void __cdecl WorkoutTreadmill(CVillager &);
+    static void __cdecl RunningOnTreadmill(CVillager &);
     static void __cdecl GetADrink(CVillager &);
     static void __cdecl HeatUpFood(CVillager &);
     static void __cdecl LookingForSnacksDispatch(CVillager &);
@@ -30973,6 +31387,8 @@ private:
     friend void __cdecl VF2RandomTVLabel(CVillager &);
     friend void __cdecl VF2RandomBoardGameLabel(CVillager &);
     friend void __cdecl VF2RandomPooltableLabel(CVillager &);
+    friend void __cdecl VF2RandomTreadmillWalkLabel(CVillager &);
+    friend void __cdecl VF2RandomTreadmillRunLabel(CVillager &);
     friend void __cdecl VF2RandomDrinkLabel(CVillager &);
     friend void __cdecl VF2RandomHeatFoodLabel(CVillager &);
     friend void __cdecl VF2RandomSnacksLabel(CVillager &);
@@ -31633,11 +32049,35 @@ extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &villager)
 // flag at +0x0C and the position at +0x10. Matching the point against that
 // array yields the specific item, which is what tells a Ping-Pong Table apart
 // from a stock Pool Table when both answer to EObject 0x36.
-static bool VF2LinkedFurnitureItemIs(CVillager &villager, int itemId)
+static bool VF2LinkedFurnitureItemIs(
+    CVillager &villager, int object, int itemId)
 {
+    // Ask the question the native behaviour itself asks, with the same call
+    // and the same arguments:
+    //
+    //   FeetPos(); FindFurniture(object, feet, info, true, 0, 0)
+    //
+    // The OBJECT is a parameter because it differs per behaviour and getting
+    // it wrong fails silently: PlayingPooltable searches object 0x36, while
+    // WorkoutTreadmill and RunningOnTreadmill both search 0x04. Hardcoding
+    // 0x36 made the bike probe search for a pool table, never match, and
+    // leave the treadmill labels in place -- a fix that quietly did nothing.
+    //
+    // An earlier version called LinkPeepToFurniture instead. That was wrong
+    // twice over: it MUTATES state by reserving a link, so calling it ahead of
+    // the native behaviour stole the reservation the behaviour was about to
+    // make, and it answers "which table can this villager be given" rather
+    // than "which table is this villager at" -- so with both tables placed it
+    // could name the wrong one. That is why a villager at a Ping-Pong Table
+    // was still labelled "Playing pool".
+    //
+    // FindFurniture is a read-only nearest-match query from the villager's
+    // feet, so asking it costs nothing and returns exactly what the plan will
+    // use.
+    ldwPoint feet = villager.FeetPos();
     sFurnitureInfo2 info = {};
-    if (!FurnitureManager.LinkPeepToFurniture(
-            (CContentMap::EObject)0x36, &villager, info, true, 0, 0)) {
+    if (!FurnitureManager.FindFurniture(
+            (CContentMap::EObject)object, feet, info, true, 0, 0)) {
         return false;
     }
     int slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, info.point);
@@ -31665,8 +32105,9 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
     // behaviour, while the link is the one the plan will use. IsInWorld is
     // not enough: with both tables placed it would answer yes for the
     // ping-pong table even when the villager walked to the pool table.
+    // 0x36 is the object PlayingPooltable searches.
     bool pingPong = VF2LinkedFurnitureItemIs(
-        villager, __VF2_PING_PONG_TABLE_ITEM_ID__);
+        villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::PlayingPooltable)) return;
     if (!pingPong) {
         // A stock pool table: leave the native label exactly as it was.
@@ -31675,6 +32116,45 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
     VF2ApplyRememberedOrRandomLabel(
         villager, kVF2BehaviorLabels_ping_pong,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong), remembered);
+}
+
+// The Exercise Bike borrows the Treadmill's two behaviours, so its users were
+// labelled "walking on the treadmill" and "running on the treadmill". Both
+// machines answer to the same object, so the label is chosen by which one the
+// villager actually walked to -- resolved exactly the way the native behaviour
+// resolves it, with FindFurniture from the villager's feet.
+//
+// A stock Treadmill keeps its stock labels, and the plan itself is untouched:
+// same walk, same animations, same duration. Only the words change, which is
+// what was asked for.
+extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(
+        villager, kVF2BehaviorLabels_exercise_bike_walk,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
+    // 0x04 is the object both treadmill behaviours search -- NOT 0x36.
+    bool bike = VF2LinkedFurnitureItemIs(
+        villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkoutTreadmill)) return;
+    if (!bike) return;
+    VF2ApplyRememberedOrRandomLabel(
+        villager, kVF2BehaviorLabels_exercise_bike_walk,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk), remembered);
+}
+
+extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
+{
+    int remembered = VF2CurrentLabelInGroup(
+        villager, kVF2BehaviorLabels_exercise_bike_run,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
+    // 0x04 is the object both treadmill behaviours search -- NOT 0x36.
+    bool bike = VF2LinkedFurnitureItemIs(
+        villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RunningOnTreadmill)) return;
+    if (!bike) return;
+    VF2ApplyRememberedOrRandomLabel(
+        villager, kVF2BehaviorLabels_exercise_bike_run,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run), remembered);
 }
 
 extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &villager)
@@ -32378,6 +32858,10 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     helper_cpp = helper_cpp.replace(
         "__VF2_PING_PONG_TABLE_ITEM_ID__", f"{PING_PONG_TABLE_ITEM_ID:#x}"
     )
+    helper_cpp = helper_cpp.replace(
+        "__VF2_EXERCISE_BIKE_ITEM_ID__",
+        f"{furniture_item_id_by_name('ExerciseBikeStd'):#x}",
+    )
     helper_cpp = helper_cpp.replace("__VF2_BEHAVIOR_LABEL_ARRAYS__", behavior_label_arrays)
     helper_cpp = helper_cpp.replace("__VF2_PRAISE_AWARD_CASES__", praise_award_cases_cpp)
     helper_cpp = helper_cpp.replace("__VF2_SCOLD_AWARD_CASES__", scold_award_cases_cpp)
@@ -32504,6 +32988,11 @@ def patch_behavior_label_variants(manifest):
         # the wrapper relabels it only when the linked table really is the
         # ping-pong one. A stock pool table keeps its stock label.
         retarget(0xDE4, 0x099, "_VF2RandomPooltableLabel", "Ping-pong label variants on the Ping-Pong Table"),
+        # The Exercise Bike borrows both Treadmill behaviours, so both are
+        # wrapped. A stock Treadmill keeps its stock labels; only a villager
+        # on the bike is relabelled.
+        retarget(0x3DA, 0x049, "_VF2RandomTreadmillWalkLabel", "Exercise bike label on the walking treadmill behaviour"),
+        retarget(0xB5E, 0x0E0, "_VF2RandomTreadmillRunLabel", "Exercise bike label on the running treadmill behaviour"),
         retarget(0x11B, 0x019, "_VF2RandomDrinkLabel", "Getting a drink label variants"),
         retarget(0xAB4, 0x0D5, "_VF2RandomHeatFoodLabel", "Heating up some food label variants"),
         retarget(0x1C3, 0x025, "_VF2RandomSnacksLabel", "Looking for snacks label variants"),

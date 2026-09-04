@@ -1297,3 +1297,179 @@ B158 canonical archive verifier and sound runtime-QA handoff
 - Store Scroll Bar is being split from the baked core into a default-off
   `.vf2scrl` runtime marker. This entry does not claim a newly linked or
   packaged Store Scroll artifact yet.
+
+B180 added furniture drop routing
+- The owner reported that the added furniture "does nothing when villagers are
+  supposed to interact with them". Root cause: theMainScene::
+  VF2HandleDropOnMobileFurniture dispatches on ITEM ID, and of the twelve added
+  items only the Invisible Spa Lounger (0x32F) had a route. The placement maps
+  and store records were correct throughout, so the items placed normally and
+  then had nothing asking them to act. This is why the Spa Lounger was the only
+  one that appeared to work.
+- Routes added for the Invisible Picnic Table (0x328), Invisible Patio Table
+  (0x329), Invisible Lounger (0x32B), and the new visible Spa Lounger (0x330).
+  The Invisible Lounger is folded into VF2IsMobileChaise rather than given its
+  own route, so it inherits every chaise behavior rather than a copy of one.
+- Six items are NOT routed through this dispatcher: the Invisible Kiddie Pool
+  (0x30A), Invisible Full-Size Pool (0x30B), Invisible Hammock (0x30C),
+  Invisible Yoga Equipment (0x32A), Exercise Bike (0x32C), Home Gym System
+  (0x32D), and Ping-Pong Table (0x32E). These borrow STOCK desktop furniture,
+  whose drop handling runs through theMainScene::HandleDropOnHotSpot, which
+  executes before the mobile dispatcher and dispatches on hotspot rather than
+  on item id. Their .fmap cell vocabularies were compared against the donor
+  maps and are byte-identical, so the hotspot data those items carry is already
+  the donor data. Evidence that this native path does reach them: the Ping-Pong
+  Table demonstrably ran the Pool Table behavior, which is why it displayed
+  "playing pool". Player confirmation that these six act on a drop is still
+  outstanding and is NOT claimed here.
+- Item ids are resolved through furniture_item_id_by_name() against the
+  NEW_FURNITURE_ITEMS and INVISIBLE_OUTDOOR_ITEMS tables. No route, binding, or
+  test pins a bare literal id.
+
+B180 added-furniture action labels
+- The Ping-Pong Table borrows the Pool Table behavior and was labelled "playing
+  pool"; it now reads "Playing ping-pong". The Exercise Bike borrows the two
+  Treadmill behaviors and was labelled walking/running on a treadmill; it now
+  reads "Using the exercise bike" and "Doing high-intensity cycling". The
+  animations are unchanged, at the explicit instruction of the owner.
+- The wrapper identifies the furniture by locating the placed furniture record
+  the villager linked to and comparing record+0x00 against the expected item id.
+  An earlier attempt used LinkPeepToFurniture, which answers "which furniture
+  COULD this villager use" and reserves a link as a side effect; that both
+  mislabelled ordinary pool games and mutated state during a query.
+- The furniture probe takes the object type as a parameter. It was previously
+  hardcoded to the pool table (0x36) while the treadmill behaviors push object
+  0x04, so the bike labels would have silently never applied. Confirmed against
+  Behavior_patched_disasm.txt before the fix.
+- The three new label groups are appended last so no established label id
+  shifts. A stock Pool Table or Treadmill keeps its stock labels.
+- "Rallying back and forth" was removed at the request of the owner. Verified
+  absent from both the patch source and every emitted .cpp.
+
+B180 store checkmarks from live state
+- The store draws a checkmark on a row whose GetNumAvailable is zero. Rows
+  whose "active" is a reversible state, rather than a purchase, are now answered
+  from live game state at the DRAW site only: the four Special Upgrades (each
+  checked against the state it sets), Unlock Everything In The Store, the three
+  price multipliers and Reset Price Multiplier, the two marriage toggles, the
+  pregnancy cheat mask rows, Anti-Spam and Rockhound ownership, the ten native
+  house renovations, and both added renovation catalogues.
+- The click path is deliberately left reading the real answer, so reversible
+  rows stay clickable: rebuying Unlock Everything restores the locks and
+  rebuying a multiplier still switches to it. A checkmark here means "active
+  now", not "sold out".
+
+B180 hairstyle store icons
+- The owner reported the hairstyle icons were cut off. The icons were being cut
+  on the indexing cell used by the engine, 28x56. The drawn heads are about
+  31px wide and centred on 12 visual frames of 56x56 within the 672x2800 sheet,
+  so a 28px cut removed half of every head. Confirmed by locating the fully
+  transparent gutters in female_heads00.png at columns 45-69, 101-121 and
+  153-178, a 56px rhythm.
+- Icons are now cut at frame 5 of 12 on a 56x56 cell, matching the column the
+  owner specified. The 28x56 engine cell is retained as a separate constant and
+  is still checked for consistency, because it remains the correct value for
+  indexing.
+
+B180 Spa Lounger
+- A visible Spa Lounger (0x330) was added alongside the invisible one (0x32F),
+  sharing one route so both behave identically. Art is SpaLoungerStd.png,
+  198x79, two frames of 99x79, supplied by the owner and registered in
+  patcher_assets/new_furniture_art/SHA256SUMS.json.
+- The receiving half of the spa treatment is autonomously selectable; the giving
+  half is not. Giving requires a second villager already receiving on that same
+  lounger, and autonomous selection picks one villager at a time, so an
+  autonomous giver would mime a massage at an empty chair.
+- The autonomous candidate resolves an actual free spa lounger from the placed
+  furniture array before committing. Gating on eObjectChaise alone is not
+  sufficient: both spa loungers share that object with every stock and mobile
+  lounger, so a villager would walk to whichever chaise was nearest. Checking
+  occupancy at the current position of the villager cannot prevent this either,
+  as it samples a position chosen before any destination exists.
+- Treatment duration, posture and the gulp-and-sigh sound (eSound_GulpAhh_01,
+  0x101) are taken from the nap and refreshing-drink behaviors of the game
+  rather than invented. Posture is chosen from the orientation field of the
+  placed lounger, so a villager does not lie across the arm of a lounger placed
+  the other way round.
+
+B180 picnic and patio props not shipped
+- The owner asked that the Picnic Table and Patio Table carry their meal and
+  drink props. They are NOT shipped, and this is a hard engine limit rather than
+  an oversight. CEnvironment::SetProp opens with `cmp edi, 54h` / `ja`, so the
+  desktop build accepts prop ids 0x00 through 0x54 only. ePropPicnicReady is
+  0x55 and ePropPatioDrinks is 0x56, both out of range. The fall-through path
+  writes through [ecx + prop*16 + 0x7C], so passing either would corrupt memory
+  rather than fail cleanly. The existing external-state approach was avoiding a
+  crash.
+- The bound was examined again for B180 to see whether it could simply be
+  raised. It cannot, and the reason is worth recording so the question is not
+  reopened as a one-byte change. The compare at Environment.obj+0xAB33 is
+  `83 FF 54`, and raising it to 0x56 is indeed a single byte. But the three
+  instructions that follow are `0F 87` (ja, past the end), `0F B6 87 <reloc>`
+  (movzx eax, byte ptr [edi + index table]) and `FF 24 85 <reloc>` (jmp dword
+  ptr [eax*4 + jump table]). This is a compiler-generated jump table, and both
+  displacements are relocations resolved at link time. Admitting 0x55 and 0x56
+  would read two entries past the end of the byte index table and jump through
+  whatever followed. Doing it properly means extending both tables and writing
+  case bodies for two props that have no desktop art and no desktop handler --
+  a feature, not a bound adjustment.
+
+B180 verification method
+- Generated .cpp files are compiled individually (cl /c /EHsc) after each
+  change. Three defects this cycle were invisible to source-reading tests and
+  visible only in the emitted C: two functions used before declaration, and one
+  block written with f-string conventions inside a template that is a raw string
+  with named __VF2_*__ placeholders, which emitted the placeholder literally.
+- Route coverage is checked by parsing the emitted
+  vf2_mobile_furniture_behaviors.cpp, not the Python source, because routes are
+  written as placeholders that only resolve at emit time.
+- Preceding canonical archive: outputs/VF2-B179-Release.zip, SHA-256
+  9A3043E9EC6D1EE430DAEE712F993B13FEE88E5B9F813753E71B02A2E6ECCD93.
+- No B180 bundle is linked, packaged, or published at the time of this entry.
+
+B180 borrowed placement maps and the two kinds of borrower
+- A defect that shipped in B179 was found and fixed: an item borrowing a donor
+  that Mobile Furniture Behaviors implements was written the donor's RAW MOBILE
+  map rather than the desktop-safe one. Those donors ship two maps -- the
+  rendered-only base map in the vanilla payload, and the desktop-safe map in
+  pc_fmaps -- and the patch installed the desktop-safe map over each donor's OWN
+  name only. A borrower's copy is written under the BORROWER's name, which that
+  pass never visited.
+- Confirmed in the shipped B179 build: Chaise_brown.png.fmap, used by the
+  ordinary Loungers, carries no non-zero cells, while InvisibleSpaLounger and
+  InvisibleLounger each carry 111 cells of 0x01B00000, 31 of 0x01B00001, and the
+  untranslated mobile peep anchor 0x01B09800 in place of the desktop 0x00009800.
+  The behavior ledger records that without the translated anchor the desktop
+  FindPeepSlot path rejects every chair, which is exactly the reported symptom:
+  a villager lay in the wrong position or changed behaviour immediately.
+- Four maps change and no others: InvisibleLounger, InvisibleSpaLounger,
+  InvisiblePatioTable and InvisiblePicnicTable. Each now matches its visible
+  counterpart byte for byte. The visible Spa Lounger 0x330 is covered by the
+  same table without a separate change.
+- The donor's own file is deliberately left untouched, because it is the base
+  map a release restores when the patch is disabled.
+- Separately, the patio table's two seat anchors were carrying a stray object
+  type in bits 16-31 (0x00049801 and 0x0004A001); they are now 0x00009801 and
+  0x0000A001, matching the desktop-safe form.
+
+B180 why the seven stock-donor items are a different case
+- The seven items that rely on the native hotspot path -- Invisible Kiddie Pool,
+  Invisible Full-Size Pool, Invisible Hammock, Invisible Yoga Equipment,
+  Exercise Bike, Home Gym System and Ping-Pong Table -- are NOT affected by the
+  defect above, and the reason is structural rather than a judgement call.
+- They borrow STOCK DESKTOP furniture, which Mobile Furniture Behaviors does not
+  implement. There is therefore no pc_fmaps entry for their donors, no second
+  map, and nothing to translate. Their maps were compared against the donor maps
+  in the shipped B179 build and are byte-identical in every case.
+- Cell values such as 0x00200000 and 0x01180000 appear in these maps, but they
+  appear in the STOCK donors themselves -- TreadmillStd, YogaGearStd and
+  PoolTableStd all carry them natively -- so they are ordinary desktop values
+  the engine has always handled, not the mobile markers the ledger forbids.
+  Chaise_brown, by contrast, carries none at all, which is what made the
+  borrowed mobile cells on the loungers conspicuous.
+- A test pins this: if any of those seven donors ever gains a pc_fmaps entry, it
+  joins the family the fix above covers and the test fails rather than letting
+  the wrong map ship silently. The mirror case is pinned too, so the check
+  cannot pass merely because a directory is empty or misnamed.
+- Player confirmation that these seven act on a drop remains outstanding and is
+  still not claimed.

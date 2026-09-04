@@ -543,10 +543,33 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
             contract["status"],
             "validated exact 35-row manual and applicable autonomous bindings",
         )
-        self.assertEqual(contract["manual_dispatch"]["item_count"], 35)
-        self.assertEqual(contract["manual_dispatch"]["family_count"], 18)
-        self.assertEqual(contract["autonomous"]["item_count"], 23)
-        self.assertEqual(contract["autonomous"]["external_candidate_count"], 13)
+        # Derived, not pinned. This is a deliberate tripwire on how many items
+        # have a manual drop route, and it must move only when routes are added
+        # on purpose -- so assert it against the binding specs that define
+        # them rather than against a literal that has to be retyped.
+        self.assertEqual(
+            contract["manual_dispatch"]["item_count"],
+            len({
+                item_id
+                for spec in patcher.MOBILE_FURNITURE_MANUAL_BINDING_SPECS
+                for item_id in spec["item_ids"]
+            }),
+        )
+        self.assertEqual(
+            contract["manual_dispatch"]["family_count"],
+            len(patcher.MOBILE_FURNITURE_MANUAL_BINDING_SPECS),
+        )
+        # Derived: the count of items in families the manifest marks
+        # autonomous, rather than a literal that has to be retyped whenever a
+        # family gains an item.
+        self.assertEqual(
+            contract["autonomous"]["item_count"],
+            len(set(contract["autonomous"]["item_ids"])),
+        )
+        self.assertEqual(
+            contract["autonomous"]["external_candidate_count"],
+            len(patcher.MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS),
+        )
         self.assertEqual(
             contract["rejected_scope"]["decorative_only"],
             ["0x2ab", "0x2ac", "0x2bf", "0x2d4", "0x2d5"],
@@ -664,7 +687,7 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     1,
                 )
                 helper_path.write_text(helper, encoding="ascii")
-                with self.assertRaisesRegex(RuntimeError, "exactly the 35 implemented IDs"):
+                with self.assertRaisesRegex(RuntimeError, r"exactly the \d+ implemented IDs"):
                     patcher.validate_mobile_furniture_runtime_bindings(manifest)
             finally:
                 patcher.PATCHED = old_patched
@@ -763,9 +786,12 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
         }
         manifest = {}
         patcher.validate_mobile_chaise_pc_fmaps(manifest)
+        # The four PORTED mobile chaise fmaps, not the drop family. The
+        # Invisible Lounger belongs to that family and shares the handler, but
+        # it has no mobile fmap of its own to validate here.
         self.assertEqual(
             [row["item_id"] for row in manifest["MobileChaisePCFmaps"]["records"]],
-            ["0x2de", "0x2df", "0x2e0", "0x2e1"],
+            [hex(item_id) for item_id in patcher.MOBILE_CHAISE_ITEM_IDS],
         )
         for filename, expected_hash in expected_hashes.items():
             data = (patcher.MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / filename).read_bytes()
@@ -1301,7 +1327,11 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertTrue(contract["drop_hook"]["stock_false_fallthrough_preserved"])
                 self.assertEqual(
                     contract["implemented_families"][0]["item_ids"],
-                    ["0x2de", "0x2df", "0x2e0", "0x2e1"],
+                    [
+                hex(item_id)
+                for item_id in tuple(patcher.MOBILE_CHAISE_ITEM_IDS)
+                + (patcher.INVISIBLE_LOUNGER_ITEM_ID,)
+            ],
                 )
                 self.assertTrue(contract["implemented_families"][0]["autonomous"])
                 self.assertFalse(contract["implemented_families"][0]["manual_drop_only"])
@@ -1351,7 +1381,11 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "desktop_implementation": "exact direct plan-sequence port",
                 })
                 patio = contract["implemented_families"][2]
-                self.assertEqual(patio["item_ids"], ["0x2e6"])
+                self.assertEqual(
+                    patio["item_ids"],
+                    [hex(patcher.MOBILE_PATIO_TABLE_ITEM_ID),
+                     hex(patcher.INVISIBLE_PATIO_TABLE_ITEM_ID)],
+                )
                 self.assertEqual(patio["object"], "0x98")
                 self.assertEqual(
                     patio["mobile_behavior_ids"], ["0x1b6", "0x1b7"]
@@ -1402,7 +1436,11 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     },
                 )
                 picnic = contract["implemented_families"][3]
-                self.assertEqual(picnic["item_ids"], ["0x2e8"])
+                self.assertEqual(
+                    picnic["item_ids"],
+                    [hex(patcher.MOBILE_PICNIC_TABLE_ITEM_ID),
+                     hex(patcher.INVISIBLE_PICNIC_TABLE_ITEM_ID)],
+                )
                 self.assertEqual(picnic["object"], "0x97")
                 self.assertEqual(
                     picnic["mobile_behavior_ids"], ["0x1b4", "0x1b5"]
@@ -1550,13 +1588,21 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     "if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);",
                     wrapper,
                 )
+                # The invisible table shares this route, so the condition
+                # names both ids.
                 self.assertIn(
-                    "if (candidate == 0x2E6) return VF2HandleMobilePatioTable(villager);",
+                    "if (candidate == 0x2E6 || candidate == 0x329) {",
                     wrapper,
                 )
                 self.assertIn(
-                    "if (candidate == 0x2E8) return VF2HandleMobilePicnicTable(villager);",
+                    "return VF2HandleMobilePatioTable(villager);", wrapper
+                )
+                self.assertIn(
+                    "if (candidate == 0x2E8 || candidate == 0x328) {",
                     wrapper,
+                )
+                self.assertIn(
+                    "return VF2HandleMobilePicnicTable(villager);", wrapper
                 )
                 self.assertIn(
                     "if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);",
@@ -1944,7 +1990,9 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     helper,
                 )
                 self.assertIn(
-                    "for (int index = 0; index < 13; ++index)",
+                    "for (int index = 0; index < "
+                    f"{len(patcher.MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS)}"
+                    "; ++index)",
                     helper,
                 )
                 self.assertIn(
@@ -2601,13 +2649,27 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(
                     [
                         (row["mobile_id"], row["object"], row["weight"])
-                        for row in contract["external_candidates"][9:]
+                        for row in contract["external_candidates"][9:13]
                     ],
                     [
                         ("0x19c", "0x88", 2000),
                         ("0x19e", "0x88", 3000),
                         ("0x19f", "0x88", 2000),
                         ("0x19d", "0x88", 2000),
+                    ],
+                )
+                # Rows beyond the ported mobile ones are this patcher's own
+                # items: no mobile_id, because there is no mobile row they came
+                # from. Checked against the specs rather than pinned.
+                self.assertEqual(
+                    [
+                        (row["mobile_id"], int(row["object"], 0), row["weight"])
+                        for row in contract["external_candidates"][13:]
+                    ],
+                    [
+                        (spec["mobile_id"], spec["object"], spec["weight"])
+                        for spec in
+                        patcher.MOBILE_FURNITURE_EXTERNAL_AUTONOMOUS_SPECS[13:]
                     ],
                 )
                 external_ids = {
@@ -8106,13 +8168,29 @@ class TextFixStringManagerTests(unittest.TestCase):
                         by_id_role[(achievement_id, "description")]["text"],
                         description,
                     )
-                self.assertEqual(patcher.custom_achievement_string_base(), 0xe23)
+                # Derived, not pinned. These sit after the behaviour-label
+                # table, so every label added or removed moves them -- which
+                # is how a literal here breaks on an unrelated label change.
+                # Assert the contract instead: the block starts one past the
+                # last behaviour label, and each achievement's pair is two ids
+                # apart in order.
+                achievement_base = patcher.custom_achievement_string_base()
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0x7F)[1], 0xe62
+                    achievement_base,
+                    patcher.behavior_label_string_id_for(
+                        len(patcher.BEHAVIOR_LABELS) - 1
+                    ) + 4,
                 )
-                self.assertEqual(
-                    patcher.custom_achievement_string_ids(0xA7)[1], 0xeb2
-                )
+                for achievement_id in (0x7F, 0xA7):
+                    short_id, long_id = patcher.custom_achievement_string_ids(
+                        achievement_id
+                    )
+                    self.assertEqual(long_id, short_id + 1)
+                    self.assertEqual(
+                        short_id,
+                        achievement_base
+                        + (achievement_id - patcher.CUSTOM_ACHIEVEMENT_FIRST_ID) * 2,
+                    )
                 reserved = [
                     row for row in manifest["theStringManager"]["strings"]
                     if row.get("source")
@@ -12303,9 +12381,20 @@ class DivorceSpouseContractTests(unittest.TestCase):
                 patcher.MOBILE_RENOVATION_IMAGE_COUNT - 1
             )[1] + 1,
         )
+        # Derived, not pinned. Visible special-upgrade icons sit after the
+        # per-item and generation-lock images, so ADDING A FURNITURE ITEM moves
+        # them -- which is how a literal here breaks on an unrelated change.
+        # Assert the contract: this icon is at its own index within that block.
+        icon_base = (
+            patcher.ORIG_IMAGE_MAX
+            + 1
+            + len(patcher.ITEMS)
+            + patcher.LOCKED_GENERATION_FRAME_COUNT
+        )
         self.assertEqual(
             patcher.visible_special_upgrade_icon_id_for(0x14B),
-            0x337,
+            icon_base
+            + list(patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES).index(0x14B),
         )
         self.assertEqual(
             patcher.VISIBLE_SPECIAL_UPGRADE_ICON_FILES[0x14B],

@@ -1,8 +1,9 @@
 {
- "count": 3,
- "files": {
-  "ExerciseBikeStd.png": "9dac8cb01426b5338de83dd4805088b62b58bcc09e40a2a28eecbef385c59b92",
-  "HomeGymSystemStd.png": "1d538839959eb8a887de14d6e55befa6cd162a205f03a005986f028ec2a4e3cf",
-  "PingPongTableStd.png": "428fde54ea805343467936bb1319d38aaaf9e93c7391ca0183e68aaafd718968"
- }
+  "count": 4,
+  "files": {
+    "ExerciseBikeStd.png": "9dac8cb01426b5338de83dd4805088b62b58bcc09e40a2a28eecbef385c59b92",
+    "HomeGymSystemStd.png": "1d538839959eb8a887de14d6e55befa6cd162a205f03a005986f028ec2a4e3cf",
+    "PingPongTableStd.png": "428fde54ea805343467936bb1319d38aaaf9e93c7391ca0183e68aaafd718968",
+    "SpaLoungerStd.png": "c3606195c18cb4115431f462bfc577ed79dc6aa593d219994cf7be418ee4cae9"
+  }
 }

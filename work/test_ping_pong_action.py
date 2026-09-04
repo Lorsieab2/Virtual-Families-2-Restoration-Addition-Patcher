@@ -25,18 +25,25 @@ class TestPingPongLabels(unittest.TestCase):
         self.assertIn("ping_pong", patcher.BEHAVIOR_LABEL_GROUP_RANGES)
         start, end = patcher.BEHAVIOR_LABEL_GROUP_RANGES["ping_pong"]
         labels = [text for _key, text in patcher.BEHAVIOR_LABELS[start:end]]
-        self.assertEqual(labels, ["Playing ping-pong", "Rallying back and forth"])
+        self.assertEqual(labels, ["Playing ping-pong"])
 
-    def test_the_group_is_appended_last(self):
-        # Inserting it anywhere else would shift every established label id.
-        last_group = patcher.BEHAVIOR_LABEL_GROUPS[-1][0]
-        self.assertEqual(last_group, "ping_pong")
-        start, end = patcher.BEHAVIOR_LABEL_GROUP_RANGES["ping_pong"]
-        self.assertEqual(end, len(patcher.BEHAVIOR_LABELS))
+    def test_the_group_is_appended_after_the_established_ones(self):
+        # What matters is that it was APPENDED, not that it is still last --
+        # the exercise bike groups were added after it. Inserting a group in
+        # the middle is what would shift every established label id.
+        names = [name for name, _entries in patcher.BEHAVIOR_LABEL_GROUPS]
+        self.assertIn("ping_pong", names)
+        # Every group that existed before it still starts where it did, which
+        # is what "appended" buys: the snow group is the last of the original
+        # set and must still precede this one.
+        self.assertLess(names.index("snow"), names.index("ping_pong"))
+        start, _end = patcher.BEHAVIOR_LABEL_GROUP_RANGES["ping_pong"]
+        snow_start, snow_end = patcher.BEHAVIOR_LABEL_GROUP_RANGES["snow"]
+        self.assertEqual(start, snow_end)
 
     def test_the_label_ids_clear_the_blocks_that_follow_them(self):
         ids = patcher.behavior_label_string_ids_for_group("ping_pong")
-        self.assertEqual(len(ids), 2)
+        self.assertEqual(len(ids), 1)
         self.assertLess(
             max(ids), patcher.holiday_ornament_collection_title_string_id(),
             "the label ids must stay below the ornament/achievement block",
@@ -140,7 +147,7 @@ class TestTheFurnitureProbe(unittest.TestCase):
         # The generated C interpolates the constant, so the literal appears in
         # the f-string template as the placeholder rather than the value.
         self.assertIn(
-            "villager, __VF2_PING_PONG_TABLE_ITEM_ID__)",
+            "villager, 0x36, __VF2_PING_PONG_TABLE_ITEM_ID__)",
             _source(),
             "the wrapper must compare against the derived item id",
         )
@@ -158,7 +165,7 @@ class TestTheFurnitureProbe(unittest.TestCase):
         # record+0x10 is an orientation index, not a point, so the lookup goes
         # through PtOnFurniture rather than matching coordinates by hand.
         body = re.search(
-            r"VF2LinkedFurnitureItemIs\(CVillager &villager, int itemId\)\n\{(.*?)\n\}",
+            r"VF2LinkedFurnitureItemIs\(\n    CVillager &villager, int object, int itemId\)\n\{(.*?)\n\}",
             _source(), re.S,
         )
         self.assertIsNotNone(body)
@@ -174,7 +181,7 @@ class TestTheFurnitureProbe(unittest.TestCase):
 
     def test_the_probe_bounds_the_slot(self):
         text = re.search(
-            r"VF2LinkedFurnitureItemIs\(CVillager &villager, int itemId\)\n\{(.*?)\n\}",
+            r"VF2LinkedFurnitureItemIs\(\n    CVillager &villager, int object, int itemId\)\n\{(.*?)\n\}",
             _source(), re.S,
         ).group(1)
         self.assertIn("slot < 0 || slot >= count", text)

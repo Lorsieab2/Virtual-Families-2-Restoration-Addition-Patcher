@@ -3105,5 +3105,53 @@ class TestSuiteCopiesInSyncTests(unittest.TestCase):
                 )
 
 
+class TestBundleChangelogReachesTheWrittenLog(unittest.TestCase):
+    """The changelog blocks must survive into the file, not just the source.
+
+    write_bundle_runner_files() writes the bundle's patcher README with
+    encoding="ascii". A non-ASCII character in any changelog line therefore
+    fails when the bundle is written and at no earlier point -- reading the
+    exporter source cannot show it, and neither can importing the tuple.
+    """
+
+    def test_every_changelog_block_is_written_out(self):
+        with tempfile.TemporaryDirectory() as td:
+            bundle = Path(td) / "bundle"
+            bundle.mkdir()
+            exporter.write_bundle_runner_files(bundle, "B180")
+            # The changelog goes into the bundle's own patcher README, which is
+            # written with encoding="ascii".
+            log = (bundle / "README-B180-PATCHER.txt").read_text(encoding="utf-8")
+            for heading, lines in (
+                ("B151 changelog", exporter.B151_CHANGELOG_LINES),
+                ("B162 changelog", exporter.B162_CHANGELOG_LINES),
+                ("B180 changelog", exporter.B180_CHANGELOG_LINES),
+            ):
+                with self.subTest(block=heading):
+                    self.assertIn(heading, log)
+                    for line in lines:
+                        self.assertIn(line, log)
+
+    def test_the_b180_block_covers_what_b180_changed(self):
+        joined = "\n".join(exporter.B180_CHANGELOG_LINES)
+        for topic in (
+            "drop routing",
+            "Ping-Pong",
+            "exercise bike",
+            "checkmark",
+            "hairstyle",
+            "Spa Lounger",
+        ):
+            with self.subTest(topic=topic):
+                self.assertIn(topic, joined)
+
+    def test_the_unrouted_items_are_not_claimed_to_work(self):
+        # Seven items rely on the native hotspot path and have not been
+        # confirmed by a player. Saying otherwise in a shipped log would be a
+        # claim the build cannot support.
+        joined = "\n".join(exporter.B180_CHANGELOG_LINES)
+        self.assertIn("outstanding and is not claimed", joined)
+
+
 if __name__ == "__main__":
     unittest.main()
