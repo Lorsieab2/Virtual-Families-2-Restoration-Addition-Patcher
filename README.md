@@ -396,6 +396,17 @@ copies stay identical -- `tests/` differs only in importing the shipped `src/`
 copy rather than `work/`. Editing one and not the other fails with "has drifted
 from"; sync the pair rather than editing either alone.
 
+Run `build_matrix.ps1` with a clean Windows `PATH`. The link step's
+`build_b119.bat` counts lines with `findstr ... | find /C /V ""`, which needs
+Windows' `find.exe`. Launched from a shell whose `PATH` puts a Unix toolchain
+first -- Git Bash, MSYS, WSL interop -- Unix `find` runs instead, reads `/C` and
+`/V` as paths, and walks the filesystem indefinitely. The build then sits at
+100% CPU with an empty log while thousands of output files are already on disk,
+so it looks exactly like healthy progress; counting output directories reports
+success. Count linked executables instead, and set
+`$env:PATH = 'C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem'` in the
+launcher.
+
 Generated C is the artifact that counts, not the Python that writes it. Some
 templates interpolate as f-strings and others are raw strings carrying named
 `__VF2_*__` placeholders substituted afterwards, so mixing the two conventions
