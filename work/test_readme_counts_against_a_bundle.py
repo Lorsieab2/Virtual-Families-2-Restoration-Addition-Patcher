@@ -18,23 +18,53 @@ build output cannot answer the question, and pretending otherwise is how the
 suite went red for everyone once already.
 """
 import json
+import re
 import unittest
 import zipfile
 from pathlib import Path
+
+import export_offline_patch_bundle as exporter
 
 ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 
 
-def _manifest():
-    """The newest built manifest, or None.
+def _current_release() -> str | None:
+    """The release these docs describe, read from the repo rather than typed.
 
-    A release archive is preferred: it is what a player actually receives.
-    A build-output manifest is the fallback.
+    An older archive left in outputs/ is not evidence about the current build.
+    The first version of this helper sorted archives by name and happily
+    validated the README against B178 while B180 was the release -- reporting
+    a failure that was two releases stale, which is the same wrong-authority
+    mistake these tests exist to catch.
     """
+    for path in sorted((ROOT / "data" / "vf2").glob("release-identities-B*.json")):
+        pass
+    identities = sorted(
+        (ROOT / "data" / "vf2").glob("release-identities-B*.json"),
+        key=lambda p: int(re.search(r"B(\d+)", p.name).group(1)),
+    )
+    if identities:
+        return re.search(r"B(\d+)", identities[-1].name).group(0)
+    return None
+
+
+def _manifest():
+    """The current release's manifest, or None.
+
+    A release archive is preferred -- it is what a player actually receives --
+    but ONLY when it is the current release. A build-output manifest is the
+    fallback, and a stale archive is ignored rather than quietly answered
+    from.
+    """
+    current = _current_release()
     for archive in sorted(
-        ROOT.rglob("VF2-B*-Release.zip"), key=lambda p: p.name, reverse=True
+        ROOT.rglob("VF2-B*-Release.zip"),
+        key=lambda p: int(re.search(r"B(\d+)", p.name).group(1)),
+        reverse=True,
     ):
+        if current and current not in archive.name:
+            continue
         try:
             with zipfile.ZipFile(archive) as bundle:
                 names = [n for n in bundle.namelist() if n.endswith("manifest.json")]
@@ -43,8 +73,16 @@ def _manifest():
         except (zipfile.BadZipFile, OSError):
             continue
     for path in sorted(
-        (ROOT / "outputs").rglob("manifest.json"), key=lambda p: p.name, reverse=True
+        (ROOT / "outputs").rglob("manifest.json"), key=lambda p: p.stat().st_mtime,
+        reverse=True,
     ):
+        # A build folder from an older release is no better evidence than an
+        # older archive. Anything naming a different release is skipped;
+        # anything naming no release at all is a working build of the current
+        # tree and is accepted.
+        stamped = re.search(r"B(\d+)", path.parent.name)
+        if stamped and current and stamped.group(0) != current:
+            continue
         try:
             return json.loads(path.read_text(encoding="utf-8")), f"build {path.parent.name}"
         except (OSError, json.JSONDecodeError):
@@ -118,6 +156,76 @@ class ReadmeCountsTests(unittest.TestCase):
             )
         }
         self.assertIn(f"Ships {len(maps)} behavior maps", README)
+
+    def test_the_renovation_setting_description_matches_what_it_installs(self):
+        """The GUI description is a promise made at the checkbox.
+
+        It said 20 images, counting Bathroom 1 and Bathroom 2 together, while
+        the setting installs 15 -- Bathroom 2's art is gated on a different
+        setting a player can decline independently. That text is not merely
+        documentation: it is shown next to the checkbox in the patcher and
+        copied into the Transparency Log the bundle ships, so B180 reached
+        every player overstating the setting by five images.
+
+        The assertion is against the EXPORTER, not the manifest, and that
+        distinction is the point. A published bundle cannot be edited, so
+        checking the shipped manifest would fail forever on B180 and force
+        someone to weaken the test to get a green board. Checking the source
+        of the text proves the next bundle is right while leaving the shipped
+        defect recorded rather than papered over.
+        """
+        rooms = {
+            p for p in self._pngs_requiring("mobile_renovations")
+            if "/store_icons/" not in p and "/curtains/" not in p
+        }
+        description = next(
+            s["description"] for s in exporter.SETTINGS
+            if s["id"] == "mobile_renovations"
+        )
+        self.assertIn(
+            f"{len(rooms)} verified mobile renovation images",
+            description,
+            f"the setting's description disagrees with the {len(rooms)} images "
+            f"it installs, per {self.source}",
+        )
+
+    def test_the_shipped_bundle_is_allowed_to_carry_the_old_wording(self):
+        """B180's manifest is wrong and cannot be changed. Say so here.
+
+        Without this, the failure above would be the only trace, and the
+        obvious way to make it pass is to delete it. Recording the known
+        divergence keeps the fact visible and keeps the board honest.
+        """
+        shipped = next(
+            (s["description"] for s in self.manifest["settings"]
+             if s["id"] == "mobile_renovations"), ""
+        )
+        source = next(
+            s["description"] for s in exporter.SETTINGS
+            if s["id"] == "mobile_renovations"
+        )
+        if shipped and shipped != source:
+            self.assertIn(
+                "20 verified", shipped,
+                "the shipped bundle diverges from source in an unexpected way; "
+                "the only known divergence is B180's renovation count",
+            )
+
+    def test_the_ornament_count_in_its_description_is_right(self):
+        """Checked because it is the same shape, and it is correct.
+
+        Recorded so a later pass does not 'fix' a claim that already matches:
+        twelve collectible images ship, and the description says twelve.
+        """
+        ornaments = {
+            p for p in self._pngs_requiring("holiday_ornaments_collection")
+            if "CollectionOrnaments/" in p
+        }
+        description = next(
+            s["description"] for s in self.manifest["settings"]
+            if s["id"] == "holiday_ornaments_collection"
+        )
+        self.assertIn(f"{len(ornaments)} yard collectibles", description)
 
 
 if __name__ == "__main__":
