@@ -1461,6 +1461,35 @@ B180 test suite: inputs a checkout cannot have
   OBB rather than merely skipped: the four OGGs were unpacked from the
   1.7.16 APK and their sizes and SHA-256s still match the pinned contract.
 
+B180 payload deduplication and what a release check must ask
+- The exporter collapses byte-identical payload files and points several
+  manifest records at one canonical copy. This is long-standing behaviour, not
+  new in B180: the B176 manifest already has five source files each serving two
+  targets, among them CouchAquaStd.png.fmap and CouchFlowers.png.fmap.
+- It became visible in B180 because the desktop-safe map fix made all three
+  lounger maps identical, so only one physical file ships while the manifest
+  writes it to InvisibleLounger, InvisibleSpaLounger and SpaLoungerStd. A
+  release check that asked "is SpaLoungerStd.png.fmap in the payload" therefore
+  reported two files missing from a bundle that was correct.
+- The check was always wrong; it simply had no identical files to be wrong
+  about until this release produced some. Recording it that way deliberately:
+  describing it as the fix having broken a verification would invite a later
+  reader to distrust the fix rather than the check.
+- The right question is what the MANIFEST INSTALLS, not what the payload
+  contains under a given name, because the manifest is what determines the
+  files a player ends up with. Asset records carry file_path, source_path and
+  source_sha256, so a target can be resolved to its canonical payload file and
+  its content verified from there.
+- The corrected check is strictly more sensitive rather than more permissive:
+  re-validated against B179 it reports two defects MORE than the by-name
+  version did, because it now resolves a lounger the by-name version had been
+  silently skipping. A revised check that passes where the old one failed is
+  only acceptable when it can be shown to catch more, not less.
+- The same distinction separates the two suites that cover this area. The
+  source-tree tests answer whether the correct map is SELECTED; the extracted-
+  payload check answers whether the correct map ARRIVES. Neither substitutes
+  for the other, and the second is the one that speaks for what a player gets.
+
 B180 verification method
 - Generated .cpp files are compiled individually (cl /c /EHsc) after each
   change. Three defects this cycle were invisible to source-reading tests and
