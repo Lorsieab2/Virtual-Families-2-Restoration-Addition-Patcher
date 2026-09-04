@@ -28,13 +28,40 @@ def _between(text, start, end):
 
 
 class MobileHolidayNativeContractTests(unittest.TestCase):
+    """Two of these read IDA exports that live only on an analyst's machine.
+
+    Both sit under `outputs/`, which .gitignore excludes, so a clean checkout
+    has never been able to run them -- setUpClass raised FileNotFoundError and
+    took the whole class with it, including the assertion that needs nothing
+    but the patcher source. A suite that is red on every machine but one is
+    indistinguishable from a real regression and trains everyone to ignore it.
+
+    So the artefacts are optional: a test that needs one skips with a message
+    naming the file when it is absent, and asserts exactly as before when it
+    is present. Nothing is weakened where the input exists.
+    """
+
     @classmethod
     def setUpClass(cls):
         cls.source = PATCH_SOURCE.read_text(encoding="utf-8")
-        cls.drop = IDA_DROP.read_text(encoding="utf-8")
-        cls.asm = IDA_ASM.read_text(encoding="utf-8")
+        cls.drop = cls._optional(IDA_DROP)
+        cls.asm = cls._optional(IDA_ASM)
+
+    @staticmethod
+    def _optional(path):
+        return path.read_text(encoding="utf-8") if path.is_file() else None
+
+    def _require(self, text, path):
+        if text is None:
+            self.skipTest(
+                f"needs the local IDA export {path.relative_to(ROOT).as_posix()}, "
+                "which is gitignored and not reproducible from a checkout"
+            )
+        return text
 
     def test_native_drop_chain_binds_family_hotspots(self):
+        self._require(self.drop, IDA_DROP)
+        self._require(self.asm, IDA_ASM)
         for token in (
             "theMainScene::DropVillager",
             "CContentMap::GetHotSpot",
@@ -50,6 +77,8 @@ class MobileHolidayNativeContractTests(unittest.TestCase):
             self.assertIn(token, self.drop)
 
     def test_native_family_handlers_call_household_manager(self):
+        self._require(self.drop, IDA_DROP)
+        self._require(self.asm, IDA_ASM)
         calls = (
             ("_ZN8CHotSpot8XmasTreeER9CVillager", "1A0h"),
             ("_ZN8CHotSpot7DreidelER9CVillager", "1A2h"),

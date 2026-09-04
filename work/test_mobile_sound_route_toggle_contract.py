@@ -7,6 +7,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "data" / "vf2" / "mobile-sound-route-toggle-contract.json"
+# The mobile OGGs are unpacked from the APK/OBB into a gitignored tree, so a
+# clean checkout does not have them and never could. Their checks are skipped
+# when it is absent rather than failed: a suite that is red on every machine
+# but the analyst's is indistinguishable from a real regression. Everything
+# that does not need the extract -- the contract's own claims, the desktop WAV
+# on disk, and the literal in the shipped Sound.obj -- still runs.
+MOBILE_EXTRACT_ROOT = ROOT / "work" / "vf2_apk_extract"
 
 EXPECTED = {
     "0x01": ("beaker.wav", "beaker.ogg", "1ea91278c036d016f301b366f1155f9893d2aef52c023a5152aa6cb716b0c591", "0321ff33949e635b1d560d8ab5e0c24b1cf91e24453a182a6479a88cfbfc0ddc", "0x145B1", "0x68", "0x004F70CC"),
@@ -78,14 +85,20 @@ class MobileSoundRouteToggleContractTests(unittest.TestCase):
                 mobile_path = ROOT / mobile["source_path"]
                 sound_obj_bytes = (ROOT / self.contract["inputs"]["sound_obj"]["path"]).read_bytes()
                 self.assertTrue(pc_path.is_file())
-                self.assertTrue(mobile_path.is_file())
                 self.assertEqual(sound_obj_bytes[int(literal_raw_off, 16):int(literal_raw_off, 16) + len(pc_name)], pc_name.encode("ascii"))
                 self.assertEqual(pc_path.stat().st_size, pc["size"])
-                self.assertEqual(mobile_path.stat().st_size, mobile["size"])
                 self.assertEqual(_sha256(pc_path), pc_hash)
-                self.assertEqual(_sha256(mobile_path), mobile_hash)
                 self.assertTrue(pc_path.read_bytes().startswith(b"RIFF"))
                 self.assertEqual(pc_path.read_bytes()[8:12], b"WAVE")
+                if not MOBILE_EXTRACT_ROOT.is_dir():
+                    self.skipTest(
+                        "needs the unpacked mobile OGGs under "
+                        f"{MOBILE_EXTRACT_ROOT.relative_to(ROOT).as_posix()}, which is "
+                        "gitignored; unpack the APK/OBB to run the mobile half"
+                    )
+                self.assertTrue(mobile_path.is_file())
+                self.assertEqual(mobile_path.stat().st_size, mobile["size"])
+                self.assertEqual(_sha256(mobile_path), mobile_hash)
                 self.assertTrue(mobile_path.read_bytes().startswith(b"OggS"))
 
     def test_atomic_staging_rollback_and_offline_packaging(self):
