@@ -48,10 +48,11 @@ downloaded it can still verify what they have.
 If your antivirus quarantines the patcher or the patched executable, do not
 simply override it. Confirm first that you downloaded the ZIP from this
 project's own releases page, and where the release notes publish a SHA-256 for
-the asset, compare it:
+the asset, compare it. Pass the **exact filename you downloaded** -- if you
+took r2, that is the r2 name, and hashing the other archive will not match:
 
 ```
-certutil -hashfile VF2-B<version>-Release.zip SHA256
+certutil -hashfile VF2-B180-Release-r2.zip SHA256
 ```
 
 If it matches the published value, you have the file that was released, and a

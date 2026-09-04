@@ -247,5 +247,41 @@ class TestTheSuiteSkipClaimHolds(unittest.TestCase):
                 )
 
 
+class TestTheChecksumExampleMatchesTheRecommendedAsset(unittest.TestCase):
+    """Telling a reader which file to take, then hashing a different one.
+
+    The README recommends r2, and the checksum command a few lines below
+    still named VF2-B<version>-Release.zip. A reader substituting B180 would
+    have hashed an archive they were told not to download -- and got a
+    mismatch against the published digest, which is the one outcome most
+    likely to make someone think the file is tampered with.
+
+    Introduced by the same change that added the recommendation, which is the
+    shape worth pinning: guidance and the command implementing it drifting
+    apart inside one edit.
+    """
+
+    def test_the_command_names_the_archive_the_readme_recommends(self):
+        named = re.findall(r"`(VF2-B\d+(?:\.\d+)?-Release-r(\d+)\.zip)`", README)
+        self.assertTrue(named, "the README no longer names a recommended archive")
+        # Take the HIGHEST revision named, not the first. The README's own rule
+        # is "take the highest revision", so the check has to follow the same
+        # rule -- otherwise a future page that mentions an older revision
+        # earlier in the prose would pin the command to the wrong file.
+        name = max(named, key=lambda pair: int(pair[1]))[0]
+        command = re.search(r"certutil -hashfile (\S+) SHA256", README)
+        self.assertIsNotNone(command, "the checksum example is gone")
+        self.assertEqual(
+            command.group(1), name,
+            "the checksum example hashes an archive the README tells readers "
+            "not to download",
+        )
+
+    def test_the_reader_is_told_to_use_their_own_filename(self):
+        # A hardcoded name goes stale at the next revision; the instruction to
+        # pass what they actually downloaded does not.
+        self.assertIn("exact filename you downloaded", README)
+
+
 if __name__ == "__main__":
     unittest.main()
