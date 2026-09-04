@@ -94,8 +94,9 @@ The load path is mostly extended by wrappers that run the native `LoadState` fir
 ## What's included
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. As of B180 it offers 36 settings, grouped the way
-the GUI groups them.
+the release you downloaded. B180's bundle offers 35 settings, grouped the way
+the GUI groups them. The patcher defines 36; the difference is the two entries
+named below that the bundle deliberately does not carry.
 
 Two of the entries below are described for completeness but are **not** offered
 by the bundle: **Allow Same-Sex Marriage** (reachable in game through its Cheat

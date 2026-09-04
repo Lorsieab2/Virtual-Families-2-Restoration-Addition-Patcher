@@ -21,15 +21,56 @@ GUI = (ROOT / "work" / "offline_vf2_patcher_gui.py").read_text(encoding="utf-8")
 LEDGER = (ROOT / "docs" / "REQUEST_LEDGER.md").read_text(encoding="utf-8")
 
 
+# Settings the exporter defines but deliberately withholds from a bundle. The
+# README names both and says why; they are the whole difference between the
+# defined count and the offered one.
+WITHHELD_FROM_BUNDLES = {"same_sex_marriage", "transparent_store_bar"}
+
+
 class TestTheSettingsCountIsTheRealOne(unittest.TestCase):
-    def test_the_readme_states_the_number_of_settings_that_exist(self):
-        match = re.search(r"it offers (\d+) settings", README)
-        self.assertIsNotNone(match, "the README no longer states a settings count")
+    """The number in the README is what a PLAYER is offered, not what exists.
+
+    The sentence carrying it says the GUI reads its checkboxes from the
+    shipped manifest, so quoting len(SETTINGS) there contradicts the sentence
+    it sits in. It was wrong by one: the exporter defines 36 settings, two are
+    deliberately withheld from bundles, and one -- core_assets -- is added
+    during export, so B180's manifest offers 35.
+
+    Pinning it to len(SETTINGS) was the original error and it looked correct,
+    because the count was checked against the source constant rather than
+    against a bundle. The offered count is derived here for the same reason:
+    a typed number cannot notice a setting being withheld.
+    """
+
+    def _offered(self):
+        return len({s["id"] for s in exporter.SETTINGS} - WITHHELD_FROM_BUNDLES) + 1
+
+    def test_the_readme_states_the_number_of_settings_a_bundle_offers(self):
+        match = re.search(r"bundle offers (\d+) settings", README)
+        self.assertIsNotNone(match, "the README no longer states an offered count")
         self.assertEqual(
             int(match.group(1)),
-            len(exporter.SETTINGS),
-            "the README's settings count has drifted from SETTINGS",
+            self._offered(),
+            "the README's offered count has drifted from what a bundle carries",
         )
+
+    def test_the_readme_also_states_the_defined_count_and_explains_the_gap(self):
+        match = re.search(r"patcher defines (\d+)", README)
+        self.assertIsNotNone(match, "the README no longer states the defined count")
+        self.assertEqual(int(match.group(1)), len(exporter.SETTINGS))
+        # The gap must be explained rather than left as two numbers.
+        self.assertIn("deliberately does not carry", README)
+
+    def test_the_withheld_settings_are_the_ones_the_readme_names(self):
+        # If one is restored to bundles, the arithmetic above silently shifts
+        # unless this fails first and sends someone to the prose.
+        for setting_id in WITHHELD_FROM_BUNDLES:
+            with self.subTest(setting_id):
+                self.assertIn(
+                    setting_id,
+                    {s["id"] for s in exporter.SETTINGS},
+                    "a withheld setting that no longer exists makes the gap wrong",
+                )
 
     def test_every_setting_is_named_somewhere_in_the_readme(self):
         # A setting a player can tick but cannot look up is undocumented, which
