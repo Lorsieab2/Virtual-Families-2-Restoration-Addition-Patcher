@@ -11,6 +11,7 @@ seven rely on the game's native hotspot path and have NOT been confirmed by a
 player. A doc that blurs the two would be claiming something the build cannot
 support.
 """
+import hashlib
 import unittest
 from pathlib import Path
 
@@ -208,11 +209,32 @@ class TestTransparencyLogMatchesTheBuild(unittest.TestCase):
         self.assertIn("0x55", text)
         self.assertIn("0x56", text)
 
-    def test_it_does_not_claim_an_unbuilt_bundle(self):
+    def test_the_unbuilt_claim_is_marked_superseded_once_a_bundle_exists(self):
+        """The log said no bundle was packaged. That was true when written.
+
+        Once the archive exists, that sentence is false, and a transparency
+        log asserting something false about its own release is worse than one
+        that says nothing. The original line is kept for the record but must
+        carry the correction beside it.
+        """
         text = TRANSPARENCY.read_text(encoding="utf-8")
-        self.assertIn(
-            "No B180 bundle is linked, packaged, or published", text
-        )
+        archive = ROOT / "outputs" / "VF2-B180-Release.zip"
+        if not archive.is_file():
+            # No bundle yet, so the original claim still stands.
+            self.assertIn(
+                "No B180 bundle is linked, packaged, or published", text
+            )
+            return
+        self.assertIn("SUPERSEDED", text)
+        self.assertIn("B180 shipped artifact", text)
+
+    def test_the_shipped_digest_matches_the_archive_on_disk(self):
+        """A digest typed into a doc is a claim; check it against the file."""
+        archive = ROOT / "outputs" / "VF2-B180-Release.zip"
+        if not archive.is_file():
+            self.skipTest("no B180 archive in this tree")
+        digest = hashlib.sha256(archive.read_bytes()).hexdigest().upper()
+        self.assertIn(digest, TRANSPARENCY.read_text(encoding="utf-8"))
 
 
 class TestTheDocumentedPropBoundIsReal(unittest.TestCase):
