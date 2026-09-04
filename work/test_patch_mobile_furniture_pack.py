@@ -8106,13 +8106,29 @@ class TextFixStringManagerTests(unittest.TestCase):
                         by_id_role[(achievement_id, "description")]["text"],
                         description,
                     )
-                self.assertEqual(patcher.custom_achievement_string_base(), 0xe23)
+                # Derived, not pinned. These sit after the behaviour-label
+                # table, so every label added or removed moves them -- which
+                # is how a literal here breaks on an unrelated label change.
+                # Assert the contract instead: the block starts one past the
+                # last behaviour label, and each achievement's pair is two ids
+                # apart in order.
+                achievement_base = patcher.custom_achievement_string_base()
                 self.assertEqual(
-                    patcher.custom_achievement_string_ids(0x7F)[1], 0xe62
+                    achievement_base,
+                    patcher.behavior_label_string_id_for(
+                        len(patcher.BEHAVIOR_LABELS) - 1
+                    ) + 4,
                 )
-                self.assertEqual(
-                    patcher.custom_achievement_string_ids(0xA7)[1], 0xeb2
-                )
+                for achievement_id in (0x7F, 0xA7):
+                    short_id, long_id = patcher.custom_achievement_string_ids(
+                        achievement_id
+                    )
+                    self.assertEqual(long_id, short_id + 1)
+                    self.assertEqual(
+                        short_id,
+                        achievement_base
+                        + (achievement_id - patcher.CUSTOM_ACHIEVEMENT_FIRST_ID) * 2,
+                    )
                 reserved = [
                     row for row in manifest["theStringManager"]["strings"]
                     if row.get("source")
