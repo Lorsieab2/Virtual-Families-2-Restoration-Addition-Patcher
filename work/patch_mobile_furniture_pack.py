@@ -13391,6 +13391,61 @@ extern "C" int __cdecl VF2GetOutfitStoreNumAvailable(int itemId) {{
 // VF2RemoveOwnedUpgrade, and these rows must never take the ReturnOne removal
 // route -- they are cancelled by VF2ToggleOneShotUpgrade from the click
 // handler instead.
+// Rows that are checkmarked from LIVE GAME STATE rather than from purchase
+// history, because owning one is a state you can be in and come out of.
+//
+// The store draws its checkmark for any row whose GetNumAvailable is zero, so
+// reporting zero here is what makes the tick appear. The click keeps seeing
+// the real answer through a different call site, so a row stays clickable --
+// which matters for the reversible ones: buying Unlock Everything again
+// restores the locks, and buying a price multiplier again switches to it.
+// Defined later in this unit; declared here because the row check below needs
+// it. Ordering like this is valid Python and invalid C, and no source-reading
+// test catches it -- only compiling the generated file does.
+static bool VF2AllStoreLocksUnlocked();
+
+static bool VF2StoreRowShowsActive(int itemId) {{
+    switch (itemId) {{
+    // The four visible Special Upgrades. Each is checked against the state it
+    // actually sets, the same test VF2GetVisibleSpecialUpgradePrice uses to
+    // make an owned row free.
+    case 0x117: return Money.bankingInterest > 0.1001f;   // Brokerage Account
+    case 0x118: return FoodStore.haveFoodClub != 0;       // Food Club
+    case 0x119: return VF2PersistentHealthPlanEntitlement() != 0;  // Health Plan
+    case 0x11A: return CollectableItem.luckyRockActive != 0;       // Lucky Rock
+    case 0x123: return VF2AllStoreLocksUnlocked();  // Unlock everything
+    default: break;
+    }}
+    // Native House Renovations are ordinary owned upgrades.
+    if (itemId >= 0xE1 && itemId <= 0xEA) {{
+        return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
+    }}
+    // Both renovation catalogues carry their own active byte.
+    if (VF2IsAIBathroom2Style(itemId)) return VF2AIBathroom2IsActive(itemId);
+    if (VF2IsMobileRenovationStyle(itemId)) {{
+        return VF2MobileRenovationIsActive(itemId);
+    }}
+    if (!kVF2EnableB150CheatUpgrades) return false;
+    // Same-sex marriage and the marriage-candidate reroll are toggles.
+    if (itemId == {SAME_SEX_MARRIAGE_ITEM_ID:#x}) {{
+        return VF2SameSexMarriageToggleActive();
+    }}
+    if (itemId == {MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) {{
+        return *VF2CheatToggleActiveByte({MARRIAGE_CANDIDATE_REROLL_ITEM_ID:#x}) != 0;
+    }}
+    // The price multipliers are mutually exclusive, so at most one of these
+    // ticks; Reset Price Multiplier ticks when none of them is in force.
+    if (itemId == 0x128 || itemId == 0x129 || itemId == 0x12A) {{
+        return InventoryManager.HaveUpgrade((EInventoryItem)itemId);
+    }}
+    if (itemId == 0x12C) {{
+        return !InventoryManager.HaveUpgrade((EInventoryItem)0x128) &&
+               !InventoryManager.HaveUpgrade((EInventoryItem)0x129) &&
+               !InventoryManager.HaveUpgrade((EInventoryItem)0x12A);
+    }}
+    return false;
+}}
+
 static bool VF2OneShotUpgradeArmed(int itemId) {{
     if (!kVF2EnableB150CheatUpgrades) return false;
     // The ownership cheats are checkmarked from live game state, not the mask.
@@ -13428,6 +13483,12 @@ extern "C" int __fastcall VF2StoreDrawNumAvailable(
 ) {{
     (void)unused;
     if (VF2OneShotUpgradeArmed(itemId)) return 0;
+    // Rows whose "active" is live game state rather than purchase history --
+    // the Special Upgrades, Unlock Everything, the price multipliers, the
+    // marriage toggles and both renovation catalogues. Reporting zero draws
+    // the checkmark; the click path reads the real answer elsewhere, so a
+    // reversible row stays clickable.
+    if (VF2StoreRowShowsActive(itemId)) return 0;
     return self->GetNumAvailable((EInventoryItem)itemId);
 }}
 
