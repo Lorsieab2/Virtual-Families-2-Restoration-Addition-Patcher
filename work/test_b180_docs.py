@@ -367,5 +367,60 @@ class TestHairstyleIconDocsMatchTheConstants(unittest.TestCase):
         )
 
 
+class TestThePropBlockerIsNamedAccurately(unittest.TestCase):
+    """The props row must not blame missing artwork that exists.
+
+    The row previously said the two props "have no desktop art". Images/meal.png
+    ships with the base game and sits in the runtime payload, so meal art is
+    not what blocks this. The real obstacle is the SetProp dispatch table --
+    every case claimed, every jump entry a DIR32 relocation -- plus the absence
+    of a drinks sprite.
+
+    That distinction decides what the owner is being asked. "The art does not
+    exist" invites them to supply art that would still not render; "the
+    dispatch table is full" is the actual question.
+    """
+
+    LEDGER = ROOT / "docs" / "REQUEST_LEDGER.md"
+    MEAL = ROOT / "work" / "vanilla_runtime_payload" / "Images" / "meal.png"
+
+    def _row(self):
+        for line in self.LEDGER.read_text(encoding="utf-8").splitlines():
+            if line.startswith("|") and "Picnic and patio table props" in line:
+                return line
+        self.fail("the picnic/patio props row is gone from the ledger")
+
+    def test_the_row_does_not_claim_the_meal_art_is_missing(self):
+        """The phrase may appear only as a quotation of the old claim.
+
+        A blunt "this string is absent" check cannot tell an assertion from a
+        correction that quotes what it is correcting -- it failed on the very
+        sentence retracting the claim. So the requirement is that wherever the
+        phrase appears, the retraction appears too.
+        """
+        row = self._row()
+        if "have no desktop art" in row:
+            self.assertIn(
+                "previously claimed", row,
+                "the row still asserts the props have no desktop art; meal.png "
+                "ships with the base game, so that must be a quoted retraction "
+                "rather than a live claim",
+            )
+
+    def test_the_row_names_the_real_obstacle(self):
+        row = self._row()
+        self.assertIn("meal.png", row, "the row should say what art does exist")
+        self.assertIn("relocation", row, "the row should name the dispatch-table obstacle")
+
+    def test_the_meal_art_really_is_in_the_payload(self):
+        """The claim above is only safe while this holds."""
+        if not self.MEAL.parent.is_dir():
+            self.skipTest("vanilla_runtime_payload is a gitignored build input")
+        self.assertTrue(
+            self.MEAL.is_file(),
+            "the ledger says meal.png is in the payload; it is not",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
