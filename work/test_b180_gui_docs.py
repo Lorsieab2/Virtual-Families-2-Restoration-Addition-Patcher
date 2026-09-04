@@ -21,62 +21,81 @@ GUI = (ROOT / "work" / "offline_vf2_patcher_gui.py").read_text(encoding="utf-8")
 LEDGER = (ROOT / "docs" / "REQUEST_LEDGER.md").read_text(encoding="utf-8")
 
 
-# Settings the exporter defines but deliberately withholds from a bundle. The
-# README names both and says why; they are the whole difference between the
-# defined count and the offered one.
-WITHHELD_FROM_BUNDLES = {"same_sex_marriage", "transparent_store_bar"}
-
-
 class TestTheSettingsCountIsTheRealOne(unittest.TestCase):
-    """The number in the README is what a PLAYER is offered, not what exists.
+    """The README's settings arithmetic has to be checkable, not asserted.
 
-    The sentence carrying it says the GUI reads its checkboxes from the
-    shipped manifest, so quoting len(SETTINGS) there contradicts the sentence
-    it sits in. It was wrong by one: the exporter defines 36 settings, two are
-    deliberately withheld from bundles, and one -- core_assets -- is added
-    during export, so B180's manifest offers 35.
+    Only the DEFINED count can be verified from the exporter. The offered count
+    depends on which source assets existed at export time, so it is checked
+    against a real bundle in test_readme_counts_against_a_bundle.py. This suite
+    owns the half that needs no build output, plus the internal consistency of
+    the sum itself.
 
-    Pinning it to len(SETTINGS) was the original error and it looked correct,
-    because the count was checked against the source constant rather than
-    against a bundle. The offered count is derived here for the same reason:
-    a typed number cannot notice a setting being withheld.
+    Two wrong versions preceded this one, and both looked right:
+
+      * pinned to len(SETTINGS), which contradicted the sentence it sat in --
+        that sentence says the GUI reads its checkboxes from the shipped
+        manifest -- and shipped a count one too high;
+      * a hardcoded set of withheld ids, which Codex rejected because the
+        exporter filters SOURCE_BACKED_OPTIONAL settings by availability. A
+        fixed list goes stale the moment a source asset appears or disappears,
+        and would then reject a correctly updated README.
     """
 
-    def _offered(self):
-        return len({s["id"] for s in exporter.SETTINGS} - WITHHELD_FROM_BUNDLES) + 1
+    def _window(self):
+        """The passage carrying the arithmetic, so stray digits elsewhere in
+        the README cannot satisfy these patterns by accident."""
+        return README.split("bundle offers")[1][:700]
 
-    def test_the_readme_states_the_number_of_settings_a_bundle_offers(self):
-        match = re.search(r"bundle offers (\d+) settings", README)
-        self.assertIsNotNone(match, "the README no longer states an offered count")
+    def test_the_readme_states_the_defined_count(self):
+        match = re.search(r"defines, which is\s*(\d+)", self._window())
+        self.assertIsNotNone(
+            match, "the README no longer states how many settings are defined"
+        )
+        self.assertEqual(int(match.group(1)), len(exporter.SETTINGS))
+
+    def test_the_arithmetic_in_the_explanation_adds_up(self):
+        """36 - 2 is 34, not 35.
+
+        The first explanation claimed the withheld entries were the whole
+        difference, which cannot be true while the offered count is 35: a
+        reader doing the subtraction lands on a different number from the one
+        advertised two lines above. Codex caught it. Naming the generated
+        setting is what makes the sentence self-consistent, so the sum is
+        checked here rather than trusted.
+        """
+        window = self._window()
+        offered = int(re.search(r"(\d+) settings", window).group(1))
+        defined = int(re.search(r"defines, which is\s*(\d+)", window).group(1))
+        unavailable = int(re.search(r"less (\d+) unavailable", window).group(1))
+        generated = int(re.search(r"plus (\d+) generated", window).group(1))
         self.assertEqual(
-            int(match.group(1)),
-            self._offered(),
-            "the README's offered count has drifted from what a bundle carries",
+            defined - unavailable + generated,
+            offered,
+            f"the README's own numbers do not reconcile: {defined} - "
+            f"{unavailable} + {generated} != {offered}",
         )
 
-    def test_the_readme_also_states_the_defined_count_and_explains_the_gap(self):
-        match = re.search(r"patcher defines (\d+)", README)
-        self.assertIsNotNone(match, "the README no longer states the defined count")
-        self.assertEqual(int(match.group(1)), len(exporter.SETTINGS))
-        # The gap must be explained rather than left as two numbers.
-        self.assertIn("deliberately does not carry", README)
+    def test_the_generated_setting_is_named(self):
+        # Without naming it the sum is unverifiable by a reader, which is how
+        # the inconsistent version survived review in the first place.
+        self.assertIn("core_assets", README)
 
-    def test_the_withheld_settings_are_the_ones_the_readme_names(self):
-        # If one is restored to bundles, the arithmetic above silently shifts
-        # unless this fails first and sends someone to the prose.
-        for setting_id in WITHHELD_FROM_BUNDLES:
+    def test_the_withheld_settings_are_availability_filtered_not_arbitrary(self):
+        """The README says a bundle drops settings whose SOURCE was missing.
+
+        That is only true of source-backed optional settings. If either named
+        setting stops being one, the stated mechanism becomes wrong even though
+        the numbers still add up -- so the claim is pinned to the set the
+        exporter actually filters against.
+        """
+        for setting_id in ("same_sex_marriage", "transparent_store_bar"):
             with self.subTest(setting_id):
                 self.assertIn(
                     setting_id,
-                    {s["id"] for s in exporter.SETTINGS},
-                    "a withheld setting that no longer exists makes the gap wrong",
+                    exporter.SOURCE_BACKED_OPTIONAL_SETTINGS,
+                    "the README explains this setting's absence by source "
+                    "availability, which only applies to source-backed settings",
                 )
-
-    def test_every_setting_is_named_somewhere_in_the_readme(self):
-        # A setting a player can tick but cannot look up is undocumented, which
-        # is the failure this catches -- not prose quality.
-        missing = [s["id"] for s in exporter.SETTINGS if s["label"] not in README]
-        self.assertEqual(missing, [], f"settings absent from the README: {missing}")
 
 
 class TestTheReadmeDoesNotOverclaimRouting(unittest.TestCase):

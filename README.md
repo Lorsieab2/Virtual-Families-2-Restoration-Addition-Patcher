@@ -95,8 +95,14 @@ The load path is mostly extended by wrappers that run the native `LoadState` fir
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
 the release you downloaded. B180's bundle offers 35 settings, grouped the way
-the GUI groups them. The patcher defines 36; the difference is the two entries
-named below that the bundle deliberately does not carry.
+the GUI groups them.
+
+That number is not simply the count of settings the patcher defines, which is
+36. A bundle drops any optional setting whose source assets were not available
+when it was exported -- in B180 that is the two named just below -- and the
+export adds one setting of its own, `core_assets`, which copies the support
+files and generated assets that are not tied to a single feature. So 36 defined,
+less 2 unavailable, plus 1 generated, is the 35 the GUI shows.
 
 Two of the entries below are described for completeness but are **not** offered
 by the bundle: **Allow Same-Sex Marriage** (reachable in game through its Cheat
