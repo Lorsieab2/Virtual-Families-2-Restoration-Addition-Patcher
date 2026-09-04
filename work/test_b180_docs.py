@@ -11,7 +11,6 @@ seven rely on the game's native hotspot path and have NOT been confirmed by a
 player. A doc that blurs the two would be claiming something the build cannot
 support.
 """
-import re
 import unittest
 from pathlib import Path
 
@@ -76,6 +75,61 @@ class TestTheRoutedAndUnroutedSplitIsReal(unittest.TestCase):
             if name in UNROUTED:
                 with self.subTest(item=name):
                     self.assertIn(f"0x{item_id:03X}", row)
+
+
+class TestTheEmittedDispatcherAgreesWithTheDocs(unittest.TestCase):
+    """Route coverage is read from the generated C, never from the generator.
+
+    Routes are written as __VF2_*__ placeholders that only resolve at emit
+    time, so the Python source cannot answer this. A placeholder that failed to
+    substitute would still read correctly in the generator and emit garbage.
+    """
+
+    def setUp(self):
+        if not EMITTED.is_file():
+            self.skipTest(f"{EMITTED.name} has not been generated in this tree")
+        text = EMITTED.read_text(encoding="utf-8")
+        start = text.index(
+            "bool const theMainScene::VF2HandleDropOnMobileFurniture"
+        )
+        self.dispatcher = text[start:text.index("\n}\n", start)]
+        self.text = text
+
+    def test_no_placeholder_survived_into_the_dispatcher(self):
+        # The failure this guards against emits the placeholder literally and
+        # still passes every test that reads the generator.
+        self.assertNotIn("__VF2_", self.dispatcher)
+
+    def test_the_four_directly_routed_items_are_present(self):
+        items = _added_items()
+        for name in (
+            "InvisiblePicnicTable",
+            "InvisiblePatioTable",
+            "InvisibleSpaLounger",
+            "SpaLoungerStd",
+        ):
+            with self.subTest(item=name):
+                self.assertIn(f"{items[name]:#x}".lower(), self.dispatcher.lower())
+
+    def test_the_invisible_lounger_is_routed_through_the_chaise_family(self):
+        # It has no `candidate ==` line on purpose: folding it into the chaise
+        # test means it picks up chaise behaviours added later too.
+        items = _added_items()
+        self.assertIn("VF2IsMobileChaise", self.dispatcher)
+        start = self.text.index("static bool VF2IsMobileChaise")
+        chaise = self.text[start:self.text.index("\n}", start)]
+        self.assertIn(f"{items['InvisibleLounger']:#x}".lower(), chaise.lower())
+
+    def test_the_seven_stock_donor_items_have_no_dispatcher_route(self):
+        # Not a defect -- they are handled by the native hotspot path. Pinned
+        # so that adding a route here without updating the docs fails.
+        items = _added_items()
+        for name in sorted(UNROUTED):
+            with self.subTest(item=name):
+                self.assertNotIn(
+                    f"candidate == {items[name]:#x}".lower(),
+                    self.dispatcher.lower(),
+                )
 
 
 class TestTransparencyLogMatchesTheBuild(unittest.TestCase):
