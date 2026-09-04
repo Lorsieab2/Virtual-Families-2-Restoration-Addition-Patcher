@@ -391,6 +391,21 @@ binary-contract tests:
 python -m unittest work.test_offline_vf2_patcher work.test_export_offline_patch_bundle work.test_offline_vf2_patcher_gui work.test_patch_mobile_furniture_pack
 ```
 
+Three suites exist in both `work/` and `tests/`, and a test asserts the two
+copies stay identical -- `tests/` differs only in importing the shipped `src/`
+copy rather than `work/`. Editing one and not the other fails with "has drifted
+from"; sync the pair rather than editing either alone.
+
+Generated C is the artifact that counts, not the Python that writes it. Some
+templates interpolate as f-strings and others are raw strings carrying named
+`__VF2_*__` placeholders substituted afterwards, so mixing the two conventions
+emits a placeholder literally while every source-reading test still passes.
+Compile the single generated file (`cl /c /EHsc`) after changing it, and read
+route coverage out of `work/patched_mobile_furniture_pack_objs/*.cpp` rather
+than the generator. Text written with `encoding="ascii"` -- the bundle's
+patcher README among it -- fails at export time and nowhere earlier, so assert
+against a bundle you actually wrote.
+
 The `work/` binary-contract tests additionally need the gitignored local build
 support directories (`work/desktop_obj_files`, `work/vanilla_runtime_payload`,
 `work/generated_import_libs`, `work/desktop_runtime_dlls`); without them those
