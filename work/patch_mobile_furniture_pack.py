@@ -15208,9 +15208,28 @@ static bool VF2MarriagePair(CVillager *&first, CVillager *&second) {
             first = VF2VillagerByPersistentId(*(int *)(record + 0x2C));
             second = VF2VillagerByPersistentId(*(int *)(record + 0x104));
             if (first && second && first != second) return true;
-            // Both parent records exist, so a dead/absent spouse must not be
-            // replaced by an adult child from the live villager array.
-            return false;
+            // Exactly one recorded parent still resolves to a living resident:
+            // this household is widowed. The record keeps naming the dead
+            // spouse -- nothing clears it -- so returning false here left a
+            // widowed adult who accepts a same-sex proposal permanently
+            // unable to finalize, because the fallback below never ran and
+            // native Accept cannot write the record for a same-sex pair.
+            //
+            // Fall through to the fallback instead. It is not a guess: it
+            // requires the same-sex toggle, excludes recorded children of this
+            // generation, and pairs only when exactly two qualifying adults
+            // are resident. A widowed adult living alone yields one and is
+            // correctly refused; a widowed adult plus a newly accepted
+            // candidate yields the two who actually married.
+            //
+            // Only the widowed shape falls through. If NEITHER resolves the
+            // household has no living recorded parent at all, and if both
+            // resolve to the same villager the record is malformed -- neither
+            // is a marriage this should attempt to reconstruct.
+            bool widowed = (first != 0) != (second != 0);
+            first = 0;
+            second = 0;
+            if (!widowed) return false;
         }
     }
 
