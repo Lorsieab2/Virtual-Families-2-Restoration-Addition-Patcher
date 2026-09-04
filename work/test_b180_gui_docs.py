@@ -37,6 +37,42 @@ class TestTheSettingsCountIsTheRealOne(unittest.TestCase):
         self.assertEqual(missing, [], f"settings absent from the README: {missing}")
 
 
+class TestTheReadmeDoesNotOverclaimRouting(unittest.TestCase):
+    """The routed/unrouted split has to survive contact with the prose.
+
+    The first draft of the visible-furniture entry said B180 gave all four
+    items a route. Only SpaLoungerStd is routed through this patcher's
+    dispatcher; the other three rely on the game's native hotspot path and are
+    unconfirmed. Claiming otherwise would promise a player something the build
+    cannot support, so the distinction is pinned rather than trusted to prose.
+    """
+
+    UNROUTED_VISIBLE = ("Exercise Bike", "Home Gym System", "Ping-Pong Table")
+
+    def test_the_unconfirmed_items_are_named_as_unconfirmed(self):
+        entry = next(
+            line for line in README.splitlines()
+            if line.startswith("- **Four new visible furniture items**")
+        )
+        for name in self.UNROUTED_VISIBLE:
+            with self.subTest(name):
+                self.assertIn(name, entry)
+        self.assertIn(
+            "does not claim they do", entry,
+            "the entry must not promise behaviour no player has confirmed",
+        )
+
+    def test_the_routed_visible_item_is_still_the_only_one(self):
+        # Reads the same source of truth the sibling docs suite uses, so the
+        # prose and the route table cannot drift apart independently.
+        docs = (ROOT / "work" / "test_b180_docs.py").read_text(encoding="utf-8")
+        routed = re.search(r"ROUTED = \{(.*?)\}", docs, re.S).group(1)
+        self.assertIn("SpaLoungerStd", routed)
+        for absent in ("ExerciseBikeStd", "HomeGymSystemStd", "PingPongTableStd"):
+            with self.subTest(absent):
+                self.assertNotIn(absent, routed)
+
+
 class TestTheWaitWindowClaimsHold(unittest.TestCase):
     @staticmethod
     def _code_of(name):
