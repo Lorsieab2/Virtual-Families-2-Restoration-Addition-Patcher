@@ -18,6 +18,13 @@ from pathlib import Path
 import patch_mobile_furniture_pack as patcher
 
 ROOT = Path(__file__).resolve().parents[1]
+
+# The published B180 prerelease asset. A fixed historical fact: it is what was
+# uploaded, downloaded back and confirmed byte-for-byte, so it is checkable
+# from the repository alone without needing the archive present.
+PUBLISHED_SHA256 = (
+    "31195169252C441AF2C77EDA3AC660E42F2784049F00FE69D75DBF8C8FCA21B7"
+)
 README = ROOT / "README.md"
 TRANSPARENCY = ROOT / "docs" / "Transparency Log.txt"
 LEDGER = ROOT / "docs" / "REQUEST_LEDGER.md"
@@ -230,6 +237,12 @@ class TestTransparencyLogMatchesTheBuild(unittest.TestCase):
         self.assertIn("No B180 bundle is linked, packaged, or published", text)
         self.assertIn("SUPERSEDED", text)
         self.assertIn("B180 shipped artifact", text)
+        # The correction must be CHECKABLE, not a bare admission that the
+        # earlier line was wrong. Naming the published SHA-256 is what lets a
+        # reader confirm which artifact the correction is about. This runs on
+        # any checkout; the separate digest test below can only compare
+        # against a local file and therefore skips without one.
+        self.assertIn(PUBLISHED_SHA256, text)
 
     def test_the_shipped_digest_matches_the_archive_on_disk(self):
         """A digest typed into a doc is a claim; check it against the file."""
