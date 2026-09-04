@@ -234,15 +234,24 @@ class TestTransparencyLogMatchesTheBuild(unittest.TestCase):
         the repository alone.
         """
         text = TRANSPARENCY.read_text(encoding="utf-8")
-        self.assertIn("No B180 bundle is linked, packaged, or published", text)
-        self.assertIn("SUPERSEDED", text)
-        self.assertIn("B180 shipped artifact", text)
+        claim = "No B180 bundle is linked, packaged, or published"
+        self.assertIn(claim, text, "the original claim must be kept for the record")
+
+        # Scope every remaining assertion to the passage that follows the
+        # claim. Checking the whole file would accept a SUPERSEDED marker or a
+        # digest sitting in an unrelated entry -- the correction would then be
+        # satisfied by text that says nothing about it, which is the same
+        # wrong-authority mistake as reading a count off the exporter instead
+        # of the bundle.
+        correction = text.split(claim, 1)[1].split(chr(10) + "B180 ", 1)[0]
+        self.assertIn("SUPERSEDED", correction,
+                      "the claim is false now and must carry its correction beside it")
         # The correction must be CHECKABLE, not a bare admission that the
         # earlier line was wrong. Naming the published SHA-256 is what lets a
-        # reader confirm which artifact the correction is about. This runs on
-        # any checkout; the separate digest test below can only compare
-        # against a local file and therefore skips without one.
-        self.assertIn(PUBLISHED_SHA256, text)
+        # reader confirm WHICH artifact it is about.
+        self.assertIn(PUBLISHED_SHA256, correction,
+                      "the correction must identify the published artifact by digest")
+        self.assertIn("B180 shipped artifact", text)
 
     def test_the_shipped_digest_matches_the_archive_on_disk(self):
         """A digest typed into a doc is a claim; check it against the file."""
