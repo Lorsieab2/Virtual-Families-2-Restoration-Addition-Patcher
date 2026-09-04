@@ -1568,18 +1568,26 @@ MOBILE_FURNITURE_IMPLEMENTED_ROUTE_SPECS = (
     },
 )
 INVISIBLE_SPA_LOUNGER_ITEM_ID = 0x32F
+SPA_LOUNGER_ITEM_ID = 0x330
+INVISIBLE_PICNIC_TABLE_ITEM_ID = 0x328
+INVISIBLE_PATIO_TABLE_ITEM_ID = 0x329
+INVISIBLE_LOUNGER_ITEM_ID = 0x32B
 MOBILE_FURNITURE_MANUAL_BINDING_SPECS = (
     {
         # Checked before the chaise family: the spa lounger shares the chaise
         # object, so the ordinary lounger route would otherwise swallow it.
         "name": "invisible_spa_lounger",
-        "item_ids": (INVISIBLE_SPA_LOUNGER_ITEM_ID,),
+        # Both loungers -- invisible and visible -- are the same item with
+        # different art, so they share one handler and one route.
+        "item_ids": (INVISIBLE_SPA_LOUNGER_ITEM_ID, SPA_LOUNGER_ITEM_ID),
         "handler": "VF2HandleMobileInvisibleSpaLounger",
-        "literal_ids": (INVISIBLE_SPA_LOUNGER_ITEM_ID,),
+        "literal_ids": (INVISIBLE_SPA_LOUNGER_ITEM_ID, SPA_LOUNGER_ITEM_ID),
     },
     {
         "name": "chaise",
-        "item_ids": MOBILE_CHAISE_ITEM_IDS,
+        # The Invisible Lounger is folded into VF2IsMobileChaise itself, so it
+        # inherits every chaise behaviour rather than needing its own route.
+        "item_ids": tuple(MOBILE_CHAISE_ITEM_IDS) + (INVISIBLE_LOUNGER_ITEM_ID,),
         "handler": "VF2HandleMobileChaise",
         "condition_marker": "VF2IsMobileChaise(candidate)",
         "literal_ids": (),
@@ -1592,15 +1600,17 @@ MOBILE_FURNITURE_MANUAL_BINDING_SPECS = (
     },
     {
         "name": "patio_table",
-        "item_ids": (MOBILE_PATIO_TABLE_ITEM_ID,),
+        # The Invisible Patio Table shares this handler and this route.
+        "item_ids": (MOBILE_PATIO_TABLE_ITEM_ID, INVISIBLE_PATIO_TABLE_ITEM_ID),
         "handler": "VF2HandleMobilePatioTable",
-        "literal_ids": (MOBILE_PATIO_TABLE_ITEM_ID,),
+        "literal_ids": (MOBILE_PATIO_TABLE_ITEM_ID, INVISIBLE_PATIO_TABLE_ITEM_ID),
     },
     {
         "name": "picnic_table",
-        "item_ids": (MOBILE_PICNIC_TABLE_ITEM_ID,),
+        # The Invisible Picnic Table shares this handler and this route.
+        "item_ids": (MOBILE_PICNIC_TABLE_ITEM_ID, INVISIBLE_PICNIC_TABLE_ITEM_ID),
         "handler": "VF2HandleMobilePicnicTable",
-        "literal_ids": (MOBILE_PICNIC_TABLE_ITEM_ID,),
+        "literal_ids": (MOBILE_PICNIC_TABLE_ITEM_ID, INVISIBLE_PICNIC_TABLE_ITEM_ID),
     },
     {
         "name": "birthday_cake",
@@ -3964,6 +3974,27 @@ NEW_FURNITURE_ITEMS = [
         "donor_fmap": "PoolTableStd.png.fmap",
         "section_name": "Furniture/Placeable",
     },
+    {
+        # The visible sibling of the Invisible Spa Lounger: same donor, same
+        # behaviour map, same drop handler, just with art. Both route to
+        # VF2HandleMobileInvisibleSpaLounger, so the give/receive treatments
+        # are identical -- the only difference is that you can see this one.
+        "name": "SpaLoungerStd",
+        "item_id": 0x330,
+        "donor": 0x26F,          # Chaise, as the invisible one uses
+        "list": "gFurniture5",
+        "price": 250,            # the invisible sibling's own price
+        "lock_generation": 12,
+        # Type 5 like the donor and like both invisible loungers. Type 1
+        # belongs to the pools alone, and using it here had native furniture
+        # logic treating a chaise as a pool.
+        "item_type": 5,
+        "short_description": "Spa Lounger",
+        "long_description": "This lounger allows villagers to \"give\" and \"receive\" spa treatments!",
+        "art_png": "SpaLoungerStd.png",
+        "donor_fmap": "Chaise_brown.png.fmap",
+        "section_name": "Furniture/Placeable",
+    },
 ]
 
 # The Ping-Pong Table's item id, referenced by the behaviour-label wrapper that
@@ -5914,6 +5945,21 @@ def outfit_body_for_item(item_id):
 
 def outfit_store_entry_index(gender, body_value):
     return OUTFIT_STORE_GENDERS.index(gender) * len(OUTFIT_STORE_BODY_VALUES) + OUTFIT_STORE_BODY_VALUES.index(body_value)
+
+
+def furniture_item_id_by_name(name):
+    """Item id of an added furniture record, by its record name.
+
+    Drop routes are matched on item id, so they must never be written as
+    literals: a renumbering would leave a route pointing at the wrong item, or
+    at nothing at all -- which is exactly how every added item ended up inert
+    while its record and behaviour map were perfectly correct.
+    """
+    for table in (NEW_FURNITURE_ITEMS, INVISIBLE_OUTDOOR_ITEMS):
+        for item in table:
+            if item["name"] == name:
+                return item["item_id"]
+    raise KeyError(f"no added furniture record named {name!r}")
 
 
 def head_item_id_for_head(gender, head_value):
@@ -24843,12 +24889,23 @@ def _parse_mobile_route_item_id(value, context):
         item_id = value if isinstance(value, int) else int(str(value), 0)
     except (TypeError, ValueError) as exc:
         raise RuntimeError(f"{context} has an invalid item ID: {value!r}") from exc
-    # The mobile furniture band, plus the one invisible item that legitimately
-    # routes through this dispatcher. Named explicitly rather than widening the
-    # band, so a typo in a mobile route id is still caught.
+    # The mobile furniture band, plus the items this patcher adds that
+    # legitimately route through this dispatcher. Each is named explicitly
+    # rather than widening the band, so a typo in a mobile route id is still
+    # caught -- which is the whole point of the check.
+    #
+    # These additions are all cases where an added item shares a donor's
+    # behaviour: the invisible tables and lounger are the stock items without
+    # art, and the visible Spa Lounger is the invisible one with art.
     if not (
         0x2AA <= item_id <= 0x2E8
-        or item_id == INVISIBLE_SPA_LOUNGER_ITEM_ID
+        or item_id in (
+            INVISIBLE_SPA_LOUNGER_ITEM_ID,
+            SPA_LOUNGER_ITEM_ID,
+            INVISIBLE_PICNIC_TABLE_ITEM_ID,
+            INVISIBLE_PATIO_TABLE_ITEM_ID,
+            INVISIBLE_LOUNGER_ITEM_ID,
+        )
     ):
         raise RuntimeError(f"{context} has out-of-scope item ID {item_id:#x}")
     return item_id
@@ -25446,6 +25503,11 @@ static int VF2FurnitureSlotUnderVillager(CVillager &villager)
 
 static bool VF2IsMobileChaise(int item)
 {
+    // The Invisible Lounger is a chaise with no art: same donor, same
+    // behaviour map, same handler. Folding it into the family here rather
+    // than giving it a route of its own means it picks up every chaise
+    // behaviour automatically, including any added later.
+    if (item == __VF2_INVISIBLE_LOUNGER__) return true;
     return item >= 0x2DE && item <= 0x2E1;
 }
 
@@ -27596,12 +27658,43 @@ __VF2_COMPUTER_DROP_DISPATCH__
     // ahead of that gate rather than quietly doing nothing when the setting is
     // off. It is manual-drop only and adds no autonomous behaviour, so nothing
     // about it depends on the ported-furniture routes below.
-    if (candidate == 0x32F) return VF2HandleMobileInvisibleSpaLounger(villager);
+    // Both spa loungers, invisible and visible, are the same item with
+    // different art. Routed ahead of the Mobile Furniture Behaviors gate
+    // because their store descriptions promise the treatments
+    // unconditionally, and ahead of the chaise family because they share the
+    // chaise object and the ordinary lounger route would swallow them.
+    if (candidate == 0x32F || candidate == __VF2_SPA_LOUNGER_ITEM_ID__) {
+        return VF2HandleMobileInvisibleSpaLounger(villager);
+    }
+
+    // Added furniture inherits its DONOR's drop behaviour.
+    //
+    // This dispatcher matches on item id, and until now only 0x32F was listed
+    // -- so every other item this patcher adds did nothing at all when a
+    // villager was dropped on it, however complete its record and behaviour
+    // map were. That is why the Exercise Bike, the Home Gym System, the
+    // Ping-Pong Table and every invisible item were inert: nothing ever asked
+    // them to act.
+    //
+    // Each id below routes to the handler its donor already uses, so the
+    // added item behaves exactly like the base-game furniture it was modelled
+    // on. These sit ahead of the Mobile Furniture Behaviors gate because they
+    // are this patcher's own items, not ported mobile rows, and that setting
+    // says in so many words that invisible and custom furniture is outside
+    // its scope.
+
     if (gVF2MobileFurnitureBehaviors == 0) return false;
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
-    if (candidate == 0x2E6) return VF2HandleMobilePatioTable(villager);
-    if (candidate == 0x2E8) return VF2HandleMobilePicnicTable(villager);
+    // The invisible tables are the same items without art -- same donor,
+    // same behaviour map, same handler -- so they join the stock route
+    // rather than getting one of their own.
+    if (candidate == 0x2E6 || candidate == __VF2_INVISIBLE_PATIO_TABLE__) {
+        return VF2HandleMobilePatioTable(villager);
+    }
+    if (candidate == 0x2E8 || candidate == __VF2_INVISIBLE_PICNIC_TABLE__) {
+        return VF2HandleMobilePicnicTable(villager);
+    }
     if (candidate == 0x2DC) return VF2HandleMobileBirthdayCake(villager);
     if (candidate == 0x2DD) return VF2HandleMobileBirthdayPresents(villager);
     if (candidate == 0x2DA) return VF2HandleMobileBirthdayBalloons(villager);
@@ -27640,6 +27733,19 @@ __VF2_COMPUTER_DROP_DISPATCH__
     helper_source = helper_source.replace(
         "__VF2_COMPUTER_DROP_DISPATCH__", computer_drop_dispatch
     )
+    # Added furniture routes to its donor's drop handler. The ids come from
+    # the item tables so a renumbering cannot leave a route pointing at the
+    # wrong item -- or, worse, silently at nothing, which is what left every
+    # one of these inert.
+    for _placeholder, _item_name in (
+        ("__VF2_SPA_LOUNGER_ITEM_ID__", "SpaLoungerStd"),
+        ("__VF2_INVISIBLE_PICNIC_TABLE__", "InvisiblePicnicTable"),
+        ("__VF2_INVISIBLE_PATIO_TABLE__", "InvisiblePatioTable"),
+        ("__VF2_INVISIBLE_LOUNGER__", "InvisibleLounger"),
+    ):
+        helper_source = helper_source.replace(
+            _placeholder, f"{furniture_item_id_by_name(_item_name):#x}"
+        )
     helper_source = helper_source.replace("__VF2_NAP_FALLBACK__", nap_fallback)
     helper_source = helper_source.replace("__VF2_REST_FALLBACK__", rest_fallback)
     helper_source = helper_source.replace(
@@ -27740,7 +27846,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
         },
         "implemented_families": [{
             "name": "mobile lounge chairs",
-            "item_ids": [hex(item) for item in MOBILE_CHAISE_ITEM_IDS],
+            "item_ids": [hex(item) for item in tuple(MOBILE_CHAISE_ITEM_IDS) + (INVISIBLE_LOUNGER_ITEM_ID,)],
             "label": "Relaxing on lounger",
             "object": hex(MOBILE_CHAISE_OBJECT),
             "manual_drop_only": False,
@@ -27787,7 +27893,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "desktop_implementation": "exact direct plan-sequence port",
         }, {
             "name": "mobile Patio Table",
-            "item_ids": [hex(MOBILE_PATIO_TABLE_ITEM_ID)],
+            "item_ids": [hex(MOBILE_PATIO_TABLE_ITEM_ID), hex(INVISIBLE_PATIO_TABLE_ITEM_ID)],
             "labels": [
                 "Getting some drinks",
                 "Having a refreshing drink",
@@ -27827,7 +27933,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "stock_tables_extended": False,
         }, {
             "name": "mobile Picnic Table",
-            "item_ids": [hex(MOBILE_PICNIC_TABLE_ITEM_ID)],
+            "item_ids": [hex(MOBILE_PICNIC_TABLE_ITEM_ID), hex(INVISIBLE_PICNIC_TABLE_ITEM_ID)],
             "labels": [
                 "Preparing a picnic",
                 "Having a picnic",
@@ -28077,7 +28183,7 @@ __VF2_COMPUTER_DROP_DISPATCH__
             "stock_tables_extended": False,
         }, {
             "name": "invisible spa lounger",
-            "item_ids": [hex(INVISIBLE_SPA_LOUNGER_ITEM_ID)],
+            "item_ids": [hex(INVISIBLE_SPA_LOUNGER_ITEM_ID), hex(SPA_LOUNGER_ITEM_ID)],
             "labels": [
                 "Getting pampered",
                 "Getting a manicure",
@@ -28602,7 +28708,8 @@ def validate_mobile_furniture_runtime_bindings(manifest):
     actual_manual_ids.update(chaise_spec["item_ids"])
     if actual_manual_ids != expected_manual_ids:
         raise RuntimeError(
-            "Manual mobile furniture bindings do not cover exactly the 35 "
+            "Manual mobile furniture bindings do not cover exactly the "
+            f"{len(expected_manual_ids)} "
             f"implemented IDs: {[hex(item_id) for item_id in sorted(actual_manual_ids)]}"
         )
     expected_handlers = Counter(
@@ -28890,7 +28997,14 @@ def validate_mobile_furniture_runtime_bindings(manifest):
             for value in family["item_ids"]
         }
         autonomous_item_ids.update(item_ids)
-        if item_ids == set(MOBILE_CHAISE_ITEM_IDS):
+        # The chaise family, with or without the Invisible Lounger folded in.
+        # That item is a chaise with no art -- same donor, same behaviour map,
+        # same handler -- so it belongs to this family rather than forming one
+        # of its own, and the family is skipped here for the same reason it
+        # always was.
+        if item_ids == set(MOBILE_CHAISE_ITEM_IDS) or item_ids == (
+            set(MOBILE_CHAISE_ITEM_IDS) | {INVISIBLE_LOUNGER_ITEM_ID}
+        ):
             continue
         object_id = int(str(family["object"]), 0)
         behavior_ids = family.get("mobile_behavior_ids")
