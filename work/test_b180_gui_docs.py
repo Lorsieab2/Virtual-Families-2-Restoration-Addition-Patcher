@@ -145,6 +145,33 @@ class TestEveryB180RequestHasALedgerRow(unittest.TestCase):
                 self.assertIn(token, LEDGER)
 
 
+class TestTheDedupClaimIsEvidenced(unittest.TestCase):
+    """The log claims payload dedup predates B180. That has to stay checkable.
+
+    It matters which way round this is recorded. If the entry read as "our fix
+    broke a verification", a later reader would be invited to distrust the fix
+    rather than the check. The claim that the collapsing is long-standing is
+    what makes the by-name check the defect, so the entry names the release and
+    the files that prove it.
+    """
+
+    def test_the_entry_names_a_release_predating_b180(self):
+        entry = TRANSPARENCY.split("B180 payload deduplication")[1]
+        entry = entry.split(chr(10) + "B180 ")[0]
+        self.assertIn("B176", entry, "the claim needs the release that evidences it")
+        self.assertIn(
+            "CouchAquaStd", entry,
+            "name a collapsed file, so the claim can be re-checked rather than "
+            "taken on trust",
+        )
+
+    def test_the_entry_states_the_check_got_stricter_not_looser(self):
+        entry = TRANSPARENCY.split("B180 payload deduplication")[1]
+        entry = entry.split(chr(10) + "B180 ")[0]
+        self.assertIn("more sensitive", entry)
+        self.assertIn("B179", entry, "a revised check must cite what it was re-validated against")
+
+
 class TestTheSuiteSkipClaimHolds(unittest.TestCase):
     def test_the_log_records_why_tests_skip_and_they_still_do(self):
         self.assertIn("B180 test suite: inputs a checkout cannot have", TRANSPARENCY)
