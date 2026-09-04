@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 README = (ROOT / "README.md").read_text(encoding="utf-8")
 TRANSPARENCY = (ROOT / "docs" / "Transparency Log.txt").read_text(encoding="utf-8")
 GUI = (ROOT / "work" / "offline_vf2_patcher_gui.py").read_text(encoding="utf-8")
+LEDGER = (ROOT / "docs" / "REQUEST_LEDGER.md").read_text(encoding="utf-8")
 
 
 class TestTheSettingsCountIsTheRealOne(unittest.TestCase):
@@ -121,6 +122,27 @@ class TestTheWaitWindowClaimsHold(unittest.TestCase):
             "the parent-relative branch must not clamp; it throws the window "
             "onto the primary monitor on a multi-monitor desktop",
         )
+
+
+class TestEveryB180RequestHasALedgerRow(unittest.TestCase):
+    """The ledger's own closing rule is that no request is silently omitted.
+
+    A shipped change with no row is exactly the omission that rule exists to
+    prevent, and it is invisible: nothing fails, the feature works, and the
+    only trace is that a later audit cannot find where it was asked for. Both
+    of these were shipped in B180 with no row until this was written.
+    """
+
+    def test_the_wait_window_and_the_fmap_work_are_recorded(self):
+        for phrase in ('Please wait', 'fmap inheritance'):
+            with self.subTest(phrase):
+                self.assertIn(phrase, LEDGER, f"no ledger row covers {phrase!r}")
+
+    def test_those_rows_name_the_evidence_not_just_the_outcome(self):
+        # A row saying only "shipped" is not usable by a later audit.
+        for token in ('0x01B09800', '0x1b0', 'wait_visibility'):
+            with self.subTest(token):
+                self.assertIn(token, LEDGER)
 
 
 class TestTheSuiteSkipClaimHolds(unittest.TestCase):
