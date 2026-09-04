@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import argparse
-import unittest
 import sys
 import tempfile
+import threading
+import unittest
 from pathlib import Path
+
+ELLIPSIS = chr(0x2026)
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "work"))
@@ -535,13 +538,63 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         path.write_text('{"target_files": [], "settings": []}', encoding="utf-8")
         return path
 
-    def test_loading_shows_a_wait_message_before_it_blocks(self):
+    def test_loading_shows_the_wait_popup_and_works_off_the_main_thread(self):
+        """The load must run through the wait popup, not on the main thread.
+
+        A status line plus one update_idletasks() still freezes the window --
+        Windows relabels it "(Not Responding)" -- which is what the ported VV
+        popup exists to prevent. So this asserts the mechanism, not a string:
+        the work reaches _run_with_wait, and it does not run on the thread that
+        is supposed to be pumping the event loop.
+        """
+        seen = {}
+        original = self.app._run_with_wait
+
+        def spy(message, work):
+            seen["message"] = message
+            seen["caller_thread"] = threading.current_thread().ident
+
+            def wrapped():
+                seen["work_thread"] = threading.current_thread().ident
+                return work()
+
+            return original(message, wrapped)
+
+        self.app._run_with_wait = spy
         with tempfile.TemporaryDirectory() as tmp:
             self.app.manifest_var.set(str(self._manifest(tmp)))
             self.assertTrue(self.app.load_manifest_settings())
-        waits = [text for text in self.shown if "Please wait" in text]
-        self.assertTrue(waits, "no wait message was rendered before loading")
+        self.assertIn("Please wait", seen.get("message", ""))
+        self.assertIn("Loading the patches", seen["message"])
+        self.assertNotEqual(
+            seen["work_thread"], seen["caller_thread"],
+            "the work ran on the main thread, so the window would still freeze",
+        )
         self.assertNotIn("Please wait", self.app.status_var.get())
+
+    def test_the_wait_popup_cannot_be_closed_and_stops_a_second_run(self):
+        # The X does nothing because the work cannot be cancelled part way
+        # without leaving a half-copied game folder, and the grab is what
+        # blocks a second click on Apply while the first is running.
+        wait = gui.WaitWindow(self.root, "Please wait", "Please wait" + ELLIPSIS)
+        try:
+            # A handler IS bound, which is what stops Tk's default destroy;
+            # an unbound protocol would close the window on the X.
+            self.assertTrue(wait.protocol("WM_DELETE_WINDOW"),
+                            "no close handler bound, so the X would destroy it")
+            self.assertFalse(wait.resizable()[0])
+            self.assertFalse(wait.resizable()[1])
+        finally:
+            wait.close()
+
+    def test_a_failure_in_the_work_surfaces_on_the_main_thread(self):
+        # Captured on the worker and re-raised here, otherwise it vanishes
+        # into the thread and the caller sees a silent success.
+        def boom():
+            raise RuntimeError("worker exploded")
+
+        with self.assertRaises(RuntimeError):
+            self.app._run_with_wait("Please wait" + ELLIPSIS, boom)
 
     def test_the_busy_cursor_is_always_restored(self):
         # Including on failure: a window left on the watch cursor looks
@@ -566,12 +619,11 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         self.assertIn("please wait", self.app.status_var.get().lower())
         for _ in range(50):
             self.root.update()
-            if "Please wait - checking your game files" in self.app.log_text.get("1.0", "end"):
+            if "Checking your game files" in self.app.log_text.get("1.0", "end"):
                 break
-        self.assertIn(
-            "Please wait - checking your game files",
-            self.app.log_text.get("1.0", "end"),
-        )
+        log = self.app.log_text.get("1.0", "end")
+        self.assertIn("Please wait", log)
+        self.assertIn("Checking your game files", log)
 
     def test_a_failed_load_cannot_leave_a_hidden_selection_applyable(self):
         """A failed load must invalidate the previously loaded manifest.
