@@ -2015,7 +2015,11 @@ The bundled player documentation still called a known-broken item unconfirmed
 - Raised by Codex on another session's PR and left unanswered there. The
   finding was verified against the source before being acted on, and the price
   claim in the same review was verified too: the gym does NOT inherit the Yoga
-  Equipment's price. The donor's price is 150 and the gym's is 3150, set
+  Equipment's price. (Corrected: the comparison should be against the
+  STOCK donor 0x220 at 150, not the added Invisible Yoga Equipment 0x32A which
+  also happens to be 150. The finding stands either way -- the repository's own
+  comment records Treadmill 3150, Pool Table 12000, Yoga Gear 150, and the gym
+  is 3150.) The donor's price is 150 and the gym's is 3150, set
   independently, so the donor supplies the furniture map, store slot and
   behaviour arrangement but not the price.
 
@@ -2109,3 +2113,30 @@ The furniture-array sanity bound was twice the real capacity
   the same trap that produced a garbage read in an earlier checker.
 - Validated against known-bad: with the guard back at 0x400 the test fails and
   names both numbers; with the fix it passes.
+
+The changelog then became wrong in the OTHER direction
+- The line above was corrected to say the Home Gym System does not work. That
+  was true when written. It stopped being true when the added-furniture
+  actions landed: the Home Gym now carries its own behaviour id bound to its
+  own handler, with ten workout variations, so a shipped log calling it broken
+  is as false as the claim it replaced.
+- Both of the tests guarding that line asserted the old world -- one required
+  the literal words "home gym system does not work". A test pinned to that
+  sentence would have forced a TRUE statement to be replaced with a false one
+  in order to stay green. This is the third time in this work that pinning a
+  phrasing rather than a property turned a correct update into an apparent
+  regression.
+- The guards now assert the property instead, and the property is the
+  distinction that keeps getting lost: an action a villager CHOOSES is built
+  and may be described as working; a reaction to being DROPPED is a separate
+  claim and is NOT built, because theMainScene::HandleDropOnHotSpot dispatches
+  on a hotspot enum and never reads a furniture item id, so it cannot tell one
+  added item from another however complete that item's record is.
+- Validated against known-bad in BOTH directions, which is what makes the pair
+  trustworthy: replacing the disclaimer with "All of these act on a drop"
+  fails three assertions, and reinstating "THE HOME GYM SYSTEM DOES NOT WORK"
+  fails one. Honest wording passes.
+- The drop-reaction check also refuses to let an unrelated negation elsewhere
+  in the line excuse a promise: only the clause immediately preceding the
+  phrase can disclaim it. A guard that cannot tell an assertion from its
+  denial is worse than none.

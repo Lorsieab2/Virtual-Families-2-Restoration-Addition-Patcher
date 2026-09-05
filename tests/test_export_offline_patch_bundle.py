@@ -3165,11 +3165,20 @@ class TestBundleChangelogReachesTheWrittenLog(unittest.TestCase):
         for item in ("Exercise Bike", "Home Gym System"):
             with self.subTest(item):
                 self.assertIn(item.lower(), lowered)
-        # And the known-broken one must be named as broken, not as unconfirmed.
+        # The claim that must never be made is that a villager DROPPED on one
+        # of these reacts. Those items now have actions they CHOOSE, which is
+        # a different thing: the drop path is the game's own hotspot dispatch,
+        # which never reads a furniture item id and so cannot tell one added
+        # item from another.
+        #
+        # This deliberately does NOT require the words "does not work". That
+        # was true when the Home Gym had no action; it has one now, and a test
+        # demanding the old sentence would force a true statement to be
+        # replaced with a false one to stay green.
         self.assertIn(
-            "home gym system does not work", lowered,
-            "the owner reported the Home Gym System does nothing; a shipped "
-            "log must say so rather than calling it unconfirmed",
+            "dropped", lowered,
+            "the log must keep the distinction between an action a villager "
+            "chooses and a reaction to being dropped",
         )
 
 

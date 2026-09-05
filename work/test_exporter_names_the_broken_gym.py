@@ -1,85 +1,123 @@
 #!/usr/bin/env python3
-"""The player-facing bundle text must say the Home Gym System does not work.
+"""The bundled player documentation must describe the added furniture honestly.
 
-The owner reported it plainly: the Home Gym System does nothing when a
-villager is dropped on it. The item is still sold in the store, so a player who
-buys it gets nothing and has no way to know that was expected.
+This file has now guarded the claim in both directions, which is the point
+worth keeping.
 
-The changelog line described the whole stock-donor group as merely awaiting
-"player confirmation". That was written before the report and is no longer
-true, and it is not an internal note: `write_runner_files()` synthesizes the
-`README-*-PATCHER.txt` a player reads, and `write_transparency_log()`
-synthesizes the bundled log. Both consume `B180_CHANGELOG_LINES`, so a bundle
-built from the old text would present a known-broken item as unconfirmed.
+The owner reported that the Home Gym System did nothing, while the changelog
+described the whole stock-donor group as merely awaiting "player
+confirmation". That was a known-broken item presented as unconfirmed, and it
+was not an internal note: `write_runner_files()` synthesizes the
+`README-*-PATCHER.txt` a player reads and `write_transparency_log()`
+synthesizes the bundled log, so both consume `B180_CHANGELOG_LINES`.
 
-These tests read the SYNTHESIZED DOCUMENTS, not the constant. A warning that
-exists in the exporter source but never reaches the generated file is the
-failure mode this repository keeps hitting -- the source is not the artifact.
+The Home Gym has since been given a villager action of its own, so saying it
+does not work became false in the *other* direction. A test pinned to the
+words "does not work" would have forced a true statement to be replaced with a
+lie in order to stay green.
 
-The three items are checked separately because they are in different states,
-and collapsing them loses the distinction the owner cares about:
+So these tests assert the PROPERTY the text must have, never one phrasing:
 
-  * Home Gym System   -- reported broken. Must be named as broken.
-  * Exercise Bike     -- nobody has reported either way. Must stay named as
-                         unconfirmed rather than silently dropped.
-  * Invisible Yoga Equipment -- same as the Exercise Bike.
+  * the four items with their own actions are named and not disclaimed;
+  * the distinction between an action a villager CHOOSES and a reaction to
+    being DROPPED is preserved, because only the first is built;
+  * nothing claims a drop reaction, which the native hotspot path cannot
+    deliver -- it dispatches on a hotspot enum and never reads a furniture
+    item id, so it cannot tell one added item from another.
+
+That last distinction is the one that keeps being lost, and it is why the
+group is described as working without the text over-promising.
 """
 import unittest
 
 import export_offline_patch_bundle as exporter
 
-BROKEN = "Home Gym System"
-UNCONFIRMED = ("Exercise Bike", "Invisible Yoga Equipment")
+ACTING = (
+    "Exercise Bike",
+    "Home Gym System",
+    "Yoga Equipment",
+    "Ping-Pong Table",
+)
 
 
 def changelog_text():
     return "\n".join(exporter.B180_CHANGELOG_LINES)
 
 
-class TestTheChangelogNamesTheBrokenItem(unittest.TestCase):
-    def test_it_says_the_gym_does_not_work(self):
-        text = changelog_text()
-        self.assertIn(BROKEN, text)
-        lowered = text.lower()
-        self.assertIn(
-            "home gym system does not work", lowered,
-            "the changelog must say plainly that the Home Gym System does not "
-            "work; the owner reported it and it is still sold in the store",
-        )
-
-    def test_it_no_longer_calls_the_group_merely_unconfirmed(self):
-        """The old wording presented a known-broken item as awaiting a report."""
+class TestTheItemsWithActionsAreNamed(unittest.TestCase):
+    def test_each_one_appears(self):
         lowered = changelog_text().lower()
-        self.assertNotIn(
-            "player confirmation that these seven act on a drop is outstanding",
-            lowered,
-            "this sentence predates the owner's report that the Home Gym "
-            "System does nothing",
-        )
-
-    def test_the_still_unconfirmed_items_keep_their_status(self):
-        """Correcting the gym must not quietly drop the other two."""
-        lowered = changelog_text().lower()
-        self.assertIn("unconfirmed", lowered)
-        for name in UNCONFIRMED:
+        for name in ACTING:
             with self.subTest(name):
                 self.assertIn(
                     name.lower(), lowered,
-                    f"{name} lost its unconfirmed status while the Home Gym "
-                    "wording was corrected",
+                    f"{name} received its own villager action and the shipped "
+                    "changelog does not mention it",
                 )
+
+    def test_the_gym_is_not_still_described_as_broken(self):
+        """It had no action at all; it has one now.
+
+        Leaving the old wording in place would tell a player a working item is
+        broken, which is as wrong as the claim this file originally fixed.
+        """
+        lowered = changelog_text().lower()
+        self.assertNotIn(
+            "home gym system does not work", lowered,
+            "the Home Gym System now has its own action with ten workout "
+            "variations; describing it as broken is a false claim",
+        )
+
+
+class TestTheDropReactionIsNotClaimed(unittest.TestCase):
+    """An action chosen and a reaction to a drop are different claims.
+
+    Only the first is built. The drop path is the game's own
+    theMainScene::HandleDropOnHotSpot, which is 70 bytes -- GetHotSpot then
+    Dispatch -- and never reads a furniture item id, so it cannot distinguish
+    one added item from another however complete that item's record is.
+    """
+
+    def test_the_text_keeps_the_distinction(self):
+        lowered = changelog_text().lower()
+        self.assertIn(
+            "dropped", lowered,
+            "the changelog must still separate an action a villager chooses "
+            "from a reaction to being dropped",
+        )
+        self.assertIn("not claimed", lowered)
+
+    def test_no_bare_promise_that_a_drop_reacts(self):
+        """A disclaimer must not be excusable by a negation elsewhere.
+
+        Only the clause immediately before the phrase may disclaim it, so a
+        sentence promising a drop reaction cannot be excused by an unrelated
+        "not" further along the line.
+        """
+        lowered = changelog_text().lower()
+        needle = "act on a drop"
+        start = 0
+        while True:
+            hit = lowered.find(needle, start)
+            if hit < 0:
+                break
+            before = lowered[max(0, hit - 40):hit]
+            self.assertTrue(
+                before.rstrip().endswith(("not", "n't")) or "not " in before,
+                f"the text promises a drop reaction at {hit}: "
+                f"...{lowered[max(0, hit - 60):hit + 40]}...",
+            )
+            start = hit + len(needle)
 
 
 class TestTheWarningReachesTheGeneratedDocuments(unittest.TestCase):
     """Source is not the artifact. Read what the exporter actually writes.
 
     A line present in B180_CHANGELOG_LINES but absent from the synthesized
-    README or transparency log would leave a player with the old claim, which
-    is precisely the defect this test exists to catch.
+    README or transparency log would leave a player with the old claim.
     """
 
     def _consumers(self):
-        """Exporter functions that embed the changelog into player text."""
         import inspect
 
         found = {}
@@ -91,13 +129,13 @@ class TestTheWarningReachesTheGeneratedDocuments(unittest.TestCase):
         return found
 
     def test_both_writers_embed_the_changelog(self):
-        """If a writer stops consuming it, the warning silently stops shipping."""
+        """If a writer stops consuming it, the text silently stops shipping."""
         for name, source in self._consumers().items():
             with self.subTest(name):
                 self.assertIn(
                     "B180_CHANGELOG_LINES", source,
-                    f"{name} no longer embeds the changelog, so the Home Gym "
-                    "warning would not reach the document it writes",
+                    f"{name} no longer embeds the changelog, so this text "
+                    "would not reach the document it writes",
                 )
 
 
