@@ -76,11 +76,15 @@ PINNED_CELLS = {0x2000B000: 0x96, 0x2000B800: 0x97, 0x2000C000: 0x98}
 # The object each donor map must carry. HammockStd is included because the
 # transparency log documents it alongside the other three; leaving it out
 # meant the donor the log names as distinguishable was never checked.
+# The objects each donor map must carry. HammockStd carries TWO -- 0x13 and
+# 0x5b -- and the transparency log names both, so both are pinned; listing
+# only 0x13 would let 0x5b vanish from the map with every assertion still
+# green.
 DONOR_OBJECTS = {
-    "YogaGearStd": 0x75,
-    "TreadmillStd": 0x04,
-    "PoolTableStd": 0x36,
-    "HammockStd": 0x13,
+    "YogaGearStd": (0x75,),
+    "TreadmillStd": (0x04,),
+    "PoolTableStd": (0x36,),
+    "HammockStd": (0x13, 0x5B),
 }
 
 
@@ -194,9 +198,11 @@ class TestTheDesktopDonorsAreDistinguishable(unittest.TestCase):
         for name, expected in DONOR_OBJECTS.items():
             with self.subTest(name):
                 objects = desktop_objects(name)
-                self.assertIn(
-                    expected, objects,
-                    f"{name} no longer carries object {expected:#x}",
+                missing = [o for o in expected if o not in objects]
+                self.assertEqual(
+                    missing, [],
+                    f"{name} no longer carries "
+                    + repr([hex(o) for o in missing]),
                 )
                 # Object 0 is the empty cell and appears in every map, so
                 # it carries no identifying information.

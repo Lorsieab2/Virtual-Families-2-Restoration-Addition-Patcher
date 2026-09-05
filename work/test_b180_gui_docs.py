@@ -435,17 +435,23 @@ class TestTheRecurringPatternIsRecorded(unittest.TestCase):
         """
         entry = self._entry()
         self.assertIn("ornaments", entry)
+        # SCOPED to the ornaments sentence. Searching the whole entry for
+        # "correct" matched unrelated case 3, which contains "claimed the
+        # correction", so the ornaments passage could have been changed to
+        # say twelve was WRONG with every assertion still green.
+        i = entry.lower().index("ornaments")
+        passage = entry[max(0, i - 200):i + 320].lower()
         # The SUBJECT alone does not preserve the counter-case. The entry
         # could be edited to say the ornaments count was also wrong, or
         # keep an unrelated ornaments mention, and this would still pass
         # while the evidence against "every claim was wrong" disappeared.
         # So assert the count and the outcome.
         self.assertIn(
-            "twelve", entry.lower(),
+            "twelve", passage,
             "the counter-case no longer states the count that was checked",
         )
         self.assertIn(
-            "correct", entry.lower(),
+            "correct", passage,
             "the counter-case no longer says the ornaments count was "
             "RIGHT, which is the whole point of keeping it -- without that "
             "the entry reads as 'every claim was wrong' and invites "

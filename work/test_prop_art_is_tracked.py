@@ -121,9 +121,15 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
         read as finished while something is still outstanding.
         """
         text = (self._row()[1] + " " + self._row()[2]).lower()
+        # PHRASES THAT MEAN UNFINISHED, not bare topic words. "qa" and
+        # "build" on their own are satisfied by "Confirmed in a build /
+        # QA complete", which presents the feature as done -- the exact
+        # claim this test exists to prevent.
         self.assertTrue(
-            any(word in text for word in
-                ("rendering", "not yet confirmed", "qa", "build")),
+            any(word in text for word in (
+                "rendering", "not yet", "pending", "unconfirmed",
+                "not confirmed", "outstanding", "remains",
+            )),
             "the row does not say what is still outstanding, so a reader "
             "cannot tell whether the props are known to work",
         )

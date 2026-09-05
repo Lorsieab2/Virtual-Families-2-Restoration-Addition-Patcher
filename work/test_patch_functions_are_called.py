@@ -117,23 +117,41 @@ INTENTIONALLY_UNCALLED = {
 
 
 def _defined_and_called(tree):
-    """Every top-level def, and every name that appears in a Call."""
+    """Every top-level def, and every name that genuinely REFERENCES one.
+
+    Two things deliberately do NOT count as a reference, because both let an
+    orphan look reached:
+
+    * An assignment TARGET. `patch_new = None` contains an ast.Name for
+      patch_new, but binds the name rather than using it -- counting it would
+      mark the installer reached by the very statement that shadows it.
+    * An attribute call on some other object. `obj.patch_new()` produces the
+      attribute "patch_new", which has nothing to do with the top-level
+      function of that name.
+
+    A bare load of the name still counts. A function handed off rather than
+    called -- placed in a table of installers, passed to a helper, wrapped by a
+    decorator -- is genuinely reachable, and that is the shape the generator
+    uses in several places.
+    """
     defined = {
         node.name for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
+    # Names bound by an assignment, for-target, with-target or similar. These
+    # are collected first so a store anywhere disqualifies that occurrence.
+    stored = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            stored.add(node.id)
     called = set()
     for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            func = node.func
-            if isinstance(func, ast.Name):
-                called.add(func.id)
-            elif isinstance(func, ast.Attribute):
-                called.add(func.attr)
-        # A function handed off by name rather than called -- a table of
-        # installers, a decorator, a getattr -- still counts as reached.
-        elif isinstance(node, ast.Name):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            called.add(node.func.id)
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
             called.add(node.id)
+    # A name that is only ever STORED, never loaded or called, is not reached.
+    called -= {n for n in stored if n not in called}
     return defined, called
 
 

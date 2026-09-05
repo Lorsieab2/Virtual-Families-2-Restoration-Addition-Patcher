@@ -26,6 +26,8 @@ a working feature when the resources it resolves at runtime were never set up.
 """
 import ast
 import unittest
+
+NL = chr(10)
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,6 +73,52 @@ class PropDescriptorsArePopulated(unittest.TestCase):
                 "carries no path and GetImageGrid cannot load the sprite",
             )
 
+    def test_the_descriptor_path_has_no_images_prefix(self):
+        """Descriptor paths are relative to the runtime Images directory.
+
+        Every other block in patch_graphics_manager relies on this:
+            head_icon_path      -> "HairstyleIcons/Male_Head_01.png"
+            renovation block    -> "MobileRenovations/<file>"
+            furniture block     -> "Furniture/<file>"
+        and the shipped B181 executable agrees -- it contains
+        "HairstyleIcons/" and "Furniture/SpaLoungerStd.png" and contains
+        NEITHER with an "Images/" prefix.
+
+        Writing f"Images/{name}" here made GetImageGrid look for
+        Images/Images/mealSE.png, which resolves to nothing -- the same
+        silent invisibility as having no descriptor at all, and it would
+        have survived every other check in this module.
+        """
+        source = SOURCE.read_text(encoding="utf-8")
+        start = source.index("for name in PROP_ART_IMAGE_ORDER:")
+        body = source[start:start + 1400]
+        self.assertNotIn(
+            'f"Images/', body,
+            "the prop descriptor path carries an Images/ prefix; paths are "
+            'already relative to Images, so this resolves to '
+            "Images/Images/<file> and the sprite cannot be loaded",
+        )
+
+    def test_no_descriptor_block_uses_an_images_prefix(self):
+        """The convention, checked across the whole function.
+
+        Pinned for every block rather than just the prop one, because the
+        mistake is equally available to the next block somebody adds.
+        """
+        source = SOURCE.read_text(encoding="utf-8")
+        start = source.index("def patch_graphics_manager(")
+        end = source.index(chr(10) + "def ", start + 10)
+        body = source[start:end]
+        offenders = [
+            line.strip() for line in body.split(chr(10))
+            if "path = " in line and '"Images/' in line
+        ]
+        self.assertEqual(
+            offenders, [],
+            "these descriptor paths carry an Images/ prefix and would "
+            "resolve to Images/Images/...: " + repr(offenders),
+        )
+
     def test_ids_and_install_targets_agree(self):
         """The descriptor path must be the path the art is installed to.
 
@@ -99,8 +147,6 @@ class PropDescriptorsArePopulated(unittest.TestCase):
         )
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class PropPositionComesFromTheRecord(unittest.TestCase):
@@ -144,11 +190,21 @@ class PropPositionComesFromTheRecord(unittest.TestCase):
             "record + 0x18", body,
             "the capture does not read the placement record's y",
         )
-        self.assertIn(
-            "info.unknown0", body,
-            "the record is not identified by the placement handle, so the "
-            "wrong table's position could be used when two are placed",
+        # Strip comments first. The explanatory comment above the code
+        # mentions info.unknown0, so matching the raw slice stayed green
+        # even with the actual comparison deleted -- in which state the
+        # loop takes the FIRST active furniture record rather than the
+        # one FindFurniture matched.
+        code = NL.join(
+            line.split("//")[0] for line in body.split(NL)
         )
+        self.assertIn(
+            "record + 0x04", code,
+            "the record is not compared against the placement handle, so "
+            "the first active record wins and the wrong table's position "
+            "is used when two are placed",
+        )
+        self.assertIn("info.unknown0", code)
 
 
 class PropDrawRespectsTheDecalBound(unittest.TestCase):
@@ -226,8 +282,22 @@ class PropDrawRunsUnconditionally(unittest.TestCase):
             "be running unconditionally",
         )
         self.assertIn(
-            "?InitDecals@CDecal@@QAEXXZ", body,
-            "the unconditional InitDecals call is not the wrapped site",
+            "?RefreshProps@CDecal@@QAEXXZ", body,
+            "the tail jump to RefreshProps is not the wrapped site, so the "
+            "draw does not run after the stock pass",
+        )
+        # Mentioning the symbol is not installing the hook. Without the
+        # retarget the original jump still runs and nothing draws, while
+        # every other assertion in this class stays green.
+        self.assertIn(
+            "retarget_relocation", body,
+            "the installer never retargets the relocation, so the hook "
+            "is not actually installed",
+        )
+        self.assertIn(
+            "@VF2RefreshPropsAndTableProps@8", body,
+            "the wrapper symbol is never appended, so there is nothing "
+            "for the relocation to point at",
         )
         self.assertNotIn(
             "@VF2RefreshPropsAddDecalAndProps@28", body,
@@ -241,9 +311,10 @@ class PropDrawRunsUnconditionally(unittest.TestCase):
         start = source.index("def patch_mobile_table_prop_draw(manifest):")
         body = source[start:source.index("\ndef ", start + 10)]
         self.assertIn(
-            "refresh_decals.value + 1", body,
-            "the installer does not require the InitDecals call to be the "
-            "first instruction, so it could hook a conditional site again",
+            "decals_sec.raw_size", body,
+            "the installer does not require the jump to be the LAST "
+            "instruction of RefreshDecals, so the wrapper's return could "
+            "land somewhere unintended",
         )
         self.assertIn(
             "raise RuntimeError", body,
@@ -259,3 +330,51 @@ class PropDrawRunsUnconditionally(unittest.TestCase):
             "the superseded AddDecal wrapper still exists; if it is ever "
             "installed alongside the new hook the props draw twice",
         )
+
+
+class PropDrawRunsAfterTheStockPass(unittest.TestCase):
+    """The capacity check is worthless if it runs against an empty array.
+
+    The draw counts occupied decal slots and refuses at 0x100, because the
+    four-argument AddDecal overload has no bounds check of its own. That check
+    only means anything at FINAL occupancy.
+
+    An earlier version hooked CDecal::InitDecals -- RefreshDecals' first
+    instruction. That is unconditional, which was the point, but InitDecals
+    EMPTIES the decal array: the check would always find room, and the two
+    added decals would then push the stock pass past the 256-slot end. The
+    guard would have read as protection while causing the overflow it was
+    written to prevent.
+
+    CDecal::RefreshDecals ends with a tail jump to CDecal::RefreshProps, so
+    wrapping that gives a site that is both unconditional and after the whole
+    stock pass. The wrapper calls RefreshProps and then draws.
+    """
+
+    def test_the_wrapper_calls_the_stock_pass_before_drawing(self):
+        source = SOURCE.read_text(encoding="utf-8")
+        start = source.index("VF2RefreshPropsAndTableProps(CDecal *self")
+        body = source[start:source.index("\n}\n", start)]
+        stock = body.index("self->RefreshProps()")
+        ours = body.index("VF2DrawMobileTableProps()")
+        self.assertLess(
+            stock, ours,
+            "the added props are drawn BEFORE the stock pass, so the decal "
+            "capacity check runs against an array the stock pass has not "
+            "filled yet -- it would always find room and the stock decals "
+            "would overflow instead",
+        )
+
+    def test_it_does_not_wrap_initdecals(self):
+        """InitDecals is unconditional but empties the array first."""
+        source = SOURCE.read_text(encoding="utf-8")
+        start = source.index("def patch_mobile_table_prop_draw(manifest):")
+        body = source[start:source.index("\ndef ", start + 10)]
+        self.assertNotIn(
+            "@VF2InitDecalsAndProps@8", body,
+            "the draw is hooked on InitDecals again; that runs before the "
+            "stock pass, so the capacity check sees a freshly emptied array",
+        )
+
+if __name__ == "__main__":
+    unittest.main()
