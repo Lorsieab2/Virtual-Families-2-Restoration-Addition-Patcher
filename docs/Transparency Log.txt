@@ -1665,3 +1665,34 @@ B180 why the seven stock-donor items are a different case
   cannot pass merely because a directory is empty or misnamed.
 - Player confirmation that these seven act on a drop remains outstanding and is
   still not claimed.
+
+Mobile prop art located, and an extraction claim retracted
+- The owner asked for the picnic-meal and patio-drinks props. Extracting their
+  supplied XAPK settles one question and opens another.
+- The art EXISTS, including the drinks. assets/tp7.dat in the OBB names
+  meal.png, mealse.png, mealsw.png and patiodrinks.png. An earlier entry
+  concluded that mobile never drew the patio drinks and there was nothing to
+  port; that is superseded. mealse/mealsw being orientation-specific also
+  confirms the prop is activated on the table by the villager behaviour, not
+  that the table swaps to a different image.
+- The sprites are NOT yet extractable, and a claim that they were has been
+  retracted. tp7.pvr was decoded as PVR v2 RGBA4444 and a control sprite
+  appeared to match at one position with "220/220 sample points". That was a
+  false positive: the signature compared only whether sample points were
+  opaque, and most sampled points are transparent in both images, so a large
+  empty region scored perfectly. Checking colour at that position gives solid
+  purple against the sprite's green. Searching the whole atlas by RGB distance
+  in all four channel orders gives best mean errors of 55 to 68 where a true
+  RGBA4444 match should be near 8, so the pixel data is not a plain linear
+  buffer.
+- Recorded because the artifact was fine and the measurement was wrong, which
+  is the harder direction to notice. Without a control sprite that also ships
+  on desktop, three plausible crops from wrong coordinates would have been
+  handed over as the real art.
+- Two corrections to what was written alongside that finding, both from review:
+  the interception CLEARS the preparer pointer rather than recording it, so
+  anything needing the preparer must establish it separately; and this project
+  has NO companion DLL yet -- work/desktop_runtime_dlls holds only stock
+  third-party libraries -- so a DLL is a component to build, not an existing
+  seam. The prop state is static in the executable and would have to be
+  exported deliberately before anything outside could read it.

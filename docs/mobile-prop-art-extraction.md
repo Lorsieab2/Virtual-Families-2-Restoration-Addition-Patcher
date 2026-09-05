@@ -20,7 +20,16 @@ table swapping to a different image.
 
 ## Where they live
 
-Source: `Virtual Families 2_1.7.16_APKPure.xapk` (the owner's Downloads).
+Source: the owner's Downloads folder. **Two names are in play and both are
+real**, so check which one is present rather than assuming:
+
+    Virtual+Families+2_1.7.16_APKPure.xapk   <- what the repo expects
+    Virtual Families 2_1.7.16_APKPure.xapk   <- what is on disk now
+
+`work/make_mobile_reconstruction_report.py` and `docs/discoveries.md` both
+name the plus-sign form, which is how APKPure delivers it. The copy the owner
+supplied for this work has spaces instead, presumably renamed by the browser
+or by hand. Same 1.7.16 build either way; the contents matched.
 
     xapk
       com.ldw.virtualfamilies2.apk                      <- no images
@@ -71,13 +80,17 @@ Two approaches that will NOT work, both tried:
   searching for a `w x h` block that is >55% opaque returns 12,000-20,000
   candidates per sprite, many of them 100% opaque. It cannot disambiguate.
 
-## The approach that does work
+## A proposed approach -- NOT yet verified to work
 
-Cross-reference against sprites whose desktop equivalents already exist. For
-each candidate offset, compare the alpha silhouette to the known-good desktop
-PNG and require a near-perfect match, as was done for `meal.png`. Decode the
-record layout from several such anchors rather than one, then apply it to the
-three sprites that have no desktop copy.
+The idea is to cross-reference against sprites whose desktop equivalents
+already exist, decode the record layout from several such anchors, then apply
+it to the three sprites that have no desktop copy.
+
+It has NOT been shown to work. It located exactly one sprite -- and see the
+correction below, which retracts even that. The three sprites we actually want
+have no desktop copies, so matching cannot find them directly; it can only ever
+serve to decode the layout, and the layout is still undecoded. Treat this as a
+line of attack, not a method.
 
 **Do not skip the control.** Without checking `meal.png` against the shipped
 desktop file, three plausible crops from the wrong coordinates would have looked
@@ -90,9 +103,12 @@ entirely convincing.
   `Patio_table.png.fmap`. The mobile originals carry the same cells with the
   object id in the high half (`0x23AC` / `0x23B4`), which the PC conversion
   strips.
-- State tracking already works. `VF2PatioSetPropAndTrack` intercepts the two
-  prop ids, and maintains a guarded external 240-game-second timer with the
-  preparing villager recorded. It simply never draws anything.
+- Partial state tracking exists. `VF2PatioSetPropAndTrack` intercepts the two
+  prop ids and maintains a guarded external 240-game-second timer. It does NOT
+  record who prepared the prop: it explicitly CLEARS `gVF2PicnicPreparer` /
+  `gVF2PatioDrinksPreparer` to 0 before setting the flag and deadline. The
+  pointers exist but are never populated on this path, so anything that needs
+  the preparer has to establish it separately. And it never draws anything.
 - The drinking sounds ship on desktop already: `sip_drink.ogg`,
   `ahh_drinking.ogg`, `drinking.ogg`.
 
@@ -103,9 +119,18 @@ and `0x56`. All 27 jump-table cases are claimed by existing props, and every
 jump entry is a `DIR32` relocation, so adding a case means editing the COFF
 relocation table of a stock object.
 
-The companion DLL avoids that entirely and matches the owner's standing
-preference for DLLs over in-exe caves. It can read the existing external state
-and draw at the attachment cells without touching `SetProp` at all.
+A companion DLL would avoid that entirely and matches the owner's standing
+preference for DLLs over in-exe caves.
+
+Two things to be clear about before treating that as a plan. **This project has
+no companion DLL yet** -- `work/desktop_runtime_dlls` holds only stock
+third-party libraries (fmod, libjpeg, libpng), and nothing loads a custom one.
+So the DLL is a component to be built, not an existing seam to hang code on.
+
+And the prop flags, deadlines and preparer pointers are all `static` in
+`vf2_mobile_furniture_behaviors.cpp`, compiled into the executable. A DLL
+cannot see them as written; the state would have to be exported deliberately
+before anything outside the exe could read it.
 
 ## CORRECTION: the sprites are not decodable from tp7.pvr as written above
 
