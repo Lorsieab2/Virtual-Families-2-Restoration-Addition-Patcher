@@ -1662,6 +1662,25 @@ B180 what a prop decal call actually looks like
   immediates, which was an overstatement caught in self-review, and
   because it proves the engine supports both forms. A wrapper may use
   literals, as the majority do, without that being the only option.
+- AND FOR THESE TWO PROPS IT MUST NOT. Review corrected the conclusion
+  drawn above, and the correction is the important part. Stock props are
+  fixtures at one place in the house, so a baked literal is right for
+  them. A picnic or patio table is FURNITURE: the player can move it, and
+  can own more than one. Two fixed literals would draw the meal at one
+  spot regardless of which table the villager actually used, and would
+  keep drawing it there after the table was moved.
+- That is a design flaw in the wrapper as sketched, not a detail. The
+  existing behaviour code already resolves a specific instance --
+  LinkPeepToFurniture and VF2FurnitureSlotAtPoint both work per slot --
+  but VF2PatioSetPropAndTrack keeps only global on/deadline state
+  (gVF2PicnicReadyOn, gVF2PatioDrinksOn, gVF2PicnicPreparer) with no slot
+  index. So the state that would be needed to place the sprite is
+  discarded at the moment it is known.
+- The remaining work is therefore larger than 'pick two literals': the
+  tracking has to retain WHICH table, and the wrapper has to read that
+  table's position rather than a constant. The exception at +0x6e5 shows
+  the engine accepts a computed position, so the route exists; what it
+  needs is the slot kept rather than dropped.
 - That is good news for the wrapper and worth stating plainly: it does not need
   to resolve a furniture record's world position at all, and the coordinate
   space question does not have to be answered, because nothing reads a

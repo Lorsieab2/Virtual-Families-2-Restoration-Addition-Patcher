@@ -37,6 +37,7 @@ REFRESH_DECALS = "?RefreshDecals@CDecal@@QAEXXZ"
 REFRESH_PROPS = "?RefreshProps@CDecal@@QAEXXZ"
 ADD_DECAL_4 = "?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHM@Z"
 ADD_DECAL_5 = "?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z"
+ENVIRONMENT = "?Environment@@3VCEnvironment@@A"
 
 # All six Environment sites the log claims reach RefreshDecals, plus the one
 # inside Decal.obj. offset -> (target, opcode).
@@ -196,11 +197,19 @@ class PropRouteTests(unittest.TestCase):
 class TestTheLogRecordsTheRoute(unittest.TestCase):
     LOG = ROOT / "docs" / "Transparency Log.txt"
 
-    def _entry(self):
+    def _entry(self, heading="how the picnic and patio props would actually be drawn"):
+        """One named entry, not the whole file.
+
+        These are separate sections and they say different things. Slicing the
+        wrong one is how an assertion passes or fails for reasons unrelated to
+        the claim it is checking -- which happened here: the coordinate
+        correction lives in the decal-call entry, not the draw-route one.
+        """
         text = self.LOG.read_text(encoding="utf-8")
-        heading = "how the picnic and patio props would actually be drawn"
-        self.assertIn(heading, text, "the draw-route entry is gone")
+        self.assertIn(heading, text, f"the {heading!r} entry is gone")
         return text.split(heading, 1)[1].split(chr(10) + "B180 ", 1)[0]
+
+    DECAL_ENTRY = "what a prop decal call actually looks like"
 
     def test_the_tail_call_warning_is_written_down(self):
         entry = self._entry()
@@ -209,6 +218,38 @@ class TestTheLogRecordsTheRoute(unittest.TestCase):
             "TAIL CALL", entry,
             "the tail-call shape is the detail a wrapper would get wrong",
         )
+
+    def test_the_position_question_is_recorded_as_resolved(self):
+        """Runs on ANY checkout, unlike the binary tests.
+
+        This lived in the object-backed class, where a gitignored Decal.obj
+        skips every method -- so on a normal checkout the guard did not run at
+        all and the text could regress while the suite stayed green. It reads
+        only the tracked log, so it belongs here.
+        """
+        entry = self._entry(self.DECAL_ENTRY)
+        self.assertIn(
+            "POSITION. RESOLVED",
+            self.LOG.read_text(encoding="utf-8"),
+            "the coordinate question was recorded as unconfirmed; once "
+            "answered the earlier note has to say so, or it reads as open",
+        )
+        self.assertIn("immediate", entry.lower())
+
+    def test_the_log_says_literals_are_wrong_for_THESE_props(self):
+        """The correction that matters most, and the easiest to lose.
+
+        Stock props are fixtures, so a baked literal suits them. A picnic or
+        patio table is furniture: the player can move it and can own more than
+        one. Recording only "the coordinates are immediates" would invite a
+        wrapper that draws the meal at one fixed spot regardless of which table
+        was used.
+        """
+        entry = self._entry(self.DECAL_ENTRY)
+        self.assertIn("MUST NOT", entry)
+        for token in ("move", "more than one"):
+            with self.subTest(token):
+                self.assertIn(token, entry)
 
     def test_the_log_states_the_counted_call_numbers(self):
         """The 'sixteen' claim was wrong. Keep the counted ones honest."""
@@ -240,6 +281,19 @@ class TestTheDecalCallShape(unittest.TestCase):
             self.skipTest("Decal.obj is a gitignored build input")
 
     def _body(self):
+        """RefreshProps' OWN bytes, not its whole section.
+
+        Today the compiler emits one function per COMDAT section, so the two
+        happen to coincide. Relying on that would mean a byte pattern living
+        in some other function could satisfy these checks after RefreshProps
+        itself changed, so the range is sliced from this symbol to the next
+        function symbol in the same section.
+
+        section_data also returns a memoryview, whose count() and `in` operate
+        on ELEMENTS rather than subsequences -- both silently return 0 for a
+        pattern that is present. Converted once here so no caller is caught.
+        """
+        import struct
         import sys
 
         sys.path.insert(0, str(ROOT / "work"))
@@ -247,40 +301,97 @@ class TestTheDecalCallShape(unittest.TestCase):
 
         obj = CoffObject(self.OBJ)
         symbol = obj.symbol(REFRESH_PROPS)
-        # section_data returns a memoryview, whose count()/in count ELEMENTS
-        # rather than subsequences -- both silently return 0 for a byte
-        # pattern that is present. Convert once, here, so no caller can be
-        # caught by it.
-        return bytes(obj.section_data(symbol.section))
+        data = self.OBJ.read_bytes()
+        name, funcs = _symbols(data)
+        later = [
+            value for secnum, value, _n in funcs
+            if secnum == symbol.section and value > symbol.value
+        ]
+        end = min(later) if later else None
+        body = bytes(obj.section_data(symbol.section))
+        return body[symbol.value:end] if end else body[symbol.value:]
 
     def test_the_prop_record_stride_is_still_sixteen_bytes(self):
-        """prop*16 + 0x7C, reached from the drawing side.
+        """prop*16 + 0x7C against the global Environment, from the draw side.
 
-        If this ever changes, both the ledger's account of the SetProp
-        fall-through and the wrapper's reading of prop state are wrong.
+        Checking the encoded bytes alone is not enough. The displacement in
+        `cmp byte [eax+0x7c], 0` carries a relocation, so the access could be
+        retargeted away from the Environment object while the 0x7c addend --
+        and this whole byte pattern -- stayed identical. The stride would then
+        prove nothing about prop records while the test still passed. So the
+        relocation covering the displacement is checked too.
         """
+        import sys
+
+        sys.path.insert(0, str(ROOT / "work"))
+        from coff_patch import CoffObject
+
         body = self._body()
-        hits = body.count(self.STRIDE)
-        self.assertGreater(
-            hits, 0,
+        start = body.find(self.STRIDE)
+        self.assertNotEqual(
+            start, -1,
             "the index*16 + 0x7c prop-record access is gone from RefreshProps",
         )
+        symbol = CoffObject(self.OBJ).symbol(REFRESH_PROPS)
+        data = self.OBJ.read_bytes()
+        name, _funcs = _symbols(data)
+        # The disp32 sits after `mov eax,ebx; shl eax,4; cmp byte [eax+` (8 bytes).
+        disp_offset = symbol.value + start + 8 - 1
+        targets = {
+            offset: name(sidx)
+            for sec, offset, sidx in _text_relocations(data)
+            if sec == symbol.section
+        }
+        self.assertEqual(
+            targets.get(disp_offset), ENVIRONMENT,
+            f"the prop access at {disp_offset:#x} no longer relocates against "
+            f"{ENVIRONMENT}; the 0x7c stride would be meaningless",
+        )
 
-    def test_the_decal_coordinates_are_immediates(self):
-        """push <imm32> twice, immediately before the call.
+    def test_the_literals_actually_feed_an_addecal_call(self):
+        """The pushes must precede a real AddDecal relocation.
 
-        This is what removes the coordinate-space question entirely. If the
-        caller ever starts computing coordinates instead, a wrapper passing
-        literals would draw in the wrong place, and nothing else here would
-        notice.
+        Asserting the byte pattern alone is not enough: the two immediate
+        pushes could survive elsewhere in RefreshProps while the AddDecal site
+        itself started computing its coordinates, and the pattern check would
+        still pass. So the call relocations are located first, and the
+        argument setup is required immediately before one of them.
         """
+        import struct
+
+        data = self.OBJ.read_bytes()
+        name, _funcs = _symbols(data)
+        import sys
+
+        sys.path.insert(0, str(ROOT / "work"))
+        from coff_patch import CoffObject
+
+        symbol = CoffObject(self.OBJ).symbol(REFRESH_PROPS)
         body = self._body()
-        # push 0xff ; push 0x146 ; push dword [edi+0x182c]
-        setup = bytes((0x68, 0xFF, 0x00, 0x00, 0x00, 0x68, 0x46, 0x01, 0x00, 0x00))
+        # push 0xff ; push 0x146 ; push dword [edi+0x182c] ; call <reloc>
+        setup = bytes((
+            0x68, 0xFF, 0x00, 0x00, 0x00,
+            0x68, 0x46, 0x01, 0x00, 0x00,
+            0xFF, 0xB7, 0x2C, 0x18, 0x00, 0x00,
+            0xE8,
+        ))
+        start = body.find(setup)
+        self.assertNotEqual(
+            start, -1,
+            "the documented immediate-coordinate setup no longer runs straight "
+            "into a call; a wrapper's literals would not match how props draw",
+        )
+        # The relocation on that call must target AddDecal, not something else.
+        call_offset = symbol.value + start + len(setup)
+        targets = {
+            offset: name(sidx)
+            for sec, offset, sidx in _text_relocations(data)
+            if sec == symbol.section
+        }
         self.assertIn(
-            setup, body,
-            "the documented immediate-coordinate call setup is gone; the "
-            "wrapper's literals would no longer match how props are drawn",
+            targets.get(call_offset), (ADD_DECAL_4, ADD_DECAL_5),
+            f"the call after the literal pushes targets "
+            f"{targets.get(call_offset)!r}, not AddDecal",
         )
 
     def test_the_log_does_not_overstate_the_immediates(self):
@@ -301,14 +412,6 @@ class TestTheDecalCallShape(unittest.TestCase):
             "the exception must be named so it can be re-checked",
         )
 
-    def test_the_log_records_that_position_is_resolved(self):
-        text = (ROOT / "docs" / "Transparency Log.txt").read_text(encoding="utf-8")
-        self.assertIn("what a prop decal call actually looks like", text)
-        self.assertIn(
-            "POSITION. RESOLVED", text,
-            "the coordinate question was recorded as unconfirmed; once answered "
-            "the earlier note has to say so, or it reads as still open",
-        )
 
 
 if __name__ == "__main__":
