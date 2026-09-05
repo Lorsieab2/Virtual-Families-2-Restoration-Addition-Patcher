@@ -93,6 +93,16 @@ INTENTIONALLY_UNCALLED = {
         "which of those was fatal, the whole route was reverted so "
         "HandleUpgrade's adoption path is byte-identical to stock, and "
         "Adoption Services is deliberately left ENTIRELY BASE-GAME",
+    "write_vc90_crt_manifest":
+        "reachable ONLY from sync_vc90_crt_private_assembly, which is "
+        "itself allow-listed below. It is here because the check now "
+        "walks the call graph from module scope rather than collecting "
+        "every name that appears in a Call: under the old flat rule an "
+        "installer called solely from another orphan inherited that "
+        "orphan's exemption silently, and this function was the live "
+        "example. It carries no reason of its own beyond its caller's -- "
+        "if sync_vc90_crt_private_assembly is ever wired up, this entry "
+        "should go with it",
     "patch_plan_logging":
         "diagnostic instrumentation, not part of a shipped build",
     "sync_holiday_body_types":
@@ -116,31 +126,85 @@ INTENTIONALLY_UNCALLED = {
 }
 
 
-def _defined_and_called(tree):
-    """Every top-level def, and every name that appears in a Call."""
+def _references_within(node):
+    """Names this node genuinely REFERENCES, excluding two false positives.
+
+    * An assignment TARGET. `patch_new = None` contains an ast.Name for
+      patch_new but binds it rather than using it -- counting it would mark an
+      installer reached by the very statement that shadows it.
+    * An attribute call on another object. `obj.patch_new()` yields the
+      attribute "patch_new", which has nothing to do with the top-level
+      function of that name.
+
+    A bare LOAD still counts: a function placed in a table, passed to a helper,
+    or wrapped by a decorator is genuinely reachable, and the generator does
+    that in several places.
+    """
+    names = set()
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
+            names.add(child.func.id)
+        elif isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load):
+            names.add(child.id)
+    return names
+
+
+def _reachable_from_module(tree):
+    """Every top-level def, and those REACHABLE from module scope.
+
+    Reachability is a call-graph walk from the module body, not a flat set of
+    every name that appears in a Call anywhere. A flat set counts calls made
+    from INSIDE an orphan, so an installer invoked only by another orphan reads
+    as reached.
+
+    That is not hypothetical: write_vc90_crt_manifest is called only by
+    sync_vc90_crt_private_assembly, which is itself deliberately allow-listed
+    as uncalled. Under the flat rule the inner writer passed without an
+    allow-list entry of its own, so any new installer called solely from
+    another orphan would have gone undetected.
+
+    The allow-list is applied as a FRONTIER, not as an exemption: an
+    intentionally-uncalled function does not seed the walk, so what only it
+    calls stays unreachable too.
+    """
     defined = {
-        node.name for node in tree.body
+        node.name: node for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
-    called = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            func = node.func
-            if isinstance(func, ast.Name):
-                called.add(func.id)
-            elif isinstance(func, ast.Attribute):
-                called.add(func.attr)
-        # A function handed off by name rather than called -- a table of
-        # installers, a decorator, a getattr -- still counts as reached.
-        elif isinstance(node, ast.Name):
-            called.add(node.id)
-    return defined, called
+    # Seed: everything referenced from module scope -- statements that actually
+    # execute on import, plus decorators and default arguments, which run then
+    # too. Function BODIES are deliberately excluded here; they are only walked
+    # once their own function is known to be reachable.
+    seed = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for deco in node.decorator_list:
+                seed |= _references_within(deco)
+            for default in node.args.defaults + [d for d in node.args.kw_defaults if d]:
+                seed |= _references_within(default)
+        else:
+            seed |= _references_within(node)
+
+    reachable, frontier = set(), [n for n in seed if n in defined]
+    while frontier:
+        name = frontier.pop()
+        if name in reachable:
+            continue
+        reachable.add(name)
+        # An intentionally-uncalled function does not extend the walk. If it
+        # did, everything it calls would inherit its exemption.
+        if name in INTENTIONALLY_UNCALLED:
+            continue
+        for referenced in _references_within(defined[name]):
+            if referenced in defined and referenced not in reachable:
+                frontier.append(referenced)
+    return set(defined), reachable
 
 
 class TestEveryInstallerIsReached(unittest.TestCase):
     def setUp(self):
         self.tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
-        self.defined, self.called = _defined_and_called(self.tree)
+        self.defined, self.called = _reachable_from_module(self.tree)
 
     def test_no_installer_is_defined_and_never_used(self):
         """The defect this module exists for.
