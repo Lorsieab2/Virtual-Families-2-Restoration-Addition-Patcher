@@ -597,11 +597,26 @@ class TestTheReadmeIsHonestAboutTheProps(unittest.TestCase):
         # this release" while the ledger and README both said it had landed --
         # green suite, three documents disagreeing, and the one a player reads
         # being the wrong one.
+        # Checked against EVERY pending-state phrase, not one substring.
+        # Using "stays bare" alone as the proxy meant the description could
+        # drop that phrase while still telling players the props "do not
+        # appear" and that drawing was "not in this release" -- the check
+        # would go green with two stale claims still shipping in the text a
+        # player actually reads.
+        pending_phrases = (
+            "stays bare", "do not appear", "does not appear",
+            "not in this release", "in progress and is not",
+        )
+        still_claims_pending = [
+            phrase for phrase in pending_phrases if phrase in description
+        ]
         self.assertEqual(
             self._rendering_pending(),
-            "stays bare" in description,
+            bool(still_claims_pending),
             "the shipped setting description and the ledger disagree about "
-            "whether the props draw; update both together",
+            "whether the props draw; update both together. The description "
+            f"still carries {still_claims_pending!r} while the ledger says "
+            f"rendering pending is {self._rendering_pending()}",
         )
 
     def test_the_readme_and_the_ledger_agree(self):
