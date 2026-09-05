@@ -28134,27 +28134,29 @@ static void VF2PlanSpaTreatment(
 {
     (void)villager;
     int const total = ldwGameState::GetRandom(5) + 5;
-    // Three sighs across the treatment, spaced the way the drink behaviour
-    // spaces them. A treatment shorter than the spacing simply gets fewer.
-    int remaining = total;
-    for (int pass = 0; pass < 3 && remaining > 0; ++pass) {
-        int slice = remaining > 2 ? 2 : remaining;
-        if (info.orientation == 1) {
-            plans->PlanToWait(slice, eBodyPositionChaise);
-        } else {
-            plans->PlanToLieDown(slice);
-        }
-        remaining -= slice;
-        plans->PlanToPlaySound(
-            static_cast<ESound>(0x101), 1.0f, eSoundTypeEffects);
+
+    // ONE rest for the whole treatment, not a slice per sigh.
+    //
+    // Reported from live play: the villager repeated "prepare to lie down"
+    // and never settled. Splitting the rest into three PlanToLieDown calls is
+    // what caused it -- each one restarts the getting-in animation rather than
+    // continuing the previous rest, so the villager perpetually prepared and
+    // never rested. Every working chaise route in this file issues a single
+    // call for the full duration; this now does the same.
+    if (info.orientation == 1) {
+        plans->PlanToWait(total, eBodyPositionChaise);
+    } else {
+        plans->PlanToLieDown(total);
     }
-    if (remaining > 0) {
-        if (info.orientation == 1) {
-            plans->PlanToWait(remaining, eBodyPositionChaise);
-        } else {
-            plans->PlanToLieDown(remaining);
-        }
-    }
+
+    // The sigh is deliberately NOT interleaved with the rest any more.
+    //
+    // It was previously emitted once per slice, so it fired on every restart
+    // of the loop above -- which made it read as tied to the action rather
+    // than to the villager enjoying the chair. Planned once here, it plays
+    // while the rest is already under way instead of punctuating it.
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x101), 1.0f, eSoundTypeEffects);
     // A treatment is restful, so it pays the nap's own energy and dirtiness.
     plans->PlanToIncDirtiness(2);
     plans->PlanToIncEnergy(ldwGameState::GetRandom(5) + 7);
@@ -35099,6 +35101,11 @@ def main():
         remove_holiday_ornament_collection_art(manifest)
     patch_graphics_manager(manifest)
     patch_bathroom1_curtain_decal(manifest)
+    # The picnic meal and patio drinks. Defined but never called until now,
+    # which is why the sprites shipped and nothing drew them: the two prop ids
+    # never enter the engine's prop array, so without this wrapper there is no
+    # draw for them at all.
+    patch_mobile_table_prop_draw(manifest)
     patch_floating_anim_table(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
         write_holiday_body_draw_helper(manifest)
