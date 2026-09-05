@@ -135,9 +135,13 @@ class PropRouteTests(unittest.TestCase):
             data = (OBJS / obj_name).read_bytes()
             name, _funcs = _symbols(data)
             obj = self._coff(obj_name)
+            # Keep the TYPE. A REL32 changed to DIR32 with the same symbol
+            # index and the same E8/E9 opcode would put an absolute address in
+            # a relative branch operand -- the route breaks and every other
+            # assertion here still passes.
             relocs = {
-                (sec, off): name(sidx)
-                for sec, off, sidx, _rt in _text_relocations(data)
+                (sec, off): (name(sidx), rtype)
+                for sec, off, sidx, rtype in _text_relocations(data)
             }
             for caller, (offset, target, opcode) in sites.items():
                 with self.subTest(f"{obj_name}:{caller.split('@')[0]}"):
@@ -151,8 +155,10 @@ class PropRouteTests(unittest.TestCase):
                         "prop drawing rather than add to it",
                     )
                     self.assertEqual(
-                        relocs.get((symbol.section, offset)), target,
-                        f"{caller} +{offset:#x} no longer targets {target}",
+                        relocs.get((symbol.section, offset)),
+                        (target, IMAGE_REL_I386_REL32),
+                        f"{caller} +{offset:#x} no longer targets {target} as "
+                        "a REL32 branch",
                     )
 
     def test_refreshprops_is_called_from_exactly_one_place_repo_wide(self):
@@ -170,15 +176,19 @@ class PropRouteTests(unittest.TestCase):
             if REFRESH_PROPS.encode("ascii") not in data:
                 continue
             name, _funcs = _symbols(data)
-            for _sec, offset, sidx, _rt in _text_relocations(data):
+            for _sec, offset, sidx, rtype in _text_relocations(data):
                 if name(sidx) == REFRESH_PROPS:
-                    sites.append((path.name, hex(offset)))
+                    sites.append((path.name, hex(offset), rtype))
         self.assertEqual(
             len(sites), 1,
             f"expected one incoming call to RefreshProps across all objects, "
             f"found {len(sites)}: {sites}",
         )
         self.assertEqual(sites[0][0], "Decal.obj")
+        self.assertEqual(
+            sites[0][2], IMAGE_REL_I386_REL32,
+            "the sole call into RefreshProps is no longer a REL32 branch",
+        )
 
     def test_refreshprops_really_makes_the_documented_decal_calls(self):
         """Looking the symbol up by name proves nothing about the caller.

@@ -283,5 +283,55 @@ class TestTheChecksumExampleMatchesTheRecommendedAsset(unittest.TestCase):
         self.assertIn("exact filename you downloaded", README)
 
 
+class TestTheRecurringPatternIsRecorded(unittest.TestCase):
+    """Nine defects, one fault. The write-up has to survive.
+
+    A peer session asked for this to live somewhere durable, on the grounds
+    that neither of us would remember the list in a month. That is the whole
+    value of it: the instances are unremarkable individually and only obvious
+    together, so an entry that loses them stops being useful while still
+    looking complete.
+    """
+
+    LOG = ROOT / "docs" / "Transparency Log.txt"
+    HEADING = "the recurring defect: what a check READS versus what it ASSERTS"
+
+    def _entry(self):
+        text = self.LOG.read_text(encoding="utf-8")
+        self.assertIn(self.HEADING, text, "the pattern write-up is gone")
+        return text.split(self.HEADING, 1)[1].split(chr(10) + "B180 ", 1)[0]
+
+    def test_the_instances_are_enumerated_not_summarised(self):
+        """A summary of nine cases is not the same artefact as the nine cases.
+
+        Summarising them back into a paragraph is the likeliest way this entry
+        degrades, and it would read as tidier while carrying less.
+        """
+        entry = self._entry()
+        for marker in ("1.", "5.", "9."):
+            with self.subTest(marker):
+                self.assertIn(marker, entry)
+
+    def test_it_records_what_catches_the_fault(self):
+        """The instances are the evidence; the practices are the point."""
+        entry = self._entry()
+        for practice in (
+            "FORGE A KNOWN-BAD INPUT",
+            "PIN EXACT NUMBERS",
+            "ASK WHAT THE CLAIM IS ABOUT",
+            "MAKE GUARDS EXPIRE",
+        ):
+            with self.subTest(practice):
+                self.assertIn(practice, entry)
+
+    def test_it_keeps_the_counter_case(self):
+        """Without one, the entry reads as "every claim was wrong".
+
+        The ornaments count was checked identically and was correct. Losing
+        that invites someone to "fix" a right number.
+        """
+        self.assertIn("ornaments", self._entry())
+
+
 if __name__ == "__main__":
     unittest.main()

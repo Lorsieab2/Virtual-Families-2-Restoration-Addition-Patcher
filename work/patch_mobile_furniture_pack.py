@@ -4186,8 +4186,14 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "item_type": 5,
         "short_description": "Invisible Spa Lounger",
         "long_description": "This special invisible lounger allows villagers to \"give\" and \"receive\" spa treatments! (For roleplaying purposes)",
-        "source_png": "Chaise_brown.png",
-        "base_png": "Chaise_brown.png",
+        # The Spa Lounger's own art, not a generic chaise. The invisible item
+        # and the normal one are the same piece of furniture and ship the
+        # SAME sprite: "invisible" names which item the transparency patch
+        # may blank, not an absence of artwork. Under Visible Graphics a
+        # player who bought the Invisible Spa Lounger should see a spa
+        # lounger, and previously saw a brown chaise.
+        "source_png": "SpaLoungerStd.png",
+        "base_png": "SpaLoungerStd.png",
         "donor_fmap": "Chaise_brown.png.fmap",
     },
     {
@@ -7217,11 +7223,24 @@ def sync_invisible_outdoor_sprites(manifest):
         # and a stale or corrupted one would otherwise be baked into the
         # invisible variant and its reference-set copy while the visible
         # counterpart gets corrected.
-        tracked_base = (
-            ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture" / item["base_png"]
-        )
+        # Two tracked stores, and both must be consulted. Bases inherited from
+        # the stock game live under inherited_runtime_images; art the owner
+        # supplied for an added item lives under new_furniture_art. The Spa
+        # Lounger's sprite is the second kind, and searching only the first
+        # silently left the invisible variant on whatever the seed had -- a
+        # brown chaise -- with no missing-source error, because a stale copy
+        # in OUT satisfied the check.
+        tracked_base = None
+        for store in (
+            ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture",
+            ROOT / "patcher_assets" / "new_furniture_art",
+        ):
+            candidate = store / item["base_png"]
+            if candidate.is_file():
+                tracked_base = candidate
+                break
         base_src = OUT / "Images" / "Furniture" / item["base_png"]
-        if tracked_base.is_file():
+        if tracked_base is not None:
             base_src = tracked_base
         if not base_src.exists():
             for candidate in (
@@ -32442,13 +32461,41 @@ static bool VF2LinkedFurnitureItemIs(
             (CContentMap::EObject)object, feet, info, true, 0, 0)) {
         return false;
     }
-    int slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, info.point);
+    // Match by the PLACEMENT HANDLE, not by hit-testing info.point.
+    //
+    // info.point is not the furniture's own position. FindFurniture computes
+    // it as record[+0x14/+0x18] plus an fmap hotspot offset, which makes it
+    // the WALK-TO ANCHOR -- the tile the villager stands on to use the item.
+    // PtOnFurniture is a point-inside-FOOTPRINT test, so handing it that
+    // anchor asks "which furniture is the villager standing inside", and for
+    // anything you stand beside (a table, a gym) the answer is -1. The probe
+    // then reported "not that item" for every item, every time: a villager at
+    // the Ping-Pong Table stayed labelled "Playing pool".
+    //
+    // AddToWorld stamps each placement with a unique handle at record[+0x04],
+    // from a counter at manager+0x9008 that it increments per placement, and
+    // FindFurniture hands that very field back as info.unknown0. So the record
+    // it matched can be named exactly, with no geometry at all -- and two
+    // copies of the same item type stay distinguishable, which a position
+    // comparison would not guarantee.
+    // 0x200 is the array's real capacity, not a guess: AddToWorld opens with
+    // `cmp [edi+0x1004], 0x200 / jge` and returns without adding once the
+    // count reaches it, so a larger count means the structure is not what this
+    // code thinks it is.
     unsigned char *manager = (unsigned char *)&FurnitureManager;
     int count = *(int *)(manager + 0x1004);
-    if (slot < 0 || slot >= count) return false;
-    unsigned char *record = manager + 0x1008 + slot * 0x40;
-    if ((*(unsigned int *)(record + 0x0C) & 1) == 0) return false;
-    return *(int *)record == itemId;
+    if (count < 0 || count > 0x200) return false;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*(unsigned int *)(record + 0x0C) & 1) == 0) continue;
+        // The handle counter is post-incremented, so 0 is the first placement's
+        // real handle rather than an "unset" sentinel. That is safe here: this
+        // only ever compares against a handle FindFurniture just returned from
+        // a genuine match, so a zero handle cannot match spuriously.
+        if (*(int *)(record + 0x04) != info.unknown0) continue;
+        return *(int *)record == itemId;
+    }
+    return false;
 }
 
 // The Ping-Pong Table borrows the Pool Table's behaviour wholesale, so without
