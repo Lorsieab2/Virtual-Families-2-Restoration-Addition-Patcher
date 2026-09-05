@@ -4013,9 +4013,17 @@ VF3_LIVING_ROOM_BATCH_02_ITEMS = [
 # those maps ship in the vanilla payload, so placing one never depends on an
 # external OBB.
 #
-# Prices are the counterpart's own, read out of the game's furniture table
+# Prices are read out of the game's furniture table
 # (?itemInfo@@3PAUsFurnitureInfo@@A, 108-byte stride, price at +8) rather than
-# invented: Treadmill 3150, Pool Table 12000, Yoga Gear 150.
+# invented: Treadmill 3150, Pool Table 12000, Yoga Gear 150, Chaise 250.
+#
+# Note that a price is NOT automatically the donor's. The donor supplies the
+# furniture map, the store slot and the behaviour arrangement; the price is
+# chosen per item. Three of these do take their donor's price, but the Home
+# Gym System does not: its donor is the Yoga Equipment at 150, and it is
+# priced 3150 -- the Treadmill's price -- because a full gym is not a yoga
+# mat. Saying "the donor supplies the price" would be wrong for that item,
+# which is why the two are stated separately here.
 NEW_FURNITURE_ITEMS = [
     {
         "name": "ExerciseBikeStd",

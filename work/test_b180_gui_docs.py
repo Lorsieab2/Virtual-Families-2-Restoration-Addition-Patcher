@@ -122,14 +122,31 @@ class TestTheReadmeDoesNotOverclaimRouting(unittest.TestCase):
 
     VISIBLE_ITEMS = ("Exercise Bike", "Home Gym System", "Ping-Pong Table")
 
-    # Phrasings that would promise a drop reaction nobody has confirmed. Each
-    # is checked case-insensitively against the entry.
+    # Phrasings that would promise a drop reaction nobody has confirmed.
+    # Checked case-insensitively, and only when NOT preceded by a negation --
+    # "does not claim they act on a drop" contains "act on a drop" and is the
+    # opposite of the claim being guarded against. A plain substring test
+    # cannot tell an assertion from its denial.
     DROP_CLAIMS = (
         "act on a drop",
         "acts on a drop",
         "responds when dropped",
         "respond when dropped",
         "works when a villager is dropped",
+    )
+
+    # A phrase is a disclaimer only when the negation sits in the SAME clause,
+    # immediately before it. A wider window is worthless here: the entry
+    # legitimately says elsewhere that the hotspot path "cannot tell one added
+    # item from another", and a sixty-character look-back picked that up and
+    # excused a genuine overclaim. Validated against known-bad, which is how
+    # that was caught.
+    DISCLAIMERS = (
+        "does not claim they ",
+        "do not claim they ",
+        "not claimed that they ",
+        "no claim that they ",
+        "unconfirmed whether they ",
     )
 
     def test_the_entry_names_every_added_visible_item(self):
@@ -153,12 +170,23 @@ class TestTheReadmeDoesNotOverclaimRouting(unittest.TestCase):
         ).lower()
         for claim in self.DROP_CLAIMS:
             with self.subTest(claim):
-                self.assertNotIn(
-                    claim, entry,
-                    "the entry must not promise a drop reaction that only the "
-                    "native hotspot path could provide and no player has "
-                    "confirmed",
-                )
+                start = 0
+                while True:
+                    at = entry.find(claim, start)
+                    if at < 0:
+                        break
+                    # The disclaimer must END exactly where the phrase begins,
+                    # so only the immediately-preceding clause can excuse it.
+                    excused = any(
+                        entry[:at].endswith(d) for d in self.DISCLAIMERS
+                    )
+                    self.assertTrue(
+                        excused,
+                        "the entry promises a drop reaction that only the "
+                        "native hotspot path could provide and no player has "
+                        f"confirmed: ...{entry[max(0, at - 70):at + 40]}...",
+                    )
+                    start = at + 1
 
     def test_the_entry_points_at_where_the_actions_are_described(self):
         """A reader must be able to find what these items actually do."""
