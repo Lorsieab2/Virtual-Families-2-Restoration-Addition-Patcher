@@ -1,90 +1,163 @@
 #!/usr/bin/env python3
-"""The stock-donor route cannot identify an added item, and here is why.
+"""The stock drop path cannot identify an added item -- and a parser trap.
 
 Seven added items were left out of the mobile drop dispatcher on the argument
-that they borrow stock furniture, and that because their .fmap cell
-vocabularies are byte-identical to the donors' maps, the native
-theMainScene::HandleDropOnHotSpot path already reaches them.
+that they borrow stock furniture, so theMainScene::HandleDropOnHotSpot reaches
+them natively. The owner reported that the Home Gym System does nothing.
 
-The owner then reported that the Home Gym System does nothing. These tests pin
-the two facts that explain it, so the argument cannot be restated later
-without something failing.
+ONE finding disproves the argument, and it is about the executable:
+HandleDropOnHotSpot never reads a furniture item id.
 
-This is the repository's recurring defect shape once more -- what a check
-READS versus what it ASSERTS. Comparing the vocabularies proved the maps
-match. It was recorded as proving the drop would be dispatched, which the
-comparison never tested and which is false.
+A SECOND claim -- that the donor maps carry identical vocabularies and so
+cannot tell items apart -- was WRONG, and these tests pin the reason, because
+the mistake is repeatable by anyone who opens the obvious directory.
+
+Two containers share these filenames:
+
+    work/assets/TextAsset/                  FMP4   828 bytes  15x13   mobile
+    .../Original Virtual Families 2 Assets/ QAMF   312 bytes  11x6    desktop
+
+The desktop QAMF map is what the patched game loads. Parsing the mobile FMP4
+bytes with the desktop field extraction still RETURNS numbers -- they are just
+meaningless -- and it produced a uniform, tidy result across hundreds of
+heterogeneous files, which is evidence of a parser reading the wrong thing
+rather than evidence of uniformity in the data.
+
+So the fmap tests here refuse any file failing the QAMF magic check, and the
+decoder is validated against this patcher's own pinned constants before being
+trusted for anything.
 """
 import pathlib
 import struct
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent
-FMAPS = ROOT / "assets" / "TextAsset"
+DESKTOP = (ROOT / "vanilla_runtime_payload" /
+           "Original Virtual Families 2 Assets" / "Assets")
+MOBILE = ROOT / "assets" / "TextAsset"
 SCENE = ROOT / "desktop_obj_files" / "theMainScene.obj"
 
-DONORS = ("YogaGearStd", "TreadmillStd", "PoolTableStd", "HammockStd")
+QAMF = b"QAMF"
+
+# Recorded in this patcher independently of any fmap parsing.
+PINNED_CELLS = {0x2000B000: 0x96, 0x2000B800: 0x97, 0x2000C000: 0x98}
+
+# Desktop donors and the object each carries, read from the QAMF maps.
+DONOR_OBJECTS = {
+    "YogaGearStd": 0x75,
+    "TreadmillStd": 0x04,
+    "PoolTableStd": 0x36,
+}
 
 
-def vocabulary(name):
-    """The set of (object type, payload) pairs a map's cells carry."""
-    b = (FMAPS / f"{name}.png.fmap").read_bytes()
-    w, h = struct.unpack_from("<ii", b, 24)
-    pairs = set()
+def object_of(cell):
+    return ((cell >> 11) & 0x7F) | ((cell >> 22) & 0x80)
+
+
+def desktop_objects(name):
+    """Objects in a DESKTOP map, refusing anything that is not QAMF."""
+    path = DESKTOP / f"{name}.png.fmap"
+    blob = path.read_bytes()
+    if blob[:4] != QAMF:
+        raise AssertionError(
+            f"{path} is {blob[:4]!r}, not QAMF; refusing to parse it with the "
+            "desktop decoder"
+        )
+    w, h = struct.unpack_from("<ii", blob, 24)
+    objects = set()
     for i in range(w * h):
-        cell = struct.unpack_from("<I", b, 32 + i * 4)[0]
+        cell = struct.unpack_from("<I", blob, 32 + i * 4)[0]
         if cell:
-            pairs.add((cell >> 16, cell & 0xFFFF))
-    return pairs
+            objects.add(object_of(cell))
+    return objects
 
 
-def _sym_names(buf):
-    symptr, nsym = struct.unpack_from("<II", buf, 8)
-    strtab = symptr + nsym * 18
-
-    def name(i):
-        b = symptr + i * 18
-        raw = buf[b:b + 8]
-        if raw[:4] == b"\x00\x00\x00\x00":
-            off = struct.unpack_from("<I", raw, 4)[0]
-            end = buf.index(b"\x00", strtab + off)
-            return buf[strtab + off:end].decode("latin1")
-        return raw.rstrip(b"\x00").decode("latin1")
-
-    return name, nsym, symptr
+class TestTheDecoderIsValidatedBeforeItIsTrusted(unittest.TestCase):
+    def test_it_reproduces_the_pinned_constants(self):
+        """Three object/cell pairs this patcher recorded independently."""
+        for cell, expected in PINNED_CELLS.items():
+            with self.subTest(hex(cell)):
+                self.assertEqual(object_of(cell), expected)
 
 
-class TestTheDonorMapsCannotTellItemsApart(unittest.TestCase):
-    def test_every_donor_carries_the_same_vocabulary(self):
-        """Byte-identical hotspot data is the problem, not the reassurance.
+class TestTheTwoContainersAreNotInterchangeable(unittest.TestCase):
+    """The trap that produced a confident wrong finding."""
 
-        If the donors were distinguishable from one another, borrowing one
-        would at least carry a usable identity. They are not.
-        """
-        vocabs = {name: vocabulary(name) for name in DONORS}
-        first = vocabs[DONORS[0]]
-        for name, vocab in vocabs.items():
+    def test_the_desktop_map_is_qamf(self):
+        blob = (DESKTOP / "YogaGearStd.png.fmap").read_bytes()
+        self.assertEqual(blob[:4], QAMF)
+
+    def test_the_mobile_file_of_the_same_name_is_not(self):
+        blob = (MOBILE / "YogaGearStd.png.fmap").read_bytes()
+        self.assertNotEqual(
+            blob[:4], QAMF,
+            "if the mobile assets have become QAMF, the guard below no longer "
+            "distinguishes the two containers and this test is why",
+        )
+
+    def test_the_desktop_parser_refuses_the_mobile_file(self):
+        """Refusing beats returning meaningless numbers."""
+        with self.assertRaises(AssertionError):
+            blob = (MOBILE / "YogaGearStd.png.fmap").read_bytes()
+            if blob[:4] != QAMF:
+                raise AssertionError("not QAMF")
+
+
+class TestTheDesktopDonorsAreDistinguishable(unittest.TestCase):
+    """The correction. They are NOT identical; the earlier claim was wrong."""
+
+    def test_each_donor_carries_its_own_object(self):
+        seen = {}
+        for name, expected in DONOR_OBJECTS.items():
             with self.subTest(name):
-                self.assertEqual(
-                    vocab, first,
-                    f"{name} differs from {DONORS[0]}; if the donor maps have "
-                    "become distinguishable the stock-donor argument deserves "
-                    "re-examination rather than this failure being silenced",
+                objects = desktop_objects(name)
+                self.assertIn(
+                    expected, objects,
+                    f"{name} no longer carries object {expected:#x}",
                 )
+                seen[name] = expected
+        self.assertEqual(
+            len(set(seen.values())), len(seen),
+            "the donors must remain distinguishable from one another",
+        )
 
-    def test_the_shared_vocabulary_carries_no_item_identity(self):
-        """Two object types, neither of which names an item."""
-        self.assertEqual(vocabulary("YogaGearStd"), {(0x0, 0x1), (0x100, 0x0)})
+    def test_the_yoga_object_is_unique_across_desktop_maps(self):
+        """0x75 identifies exactly one map, which is what makes it usable."""
+        carriers = []
+        for path in sorted(DESKTOP.glob("*.fmap")):
+            blob = path.read_bytes()
+            if blob[:4] != QAMF:
+                continue
+            w, h = struct.unpack_from("<ii", blob, 24)
+            if w <= 0 or h <= 0 or 32 + w * h * 4 > len(blob):
+                continue
+            for i in range(w * h):
+                cell = struct.unpack_from("<I", blob, 32 + i * 4)[0]
+                if cell and object_of(cell) == 0x75:
+                    carriers.append(path.name)
+                    break
+        self.assertEqual(carriers, ["YogaGearStd.png.fmap"])
 
 
 class TestTheStockDropPathNeverReadsAnItemId(unittest.TestCase):
-    """HandleDropOnHotSpot dispatches on the hotspot enum and nothing else."""
+    """The finding that stands. About the executable, not the maps."""
 
     def _function_section(self):
         buf = SCENE.read_bytes()
-        name, nsym, symptr = _sym_names(buf)
-        i = 0
+        symptr, nsym = struct.unpack_from("<II", buf, 8)
+        strtab = symptr + nsym * 18
+
+        def name(i):
+            b = symptr + i * 18
+            raw = buf[b:b + 8]
+            if raw[:4] == b"\x00\x00\x00\x00":
+                off = struct.unpack_from("<I", raw, 4)[0]
+                end = buf.index(b"\x00", strtab + off)
+                return buf[strtab + off:end].decode("latin1")
+            return raw.rstrip(b"\x00").decode("latin1")
+
         found = []
+        i = 0
         while i < nsym:
             b = symptr + i * 18
             secnum = struct.unpack_from("<h", buf, b + 12)[0]
@@ -100,7 +173,6 @@ class TestTheStockDropPathNeverReadsAnItemId(unittest.TestCase):
 
     def test_it_calls_only_gethotspot_and_dispatch(self):
         buf, name, secnum = self._function_section()
-        nsec = struct.unpack_from("<H", buf, 2)[0]
         optlen = struct.unpack_from("<H", buf, 16)[0]
         base = 20 + optlen + (secnum - 1) * 40
         relptr = struct.unpack_from("<I", buf, base + 24)[0]

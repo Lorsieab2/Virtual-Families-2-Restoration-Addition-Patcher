@@ -2099,19 +2099,50 @@ The stock-donor furniture route rested on a premise that is false
   Nothing in the map separates a Home Gym from Yoga Equipment or a Treadmill.
 - HandleDropOnHotSpot cannot see an item id at all. It is 70 bytes with five
   relocations (theMainScene.obj SECT2A) and its whole body is
+
+The stock-donor furniture route: one finding stood, one was my own error
+- Seven added items were left out of the mobile drop dispatcher on the
+  argument that they borrow stock furniture, so theMainScene::HandleDropOnHotSpot
+  reaches them natively. The owner has reported that the Home Gym System does
+  nothing, so the argument needed testing.
+- WHAT HOLDS: HandleDropOnHotSpot cannot see a furniture item id. It is 70
+  bytes with five relocations (theMainScene.obj SECT2A) and its entire body is
   CContentMap::GetHotSpot(ldwPoint) then CHotSpot::Dispatch(CVillager&,
   EHotSpot). It dispatches on the hotspot enum and never reads the furniture
-  record, so an item whose identity is its item id is unreachable by it.
-- The Ping-Pong Table was offered as evidence that the native path does reach
-  these items. It is not evidence for the rest: it borrows the Pool Table's
-  hotspot, and its reported fault was a wrong LABEL -- "Playing pool" -- which
-  means the donor behaviour ran. An item with no behaviour at all is a
-  different failure and the ping-pong case says nothing about it.
-- This is the recurring shape again, in a new place: what a check READS versus
-  what it ASSERTS. Comparing the vocabularies established that the maps match.
-  It was recorded as establishing that the drop would be dispatched, which the
-  comparison never tested.
-- Recorded rather than silently repaired: the route that does distinguish
-  these items is the mobile dispatcher, which resolves an item id from the
-  furniture record via VF2FurnitureItemAtPoint. Building those handlers is the
-  outstanding work, and the ledger row already named it as the fallback.
+  record. This is a fact about the executable and is independent of any map
+  question.
+- WHAT WAS WRONG, AND IT WAS MINE: I reported that the donor maps carry
+  identical cell vocabularies and therefore cannot distinguish one item from
+  another, and that object 0x75 appears in none of 493 maps. Both claims came
+  from parsing the WRONG FILES. Two different containers share these names:
+      work/assets/TextAsset/               FMP4  828 bytes  15x13   (mobile)
+      .../Original Virtual Families 2 Assets/Assets/  QAMF  312 bytes  11x6  (desktop)
+  The desktop QAMF map is what the patched game loads. My scan read the
+  extracted MOBILE FMP4 assets with a desktop parser. The field extraction
+  ((v >> 11) & 0x7F) | ((v >> 22) & 0x80) still returns numbers when applied to
+  FMP4 bytes; they are simply meaningless, and they produced a suspiciously
+  tidy result -- every map showing only objects 0x0 and 0x100 -- which I read
+  as a finding instead of as the warning sign it was.
+- The truth, from the 276 valid QAMF desktop maps: the donors are FULLY
+  distinguishable. YogaGearStd (11x6) carries object 0x75, TreadmillStd
+  (14x16) carries 0x4, PoolTableStd (21x20) carries 0x36, and HammockStd
+  (19x24) carries 0x13 and 0x5b. Object 0x75 exists in exactly one map,
+  YogaGearStd, which is what the other session originally reported.
+- The lesson is the one already recorded about validating a checker before
+  trusting it. The decoder was never validated against anything known before
+  being used to overturn someone else's finding. Validated afterwards, it
+  reproduces all three of this patcher's own pinned constants --
+  0x2000B000 -> 0x96, 0x2000B800 -> 0x97, 0x2000C000 -> 0x98 -- on the desktop
+  maps, and reproduces nothing on the mobile ones because they fail the QAMF
+  magic check outright. A magic-number check would have refused the whole scan
+  in the first place, and the parser now performs one.
+- A uniform, tidy result across hundreds of heterogeneous files is evidence of
+  a parser reading the wrong thing, not evidence of uniformity in the data.
+- Net effect on the outstanding work: unchanged. The route that distinguishes
+  these items is still the mobile dispatcher, which resolves an item id from
+  the furniture record via VF2FurnitureItemAtPoint, and building those handlers
+  is still the outstanding work named as the ledger row's own fallback.
+  Relevant to it: CBehavior::WorkingOut (Behavior.obj SECT336) and
+  CBehavior::QuickWorkout (SECT206) call neither FindFurniture nor
+  LinkPeepToFurniture, but both DO call the point-taking
+  CVillagerPlans::PlanToGo(ldwPoint, ESpeed, EPriority).
