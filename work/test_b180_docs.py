@@ -75,7 +75,21 @@ class TestTheRoutedAndUnroutedSplitIsReal(unittest.TestCase):
             line for line in ledger.splitlines()
             if "Stock-donor added furniture" in line
         )
-        self.assertIn("Needs player confirmation", row)
+        # The point is that the row must not present these seven as working.
+        # The status wording is allowed to change as the investigation moves
+        # on -- it began as "Needs player confirmation" and became "Premise
+        # disproved / route needed" once the owner reported the Home Gym does
+        # nothing -- so this asserts the CLAIM, not one particular phrasing.
+        status = row.split("|")[2].strip()
+        self.assertNotEqual(status, "", "the row lost its status column")
+        for claimed_working in ("Shipped", "Confirmed working", "Complete"):
+            with self.subTest(claimed_working):
+                self.assertNotIn(
+                    claimed_working.lower(), status.lower(),
+                    f"the status {status!r} presents the unrouted seven as "
+                    "working; they are not routed and the owner has reported "
+                    "the Home Gym System does nothing",
+                )
         self.assertIn("HandleDropOnHotSpot", row)
         # And every one of the seven is named, so none is quietly dropped from
         # the outstanding list.
