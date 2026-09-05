@@ -10040,6 +10040,22 @@ def sync_invisible_furniture_reference_sets(manifest):
                 # the transparent setting -- leaving them stuck invisible.
                 for candidate in (
                     ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture" / source_name,
+                    # Newly ADDED art, which is neither inherited nor vanilla.
+                    # The Invisible Spa Lounger is the case that proves this
+                    # is needed: its base is SpaLoungerStd.png, which exists
+                    # ONLY here -- not in inherited_runtime_images and not in
+                    # any vanilla payload. Without this entry a clean build
+                    # drops that item from the Base Graphics reference set,
+                    # so a player who applies Transparent Graphics can never
+                    # restore it and is left stuck with an invisible item
+                    # they paid a store price for.
+                    #
+                    # It is listed BEFORE the payload entries deliberately.
+                    # install_new_furniture_art() writes this art into OUT,
+                    # but it runs AFTER this function, so on a seeded build
+                    # OUT may still hold the seed's older copy; the tracked
+                    # source is the authoritative one.
+                    NEW_FURNITURE_ART_DIR / source_name,
                     *(
                         payload / "Images" / "Furniture" / source_name
                         for payload in VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS
