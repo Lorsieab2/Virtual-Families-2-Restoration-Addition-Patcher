@@ -372,6 +372,76 @@ Grouped visible-label variants are applied to the native TV, web, video game, ra
 
 The sit-down pool is shared: the couch/chair route, the chaise route, and RestingBody's own resting labels (`Resting`, `Resting legs`, `Resting tired feet`) all draw from the same age/career/gender-aware label set. RestingBody's wrapper only substitutes a label when the native behavior actually emitted one of its three stock resting labels, so no other native label is disturbed.
 
+**Actions for the added furniture**
+
+Each added item has villager actions of its own rather than a variation of the
+base-game item it was modelled on. The distinction matters in play: a villager
+using the Exercise Bike is performing a bike action, not a treadmill action
+relabelled at the last moment.
+
+- The **Exercise Bike** has its own walking and running actions, labelled
+  **Using the exercise bike** and **Doing high-intensity cycling**.
+- The **Home Gym System** has its own workout action, with ten variations:
+  lifting weights, doing crunches, cardio exercises, resistance training,
+  strength training, aerobic exercises, endurance exercises, stretching,
+  high-intensity interval training, and weightlifting.
+- The **Yoga Equipment** has its own action, labelled **Doing yoga**.
+- The **Ping-Pong Table** has its own action, labelled **Playing ping-pong**.
+
+Each borrows its base-game counterpart for *animations and duration only* --
+those are deliberately unchanged, and reusing them is the point. What is not
+borrowed is identity: every one of these carries its own behaviour, so it is
+never a branch inside somebody else's.
+
+Two things follow, and both are worth stating plainly because they are what
+makes this safe:
+
+- **Stock furniture is untouched.** A stock Treadmill and a stock Pool Table
+  behave exactly as they did before, with their own actions and their own
+  labels. Nothing about them changes.
+- **Nothing is gated on owning an item.** Every base-game action stays
+  available to every villager exactly as before. Owning one of these items
+  *adds* its action and takes nothing away; an action simply does not fire when
+  its own item is not placed, so it happens at that item rather than being a
+  reward for buying it.
+
+Before this, three of these items borrowed a base-game action wholesale and
+swapped the label once the villager's linked furniture turned out to be the
+added one, and the Home Gym System had no action at all -- the Yoga Equipment it
+was modelled on consults no furniture in the base game, so the gym could be
+bought and placed and never used by anyone.
+
+A separate fault, reported from live play on B180, kept even the label swap from
+working: villagers at the Ping-Pong Table were still labelled "Playing pool".
+Recovering which item a villager was at went through a point the game hands back
+for a different purpose -- the tile a villager stands on to *use* something, not
+the item's own footprint -- and testing that point against the footprint asks
+"which furniture is the villager standing inside". For anything you stand
+beside, a table included, the answer is "none", so the check reported "not that
+item" for every item, every time. Each placement carries a unique handle that
+the game returns alongside the match, and the record is now found by that
+handle, which also keeps two tables of the same kind apart.
+
+**Substantive changes** below: the hammock rest builds its own plan sequence,
+six-child private romantic time changes an outcome, and the computer drop gains
+a choice it did not have.
+
+**Made autonomously selectable**
+
+- Hammock anchored rest (Sunny/Cloudy weather only), warming hands by and watching the fireplace, pinball / slots / pachinko / pool table / foosball, and random radio or MP3 dancing/listening — all ages.
+- Playhouse and playground (daytime only), playing quietly at the kids table, drawing at the easel, the sandbox, the toy train table, and "driving like a grownup" — children only.
+- Mending a button and ironing clothes — from displayed age 14. Kitchen, office, and workshop career work — adults only.
+- Checking weight, playing video games, browsing the web, watching TV, getting a drink, heating up food, looking for snacks, preparing a meal, bookshelf reading, showers and baths (including the north shower), coffee/tea and the rare grande latte, cocktails, the trampoline, board games, the swimming pool, watering flowers/roses/window boxes, bathroom sink washing and grooming, the telescope, working out, breakfast, teen homework, and teen online exams.
+- Teaching first words and the infant-care label family — nursing mothers carrying a baby only.
+- **"Needs to sit down" on couches and chairs** (`CBehavior::UseCouch`, `0x189`). This is the behavior a manual drop on a couch or chair runs via `CHotSpot::Couch`, and it is enabled as its own autonomous candidate at weight 450 so the AI picks it too. Native couch and age gates are retained.
+- **RestingBody** (`0x127`) and its resting label family. Autonomous for all ages at weight 450. Its native sittable targeting and plans are retained. When **Add mobile furniture behaviors** is also enabled, that patch runs last and raises this candidate to weight 2000, where it additionally carries the chaise sunbathing and sit-down routes.
+
+**Label variations**
+
+Grouped visible-label variants are applied to the native TV, web, video game, radio, reading, petting, mending, ironing, telescope, workout, career, shower/bath, coffee/tea, cocktail, pool, sandbox, toy train, playground, and snow-play routes. The wrappers preserve the original behavior plans and only change the displayed action text.
+
+The sit-down pool is shared: the couch/chair route, the chaise route, and RestingBody's own resting labels (`Resting`, `Resting legs`, `Resting tired feet`) all draw from the same age/career/gender-aware label set. RestingBody's wrapper only substitutes a label when the native behavior actually emitted one of its three stock resting labels, so no other native label is disturbed.
+
 **Labels for the added furniture**
 
 Three of the added items borrow a base-game machine whose label would otherwise
