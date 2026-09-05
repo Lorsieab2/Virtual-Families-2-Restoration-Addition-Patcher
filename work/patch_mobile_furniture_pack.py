@@ -20075,6 +20075,40 @@ def patch_graphics_manager(manifest):
             "grid": [1, 1],
         })
 
+    # The picnic-meal and patio-drinks sprites. Space for these three
+    # descriptors is reserved above (the "+ len(PROP_ART_IMAGE_ORDER)" term in
+    # append_count), but reserving is not populating: without this loop the
+    # records stay zero-filled, so the ids prop_art_image_id() computes point
+    # at blank descriptors and GetImageGrid() cannot resolve any of them. The
+    # draw hook then runs and renders nothing, which is exactly what shipped
+    # in B181 -- the executable contained no path string for any of the three,
+    # while every populated descriptor puts its path in the binary.
+    prop_art_desc_manifest = []
+    for name in PROP_ART_IMAGE_ORDER:
+        image_id = prop_art_image_id(name, holiday_desc_count)
+        path = f"Images/{PROP_ART_INSTALL[name]}"
+        vals = plain_image_donor[:]
+        vals[0] = image_id
+        vals[1] = 0
+        vals[2] = 1
+        vals[3] = 1
+        desc_off = img_sym.value + image_id * DESC_SIZE
+        img_sec = obj.section(img_sym.section)
+        obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack(
+            "<" + "I" * (DESC_SIZE // 4), *vals
+        )
+        sym = "_vf2prop_" + name.replace(".", "_")
+        helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+        symidx = obj.append_undefined_symbol(sym)
+        obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+        prop_art_desc_manifest.append({
+            "name": name,
+            "image_id": hex(image_id),
+            "path": path,
+            "symbol": sym,
+            "grid": [1, 1],
+        })
+
     mobile_renovation_desc_manifest = []
     if ENABLE_MOBILE_RENOVATIONS:
         for index, filename in enumerate(MOBILE_RENOVATION_ART_FILES):
@@ -20407,6 +20441,11 @@ def patch_graphics_manager(manifest):
             "image_base": hex(head_icon_image_base(holiday_desc_count)),
             "image_count": HEAD_STORE_ENTRY_COUNT,
             "descriptors": head_icon_desc_manifest,
+        },
+        "prop_art_images": {
+            "image_base": hex(prop_art_image_base(holiday_desc_count)),
+            "image_count": len(PROP_ART_IMAGE_ORDER),
+            "descriptors": prop_art_desc_manifest,
         },
         "mobile_renovation_images": {
             "enabled": ENABLE_MOBILE_RENOVATIONS,
