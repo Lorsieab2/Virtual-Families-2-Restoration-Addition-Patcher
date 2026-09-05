@@ -19480,6 +19480,16 @@ def patch_mobile_table_prop_draw(manifest):
     # Find the LAST AddDecal call inside RefreshProps by walking the section's
     # relocations, rather than pinning a fixed offset. A shifted function then
     # fails loudly instead of hooking whatever now sits at that address.
+    #
+    # The search runs to the end of the section, which is the function's real
+    # extent -- RefreshProps is the only symbol in it, at value 0. An earlier
+    # hardcoded length of 0xA83 excluded nothing (the chosen site is 0xa6b and
+    # the section is 0xba4), but it sat just 0x18 bytes above that site: had
+    # the function grown a later AddDecal call past the cutoff, the search
+    # would have silently settled on an EARLIER call and drawn our props
+    # partway through the stock prop pass instead of on top of it. No error
+    # would fire, because a site was still found.
+    search_end = refresh_props.value + section.raw_size
     hook_vaddr = None
     ptr = section.reloc_ptr
     for _ in range(section.nreloc):
@@ -19487,7 +19497,7 @@ def patch_mobile_table_prop_draw(manifest):
         ptr += 10
         if rec_sym != add_decal_5.index:
             continue
-        if not (refresh_props.value <= rec_vaddr - 1 < refresh_props.value + 0xA83):
+        if not (refresh_props.value <= rec_vaddr - 1 < search_end):
             continue
         if obj.buf[section.raw_ptr + rec_vaddr - 1] != 0xE8:
             continue
