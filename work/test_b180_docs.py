@@ -422,5 +422,81 @@ class TestThePropBlockerIsNamedAccurately(unittest.TestCase):
         )
 
 
+class TestBothPropBoundsAreReal(unittest.TestCase):
+    """Two independent limits agree on 85 props. Both are pinned.
+
+    The docs used to name only SetProp's `cmp edi,54h`. CEnvironment::Update
+    ends its loop with `cmp edi,55h` / `jl`, walking the same 0x00-0x54 range.
+    Recording only one of them understates what raising the bound costs: the
+    two agree today, and changing either alone desynchronises the array from
+    the code that iterates it.
+
+    The 0x55 is also the exact value most likely to be misread as a free slot
+    for ePropPicnicReady. It is a loop terminator, not an index. This test
+    exists partly so that misreading fails here rather than propagating into
+    a change that walks off the end of the array.
+    """
+
+    OBJ = ROOT / "work" / "desktop_obj_files" / "Environment.obj"
+    SETPROP_CMP = bytes((0x83, 0xFF, 0x54))   # cmp edi, 54h
+    UPDATE_CMP = bytes((0x83, 0xFF, 0x55))    # cmp edi, 55h
+    JA = bytes((0x0F, 0x87))                  # reject above
+    JL = bytes((0x0F, 0x8C))                  # loop back while below
+
+    def _obj(self):
+        if not self.OBJ.is_file():
+            self.skipTest("Environment.obj is a gitignored build input")
+        return self.OBJ.read_bytes()
+
+    def _sole(self, data, pattern, label):
+        hits = [
+            i for i in range(len(data) - len(pattern) + 1)
+            if data[i:i + len(pattern)] == pattern
+        ]
+        self.assertEqual(
+            len(hits), 1,
+            f"expected exactly one {label}, found {len(hits)}; a checker that "
+            "picks the first of several is guessing",
+        )
+        return hits[0]
+
+    def test_setprop_still_rejects_above_0x54(self):
+        data = self._obj()
+        at = self._sole(data, self.SETPROP_CMP, "SetProp bound")
+        self.assertEqual(
+            data[at + 3:at + 5], self.JA,
+            "SetProp must still REJECT ids above the bound",
+        )
+
+    def test_update_still_iterates_to_0x55_exclusive(self):
+        data = self._obj()
+        at = self._sole(data, self.UPDATE_CMP, "Update bound")
+        self.assertEqual(
+            data[at + 3:at + 5], self.JL,
+            "Update's 0x55 must remain an EXCLUSIVE loop limit; if this ever "
+            "reads as an index there is one more prop slot than the docs say",
+        )
+
+    def test_the_two_bounds_describe_the_same_array(self):
+        """SetProp admits <= 0x54, Update walks < 0x55: the same 85 entries.
+
+        If a future build makes these disagree, both the documentation and the
+        interception in VF2PatioSetPropAndTrack are reasoning about an array
+        that no longer exists in that shape.
+        """
+        data = self._obj()
+        self._sole(data, self.SETPROP_CMP, "SetProp bound")
+        self._sole(data, self.UPDATE_CMP, "Update bound")
+
+    def test_the_log_records_both_bounds(self):
+        text = TRANSPARENCY.read_text(encoding="utf-8")
+        self.assertIn("the prop bound is TWO limits", text)
+        self.assertIn(
+            "0xce4f", text,
+            "the Update bound's address belongs in the record; without it the "
+            "second limit cannot be re-checked",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

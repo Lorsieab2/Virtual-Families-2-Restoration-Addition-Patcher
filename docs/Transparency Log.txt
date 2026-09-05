@@ -1554,6 +1554,34 @@ B180 shipped an overstated count in one setting description
   ornaments description was checked identically and is correct at 12, which is
   now pinned so a later pass does not "fix" a right number.
 
+B180 the prop bound is TWO limits, not one, and they agree
+- The picnic/patio props were previously documented as blocked by a single
+  compare, CEnvironment::SetProp's `cmp edi,54h`. Re-examined after the owner
+  supplied the artwork. There is a SECOND bound, and finding it changes what
+  raising the limit would cost.
+- CEnvironment::Update at Environment.obj+0xce4f ends its loop with
+  `inc edi` / `cmp edi,55h` / `jl`, so it walks prop indices 0x00-0x54.
+  SetProp at +0xab33 uses `cmp edi,54h` / `ja`, admitting 0x00-0x54. The two
+  agree on exactly 85 props.
+- The 0x55 in Update is the loop's terminator, NOT a spare slot. It would be
+  easy to read it as one free index beyond SetProp's limit and conclude there
+  was headroom for ePropPicnicReady (0x55); there is not, and both props
+  remain past the end of the array.
+- So raising the bound means changing at least three things in a stock object
+  file that agree with each other today: SetProp's compare, Update's loop
+  terminator, and the jump table SetProp dispatches through, whose index and
+  target displacements are both link-time relocations. Any one of them left
+  behind desynchronises the array from the code that walks it.
+- This is why the shipped approach intercepts instead. VF2PatioSetPropAndTrack
+  catches 0x55 and 0x56 before SetProp sees them and tracks the state
+  externally, so the out-of-range ids never reach the engine. That is also why
+  nothing crashes today and why nothing draws.
+- Environment.obj carries a table-driven prop system -- PropTypeStruct,
+  InitProps, RefreshProps, UpdateProps, GetPropPosition, SetPropPosition,
+  PropIsActive -- with no static prop table in .data, so the array is built at
+  runtime by InitProps. There are no prop art filenames in the object either,
+  so art is resolved elsewhere.
+
 B180 verification method
 - Generated .cpp files are compiled individually (cl /c /EHsc) after each
   change. Three defects this cycle were invisible to source-reading tests and
