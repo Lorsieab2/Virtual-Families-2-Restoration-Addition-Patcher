@@ -1582,6 +1582,35 @@ B180 the prop bound is TWO limits, not one, and they agree
   runtime by InitProps. There are no prop art filenames in the object either,
   so art is resolved elsewhere.
 
+B180 how the picnic and patio props would actually be drawn
+- Traced after the owner supplied the artwork. Recorded because it changes the
+  route from "extend a jump table in a stock object" to "wrap one function",
+  and because the shape of the call sites decides how the wrapper must work.
+- Props are not blitted directly. Environment.obj calls CDecal::RefreshDecals,
+  and CDecal::RefreshProps is what draws them: it calls
+  CDecal::AddDecal(ldwImageGrid *, int x, int y, float) sixteen times, once per
+  prop type. AddDecal is public and takes an image grid plus world
+  coordinates, so it can draw a sprite the prop enum never has to know about.
+- That is why the SetProp bound is not the real obstacle to RENDERING. The
+  bound stops an id being stored in the prop array; it does not stop anything
+  being drawn. A wrapper around CDecal::RefreshProps can draw the meal and
+  drinks sprites from the state VF2PatioSetPropAndTrack already tracks --
+  gVF2PicnicReadyOn, gVF2PatioDrinksOn and their deadlines -- without the ids
+  ever entering the array.
+- Six call sites reach RefreshDecals from Environment.obj: ClearProp +0x104,
+  Refresh +0x18, RefreshProps +0xe6, SetProp +0x33b, SetPropGroceries +0x98
+  and UpdateProps +0x53. CDecal::RefreshDecals reaches CDecal::RefreshProps
+  from exactly one site, +0xb70.
+- IMPORTANT for the wrapper: that site and CEnvironment::RefreshProps +0xe6 are
+  `jmp rel32` TAIL CALLS (opcode 0xE9), not `call rel32`. Retargeting a tail
+  call REPLACES the callee rather than wrapping it, so the helper must invoke
+  the original itself and must not expect to return into the caller. A
+  wrapper written for a `call` site would silently drop the stock prop
+  drawing, which is far worse than the missing props it set out to add.
+- No change to Environment.obj is needed for any of this, which is why it is
+  the safe route: it is the relocation-retarget pattern already proven by
+  VF2PatioSetPropAndTrack.
+
 B180 verification method
 - Generated .cpp files are compiled individually (cl /c /EHsc) after each
   change. Three defects this cycle were invisible to source-reading tests and
