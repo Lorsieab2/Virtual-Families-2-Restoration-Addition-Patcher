@@ -5332,6 +5332,67 @@ def install_new_furniture_art(manifest):
     print(f"new furniture art: {len(installed)} sprites installed")
 
 
+PROP_ART_DIR = (
+    ROOT / "patcher_assets" / "optional_patches" / "mobile_furniture_behaviors"
+    / "prop_art"
+)
+
+# Sprite -> the name it is installed under in the build's Images folder. The
+# meal is orientation-specific because mobile ships two, which is what settled
+# that the behaviour activates a prop ON the table rather than the table
+# swapping to a different image. The drinks stand reads the same either way.
+PROP_ART_INSTALL = {
+    "mealSE.png": "mealSE.png",
+    "mealSW.png": "mealSW.png",
+    "patioDrinks.png": "patioDrinks.png",
+}
+
+
+def install_prop_art(manifest):
+    """Write the picnic-meal and patio-drinks sprites into the build.
+
+    Tracked art has to be EMITTED, not merely checked in. The exporter builds
+    a bundle by diffing the build output against a clean base, so a sprite the
+    generator never writes is a sprite a player never receives -- the wrapper
+    would draw correctly here and show nothing on a real install.
+
+    Digest-verified before writing for the same reason install_new_furniture_art
+    is: hand-supplied art cannot be regenerated, and a silently re-encoded or
+    truncated file should fail the build rather than ship.
+    """
+    record = manifest.setdefault("prop_art", {})
+    sums_path = PROP_ART_DIR / "SHA256SUMS.json"
+    if not sums_path.is_file():
+        raise SystemExit(f"Prop art digests are missing: {sums_path}")
+    digests = json.loads(sums_path.read_text(encoding="utf-8")).get("files", {})
+    installed, problems = [], []
+    for source_name, target_name in PROP_ART_INSTALL.items():
+        source = PROP_ART_DIR / source_name
+        if not source.is_file():
+            problems.append(f"{source_name} is missing from {PROP_ART_DIR}")
+            continue
+        expected = digests.get(source_name)
+        payload = source.read_bytes()
+        if expected is None:
+            problems.append(f"{source_name} has no recorded digest")
+            continue
+        if hashlib.sha256(payload).hexdigest() != expected:
+            problems.append(f"{source_name} does not match its recorded digest")
+            continue
+        target = OUT / "Images" / target_name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+        installed.append(target_name)
+    if problems:
+        raise SystemExit("Prop art cannot be installed -- " + "; ".join(problems))
+    record.update(
+        status="ok",
+        source=_repo_relative(PROP_ART_DIR),
+        installed=installed,
+    )
+    print(f"prop art: {len(installed)} sprites installed")
+
+
 def restore_preserved_inherited_art(manifest):
     """Supply inheritance-only images from the tracked store, not a predecessor.
 
@@ -34411,6 +34472,9 @@ def main():
     # installing afterwards would leave the two orientations sliced at the
     # wrong boundary.
     install_new_furniture_art(manifest)
+    # Emitted alongside it for the same reason: the exporter ships what the
+    # build writes, so tracked-but-unwritten art never reaches a player.
+    install_prop_art(manifest)
     normalize_added_furniture_sheets(manifest)
     # Seeded and additive runtime assets may both contribute files; remove
     # development-source names only from known runtime asset directories
