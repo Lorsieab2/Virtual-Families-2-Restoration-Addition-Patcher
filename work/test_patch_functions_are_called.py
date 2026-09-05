@@ -65,7 +65,14 @@ INTENTIONALLY_UNCALLED = {
         "working replacement ships -- the CInventoryManager::GetOutfit hook "
         "reads the selected synthetic ToolTray item directly. The helper "
         "symbol existing and being referenced elsewhere is exactly what makes "
-        "this look like forgotten wiring; it is not",
+        "this look like forgotten wiring; it is not. Confirmed in the "
+        "generator as well as the manifest: outfit_apply_body_resolver is "
+        "written TWICE, optimistically inside this orphan and again inside "
+        "main(), and main()'s write wins unconditionally. So the "
+        "disabled-for-stability record is not stale documentation left lying "
+        "around -- it is an active statement made by the shipping build path "
+        "on every build, while the orphan's own hopeful status line is the "
+        "one that never runs",
     "patch_plan_logging":
         "diagnostic instrumentation, not part of a shipped build",
     "sync_holiday_body_types":
