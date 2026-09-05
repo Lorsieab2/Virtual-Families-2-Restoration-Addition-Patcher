@@ -38,8 +38,27 @@ import struct
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent
-DESKTOP = (ROOT / "vanilla_runtime_payload" /
-           "Original Virtual Families 2 Assets" / "Assets")
+PAYLOAD = ROOT / "vanilla_runtime_payload"
+
+
+def _desktop_assets():
+    """Whichever payload layout this machine happens to have.
+
+    Two layouts are in circulation and each exists on some machines and not
+    others, so hardcoding either makes the tests pass for one person and raise
+    FileNotFoundError for the next. Resolve it instead, and return None when
+    neither is present so the caller can skip rather than crash.
+    """
+    for candidate in (
+        PAYLOAD / "Assets",
+        PAYLOAD / "Original Virtual Families 2 Assets" / "Assets",
+    ):
+        if (candidate / "YogaGearStd.png.fmap").is_file():
+            return candidate
+    return None
+
+
+DESKTOP = _desktop_assets()
 MOBILE = ROOT / "assets" / "TextAsset"
 SCENE = ROOT / "desktop_obj_files" / "theMainScene.obj"
 
@@ -62,7 +81,7 @@ def object_of(cell):
 
 def require_desktop_payload(case):
     """Skip unless the gitignored game payload is present in this checkout."""
-    if not DESKTOP.is_dir():
+    if DESKTOP is None:
         case.skipTest("vanilla_runtime_payload is a gitignored build input")
 
 
