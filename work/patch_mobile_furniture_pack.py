@@ -19439,6 +19439,89 @@ def apply_second_bathroom_leaks(manifest):
     patch_second_bathroom_leaks(manifest)
 
 
+def patch_mobile_table_prop_draw(manifest):
+    """Draw the picnic meal and patio drinks, without spending cave space.
+
+    The two prop ids never enter the engine's prop array -- it is
+    CEnvironment + prop*16 and prop 0x54 is its last record -- so nothing in
+    RefreshProps or RefreshDecals draws them. This adds two draws that were
+    never there.
+
+    It costs ZERO added bytes. RefreshProps' last AddDecal call is already a
+    five-byte call with a relocation, so pointing that relocation at a wrapper
+    needs no trampoline, no cave and no section growth. The wrapper forwards to
+    the stock AddDecal and then draws ours, which is also the ordering we want:
+    our props land on top of every stock prop.
+
+    Deliberately NOT hooked at the epilogue. Overwriting
+    `pop edi/esi/ebx; mov esp,ebp` with a call and reproducing those
+    instructions in a naked helper cannot work -- `mov esp,ebp` restores the
+    CALLER's frame and destroys the helper's own return address. Wrapping an
+    existing call site avoids that entire class of problem.
+
+    The wrapped site uses the FIVE-argument AddDecal, which is the
+    bounds-checked overload. The wrapper forwards to it unchanged; only our own
+    draws use the four-argument form, and those are gated on the prop actually
+    being placed rather than on a scan that never stops.
+    """
+    path = PATCHED / "Decal.obj"
+    obj = CoffObject(path)
+    refresh_props = obj.symbol("?RefreshProps@CDecal@@QAEXXZ")
+    section = obj.section(refresh_props.section)
+    add_decal_5 = obj.symbol("?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z")
+
+    # Find the LAST AddDecal call inside RefreshProps by walking the section's
+    # relocations, rather than pinning a fixed offset. A shifted function then
+    # fails loudly instead of hooking whatever now sits at that address.
+    hook_vaddr = None
+    ptr = section.reloc_ptr
+    for _ in range(section.nreloc):
+        rec_vaddr, rec_sym, _rec_type = struct.unpack_from("<IIH", obj.buf, ptr)
+        ptr += 10
+        if rec_sym != add_decal_5.index:
+            continue
+        if not (refresh_props.value <= rec_vaddr - 1 < refresh_props.value + 0xA83):
+            continue
+        if obj.buf[section.raw_ptr + rec_vaddr - 1] != 0xE8:
+            continue
+        if hook_vaddr is None or rec_vaddr > hook_vaddr:
+            hook_vaddr = rec_vaddr
+    if hook_vaddr is None:
+        raise RuntimeError(
+            "CDecal::RefreshProps has no AddDecal call to wrap; the prop draw "
+            "hook cannot be installed"
+        )
+
+    helper = obj.append_undefined_symbol("_VF2RefreshPropsAddDecalAndProps")
+    obj.retarget_relocation(
+        refresh_props.section, hook_vaddr, helper, IMAGE_REL_I386_REL32
+    )
+    obj.write(path)
+
+    manifest["MobileTablePropDraw"] = {
+        "status": "installed",
+        "function": "?RefreshProps@CDecal@@QAEXXZ",
+        "hooked_call_offset": hex(hook_vaddr - 1 - refresh_props.value),
+        "wrapped": "?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z",
+        "helper": "_VF2RefreshPropsAddDecalAndProps",
+        "added_bytes": 0,
+        "mechanism": (
+            "retargets an existing five-byte call relocation; no trampoline, "
+            "no cave space, no section growth"
+        ),
+        "draws": list(PROP_ART_IMAGE_ORDER),
+        "position_source": (
+            "FindFurniture at prop activation -- sFurnitureInfo2 carries both "
+            "the world point and the orientation that picks SE from SW"
+        ),
+        "why_not_the_prop_array": (
+            "CEnvironment + prop*16 holds through prop 0x54; 0x55 and 0x56 "
+            "would write 32 bytes past its last record"
+        ),
+    }
+    print("mobile table prop draw: RefreshProps hooked, 0 bytes added")
+
+
 def patch_bathroom1_curtain_decal(manifest):
     """Route each bathroom's renovation curtain to its own native decal slot.
 
