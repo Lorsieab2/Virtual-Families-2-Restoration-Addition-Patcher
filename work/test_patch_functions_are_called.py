@@ -73,6 +73,26 @@ INTENTIONALLY_UNCALLED = {
         "around -- it is an active statement made by the shipping build path "
         "on every build, while the orphan's own hopeful status line is the "
         "one that never runs",
+    "patch_vf3_style_child_adoption_chooser":
+        "REVERTED BECAUSE IT CRASHED THE GAME, and found only once this "
+        "module stopped deciding reachability by counting the name in the "
+        "file text -- it is referenced twice in comments, one of them a "
+        "commented-out call, which the old text count accepted as reached. "
+        "It replaced the stock spawn route in "
+        "CScrollingStoreScene::HandleUpgrade (+0x57A) with a helper that "
+        "put up a baby-or-older-child message box and spawned the adoptee "
+        "itself. Purchasing Adoption Services then access-violated with a "
+        "faulting module of 'unknown' at address 0x1D7 -- execution had "
+        "left every loaded module, which is the signature of a call "
+        "through a corrupted return address or function pointer, not a bad "
+        "data read. The helper also did not reproduce the stock call: the "
+        "native route is SpawnSpecificPeep(age=1, gender=-1, body=0x3C) "
+        "and it passed body=-1 with an explicit gender, and it built a "
+        "theMessageBoxDlg in a 0x300-byte stack buffer standing in for a "
+        "class whose real size is not pinned anywhere. Rather than guess "
+        "which of those was fatal, the whole route was reverted so "
+        "HandleUpgrade's adoption path is byte-identical to stock, and "
+        "Adoption Services is deliberately left ENTIRELY BASE-GAME",
     "patch_plan_logging":
         "diagnostic instrumentation, not part of a shipped build",
     "sync_holiday_body_types":
@@ -134,12 +154,16 @@ class TestEveryInstallerIsReached(unittest.TestCase):
         }
         self.assertTrue(installers, "found no installers -- a vacuous pass")
 
+        # Reachability is decided from the AST call set, NOT from counting
+        # the name in the file text. A text count is satisfied by a mention
+        # in a comment or a docstring, which is exactly how an orphan hides:
+        # patch_vf3_style_child_adoption_chooser is defined once, referenced
+        # only from two comments (one of them a commented-out call), and the
+        # old text-count rule passed it as reached.
         orphaned = sorted(
             name for name in installers
             if name not in INTENTIONALLY_UNCALLED
-            # A definition is itself a Name node in the tree, so require the
-            # name to appear more often than its single definition.
-            and SOURCE.read_text(encoding="utf-8").count(name) <= 1
+            and name not in self.called
         )
         self.assertEqual(
             orphaned, [],
