@@ -25726,6 +25726,55 @@ static void VF2CaptureTableProp(
     outPlaced = true;
 }
 
+// Draw the picnic meal and patio drinks.
+//
+// These two props are not in the engine's prop array and never can be: it is
+// CEnvironment + prop*16 and prop 0x54 is its last record, so 0x55 and 0x56
+// would land past the end. Nothing in RefreshProps or RefreshDecals pushes
+// either id, so there is no existing draw to substitute at -- this ADDS two
+// draws that were never there.
+//
+// AddDecal here is the four-argument overload, which carries NO bounds check;
+// the five-argument form guards with `cmp edx,0x100 / jg`. Rather than rely on
+// a scan that does not stop, the caller is gated on the prop actually being
+// placed, so at most two extra decals are ever added.
+static void VF2DrawTableProp(
+    int imageId,
+    int x,
+    int y)
+{
+    theGraphicsManager *graphics = theGraphicsManager::Get();
+    if (graphics == 0) return;
+    ldwImageGrid *grid = graphics->GetImageGrid((EImage)imageId);
+    if (grid == 0) return;
+    Decal.AddDecal(grid, x, y, 1.0f);
+}
+
+// Called after the stock prop pass, so our two draw on top of it rather than
+// in place of it.
+extern "C" void __cdecl VF2DrawMobileTableProps()
+{
+    if (gVF2MobileFurnitureBehaviors == 0) return;
+    if (VF2PicnicReadyActive() && gVF2PicnicPropPlaced) {
+        // Mobile ships mealSE and mealSW as a pair, which is what establishes
+        // the prop sits ON the table: the sprite has to face the way the
+        // table does.
+        VF2DrawTableProp(
+            gVF2PicnicPropOrientation == 1
+                ? __VF2_PROP_IMAGE_MEAL_SE__
+                : __VF2_PROP_IMAGE_MEAL_SW__,
+            gVF2PicnicPropX,
+            gVF2PicnicPropY);
+    }
+    if (VF2PatioDrinksActive() && gVF2PatioPropPlaced) {
+        // A single sprite: the drinks stand reads the same from either side.
+        VF2DrawTableProp(
+            __VF2_PROP_IMAGE_PATIO_DRINKS__,
+            gVF2PatioPropX,
+            gVF2PatioPropY);
+    }
+}
+
 extern "C" void __fastcall VF2PatioSetPropAndTrack(
     CEnvironment *environment,
     void *,
@@ -28170,6 +28219,18 @@ __VF2_COMPUTER_DROP_DISPATCH__
     ):
         helper_source = helper_source.replace(
             _placeholder, f"{furniture_item_id_by_name(_item_name):#x}"
+        )
+    # The prop sprites' image ids. Substituted from the same functions the
+    # descriptor append uses, so a shifted block cannot leave the draw
+    # pointing at whatever art now occupies the old id.
+    _prop_holiday = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
+    for _placeholder, _sprite in (
+        ("__VF2_PROP_IMAGE_MEAL_SE__", "mealSE.png"),
+        ("__VF2_PROP_IMAGE_MEAL_SW__", "mealSW.png"),
+        ("__VF2_PROP_IMAGE_PATIO_DRINKS__", "patioDrinks.png"),
+    ):
+        helper_source = helper_source.replace(
+            _placeholder, str(prop_art_image_id(_sprite, _prop_holiday))
         )
     helper_source = helper_source.replace("__VF2_NAP_FALLBACK__", nap_fallback)
     helper_source = helper_source.replace("__VF2_REST_FALLBACK__", rest_fallback)
