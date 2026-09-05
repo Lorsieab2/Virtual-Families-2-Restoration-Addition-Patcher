@@ -26,6 +26,8 @@ The sync happens first, so on a clean output tree the art is not in OUT yet and
 the fallback is the only way to find it.
 """
 import unittest
+
+NL = chr(10)
 from pathlib import Path
 import sys
 
@@ -41,8 +43,15 @@ class BaseGraphicsCanResolveAddedArt(unittest.TestCase):
         source = SOURCE.read_text(encoding="utf-8")
         start = source.index("def sync_invisible_furniture_reference_sets(")
         body = source[start:source.index("\ndef ", start + 10)]
+        # STRIP COMMENTS. This currently passes only because the comment
+        # above the fallback entry happens to say "Newly ADDED art" rather
+        # than the symbol name -- luck, not design. Three tests in this
+        # repository have already matched their own explanatory comment
+        # and stayed green with the code deleted, so any test that slices
+        # raw source strips comments first.
+        code = NL.join(line.split("#")[0] for line in body.split(NL))
         self.assertIn(
-            "NEW_FURNITURE_ART_DIR", body,
+            "NEW_FURNITURE_ART_DIR", code,
             "the Base Graphics fallback does not search new_furniture_art, so "
             "an invisible item whose base is ADDED art is dropped from the "
             "reference set and can never be restored",
