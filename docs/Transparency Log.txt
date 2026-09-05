@@ -2018,3 +2018,94 @@ The bundled player documentation still called a known-broken item unconfirmed
   Equipment's price. The donor's price is 150 and the gym's is 3150, set
   independently, so the donor supplies the furniture map, store slot and
   behaviour arrangement but not the price.
+
+The Home Gym System did not work, and this is why
+- Reported from live play: the item could be bought and placed and no villager
+  ever used it. That was accurate, and it is fixed now -- see the entry below on
+  every added furniture item having actions of its own.
+- The item borrows the Yoga Equipment as its donor, which supplies its price,
+  its store slot and its furniture map. Reading the game's own code shows why
+  that cannot produce an interactive item: the two yoga behaviours are pure
+  in-place animations. Neither asks the game which piece of furniture the
+  villager is at, and neither refuses to run when none is placed. A villager
+  doing yoga does it wherever they happen to be standing, and the mat is
+  scenery.
+- The behaviours that DO make a placed machine get used, such as the two
+  treadmill ones, link the villager to a specific placed object and stop if
+  they cannot. That is the difference, and it is a property of the behaviour
+  rather than of the item.
+- So cloning the Yoga Equipment produced a faithful clone of a decoration. The
+  fault is in what was cloned, not in the cloning.
+- An earlier attempt to fix this by repointing the item at the treadmill's
+  furniture map was wrong and was reverted in full. It would have changed what
+  the item IS -- a machine a villager walks up to and mounts -- rather than
+  implementing what was asked for, which is that the workout behaviours stay
+  available to everyone exactly as they are now, and that owning a gym makes
+  villagers perform them at it. Nothing about that is a restriction on who may
+  work out, and no version of this feature should gate a behaviour on owning
+  the item.
+- Recorded here rather than quietly left out, because a release that claims
+  four working furniture items when one of them is inert is the kind of claim
+  this log exists to prevent.
+
+Every added furniture item now has actions of its own
+- The Home Gym System, the Yoga Equipment, the Exercise Bike and the Ping-Pong
+  Table each have their own villager actions, rather than a base-game action
+  with the label swapped once the villager's linked furniture turned out to be
+  the added one. What was asked for: the actions "should not be a variation of
+  the treadmill actions. they should be independent, but use the same
+  animations, duration etc. and be exclusive to the exercise bike", and then
+  "same for the other added furniture items".
+- The base-game counterpart supplies animations and duration and nothing else.
+  Reusing those is deliberate and was explicitly wanted; what is no longer
+  borrowed is identity, so a villager on the Exercise Bike is performing a bike
+  action rather than a treadmill action wearing a different name.
+- Two properties hold, and they are structural rather than promised. Stock
+  furniture keeps its own actions and labels, so a stock Treadmill and Pool
+  Table behave exactly as before. And nothing is gated on owning an item: every
+  base-game action stays available to every villager, and an added item's action
+  simply does not fire when that item is not placed. Owning one adds an action
+  and takes none away.
+- The mechanism is a behaviour id of the item's own, bound to its own handler in
+  the game's behaviour constructor. Copying a behaviour's data into an unused id
+  is not sufficient and would have failed quietly: every existing copy of that
+  kind in this patcher targets an id the constructor already registers, and an
+  unregistered id has no handler attached to it at all.
+- One limit is now enforced by the build rather than trusted. Behaviour records
+  grow through the villager's own memory toward the buffer holding the label the
+  game is about to display; an id past a certain point overwrites it. The
+  installer computes where each record ends and refuses to build if one would
+  reach the label, so a future addition fails loudly instead of corrupting what
+  the player sees.
+- Verified in the linked executable rather than in the source: each handler is
+  disassembled and shown to push its own item id, ask whether that item is
+  placed, and return without acting when it is not. All five registrations are
+  present in the shipped constructor, one each, and every label ships.
+
+The furniture-array sanity bound was twice the real capacity
+- VF2FindFreeSpaLoungerSlot reads the placed-furniture record count out of the
+  furniture manager and walks that many records. Before walking it rejects an
+  implausible count, and that guard was written as 0x400.
+- The engine's real capacity is 0x200. Both sites in FurnitureManager.obj that
+  compare the count against an immediate do "cmp dword ptr [reg + 0x1004],
+  0x200" followed by "jge <return without adding>", so the array refuses to
+  grow past 512 records and a count above that cannot occur. A guard set at
+  twice the capacity still admitted 512 records' worth of addresses the engine
+  would never populate.
+- Not exploitable on its own, because the walk is bounded by the same count it
+  reads and the engine never writes a larger one. It was simply wrong against
+  the binary, and a sanity guard that admits values the engine cannot produce
+  is not doing the job it exists for.
+- Found by the other session while self-reviewing the equivalent bound in its
+  own change, and reported rather than edited, because this function is in a
+  different lane. Verified here against the object rather than taken on
+  report: scanning every comparison against the count field finds 28 sites, of
+  which exactly two use an immediate, and both say 0x200.
+- The test derives the constant FROM the object instead of restating it, so
+  the source and the binary cannot drift apart silently, and it refuses if the
+  two sites ever disagree rather than picking the first. It walks decoded
+  instructions rather than reading a fixed displacement, because the cmp and
+  its jge are not adjacent -- 0x0006 then 0x0010 in both functions -- which is
+  the same trap that produced a garbage read in an earlier checker.
+- Validated against known-bad: with the guard back at 0x400 the test fails and
+  names both numbers; with the fix it passes.
