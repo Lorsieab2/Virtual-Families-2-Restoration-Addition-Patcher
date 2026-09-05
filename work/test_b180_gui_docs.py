@@ -349,10 +349,16 @@ class TestTheChecksumExampleMatchesTheRecommendedAsset(unittest.TestCase):
             r"`(VF2-B(\d+(?:\.\d+)?)-Release(?:-r(\d+))?\.zip)`", README
         )
         self.assertTrue(named, "the README no longer names a recommended archive")
-        name = max(
-            named,
-            key=lambda m: (float(m[1]), int(m[2]) if m[2] else 0),
-        )[0]
+        def _rank(match):
+            # Compare release components as INTEGERS, not as a float. Once a
+            # point release reaches two digits, float() puts 181.9 above
+            # 181.10 and the guard would select the older archive -- letting a
+            # stale checksum example pass, which is the exact failure this
+            # test exists to catch.
+            parts = tuple(int(part) for part in match[1].split("."))
+            return (parts, int(match[2]) if match[2] else 0)
+
+        name = max(named, key=_rank)[0]
         command = re.search(r"certutil -hashfile (\S+) SHA256", README)
         self.assertIsNotNone(command, "the checksum example is gone")
         self.assertEqual(

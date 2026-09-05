@@ -2210,7 +2210,10 @@ The stock-donor furniture route: one finding stood, one was my own error
   CVillagerPlans::PlanToGo(ldwPoint, ESpeed, EPriority).
 
 B181 was published, and what its verification did and did not establish
-- Built from main at 9d45667, seeded per variant from the B180 matrix outputs.
+- Built from main at 9f3bee0 -- the revision the binaries were compiled from -- and seeded
+  per variant from the B180 matrix outputs. The release metadata, notes and variant
+  identities were committed afterwards as 9d45667, which is the tag's target; anyone
+  reproducing the binaries wants 9f3bee0, not the packaging commit.
   32/32 variants linked with distinct SHA-256s. The bundle reproduces 8226 of
   8226 Images/Assets files on a clean install, and the release gate passes with
   variant_identities_authenticated true.
