@@ -1987,3 +1987,31 @@ The furniture probe answered "no" to every question
   whose answer should be true, including "at the ping-pong table, is this the
   ping-pong table" -- and the new one correct on all five, with two ping-pong
   tables placed at once.
+
+The Home Gym System does not work, and this is why
+- Reported from live play: the item can be bought and placed and no villager
+  ever uses it. That is accurate and it is not fixed.
+- The item borrows the Yoga Equipment as its donor, which supplies its price,
+  its store slot and its furniture map. Reading the game's own code shows why
+  that cannot produce an interactive item: the two yoga behaviours are pure
+  in-place animations. Neither asks the game which piece of furniture the
+  villager is at, and neither refuses to run when none is placed. A villager
+  doing yoga does it wherever they happen to be standing, and the mat is
+  scenery.
+- The behaviours that DO make a placed machine get used, such as the two
+  treadmill ones, link the villager to a specific placed object and stop if
+  they cannot. That is the difference, and it is a property of the behaviour
+  rather than of the item.
+- So cloning the Yoga Equipment produced a faithful clone of a decoration. The
+  fault is in what was cloned, not in the cloning.
+- An earlier attempt to fix this by repointing the item at the treadmill's
+  furniture map was wrong and was reverted in full. It would have changed what
+  the item IS -- a machine a villager walks up to and mounts -- rather than
+  implementing what was asked for, which is that the workout behaviours stay
+  available to everyone exactly as they are now, and that owning a gym makes
+  villagers perform them at it. Nothing about that is a restriction on who may
+  work out, and no version of this feature should gate a behaviour on owning
+  the item.
+- Recorded here rather than quietly left out, because a release that claims
+  four working furniture items when one of them is inert is the kind of claim
+  this log exists to prevent.
