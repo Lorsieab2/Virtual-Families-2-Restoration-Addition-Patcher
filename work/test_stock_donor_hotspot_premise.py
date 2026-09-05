@@ -26,6 +26,12 @@ rather than evidence of uniformity in the data.
 So the fmap tests here refuse any file failing the QAMF magic check, and the
 decoder is validated against this patcher's own pinned constants before being
 trusted for anything.
+
+The desktop maps come from the player's own game install and live under
+work/vanilla_runtime_payload, which .gitignore excludes. A fresh clone does
+not have them, so every test that reads one SKIPS when the payload is absent
+rather than failing. The finding that matters -- that the stock drop path
+cannot see an item id -- reads a tracked object file and always runs.
 """
 import pathlib
 import struct
@@ -52,6 +58,12 @@ DONOR_OBJECTS = {
 
 def object_of(cell):
     return ((cell >> 11) & 0x7F) | ((cell >> 22) & 0x80)
+
+
+def require_desktop_payload(case):
+    """Skip unless the gitignored game payload is present in this checkout."""
+    if not DESKTOP.is_dir():
+        case.skipTest("vanilla_runtime_payload is a gitignored build input")
 
 
 def desktop_objects(name):
@@ -84,6 +96,7 @@ class TestTheTwoContainersAreNotInterchangeable(unittest.TestCase):
     """The trap that produced a confident wrong finding."""
 
     def test_the_desktop_map_is_qamf(self):
+        require_desktop_payload(self)
         blob = (DESKTOP / "YogaGearStd.png.fmap").read_bytes()
         self.assertEqual(blob[:4], QAMF)
 
@@ -107,6 +120,7 @@ class TestTheDesktopDonorsAreDistinguishable(unittest.TestCase):
     """The correction. They are NOT identical; the earlier claim was wrong."""
 
     def test_each_donor_carries_its_own_object(self):
+        require_desktop_payload(self)
         seen = {}
         for name, expected in DONOR_OBJECTS.items():
             with self.subTest(name):
@@ -123,6 +137,7 @@ class TestTheDesktopDonorsAreDistinguishable(unittest.TestCase):
 
     def test_the_yoga_object_is_unique_across_desktop_maps(self):
         """0x75 identifies exactly one map, which is what makes it usable."""
+        require_desktop_payload(self)
         carriers = []
         for path in sorted(DESKTOP.glob("*.fmap")):
             blob = path.read_bytes()
