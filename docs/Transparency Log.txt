@@ -1890,3 +1890,24 @@ Prop drawing: the storage layout, and why a wrapper must keep its own position
   existing draw site to substitute at. The wrapper adds draws that were never
   there, rather than replacing an existing push the way the bathroom curtain
   patch does.
+
+The prop art was tracked but not shipped
+- The three supplied sprites -- mealSE.png, mealSW.png, patioDrinks.png --
+  were checked in and hash-pinned, and nothing wrote them into a build. The
+  only file referencing prop_art was its own tracking test.
+- That would have failed quietly and late. The exporter builds a bundle by
+  diffing the build output against a clean base, so a sprite the generator
+  never writes is a sprite a player never receives. A wrapper drawing these
+  props would have worked on a machine with the repository checked out and
+  shown nothing on a real install, with the art visibly present in the source
+  tree the whole time.
+- The precedent that does work is install_new_furniture_art: SpaLoungerStd.png
+  reaches players at payload/Images/Furniture/SpaLoungerStd.png, and it gets
+  there by being WRITTEN into the build output rather than by being named in
+  the exporter. install_prop_art now does the same for the three sprites,
+  refusing to write any file whose digest does not match, because hand-supplied
+  art cannot be regenerated.
+- A test compares the tracked files against the install map in both
+  directions, so a sprite added and forgotten fails rather than sitting in the
+  repository looking shipped. Verified by adding an untracked sprite: the
+  suite fails, and passes again when it is removed.
