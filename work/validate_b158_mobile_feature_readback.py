@@ -147,6 +147,13 @@ def _validate_furniture(image: LinkedPE, manifest: dict, furniture_enabled: bool
     _require(manual.get("stock_first") is True, f"{image.path}: stock-first dispatch is not preserved")
     _require(manual.get("stock_false_fallthrough") is True, f"{image.path}: stock false fallthrough is not preserved")
     _require(
+        isinstance(autonomous.get("item_count"), int)
+        and autonomous["item_count"] > 0,
+        f"{image.path}: autonomous item_count is missing or zero -- a manifest "
+        "with no autonomously selectable furniture would otherwise satisfy the "
+        "consistency check below, since 0 ids equal a count of 0",
+    )
+    _require(
         len(autonomous.get("item_ids") or []) == autonomous.get("item_count"),
         f"{image.path}: autonomous item_count {autonomous.get('item_count')} "
         f"does not match the {len(autonomous.get('item_ids') or [])} ids listed",
