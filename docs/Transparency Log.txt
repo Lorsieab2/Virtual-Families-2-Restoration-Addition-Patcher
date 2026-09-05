@@ -2343,3 +2343,117 @@ B182 the picnic and patio props: four defects, all confirmed, all fixed
   never whether it produces the intended result; a feature also depends on
   resources the code path does not mention, and reserved-but-unpopulated space
   fails silently because sizes look right and offsets stay valid.
+
+B181/B180 startup crash: what is established, and the contradiction that remains
+- The owner reported that the latest build crashes on startup. The Windows
+  Application Error log records it twice on 2026-09-05 (13:16:55 and 13:22:08):
+      Faulting application  Virtual Families 2 - Modded B181.exe
+      Exception code        0xc0000005   (access violation)
+      Fault offset          0x000c8ace   (an RVA -> VA 0x4C8ACE)
+      Faulting module       the game executable itself
+  The game's own ldwLog.txt is NOT a crash log: it contains only "Seconds Timer
+  out of bounds (-6)!", which is identical in B180 and is timestamped before
+  B181 was built.
+
+- NOT A B181 REGRESSION. B180 faults at the identical instruction in the
+  identical function, at offset 0x0c869e -- exactly 0x430 lower, which is the
+  code inserted between the two builds. The retry loop that faults appears
+  exactly once in each binary.
+
+- THE FAULTING INSTRUCTION, resolved from the COFF symbol table of
+  VillagerAI.obj rather than by fingerprint:
+      ?TakePosition@CVillagerAI@@QAEXAAVCVillager@@@Z, .text$mn + 0x3D
+      0x4C8ACE   cmp dword ptr [esi], 0
+  Its call targets were read from that object's relocation table, which names
+  every one:
+      +0x00D  theGameState::Get()
+      +0x023  CVillagerPlans::ForgetPlans(villager, false)
+      +0x038  CVillagerAI::DecideWhatToDo(villager)    <- the loop body
+      +0x045  CVillager::Stop()
+      +0x04E  ldwGameState::GetRandom(int)
+  So the loop is:
+      +0x028  cmp dword ptr [esi], edi   ; edi == 0, and this READ SUCCEEDS
+      +0x02A  jne +0x43
+      +0x030  cmp edi, 0xa               ; up to ten attempts
+      +0x038  call DecideWhatToDo
+      +0x03D  inc edi
+      +0x03E  cmp dword ptr [esi], 0     ; FAULT
+  esi is set once at +0x009 (mov esi, ecx) and never rewritten in the function,
+  and the read at +0x028 must have succeeded for execution to reach +0x3E. The
+  window is therefore ONE CALL WIDE, and the call is the function this patcher
+  inserts bytes into.
+
+- BOTH CALLERS OF THE OUTER LOOP ARE NAMED. CVillagerManager::TakePositions
+  (0x4CBF40) is the only caller of TakePosition, and has exactly two callers of
+  its own, found by an exhaustive scan of every E8 in .text:
+      0x49A348  inside theGameState::Load(int)         -- the save-load path
+      0x4A27A4  inside theMainScene::UpdateScene()     -- the per-frame path
+  Neither function is virtual; neither address is stored as a pointer anywhere
+  in the image. Both callers load the same fixed manager, mov ecx, 0x718E20.
+
+- THE ADDED-FURNITURE CODE WAS CLEARED STRUCTURALLY, each with a check:
+  * the inserted payload ships as designed at 0x4C891B -- 12 bytes pushed,
+    8 popped by add esp,8 plus 4 by pop ecx, balanced; and cdecl right-to-left
+    order gives the callee arg0=esi (the CVillager&, confirmed from the
+    pristine prologue mov esi,[ebp+8]) and arg1=ecx (stockWeight).
+  * its jne lands on 0x4C896E, the real stock epilogue, on a valid instruction
+    boundary, with the pops and the security-cookie check intact.
+  * all 174 branches in the patched DecideWhatToDo (575 instructions) land on
+    decoded instruction boundaries and none escapes the function. There are no
+    indirect jump-table dispatches in it.
+  * esi discipline is structurally identical to the pristine object: one ret,
+    one pop esi, and the only writes to esi are the prologue load and that pop.
+  * all five added behaviour handlers are 78 bytes with 2 branches and no bad
+    targets, each resolved from its single SetMacro registration.
+  * behaviour ids 0xB1-0xB4 and 0xB8 are genuinely unregistered -- verified
+    against the pristine Behavior.obj with the scan bounded to
+    CBehavior::CBehavior via the symbol table: 387 stock registrations, max id
+    0x19A, and those five among the 24 free ids below it.
+  * the cloned candidate records land at villager+0xFB88..0x10208, far below
+    the behaviour label buffer at 0x1BBA8 and the struct end at 0x1CC0C.
+  * CVillagerManager::TakePositions is BYTE-IDENTICAL to the pristine object
+    with call operands masked, so the patcher did not touch the outer loop.
+
+- THE CONTRADICTION. esi is a villager slot, VillagerManager + 0x1CC70 +
+  index * 0x1CC0C, so the thirty slots span 0x735A90..0xA943F8. That is inside
+  .data (VA 0x572000..0xB7E76C) and inside SizeOfImage (image ends 0xBAD000),
+  which is committed memory: a read there cannot raise an access violation.
+  Yet the event log records a real 0xc0000005 reading exactly there.
+  One of those premises must be wrong, and the honest position is to say so
+  rather than choose a story. Candidates not yet excluded: the manager not
+  being at 0x718E20 at fault time; a third entry into TakePositions; or the
+  outer loop's bound being wrong in the failing run.
+
+- RULED OUT, so nobody re-runs them:
+  * stack exhaustion. DecideWhatToDo's own frame is sub esp,0xCF0, but the
+    calls are sequential rather than nested, PE stack reserve is 0x100000, and
+    it does not call TakePosition, TakePositions or itself.
+  * the outer loop walking out of .data. It would need 38 iterations to leave
+    the section and its bound is 30.
+  * the one-slot stack-buffer overflow in TakePositions. edi can reach 30 and
+    the buffer holds 30 entries before the cookie at ebp-4, so a 30th write
+    lands on the cookie -- but that produces a fast-fail (0xC0000409) in the
+    epilogue, not an access violation inside the callee. It is also stock code,
+    byte-identical to the pristine object.
+  * the pet equivalent. CPetAI::TakePosition carries the same loop shape in
+    PetAI.obj, but the pattern occurs exactly ONCE in the shipped executable,
+    at the fault address, and TakePosition has exactly one caller.
+
+- A DEFECT FOUND ON THE WAY, recorded but deliberately NOT fixed because the
+  owner has not reported it and it is outside what was asked: the behaviour
+  label cache, gVF2BehaviorLabelCache, holds 64 raw CVillager* entries and is
+  never cleared -- not on save load, not on new game --  and
+  VF2BehaviorLabelCacheStillActive dereferences them. It is NOT an access
+  violation: villagers live in a fixed array, so a stale pointer addresses
+  valid mapped memory that now holds a DIFFERENT villager. That is a
+  wrong-label bug, not a fault.
+
+- METHOD NOTES, both of which produced a confidently wrong answer during this
+  investigation and were caught before being acted on:
+  * a section header's VirtualAddress field is an RVA. Adding the image base to
+    a value that already includes it produced ".data extends past SizeOfImage",
+    which looked like a spectacular finding and was arithmetic.
+  * scanning a whole image for a shaped byte sequence matches unrelated code.
+    Counting SetMacro registrations across the executable reported 423 ids
+    including 0x3FF; bounding the scan to the constructor via the object's
+    symbol table gave 387 and a clean maximum of 0x19A.
