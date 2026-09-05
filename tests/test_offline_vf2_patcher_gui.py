@@ -687,6 +687,57 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
                 "the user cannot dismiss it for the rest of the session",
             )
 
+    def test_an_EARLY_construction_failure_is_also_cleaned_up(self):
+        """The failure can happen before _bar exists.
+
+        The tested grab timeout is a LATE failure -- by then WaitWindow has
+        built its progress bar, so close() works. A failure during title,
+        protocol or child-widget setup leaves self._bar unset, and close()
+        begins by touching it: calling close() there raises AttributeError out
+        of the handler and abandons the run with the controls still disabled.
+
+        So the cleanup destroys the window rather than closing it, and this
+        drives the early case specifically.
+        """
+        import tkinter as tk
+
+        original = gui.WaitWindow
+        built = []
+
+        class EarlyFailure(original):
+            def __init__(self, parent, title, message, modal=True):
+                # Deliberately NOT calling WaitWindow.__init__ past Toplevel:
+                # a real window exists, but _bar was never assigned.
+                tk.Toplevel.__init__(self, parent)
+                self._modal = False
+                built.append(self)
+                raise tk.TclError("failed before the progress bar existed")
+
+        gui.WaitWindow = EarlyFailure
+        try:
+            posted = self._capture_after()
+            self.app._run_worker("Apply", lambda: None)
+            self._drain(posted)
+        finally:
+            gui.WaitWindow = original
+
+        self.assertTrue(built, "the test never reached construction")
+        self.assertFalse(
+            hasattr(built[0], "_bar"),
+            "the fixture built a progress bar, so this is not the early case",
+        )
+        for window in built:
+            self.assertFalse(
+                window.winfo_exists(),
+                "a window that failed BEFORE its progress bar existed is still "
+                "on screen; close() would have raised AttributeError here",
+            )
+        self.assertIn(
+            "complete", self.app.status_var.get().lower(),
+            "the run did not finish, so the handler abandoned it instead of "
+            "letting the patch proceed",
+        )
+
     def test_a_failed_run_still_closes_the_wait_popup(self):
         """A crash must not leave a modal popup over a dead UI.
 

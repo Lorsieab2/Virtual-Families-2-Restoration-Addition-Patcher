@@ -1105,10 +1105,17 @@ class VF2PatcherGUI:
             # nothing to close: the popup would sit there for the rest of
             # the session with its own X disabled. Destroy whatever was
             # built before giving up.
+            # DESTROY, do not close(). WaitWindow.close() begins by
+            # touching self._bar, which does not exist yet if the failure
+            # happened during title, protocol or widget setup -- so
+            # calling it would raise AttributeError out of this handler
+            # and abandon the run with the controls still disabled. The
+            # tested _take_grab() failure is a LATE one and would have
+            # survived close(); an early one would not.
             for child in self.root.winfo_children():
                 if isinstance(child, WaitWindow):
-                    with contextlib.suppress(tk.TclError):
-                        child.close()
+                    with contextlib.suppress(tk.TclError, AttributeError):
+                        child.destroy()
             return
         self._work_wait = wait
         # The popup disables its own X, but that does nothing for the ROOT
