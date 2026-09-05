@@ -16,6 +16,7 @@ executables, 100 hairstyle icons, 113 furniture PNGs.
 """
 import hashlib
 import json
+import re
 import pathlib
 import shutil
 import struct
@@ -24,6 +25,23 @@ import zipfile
 from collections import Counter
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+def _normalize_declared_sha256(value):
+    """Accept exactly what the patcher accepts, and nothing more.
+
+    offline_vf2_patcher.normalize_sha256 strips surrounding whitespace and an
+    optional "sha256:" prefix before matching 64 hex characters. Comparing a
+    raw .lower() against the computed digest would reject a manifest the
+    player's own patcher consumes happily -- a gate stricter than the thing it
+    gates is a false alarm, not a safeguard.
+    """
+    if not isinstance(value, str):
+        return None
+    text = value.strip().lower()
+    if text.startswith("sha256:"):
+        text = text[7:]
+    return text if re.fullmatch(r"[0-9a-f]{64}", text) else None
+
+
 def _default_archive():
     """The newest release ZIP in outputs/, not a pinned release name.
 
@@ -33,7 +51,16 @@ def _default_archive():
     artifact is worse than no gate, because it still prints a pass.
     """
     out = ROOT / "outputs"
-    zips = sorted(out.glob("VF2-B*-Release*.zip")) if out.is_dir() else []
+    # Only the documented release grammar: VF2-B<version>-Release[-r<n>].zip.
+    # A looser glob picks up scratch archives sitting beside the real one --
+    # VF2-B181-Release-corrupt.zip ranks identically to VF2-B181-Release.zip
+    # and sorts first, so the gate would verify the scratch file and pass.
+    pattern = re.compile(r"^VF2-B\d+(?:\.\d+)*-Release(?:-r\d+)?\.zip$")
+    zips = (
+        sorted(p for p in out.glob("VF2-B*-Release*.zip") if pattern.match(p.name))
+        if out.is_dir()
+        else []
+    )
     if not zips:
         return out / "VF2-B180-Release.zip"
 
@@ -191,9 +218,17 @@ def main():
         resolved = maps.get(name)
         if resolved is None:
             continue
+        record = installed.get(f"Assets/{name}")
+        if record is None:
+            # A map present in the payload under its own name but with no
+            # manifest record. The resolution loop above already recorded that
+            # as a problem; subscripting here would raise KeyError and abort
+            # before the collected problems are printed, turning a diagnosable
+            # bundle into a stack trace.
+            continue
         actual = hashlib.sha256(resolved.read_bytes()).hexdigest()
         lounger_digests[name] = actual
-        declared = installed[f"Assets/{name}"].get("source_sha256")
+        declared = _normalize_declared_sha256(record.get("source_sha256"))
         if not declared:
             problems.append(
                 f"Assets/{name}: the manifest record declares no source_sha256, "
