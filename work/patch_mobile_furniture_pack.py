@@ -12490,6 +12490,13 @@ public:
     // with `cmp edx,0x100 / jg`, this one has no comparison against any bound
     // anywhere in its 69 bytes. Callers must not assume the scan stops.
     void AddDecal(ldwImageGrid *grid, int x, int y, float scale);
+    // The five-argument overload,
+    // ?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z. This one DOES bounds-
+    // check, guarding with `cmp edx,0x100 / jg` against 256 slots. It is the
+    // one RefreshProps calls at the site the prop draw wraps, and declaring it
+    // as an overload lets the compiler mangle it correctly rather than needing
+    // the symbol spelled out.
+    void AddDecal(ldwImageGrid *grid, int a, int b, int c, float scale);
 };
 extern CDecal Decal;
 """
@@ -19492,7 +19499,12 @@ def patch_mobile_table_prop_draw(manifest):
             "hook cannot be installed"
         )
 
-    helper = obj.append_undefined_symbol("_VF2RefreshPropsAddDecalAndProps")
+    # __fastcall mangles as @Name@<total argument bytes>: 4 each for the ECX
+    # and EDX slots plus five stack arguments = 28. The same convention as
+    # MOBILE_PATIO_PROP_HELPER_SYMBOL, which is @VF2PatioSetPropAndTrack@12.
+    helper = obj.append_undefined_symbol(
+        "@VF2RefreshPropsAddDecalAndProps@28"
+    )
     obj.retarget_relocation(
         refresh_props.section, hook_vaddr, helper, IMAGE_REL_I386_REL32
     )
@@ -19503,7 +19515,7 @@ def patch_mobile_table_prop_draw(manifest):
         "function": "?RefreshProps@CDecal@@QAEXXZ",
         "hooked_call_offset": hex(hook_vaddr - 1 - refresh_props.value),
         "wrapped": "?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z",
-        "helper": "_VF2RefreshPropsAddDecalAndProps",
+        "helper": "@VF2RefreshPropsAddDecalAndProps@28",
         "added_bytes": 0,
         "mechanism": (
             "retargets an existing five-byte call relocation; no trampoline, "
@@ -25856,6 +25868,33 @@ extern "C" void __cdecl VF2DrawMobileTableProps()
             gVF2PatioPropX,
             gVF2PatioPropY);
     }
+}
+
+// Wraps RefreshProps' last AddDecal so the picnic meal and patio drinks draw
+// after every stock prop. Reached by retargeting that call's relocation, which
+// costs no bytes -- no trampoline, no cave, no section growth.
+//
+// NO naked assembly is needed, and two attempts at it were wrong before this
+// was noticed. The wrapper is entered exactly as the stock function would be:
+// `this` in ECX, five arguments on the stack, and the callee expected to pop
+// them (`ret 20`). That is precisely what __fastcall with a dummy second
+// argument produces on MSVC -- the same idiom VF2PatioSetPropAndTrack already
+// uses -- so the compiler emits the correct epilogue itself. Hand-written
+// stack juggling here either returns past our own code or leaves the stack
+// twenty bytes short.
+extern "C" void __fastcall VF2RefreshPropsAddDecalAndProps(
+    CDecal *self,
+    void *,
+    ldwImageGrid *grid,
+    int a,
+    int b,
+    int c,
+    float scale)
+{
+    // The stock draw first, unchanged, so nothing existing is disturbed.
+    self->AddDecal(grid, a, b, c, scale);
+    // Then ours, on top of every stock prop.
+    VF2DrawMobileTableProps();
 }
 
 extern "C" void __fastcall VF2PatioSetPropAndTrack(
