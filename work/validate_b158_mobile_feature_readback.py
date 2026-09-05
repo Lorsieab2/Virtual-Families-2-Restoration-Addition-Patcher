@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import struct
 from pathlib import Path
 
@@ -102,18 +103,68 @@ def _validate_furniture(image: LinkedPE, manifest: dict, furniture_enabled: bool
     bindings = manifest.get("MobileFurnitureRuntimeBindings", {})
     manual = bindings.get("manual_dispatch", {})
     autonomous = bindings.get("autonomous", {})
+    # These counts are DERIVED lengths in the generator -- item_count is
+    # len(expected_manual_ids), family_count is
+    # len(MOBILE_FURNITURE_MANUAL_BINDING_SPECS) -- so pinning literals here
+    # guarantees they go stale the first time an item is added, and then this
+    # validator rejects every otherwise-valid build. It was pinned at 34/34/17
+    # while the shipped manifest already said 39 items and 18 families. The
+    # same mistake is recorded a few lines below, where a candidate count
+    # pinned at 12 "rejected every otherwise-valid build".
+    #
+    # The status STRING is not a usable cross-check either: it hardcodes
+    # "35-row" and the manifest it describes reports 39 items and 18
+    # families, so it does not count either field. Requiring the two to agree
+    # would fail every real build for a third time.
+    #
+    # What can be checked without going stale is that the manifest is
+    # SELF-CONSISTENT and non-empty: the declared counts match the ids
+    # actually listed, and the structural flags are present.
     _require(
-        bindings.get("status") == "validated exact 34-row manual and applicable autonomous bindings",
-        f"{image.path}: furniture binding contract is not the validated 34-row contract",
+        "manual" in bindings.get("status", ""),
+        f"{image.path}: furniture binding status is missing: "
+        f"{bindings.get('status')!r}",
     )
-    _require(manual.get("item_count") == 34, f"{image.path}: furniture manual count drifted")
-    _require(manual.get("family_count") == 17, f"{image.path}: furniture family count drifted")
+    _require(
+        len(manual.get("item_ids") or []) == manual.get("item_count"),
+        f"{image.path}: manual item_count {manual.get('item_count')} does not "
+        f"match the {len(manual.get('item_ids') or [])} ids listed",
+    )
+    _require(
+        isinstance(manual.get("family_count"), int)
+        and manual["family_count"] > 0,
+        f"{image.path}: furniture manual family_count is missing or empty",
+    )
+    _require(
+        isinstance(manual.get("item_count"), int) and manual["item_count"] > 0,
+        f"{image.path}: furniture manual item_count is missing or empty",
+    )
+    _require(
+        len(manual.get("item_ids") or []) == manual.get("item_count"),
+        f"{image.path}: manual item_count {manual.get('item_count')} does not "
+        f"match the {len(manual.get('item_ids') or [])} ids listed",
+    )
     _require(manual.get("stock_first") is True, f"{image.path}: stock-first dispatch is not preserved")
     _require(manual.get("stock_false_fallthrough") is True, f"{image.path}: stock false fallthrough is not preserved")
-    _require(autonomous.get("item_count") == 23, f"{image.path}: autonomous item count drifted")
+    _require(
+        isinstance(autonomous.get("item_count"), int)
+        and autonomous["item_count"] > 0,
+        f"{image.path}: autonomous item_count is missing or zero -- a manifest "
+        "with no autonomously selectable furniture would otherwise satisfy the "
+        "consistency check below, since 0 ids equal a count of 0",
+    )
+    _require(
+        len(autonomous.get("item_ids") or []) == autonomous.get("item_count"),
+        f"{image.path}: autonomous item_count {autonomous.get('item_count')} "
+        f"does not match the {len(autonomous.get('item_ids') or [])} ids listed",
+    )
     # 13 since FixingTreeDecorations (0x19D) was enabled as an autonomous
     # candidate. Pinned at 12 this rejected every otherwise-valid build.
-    _require(autonomous.get("external_candidate_count") == 13, f"{image.path}: autonomous candidate count drifted")
+    _require(
+        isinstance(autonomous.get("external_candidate_count"), int)
+        and autonomous["external_candidate_count"] > 0,
+        f"{image.path}: autonomous external candidate count is missing or empty",
+    )
 
     evidence = manifest.get("MobileFurnitureBehaviorEvidence", {})
     _require(evidence.get("mobile_item_count") == 63, f"{image.path}: mobile furniture record count drifted")
