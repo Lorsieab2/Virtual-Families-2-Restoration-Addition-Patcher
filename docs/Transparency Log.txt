@@ -2554,3 +2554,61 @@ B181 startup crash: the added furniture is NOT the cause, and it is intermittent
   cleanly on the first attempt, or whether launching usually takes a couple of
   tries. An intermittent launch-time fault has a different search than a
   deterministic one, and the evidence above says this is the former.
+
+The faulting loop is the GAME'S OWN CODE, present in the pristine object
+- The two entries above establish that the crash predates the added furniture
+  and is intermittent. This settles the remaining attribution question
+  outright, and it does so without depending on any crash record.
+
+- THE PRISTINE OBJECT CONTAINS THE FAULTING INSTRUCTION.
+  work/desktop_obj_files/VillagerAI.obj is gitignored and is extracted from the
+  player's own installation -- it is the game's shipped code, not anything this
+  patcher generates. Disassembling
+  ?TakePosition@CVillagerAI@@QAEXAAVCVillager@@@Z from it:
+
+      +0x0028  393e           cmp  dword ptr [esi], edi
+      +0x002A  7517           jne  0x43
+      +0x0030  83ff0a         cmp  edi, 0xa            <- the ten-retry bound
+      +0x0033  7d0e           jge  0x43
+      +0x0035  53             push ebx
+      +0x0036  8bce           mov  ecx, esi
+      +0x0038  e800000000     call <CVillagerAI::DecideWhatToDo>
+      +0x003D  47             inc  edi
+      +0x003E  833e00         cmp  dword ptr [esi], 0  <- THE FAULTING READ
+      +0x0041  74ed           je   0x30
+
+  The byte pattern 47 83 3e 00 74 ed occurs once in the whole object, in that
+  function. The retry loop, its bound, and the exact instruction that faults
+  are all present BEFORE the patcher touches anything.
+
+- WHY THIS IS STRONGER THAN THE CRASH-RECORD ARGUMENT. That argument rests on
+  B178 and B180 crashing identically while containing none of the five added
+  behaviour registrations, which is sound but depends on correctly attributing
+  crash records to binaries. This does not depend on the crash at all: the
+  faulting instruction exists in untouched game code, so no part of the patcher
+  wrote it.
+
+- WHAT IT DOES NOT ESTABLISH. The loop being stock does not prove the patcher
+  cannot CAUSE it to fault. Whether something in the build makes esi go bad
+  inside DecideWhatToDo is a separate question that an object file cannot
+  answer. It removes "the patcher introduced a bad loop" from the table; it
+  does not close the investigation.
+
+- A CORRECTION TO AN EARLIER LINE OF ATTACK, recorded because it was pursued at
+  length. A register-agnostic decoded scan of the vanilla executable found ZERO
+  up-to-ten retry loops re-checking a dereferenced pointer, against one in every
+  modded build, which looked like evidence the recompile had introduced it. It
+  is not. The pristine object settles that vanilla contains the identical logic
+  and merely expresses it in a form the pattern could not match -- retail
+  codegen may inline, unroll, or keep the counter in memory.
+
+- THE GENERAL RULE, which cost three separate mistakes in one investigation:
+  AN ABSENCE FOUND BY PATTERN MATCHING IS NEVER EVIDENCE OF AN ABSENCE IN FACT.
+  It is evidence about the pattern. The three instances were a whole-image scan
+  reporting eleven behaviour registrations in the unpatched vanilla executable
+  (impossible, so the method was wrong rather than the data); a check that
+  symbol names were absent from a release build (they are stripped, so it
+  answers nothing); and the vanilla loop scan above. A decoded scan is stronger
+  than a raw byte scan and is not immune. The tell is the same every time: a
+  result that would be surprising if true needs a second, different artifact
+  before it is believed -- not a tighter pattern.
