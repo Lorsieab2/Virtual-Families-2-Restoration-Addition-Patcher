@@ -1587,10 +1587,14 @@ B180 how the picnic and patio props would actually be drawn
   route from "extend a jump table in a stock object" to "wrap one function",
   and because the shape of the call sites decides how the wrapper must work.
 - Props are not blitted directly. Environment.obj calls CDecal::RefreshDecals,
-  and CDecal::RefreshProps is what draws them: it calls
-  CDecal::AddDecal(ldwImageGrid *, int x, int y, float) sixteen times, once per
-  prop type. AddDecal is public and takes an image grid plus world
-  coordinates, so it can draw a sprite the prop enum never has to know about.
+  and CDecal::RefreshProps is what draws them. It calls BOTH AddDecal
+  overloads: 19 calls to (ldwImageGrid *, int, int, float) and 25 to
+  (ldwImageGrid *, int, int, int, float), counted from the relocations
+  inside RefreshProps rather than estimated. An earlier draft of this entry
+  said 'sixteen times, once per prop type'; that was wrong on both the
+  count and the one-per-type reading, and review caught it. AddDecal is
+  public and takes an image grid plus world coordinates, so it can draw a
+  sprite the prop enum never has to know about.
 - That is why the SetProp bound is not the real obstacle to RENDERING. The
   bound stops an id being stored in the prop array; it does not stop anything
   being drawn. A wrapper around CDecal::RefreshProps can draw the meal and
