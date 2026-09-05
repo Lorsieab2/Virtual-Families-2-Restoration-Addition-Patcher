@@ -32178,12 +32178,20 @@ static bool VF2LinkedFurnitureItemIs(
     // it matched can be named exactly, with no geometry at all -- and two
     // copies of the same item type stay distinguishable, which a position
     // comparison would not guarantee.
+    // 0x200 is the array's real capacity, not a guess: AddToWorld opens with
+    // `cmp [edi+0x1004], 0x200 / jge` and returns without adding once the
+    // count reaches it, so a larger count means the structure is not what this
+    // code thinks it is.
     unsigned char *manager = (unsigned char *)&FurnitureManager;
     int count = *(int *)(manager + 0x1004);
-    if (count < 0 || count > 0x400) return false;
+    if (count < 0 || count > 0x200) return false;
     for (int slot = 0; slot < count; ++slot) {
         unsigned char *record = manager + 0x1008 + slot * 0x40;
         if ((*(unsigned int *)(record + 0x0C) & 1) == 0) continue;
+        // The handle counter is post-incremented, so 0 is the first placement's
+        // real handle rather than an "unset" sentinel. That is safe here: this
+        // only ever compares against a handle FindFurniture just returned from
+        // a genuine match, so a zero handle cannot match spuriously.
         if (*(int *)(record + 0x04) != info.unknown0) continue;
         return *(int *)record == itemId;
     }
