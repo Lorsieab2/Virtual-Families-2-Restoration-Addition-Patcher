@@ -1988,6 +1988,41 @@ The furniture probe answered "no" to every question
   ping-pong table" -- and the new one correct on all five, with two ping-pong
   tables placed at once.
 
+The bundled player documentation still called a known-broken item unconfirmed
+- The owner reported that the Home Gym System does nothing when a villager is
+  dropped on it. The item is sold in the store for 3150, so a player who buys
+  it receives nothing and has no way to know that was expected.
+- The B180 changelog line described the whole stock-donor group -- Invisible
+  Kiddie Pool, Invisible Full-Size Pool, Invisible Hammock, Invisible Yoga
+  Equipment, Exercise Bike, Home Gym System, Ping-Pong Table -- as merely
+  awaiting "player confirmation". That was accurate when written and stopped
+  being accurate when the report arrived.
+- This was not an internal note. write_runner_files() synthesizes the
+  README-*-PATCHER.txt a player reads and write_transparency_log() synthesizes
+  the bundled log, and both consume B180_CHANGELOG_LINES. A bundle built from
+  the old text would have handed a player a known-broken item presented as
+  unconfirmed.
+- The line now says plainly that the Home Gym System does not work and that
+  its behaviour is not implemented, while keeping the Exercise Bike and the
+  Invisible Yoga Equipment named as UNCONFIRMED. Those are different states --
+  one reported broken, two never reported either way -- and collapsing them
+  would have quietly downgraded what is known about the other two.
+- The tests read the synthesized text and the writers that embed it, not the
+  constant, because a warning present in the exporter source but absent from
+  the generated file is this repository's recurring failure. Validated against
+  known-bad: with the old wording restored all three assertions fail, naming
+  the sentence that predates the report; with the correction they pass.
+- Raised by Codex on another session's PR and left unanswered there. The
+  finding was verified against the source before being acted on, and the price
+  claim in the same review was verified too: the gym does NOT inherit the Yoga
+  Equipment's price. (Corrected: the comparison should be against the
+  STOCK donor 0x220 at 150, not the added Invisible Yoga Equipment 0x32A which
+  also happens to be 150. The finding stands either way -- the repository's own
+  comment records Treadmill 3150, Pool Table 12000, Yoga Gear 150, and the gym
+  is 3150.) The donor's price is 150 and the gym's is 3150, set
+  independently, so the donor supplies the furniture map, store slot and
+  behaviour arrangement but not the price.
+
 The Home Gym System did not work, and this is why
 - Reported from live play: the item could be bought and placed and no villager
   ever used it. That was accurate, and it is fixed now -- see the entry below on
@@ -2078,6 +2113,33 @@ The furniture-array sanity bound was twice the real capacity
   the same trap that produced a garbage read in an earlier checker.
 - Validated against known-bad: with the guard back at 0x400 the test fails and
   names both numbers; with the fix it passes.
+
+The changelog then became wrong in the OTHER direction
+- The line above was corrected to say the Home Gym System does not work. That
+  was true when written. It stopped being true when the added-furniture
+  actions landed: the Home Gym now carries its own behaviour id bound to its
+  own handler, with ten workout variations, so a shipped log calling it broken
+  is as false as the claim it replaced.
+- Both of the tests guarding that line asserted the old world -- one required
+  the literal words "home gym system does not work". A test pinned to that
+  sentence would have forced a TRUE statement to be replaced with a false one
+  in order to stay green. This is the third time in this work that pinning a
+  phrasing rather than a property turned a correct update into an apparent
+  regression.
+- The guards now assert the property instead, and the property is the
+  distinction that keeps getting lost: an action a villager CHOOSES is built
+  and may be described as working; a reaction to being DROPPED is a separate
+  claim and is NOT built, because theMainScene::HandleDropOnHotSpot dispatches
+  on a hotspot enum and never reads a furniture item id, so it cannot tell one
+  added item from another however complete that item's record is.
+- Validated against known-bad in BOTH directions, which is what makes the pair
+  trustworthy: replacing the disclaimer with "All of these act on a drop"
+  fails three assertions, and reinstating "THE HOME GYM SYSTEM DOES NOT WORK"
+  fails one. Honest wording passes.
+- The drop-reaction check also refuses to let an unrelated negation elsewhere
+  in the line excuse a promise: only the clause immediately preceding the
+  phrase can disclaim it. A guard that cannot tell an assertion from its
+  denial is worse than none.
 
 The stock-donor furniture route rested on a premise that is false
 - Seven added items -- Invisible Kiddie Pool (0x30A), Invisible Full-Size Pool
