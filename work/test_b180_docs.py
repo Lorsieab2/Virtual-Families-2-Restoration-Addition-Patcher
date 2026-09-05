@@ -552,12 +552,16 @@ class TestTheReadmeIsHonestAboutTheProps(unittest.TestCase):
             row["description"] for row in exporter.SETTINGS
             if row["id"] == "mobile_furniture_behaviors"
         )
-        if not self._rendering_pending():
-            self.skipTest("the ledger says rendering has landed")
-        self.assertIn(
-            "stays bare", description,
-            "the shipped setting description names the Picnic and Patio "
-            "Tables without saying their props do not draw",
+        # Compared, not skipped. Skipping once the ledger flips would leave
+        # the GUI still telling players drawing is "in progress and not in
+        # this release" while the ledger and README both said it had landed --
+        # green suite, three documents disagreeing, and the one a player reads
+        # being the wrong one.
+        self.assertEqual(
+            self._rendering_pending(),
+            "stays bare" in description,
+            "the shipped setting description and the ledger disagree about "
+            "whether the props draw; update both together",
         )
 
     def test_the_readme_and_the_ledger_agree(self):
