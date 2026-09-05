@@ -422,9 +422,25 @@ class TestThePropBlockerIsNamedAccurately(unittest.TestCase):
             )
 
     def test_the_row_names_the_real_obstacle(self):
+        """The row must explain WHY the props did not draw, not just that they did not.
+
+        This originally required the row to name the art that exists and the
+        dispatch-table obstacle, because at the time the obstacle was the
+        whole story. Four defects were later found and fixed, so the row now
+        explains those instead -- but the requirement is unchanged in
+        substance: a reader must be able to tell what was actually wrong.
+        """
         row = self._row()
-        self.assertIn("meal.png", row, "the row should say what art does exist")
-        self.assertIn("relocation", row, "the row should name the dispatch-table obstacle")
+        self.assertIn(
+            "meal", row.lower(),
+            "the row should say which art is involved",
+        )
+        for cause in ("descriptor", "conditional", "hotspot"):
+            self.assertIn(
+                cause, row.lower(),
+                f"the row does not mention the {cause} defect, so a reader "
+                "cannot tell what was actually wrong",
+            )
 
     def test_the_meal_art_really_is_in_the_payload(self):
         """The claim above is only safe while this holds."""

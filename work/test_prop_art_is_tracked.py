@@ -112,8 +112,21 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
         )
 
     def test_the_row_says_what_actually_remains(self):
-        evidence = self._row()[2]
-        self.assertIn("rendering", evidence.lower() + self._row()[1].lower())
+        """The row must name the outstanding step, whatever it currently is.
+
+        This required the word "rendering" while rendering was the thing
+        still to do. Four defects were found and fixed, so what remains is
+        no longer the drawing itself but confirming it in a built binary and
+        in play. The requirement is the same in substance: the row must not
+        read as finished while something is still outstanding.
+        """
+        text = (self._row()[1] + " " + self._row()[2]).lower()
+        self.assertTrue(
+            any(word in text for word in
+                ("rendering", "not yet confirmed", "qa", "build")),
+            "the row does not say what is still outstanding, so a reader "
+            "cannot tell whether the props are known to work",
+        )
 
 
 if __name__ == "__main__":

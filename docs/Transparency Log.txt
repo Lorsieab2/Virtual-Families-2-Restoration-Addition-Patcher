@@ -2245,3 +2245,101 @@ B181 was published, and what its verification did and did not establish
   the asset as separate steps, with the full 40-character SHA, worked. Only
   querying the release state after each attempt distinguished the failures from
   the success.
+
+B182 the picnic and patio props: four defects, all confirmed, all fixed
+- The owner reported directly that "the props also don't draw on the picnic
+  tables or the patios". They did not draw in B181 or in any earlier build.
+  Four separate defects were responsible. Each was confirmed against the
+  shipped B181 executable or against the engine's own disassembly, not from
+  reading the diff, and the first of them made the other three invisible.
+
+- 1. THE IMAGE DESCRIPTORS WERE RESERVED AND NEVER POPULATED.
+  patch_graphics_manager() reserved three descriptor records for the sprites --
+  the "+ len(PROP_ART_IMAGE_ORDER)" term in append_count -- but no loop ever
+  wrote them. Every other image block sets an id, a path-symbol relocation and
+  the grid dimensions; the prop block got zero-filled space and nothing else.
+  The ids prop_art_image_id() computes therefore pointed at blank descriptors
+  and GetImageGrid() could not resolve any of the three.
+  The artifact says so exactly. Every populated descriptor carries a
+  path-symbol relocation, so its path string ends up in the linked executable.
+  In the shipped B181 binary:
+      SpaLoungerStd.png   present     <- a populated descriptor
+      mealSE.png          ABSENT
+      mealSW.png          ABSENT
+      patioDrinks.png     ABSENT
+  in every form, with and without an "Images/" prefix.
+
+- 2. THE DRAW WAS ON A CONDITIONAL PATH. All 48 AddDecal calls in
+  CDecal::RefreshProps sit inside per-prop active branches of its switch. The
+  wrapped site at +0xA6A is reached only by a jmp to 0xa62 from those branches
+  and sits within two nested loops (cmp esi,4 and cmp ebx,0x55), so the props
+  drew only while some unrelated stock prop happened to be active.
+  There is no unconditional call site inside RefreshProps to move to, and
+  RefreshProps itself is reached through a vtable rather than a direct call, so
+  there is nothing to wrap one level up either. CDecal::RefreshDecals calls
+  CDecal::InitDecals as its FIRST instruction, before any branch, and runs
+  every refresh -- that is the new hook. InitDecals clears the decal array, so
+  drawing after it is also the correct order: RefreshDecals and RefreshProps
+  repopulate the array in the same pass and ours are added alongside.
+  Still zero added bytes, because that call is already five bytes with a
+  relocation. InitDecals has two call sites, RefreshDecals +0x4 and
+  CDecal::Reset +0x1C, so the site is located through RefreshDecals' own COMDAT
+  section and asserted to be that function's first instruction; a drifted
+  prologue fails the build rather than silently hooking a conditional path
+  again.
+
+- 3. THE POSITION WAS THE WALK-TO ANCHOR, NOT THE TABLE.
+  CFurnitureManager::FindFurniture ends by copying the matched record into
+  sFurnitureInfo2 and adjusts the position on the way:
+      +0x110  sub  esi, [eax]        ; hotspot x
+      +0x115  sub  edx, [eax + 4]    ; hotspot y
+      +0x121  mov  ecx, [ebx + 0x14] ; record x
+      +0x124  mov  eax, [ebx + 0x18] ; record y
+      +0x127  add  ecx, esi
+      +0x129  add  eax, edx
+      +0x137  mov  [edx + 8], ecx    ; -> info.point.x
+      +0x12E  mov  [edx + 0xc], eax  ; -> info.point.y
+      +0x13D  mov  [edx], eax        ; -> info.unknown0, the placement handle
+  So info.point is the tile a villager stands on to USE the item. Drawing there
+  puts the prop beside the table by however much that furniture map's hotspot
+  is offset. The capture now finds the record by its unique placement handle
+  and reads the record's own +0x14/+0x18 position and +0x10 orientation. An
+  unresolvable handle suppresses the draw rather than placing a prop somewhere
+  arbitrary.
+
+- 4. THE DRAW COULD WRITE PAST THE DECAL ARRAY. Both AddDecal overloads walk
+  the same free-slot scan -- occupancy byte at record + 0, stride 0x18 -- but
+  only the five-argument form guards with cmp edx,0x100 / jg before writing.
+  The four-argument form this feature calls has no comparison against any
+  bound. The previous justification, that the callers are gated on a prop being
+  placed so "at most two extra decals are ever added", bounds what the feature
+  ADDS and not what is already there: with all 256 slots occupied by the stock
+  refresh, the FIRST of these calls walks off the end.
+  Switching to the guarded overload is not available. Its extra argument is a
+  per-decal value RefreshProps reads from its own object -- [edi+0x1940]
+  indexed by the current prop, at +0x25BB8 -- and no constant is correct in its
+  place. The same bound is applied before the call instead, with the same
+  stride and occupancy byte taken from the disassembly.
+
+- WHY NOT THE PROP ARRAY AT ALL: CEnvironment + prop*16 holds through prop
+  0x54. CEnvironment::SetProp opens with cmp edi,54h followed by a JA, so the
+  two ids 0x55 and 0x56 would write 32 bytes past its last record. That is why
+  the state is tracked outside the array and the draw had to be added rather
+  than substituted for an existing one.
+
+- NOT YET CONFIRMED IN A BUILD OR IN PLAY. All four fixes are in source with
+  tests validated against known-bad builds -- removing each fix fails its own
+  test -- but they have not been through a matrix build, and nobody has seen a
+  prop on a table in a running game. The ledger row and the README both say so,
+  and the packaged GUI description was updated too, since that is the text a
+  player actually reads before enabling the setting.
+
+- A NOTE ON HOW THIS WAS NEARLY MISSED. The draw installer was checked earlier
+  in the same session and found to be DEFINED and CALLED, the sprite PNGs were
+  present in the player's install folder, and the build manifest recorded the
+  hook as "installed". That is four pieces of agreeing evidence, and the
+  conclusion drawn from them -- that the feature now worked and the docs saying
+  otherwise were stale -- was wrong. Reachability answers whether code runs,
+  never whether it produces the intended result; a feature also depends on
+  resources the code path does not mention, and reserved-but-unpopulated space
+  fails silently because sizes look right and offsets stay valid.
