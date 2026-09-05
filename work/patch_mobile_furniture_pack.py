@@ -25565,6 +25565,25 @@ static unsigned int gVF2PicnicReadyDeadline = 0;
 static CVillager *gVF2PatioDrinksPreparer = 0;
 static CVillager *gVF2PicnicPreparer = 0;
 
+// Where to draw each prop, and which way its table faces.
+//
+// Kept HERE rather than in the engine's own per-prop array. That array is
+// CEnvironment + prop*16 with the active byte at +0x7C and x/y at +0x84/+0x88,
+// and prop 0x54 is the last record it holds -- so SetPropPosition(0x55) would
+// write 32 bytes past its end. GetPropPosition failing to answer for these ids
+// is correct behaviour, not an obstacle to route around.
+//
+// Orientation picks between the two meal sprites. Mobile ships mealSE and
+// mealSW as a pair, which is what establishes that the behaviour activates a
+// prop ON the table rather than the table swapping to a different image.
+static int gVF2PicnicPropX = 0;
+static int gVF2PicnicPropY = 0;
+static int gVF2PicnicPropOrientation = 0;
+static bool gVF2PicnicPropPlaced = false;
+static int gVF2PatioPropX = 0;
+static int gVF2PatioPropY = 0;
+static bool gVF2PatioPropPlaced = false;
+
 static void VF2ClearPatioDrinks()
 {
     gVF2PatioDrinksOn = 0;
@@ -25632,6 +25651,43 @@ static bool VF2PicnicReadyActive()
     return false;
 }
 
+// Record where a prop's table stands, and which way it faces.
+//
+// The engine's own per-prop position array cannot hold these ids: it is
+// CEnvironment + prop*16 and prop 0x54 is its last record, so writing 0x55 or
+// 0x56 there lands 32 bytes past the end. So the position is kept beside the
+// flags this file already keeps.
+//
+// FindFurniture is read-only and nearest-match from a point -- the same
+// question the native behaviours ask. LinkPeepToFurniture would answer "which
+// table COULD this villager use" and reserve a link as a side effect, which is
+// the mistake that once made the ping-pong table report "playing pool".
+//
+// A prop whose table cannot be resolved is left unplaced rather than drawn at
+// a guessed position: a sprite in the wrong place reads as a bug, an absent
+// one reads as the feature not being finished, and the second is honest.
+static void VF2CaptureTableProp(
+    CVillager *preparer,
+    int object,
+    int &outX,
+    int &outY,
+    int *outOrientation,
+    bool &outPlaced)
+{
+    outPlaced = false;
+    if (preparer == 0) return;
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            (CContentMap::EObject)object, preparer->FeetPos(),
+            info, true, 0, 0)) {
+        return;
+    }
+    outX = info.point.x;
+    outY = info.point.y;
+    if (outOrientation != 0) *outOrientation = info.orientation;
+    outPlaced = true;
+}
+
 extern "C" void __fastcall VF2PatioSetPropAndTrack(
     CEnvironment *environment,
     void *,
@@ -25646,11 +25702,24 @@ extern "C" void __fastcall VF2PatioSetPropAndTrack(
         else VF2ClearPatioDrinks();
         return;
     }
+    // Resolve the table BEFORE clearing the preparer, because the preparer is
+    // the only thing that knows which table this is. FindFurniture is
+    // read-only and nearest-match from a point, the same question the native
+    // behaviours ask; LinkPeepToFurniture would reserve a link as a side
+    // effect and is the wrong call here.
     if (prop == ePropPicnicReady) {
+        VF2CaptureTableProp(
+            gVF2PicnicPreparer, CContentMap::eObjectPicnicTable,
+            gVF2PicnicPropX, gVF2PicnicPropY,
+            &gVF2PicnicPropOrientation, gVF2PicnicPropPlaced);
         gVF2PicnicPreparer = 0;
         gVF2PicnicReadyOn = 1;
         gVF2PicnicReadyDeadline = GameTime.Seconds() + 240;
     } else {
+        VF2CaptureTableProp(
+            gVF2PatioDrinksPreparer, CContentMap::eObjectPatioTable,
+            gVF2PatioPropX, gVF2PatioPropY,
+            0, gVF2PatioPropPlaced);
         gVF2PatioDrinksPreparer = 0;
         gVF2PatioDrinksOn = 1;
         gVF2PatioDrinksDeadline = GameTime.Seconds() + 240;
