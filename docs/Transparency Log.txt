@@ -1610,6 +1610,21 @@ B180 how the picnic and patio props would actually be drawn
 - No change to Environment.obj is needed for any of this, which is why it is
   the safe route: it is the relocation-retarget pattern already proven by
   VF2PatioSetPropAndTrack.
+- The two inputs a wrapper still needs, traced but not yet built:
+  IMAGE. AddDecal takes an ldwImageGrid *, obtained from
+  theGraphicsManager::GetImageGrid(EImage), which the generator already
+  calls. New ids are allocated past ORIG_IMAGE_MAX (0x27C) by the existing
+  image_id_for / lock_image_id_for / visible_special_upgrade_icon_id_for
+  scheme, and a new image is registered by cloning a donor's 0x30-byte
+  descriptor and rewriting its grid dimensions from the PNG's real size.
+  So registering the three prop sprites uses machinery that already ships.
+  POSITION. GetPropPosition is keyed by prop id, so it cannot answer for
+  0x55 or 0x56. The table's own placement lives in the furniture record
+  that VF2FurnitureSlotAtPoint already resolves. What is NOT yet confirmed
+  is that the coordinate space AddDecal expects matches what the furniture
+  record stores; asserting they match without checking is how a prop ends
+  up drawn in the wrong place, or off-screen, in a way no source-level
+  test would catch.
 
 B180 verification method
 - Generated .cpp files are compiled individually (cl /c /EHsc) after each
