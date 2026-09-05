@@ -1838,3 +1838,55 @@ Mobile prop art located, and an extraction claim retracted
   third-party libraries -- so a DLL is a component to build, not an existing
   seam. The prop state is static in the executable and would have to be
   exported deliberately before anything outside could read it.
+
+Picnic and patio props: what a player is told before enabling the setting
+- The Mobile Furniture Behaviors description names the Picnic Table and Patio
+  Table among the furniture it brings over. The behaviours do run. The meal
+  and drinks sprites do NOT appear on the tables, because the two prop ids
+  are outside the range the desktop prop array holds, so the state is tracked
+  externally and nothing draws.
+- Saying only the first half in the place a player reads before ticking the
+  box is the kind of half-true that arrives later as a bug report. The README
+  now says plainly that villagers prepare, eat and drink while the table stays
+  bare, and that drawing is in progress and not in this release.
+- Tied to the request ledger rather than to a fixed sentence: a test compares
+  whether the ledger row still says rendering is pending against whether the
+  README still carries the warning, and fails when they disagree. Confirmed by
+  editing the README to claim the props render while the ledger still said
+  pending -- the suite fails. So whichever is updated first when rendering
+  lands, the other cannot be forgotten.
+
+Prop drawing: the storage layout, and why a wrapper must keep its own position
+- Decoded from Environment.obj rather than inferred. GetPropPosition (section
+  20, 38 bytes, no relocations) and SetPropPosition (section 42, 32 bytes, no
+  relocations) both index the same way: prop*2 scaled by 8, so prop*16.
+
+    per-prop record: CEnvironment + prop*16
+      +0x7C  active byte
+      +0x84  X
+      +0x88  Y
+
+- This confirms the ledger's [ecx + prop*16 + 0x7C] note from a second,
+  independent function, and identifies 0x7C as the active flag -- the same
+  byte the draw path tests with `cmp byte [eax+0x7C], 0`.
+- The consequence decides the design. Prop 0x54 is the last stock record and
+  ends at +0x5CC; 0x55 and 0x56 would need 32 bytes beyond it. So calling
+  SetPropPosition for either id writes past the array end -- the same
+  out-of-bounds write SetProp's bound prevents, reached through a different
+  function. A wrapper must therefore keep its own position beside the flags it
+  already keeps, and pass those coordinates to AddDecal directly. That
+  GetPropPosition cannot answer for these ids is correct behaviour, not an
+  obstacle to route around.
+- The decal side, from Decal.obj: AddDecal is a slot insertion into a 256-entry
+  array of 24-byte slots, found by scanning for a zero first byte. Neither
+  overload has relocations, so a wrapper can call one directly.
+- The two overloads are NOT equally safe, which matters more than their arity.
+  The five-argument form (grid,int,int,int,float) bounds-checks with
+  `cmp edx,0x100 / jg`. The four-argument form (grid,int,int,float) has no
+  comparison against any bound anywhere in its 69 bytes -- checked for every
+  register form. Adding draws through the unguarded one when the array is near
+  full would write past slot 256.
+- Neither RefreshDecals nor RefreshProps pushes 0x55 or 0x56, so there is no
+  existing draw site to substitute at. The wrapper adds draws that were never
+  there, rather than replacing an existing push the way the bathroom curtain
+  patch does.

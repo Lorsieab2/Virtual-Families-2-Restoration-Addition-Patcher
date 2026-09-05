@@ -498,5 +498,37 @@ class TestBothPropBoundsAreReal(unittest.TestCase):
         )
 
 
+class TestTheReadmeIsHonestAboutTheProps(unittest.TestCase):
+    """A player enabling the tables must not be promised props that do not draw.
+
+    The behaviours ship and work; the meal and drinks sprites do not appear.
+    Saying only the former in the place a player reads before enabling the
+    setting is the kind of half-true that reads as a bug report waiting to
+    happen.
+
+    This is tied to the ledger rather than to a fixed sentence, so that when
+    rendering does land, whichever of the two is updated first fails until the
+    other follows.
+    """
+
+    def test_the_readme_says_the_props_do_not_draw_yet(self):
+        text = README.read_text(encoding="utf-8")
+        self.assertIn("do not yet appear", text)
+
+    def test_it_agrees_with_the_ledger(self):
+        ledger = LEDGER.read_text(encoding="utf-8")
+        row = next(
+            line for line in ledger.splitlines()
+            if line.startswith("| Picnic and patio table props")
+        )
+        rendering_pending = "rendering pending" in row.lower()
+        readme_warns = "do not yet appear" in README.read_text(encoding="utf-8")
+        self.assertEqual(
+            rendering_pending, readme_warns,
+            "the ledger and the README disagree about whether the props "
+            "render; update both together",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
