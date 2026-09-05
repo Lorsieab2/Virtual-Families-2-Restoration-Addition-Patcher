@@ -4186,8 +4186,14 @@ INVISIBLE_OUTDOOR_ITEMS = [
         "item_type": 5,
         "short_description": "Invisible Spa Lounger",
         "long_description": "This special invisible lounger allows villagers to \"give\" and \"receive\" spa treatments! (For roleplaying purposes)",
-        "source_png": "Chaise_brown.png",
-        "base_png": "Chaise_brown.png",
+        # The Spa Lounger's own art, not a generic chaise. The invisible item
+        # and the normal one are the same piece of furniture and ship the
+        # SAME sprite: "invisible" names which item the transparency patch
+        # may blank, not an absence of artwork. Under Visible Graphics a
+        # player who bought the Invisible Spa Lounger should see a spa
+        # lounger, and previously saw a brown chaise.
+        "source_png": "SpaLoungerStd.png",
+        "base_png": "SpaLoungerStd.png",
         "donor_fmap": "Chaise_brown.png.fmap",
     },
     {
@@ -7193,11 +7199,24 @@ def sync_invisible_outdoor_sprites(manifest):
         # and a stale or corrupted one would otherwise be baked into the
         # invisible variant and its reference-set copy while the visible
         # counterpart gets corrected.
-        tracked_base = (
-            ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture" / item["base_png"]
-        )
+        # Two tracked stores, and both must be consulted. Bases inherited from
+        # the stock game live under inherited_runtime_images; art the owner
+        # supplied for an added item lives under new_furniture_art. The Spa
+        # Lounger's sprite is the second kind, and searching only the first
+        # silently left the invisible variant on whatever the seed had -- a
+        # brown chaise -- with no missing-source error, because a stale copy
+        # in OUT satisfied the check.
+        tracked_base = None
+        for store in (
+            ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture",
+            ROOT / "patcher_assets" / "new_furniture_art",
+        ):
+            candidate = store / item["base_png"]
+            if candidate.is_file():
+                tracked_base = candidate
+                break
         base_src = OUT / "Images" / "Furniture" / item["base_png"]
-        if tracked_base.is_file():
+        if tracked_base is not None:
             base_src = tracked_base
         if not base_src.exists():
             for candidate in (
