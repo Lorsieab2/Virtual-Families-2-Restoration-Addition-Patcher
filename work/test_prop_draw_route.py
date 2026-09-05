@@ -38,6 +38,10 @@ REFRESH_PROPS = "?RefreshProps@CDecal@@QAEXXZ"
 ADD_DECAL_4 = "?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHM@Z"
 ADD_DECAL_5 = "?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z"
 ENVIRONMENT = "?Environment@@3VCEnvironment@@A"
+# The linker accepts DIR32 and REL32 for the same symbol but applies
+# different address maths, so the TYPE is part of the claim, not incidental.
+IMAGE_REL_I386_DIR32 = 0x06
+IMAGE_REL_I386_REL32 = 0x14
 
 # All six Environment sites the log claims reach RefreshDecals, plus the one
 # inside Decal.obj. offset -> (target, opcode).
@@ -76,8 +80,17 @@ def _symbols(data):
     funcs = []
     for index in range(nsym):
         off = symptr + index * 18
-        value, secnum, _typ, cls = struct.unpack_from("<IhHB", data, off + 8)
-        if secnum > 0 and cls == 2:
+        value, secnum, typ, cls = struct.unpack_from("<IhHB", data, off + 8)
+        # EXTERNAL (2) and STATIC (3) both define real functions. Taking only
+        # externals would miss a static one following RefreshProps, and the
+        # body slice would then run straight through it -- the cross-function
+        # false positive the slicing exists to prevent.
+        #
+        # The function marker is IMAGE_SYM_DTYPE_FUNCTION, which this toolchain
+        # emits as type 0x0020 outright. Reading it as a high byte (typ >> 8)
+        # matches nothing here and silently empties the list, which showed up
+        # as every AddDecal count dropping to zero rather than as an error.
+        if secnum > 0 and cls in (2, 3) and typ == 0x20:
             funcs.append((secnum, value, name(index)))
     return name, funcs
 
@@ -95,7 +108,7 @@ def _text_relocations(data):
         nrel = struct.unpack_from("<H", data, off + 32)[0]
         for r in range(nrel):
             offset, sidx, _typ = struct.unpack_from("<IIH", data, relptr + r * 10)
-            yield index + 1, offset, sidx
+            yield index + 1, offset, sidx, _typ
 
 
 class PropRouteTests(unittest.TestCase):
@@ -124,7 +137,7 @@ class PropRouteTests(unittest.TestCase):
             obj = self._coff(obj_name)
             relocs = {
                 (sec, off): name(sidx)
-                for sec, off, sidx in _text_relocations(data)
+                for sec, off, sidx, _rt in _text_relocations(data)
             }
             for caller, (offset, target, opcode) in sites.items():
                 with self.subTest(f"{obj_name}:{caller.split('@')[0]}"):
@@ -157,7 +170,7 @@ class PropRouteTests(unittest.TestCase):
             if REFRESH_PROPS.encode("ascii") not in data:
                 continue
             name, _funcs = _symbols(data)
-            for _sec, offset, sidx in _text_relocations(data):
+            for _sec, offset, sidx, _rt in _text_relocations(data):
                 if name(sidx) == REFRESH_PROPS:
                     sites.append((path.name, hex(offset)))
         self.assertEqual(
@@ -177,7 +190,7 @@ class PropRouteTests(unittest.TestCase):
         data = (OBJS / "Decal.obj").read_bytes()
         name, funcs = _symbols(data)
         counts = {ADD_DECAL_4: 0, ADD_DECAL_5: 0}
-        for sec, offset, sidx in _text_relocations(data):
+        for sec, offset, sidx, _rt in _text_relocations(data):
             target = name(sidx)
             if target not in counts:
                 continue
@@ -338,14 +351,15 @@ class TestTheDecalCallShape(unittest.TestCase):
         # The disp32 sits after `mov eax,ebx; shl eax,4; cmp byte [eax+` (8 bytes).
         disp_offset = symbol.value + start + 8 - 1
         targets = {
-            offset: name(sidx)
-            for sec, offset, sidx in _text_relocations(data)
+            offset: (name(sidx), rtype)
+            for sec, offset, sidx, rtype in _text_relocations(data)
             if sec == symbol.section
         }
         self.assertEqual(
-            targets.get(disp_offset), ENVIRONMENT,
+            targets.get(disp_offset), (ENVIRONMENT, IMAGE_REL_I386_DIR32),
             f"the prop access at {disp_offset:#x} no longer relocates against "
-            f"{ENVIRONMENT}; the 0x7c stride would be meaningless",
+            f"{ENVIRONMENT} as DIR32; a REL32 on the same symbol would compute "
+            "a different address while every byte here stayed identical",
         )
 
     def test_the_literals_actually_feed_an_addecal_call(self):
@@ -384,14 +398,19 @@ class TestTheDecalCallShape(unittest.TestCase):
         # The relocation on that call must target AddDecal, not something else.
         call_offset = symbol.value + start + len(setup)
         targets = {
-            offset: name(sidx)
-            for sec, offset, sidx in _text_relocations(data)
+            offset: (name(sidx), rtype)
+            for sec, offset, sidx, rtype in _text_relocations(data)
             if sec == symbol.section
         }
-        self.assertIn(
-            targets.get(call_offset), (ADD_DECAL_4, ADD_DECAL_5),
-            f"the call after the literal pushes targets "
-            f"{targets.get(call_offset)!r}, not AddDecal",
+        # This exact site must be the FOUR-argument overload. The pinned bytes
+        # push image, two integers and a float; calling the five-argument
+        # overload from them would leave its extra integer absent and can
+        # unbalance the stack. Accepting either would also let this site and
+        # another swap overloads while the aggregate 19/25 count stayed intact.
+        self.assertEqual(
+            targets.get(call_offset), (ADD_DECAL_4, IMAGE_REL_I386_REL32),
+            f"the call after the literal pushes is {targets.get(call_offset)!r}, "
+            f"not a REL32 call to the four-argument {ADD_DECAL_4}",
         )
 
     def test_the_log_does_not_overstate_the_immediates(self):

@@ -1622,12 +1622,15 @@ B180 how the picnic and patio props would actually be drawn
   scheme, and a new image is registered by cloning a donor's 0x30-byte
   descriptor and rewriting its grid dimensions from the PNG's real size.
   So registering the three prop sprites uses machinery that already ships.
-  POSITION. RESOLVED -- see the decal-call entry below. The coordinates are
-  immediate constants in the caller, not values read from any record, so
-  there is no coordinate space to reconcile and GetPropPosition is not
-  needed. The wrapper takes two literals per sprite. Those literals are the
-  only input that cannot be derived from the objects, and can be settled
-  only by looking at the result in game.
+  POSITION. RESOLVED, but NOT as 'use two literals' -- see the decal-call
+  entry below and read its correction before implementing. What is resolved
+  is how the engine takes a position: 43 of 44 stock calls pass immediates
+  and one computes it, so both forms work and GetPropPosition is not
+  required. What is NOT resolved is which position these two props should
+  use, and literals are the wrong answer for them: a table can be moved and
+  a player can own more than one, so the sprite has to follow the specific
+  table the villager used. That means retaining the furniture slot that
+  VF2PatioSetPropAndTrack currently discards.
 
 B180 what a prop decal call actually looks like
 - Decoded from CDecal::RefreshProps rather than inferred, because the wrapper's
@@ -1681,12 +1684,13 @@ B180 what a prop decal call actually looks like
   table's position rather than a constant. The exception at +0x6e5 shows
   the engine accepts a computed position, so the route exists; what it
   needs is the slot kept rather than dropped.
-- That is good news for the wrapper and worth stating plainly: it does not need
-  to resolve a furniture record's world position at all, and the coordinate
-  space question does not have to be answered, because nothing reads a
-  coordinate. It needs two constants per sprite, chosen to sit on the table.
-  Those constants are the one input that cannot be derived from the objects and
-  can only be settled by looking at the result in game.
+- SUPERSEDED: an earlier draft of this entry concluded from the immediates
+  that a wrapper 'does not need to resolve a furniture record's world
+  position at all' and needs only two constants per sprite. That is wrong
+  for these two props, for the reason given directly above, and it is left
+  here marked rather than deleted because it is the tempting conclusion and
+  someone will reach it again. A wrapper for the picnic and patio props DOES
+  need the selected table's position.
 - The active-flag check also means a wrapper cannot simply always draw. Stock
   props draw only when their flag is set; the two added props have no flag in
   the array, which is exactly why VF2PatioSetPropAndTrack keeps their state
