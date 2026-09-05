@@ -31,6 +31,15 @@ INSTALLER_PREFIXES = ("patch_", "install_", "sync_", "register_", "write_")
 # Functions that are deliberately not called from this module. Each needs a
 # reason, so the list cannot quietly become a dumping ground for the very
 # defect this test exists to catch.
+#
+# A caution learned from one of these. "Defined but never called" answers
+# whether the FUNCTION is reached; it does not answer whether the FEATURE
+# ships. Those come apart exactly when an implementation is replaced and the
+# old entry point is left behind -- sync_holiday_body_types looked like a
+# dropped feature by every static measure and is in fact superseded by a
+# working renderer. Before concluding that an orphan is a lost feature, check
+# the build manifest or a real build for whether the thing it was for happens
+# by another route.
 INTENTIONALLY_UNCALLED = {
     # Found by this module on the day it was written, and recorded rather than
     # fixed: each predates the prop-draw defect and none was named by the owner
@@ -45,7 +54,15 @@ INTENTIONALLY_UNCALLED = {
     "patch_plan_logging":
         "diagnostic instrumentation, not part of a shipped build",
     "sync_holiday_body_types":
-        "not reached by the current generator; unaudited, predates this check",
+        "SUPERSEDED, not dropped -- checked at the feature level rather than "
+        "the function level. The four holiday bodies DO ship, through a "
+        "folder-backed runtime renderer, and the build manifest says so "
+        "explicitly: holiday_body_types is 'folder-backed runtime renderer "
+        "enabled' and records 'spritesheets: not expanded; original sheets "
+        "remain fallback'. This function is the old spritesheet-expansion "
+        "route that line is declining to use. Wiring it up would re-enable a "
+        "superseded implementation alongside the working one -- a regression, "
+        "not a restoration",
     "sync_vc90_crt_private_assembly":
         "not reached by the current generator; unaudited, predates this check",
 }
