@@ -378,3 +378,54 @@ class PropDrawRunsAfterTheStockPass(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DocsDescribeTheInstalledHook(unittest.TestCase):
+    """The docs must describe what ships, not an attempt that was rejected.
+
+    The hook moved twice: from a conditional AddDecal call inside
+    CDecal::RefreshProps, to CDecal::InitDecals (unconditional but WRONG, since
+    it empties the decal array before the capacity check runs), and finally to
+    RefreshDecals' tail jump to RefreshProps.
+
+    After the second move the ledger and the transparency log still described
+    the InitDecals arrangement -- the very ordering the capacity fix rejected.
+    Anyone maintaining or verifying this would have been reading the opposite
+    of what is installed, which is worse than no documentation.
+    """
+
+    LEDGER = ROOT / "docs" / "REQUEST_LEDGER.md"
+    LOG = ROOT / "docs" / "Transparency Log.txt"
+
+    def _prop_text(self):
+        row = next(
+            line for line in self.LEDGER.read_text(encoding="utf-8").splitlines()
+            if line.startswith("| Picnic and patio table props")
+        )
+        log = self.LOG.read_text(encoding="utf-8")
+        entry = log[log.index("B182 the picnic and patio props"):]
+        return row, entry.split(NL + "B18", 1)[0]
+
+    def test_both_documents_name_the_installed_hook(self):
+        for name, text in zip(("ledger", "transparency log"), self._prop_text()):
+            with self.subTest(doc=name):
+                self.assertIn(
+                    "tail jump", text.lower(),
+                    "the document does not name the tail jump that is actually "
+                    "hooked",
+                )
+
+    def test_neither_presents_initdecals_as_the_installed_hook(self):
+        """It may appear only as the rejected attempt it was."""
+        for name, text in zip(("ledger", "transparency log"), self._prop_text()):
+            with self.subTest(doc=name):
+                if "InitDecals" not in text:
+                    continue
+                lowered = text.lower()
+                self.assertTrue(
+                    "wrong" in lowered or "rejected" in lowered
+                    or "intermediate attempt" in lowered,
+                    "InitDecals is mentioned without being marked as the "
+                    "rejected arrangement, so it reads as the installed hook -- "
+                    "which is the ordering the capacity fix exists to avoid",
+                )

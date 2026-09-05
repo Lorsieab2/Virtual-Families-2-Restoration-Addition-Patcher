@@ -2274,19 +2274,27 @@ B182 the picnic and patio props: four defects, all confirmed, all fixed
   wrapped site at +0xA6A is reached only by a jmp to 0xa62 from those branches
   and sits within two nested loops (cmp esi,4 and cmp ebx,0x55), so the props
   drew only while some unrelated stock prop happened to be active.
-  There is no unconditional call site inside RefreshProps to move to, and
-  RefreshProps itself is reached through a vtable rather than a direct call, so
-  there is nothing to wrap one level up either. CDecal::RefreshDecals calls
-  CDecal::InitDecals as its FIRST instruction, before any branch, and runs
-  every refresh -- that is the new hook. InitDecals clears the decal array, so
-  drawing after it is also the correct order: RefreshDecals and RefreshProps
-  repopulate the array in the same pass and ours are added alongside.
-  Still zero added bytes, because that call is already five bytes with a
-  relocation. InitDecals has two call sites, RefreshDecals +0x4 and
-  CDecal::Reset +0x1C, so the site is located through RefreshDecals' own COMDAT
-  section and asserted to be that function's first instruction; a drifted
-  prologue fails the build rather than silently hooking a conditional path
-  again.
+  There is no unconditional call site inside RefreshProps to move to, and every
+  call in it is inside that switch.
+  AN INTERMEDIATE ATTEMPT WRAPPED CDecal::InitDecals, RefreshDecals' first
+  instruction. That is unconditional, which was the requirement, and it was
+  WRONG -- InitDecals EMPTIES the decal array, so the capacity check in defect
+  4 below would have run against freshly cleared storage, always found room,
+  and the two added decals would then have pushed the STOCK pass past the
+  256-slot end. A guard that reads as protection while causing the overflow it
+  exists to prevent. It was caught in review before shipping.
+  THE INSTALLED HOOK is CDecal::RefreshDecals' TAIL JUMP to
+  CDecal::RefreshProps -- an E9 at +0xB6F whose REL32 relocation is at +0xB70,
+  four bytes before the section end, and the ONLY REL32 reference to
+  RefreshProps in the whole object. The wrapper,
+  VF2RefreshPropsAndTableProps, calls RefreshProps and THEN draws, so the site
+  is unconditional AND at final decal occupancy, which are the two constraints
+  that have to hold at once.
+  Still zero added bytes, because that jump is already five bytes with a
+  relocation. The installer asserts exactly one such site and that it ends at
+  the section end, so if RefreshDecals ever stops ending in a tail call the
+  build fails rather than hooking it blind -- the wrapper CALLs RefreshProps
+  and therefore needs a real return.
 
 - 3. THE POSITION WAS THE WALK-TO ANCHOR, NOT THE TABLE.
   CFurnitureManager::FindFurniture ends by copying the matched record into
