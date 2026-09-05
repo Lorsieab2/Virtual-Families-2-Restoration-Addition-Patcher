@@ -1834,3 +1834,20 @@ Mobile prop art located, and an extraction claim retracted
   third-party libraries -- so a DLL is a component to build, not an existing
   seam. The prop state is static in the executable and would have to be
   exported deliberately before anything outside could read it.
+
+Picnic and patio props: what a player is told before enabling the setting
+- The Mobile Furniture Behaviors description names the Picnic Table and Patio
+  Table among the furniture it brings over. The behaviours do run. The meal
+  and drinks sprites do NOT appear on the tables, because the two prop ids
+  are outside the range the desktop prop array holds, so the state is tracked
+  externally and nothing draws.
+- Saying only the first half in the place a player reads before ticking the
+  box is the kind of half-true that arrives later as a bug report. The README
+  now says plainly that villagers prepare, eat and drink while the table stays
+  bare, and that drawing is in progress and not in this release.
+- Tied to the request ledger rather than to a fixed sentence: a test compares
+  whether the ledger row still says rendering is pending against whether the
+  README still carries the warning, and fails when they disagree. Confirmed by
+  editing the README to claim the props render while the ledger still said
+  pending -- the suite fails. So whichever is updated first when rendering
+  lands, the other cannot be forgotten.
