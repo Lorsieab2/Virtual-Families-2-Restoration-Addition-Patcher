@@ -283,6 +283,24 @@ class TestTheDecalCallShape(unittest.TestCase):
             "wrapper's literals would no longer match how props are drawn",
         )
 
+    def test_the_log_does_not_overstate_the_immediates(self):
+        """43 of 44, not all of them.
+
+        An earlier draft said every coordinate was an immediate. One call --
+        the four-argument one at RefreshProps+0x6e5 -- pushes esi and
+        dword [eax] instead, a computed position. Overstating this matters in
+        one direction: it would tell a later reader that literals are the only
+        form the engine accepts, when in fact it supports both.
+        """
+        text = (ROOT / "docs" / "Transparency Log.txt").read_text(encoding="utf-8")
+        entry = text.split("what a prop decal call actually looks like", 1)[1]
+        entry = entry.split(chr(10) + "B180 ", 1)[0]
+        self.assertIn("43 of the 44", entry)
+        self.assertIn(
+            "0x6e5", entry,
+            "the exception must be named so it can be re-checked",
+        )
+
     def test_the_log_records_that_position_is_resolved(self):
         text = (ROOT / "docs" / "Transparency Log.txt").read_text(encoding="utf-8")
         self.assertIn("what a prop decal call actually looks like", text)

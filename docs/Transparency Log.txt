@@ -1652,10 +1652,16 @@ B180 what a prop decal call actually looks like
   the *16 and 0x7c is the active-flag field. There are 43 such flag reads in
   RefreshProps, all of the form [eax+0x7c] with eax recomputed per prop, so the
   index lives in ebx rather than in the displacement.
-- SECOND, and this settles a question previously recorded as unconfirmed: the
-  DECAL COORDINATES ARE IMMEDIATE CONSTANTS. The first call passes x=0x146 and
-  y=0xff as literals, not values read from a furniture record. So a prop's
-  position is baked per prop at compile time.
+- SECOND, and this settles a question previously recorded as unconfirmed:
+  the decal coordinates are IMMEDIATE CONSTANTS in 43 of the 44 calls. The
+  first passes x=0x146 and y=0xff as literals, not values read from a
+  furniture record, so those props' positions are baked at compile time.
+  The single exception is the four-argument call at RefreshProps+0x6e5,
+  which pushes esi and dword [eax] -- a computed position. It is recorded
+  because an earlier draft of this entry said ALL the coordinates were
+  immediates, which was an overstatement caught in self-review, and
+  because it proves the engine supports both forms. A wrapper may use
+  literals, as the majority do, without that being the only option.
 - That is good news for the wrapper and worth stating plainly: it does not need
   to resolve a furniture record's world position at all, and the coordinate
   space question does not have to be answered, because nothing reads a
