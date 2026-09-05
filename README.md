@@ -391,6 +391,17 @@ linked to and comparing its item id, rather than by asking which furniture the
 villager *could* use -- that second question reserves a link as a side effect,
 which is why an earlier attempt mislabelled ordinary pool games.
 
+Reported from live play on B180: villagers at the Ping-Pong Table were still
+labelled "Playing pool", and the same fault would have silenced the Exercise
+Bike's labels too. Recovering the record went through a point the game hands
+back for a different purpose -- the tile the villager stands on to *use* the
+item, not the item's own footprint -- and testing that point against the
+footprint asks "which furniture is the villager standing inside". For anything
+you stand beside, a table included, the answer is "none", so the check reported
+"not that item" for every item, every time. Each placement instead carries a
+unique handle that the game returns alongside the match, and the record is now
+found by that handle, which also keeps two tables of the same kind apart.
+
 **Substantive changes**
 
 These three do more than change eligibility or wording:

@@ -20,6 +20,14 @@ def _source():
     return path.read_text(encoding="utf-8")
 
 
+# The body of VF2LinkedFurnitureItemIs, so several tests can inspect it without
+# each repeating the pattern.
+PROBE_BODY = (
+    r"VF2LinkedFurnitureItemIs\(\n"
+    r"    CVillager &villager, int object, int itemId\)\n\{(.*?)\n\}"
+)
+
+
 class TestPingPongLabels(unittest.TestCase):
     def test_the_group_exists_with_both_labels(self):
         self.assertIn("ping_pong", patcher.BEHAVIOR_LABEL_GROUP_RANGES)
@@ -160,17 +168,18 @@ class TestTheFurnitureProbe(unittest.TestCase):
         self.assertEqual(patcher.PING_PONG_TABLE_ITEM_ID, record["item_id"])
 
     def test_the_probe_uses_the_proven_record_layout(self):
-        # Item id at record+0x00 and the in-world flag at record+0x0C are what
-        # CFurnitureManager::PtOnFurniture and FurnitureHasObject both use;
-        # record+0x10 is an orientation index, not a point, so the lookup goes
-        # through PtOnFurniture rather than matching coordinates by hand.
+        # The count at manager+0x1004, the 0x40 stride from manager+0x1008, the
+        # item id at record+0x00 and the in-world flag at record+0x0C are all
+        # confirmed twice over in FurnitureManager.obj: AddToWorld writes them
+        # and PtOnFurniture reads them back through its own cursor.
+        #
+        # record+0x10 is an orientation index rather than a point, so it must
+        # not be treated as a position.
         body = re.search(
-            r"VF2LinkedFurnitureItemIs\(\n    CVillager &villager, int object, int itemId\)\n\{(.*?)\n\}",
-            _source(), re.S,
+            PROBE_BODY, _source(), re.S,
         )
         self.assertIsNotNone(body)
         text = body.group(1)
-        self.assertIn("VF2BehaviorPtOnFurnitureIndex", text)
         self.assertIn("manager + 0x1004", text)
         self.assertIn("manager + 0x1008 + slot * 0x40", text)
         self.assertIn("record + 0x0C", text)
@@ -179,12 +188,43 @@ class TestTheFurnitureProbe(unittest.TestCase):
             "record+0x10 is an orientation index, not the placed point",
         )
 
-    def test_the_probe_bounds_the_slot(self):
-        text = re.search(
-            r"VF2LinkedFurnitureItemIs\(\n    CVillager &villager, int object, int itemId\)\n\{(.*?)\n\}",
-            _source(), re.S,
-        ).group(1)
-        self.assertIn("slot < 0 || slot >= count", text)
+    def test_the_probe_matches_the_placement_handle_not_a_point(self):
+        """The probe must not hit-test info.point to recover the record.
+
+        This is the bug players saw as "Playing pool" at the Ping-Pong Table.
+        FindFurniture sets info.point to record+0x14/+0x18 plus a furniture-map
+        hotspot offset, making it the tile the villager stands on to USE the
+        item. PtOnFurniture is a point-inside-footprint test, so it was being
+        asked which furniture the villager stands INSIDE -- and for anything
+        you stand beside, that is nothing. The probe answered "not that item"
+        for every item, every time.
+
+        AddToWorld stamps each placement with a unique handle at record+0x04
+        and FindFurniture returns it as info.unknown0, so the matched record is
+        named exactly, with no geometry.
+        """
+        text = re.search(PROBE_BODY, _source(), re.S).group(1)
+        code = "\n".join(
+            line for line in text.splitlines()
+            if not line.lstrip().startswith("//")
+        )
+        self.assertNotIn(
+            "VF2BehaviorPtOnFurnitureIndex", code,
+            "recovering the slot by hit-testing info.point is the defect; "
+            "info.point is the walk-to anchor, not the item's footprint",
+        )
+        self.assertIn("record + 0x04", code)
+        self.assertIn("info.unknown0", code)
+
+    def test_the_probe_bounds_the_record_count(self):
+        """0x200 is the array's real capacity, read out of the binary.
+
+        AddToWorld opens with `cmp [edi+0x1004], 0x200 / jge` and returns
+        without adding once the count reaches it, so a larger count means the
+        structure is not what this code believes it is.
+        """
+        text = re.search(PROBE_BODY, _source(), re.S).group(1)
+        self.assertIn("count < 0 || count > 0x200", text)
 
 
 if __name__ == "__main__":

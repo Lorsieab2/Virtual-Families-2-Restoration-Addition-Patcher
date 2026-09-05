@@ -1955,3 +1955,35 @@ The prop art was tracked but not shipped
   directions, so a sprite added and forgotten fails rather than sitting in the
   repository looking shipped. Verified by adding an untracked sprite: the
   suite fails, and passes again when it is removed.
+
+The furniture probe answered "no" to every question
+- Reported from live play on B180: villagers at the Ping-Pong Table were still
+  labelled "Playing pool". The label wrapper was present, the item records were
+  correct, and the strings shipped -- so nothing about the build looked wrong.
+- VF2LinkedFurnitureItemIs asks FindFurniture which piece the villager is at,
+  then recovered the slot by passing info.point to PtOnFurniture. Those two
+  functions do not agree on what that point means. Disassembling
+  FurnitureManager.obj shows FindFurniture computes it as the record position
+  plus a furniture-map hotspot offset -- the walk-to anchor, the tile a villager
+  stands on to use the item -- while PtOnFurniture is a point-inside-footprint
+  test. Handing it the anchor asks "which furniture is the villager standing
+  inside", and for anything you stand beside the answer is none. The probe
+  therefore returned false for every item, every time.
+- That is the failure mode this log has named before: a check that passes, or in
+  this case fails, for a reason unrelated to what it was meant to measure. It
+  reads exactly like a feature that was never wired up, which is why the
+  wrappers looked implemented and did nothing.
+- AddToWorld stamps every placement with a unique handle, taken from a counter
+  it increments per placement, and FindFurniture returns that same field. The
+  probe now matches on the handle, which names the matched record exactly with
+  no geometry involved, and keeps two copies of one item type distinguishable --
+  something comparing positions would not guarantee. The record layout is
+  confirmed twice over, since AddToWorld writes those fields and PtOnFurniture
+  reads them back through its own cursor.
+- Verified past the source, because a passing suite is not a shipped fix. The
+  generated behaviour file was emitted with real substitutions, with no
+  placeholders left behind, and compiles clean. A model of the real record
+  layout then scores the old probe wrong on three of five cases -- every case
+  whose answer should be true, including "at the ping-pong table, is this the
+  ping-pong table" -- and the new one correct on all five, with two ping-pong
+  tables placed at once.

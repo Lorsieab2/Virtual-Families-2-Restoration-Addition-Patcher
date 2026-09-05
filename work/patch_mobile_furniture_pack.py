@@ -32161,13 +32161,41 @@ static bool VF2LinkedFurnitureItemIs(
             (CContentMap::EObject)object, feet, info, true, 0, 0)) {
         return false;
     }
-    int slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, info.point);
+    // Match by the PLACEMENT HANDLE, not by hit-testing info.point.
+    //
+    // info.point is not the furniture's own position. FindFurniture computes
+    // it as record[+0x14/+0x18] plus an fmap hotspot offset, which makes it
+    // the WALK-TO ANCHOR -- the tile the villager stands on to use the item.
+    // PtOnFurniture is a point-inside-FOOTPRINT test, so handing it that
+    // anchor asks "which furniture is the villager standing inside", and for
+    // anything you stand beside (a table, a gym) the answer is -1. The probe
+    // then reported "not that item" for every item, every time: a villager at
+    // the Ping-Pong Table stayed labelled "Playing pool".
+    //
+    // AddToWorld stamps each placement with a unique handle at record[+0x04],
+    // from a counter at manager+0x9008 that it increments per placement, and
+    // FindFurniture hands that very field back as info.unknown0. So the record
+    // it matched can be named exactly, with no geometry at all -- and two
+    // copies of the same item type stay distinguishable, which a position
+    // comparison would not guarantee.
+    // 0x200 is the array's real capacity, not a guess: AddToWorld opens with
+    // `cmp [edi+0x1004], 0x200 / jge` and returns without adding once the
+    // count reaches it, so a larger count means the structure is not what this
+    // code thinks it is.
     unsigned char *manager = (unsigned char *)&FurnitureManager;
     int count = *(int *)(manager + 0x1004);
-    if (slot < 0 || slot >= count) return false;
-    unsigned char *record = manager + 0x1008 + slot * 0x40;
-    if ((*(unsigned int *)(record + 0x0C) & 1) == 0) return false;
-    return *(int *)record == itemId;
+    if (count < 0 || count > 0x200) return false;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*(unsigned int *)(record + 0x0C) & 1) == 0) continue;
+        // The handle counter is post-incremented, so 0 is the first placement's
+        // real handle rather than an "unset" sentinel. That is safe here: this
+        // only ever compares against a handle FindFurniture just returned from
+        // a genuine match, so a zero handle cannot match spuriously.
+        if (*(int *)(record + 0x04) != info.unknown0) continue;
+        return *(int *)record == itemId;
+    }
+    return false;
 }
 
 // The Ping-Pong Table borrows the Pool Table's behaviour wholesale, so without
