@@ -101,3 +101,98 @@ class PropDescriptorsArePopulated(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PropPositionComesFromTheRecord(unittest.TestCase):
+    """info.point is the walk-to anchor, not the table.
+
+    Proven from the engine's own instructions rather than assumed.
+    CFurnitureManager::FindFurniture ends by copying the matched record into
+    sFurnitureInfo2, and it adjusts the position on the way:
+
+        +0x110  sub  esi, [eax]        ; hotspot x
+        +0x115  sub  edx, [eax + 4]    ; hotspot y
+        +0x121  mov  ecx, [ebx + 0x14] ; record x
+        +0x124  mov  eax, [ebx + 0x18] ; record y
+        +0x127  add  ecx, esi          ; <-- x + hotspot
+        +0x129  add  eax, edx          ; <-- y + hotspot
+        +0x137  mov  [edx + 8], ecx    ; info.point.x
+        +0x12E  mov  [edx + 0xc], eax  ; info.point.y
+        +0x13A  mov  eax, [ebx + 4]
+        +0x13D  mov  [edx], eax        ; info.unknown0 = the placement handle
+
+    So info.point is the tile a villager STANDS ON to use the item. Drawing a
+    prop there puts it beside the table by however much that furniture map's
+    hotspot is offset. The record's own +0x14/+0x18 are the world position, and
+    +0x04 is the unique handle that identifies which record was matched.
+    """
+
+    def test_the_capture_reads_the_record_not_info_point(self):
+        source = SOURCE.read_text(encoding="utf-8")
+        start = source.index("static void VF2CaptureTableProp(")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertNotIn(
+            "outX = info.point.x", body,
+            "the capture is back on info.point, which is the walk-to anchor -- "
+            "the prop will draw beside the table, not on it",
+        )
+        self.assertIn(
+            "record + 0x14", body,
+            "the capture does not read the placement record's x",
+        )
+        self.assertIn(
+            "record + 0x18", body,
+            "the capture does not read the placement record's y",
+        )
+        self.assertIn(
+            "info.unknown0", body,
+            "the record is not identified by the placement handle, so the "
+            "wrong table's position could be used when two are placed",
+        )
+
+
+class PropDrawRespectsTheDecalBound(unittest.TestCase):
+    """The four-argument AddDecal has no bounds check; this feature adds one.
+
+    Both overloads walk the same free-slot scan:
+
+        +0x008  cmp  byte ptr [esi], dl     ; occupancy byte at record + 0
+        +0x010  lea  eax, [eax + 0x18]      ; stride 0x18
+        +0x014  cmp  byte ptr [eax], 0
+        +0x019  cmp  edx, 0x100 / jg        ; FIVE-arg form only
+
+    The five-argument form skips the write when the array is full. The
+    four-argument form has no comparison against any bound and writes wherever
+    the scan stopped.
+
+    "At most two extra decals" does not make that safe: it bounds what this
+    feature ADDS, not what is already there. With all 256 slots occupied by the
+    stock refresh, the first call walks off the end.
+
+    Switching overloads is not the fix -- the five-argument form's extra
+    argument is a per-decal value RefreshProps reads from its own object
+    ([edi+0x1940] indexed by prop, +0x25BB8), and there is no correct constant
+    to substitute. So the bound is applied here instead, against the same array
+    with the same stride the engine uses.
+    """
+
+    def test_the_draw_checks_the_bound_before_adding(self):
+        source = SOURCE.read_text(encoding="utf-8")
+        start = source.index("static void VF2DrawTableProp(")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertIn(
+            "0x100", body,
+            "the draw does not bound the decal array, so a full array means "
+            "AddDecal writes past its end",
+        )
+        self.assertIn(
+            "0x18", body,
+            "the scan does not use the engine's 0x18 record stride, so it "
+            "counts the wrong thing",
+        )
+        guard = body.index("0x100")
+        call = body.index("Decal.AddDecal")
+        self.assertLess(
+            guard, call,
+            "the bound is checked after the draw, which is no bound at all",
+        )

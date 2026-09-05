@@ -25970,10 +25970,37 @@ static void VF2CaptureTableProp(
             info, true, 0, 0)) {
         return;
     }
-    outX = info.point.x;
-    outY = info.point.y;
-    if (outOrientation != 0) *outOrientation = info.orientation;
-    outPlaced = true;
+    // info.point is NOT the table. FindFurniture sets it to the placement
+    // position PLUS the furniture map's hotspot offset -- the tile a
+    // villager stands on to USE the item -- so drawing there puts the meal
+    // or the drinks beside the table rather than on it, by however much
+    // that map's hotspot is offset.
+    //
+    // The placement record holds the real world position. info.unknown0 is
+    // the unique placement handle, which is exactly how the added-furniture
+    // probe above identifies a record, so the same lookup applies here and
+    // two copies of the same table stay distinguishable.
+    //
+    // 0x200 is the array's real capacity, from AddToWorld's own
+    // `cmp [edi+0x1004], 0x200 / jge` guard, not a guess.
+    unsigned char *manager = (unsigned char *)&FurnitureManager;
+    int count = *(int *)(manager + 0x1004);
+    if (count < 0 || count > 0x200) return;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*(unsigned int *)(record + 0x0C) & 1) == 0) continue;
+        if (*(int *)(record + 0x04) != info.unknown0) continue;
+        outX = *(int *)(record + 0x14);
+        outY = *(int *)(record + 0x18);
+        if (outOrientation != 0) {
+            *outOrientation = *(int *)(record + 0x10);
+        }
+        outPlaced = true;
+        return;
+    }
+    // No record carried that handle. Leaving outPlaced false is what stops
+    // the draw, which is the right outcome: a prop drawn at a position we
+    // could not resolve would appear somewhere arbitrary.
 }
 
 // Draw the picnic meal and patio drinks.
@@ -25997,6 +26024,33 @@ static void VF2DrawTableProp(
     if (graphics == 0) return;
     ldwImageGrid *grid = graphics->GetImageGrid((EImage)imageId);
     if (grid == 0) return;
+    // BOUND THE ARRAY OURSELVES before calling.
+    //
+    // Both AddDecal overloads walk the same free-slot scan, stepping 0x18
+    // bytes per record until they find a zero occupancy byte. The
+    // FIVE-argument form then guards with `cmp edx,0x100 / jg` and skips
+    // the write when the array is full; the FOUR-argument form has no
+    // comparison against any bound and writes wherever the scan stopped.
+    //
+    // Gating the callers on a prop being placed does NOT make that safe. It
+    // bounds how many EXTRA decals this feature adds, not how many are
+    // already present: if the stock refresh has filled all 256 slots, the
+    // very first of our calls walks past the end of the array and writes
+    // there.
+    //
+    // Switching to the five-argument overload is not the fix either. Its
+    // extra argument is a per-decal value RefreshProps reads from its own
+    // object -- [edi+0x1940] indexed by the current prop, at +0x25BB8 --
+    // and there is no correct constant to substitute for it. Passing a
+    // guessed layer would write a wrong value into the slot field.
+    //
+    // So the same bound is applied here, against the same array, using the
+    // same scan the engine uses. A full array means our prop is not drawn,
+    // which is what the guarded overload does too.
+    unsigned char *decals = (unsigned char *)&Decal;
+    int used = 0;
+    while (used < 0x100 && decals[used * 0x18] != 0) ++used;
+    if (used >= 0x100) return;
     Decal.AddDecal(grid, x, y, 1.0f);
 }
 
