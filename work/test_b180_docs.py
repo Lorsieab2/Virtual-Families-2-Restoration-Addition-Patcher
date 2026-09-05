@@ -82,14 +82,24 @@ class TestTheRoutedAndUnroutedSplitIsReal(unittest.TestCase):
         # nothing -- so this asserts the CLAIM, not one particular phrasing.
         status = row.split("|")[2].strip()
         self.assertNotEqual(status, "", "the row lost its status column")
-        for claimed_working in ("Shipped", "Confirmed working", "Complete"):
-            with self.subTest(claimed_working):
-                self.assertNotIn(
-                    claimed_working.lower(), status.lower(),
-                    f"the status {status!r} presents the unrouted seven as "
-                    "working; they are not routed and the owner has reported "
-                    "the Home Gym System does nothing",
-                )
+        # An ALLOW-LIST, not a blacklist. Enumerating three phrasings let
+        # "Verified", "Working / player-confirmed" or "Implemented" through,
+        # each of which presents the unrouted items as working -- the exact
+        # error this test exists to prevent. The status must instead say
+        # plainly that something is unresolved.
+        unresolved = (
+            "premise disproved", "route needed", "needs", "pending",
+            "partial", "not started", "blocked", "outstanding",
+            "unrouted", "in progress", "not yet", "deliberately not",
+        )
+        self.assertTrue(
+            any(word in status.lower() for word in unresolved),
+            f"the status {status!r} does not say anything is still "
+            "unresolved, so it reads as working. The seven items are not "
+            "routed through HandleDropOnHotSpot and the owner has reported "
+            "the Home Gym System does nothing. If they genuinely now work, "
+            "this test is the wrong thing to edit -- the route is.",
+        )
         self.assertIn("HandleDropOnHotSpot", row)
         # And every one of the seven is named, so none is quietly dropped from
         # the outstanding list.
