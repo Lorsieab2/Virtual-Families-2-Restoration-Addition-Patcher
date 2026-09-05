@@ -24,7 +24,34 @@ import zipfile
 from collections import Counter
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-ARCHIVE = ROOT / "outputs" / "VF2-B180-Release.zip"
+def _default_archive():
+    """The newest release ZIP in outputs/, not a pinned release name.
+
+    This was hardcoded to VF2-B180-Release.zip, so once B181 shipped the
+    checker could not look at the release it was meant to gate -- it verified
+    a superseded archive and reported success. A gate pinned to yesterday's
+    artifact is worse than no gate, because it still prints a pass.
+    """
+    out = ROOT / "outputs"
+    zips = sorted(out.glob("VF2-B*-Release*.zip")) if out.is_dir() else []
+    if not zips:
+        return out / "VF2-B180-Release.zip"
+
+    def rank(path):
+        stem = path.stem
+        rel = stem.split("-")[1][1:] if "-" in stem else "0"
+        parts = tuple(int(x) for x in rel.split(".") if x.isdigit())
+        rev = stem.rsplit("-r", 1)[1] if "-r" in stem else "0"
+        return (parts, int(rev) if rev.isdigit() else 0)
+
+    return max(zips, key=rank)
+
+
+ARCHIVE = (
+    pathlib.Path(sys.argv[1]).resolve()
+    if len(sys.argv) > 1
+    else _default_archive()
+)
 EXTRACT = ROOT / "outputs" / "_b180_extract"
 
 ADDED = [
@@ -151,11 +178,32 @@ def main():
     # Resolving proves they install; equal digests prove they install the SAME
     # map. That is the actual claim the desktop-safe fix makes, and without it
     # three loungers could each resolve to a different file and still pass.
-    lounger_digests = {
-        name: installed[f"Assets/{name}"].get("source_sha256", "")
-        for name in LOUNGER_MAPS
-        if f"Assets/{name}" in installed
-    }
+    # Hash the RESOLVED FILE, never the declared digest. A record's
+    # source_sha256 is written by the same exporter that wrote the payload, so
+    # comparing declared values to each other only proves the manifest agrees
+    # with itself. Worse, `.get(..., "")` maps every OMITTED digest to the same
+    # empty string, so three records that declare nothing would compare equal
+    # and pass -- while the real patcher rejects each asset because the payload
+    # does not match the manifest. Digesting the bytes on disk answers the
+    # question the manifest cannot be trusted to answer about itself.
+    lounger_digests = {}
+    for name in LOUNGER_MAPS:
+        resolved = maps.get(name)
+        if resolved is None:
+            continue
+        actual = hashlib.sha256(resolved.read_bytes()).hexdigest()
+        lounger_digests[name] = actual
+        declared = installed[f"Assets/{name}"].get("source_sha256")
+        if not declared:
+            problems.append(
+                f"Assets/{name}: the manifest record declares no source_sha256, "
+                "so the patcher cannot verify what it installs"
+            )
+        elif declared.lower() != actual.lower():
+            problems.append(
+                f"Assets/{name}: payload digest {actual[:12]} does not match "
+                f"the manifest's declared {declared[:12]}"
+            )
     if len(lounger_digests) == len(LOUNGER_MAPS):
         distinct = set(lounger_digests.values())
         if len(distinct) != 1:
