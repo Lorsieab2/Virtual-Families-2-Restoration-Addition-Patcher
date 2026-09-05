@@ -31,6 +31,23 @@ INSTALLER_PREFIXES = ("patch_", "install_", "sync_", "register_", "write_")
 # Functions that are deliberately not called from this module. Each needs a
 # reason, so the list cannot quietly become a dumping ground for the very
 # defect this test exists to catch.
+#
+# A caution learned from one of these. "Defined but never called" answers
+# whether the FUNCTION is reached; it does not answer whether the FEATURE
+# ships. Those come apart exactly when an implementation is replaced and the
+# old entry point is left behind -- sync_holiday_body_types looked like a
+# dropped feature by every static measure and is in fact superseded by a
+# working renderer. Before concluding that an orphan is a lost feature, check
+# the build manifest or a real build for whether the thing it was for happens
+# by another route.
+#
+# Checking all three that way was worth it, and the result is worth stating:
+# an orphaned installer in a mature codebase is far likelier to be a DECISION
+# than an oversight, and the decision is usually recorded somewhere other than
+# the code. Two of these three had their rationale sitting in the build
+# manifest in plain language, and one of those names a CRASH. Wiring them up
+# would have shipped a regression and a crash respectively -- both in the name
+# of a fix, and neither visible from reading the generator however carefully.
 INTENTIONALLY_UNCALLED = {
     # Found by this module on the day it was written, and recorded rather than
     # fixed: each predates the prop-draw defect and none was named by the owner
@@ -41,13 +58,34 @@ INTENTIONALLY_UNCALLED = {
         "an explicitly inert legacy stub -- its own docstring says so, and it "
         "exists to keep old callers resolving",
     "patch_main_scene_outfit_body_apply":
-        "not reached by the current generator; unaudited, predates this check",
+        "DELIBERATELY DISABLED, and wiring it up would CRASH THE GAME. The "
+        "build manifest states it outright: outfit_apply_body_resolver is "
+        "'disabled for B97 stability', because 'B96 final-apply callsite "
+        "replacement made generated Outfit-section items crash on apply'. A "
+        "working replacement ships -- the CInventoryManager::GetOutfit hook "
+        "reads the selected synthetic ToolTray item directly. The helper "
+        "symbol existing and being referenced elsewhere is exactly what makes "
+        "this look like forgotten wiring; it is not",
     "patch_plan_logging":
         "diagnostic instrumentation, not part of a shipped build",
     "sync_holiday_body_types":
-        "not reached by the current generator; unaudited, predates this check",
+        "SUPERSEDED, not dropped -- checked at the feature level rather than "
+        "the function level. The four holiday bodies DO ship, through a "
+        "folder-backed runtime renderer, and the build manifest says so "
+        "explicitly: holiday_body_types is 'folder-backed runtime renderer "
+        "enabled' and records 'spritesheets: not expanded; original sheets "
+        "remain fallback'. This function is the old spritesheet-expansion "
+        "route that line is declining to use. Wiring it up would re-enable a "
+        "superseded implementation alongside the working one -- a regression, "
+        "not a restoration",
     "sync_vc90_crt_private_assembly":
-        "not reached by the current generator; unaudited, predates this check",
+        "no VC90 or CRT key appears anywhere in a build manifest, so the "
+        "feature does not ship and nothing references it. VC90_CRT_DLL_NAMES "
+        "is msvcr90/msvcp90/msvcm90 -- the MSVC 2008 runtimes -- while "
+        "desktop_runtime_dlls ships SDL2, SDL2_image, fmod, libjpeg, libpng16 "
+        "and zlib1 and no CRT at all. Consistent with being obsolete for this "
+        "toolchain. Weaker evidence than the two above, since absence proves "
+        "less than a positive statement, but no reason to touch it",
 }
 
 
