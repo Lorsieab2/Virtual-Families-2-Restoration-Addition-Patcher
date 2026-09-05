@@ -218,5 +218,80 @@ class TestTheLogRecordsTheRoute(unittest.TestCase):
                 self.assertIn(str(count), entry)
 
 
+class TestTheDecalCallShape(unittest.TestCase):
+    """The wrapper's arguments come from this sequence, so pin it.
+
+    Decoded rather than inferred. The first AddDecal call in RefreshProps sets
+    up its arguments as immediate constants, which is what makes the wrapper
+    tractable: there is no furniture record to resolve and no coordinate space
+    to reconcile, only two literals per sprite.
+
+    The prop-record stride is confirmed here too. `mov eax, ebx` / `shl eax, 4`
+    then `cmp byte [eax+0x7c], 0` is the prop*16 + 0x7C the request ledger
+    recorded from the SetProp fall-through, arrived at from the other end.
+    """
+
+    OBJ = OBJS / "Decal.obj"
+    # mov eax, ebx ; shl eax, 4 ; cmp byte [eax+0x7c], 0
+    STRIDE = bytes((0x8B, 0xC3, 0xC1, 0xE0, 0x04, 0x80, 0xB8, 0x7C, 0x00, 0x00, 0x00, 0x00))
+
+    def setUp(self):
+        if not self.OBJ.is_file():
+            self.skipTest("Decal.obj is a gitignored build input")
+
+    def _body(self):
+        import sys
+
+        sys.path.insert(0, str(ROOT / "work"))
+        from coff_patch import CoffObject
+
+        obj = CoffObject(self.OBJ)
+        symbol = obj.symbol(REFRESH_PROPS)
+        # section_data returns a memoryview, whose count()/in count ELEMENTS
+        # rather than subsequences -- both silently return 0 for a byte
+        # pattern that is present. Convert once, here, so no caller can be
+        # caught by it.
+        return bytes(obj.section_data(symbol.section))
+
+    def test_the_prop_record_stride_is_still_sixteen_bytes(self):
+        """prop*16 + 0x7C, reached from the drawing side.
+
+        If this ever changes, both the ledger's account of the SetProp
+        fall-through and the wrapper's reading of prop state are wrong.
+        """
+        body = self._body()
+        hits = body.count(self.STRIDE)
+        self.assertGreater(
+            hits, 0,
+            "the index*16 + 0x7c prop-record access is gone from RefreshProps",
+        )
+
+    def test_the_decal_coordinates_are_immediates(self):
+        """push <imm32> twice, immediately before the call.
+
+        This is what removes the coordinate-space question entirely. If the
+        caller ever starts computing coordinates instead, a wrapper passing
+        literals would draw in the wrong place, and nothing else here would
+        notice.
+        """
+        body = self._body()
+        # push 0xff ; push 0x146 ; push dword [edi+0x182c]
+        setup = bytes((0x68, 0xFF, 0x00, 0x00, 0x00, 0x68, 0x46, 0x01, 0x00, 0x00))
+        self.assertIn(
+            setup, body,
+            "the documented immediate-coordinate call setup is gone; the "
+            "wrapper's literals would no longer match how props are drawn",
+        )
+
+    def test_the_log_records_that_position_is_resolved(self):
+        text = (ROOT / "docs" / "Transparency Log.txt").read_text(encoding="utf-8")
+        self.assertIn("what a prop decal call actually looks like", text)
+        self.assertIn(
+            "POSITION. RESOLVED", text,
+            "the coordinate question was recorded as unconfirmed; once answered "
+            "the earlier note has to say so, or it reads as still open",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

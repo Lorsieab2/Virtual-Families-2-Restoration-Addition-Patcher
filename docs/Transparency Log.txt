@@ -1622,13 +1622,50 @@ B180 how the picnic and patio props would actually be drawn
   scheme, and a new image is registered by cloning a donor's 0x30-byte
   descriptor and rewriting its grid dimensions from the PNG's real size.
   So registering the three prop sprites uses machinery that already ships.
-  POSITION. GetPropPosition is keyed by prop id, so it cannot answer for
-  0x55 or 0x56. The table's own placement lives in the furniture record
-  that VF2FurnitureSlotAtPoint already resolves. What is NOT yet confirmed
-  is that the coordinate space AddDecal expects matches what the furniture
-  record stores; asserting they match without checking is how a prop ends
-  up drawn in the wrong place, or off-screen, in a way no source-level
-  test would catch.
+  POSITION. RESOLVED -- see the decal-call entry below. The coordinates are
+  immediate constants in the caller, not values read from any record, so
+  there is no coordinate space to reconcile and GetPropPosition is not
+  needed. The wrapper takes two literals per sprite. Those literals are the
+  only input that cannot be derived from the objects, and can be settled
+  only by looking at the result in game.
+
+B180 what a prop decal call actually looks like
+- Decoded from CDecal::RefreshProps rather than inferred, because the wrapper's
+  arguments depend on it and guessing them would draw in the wrong place.
+- The first call in that function reads, in full:
+
+    8b c3                    mov  eax, ebx              ; ebx = prop index
+    c1 e0 04                 shl  eax, 4                ; index * 16
+    80 b8 7c 00 00 00 00     cmp  byte [eax+0x7c], 0    ; the active flag
+    0f 84 ...                je   skip                  ; inactive: draw nothing
+    51                       push ecx
+    c7 04 24 00 00 80 3f     mov  dword [esp], 1.0f
+    8b cf                    mov  ecx, edi              ; this = CDecal *
+    68 ff 00 00 00           push 0xff
+    68 46 01 00 00           push 0x146
+    ff b7 2c 18 00 00        push dword [edi+0x182c]    ; ldwImageGrid *
+    e8 <reloc>               call AddDecal
+
+- Two things follow, and both matter for the wrapper.
+- FIRST, the prop record stride is confirmed as prop*16 + 0x7C, matching what
+  the request ledger recorded from the SetProp fall-through. The shl eax,4 is
+  the *16 and 0x7c is the active-flag field. There are 43 such flag reads in
+  RefreshProps, all of the form [eax+0x7c] with eax recomputed per prop, so the
+  index lives in ebx rather than in the displacement.
+- SECOND, and this settles a question previously recorded as unconfirmed: the
+  DECAL COORDINATES ARE IMMEDIATE CONSTANTS. The first call passes x=0x146 and
+  y=0xff as literals, not values read from a furniture record. So a prop's
+  position is baked per prop at compile time.
+- That is good news for the wrapper and worth stating plainly: it does not need
+  to resolve a furniture record's world position at all, and the coordinate
+  space question does not have to be answered, because nothing reads a
+  coordinate. It needs two constants per sprite, chosen to sit on the table.
+  Those constants are the one input that cannot be derived from the objects and
+  can only be settled by looking at the result in game.
+- The active-flag check also means a wrapper cannot simply always draw. Stock
+  props draw only when their flag is set; the two added props have no flag in
+  the array, which is exactly why VF2PatioSetPropAndTrack keeps their state
+  externally. The wrapper's condition is that external state, not [eax+0x7c].
 
 B180 verification method
 - Generated .cpp files are compiled individually (cl /c /EHsc) after each
