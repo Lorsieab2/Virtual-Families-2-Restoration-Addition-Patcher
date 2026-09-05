@@ -25692,6 +25692,41 @@ public:
     void SetProp(EPropEnum);
 };
 
+// The drawing types the prop pass needs. This translation unit declares its
+// own types rather than sharing a header, and these four were used by
+// VF2DrawTableProp without ever being declared here -- the file did not
+// compile, which no test caught because every test reads the generator rather
+// than building the emitted C.
+//
+// Declared exactly as the other generated units declare them, so the compiler
+// mangles the calls to the same symbols the linker already resolves.
+enum EImage { eImageDummy = 0 };
+class ldwImageGrid;
+class theGraphicsManager {
+public:
+    static theGraphicsManager *Get();
+    ldwImageGrid *GetImageGrid(EImage image);
+};
+
+class CDecal {
+public:
+    // The FOUR-argument overload, ?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHM@Z.
+    // It carries NO bounds check -- the five-argument form guards with
+    // `cmp edx,0x100 / jg`, this one has no comparison against any bound in
+    // its 69 bytes. Safe here only because the two callers are gated on a prop
+    // actually being placed, so at most two extra decals are ever added.
+    void AddDecal(ldwImageGrid *grid, int x, int y, float scale);
+    // The FIVE-argument overload,
+    // ?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z, which DOES bounds-check.
+    // It is what RefreshProps calls at the site the prop draw wraps, and the
+    // wrapper forwards to it unchanged. Both overloads must be declared here:
+    // declaring only one makes the wrapper's forwarding call fail to match,
+    // and declaring them as overloads lets the compiler mangle each to the
+    // symbol the linker already resolves rather than spelling either out.
+    void AddDecal(ldwImageGrid *grid, int a, int b, int c, float scale);
+};
+extern CDecal Decal;
+
 class CGameTime {
 public:
     unsigned int const Seconds();
