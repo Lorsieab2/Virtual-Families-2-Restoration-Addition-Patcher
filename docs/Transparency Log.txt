@@ -2465,3 +2465,92 @@ B181/B180 startup crash: what is established, and the contradiction that remains
     Counting SetMacro registrations across the executable reported 423 ids
     including 0x3FF; bounding the scan to the constructor via the object's
     symbol table gave 387 and a clean maximum of 0x19A.
+
+B181 startup crash: the added furniture is NOT the cause, and it is intermittent
+- The entry above records the investigation as it stood when only the B181
+  crash was known. Two pieces of RUNTIME evidence have since settled the
+  attribution question, and both supersede everything the static analysis
+  could establish.
+
+- THE FULL CRASH HISTORY. Reading fourteen days of Windows Application Error
+  events rather than only the two the owner reported gives EIGHT crashes across
+  FOUR builds:
+      Sep 2 17:35  B178                  fault offset 0x0c7aae
+      Sep 2 17:49  Playtest 2            fault offset 0x0c7b1e
+      Sep 2 18:16  Playtest 2            fault offset 0x0c7aae
+      Sep 2 18:17  Playtest 2            fault offset 0x0c7aae
+      Sep 2 18:23  Playtest 2            fault offset 0x0c740e
+      Sep 4 23:53  B180                  fault offset 0x0c869e
+      Sep 5 13:16  B181                  fault offset 0x0c8ace
+      Sep 5 13:22  B181                  fault offset 0x0c8ace
+  The four Playtest 2 records carry four DIFFERENT PE timestamps, so that is
+  four separate rebuilds crashing, not one build four times.
+
+- EACH RECORD WAS MATCHED TO A BINARY BY PE TIMESTAMP, which is the only
+  reliable way to know which build a crash record belongs to. Three of the
+  faulting binaries survive on disk: B181, B180, and the B178 at
+  outputs/VF2-B178-matrix-20260902-final_all_enabled. All three disassemble at
+  their own fault offsets to the SAME instruction in the SAME function:
+      cmp dword ptr [esi], 0
+  inside the ten-attempt retry loop of
+  ?TakePosition@CVillagerAI@@QAEXAAVCVillager@@@Z, whose loop body is
+  CVillagerAI::DecideWhatToDo.
+
+- THE ADDED FURNITURE IS NOT THE CAUSE. B178 and B180 contain ZERO of the five
+  added behaviour registrations -- searched for as their SetMacro entries,
+  68 <id32> 8b ce e8, for ids 0x0B1, 0x0B2, 0x0B3, 0x0B4 and 0x0B8 -- and both
+  crash identically. B178 did so on 2 September, three days before those
+  behaviours existed at all. A feature that is absent cannot cause a crash that
+  is present.
+  That single comparison establishes what nine structural checks could not.
+  Payload bytes, argument order, stack balance, branch target, all 174 branches,
+  esi save and restore, caller-frame writes, the gate-off path, id collisions
+  and record bounds all came back clean, and none of them could EXONERATE the
+  added code, only fail to incriminate it. The runtime comparison does what the
+  static analysis could not.
+
+- AND IT IS INTERMITTENT. The Playtest 2 save folder holds a village file
+  written 5 September 01:39:44, hours after that build's four crashes on
+  2 September, and its bytes differ from the B180 folder's copy. So that build
+  loaded a save, ran, and wrote it back successfully. The crash is not
+  deterministic per build.
+  This also disposes of an earlier inference recorded above. B181 having left
+  ldwLog.txt untouched was read as a bound on how far execution got; it is not.
+  Playtest 2's log was last written 31 August and that build saved on
+  5 September without touching it, so the log is written only on occasional
+  events -- a blocked path, a timer warning -- and never at startup or
+  shutdown. The inference was void, not merely weak.
+
+- WHAT REMAINS UNEXPLAINED. esi is a villager slot and is READABLE at the loop
+  head and again at TakePosition+0x28, and unreadable at +0x3E. That is a
+  one-call-wide window around DecideWhatToDo, and no static examination of
+  either function accounts for it.
+
+- RULED OUT, each with a check rather than an argument:
+  * An esi overrun. The loop head reads [esi+0x1BB84], 113,540 bytes higher
+    than the faulting [esi], so the high read always leaves the section first.
+    There is NO index at which [esi] is unmapped while [esi+0x1BB84] is mapped,
+    so an out-of-range esi always faults at the loop head, one call earlier
+    than the observed fault. The villager array also has eight further slots of
+    headroom inside .data past its legitimate thirty.
+  * Stack exhaustion. The calls are sequential rather than nested, the PE stack
+    reserve is 0x100000, and DecideWhatToDo does not recurse.
+  * The one-slot stack-buffer overflow in CVillagerManager::TakePositions. It
+    would overwrite the security cookie and fast-fail (0xC0000409) in the
+    epilogue rather than access-violate inside the callee, and that function is
+    byte-identical to the pristine object.
+  * The CPetAI equivalent. CPetAI::TakePosition carries the same loop shape in
+    PetAI.obj, but the pattern occurs exactly once in the shipped executable,
+    at the fault address, and TakePosition has exactly one caller.
+  * Comparison against vanilla. This is USELESS as a baseline and should not be
+    attempted again: the recompile is different enough that the best match for
+    a 40-byte window from the modded build is 13 of 40 bytes somewhere in
+    vanilla, which is noise. "Absent from vanilla" is not evidence the patcher
+    wrote something. What CAN be compared is bounds rather than bytes, and
+    those agree: both builds bound their villager walks at 0x1e at exactly
+    twenty sites, so the recompile changed codegen and not the logic.
+
+- THE ONE INPUT THAT WOULD NARROW IT is whether any build has ever launched
+  cleanly on the first attempt, or whether launching usually takes a couple of
+  tries. An intermittent launch-time fault has a different search than a
+  deterministic one, and the evidence above says this is the former.
