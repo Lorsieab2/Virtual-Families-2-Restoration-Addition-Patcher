@@ -1696,6 +1696,50 @@ B180 what a prop decal call actually looks like
   the array, which is exactly why VF2PatioSetPropAndTrack keeps their state
   externally. The wrapper's condition is that external state, not [eax+0x7c].
 
+B180 the recurring defect: what a check READS versus what it ASSERTS
+- Nine separate defects this release were one fault wearing different clothes.
+  Naming it here because it kept being rediscovered, each time as if new, and
+  because the instances are only obvious together.
+- The fault: a check's assertion and the thing it reads drift apart, and
+  nothing fails, because what it reads still exists. A green result then means
+  "the thing I looked at is still there", not "the claim is still true".
+- The nine, with what each actually read:
+  1. README settings count       read the exporter, claimed the bundle
+  2. disclosure guard            inside a bundle-gated class; skipped on every
+                                 clean checkout and guarded nothing
+  3. digest requirement          searched the whole log, claimed the correction
+  4. prop honesty warning        landed in the repo README; a player reads the
+                                 GUI's manifest description
+  5. keyword guard               searched for the right topic's words in the
+                                 wrong paragraph
+  6. symbol-class filter         collected EXTERNAL only; STATIC boundaries
+                                 were invisible, so a slice ran past them
+  7. relocation check            verified the target, discarded the type;
+                                 DIR32 and REL32 both link and differ
+  8. AddDecal overload           accepted either, when the pushed bytes admit
+                                 exactly one
+  9. archive selection           sorted by filename and answered from B178
+                                 while B180 was the release
+- Two of these were found by writing a check and having it pass when it should
+  not have. Seven were found by review. That ratio is the argument for review
+  rather than for more checks.
+- What actually catches it, in the order that has worked here:
+  FORGE A KNOWN-BAD INPUT. Every object-level check in this area is validated
+  against a deliberately broken copy -- a flipped opcode, a retargeted
+  relocation, a rewritten coordinate -- and the object restored byte-identical
+  afterwards. A check never shown to fail has not been tested, only run.
+  PIN EXACT NUMBERS, NOT THRESHOLDS. "19 and 25" caught a filter that silently
+  matched nothing; "greater than zero" would have passed on an empty list.
+  ASK WHAT THE CLAIM IS ABOUT. A statement about a bundle cannot be checked
+  against the source that generates it. A statement about what a player sees
+  cannot be checked against a file they never open.
+  MAKE GUARDS EXPIRE. A guard that cannot stop applying becomes an obstacle to
+  the change it exists to shepherd, and the pressure is then to delete it.
+- The counter-case is worth keeping too: the holiday ornaments description
+  says twelve collectibles and ships twelve. It was checked the same way and
+  was correct, and is now pinned so a later pass does not "fix" a right
+  number.
+
 B180 verification method
 - Generated .cpp files are compiled individually (cl /c /EHsc) after each
   change. Three defects this cycle were invisible to source-reading tests and
