@@ -6363,6 +6363,30 @@ def head_icon_image_base(holiday_body_descriptor_count=0):
     return base
 
 
+PROP_ART_IMAGE_ORDER = ("mealSE.png", "mealSW.png", "patioDrinks.png")
+
+
+def prop_art_image_base(holiday_body_descriptor_count=0):
+    """The picnic-meal and patio-drinks sprites, appended after every block.
+
+    Appended for the same reason every block above it is: an id already
+    assigned must not shift, or art elsewhere silently changes. The hairstyle
+    icons are the previous last block, so this starts after them -- and only
+    counts them when they are actually present, since a disabled feature
+    contributes no descriptors.
+    """
+    # HEAD_STORE_ENTRY_COUNT is added unconditionally, matching the
+    # descriptor-append site: the hairstyle icons are always generated.
+    return head_icon_image_base(holiday_body_descriptor_count) + HEAD_STORE_ENTRY_COUNT
+
+
+def prop_art_image_id(name, holiday_body_descriptor_count=0):
+    return (
+        prop_art_image_base(holiday_body_descriptor_count)
+        + PROP_ART_IMAGE_ORDER.index(name)
+    )
+
+
 def head_icon_image_id(gender, head_value, holiday_body_descriptor_count=0):
     return (
         head_icon_image_base(holiday_body_descriptor_count)
@@ -12457,6 +12481,15 @@ public:
     ldwImageGrid *bathroom1ClosedCurtainGrid;
     void RefreshProps();
     void RefreshDecals();
+    // The four-argument overload, ?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHM@Z.
+    // Decoded from Decal.obj section 14: 69 bytes, no relocations, a slot
+    // insertion that scans for a free entry (first byte zero) in a 256-entry
+    // array of 24-byte slots.
+    //
+    // NOTE it carries NO bounds check -- the five-argument overload guards
+    // with `cmp edx,0x100 / jg`, this one has no comparison against any bound
+    // anywhere in its 69 bytes. Callers must not assume the scan stops.
+    void AddDecal(ldwImageGrid *grid, int x, int y, float scale);
 };
 extern CDecal Decal;
 """
@@ -19615,8 +19648,13 @@ def patch_graphics_manager(manifest):
         + (len(AI_BATHROOM2_STYLE_CATALOG) * 2 if ENABLE_AI_GENERATED_BATHROOM2 else 0)
         + (len(MOBILE_RENOVATION_CURTAIN_COLOR_ORDER) if ENABLE_MOBILE_RENOVATIONS else 0)
         + (len(MOBILE_RENOVATION_CURTAIN_COLOR_ORDER) if ENABLE_AI_GENERATED_BATHROOM2 else 0)
-        # Hairstyle store icons are appended last, after every block above.
+        # Hairstyle store icons.
         + HEAD_STORE_ENTRY_COUNT
+        # The picnic-meal and patio-drinks sprites are appended last. They get
+        # descriptors like any other image so GetImageGrid can resolve them;
+        # without this the ids computed by prop_art_image_id would point past
+        # the end of the table.
+        + len(PROP_ART_IMAGE_ORDER)
     )
     if append_count:
         obj.insert_section_bytes(img_sym.section, img_sym.value + ORIG_IMAGE_COUNT * DESC_SIZE, b"\0" * (append_count * DESC_SIZE))
