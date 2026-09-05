@@ -6369,6 +6369,30 @@ def head_icon_image_base(holiday_body_descriptor_count=0):
     return base
 
 
+PROP_ART_IMAGE_ORDER = ("mealSE.png", "mealSW.png", "patioDrinks.png")
+
+
+def prop_art_image_base(holiday_body_descriptor_count=0):
+    """The picnic-meal and patio-drinks sprites, appended after every block.
+
+    Appended for the same reason every block above it is: an id already
+    assigned must not shift, or art elsewhere silently changes. The hairstyle
+    icons are the previous last block, so this starts after them -- and only
+    counts them when they are actually present, since a disabled feature
+    contributes no descriptors.
+    """
+    # HEAD_STORE_ENTRY_COUNT is added unconditionally, matching the
+    # descriptor-append site: the hairstyle icons are always generated.
+    return head_icon_image_base(holiday_body_descriptor_count) + HEAD_STORE_ENTRY_COUNT
+
+
+def prop_art_image_id(name, holiday_body_descriptor_count=0):
+    return (
+        prop_art_image_base(holiday_body_descriptor_count)
+        + PROP_ART_IMAGE_ORDER.index(name)
+    )
+
+
 def head_icon_image_id(gender, head_value, holiday_body_descriptor_count=0):
     return (
         head_icon_image_base(holiday_body_descriptor_count)
@@ -12476,6 +12500,22 @@ public:
     ldwImageGrid *bathroom1ClosedCurtainGrid;
     void RefreshProps();
     void RefreshDecals();
+    // The four-argument overload, ?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHM@Z.
+    // Decoded from Decal.obj section 14: 69 bytes, no relocations, a slot
+    // insertion that scans for a free entry (first byte zero) in a 256-entry
+    // array of 24-byte slots.
+    //
+    // NOTE it carries NO bounds check -- the five-argument overload guards
+    // with `cmp edx,0x100 / jg`, this one has no comparison against any bound
+    // anywhere in its 69 bytes. Callers must not assume the scan stops.
+    void AddDecal(ldwImageGrid *grid, int x, int y, float scale);
+    // The five-argument overload,
+    // ?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z. This one DOES bounds-
+    // check, guarding with `cmp edx,0x100 / jg` against 256 slots. It is the
+    // one RefreshProps calls at the site the prop draw wraps, and declaring it
+    // as an overload lets the compiler mangle it correctly rather than needing
+    // the symbol spelled out.
+    void AddDecal(ldwImageGrid *grid, int a, int b, int c, float scale);
 };
 extern CDecal Decal;
 """
@@ -19425,6 +19465,104 @@ def apply_second_bathroom_leaks(manifest):
     patch_second_bathroom_leaks(manifest)
 
 
+def patch_mobile_table_prop_draw(manifest):
+    """Draw the picnic meal and patio drinks, without spending cave space.
+
+    The two prop ids never enter the engine's prop array -- it is
+    CEnvironment + prop*16 and prop 0x54 is its last record -- so nothing in
+    RefreshProps or RefreshDecals draws them. This adds two draws that were
+    never there.
+
+    It costs ZERO added bytes. RefreshProps' last AddDecal call is already a
+    five-byte call with a relocation, so pointing that relocation at a wrapper
+    needs no trampoline, no cave and no section growth. The wrapper forwards to
+    the stock AddDecal and then draws ours, which is also the ordering we want:
+    our props land on top of every stock prop.
+
+    Deliberately NOT hooked at the epilogue. Overwriting
+    `pop edi/esi/ebx; mov esp,ebp` with a call and reproducing those
+    instructions in a naked helper cannot work -- `mov esp,ebp` restores the
+    CALLER's frame and destroys the helper's own return address. Wrapping an
+    existing call site avoids that entire class of problem.
+
+    The wrapped site uses the FIVE-argument AddDecal, which is the
+    bounds-checked overload. The wrapper forwards to it unchanged; only our own
+    draws use the four-argument form, and those are gated on the prop actually
+    being placed rather than on a scan that never stops.
+    """
+    path = PATCHED / "Decal.obj"
+    obj = CoffObject(path)
+    refresh_props = obj.symbol("?RefreshProps@CDecal@@QAEXXZ")
+    section = obj.section(refresh_props.section)
+    add_decal_5 = obj.symbol("?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z")
+
+    # Find the LAST AddDecal call inside RefreshProps by walking the section's
+    # relocations, rather than pinning a fixed offset. A shifted function then
+    # fails loudly instead of hooking whatever now sits at that address.
+    #
+    # The search runs to the end of the section, which is the function's real
+    # extent -- RefreshProps is the only symbol in it, at value 0. An earlier
+    # hardcoded length of 0xA83 excluded nothing (the chosen site is 0xa6b and
+    # the section is 0xba4), but it sat just 0x18 bytes above that site: had
+    # the function grown a later AddDecal call past the cutoff, the search
+    # would have silently settled on an EARLIER call and drawn our props
+    # partway through the stock prop pass instead of on top of it. No error
+    # would fire, because a site was still found.
+    search_end = refresh_props.value + section.raw_size
+    hook_vaddr = None
+    ptr = section.reloc_ptr
+    for _ in range(section.nreloc):
+        rec_vaddr, rec_sym, _rec_type = struct.unpack_from("<IIH", obj.buf, ptr)
+        ptr += 10
+        if rec_sym != add_decal_5.index:
+            continue
+        if not (refresh_props.value <= rec_vaddr - 1 < search_end):
+            continue
+        if obj.buf[section.raw_ptr + rec_vaddr - 1] != 0xE8:
+            continue
+        if hook_vaddr is None or rec_vaddr > hook_vaddr:
+            hook_vaddr = rec_vaddr
+    if hook_vaddr is None:
+        raise RuntimeError(
+            "CDecal::RefreshProps has no AddDecal call to wrap; the prop draw "
+            "hook cannot be installed"
+        )
+
+    # __fastcall mangles as @Name@<total argument bytes>: 4 each for the ECX
+    # and EDX slots plus five stack arguments = 28. The same convention as
+    # MOBILE_PATIO_PROP_HELPER_SYMBOL, which is @VF2PatioSetPropAndTrack@12.
+    helper = obj.append_undefined_symbol(
+        "@VF2RefreshPropsAddDecalAndProps@28"
+    )
+    obj.retarget_relocation(
+        refresh_props.section, hook_vaddr, helper, IMAGE_REL_I386_REL32
+    )
+    obj.write(path)
+
+    manifest["MobileTablePropDraw"] = {
+        "status": "installed",
+        "function": "?RefreshProps@CDecal@@QAEXXZ",
+        "hooked_call_offset": hex(hook_vaddr - 1 - refresh_props.value),
+        "wrapped": "?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z",
+        "helper": "@VF2RefreshPropsAddDecalAndProps@28",
+        "added_bytes": 0,
+        "mechanism": (
+            "retargets an existing five-byte call relocation; no trampoline, "
+            "no cave space, no section growth"
+        ),
+        "draws": list(PROP_ART_IMAGE_ORDER),
+        "position_source": (
+            "FindFurniture at prop activation -- sFurnitureInfo2 carries both "
+            "the world point and the orientation that picks SE from SW"
+        ),
+        "why_not_the_prop_array": (
+            "CEnvironment + prop*16 holds through prop 0x54; 0x55 and 0x56 "
+            "would write 32 bytes past its last record"
+        ),
+    }
+    print("mobile table prop draw: RefreshProps hooked, 0 bytes added")
+
+
 def patch_bathroom1_curtain_decal(manifest):
     """Route each bathroom's renovation curtain to its own native decal slot.
 
@@ -19634,8 +19772,13 @@ def patch_graphics_manager(manifest):
         + (len(AI_BATHROOM2_STYLE_CATALOG) * 2 if ENABLE_AI_GENERATED_BATHROOM2 else 0)
         + (len(MOBILE_RENOVATION_CURTAIN_COLOR_ORDER) if ENABLE_MOBILE_RENOVATIONS else 0)
         + (len(MOBILE_RENOVATION_CURTAIN_COLOR_ORDER) if ENABLE_AI_GENERATED_BATHROOM2 else 0)
-        # Hairstyle store icons are appended last, after every block above.
+        # Hairstyle store icons.
         + HEAD_STORE_ENTRY_COUNT
+        # The picnic-meal and patio-drinks sprites are appended last. They get
+        # descriptors like any other image so GetImageGrid can resolve them;
+        # without this the ids computed by prop_art_image_id would point past
+        # the end of the table.
+        + len(PROP_ART_IMAGE_ORDER)
     )
     if append_count:
         obj.insert_section_bytes(img_sym.section, img_sym.value + ORIG_IMAGE_COUNT * DESC_SIZE, b"\0" * (append_count * DESC_SIZE))
@@ -25584,6 +25727,25 @@ static unsigned int gVF2PicnicReadyDeadline = 0;
 static CVillager *gVF2PatioDrinksPreparer = 0;
 static CVillager *gVF2PicnicPreparer = 0;
 
+// Where to draw each prop, and which way its table faces.
+//
+// Kept HERE rather than in the engine's own per-prop array. That array is
+// CEnvironment + prop*16 with the active byte at +0x7C and x/y at +0x84/+0x88,
+// and prop 0x54 is the last record it holds -- so SetPropPosition(0x55) would
+// write 32 bytes past its end. GetPropPosition failing to answer for these ids
+// is correct behaviour, not an obstacle to route around.
+//
+// Orientation picks between the two meal sprites. Mobile ships mealSE and
+// mealSW as a pair, which is what establishes that the behaviour activates a
+// prop ON the table rather than the table swapping to a different image.
+static int gVF2PicnicPropX = 0;
+static int gVF2PicnicPropY = 0;
+static int gVF2PicnicPropOrientation = 0;
+static bool gVF2PicnicPropPlaced = false;
+static int gVF2PatioPropX = 0;
+static int gVF2PatioPropY = 0;
+static bool gVF2PatioPropPlaced = false;
+
 static void VF2ClearPatioDrinks()
 {
     gVF2PatioDrinksOn = 0;
@@ -25651,6 +25813,119 @@ static bool VF2PicnicReadyActive()
     return false;
 }
 
+// Record where a prop's table stands, and which way it faces.
+//
+// The engine's own per-prop position array cannot hold these ids: it is
+// CEnvironment + prop*16 and prop 0x54 is its last record, so writing 0x55 or
+// 0x56 there lands 32 bytes past the end. So the position is kept beside the
+// flags this file already keeps.
+//
+// FindFurniture is read-only and nearest-match from a point -- the same
+// question the native behaviours ask. LinkPeepToFurniture would answer "which
+// table COULD this villager use" and reserve a link as a side effect, which is
+// the mistake that once made the ping-pong table report "playing pool".
+//
+// A prop whose table cannot be resolved is left unplaced rather than drawn at
+// a guessed position: a sprite in the wrong place reads as a bug, an absent
+// one reads as the feature not being finished, and the second is honest.
+static void VF2CaptureTableProp(
+    CVillager *preparer,
+    int object,
+    int &outX,
+    int &outY,
+    int *outOrientation,
+    bool &outPlaced)
+{
+    outPlaced = false;
+    if (preparer == 0) return;
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            (CContentMap::EObject)object, preparer->FeetPos(),
+            info, true, 0, 0)) {
+        return;
+    }
+    outX = info.point.x;
+    outY = info.point.y;
+    if (outOrientation != 0) *outOrientation = info.orientation;
+    outPlaced = true;
+}
+
+// Draw the picnic meal and patio drinks.
+//
+// These two props are not in the engine's prop array and never can be: it is
+// CEnvironment + prop*16 and prop 0x54 is its last record, so 0x55 and 0x56
+// would land past the end. Nothing in RefreshProps or RefreshDecals pushes
+// either id, so there is no existing draw to substitute at -- this ADDS two
+// draws that were never there.
+//
+// AddDecal here is the four-argument overload, which carries NO bounds check;
+// the five-argument form guards with `cmp edx,0x100 / jg`. Rather than rely on
+// a scan that does not stop, the caller is gated on the prop actually being
+// placed, so at most two extra decals are ever added.
+static void VF2DrawTableProp(
+    int imageId,
+    int x,
+    int y)
+{
+    theGraphicsManager *graphics = theGraphicsManager::Get();
+    if (graphics == 0) return;
+    ldwImageGrid *grid = graphics->GetImageGrid((EImage)imageId);
+    if (grid == 0) return;
+    Decal.AddDecal(grid, x, y, 1.0f);
+}
+
+// Called after the stock prop pass, so our two draw on top of it rather than
+// in place of it.
+extern "C" void __cdecl VF2DrawMobileTableProps()
+{
+    if (gVF2MobileFurnitureBehaviors == 0) return;
+    if (VF2PicnicReadyActive() && gVF2PicnicPropPlaced) {
+        // Mobile ships mealSE and mealSW as a pair, which is what establishes
+        // the prop sits ON the table: the sprite has to face the way the
+        // table does.
+        VF2DrawTableProp(
+            gVF2PicnicPropOrientation == 1
+                ? __VF2_PROP_IMAGE_MEAL_SE__
+                : __VF2_PROP_IMAGE_MEAL_SW__,
+            gVF2PicnicPropX,
+            gVF2PicnicPropY);
+    }
+    if (VF2PatioDrinksActive() && gVF2PatioPropPlaced) {
+        // A single sprite: the drinks stand reads the same from either side.
+        VF2DrawTableProp(
+            __VF2_PROP_IMAGE_PATIO_DRINKS__,
+            gVF2PatioPropX,
+            gVF2PatioPropY);
+    }
+}
+
+// Wraps RefreshProps' last AddDecal so the picnic meal and patio drinks draw
+// after every stock prop. Reached by retargeting that call's relocation, which
+// costs no bytes -- no trampoline, no cave, no section growth.
+//
+// NO naked assembly is needed, and two attempts at it were wrong before this
+// was noticed. The wrapper is entered exactly as the stock function would be:
+// `this` in ECX, five arguments on the stack, and the callee expected to pop
+// them (`ret 20`). That is precisely what __fastcall with a dummy second
+// argument produces on MSVC -- the same idiom VF2PatioSetPropAndTrack already
+// uses -- so the compiler emits the correct epilogue itself. Hand-written
+// stack juggling here either returns past our own code or leaves the stack
+// twenty bytes short.
+extern "C" void __fastcall VF2RefreshPropsAddDecalAndProps(
+    CDecal *self,
+    void *,
+    ldwImageGrid *grid,
+    int a,
+    int b,
+    int c,
+    float scale)
+{
+    // The stock draw first, unchanged, so nothing existing is disturbed.
+    self->AddDecal(grid, a, b, c, scale);
+    // Then ours, on top of every stock prop.
+    VF2DrawMobileTableProps();
+}
+
 extern "C" void __fastcall VF2PatioSetPropAndTrack(
     CEnvironment *environment,
     void *,
@@ -25665,11 +25940,24 @@ extern "C" void __fastcall VF2PatioSetPropAndTrack(
         else VF2ClearPatioDrinks();
         return;
     }
+    // Resolve the table BEFORE clearing the preparer, because the preparer is
+    // the only thing that knows which table this is. FindFurniture is
+    // read-only and nearest-match from a point, the same question the native
+    // behaviours ask; LinkPeepToFurniture would reserve a link as a side
+    // effect and is the wrong call here.
     if (prop == ePropPicnicReady) {
+        VF2CaptureTableProp(
+            gVF2PicnicPreparer, CContentMap::eObjectPicnicTable,
+            gVF2PicnicPropX, gVF2PicnicPropY,
+            &gVF2PicnicPropOrientation, gVF2PicnicPropPlaced);
         gVF2PicnicPreparer = 0;
         gVF2PicnicReadyOn = 1;
         gVF2PicnicReadyDeadline = GameTime.Seconds() + 240;
     } else {
+        VF2CaptureTableProp(
+            gVF2PatioDrinksPreparer, CContentMap::eObjectPatioTable,
+            gVF2PatioPropX, gVF2PatioPropY,
+            0, gVF2PatioPropPlaced);
         gVF2PatioDrinksPreparer = 0;
         gVF2PatioDrinksOn = 1;
         gVF2PatioDrinksDeadline = GameTime.Seconds() + 240;
@@ -28082,6 +28370,18 @@ __VF2_COMPUTER_DROP_DISPATCH__
     ):
         helper_source = helper_source.replace(
             _placeholder, f"{furniture_item_id_by_name(_item_name):#x}"
+        )
+    # The prop sprites' image ids. Substituted from the same functions the
+    # descriptor append uses, so a shifted block cannot leave the draw
+    # pointing at whatever art now occupies the old id.
+    _prop_holiday = holiday_body_descriptor_count() if ENABLE_HOLIDAY_BODY_TYPES else 0
+    for _placeholder, _sprite in (
+        ("__VF2_PROP_IMAGE_MEAL_SE__", "mealSE.png"),
+        ("__VF2_PROP_IMAGE_MEAL_SW__", "mealSW.png"),
+        ("__VF2_PROP_IMAGE_PATIO_DRINKS__", "patioDrinks.png"),
+    ):
+        helper_source = helper_source.replace(
+            _placeholder, str(prop_art_image_id(_sprite, _prop_holiday))
         )
     helper_source = helper_source.replace("__VF2_NAP_FALLBACK__", nap_fallback)
     helper_source = helper_source.replace("__VF2_REST_FALLBACK__", rest_fallback)

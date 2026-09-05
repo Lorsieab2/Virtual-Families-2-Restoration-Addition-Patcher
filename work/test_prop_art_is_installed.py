@@ -32,12 +32,56 @@ ART = (
 
 class TestThePropArtIsEmittedByTheBuild(unittest.TestCase):
     def test_the_installer_exists_and_is_called(self):
-        """Defining it without calling it is the same as not having it."""
+        """Defining it without calling it is the same as not having it.
+
+        This reads the GENERATOR, which is a weaker claim than it looks: it
+        says the code to copy the art exists, not that the art reached a
+        build. The artifact-level check is the sibling below, and it is the
+        one that actually answers the question.
+        """
         source = (ROOT / "work" / "patch_mobile_furniture_pack.py").read_text(
             encoding="utf-8"
         )
         self.assertIn("def install_prop_art(manifest):", source)
         self.assertIn("    install_prop_art(manifest)", source)
+
+    def test_the_sprites_are_in_a_build_that_ran_the_installer(self):
+        """Ask a build output, not the generator that would produce one.
+
+        Reading the generator and concluding the art ships is the same
+        mistake that let the art be tracked-but-unshipped in the first place:
+        a claim about what a player receives, checked against a file in the
+        repository.
+
+        Only builds newer than the installer can pass, so this skips on older
+        ones rather than failing them -- B180 predates install_prop_art and
+        legitimately does not contain these sprites.
+        """
+        builds = sorted(
+            d for d in (ROOT / "outputs").glob("VF2-*-matrix-*")
+            if (d / "Images").is_dir() and list(d.glob("*.exe"))
+        )
+        if not builds:
+            self.skipTest("no finished build output in this tree")
+        fresh = [
+            d for d in builds
+            if all((d / "Images" / n).is_file() for n in patcher.PROP_ART_INSTALL)
+        ]
+        if not fresh:
+            self.skipTest(
+                "no build newer than install_prop_art; the newest predates it "
+                "and correctly lacks these sprites"
+            )
+        for build in fresh:
+            for source_name, target_name in patcher.PROP_ART_INSTALL.items():
+                with self.subTest(build=build.name, sprite=target_name):
+                    shipped = (build / "Images" / target_name).read_bytes()
+                    tracked = (ART / source_name).read_bytes()
+                    self.assertEqual(
+                        hashlib.sha256(shipped).hexdigest(),
+                        hashlib.sha256(tracked).hexdigest(),
+                        "the built sprite differs from the tracked source",
+                    )
 
     def test_every_tracked_sprite_is_installed(self):
         """No sprite may be tracked but left out of the install map.
