@@ -1890,3 +1890,27 @@ Prop drawing: the storage layout, and why a wrapper must keep its own position
   existing draw site to substitute at. The wrapper adds draws that were never
   there, rather than replacing an existing push the way the bathroom curtain
   patch does.
+
+The prop warning had to go where a player actually reads it
+- The Picnic and Patio Table props do not draw. That was first disclosed only
+  in the repository README, which is the wrong place: a player who downloads a
+  release goes through Launch_GUI.bat, and the GUI renders the description out
+  of the exported manifest, not out of this repository.
+- Verified against the shipped B180 archive rather than assumed. Its
+  manifest.json carries this setting's description verbatim, and that text
+  still named the Picnic Table and Patio Table with no mention of the props.
+  So the disclosure reached the audience that already knew and missed the one
+  it was written for.
+- The warning now lives in the exporter's setting description, which is what
+  the manifest is built from. B180 predates it; the next bundle carries it.
+- A related defect in the guard itself is worth recording. The first version
+  asserted the warning phrase was present UNCONDITIONALLY, while the coupling
+  beside it correctly allowed the warning to disappear once rendering landed.
+  The suite would therefore have failed on the documented transition -- the
+  exact change the guard exists to coordinate. A check that fails when the
+  work is done right does not get satisfied; it gets deleted, and whatever it
+  was coupled to goes with it. Removed, with the reason recorded in place so
+  the absence reads as deliberate.
+- Both directions confirmed by editing the files: README, ledger and shipped
+  description updated together passes; leaving the shipped description behind
+  fails.

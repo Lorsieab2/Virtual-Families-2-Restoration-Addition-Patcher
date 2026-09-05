@@ -526,6 +526,12 @@ class TestTheReadmeIsHonestAboutTheProps(unittest.TestCase):
         the GUI renders the manifest description from the exporter. Warning
         only in the repository README leaves the shipped text still naming
         both tables with no mention that their props do not draw.
+
+        This checks the SETTINGS constant, which is the source the exported
+        manifest is built from -- confirmed by reading the shipped B180
+        archive, whose manifest.json carries this setting's description
+        verbatim. B180 itself predates the warning and does not contain it;
+        the next bundle will.
         """
         description = next(
             row["description"] for row in exporter.SETTINGS
