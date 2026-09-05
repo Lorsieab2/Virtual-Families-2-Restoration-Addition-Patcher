@@ -1,5 +1,14 @@
 # Extracting the mobile picnic-meal and patio-drinks prop art
 
+> **Extraction is no longer on the critical path.** The owner supplied the
+> sprites by hand and they are checked in and hash-pinned under
+> `patcher_assets/optional_patches/mobile_furniture_behaviors/prop_art/`.
+> Their dimensions independently corroborate what is decoded below --
+> `mealSE` 105x71 and `mealSW` 115x67 match the `tp7.dat` records exactly --
+> so this file is kept as the record of where the mobile originals live, and
+> because it corrects the claim that mobile never drew the patio drinks. Do
+> not spend effort on extraction expecting it to unblock anything.
+
 Notes for whoever builds the picnic/patio props. Everything below was verified
 against the real files; the one place it stops is stated plainly rather than
 guessed past.
@@ -114,10 +123,29 @@ entirely convincing.
 
 ## Why the draw belongs in the DLL
 
-`CEnvironment::SetProp` bounds at `cmp edi, 54h` and the two props are `0x55`
-and `0x56`. All 27 jump-table cases are claimed by existing props, and every
-jump entry is a `DIR32` relocation, so adding a case means editing the COFF
-relocation table of a stock object.
+The prop limit is **two bounds, not one**, and both must be satisfied. An
+earlier version of this note named only the first, which understated the cost.
+Verified against the real object:
+
+    SetProp  Environment.obj+0xab33   83 ff 54 / 0f 87   cmp edi,54h ; ja
+    Update   Environment.obj+0xce4f   83 ff 55 / 0f 8c   cmp edi,55h ; jl
+
+`ja` rejects above `0x54`, so SetProp admits `0x00..0x54`. `jl` continues while
+below `0x55`, so Update walks `0x00..0x54`. Both cover exactly 85 props and
+they agree.
+
+**The trap:** `cmp edi,55h` in Update looks like one free slot beyond SetProp's
+limit — exactly enough for `ePropPicnicReady` at `0x55`. It is not. The `jl`
+makes `0x55` the loop's *exclusive terminator*, so `0x55` is never walked. Both
+props remain past the end of the array. Reading the compare without the jump
+gives the opposite conclusion.
+
+So raising the bound means three coordinated edits inside a stock object that
+agree with each other today — SetProp's compare, Update's terminator, and the
+jump table SetProp dispatches through, whose index and target displacements are
+both `DIR32` link-time relocations. All 27 jump cases are already claimed by
+existing props. Leave any one of the three behind and the array desynchronises
+from the code walking it.
 
 A companion DLL would avoid that entirely and matches the owner's standing
 preference for DLLs over in-exe caves.
