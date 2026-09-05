@@ -2078,3 +2078,40 @@ The furniture-array sanity bound was twice the real capacity
   the same trap that produced a garbage read in an earlier checker.
 - Validated against known-bad: with the guard back at 0x400 the test fails and
   names both numbers; with the fix it passes.
+
+The stock-donor furniture route rested on a premise that is false
+- Seven added items -- Invisible Kiddie Pool (0x30A), Invisible Full-Size Pool
+  (0x30B), Invisible Hammock (0x30C), Invisible Yoga Equipment (0x32A),
+  Exercise Bike (0x32C), Home Gym System (0x32D) and Ping-Pong Table (0x32E)
+  -- were deliberately given no route in the mobile drop dispatcher. The
+  argument was that they borrow stock desktop furniture, whose drop handling
+  runs through theMainScene::HandleDropOnHotSpot before the mobile dispatcher,
+  and that "their .fmap cell vocabularies were compared against the donor maps
+  and are byte-identical, so the hotspot data they carry is already the donor
+  data".
+- The owner has since reported that the Home Gym System does nothing. Two
+  findings explain why, and both contradict the argument above.
+- The donor maps are indistinguishable from EACH OTHER, not just from their
+  borrowers. YogaGearStd (15x13), TreadmillStd (16x15), PoolTableStd (23x19)
+  and HammockStd (19x24) all carry the same cell vocabulary: object 0x0 with
+  payload 0x1, and object 0x100 with payload 0x0. Byte-identical hotspot data
+  was read as proof the native path would work; it is the reason it cannot.
+  Nothing in the map separates a Home Gym from Yoga Equipment or a Treadmill.
+- HandleDropOnHotSpot cannot see an item id at all. It is 70 bytes with five
+  relocations (theMainScene.obj SECT2A) and its whole body is
+  CContentMap::GetHotSpot(ldwPoint) then CHotSpot::Dispatch(CVillager&,
+  EHotSpot). It dispatches on the hotspot enum and never reads the furniture
+  record, so an item whose identity is its item id is unreachable by it.
+- The Ping-Pong Table was offered as evidence that the native path does reach
+  these items. It is not evidence for the rest: it borrows the Pool Table's
+  hotspot, and its reported fault was a wrong LABEL -- "Playing pool" -- which
+  means the donor behaviour ran. An item with no behaviour at all is a
+  different failure and the ping-pong case says nothing about it.
+- This is the recurring shape again, in a new place: what a check READS versus
+  what it ASSERTS. Comparing the vocabularies established that the maps match.
+  It was recorded as establishing that the drop would be dispatched, which the
+  comparison never tested.
+- Recorded rather than silently repaired: the route that does distinguish
+  these items is the mobile dispatcher, which resolves an item id from the
+  furniture record via VF2FurnitureItemAtPoint. Building those handlers is the
+  outstanding work, and the ledger row already named it as the fallback.
