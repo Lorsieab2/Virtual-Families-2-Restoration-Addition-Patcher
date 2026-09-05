@@ -1098,6 +1098,17 @@ class VF2PatcherGUI:
                 "This can take a minute on a full release.",
             )
         except tk.TclError:
+            # WaitWindow can raise AFTER Toplevel.__init__ has already put
+            # a window on screen -- _take_grab() giving up on its deadline
+            # is the case that actually happens. The assignment below never
+            # completes, so _work_wait stays None and _finish_worker has
+            # nothing to close: the popup would sit there for the rest of
+            # the session with its own X disabled. Destroy whatever was
+            # built before giving up.
+            for child in self.root.winfo_children():
+                if isinstance(child, WaitWindow):
+                    with contextlib.suppress(tk.TclError):
+                        child.close()
             return
         self._work_wait = wait
         # The popup disables its own X, but that does nothing for the ROOT

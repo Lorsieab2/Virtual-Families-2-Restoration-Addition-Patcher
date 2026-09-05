@@ -643,6 +643,50 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
             "the wait popup outlived the run, so it would sit there forever",
         )
 
+    def test_a_popup_that_fails_to_build_does_not_stay_on_screen(self):
+        """WaitWindow can raise AFTER putting a window on screen.
+
+        Toplevel.__init__ succeeds and maps the window; _take_grab() can then
+        give up on its deadline and raise. The assignment to `wait` never
+        completes, so _work_wait stays None and _finish_worker has nothing to
+        close -- leaving a popup with its own X disabled sitting there for the
+        rest of the session.
+
+        The patch still has to proceed (a popup that cannot be built must not
+        stop the work the user asked for), so the orphan has to be destroyed on
+        the way out rather than by refusing to run.
+        """
+        import tkinter as tk
+
+        original = gui.WaitWindow
+        built = []
+
+        class ExplodingWaitWindow(original):
+            def __init__(self, parent, title, message, modal=True):
+                super().__init__(parent, title, message, modal=False)
+                built.append(self)
+                raise tk.TclError("grab timed out")
+
+        gui.WaitWindow = ExplodingWaitWindow
+        try:
+            posted = self._capture_after()
+            self.app._run_worker("Apply", lambda: None)
+            self._drain(posted)
+        finally:
+            gui.WaitWindow = original
+
+        self.assertTrue(built, "the test never reached WaitWindow construction")
+        self.assertIsNone(
+            getattr(self.app, "_work_wait", None),
+            "a popup that failed to build was recorded as the live one",
+        )
+        for window in built:
+            self.assertFalse(
+                window.winfo_exists(),
+                "the half-built popup is still on screen; its X is disabled, so "
+                "the user cannot dismiss it for the rest of the session",
+            )
+
     def test_a_failed_run_still_closes_the_wait_popup(self):
         """A crash must not leave a modal popup over a dead UI.
 
