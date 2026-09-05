@@ -15,6 +15,7 @@ import hashlib
 import unittest
 from pathlib import Path
 
+import export_offline_patch_bundle as exporter
 import patch_mobile_furniture_pack as patcher
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -511,9 +512,36 @@ class TestTheReadmeIsHonestAboutTheProps(unittest.TestCase):
     other follows.
     """
 
-    def test_the_readme_says_the_props_do_not_draw_yet(self):
-        text = README.read_text(encoding="utf-8")
-        self.assertIn("do not yet appear", text)
+    # Deliberately NO unconditional "the warning is present" assertion. An
+    # earlier version had one, and it would have kept failing forever once
+    # rendering landed and both documents were correctly updated together --
+    # turning the documented transition into a broken suite, which is how a
+    # guard gets deleted rather than satisfied. The coupling below is the
+    # whole check: the two must agree, in either direction.
+
+    def test_the_shipped_setting_description_warns_too(self):
+        """The repo README is not what a player reads before enabling this.
+
+        A player who downloads the release goes through Launch_GUI.bat, and
+        the GUI renders the manifest description from the exporter. Warning
+        only in the repository README leaves the shipped text still naming
+        both tables with no mention that their props do not draw.
+        """
+        description = next(
+            row["description"] for row in exporter.SETTINGS
+            if row["id"] == "mobile_furniture_behaviors"
+        )
+        ledger = LEDGER.read_text(encoding="utf-8")
+        row = next(
+            line for line in ledger.splitlines()
+            if line.startswith("| Picnic and patio table props")
+        )
+        self.assertEqual(
+            "rendering pending" in row.lower(),
+            "do not yet appear" in description,
+            "the shipped setting description and the ledger disagree about "
+            "whether the props render; update both together",
+        )
 
     def test_it_agrees_with_the_ledger(self):
         ledger = LEDGER.read_text(encoding="utf-8")

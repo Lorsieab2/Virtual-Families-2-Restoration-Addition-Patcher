@@ -391,7 +391,7 @@ SETTINGS = [
     {
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
-        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes good-weather loungers choose among relaxing, reading, studying, sitting, napping, and sleeping with exhaustion-sensitive rest odds, plus spontaneous supported variants. Exact guarded manual routes cover the Patio Umbrella and tables, Picnic Table, Birthday furniture, Christmas Trees, Dreidel, Menorah, Stockings, Holiday Candles, Santa's Cookie Plate, ten Holiday figurines, Red Bow, Santa Wall Decoration, and both garlands. Invisible/custom/VF3 furniture is excluded.",
+        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes good-weather loungers choose among relaxing, reading, studying, sitting, napping, and sleeping with exhaustion-sensitive rest odds, plus spontaneous supported variants. Exact guarded manual routes cover the Patio Umbrella and tables, Picnic Table, Birthday furniture, Christmas Trees, Dreidel, Menorah, Stockings, Holiday Candles, Santa's Cookie Plate, ten Holiday figurines, Red Bow, Santa Wall Decoration, and both garlands. Invisible/custom/VF3 furniture is excluded. The Picnic Table and Patio Table behaviours run, but their meal and drinks do not yet appear on the tables: those two props sit outside the range the desktop prop array holds, so the state is tracked outside it and nothing draws. Villagers still prepare, eat and drink; the table stays bare.",
         "default": True,
         "category": "optional",
     },
