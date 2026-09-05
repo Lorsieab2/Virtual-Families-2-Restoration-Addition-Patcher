@@ -28315,7 +28315,7 @@ static int VF2FindFreeSpaLoungerSlot(CVillager &villager)
 {
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
     int count = *reinterpret_cast<int *>(manager + 0x1004);
-    if (count < 0 || count > 0x400) return -1;
+    if (count < 0 || count > 0x200) return -1;
     for (int slot = 0; slot < count; ++slot) {
         unsigned char *record = manager + 0x1008 + slot * 0x40;
         if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;

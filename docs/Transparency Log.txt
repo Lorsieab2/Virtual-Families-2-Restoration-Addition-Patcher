@@ -1989,8 +1989,9 @@ The furniture probe answered "no" to every question
   tables placed at once.
 
 The Home Gym System did not work, and this is why
-- Reported from live play: the item can be bought and placed and no villager
-  ever uses it. That is accurate and it is not fixed.
+- Reported from live play: the item could be bought and placed and no villager
+  ever used it. That was accurate, and it is fixed now -- see the entry below on
+  every added furniture item having actions of its own.
 - The item borrows the Yoga Equipment as its donor, which supplies its price,
   its store slot and its furniture map. Reading the game's own code shows why
   that cannot produce an interactive item: the two yoga behaviours are pure
@@ -2049,3 +2050,31 @@ Every added furniture item now has actions of its own
   disassembled and shown to push its own item id, ask whether that item is
   placed, and return without acting when it is not. All five registrations are
   present in the shipped constructor, one each, and every label ships.
+
+The furniture-array sanity bound was twice the real capacity
+- VF2FindFreeSpaLoungerSlot reads the placed-furniture record count out of the
+  furniture manager and walks that many records. Before walking it rejects an
+  implausible count, and that guard was written as 0x400.
+- The engine's real capacity is 0x200. Both sites in FurnitureManager.obj that
+  compare the count against an immediate do "cmp dword ptr [reg + 0x1004],
+  0x200" followed by "jge <return without adding>", so the array refuses to
+  grow past 512 records and a count above that cannot occur. A guard set at
+  twice the capacity still admitted 512 records' worth of addresses the engine
+  would never populate.
+- Not exploitable on its own, because the walk is bounded by the same count it
+  reads and the engine never writes a larger one. It was simply wrong against
+  the binary, and a sanity guard that admits values the engine cannot produce
+  is not doing the job it exists for.
+- Found by the other session while self-reviewing the equivalent bound in its
+  own change, and reported rather than edited, because this function is in a
+  different lane. Verified here against the object rather than taken on
+  report: scanning every comparison against the count field finds 28 sites, of
+  which exactly two use an immediate, and both say 0x200.
+- The test derives the constant FROM the object instead of restating it, so
+  the source and the binary cannot drift apart silently, and it refuses if the
+  two sites ever disagree rather than picking the first. It walks decoded
+  instructions rather than reading a fixed displacement, because the cmp and
+  its jge are not adjacent -- 0x0006 then 0x0010 in both functions -- which is
+  the same trap that produced a garbage read in an earlier checker.
+- Validated against known-bad: with the guard back at 0x400 the test fails and
+  names both numbers; with the fix it passes.
