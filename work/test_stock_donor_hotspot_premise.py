@@ -66,6 +66,17 @@ def require_desktop_payload(case):
         case.skipTest("vanilla_runtime_payload is a gitignored build input")
 
 
+def require_desktop_objects(case):
+    """Skip unless the gitignored game object files are in this checkout.
+
+    work/desktop_obj_files is .gitignore'd too -- it is extracted from the
+    player's own installation, not committed -- so a fresh clone has no
+    theMainScene.obj to read.
+    """
+    if not SCENE.is_file():
+        case.skipTest("desktop_obj_files is a gitignored build input")
+
+
 def desktop_objects(name):
     """Objects in a DESKTOP map, refusing anything that is not QAMF."""
     path = DESKTOP / f"{name}.png.fmap"
@@ -158,6 +169,7 @@ class TestTheStockDropPathNeverReadsAnItemId(unittest.TestCase):
     """The finding that stands. About the executable, not the maps."""
 
     def _function_section(self):
+        require_desktop_objects(self)
         buf = SCENE.read_bytes()
         symptr, nsym = struct.unpack_from("<II", buf, 8)
         strtab = symptr + nsym * 18
