@@ -106,3 +106,48 @@ relocation table of a stock object.
 The companion DLL avoids that entirely and matches the owner's standing
 preference for DLLs over in-exe caves. It can read the existing external state
 and draw at the attachment cells without touching `SetProp` at all.
+
+## CORRECTION: the sprites are not decodable from tp7.pvr as written above
+
+Everything above about *where the names live* holds. The decode does not.
+
+`tp7.pvr` was decoded as PVR v2 RGBA4444 and the result looks plausible --
+443k fully transparent pixels, varied colour elsewhere. It is still wrong, and
+the control proves it. Searching the whole decoded atlas for the desktop
+`meal.png` by RGB distance over its opaque pixels gives:
+
+    RGBA4444  best mean error 59.7
+    BGRA4444  best mean error 55.4
+    ARGB4444  best mean error 68.2
+    ABGR4444  best mean error 65.9
+
+RGBA4444 quantisation should put a true match near 8, not 55. No channel order
+produces one, so `meal.png` is not present in the decoded image at all.
+
+An earlier note in this file claimed `meal.png` was located at (244,424) with
+"220/220 sample points". That was a FALSE POSITIVE: the signature compared only
+whether sample points were opaque, and most of the sampled points were
+transparent in both images, so a large transparent region scored perfectly.
+Checking actual colour at that position gives solid purple (136,51,221) against
+the sprite's green (53,102,38), and 1420 of 2720 sampled pixels disagree on
+alpha. The "exact" match was an artifact of the metric, not a location.
+
+So the remaining unknown is larger than "the .dat coordinates are wrong": the
+pixel data itself is not a plain linear RGBA4444 buffer. Possibilities not yet
+ruled out -- twiddled/Morton ordering (common in PVR v2), a second compression
+layer, or the sprites living on a different page than the one naming them.
+
+What is still solid:
+
+- the sprite NAMES are in `assets/tp7.dat`, including `patiodrinks.png`
+- `mealse.png` / `mealsw.png` exist, so the prop is orientation-specific
+- the widths and heights in the .dat records ARE right; `meal.png` reads
+  160x68 there and the desktop file is 160x68
+
+What must not be trusted from the earlier section: the (x,y) interpretation,
+the "verified" (244,424), and any crop taken from the decoded atlas.
+
+Do not extract sprites from this atlas until a control sprite with a known
+desktop copy round-trips to a mean RGB error in single digits. That check is
+cheap and it is the only thing separating the real art from a convincing crop
+of the wrong pixels.
