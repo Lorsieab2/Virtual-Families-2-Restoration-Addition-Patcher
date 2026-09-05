@@ -112,8 +112,27 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
         )
 
     def test_the_row_says_what_actually_remains(self):
-        evidence = self._row()[2]
-        self.assertIn("rendering", evidence.lower() + self._row()[1].lower())
+        """The row must name the outstanding work, whatever it currently is.
+
+        This asked for the literal word "rendering", which was right while the
+        draw was unbuilt and became wrong the moment it shipped -- the row
+        then had to keep a false word to stay green. Pin the PROPERTY: the row
+        states what is left, and does not claim the props are unshipped now
+        that the draw is installed and the sprites carry install records.
+        """
+        status, evidence = self._row()[1], self._row()[2]
+        combined = (status + " " + evidence).lower()
+        self.assertTrue(
+            any(word in combined for word in ("pending", "remains", "outstanding")),
+            "the row does not say what is still outstanding",
+        )
+        for stale in ("they are not shipped", "rendering pending"):
+            with self.subTest(stale):
+                self.assertNotIn(
+                    stale, combined,
+                    f"the row still says {stale!r}, but the draw is installed "
+                    "and all three sprites carry install records",
+                )
 
 
 if __name__ == "__main__":
