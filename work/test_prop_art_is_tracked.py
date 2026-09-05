@@ -70,5 +70,51 @@ class TestSuppliedPropArt(unittest.TestCase):
                 self.assertIn(f"meal{suffix}.png", SUPPLIED)
 
 
+class TestTheLedgerStatusMatchesReality(unittest.TestCase):
+    """A release-gate row must not say "blocked" once nothing blocks it.
+
+    This ledger is read as a completeness gate, so a stale status does real
+    harm in one direction: it defers work that is actually ready. The row said
+    "Blocked by engine bound" and closed by awaiting an owner decision, both
+    of which stopped being true when the art arrived and the draw route was
+    identified.
+
+    The status is tied to the art here rather than left to prose, so the two
+    cannot disagree: while the sprites are checked in, the row may not claim
+    to be blocked or waiting on a decision.
+    """
+
+    LEDGER = ROOT / "docs" / "REQUEST_LEDGER.md"
+
+    def _row(self):
+        for line in self.LEDGER.read_text(encoding="utf-8").splitlines():
+            if line.startswith("|") and "Picnic and patio table props" in line:
+                return [cell.strip() for cell in line.strip("|").split("|")]
+        self.fail("the picnic/patio props row is gone from the ledger")
+
+    def test_the_status_is_not_blocked_while_the_art_is_present(self):
+        if not all((ART / name).is_file() for name in SUPPLIED):
+            self.skipTest("the supplied art is not checked in")
+        status = self._row()[1]
+        self.assertNotIn(
+            "Blocked", status,
+            "the art is checked in and the draw route identified; a 'Blocked' "
+            "status defers work that is ready",
+        )
+
+    def test_the_row_no_longer_awaits_a_decision(self):
+        if not all((ART / name).is_file() for name in SUPPLIED):
+            self.skipTest("the supplied art is not checked in")
+        evidence = self._row()[2]
+        self.assertNotIn(
+            "awaiting a decision", evidence,
+            "the owner supplied the art, which was the decision being awaited",
+        )
+
+    def test_the_row_says_what_actually_remains(self):
+        evidence = self._row()[2]
+        self.assertIn("rendering", evidence.lower() + self._row()[1].lower())
+
+
 if __name__ == "__main__":
     unittest.main()
