@@ -196,3 +196,66 @@ class PropDrawRespectsTheDecalBound(unittest.TestCase):
             guard, call,
             "the bound is checked after the draw, which is no bound at all",
         )
+
+
+class PropDrawRunsUnconditionally(unittest.TestCase):
+    """The draw must not hang off a branch that only sometimes runs.
+
+    The first version of this hook wrapped the last AddDecal call in
+    CDecal::RefreshProps. All 48 AddDecal calls in that function sit inside
+    per-prop active branches of its switch -- the call at +0xA6A is reached
+    only by `jmp 0xa62` from those branches -- so the table props drew only
+    while some unrelated stock prop happened to be active.
+
+    CDecal::RefreshDecals calls CDecal::InitDecals as its FIRST instruction,
+    before any branch, and runs every refresh. That call is already a five-byte
+    call with a relocation, so retargeting it costs zero added bytes.
+
+    InitDecals has two call sites -- RefreshDecals +0x4 and CDecal::Reset
+    +0x1C -- so the installer must pick the right one and refuse if the
+    prologue ever drifts.
+    """
+
+    def test_the_hook_is_on_refreshdecals_not_refreshprops(self):
+        source = SOURCE.read_text(encoding="utf-8")
+        start = source.index("def patch_mobile_table_prop_draw(manifest):")
+        body = source[start:source.index("\ndef ", start + 10)]
+        self.assertIn(
+            "?RefreshDecals@CDecal@@QAEXXZ", body,
+            "the prop draw is not hooked through RefreshDecals, so it cannot "
+            "be running unconditionally",
+        )
+        self.assertIn(
+            "?InitDecals@CDecal@@QAEXXZ", body,
+            "the unconditional InitDecals call is not the wrapped site",
+        )
+        self.assertNotIn(
+            "@VF2RefreshPropsAddDecalAndProps@28", body,
+            "the old conditional AddDecal wrapper is still installed, so the "
+            "props would draw twice whenever a stock prop is active",
+        )
+
+    def test_the_installer_refuses_a_drifted_prologue(self):
+        """A silent fallback here would re-create the original defect."""
+        source = SOURCE.read_text(encoding="utf-8")
+        start = source.index("def patch_mobile_table_prop_draw(manifest):")
+        body = source[start:source.index("\ndef ", start + 10)]
+        self.assertIn(
+            "refresh_decals.value + 1", body,
+            "the installer does not require the InitDecals call to be the "
+            "first instruction, so it could hook a conditional site again",
+        )
+        self.assertIn(
+            "raise RuntimeError", body,
+            "a drifted prologue does not fail the build",
+        )
+
+    def test_the_redundant_wrapper_is_gone(self):
+        """Two hooks would draw the props twice per frame."""
+        source = SOURCE.read_text(encoding="utf-8")
+        self.assertNotIn(
+            'extern "C" void __fastcall VF2RefreshPropsAddDecalAndProps(',
+            source,
+            "the superseded AddDecal wrapper still exists; if it is ever "
+            "installed alongside the new hook the props draw twice",
+        )
