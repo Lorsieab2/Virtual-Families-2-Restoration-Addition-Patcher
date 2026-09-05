@@ -126,8 +126,8 @@ INTENTIONALLY_UNCALLED = {
 }
 
 
-def _references_within(node):
-    """Names this node genuinely REFERENCES, excluding two false positives.
+def _references_within(node, descend_scopes=False):
+    """Names this node genuinely REFERENCES, excluding three false positives.
 
     * An assignment TARGET. `patch_new = None` contains an ast.Name for
       patch_new but binds it rather than using it -- counting it would mark an
@@ -135,17 +135,44 @@ def _references_within(node):
     * An attribute call on another object. `obj.patch_new()` yields the
       attribute "patch_new", which has nothing to do with the top-level
       function of that name.
+    * A reference inside a NESTED SCOPE that this node merely DEFINES. Defining
+      a class or an inner function does not run its body, so a mention of
+      patch_new inside an unused class method is not a call. ast.walk descends
+      into those bodies eagerly, which made an otherwise-unreferenced class
+      count as a reference site.
 
-    A bare LOAD still counts: a function placed in a table, passed to a helper,
-    or wrapped by a decorator is genuinely reachable, and the generator does
-    that in several places.
+    A bare LOAD in the node's own scope still counts: a function placed in a
+    table, passed to a helper, or wrapped by a decorator is genuinely
+    reachable, and the generator does that in several places.
     """
     names = set()
-    for child in ast.walk(node):
-        if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
-            names.add(child.func.id)
-        elif isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load):
-            names.add(child.id)
+    stack = [node]
+    seen_root = False
+    while stack:
+        current = stack.pop()
+        is_scope = isinstance(
+            current, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+        )
+        if is_scope and seen_root and not descend_scopes:
+            # A scope this node defines rather than executes. Its decorators
+            # and default arguments DO run at definition time, so those are
+            # still followed; the body is not.
+            for deco in getattr(current, "decorator_list", []):
+                stack.append(deco)
+            args = getattr(current, "args", None)
+            if args is not None:
+                stack.extend(args.defaults)
+                stack.extend(d for d in args.kw_defaults if d)
+            if isinstance(current, ast.ClassDef):
+                stack.extend(current.bases)
+                stack.extend(kw.value for kw in current.keywords)
+            continue
+        seen_root = True
+        if isinstance(current, ast.Call) and isinstance(current.func, ast.Name):
+            names.add(current.func.id)
+        elif isinstance(current, ast.Name) and isinstance(current.ctx, ast.Load):
+            names.add(current.id)
+        stack.extend(ast.iter_child_nodes(current))
     return names
 
 
@@ -264,3 +291,52 @@ class TestEveryInstallerIsReached(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TheLedgerMatchesTheAllowList(unittest.TestCase):
+    """The ledger row must name every exception, and count them correctly.
+
+    The row began at five. It became six when the check stopped treating a
+    mention in a comment as a reference (surfacing
+    patch_vf3_style_child_adoption_chooser), and seven when reachability became
+    a call-graph walk (surfacing write_vc90_crt_manifest, reachable only from
+    another allow-listed orphan).
+
+    Both times the prose kept the old number. A reader auditing why
+    build-writing functions are exempt would have missed one, which is the
+    whole purpose of the row.
+
+    The count is DERIVED from INTENTIONALLY_UNCALLED rather than restated, so
+    the two cannot drift apart again.
+    """
+
+    LEDGER = Path(patcher.ROOT) / "docs" / "REQUEST_LEDGER.md"
+    WORDS = {
+        5: "Five", 6: "Six", 7: "Seven", 8: "Eight", 9: "Nine", 10: "Ten",
+    }
+
+    def _row(self):
+        for line in self.LEDGER.read_text(encoding="utf-8").splitlines():
+            if line.startswith("|") and "installers defined but never called" in line:
+                return line
+        self.fail("the orphan-installer row is gone from the ledger")
+
+    def test_the_row_counts_the_allow_list_correctly(self):
+        n = len(INTENTIONALLY_UNCALLED)
+        word = self.WORDS.get(n)
+        self.assertIsNotNone(word, f"no spelling for {n}; extend WORDS")
+        self.assertIn(
+            f"{word} installers", self._row(),
+            f"the allow-list has {n} entries but the ledger row does not say "
+            f"{word}; the count was restated rather than derived and has drifted",
+        )
+
+    def test_every_allow_listed_function_is_named_in_the_row(self):
+        row = self._row()
+        missing = sorted(n for n in INTENTIONALLY_UNCALLED if n not in row)
+        self.assertEqual(
+            missing, [],
+            "these allow-listed functions are not named in the ledger row, so "
+            "a reader auditing the exemptions would miss them:\n  "
+            + "\n  ".join(missing),
+        )

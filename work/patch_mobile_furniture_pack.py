@@ -19653,6 +19653,7 @@ def patch_mobile_table_prop_draw(manifest):
             "no cave space, no section growth"
         ),
         "unconditional": True,
+        "refresh_decals_retargeted": True,
         "why_not_refreshprops": (
             "every AddDecal call in CDecal::RefreshProps sits inside a "
             "per-prop active branch of its switch, so wrapping one draws the "
@@ -19817,7 +19818,12 @@ def patch_bathroom1_curtain_decal(manifest):
             "CDecal+0x1924": "image 539 curtain_closed.png (north bathroom)",
             "CDecal+0x1928": "image 615 curtain_closed_southb.png (south/workshop bathroom)",
         },
-        "refresh_decals_untouched": True,
+        # Scoped to THIS patch. patch_mobile_table_prop_draw runs later and
+        # DOES retarget a relocation inside CDecal::RefreshDecals, so an
+        # unqualified "untouched" here would contradict the manifest entry
+        # that patch writes and make the build evidence unusable for
+        # conflict analysis.
+        "refresh_decals_untouched_by_this_patch": True,
     }
     if bathroom1_hook is not None:
         manifest["CDecal"]["bathroom1_closed_curtain_grid_hook"] = bathroom1_hook

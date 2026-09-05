@@ -236,18 +236,28 @@ class PropDrawRespectsTheDecalBound(unittest.TestCase):
         source = SOURCE.read_text(encoding="utf-8")
         start = source.index("static void VF2DrawTableProp(")
         body = source[start:source.index("\n}\n", start)]
+        # STRIP COMMENTS FIRST. The explanation above the guard mentions
+        # both 0x100 and 0x18, so matching the raw slice stayed green with
+        # the actual scan and early return deleted -- which restores the
+        # out-of-bounds write this test exists to prevent.
+        code = NL.join(line.split("//")[0] for line in body.split(NL))
         self.assertIn(
-            "0x100", body,
-            "the draw does not bound the decal array, so a full array means "
-            "AddDecal writes past its end",
+            "0x100", code,
+            "the draw does not bound the decal array in CODE, so a full "
+            "array means AddDecal writes past its end",
         )
         self.assertIn(
-            "0x18", body,
+            "0x18", code,
             "the scan does not use the engine's 0x18 record stride, so it "
             "counts the wrong thing",
         )
-        guard = body.index("0x100")
-        call = body.index("Decal.AddDecal")
+        self.assertIn(
+            "return", code,
+            "there is no early return, so a full array is detected and then "
+            "drawn into anyway",
+        )
+        guard = code.index("0x100")
+        call = code.index("Decal.AddDecal")
         self.assertLess(
             guard, call,
             "the bound is checked after the draw, which is no bound at all",
