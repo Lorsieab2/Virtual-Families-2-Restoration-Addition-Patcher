@@ -3146,11 +3146,31 @@ class TestBundleChangelogReachesTheWrittenLog(unittest.TestCase):
                 self.assertIn(topic, joined)
 
     def test_the_unrouted_items_are_not_claimed_to_work(self):
-        # Seven items rely on the native hotspot path and have not been
-        # confirmed by a player. Saying otherwise in a shipped log would be a
-        # claim the build cannot support.
+        # Seven items rely on the native hotspot path. None may be presented
+        # as working in a shipped log, because the build cannot support that
+        # claim.
+        #
+        # This asserts the CLAIM rather than one phrasing of it. The wording
+        # began as "outstanding and is not claimed" and had to change once the
+        # owner reported that the Home Gym System does nothing: describing a
+        # known-broken item as merely awaiting confirmation is itself wrong.
+        # Pinning the old sentence made that correction look like a
+        # regression.
         joined = "\n".join(exporter.B180_CHANGELOG_LINES)
-        self.assertIn("outstanding and is not claimed", joined)
+        lowered = joined.lower()
+        self.assertTrue(
+            "not claimed" in lowered or "is claimed to work" in lowered,
+            "the log must still disclaim these items",
+        )
+        for item in ("Exercise Bike", "Home Gym System"):
+            with self.subTest(item):
+                self.assertIn(item.lower(), lowered)
+        # And the known-broken one must be named as broken, not as unconfirmed.
+        self.assertIn(
+            "home gym system does not work", lowered,
+            "the owner reported the Home Gym System does nothing; a shipped "
+            "log must say so rather than calling it unconfirmed",
+        )
 
 
 if __name__ == "__main__":

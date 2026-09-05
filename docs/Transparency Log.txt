@@ -1987,3 +1987,34 @@ The furniture probe answered "no" to every question
   whose answer should be true, including "at the ping-pong table, is this the
   ping-pong table" -- and the new one correct on all five, with two ping-pong
   tables placed at once.
+
+The bundled player documentation still called a known-broken item unconfirmed
+- The owner reported that the Home Gym System does nothing when a villager is
+  dropped on it. The item is sold in the store for 3150, so a player who buys
+  it receives nothing and has no way to know that was expected.
+- The B180 changelog line described the whole stock-donor group -- Invisible
+  Kiddie Pool, Invisible Full-Size Pool, Invisible Hammock, Invisible Yoga
+  Equipment, Exercise Bike, Home Gym System, Ping-Pong Table -- as merely
+  awaiting "player confirmation". That was accurate when written and stopped
+  being accurate when the report arrived.
+- This was not an internal note. write_runner_files() synthesizes the
+  README-*-PATCHER.txt a player reads and write_transparency_log() synthesizes
+  the bundled log, and both consume B180_CHANGELOG_LINES. A bundle built from
+  the old text would have handed a player a known-broken item presented as
+  unconfirmed.
+- The line now says plainly that the Home Gym System does not work and that
+  its behaviour is not implemented, while keeping the Exercise Bike and the
+  Invisible Yoga Equipment named as UNCONFIRMED. Those are different states --
+  one reported broken, two never reported either way -- and collapsing them
+  would have quietly downgraded what is known about the other two.
+- The tests read the synthesized text and the writers that embed it, not the
+  constant, because a warning present in the exporter source but absent from
+  the generated file is this repository's recurring failure. Validated against
+  known-bad: with the old wording restored all three assertions fail, naming
+  the sentence that predates the report; with the correction they pass.
+- Raised by Codex on another session's PR and left unanswered there. The
+  finding was verified against the source before being acted on, and the price
+  claim in the same review was verified too: the gym does NOT inherit the Yoga
+  Equipment's price. The donor's price is 150 and the gym's is 3150, set
+  independently, so the donor supplies the furniture map, store slot and
+  behaviour arrangement but not the price.
