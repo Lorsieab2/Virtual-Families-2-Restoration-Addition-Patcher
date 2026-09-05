@@ -3304,7 +3304,33 @@ BEHAVIOR_LABEL_GROUPS = [
             ("eString_DoingHighIntensityCycling", "Doing high-intensity cycling"),
         ],
     ),
+    # The Home Gym System's own workout labels. These are the ten variations
+    # the owner asked for, and they belong to the gym rather than to the
+    # stock "Working out" behaviour the gym reuses the animations from.
+    (
+        "home_gym",
+        [
+            ("eString_LiftingWeightsGym", "Lifting weights"),
+            ("eString_DoingCrunchesGym", "Doing crunches"),
+            ("eString_DoingCardioGym", "Doing cardio exercises"),
+            ("eString_DoingResistanceGym", "Doing resistance training"),
+            ("eString_DoingStrengthGym", "Doing strength training"),
+            ("eString_DoingAerobicGym", "Doing aerobic exercises"),
+            ("eString_DoingEnduranceGym", "Doing endurance exercises"),
+            ("eString_StretchingGym", "Stretching"),
+            ("eString_DoingHIITGym", "Doing high-intensity interval training"),
+            ("eString_DoingWeightliftingGym", "Doing weightlifting"),
+        ],
+    ),
+    # The Yoga Equipment's own labels, for the same reason.
+    (
+        "yoga_equipment",
+        [
+            ("eString_DoingYogaOnMat", "Doing yoga"),
+        ],
+    ),
 ]
+
 BEHAVIOR_LABELS = [
     entry
     for _group_name, group_entries in BEHAVIOR_LABEL_GROUPS
@@ -4058,6 +4084,24 @@ NEW_FURNITURE_ITEMS = [
 
 # The Ping-Pong Table's item id, referenced by the behaviour-label wrapper that
 # tells it apart from a stock Pool Table (both answer to EObject 0x36).
+# Where the per-villager behaviour label buffer lives. Candidate records grow
+# upward from villager + 0x6BB8 at 0xD0 bytes each, so any new behaviour id has
+# to keep its record below this or it overwrites the label the game is about to
+# display.
+VILLAGER_BEHAVIOR_LABEL_OFFSET = 0x1BBA8
+
+# Behaviour ids for the added furniture's own actions, with the handler each is
+# bound to. Every id here is an unregistered gap below the highest id the stock
+# constructor registers (0x19A) -- there are only two free ids above it, and a
+# record at 0x19D would collide with the label buffer above.
+ADDED_FURNITURE_BEHAVIORS = (
+    (0x0B1, "VF2ExerciseBikeWalk"),
+    (0x0B2, "VF2ExerciseBikeRun"),
+    (0x0B3, "VF2HomeGymWorkout"),
+    (0x0B4, "VF2YogaEquipmentWorkout"),
+    (0x0B8, "VF2PingPongPlay"),
+)
+
 PING_PONG_TABLE_ITEM_ID = next(
     item["item_id"]
     for item in NEW_FURNITURE_ITEMS
@@ -28090,27 +28134,29 @@ static void VF2PlanSpaTreatment(
 {
     (void)villager;
     int const total = ldwGameState::GetRandom(5) + 5;
-    // Three sighs across the treatment, spaced the way the drink behaviour
-    // spaces them. A treatment shorter than the spacing simply gets fewer.
-    int remaining = total;
-    for (int pass = 0; pass < 3 && remaining > 0; ++pass) {
-        int slice = remaining > 2 ? 2 : remaining;
-        if (info.orientation == 1) {
-            plans->PlanToWait(slice, eBodyPositionChaise);
-        } else {
-            plans->PlanToLieDown(slice);
-        }
-        remaining -= slice;
-        plans->PlanToPlaySound(
-            static_cast<ESound>(0x101), 1.0f, eSoundTypeEffects);
+
+    // ONE rest for the whole treatment, not a slice per sigh.
+    //
+    // Reported from live play: the villager repeated "prepare to lie down"
+    // and never settled. Splitting the rest into three PlanToLieDown calls is
+    // what caused it -- each one restarts the getting-in animation rather than
+    // continuing the previous rest, so the villager perpetually prepared and
+    // never rested. Every working chaise route in this file issues a single
+    // call for the full duration; this now does the same.
+    if (info.orientation == 1) {
+        plans->PlanToWait(total, eBodyPositionChaise);
+    } else {
+        plans->PlanToLieDown(total);
     }
-    if (remaining > 0) {
-        if (info.orientation == 1) {
-            plans->PlanToWait(remaining, eBodyPositionChaise);
-        } else {
-            plans->PlanToLieDown(remaining);
-        }
-    }
+
+    // The sigh is deliberately NOT interleaved with the rest any more.
+    //
+    // It was previously emitted once per slice, so it fired on every restart
+    // of the loop above -- which made it read as tied to the action rather
+    // than to the villager enjoying the chair. Planned once here, it plays
+    // while the rest is already under way instead of punctuating it.
+    plans->PlanToPlaySound(
+        static_cast<ESound>(0x101), 1.0f, eSoundTypeEffects);
     // A treatment is restful, so it pays the nap's own energy and dirtiness.
     plans->PlanToIncDirtiness(2);
     plans->PlanToIncEnergy(ldwGameState::GetRandom(5) + 7);
@@ -31687,6 +31733,14 @@ extern "C" void __cdecl VF2RandomBoardGameLabel(CVillager &);
 extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &);
 extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &);
+// Added furniture, each with an action of its own rather than a relabelled
+// donor action. Registered under their own behaviour ids in CBehavior's
+// constructor.
+extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &);
+extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &);
+extern "C" void __cdecl VF2HomeGymWorkout(CVillager &);
+extern "C" void __cdecl VF2YogaEquipmentWorkout(CVillager &);
+extern "C" void __cdecl VF2PingPongPlay(CVillager &);
 extern "C" void __cdecl VF2RandomDrinkLabel(CVillager &);
 extern "C" void __cdecl VF2RandomHeatFoodLabel(CVillager &);
 extern "C" void __cdecl VF2RandomSnacksLabel(CVillager &);
@@ -31805,6 +31859,13 @@ private:
     friend void __cdecl VF2RandomPooltableLabel(CVillager &);
     friend void __cdecl VF2RandomTreadmillWalkLabel(CVillager &);
     friend void __cdecl VF2RandomTreadmillRunLabel(CVillager &);
+    // The added-furniture actions call the donor behaviours directly, which
+    // are private statics on this class.
+    friend void __cdecl VF2ExerciseBikeWalk(CVillager &);
+    friend void __cdecl VF2ExerciseBikeRun(CVillager &);
+    friend void __cdecl VF2HomeGymWorkout(CVillager &);
+    friend void __cdecl VF2YogaEquipmentWorkout(CVillager &);
+    friend void __cdecl VF2PingPongPlay(CVillager &);
     friend void __cdecl VF2RandomDrinkLabel(CVillager &);
     friend void __cdecl VF2RandomHeatFoodLabel(CVillager &);
     friend void __cdecl VF2RandomSnacksLabel(CVillager &);
@@ -32531,6 +32592,103 @@ static bool VF2LinkedFurnitureItemIs(
         return *(int *)record == itemId;
     }
     return false;
+}
+
+// ---- Added furniture: actions of their OWN -------------------------------
+//
+// Each added item gets its own behaviour, registered under its own id, rather
+// than a label swapped onto a donor's action at the last moment. That is what
+// was asked for: "the exercise bike's villager actions should not be a
+// variation of the treadmill actions. they should be independent, but use the
+// same animations, duration etc. and be exclusive to the exercise bike",
+// followed by "same for the other added furniture items".
+//
+// So the donor is borrowed for DATA and never for IDENTITY. Each handler runs
+// the donor's native plan -- which is where the animations and the duration
+// come from, unchanged -- and then applies the item's own label. Because the
+// action carries its own behaviour id, a villager using the Exercise Bike is
+// running a bike action, not a treadmill action wearing a different name.
+//
+// Two properties hold for every one of these:
+//
+//   * A stock donor is untouched. The stock Treadmill and Pool Table keep
+//     their own behaviours and their own labels; nothing about them changes.
+//
+//   * Nothing is gated on ownership. The donor behaviours stay globally
+//     available exactly as before, so a player who owns none of these items
+//     loses nothing. Owning one ADDS its action; it never subtracts another.
+//     ("IF THE GYM IS OWNED IT SHOULD NEVER GATE BEHAVIORS.")
+//
+// The eligibility half is positional, not permissive: an action only runs when
+// its own item is actually placed, so it happens AT that item. With the item
+// absent the action simply does not fire and the villager does whatever they
+// would have done anyway.
+static bool VF2AddedFurnitureInWorld(int itemId)
+{
+    return FurnitureManager.IsInWorld((EInventoryItem)itemId);
+}
+
+// Runs the donor's native action, then relabels to the item's own group.
+// Returning early when the native behaviour did not take leaves the villager
+// exactly as the stock game left them.
+static void VF2RunOwnFurnitureAction(
+    CVillager &villager,
+    void (__cdecl *donorBehavior)(CVillager &),
+    int const *labels,
+    int labelCount)
+{
+    int remembered = VF2CurrentLabelInGroup(villager, labels, labelCount);
+    if (!VF2RunNativeBehaviorAndChangedLabel(villager, donorBehavior)) return;
+    VF2ApplyRememberedOrRandomLabel(villager, labels, labelCount, remembered);
+}
+
+extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
+{
+    if (!VF2AddedFurnitureInWorld(__VF2_EXERCISE_BIKE_ITEM_ID__)) return;
+    VF2RunOwnFurnitureAction(
+        villager, CBehavior::WorkoutTreadmill,
+        kVF2BehaviorLabels_exercise_bike_walk,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
+}
+
+extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
+{
+    if (!VF2AddedFurnitureInWorld(__VF2_EXERCISE_BIKE_ITEM_ID__)) return;
+    VF2RunOwnFurnitureAction(
+        villager, CBehavior::RunningOnTreadmill,
+        kVF2BehaviorLabels_exercise_bike_run,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
+}
+
+// The Home Gym System. Its donor, the Yoga Equipment, is scenery in the base
+// game -- WorkingOut consults no furniture at all -- so the gym could be
+// bought and placed and no villager would ever use it. This gives it an
+// action of its own, with the ten workout variations that were asked for.
+extern "C" void __cdecl VF2HomeGymWorkout(CVillager &villager)
+{
+    if (!VF2AddedFurnitureInWorld(__VF2_HOME_GYM_ITEM_ID__)) return;
+    VF2RunOwnFurnitureAction(
+        villager, CBehavior::WorkingOut,
+        kVF2BehaviorLabels_home_gym,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_home_gym));
+}
+
+extern "C" void __cdecl VF2YogaEquipmentWorkout(CVillager &villager)
+{
+    if (!VF2AddedFurnitureInWorld(__VF2_YOGA_EQUIPMENT_ITEM_ID__)) return;
+    VF2RunOwnFurnitureAction(
+        villager, CBehavior::QuickWorkout,
+        kVF2BehaviorLabels_yoga_equipment,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_yoga_equipment));
+}
+
+extern "C" void __cdecl VF2PingPongPlay(CVillager &villager)
+{
+    if (!VF2AddedFurnitureInWorld(__VF2_PING_PONG_TABLE_ITEM_ID__)) return;
+    VF2RunOwnFurnitureAction(
+        villager, CBehavior::PlayingPooltable,
+        kVF2BehaviorLabels_ping_pong,
+        VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong));
 }
 
 // The Ping-Pong Table borrows the Pool Table's behaviour wholesale, so without
@@ -33288,6 +33446,19 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     EnableAutonomousCandidateWithWeight(data, 0x0AD, 450); // BathroomGroomingShaveMakeup
     EnableAutonomousCandidateWithWeight(data, 0x11D, 450); // UseTelescope
     EnableAutonomousCandidateWithWeight(data, 0x04A, 450); // WorkingOut, retain stock age gates
+    // The added furniture's own actions. Each clones its donor's candidate
+    // record -- gates, animations, duration, everything -- into its OWN
+    // behaviour id, which is what makes the action independent rather than a
+    // relabelling of the donor. The donors above keep their own rows
+    // untouched, so nothing a villager could already do is taken away; these
+    // rows only ADD. Each handler then declines to act unless its item is
+    // actually placed, so the action happens at the item rather than being
+    // gated on owning it.
+    CloneAutonomousCandidateWithWeight(data, 0x049, 0x0B1, 450); // Exercise Bike, walking
+    CloneAutonomousCandidateWithWeight(data, 0x0E0, 0x0B2, 450); // Exercise Bike, running
+    CloneAutonomousCandidateWithWeight(data, 0x04A, 0x0B3, 450); // Home Gym System
+    CloneAutonomousCandidateWithWeight(data, 0x08B, 0x0B4, 450); // Yoga Equipment
+    CloneAutonomousCandidateWithWeight(data, 0x099, 0x0B8, 450); // Ping-Pong Table
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x047, 450); // WorkKitchenDispatch
     CloneAutonomousCandidateWithWeight(data, 0x047, 0x048, 450); // WorkKitchen0, with kitchen career gates
     EnableAdultOnlyAutonomousCandidateWithWeight(data, 0x048, 450);
@@ -33305,6 +33476,14 @@ extern "C" void __cdecl VF2EnableAutonomousCandidates(void *villager)
     helper_cpp = helper_cpp.replace(
         "__VF2_EXERCISE_BIKE_ITEM_ID__",
         f"{furniture_item_id_by_name('ExerciseBikeStd'):#x}",
+    )
+    helper_cpp = helper_cpp.replace(
+        "__VF2_HOME_GYM_ITEM_ID__",
+        f"{furniture_item_id_by_name('HomeGymSystemStd'):#x}",
+    )
+    helper_cpp = helper_cpp.replace(
+        "__VF2_YOGA_EQUIPMENT_ITEM_ID__",
+        f"{furniture_item_id_by_name('InvisibleYogaEquipment'):#x}",
     )
     helper_cpp = helper_cpp.replace("__VF2_BEHAVIOR_LABEL_ARRAYS__", behavior_label_arrays)
     helper_cpp = helper_cpp.replace("__VF2_PRAISE_AWARD_CASES__", praise_award_cases_cpp)
@@ -33528,6 +33707,119 @@ def patch_arcade_behavior_labels(manifest):
         changed.append({"behavior": symbol_name, "string_id": hex(string_id), "text": text})
     obj.write(PATCHED / "Behavior.obj")
     manifest["arcade_behavior_labels"] = changed
+
+
+def register_added_furniture_behaviors(manifest):
+    """Give each added furniture item a behaviour id of its very own.
+
+    The owner asked that added furniture carry actions that are independent
+    and exclusive to the item rather than variations of a donor's:
+
+        "the exercise bike's villager actions should not be a variation of the
+         treadmill actions. they should be independent, but use the same
+         animations, duration etc. and be exclusive to the exercise bike"
+        "same for the other added furniture items"
+
+    A label swapped onto the donor's action at the last moment does not satisfy
+    that -- the villager is still running the donor's behaviour. What does is a
+    separate behaviour id bound to our own handler, which is what this installs.
+
+    CBehavior's constructor is what binds a handler to an id. Every entry is the
+    same seventeen bytes:
+
+        68 <DIR32 handler>    push handler
+        68 <id32>             push behaviour id
+        8b ce                 mov ecx, esi
+        e8 <REL32 SetMacro>   call CBehavior::SetMacro
+
+    New entries are inserted immediately before the constructor's four-byte
+    epilogue (8b c6 5e c3), so every existing entry keeps its position and the
+    relative branches inside the function are untouched.
+
+    WHY NOT JUST CLONE A CANDIDATE RECORD. CloneAutonomousCandidateWithWeight
+    copies a donor's 0xD0-byte record into another slot, and the patcher already
+    uses it -- but every one of its existing targets (0x016, 0x048, 0x077,
+    0x0A5-0x0A8) is an id the constructor ALREADY registers. Cloning into an
+    unregistered id would produce a candidate with no handler bound to it. The
+    registration is the part that makes an id real.
+
+    WHY THESE IDS. Candidate records live at villager + 0x6BB8 + id * 0xD0, and
+    the behaviour label buffer sits at villager + 0x1BBA8. Id 0x19D would end at
+    0x1BC18 and overwrite the label, so only 0x19B and 0x19C are free above the
+    highest registered id (0x19A) -- not enough. These five are unregistered
+    gaps below that ceiling, so each record lands well clear of the label.
+    """
+    obj = CoffObject(PATCHED / "Behavior.obj")
+    ctor = obj.symbol("??0CBehavior@@QAE@XZ")
+    sec = obj.section(ctor.section)
+    set_macro = "?SetMacro@CBehavior@@QAEXW4EBehavior@@Q6AXAAVCVillager@@@Z@Z"
+
+    # The epilogue the entries are inserted in front of. Matching it rather
+    # than trusting a length means a changed constructor fails loudly.
+    epilogue = b"\x8b\xc6\x5e\xc3"
+    end = ctor.value + sec.raw_size
+    tail = bytes(obj.buf[sec.raw_ptr + end - 4:sec.raw_ptr + end])
+    if tail != epilogue:
+        raise RuntimeError(
+            "CBehavior's constructor does not end with the expected epilogue; "
+            f"found {tail.hex(' ')} rather than {epilogue.hex(' ')}"
+        )
+
+    registered = []
+    for behavior_id, helper in ADDED_FURNITURE_BEHAVIORS:
+        if behavior_id > 0x1FF:
+            raise RuntimeError(f"behaviour id {behavior_id:#x} is out of range")
+        # Guard the label buffer explicitly rather than relying on the table
+        # being written correctly.
+        record_end = 0x6BB8 + (behavior_id + 1) * 0xD0
+        if record_end > VILLAGER_BEHAVIOR_LABEL_OFFSET:
+            raise RuntimeError(
+                f"behaviour id {behavior_id:#x} would place its candidate "
+                f"record at {record_end:#x}, past the label buffer at "
+                f"{VILLAGER_BEHAVIOR_LABEL_OFFSET:#x}"
+            )
+        insert_at = ctor.value + sec.raw_size - 4
+        entry = (
+            b"\x68" + b"\x00\x00\x00\x00"
+            + b"\x68" + struct.pack("<I", behavior_id)
+            + b"\x8b\xce"
+            + b"\xe8" + b"\x00\x00\x00\x00"
+        )
+        obj.insert_section_bytes(sec.index, insert_at, entry)
+        sec = obj.section(ctor.section)
+        handler_symbol = obj.append_undefined_symbol(f"_{helper}")
+        obj.append_relocation(
+            sec.index, insert_at + 1, handler_symbol, IMAGE_REL_I386_DIR32
+        )
+        obj.append_relocation(
+            sec.index, insert_at + 13,
+            obj.symbol(set_macro).index, IMAGE_REL_I386_REL32,
+        )
+        registered.append({
+            "behavior_id": hex(behavior_id),
+            "helper": helper,
+            "constructor_offset": hex(insert_at),
+        })
+
+    obj.write(PATCHED / "Behavior.obj")
+    manifest["added_furniture_behaviors"] = {
+        "status": "each added furniture item has its own behaviour id",
+        "registered": registered,
+        "mechanism": (
+            "seventeen-byte SetMacro entries appended to CBehavior's "
+            "constructor before its epilogue"
+        ),
+        "donor_use": (
+            "donors supply animations and duration only; each action carries "
+            "its own behaviour id and its own labels"
+        ),
+        "stock_donors_unchanged": True,
+        "gates_nothing": (
+            "the donor behaviours stay globally available; owning an item adds "
+            "its action and removes nothing"
+        ),
+    }
+    print(f"added furniture behaviours: {len(registered)} registered")
 
 
 def restore_supplied_game_table_sprites(manifest):
@@ -34694,6 +34986,9 @@ def main():
         patch_bookshelf_reading_behavior(manifest)
         patch_radio_drop_behavior(manifest)
         patch_behavior_label_variants(manifest)
+        # Each added furniture item gets a behaviour id of its own, bound to
+        # its own handler, rather than a label swapped onto a donor's action.
+        register_added_furniture_behaviors(manifest)
         patch_arcade_behavior_labels(manifest)
         # A couple at six children takes the ordinary romantic path instead
         # of refusing; the behaviour is relabelled rather than replaced.
@@ -34806,6 +35101,11 @@ def main():
         remove_holiday_ornament_collection_art(manifest)
     patch_graphics_manager(manifest)
     patch_bathroom1_curtain_decal(manifest)
+    # The picnic meal and patio drinks. Defined but never called until now,
+    # which is why the sprites shipped and nothing drew them: the two prop ids
+    # never enter the engine's prop array, so without this wrapper there is no
+    # draw for them at all.
+    patch_mobile_table_prop_draw(manifest)
     patch_floating_anim_table(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
         write_holiday_body_draw_helper(manifest)

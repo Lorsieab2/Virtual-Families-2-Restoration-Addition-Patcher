@@ -102,25 +102,74 @@ class TestTheReadmeDoesNotOverclaimRouting(unittest.TestCase):
     """The routed/unrouted split has to survive contact with the prose.
 
     The first draft of the visible-furniture entry said B180 gave all four
-    items a route. Only SpaLoungerStd is routed through this patcher's
-    dispatcher; the other three rely on the game's native hotspot path and are
-    unconfirmed. Claiming otherwise would promise a player something the build
-    cannot support, so the distinction is pinned rather than trusted to prose.
+    items a route. It had not: only SpaLoungerStd went through this patcher's
+    dispatcher, and the other three relied on the game's native hotspot path
+    and were unconfirmed. That overclaim is what this class was written to
+    prevent.
+
+    The situation has since changed, and the class changed with it. The
+    Exercise Bike, Home Gym System, Ping-Pong Table and Yoga Equipment now each
+    have a villager action of their own, registered under their own behaviour
+    id -- so naming them as unconfirmed would now be the inaccurate claim.
+
+    What is pinned is therefore the property rather than a phrasing: the entry
+    must name all four items, and must not assert that a villager DROPPED on
+    one of them acts, because that route is still the native hotspot path and
+    is still unconfirmed. An action a villager chooses on their own and a
+    reaction to being dropped are different claims, and only the first is
+    built.
     """
 
-    UNROUTED_VISIBLE = ("Exercise Bike", "Home Gym System", "Ping-Pong Table")
+    VISIBLE_ITEMS = ("Exercise Bike", "Home Gym System", "Ping-Pong Table")
 
-    def test_the_unconfirmed_items_are_named_as_unconfirmed(self):
+    # Phrasings that would promise a drop reaction nobody has confirmed. Each
+    # is checked case-insensitively against the entry.
+    DROP_CLAIMS = (
+        "act on a drop",
+        "acts on a drop",
+        "responds when dropped",
+        "respond when dropped",
+        "works when a villager is dropped",
+    )
+
+    def test_the_entry_names_every_added_visible_item(self):
         entry = next(
             line for line in README.splitlines()
             if line.startswith("- **Four new visible furniture items**")
         )
-        for name in self.UNROUTED_VISIBLE:
+        for name in self.VISIBLE_ITEMS:
             with self.subTest(name):
                 self.assertIn(name, entry)
+
+    def test_the_entry_does_not_promise_an_unconfirmed_drop_reaction(self):
+        """The drop route is still the native hotspot path, still unconfirmed.
+
+        The added items have their own autonomous actions now, which is a
+        different claim from "drop a villager on one and something happens".
+        """
+        entry = next(
+            line for line in README.splitlines()
+            if line.startswith("- **Four new visible furniture items**")
+        ).lower()
+        for claim in self.DROP_CLAIMS:
+            with self.subTest(claim):
+                self.assertNotIn(
+                    claim, entry,
+                    "the entry must not promise a drop reaction that only the "
+                    "native hotspot path could provide and no player has "
+                    "confirmed",
+                )
+
+    def test_the_entry_points_at_where_the_actions_are_described(self):
+        """A reader must be able to find what these items actually do."""
+        entry = next(
+            line for line in README.splitlines()
+            if line.startswith("- **Four new visible furniture items**")
+        )
+        self.assertIn("Actions for the added furniture", entry)
         self.assertIn(
-            "does not claim they do", entry,
-            "the entry must not promise behaviour no player has confirmed",
+            "**Actions for the added furniture**", README,
+            "the section the entry points at must exist",
         )
 
     def test_the_routed_visible_item_is_still_the_only_one(self):
