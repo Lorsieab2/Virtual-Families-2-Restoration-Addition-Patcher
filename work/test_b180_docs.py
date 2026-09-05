@@ -511,20 +511,59 @@ class TestTheReadmeIsHonestAboutTheProps(unittest.TestCase):
     other follows.
     """
 
-    def test_the_readme_says_the_props_do_not_draw_yet(self):
-        text = README.read_text(encoding="utf-8")
-        self.assertIn("do not yet appear", text)
+    WARNING = "do not yet appear"
 
-    def test_it_agrees_with_the_ledger(self):
+    def _rendering_pending(self):
         ledger = LEDGER.read_text(encoding="utf-8")
         row = next(
             line for line in ledger.splitlines()
             if line.startswith("| Picnic and patio table props")
         )
-        rendering_pending = "rendering pending" in row.lower()
-        readme_warns = "do not yet appear" in README.read_text(encoding="utf-8")
+        return "rendering pending" in row.lower()
+
+    def test_the_readme_warns_while_rendering_is_pending(self):
+        """Conditional, so the transition is not blocked forever.
+
+        An unconditional requirement for the warning phrase would keep this
+        suite failing on the day rendering lands and both documents are
+        correctly updated together -- turning the guard into an obstacle to
+        the very change it is meant to shepherd. It applies only while the
+        ledger says rendering is still pending.
+        """
+        if not self._rendering_pending():
+            self.skipTest("the ledger says rendering has landed")
+        self.assertIn(self.WARNING, README.read_text(encoding="utf-8"))
+
+    def test_the_shipped_setting_description_warns_too(self):
+        """The README is not what a player reads before enabling the setting.
+
+        Someone who downloads the release and runs Launch_GUI.bat never opens
+        this repository. The GUI renders the manifest description generated
+        from export_offline_patch_bundle, and that text names the Patio and
+        Picnic Tables. Warning only in the repo README leaves the packaged
+        flow -- the normal one -- still misleading.
+        """
+        import sys
+
+        sys.path.insert(0, str(ROOT / "work"))
+        import export_offline_patch_bundle as exporter
+
+        description = next(
+            row["description"] for row in exporter.SETTINGS
+            if row["id"] == "mobile_furniture_behaviors"
+        )
+        if not self._rendering_pending():
+            self.skipTest("the ledger says rendering has landed")
+        self.assertIn(
+            "stays bare", description,
+            "the shipped setting description names the Picnic and Patio "
+            "Tables without saying their props do not draw",
+        )
+
+    def test_the_readme_and_the_ledger_agree(self):
         self.assertEqual(
-            rendering_pending, readme_warns,
+            self._rendering_pending(),
+            self.WARNING in README.read_text(encoding="utf-8"),
             "the ledger and the README disagree about whether the props "
             "render; update both together",
         )
