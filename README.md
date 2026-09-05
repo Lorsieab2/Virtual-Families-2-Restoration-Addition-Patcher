@@ -38,8 +38,9 @@ the GUI header, which opens the releases page in your browser when you click
 it.
 
 **If a release carries more than one archive, take the highest revision.**
-B180 has two: `VF2-B180-Release.zip` and `VF2-B180-Release-r2.zip`. Take
-**r2**. They differ in exactly two files -- `manifest.json` and
+B181 carries a single archive, `VF2-B181-Release.zip`, so there is nothing to
+choose between. B180 had two -- `VF2-B180-Release.zip` and
+`VF2-B180-Release-r2.zip` -- and the rule was to take **r2**. They differ in exactly two files -- `manifest.json` and
 `Transparency Log.txt` -- because one setting's description overstated what
 it installs; all 32 executables are byte-identical between them. The
 original is kept attached rather than replaced so anyone who already
@@ -52,7 +53,7 @@ the asset, compare it. Pass the **exact filename you downloaded** -- if you
 took r2, that is the r2 name, and hashing the other archive will not match:
 
 ```
-certutil -hashfile VF2-B180-Release-r2.zip SHA256
+certutil -hashfile VF2-B181-Release.zip SHA256
 ```
 
 If it matches the published value, you have the file that was released, and a
@@ -104,12 +105,12 @@ The load path is mostly extended by wrappers that run the native `LoadState` fir
 ## What's included
 
 The GUI reads its checkboxes from the shipped manifest, so the exact list follows
-the release you downloaded. B180's bundle offers 35 settings, grouped the way
-the GUI groups them.
+the release you downloaded. B181's bundle offers 35 settings, grouped the way
+the GUI groups them, unchanged from B180.
 
 That number is not simply the count of settings the patcher defines, which is
 36. A bundle drops any optional setting whose source assets were not available
-when it was exported -- in B180 that is the two named just below -- and the
+when it was exported -- in B181, as in B180, that is the two named just below -- and the
 export adds one setting of its own, `core_assets`, which copies the support
 files and generated assets that are not tied to a single feature. So 36 defined,
 less 2 unavailable, plus 1 generated, is the 35 the GUI shows.

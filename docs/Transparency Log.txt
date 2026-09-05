@@ -2208,3 +2208,40 @@ The stock-donor furniture route: one finding stood, one was my own error
   CBehavior::QuickWorkout (SECT206) call neither FindFurniture nor
   LinkPeepToFurniture, but both DO call the point-taking
   CVillagerPlans::PlanToGo(ldwPoint, ESpeed, EPriority).
+
+B181 was published, and what its verification did and did not establish
+- Built from main at 9f3bee0 -- the revision the binaries were compiled from -- and seeded
+  per variant from the B180 matrix outputs. The release metadata, notes and variant
+  identities were committed afterwards as 9d45667, which is the tag's target; anyone
+  reproducing the binaries wants 9f3bee0, not the packaging commit.
+  32/32 variants linked with distinct SHA-256s. The bundle reproduces 8226 of
+  8226 Images/Assets files on a clean install, and the release gate passes with
+  variant_identities_authenticated true.
+- VF2-B181-Release.zip, 145124405 bytes, SHA-256
+  be054138b95365f1f49aa22bfea1fb4049926991ff1109c00e60657e3fe73750
+  That digest was computed four times independently -- twice before upload and
+  twice from the published asset -- and the downloaded archive is byte-identical
+  to the local one.
+- WHAT IS VERIFIED: the four added furniture items carry villager actions of
+  their own, confirmed by disassembling a shipped executable rather than by
+  finding strings. Each handler pushes its own item id, calls IsInWorld and
+  returns early when the item is absent; all five registration entries are in
+  the shipped constructor exactly once each.
+- WHAT IS NOT: that any of it looks right in play. Nobody has watched a villager
+  walk to the gym. Every claim above is artifact-level, and the release exists so
+  that gap can be closed by playing it.
+- A verification pass twice read a correctly-installed file as missing, because
+  the bundle is an additive patch rather than a file tree. Byte-identical payload
+  files are collapsed to one copy and the other install records are repointed at
+  the survivor, so SpaLoungerStd.png is absent as a member and installs correctly
+  from the invisible lounger's copy. That only became possible once both loungers
+  were fixed to share one sprite -- the repair created the duplicate. Checked
+  across every file the build produces: 6669 install records, zero unresolvable
+  sources.
+- Publishing itself failed three times while reporting success each time: a short
+  SHA rejected as an invalid target, an asset stalled at state=starter while one
+  endpoint reported assets=0 and another showed it at full size, and a direct
+  upload that removed the release entirely. Creating the release and uploading
+  the asset as separate steps, with the full 40-character SHA, worked. Only
+  querying the release state after each attempt distinguished the failures from
+  the success.

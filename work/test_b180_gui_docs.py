@@ -339,13 +339,26 @@ class TestTheChecksumExampleMatchesTheRecommendedAsset(unittest.TestCase):
     """
 
     def test_the_command_names_the_archive_the_readme_recommends(self):
-        named = re.findall(r"`(VF2-B\d+(?:\.\d+)?-Release-r(\d+)\.zip)`", README)
+        # The archive a reader should download is the highest-numbered RELEASE
+        # the README names, and within that release the highest revision if it
+        # has any. Keying on "-rN" alone was wrong: a release with a single
+        # archive has no revision suffix, so the old pattern kept matching an
+        # EARLIER release's r2 out of the historical sentence explaining what
+        # the suffix means, and pinned the command to a superseded file.
+        named = re.findall(
+            r"`(VF2-B(\d+(?:\.\d+)?)-Release(?:-r(\d+))?\.zip)`", README
+        )
         self.assertTrue(named, "the README no longer names a recommended archive")
-        # Take the HIGHEST revision named, not the first. The README's own rule
-        # is "take the highest revision", so the check has to follow the same
-        # rule -- otherwise a future page that mentions an older revision
-        # earlier in the prose would pin the command to the wrong file.
-        name = max(named, key=lambda pair: int(pair[1]))[0]
+        def _rank(match):
+            # Compare release components as INTEGERS, not as a float. Once a
+            # point release reaches two digits, float() puts 181.9 above
+            # 181.10 and the guard would select the older archive -- letting a
+            # stale checksum example pass, which is the exact failure this
+            # test exists to catch.
+            parts = tuple(int(part) for part in match[1].split("."))
+            return (parts, int(match[2]) if match[2] else 0)
+
+        name = max(named, key=_rank)[0]
         command = re.search(r"certutil -hashfile (\S+) SHA256", README)
         self.assertIsNotNone(command, "the checksum example is gone")
         self.assertEqual(
