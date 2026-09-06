@@ -38,6 +38,50 @@ import patch_mobile_furniture_pack as patcher
 SOURCE = ROOT / "work" / "patch_mobile_furniture_pack.py"
 
 
+
+# The base sources that live ONLY in the gitignored vanilla payload, pinned
+# by name because a fresh clone cannot look.
+#
+# Skipping EVERY unresolvable source when the payload is absent made this
+# suite report success on exactly the environment it claims to protect: a
+# newly added or renamed invisible item whose art was never committed got
+# waved through, because 'not in a tracked directory' and 'vanilla-only'
+# were treated as the same thing. Only a name on this list gets that excuse,
+# so anything NEW must be findable in a tracked directory or it fails.
+#
+# Every entry was confirmed present in the vanilla payload when this list was
+# written, and a test below re-confirms it whenever the payload is available.
+VANILLA_ONLY_BASE_SOURCES = frozenset({
+    "BedAdultBrownStd.png",
+    "ScaleBathroomStd.png",
+    "ChairBeanbagBlueStd.png",
+    "BedKidsBlueStd.png",
+    "DoubleBedCheckeredDuvetBlue.png",
+    "DresserStd1.png",
+    "LaundryDryingRackStd.png",
+    "PoolLargeStd.png",
+    "GrandfatherClockStd.png",
+    "HammockStd.png",
+    "HeartShapedBed.png",
+    "IroningBoardStd.png",
+    "PoolChildrensStd.png",
+    "KidsTableAndChairsStd.png",
+    "BookCaseBirchStd.png",
+    "IpodSpeakersStd.png",
+    "FirePlaceRusticStd.png",
+    "PlayStructureStd.png",
+    "Sandbox.png",
+    "Gothic_SingleBedBlue.png",
+    "SofaBlue.png",
+    "LowerBookshelf.png",
+    "BookCaseBirchSmStd.png",
+    "CouchTrashedBeigeStd.png",
+    "TrainTableForKids.png",
+    "Trampoline.png",
+    "SofaWornWhiteStd.png",
+    "YogaGearStd.png",
+})
+
 class BaseGraphicsCanResolveAddedArt(unittest.TestCase):
     def test_the_fallback_searches_the_new_art_directory(self):
         source = SOURCE.read_text(encoding="utf-8")
@@ -80,9 +124,10 @@ class BaseGraphicsCanResolveAddedArt(unittest.TestCase):
             if any(d.is_dir() for d in payload_dirs):
                 if any((d / source_name).is_file() for d in payload_dirs):
                     continue
-            else:
-                # Payload absent (fresh clone): cannot judge these, skip them
-                # rather than fail on a gitignored build input.
+            elif source_name in VANILLA_ONLY_BASE_SOURCES:
+                # Payload absent (fresh clone). Only a source on the pinned
+                # list below may be excused: each was CONFIRMED present in the
+                # vanilla payload when the list was written.
                 continue
             unfindable.append(f"{name} -> {source_name}")
         self.assertEqual(
@@ -92,6 +137,44 @@ class BaseGraphicsCanResolveAddedArt(unittest.TestCase):
             + "\n  ".join(unfindable),
         )
 
+    def test_the_vanilla_only_list_is_accurate_and_minimal(self):
+        """The excuse list must not drift into a place to hide a real gap.
+
+        An allow-list added to stop a check being too strict suppresses the
+        signal in the other direction too, so it is asserted from BOTH sides
+        whenever the payload is actually available: every pinned name must
+        really be in the payload, and no pinned name may have since become
+        available in a tracked directory, which would make its excuse
+        unnecessary and mask a later removal.
+        """
+        payload_dirs = [
+            Path(p) / "Images" / "Furniture"
+            for p in patcher.VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS
+        ]
+        if not any(d.is_dir() for d in payload_dirs):
+            self.skipTest("vanilla_runtime_payload is a gitignored build input")
+        tracked = [
+            ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture",
+            patcher.NEW_FURNITURE_ART_DIR,
+        ]
+        for source_name in sorted(VANILLA_ONLY_BASE_SOURCES):
+            with self.subTest(source_name):
+                self.assertTrue(
+                    any((d / source_name).is_file() for d in payload_dirs),
+                    f"{source_name} is excused as vanilla-only but is not in "
+                    + "the payload, so its excuse hides a missing source",
+                )
+                self.assertFalse(
+                    any((d / source_name).is_file() for d in tracked),
+                    f"{source_name} is now tracked, so it no longer needs "
+                    + "the vanilla-only excuse; remove it from the list",
+                )
+
+    def test_a_source_that_is_neither_tracked_nor_pinned_is_not_excused(self):
+        """A NEW item with no committed art must fail even on a fresh clone."""
+        self.assertNotIn(
+            "AnInventedSourceThatWasNeverCommitted.png", VANILLA_ONLY_BASE_SOURCES,
+        )
     def test_the_spa_lounger_base_is_only_in_the_new_art_directory(self):
         """Pins WHY the new entry is required, so it is not removed as noise."""
         source_name = patcher.INVISIBLE_BASE_GRAPHIC_SOURCE_BY_NAME.get(

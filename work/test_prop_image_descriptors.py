@@ -38,6 +38,22 @@ sys.path.insert(0, str(ROOT / "work"))
 import patch_mobile_furniture_pack as patcher
 
 
+
+def _function_named(path, name):
+    """The AST of one top-level function, for assertions text cannot fake.
+
+    A source-slicing test matches its own explanatory comments, so a check
+    written as `assertIn("retarget_relocation", body)` stays green after the
+    call it guards is deleted -- the comment above it still says the words.
+    Parsing gives the calls themselves.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return node
+    raise AssertionError(f"{name} is not defined in {path}")
+
+
 class PropDescriptorsArePopulated(unittest.TestCase):
     def test_every_prop_sprite_has_a_descriptor_write(self):
         """Reserving space is not populating it.
@@ -273,13 +289,16 @@ class PropDrawRunsUnconditionally(unittest.TestCase):
     only by `jmp 0xa62` from those branches -- so the table props drew only
     while some unrelated stock prop happened to be active.
 
-    CDecal::RefreshDecals calls CDecal::InitDecals as its FIRST instruction,
-    before any branch, and runs every refresh. That call is already a five-byte
-    call with a relocation, so retargeting it costs zero added bytes.
+    CDecal::RefreshDecals TAIL-JUMPS to CDecal::RefreshProps as its LAST
+    instruction. That E9 already carries a relocation, so retargeting it costs
+    zero added bytes, and it is the one site that is both unconditional and at
+    final decal occupancy.
 
-    InitDecals has two call sites -- RefreshDecals +0x4 and CDecal::Reset
-    +0x1C -- so the installer must pick the right one and refuse if the
-    prologue ever drifts.
+    InitDecals was tried first and rejected: it is unconditional but it EMPTIES
+    the array, so the capacity check would always find room and the two added
+    decals would push the stock pass past the 256-slot end. The installer must
+    therefore find exactly one tail jump at the very end of the section and
+    refuse if that shape ever drifts.
     """
 
     def test_the_hook_is_on_refreshdecals_not_refreshprops(self):
@@ -299,10 +318,33 @@ class PropDrawRunsUnconditionally(unittest.TestCase):
         # Mentioning the symbol is not installing the hook. Without the
         # retarget the original jump still runs and nothing draws, while
         # every other assertion in this class stays green.
+        #
+        # Asserted from the AST, not from the text. This comment contains the
+        # words "retarget_relocation", so a substring match against the source
+        # would be satisfied by the explanation of the call even after the
+        # call itself was deleted -- a test that passes because of its own
+        # prose. ast.parse sees calls only.
+        installer = _function_named(SOURCE, "patch_mobile_table_prop_draw")
+        retargets = [
+            call for call in ast.walk(installer)
+            if isinstance(call, ast.Call)
+            and isinstance(call.func, ast.Attribute)
+            and call.func.attr == "retarget_relocation"
+        ]
+        self.assertEqual(
+            len(retargets), 1,
+            "the installer must retarget exactly one relocation; without that "
+            "call the original jump still runs and nothing draws",
+        )
+        # The relocation must point at OUR wrapper. Retargeting to anything
+        # else installs a hook that is real but wrong.
+        argument_names = {
+            node.id for node in ast.walk(retargets[0]) if isinstance(node, ast.Name)
+        }
         self.assertIn(
-            "retarget_relocation", body,
-            "the installer never retargets the relocation, so the hook "
-            "is not actually installed",
+            "draw_helper", argument_names,
+            "the relocation is retargeted at something other than the "
+            "appended wrapper symbol",
         )
         self.assertIn(
             "@VF2RefreshPropsAndTableProps@8", body,

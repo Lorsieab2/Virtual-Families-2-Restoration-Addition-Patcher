@@ -121,18 +121,29 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
         read as finished while something is still outstanding.
         """
         text = (self._row()[1] + " " + self._row()[2]).lower()
-        # PHRASES THAT MEAN UNFINISHED, not bare topic words. "qa" and
-        # "build" on their own are satisfied by "Confirmed in a build /
-        # QA complete", which presents the feature as done -- the exact
-        # claim this test exists to prevent.
+        # PHRASES THAT MEAN UNFINISHED, not bare topic words. Each entry has
+        # to be unambiguous on its own, because the check is a substring
+        # match and a bare topic word is satisfied by a sentence that says
+        # the opposite. "qa" and "build" are satisfied by "Confirmed in a
+        # build / QA complete"; "rendering" by "rendering complete"; and
+        # "remains" by "no work remains" -- every one of which presents the
+        # feature as done, the exact claim this test exists to prevent.
         self.assertTrue(
-            any(word in text for word in (
-                "rendering", "not yet", "pending", "unconfirmed",
-                "not confirmed", "outstanding", "remains",
+            any(phrase in text for phrase in (
+                "not yet", "pending", "unconfirmed", "not confirmed",
+                "still outstanding", "remains outstanding", "yet to be",
+                "has not been", "have not been", "nobody has",
             )),
             "the row does not say what is still outstanding, so a reader "
             "cannot tell whether the props are known to work",
         )
+        # And it must not ALSO read as finished. A row can satisfy the phrase
+        # above and still open by calling the work complete.
+        for claim in ("qa complete", "rendering complete", "no work remains"):
+            self.assertNotIn(
+                claim, text,
+                f"the row claims {claim!r} while confirmation is outstanding",
+            )
 
 
 if __name__ == "__main__":
