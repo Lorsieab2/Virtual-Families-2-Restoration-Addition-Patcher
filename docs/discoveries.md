@@ -3828,7 +3828,7 @@ Measured against the extracted bundles rather than the source tree:
   `.reloc` from `0x786000` to `0x79C000`. Parsing the resource directory shows
   it holds only `ICON` and `GROUP_ICON`: the patcher icon. It is cosmetic.
 
-### A one-sided path check, and what it turned up
+### A one-sided path check, and a wrong conclusion drawn from it
 
 The first version of this entry compared only the files present in both
 bundles, which cannot see a path that one has and the other does not. Redone
@@ -3842,12 +3842,23 @@ which states that B180 adds `InvisibleSpaLounger.png.fmap` and
 the whole payload, **neither file is present in B179, B180 or B181** -- only
 `InvisibleLounger.png.fmap`, which all three carry.
 
-The verifier does not fail on that, because its lounger check resolves the
-three names through the build MANIFEST and compares digests recorded there,
-rather than requiring the files to exist in the extracted payload. So a map the
-manifest declares can be absent from disk without the check noticing. That is a
-gap in the verifier rather than a defect in this bracket, and it is recorded
-here rather than fixed, since it is outside what this entry changes.
+AN EARLIER VERSION OF THIS ENTRY CALLED THAT A VERIFIER GAP. IT IS NOT, and
+the correction matters more than the observation, because acting on it would
+have meant "fixing" a working contract.
+
+The payload DEDUPLICATES. `verify_extracted_release_payload.py` requires a
+manifest record for every lounger map, resolves each record's `source_path` to
+an actual file in the extracted payload -- failing with "manifest points at ...
+which is not in the payload" when it cannot -- hashes the bytes on disk rather
+than the declared digest, and requires all three maps to resolve to identical
+content. `offline_vf2_patcher.py` then copies that one canonical source to each
+declared target at apply time.
+
+So a target-named file being absent from the payload is the DESIGN, not an
+undetected omission: the three lounger maps share one stored file precisely
+because the desktop-safe fix requires them to be identical, and the verifier
+proves that by digesting the resolved bytes. The check does not fail because
+there is nothing wrong.
 
 ### What this rules out
 
