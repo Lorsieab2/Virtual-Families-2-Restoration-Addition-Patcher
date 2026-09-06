@@ -3840,6 +3840,35 @@ Measured against the extracted bundles rather than the source tree:
   one of which runs and one of which does not. That is a stronger bracket than
   the release-level statement this entry previously claimed, not a weaker one.
 
+  **And the two runs were configured identically**, which the `.text` match
+  alone does not establish. A release ships 32 executables whose feature sets
+  differ, so both axes have to be pinned before the comparison is controlled.
+  Every patcher run writes
+  `<install>/.vf2_patch_backups/<ts>_manifest/patch_log.json` carrying a
+  `settings.available` array with per-setting `enabled` state. Read from the
+  owner's own installs:
+
+  | run | enabled | disabled |
+  | --- | --- | --- |
+  | B179 (works) | 34 of 35 | `invisible_furniture_transparent_graphics` |
+  | B180 (crashes) | 34 of 35 | `invisible_furniture_transparent_graphics` |
+  | B181 (crashes) | 34 of 35 | `invisible_furniture_transparent_graphics` |
+
+  Zero differing settings across all three, the same
+  `vanilla_to_modded_output` mode, and identical runtime checks including the
+  directory counts (`Images` 655, `Sounds` 316, `Assets` 242). Same variant
+  AND same configuration.
+
+  The patch logs also record the INSTALL-level delta, which is narrower than
+  the bundle delta because it counts what a player ends up with rather than
+  what the payload stores. Between the B179 and B180 installs the one-sided
+  file set is exactly two paths, both added by B180:
+  `Assets/SpaLoungerStd.png.fmap` and `Images/Furniture/SpaLoungerStd.png`.
+  Nothing is removed. That is what made a single-variable ablation possible:
+  a copy of the crashing B180 install with those two files removed, verified
+  to differ from the original in nothing else and to carry a byte-identical
+  executable.
+
 - **Three assets differ under `Assets/`.** `InvisibleLounger.png.fmap`,
   `InvisiblePatioTable.png.fmap` and `InvisiblePicnicTable.png.fmap`. Every
   other file in that directory is byte-identical, and neither bundle has a
