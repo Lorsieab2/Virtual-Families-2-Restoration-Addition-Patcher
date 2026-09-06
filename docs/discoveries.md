@@ -3816,9 +3816,13 @@ that B179 runs. B179 is therefore the newest known-good build, which makes
 the B179-to-B180 delta the tightest available bracket on the regression.
 Measured against the extracted bundles rather than the source tree:
 
-- **Exactly three shipped assets differ.** `InvisibleLounger.png.fmap`,
-  `InvisiblePatioTable.png.fmap` and `InvisiblePicnicTable.png.fmap`. Every
-  other file under `Assets/` is byte-identical between the two bundles.
+- **Three `Assets/` files differ, and 100 `Images/` files.** Under `Assets/`:
+  `InvisibleLounger.png.fmap`, `InvisiblePatioTable.png.fmap` and
+  `InvisiblePicnicTable.png.fmap`; every other `Assets/` file is byte-identical.
+  Under `Images/` a further **100 files changed** -- the regenerated
+  `HairstyleIcons/` set -- plus the one addition recorded below. The
+  `Assets/`-only figure was the first version of this entry and it understated
+  the delta: `Images/` files are loaded by the game and belong in the bracket.
 - **The change in all three is the documented desktop-safe strip**: the mobile
   object-type field is removed from the high half of each cell, and the mobile
   behaviour-hotspot cells whose payload is `0x0001` are zeroed. Both halves are
@@ -3826,7 +3830,13 @@ Measured against the extracted bundles rather than the source tree:
   `patch_mobile_furniture_pack.py:4172`.
 - **The executable gained an `.rsrc` section** of 0x15EB0 bytes, moving
   `.reloc` from `0x786000` to `0x79C000`. Parsing the resource directory shows
-  it holds only `ICON` and `GROUP_ICON`: the patcher icon. It is cosmetic.
+  it holds only `ICON` and `GROUP_ICON`. These are the **stock game icon**,
+  not the patcher's: `offline_vf2_patcher.py` reads `RT_ICON` and
+  `RT_GROUP_ICON` from the player's own original executable
+  (`read_executable_icon_resources`, line 3433) and writes them into the
+  patched one under the log message "Preserving stock executable icon
+  resources" (line 3530). `patcher_icon.ico` is a separate GUI asset and is
+  not involved. It is cosmetic either way.
 
 ### A one-sided path check, and a wrong conclusion drawn from it
 
@@ -3836,10 +3846,11 @@ over the UNION of paths: `Assets/` holds 645 files in each bundle with no
 one-sided entry, and `Images/` holds 6540 against 6541, the single addition
 being `Furniture/SpaLoungerStd.png`.
 
-That re-check contradicted a comment in `work/verify_extracted_release_payload.py`,
-which states that B180 adds `InvisibleSpaLounger.png.fmap` and
-`SpaLoungerStd.png.fmap` and that B179 shipped neither. Searched by name across
-the whole payload, **neither file is present in B179, B180 or B181** -- only
+That re-check appeared to contradict a comment in
+`work/verify_extracted_release_payload.py`, which states that B180 adds
+`InvisibleSpaLounger.png.fmap` and `SpaLoungerStd.png.fmap` and that B179
+shipped neither. Searched by name across the bundle payload, neither file is
+present under its own name in B179, B180 or B181 -- only
 `InvisibleLounger.png.fmap`, which all three carry.
 
 AN EARLIER VERSION OF THIS ENTRY CALLED THAT A VERIFIER GAP. IT IS NOT, and
@@ -3859,6 +3870,65 @@ undetected omission: the three lounger maps share one stored file precisely
 because the desktop-safe fix requires them to be identical, and the verifier
 proves that by digesting the resolved bytes. The check does not fail because
 there is nothing wrong.
+
+Read from the shipped B181 bundle, all three targets resolve to one real
+payload file:
+
+| manifest target | resolves to |
+| --- | --- |
+| `Assets/InvisibleSpaLounger.png.fmap` | `payload/Assets/InvisibleLounger.png.fmap` |
+| `Assets/InvisibleLounger.png.fmap` | `payload/Assets/InvisibleLounger.png.fmap` |
+| `Assets/SpaLoungerStd.png.fmap` | `payload/Assets/InvisibleLounger.png.fmap` |
+
+What the loungers DO differ by is at install time rather than in the bundle.
+Comparing the owner's own B179 and B180 installs through their
+`.vf2_patch_backups/<ts>_manifest/patch_log.json` records, the one-sided file
+delta is exactly two paths, both added by B180:
+`Assets/SpaLoungerStd.png.fmap` and `Images/Furniture/SpaLoungerStd.png`.
+
+### The two runs were configured identically
+
+A release-level "B179 runs, B180 crashes" is only a controlled bracket if both
+runs used the same settings, and each release ships 32 executable variants with
+different feature sets. Every patcher run writes
+`<install>/.vf2_patch_backups/<ts>_manifest/patch_log.json` carrying a
+`settings.available` array with per-setting `enabled` state.
+
+| run | enabled | disabled |
+| --- | --- | --- |
+| B179 (works) | 34 of 35 | `invisible_furniture_transparent_graphics` |
+| B180 (crashes) | 34 of 35 | `invisible_furniture_transparent_graphics` |
+
+**Zero differing settings.** Same machine, same vanilla input, same
+`vanilla_to_modded_output` mode. The 15 runtime checks are identical too,
+including the directory counts (`Images` 655, `Sounds` 316, `Assets` 242).
+
+### And all three runs selected the same executable overlay
+
+The patcher does not build the executable on the player's machine for these
+offline installs. `select_exact_executable_overlays()` picks exactly one
+packaged matrix EXE for the enabled setting set, `apply_asset_patches()` copies
+it into the output, and `write_executable_icon_resources_atomic()` then mutates
+that copy with the stock icon. The variant identity is recorded in each patch
+log as the executable record's `source_path`:
+
+| run | selected overlay |
+| --- | --- |
+| B179 (works) | `payload\Virtual Families 2 - Modded B179 - Final All-Enabled Native.exe` |
+| B180 (crashes) | `payload\Virtual Families 2 - Modded B180 - Final All-Enabled Native.exe` |
+| B181 (crashes) | `payload\Virtual Families 2 - Modded B181 - Final All-Enabled Native.exe` |
+
+**The same variant in all three**, which tightens the bracket further: not
+merely the same settings but the same overlay lineage, working in B179 and
+crashing in B180 and B181.
+
+An earlier version of this entry claimed the installed executable "is not one
+of the 32 matrix variants" because its hash matches none of them and it is
+larger than all of them (`a87aa30555fe...`, 1,932,800 bytes against a
+1,842,688-byte overlay). That reasoning was wrong. The difference is the icon
+resources written into the copy after it is placed, which adds the `.rsrc`
+section and moves `.reloc`. A hash mismatch against the packaged overlay is
+what a correct install looks like, not evidence that no variant was used.
 
 ### What this rules out
 
