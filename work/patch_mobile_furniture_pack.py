@@ -27894,7 +27894,13 @@ struct VF2MobileExternalWeights {
     unsigned int weights[14];
 };
 
-static VF2MobileExternalWeights gVF2MobileExternalWeights[30] = {};
+// One slot per villager the selector has weighted.  Sized well above the
+// thirty the AI walk visits, because a slot is claimed by a villager POINTER
+// and a pointer is only ever replaced, never released: a household that
+// outlives a generation leaves the dead villager's slot claimed forever.  At
+// thirty the table held exactly as many slots as the walk has villagers, so a
+// single stale entry was enough to push a live villager out of it.
+static VF2MobileExternalWeights gVF2MobileExternalWeights[128] = {};
 
 static unsigned int VF2RandomizeMobileCandidateWeight(unsigned int baseWeight)
 {
@@ -27906,7 +27912,7 @@ static unsigned int VF2RandomizeMobileCandidateWeight(unsigned int baseWeight)
 static VF2MobileExternalWeights *VF2FindMobileExternalWeights(void *villager)
 {
     VF2MobileExternalWeights *empty = 0;
-    for (int index = 0; index < 30; ++index) {
+    for (int index = 0; index < 128; ++index) {
         if (gVF2MobileExternalWeights[index].villager == villager) {
             return &gVF2MobileExternalWeights[index];
         }
@@ -27914,7 +27920,14 @@ static VF2MobileExternalWeights *VF2FindMobileExternalWeights(void *villager)
             empty = &gVF2MobileExternalWeights[index];
         }
     }
-    return empty ? empty : &gVF2MobileExternalWeights[0];
+    // Every slot is claimed and none of them is this villager, so one has to
+    // be taken from whoever holds it.  Choose by hashing the pointer rather
+    // than always taking slot zero: slot zero would make every unplaced
+    // villager evict the same record and re-randomise it on each other's
+    // behalf, whereas hashing spreads the loss.  This mirrors the eviction
+    // the behaviour-label cache already uses for the same situation.
+    return empty ? empty : &gVF2MobileExternalWeights[
+        ((unsigned int)villager >> 2) & 127];
 }
 
 static void VF2InitializeMobileExternalWeights(void *villager)
@@ -28341,7 +28354,14 @@ extern "C" void __cdecl VF2MobileStudyingOnPatio(CVillager &villager)
     }
     if (!VF2WeatherAllowsOutdoorFurniture() ||
         !VF2TryLinkMobileChaise(villager, info)) {
-        CBehavior::ReadingBook(villager);
+        // Fall back to the behaviour that was actually chosen.  This used to
+        // run CBehavior::ReadingBook instead, which is a DIFFERENT behaviour
+        // from the one the selector picked, and which is itself rebound to
+        // VF2MobileReadingBook -- so a villager who could not reach a lounger
+        // was silently handed someone else's activity by way of a second
+        // rebound handler.  The other three mobile chaise handlers each fall
+        // back to their own stock behaviour; this one now matches them.
+        CBehavior::StudyingOnPatio(villager);
         return;
     }
     VF2PlanLinkedChaiseAction(
