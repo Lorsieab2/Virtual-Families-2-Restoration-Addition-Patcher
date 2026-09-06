@@ -4229,7 +4229,7 @@ fault. The correlation with the B179-to-B180 delta is real, but no trace
 connects lost or sparse collision geometry to this register state, and none
 should be asserted without one.
 
-### The saved-register slots, and one exact relation across all five dumps
+### The saved-register slots: one confirmed relation, no mechanism
 
 `sub_4C8660`'s prologue is `push ebp / mov ebp,esp / sub esp,0x14 / push ebx /
 push esi / push edi`, so its own saved registers sit at `[ebp-0x18]` (ebx),
@@ -4242,32 +4242,48 @@ push esi / push edi`, so its own saved registers sit at `[ebp-0x18]` (ebx),
     B181 #25632      2      0x00785A91    0x00000000   0x00785A90   0x00000000
     B181 #48596      0      0x00785A91    0x00000000   0x00785A90   0x00000000
 
-Two things follow, and they should be kept apart.
-
 MEASUREMENT, exact in all five dumps: `live edi == [ebp-0x1C] + 1`. That slot
 is the SAVED ESI slot, and it still holds the correct object pointer. The
 caller's `inc edi` immediately before the fault accounts for the `+ 1`.
+
+IT IS ONE FACT, NOT TWO. `[ebp-0x1C]` holds the same value as `arg_0`
+(`[ebp+8]`) in all five dumps, and that is structural rather than
+coincidental: the outer loop does `push esi / mov ecx,esi / call`, passing its
+own esi as BOTH the argument and ecx, and the callee pushes its incoming esi
+before overwriting esi from ecx. So "edi == saved_esi + 1" and
+"edi == arg_0 + 1" are the same statement spelled two ways. Reading it off the
+saved slot is a genuine independent confirmation of the relation, but it does
+NOT add a second data point, and it does not single out the saved-esi slot as
+the source, because that value is reachable by other routes.
 
 Also measured: the saved slots are INTACT and CORRECT. Saved esi still holds
 the real pointer and saved edi still holds 0. Nothing overwrote the stack;
 only what the live registers ended up holding is wrong. This independently
 disposes of any remaining "the object was freed or relocated" reading.
 
-HYPOTHESIS, which fits edi and does NOT yet fit esi: a one-slot (4-byte)
-displacement, in which `pop edi` reads the saved-esi slot rather than the
-saved-edi slot. If that were the whole story, `pop esi` should then take the
-saved-ebx slot -- and that matches in only one of the five dumps (esi is
-0,0,1,2,0 against ebx slots 1,1,3,0,0). The slots tabulated above are the
-CALLER's, written at its own entry; the loop body has its own frame with its
-own saved ebx, so esi's source is probably a slot not yet identified.
+A ONE-SLOT DISPLACEMENT DOES NOT EXPLAIN IT, on frame-layout grounds. The
+slots tabulated above are the CALLER's, pushed by its own prologue and popped
+by its own epilogue. The loop body has a SEPARATE frame much further down: its
+prologue is `push ebp / mov ebp,esp / sub esp,0xCF0 / ... / push esi /
+push edi`, putting its saved esi and edi at its own `ebp-0xCF4` and `-0xCF8`.
+A displacement inside the loop body's epilogue reads slots in the loop body's
+frame, which lies far BELOW the caller's `[ebp-0x1C]`; it never pops that far
+and cannot reach it. So the relation is real and this mechanism does not
+produce it.
 
-A related prediction was tested and FAILED, which is worth recording so it is
-not retried: if the displacement were instead large enough for `pop edi` to
-reach the pushed argument word (roughly the whole `0xCF0` frame), then
-`pop esi` would have read the word above it, `[ebp+12]`. That word is
-`0x010B289C`, `0x015758A0`, `0x010B289C`, `0x0057289C`, `0x0057289C` -- a
-pointer in every dump, never 0, 1 or 2. So the displacement, if there is one,
-is not frame-sized.
+A frame-sized displacement is FALSIFIED too, and it is recorded so it is not
+retried. If the displacement were large enough for `pop edi` to reach the
+pushed argument word -- roughly the whole `0xCF0` frame -- then `pop esi`
+would have read the word above it, `[ebp+12]`. That word is `0x010B289C`,
+`0x015758A0`, `0x010B289C`, `0x0057289C`, `0x0057289C`: a pointer in every
+dump, never 0, 1 or 2.
+
+So both the small and the large displacement are ruled out, by different
+arguments, and NO mechanism currently accounts for both registers. Two
+sessions have independently reproduced the `edi` relation and neither can
+explain how edi comes to hold the object pointer at all, nor separately how
+esi comes to hold 0, 1 or 2. That is the honest state; it should not be
+written up as support for any displacement story.
 
 ### The static stack-balance check, and why it does not close the question
 
