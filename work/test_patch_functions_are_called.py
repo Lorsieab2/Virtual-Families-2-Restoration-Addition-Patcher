@@ -318,6 +318,20 @@ def _reachable_from_module(tree):
             pending_scopes.extend(scopes)
 
     reachable = set()
+    # A rebound name is not the installer wherever it is called from. Filtering
+    # only the seed left the walk itself unfiltered: a call found while
+    # expanding a REACHABLE FUNCTION'S BODY was enqueued without the check, so
+    # `patch_new = something_else` followed by `def main(): patch_new()` marked
+    # the installer reached even though main() invokes the replacement. The
+    # module-scope path was correct and the via-a-function path was not, which
+    # is why the fixtures -- all calling at module scope -- stayed green.
+    def _reaches(referenced):
+        return (
+            referenced in defined
+            and referenced not in rebound
+            and referenced not in reachable
+        )
+
     frontier = [n for n in seed if n in defined and n not in rebound]
     # Nested scopes are keyed by identity: the same helper reached twice must
     # be walked once. Without this the walk re-expands every nested scope on
@@ -334,7 +348,7 @@ def _reachable_from_module(tree):
                     seen_scopes.add(id(scope))
                     pending_scopes.append(scope)
             for referenced in names:
-                if referenced in defined and referenced not in reachable:
+                if _reaches(referenced):
                     frontier.append(referenced)
             continue
         name = frontier.pop()
@@ -351,7 +365,7 @@ def _reachable_from_module(tree):
                 seen_scopes.add(id(scope))
                 pending_scopes.append(scope)
         for referenced in names:
-            if referenced in defined and referenced not in reachable:
+            if _reaches(referenced):
                 frontier.append(referenced)
     return set(defined), reachable
 
@@ -490,6 +504,47 @@ class TheReachabilityWalkResolvesScopes(unittest.TestCase):
     """
 
     UNREACHABLE = {
+        # Rebound at module scope, then called FROM INSIDE A FUNCTION. The
+        # fixtures below this group all call at module scope, which the walk
+        # already handled; these cover the path that did not, where the call
+        # is found while expanding a reachable function's body.
+        "rebound by import-as, called via a function": (
+            "def patch_new(): pass\n"
+            "from hooks import x as patch_new\n"
+            "def main():\n"
+            "    patch_new()\n"
+            "main()\n"
+        ),
+        "rebound by a walrus, called via a function": (
+            "def patch_new(): pass\n"
+            "(patch_new := (lambda: None))\n"
+            "def main():\n"
+            "    patch_new()\n"
+            "main()\n"
+        ),
+        "rebound by a for target, called via a function": (
+            "def patch_new(): pass\n"
+            "for patch_new in items:\n"
+            "    pass\n"
+            "def main():\n"
+            "    patch_new()\n"
+            "main()\n"
+        ),
+        "rebound by a with-as, called via a function": (
+            "def patch_new(): pass\n"
+            "with open(f) as patch_new:\n"
+            "    pass\n"
+            "def main():\n"
+            "    patch_new()\n"
+            "main()\n"
+        ),
+        "rebound by assignment, called via a function": (
+            "def patch_new(): pass\n"
+            "patch_new = None\n"
+            "def main():\n"
+            "    patch_new()\n"
+            "main()\n"
+        ),
         "a class method that mentions it": (
             "def patch_new(): pass\n"
             "class Unused:\n"
