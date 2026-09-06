@@ -2612,3 +2612,57 @@ The faulting loop is the GAME'S OWN CODE, present in the pristine object
   than a raw byte scan and is not immune. The tell is the same every time: a
   result that would be surprising if true needs a second, different artifact
   before it is believed -- not a tighter pattern.
+
+The crash is in theGameState's CONSTRUCTOR, and it is deterministic
+- The owner answered two questions that reshaped this entirely: "B181 doesn't
+  even open. it crashes" and, asked whether it had ever started, "no b181 has
+  never opened successfully". So the fault is not intermittent and does not
+  involve loading a family, a menu, or any player action.
+
+- THE PATH, resolved from the object symbol tables rather than guessed:
+
+      theGameState::theGameState()            <- THE CONSTRUCTOR
+        -> theGameState::Load(int)             0x499F10
+           -> CFurnitureManager::LoadState     0x467BF0  (gates the next call)
+           -> CVillagerManager::TakePositions  0x4CBF40
+              -> CVillagerAI::TakePosition     0x4C8A90
+                 -> cmp dword ptr [esi], 0     0x4C8ACE   <<<< FAULT
+
+  The naming misled the investigation for a long time. theGameState.obj
+  defines TWO Load symbols -- ?Load@theGameState@@UAE_NH@Z and
+  ?Load@theGameState@@QAEXXZ -- as well as LoadCurrentGame and Init. Only the
+  first calls TakePositions, and it also calls CVillagerManager::LoadState.
+  Asking what references THAT function gives exactly one caller in the entire
+  object set: ??0theGameState@@IAE@XZ, the constructor. Nothing else calls it.
+
+- WHY THIS RECONCILES EVERY FACT, including two that never fitted:
+  * "doesn't even open" is accurate. The crash happens during theGameState
+    CONSTRUCTION, before a window is drawn -- which looks like never starting
+    from outside while being some way into initialisation.
+  * it is deterministic because a constructor runs on every launch,
+    unconditionally.
+  * the earlier finding that TakePositions is on the save-load path was right
+    about the mechanism and wrong about the timing. That path runs at STARTUP,
+    not when a player picks a family.
+  * theMainScene::UpdateScene, the other caller of TakePositions, never
+    mattered: the game dies before a scene exists.
+
+- THE FAULTING CODE IS IDENTICAL IN A BUILD THAT NEVER CRASHED. B174.2, built
+  30 August and with no crash record, has the same TakePositions loop-head
+  signature (one hit in each binary) and a byte-identical loop tail:
+      B174.2  568bcee8e5caffff4381c60ccc010083fb1e7cae
+      B181    568bcee8e5caffff4381c60ccc010083fb1e7cae
+  Same stride 0x1CC0C, same bound 0x1E, same call. The difference between the
+  two builds is not in this function.
+
+- WHAT THIS RETIRES. Every "intermittent, frequency-shifted" framing the
+  investigation had been reasoning within, and with it the Playtest 2
+  succeeded-on-Sep-5 datapoint as evidence about B181: different build, and
+  B181's own record is two attempts, two crashes, no successes. A deterministic
+  failure in code that a near-identical build does not exhibit is a far tighter
+  target than an intermittent one.
+
+- WHAT REMAINS. Something in B181 makes that walk fault on every launch while
+  B174.2 does not, and the faulting function is identical between them. The
+  narrowest remaining target is theGameState's constructor itself and whatever
+  it sets up before Load runs.
