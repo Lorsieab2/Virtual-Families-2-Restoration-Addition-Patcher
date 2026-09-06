@@ -264,3 +264,60 @@ class TestEveryInstallerIsReached(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AllowListedInstallersStayUncalled(unittest.TestCase):
+    """Re-enabling one of these must FAIL, not pass quietly.
+
+    The allow-list is applied as a frontier during the call-graph walk: an
+    intentionally-uncalled function is added to `reachable` and then does not
+    extend the walk. That is right for detecting orphans hidden behind orphans,
+    and it has a hole at the other end -- if somebody CALLS one of these from
+    main(), the walk marks it reachable, the orphan assertion excludes it by
+    name anyway, and the suite stays green.
+
+    Two of the seven would do real damage that way:
+
+      patch_vf3_style_child_adoption_chooser -- reverted because it CRASHED
+        the game; purchasing Adoption Services access-violated with a faulting
+        module of "unknown" at 0x1D7.
+      patch_main_scene_outfit_body_apply -- disabled for stability; the build
+        manifest records that the B96 final-apply callsite replacement made
+        generated Outfit-section items crash on apply.
+
+    Uncommenting either would ship a known crash with every check green, and
+    the allow-list entry explaining why it is uncalled would become a lie.
+    """
+
+    def setUp(self):
+        self.tree = ast.parse(SOURCE.read_text(encoding="utf-8"))
+        self.defined, self.reachable = _reachable_from_module(self.tree)
+
+    def test_no_allow_listed_installer_is_reachable(self):
+        wrongly_reachable = sorted(
+            name for name in INTENTIONALLY_UNCALLED
+            if name in self.reachable
+        )
+        self.assertEqual(
+            wrongly_reachable, [],
+            "these functions are recorded as intentionally uncalled but are "
+            "now REACHED from module scope:\n  "
+            + "\n  ".join(wrongly_reachable)
+            + "\nEither the call is a mistake -- two of these are recorded as "
+            "crashing the game -- or the function genuinely ships now and its "
+            "allow-list entry is stale. Both need a decision, not a green "
+            "suite.",
+        )
+
+    def test_every_allow_listed_name_is_actually_defined(self):
+        """A stale entry hides the next orphan that takes its name."""
+        missing = sorted(
+            name for name in INTENTIONALLY_UNCALLED
+            if name not in self.defined
+        )
+        self.assertEqual(
+            missing, [],
+            "these allow-list entries name functions that no longer exist, so "
+            "the entry is dead weight and would silently exempt a future "
+            "function of the same name:\n  " + "\n  ".join(missing),
+        )
