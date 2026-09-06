@@ -3808,3 +3808,111 @@
   `disabled_with_island_events` and preserve native E6 activation. A new
   renderer-off, no-B132 diagnostic links with this manifest boundary; runtime
   confirmation and final root-cause attribution remain pending.
+
+## The B179-to-B180 bundle delta, measured rather than inferred
+
+The owner confirmed on 5 September that B180 crashes as well as B181, and
+that B179 runs. B179 is therefore the newest known-good build, which makes
+the B179-to-B180 delta the tightest available bracket on the regression.
+Measured against the extracted bundles rather than the source tree:
+
+- **THE TWO CRASHING BUILDS ARE THE SAME VARIANT, identified by code section.**
+  Each release ships 32 executables with different feature sets, so this had to
+  be established rather than assumed.
+
+  A WHOLE-FILE HASH CANNOT ANSWER IT, and an earlier version of this entry drew
+  the wrong conclusion from one. The installed B180 executable
+  (`a87aa30555fe012c...`) matches no variant in the release payload byte for
+  byte, which was recorded here as "cannot say which variant it is". That is an
+  artifact of comparing different INSTALLATION STAGES: the apply path copies the
+  selected executable and then rewrites its icon resources into the copy
+  (`preserve_stock_exe_icon`, `src/offline_vf2_patcher.py`), so an installed
+  executable never matches the payload image it came from. The same rewrite is
+  what produces the `.rsrc` section discussed below.
+
+  Digesting the `.text` section instead -- which the icon rewrite does not touch
+  -- resolves both immediately:
+
+      installed B180  .text d6af263edb9986ce  ->  B180 Final All-Enabled Native
+      installed B181  .text 3d7b487c64dfccba  ->  B181 Final All-Enabled Native
+
+  So the comparison IS variant-matched: the same variant of consecutive builds,
+  one of which runs and one of which does not. That is a stronger bracket than
+  the release-level statement this entry previously claimed, not a weaker one.
+
+- **Three assets differ under `Assets/`.** `InvisibleLounger.png.fmap`,
+  `InvisiblePatioTable.png.fmap` and `InvisiblePicnicTable.png.fmap`. Every
+  other file in that directory is byte-identical, and neither bundle has a
+  path the other lacks -- 645 files each, compared over the UNION of paths so
+  a one-sided addition could not hide.
+
+  THAT IS NOT THE WHOLE BUNDLE, and an earlier version of this entry said
+  "exactly three shipped assets differ" without the qualifier, which is wrong
+  and would steer a diagnosis away from most of what actually changed. The
+  runtime `Images/` tree differs too: **100 files changed and one added**
+  (`Furniture/SpaLoungerStd.png`), 6540 files against 6541. The changed set is
+  the regenerated `HairstyleIcons/`. Those are loaded by the game and belong
+  in the delta.
+
+  So the bracket over the whole payload is 3 changed under `Assets/`, 100
+  changed and 1 added under `Images/`. The three fmaps are where this entry
+  looked first, not the only thing that moved.
+- **The change in all three is the documented desktop-safe strip**: the mobile
+  object-type field is removed from the high half of each cell, and the mobile
+  behaviour-hotspot cells whose payload is `0x0001` are zeroed. Both halves are
+  intended; the zeroing is the "unsafe behaviour cells stripped" described at
+  `patch_mobile_furniture_pack.py:4172`.
+- **The installed executable carries an `.rsrc` section** of 0x15EB0 bytes,
+  moving `.reloc` from `0x786000` to `0x79C000`. This is written by the APPLY
+  step rather than by the build -- raw linker images carry no stock icon -- so
+  it is a property of the installation, not a change between the two releases.
+  Parsing the resource directory shows
+  it holds only `ICON` and `GROUP_ICON`. These are the STOCK GAME icon
+  resources, not the patcher's own branding: `offline_vf2_patcher.py` captures
+  `RT_ICON` (3) and `RT_GROUP_ICON` (14) from the player's original executable
+  and writes them into the patched one, while `patcher_icon.ico` is a separate
+  GUI and shortcut asset that never enters this section. An earlier version of
+  this entry called it "the patcher icon", which misidentifies where the bytes
+  come from and would make this measurement impossible to reproduce.
+
+### What this rules out
+
+- **The five added behaviours are not the cause.** B180 contains zero of the
+  five `SetMacro` registrations for ids `0x0B1`-`0x0B4` and `0x0B8`, and B180
+  crashes. This previously rested on attributing crash records to binaries;
+  it now rests on a build the owner has personally confirmed crashes.
+- **The faulting loop is not new.** The byte sequence `47 83 3e 00 74 ed`
+  occurs exactly once in each of B179, B180 and B181. The working build
+  contains the same retry loop at the same place in the same function.
+
+### Two claims withdrawn after checking
+
+Both were wrong, and both looked convincing before the check:
+
+- The shipped `Patio_table.png.fmap` does not carry the `9c18bec` seat-anchor
+  correction, which read as a fix that never reached the artifact. It is not:
+  the corrected map ships as `InvisiblePatioTable.png.fmap`, and the
+  vanilla-named file in these two bundles carries the uncorrected bytes.
+
+  Stated precisely, because "deliberately left untouched" is too strong as a
+  general claim: `mobile_furniture_behavior_asset_patches()` copies the
+  corrected `pc_fmaps/Patio_table.png.fmap` into
+  `payload/MobileFurnitureBehaviorFmaps` and can target it back to
+  `Assets/Patio_table.png.fmap` when the default-on `mobile_furniture_behaviors`
+  setting is enabled, in which case an installed game carries the corrected map
+  under BOTH names. In the B179 and B180 payloads examined here that folder
+  contains no `Patio_table.png.fmap`, so the donor-named file is the
+  uncorrected one -- but an investigator must check the installed file rather
+  than assuming the restore payload is what runs.
+- `Picnic_table`'s far seats keep a `0x0002` residual after the strip. That is
+  explicitly allowed and named in
+  `test_no_map_keeps_a_fragment_of_the_mobile_object_type`: the map carries
+  `0x3ae` as well as `0x3ac`, and `0x3ae - 0x3ac` is `0x2`.
+
+### One real gap in the checks, with the bytes currently correct
+
+`test_every_kept_cell_keeps_its_payload_verbatim` guards its comparison with
+`if pc:`, so it skips every cell the transform zeroed. A transform that
+wrongly cleared a cell it should have kept would pass that check silently.
+The current bytes are right, so this is a hole in the check rather than a
+defect in the data.
