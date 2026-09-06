@@ -158,14 +158,15 @@ def _bound_locally(node):
 
     A parameter, an assignment target, a walrus, a for-loop variable, an
     `except ... as`, a `with ... as`, an import alias, or a nested def/class
-    all create a local binding. `patch_new = lambda: None; patch_new()` inside
-    a reachable function refers to that local, not to the top-level installer
-    of the same name, so counting it would mark an orphan reached by a
-    statement that never touches it.
+    all create a local binding. `patch_new = lambda: None; patch_new()` refers
+    to that local, not to the top-level installer of the same name.
 
-    Only the scope's OWN bindings are collected; nested scopes are separate.
+    Nested def and class names are returned SEPARATELY, because they shadow
+    like any other binding but are also callable graph nodes in their own
+    right -- a helper defined and then called inside a reachable function does
+    reach whatever it calls.
     """
-    bound = set()
+    bound, scopes = set(), {}
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
         args = node.args
         every = (
@@ -178,46 +179,54 @@ def _bound_locally(node):
     for child in _own_scope_nodes(node):
         if isinstance(child, ast.Name) and isinstance(child.ctx, (ast.Store, ast.Del)):
             bound.add(child.id)
-        elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            bound.add(child.name)
+            scopes[child.name] = child
+        elif isinstance(child, ast.ClassDef):
             bound.add(child.name)
         elif isinstance(child, (ast.Import, ast.ImportFrom)):
             for alias in child.names:
                 bound.add((alias.asname or alias.name).split(".")[0])
         elif isinstance(child, ast.ExceptHandler) and child.name:
             bound.add(child.name)
-    return bound
+    return bound, scopes
 
 
 def _references_within(node):
-    """Names this node genuinely REFERENCES, excluding four false positives.
+    """Names this node genuinely REFERENCES, and the nested scopes it CALLS.
 
-    * An assignment TARGET. `patch_new = None` contains an ast.Name for
-      patch_new but binds it rather than using it -- counting it would mark an
-      installer reached by the very statement that shadows it.
-    * An attribute call on another object. `obj.patch_new()` yields the
-      attribute "patch_new", which has nothing to do with the top-level
-      function of that name.
-    * A LOCALLY BOUND name. A parameter or local variable that happens to share
-      an installer's name refers to the local, so it is dropped here.
-    * Anything inside a NESTED scope. Defining a class or an inner function
-      does not run its body; those scopes are separate graph nodes, walked only
-      once something actually references them.
+    Returns (names, called_scopes). Four false positives are excluded from the
+    names:
+
+    * An assignment TARGET. `patch_new = None` binds rather than uses.
+    * An attribute call on another object. `obj.patch_new()` has nothing to do
+      with the top-level function of that name.
+    * A LOCALLY BOUND name, which refers to the local, not the installer.
+    * Anything inside a NESTED scope, since defining a class or an inner
+      function does not run its body.
+
+    The last exclusion would lose a real edge on its own: a helper that a
+    reachable function defines AND CALLS does reach what it calls. So a nested
+    def whose own name is invoked in this scope is returned as a scope to walk,
+    while one that is merely defined is not.
 
     A bare LOAD still counts: a function placed in a table, passed to a helper,
-    or wrapped by a decorator is genuinely reachable, and the generator does
-    that in several places.
+    or wrapped by a decorator is genuinely reachable.
     """
-    shadowed = _bound_locally(node)
-    names = set()
+    shadowed, nested_scopes = _bound_locally(node)
+    names, called_here = set(), set()
     for child in _own_scope_nodes(node):
         if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
+            called_here.add(child.func.id)
             if child.func.id not in shadowed:
                 names.add(child.func.id)
         elif isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load):
             if child.id not in shadowed:
                 names.add(child.id)
-    return names
-
+    called_scopes = [
+        scope for name, scope in nested_scopes.items() if name in called_here
+    ]
+    return names, called_scopes
 
 def _reachable_from_module(tree):
     """Every top-level def, and those REACHABLE from module scope.
@@ -225,38 +234,72 @@ def _reachable_from_module(tree):
     Reachability is a call-graph walk from the module body, not a flat set of
     every name that appears in a Call anywhere. A flat set counts calls made
     from INSIDE an orphan, so an installer invoked only by another orphan reads
-    as reached.
+    as reached. That is not hypothetical: write_vc90_crt_manifest is called
+    only by sync_vc90_crt_private_assembly, which is itself allow-listed.
 
-    That is not hypothetical: write_vc90_crt_manifest is called only by
-    sync_vc90_crt_private_assembly, which is itself deliberately allow-listed
-    as uncalled. Under the flat rule the inner writer passed without an
-    allow-list entry of its own, so any new installer called solely from
-    another orphan would have gone undetected.
-
-    The allow-list is applied as a FRONTIER, not as an exemption: an
-    intentionally-uncalled function does not seed the walk, so what only it
+    The allow-list is applied as a FRONTIER, not an exemption: an
+    intentionally-uncalled function does not extend the walk, so what only it
     calls stays unreachable too.
+
+    A top-level name REBOUND at module scope -- a def followed by
+    `patch_new = lambda: None` -- no longer refers to the installer, so a later
+    call invokes the replacement and the installer is still an orphan. Those
+    names are dropped from the seed.
     """
     defined = {
         node.name: node for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
-    # Seed: everything referenced from module scope -- statements that actually
-    # execute on import, plus decorators and default arguments, which run then
-    # too. Function BODIES are deliberately excluded here; they are only walked
-    # once their own function is known to be reachable.
+    # Names rebound at module scope. The binding a later call reaches is the
+    # replacement, not the installer.
+    rebound = set()
+    for node in tree.body:
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                for name in ast.walk(target):
+                    if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Store):
+                        if name.id in defined:
+                            rebound.add(name.id)
+
+    # Seed: everything referenced from module scope -- statements that execute
+    # on import, plus decorators and default arguments, which run then too.
+    # Function BODIES are excluded here; each is walked once its own function
+    # is known to be reachable.
     seed = set()
+    pending_scopes = []
     for node in tree.body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for deco in node.decorator_list:
-                seed |= _references_within(deco)
-            for default in node.args.defaults + [d for d in node.args.kw_defaults if d]:
-                seed |= _references_within(default)
+            sources = list(node.decorator_list)
+            sources += node.args.defaults
+            sources += [d for d in node.args.kw_defaults if d]
         else:
-            seed |= _references_within(node)
+            sources = [node]
+        for source in sources:
+            names, scopes = _references_within(source)
+            seed |= names
+            pending_scopes.extend(scopes)
 
-    reachable, frontier = set(), [n for n in seed if n in defined]
-    while frontier:
+    reachable = set()
+    frontier = [n for n in seed if n in defined and n not in rebound]
+    # Nested scopes are keyed by identity: the same helper reached twice must
+    # be walked once. Without this the walk re-expands every nested scope on
+    # each visit, which on a 35k-line generator does not finish.
+    seen_scopes = {id(scope) for scope in pending_scopes}
+    while frontier or pending_scopes:
+        if pending_scopes:
+            # A nested helper something actually called. It is not a top-level
+            # name, so it is walked for its edges without being recorded as a
+            # reachable installer itself.
+            names, scopes = _references_within(pending_scopes.pop())
+            for scope in scopes:
+                if id(scope) not in seen_scopes:
+                    seen_scopes.add(id(scope))
+                    pending_scopes.append(scope)
+            for referenced in names:
+                if referenced in defined and referenced not in reachable:
+                    frontier.append(referenced)
+            continue
         name = frontier.pop()
         if name in reachable:
             continue
@@ -265,7 +308,12 @@ def _reachable_from_module(tree):
         # did, everything it calls would inherit its exemption.
         if name in INTENTIONALLY_UNCALLED:
             continue
-        for referenced in _references_within(defined[name]):
+        names, scopes = _references_within(defined[name])
+        for scope in scopes:
+            if id(scope) not in seen_scopes:
+                seen_scopes.add(id(scope))
+                pending_scopes.append(scope)
+        for referenced in names:
             if referenced in defined and referenced not in reachable:
                 frontier.append(referenced)
     return set(defined), reachable
@@ -430,6 +478,15 @@ class TheReachabilityWalkResolvesScopes(unittest.TestCase):
         ),
         "an assignment target": "def patch_new(): pass\npatch_new = None\n",
         "an attribute on another object": "def patch_new(): pass\nobj.patch_new()\n",
+        "a module-level rebinding before the call": (
+            "def patch_new(): pass\n"
+            "patch_new = lambda: None\n"
+            "patch_new()\n"
+        ),
+        "a call from another orphan": (
+            "def patch_new(): pass\n"
+            "def orphan(): patch_new()\n"
+        ),
     }
 
     REACHABLE = {
@@ -447,6 +504,22 @@ class TheReachabilityWalkResolvesScopes(unittest.TestCase):
         "use as a decorator": "def patch_new(): pass\n@patch_new\ndef x(): pass\n",
         "use as a default argument": (
             "def patch_new(): pass\ndef entry(f=patch_new): pass\n"
+        ),
+        "a nested helper that is defined AND called": (
+            "def patch_new(): pass\n"
+            "def entry():\n"
+            "    def inner(): patch_new()\n"
+            "    inner()\n"
+            "entry()\n"
+        ),
+        "a nested helper two levels down": (
+            "def patch_new(): pass\n"
+            "def entry():\n"
+            "    def outer():\n"
+            "        def inner(): patch_new()\n"
+            "        inner()\n"
+            "    outer()\n"
+            "entry()\n"
         ),
     }
 
