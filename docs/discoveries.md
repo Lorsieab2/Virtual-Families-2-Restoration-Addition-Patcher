@@ -4229,6 +4229,46 @@ fault. The correlation with the B179-to-B180 delta is real, but no trace
 connects lost or sparse collision geometry to this register state, and none
 should be asserted without one.
 
+### The saved-register slots, and one exact relation across all five dumps
+
+`sub_4C8660`'s prologue is `push ebp / mov ebp,esp / sub esp,0x14 / push ebx /
+push esi / push edi`, so its own saved registers sit at `[ebp-0x18]` (ebx),
+`[ebp-0x1C]` (esi) and `[ebp-0x20]` (edi). Reading those out of the dumps:
+
+    dump          live esi   live edi     [ebp-0x18]   [ebp-0x1C]   [ebp-0x20]
+    B180 #18188      0      0x012E2515    0x00000001   0x012E2514   0x00000000
+    B180 #44912      0      0x009E2515    0x00000001   0x009E2514   0x00000000
+    B180 #56108      1      0x0131BD2D    0x00000003   0x0131BD2C   0x00000000
+    B181 #25632      2      0x00785A91    0x00000000   0x00785A90   0x00000000
+    B181 #48596      0      0x00785A91    0x00000000   0x00785A90   0x00000000
+
+Two things follow, and they should be kept apart.
+
+MEASUREMENT, exact in all five dumps: `live edi == [ebp-0x1C] + 1`. That slot
+is the SAVED ESI slot, and it still holds the correct object pointer. The
+caller's `inc edi` immediately before the fault accounts for the `+ 1`.
+
+Also measured: the saved slots are INTACT and CORRECT. Saved esi still holds
+the real pointer and saved edi still holds 0. Nothing overwrote the stack;
+only what the live registers ended up holding is wrong. This independently
+disposes of any remaining "the object was freed or relocated" reading.
+
+HYPOTHESIS, which fits edi and does NOT yet fit esi: a one-slot (4-byte)
+displacement, in which `pop edi` reads the saved-esi slot rather than the
+saved-edi slot. If that were the whole story, `pop esi` should then take the
+saved-ebx slot -- and that matches in only one of the five dumps (esi is
+0,0,1,2,0 against ebx slots 1,1,3,0,0). The slots tabulated above are the
+CALLER's, written at its own entry; the loop body has its own frame with its
+own saved ebx, so esi's source is probably a slot not yet identified.
+
+A related prediction was tested and FAILED, which is worth recording so it is
+not retried: if the displacement were instead large enough for `pop edi` to
+reach the pushed argument word (roughly the whole `0xCF0` frame), then
+`pop esi` would have read the word above it, `[ebp+12]`. That word is
+`0x010B289C`, `0x015758A0`, `0x010B289C`, `0x0057289C`, `0x0057289C` -- a
+pointer in every dump, never 0, 1 or 2. So the displacement, if there is one,
+is not frame-sized.
+
 ### The static stack-balance check, and why it does not close the question
 
 Since the epilogue argument fails, the stack-balance hypothesis was tested
