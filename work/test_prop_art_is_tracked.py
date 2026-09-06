@@ -18,6 +18,7 @@ engine at all -- VF2PatioSetPropAndTrack intercepts them and tracks the state
 externally. Drawing is still to be built. The art being present and correct is
 a precondition for that work, not evidence it is done.
 """
+import re
 import hashlib
 import struct
 import unittest
@@ -41,6 +42,50 @@ def _png(path):
     data = path.read_bytes()
     width, height = struct.unpack_from(">II", data, 16)
     return width, height, data[25], hashlib.sha256(data).hexdigest()[:16]
+
+
+
+# PHRASES THAT MEAN UNFINISHED, not bare topic words. Each entry has to be
+# unambiguous on its own, because a bare topic word is satisfied by a
+# sentence that says the opposite: "qa"/"build" by "Confirmed in a build /
+# QA complete", "rendering" by "rendering complete", "remains" by "no work
+# remains".
+_PENDING_PHRASES = (
+    "not yet", "not confirmed", "pending", "unconfirmed",
+    "still outstanding", "remains outstanding", "yet to be",
+    "has not been", "have not been", "nobody has",
+)
+
+# Even an unambiguous phrase is reversed by a negator beside it, and a
+# literal blocklist cannot enumerate those forms:
+#
+#   "Confirmed; nothing pending"            contains "pending"
+#   "Done -- nothing unconfirmed remains"   contains "unconfirmed"
+#   "No longer awaiting confirmation"       contains "awaiting"
+#
+# So negation is judged PER CLAUSE, and the matched phrase is blanked out
+# first so that "not yet" and "not confirmed" are not denied by their own
+# "not". A row that reports a finished substep AND an outstanding one --
+# "Rendering no longer pending; confirmation still outstanding" -- still
+# passes on the clause that is genuinely pending.
+_NEGATOR = re.compile(r"\b(no|not|nothing|none|never)\b")
+_CLAUSE_SPLIT = re.compile(r"[.;,]| but | and ")
+
+
+def _reads_as_pending(text):
+    """True when some clause says work is outstanding without denying it."""
+    for clause in _CLAUSE_SPLIT.split(text):
+        if not clause.strip():
+            continue
+        for phrase in _PENDING_PHRASES:
+            at = clause.find(phrase)
+            if at < 0:
+                continue
+            rest = clause[:at] + " " * len(phrase) + clause[at + len(phrase):]
+            if _NEGATOR.search(rest):
+                continue
+            return True
+    return False
 
 
 class TestSuppliedPropArt(unittest.TestCase):
@@ -129,11 +174,7 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
         # "remains" by "no work remains" -- every one of which presents the
         # feature as done, the exact claim this test exists to prevent.
         self.assertTrue(
-            any(phrase in text for phrase in (
-                "not yet", "pending", "unconfirmed", "not confirmed",
-                "still outstanding", "remains outstanding", "yet to be",
-                "has not been", "have not been", "nobody has",
-            )),
+            _reads_as_pending(text),
             "the row does not say what is still outstanding, so a reader "
             "cannot tell whether the props are known to work",
         )
