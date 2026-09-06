@@ -3816,9 +3816,41 @@ that B179 runs. B179 is therefore the newest known-good build, which makes
 the B179-to-B180 delta the tightest available bracket on the regression.
 Measured against the extracted bundles rather than the source tree:
 
-- **Exactly three shipped assets differ.** `InvisibleLounger.png.fmap`,
+- **WHAT THIS BRACKET DOES AND DOES NOT CONTROL FOR.** Each release ships 32
+  executable variants with different feature sets, so "B179 runs and B180
+  crashes" is a statement about two RELEASES, not yet a controlled comparison
+  of two matched variants. The executable actually run is a deployed copy whose
+  SHA-256 is `a87aa30555fe012c...`, and it matches NONE of the variants in the
+  extracted B180 release payload, so this record cannot say which variant it
+  is or what settings produced it. If the two runs used different settings, the
+  observed transition includes variant differences as well as build
+  differences.
+
+  This does not weaken the two claims below that rest on reading the binaries
+  themselves -- the absent behaviour registrations and the byte-identical retry
+  loop are properties of the specific files disassembled, whatever variant they
+  are. It does mean the ASSET delta above brackets two releases rather than two
+  matched builds. Recording the installed executable's hash and the selected
+  settings at the time of each run is what would close that gap, and it was not
+  captured.
+
+- **Three assets differ under `Assets/`.** `InvisibleLounger.png.fmap`,
   `InvisiblePatioTable.png.fmap` and `InvisiblePicnicTable.png.fmap`. Every
-  other file under `Assets/` is byte-identical between the two bundles.
+  other file in that directory is byte-identical, and neither bundle has a
+  path the other lacks -- 645 files each, compared over the UNION of paths so
+  a one-sided addition could not hide.
+
+  THAT IS NOT THE WHOLE BUNDLE, and an earlier version of this entry said
+  "exactly three shipped assets differ" without the qualifier, which is wrong
+  and would steer a diagnosis away from most of what actually changed. The
+  runtime `Images/` tree differs too: **100 files changed and one added**
+  (`Furniture/SpaLoungerStd.png`), 6540 files against 6541. The changed set is
+  the regenerated `HairstyleIcons/`. Those are loaded by the game and belong
+  in the delta.
+
+  So the bracket over the whole payload is 3 changed under `Assets/`, 100
+  changed and 1 added under `Images/`. The three fmaps are where this entry
+  looked first, not the only thing that moved.
 - **The change in all three is the documented desktop-safe strip**: the mobile
   object-type field is removed from the high half of each cell, and the mobile
   behaviour-hotspot cells whose payload is `0x0001` are zeroed. Both halves are
@@ -3826,7 +3858,13 @@ Measured against the extracted bundles rather than the source tree:
   `patch_mobile_furniture_pack.py:4172`.
 - **The executable gained an `.rsrc` section** of 0x15EB0 bytes, moving
   `.reloc` from `0x786000` to `0x79C000`. Parsing the resource directory shows
-  it holds only `ICON` and `GROUP_ICON`: the patcher icon. It is cosmetic.
+  it holds only `ICON` and `GROUP_ICON`. These are the STOCK GAME icon
+  resources, not the patcher's own branding: `offline_vf2_patcher.py` captures
+  `RT_ICON` (3) and `RT_GROUP_ICON` (14) from the player's original executable
+  and writes them into the patched one, while `patcher_icon.ico` is a separate
+  GUI and shortcut asset that never enters this section. An earlier version of
+  this entry called it "the patcher icon", which misidentifies where the bytes
+  come from and would make this measurement impossible to reproduce.
 
 ### What this rules out
 
@@ -3845,7 +3883,18 @@ Both were wrong, and both looked convincing before the check:
 - The shipped `Patio_table.png.fmap` does not carry the `9c18bec` seat-anchor
   correction, which read as a fix that never reached the artifact. It is not:
   the corrected map ships as `InvisiblePatioTable.png.fmap`, and the
-  vanilla-named file is deliberately left untouched as the restore baseline.
+  vanilla-named file in these two bundles carries the uncorrected bytes.
+
+  Stated precisely, because "deliberately left untouched" is too strong as a
+  general claim: `mobile_furniture_behavior_asset_patches()` copies the
+  corrected `pc_fmaps/Patio_table.png.fmap` into
+  `payload/MobileFurnitureBehaviorFmaps` and can target it back to
+  `Assets/Patio_table.png.fmap` when the default-on `mobile_furniture_behaviors`
+  setting is enabled, in which case an installed game carries the corrected map
+  under BOTH names. In the B179 and B180 payloads examined here that folder
+  contains no `Patio_table.png.fmap`, so the donor-named file is the
+  uncorrected one -- but an investigator must check the installed file rather
+  than assuming the restore payload is what runs.
 - `Picnic_table`'s far seats keep a `0x0002` residual after the strip. That is
   explicitly allowed and named in
   `test_no_map_keeps_a_fragment_of_the_mobile_object_type`: the map carries
