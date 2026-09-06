@@ -3808,3 +3808,53 @@
   `disabled_with_island_events` and preserve native E6 activation. A new
   renderer-off, no-B132 diagnostic links with this manifest boundary; runtime
   confirmation and final root-cause attribution remain pending.
+
+## The B179-to-B180 bundle delta, measured rather than inferred
+
+The owner confirmed on 5 September that B180 crashes as well as B181, and
+that B179 runs. B179 is therefore the newest known-good build, which makes
+the B179-to-B180 delta the tightest available bracket on the regression.
+Measured against the extracted bundles rather than the source tree:
+
+- **Exactly three shipped assets differ.** `InvisibleLounger.png.fmap`,
+  `InvisiblePatioTable.png.fmap` and `InvisiblePicnicTable.png.fmap`. Every
+  other file under `Assets/` is byte-identical between the two bundles.
+- **The change in all three is the documented desktop-safe strip**: the mobile
+  object-type field is removed from the high half of each cell, and the mobile
+  behaviour-hotspot cells whose payload is `0x0001` are zeroed. Both halves are
+  intended; the zeroing is the "unsafe behaviour cells stripped" described at
+  `patch_mobile_furniture_pack.py:4172`.
+- **The executable gained an `.rsrc` section** of 0x15EB0 bytes, moving
+  `.reloc` from `0x786000` to `0x79C000`. Parsing the resource directory shows
+  it holds only `ICON` and `GROUP_ICON`: the patcher icon. It is cosmetic.
+
+### What this rules out
+
+- **The five added behaviours are not the cause.** B180 contains zero of the
+  five `SetMacro` registrations for ids `0x0B1`-`0x0B4` and `0x0B8`, and B180
+  crashes. This previously rested on attributing crash records to binaries;
+  it now rests on a build the owner has personally confirmed crashes.
+- **The faulting loop is not new.** The byte sequence `47 83 3e 00 74 ed`
+  occurs exactly once in each of B179, B180 and B181. The working build
+  contains the same retry loop at the same place in the same function.
+
+### Two claims withdrawn after checking
+
+Both were wrong, and both looked convincing before the check:
+
+- The shipped `Patio_table.png.fmap` does not carry the `9c18bec` seat-anchor
+  correction, which read as a fix that never reached the artifact. It is not:
+  the corrected map ships as `InvisiblePatioTable.png.fmap`, and the
+  vanilla-named file is deliberately left untouched as the restore baseline.
+- `Picnic_table`'s far seats keep a `0x0002` residual after the strip. That is
+  explicitly allowed and named in
+  `test_no_map_keeps_a_fragment_of_the_mobile_object_type`: the map carries
+  `0x3ae` as well as `0x3ac`, and `0x3ae - 0x3ac` is `0x2`.
+
+### One real gap in the checks, with the bytes currently correct
+
+`test_every_kept_cell_keeps_its_payload_verbatim` guards its comparison with
+`if pc:`, so it skips every cell the transform zeroed. A transform that
+wrongly cleared a cell it should have kept would pass that check silently.
+The current bytes are right, so this is a hole in the check rather than a
+defect in the data.
