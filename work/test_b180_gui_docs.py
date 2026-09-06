@@ -398,9 +398,22 @@ class TestTheRecurringPatternIsRecorded(unittest.TestCase):
         degrades, and it would read as tidier while carrying less.
         """
         entry = self._entry()
-        for marker in ("1.", "5.", "9."):
-            with self.subTest(marker):
-                self.assertIn(marker, entry)
+        # ALL NINE, anchored to the start of their list line. Checking only
+        # 1, 5 and 9 meant deleting entries 2-4 and 6-8 left every
+        # assertion green while the artefact lost most of the list this
+        # test exists to protect. A bare "5." also matches any decimal in
+        # prose -- a version number, a byte count -- so the anchor matters
+        # as much as the count.
+        import re
+        found = {
+            int(m) for m in re.findall(r"^\s*(\d+)\.", entry, re.M)
+        }
+        missing = sorted(set(range(1, 10)) - found)
+        self.assertEqual(
+            missing, [],
+            f"the entry has lost enumerated cases {missing}; a summary of "
+            "nine cases is not the same artefact as the nine cases",
+        )
 
     def test_it_records_what_catches_the_fault(self):
         """The instances are the evidence; the practices are the point."""
@@ -420,7 +433,30 @@ class TestTheRecurringPatternIsRecorded(unittest.TestCase):
         The ornaments count was checked identically and was correct. Losing
         that invites someone to "fix" a right number.
         """
-        self.assertIn("ornaments", self._entry())
+        entry = self._entry()
+        self.assertIn("ornaments", entry)
+        # SCOPED to the ornaments sentence. Searching the whole entry for
+        # "correct" matched unrelated case 3, which contains "claimed the
+        # correction", so the ornaments passage could have been changed to
+        # say twelve was WRONG with every assertion still green.
+        i = entry.lower().index("ornaments")
+        passage = entry[max(0, i - 200):i + 320].lower()
+        # The SUBJECT alone does not preserve the counter-case. The entry
+        # could be edited to say the ornaments count was also wrong, or
+        # keep an unrelated ornaments mention, and this would still pass
+        # while the evidence against "every claim was wrong" disappeared.
+        # So assert the count and the outcome.
+        self.assertIn(
+            "twelve", passage,
+            "the counter-case no longer states the count that was checked",
+        )
+        self.assertIn(
+            "correct", passage,
+            "the counter-case no longer says the ornaments count was "
+            "RIGHT, which is the whole point of keeping it -- without that "
+            "the entry reads as 'every claim was wrong' and invites "
+            "someone to fix a correct number",
+        )
 
 
 if __name__ == "__main__":

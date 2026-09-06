@@ -2245,3 +2245,424 @@ B181 was published, and what its verification did and did not establish
   the asset as separate steps, with the full 40-character SHA, worked. Only
   querying the release state after each attempt distinguished the failures from
   the success.
+
+B182 the picnic and patio props: four defects, all confirmed, all fixed
+- The owner reported directly that "the props also don't draw on the picnic
+  tables or the patios". They did not draw in B181 or in any earlier build.
+  Four separate defects were responsible. Each was confirmed against the
+  shipped B181 executable or against the engine's own disassembly, not from
+  reading the diff, and the first of them made the other three invisible.
+
+- 1. THE IMAGE DESCRIPTORS WERE RESERVED AND NEVER POPULATED.
+  patch_graphics_manager() reserved three descriptor records for the sprites --
+  the "+ len(PROP_ART_IMAGE_ORDER)" term in append_count -- but no loop ever
+  wrote them. Every other image block sets an id, a path-symbol relocation and
+  the grid dimensions; the prop block got zero-filled space and nothing else.
+  The ids prop_art_image_id() computes therefore pointed at blank descriptors
+  and GetImageGrid() could not resolve any of the three.
+  The artifact says so exactly. Every populated descriptor carries a
+  path-symbol relocation, so its path string ends up in the linked executable.
+  In the shipped B181 binary:
+      SpaLoungerStd.png   present     <- a populated descriptor
+      mealSE.png          ABSENT
+      mealSW.png          ABSENT
+      patioDrinks.png     ABSENT
+  in every form, with and without an "Images/" prefix.
+
+- 2. THE DRAW WAS ON A CONDITIONAL PATH. All 48 AddDecal calls in
+  CDecal::RefreshProps sit inside per-prop active branches of its switch. The
+  wrapped site at +0xA6A is reached only by a jmp to 0xa62 from those branches
+  and sits within two nested loops (cmp esi,4 and cmp ebx,0x55), so the props
+  drew only while some unrelated stock prop happened to be active.
+  There is no unconditional call site inside RefreshProps to move to, and every
+  call in it is inside that switch.
+  AN INTERMEDIATE ATTEMPT WRAPPED CDecal::InitDecals, RefreshDecals' first
+  instruction. That is unconditional, which was the requirement, and it was
+  WRONG -- InitDecals EMPTIES the decal array, so the capacity check in defect
+  4 below would have run against freshly cleared storage, always found room,
+  and the two added decals would then have pushed the STOCK pass past the
+  256-slot end. A guard that reads as protection while causing the overflow it
+  exists to prevent. It was caught in review before shipping.
+  THE INSTALLED HOOK is CDecal::RefreshDecals' TAIL JUMP to
+  CDecal::RefreshProps -- an E9 at +0xB6F whose REL32 relocation is at +0xB70,
+  four bytes before the section end, and the ONLY REL32 reference to
+  RefreshProps in the whole object. The wrapper,
+  VF2RefreshPropsAndTableProps, calls RefreshProps and THEN draws, so the site
+  is unconditional AND at final decal occupancy, which are the two constraints
+  that have to hold at once.
+  Still zero added bytes, because that jump is already five bytes with a
+  relocation. The installer asserts exactly one such site and that it ends at
+  the section end, so if RefreshDecals ever stops ending in a tail call the
+  build fails rather than hooking it blind -- the wrapper CALLs RefreshProps
+  and therefore needs a real return.
+
+- 3. THE POSITION WAS THE WALK-TO ANCHOR, NOT THE TABLE.
+  CFurnitureManager::FindFurniture ends by copying the matched record into
+  sFurnitureInfo2 and adjusts the position on the way:
+      +0x110  sub  esi, [eax]        ; hotspot x
+      +0x115  sub  edx, [eax + 4]    ; hotspot y
+      +0x121  mov  ecx, [ebx + 0x14] ; record x
+      +0x124  mov  eax, [ebx + 0x18] ; record y
+      +0x127  add  ecx, esi
+      +0x129  add  eax, edx
+      +0x137  mov  [edx + 8], ecx    ; -> info.point.x
+      +0x12E  mov  [edx + 0xc], eax  ; -> info.point.y
+      +0x13D  mov  [edx], eax        ; -> info.unknown0, the placement handle
+  So info.point is the tile a villager stands on to USE the item. Drawing there
+  puts the prop beside the table by however much that furniture map's hotspot
+  is offset. The capture now finds the record by its unique placement handle
+  and reads the record's own +0x14/+0x18 position and +0x10 orientation. An
+  unresolvable handle suppresses the draw rather than placing a prop somewhere
+  arbitrary.
+
+- 4. THE DRAW COULD WRITE PAST THE DECAL ARRAY. Both AddDecal overloads walk
+  the same free-slot scan -- occupancy byte at record + 0, stride 0x18 -- but
+  only the five-argument form guards with cmp edx,0x100 / jg before writing.
+  The four-argument form this feature calls has no comparison against any
+  bound. The previous justification, that the callers are gated on a prop being
+  placed so "at most two extra decals are ever added", bounds what the feature
+  ADDS and not what is already there: with all 256 slots occupied by the stock
+  refresh, the FIRST of these calls walks off the end.
+  Switching to the guarded overload is not available. Its extra argument is a
+  per-decal value RefreshProps reads from its own object -- [edi+0x1940]
+  indexed by the current prop, at +0x25BB8 -- and no constant is correct in its
+  place. The same bound is applied before the call instead, with the same
+  stride and occupancy byte taken from the disassembly.
+
+- WHY NOT THE PROP ARRAY AT ALL: CEnvironment + prop*16 holds through prop
+  0x54. CEnvironment::SetProp opens with cmp edi,54h followed by a JA, so the
+  two ids 0x55 and 0x56 would write 32 bytes past its last record. That is why
+  the state is tracked outside the array and the draw had to be added rather
+  than substituted for an existing one.
+
+- NOT YET CONFIRMED IN A BUILD OR IN PLAY. All four fixes are in source with
+  tests validated against known-bad builds -- removing each fix fails its own
+  test -- but they have not been through a matrix build, and nobody has seen a
+  prop on a table in a running game. The ledger row and the README both say so,
+  and the packaged GUI description was updated too, since that is the text a
+  player actually reads before enabling the setting.
+
+- A NOTE ON HOW THIS WAS NEARLY MISSED. The draw installer was checked earlier
+  in the same session and found to be DEFINED and CALLED, the sprite PNGs were
+  present in the player's install folder, and the build manifest recorded the
+  hook as "installed". That is four pieces of agreeing evidence, and the
+  conclusion drawn from them -- that the feature now worked and the docs saying
+  otherwise were stale -- was wrong. Reachability answers whether code runs,
+  never whether it produces the intended result; a feature also depends on
+  resources the code path does not mention, and reserved-but-unpopulated space
+  fails silently because sizes look right and offsets stay valid.
+
+B181/B180 startup crash: what is established, and the contradiction that remains
+- The owner reported that the latest build crashes on startup. The Windows
+  Application Error log records it twice on 2026-09-05 (13:16:55 and 13:22:08):
+      Faulting application  Virtual Families 2 - Modded B181.exe
+      Exception code        0xc0000005   (access violation)
+      Fault offset          0x000c8ace   (an RVA -> VA 0x4C8ACE)
+      Faulting module       the game executable itself
+  The game's own ldwLog.txt is NOT a crash log: it contains only "Seconds Timer
+  out of bounds (-6)!", which is identical in B180 and is timestamped before
+  B181 was built.
+
+- NOT A B181 REGRESSION. B180 faults at the identical instruction in the
+  identical function, at offset 0x0c869e -- exactly 0x430 lower, which is the
+  code inserted between the two builds. The retry loop that faults appears
+  exactly once in each binary.
+
+- THE FAULTING INSTRUCTION, resolved from the COFF symbol table of
+  VillagerAI.obj rather than by fingerprint:
+      ?TakePosition@CVillagerAI@@QAEXAAVCVillager@@@Z, .text$mn + 0x3D
+      0x4C8ACE   cmp dword ptr [esi], 0
+  Its call targets were read from that object's relocation table, which names
+  every one:
+      +0x00D  theGameState::Get()
+      +0x023  CVillagerPlans::ForgetPlans(villager, false)
+      +0x038  CVillagerAI::DecideWhatToDo(villager)    <- the loop body
+      +0x045  CVillager::Stop()
+      +0x04E  ldwGameState::GetRandom(int)
+  So the loop is:
+      +0x028  cmp dword ptr [esi], edi   ; edi == 0, and this READ SUCCEEDS
+      +0x02A  jne +0x43
+      +0x030  cmp edi, 0xa               ; up to ten attempts
+      +0x038  call DecideWhatToDo
+      +0x03D  inc edi
+      +0x03E  cmp dword ptr [esi], 0     ; FAULT
+  esi is set once at +0x009 (mov esi, ecx) and never rewritten in the function,
+  and the read at +0x028 must have succeeded for execution to reach +0x3E. The
+  window is therefore ONE CALL WIDE, and the call is the function this patcher
+  inserts bytes into.
+
+- BOTH CALLERS OF THE OUTER LOOP ARE NAMED. CVillagerManager::TakePositions
+  (0x4CBF40) is the only caller of TakePosition, and has exactly two callers of
+  its own, found by an exhaustive scan of every E8 in .text:
+      0x49A348  inside theGameState::Load(int)         -- the save-load path
+      0x4A27A4  inside theMainScene::UpdateScene()     -- the per-frame path
+  Neither function is virtual; neither address is stored as a pointer anywhere
+  in the image. Both callers load the same fixed manager, mov ecx, 0x718E20.
+
+- THE ADDED-FURNITURE CODE WAS CLEARED STRUCTURALLY, each with a check:
+  * the inserted payload ships as designed at 0x4C891B -- 12 bytes pushed,
+    8 popped by add esp,8 plus 4 by pop ecx, balanced; and cdecl right-to-left
+    order gives the callee arg0=esi (the CVillager&, confirmed from the
+    pristine prologue mov esi,[ebp+8]) and arg1=ecx (stockWeight).
+  * its jne lands on 0x4C896E, the real stock epilogue, on a valid instruction
+    boundary, with the pops and the security-cookie check intact.
+  * all 174 branches in the patched DecideWhatToDo (575 instructions) land on
+    decoded instruction boundaries and none escapes the function. There are no
+    indirect jump-table dispatches in it.
+  * esi discipline is structurally identical to the pristine object: one ret,
+    one pop esi, and the only writes to esi are the prologue load and that pop.
+  * all five added behaviour handlers are 78 bytes with 2 branches and no bad
+    targets, each resolved from its single SetMacro registration.
+  * behaviour ids 0xB1-0xB4 and 0xB8 are genuinely unregistered -- verified
+    against the pristine Behavior.obj with the scan bounded to
+    CBehavior::CBehavior via the symbol table: 387 stock registrations, max id
+    0x19A, and those five among the 24 free ids below it.
+  * the cloned candidate records land at villager+0xFB88..0x10208, far below
+    the behaviour label buffer at 0x1BBA8 and the struct end at 0x1CC0C.
+  * CVillagerManager::TakePositions is BYTE-IDENTICAL to the pristine object
+    with call operands masked, so the patcher did not touch the outer loop.
+
+- THE CONTRADICTION. esi is a villager slot, VillagerManager + 0x1CC70 +
+  index * 0x1CC0C, so the thirty slots span 0x735A90..0xA943F8. That is inside
+  .data (VA 0x572000..0xB7E76C) and inside SizeOfImage (image ends 0xBAD000),
+  which is committed memory: a read there cannot raise an access violation.
+  Yet the event log records a real 0xc0000005 reading exactly there.
+  One of those premises must be wrong, and the honest position is to say so
+  rather than choose a story. Candidates not yet excluded: the manager not
+  being at 0x718E20 at fault time; a third entry into TakePositions; or the
+  outer loop's bound being wrong in the failing run.
+
+- RULED OUT, so nobody re-runs them:
+  * stack exhaustion. DecideWhatToDo's own frame is sub esp,0xCF0, but the
+    calls are sequential rather than nested, PE stack reserve is 0x100000, and
+    it does not call TakePosition, TakePositions or itself.
+  * the outer loop walking out of .data. It would need 38 iterations to leave
+    the section and its bound is 30.
+  * the one-slot stack-buffer overflow in TakePositions. edi can reach 30 and
+    the buffer holds 30 entries before the cookie at ebp-4, so a 30th write
+    lands on the cookie -- but that produces a fast-fail (0xC0000409) in the
+    epilogue, not an access violation inside the callee. It is also stock code,
+    byte-identical to the pristine object.
+  * the pet equivalent. CPetAI::TakePosition carries the same loop shape in
+    PetAI.obj, but the pattern occurs exactly ONCE in the shipped executable,
+    at the fault address, and TakePosition has exactly one caller.
+
+- A DEFECT FOUND ON THE WAY, recorded but deliberately NOT fixed because the
+  owner has not reported it and it is outside what was asked: the behaviour
+  label cache, gVF2BehaviorLabelCache, holds 64 raw CVillager* entries and is
+  never cleared -- not on save load, not on new game --  and
+  VF2BehaviorLabelCacheStillActive dereferences them. It is NOT an access
+  violation: villagers live in a fixed array, so a stale pointer addresses
+  valid mapped memory that now holds a DIFFERENT villager. That is a
+  wrong-label bug, not a fault.
+
+- METHOD NOTES, both of which produced a confidently wrong answer during this
+  investigation and were caught before being acted on:
+  * a section header's VirtualAddress field is an RVA. Adding the image base to
+    a value that already includes it produced ".data extends past SizeOfImage",
+    which looked like a spectacular finding and was arithmetic.
+  * scanning a whole image for a shaped byte sequence matches unrelated code.
+    Counting SetMacro registrations across the executable reported 423 ids
+    including 0x3FF; bounding the scan to the constructor via the object's
+    symbol table gave 387 and a clean maximum of 0x19A.
+
+B181 startup crash: the added furniture is NOT the cause, and it is intermittent
+- The entry above records the investigation as it stood when only the B181
+  crash was known. Two pieces of RUNTIME evidence have since settled the
+  attribution question, and both supersede everything the static analysis
+  could establish.
+
+- THE FULL CRASH HISTORY. Reading fourteen days of Windows Application Error
+  events rather than only the two the owner reported gives EIGHT crashes across
+  FOUR builds:
+      Sep 2 17:35  B178                  fault offset 0x0c7aae
+      Sep 2 17:49  Playtest 2            fault offset 0x0c7b1e
+      Sep 2 18:16  Playtest 2            fault offset 0x0c7aae
+      Sep 2 18:17  Playtest 2            fault offset 0x0c7aae
+      Sep 2 18:23  Playtest 2            fault offset 0x0c740e
+      Sep 4 23:53  B180                  fault offset 0x0c869e
+      Sep 5 13:16  B181                  fault offset 0x0c8ace
+      Sep 5 13:22  B181                  fault offset 0x0c8ace
+  The four Playtest 2 records carry four DIFFERENT PE timestamps, so that is
+  four separate rebuilds crashing, not one build four times.
+
+- EACH RECORD WAS MATCHED TO A BINARY BY PE TIMESTAMP, which is the only
+  reliable way to know which build a crash record belongs to. Three of the
+  faulting binaries survive on disk: B181, B180, and the B178 at
+  outputs/VF2-B178-matrix-20260902-final_all_enabled. All three disassemble at
+  their own fault offsets to the SAME instruction in the SAME function:
+      cmp dword ptr [esi], 0
+  inside the ten-attempt retry loop of
+  ?TakePosition@CVillagerAI@@QAEXAAVCVillager@@@Z, whose loop body is
+  CVillagerAI::DecideWhatToDo.
+
+- THE ADDED FURNITURE IS NOT THE CAUSE. B178 and B180 contain ZERO of the five
+  added behaviour registrations -- searched for as their SetMacro entries,
+  68 <id32> 8b ce e8, for ids 0x0B1, 0x0B2, 0x0B3, 0x0B4 and 0x0B8 -- and both
+  crash identically. B178 did so on 2 September, three days before those
+  behaviours existed at all. A feature that is absent cannot cause a crash that
+  is present.
+  That single comparison establishes what nine structural checks could not.
+  Payload bytes, argument order, stack balance, branch target, all 174 branches,
+  esi save and restore, caller-frame writes, the gate-off path, id collisions
+  and record bounds all came back clean, and none of them could EXONERATE the
+  added code, only fail to incriminate it. The runtime comparison does what the
+  static analysis could not.
+
+- AND IT IS INTERMITTENT. The Playtest 2 save folder holds a village file
+  written 5 September 01:39:44, hours after that build's four crashes on
+  2 September, and its bytes differ from the B180 folder's copy. So that build
+  loaded a save, ran, and wrote it back successfully. The crash is not
+  deterministic per build.
+  This also disposes of an earlier inference recorded above. B181 having left
+  ldwLog.txt untouched was read as a bound on how far execution got; it is not.
+  Playtest 2's log was last written 31 August and that build saved on
+  5 September without touching it, so the log is written only on occasional
+  events -- a blocked path, a timer warning -- and never at startup or
+  shutdown. The inference was void, not merely weak.
+
+- WHAT REMAINS UNEXPLAINED. esi is a villager slot and is READABLE at the loop
+  head and again at TakePosition+0x28, and unreadable at +0x3E. That is a
+  one-call-wide window around DecideWhatToDo, and no static examination of
+  either function accounts for it.
+
+- RULED OUT, each with a check rather than an argument:
+  * An esi overrun. The loop head reads [esi+0x1BB84], 113,540 bytes higher
+    than the faulting [esi], so the high read always leaves the section first.
+    There is NO index at which [esi] is unmapped while [esi+0x1BB84] is mapped,
+    so an out-of-range esi always faults at the loop head, one call earlier
+    than the observed fault. The villager array also has eight further slots of
+    headroom inside .data past its legitimate thirty.
+  * Stack exhaustion. The calls are sequential rather than nested, the PE stack
+    reserve is 0x100000, and DecideWhatToDo does not recurse.
+  * The one-slot stack-buffer overflow in CVillagerManager::TakePositions. It
+    would overwrite the security cookie and fast-fail (0xC0000409) in the
+    epilogue rather than access-violate inside the callee, and that function is
+    byte-identical to the pristine object.
+  * The CPetAI equivalent. CPetAI::TakePosition carries the same loop shape in
+    PetAI.obj, but the pattern occurs exactly once in the shipped executable,
+    at the fault address, and TakePosition has exactly one caller.
+  * Comparison against vanilla. This is USELESS as a baseline and should not be
+    attempted again: the recompile is different enough that the best match for
+    a 40-byte window from the modded build is 13 of 40 bytes somewhere in
+    vanilla, which is noise. "Absent from vanilla" is not evidence the patcher
+    wrote something. What CAN be compared is bounds rather than bytes, and
+    those agree: both builds bound their villager walks at 0x1e at exactly
+    twenty sites, so the recompile changed codegen and not the logic.
+
+- THE ONE INPUT THAT WOULD NARROW IT is whether any build has ever launched
+  cleanly on the first attempt, or whether launching usually takes a couple of
+  tries. An intermittent launch-time fault has a different search than a
+  deterministic one, and the evidence above says this is the former.
+
+The faulting loop is the GAME'S OWN CODE, present in the pristine object
+- The two entries above establish that the crash predates the added furniture
+  and is intermittent. This settles the remaining attribution question
+  outright, and it does so without depending on any crash record.
+
+- THE PRISTINE OBJECT CONTAINS THE FAULTING INSTRUCTION.
+  work/desktop_obj_files/VillagerAI.obj is gitignored and is extracted from the
+  player's own installation -- it is the game's shipped code, not anything this
+  patcher generates. Disassembling
+  ?TakePosition@CVillagerAI@@QAEXAAVCVillager@@@Z from it:
+
+      +0x0028  393e           cmp  dword ptr [esi], edi
+      +0x002A  7517           jne  0x43
+      +0x0030  83ff0a         cmp  edi, 0xa            <- the ten-retry bound
+      +0x0033  7d0e           jge  0x43
+      +0x0035  53             push ebx
+      +0x0036  8bce           mov  ecx, esi
+      +0x0038  e800000000     call <CVillagerAI::DecideWhatToDo>
+      +0x003D  47             inc  edi
+      +0x003E  833e00         cmp  dword ptr [esi], 0  <- THE FAULTING READ
+      +0x0041  74ed           je   0x30
+
+  The byte pattern 47 83 3e 00 74 ed occurs once in the whole object, in that
+  function. The retry loop, its bound, and the exact instruction that faults
+  are all present BEFORE the patcher touches anything.
+
+- WHY THIS IS STRONGER THAN THE CRASH-RECORD ARGUMENT. That argument rests on
+  B178 and B180 crashing identically while containing none of the five added
+  behaviour registrations, which is sound but depends on correctly attributing
+  crash records to binaries. This does not depend on the crash at all: the
+  faulting instruction exists in untouched game code, so no part of the patcher
+  wrote it.
+
+- WHAT IT DOES NOT ESTABLISH. The loop being stock does not prove the patcher
+  cannot CAUSE it to fault. Whether something in the build makes esi go bad
+  inside DecideWhatToDo is a separate question that an object file cannot
+  answer. It removes "the patcher introduced a bad loop" from the table; it
+  does not close the investigation.
+
+- A CORRECTION TO AN EARLIER LINE OF ATTACK, recorded because it was pursued at
+  length. A register-agnostic decoded scan of the vanilla executable found ZERO
+  up-to-ten retry loops re-checking a dereferenced pointer, against one in every
+  modded build, which looked like evidence the recompile had introduced it. It
+  is not. The pristine object settles that vanilla contains the identical logic
+  and merely expresses it in a form the pattern could not match -- retail
+  codegen may inline, unroll, or keep the counter in memory.
+
+- THE GENERAL RULE, which cost three separate mistakes in one investigation:
+  AN ABSENCE FOUND BY PATTERN MATCHING IS NEVER EVIDENCE OF AN ABSENCE IN FACT.
+  It is evidence about the pattern. The three instances were a whole-image scan
+  reporting eleven behaviour registrations in the unpatched vanilla executable
+  (impossible, so the method was wrong rather than the data); a check that
+  symbol names were absent from a release build (they are stripped, so it
+  answers nothing); and the vanilla loop scan above. A decoded scan is stronger
+  than a raw byte scan and is not immune. The tell is the same every time: a
+  result that would be surprising if true needs a second, different artifact
+  before it is believed -- not a tighter pattern.
+
+The crash is in theGameState's CONSTRUCTOR, and it is deterministic
+- The owner answered two questions that reshaped this entirely: "B181 doesn't
+  even open. it crashes" and, asked whether it had ever started, "no b181 has
+  never opened successfully". So the fault is not intermittent and does not
+  involve loading a family, a menu, or any player action.
+
+- THE PATH, resolved from the object symbol tables rather than guessed:
+
+      theGameState::theGameState()            <- THE CONSTRUCTOR
+        -> theGameState::Load(int)             0x499F10
+           -> CFurnitureManager::LoadState     0x467BF0  (gates the next call)
+           -> CVillagerManager::TakePositions  0x4CBF40
+              -> CVillagerAI::TakePosition     0x4C8A90
+                 -> cmp dword ptr [esi], 0     0x4C8ACE   <<<< FAULT
+
+  The naming misled the investigation for a long time. theGameState.obj
+  defines TWO Load symbols -- ?Load@theGameState@@UAE_NH@Z and
+  ?Load@theGameState@@QAEXXZ -- as well as LoadCurrentGame and Init. Only the
+  first calls TakePositions, and it also calls CVillagerManager::LoadState.
+  Asking what references THAT function gives exactly one caller in the entire
+  object set: ??0theGameState@@IAE@XZ, the constructor. Nothing else calls it.
+
+- WHY THIS RECONCILES EVERY FACT, including two that never fitted:
+  * "doesn't even open" is accurate. The crash happens during theGameState
+    CONSTRUCTION, before a window is drawn -- which looks like never starting
+    from outside while being some way into initialisation.
+  * it is deterministic because a constructor runs on every launch,
+    unconditionally.
+  * the earlier finding that TakePositions is on the save-load path was right
+    about the mechanism and wrong about the timing. That path runs at STARTUP,
+    not when a player picks a family.
+  * theMainScene::UpdateScene, the other caller of TakePositions, never
+    mattered: the game dies before a scene exists.
+
+- THE FAULTING CODE IS IDENTICAL IN A BUILD THAT NEVER CRASHED. B174.2, built
+  30 August and with no crash record, has the same TakePositions loop-head
+  signature (one hit in each binary) and a byte-identical loop tail:
+      B174.2  568bcee8e5caffff4381c60ccc010083fb1e7cae
+      B181    568bcee8e5caffff4381c60ccc010083fb1e7cae
+  Same stride 0x1CC0C, same bound 0x1E, same call. The difference between the
+  two builds is not in this function.
+
+- WHAT THIS RETIRES. Every "intermittent, frequency-shifted" framing the
+  investigation had been reasoning within, and with it the Playtest 2
+  succeeded-on-Sep-5 datapoint as evidence about B181: different build, and
+  B181's own record is two attempts, two crashes, no successes. A deterministic
+  failure in code that a near-identical build does not exhibit is a far tighter
+  target than an intermittent one.
+
+- WHAT REMAINS. Something in B181 makes that walk fault on every launch while
+  B174.2 does not, and the faulting function is identical between them. The
+  narrowest remaining target is theGameState's constructor itself and whatever
+  it sets up before Load runs.

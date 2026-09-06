@@ -73,10 +73,18 @@ QAMF = b"QAMF"
 PINNED_CELLS = {0x2000B000: 0x96, 0x2000B800: 0x97, 0x2000C000: 0x98}
 
 # Desktop donors and the object each carries, read from the QAMF maps.
+# The object each donor map must carry. HammockStd is included because the
+# transparency log documents it alongside the other three; leaving it out
+# meant the donor the log names as distinguishable was never checked.
+# The objects each donor map must carry. HammockStd carries TWO -- 0x13 and
+# 0x5b -- and the transparency log names both, so both are pinned; listing
+# only 0x13 would let 0x5b vanish from the map with every assertion still
+# green.
 DONOR_OBJECTS = {
-    "YogaGearStd": 0x75,
-    "TreadmillStd": 0x04,
-    "PoolTableStd": 0x36,
+    "YogaGearStd": (0x75,),
+    "TreadmillStd": (0x04,),
+    "PoolTableStd": (0x36,),
+    "HammockStd": (0x13, 0x5B),
 }
 
 
@@ -97,13 +105,30 @@ def require_desktop_objects(case):
     player's own installation, not committed -- so a fresh clone has no
     theMainScene.obj to read.
     """
-    if not SCENE.is_file():
+    # PRESENCE IS DECIDED BY THE DIRECTORY, not by one file inside it.
+    # Testing for theMainScene.obj alone meant a payload that IS present
+    # but has lost that file skipped SILENTLY -- the check disappeared
+    # exactly when something was wrong with the thing it checks, and a
+    # fresh clone was indistinguishable from a damaged one in the output.
+    if not SCENE.parent.is_dir():
         case.skipTest("desktop_obj_files is a gitignored build input")
+    if not SCENE.is_file():
+        case.fail(
+            f"desktop_obj_files exists but {SCENE.name} is missing from "
+            "it. That is a damaged build input, not an absent one, and it "
+            "must not be reported as a skip."
+        )
 
 
-def desktop_objects(name):
-    """Objects in a DESKTOP map, refusing anything that is not QAMF."""
-    path = DESKTOP / f"{name}.png.fmap"
+def desktop_objects(name, directory=None):
+    """Objects in a DESKTOP map, refusing anything that is not QAMF.
+
+    `directory` exists so the rejection test can push a real mobile file
+    through THIS function rather than re-implementing the magic check in
+    the test. A test that raises its own AssertionError proves nothing
+    about the parser and would keep passing if this guard were deleted.
+    """
+    path = (directory or DESKTOP) / f"{name}.png.fmap"
     blob = path.read_bytes()
     if blob[:4] != QAMF:
         raise AssertionError(
@@ -144,30 +169,61 @@ class TestTheTwoContainersAreNotInterchangeable(unittest.TestCase):
         )
 
     def test_the_desktop_parser_refuses_the_mobile_file(self):
-        """Refusing beats returning meaningless numbers."""
-        with self.assertRaises(AssertionError):
-            blob = (MOBILE / "YogaGearStd.png.fmap").read_bytes()
-            if blob[:4] != QAMF:
-                raise AssertionError("not QAMF")
+        """Refusing beats returning meaningless numbers.
+
+        Routed through the REAL desktop_objects() parser. This previously
+        read the file and raised its own AssertionError, so it never
+        touched the parser at all and would have stayed green with the
+        magic check removed -- the precise regression it claims to
+        prevent. Applying the desktop decoder to FMP4 bytes does not
+        fail loudly; it returns tidy, meaningless numbers, which is what
+        produced the withdrawn "all donors are identical" finding.
+        """
+        with self.assertRaises(AssertionError) as caught:
+            desktop_objects("YogaGearStd", directory=MOBILE)
+        self.assertIn(
+            "not QAMF", str(caught.exception),
+            "the parser raised for some other reason than the magic "
+            "check, so this does not pin the guard",
+        )
 
 
 class TestTheDesktopDonorsAreDistinguishable(unittest.TestCase):
     """The correction. They are NOT identical; the earlier claim was wrong."""
 
     def test_each_donor_carries_its_own_object(self):
+        """Distinguishability is checked from the DECODED maps.
+
+        This previously recorded the hardcoded expected value into `seen`
+        and then asserted those were distinct -- which is guaranteed by
+        DONOR_OBJECTS having distinct literals, and says nothing about the
+        maps. If every donor acquired all four objects the assertion would
+        still have passed while the donors became indistinguishable, which
+        is the exact conclusion this class exists to pin.
+
+        The decoded object SET is stored instead, so the comparison is
+        between what the maps actually contain.
+        """
         require_desktop_payload(self)
-        seen = {}
+        signatures = {}
         for name, expected in DONOR_OBJECTS.items():
             with self.subTest(name):
                 objects = desktop_objects(name)
-                self.assertIn(
-                    expected, objects,
-                    f"{name} no longer carries object {expected:#x}",
+                missing = [o for o in expected if o not in objects]
+                self.assertEqual(
+                    missing, [],
+                    f"{name} no longer carries "
+                    + repr([hex(o) for o in missing]),
                 )
-                seen[name] = expected
+                # Object 0 is the empty cell and appears in every map, so
+                # it carries no identifying information.
+                signatures[name] = frozenset(objects) - {0}
         self.assertEqual(
-            len(set(seen.values())), len(seen),
-            "the donors must remain distinguishable from one another",
+            len(set(signatures.values())), len(signatures),
+            "two donor maps decode to the SAME object set, so they cannot "
+            "be told apart: "
+            + repr({k: sorted(hex(o) for o in v)
+                    for k, v in signatures.items()}),
         )
 
     def test_the_yoga_object_is_unique_across_desktop_maps(self):
@@ -187,6 +243,78 @@ class TestTheDesktopDonorsAreDistinguishable(unittest.TestCase):
                     carriers.append(path.name)
                     break
         self.assertEqual(carriers, ["YogaGearStd.png.fmap"])
+
+
+class TestTheDropPathClaimRunsOnAFreshClone(unittest.TestCase):
+    """The same contract, read from a TRACKED file so it never skips.
+
+    The object-file test below is the stronger check -- it reads the real
+    COFF relocations -- but work/desktop_obj_files is gitignored, so on a fresh
+    clone it skips and the central claim of this module goes unverified. A
+    suite that reports success without ever checking its own headline claim is
+    worse than one that fails.
+
+    work/theMainScene_disasm.txt IS tracked and carries the full body of
+    HandleDropOnHotSpot, so the claim can be checked everywhere:
+
+        push ebp / mov ebp,esp / sub esp,8
+        call ?FeetPos@CVillager@@...
+        mov  ecx, offset ?ContentMap@@...
+        call ?GetHotSpot@CContentMap@@...
+        test eax,eax / je
+        call ?Dispatch@CHotSpot@@...
+        ret 4
+
+    FeetPos, GetHotSpot, Dispatch. No furniture manager, no item id.
+    """
+
+    DISASM = ROOT / "theMainScene_disasm.txt"
+
+    def _body(self):
+        self.assertTrue(
+            self.DISASM.is_file(),
+            f"{self.DISASM} is tracked and must exist; without it this "
+            "module's central claim is unverifiable on a fresh clone",
+        )
+        text = self.DISASM.read_text(encoding="utf-8", errors="replace")
+        marker = "?HandleDropOnHotSpot@theMainScene@@IAE?B_NAAVCVillager@@@Z ("
+        start = text.index(marker)
+        # The next function heading ends this one. Headings are the only lines
+        # that start at column 0 with a decorated name.
+        rest = text[start + len(marker):]
+        end = rest.index(chr(10) + "?")
+        return rest[:end]
+
+    def test_the_body_calls_only_feetpos_gethotspot_and_dispatch(self):
+        body = self._body()
+        for required in ("FeetPos", "GetHotSpot", "Dispatch"):
+            with self.subTest(required):
+                self.assertIn(required, body)
+
+    def test_the_body_never_touches_furniture(self):
+        """This is the claim the stock-donor argument rests on."""
+        body = self._body()
+        for forbidden in (
+            "FindFurniture", "FurnitureManager", "ItemAtPoint",
+            "PtOnFurniture", "LinkPeepToFurniture",
+        ):
+            with self.subTest(forbidden):
+                self.assertNotIn(
+                    forbidden, body,
+                    "HandleDropOnHotSpot references " + forbidden + ", so it "
+                    "could identify an added item after all and the "
+                    "stock-donor argument needs revisiting",
+                )
+
+    def test_the_body_is_short_enough_to_be_the_whole_function(self):
+        """Guards against the extraction silently grabbing nothing."""
+        body = self._body()
+        self.assertIn("ret", body, "the extracted body has no return")
+        self.assertGreater(
+            body.count(":"), 10,
+            "the extracted body is too short to be the real function; the "
+            "heading format probably changed",
+        )
 
 
 class TestTheStockDropPathNeverReadsAnItemId(unittest.TestCase):

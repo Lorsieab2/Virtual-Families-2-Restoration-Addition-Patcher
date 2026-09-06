@@ -10032,6 +10032,23 @@ def sync_invisible_furniture_reference_sets(manifest):
                 authentic = authentic_inherited_furniture_source(source_name)
                 if authentic is not None:
                     visible_source = authentic
+                else:
+                    # ADDED art gets the same treatment, and needs it for the
+                    # same reason. authentic_inherited_furniture_source() only
+                    # covers inheritance-only names, so art that is neither
+                    # inherited nor vanilla -- SpaLoungerStd.png, which exists
+                    # ONLY in new_furniture_art -- fell through to OUT and
+                    # snapshotted whatever a seed had put there.
+                    #
+                    # Checked BEFORE the existence test below, not inside it.
+                    # A seed copy that exists but is stale would otherwise win
+                    # simply by existing, which is the ordering bug this
+                    # function keeps hitting: install_new_furniture_art()
+                    # writes the correct bytes into OUT, but it runs after
+                    # this.
+                    added = NEW_FURNITURE_ART_DIR / source_name
+                    if added.is_file():
+                        visible_source = added
             if source_name and not visible_source.exists():
                 # Several bases are inheritance-only, so on an unseeded build
                 # they are not in OUT yet. Resolving them only under OUT
@@ -19525,94 +19542,149 @@ def patch_mobile_table_prop_draw(manifest):
     RefreshProps or RefreshDecals draws them. This adds two draws that were
     never there.
 
-    It costs ZERO added bytes. RefreshProps' last AddDecal call is already a
-    five-byte call with a relocation, so pointing that relocation at a wrapper
-    needs no trampoline, no cave and no section growth. The wrapper forwards to
-    the stock AddDecal and then draws ours, which is also the ordering we want:
-    our props land on top of every stock prop.
+    HOOKED ON THE UNCONDITIONAL TAIL CALL, AFTER THE STOCK PASS. Two
+    constraints have to hold at once and only one site satisfies both.
 
-    Deliberately NOT hooked at the epilogue. Overwriting
+    UNCONDITIONAL: the first version wrapped the last AddDecal call in
+    CDecal::RefreshProps, which does not run every refresh -- all 48 AddDecal
+    calls in that function sit inside per-prop active branches of its switch,
+    so the table props only drew while some unrelated stock prop happened to
+    be active.
+
+    AT FINAL OCCUPANCY: the draw checks the decal array before adding, because
+    the four-argument AddDecal overload has no bounds check of its own.
+    Hooking CDecal::InitDecals -- RefreshDecals' first instruction -- is
+    unconditional but wrong for this, because InitDecals EMPTIES the array:
+    the check would always find room, and the two added decals would then push
+    the stock pass past the 256-slot end.
+
+    CDecal::RefreshDecals ends with a TAIL JUMP to CDecal::RefreshProps, an E9
+    at +0xB6F whose REL32 relocation is at +0xB70, four bytes before the end of
+    the section. Retargeting it to a wrapper that calls RefreshProps and then
+    draws satisfies both constraints.
+
+    It costs ZERO added bytes: that jump is already five bytes with a
+    relocation, so retargeting it needs no trampoline, no cave and no section
+    growth.
+
+    Deliberately NOT hooked at a function epilogue. Overwriting
     `pop edi/esi/ebx; mov esp,ebp` with a call and reproducing those
     instructions in a naked helper cannot work -- `mov esp,ebp` restores the
     CALLER's frame and destroys the helper's own return address. Wrapping an
     existing call site avoids that entire class of problem.
 
-    The wrapped site uses the FIVE-argument AddDecal, which is the
-    bounds-checked overload. The wrapper forwards to it unchanged; only our own
-    draws use the four-argument form, and those are gated on the prop actually
-    being placed rather than on a scan that never stops.
+    The site is asserted to be a single tail jump ending exactly at the section
+    end. If RefreshDecals ever stops ending that way the wrapper's return
+    would land somewhere unintended, so the build fails rather than hooking it
+    blind.
     """
     path = PATCHED / "Decal.obj"
     obj = CoffObject(path)
-    refresh_props = obj.symbol("?RefreshProps@CDecal@@QAEXXZ")
-    section = obj.section(refresh_props.section)
-    add_decal_5 = obj.symbol("?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z")
-
-    # Find the LAST AddDecal call inside RefreshProps by walking the section's
-    # relocations, rather than pinning a fixed offset. A shifted function then
-    # fails loudly instead of hooking whatever now sits at that address.
+    # THE DRAW HANGS OFF THE UNCONDITIONAL TAIL CALL, and runs AFTER the
+    # stock pass.
     #
-    # The search runs to the end of the section, which is the function's real
-    # extent -- RefreshProps is the only symbol in it, at value 0. An earlier
-    # hardcoded length of 0xA83 excluded nothing (the chosen site is 0xa6b and
-    # the section is 0xba4), but it sat just 0x18 bytes above that site: had
-    # the function grown a later AddDecal call past the cutoff, the search
-    # would have silently settled on an EARLIER call and drawn our props
-    # partway through the stock prop pass instead of on top of it. No error
-    # would fire, because a site was still found.
-    search_end = refresh_props.value + section.raw_size
-    hook_vaddr = None
-    ptr = section.reloc_ptr
-    for _ in range(section.nreloc):
-        rec_vaddr, rec_sym, _rec_type = struct.unpack_from("<IIH", obj.buf, ptr)
+    # Two constraints have to hold at once and only this site satisfies both.
+    #
+    # UNCONDITIONAL: every AddDecal call inside CDecal::RefreshProps -- all 48
+    # of them -- sits inside a per-prop active branch of its switch, so
+    # wrapping any one of them runs our draws only while that particular stock
+    # prop is active, and the table props would appear and vanish with
+    # unrelated furniture. That is what the first version of this hook did.
+    #
+    # AFTER THE STOCK PASS: the draw checks the decal array's occupancy before
+    # adding, because the four-argument AddDecal overload has no bounds check
+    # of its own. Hooking CDecal::InitDecals -- RefreshDecals' first
+    # instruction -- is unconditional but WRONG for this, because InitDecals
+    # EMPTIES the array: the check would always find room, and our two decals
+    # would then push the stock pass past the 256-slot end.
+    #
+    # CDecal::RefreshDecals ends with a TAIL JUMP to CDecal::RefreshProps
+    # (an E9 at +0xB6F with a REL32 relocation at +0xB70). Retargeting it to a
+    # wrapper that calls RefreshProps and then draws gives an unconditional
+    # site at final occupancy, and costs zero added bytes for the same reason
+    # as before: the five-byte jump already exists with a relocation, so no
+    # trampoline, no cave and no section growth.
+    #
+    # The wrapper CALLs RefreshProps rather than jumping, so it needs a real
+    # return -- which is why the site must be the tail jump and not a `ret`.
+    refresh_props_sym = obj.symbol("?RefreshProps@CDecal@@QAEXXZ")
+    refresh_decals = obj.symbol("?RefreshDecals@CDecal@@QAEXXZ")
+    decals_sec = obj.section(refresh_decals.section)
+    tail_sites = []
+    ptr = decals_sec.reloc_ptr
+    for _ in range(decals_sec.nreloc):
+        rec_vaddr, rec_sym, rec_type = struct.unpack_from("<IIH", obj.buf, ptr)
         ptr += 10
-        if rec_sym != add_decal_5.index:
+        if rec_sym != refresh_props_sym.index or rec_type != IMAGE_REL_I386_REL32:
             continue
-        if not (refresh_props.value <= rec_vaddr - 1 < search_end):
+        if obj.buf[decals_sec.raw_ptr + rec_vaddr - 1] != 0xE9:
             continue
-        if obj.buf[section.raw_ptr + rec_vaddr - 1] != 0xE8:
-            continue
-        if hook_vaddr is None or rec_vaddr > hook_vaddr:
-            hook_vaddr = rec_vaddr
-    if hook_vaddr is None:
+        tail_sites.append(rec_vaddr)
+    # Exactly one, and it must be the LAST instruction of the function -- a
+    # five-byte jump whose operand ends at the section end. Anything else means
+    # the tail call is no longer a tail call, so the wrapper's return would
+    # land somewhere unintended; fail rather than hook it blind.
+    if len(tail_sites) != 1 or tail_sites[0] + 4 != decals_sec.raw_size:
         raise RuntimeError(
-            "CDecal::RefreshProps has no AddDecal call to wrap; the prop draw "
-            "hook cannot be installed"
+            "CDecal::RefreshDecals does not end in a single tail jump to "
+            "RefreshProps; the prop draw cannot be hooked after the stock "
+            f"pass (found {[hex(s) for s in tail_sites]}, section size "
+            f"{hex(decals_sec.raw_size)})"
         )
-
-    # __fastcall mangles as @Name@<total argument bytes>: 4 each for the ECX
-    # and EDX slots plus five stack arguments = 28. The same convention as
-    # MOBILE_PATIO_PROP_HELPER_SYMBOL, which is @VF2PatioSetPropAndTrack@12.
-    helper = obj.append_undefined_symbol(
-        "@VF2RefreshPropsAddDecalAndProps@28"
-    )
+    draw_helper = obj.append_undefined_symbol("@VF2RefreshPropsAndTableProps@8")
     obj.retarget_relocation(
-        refresh_props.section, hook_vaddr, helper, IMAGE_REL_I386_REL32
+        refresh_decals.section, tail_sites[0], draw_helper,
+        IMAGE_REL_I386_REL32,
     )
     obj.write(path)
 
     manifest["MobileTablePropDraw"] = {
         "status": "installed",
-        "function": "?RefreshProps@CDecal@@QAEXXZ",
-        "hooked_call_offset": hex(hook_vaddr - 1 - refresh_props.value),
-        "wrapped": "?AddDecal@CDecal@@QAEXPAVldwImageGrid@@HHHM@Z",
-        "helper": "@VF2RefreshPropsAddDecalAndProps@28",
+        "function": "?RefreshDecals@CDecal@@QAEXXZ",
+        # The retargeted instruction is RefreshDecals' E9 TAIL JUMP to
+        # RefreshProps, not a call. Naming it a call would tell anyone
+        # verifying this hook the wrong instruction shape and the wrong
+        # return semantics: the wrapper returns to RefreshDecals' CALLER,
+        # not to RefreshDecals.
+        "hooked_jump_offset": hex(tail_sites[0] - 1 - refresh_decals.value),
+        "hooked_instruction": "E9 rel32 (tail jump)",
+        "wrapped": "?RefreshProps@CDecal@@QAEXXZ (tail jump)",
+        "helper": "@VF2RefreshPropsAndTableProps@8",
         "added_bytes": 0,
         "mechanism": (
-            "retargets an existing five-byte call relocation; no trampoline, "
+            "retargets the existing five-byte E9 tail jump; no trampoline, "
             "no cave space, no section growth"
+        ),
+        "unconditional": True,
+        "refresh_decals_retargeted": True,
+        "why_not_refreshprops": (
+            "every AddDecal call in CDecal::RefreshProps sits inside a "
+            "per-prop active branch of its switch, so wrapping one draws the "
+            "table props only while an unrelated stock prop is active. "
+            "RefreshDecals TAIL-JUMPS to RefreshProps as its last "
+            "instruction, which is unconditional AND at final decal "
+            "occupancy -- hooking InitDecals instead would be unconditional "
+            "but would run the capacity check against a freshly emptied "
+            "array"
         ),
         "draws": list(PROP_ART_IMAGE_ORDER),
         "position_source": (
-            "FindFurniture at prop activation -- sFurnitureInfo2 carries both "
-            "the world point and the orientation that picks SE from SW"
+            "the placement record found by info.unknown0, reading its own "
+            "+0x14/+0x18 world position and +0x10 orientation -- NOT "
+            "info.point, which FindFurniture sets to the position plus the "
+            "furniture map hotspot offset (the tile a villager stands on)"
+        ),
+        "decal_bound": (
+            "the draw counts occupied slots (stride 0x18, occupancy byte at "
+            "record + 0) and refuses at 0x100, because the four-argument "
+            "AddDecal overload has no bounds check of its own"
         ),
         "why_not_the_prop_array": (
             "CEnvironment + prop*16 holds through prop 0x54; 0x55 and 0x56 "
             "would write 32 bytes past its last record"
         ),
     }
-    print("mobile table prop draw: RefreshProps hooked, 0 bytes added")
+    print("mobile table prop draw: RefreshDecals tail jump hooked, 0 bytes added")
 
 
 def patch_bathroom1_curtain_decal(manifest):
@@ -19749,7 +19821,12 @@ def patch_bathroom1_curtain_decal(manifest):
             "CDecal+0x1924": "image 539 curtain_closed.png (north bathroom)",
             "CDecal+0x1928": "image 615 curtain_closed_southb.png (south/workshop bathroom)",
         },
-        "refresh_decals_untouched": True,
+        # Scoped to THIS patch. patch_mobile_table_prop_draw runs later and
+        # DOES retarget a relocation inside CDecal::RefreshDecals, so an
+        # unqualified "untouched" here would contradict the manifest entry
+        # that patch writes and make the build evidence unusable for
+        # conflict analysis.
+        "refresh_decals_untouched_by_this_patch": True,
     }
     if bathroom1_hook is not None:
         manifest["CDecal"]["bathroom1_closed_curtain_grid_hook"] = bathroom1_hook
@@ -20069,6 +20146,48 @@ def patch_graphics_manager(manifest):
             "item_id": hex(entry["item_id"]),
             "gender": entry["gender"],
             "head_value": entry["head_value"],
+            "image_id": hex(image_id),
+            "path": path,
+            "symbol": sym,
+            "grid": [1, 1],
+        })
+
+    # The picnic-meal and patio-drinks sprites. Space for these three
+    # descriptors is reserved above (the "+ len(PROP_ART_IMAGE_ORDER)" term in
+    # append_count), but reserving is not populating: without this loop the
+    # records stay zero-filled, so the ids prop_art_image_id() computes point
+    # at blank descriptors and GetImageGrid() cannot resolve any of them. The
+    # draw hook then runs and renders nothing, which is exactly what shipped
+    # in B181 -- the executable contained no path string for any of the three,
+    # while every populated descriptor puts its path in the binary.
+    prop_art_desc_manifest = []
+    for name in PROP_ART_IMAGE_ORDER:
+        image_id = prop_art_image_id(name, holiday_desc_count)
+        # NO "Images/" prefix. Descriptor paths are resolved relative to the
+        # runtime Images directory already, which every other block in this
+        # function relies on -- head_icon_path returns "HairstyleIcons/...",
+        # the renovation block "MobileRenovations/...", and the furniture
+        # block "Furniture/...". The shipped B181 executable confirms it:
+        # it contains "HairstyleIcons/" and "Furniture/SpaLoungerStd.png"
+        # and contains neither with an "Images/" prefix. Adding one here
+        # would make GetImageGrid look for Images/Images/mealSE.png.
+        path = PROP_ART_INSTALL[name]
+        vals = plain_image_donor[:]
+        vals[0] = image_id
+        vals[1] = 0
+        vals[2] = 1
+        vals[3] = 1
+        desc_off = img_sym.value + image_id * DESC_SIZE
+        img_sec = obj.section(img_sym.section)
+        obj.buf[img_sec.raw_ptr + desc_off : img_sec.raw_ptr + desc_off + DESC_SIZE] = struct.pack(
+            "<" + "I" * (DESC_SIZE // 4), *vals
+        )
+        sym = "_vf2prop_" + name.replace(".", "_")
+        helper_lines.append(f'const char {sym[1:]}[] = "{path}";')
+        symidx = obj.append_undefined_symbol(sym)
+        obj.append_relocation(img_sym.section, desc_off + 4, symidx)
+        prop_art_desc_manifest.append({
+            "name": name,
             "image_id": hex(image_id),
             "path": path,
             "symbol": sym,
@@ -20407,6 +20526,11 @@ def patch_graphics_manager(manifest):
             "image_base": hex(head_icon_image_base(holiday_desc_count)),
             "image_count": HEAD_STORE_ENTRY_COUNT,
             "descriptors": head_icon_desc_manifest,
+        },
+        "prop_art_images": {
+            "image_base": hex(prop_art_image_base(holiday_desc_count)),
+            "image_count": len(PROP_ART_IMAGE_ORDER),
+            "descriptors": prop_art_desc_manifest,
         },
         "mobile_renovation_images": {
             "enabled": ENABLE_MOBILE_RENOVATIONS,
@@ -25776,6 +25900,12 @@ public:
     // and declaring them as overloads lets the compiler mangle each to the
     // symbol the linker already resolves rather than spelling either out.
     void AddDecal(ldwImageGrid *grid, int a, int b, int c, float scale);
+    // RefreshDecals TAIL-JUMPS to this as its last instruction, which is
+    // where the prop draw hooks: unconditional, and after the whole stock
+    // pass has populated the decal array. VF2RefreshPropsAndTableProps calls
+    // it through this class, so it must be declared in THIS translation unit
+    // as well -- the other CDecal above is a different generated source.
+    void RefreshProps();
 };
 extern CDecal Decal;
 
@@ -25931,10 +26061,37 @@ static void VF2CaptureTableProp(
             info, true, 0, 0)) {
         return;
     }
-    outX = info.point.x;
-    outY = info.point.y;
-    if (outOrientation != 0) *outOrientation = info.orientation;
-    outPlaced = true;
+    // info.point is NOT the table. FindFurniture sets it to the placement
+    // position PLUS the furniture map's hotspot offset -- the tile a
+    // villager stands on to USE the item -- so drawing there puts the meal
+    // or the drinks beside the table rather than on it, by however much
+    // that map's hotspot is offset.
+    //
+    // The placement record holds the real world position. info.unknown0 is
+    // the unique placement handle, which is exactly how the added-furniture
+    // probe above identifies a record, so the same lookup applies here and
+    // two copies of the same table stay distinguishable.
+    //
+    // 0x200 is the array's real capacity, from AddToWorld's own
+    // `cmp [edi+0x1004], 0x200 / jge` guard, not a guess.
+    unsigned char *manager = (unsigned char *)&FurnitureManager;
+    int count = *(int *)(manager + 0x1004);
+    if (count < 0 || count > 0x200) return;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*(unsigned int *)(record + 0x0C) & 1) == 0) continue;
+        if (*(int *)(record + 0x04) != info.unknown0) continue;
+        outX = *(int *)(record + 0x14);
+        outY = *(int *)(record + 0x18);
+        if (outOrientation != 0) {
+            *outOrientation = *(int *)(record + 0x10);
+        }
+        outPlaced = true;
+        return;
+    }
+    // No record carried that handle. Leaving outPlaced false is what stops
+    // the draw, which is the right outcome: a prop drawn at a position we
+    // could not resolve would appear somewhere arbitrary.
 }
 
 // Draw the picnic meal and patio drinks.
@@ -25958,6 +26115,33 @@ static void VF2DrawTableProp(
     if (graphics == 0) return;
     ldwImageGrid *grid = graphics->GetImageGrid((EImage)imageId);
     if (grid == 0) return;
+    // BOUND THE ARRAY OURSELVES before calling.
+    //
+    // Both AddDecal overloads walk the same free-slot scan, stepping 0x18
+    // bytes per record until they find a zero occupancy byte. The
+    // FIVE-argument form then guards with `cmp edx,0x100 / jg` and skips
+    // the write when the array is full; the FOUR-argument form has no
+    // comparison against any bound and writes wherever the scan stopped.
+    //
+    // Gating the callers on a prop being placed does NOT make that safe. It
+    // bounds how many EXTRA decals this feature adds, not how many are
+    // already present: if the stock refresh has filled all 256 slots, the
+    // very first of our calls walks past the end of the array and writes
+    // there.
+    //
+    // Switching to the five-argument overload is not the fix either. Its
+    // extra argument is a per-decal value RefreshProps reads from its own
+    // object -- [edi+0x1940] indexed by the current prop, at +0x25BB8 --
+    // and there is no correct constant to substitute for it. Passing a
+    // guessed layer would write a wrong value into the slot field.
+    //
+    // So the same bound is applied here, against the same array, using the
+    // same scan the engine uses. A full array means our prop is not drawn,
+    // which is what the guarded overload does too.
+    unsigned char *decals = (unsigned char *)&Decal;
+    int used = 0;
+    while (used < 0x100 && decals[used * 0x18] != 0) ++used;
+    if (used >= 0x100) return;
     Decal.AddDecal(grid, x, y, 1.0f);
 }
 
@@ -25986,30 +26170,42 @@ extern "C" void __cdecl VF2DrawMobileTableProps()
     }
 }
 
-// Wraps RefreshProps' last AddDecal so the picnic meal and patio drinks draw
-// after every stock prop. Reached by retargeting that call's relocation, which
-// costs no bytes -- no trampoline, no cave, no section growth.
+// Wraps CDecal::RefreshDecals' TAIL JUMP to RefreshProps -- the E9 that is
+// RefreshDecals' last instruction. Two earlier hook sites were tried and both
+// were wrong, so the reasoning is recorded here rather than left to be
+// rediscovered.
 //
-// NO naked assembly is needed, and two attempts at it were wrong before this
-// was noticed. The wrapper is entered exactly as the stock function would be:
-// `this` in ECX, five arguments on the stack, and the callee expected to pop
-// them (`ret 20`). That is precisely what __fastcall with a dummy second
-// argument produces on MSVC -- the same idiom VF2PatioSetPropAndTrack already
-// uses -- so the compiler emits the correct epilogue itself. Hand-written
-// stack juggling here either returns past our own code or leaves the stack
-// twenty bytes short.
-extern "C" void __fastcall VF2RefreshPropsAddDecalAndProps(
-    CDecal *self,
-    void *,
-    ldwImageGrid *grid,
-    int a,
-    int b,
-    int c,
-    float scale)
+// NOT one of RefreshProps' AddDecal calls: all 48 of them sit inside per-prop
+// active branches of its switch, so wrapping one draws our props only while
+// some unrelated stock prop happens to be active.
+//
+// NOT InitDecals either, even though RefreshDecals calls it unconditionally as
+// its first instruction. InitDecals EMPTIES the decal array, so the capacity
+// check in VF2DrawTableProp would run against freshly cleared storage, always
+// find room, and our two decals would then push the stock pass past the
+// 256-slot end -- a guard causing the very overflow it exists to prevent.
+//
+// The tail jump is the one site that is both UNCONDITIONAL and at FINAL decal
+// occupancy. The wrapper therefore calls RefreshProps() first and draws
+// second, which is also the correct z-order.
+//
+// CALLING CONTRACT: this replaces a JUMP, not a call, so the wrapper returns
+// to RefreshDecals' caller rather than to RefreshDecals. It is entered exactly
+// as RefreshProps would be -- `this` in ECX, no stack arguments -- which is
+// what __fastcall with a dummy second argument produces on MSVC, the same
+// idiom VF2PatioSetPropAndTrack uses. No naked assembly is needed.
+//
+// Costs zero added bytes: an existing five-byte E9 with a relocation is
+// retargeted, so no trampoline, no cave, no section growth.
+extern "C" void __fastcall VF2RefreshPropsAndTableProps(CDecal *self, void *)
 {
-    // The stock draw first, unchanged, so nothing existing is disturbed.
-    self->AddDecal(grid, a, b, c, scale);
-    // Then ours, on top of every stock prop.
+    // The stock pass FIRST, then ours -- which is both the right z-order
+    // and the only point at which the decal array is at its final
+    // occupancy. Drawing straight after InitDecals() instead would run the
+    // capacity check against a freshly EMPTIED array, so it would always
+    // find room, and our two decals would then push the stock pass past
+    // the 256-slot end.
+    self->RefreshProps();
     VF2DrawMobileTableProps();
 }
 
