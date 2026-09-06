@@ -301,9 +301,12 @@ def _reachable_from_module(tree):
                     # calls that execute after it: `entry(); patch_new = None`
                     # really does run the installer, so treating any later
                     # rebinding as global reports a false orphan.
-                    rebound[name] = min(
-                        rebound.get(name, child.lineno), child.lineno
-                    )
+                    # (line, col) rather than line alone: a rebinding and a
+                    # call can share a physical line -- `patch_new = None;
+                    # patch_new()` -- and comparing line numbers alone makes
+                    # the later call look like it precedes the rebinding.
+                    where = (child.lineno, child.col_offset)
+                    rebound[name] = min(rebound.get(name, where), where)
 
     # Seed: everything referenced from module scope -- statements that execute
     # on import, plus decorators and default arguments, which run then too.
@@ -324,7 +327,10 @@ def _reachable_from_module(tree):
         for source in sources:
             names, scopes = _references_within(source)
             seed |= names
-            line = getattr(source, "lineno", node.lineno)
+            line = (
+                getattr(source, "lineno", node.lineno),
+                getattr(source, "col_offset", 0),
+            )
             for name in names:
                 seed_line[name] = min(seed_line.get(name, line), line)
             pending_scopes.extend((scope, line) for scope in scopes)
@@ -346,7 +352,13 @@ def _reachable_from_module(tree):
     # Nested scopes are keyed by identity: the same helper reached twice must
     # be walked once. Without this the walk re-expands every nested scope on
     # each visit, which on a 35k-line generator does not finish.
-    seen_scopes = {id(scope) for scope, _ in pending_scopes}
+    seen_scopes = {id(scope): at for scope, at in pending_scopes}
+    # name -> EARLIEST module-scope position it has been expanded from. A
+    # helper called both before and after a rebinding is one graph node
+    # reached at two different times; memoising by name alone lets a late
+    # path mask a genuine early one, and because the seed is a set that
+    # outcome varied with hash iteration order.
+    visited = {}
     while frontier or pending_scopes:
         if pending_scopes:
             # A nested helper something actually called. It is not a top-level
@@ -355,17 +367,21 @@ def _reachable_from_module(tree):
             scope_node, at = pending_scopes.pop()
             names, scopes = _references_within(scope_node)
             for scope in scopes:
-                if id(scope) not in seen_scopes:
-                    seen_scopes.add(id(scope))
+                prior = seen_scopes.get(id(scope))
+                if prior is None or at < prior:
+                    seen_scopes[id(scope)] = at
                     pending_scopes.append((scope, at))
             for referenced in names:
-                if (referenced in defined and referenced not in reachable
-                        and not _rebound_before(referenced, at)):
+                if (referenced in defined
+                        and not _rebound_before(referenced, at)
+                        and (referenced not in visited
+                             or at < visited[referenced])):
                     frontier.append((referenced, at))
             continue
         name, at = frontier.pop()
-        if name in reachable:
+        if name in visited and visited[name] <= at:
             continue
+        visited[name] = at
         reachable.add(name)
         # An intentionally-uncalled function does not extend the walk. If it
         # did, everything it calls would inherit its exemption.
@@ -373,12 +389,15 @@ def _reachable_from_module(tree):
             continue
         names, scopes = _references_within(defined[name])
         for scope in scopes:
-            if id(scope) not in seen_scopes:
-                seen_scopes.add(id(scope))
+            prior = seen_scopes.get(id(scope))
+            if prior is None or at < prior:
+                seen_scopes[id(scope)] = at
                 pending_scopes.append((scope, at))
         for referenced in names:
-            if (referenced in defined and referenced not in reachable
-                    and not _rebound_before(referenced, at)):
+            if (referenced in defined
+                    and not _rebound_before(referenced, at)
+                    and (referenced not in visited
+                         or at < visited[referenced])):
                 frontier.append((referenced, at))
     return set(defined), reachable
 
@@ -517,6 +536,12 @@ class TheReachabilityWalkResolvesScopes(unittest.TestCase):
     """
 
     UNREACHABLE = {
+        # A rebinding and a call can share a physical line, so line numbers
+        # alone cannot order them.
+        "rebound and called on the same source line": (
+            "def patch_new(): pass\n"
+            "patch_new = None; patch_new()\n"
+        ),
         # Rebound at module scope, then called FROM INSIDE A FUNCTION. The
         # other fixtures here call at module scope, which the walk already
         # handled; these cover the path that did not, where the call is
@@ -623,6 +648,21 @@ class TheReachabilityWalkResolvesScopes(unittest.TestCase):
     }
 
     REACHABLE = {
+        # One helper reached both BEFORE and AFTER a rebinding. Memoising by
+        # name alone let the late path mask the genuine early one, and the
+        # outcome varied with hash iteration order because the seed is a set.
+        "a shared helper reached before and after a rebinding": (
+            "def patch_new(): pass\n"
+            "def shared():\n"
+            "    patch_new()\n"
+            "def early():\n"
+            "    shared()\n"
+            "def late():\n"
+            "    shared()\n"
+            "early()\n"
+            "patch_new = None\n"
+            "late()\n"
+        ),
         # A rebinding only governs calls that execute AFTER it. This one
         # runs the installer before the name is reassigned, so it is real
         # wiring and must not be reported as an orphan.
