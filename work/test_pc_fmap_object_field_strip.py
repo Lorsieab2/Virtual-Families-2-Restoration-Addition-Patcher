@@ -79,11 +79,20 @@ class TestObjectTypeFieldIsStrippedWholly(unittest.TestCase):
         The check above compares payloads only where the pc cell survives, so
         a transform that wrongly cleared a cell it should have kept passes it
         silently -- the very failure the seat-anchor regression was. Across
-        all 34 maps exactly two payloads are ever dropped: 0x0001, the mobile
-        behaviour hotspot the desktop tables carry no handler for, and 0x8800
+        all 34 maps exactly two payloads are ever dropped: 0x0001 and 0x8800
         on the four holiday-decoration cells the group and stocking validators
         own. 0x8800 is kept on seven other cells, so it is not unsafe by
         itself and only the named maps may drop it.
+
+        0x0001 is NOT mobile-only metadata, and an earlier version of this
+        docstring said it was. It is ordinary desktop collision geometry: the
+        exact value 0x00000001 occurs 3,458 times across 102 of the 327 maps
+        installed with B179, and 3,186 times across 86 files of the retail
+        desktop install, where in the stock BlackCouch it forms one contiguous
+        51-cell region rather than isolated markers. These maps drop it as part
+        of the wider hotspot-metadata exclusion the B156 ledger records for
+        each map, which is a choice about what a DONOR's own map carries, not
+        a statement that the desktop engine cannot handle the value.
 
         Anything else being cleared means the strip removed geometry, which is
         how a villager ends up walked to a position that no longer exists.

@@ -2666,3 +2666,87 @@ The crash is in theGameState's CONSTRUCTOR, and it is deterministic
   B174.2 does not, and the faulting function is identical between them. The
   narrowest remaining target is theGameState's constructor itself and whatever
   it sets up before Load runs.
+
+
+- WHAT CHANGED IN THE DATA THAT WALK READS. The faulting function is identical
+  between a build that crashes and one that does not, so the difference is in
+  what it walks. Comparing the INSTALLED trees rather than the release staging
+  directories -- staging holds 84 placement maps, an installed game 327 or 328
+  -- five maps differ between B179, which boots, and B180, which does not:
+
+      InvisibleLounger.png.fmap       154 occupied cells -> 12
+      InvisibleSpaLounger.png.fmap    154 -> 12
+      InvisiblePatioTable.png.fmap    241 -> 8
+      InvisiblePicnicTable.png.fmap   237 -> 8
+      SpaLoungerStd.png.fmap          new in B180
+
+  Every one of the other 322 maps is byte-identical, and B181 differs from B180
+  in no placement map at all.
+
+- THE CAUSE, STATED PRECISELY. The tracked desktop-safe maps are NOT damaged.
+  They are generator output, documented in the B156 ledger, and 33 of the 34
+  are byte-identical to what B179 ships; the one exception is Patio_table,
+  differing by the two anchor cells 9c18bec corrected, at the same occupancy.
+  A sparse map is correct under the donor's OWN name.
+
+  What ee5c306 changed is which file a BORROWING item receives. A donor has two
+  maps, its own sparse desktop-safe one and the raw mobile map it was cut from.
+  A borrower has neither, so the map it is handed is the only thing describing
+  where the piece is solid. Before that commit borrowers fell through to the
+  donor's raw map; after it they took the sparse one. It is absent from B179
+  and present in both B180 and B181.
+
+  The sparse map is small because a desktop-safe copy keeps a cell's low half,
+  which is right for a peep-slot anchor and empties everything else: 24,748 of
+  the 42,987 occupied cells across the 327 maps installed with B179 -- 57.6% --
+  carry a type with a zero low half, and the most common occupied cell in the
+  stock game, 0x01080000, is one of them.
+
+- THE FIX. A borrower keeps the donor's geometry and takes only the anchor
+  cells in their translated desktop form. Verified against the B179 install:
+  all four borrowers reach B179's occupancy with every non-anchor cell
+  byte-identical, 254/254, 254/254, 315/315 and 344/344. The donor-named maps
+  are untouched and still install at 12, 8 and 8 cells. No tracked asset
+  changes, so the ten validators that reject 0x0001 never fire.
+
+  An earlier attempt repaired the three tracked maps instead. That was wrong:
+  the exporter copies pc_fmaps/<donor> to Assets/<donor>, so it would also have
+  installed full maps under the donor names, which B179 does not do.
+
+- ON 0x0001. It is ordinary desktop collision geometry, not mobile-only
+  metadata: the exact value occurs 3,458 times across 102 of the 327 maps
+  installed with B179, and B179's own shipped InvisiblePatioTable carries 43 of
+  them and InvisiblePicnicTable 50.
+
+- WHAT IS STILL NOT ESTABLISHED. That this explains the fault. The borrowed
+  geometry is what changed across the boundary and restoring it is a fix for a
+  real defect on its own terms, but the mechanism is untraced.
+
+  Two register facts are established, each reproduced independently by two
+  sessions across all five dumps. esi holds 0, 1 or 2 where the object pointer
+  belongs, with the faulting address equal to esi. And edi holds arg_0 + 1
+  where a counter bounded to ten belongs -- the same fact as
+  edi == [ebp-0x1C] + 1, the caller's saved-esi slot, because the outer loop
+  passes its own esi as both ecx and the argument.
+
+  The caller's saved slots are intact and correct, so nothing overwrote the
+  stack and no freed-or-relocated-object reading survives.
+
+  Stack displacement is the open hypothesis: the epilogue's pops run before
+  mov esp,ebp reloads esp, and the cookie cannot detect it because it travels
+  [ebp-4] -> ecx and is compared there. Two forms are tested and fail. A
+  frame-sized displacement to the pushed argument word predicts pop esi read
+  [ebp+12], a pointer in every dump. A one-slot displacement to the saved-esi
+  slot cannot occur, that slot being in the caller's frame above the loop
+  body's own. Two earlier arguments against displacement are withdrawn: that
+  the callees are clean with a single exit, and that inc edi accounts for the
+  +1 -- the latter presupposes the anomaly.
+
+  Static analysis is exhausted rather than conclusive: IDA's SP analysis over
+  all 185 basic blocks reaches the epilogue at spd = -0xCFC with spd zero at
+  the return and all 42 call sites matching their declared retn N, but it is
+  path-insensitive and trusts each declaration. Settling it needs a hardware
+  watchpoint under a debugger, which is live execution and the owner's
+  decision. Until then the accurate statement is that the emptied
+  geometry was sufficient to trigger the crash, not that the crash is
+  understood.

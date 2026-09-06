@@ -954,6 +954,65 @@ def desktop_safe_fmap_source(donor):
     safe = MOBILE_FURNITURE_BEHAVIOR_PC_FMAP_DIR / donor
     return safe if safe.is_file() else None
 
+
+def borrowed_fmap_bytes(donor_map, desktop_safe_map):
+    """The map a BORROWING item should receive.
+
+    The donor's desktop-safe map is deliberately sparse: it keeps the proven
+    EObject cells and the translated peep-slot anchors and drops the mobile
+    hotspot metadata, which is right for the donor's OWN name and is what a
+    release installs there.
+
+    A borrower needs something different. It has no map of its own, so the one
+    it is given is the only thing describing where the piece is solid, and a
+    sparse map leaves it with almost no collision geometry -- the Patio Table
+    borrower fell from 241 occupied cells to 8 when borrowers were switched
+    onto the desktop-safe map. Of the 42,987 occupied cells across the 327
+    maps installed with B179, 24,748 (57.6%) carry a type with a zero low
+    half, so a map that keeps only the low half keeps almost nothing.
+
+    So a borrower takes the donor's full geometry and only the anchor cells in
+    their translated desktop form: every cell the desktop-safe map rewrote is
+    taken from it, and every other cell is carried across from the donor map
+    untouched. That is what the working build shipped for these borrowers,
+    plus the anchor translation that the desktop-safe map exists to provide.
+    """
+    donor_cells = _fmap_cells(donor_map)
+    safe_cells = _fmap_cells(desktop_safe_map)
+    if not donor_cells or len(donor_cells) != len(safe_cells):
+        # Either file is not a readable QAMF grid, or the two disagree about
+        # the grid size.  Say so rather than guess.
+        #
+        # Returning None is only safe because the caller answers it by copying
+        # the desktop-safe map verbatim -- the line this function was added
+        # beside, and the behaviour every borrower had before it existed.  A
+        # caller that did something else with None would make declining worse
+        # than guessing, so that fallback is part of this contract rather than
+        # an implementation detail of the call site.
+        return None
+    merged = [
+        safe if safe and safe != donor else donor
+        for donor, safe in zip(donor_cells, safe_cells)
+    ]
+    grid_end = 32 + 4 * len(merged)
+    return (
+        donor_map[:32]
+        + struct.pack("<%dI" % len(merged), *merged)
+        + donor_map[grid_end:]
+    )
+
+
+def _fmap_cells(data):
+    """The cell grid of a QAMF map, or an empty list if it is not one."""
+    if len(data) < 32 or data[:4] != b"QAMF":
+        return []
+    width, height = struct.unpack_from("<II", data, 24)
+    count = width * height
+    if len(data) < 32 + 4 * count:
+        return []
+    return list(struct.unpack_from("<%dI" % count, data, 32))
+
+
 MOBILE_RENOVATION_ART_SOURCE_DIR = ROOT / "work" / "assets" / "mobile_renovations"
 MOBILE_RENOVATION_CURTAIN_SOURCE_DIR = (
     ROOT / "patcher_assets" / "optional_patches" / "mobile_renovations" / "source_art" / "shower_curtains"
@@ -24676,7 +24735,14 @@ def sync_behavior_assets(manifest):
             shutil.copy2(src, donor_dst)
         borrowed = desktop_safe_fmap_source(donor) or src
         dst = assets / target
-        shutil.copy2(borrowed, dst)
+        merged = None
+        if borrowed != src:
+            merged = borrowed_fmap_bytes(src.read_bytes(), borrowed.read_bytes())
+        if merged is None:
+            shutil.copy2(borrowed, dst)
+        else:
+            dst.write_bytes(merged)
+            shutil.copystat(src, dst)
         record = {
             "target": target,
             "donor": donor,
@@ -24686,8 +24752,9 @@ def sync_behavior_assets(manifest):
         if borrowed != src:
             record["donor_own_source"] = str(src)
             record["reason"] = (
-                "the donor also ships a desktop-safe map; the borrower takes "
-                "that rather than the donor's raw mobile base map"
+                "the donor also ships a desktop-safe map; the borrower keeps "
+                "the donor's collision geometry and takes the desktop-safe "
+                "map's translated anchors"
             )
         bucket.append(record)
 
