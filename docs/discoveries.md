@@ -3992,3 +3992,100 @@ Both were wrong, and both looked convincing before the check:
 wrongly cleared a cell it should have kept would pass that check silently.
 The current bytes are right, so this is a hole in the check rather than a
 defect in the data.
+
+
+## A borrowing item was given a map authored for the donor's own name
+
+`ee5c306` routed borrowing furniture items onto the donor's desktop-safe map.
+That map is deliberately sparse, and it is correct that way *under the donor's
+own name*. It is not usable as a borrower's only map.
+
+### Both kinds of file ship in the build that boots
+
+Reading the B179 install -- the artifact the owner confirms launches -- rather
+than the release staging directory, which holds only 84 of the 327 maps:
+
+    donor-named, sparse by design
+      Chaise_brown.png.fmap     12 occupied cells   b0126fa4d054
+      Patio_table.png.fmap       8                  0a60f9c57955
+      Picnic_table.png.fmap      8                  3d3aaeeeb77e
+
+    borrower-named, full geometry
+      InvisibleLounger          154                 01eea907fbed
+      InvisibleSpaLounger       154                 01eea907fbed
+      InvisiblePatioTable       241                 9b362e94663d
+      InvisiblePicnicTable      237                 f98db5d447b2
+
+The sparse maps are generator output and are documented as such in
+`docs/B156-mobile-furniture-behavior-ledger.md`, which pins Picnic Table's
+hash `3d3aaeee...` -- the eight-cell file -- and records that "mobile-only
+markers `0x01B40000` and `0x01AC0000` are excluded". Thirty-three of the
+thirty-four tracked `pc_fmaps` are byte-identical to what B179 ships; the one
+exception is `Patio_table`, differing by the two anchor cells `9c18bec`
+corrected, at the same occupancy. Nothing about them is damaged.
+
+### What changed, and why it matters for a borrower
+
+A donor has two maps: its own sparse desktop-safe one, and the raw mobile map
+it was cut from. A borrower has neither -- the map it is handed is the only
+thing describing where the piece is solid. Before `ee5c306` a borrower fell
+through to the donor's raw map and received full geometry. After it, borrowers
+took the sparse map, and `InvisiblePatioTable` fell from 241 occupied cells to
+8, `InvisiblePicnicTable` from 237 to 8, and both loungers from 154 to 12.
+
+`git merge-base --is-ancestor` places `ee5c306` outside B179 and inside both
+B180 and B181, matching the boundary between the build that boots and the two
+that do not.
+
+The sparse map is small because a desktop-safe copy keeps a cell's low half.
+That is right for a peep-slot anchor and empties everything else: of the 42,987
+occupied cells across the 327 maps installed with B179, 24,748 -- 57.6% --
+carry a type with a zero low half, and the single most common occupied cell in
+the stock game, `0x01080000`, is one of them.
+
+### The fix
+
+A borrower now takes the donor's full geometry and only the anchor cells in
+their translated desktop form. Every cell the desktop-safe map rewrote is taken
+from it; every other cell is carried across from the donor map untouched.
+
+    borrower                occupied   B179   non-anchor cells vs B179
+    InvisibleLounger             154    154   254/254 identical
+    InvisibleSpaLounger          154    154   254/254 identical
+    InvisiblePatioTable          241    241   315/315 identical
+    InvisiblePicnicTable         237    237   344/344 identical
+    SpaLoungerStd                154      -   new in B180
+
+The donor-named maps are untouched and still install at 12, 8 and 8 cells. No
+tracked asset changes, so the ten validators that reject `0x0001` never fire
+and `work/build_holiday_pc_fmaps.py` is not involved.
+
+An earlier attempt at this repaired the three tracked `pc_fmaps` instead. That
+was wrong: `work/export_offline_patch_bundle.py` copies `pc_fmaps/<donor>` to
+`Assets/<donor>`, so editing the shared file would also have installed full
+maps under the donor names, which B179 does not do and the ledger forbids.
+
+### On `0x0001`
+
+It is ordinary desktop collision geometry, not mobile-only metadata. The exact
+value `0x00000001` occurs 3,458 times across 102 of the 327 maps installed with
+B179, 8.0% of all occupied cells, and B179's own shipped `InvisiblePatioTable`
+carries 43 of them and `InvisiblePicnicTable` 50.
+
+### What this does not establish
+
+That the crash is explained. The borrowed geometry is what changed across the
+boundary and restoring it is a fix for a real defect on its own terms, but the
+mechanism connecting empty geometry to the observed fault is not traced.
+
+All five dumps fault deterministically at the same `cmp dword ptr [esi], 0`,
+with the faulting address equal to `esi`, and the same loop is byte-identical
+in booting B179. Whether a path through the loop body can leave the stack
+displaced, so that its `pop edi` and `pop esi` read neighbouring slots before
+`mov esp, ebp` repairs the stack pointer, is unresolved: the function has a
+single return path and no displacement has been demonstrated on it, and the
+observed `edi == arg_0 + 1` is equally explained by the caller's own `inc edi`
+immediately before the fault. Settling it needs a hardware watchpoint, which is
+live execution and the owner's decision. Until then the accurate statement is
+that the emptied geometry was sufficient to trigger the crash, not that the
+crash is understood.
