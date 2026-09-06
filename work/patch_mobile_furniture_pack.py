@@ -10023,45 +10023,41 @@ def sync_invisible_furniture_reference_sets(manifest):
             source_name = INVISIBLE_BASE_GRAPHIC_SOURCE_BY_NAME.get(image.stem)
             visible_source = (OUT / "Images" / "Furniture" / source_name) if source_name else image
             if source_name:
-                # Prefer the digest-verified tracked copy over whatever a seed
-                # left in OUT. A seeded build can inherit a corrupted Picnic,
-                # Patio or Chaise image; restore_preserved_inherited_art()
-                # fixes the active art, but it runs after this, so the Base
-                # Graphics reference would keep the bad bytes and hand them
-                # back when a player restores their visible art.
-                authentic = authentic_inherited_furniture_source(source_name)
-                if authentic is not None:
-                    visible_source = authentic
-            if source_name and not visible_source.exists():
-                # Several bases are inheritance-only, so on an unseeded build
-                # they are not in OUT yet. Resolving them only under OUT
-                # dropped those items from the Base Graphics folder, which is
-                # what players restore their visible art from after applying
-                # the transparent setting -- leaving them stuck invisible.
+                # Resolve the base graphic by PREFERENCE, not by "whatever is
+                # in OUT first". The old shape asked whether OUT already had
+                # the file and only looked further when it did not, which lost
+                # in both directions.
+                #
+                # On a SEEDED build OUT can hold an older or corrupted copy
+                # left by the seed. Because the file existed, the tracked
+                # source was never consulted, and the Base Graphics folder
+                # snapshotted the stale bytes -- restore_preserved_inherited_art()
+                # and install_new_furniture_art() both fix the ACTIVE art but
+                # run after this, so the reference set kept the bad copy and
+                # handed it back when a player restored their visible art.
+                #
+                # On a CLEAN build the tracked source is the only copy that
+                # exists at all, since install_new_furniture_art() has not run
+                # yet.
+                #
+                # Order: digest-verified inherited copy, then tracked added
+                # art, then the inherited store, then the vanilla payloads.
                 for candidate in (
-                    ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture" / source_name,
+                    authentic_inherited_furniture_source(source_name),
                     # Newly ADDED art, which is neither inherited nor vanilla.
                     # The Invisible Spa Lounger is the case that proves this
                     # is needed: its base is SpaLoungerStd.png, which exists
                     # ONLY here -- not in inherited_runtime_images and not in
-                    # any vanilla payload. Without this entry a clean build
-                    # drops that item from the Base Graphics reference set,
-                    # so a player who applies Transparent Graphics can never
-                    # restore it and is left stuck with an invisible item
-                    # they paid a store price for.
-                    #
-                    # It is listed BEFORE the payload entries deliberately.
-                    # install_new_furniture_art() writes this art into OUT,
-                    # but it runs AFTER this function, so on a seeded build
-                    # OUT may still hold the seed's older copy; the tracked
-                    # source is the authoritative one.
+                    # any vanilla payload.
                     NEW_FURNITURE_ART_DIR / source_name,
+                    ROOT / "patcher_assets" / "inherited_runtime_images" / "Furniture" / source_name,
                     *(
                         payload / "Images" / "Furniture" / source_name
                         for payload in VANILLA_RUNTIME_PAYLOAD_SOURCE_DIRS
                     ),
+                    OUT / "Images" / "Furniture" / source_name,
                 ):
-                    if candidate.is_file():
+                    if candidate is not None and candidate.is_file():
                         visible_source = candidate
                         break
             if name == "Invisible Furniture - Transparent":
@@ -19640,12 +19636,18 @@ def patch_mobile_table_prop_draw(manifest):
     manifest["MobileTablePropDraw"] = {
         "status": "installed",
         "function": "?RefreshDecals@CDecal@@QAEXXZ",
-        "hooked_call_offset": hex(tail_sites[0] - 1 - refresh_decals.value),
+        # The retargeted instruction is RefreshDecals' E9 TAIL JUMP to
+        # RefreshProps, not a call. Naming it a call would tell anyone
+        # verifying this hook the wrong instruction shape and the wrong
+        # return semantics: the wrapper returns to RefreshDecals' CALLER,
+        # not to RefreshDecals.
+        "hooked_jump_offset": hex(tail_sites[0] - 1 - refresh_decals.value),
+        "hooked_instruction": "E9 rel32 (tail jump)",
         "wrapped": "?RefreshProps@CDecal@@QAEXXZ (tail jump)",
         "helper": "@VF2RefreshPropsAndTableProps@8",
         "added_bytes": 0,
         "mechanism": (
-            "retargets an existing five-byte call relocation; no trampoline, "
+            "retargets the existing five-byte E9 tail jump; no trampoline, "
             "no cave space, no section growth"
         ),
         "unconditional": True,
@@ -26163,31 +26165,33 @@ extern "C" void __cdecl VF2DrawMobileTableProps()
     }
 }
 
-// Wraps RefreshProps' last AddDecal so the picnic meal and patio drinks draw
-// after every stock prop. Reached by retargeting that call's relocation, which
-// costs no bytes -- no trampoline, no cave, no section growth.
+// Wraps CDecal::RefreshDecals' TAIL JUMP to RefreshProps -- the E9 that is
+// RefreshDecals' last instruction. Two earlier hook sites were tried and both
+// were wrong, so the reasoning is recorded here rather than left to be
+// rediscovered.
 //
-// NO naked assembly is needed, and two attempts at it were wrong before this
-// was noticed. The wrapper is entered exactly as the stock function would be:
-// `this` in ECX, five arguments on the stack, and the callee expected to pop
-// them (`ret 20`). That is precisely what __fastcall with a dummy second
-// argument produces on MSVC -- the same idiom VF2PatioSetPropAndTrack already
-// uses -- so the compiler emits the correct epilogue itself. Hand-written
-// stack juggling here either returns past our own code or leaves the stack
-// twenty bytes short.
-// Wraps CDecal::InitDecals, which RefreshDecals calls UNCONDITIONALLY as
-// its very first instruction. That is the point of hooking here: every
-// AddDecal call inside RefreshProps sits within a per-prop active branch
-// of a switch, so wrapping one of them draws our props only while some
-// unrelated stock prop happens to be active.
+// NOT one of RefreshProps' AddDecal calls: all 48 of them sit inside per-prop
+// active branches of its switch, so wrapping one draws our props only while
+// some unrelated stock prop happens to be active.
 //
-// InitDecals clears the array, so our draws must come AFTER it -- which is
-// also why they survive: RefreshDecals and RefreshProps repopulate the
-// array in the same pass and ours are added alongside.
+// NOT InitDecals either, even though RefreshDecals calls it unconditionally as
+// its first instruction. InitDecals EMPTIES the decal array, so the capacity
+// check in VF2DrawTableProp would run against freshly cleared storage, always
+// find room, and our two decals would then push the stock pass past the
+// 256-slot end -- a guard causing the very overflow it exists to prevent.
 //
-// Costs zero added bytes, like the site it replaces: an existing five-byte
-// call with a relocation is retargeted, so no trampoline, no cave, no
-// section growth.
+// The tail jump is the one site that is both UNCONDITIONAL and at FINAL decal
+// occupancy. The wrapper therefore calls RefreshProps() first and draws
+// second, which is also the correct z-order.
+//
+// CALLING CONTRACT: this replaces a JUMP, not a call, so the wrapper returns
+// to RefreshDecals' caller rather than to RefreshDecals. It is entered exactly
+// as RefreshProps would be -- `this` in ECX, no stack arguments -- which is
+// what __fastcall with a dummy second argument produces on MSVC, the same
+// idiom VF2PatioSetPropAndTrack uses. No naked assembly is needed.
+//
+// Costs zero added bytes: an existing five-byte E9 with a relocation is
+// retargeted, so no trampoline, no cave, no section growth.
 extern "C" void __fastcall VF2RefreshPropsAndTableProps(CDecal *self, void *)
 {
     // The stock pass FIRST, then ours -- which is both the right z-order

@@ -110,5 +110,87 @@ class BaseGraphicsCanResolveAddedArt(unittest.TestCase):
         )
 
 
+class BaseGraphicsPrefersTrackedArtOverASeedCopy(unittest.TestCase):
+    """A stale copy in OUT must not win over the tracked source.
+
+    This runs the real function against a real output tree rather than
+    slicing the source, because the defect it guards is an ORDERING one and
+    ordering is invisible to a text match.
+
+    The old resolution asked whether OUT already had the base image and only
+    looked further when it did not. A seeded build can inherit an older or
+    corrupted copy, and because that file EXISTED the tracked source was never
+    consulted -- so the Base Graphics folder snapshotted the stale bytes and
+    handed them back when a player restored their visible art.
+    Both restore_preserved_inherited_art() and install_new_furniture_art()
+    correct the ACTIVE art, but both run after this function, so neither
+    repairs the reference set.
+
+    Note what is NOT sufficient as a test: deleting the seed copy. The
+    clean-build case passes either way, because the tracked directory is on
+    the fallback search path. Only a seed copy that exists and is WRONG
+    separates the two behaviours, which is why this test corrupts rather than
+    removes it.
+    """
+
+    def test_a_corrupt_seed_copy_does_not_reach_the_reference_set(self):
+        import hashlib
+        import os
+        import shutil
+        import tempfile
+
+        tracked = ROOT / "patcher_assets" / "new_furniture_art" / "SpaLoungerStd.png"
+        if not tracked.is_file():
+            self.fail(f"tracked added art is missing: {tracked}")
+        source = ROOT / "outputs" / "VF2-Mobile-Additive-Furniture-Pack"
+        furniture = source / "Images" / "Furniture"
+        if not furniture.is_dir():
+            self.skipTest("no generated output tree; run the generator first")
+
+        previous = os.environ.get("VF2_PATCH_OUT")
+        temporary = tempfile.mkdtemp()
+        try:
+            out = Path(temporary) / "OUT"
+            (out / "Images" / "Furniture").mkdir(parents=True)
+            for entry in furniture.iterdir():
+                if entry.is_file():
+                    shutil.copy2(entry, out / "Images" / "Furniture" / entry.name)
+            stale = out / "Images" / "Furniture" / "SpaLoungerStd.png"
+            stale.write_bytes(b"\x89PNG\r\n\x1a\n" + b"stale seed copy" * 40)
+
+            os.environ["VF2_PATCH_OUT"] = str(out)
+            import importlib
+
+            reloaded = importlib.reload(patcher)
+            manifest = {}
+            reloaded.sync_invisible_furniture_reference_sets(manifest)
+
+            shipped = (
+                out
+                / "OptionalVisualMods"
+                / "Invisible Furniture - Base Graphics"
+                / "InvisibleSpaLounger.png"
+            )
+            self.assertTrue(
+                shipped.is_file(),
+                "the Spa Lounger is absent from the Base Graphics reference set",
+            )
+            self.assertEqual(
+                hashlib.sha256(shipped.read_bytes()).hexdigest(),
+                hashlib.sha256(tracked.read_bytes()).hexdigest(),
+                "the reference set shipped the stale seed bytes instead of the "
+                "tracked art, so restoring visible graphics gives back a bad image",
+            )
+        finally:
+            if previous is None:
+                os.environ.pop("VF2_PATCH_OUT", None)
+            else:
+                os.environ["VF2_PATCH_OUT"] = previous
+            shutil.rmtree(temporary, ignore_errors=True)
+            import importlib
+
+            importlib.reload(patcher)
+
+
 if __name__ == "__main__":
     unittest.main()
