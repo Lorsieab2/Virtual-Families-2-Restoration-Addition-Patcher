@@ -3854,20 +3854,44 @@ Measured against the extracted bundles rather than the source tree:
   | B180 (crashes) | 34 of 35 | `invisible_furniture_transparent_graphics` |
   | B181 (crashes) | 34 of 35 | `invisible_furniture_transparent_graphics` |
 
+  And B179's own binary is variant-matched too, which the settings table alone
+  does not show. Its patch log selects
+  `payload\Virtual Families 2 - Modded B179 - Final All-Enabled Native.exe`,
+  and the installed executable's `.text` digest is `fcad90fbcfba196e`, which
+  matches the `Final All-Enabled Native` variant among the 128 B179 matrix
+  executables. So all three installs -- the one that works and the two that
+  crash -- are the same variant of consecutive builds.
+
   Zero differing settings across all three, the same
   `vanilla_to_modded_output` mode, and identical runtime checks including the
   directory counts (`Images` 655, `Sounds` 316, `Assets` 242). Same variant
   AND same configuration.
 
-  The patch logs also record the INSTALL-level delta, which is narrower than
-  the bundle delta because it counts what a player ends up with rather than
-  what the payload stores. Between the B179 and B180 installs the one-sided
-  file set is exactly two paths, both added by B180:
-  `Assets/SpaLoungerStd.png.fmap` and `Images/Furniture/SpaLoungerStd.png`.
-  Nothing is removed. That is what made a single-variable ablation possible:
-  a copy of the crashing B180 install with those two files removed, verified
-  to differ from the original in nothing else and to carry a byte-identical
-  executable.
+  **The install trees themselves**, walked and content-hashed rather than read
+  out of the logs. An earlier version of this entry claimed "exactly two
+  one-sided paths" from the patch logs alone, which was not a safe reading:
+  the logs inventory `patched_files` and `asset_files`, not every file
+  `prepare_output_dir()` copies, so equal directory counts do not prove equal
+  trees. Measured directly, B179 8,553 files against B180 8,555:
+
+  | | count | paths |
+  | --- | --- | --- |
+  | only in B179 | 1 | the B179-named executable |
+  | only in B180 | 3 | the B180-named executable, `Assets/SpaLoungerStd.png.fmap`, `Images/Furniture/SpaLoungerStd.png` |
+  | shared but differing | 105 | 100 under `Images/HairstyleIcons/`, 5 `Assets/*.fmap` |
+
+  The five differing fmaps are `InvisibleLounger`, `InvisiblePatioTable`,
+  `InvisiblePicnicTable`, `InvisibleSpaLounger` and `Patio_table` -- two more
+  than the three this entry records for the BUNDLE, because
+  `mobile_furniture_behavior_asset_patches()` also rewrites `Patio_table` and
+  `InvisibleSpaLounger` at apply time when `mobile_furniture_behaviors` is
+  enabled. The differently-named executables are expected and are not part of
+  the delta.
+
+  Discounting the executables, the one-sided set is the two Spa Lounger files,
+  which is what made a single-variable ablation possible: a copy of the
+  crashing B180 install with those two removed, verified to differ from the
+  original in nothing else and to carry a byte-identical executable.
 
 - **Three assets differ under `Assets/`.** `InvisibleLounger.png.fmap`,
   `InvisiblePatioTable.png.fmap` and `InvisiblePicnicTable.png.fmap`. Every
