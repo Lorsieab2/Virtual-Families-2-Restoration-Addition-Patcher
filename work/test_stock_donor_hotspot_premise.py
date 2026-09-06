@@ -49,11 +49,16 @@ def _desktop_assets():
     FileNotFoundError for the next. Resolve it instead, and return None when
     neither is present so the caller can skip rather than crash.
     """
+    # A skip guard is a two-way door. Keying "is the payload here?" on ONE
+    # FILE means a payload that IS present but has lost that file skips
+    # silently -- the check disappears exactly when something is wrong with
+    # the thing it checks. Decide presence from the DIRECTORY, and let a
+    # missing file inside a present payload fail loudly.
     for candidate in (
         PAYLOAD / "Assets",
         PAYLOAD / "Original Virtual Families 2 Assets" / "Assets",
     ):
-        if (candidate / "YogaGearStd.png.fmap").is_file():
+        if candidate.is_dir() and any(candidate.glob("*.fmap")):
             return candidate
     return None
 
