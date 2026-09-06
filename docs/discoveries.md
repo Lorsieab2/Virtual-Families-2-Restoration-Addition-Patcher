@@ -4079,13 +4079,39 @@ boundary and restoring it is a fix for a real defect on its own terms, but the
 mechanism connecting empty geometry to the observed fault is not traced.
 
 All five dumps fault deterministically at the same `cmp dword ptr [esi], 0`,
-with the faulting address equal to `esi`, and the same loop is byte-identical
-in booting B179. Whether a path through the loop body can leave the stack
-displaced, so that its `pop edi` and `pop esi` read neighbouring slots before
-`mov esp, ebp` repairs the stack pointer, is unresolved: the function has a
-single return path and no displacement has been demonstrated on it, and the
-observed `edi == arg_0 + 1` is equally explained by the caller's own `inc edi`
-immediately before the fault. Settling it needs a hardware watchpoint, which is
-live execution and the owner's decision. Until then the accurate statement is
-that the emptied geometry was sufficient to trigger the crash, not that the
-crash is understood.
+and the same loop is byte-identical in booting B179, so the code is not the
+variable. Two register facts are established, each reproduced independently by
+two sessions across all five dumps: `esi` holds 0, 1 or 2 where the object
+pointer belongs, with the faulting address equal to `esi`; and `edi` holds
+`arg_0 + 1` where a counter bounded to ten belongs. The second is the same fact
+as `edi == [ebp-0x1C] + 1`, the caller's saved-`esi` slot, because the outer
+loop passes its own `esi` as both `ecx` and the argument, so those two words
+necessarily hold the same pointer.
+
+The caller's saved slots are intact and correct -- saved `esi` still holds the
+real pointer and saved `edi` still holds zero -- so nothing overwrote the
+stack, and no freed-or-relocated-object reading survives that.
+
+No mechanism accounts for both registers. Stack displacement is the open
+hypothesis: the epilogue's `pop edi` and `pop esi` run before `mov esp, ebp`
+reloads `esp`, and the stack cookie cannot detect a displacement because it
+travels from `[ebp-4]` into `ecx` and is compared there, never touching `esp`.
+Two specific forms have been tested and do not hold. A frame-sized
+displacement reaching the pushed argument word predicts that `pop esi` read
+`[ebp+12]`, which is a pointer in every dump and never 0, 1 or 2. A one-slot
+displacement to the caller's saved-`esi` slot cannot occur either, because that
+slot lies in the caller's frame above the loop body's own, which the loop body
+never pops into. Two earlier arguments against displacement are also withdrawn:
+that the callees are clean and the body has a single exit, which does not
+establish preservation; and that the caller's `inc edi` accounts for the `+1`,
+which presupposes the anomaly, since it explains the increment only given that
+`edi` already held `arg_0`.
+
+Static analysis is exhausted rather than conclusive. IDA's stack-pointer
+analysis over all 185 basic blocks of the loop body finds every path reaching
+the epilogue at `spd = -0xCFC` with `spd` zero at the return, and all 42 call
+sites matching their callee's declared `retn N`, but that is path-insensitive
+and trusts each declaration, so it does not clear the hypothesis. Settling it
+needs a hardware watchpoint, which is live execution and the owner's decision.
+Until then the accurate statement is that the emptied geometry was sufficient
+to trigger the crash, not that the crash is understood.

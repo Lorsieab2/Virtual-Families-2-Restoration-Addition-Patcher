@@ -2720,13 +2720,33 @@ The crash is in theGameState's CONSTRUCTOR, and it is deterministic
 
 - WHAT IS STILL NOT ESTABLISHED. That this explains the fault. The borrowed
   geometry is what changed across the boundary and restoring it is a fix for a
-  real defect on its own terms, but the mechanism is untraced. Whether a path
-  through the loop body can leave the stack displaced, so that its pop edi and
-  pop esi read neighbouring slots before mov esp,ebp repairs the stack pointer,
-  is unresolved: the function has a single return path, no displacement has
-  been demonstrated on it, and the observed edi == arg_0 + 1 is equally
-  explained by the caller's own inc edi immediately before the fault. Settling
-  it needs a hardware watchpoint under a debugger, which is live execution and
-  the owner's decision. Until then the accurate statement is that the emptied
+  real defect on its own terms, but the mechanism is untraced.
+
+  Two register facts are established, each reproduced independently by two
+  sessions across all five dumps. esi holds 0, 1 or 2 where the object pointer
+  belongs, with the faulting address equal to esi. And edi holds arg_0 + 1
+  where a counter bounded to ten belongs -- the same fact as
+  edi == [ebp-0x1C] + 1, the caller's saved-esi slot, because the outer loop
+  passes its own esi as both ecx and the argument.
+
+  The caller's saved slots are intact and correct, so nothing overwrote the
+  stack and no freed-or-relocated-object reading survives.
+
+  Stack displacement is the open hypothesis: the epilogue's pops run before
+  mov esp,ebp reloads esp, and the cookie cannot detect it because it travels
+  [ebp-4] -> ecx and is compared there. Two forms are tested and fail. A
+  frame-sized displacement to the pushed argument word predicts pop esi read
+  [ebp+12], a pointer in every dump. A one-slot displacement to the saved-esi
+  slot cannot occur, that slot being in the caller's frame above the loop
+  body's own. Two earlier arguments against displacement are withdrawn: that
+  the callees are clean with a single exit, and that inc edi accounts for the
+  +1 -- the latter presupposes the anomaly.
+
+  Static analysis is exhausted rather than conclusive: IDA's SP analysis over
+  all 185 basic blocks reaches the epilogue at spd = -0xCFC with spd zero at
+  the return and all 42 call sites matching their declared retn N, but it is
+  path-insensitive and trusts each declaration. Settling it needs a hardware
+  watchpoint under a debugger, which is live execution and the owner's
+  decision. Until then the accurate statement is that the emptied
   geometry was sufficient to trigger the crash, not that the crash is
   understood.
