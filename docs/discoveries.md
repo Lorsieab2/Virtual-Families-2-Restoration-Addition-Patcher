@@ -4147,7 +4147,7 @@ built and undamaged. Scanning 0x200 bytes of stack finds exactly one
 executable return address, `0x4CBFAB` -- the CALLER. There is no frame beneath
 this one, so whatever the retry loop called had already returned normally.
 
-### Which makes the corruption specific and provable
+### Which narrows where esi can have come from
 
 The enclosing function writes esi ONCE, at entry from ecx, and never again;
 edi is zeroed at entry and only incremented. The loop reads `[esi]` twice:
@@ -4160,28 +4160,80 @@ edi is zeroed at entry and only incremented. The loop reads `[esi]` twice:
 Had esi been bad on entry the fault would be at +0x28, not +0x3E. So esi was
 valid, one call ran and returned, and esi came back as 0, 1 or 2. edi at the
 same moment holds a POINTER-shaped value (`0x785A91`, `0x9E2515`) where a
-0..10 counter belongs. The callee left its own values in the caller's
-callee-saved registers.
+0..10 counter belongs.
+
+It is tempting to conclude from that pair of facts that the callee left its
+own values in the caller's callee-saved registers. That conclusion is WRONG,
+and the epilogue rules it out. The loop body has exactly ONE return path,
+and it ends:
+
+    pop edi
+    pop esi
+    call __security_check_cookie
+    mov esp, ebp        <- esp reloaded FROM ebp, not from the pops
+    pop ebp
+    ret 4
+
+Because `esp` is reloaded from `ebp` before the frame is torn down, an
+unbalanced push anywhere inside the loop body cannot shift what `pop edi` and
+`pop esi` read, and so cannot leave stale values behind in them. This argument
+is about the loop body's own single epilogue, which is the frame the caller
+actually returns through; it does not depend on auditing the callees, and it
+holds regardless of what they do internally. Whatever puts 0, 1 or 2 into esi,
+it is not the loop body failing to restore the caller's registers.
+
+Two further measurements constrain what it can be. In all five dumps `edi` is
+exactly `arg_0 + 1`, and the `arg_0` values fall on the caller's own object
+stride, `this + 0x1CC70 + k * 0x1CC0C` (k = 0 and k = 2 both observed) -- so
+the register file is internally consistent with a real frame rather than with
+scrambled contents. And live memory read from the dumps at `arg_0` is a
+well-formed object whose first dword is 3, not 0: for the real object the loop
+condition `*this == 0` is false, and the loop should have exited rather than
+faulted. What esi holds at the fault is a small integer of the kind stored AT
+`[arg_0]`, not a corrupted pointer.
 
 ### What was checked and came back clean
 
 - The loop body's epilogue: `pop edi`, `pop esi`, `mov esp,ebp`, `pop ebp`,
-  `ret 4`, with the cookie check between the pops and the return. Correct.
-- `__security_check_cookie` at `0x4D3B90`: three instructions, touches neither
-  register.
-- All 26 distinct call targets inside the loop body: none writes esi without
-  restoring it.
-- The patcher's own injected helper at `0x4BF000`: one `push esi`, one
-  `pop esi`, one `ret`. Balanced.
+  `ret 4`, with the cookie check between the pops and the return. Correct,
+  and it is the `mov esp, ebp` that makes the restore unspoilable.
+- `__security_check_cookie` at `0x4D3B90`: `cmp ecx, ___security_cookie`,
+  `jnz`, `retn`, and on the failure path `jmp` to the report routine. It
+  touches neither esi nor edi.
+- The loop body reaches 26 distinct call targets. They were enumerated, but
+  note that many of them use esp-based frames rather than the `mov esp, ebp`
+  form, so a per-callee audit is not what rules the theory out -- the loop
+  body's own epilogue is. The enumeration is recorded for completeness, not
+  as the proof.
 
 ### What this does NOT establish
 
-Which callee corrupts the registers. A linear push/pop scan cannot distinguish
-a callee-save from an argument push -- the shipped loop body shows five
-`push esi` against one `pop esi` and four of those five are arguments. A
-previous session reached a wrong conclusion by exactly that method and
-retracted it; this entry stops rather than repeat it with a different
-register.
+How esi comes to hold 0, 1 or 2. The callee-corruption explanation is ruled
+out above, and nothing measured so far replaces it. Note also that a linear
+push/pop scan cannot distinguish a callee-save from an argument push -- the
+shipped loop body shows five `push esi` against one `pop esi`, and four of
+those five are arguments. Two separate sessions reached a wrong conclusion by
+exactly that method and retracted it; the epilogue argument above is what
+actually settles the question, and it should be used in preference to any
+push/pop tally.
 
-Settling it needs a hardware watchpoint or single-stepping under a debugger,
-which is a live-execution step and is the owner's call to authorise.
+Nor does this entry establish any link between the furniture maps and the
+fault. The correlation with the B179-to-B180 delta is real, but no trace
+connects lost or sparse collision geometry to this register state, and none
+should be asserted without one.
+
+Settling the remaining question needs a hardware watchpoint or single-stepping
+under a debugger, which is a live-execution step and is the owner's call to
+authorise.
+
+### Per-build addresses differ; do not reuse them
+
+B180 and B181 fault at the SAME instruction of the SAME function, but at
+different image-relative addresses, because the builds shifted by 0x430:
+
+    B180   fault rva 0xC869E   in sub_4C8660 (0x4C8660-0x4C8749), at +0x3E
+    B181   fault rva 0xC8ACE   in sub_4C8A90 (0x4C8A90-0x4C8B79), at +0x3E
+
+In B180's layout, 0xC8ACE lands in a different function entirely. Any RVA in
+this entry is only valid for the build it was measured on; re-derive it per
+binary rather than carrying it across.
