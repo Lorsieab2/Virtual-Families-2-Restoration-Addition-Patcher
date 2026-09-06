@@ -292,9 +292,15 @@ class TestTheDocumentedPropBoundIsReal(unittest.TestCase):
     OBJ = ROOT / "work" / "desktop_obj_files" / "Environment.obj"
 
     def test_setprop_still_rejects_the_two_props_we_need(self):
-        if not self.OBJ.is_file():
+        # Presence is decided by the DIRECTORY, not by one file inside it.
+        if not self.OBJ.parent.is_dir():
             self.skipTest(
-                "Environment.obj is a gitignored build input; not present here"
+                "desktop_obj_files is a gitignored build input"
+            )
+        if not self.OBJ.is_file():
+            self.fail(
+                "desktop_obj_files exists but Environment.obj is missing "
+                "from it. That is a damaged build input, not an absent one."
             )
         data = self.OBJ.read_bytes()
         # cmp edi, 54h -- the bound the docs quote.
