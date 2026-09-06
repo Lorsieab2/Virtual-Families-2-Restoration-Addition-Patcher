@@ -1041,7 +1041,27 @@ class VF2PatcherGUI:
             summary = getattr(args, "last_apply_summary", None) if args is not None else None
             self.root.after(0, lambda: self._finish_worker(label, success, message, output, err_output, summary, dry_run))
 
-        threading.Thread(target=worker, daemon=True).start()
+        # If the thread cannot start -- the OS refusing another thread is the
+        # real case -- nothing will ever call _finish_worker, and the popup
+        # has already taken a modal grab with BOTH its own X and the root's
+        # close handler disabled. Tk would report the exception and keep
+        # looping, leaving the app locked behind a window nobody can dismiss.
+        # Undo the busy state here rather than leaving it to a callback that
+        # is never scheduled.
+        try:
+            threading.Thread(target=worker, daemon=True).start()
+        except RuntimeError as exc:
+            self._close_work_wait()
+            self._set_busy(False)
+            self.status_var.set(f"{label} could not start")
+            self._append_log(
+                f"ERROR: could not start the {label} thread: {exc}\n"
+            )
+            messagebox.showerror(
+                "Could not start",
+                f"{label} could not be started because a worker thread "
+                f"could not be created:\n\n{exc}",
+            )
 
     def _finish_worker(
         self,

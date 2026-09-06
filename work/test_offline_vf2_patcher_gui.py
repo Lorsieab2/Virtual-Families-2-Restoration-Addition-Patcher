@@ -6,6 +6,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ELLIPSIS = chr(0x2026)
 
@@ -844,6 +845,40 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         log = self.app.log_text.get("1.0", "end")
         self.assertIn("Please wait", log)
         self.assertIn("Checking your game files", log)
+
+    def test_a_worker_that_cannot_start_does_not_lock_the_app(self):
+        """A thread that refuses to start must not leave a modal popup.
+
+        _open_work_wait takes a modal grab, disables the popup's own X AND
+        replaces the root's WM_DELETE_WINDOW with a no-op. Everything that
+        undoes that lives in _finish_worker, which only ever runs because the
+        worker thread schedules it. So if Thread.start() raises -- the OS
+        refusing another thread is the real case -- nothing restores the UI
+        and the app sits behind a window that nothing can dismiss, for the
+        rest of the session.
+
+        Asserted on the observable end state rather than on the guard: busy
+        cleared, popup gone, and the root's close handler restored, which is
+        what "the user can still quit" actually means.
+        """
+        before = self.app.root.protocol("WM_DELETE_WINDOW")
+        errors = []
+        with mock.patch.object(
+            gui.threading, "Thread", side_effect=RuntimeError("can't start new thread")
+        ), mock.patch.object(gui.messagebox, "showerror", lambda *a, **k: errors.append(a)):
+            self.app._run_worker("Apply", lambda: None)
+        self.root.update()
+        self.assertIsNone(
+            getattr(self.app, "_work_wait", None),
+            "the wait popup outlived a worker that never started",
+        )
+        self.assertEqual(
+            self.app.root.protocol("WM_DELETE_WINDOW"),
+            before,
+            "the root close handler was left disabled, so the app cannot be quit",
+        )
+        self.assertTrue(errors, "the failure was never reported to the user")
+        self.assertIn("could not start", self.app.status_var.get().lower())
 
     def test_a_failed_load_cannot_leave_a_hidden_selection_applyable(self):
         """A failed load must invalidate the previously loaded manifest.
