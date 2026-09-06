@@ -3840,6 +3840,59 @@ Measured against the extracted bundles rather than the source tree:
   one of which runs and one of which does not. That is a stronger bracket than
   the release-level statement this entry previously claimed, not a weaker one.
 
+  **And the two runs were configured identically**, which the `.text` match
+  alone does not establish. A release ships 32 executables whose feature sets
+  differ, so both axes have to be pinned before the comparison is controlled.
+  Every patcher run writes
+  `<install>/.vf2_patch_backups/<ts>_manifest/patch_log.json` carrying a
+  `settings.available` array with per-setting `enabled` state. Read from the
+  owner's own installs:
+
+  | run | enabled | disabled |
+  | --- | --- | --- |
+  | B179 (works) | 34 of 35 | `invisible_furniture_transparent_graphics` |
+  | B180 (crashes) | 34 of 35 | `invisible_furniture_transparent_graphics` |
+  | B181 (crashes) | 34 of 35 | `invisible_furniture_transparent_graphics` |
+
+  And B179's own binary is variant-matched too, which the settings table alone
+  does not show. Its patch log selects
+  `payload\Virtual Families 2 - Modded B179 - Final All-Enabled Native.exe`,
+  and the installed executable's `.text` digest is `fcad90fbcfba196e`, which
+  matches the `Final All-Enabled Native` variant among the 128 B179 matrix
+  executables. So all three installs -- the one that works and the two that
+  crash -- are the same variant of consecutive builds.
+
+  Zero differing settings across all three, the same
+  `vanilla_to_modded_output` mode, and identical runtime checks including the
+  directory counts (`Images` 655, `Sounds` 316, `Assets` 242). Same variant
+  AND same configuration.
+
+  **The install trees themselves**, walked and content-hashed rather than read
+  out of the logs. An earlier version of this entry claimed "exactly two
+  one-sided paths" from the patch logs alone, which was not a safe reading:
+  the logs inventory `patched_files` and `asset_files`, not every file
+  `prepare_output_dir()` copies, so equal directory counts do not prove equal
+  trees. Measured directly, B179 8,553 files against B180 8,555:
+
+  | | count | paths |
+  | --- | --- | --- |
+  | only in B179 | 1 | the B179-named executable |
+  | only in B180 | 3 | the B180-named executable, `Assets/SpaLoungerStd.png.fmap`, `Images/Furniture/SpaLoungerStd.png` |
+  | shared but differing | 105 | 100 under `Images/HairstyleIcons/`, 5 `Assets/*.fmap` |
+
+  The five differing fmaps are `InvisibleLounger`, `InvisiblePatioTable`,
+  `InvisiblePicnicTable`, `InvisibleSpaLounger` and `Patio_table` -- two more
+  than the three this entry records for the BUNDLE, because
+  `mobile_furniture_behavior_asset_patches()` also rewrites `Patio_table` and
+  `InvisibleSpaLounger` at apply time when `mobile_furniture_behaviors` is
+  enabled. The differently-named executables are expected and are not part of
+  the delta.
+
+  Discounting the executables, the one-sided set is the two Spa Lounger files,
+  which is what made a single-variable ablation possible: a copy of the
+  crashing B180 install with those two removed, verified to differ from the
+  original in nothing else and to carry a byte-identical executable.
+
 - **Three assets differ under `Assets/`.** `InvisibleLounger.png.fmap`,
   `InvisiblePatioTable.png.fmap` and `InvisiblePicnicTable.png.fmap`. Every
   other file in that directory is byte-identical, and neither bundle has a
