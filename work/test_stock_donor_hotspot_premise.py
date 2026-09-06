@@ -105,8 +105,19 @@ def require_desktop_objects(case):
     player's own installation, not committed -- so a fresh clone has no
     theMainScene.obj to read.
     """
-    if not SCENE.is_file():
+    # PRESENCE IS DECIDED BY THE DIRECTORY, not by one file inside it.
+    # Testing for theMainScene.obj alone meant a payload that IS present
+    # but has lost that file skipped SILENTLY -- the check disappeared
+    # exactly when something was wrong with the thing it checks, and a
+    # fresh clone was indistinguishable from a damaged one in the output.
+    if not SCENE.parent.is_dir():
         case.skipTest("desktop_obj_files is a gitignored build input")
+    if not SCENE.is_file():
+        case.fail(
+            f"desktop_obj_files exists but {SCENE.name} is missing from "
+            "it. That is a damaged build input, not an absent one, and it "
+            "must not be reported as a skip."
+        )
 
 
 def desktop_objects(name, directory=None):

@@ -484,8 +484,14 @@ class TestBothPropBoundsAreReal(unittest.TestCase):
     JL = bytes((0x0F, 0x8C))                  # loop back while below
 
     def _obj(self):
+        # Presence is decided by the DIRECTORY, not by one file inside it.
+        if not self.OBJ.parent.is_dir():
+            self.skipTest("desktop_obj_files is a gitignored build input")
         if not self.OBJ.is_file():
-            self.skipTest("Environment.obj is a gitignored build input")
+            self.fail(
+                "desktop_obj_files exists but Environment.obj is missing "
+                "from it. That is a damaged build input, not an absent one."
+            )
         return self.OBJ.read_bytes()
 
     def _sole(self, data, pattern, label):

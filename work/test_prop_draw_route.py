@@ -300,8 +300,17 @@ class TestTheDecalCallShape(unittest.TestCase):
     STRIDE = bytes((0x8B, 0xC3, 0xC1, 0xE0, 0x04, 0x80, 0xB8, 0x7C, 0x00, 0x00, 0x00, 0x00))
 
     def setUp(self):
+        # Presence is decided by the DIRECTORY, not by one file inside it.
+        # Testing for Decal.obj alone meant a payload that IS present but
+        # has lost that file skipped silently -- the check vanishing exactly
+        # when something is wrong with what it checks.
+        if not self.OBJ.parent.is_dir():
+            self.skipTest("desktop_obj_files is a gitignored build input")
         if not self.OBJ.is_file():
-            self.skipTest("Decal.obj is a gitignored build input")
+            self.fail(
+                "desktop_obj_files exists but Decal.obj is missing from it. "
+                "That is a damaged build input, not an absent one."
+            )
 
     def _body(self):
         """RefreshProps' OWN bytes, not its whole section.
