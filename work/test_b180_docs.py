@@ -82,14 +82,24 @@ class TestTheRoutedAndUnroutedSplitIsReal(unittest.TestCase):
         # nothing -- so this asserts the CLAIM, not one particular phrasing.
         status = row.split("|")[2].strip()
         self.assertNotEqual(status, "", "the row lost its status column")
-        for claimed_working in ("Shipped", "Confirmed working", "Complete"):
-            with self.subTest(claimed_working):
-                self.assertNotIn(
-                    claimed_working.lower(), status.lower(),
-                    f"the status {status!r} presents the unrouted seven as "
-                    "working; they are not routed and the owner has reported "
-                    "the Home Gym System does nothing",
-                )
+        # An ALLOW-LIST, not a blacklist. Enumerating three phrasings let
+        # "Verified", "Working / player-confirmed" or "Implemented" through,
+        # each of which presents the unrouted items as working -- the exact
+        # error this test exists to prevent. The status must instead say
+        # plainly that something is unresolved.
+        unresolved = (
+            "premise disproved", "route needed", "needs", "pending",
+            "partial", "not started", "blocked", "outstanding",
+            "unrouted", "in progress", "not yet", "deliberately not",
+        )
+        self.assertTrue(
+            any(word in status.lower() for word in unresolved),
+            f"the status {status!r} does not say anything is still "
+            "unresolved, so it reads as working. The seven items are not "
+            "routed through HandleDropOnHotSpot and the owner has reported "
+            "the Home Gym System does nothing. If they genuinely now work, "
+            "this test is the wrong thing to edit -- the route is.",
+        )
         self.assertIn("HandleDropOnHotSpot", row)
         # And every one of the seven is named, so none is quietly dropped from
         # the outstanding list.
@@ -282,9 +292,15 @@ class TestTheDocumentedPropBoundIsReal(unittest.TestCase):
     OBJ = ROOT / "work" / "desktop_obj_files" / "Environment.obj"
 
     def test_setprop_still_rejects_the_two_props_we_need(self):
-        if not self.OBJ.is_file():
+        # Presence is decided by the DIRECTORY, not by one file inside it.
+        if not self.OBJ.parent.is_dir():
             self.skipTest(
-                "Environment.obj is a gitignored build input; not present here"
+                "desktop_obj_files is a gitignored build input"
+            )
+        if not self.OBJ.is_file():
+            self.fail(
+                "desktop_obj_files exists but Environment.obj is missing "
+                "from it. That is a damaged build input, not an absent one."
             )
         data = self.OBJ.read_bytes()
         # cmp edi, 54h -- the bound the docs quote.
@@ -422,9 +438,25 @@ class TestThePropBlockerIsNamedAccurately(unittest.TestCase):
             )
 
     def test_the_row_names_the_real_obstacle(self):
+        """The row must explain WHY the props did not draw, not just that they did not.
+
+        This originally required the row to name the art that exists and the
+        dispatch-table obstacle, because at the time the obstacle was the
+        whole story. Four defects were later found and fixed, so the row now
+        explains those instead -- but the requirement is unchanged in
+        substance: a reader must be able to tell what was actually wrong.
+        """
         row = self._row()
-        self.assertIn("meal.png", row, "the row should say what art does exist")
-        self.assertIn("relocation", row, "the row should name the dispatch-table obstacle")
+        self.assertIn(
+            "meal", row.lower(),
+            "the row should say which art is involved",
+        )
+        for cause in ("descriptor", "conditional", "hotspot"):
+            self.assertIn(
+                cause, row.lower(),
+                f"the row does not mention the {cause} defect, so a reader "
+                "cannot tell what was actually wrong",
+            )
 
     def test_the_meal_art_really_is_in_the_payload(self):
         """The claim above is only safe while this holds."""
@@ -458,8 +490,14 @@ class TestBothPropBoundsAreReal(unittest.TestCase):
     JL = bytes((0x0F, 0x8C))                  # loop back while below
 
     def _obj(self):
+        # Presence is decided by the DIRECTORY, not by one file inside it.
+        if not self.OBJ.parent.is_dir():
+            self.skipTest("desktop_obj_files is a gitignored build input")
         if not self.OBJ.is_file():
-            self.skipTest("Environment.obj is a gitignored build input")
+            self.fail(
+                "desktop_obj_files exists but Environment.obj is missing "
+                "from it. That is a damaged build input, not an absent one."
+            )
         return self.OBJ.read_bytes()
 
     def _sole(self, data, pattern, label):
@@ -571,11 +609,26 @@ class TestTheReadmeIsHonestAboutTheProps(unittest.TestCase):
         # this release" while the ledger and README both said it had landed --
         # green suite, three documents disagreeing, and the one a player reads
         # being the wrong one.
+        # Checked against EVERY pending-state phrase, not one substring.
+        # Using "stays bare" alone as the proxy meant the description could
+        # drop that phrase while still telling players the props "do not
+        # appear" and that drawing was "not in this release" -- the check
+        # would go green with two stale claims still shipping in the text a
+        # player actually reads.
+        pending_phrases = (
+            "stays bare", "do not appear", "does not appear",
+            "not in this release", "in progress and is not",
+        )
+        still_claims_pending = [
+            phrase for phrase in pending_phrases if phrase in description
+        ]
         self.assertEqual(
             self._rendering_pending(),
-            "stays bare" in description,
+            bool(still_claims_pending),
             "the shipped setting description and the ledger disagree about "
-            "whether the props draw; update both together",
+            "whether the props draw; update both together. The description "
+            f"still carries {still_claims_pending!r} while the ledger says "
+            f"rendering pending is {self._rendering_pending()}",
         )
 
     def test_the_readme_and_the_ledger_agree(self):

@@ -112,8 +112,38 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
         )
 
     def test_the_row_says_what_actually_remains(self):
-        evidence = self._row()[2]
-        self.assertIn("rendering", evidence.lower() + self._row()[1].lower())
+        """The row must name the outstanding step, whatever it currently is.
+
+        This required the word "rendering" while rendering was the thing
+        still to do. Four defects were found and fixed, so what remains is
+        no longer the drawing itself but confirming it in a built binary and
+        in play. The requirement is the same in substance: the row must not
+        read as finished while something is still outstanding.
+        """
+        text = (self._row()[1] + " " + self._row()[2]).lower()
+        # PHRASES THAT MEAN UNFINISHED, not bare topic words. Each entry has
+        # to be unambiguous on its own, because the check is a substring
+        # match and a bare topic word is satisfied by a sentence that says
+        # the opposite. "qa" and "build" are satisfied by "Confirmed in a
+        # build / QA complete"; "rendering" by "rendering complete"; and
+        # "remains" by "no work remains" -- every one of which presents the
+        # feature as done, the exact claim this test exists to prevent.
+        self.assertTrue(
+            any(phrase in text for phrase in (
+                "not yet", "pending", "unconfirmed", "not confirmed",
+                "still outstanding", "remains outstanding", "yet to be",
+                "has not been", "have not been", "nobody has",
+            )),
+            "the row does not say what is still outstanding, so a reader "
+            "cannot tell whether the props are known to work",
+        )
+        # And it must not ALSO read as finished. A row can satisfy the phrase
+        # above and still open by calling the work complete.
+        for claim in ("qa complete", "rendering complete", "no work remains"):
+            self.assertNotIn(
+                claim, text,
+                f"the row claims {claim!r} while confirmation is outstanding",
+            )
 
 
 if __name__ == "__main__":
