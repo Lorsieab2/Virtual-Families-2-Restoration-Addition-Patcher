@@ -4229,6 +4229,30 @@ fault. The correlation with the B179-to-B180 delta is real, but no trace
 connects lost or sparse collision geometry to this register state, and none
 should be asserted without one.
 
+### The static stack-balance check, and why it does not close the question
+
+Since the epilogue argument fails, the stack-balance hypothesis was tested
+directly instead, with IDA's own SP analysis over the whole loop body
+(B181 `sub_4C7FE0`, 185 basic blocks):
+
+- Every path reaches the epilogue at the same tracked depth. The two apparent
+  predecessor/successor disagreements at `0x4C8081` and `0x4C891B` are
+  bookkeeping at jump targets, not imbalances: both routes arrive at
+  `0x4C896E` at `spd = -0xCFC`, and `spd` is `0` at `retn` on every path.
+- All 42 call sites in the loop body were checked against their callee's
+  actual `retn N`. Every site's cleanup matches the callee's purge, and no
+  callee has inconsistent purge values across its returns.
+
+So there is no STATICALLY visible imbalance. That is worth recording, but it
+does NOT clear the hypothesis, for the same reason the epilogue argument
+failed: this is a whole-program, path-insensitive result that assumes each
+callee behaves as its declared return says. An imbalance produced only on a
+particular dynamic path, or by a callee that returns differently under some
+condition, would not appear here.
+
+Static analysis has now been taken as far as it goes on this crash. What
+remains needs live execution.
+
 Settling the remaining question needs a hardware watchpoint or single-stepping
 under a debugger, which is a live-execution step and is the owner's call to
 authorise.
