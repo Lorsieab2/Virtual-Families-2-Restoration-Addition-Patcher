@@ -38,6 +38,11 @@ __pycache__/
 !/work/*.hpp
 !/work/*.rsp
 !/work/*.json
+# ...but never the GUI's local settings: save_saved_paths() writes the
+# operator's own vanilla_game_dir and modded_output_dir into this file
+# beside the patcher, so tracking it dirties the tree on every GUI run
+# and publishes install paths on the first commit of that dirt.
+/work/patcher_local_settings.json
 !/work/*.csv
 !/work/*.txt
 !/work/*.md

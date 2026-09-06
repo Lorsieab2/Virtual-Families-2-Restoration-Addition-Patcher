@@ -126,8 +126,70 @@ INTENTIONALLY_UNCALLED = {
 }
 
 
+def _own_scope_nodes(node):
+    """Every node in this scope, NOT descending into nested scopes.
+
+    ast.walk descends into nested function, lambda and class bodies. Defining
+    a class whose method mentions patch_new() does not execute that method, and
+    defining an inner helper that a reachable function never calls does not
+    execute it either -- so walking eagerly through them reports an orphan as
+    reached. Each nested scope is a separate graph node, reached only when
+    something actually references it.
+    """
+    nested = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef)
+    # The node ITSELF counts: a decorator or a default argument is handed to
+    # this helper as a bare Name, and yielding only its children would miss it.
+    # A nested scope passed in directly is still descended into, because the
+    # caller asked about that scope specifically.
+    stack = [node]
+    while stack:
+        current = stack.pop()
+        yield current
+        # Stop at a nested scope -- unless it is the node the caller asked
+        # about, whose own body is exactly what they want walked.
+        if current is not node and isinstance(current, nested):
+            continue
+        for child in ast.iter_child_nodes(current):
+            stack.append(child)
+
+
+def _bound_locally(node):
+    """Names this scope BINDS, which therefore shadow a module-level function.
+
+    A parameter, an assignment target, a walrus, a for-loop variable, an
+    `except ... as`, a `with ... as`, an import alias, or a nested def/class
+    all create a local binding. `patch_new = lambda: None; patch_new()` inside
+    a reachable function refers to that local, not to the top-level installer
+    of the same name, so counting it would mark an orphan reached by a
+    statement that never touches it.
+
+    Only the scope's OWN bindings are collected; nested scopes are separate.
+    """
+    bound = set()
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+        args = node.args
+        every = (
+            list(args.posonlyargs) + list(args.args) + list(args.kwonlyargs)
+            + ([args.vararg] if args.vararg else [])
+            + ([args.kwarg] if args.kwarg else [])
+        )
+        for arg in every:
+            bound.add(arg.arg)
+    for child in _own_scope_nodes(node):
+        if isinstance(child, ast.Name) and isinstance(child.ctx, (ast.Store, ast.Del)):
+            bound.add(child.id)
+        elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(child.name)
+        elif isinstance(child, (ast.Import, ast.ImportFrom)):
+            for alias in child.names:
+                bound.add((alias.asname or alias.name).split(".")[0])
+        elif isinstance(child, ast.ExceptHandler) and child.name:
+            bound.add(child.name)
+    return bound
+
+
 def _references_within(node):
-    """Names this node genuinely REFERENCES, excluding two false positives.
+    """Names this node genuinely REFERENCES, excluding four false positives.
 
     * An assignment TARGET. `patch_new = None` contains an ast.Name for
       patch_new but binds it rather than using it -- counting it would mark an
@@ -135,17 +197,25 @@ def _references_within(node):
     * An attribute call on another object. `obj.patch_new()` yields the
       attribute "patch_new", which has nothing to do with the top-level
       function of that name.
+    * A LOCALLY BOUND name. A parameter or local variable that happens to share
+      an installer's name refers to the local, so it is dropped here.
+    * Anything inside a NESTED scope. Defining a class or an inner function
+      does not run its body; those scopes are separate graph nodes, walked only
+      once something actually references them.
 
     A bare LOAD still counts: a function placed in a table, passed to a helper,
     or wrapped by a decorator is genuinely reachable, and the generator does
     that in several places.
     """
+    shadowed = _bound_locally(node)
     names = set()
-    for child in ast.walk(node):
+    for child in _own_scope_nodes(node):
         if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
-            names.add(child.func.id)
+            if child.func.id not in shadowed:
+                names.add(child.func.id)
         elif isinstance(child, ast.Name) and isinstance(child.ctx, ast.Load):
-            names.add(child.id)
+            if child.id not in shadowed:
+                names.add(child.id)
     return names
 
 
@@ -262,10 +332,6 @@ class TestEveryInstallerIsReached(unittest.TestCase):
                 )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class AllowListedInstallersStayUncalled(unittest.TestCase):
     """Re-enabling one of these must FAIL, not pass quietly.
 
@@ -321,3 +387,91 @@ class AllowListedInstallersStayUncalled(unittest.TestCase):
             "the entry is dead weight and would silently exempt a future "
             "function of the same name:\n  " + "\n  ".join(missing),
         )
+
+
+class TheReachabilityWalkResolvesScopes(unittest.TestCase):
+    """The walk must answer both questions, not just the safe one.
+
+    A reachability check has two ways to be wrong and only one of them is
+    loud. Reporting a called installer as an orphan fails the suite and gets
+    fixed. Reporting an ORPHAN as reached is silent -- it is the defect this
+    module exists to catch, and it is what every case below reproduced before
+    the traversal resolved scopes and lexical bindings.
+
+    So each case is asserted in BOTH directions: the shapes that must not
+    count as reachable, and the shapes that genuinely are and must survive.
+    A stricter walk that quietly stopped seeing real handoffs would pass a
+    one-sided version of this test while breaking the generator's own wiring.
+    """
+
+    UNREACHABLE = {
+        "a class method that mentions it": (
+            "def patch_new(): pass\n"
+            "class Unused:\n"
+            "    def go(self): patch_new()\n"
+        ),
+        "a local that shadows it, then is called": (
+            "def patch_new(): pass\n"
+            "def entry():\n"
+            "    patch_new = lambda: None\n"
+            "    patch_new()\n"
+            "entry()\n"
+        ),
+        "a parameter that shadows it": (
+            "def patch_new(): pass\n"
+            "def entry(patch_new): patch_new()\n"
+            "entry(None)\n"
+        ),
+        "a nested def that is never called": (
+            "def patch_new(): pass\n"
+            "def entry():\n"
+            "    def inner(): patch_new()\n"
+            "entry()\n"
+        ),
+        "an assignment target": "def patch_new(): pass\npatch_new = None\n",
+        "an attribute on another object": "def patch_new(): pass\nobj.patch_new()\n",
+    }
+
+    REACHABLE = {
+        "a direct call from module scope": "def patch_new(): pass\npatch_new()\n",
+        "a call from a reachable function": (
+            "def patch_new(): pass\ndef entry(): patch_new()\nentry()\n"
+        ),
+        "a call two levels down": (
+            "def patch_new(): pass\n"
+            "def middle(): patch_new()\n"
+            "def top(): middle()\n"
+            "top()\n"
+        ),
+        "a handoff into a table": "def patch_new(): pass\nTABLE = [patch_new]\n",
+        "use as a decorator": "def patch_new(): pass\n@patch_new\ndef x(): pass\n",
+        "use as a default argument": (
+            "def patch_new(): pass\ndef entry(f=patch_new): pass\n"
+        ),
+    }
+
+    def test_these_shapes_do_not_make_an_orphan_look_reached(self):
+        for description, source in self.UNREACHABLE.items():
+            with self.subTest(description):
+                _, reachable = _reachable_from_module(ast.parse(source))
+                self.assertNotIn(
+                    "patch_new",
+                    reachable,
+                    f"{description} reported an uncalled installer as reached, "
+                    "which is the silent orphan this module exists to catch",
+                )
+
+    def test_genuine_reachability_still_counts(self):
+        for description, source in self.REACHABLE.items():
+            with self.subTest(description):
+                _, reachable = _reachable_from_module(ast.parse(source))
+                self.assertIn(
+                    "patch_new",
+                    reachable,
+                    f"{description} is real wiring the generator uses, and a "
+                    "walk that misses it would report false orphans",
+                )
+
+
+if __name__ == "__main__":
+    unittest.main()
