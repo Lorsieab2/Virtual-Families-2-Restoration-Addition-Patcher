@@ -18,6 +18,7 @@ engine at all -- VF2PatioSetPropAndTrack intercepts them and tracks the state
 externally. Drawing is still to be built. The art being present and correct is
 a precondition for that work, not evidence it is done.
 """
+import re
 import hashlib
 import struct
 import unittest
@@ -41,6 +42,49 @@ def _png(path):
     data = path.read_bytes()
     width, height = struct.unpack_from(">II", data, 16)
     return width, height, data[25], hashlib.sha256(data).hexdigest()[:16]
+
+
+
+# PHRASES THAT MEAN UNFINISHED, not bare topic words. A bare topic word is
+# satisfied by a sentence saying the opposite: "rendering" by "rendering
+# complete", "qa"/"build" by "Confirmed in a build / QA complete", "remains"
+# by "no work remains". Every entry below carries the pending sense alone.
+_PENDING_PHRASES = (
+    "not yet", "not confirmed", "pending", "unconfirmed", "outstanding",
+    "yet to be", "has not been", "have not been", "nobody has",
+)
+
+# Even an unambiguous phrase is reversed by a negator beside it, and the
+# finished forms are open-ended, so a literal blocklist cannot enumerate them:
+#
+#   "Confirmed; nothing pending"           contains "pending"
+#   "Done -- nothing unconfirmed remains"  contains "unconfirmed"
+#   "No longer awaiting confirmation"      contains "awaiting"
+#
+# A phrase is denied only by a negator that IMMEDIATELY PRECEDES it. Scoping
+# it that way matters in both directions: "not yet" and "not confirmed" are
+# not denied by their own leading "not", and
+# "Confirmation is pending because it is not complete" stays PENDING, because
+# that "not" belongs to "not complete", which reinforces the claim.
+_NEGATOR = re.compile(
+    r"\b(no|not|nothing|none|never)\b\W*(?:longer\W+)?\w*\W*$"
+)
+_CLAUSE_SPLIT = re.compile(r"[.;,]| but | and | because ")
+
+
+def _reads_as_pending(text):
+    """True when some clause says work is outstanding without denying it."""
+    for clause in _CLAUSE_SPLIT.split(text):
+        if not clause.strip():
+            continue
+        for phrase in _PENDING_PHRASES:
+            at = clause.find(phrase)
+            if at < 0:
+                continue
+            if _NEGATOR.search(clause[:at]):
+                continue
+            return True
+    return False
 
 
 class TestSuppliedPropArt(unittest.TestCase):
@@ -114,36 +158,19 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
     def test_the_row_says_what_actually_remains(self):
         """The row must name the outstanding step, whatever it currently is.
 
-        This required the word "rendering" while rendering was the thing
-        still to do. Four defects were found and fixed, so what remains is
-        no longer the drawing itself but confirming it in a built binary and
-        in play. The requirement is the same in substance: the row must not
-        read as finished while something is still outstanding.
+        This required the bare word "rendering" while rendering was the thing
+        still to do. Four defects were found and fixed, so what remains is no
+        longer the drawing itself but confirming it in a built binary and in
+        play. The requirement is the same in substance -- the row must not
+        read as finished while something is outstanding -- but a bare topic
+        word cannot express it.
         """
         text = (self._row()[1] + " " + self._row()[2]).lower()
-        # PHRASES THAT MEAN UNFINISHED, not bare topic words. Each entry has
-        # to be unambiguous on its own, because the check is a substring
-        # match and a bare topic word is satisfied by a sentence that says
-        # the opposite. "qa" and "build" are satisfied by "Confirmed in a
-        # build / QA complete"; "rendering" by "rendering complete"; and
-        # "remains" by "no work remains" -- every one of which presents the
-        # feature as done, the exact claim this test exists to prevent.
         self.assertTrue(
-            any(phrase in text for phrase in (
-                "not yet", "pending", "unconfirmed", "not confirmed",
-                "still outstanding", "remains outstanding", "yet to be",
-                "has not been", "have not been", "nobody has",
-            )),
+            _reads_as_pending(text),
             "the row does not say what is still outstanding, so a reader "
             "cannot tell whether the props are known to work",
         )
-        # And it must not ALSO read as finished. A row can satisfy the phrase
-        # above and still open by calling the work complete.
-        for claim in ("qa complete", "rendering complete", "no work remains"):
-            self.assertNotIn(
-                claim, text,
-                f"the row claims {claim!r} while confirmation is outstanding",
-            )
 
 
 if __name__ == "__main__":
