@@ -1003,6 +1003,14 @@ class VF2PatcherGUI:
     def _run_worker(self, label: str, func: object, *, args: object | None = None, dry_run: bool = False) -> None:
         self._set_busy(True)
         self.status_var.set(f"{label} running - please wait...")
+        # The owner asked for the wait popup "while it's patching", not
+        # only while the manifest loads. _run_with_wait cannot be reused here:
+        # it pumps the event loop until the work returns, whereas this path
+        # hands control back to Tk and finishes later in _finish_worker. So
+        # the window is opened here and closed there -- including on the
+        # failure path, or a crash would leave a modal popup over a dead UI
+        # with no way to dismiss it.
+        self._open_work_wait(label)
         self._append_log(f"\n== {label} ==\n")
         # Everything the patcher print()s is captured and only shown when
         # the run finishes, so the log stays empty right through the
@@ -1033,7 +1041,27 @@ class VF2PatcherGUI:
             summary = getattr(args, "last_apply_summary", None) if args is not None else None
             self.root.after(0, lambda: self._finish_worker(label, success, message, output, err_output, summary, dry_run))
 
-        threading.Thread(target=worker, daemon=True).start()
+        # If the thread cannot start -- the OS refusing another thread is the
+        # real case -- nothing will ever call _finish_worker, and the popup
+        # has already taken a modal grab with BOTH its own X and the root's
+        # close handler disabled. Tk would report the exception and keep
+        # looping, leaving the app locked behind a window nobody can dismiss.
+        # Undo the busy state here rather than leaving it to a callback that
+        # is never scheduled.
+        try:
+            threading.Thread(target=worker, daemon=True).start()
+        except RuntimeError as exc:
+            self._close_work_wait()
+            self._set_busy(False)
+            self.status_var.set(f"{label} could not start")
+            self._append_log(
+                f"ERROR: could not start the {label} thread: {exc}\n"
+            )
+            messagebox.showerror(
+                "Could not start",
+                f"{label} could not be started because a worker thread "
+                f"could not be created:\n\n{exc}",
+            )
 
     def _finish_worker(
         self,
@@ -1051,6 +1079,11 @@ class VF2PatcherGUI:
             self._append_log(stderr)
         if message:
             self._append_log(message + "\n")
+        # Closed BEFORE anything that can raise or show a dialog. A
+        # messagebox raised while the modal wait popup still holds the grab
+        # would sit behind it, unreachable, and the app would look hung --
+        # which is the exact impression the popup exists to prevent.
+        self._close_work_wait()
         self._set_busy(False)
         if success:
             self.status_var.set(f"{label} complete.")
@@ -1062,6 +1095,89 @@ class VF2PatcherGUI:
             if message:
                 display = message.removeprefix("ERROR: ").strip()
                 messagebox.showerror(APP_DISPLAY_NAME, display)
+
+    # What the popup says the run is DOING. _run_worker handles three
+    # operations and only one of them writes a patched game: telling a dry
+    # run that files are being written contradicts the guarantee the rest of
+    # the UI makes about it, and calling a restore "patching" simply
+    # misdescribes it. Keyed on the label _run_worker was given, which is the
+    # same string the status line and the log already use.
+    _WORK_WAIT_DETAIL = {
+        "Dry run": "Checking your game files. Nothing is written in a dry run.",
+        "Restore backup": "Restoring the selected backup into the game folder.",
+    }
+
+    def _work_wait_detail(self, label: str) -> str:
+        """The operation-specific line, falling back to the patching text."""
+        return self._WORK_WAIT_DETAIL.get(
+            label, "Checking your game files and writing the patched game."
+        )
+
+    def _open_work_wait(self, label: str) -> None:
+        """Show the wait popup for a long background run.
+
+        Reuses WaitWindow rather than adding a second mechanism, so the
+        popup shown while patching is the same one already shown while the
+        manifest loads.
+
+        Never raises. A failure to build the popup must not stop the patch
+        the user actually asked for -- the run proceeds with the status
+        line, exactly as it did before this existed.
+        """
+        self._work_wait = None
+        self._work_wait_previous_close = None
+        try:
+            wait = WaitWindow(
+                self.root,
+                "Please wait",
+                f"{label} in progress." + "\n\n"
+                + self._work_wait_detail(label) + "\n"
+                + "This can take a minute on a full release.",
+            )
+        except tk.TclError:
+            # WaitWindow can raise AFTER Toplevel.__init__ has already put
+            # a window on screen -- _take_grab() giving up on its deadline
+            # is the case that actually happens. The assignment below never
+            # completes, so _work_wait stays None and _finish_worker has
+            # nothing to close: the popup would sit there for the rest of
+            # the session with its own X disabled. Destroy whatever was
+            # built before giving up.
+            # DESTROY, do not close(). WaitWindow.close() begins by
+            # touching self._bar, which does not exist yet if the failure
+            # happened during title, protocol or widget setup -- so
+            # calling it would raise AttributeError out of this handler
+            # and abandon the run with the controls still disabled. The
+            # tested _take_grab() failure is a LATE one and would have
+            # survived close(); an early one would not.
+            for child in self.root.winfo_children():
+                if isinstance(child, WaitWindow):
+                    with contextlib.suppress(tk.TclError, AttributeError):
+                        child.destroy()
+            return
+        self._work_wait = wait
+        # The popup disables its own X, but that does nothing for the ROOT
+        # window: closing the app from the title bar or taskbar would destroy
+        # every widget while the worker thread is still writing game files.
+        # _run_with_wait guards the same way for the same reason.
+        with contextlib.suppress(tk.TclError):
+            self._work_wait_previous_close = self.root.protocol("WM_DELETE_WINDOW")
+            self.root.protocol("WM_DELETE_WINDOW", lambda: None)
+
+    def _close_work_wait(self) -> None:
+        """Close the wait popup and restore the root close handler.
+
+        Safe to call when no popup is open, so _finish_worker does not have
+        to know whether _open_work_wait succeeded.
+        """
+        wait = getattr(self, "_work_wait", None)
+        if wait is not None:
+            wait.close()
+        self._work_wait = None
+        previous = getattr(self, "_work_wait_previous_close", None)
+        if previous is not None:
+            with contextlib.suppress(tk.TclError):
+                self.root.protocol("WM_DELETE_WINDOW", previous)
+        self._work_wait_previous_close = None
 
     def _set_busy(self, busy: bool) -> None:
         state = "disabled" if busy else "normal"

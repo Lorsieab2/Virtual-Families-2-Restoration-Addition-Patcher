@@ -112,3 +112,7 @@ __pycache__/
 /.git/
 /.codex/
 /.agents/
+
+# Written by the GUI (and by its tests, which instantiate the real app).
+work/patcher_local_settings.json
+src/patcher_local_settings.json

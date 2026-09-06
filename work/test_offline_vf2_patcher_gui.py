@@ -3,8 +3,10 @@ import argparse
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ELLIPSIS = chr(0x2026)
 
@@ -572,6 +574,201 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         )
         self.assertNotIn("Please wait", self.app.status_var.get())
 
+    def _capture_after(self):
+        """Collect what the worker hands back via root.after().
+
+        _run_worker finishes by posting _finish_worker with root.after(0),
+        which only runs inside a live mainloop. These tests never call
+        mainloop() -- doing so would block the runner -- so the callback is
+        captured and invoked directly. That still exercises the real
+        _finish_worker; only Tk's delivery is stood in for.
+        """
+        posted = []
+        original = self.root.after
+
+        def spy(delay, callback=None, *args):
+            if callback is not None and delay == 0:
+                posted.append(lambda: callback(*args))
+                return "after#test"
+            return original(delay, callback, *args)
+
+        self.root.after = spy
+        return posted
+
+    def _drain(self, posted, timeout=5.0):
+        """Run whatever the worker posted, once it has posted it."""
+        deadline = time.monotonic() + timeout
+        while not posted and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertTrue(posted, "the worker never posted its completion")
+        while posted:
+            posted.pop(0)()
+
+    def test_patching_shows_the_wait_popup_too_not_only_loading(self):
+        """The owner asked for the popup while PATCHING, not only loading.
+
+        _run_worker is the long one -- it copies whole game folders and
+        writes patched bytes -- and it had no popup at all: only a status
+        line and a log that stays empty until the run ends. This asserts a
+        real WaitWindow exists while the worker is in flight, so removing
+        the call fails the test rather than passing on a string.
+        """
+        import tkinter as tk
+
+        during = {}
+        started = threading.Event()
+        release = threading.Event()
+
+        def slow_work():
+            started.set()
+            release.wait(5)
+
+        posted = self._capture_after()
+        self.app._run_worker("Apply", slow_work)
+        self.assertTrue(started.wait(5), "the worker never started")
+        during["wait"] = getattr(self.app, "_work_wait", None)
+        during["is_window"] = isinstance(during["wait"], gui.WaitWindow)
+        during["exists"] = bool(
+            during["wait"] is not None and during["wait"].winfo_exists()
+        )
+        release.set()
+        self._drain(posted)
+
+        self.assertTrue(
+            during["is_window"],
+            "no WaitWindow while patching -- the window would look frozen",
+        )
+        self.assertTrue(during["exists"], "the wait popup was not on screen")
+        self.assertIsNone(
+            getattr(self.app, "_work_wait", None),
+            "the wait popup outlived the run, so it would sit there forever",
+        )
+
+    def test_a_popup_that_fails_to_build_does_not_stay_on_screen(self):
+        """WaitWindow can raise AFTER putting a window on screen.
+
+        Toplevel.__init__ succeeds and maps the window; _take_grab() can then
+        give up on its deadline and raise. The assignment to `wait` never
+        completes, so _work_wait stays None and _finish_worker has nothing to
+        close -- leaving a popup with its own X disabled sitting there for the
+        rest of the session.
+
+        The patch still has to proceed (a popup that cannot be built must not
+        stop the work the user asked for), so the orphan has to be destroyed on
+        the way out rather than by refusing to run.
+        """
+        import tkinter as tk
+
+        original = gui.WaitWindow
+        built = []
+
+        class ExplodingWaitWindow(original):
+            def __init__(self, parent, title, message, modal=True):
+                super().__init__(parent, title, message, modal=False)
+                built.append(self)
+                raise tk.TclError("grab timed out")
+
+        gui.WaitWindow = ExplodingWaitWindow
+        try:
+            posted = self._capture_after()
+            self.app._run_worker("Apply", lambda: None)
+            self._drain(posted)
+        finally:
+            gui.WaitWindow = original
+
+        self.assertTrue(built, "the test never reached WaitWindow construction")
+        self.assertIsNone(
+            getattr(self.app, "_work_wait", None),
+            "a popup that failed to build was recorded as the live one",
+        )
+        for window in built:
+            self.assertFalse(
+                window.winfo_exists(),
+                "the half-built popup is still on screen; its X is disabled, so "
+                "the user cannot dismiss it for the rest of the session",
+            )
+
+    def test_an_EARLY_construction_failure_is_also_cleaned_up(self):
+        """The failure can happen before _bar exists.
+
+        The tested grab timeout is a LATE failure -- by then WaitWindow has
+        built its progress bar, so close() works. A failure during title,
+        protocol or child-widget setup leaves self._bar unset, and close()
+        begins by touching it: calling close() there raises AttributeError out
+        of the handler and abandons the run with the controls still disabled.
+
+        So the cleanup destroys the window rather than closing it, and this
+        drives the early case specifically.
+        """
+        import tkinter as tk
+
+        original = gui.WaitWindow
+        built = []
+
+        class EarlyFailure(original):
+            def __init__(self, parent, title, message, modal=True):
+                # Deliberately NOT calling WaitWindow.__init__ past Toplevel:
+                # a real window exists, but _bar was never assigned.
+                tk.Toplevel.__init__(self, parent)
+                self._modal = False
+                built.append(self)
+                raise tk.TclError("failed before the progress bar existed")
+
+        gui.WaitWindow = EarlyFailure
+        try:
+            posted = self._capture_after()
+            self.app._run_worker("Apply", lambda: None)
+            self._drain(posted)
+        finally:
+            gui.WaitWindow = original
+
+        self.assertTrue(built, "the test never reached construction")
+        self.assertFalse(
+            hasattr(built[0], "_bar"),
+            "the fixture built a progress bar, so this is not the early case",
+        )
+        for window in built:
+            self.assertFalse(
+                window.winfo_exists(),
+                "a window that failed BEFORE its progress bar existed is still "
+                "on screen; close() would have raised AttributeError here",
+            )
+        self.assertIn(
+            "complete", self.app.status_var.get().lower(),
+            "the run did not finish, so the handler abandoned it instead of "
+            "letting the patch proceed",
+        )
+
+    def test_a_failed_run_still_closes_the_wait_popup(self):
+        """A crash must not leave a modal popup over a dead UI.
+
+        The popup takes a grab, so if it survived a failure the user could
+        not click anything -- including the error dialog explaining what
+        went wrong. _finish_worker closes it before showing that dialog.
+        """
+        shown = []
+        self.app._show_apply_success = lambda summary: None
+        gui.messagebox.showerror = lambda *a, **k: shown.append(a)
+
+        def boom():
+            raise RuntimeError("patching blew up")
+
+        posted = self._capture_after()
+        self.app._run_worker("Apply", boom)
+        self._drain(posted)
+
+        self.assertIn("failed", self.app.status_var.get())
+        self.assertIsNone(
+            getattr(self.app, "_work_wait", None),
+            "the popup survived a failure and would block the whole app",
+        )
+        # grab_current() is None when nothing holds a grab; Tk stringifies
+        # that as "None", so compare the object rather than its text.
+        self.assertIsNone(
+            self.root.grab_current(),
+            "a grab outlived the failed run, so every control stays dead",
+        )
+
     def test_the_wait_popup_cannot_be_closed_and_stops_a_second_run(self):
         # The X does nothing because the work cannot be cancelled part way
         # without leaving a half-copied game folder, and the grab is what
@@ -648,6 +845,74 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         log = self.app.log_text.get("1.0", "end")
         self.assertIn("Please wait", log)
         self.assertIn("Checking your game files", log)
+
+    def test_the_popup_describes_the_operation_it_is_running(self):
+        """Each operation must be described as what it actually does.
+
+        _run_worker serves three operations and only one writes a patched
+        game. A dry run that announces it is "writing the patched game"
+        contradicts the guarantee the rest of the UI makes about dry runs,
+        and a restore described as patching is simply wrong.
+
+        The dry-run case is asserted NEGATIVELY as well as positively: the
+        wording must not merely mention checking, it must not claim to write,
+        because the original text mentioned checking too and was still wrong.
+        """
+        cases = {
+            "Enable/Disable patches": ("writing the patched game", None),
+            "Dry run": ("Nothing is written", "writing the patched game"),
+            "Restore backup": ("Restoring the selected backup", "writing the patched game"),
+        }
+        for label, (expected, forbidden) in cases.items():
+            with self.subTest(label):
+                detail = self.app._work_wait_detail(label)
+                self.assertIn(expected, detail)
+                if forbidden is not None:
+                    self.assertNotIn(
+                        forbidden,
+                        detail,
+                        f"the {label} popup still claims to write a patched game",
+                    )
+
+    def test_an_unknown_operation_keeps_the_patching_wording(self):
+        """A new caller must not silently get a blank or misleading line."""
+        self.assertIn(
+            "writing the patched game", self.app._work_wait_detail("Something new")
+        )
+
+    def test_a_worker_that_cannot_start_does_not_lock_the_app(self):
+        """A thread that refuses to start must not leave a modal popup.
+
+        _open_work_wait takes a modal grab, disables the popup's own X AND
+        replaces the root's WM_DELETE_WINDOW with a no-op. Everything that
+        undoes that lives in _finish_worker, which only ever runs because the
+        worker thread schedules it. So if Thread.start() raises -- the OS
+        refusing another thread is the real case -- nothing restores the UI
+        and the app sits behind a window that nothing can dismiss, for the
+        rest of the session.
+
+        Asserted on the observable end state rather than on the guard: busy
+        cleared, popup gone, and the root's close handler restored, which is
+        what "the user can still quit" actually means.
+        """
+        before = self.app.root.protocol("WM_DELETE_WINDOW")
+        errors = []
+        with mock.patch.object(
+            gui.threading, "Thread", side_effect=RuntimeError("can't start new thread")
+        ), mock.patch.object(gui.messagebox, "showerror", lambda *a, **k: errors.append(a)):
+            self.app._run_worker("Apply", lambda: None)
+        self.root.update()
+        self.assertIsNone(
+            getattr(self.app, "_work_wait", None),
+            "the wait popup outlived a worker that never started",
+        )
+        self.assertEqual(
+            self.app.root.protocol("WM_DELETE_WINDOW"),
+            before,
+            "the root close handler was left disabled, so the app cannot be quit",
+        )
+        self.assertTrue(errors, "the failure was never reported to the user")
+        self.assertIn("could not start", self.app.status_var.get().lower())
 
     def test_a_failed_load_cannot_leave_a_hidden_selection_applyable(self):
         """A failed load must invalidate the previously loaded manifest.
