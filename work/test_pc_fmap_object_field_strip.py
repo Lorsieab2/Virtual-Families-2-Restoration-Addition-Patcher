@@ -73,17 +73,58 @@ class TestObjectTypeFieldIsStrippedWholly(unittest.TestCase):
                             f"{name}: payload rewritten ({mobile:#010x} -> {pc:#010x})",
                         )
 
+    def test_the_strip_never_costs_a_cell_its_collision_payload(self):
+        """The regression that gutted four furniture footprints.
+
+        The strip removes the mobile object type from the high half. It must
+        not touch the low half -- that is the cell's own payload, and 0x0001
+        is base-game collision geometry: 11,258 cells across the install use
+        it, and it appears in 16 of the 34 maps in the mobile restore set.
+
+        Nineteen maps were zeroing whole cells instead, taking 856 payloads
+        with them. On the installed builds InvisiblePatioTable fell from 241
+        occupied cells to 8 and InvisibleLounger from 154 to 12 -- the
+        collision and placement geometry a villager is walked onto.
+
+        The clearest cases carried NO type at all: cells 44-49 of
+        Patio_table are 0x00000001 in the mobile map, so there was nothing
+        to strip, and they were zeroed anyway.
+
+        Asserted per map with a count, because a single global total hides
+        which map regressed.
+        """
+        for name in self.names:
+            with self.subTest(name):
+                lost = [
+                    (index, mobile)
+                    for index, (mobile, pc) in enumerate(
+                        zip(_cells(MOBILE / name), _cells(PC / name))
+                    )
+                    if pc == 0 and (mobile & 0xFFFF) == 0x0001
+                ]
+                self.assertEqual(
+                    lost, [],
+                    f"{name}: {len(lost)} cell(s) lost the 0x0001 collision "
+                    f"payload the strip has no reason to touch, e.g. cell "
+                    f"{lost[0][0] if lost else 0}",
+                )
+
     def test_a_cleared_cell_only_ever_drops_a_known_unsafe_payload(self):
         """Zeroing a cell must be deliberate, not incidental.
 
         The check above compares payloads only where the pc cell survives, so
         a transform that wrongly cleared a cell it should have kept passes it
         silently -- the very failure the seat-anchor regression was. Across
-        all 34 maps exactly two payloads are ever dropped: 0x0001, the mobile
-        behaviour hotspot the desktop tables carry no handler for, and 0x8800
-        on the four holiday-decoration cells the group and stocking validators
-        own. 0x8800 is kept on seven other cells, so it is not unsafe by
-        itself and only the named maps may drop it.
+        all 34 maps exactly ONE payload is ever dropped: 0x8800, on the four
+        holiday-decoration cells the group and stocking validators own. It is
+        kept on seven other cells, so it is not unsafe by itself and only the
+        named maps may drop it.
+
+        0x0001 USED TO BE ON THIS LIST, described as a mobile behaviour
+        hotspot. That was wrong: it is base-game collision geometry, present
+        in 16 of the 34 maps in the mobile restore set and the most common
+        non-zero payload in the install. Dropping it gutted four furniture
+        footprints; the test above now forbids it outright.
 
         Anything else being cleared means the strip removed geometry, which is
         how a villager ends up walked to a position that no longer exists.
@@ -101,7 +142,7 @@ class TestObjectTypeFieldIsStrippedWholly(unittest.TestCase):
                     payload = mobile & 0xFFFF
                     if pc or not payload:
                         continue
-                    allowed = {0x0001}
+                    allowed = set()
                     if name in may_drop_8800:
                         allowed.add(0x8800)
                     self.assertIn(
