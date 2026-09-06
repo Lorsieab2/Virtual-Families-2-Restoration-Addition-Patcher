@@ -3994,6 +3994,7 @@ The current bytes are right, so this is a hole in the check rather than a
 defect in the data.
 
 
+
 ## A borrowing item was given a map authored for the donor's own name
 
 `ee5c306` routed borrowing furniture items onto the donor's desktop-safe map.
@@ -4115,3 +4116,72 @@ and trusts each declaration, so it does not clear the hypothesis. Settling it
 needs a hardware watchpoint, which is live execution and the owner's decision.
 Until then the accurate statement is that the emptied geometry was sufficient
 to trigger the crash, not that the crash is understood.
+
+## The startup crash is a NULL dereference, not a bad villager pointer
+
+Read from the dumps' EXCEPTION RECORDS, which no earlier entry had opened.
+Every prior theory was framed around the villager record being unmapped,
+freed, or moved; all of them are wrong, and the parameter array says so
+directly.
+
+### The faulting address is the value in esi
+
+`EXCEPTION_ACCESS_VIOLATION` carries two parameters: the access type and the
+address. Across all five dumps:
+
+    B180 #44912   READ at 0x0    esi = 0
+    B180 #18188   READ at 0x0    esi = 0
+    B180 #56108   READ at 0x1    esi = 1
+    B181 #25632   READ at 0x2    esi = 2
+    B181 #48596   READ at 0x0    esi = 0
+
+The faulting address EQUALS esi in every one. The instruction is
+`cmp dword ptr [esi], 0`, so this is a null or near-null dereference. Nothing
+was unmapped and nothing was freed: esi simply is not a pointer any more.
+
+### The frame is intact and the callee has returned
+
+`ebp` is `0x42A168` and `esp` is `0x42A148`, exactly the `ebp - 0x20` that
+`push ebp / sub esp,0x14 / push ebx,esi,edi` produces, so the frame is fully
+built and undamaged. Scanning 0x200 bytes of stack finds exactly one
+executable return address, `0x4CBFAB` -- the CALLER. There is no frame beneath
+this one, so whatever the retry loop called had already returned normally.
+
+### Which makes the corruption specific and provable
+
+The enclosing function writes esi ONCE, at entry from ecx, and never again;
+edi is zeroed at entry and only incremented. The loop reads `[esi]` twice:
+
+    +0x28  cmp [esi], edi     <- succeeds
+    +0x38  call <the loop body>
+    +0x3D  inc edi
+    +0x3E  cmp [esi], 0       <- FAULTS
+
+Had esi been bad on entry the fault would be at +0x28, not +0x3E. So esi was
+valid, one call ran and returned, and esi came back as 0, 1 or 2. edi at the
+same moment holds a POINTER-shaped value (`0x785A91`, `0x9E2515`) where a
+0..10 counter belongs. The callee left its own values in the caller's
+callee-saved registers.
+
+### What was checked and came back clean
+
+- The loop body's epilogue: `pop edi`, `pop esi`, `mov esp,ebp`, `pop ebp`,
+  `ret 4`, with the cookie check between the pops and the return. Correct.
+- `__security_check_cookie` at `0x4D3B90`: three instructions, touches neither
+  register.
+- All 26 distinct call targets inside the loop body: none writes esi without
+  restoring it.
+- The patcher's own injected helper at `0x4BF000`: one `push esi`, one
+  `pop esi`, one `ret`. Balanced.
+
+### What this does NOT establish
+
+Which callee corrupts the registers. A linear push/pop scan cannot distinguish
+a callee-save from an argument push -- the shipped loop body shows five
+`push esi` against one `pop esi` and four of those five are arguments. A
+previous session reached a wrong conclusion by exactly that method and
+retracted it; this entry stops rather than repeat it with a different
+register.
+
+Settling it needs a hardware watchpoint or single-stepping under a debugger,
+which is a live-execution step and is the owner's call to authorise.
