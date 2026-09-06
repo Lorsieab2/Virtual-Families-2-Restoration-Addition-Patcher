@@ -51,9 +51,8 @@ def _png(path):
 # QA complete", "rendering" by "rendering complete", "remains" by "no work
 # remains".
 _PENDING_PHRASES = (
-    "not yet", "not confirmed", "pending", "unconfirmed",
-    "still outstanding", "remains outstanding", "yet to be",
-    "has not been", "have not been", "nobody has",
+    "not yet", "not confirmed", "pending", "unconfirmed", "outstanding",
+    "yet to be", "has not been", "have not been", "nobody has",
 )
 
 # Even an unambiguous phrase is reversed by a negator beside it, and a
@@ -63,13 +62,21 @@ _PENDING_PHRASES = (
 #   "Done -- nothing unconfirmed remains"   contains "unconfirmed"
 #   "No longer awaiting confirmation"       contains "awaiting"
 #
-# So negation is judged PER CLAUSE, and the matched phrase is blanked out
-# first so that "not yet" and "not confirmed" are not denied by their own
-# "not". A row that reports a finished substep AND an outstanding one --
-# "Rendering no longer pending; confirmation still outstanding" -- still
-# passes on the clause that is genuinely pending.
-_NEGATOR = re.compile(r"\b(no|not|nothing|none|never)\b")
-_CLAUSE_SPLIT = re.compile(r"[.;,]| but | and ")
+# So a phrase is denied only by a negator that IMMEDIATELY PRECEDES it --
+# "nothing pending", "no longer awaiting" -- rather than by one occurring
+# anywhere in the clause. Scoping it that way matters in both directions:
+#
+#   "not yet" / "not confirmed"  are not denied by their own leading "not"
+#   "Confirmation is pending because it is not complete"  stays PENDING,
+#       because the "not" belongs to "not complete", which reinforces it
+#
+# Negation is also judged per clause, so a row reporting a finished substep
+# AND an outstanding one -- "Rendering no longer pending; confirmation still
+# outstanding" -- still passes on the clause that is genuinely pending.
+_NEGATOR = re.compile(
+    r"\b(no|not|nothing|none|never)\b\W*(?:longer\W+)?\w*\W*$"
+)
+_CLAUSE_SPLIT = re.compile(r"[.;,]| but | and | because ")
 
 
 def _reads_as_pending(text):
@@ -81,8 +88,7 @@ def _reads_as_pending(text):
             at = clause.find(phrase)
             if at < 0:
                 continue
-            rest = clause[:at] + " " * len(phrase) + clause[at + len(phrase):]
-            if _NEGATOR.search(rest):
+            if _NEGATOR.search(clause[:at]):
                 continue
             return True
     return False
