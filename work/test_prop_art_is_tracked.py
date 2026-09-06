@@ -58,18 +58,21 @@ _PENDING_PHRASES = (
 # finished forms are open-ended, so a literal blocklist cannot enumerate them:
 #
 #   "Confirmed; nothing pending"           contains "pending"
-#   "Done -- nothing unconfirmed remains"  contains "unconfirmed"
-#   "No longer awaiting confirmation"      contains "awaiting"
+#   "No work is currently pending"          contains "pending"
+#   "No longer awaiting confirmation"       contains "awaiting"
 #
-# A phrase is denied only by a negator that IMMEDIATELY PRECEDES it. Scoping
-# it that way matters in both directions: "not yet" and "not confirmed" are
-# not denied by their own leading "not", and
+# A phrase is denied by a negator earlier in the same clause with only
+# ordinary noun and auxiliary words between them. The window is bounded so an
+# unrelated negator cannot leak across a clause, and the phrase's own leading
+# "not" is never the negator, so "not yet" and "not confirmed" still count.
 # "Confirmation is pending because it is not complete" stays PENDING, because
-# that "not" belongs to "not complete", which reinforces the claim.
+# that "not" belongs to "not complete" and follows the phrase.
 _NEGATOR = re.compile(
-    r"\b(no|not|nothing|none|never)\b\W*(?:longer\W+)?\w*\W*$"
+    r"\b(?:no|not|nothing|none|never)\b(?:\W+\w+){0,4}\W*$"
 )
-_CLAUSE_SPLIT = re.compile(r"[.;,]| but | and | because ")
+# Slash-separated substeps are a ledger convention -- "source complete / QA
+# pending" -- so "/" separates clauses like any other punctuation.
+_CLAUSE_SPLIT = re.compile(r"[.;,/]| but | and | because ")
 
 
 def _reads_as_pending(text):
@@ -78,12 +81,13 @@ def _reads_as_pending(text):
         if not clause.strip():
             continue
         for phrase in _PENDING_PHRASES:
-            at = clause.find(phrase)
-            if at < 0:
-                continue
-            if _NEGATOR.search(clause[:at]):
-                continue
-            return True
+            # EVERY occurrence, not just the first: a negated mention can
+            # precede a genuine one -- "nothing pending in source / QA
+            # pending" -- and stopping at the first hides the real claim.
+            for hit in re.finditer(r"\b" + re.escape(phrase) + r"\b", clause):
+                if _NEGATOR.search(clause[:hit.start()]):
+                    continue
+                return True
     return False
 
 
