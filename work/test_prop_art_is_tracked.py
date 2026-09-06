@@ -72,7 +72,13 @@ _NEGATOR = re.compile(
 )
 # Slash-separated substeps are a ledger convention -- "source complete / QA
 # pending" -- so "/" separates clauses like any other punctuation.
-_CLAUSE_SPLIT = re.compile(r"[.;,/]| but | and | because ")
+# Sentence and clause separators. ":" and the dashes matter as much as ";":
+# "Blockers: none - QA pending" is a legitimate pending row, and without them
+# the negator in the first clause reaches across and suppresses "pending" in
+# the second. Hyphen, en dash and em dash are all used in these rows.
+_CLAUSE_SPLIT = re.compile(
+    r"[.;,/:\u2013\u2014]|\s-\s| but | and | because "
+)
 
 
 def _reads_as_pending(text):
@@ -158,6 +164,39 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             "awaiting a decision", evidence,
             "the owner supplied the art, which was the decision being awaited",
         )
+
+    # Claims that the very work this row is waiting on is already finished.
+    # A row may legitimately say one substep is complete while another is
+    # pending -- "source complete / QA pending" is the ledger's own idiom --
+    # but it must not claim the OUTSTANDING step is done. Dropping the old
+    # literal "qa complete" check left "QA complete; release pending" passing
+    # a test whose whole purpose is to reject a finished-sounding row.
+    _CONTRADICTORY_CLAIMS = (
+        "qa complete",
+        "qa is complete",
+        "qa done",
+        "rendering complete",
+        "confirmed in play",
+        "verified in play",
+        "no work remains",
+    )
+
+    def test_the_row_never_claims_the_outstanding_work_is_done(self):
+        """A pending phrase elsewhere must not excuse a completion claim.
+
+        _reads_as_pending answers "does some clause say work is outstanding".
+        It cannot answer "does another clause contradict that", and a row
+        carrying both is worse than one carrying neither -- it reads as
+        finished to a person and as pending to the check.
+        """
+        text = (self._row()[1] + " " + self._row()[2]).lower()
+        for claim in self._CONTRADICTORY_CLAIMS:
+            self.assertNotIn(
+                claim,
+                text,
+                f"the row claims {claim!r} while confirmation is still "
+                "outstanding, so it reads as finished to a reader",
+            )
 
     def test_the_row_says_what_actually_remains(self):
         """The row must name the outstanding step, whatever it currently is.
