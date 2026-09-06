@@ -981,8 +981,14 @@ def borrowed_fmap_bytes(donor_map, desktop_safe_map):
     safe_cells = _fmap_cells(desktop_safe_map)
     if not donor_cells or len(donor_cells) != len(safe_cells):
         # Either file is not a readable QAMF grid, or the two disagree about
-        # the grid size.  Say so rather than guess: the caller falls back to
-        # copying the desktop-safe map verbatim, which is what it did before.
+        # the grid size.  Say so rather than guess.
+        #
+        # Returning None is only safe because the caller answers it by copying
+        # the desktop-safe map verbatim -- the line this function was added
+        # beside, and the behaviour every borrower had before it existed.  A
+        # caller that did something else with None would make declining worse
+        # than guessing, so that fallback is part of this contract rather than
+        # an implementation detail of the call site.
         return None
     merged = [
         safe if safe and safe != donor else donor
