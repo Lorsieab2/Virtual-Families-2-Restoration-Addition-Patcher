@@ -289,8 +289,6 @@ class TestEveryInstallerIsReached(unittest.TestCase):
                 )
 
 
-if __name__ == "__main__":
-    unittest.main()
 
 
 class TheLedgerMatchesTheAllowList(unittest.TestCase):
@@ -397,3 +395,7 @@ class AllowListedInstallersStayUncalled(unittest.TestCase):
             "the entry is dead weight and would silently exempt a future "
             "function of the same name:\n  " + "\n  ".join(missing),
         )
+
+
+if __name__ == "__main__":
+    unittest.main()
