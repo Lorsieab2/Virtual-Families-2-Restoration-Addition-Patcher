@@ -3875,6 +3875,29 @@ Measured against the extracted bundles rather than the source tree:
   this entry called it "the patcher icon", which misidentifies where the bytes
   come from and would make this measurement impossible to reproduce.
 
+### The lounger maps share one stored file, by design
+
+The union-of-paths comparison above raised a question worth settling, because
+a comment in `work/verify_extracted_release_payload.py` states that B180 adds
+`InvisibleSpaLounger.png.fmap` and `SpaLoungerStd.png.fmap` and that B179
+shipped neither. Searched by name across the whole payload, **neither file is
+present in B179, B180 or B181** -- only `InvisibleLounger.png.fmap`, which all
+three carry.
+
+That is NOT an undetected omission, and calling it one would have meant
+"fixing" a contract that works. The payload DEDUPLICATES. The verifier requires
+a manifest record for every lounger map, resolves each record's `source_path`
+to an actual file in the extracted payload -- failing with "manifest points at
+... which is not in the payload" when it cannot -- hashes the bytes on disk
+rather than the declared digest, and requires all three maps to resolve to
+identical content. `offline_vf2_patcher.py` then copies that one canonical
+source to each declared target at apply time.
+
+So a target-named file being absent from the payload is the design: the three
+lounger maps share one stored file precisely because the desktop-safe fix
+requires them to be identical, and the verifier proves that by digesting the
+resolved bytes.
+
 ### What this rules out
 
 - **The five added behaviours are not the cause.** B180 contains zero of the

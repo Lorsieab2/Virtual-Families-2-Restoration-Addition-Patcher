@@ -73,6 +73,45 @@ class TestObjectTypeFieldIsStrippedWholly(unittest.TestCase):
                             f"{name}: payload rewritten ({mobile:#010x} -> {pc:#010x})",
                         )
 
+    def test_a_cleared_cell_only_ever_drops_a_known_unsafe_payload(self):
+        """Zeroing a cell must be deliberate, not incidental.
+
+        The check above compares payloads only where the pc cell survives, so
+        a transform that wrongly cleared a cell it should have kept passes it
+        silently -- the very failure the seat-anchor regression was. Across
+        all 34 maps exactly two payloads are ever dropped: 0x0001, the mobile
+        behaviour hotspot the desktop tables carry no handler for, and 0x8800
+        on the four holiday-decoration cells the group and stocking validators
+        own. 0x8800 is kept on seven other cells, so it is not unsafe by
+        itself and only the named maps may drop it.
+
+        Anything else being cleared means the strip removed geometry, which is
+        how a villager ends up walked to a position that no longer exists.
+        """
+        may_drop_8800 = {
+            "SantaWallDecoration.png.fmap",
+            "StockingLarge.png.fmap",
+            "StockingSmall.png.fmap",
+        }
+        for name in self.names:
+            with self.subTest(name):
+                for index, (mobile, pc) in enumerate(
+                    zip(_cells(MOBILE / name), _cells(PC / name))
+                ):
+                    payload = mobile & 0xFFFF
+                    if pc or not payload:
+                        continue
+                    allowed = {0x0001}
+                    if name in may_drop_8800:
+                        allowed.add(0x8800)
+                    self.assertIn(
+                        payload,
+                        allowed,
+                        f"{name}: cell {index} dropped payload {payload:#06x} "
+                        f"({mobile:#010x} -> {pc:#010x}); only the mobile "
+                        f"behaviour hotspot may be cleared here",
+                    )
+
     def test_no_map_keeps_a_fragment_of_the_mobile_object_type(self):
         """A kept cell's type must be a type this map actually subtracted.
 
