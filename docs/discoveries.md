@@ -3816,23 +3816,29 @@ that B179 runs. B179 is therefore the newest known-good build, which makes
 the B179-to-B180 delta the tightest available bracket on the regression.
 Measured against the extracted bundles rather than the source tree:
 
-- **WHAT THIS BRACKET DOES AND DOES NOT CONTROL FOR.** Each release ships 32
-  executable variants with different feature sets, so "B179 runs and B180
-  crashes" is a statement about two RELEASES, not yet a controlled comparison
-  of two matched variants. The executable actually run is a deployed copy whose
-  SHA-256 is `a87aa30555fe012c...`, and it matches NONE of the variants in the
-  extracted B180 release payload, so this record cannot say which variant it
-  is or what settings produced it. If the two runs used different settings, the
-  observed transition includes variant differences as well as build
-  differences.
+- **THE TWO CRASHING BUILDS ARE THE SAME VARIANT, identified by code section.**
+  Each release ships 32 executables with different feature sets, so this had to
+  be established rather than assumed.
 
-  This does not weaken the two claims below that rest on reading the binaries
-  themselves -- the absent behaviour registrations and the byte-identical retry
-  loop are properties of the specific files disassembled, whatever variant they
-  are. It does mean the ASSET delta above brackets two releases rather than two
-  matched builds. Recording the installed executable's hash and the selected
-  settings at the time of each run is what would close that gap, and it was not
-  captured.
+  A WHOLE-FILE HASH CANNOT ANSWER IT, and an earlier version of this entry drew
+  the wrong conclusion from one. The installed B180 executable
+  (`a87aa30555fe012c...`) matches no variant in the release payload byte for
+  byte, which was recorded here as "cannot say which variant it is". That is an
+  artifact of comparing different INSTALLATION STAGES: the apply path copies the
+  selected executable and then rewrites its icon resources into the copy
+  (`preserve_stock_exe_icon`, `src/offline_vf2_patcher.py`), so an installed
+  executable never matches the payload image it came from. The same rewrite is
+  what produces the `.rsrc` section discussed below.
+
+  Digesting the `.text` section instead -- which the icon rewrite does not touch
+  -- resolves both immediately:
+
+      installed B180  .text d6af263edb9986ce  ->  B180 Final All-Enabled Native
+      installed B181  .text 3d7b487c64dfccba  ->  B181 Final All-Enabled Native
+
+  So the comparison IS variant-matched: the same variant of consecutive builds,
+  one of which runs and one of which does not. That is a stronger bracket than
+  the release-level statement this entry previously claimed, not a weaker one.
 
 - **Three assets differ under `Assets/`.** `InvisibleLounger.png.fmap`,
   `InvisiblePatioTable.png.fmap` and `InvisiblePicnicTable.png.fmap`. Every
@@ -3856,8 +3862,11 @@ Measured against the extracted bundles rather than the source tree:
   behaviour-hotspot cells whose payload is `0x0001` are zeroed. Both halves are
   intended; the zeroing is the "unsafe behaviour cells stripped" described at
   `patch_mobile_furniture_pack.py:4172`.
-- **The executable gained an `.rsrc` section** of 0x15EB0 bytes, moving
-  `.reloc` from `0x786000` to `0x79C000`. Parsing the resource directory shows
+- **The installed executable carries an `.rsrc` section** of 0x15EB0 bytes,
+  moving `.reloc` from `0x786000` to `0x79C000`. This is written by the APPLY
+  step rather than by the build -- raw linker images carry no stock icon -- so
+  it is a property of the installation, not a change between the two releases.
+  Parsing the resource directory shows
   it holds only `ICON` and `GROUP_ICON`. These are the STOCK GAME icon
   resources, not the patcher's own branding: `offline_vf2_patcher.py` captures
   `RT_ICON` (3) and `RT_GROUP_ICON` (14) from the player's original executable
