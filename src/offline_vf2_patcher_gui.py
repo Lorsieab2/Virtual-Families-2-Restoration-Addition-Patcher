@@ -1096,6 +1096,23 @@ class VF2PatcherGUI:
                 display = message.removeprefix("ERROR: ").strip()
                 messagebox.showerror(APP_DISPLAY_NAME, display)
 
+    # What the popup says the run is DOING. _run_worker handles three
+    # operations and only one of them writes a patched game: telling a dry
+    # run that files are being written contradicts the guarantee the rest of
+    # the UI makes about it, and calling a restore "patching" simply
+    # misdescribes it. Keyed on the label _run_worker was given, which is the
+    # same string the status line and the log already use.
+    _WORK_WAIT_DETAIL = {
+        "Dry run": "Checking your game files. Nothing is written in a dry run.",
+        "Restore backup": "Restoring the selected backup into the game folder.",
+    }
+
+    def _work_wait_detail(self, label: str) -> str:
+        """The operation-specific line, falling back to the patching text."""
+        return self._WORK_WAIT_DETAIL.get(
+            label, "Checking your game files and writing the patched game."
+        )
+
     def _open_work_wait(self, label: str) -> None:
         """Show the wait popup for a long background run.
 
@@ -1114,8 +1131,8 @@ class VF2PatcherGUI:
                 self.root,
                 "Please wait",
                 f"{label} in progress." + "\n\n"
-                "Checking your game files and writing the patched game." + "\n"
-                "This can take a minute on a full release.",
+                + self._work_wait_detail(label) + "\n"
+                + "This can take a minute on a full release.",
             )
         except tk.TclError:
             # WaitWindow can raise AFTER Toplevel.__init__ has already put

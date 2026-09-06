@@ -846,6 +846,40 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         self.assertIn("Please wait", log)
         self.assertIn("Checking your game files", log)
 
+    def test_the_popup_describes_the_operation_it_is_running(self):
+        """Each operation must be described as what it actually does.
+
+        _run_worker serves three operations and only one writes a patched
+        game. A dry run that announces it is "writing the patched game"
+        contradicts the guarantee the rest of the UI makes about dry runs,
+        and a restore described as patching is simply wrong.
+
+        The dry-run case is asserted NEGATIVELY as well as positively: the
+        wording must not merely mention checking, it must not claim to write,
+        because the original text mentioned checking too and was still wrong.
+        """
+        cases = {
+            "Enable/Disable patches": ("writing the patched game", None),
+            "Dry run": ("Nothing is written", "writing the patched game"),
+            "Restore backup": ("Restoring the selected backup", "writing the patched game"),
+        }
+        for label, (expected, forbidden) in cases.items():
+            with self.subTest(label):
+                detail = self.app._work_wait_detail(label)
+                self.assertIn(expected, detail)
+                if forbidden is not None:
+                    self.assertNotIn(
+                        forbidden,
+                        detail,
+                        f"the {label} popup still claims to write a patched game",
+                    )
+
+    def test_an_unknown_operation_keeps_the_patching_wording(self):
+        """A new caller must not silently get a blank or misleading line."""
+        self.assertIn(
+            "writing the patched game", self.app._work_wait_detail("Something new")
+        )
+
     def test_a_worker_that_cannot_start_does_not_lock_the_app(self):
         """A thread that refuses to start must not leave a modal popup.
 
