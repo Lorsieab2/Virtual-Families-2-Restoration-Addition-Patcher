@@ -979,7 +979,10 @@ def borrowed_fmap_bytes(donor_map, desktop_safe_map):
     """
     donor_cells = _fmap_cells(donor_map)
     safe_cells = _fmap_cells(desktop_safe_map)
-    if len(donor_cells) != len(safe_cells):
+    if not donor_cells or len(donor_cells) != len(safe_cells):
+        # Either file is not a readable QAMF grid, or the two disagree about
+        # the grid size.  Say so rather than guess: the caller falls back to
+        # copying the desktop-safe map verbatim, which is what it did before.
         return None
     merged = [
         safe if safe and safe != donor else donor
