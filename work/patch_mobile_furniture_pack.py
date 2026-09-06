@@ -12584,10 +12584,6 @@ public:
     // as an overload lets the compiler mangle it correctly rather than needing
     // the symbol spelled out.
     void AddDecal(ldwImageGrid *grid, int a, int b, int c, float scale);
-    // RefreshDecals TAIL-JUMPS to this as its last instruction, which is
-    // where the prop draw hooks: unconditional, and after the whole stock
-    // pass has populated the decal array.
-    void RefreshProps();
 };
 extern CDecal Decal;
 """
@@ -25897,6 +25893,12 @@ public:
     // and declaring them as overloads lets the compiler mangle each to the
     // symbol the linker already resolves rather than spelling either out.
     void AddDecal(ldwImageGrid *grid, int a, int b, int c, float scale);
+    // RefreshDecals TAIL-JUMPS to this as its last instruction, which is
+    // where the prop draw hooks: unconditional, and after the whole stock
+    // pass has populated the decal array. VF2RefreshPropsAndTableProps calls
+    // it through this class, so it must be declared in THIS translation unit
+    // as well -- the other CDecal above is a different generated source.
+    void RefreshProps();
 };
 extern CDecal Decal;
 
