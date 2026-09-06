@@ -166,7 +166,7 @@ def _bound_locally(node):
     right -- a helper defined and then called inside a reachable function does
     reach whatever it calls.
     """
-    bound, scopes = set(), {}
+    bound, scopes, stored = set(), {}, set()
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
         args = node.args
         every = (
@@ -179,6 +179,7 @@ def _bound_locally(node):
     for child in _own_scope_nodes(node):
         if isinstance(child, ast.Name) and isinstance(child.ctx, (ast.Store, ast.Del)):
             bound.add(child.id)
+            stored.add(child.id)
         elif isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
             bound.add(child.name)
             scopes[child.name] = child
@@ -186,9 +187,19 @@ def _bound_locally(node):
             bound.add(child.name)
         elif isinstance(child, (ast.Import, ast.ImportFrom)):
             for alias in child.names:
-                bound.add((alias.asname or alias.name).split(".")[0])
+                alias_name = (alias.asname or alias.name).split(".")[0]
+                bound.add(alias_name)
+                stored.add(alias_name)
         elif isinstance(child, ast.ExceptHandler) and child.name:
             bound.add(child.name)
+            stored.add(child.name)
+    # A nested def whose name is ALSO assigned somewhere in this scope no
+    # longer reliably refers to that definition, so calling the name is not
+    # evidence that its body runs. Applied after the scan rather than during
+    # it, because _own_scope_nodes does not visit in source order and the
+    # assignment may be seen before the def.
+    for name in stored:
+        scopes.pop(name, None)
     return bound, scopes
 
 
@@ -250,17 +261,43 @@ def _reachable_from_module(tree):
         node.name: node for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
-    # Names rebound at module scope. The binding a later call reaches is the
-    # replacement, not the installer.
+    # Names rebound at module scope AFTER their def. The binding a later call
+    # reaches is the replacement, not the installer, so the installer is still
+    # an orphan.
+    #
+    # Collected from every binding form rather than from a list of statement
+    # types. Recognising only Assign/AnnAssign/AugAssign missed `from x import
+    # y as patch_new`, `(patch_new := ...)`, `for patch_new in ...`, and
+    # `with ... as patch_new`, each of which rebinds the name just as
+    # effectively. Any Store context, plus import aliases and the two `as`
+    # forms, is what "rebound" actually means.
+    #
+    # Order matters: a Store BEFORE the def is not a rebinding of it, because
+    # the def is what runs last. Statements are walked in source order and a
+    # name only counts once its own def has been seen.
     rebound = set()
+    seen_def = set()
     for node in tree.body:
-        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            for target in targets:
-                for name in ast.walk(target):
-                    if isinstance(name, ast.Name) and isinstance(name.ctx, ast.Store):
-                        if name.id in defined:
-                            rebound.add(name.id)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name in seen_def:
+                # A second def of the same name replaces the first. Whichever
+                # one this walk holds, the name itself is still genuinely
+                # reachable, so it is not treated as a rebinding.
+                pass
+            seen_def.add(node.name)
+            continue
+        for child in ast.walk(node):
+            names = []
+            if isinstance(child, ast.Name) and isinstance(child.ctx, (ast.Store, ast.Del)):
+                names.append(child.id)
+            elif isinstance(child, (ast.Import, ast.ImportFrom)):
+                for alias in child.names:
+                    names.append((alias.asname or alias.name).split(".")[0])
+            elif isinstance(child, ast.ExceptHandler) and child.name:
+                names.append(child.name)
+            for name in names:
+                if name in defined and name in seen_def:
+                    rebound.add(name)
 
     # Seed: everything referenced from module scope -- statements that execute
     # on import, plus decorators and default arguments, which run then too.
@@ -487,6 +524,34 @@ class TheReachabilityWalkResolvesScopes(unittest.TestCase):
             "def patch_new(): pass\n"
             "def orphan(): patch_new()\n"
         ),
+        "an import alias that rebinds it": (
+            "def patch_new(): pass\n"
+            "from hooks import replacement as patch_new\n"
+            "patch_new()\n"
+        ),
+        "a walrus that rebinds it": (
+            "def patch_new(): pass\n"
+            "(patch_new := (lambda: None))\n"
+            "patch_new()\n"
+        ),
+        "a for-loop target that rebinds it": (
+            "def patch_new(): pass\n"
+            "for patch_new in items: pass\n"
+            "patch_new()\n"
+        ),
+        "a with-as target that rebinds it": (
+            "def patch_new(): pass\n"
+            "with opened() as patch_new: pass\n"
+            "patch_new()\n"
+        ),
+        "a nested helper rebound before it is called": (
+            "def patch_new(): pass\n"
+            "def entry():\n"
+            "    def inner(): patch_new()\n"
+            "    inner = something_else\n"
+            "    inner()\n"
+            "entry()\n"
+        ),
     }
 
     REACHABLE = {
@@ -520,6 +585,11 @@ class TheReachabilityWalkResolvesScopes(unittest.TestCase):
             "        inner()\n"
             "    outer()\n"
             "entry()\n"
+        ),
+        "a name stored BEFORE its def, which is not a rebinding": (
+            "patch_new = None\n"
+            "def patch_new(): pass\n"
+            "patch_new()\n"
         ),
     }
 
