@@ -4147,7 +4147,7 @@ built and undamaged. Scanning 0x200 bytes of stack finds exactly one
 executable return address, `0x4CBFAB` -- the CALLER. There is no frame beneath
 this one, so whatever the retry loop called had already returned normally.
 
-### Which narrows where esi can have come from
+### What the register state does and does not tell us
 
 The enclosing function writes esi ONCE, at entry from ecx, and never again;
 edi is zeroed at entry and only incremented. The loop reads `[esi]` twice:
@@ -4162,60 +4162,67 @@ valid, one call ran and returned, and esi came back as 0, 1 or 2. edi at the
 same moment holds a POINTER-shaped value (`0x785A91`, `0x9E2515`) where a
 0..10 counter belongs.
 
-It is tempting to conclude from that pair of facts that the callee left its
-own values in the caller's callee-saved registers. That conclusion is WRONG,
-and the epilogue rules it out. The loop body has exactly ONE return path,
-and it ends:
+The loop body has exactly ONE return path, and it ends:
 
     pop edi
     pop esi
     call __security_check_cookie
-    mov esp, ebp        <- esp reloaded FROM ebp, not from the pops
+    mov esp, ebp
     pop ebp
     ret 4
 
-Because `esp` is reloaded from `ebp` before the frame is torn down, an
-unbalanced push anywhere inside the loop body cannot shift what `pop edi` and
-`pop esi` read, and so cannot leave stale values behind in them. This argument
-is about the loop body's own single epilogue, which is the frame the caller
-actually returns through; it does not depend on auditing the callees, and it
-holds regardless of what they do internally. Whatever puts 0, 1 or 2 into esi,
-it is not the loop body failing to restore the caller's registers.
+An earlier revision of this entry argued that the trailing `mov esp, ebp`
+makes the restore unspoilable, and therefore ruled out the loop body as the
+source of the bad registers. THAT ARGUMENT IS WRONG, and it is recorded here
+so it is not made a third time. The two pops execute BEFORE `mov esp, ebp`.
+If the loop body reaches its epilogue with `esp` displaced -- an unbalanced
+push, or wrong argument cleanup on some path -- then `pop edi` and `pop esi`
+read the WRONG STACK SLOTS, and the later `mov esp, ebp` repairs only the
+stack pointer so the function can still return. It cannot undo registers that
+were already loaded from the wrong addresses. The order of those instructions
+is what matters, and it defeats the argument.
 
-Two further measurements constrain what it can be. In all five dumps `edi` is
-exactly `arg_0 + 1`, and the `arg_0` values fall on the caller's own object
-stride, `this + 0x1CC70 + k * 0x1CC0C` (k = 0 and k = 2 both observed) -- so
-the register file is internally consistent with a real frame rather than with
-scrambled contents. And live memory read from the dumps at `arg_0` is a
-well-formed object whose first dword is 3, not 0: for the real object the loop
-condition `*this == 0` is false, and the loop should have exited rather than
-faulted. What esi holds at the fault is a small integer of the kind stored AT
-`[arg_0]`, not a corrupted pointer.
+So the stack-balance hypothesis is NOT excluded. It also fits a measurement
+this entry had treated as evidence against corruption: in all five dumps
+`edi` is exactly `arg_0 + 1`, and `arg_0` falls on the caller's own object
+stride `this + 0x1CC70 + k * 0x1CC0C` (k = 0 and k = 2 both observed). A pop
+taken from a neighbouring slot is precisely how a register ends up holding a
+value that is adjacent to, but not equal to, a live pointer.
+
+What the dumps do establish is that the fault is not a stale or freed object.
+Live memory read from the dumps at `arg_0` is a well-formed object whose first
+dword is 3, not 0 -- so for the real object the loop condition `*this == 0` is
+false and the loop should have exited rather than faulted -- and the caller's
+own frame is intact at the fault, with `ebp - esp` exactly `0x20`, the value
+its prologue produces.
 
 ### What was checked and came back clean
 
-- The loop body's epilogue: `pop edi`, `pop esi`, `mov esp,ebp`, `pop ebp`,
-  `ret 4`, with the cookie check between the pops and the return. Correct,
-  and it is the `mov esp, ebp` that makes the restore unspoilable.
+- The loop body's epilogue is `pop edi`, `pop esi`, cookie check,
+  `mov esp,ebp`, `pop ebp`, `ret 4`. Recorded as measured. Note the pops come
+  FIRST -- see above for why that does not clear the loop body.
 - `__security_check_cookie` at `0x4D3B90`: `cmp ecx, ___security_cookie`,
   `jnz`, `retn`, and on the failure path `jmp` to the report routine. It
   touches neither esi nor edi.
-- The loop body reaches 26 distinct call targets. They were enumerated, but
-  note that many of them use esp-based frames rather than the `mov esp, ebp`
-  form, so a per-callee audit is not what rules the theory out -- the loop
-  body's own epilogue is. The enumeration is recorded for completeness, not
-  as the proof.
+- The loop body reaches 26 distinct call targets; they were enumerated. Many
+  use esp-based frames rather than the `mov esp, ebp` form. This enumeration
+  is recorded for completeness and does NOT clear them -- see below for why a
+  push/pop tally cannot decide the question either way.
 
 ### What this does NOT establish
 
-How esi comes to hold 0, 1 or 2. The callee-corruption explanation is ruled
-out above, and nothing measured so far replaces it. Note also that a linear
-push/pop scan cannot distinguish a callee-save from an argument push -- the
-shipped loop body shows five `push esi` against one `pop esi`, and four of
-those five are arguments. Two separate sessions reached a wrong conclusion by
-exactly that method and retracted it; the epilogue argument above is what
-actually settles the question, and it should be used in preference to any
-push/pop tally.
+How esi comes to hold 0, 1 or 2. Nothing here identifies the mechanism, and
+in particular the stack-balance hypothesis remains OPEN -- the epilogue does
+not exclude it, for the reason given above.
+
+What is established is only that two shortcuts do not work. A linear push/pop
+scan cannot distinguish a callee-save from an argument push: the shipped loop
+body shows five `push esi` against one `pop esi`, and four of those five are
+arguments. And the trailing `mov esp, ebp` does not protect the pops that
+precede it. Three separate attempts on this crash have now reached a
+confident conclusion by one of those two routes and had to retract it. Treat
+any register-preservation claim about this frame as unproven until it comes
+from live execution.
 
 Nor does this entry establish any link between the furniture maps and the
 fault. The correlation with the B179-to-B180 delta is real, but no trace
