@@ -3828,6 +3828,27 @@ Measured against the extracted bundles rather than the source tree:
   `.reloc` from `0x786000` to `0x79C000`. Parsing the resource directory shows
   it holds only `ICON` and `GROUP_ICON`: the patcher icon. It is cosmetic.
 
+### A one-sided path check, and what it turned up
+
+The first version of this entry compared only the files present in both
+bundles, which cannot see a path that one has and the other does not. Redone
+over the UNION of paths: `Assets/` holds 645 files in each bundle with no
+one-sided entry, and `Images/` holds 6540 against 6541, the single addition
+being `Furniture/SpaLoungerStd.png`.
+
+That re-check contradicted a comment in `work/verify_extracted_release_payload.py`,
+which states that B180 adds `InvisibleSpaLounger.png.fmap` and
+`SpaLoungerStd.png.fmap` and that B179 shipped neither. Searched by name across
+the whole payload, **neither file is present in B179, B180 or B181** -- only
+`InvisibleLounger.png.fmap`, which all three carry.
+
+The verifier does not fail on that, because its lounger check resolves the
+three names through the build MANIFEST and compares digests recorded there,
+rather than requiring the files to exist in the extracted payload. So a map the
+manifest declares can be absent from disk without the check noticing. That is a
+gap in the verifier rather than a defect in this bracket, and it is recorded
+here rather than fixed, since it is outside what this entry changes.
+
 ### What this rules out
 
 - **The five added behaviours are not the cause.** B180 contains zero of the
