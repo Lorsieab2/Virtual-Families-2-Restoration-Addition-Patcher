@@ -3945,9 +3945,27 @@ what a correct install looks like, not evidence that no variant was used.
 Both were wrong, and both looked convincing before the check:
 
 - The shipped `Patio_table.png.fmap` does not carry the `9c18bec` seat-anchor
-  correction, which read as a fix that never reached the artifact. It is not:
-  the corrected map ships as `InvisiblePatioTable.png.fmap`, and the
-  vanilla-named file is deliberately left untouched as the restore baseline.
+  correction *in the bundle payload*, which read as a fix that never reached
+  the artifact. It is not: the corrected map ships as
+  `InvisiblePatioTable.png.fmap`, and the vanilla-named payload copy is the
+  restore baseline.
+
+  **But it does not stay that way at install time**, and an earlier version of
+  this entry wrongly said the donor-named file is left untouched. The manifest
+  writes `Assets/Patio_table.png.fmap` TWICE: once from
+  `payload/Assets/Patio_table.png.fmap`, then again from
+  `payload/Assets/InvisiblePatioTable.png.fmap` when the default-on
+  `mobile_furniture_behaviors` setting is enabled. Read off the owner's own
+  B180 install, the two files are byte-identical:
+
+  | installed file | sha256 |
+  | --- | --- |
+  | `Assets/Patio_table.png.fmap` | `7c253287702c895a84260c19...` |
+  | `Assets/InvisiblePatioTable.png.fmap` | `7c253287702c895a84260c19...` |
+
+  So an enabled installation carries the corrected map under **both** names.
+  Anyone verifying this by reading the payload rather than the install will
+  compare the restore source instead of the file the game actually loads.
 - `Picnic_table`'s far seats keep a `0x0002` residual after the strip. That is
   explicitly allowed and named in
   `test_no_map_keeps_a_fragment_of_the_mobile_object_type`: the map carries
