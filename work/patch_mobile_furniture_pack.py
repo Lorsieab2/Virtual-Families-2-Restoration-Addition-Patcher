@@ -28855,11 +28855,35 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
     // behaviour. This engine exposes no unlink call, so a speculative
     // reservation cannot be given back.
     //
-    // FindFurniture answers the same nearest-match question and reserves
-    // nothing.
+    // PROBED AT THE LOUNGER'S OWN PLACEMENT, NOT AT THE VILLAGER'S FEET. A
+    // feet-anchored probe asks "what is nearest to the villager", which is a
+    // different question from "is the free lounger reachable" in a way that
+    // fails in both directions:
+    //
+    //   - FindFurniture ignores peep-slot availability, so a FULL ordinary
+    //     chaise nearer than the lounger wins the nearest-match and the probe
+    //     rejects a treatment that LinkPeepToFurniture would have granted --
+    //     it skips the full chaise and reserves the lounger. The behaviour
+    //     disappears under ordinary contention.
+    //   - and when the probe accepts a lounger whose peep slots are all
+    //     spoken for by villagers still walking to it (VF2SpaOccupantIndex
+    //     counts only those already standing on it), the link skips it and
+    //     can reserve an ordinary chaise, which the post-link check then
+    //     rejects -- leaking that reservation.
+    //
+    // Anchoring the probe on the placement record of the lounger
+    // VF2FindFreeSpaLoungerSlot already picked removes the nearest-match
+    // question entirely. This is the pattern VF2FindAddedFurnitureVenue uses
+    // for the same reason: enumerate the item's own records, ask the native
+    // read-only lookup per placement, and verify the handle it returns.
+    unsigned char *spaManager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    unsigned char *spaRecord = spaManager + 0x1008 + loungerSlot * 0x40;
+    ldwPoint loungerPlacement = {
+        *reinterpret_cast<int *>(spaRecord + 0x14),
+        *reinterpret_cast<int *>(spaRecord + 0x18)};
     sFurnitureInfo2 probe = {};
     if (!FurnitureManager.FindFurniture(
-            CContentMap::eObjectChaise, villager.FeetPos(), probe, true, 0, 0)) {
+            CContentMap::eObjectChaise, loungerPlacement, probe, true, 0, 0)) {
         return false;
     }
     if (!VF2SpaLoungerHasHandle(probe.unknown0)) return false;
@@ -28870,11 +28894,12 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
         return false;
     }
 
-    // The probe and the link ask slightly different questions -- the linker
-    // additionally skips placements with no free peep slot -- so confirm what
-    // was actually reserved rather than assuming they agreed. After the probe
-    // above this can only fire when the link landed somewhere other than the
-    // lounger the probe named: a race, or that lounger being full.
+    // The probe and the link still ask slightly different questions -- the
+    // linker additionally skips placements with no free peep slot -- so
+    // confirm what was actually reserved rather than assuming they agreed.
+    // This accepts ANY spa lounger, not merely the one the probe named: a
+    // villager sent to the second lounger is doing exactly what this route is
+    // for, and the label is honest either way.
     if (!VF2SpaLoungerHasHandle(info.unknown0)) return false;
 
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);

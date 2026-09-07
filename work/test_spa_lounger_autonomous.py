@@ -102,6 +102,47 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             "happen before it, not after",
         )
 
+    def test_the_probe_is_anchored_on_the_lounger_not_the_villager(self):
+        """A feet-anchored probe asks the wrong question, in both directions.
+
+        FindFurniture is nearest-match and ignores peep-slot availability, so
+        anchoring on the villager's feet means a FULL ordinary chaise nearer
+        than the lounger wins and the treatment is refused -- even though
+        LinkPeepToFurniture would have skipped that chaise and reserved the
+        lounger. The same anchoring lets the probe accept a lounger whose
+        slots are all spoken for by villagers still walking to it, after
+        which the link lands on a chaise and the post-link check leaks it.
+
+        Anchoring on the placement record of the lounger that
+        VF2FindFreeSpaLoungerSlot already chose removes the nearest-match
+        question entirely.
+        """
+        body = _receiving_body()
+        collapsed = " ".join(body.split())
+        self.assertNotIn(
+            "FindFurniture( CContentMap::eObjectChaise, villager.FeetPos()",
+            collapsed,
+            "a feet-anchored probe reintroduces the nearest-match failures",
+        )
+        probe = body.index("FindFurniture")
+        window = body[:probe]
+        self.assertIn(
+            "loungerSlot * 0x40", window,
+            "the probe must be anchored on the chosen lounger's placement record",
+        )
+
+    def test_the_probe_anchor_comes_from_the_chosen_slot(self):
+        # loungerSlot is what VF2FindFreeSpaLoungerSlot proved free. Anchoring
+        # on any other slot would probe a lounger that may be occupied.
+        body = _receiving_body()
+        record = body.index("loungerSlot * 0x40")
+        self.assertLess(
+            body.index("loungerSlot"), record + 1,
+            "loungerSlot must be established before it anchors the probe",
+        )
+        self.assertIn("+ 0x14", body)
+        self.assertIn("+ 0x18", body)
+
     def test_the_probe_result_is_checked_before_the_link(self):
         body = _receiving_body()
         check = body.index("VF2SpaLoungerHasHandle")
