@@ -103,7 +103,14 @@ _NEGATOR = re.compile(
 # list no longer has to guess.
 _CLAUSE_SPLIT = re.compile(
     r"[.;,/:\u2013\u2014]|\s--+\s|\s-\s"
-    r"| but | and | because | while | although | though | until | since | as "
+    r"| but | and | because | while | although | though | until | since "
+    # "as" only where it joins a CLAUSE, never where it is the
+    # preposition in "marked as pending". The tell is structural rather
+    # than a list of labelling verbs: a conjunction is followed by a
+    # subject and a verb, a preposition by the phrase itself. Splitting
+    # "not marked as pending" severs the negator from what it denies and
+    # turns a finished row into an outstanding one.
+    r"| as (?=\w+(?:\W+\w+){0,3}\W+(?:is|are|was|were|remains|remain|stays|stay|becomes|has|have|had)\b)"
 )
 
 
@@ -317,6 +324,10 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             # guard must match "had ... been" and never a bare "had".
             "qa has had confirmation pending for two days",
             "we had confirmation pending",
+            # "as" the PREPOSITION, where the phrase follows directly. This
+            # must not split, or the negator is severed from what it denies.
+            "marked as pending",
+            "flagged as unconfirmed",
         )
         for text in outstanding:
             with self.subTest(text=text):
@@ -350,6 +361,11 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             "no issues while qa was still pending",
             "although qa had recently been pending",
             "no issues since qa had been briefly pending",
+            # The negated preposition form: these DENY outstanding work, and
+            # splitting on "as" here would read them as claiming it.
+            "not marked as pending",
+            "not flagged as pending",
+            "not listed as outstanding",
         )
         for text in finished:
             with self.subTest(text=text):
