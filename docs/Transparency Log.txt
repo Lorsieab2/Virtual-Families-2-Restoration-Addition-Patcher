@@ -2983,3 +2983,19 @@ B182 THE CRASH WARNING WAS SCOPED TO THE BUILDS IT DESCRIBES.
   substitution, unlike the two suites marked otherwise. Applying that
   substitution to the wrong file failed the guard a second time. The guard did
   its job and caught real drift that would otherwise have shipped.
+
+B182 CURRENT ADDED-FURNITURE ROUTING STATUS.
+
+- The source now gives the Exercise Bike, Home Gym System, Yoga Equipment and
+  Ping-Pong Table distinct behavior handlers and exact manual-drop item routes.
+  Their stock donor behaviors remain globally available: ownership is not an
+  eligibility gate.
+- The donor actions compute their own destinations, so the implementation
+  redirects their exact PlanToGo relocations to preserve the selected venue.
+  The Home Gym continues to use its existing YogaGear fmap/object identity;
+  no treadmill fmap substitution is used. If no matching placement is linked,
+  the donor action remains the fallback.
+- Spa receiving and giving now use `GetRandom(11) + 55` plan seconds, and the
+  giver no longer appends the donor chaise walk after a manual drop. Generated
+  build validation and player/runtime QA remain separate gates; no player claim
+  is made by this source update.
