@@ -16,7 +16,37 @@ class TestAddedFurnitureContract(unittest.TestCase):
         block = src[src.index("static void VF2RunOwnFurnitureAction("):src.index("// The Ping-Pong Table", src.index("static void VF2RunOwnFurnitureAction("))]
         self.assertNotIn("IsInWorld", block)
         self.assertIn("VF2RunNativeBehaviorAndChangedLabel", block)
-        self.assertIn("if (!changed) return;", block)
+        self.assertNotIn("if (!changed) return;", block)
+        self.assertIn("apply the item's label", block)
+        self.assertIn("static void VF2ApplyVenueLabel(", source())
+
+    def test_venue_label_is_applied_when_donor_keeps_native_label(self):
+        src = source()
+        start = src.index("static void VF2RunOwnFurnitureAction(")
+        body = src[start:src.index('extern "C" void __cdecl VF2ExerciseBikeWalk', start)]
+        donor = body.index("VF2RunNativeBehaviorAndChangedLabel(villager, donorBehavior);")
+        after = body[donor:]
+        self.assertIn("VF2EndAddedFurnitureVenue(villager);", after)
+        self.assertIn("VF2ApplyVenueLabel", after)
+
+    def test_venue_label_selector_has_no_native_label_roll(self):
+        src = source()
+        start = src.index("static void VF2ApplyVenueLabel(")
+        body = src[start:src.index("static void VF2ApplyRandomLabel", start)]
+        self.assertNotIn("GetRandom(count + 1)", body)
+        self.assertIn("GetRandom(count)", body)
+
+    def test_stock_donor_wrappers_use_strict_selector_only_for_added_items(self):
+        src = source()
+        for start_marker, end_marker in (
+            ("extern \"C\" void __cdecl VF2RandomPooltableLabel", "// The Exercise Bike"),
+            ("extern \"C\" void __cdecl VF2RandomTreadmillWalkLabel", "extern \"C\" void __cdecl VF2RandomTreadmillRunLabel"),
+            ("extern \"C\" void __cdecl VF2RandomTreadmillRunLabel", "extern \"C\" void __cdecl VF2RandomDrinkLabel"),
+        ):
+            start = src.index(start_marker, src.index("// The Ping-Pong Table borrows the Pool Table's behaviour wholesale"))
+            body = src[start:src.index(end_marker, start)]
+            self.assertIn("VF2ApplyVenueLabel", body)
+            self.assertIn("if (!", body)
 
     def test_missing_venue_falls_back_to_native_donor(self):
         src = source()
