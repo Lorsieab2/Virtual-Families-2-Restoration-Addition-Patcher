@@ -171,11 +171,18 @@ def main():
         # reported as "not installed" by a resolver that only reads
         # asset_patches -- a false alarm on a correct bundle, which is the
         # same class of mistake as the by-name check this replaced.
+        # Index by the destination the INSTALLER writes to, not by file_path.
+        # offline_vf2_patcher's asset parser reads
+        # raw.get("output_file_path", ...) and writes there when it is set, so
+        # a record can name the expected lounger in file_path, redirect its
+        # output elsewhere, and still satisfy a file_path-keyed presence check
+        # while the player never receives the map. Mirror the installer.
         installed = {}
         for key in ("asset_patches", "post_asset_patches"):
             for record in manifest.get(key, []):
-                if "file_path" in record:
-                    installed.setdefault(record["file_path"], record)
+                target_key = record.get("output_file_path") or record.get("file_path")
+                if target_key:
+                    installed.setdefault(target_key, record)
 
     for name in LOUNGER_MAPS:
         target = f"Assets/{name}"
@@ -183,19 +190,22 @@ def main():
         if record is None:
             problems.append(f"{target} is not installed by the manifest")
             continue
-        # Resolve the canonical payload file the record points at.
-        candidates = [
-            p for p in EXTRACT.rglob(pathlib.PurePosixPath(
-                record["source_path"]).name)
-            if p.as_posix().endswith(record["source_path"])
-        ]
-        if not candidates:
+        # Resolve the payload file EXACTLY where the installer looks: under
+        # the manifest's own directory. offline_vf2_patcher uses
+        # resolve_under_manifest_dir(manifest_dir, asset.source_path), so a
+        # global suffix search asks a weaker question than the one that decides
+        # whether a player's install succeeds. A stale or misplaced copy deeper
+        # in the archive whose path merely ENDS WITH the same source_path would
+        # satisfy the search here and still fail for the player.
+        source_rel = record["source_path"]
+        resolved = manifest_path.parent / pathlib.PurePosixPath(source_rel)
+        if not resolved.is_file():
             problems.append(
-                f"{target}: manifest points at {record['source_path']}, "
-                "which is not in the payload"
+                f"{target}: manifest points at {source_rel}, which is not "
+                "present at that path relative to the manifest"
             )
             continue
-        maps[name] = candidates[0]
+        maps[name] = resolved
 
     print(
         f"lounger maps     : {len(maps)} of {len(LOUNGER_MAPS)} resolved "
