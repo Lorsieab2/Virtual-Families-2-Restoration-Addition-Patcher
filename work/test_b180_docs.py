@@ -36,6 +36,17 @@ EMITTED = (
     "vf2_mobile_furniture_behaviors.cpp"
 )
 
+# These four route ONLY in a build made with VF2_ENABLE_BEHAVIOR_PATCHES=1.
+# The generator emits their dispatch block as an empty string otherwise, by
+# design -- Behavior Patches is a selectable executable overlay, and an
+# unflagged build is meant to retain stock behaviour.
+BEHAVIOR_PATCH_ROUTED = {
+    "InvisibleYogaEquipment",
+    "ExerciseBikeStd",
+    "HomeGymSystemStd",
+    "PingPongTableStd",
+}
+
 ROUTED = {
     "InvisiblePicnicTable",
     "InvisiblePatioTable",
@@ -134,13 +145,51 @@ class TestTheEmittedDispatcherAgreesWithTheDocs(unittest.TestCase):
 
     def setUp(self):
         if not EMITTED.is_file():
-            self.skipTest(f"{EMITTED.name} has not been generated in this tree")
+            self.skipTest(
+                f"{EMITTED.name} has not been generated in this tree, so "
+                "these route checks examined NOTHING. A bare checkout reports "
+                "green here; that is the absence of a measurement, not a pass."
+            )
+        # An emitted artifact records whenever the tree was last BUILT, not
+        # what the generator says now. A file older than the generator is
+        # answering a question about yesterday -- which produced a real false
+        # report here once, where an item read as unrouted in a stale artifact
+        # and routed after regeneration.
+        generator = ROOT / "work" / "patch_mobile_furniture_pack.py"
+        if generator.is_file():
+            if EMITTED.stat().st_mtime < generator.stat().st_mtime:
+                self.skipTest(
+                    f"{EMITTED.name} is older than the generator that writes "
+                    "it, so it describes an earlier build. Regenerate before "
+                    "trusting these route checks."
+                )
         text = EMITTED.read_text(encoding="utf-8")
         start = text.index(
             "bool const theMainScene::VF2HandleDropOnMobileFurniture"
         )
         self.dispatcher = text[start:text.index("\n}\n", start)]
         self.text = text
+
+        # BEHAVIOR PATCHES IS AN OPTIONAL OVERLAY, NOT A DEFECT WHEN OFF.
+        #
+        # The generator gates four of these routes on ENABLE_BEHAVIOR_PATCHES,
+        # which defaults to "0", and says so directly: "Unflagged builds retain
+        # stock behavior; the checked patcher setting selects a matching build
+        # made with VF2_ENABLE_BEHAVIOR_PATCHES=1."
+        #
+        # So a default build legitimately emits no route for the Exercise
+        # Bike, Home Gym, Yoga Equipment or Ping-Pong Table. Asserting them
+        # unconditionally made this test FAIL on a perfectly good tree and
+        # report a defect that was not there -- a check that cannot tell a
+        # configuration from a bug.
+        # _added_items() maps name -> item_id, so iterate the mapping rather
+        # than treating its keys as records.
+        added = _added_items()
+        self.behavior_patches_on = any(
+            f"{added[name]:#x}".lower() in self.dispatcher.lower()
+            for name in BEHAVIOR_PATCH_ROUTED
+            if name in added
+        )
 
     def test_no_placeholder_survived_into_the_dispatcher(self):
         # The failure this guards against emits the placeholder literally and
@@ -160,7 +209,31 @@ class TestTheEmittedDispatcherAgreesWithTheDocs(unittest.TestCase):
             "PingPongTableStd",
         ):
             with self.subTest(item=name):
+                if (name in BEHAVIOR_PATCH_ROUTED
+                        and not self.behavior_patches_on):
+                    # Legitimately absent: this build was made without
+                    # VF2_ENABLE_BEHAVIOR_PATCHES=1, so the generator emitted
+                    # the dispatch block for these four as an empty string.
+                    # Asserting here reports a defect that is not there.
+                    continue
                 self.assertIn(f"{items[name]:#x}".lower(), self.dispatcher.lower())
+
+    def test_a_behaviour_patches_build_routes_all_four_gated_items(self):
+        # The other half of the rule: when the overlay IS built, all four must
+        # be present. Without this, the skip above would let a genuine
+        # regression hide behind "behaviour patches must be off".
+        if not self.behavior_patches_on:
+            self.skipTest(
+                "this build has no behaviour-patches routes, so there is "
+                "nothing to check; regenerate with "
+                "VF2_ENABLE_BEHAVIOR_PATCHES=1 to exercise it")
+        items = _added_items()
+        for name in sorted(BEHAVIOR_PATCH_ROUTED):
+            with self.subTest(item=name):
+                self.assertIn(
+                    f"{items[name]:#x}".lower(), self.dispatcher.lower(),
+                    "%s has no drop route in a behaviour-patches build, so "
+                    "dropping a villager on it does nothing" % name)
 
     def test_the_invisible_lounger_is_routed_through_the_chaise_family(self):
         # It has no `candidate ==` line on purpose: folding it into the chaise
