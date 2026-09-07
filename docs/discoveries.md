@@ -4236,17 +4236,21 @@ Every register anomaly recorded above falls out of that one skipped pop:
 So the stack-balance hypothesis was right in shape, and the reason it could not
 be confirmed is recorded below.
 
-The fix restores the missing pop on the handled path. It is verified at the
-source and object level and the test that previously pinned the faulty bytes
-now asserts the register is restored, but NO REBUILT BINARY HAS YET BEEN SHOWN
-TO BOOT with the feature enabled. Until one has, this entry records a diagnosis
-and not a cure.
+The fix restores the missing pop on the handled path, and it is confirmed at
+runtime: a build made from the corrected source, with the feature enabled, ran
+to a clean exit and wrote no crash dump, while the unfixed build on the same
+install and the same assets faulted and wrote one. Only the executable
+differed. The test that previously pinned the faulty bytes now asserts the
+register is restored, and fails if the payload is reverted.
 
-Note also that confirming it requires a FRESH build. The intermediate objects
-are untracked build products, and the one on disk predates the fix: it still
-contains the pre-fix byte sequence and not the corrected one. A build that
-reuses that directory links the old object, so the artifact would not contain
-the fix while every source-level check still passed.
+Two build hazards made that test easy to get wrong, and both would have
+produced a false pass rather than a visible failure. The intermediate objects
+are untracked build products and the one on disk predated the fix, so the patch
+had to be applied from the pristine object -- a build reusing the old directory
+links the old object and the fix does nothing while every source-level check
+passes. And a fresh build ships every feature flag at zero, so the flag has to
+be set explicitly; without that the feature never runs and a clean exit proves
+only that the code under test was never reached.
 
 ### Why the earlier analyses could not see it
 
