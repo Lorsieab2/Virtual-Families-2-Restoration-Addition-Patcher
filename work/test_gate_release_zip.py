@@ -164,6 +164,61 @@ class FeatureRegressionTests(unittest.TestCase):
             previous = gate.previous_release_archive(after)
             self.assertEqual(previous.name, "VF2-B181-Release.zip")
 
+    def test_the_baseline_is_chosen_by_version_not_by_spelling(self):
+        # Sorted as text, VF2-B99 lands AFTER VF2-B181. Gating B183 with both
+        # retained would pick B99 as the baseline, and a setting present in
+        # B181 but absent from B99 and B183 would never be reported -- the
+        # gate passing the exact loss it exists to block.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B99-Release.zip", ["a"])
+            _bundle(root / "VF2-B181-Release.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            previous = gate.previous_release_archive(after)
+            self.assertEqual(previous.name, "VF2-B181-Release.zip")
+            self.assertIsNotNone(
+                gate.lost_settings(after, previous),
+                "the B181-only setting was dropped and went unreported",
+            )
+
+    def test_a_revision_outranks_the_release_it_revises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B181-Release.zip", ["a"])
+            _bundle(root / "VF2-B181-Release-r2.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            self.assertEqual(
+                gate.previous_release_archive(after).name,
+                "VF2-B181-Release-r2.zip",
+            )
+
+    def test_a_scratch_zip_is_never_the_baseline(self):
+        # Reading a non-release ZIP raises AFTER packaging, which aborts the
+        # gate without quarantining and leaves the new archive sitting at its
+        # publishable filename.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VF2-B183-Release-corrupt.zip").write_bytes(b"not a zip")
+            _bundle(root / "VF2-B181-Release.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            previous = gate.previous_release_archive(after)
+            self.assertEqual(previous.name, "VF2-B181-Release.zip")
+            # And the check still reports the real loss rather than dying.
+            self.assertIsNotNone(gate.lost_settings(after, previous))
+
+    def test_a_later_release_is_not_used_as_the_baseline(self):
+        # Re-gating an older archive must not measure it against a newer one,
+        # which would report every later addition as a loss.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B190-Release.zip", ["a", "b", "c"])
+            _bundle(root / "VF2-B181-Release.zip", ["a"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            self.assertEqual(
+                gate.previous_release_archive(after).name,
+                "VF2-B181-Release.zip",
+            )
+
     def test_the_gate_runs_the_check_before_declaring_success(self):
         source = Path(gate.__file__).read_text(encoding="utf-8")
         checked = source.index("lost_settings(archive, previous)")

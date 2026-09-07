@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import zipfile
@@ -61,18 +62,57 @@ def settings_in_archive(archive: Path) -> set[str]:
     }
 
 
-def previous_release_archive(archive: Path) -> Path | None:
-    """The most recent packaged release other than this one, or None.
+# The documented release filename: VF2-B<version>[-r<revision>]-Release.zip.
+# Anything else beside it -- a scratch copy, a corrupt download, a hand-edited
+# experiment -- is not a release and must not be treated as one.
+RELEASE_NAME = re.compile(
+    r"^VF2-B(?P<version>\d+(?:\.\d+)*)-Release(?:-r(?P<revision>\d+))?\.zip$"
+)
 
-    Compared against whatever was published last rather than a pinned name,
-    so the check keeps working as builds advance without anyone editing it.
+
+def release_order(path: Path):
+    """Sort key for a release filename, or None if it is not one.
+
+    Ordering by NUMERIC COMPONENTS, never lexicographically. Sorted as text,
+    "VF2-B99-Release.zip" lands after "VF2-B181-Release.zip", so gating B183
+    with both retained would pick B99 as the baseline -- and a setting present
+    in B181 but absent from B99 and B183 would never be reported. The gate
+    would pass the exact feature loss it exists to block.
     """
-    others = [
-        p
-        for p in sorted(archive.parent.glob("VF2-B*-Release*.zip"))
-        if p.resolve() != archive.resolve() and not p.name.endswith(".REJECTED")
-    ]
-    return others[-1] if others else None
+    match = RELEASE_NAME.match(path.name)
+    if match is None:
+        return None
+    version = tuple(int(part) for part in match.group("version").split("."))
+    revision = int(match.group("revision") or 0)
+    return (version, revision)
+
+
+def previous_release_archive(archive: Path) -> Path | None:
+    """The highest-versioned release preceding this one, or None.
+
+    Compared against whatever shipped last rather than a pinned name, so the
+    check keeps working as builds advance without anyone editing it.
+
+    Candidates are restricted to the release grammar before anything is
+    opened. A loose glob would accept a scratch ZIP sitting beside the real
+    one, and reading it raises out of the gate AFTER packaging -- leaving the
+    new archive at its publishable filename with no quarantine, which is the
+    accident this whole gate exists to prevent.
+    """
+    this = release_order(archive)
+    candidates = []
+    for candidate in archive.parent.glob("*.zip"):
+        if candidate.resolve() == archive.resolve():
+            continue
+        order = release_order(candidate)
+        if order is None:
+            continue
+        if this is not None and order >= this:
+            continue
+        candidates.append((order, candidate))
+    if not candidates:
+        return None
+    return max(candidates)[1]
 
 
 def lost_settings(archive: Path, previous: Path) -> str | None:
