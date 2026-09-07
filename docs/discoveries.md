@@ -4236,6 +4236,18 @@ Every register anomaly recorded above falls out of that one skipped pop:
 So the stack-balance hypothesis was right in shape, and the reason it could not
 be confirmed is recorded below.
 
+The fix restores the missing pop on the handled path. It is verified at the
+source and object level and the test that previously pinned the faulty bytes
+now asserts the register is restored, but NO REBUILT BINARY HAS YET BEEN SHOWN
+TO BOOT with the feature enabled. Until one has, this entry records a diagnosis
+and not a cure.
+
+Note also that confirming it requires a FRESH build. The intermediate objects
+are untracked build products, and the one on disk predates the fix: it still
+contains the pre-fix byte sequence and not the corrected one. A build that
+reuses that directory links the old object, so the artifact would not contain
+the fix while every source-level check still passed.
+
 ### Why the earlier analyses could not see it
 
 What is established is only that two shortcuts do not work. A linear push/pop
