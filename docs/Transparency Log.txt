@@ -2892,3 +2892,26 @@ B182 the crash is a stack displacement, and it was never a build regression
   epilogue, and one decoded an injected stub without the host prologue whose
   registers it restores. Validate any such detector against a known-good control
   before believing a hit.
+
+- AND IT IS CONFIRMED AGAIN FROM MERGED MAIN, WHICH IS A DIFFERENT CLAIM. The
+  runtime evidence above was produced from the fix branch. That branch was
+  squash-merged, so the commit it was gathered on no longer exists in shipped
+  history, and a release is built from main rather than from a branch. So the
+  whole sequence was repeated against main after the merge: the object was
+  regenerated with the build directory cleared, the executable was linked, and
+  the patch site was decoded out of the linked binary rather than read from the
+  source. The pre-fix byte sequence does not occur anywhere in that executable,
+  and both exit paths restore the register -- the injected path through the byte
+  the fix adds, the stock path through its own restore after the loop. With the
+  feature enabled the game ran for a minute and wrote no dump, while the unfixed
+  build in the same install faulted in seconds and wrote one.
+
+- THE CONTROL IS THE POINT, NOT THE PASS. A fixed build that does not crash is
+  absence of evidence; it is the unfixed build still crashing in the same
+  install, in the same session, that makes the result mean anything. The same
+  reasoning settled a scare during this rebuild: the packaging step failed on a
+  missing runtime file, which looked like a regression until the identical
+  command was run at the parent commit and failed identically. It is a
+  pre-existing gap in the build environment, resolved by seeding from a valid
+  previous-release directory, and nothing to do with the fix. A build failure
+  that appears while holding a change is not evidence the change caused it.
