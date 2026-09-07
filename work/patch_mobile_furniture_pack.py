@@ -25789,6 +25789,19 @@ enum ELike { eLikeDummy = 0 };
 enum EBodyPosition {
     eBodyPositionStanding = 0,
     eBodyPositionUmbrella = 0x0D,
+    // The two seated poses the Exercise Bike uses, one per furniture
+    // orientation. Values DECODED from work/desktop_obj_files/AnimManager.obj's
+    // enum records rather than guessed:
+    //     eBodyPosition_Upright   0x00   <- matches eBodyPositionStanding here,
+    //                                       which is what validates the method
+    //     eBodyPosition_Sitting   0x02
+    //     eBodyPosition_SittingNE 0x11
+    //     eBodyPosition_SittingNW 0x12
+    // A wrong constant here would seat the villager in some unrelated pose and
+    // still compile, so the cross-check against a value this file already
+    // knows matters more than the two new ones.
+    eBodyPositionSittingNE = 0x11,
+    eBodyPositionSittingNW = 0x12,
     eBodyPositionChaise = 0x17
 };
 enum EDirection { eDirectionUmbrella = 3 };
@@ -33150,6 +33163,39 @@ static void VF2RunOwnFurnitureAction(
     VF2ApplyVenueLabel(villager, labels, labelCount, remembered);
 }
 
+// Seat the villager on the Exercise Bike, facing the way it was placed.
+//
+// The bike borrows WorkoutTreadmill, which is a standing animation: a villager
+// on the bike stood next to it and jogged on the spot. The owner asked for the
+// treadmill BEHAVIOUR with the sitting animation cycles instead, chosen by
+// orientation -- first furniture frame northwest, second northeast.
+//
+// Orientation comes from info.orientation, never from a raw byte offset. The
+// same struct is used elsewhere with +0x14 read as orientation, and +0x14 is
+// padding in sFurnitureInfo2; that produced the wrong-facing bug this repo
+// already carries a fix for.
+//
+// The pose is applied AFTER the donor runs. The donor plans its own route and
+// its own animation, and PlanToGo appends, so a pose queued before it would be
+// overtaken by the donor's own plan. Queuing the seated wait last leaves the
+// villager in the chair at the end of the action rather than standing beside
+// it.
+static void VF2SeatOnExerciseBike(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(
+            (CContentMap::EObject)0x04, villager.FeetPos(), info,
+            true, 0, false)) {
+        // No bike resolved: leave the donor's own presentation alone rather
+        // than seating the villager on nothing.
+        return;
+    }
+    plans->PlanToWait(
+        1,
+        info.orientation == 1 ? eBodyPositionSittingNW : eBodyPositionSittingNE);
+}
+
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 {
     VF2RunOwnFurnitureAction(
@@ -33157,6 +33203,7 @@ extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
         __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
         kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
+    VF2SeatOnExerciseBike(villager);
 }
 
 extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
@@ -33166,6 +33213,7 @@ extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
         __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
         kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
+    VF2SeatOnExerciseBike(villager);
 }
 
 // The Home Gym System. Its donor, the Yoga Equipment, is scenery in the base
