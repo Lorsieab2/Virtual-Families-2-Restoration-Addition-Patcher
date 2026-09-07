@@ -1,7 +1,7 @@
 # Reusable, data-driven replacement for the old pattern of hand-copying a
 # whole build_bNNN_matrix.ps1 script per release (see work/build_b162_matrix.ps1
 # for the last such script). One engine plus two small JSON files:
-#   -MatrixConfig   the stable 19-variant toggle matrix (data/vf2/build-matrix-toggles.json)
+#   -MatrixConfig   the stable 32-variant toggle matrix (data/vf2/build-matrix-toggles.json)
 #   -ReleaseConfig  this release's exe name/output prefix/optional seed paths
 #
 # Recreated from scratch: a prior build (tagged "Redesigned" on GitHub) used a
