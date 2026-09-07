@@ -32945,7 +32945,14 @@ static void VF2RunOwnFurnitureAction(
 
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 {
-    if (!VF2AddedFurnitureInWorld(__VF2_EXERCISE_BIKE_ITEM_ID__)) return;
+    // The cloned action is selected independently from the stock treadmill
+    // action.  IsInWorld only says that some bike exists; it does not say
+    // which 0x04 placement this donor plan will use.  Probe with the exact
+    // same read-only query as WorkoutTreadmill before running it, and require
+    // the returned placement handle to identify the bike.  The stock donor
+    // row remains globally available and unchanged.
+    if (!VF2LinkedFurnitureItemIs(
+            villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__)) return;
     VF2RunOwnFurnitureAction(
         villager, CBehavior::WorkoutTreadmill,
         kVF2BehaviorLabels_exercise_bike_walk,
@@ -32954,7 +32961,11 @@ extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 
 extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 {
-    if (!VF2AddedFurnitureInWorld(__VF2_EXERCISE_BIKE_ITEM_ID__)) return;
+    // RunningOnTreadmill performs the same FeetPos/FindFurniture(0x04)
+    // lookup, so this identity probe prevents a bike action from consuming a
+    // stock treadmill when both are placed.
+    if (!VF2LinkedFurnitureItemIs(
+            villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__)) return;
     VF2RunOwnFurnitureAction(
         villager, CBehavior::RunningOnTreadmill,
         kVF2BehaviorLabels_exercise_bike_run,
