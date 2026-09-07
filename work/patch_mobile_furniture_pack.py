@@ -35666,13 +35666,16 @@ def main():
         validate_holiday_ornament_native_contract(manifest)
     else:
         remove_holiday_ornament_collection_art(manifest)
-    patch_graphics_manager(manifest)
-    patch_bathroom1_curtain_decal(manifest)
     # The picnic meal and patio drinks. Defined but never called until now,
     # which is why the sprites shipped and nothing drew them: the two prop ids
     # never enter the engine's prop array, so without this wrapper there is no
     # draw for them at all.
     patch_mobile_table_prop_draw(manifest)
+    # This hook must see the stock RefreshDecals tail relocation before the
+    # bathroom curtain patch rewrites other Decal.obj relocations and serializes
+    # the object. Keep the two Decal.obj passes in this order.
+    patch_graphics_manager(manifest)
+    patch_bathroom1_curtain_decal(manifest)
     patch_floating_anim_table(manifest)
     if ENABLE_HOLIDAY_BODY_TYPES:
         write_holiday_body_draw_helper(manifest)

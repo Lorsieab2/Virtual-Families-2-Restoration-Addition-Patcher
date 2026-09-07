@@ -110,6 +110,12 @@ class TestAddedFurnitureContract(unittest.TestCase):
         self.assertEqual(body.count("add esp, 20"), 2)
         self.assertEqual(body.count("ret 16"), 2)
 
+    def test_decal_tail_hook_runs_before_curtain_relocations(self):
+        src = source()
+        table = src.index("    patch_mobile_table_prop_draw(manifest)")
+        curtain = src.index("    patch_bathroom1_curtain_decal(manifest)")
+        self.assertLess(table, curtain)
+
 
 if __name__ == "__main__":
     unittest.main()
