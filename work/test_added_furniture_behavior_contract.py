@@ -25,7 +25,8 @@ class TestAddedFurnitureContract(unittest.TestCase):
         self.assertIn("bool const hasVenue", body)
         self.assertIn("VF2RunNativeBehaviorAndChangedLabel", body)
         self.assertIn("VF2EndAddedFurnitureVenue(villager);", body)
-        self.assertNotIn("if (!hasVenue) return", body)
+        self.assertIn("if (!hasVenue)", body)
+        self.assertIn("leave its stock label untouched", body)
 
     def test_shared_donor_objects_are_explicit_and_separate(self):
         src = source()

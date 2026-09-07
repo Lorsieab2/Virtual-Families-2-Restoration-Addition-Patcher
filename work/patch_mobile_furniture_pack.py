@@ -33039,10 +33039,14 @@ static void VF2RunOwnFurnitureAction(
     ldwPoint venue = {};
     bool const hasVenue = VF2FindAddedFurnitureVenue(
         villager, itemId, object, venue);
-    if (hasVenue) {
-        VF2BeginAddedFurnitureVenue(
-            villager, venue);
+    if (!hasVenue) {
+        // The added candidate is additive. If its placement cannot be linked,
+        // run the original donor and leave its stock label untouched; this is
+        // the explicit fallback for an absent or unavailable matching item.
+        VF2RunNativeBehaviorAndChangedLabel(villager, donorBehavior);
+        return;
     }
+    VF2BeginAddedFurnitureVenue(villager, venue);
     int remembered = VF2CurrentLabelInGroup(villager, labels, labelCount);
     bool const changed = VF2RunNativeBehaviorAndChangedLabel(
         villager, donorBehavior);
