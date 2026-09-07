@@ -103,7 +103,7 @@ _NEGATOR = re.compile(
 # list no longer has to guess.
 _CLAUSE_SPLIT = re.compile(
     r"[.;,/:\u2013\u2014]|\s--+\s|\s-\s"
-    r"| but | and | because | while | although | though | until | since "
+    r"| but | and | because | while | although | though | until | since | as "
 )
 
 
@@ -129,7 +129,15 @@ def _joined_row_text(status, evidence):
 # match reads those as current claims, which is the unsafe direction.
 # Two is the same bounded-reach idea as the negator window: enough for
 # natural modifiers, not enough to span a clause.
-_PAST_TENSE = re.compile(r"\b(?:was|were|had been|had)\b(?:\W+\w+){0,2}\W*$")
+# "had" is matched only as part of "had ... been", never bare. Bare
+# "had" also matches the PRESENT PERFECT -- "QA has had confirmation
+# pending for two days" -- which says the work is outstanding right
+# now, so suppressing it would lose a genuine claim. The modifier
+# belongs inside the had/been pair rather than after a bare "had".
+_PAST_TENSE = re.compile(
+    r"\b(?:was|were)\b(?:\W+\w+){0,2}\W*$"
+    r"|\bhad\b(?:\W+\w+){0,2}\W+been\b(?:\W+\w+){0,2}\W*$"
+)
 
 
 def _reads_as_pending(text):
@@ -301,6 +309,14 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             # Present tense with the same modifier must stay outstanding --
             # the guard keys on the auxiliary, not on the adverb.
             "qa is still pending",
+            # Causal "as" joins clauses like the others.
+            "not complete as final qa remains pending",
+            "not shipped as qa is pending",
+            # PRESENT PERFECT. "had" here does not make the phrase
+            # historical -- the work is outstanding right now -- so the
+            # guard must match "had ... been" and never a bare "had".
+            "qa has had confirmation pending for two days",
+            "we had confirmation pending",
         )
         for text in outstanding:
             with self.subTest(text=text):
@@ -333,6 +349,7 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             "no issues since qa was previously pending",
             "no issues while qa was still pending",
             "although qa had recently been pending",
+            "no issues since qa had been briefly pending",
         )
         for text in finished:
             with self.subTest(text=text):
