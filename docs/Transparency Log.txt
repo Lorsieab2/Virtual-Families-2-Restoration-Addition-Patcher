@@ -2750,3 +2750,91 @@ The crash is in theGameState's CONSTRUCTOR, and it is deterministic
   decision. Until then the accurate statement is that the emptied
   geometry was sufficient to trigger the crash, not that the crash is
   understood.
+
+
+B182 the crash is a stack displacement, and it was never a build regression
+- TWO EARLIER CONCLUSIONS IN THIS LOG ARE WRONG AND ARE CORRECTED HERE. The
+  entry above closes by saying the emptied furniture geometry was "sufficient
+  to trigger the crash", and it rules out a one-slot displacement. Both are
+  false. The geometry is not sufficient and not necessary, and a one-slot
+  displacement is exactly what occurs.
+
+- IT WAS NEVER A B179-TO-B180 REGRESSION. The whole investigation was bracketed
+  between a build that was believed to work and one that crashed. That bracket
+  was an artifact of which options happened to be enabled. Setting the
+  Mobile Furniture Behaviors flag byte .vf2beh from 01 to 00, with every asset
+  and every other flag untouched, stops the crash on BOTH builds:
+      B180 stock                          crash
+      B180 with .vf2beh=0                 no crash
+      B179 stock                          crash
+      B179 with .vf2beh=0                 no crash
+      .vf2beh=1, all four other flags 0   crash
+      .vf2beh=0, all four other flags 1   no crash
+  The flag is necessary and sufficient, on both builds. B179 crashes too when
+  the feature is on; it was never the working control it was taken to be.
+
+- THE MECHANISM IS A FOUR-BYTE STACK DISPLACEMENT, proven arithmetically rather
+  than argued. In the faulting frame the stack holds [esp+0] = 0, the value
+  pop edi should take, and [esp+4] = the object pointer, the value pop esi
+  should take. Correct execution followed by the caller's inc edi would leave
+  edi = 1 and esi = the pointer. Observed is the exact opposite: edi holds
+  pointer + 1 and esi holds a small integer. The two registers took each
+  other's slots, one slot apart, and the inc then landed on the pointer. This
+  holds in every dump in which the game itself faulted -- six at the time of
+  writing, across four different builds. ebx is a third casualty: it is loaded
+  once from [ebp+8] and never rewritten, yet holds a small integer where the
+  pointer belongs.
+
+- ONE DUMP IS EXCLUDED AND THE REASON IS RECORDED RATHER THAN OMITTED. A
+  seventh dump exists from a diagnostic build and does not show the pattern,
+  because it is not the game's own fault. That build carried a hand-written
+  byte patch intended to force one branch, and the patch was malformed: a
+  six-byte conditional jump was replaced by a five-byte unconditional one
+  while reusing the original displacement, so it landed one byte early, in the
+  middle of an instruction. The process executed rubbish and faulted at an
+  address inside no module at all. It measured nothing about the game. It is
+  named here rather than quietly dropped, because a record that silently
+  discards its inconvenient sample is not a record.
+  The lesson generalises: that patch was produced after verifying the bytes AT
+  the target offset were the expected ones, and without decoding the
+  replacement to confirm it still branched to the same place. Verify the
+  output of a patch, not its input.
+
+- THE PRECEDING ENTRY'S REASONING FAILED FOR A SPECIFIC REASON WORTH KEEPING.
+  It dismissed the one-slot form on the grounds that the saved-esi slot lies in
+  the caller's frame, above the loop body's own. That is true and irrelevant:
+  the displacement is in the loop body's OWN epilogue, whose pops run before
+  mov esp,ebp reloads esp, so they read the loop body's own frame at a
+  four-byte offset. The frame-size constraint that produced the dismissal was
+  derived from the wrong candidate word.
+
+- CREDIT WHERE IT IS DUE. The automated reviewer identified this mechanism on
+  pull request 198 and was told it was wrong. Its finding was retracted by one
+  session and that retraction was reinforced by another. Both were mistaken and
+  the reviewer was right. The evidence was in the dumps throughout.
+
+- WHAT IS ELIMINATED, each by a controlled test rather than by argument. The
+  five furniture maps, by a single-variable swap on a hash-verified tree that
+  still crashed. All four added autonomous behaviours, by patching each
+  candidate-enable immediate to zero individually and then all four together,
+  with the flag still on, and crashing in all five runs. The C++ ABI boundary,
+  by cross-checking every extern "C" declaration against its definition for
+  convention and argument count: 85 declarations, 177 definitions, zero
+  mismatches. The injected selection payload, which balances on both paths. The
+  autonomous selector's calling convention, which reads exactly its two
+  declared arguments against a caller that cleans eight bytes. The four rebound
+  handlers, which all save and restore ebx, esi and edi. The picker's dispatch
+  bounds. The candidate array, identical between builds with nothing above id
+  0x199. The hairstyle icons, a deliberate cosmetic change.
+
+- WHAT IS NOT ESTABLISHED. Which push leaks. The displacement is proven; the
+  instruction responsible is not identified, and no build is confirmed booting
+  with the feature enabled. This entry does not claim the crash is fixed.
+
+- A METHOD WARNING EARNED THREE TIMES IN ONE DAY. Three separate stack-imbalance
+  scanners, written independently, each produced a confident false positive on
+  this binary: one flagged a stock helper with 567 callers and no cleanup at any
+  of them, one swept an inner call's stack adjustment into an adjacent function's
+  epilogue, and one decoded an injected stub without the host prologue whose
+  registers it restores. Validate any such detector against a known-good control
+  before believing a hit.

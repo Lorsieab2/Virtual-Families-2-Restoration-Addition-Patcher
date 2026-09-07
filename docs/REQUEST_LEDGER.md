@@ -8,6 +8,28 @@ This is the durable completeness gate for future builds. A request does not
 disappear because it was made in an older chat. A label, checkbox, design note,
 dormant hook, or successful link is not proof that a feature is finished.
 
+## Owner's blanket QA statement, 2026-09-06
+
+The owner has stated that they have tested most of the rows below marked
+"live QA pending" or "in-game QA pending" and that those work, with two
+exceptions they named: the patcher's "Please wait" window, and everything
+blocked behind the startup crash.
+
+That statement is recorded here rather than written into each row, because it
+was given as a blanket assurance and not as a row-by-row confirmation, and the
+owner has explicitly said they do not want to re-test each item individually.
+So the per-row statuses below are left as they stand: they remain accurate as a
+record of what has been INDIVIDUALLY verified, and this note is the record of
+what the owner reports working overall. Do not read an unchanged "QA pending"
+row as a claim that the feature is broken.
+
+Still genuinely outstanding:
+
+- The patcher's "Please wait" window - see the row near the end of this file.
+- The twelve features that require Mobile Furniture Behaviors, which currently
+  prevents the game from starting. See `docs/Transparency Log.txt` for the
+  crash record. These cannot be tested until that is fixed.
+
 ## Status meanings
 
 - **Shipped / automated-verified**: in the published baseline with
