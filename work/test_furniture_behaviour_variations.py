@@ -22,15 +22,37 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 GENERATOR = ROOT / "work" / "patch_mobile_furniture_pack.py"
 SOURCE = GENERATOR.read_text(encoding="utf-8", errors="replace")
 
-# Behaviour names verified against work/desktop_obj_files/Behavior.obj's symbol
-# table, not taken from prose. Note Aerobics rather than DoingAerobics.
+# Only the donors whose PlanToGo callsites are retargeted to the venue may be
+# offered. patch_added_furniture_venue_callsites rewrites the relocation in
+# these two and no others.
 EXPECTED_DONORS = (
+    "CBehavior::WorkingOut",
+    "CBehavior::QuickWorkout",
+)
+
+# Verified present in Behavior.obj's symbol table, but NOT venue-aware: they
+# keep their own stock-location routes, and PlanToGo appends rather than
+# replaces, so a route they append lands after the venue and the villager
+# walks away. Offering them would look correct in every static check and do
+# the wrong thing in play.
+UNRETARGETED_DONORS = (
     "CBehavior::DoingKungFu",
     "CBehavior::DoingTaiChi",
     "CBehavior::Aerobics",
-    "CBehavior::QuickWorkout",
-    "CBehavior::WorkingOut",
 )
+
+
+def retargeted_symbols():
+    """The behaviours whose PlanToGo relocation is actually rewritten."""
+    # Slice to the next top-level def rather than to a "for" line: the
+    # earlier pattern matched nothing and the guard below turned that into a
+    # failure instead of a vacuous pass.
+    i = SOURCE.find("def patch_added_furniture_venue_callsites")
+    if i < 0:
+        return set()
+    j = SOURCE.find("\ndef ", i + 1)
+    block = SOURCE[i:j if j > 0 else len(SOURCE)]
+    return set(re.findall(r"\?([A-Za-z0-9_]+)@CBehavior@@", block))
 
 
 def donor_table():
@@ -64,6 +86,33 @@ class GymAndYogaOfferTheirWholeSet(unittest.TestCase):
         for donor in EXPECTED_DONORS:
             with self.subTest(donor=donor):
                 self.assertIn(donor, table)
+
+    def test_every_offered_donor_is_actually_retargeted_to_the_venue(self):
+        # THE FINDING THIS PINS: the table originally offered five donors, but
+        # patch_added_furniture_venue_callsites only rewrites the PlanToGo
+        # relocation for WorkingOut and QuickWorkout. The other three kept
+        # their own stock-location routes, so three of five selections walked
+        # away from the gym -- with the code present and every static check
+        # passing.
+        retargeted = retargeted_symbols()
+        self.assertTrue(retargeted,
+                        "could not read the retargeted symbol list; this test "
+                        "would otherwise pass vacuously")
+        table = donor_table()
+        offered = set(re.findall(r"CBehavior::([A-Za-z0-9_]+)", table))
+        self.assertTrue(offered, "no donors are offered at all")
+        for name in sorted(offered):
+            with self.subTest(donor=name):
+                self.assertIn(
+                    name, retargeted,
+                    "%s is offered as a venue donor but its PlanToGo is not "
+                    "retargeted, so the action would run somewhere else" % name)
+
+    def test_the_unretargeted_donors_are_not_offered(self):
+        table = donor_table()
+        for donor in UNRETARGETED_DONORS:
+            with self.subTest(donor=donor):
+                self.assertNotIn(donor, table)
 
     def test_no_invented_behaviour_symbols(self):
         # DoingAerobics and DoingXExercises do not exist in Behavior.obj. The

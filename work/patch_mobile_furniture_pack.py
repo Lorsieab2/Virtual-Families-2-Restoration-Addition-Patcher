@@ -32159,12 +32159,6 @@ private:
     static void __cdecl UseTelescope(CVillager &);
     static void __cdecl WorkingOut(CVillager &);
     static void __cdecl QuickWorkout(CVillager &);
-    // The rest of the general workout set. Names taken from Behavior.obj's
-    // symbol table rather than from prose: the behaviour is
-    // ?Aerobics@CBehavior@@CAXAAVCVillager@@@Z, NOT DoingAerobics.
-    static void __cdecl DoingKungFu(CVillager &);
-    static void __cdecl DoingTaiChi(CVillager &);
-    static void __cdecl Aerobics(CVillager &);
     static void __cdecl WorkKitchenDispatch(CVillager &);
     static void __cdecl WorkKitchen0(CVillager &);
     static void __cdecl OfficeCarreerWork(CVillager &);
@@ -33198,16 +33192,28 @@ static void VF2RunOwnFurnitureActionVaried(
 // offer as venues. Every one is a stock behaviour that consults no placed
 // item, which is what makes it safe to host: the venue comes from
 // VF2RunOwnFurnitureAction, never from the donor.
+// ONLY the donors whose PlanToGo callsites are actually retargeted to the
+// venue may appear here.
+//
+// patch_added_furniture_venue_callsites rewrites the PlanToGo relocation in
+// WorkingOut and QuickWorkout so their route resolves to the added item.
+// DoingKungFu, DoingTaiChi and Aerobics are NOT retargeted: they keep their
+// own stock-location routes, and because PlanToGo APPENDS rather than
+// replaces, a route they append lands after the venue and the villager walks
+// away from the gym to do the action somewhere else. Aerobics can also return
+// without acting at all when its object-0x0D lookup fails.
+//
+// Including them would have been the exact failure this repository keeps
+// producing: the code is present, it compiles, every static check passes, and
+// three of five selections do the wrong thing in play. They can be added once
+// they are venue-aware, which means extending the callsite patch and proving
+// the retarget landed -- not extending this list.
 static void (__cdecl *const kVF2GymDonorBehaviors[])(CVillager &) = {
-    CBehavior::DoingKungFu,
-    CBehavior::DoingTaiChi,
-    CBehavior::Aerobics,
-    CBehavior::QuickWorkout,
     // "Doing X exercises" is not a separate behaviour: it is WorkingOut
     // wearing the fourteen labels of the existing "workout" group -- leg,
-    // arm, back and abdominal exercises, crunches, cardio, and so on. So the
-    // set is six entries and WorkingOut carries two of the owner's names.
+    // arm, back and abdominal exercises, crunches, cardio, and so on.
     CBehavior::WorkingOut,
+    CBehavior::QuickWorkout,
 };
 
 #define VF2_DONOR_COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
