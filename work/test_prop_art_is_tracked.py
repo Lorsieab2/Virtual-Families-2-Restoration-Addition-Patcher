@@ -93,15 +93,17 @@ _NEGATOR = re.compile(
 # join clauses the same way and were wrong before the window widened, so
 # they are fixed here too rather than left as a narrower version of the
 # same defect.
-# "since" is deliberately NOT here. It is ambiguous -- causal in "not
-# shipped since QA is pending", temporal in "no issues since QA was
-# pending" -- and splitting on it makes the second read as an
-# outstanding claim, which lets a FINISHED row satisfy the gate. Every
-# other entry here fails safe; this one would not, so the ambiguous
-# causal case stays unhandled rather than opening a hole.
+# "since" is here too. It is ambiguous -- causal in "not shipped since QA
+# is pending", temporal in "no issues since QA was pending" -- and it was
+# briefly removed because splitting on it made the temporal reading look
+# like a live claim. Removing it only hid the problem: EVERY conjunction
+# here has the same ambiguity, and "while", "although", "though" and
+# "until" all did too. The tense of the phrase is what separates the two
+# senses, so _PAST_TENSE handles it for all of them and the separator
+# list no longer has to guess.
 _CLAUSE_SPLIT = re.compile(
     r"[.;,/:\u2013\u2014]|\s--+\s|\s-\s"
-    r"| but | and | because | while | although | though | until "
+    r"| but | and | because | while | although | though | until | since "
 )
 
 
@@ -116,6 +118,14 @@ def _joined_row_text(status, evidence):
     return (status + ". " + evidence).lower()
 
 
+# A phrase in the past tense describes a state that HAS BEEN resolved, not
+# work still outstanding: "no issues while QA was pending" is a historical
+# mention, and reading it as a live claim lets a FINISHED row satisfy the
+# gate. This is checked per occurrence, like the negator, because it is a
+# property of the phrase rather than of the clause.
+_PAST_TENSE = re.compile(r"\b(?:was|were|had been)\W+$")
+
+
 def _reads_as_pending(text):
     """True when some clause says work is outstanding without denying it."""
     for clause in _CLAUSE_SPLIT.split(text):
@@ -127,6 +137,8 @@ def _reads_as_pending(text):
             # pending" -- and stopping at the first hides the real claim.
             for hit in re.finditer(r"\b" + re.escape(phrase) + r"\b", clause):
                 if _NEGATOR.search(clause[:hit.start()]):
+                    continue
+                if _PAST_TENSE.search(clause[:hit.start()]):
                     continue
                 return True
     return False
@@ -294,11 +306,18 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             "no work is known to be pending",
             "nothing pending",
             "no confirmation pending",
-            # Temporal "since": the mention is historical, and the leading
-            # negator denies it. This is the one wording in this file where a
-            # misread would let a FINISHED row satisfy the gate rather than
-            # raise a false alarm, so it is pinned explicitly.
+            # Historical mentions. These are the wordings where a misread
+            # lets a FINISHED row satisfy the gate rather than raising a
+            # false alarm, which is the direction that actually loses
+            # information -- so every conjunction is pinned, not just the
+            # one review happened to find. The past tense is what makes
+            # them historical; the conjunction is incidental.
             "no issues since qa was pending",
+            "no issues while qa was pending",
+            "no issues although qa was pending",
+            "no issues though qa was pending",
+            "no issues until qa was pending",
+            "qa was pending and is now complete",
         )
         for text in finished:
             with self.subTest(text=text):
