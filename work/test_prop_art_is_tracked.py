@@ -141,6 +141,14 @@ def _joined_row_text(status, evidence):
 # pending for two days" -- which says the work is outstanding right
 # now, so suppressing it would lose a genuine claim. The modifier
 # belongs inside the had/been pair rather than after a bare "had".
+# KNOWN LIMIT: the simple past is read as historical, so a CURRENT
+# checkpoint narrated in the past -- "at today's check, QA was still
+# pending" -- reads as resolved. Separating that from "QA was pending
+# last week" needs a judgement about time references rather than about
+# tense, which no bounded pattern here can make. The ledger narrates live
+# status in the present throughout, and a search of it finds no past-tense
+# wording beside a pending phrase, so this is recorded rather than fixed:
+# widening against wording that does not appear costs more than it buys.
 _PAST_TENSE = re.compile(
     r"\b(?:was|were)\b(?:\W+\w+){0,2}\W*$"
     r"|\bhad\b(?:\W+\w+){0,2}\W+been\b(?:\W+\w+){0,2}\W*$"
