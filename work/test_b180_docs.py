@@ -103,6 +103,7 @@ class TestTheRoutedAndUnroutedSplitIsReal(unittest.TestCase):
             "this test is the wrong thing to edit -- the route is.",
         )
         self.assertIn("outside the mobile dispatcher", row)
+        self.assertIn("HandleDropOnHotSpot", row)
         # And every remaining item is named, so none is quietly dropped from
         # the outstanding list.
         for name, item_id in _added_items().items():
