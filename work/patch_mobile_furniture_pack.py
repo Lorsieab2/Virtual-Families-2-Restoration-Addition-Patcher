@@ -26335,6 +26335,15 @@ static int VF2FurnitureItemAtSlot(int slot)
     return *reinterpret_cast<int *>(manager + 0x1008 + slot * 0x40);
 }
 
+// FindFurniture returns the placement handle in unknown0. Unlike info.point,
+// that handle identifies the placed record rather than its walk-to hotspot.
+static int VF2FurnitureHandleAtSlot(int slot)
+{
+    if (slot < 0) return -1;
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    return *reinterpret_cast<int *>(manager + 0x1008 + slot * 0x40 + 0x04);
+}
+
 static int VF2FurnitureItemAtPoint(ldwPoint point)
 {
     return VF2FurnitureItemAtSlot(VF2FurnitureSlotAtPoint(point));
@@ -28418,9 +28427,10 @@ protected:
 // How a spa treatment actually plays out, shared by the manual drop and the
 // autonomous receiving route so both look the same.
 //
-// Duration and posture come from the chaise "Taking a nap" branch, which is
-// what was asked for: GetRandom(5) + 5, lying down when the lounger faces one
-// way and sitting in the chaise pose when it faces the other. Reading the
+// Posture comes from the chaise "Taking a nap" branch. Treatment duration is
+// intentionally expanded to roughly one real-life minute, while still varying
+// slightly. Lying down when the lounger faces one way and sitting in the chaise
+// pose when it faces the other. Reading the
 // orientation out of sFurnitureInfo2 rather than assuming one is what keeps a
 // villager from lying across the arm of a lounger placed the other way round.
 //
@@ -28432,7 +28442,9 @@ static void VF2PlanSpaTreatment(
     CVillagerPlans *plans, CVillager &villager, sFurnitureInfo2 const &info)
 {
     (void)villager;
-    int const total = ldwGameState::GetRandom(5) + 5;
+    // Keep the treatment close to one real-life minute, with a small
+    // variation so repeated treatments do not have identical duration.
+    int const total = ldwGameState::GetRandom(11) + 55;
 
     // ONE rest for the whole treatment, not a slice per sigh.
     //
@@ -28565,18 +28577,34 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
         VF2SetActionLabel(villager, kVF2SpaGivingLabels[receiving]);
         plans->PlanToGo(
             CContentMap::eObjectChaise, eSpeedNormal, ePriorityNormal, false);
-        plans->PlanToWork(ldwGameState::GetRandom(3) + 4);
+        plans->PlanToWork(ldwGameState::GetRandom(11) + 55);
         plans->StartNewBehavior(villager);
         return true;
     }
 
     // Nobody on this one, so this adult takes it and receives a treatment.
-    // Link to the lounger first: the plan needs its orientation to choose
+    // Probe the exact placement before linking. The chaise object is shared by
+    // ordinary and spa loungers, so a nearest-family link alone can reserve a
+    // different lounger and then apply a spa-only label to it.
+    sFurnitureInfo2 probe = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectChaise, villager.FeetPos(), probe, true, 0,
+            false)) {
+        return false;
+    }
+    if (probe.unknown0 != VF2FurnitureHandleAtSlot(loungerSlot)) {
+        return false;
+    }
+
+    // Link to the confirmed lounger: the plan needs its orientation to choose
     // between lying down and the chaise pose, and its point to walk to.
     sFurnitureInfo2 receiveInfo = {};
     if (!FurnitureManager.LinkPeepToFurniture(
             CContentMap::eObjectChaise, &villager, receiveInfo, true, 0,
             false)) {
+        return false;
+    }
+    if (receiveInfo.unknown0 != VF2FurnitureHandleAtSlot(loungerSlot)) {
         return false;
     }
     plans->ForgetPlans(villager, false);
@@ -28640,9 +28668,22 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
     int const loungerSlot = VF2FindFreeSpaLoungerSlot(villager);
     if (loungerSlot < 0) return false;
 
+    sFurnitureInfo2 probe = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectChaise, villager.FeetPos(), probe, true, 0,
+            false)) {
+        return false;
+    }
+    if (probe.unknown0 != VF2FurnitureHandleAtSlot(loungerSlot)) {
+        return false;
+    }
+
     sFurnitureInfo2 info = {};
     if (!FurnitureManager.LinkPeepToFurniture(
             CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
+        return false;
+    }
+    if (info.unknown0 != VF2FurnitureHandleAtSlot(loungerSlot)) {
         return false;
     }
 
