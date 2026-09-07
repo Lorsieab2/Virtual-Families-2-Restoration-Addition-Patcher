@@ -32940,17 +32940,38 @@ static bool VF2AddedFurnitureHandleIsItem(int handle, int itemId)
 static bool VF2FindAddedFurnitureVenue(
     CVillager &villager, int itemId, int object, ldwPoint &outPoint)
 {
-    sFurnitureInfo2 info = {};
-    // LinkPeepToFurniture is the authoritative selection. FindFurniture is
-    // only a prediction and can disagree when a placement has no free peep
-    // slot; probing it first would therefore select the wrong object or leave
-    // a reservation mismatch. The returned handle identifies this placement.
-    if (FurnitureManager.LinkPeepToFurniture(
-            (CContentMap::EObject)object, &villager, info, true, 0, false) &&
-        VF2AddedFurnitureHandleIsItem(info.unknown0, itemId)) {
-        outPoint = info.point;
-        return true;
+    // This venue wrapper only needs a destination, not a peep reservation.
+    // Do not call LinkPeepToFurniture speculatively: a shared-object stock
+    // placement could be reserved and there is no unlink API to undo it.
+    // Instead enumerate the exact item records, ask the native read-only
+    // lookup for each placement anchor, and verify its returned handle.
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return false;
+    ldwPoint feet = villager.FeetPos();
+    long bestDistance = 0x7FFFFFFF;
+    bool found = false;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        if (*reinterpret_cast<int *>(record) != itemId) continue;
+        ldwPoint placement = {
+            *reinterpret_cast<int *>(record + 0x14),
+            *reinterpret_cast<int *>(record + 0x18)};
+        sFurnitureInfo2 info = {};
+        if (!FurnitureManager.FindFurniture(
+                (CContentMap::EObject)object, placement, info, true, 0, 0)) continue;
+        if (!VF2AddedFurnitureHandleIsItem(info.unknown0, itemId)) continue;
+        long dx = info.point.x - feet.x;
+        long dy = info.point.y - feet.y;
+        long distance = dx * dx + dy * dy;
+        if (!found || distance < bestDistance) {
+            bestDistance = distance;
+            outPoint = info.point;
+            found = true;
+        }
     }
+    if (found) return true;
     return false;
 }
 
