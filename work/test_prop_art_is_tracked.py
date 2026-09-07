@@ -67,8 +67,13 @@ _PENDING_PHRASES = (
 # "not" is never the negator, so "not yet" and "not confirmed" still count.
 # "Confirmation is pending because it is not complete" stays PENDING, because
 # that "not" belongs to "not complete" and follows the phrase.
+# Five intervening words, not four. "no work is known to be pending" puts
+# five words between the negator and the phrase, so a four-word window read
+# a finished status as still outstanding. The window exists to stop a
+# negator reaching across a whole clause, and the clause separators below
+# already bound that, so five stays conservative.
 _NEGATOR = re.compile(
-    r"\b(?:no|not|nothing|none|never)\b(?:\W+\w+){0,4}\W*$"
+    r"\b(?:no|not|nothing|none|never)\b(?:\W+\w+){0,5}\W*$"
 )
 # Slash-separated substeps are a ledger convention -- "source complete / QA
 # pending" -- so "/" separates clauses like any other punctuation.
@@ -76,8 +81,13 @@ _NEGATOR = re.compile(
 # "Blockers: none - QA pending" is a legitimate pending row, and without them
 # the negator in the first clause reaches across and suppresses "pending" in
 # the second. Hyphen, en dash and em dash are all used in these rows.
+# "--" is the ASCII dash these documents actually use -- this very comment
+# uses it -- and it was missing, so "not shipped -- qa pending" stayed one
+# clause and the leading negator suppressed a genuine pending claim. It has
+# to come before the single-hyphen alternative, which would otherwise match
+# first and leave a stray "-" heading the next clause.
 _CLAUSE_SPLIT = re.compile(
-    r"[.;,/:\u2013\u2014]|\s-\s| but | and | because "
+    r"[.;,/:\u2013\u2014]|\s--+\s|\s-\s| but | and | because "
 )
 
 
@@ -214,6 +224,47 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             "the row does not say what is still outstanding, so a reader "
             "cannot tell whether the props are known to work",
         )
+
+    def test_reads_as_pending_handles_the_wordings_these_rows_use(self):
+        """Pin the two ways this helper misread real ledger prose.
+
+        Both were found by review against wording that would plausibly be
+        written here, and both failed in a way no existing row happened to
+        trigger -- which is exactly why they need a test rather than a fix
+        alone. They are asserted as behaviour, not as the regex text, so a
+        later rewrite of the pattern still has to satisfy them.
+        """
+        outstanding = (
+            # A negator separated from the phrase by a longer auxiliary
+            # phrase must still not be read as denying it across a clause
+            # boundary marked by the ASCII "--" dash these documents use.
+            "not shipped -- qa pending",
+            "not complete: confirmation pending",
+            "blockers: none - qa pending",
+            "nothing pending in source / qa pending",
+            "confirmation is pending because it is not complete",
+            "qa pending",
+        )
+        for text in outstanding:
+            with self.subTest(text=text):
+                self.assertTrue(
+                    _reads_as_pending(text),
+                    f"{text!r} names outstanding work but was read as finished",
+                )
+
+        finished = (
+            # Five words between the negator and the phrase: a four-word
+            # window read this finished status as outstanding.
+            "no work is known to be pending",
+            "nothing pending",
+            "no confirmation pending",
+        )
+        for text in finished:
+            with self.subTest(text=text):
+                self.assertFalse(
+                    _reads_as_pending(text),
+                    f"{text!r} denies outstanding work but was read as pending",
+                )
 
 
 if __name__ == "__main__":
