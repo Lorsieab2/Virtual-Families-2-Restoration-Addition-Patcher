@@ -36,6 +36,18 @@ class TestAddedFurnitureContract(unittest.TestCase):
         self.assertNotIn("GetRandom(count + 1)", body)
         self.assertIn("GetRandom(count)", body)
 
+    def test_stock_donor_wrappers_use_strict_selector_only_for_added_items(self):
+        src = source()
+        for start_marker, end_marker in (
+            ("extern \"C\" void __cdecl VF2RandomPooltableLabel", "// The Exercise Bike"),
+            ("extern \"C\" void __cdecl VF2RandomTreadmillWalkLabel", "extern \"C\" void __cdecl VF2RandomTreadmillRunLabel"),
+            ("extern \"C\" void __cdecl VF2RandomTreadmillRunLabel", "extern \"C\" void __cdecl VF2RandomDrinkLabel"),
+        ):
+            start = src.index(start_marker, src.index("// The Ping-Pong Table borrows the Pool Table's behaviour wholesale"))
+            body = src[start:src.index(end_marker, start)]
+            self.assertIn("VF2ApplyVenueLabel", body)
+            self.assertIn("if (!", body)
+
     def test_missing_venue_falls_back_to_native_donor(self):
         src = source()
         start = src.index("static void VF2RunOwnFurnitureAction(")

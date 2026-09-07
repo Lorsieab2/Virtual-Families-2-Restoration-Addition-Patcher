@@ -33223,7 +33223,7 @@ extern "C" void __cdecl VF2RandomPooltableLabel(CVillager &villager)
         // A stock pool table: leave the native label exactly as it was.
         return;
     }
-    VF2ApplyRememberedOrRandomLabel(
+    VF2ApplyVenueLabel(
         villager, kVF2BehaviorLabels_ping_pong,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong), remembered);
 }
@@ -33247,7 +33247,7 @@ extern "C" void __cdecl VF2RandomTreadmillWalkLabel(CVillager &villager)
         villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::WorkoutTreadmill)) return;
     if (!bike) return;
-    VF2ApplyRememberedOrRandomLabel(
+    VF2ApplyVenueLabel(
         villager, kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk), remembered);
 }
@@ -33262,7 +33262,7 @@ extern "C" void __cdecl VF2RandomTreadmillRunLabel(CVillager &villager)
         villager, 0x04, __VF2_EXERCISE_BIKE_ITEM_ID__);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, CBehavior::RunningOnTreadmill)) return;
     if (!bike) return;
-    VF2ApplyRememberedOrRandomLabel(
+    VF2ApplyVenueLabel(
         villager, kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run), remembered);
 }
