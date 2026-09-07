@@ -33014,9 +33014,14 @@ static void __cdecl VF2PlanToGoAtAddedFurnitureImpl(
 extern "C" __declspec(naked) void VF2PlanToGoAtAddedFurniture()
 {
     __asm {
+        push dword ptr [esp+16]
+        push dword ptr [esp+16]
+        push dword ptr [esp+16]
+        push dword ptr [esp+16]
         push ecx
         call VF2PlanToGoAtAddedFurnitureImpl
-        ret
+        add esp, 20
+        ret 16
     }
 }
 
@@ -33039,9 +33044,14 @@ static bool __cdecl VF2PlanToGoObjectAtAddedFurnitureImpl(
 extern "C" __declspec(naked) void VF2PlanToGoObjectAtAddedFurniture()
 {
     __asm {
+        push dword ptr [esp+16]
+        push dword ptr [esp+16]
+        push dword ptr [esp+16]
+        push dword ptr [esp+16]
         push ecx
         call VF2PlanToGoObjectAtAddedFurnitureImpl
-        ret
+        add esp, 20
+        ret 16
     }
 }
 

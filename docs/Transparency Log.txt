@@ -3003,3 +3003,12 @@ B182 CURRENT ADDED-FURNITURE ROUTING STATUS.
   `GetRandom(3) + 4` work interval. It now uses `GetRandom(11) + 55`, matching
   the receiving treatment's approximately one-minute real-time interval. This
   is a source/test change only until a generated build and live player check.
+
+B182 BUILD ABI FOLLOW-UP.
+
+- Building the merged added-furniture routing source exposed an invalid
+  `__thiscall` declaration on free-function PlanToGo helpers. The narrow fix
+  keeps cdecl implementations behind x86 naked entry wrappers that forward the
+  native arguments, preserve ECX, and perform the original 16-byte thiscall
+  cleanup. The focused contract test and the required B119 build now pass.
+  Runtime/player verification remains outstanding.
