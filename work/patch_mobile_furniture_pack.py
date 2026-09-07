@@ -28352,15 +28352,23 @@ extern "C" void __cdecl VF2MobileStudyingOnPatio(CVillager &villager)
         CBehavior::StudyingOnPatio(villager);
         return;
     }
-    if (!VF2WeatherAllowsOutdoorFurniture() ||
-        !VF2TryLinkMobileChaise(villager, info)) {
-        // Fall back to the behaviour that was actually chosen.  This used to
-        // run CBehavior::ReadingBook instead, which is a DIFFERENT behaviour
-        // from the one the selector picked, and which is itself rebound to
-        // VF2MobileReadingBook -- so a villager who could not reach a lounger
-        // was silently handed someone else's activity by way of a second
-        // rebound handler.  The other three mobile chaise handlers each fall
-        // back to their own stock behaviour; this one now matches them.
+    if (!VF2WeatherAllowsOutdoorFurniture()) {
+        // Bad weather refuses the lounger, and the stock studying route walks
+        // to fixed patio coordinates without re-checking the sky -- so
+        // deferring to it here would put the villager outdoors in the rain,
+        // which is the very thing the check just rejected.  Read indoors
+        // instead.  The other three chaise handlers fall back to indoor
+        // behaviours of their own for the same reason.
+        CBehavior::ReadingBook(villager);
+        return;
+    }
+    if (!VF2TryLinkMobileChaise(villager, info)) {
+        // The weather is fine and only the lounger is unavailable, so the
+        // villager can still study outside by the stock route.  This used to
+        // run CBehavior::ReadingBook, a DIFFERENT behaviour from the one the
+        // selector chose and itself rebound to VF2MobileReadingBook, so an
+        // unavailable lounger silently handed the villager someone else's
+        // activity by way of a second rebound handler.
         CBehavior::StudyingOnPatio(villager);
         return;
     }
