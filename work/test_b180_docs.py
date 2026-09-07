@@ -155,6 +155,10 @@ class TestTheEmittedDispatcherAgreesWithTheDocs(unittest.TestCase):
             "InvisiblePatioTable",
             "InvisibleSpaLounger",
             "SpaLoungerStd",
+            "InvisibleYogaEquipment",
+            "ExerciseBikeStd",
+            "HomeGymSystemStd",
+            "PingPongTableStd",
         ):
             with self.subTest(item=name):
                 self.assertIn(f"{items[name]:#x}".lower(), self.dispatcher.lower())
