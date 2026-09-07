@@ -67,8 +67,13 @@ _PENDING_PHRASES = (
 # "not" is never the negator, so "not yet" and "not confirmed" still count.
 # "Confirmation is pending because it is not complete" stays PENDING, because
 # that "not" belongs to "not complete" and follows the phrase.
+# Five intervening words, not four. "no work is known to be pending" puts
+# five words between the negator and the phrase, so a four-word window read
+# a finished status as still outstanding. The window exists to stop a
+# negator reaching across a whole clause, and the clause separators below
+# already bound that, so five stays conservative.
 _NEGATOR = re.compile(
-    r"\b(?:no|not|nothing|none|never)\b(?:\W+\w+){0,4}\W*$"
+    r"\b(?:no|not|nothing|none|never)\b(?:\W+\w+){0,5}\W*$"
 )
 # Slash-separated substeps are a ledger convention -- "source complete / QA
 # pending" -- so "/" separates clauses like any other punctuation.
@@ -76,8 +81,77 @@ _NEGATOR = re.compile(
 # "Blockers: none - QA pending" is a legitimate pending row, and without them
 # the negator in the first clause reaches across and suppresses "pending" in
 # the second. Hyphen, en dash and em dash are all used in these rows.
+# "--" is the ASCII dash these documents actually use -- this very comment
+# uses it -- and it was missing, so "not shipped -- qa pending" stayed one
+# clause and the leading negator suppressed a genuine pending claim. It has
+# to come before the single-hyphen alternative, which would otherwise match
+# first and leave a stray "-" heading the next clause.
+# The subordinating conjunctions are here for the same reason as the
+# punctuation: "not complete while final QA is pending" states outstanding
+# work in its second clause, and without a boundary the leading negator
+# reaches across and denies it. "although", "though", "until" and "since"
+# join clauses the same way and were wrong before the window widened, so
+# they are fixed here too rather than left as a narrower version of the
+# same defect.
+# "since" is here too. It is ambiguous -- causal in "not shipped since QA
+# is pending", temporal in "no issues since QA was pending" -- and it was
+# briefly removed because splitting on it made the temporal reading look
+# like a live claim. Removing it only hid the problem: EVERY conjunction
+# here has the same ambiguity, and "while", "although", "though" and
+# "until" all did too. The tense of the phrase is what separates the two
+# senses, so _PAST_TENSE handles it for all of them and the separator
+# list no longer has to guess.
 _CLAUSE_SPLIT = re.compile(
-    r"[.;,/:\u2013\u2014]|\s-\s| but | and | because "
+    r"[.;,/:\u2013\u2014]|\s--+\s|\s-\s"
+    r"| but | and | because | while | although | though | until | since "
+    # "as" only where it joins a CLAUSE, never where it is the
+    # preposition in "marked as pending". The tell is structural rather
+    # than a list of labelling verbs: a conjunction is followed by a
+    # subject and a verb, a preposition by the phrase itself. Splitting
+    # "not marked as pending" severs the negator from what it denies and
+    # turns a finished row into an outstanding one.
+    r"| as (?=\w+(?:\W+\w+){0,3}\W+(?:is|are|was|were|remains|remain|stays|stay|becomes|has|have|had)\b)"
+)
+
+
+def _joined_row_text(status, evidence):
+    """The two ledger cells as one string, with a clause boundary between.
+
+    They are distinct fields. Joined with a bare space, a negator ending the
+    status cell reaches into the evidence cell and denies it -- "Not
+    complete" beside "Final runtime QA remains pending" read as finished.
+    The separator keeps each cell's claim its own.
+    """
+    return (status + ". " + evidence).lower()
+
+
+# A phrase in the past tense describes a state that HAS BEEN resolved, not
+# work still outstanding: "no issues while QA was pending" is a historical
+# mention, and reading it as a live claim lets a FINISHED row satisfy the
+# gate. This is checked per occurrence, like the negator, because it is a
+# property of the phrase rather than of the clause.
+# Up to two words may sit between the auxiliary and the phrase, because
+# ordinary wording puts them there -- "was still pending", "was
+# previously pending", "had recently been pending". An exact-suffix
+# match reads those as current claims, which is the unsafe direction.
+# Two is the same bounded-reach idea as the negator window: enough for
+# natural modifiers, not enough to span a clause.
+# "had" is matched only as part of "had ... been", never bare. Bare
+# "had" also matches the PRESENT PERFECT -- "QA has had confirmation
+# pending for two days" -- which says the work is outstanding right
+# now, so suppressing it would lose a genuine claim. The modifier
+# belongs inside the had/been pair rather than after a bare "had".
+# KNOWN LIMIT: the simple past is read as historical, so a CURRENT
+# checkpoint narrated in the past -- "at today's check, QA was still
+# pending" -- reads as resolved. Separating that from "QA was pending
+# last week" needs a judgement about time references rather than about
+# tense, which no bounded pattern here can make. The ledger narrates live
+# status in the present throughout, and a search of it finds no past-tense
+# wording beside a pending phrase, so this is recorded rather than fixed:
+# widening against wording that does not appear costs more than it buys.
+_PAST_TENSE = re.compile(
+    r"\b(?:was|were)\b(?:\W+\w+){0,2}\W*$"
+    r"|\bhad\b(?:\W+\w+){0,2}\W+been\b(?:\W+\w+){0,2}\W*$"
 )
 
 
@@ -92,6 +166,8 @@ def _reads_as_pending(text):
             # pending" -- and stopping at the first hides the real claim.
             for hit in re.finditer(r"\b" + re.escape(phrase) + r"\b", clause):
                 if _NEGATOR.search(clause[:hit.start()]):
+                    continue
+                if _PAST_TENSE.search(clause[:hit.start()]):
                     continue
                 return True
     return False
@@ -208,11 +284,128 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
         read as finished while something is outstanding -- but a bare topic
         word cannot express it.
         """
-        text = (self._row()[1] + " " + self._row()[2]).lower()
+        text = _joined_row_text(self._row()[1], self._row()[2])
         self.assertTrue(
             _reads_as_pending(text),
             "the row does not say what is still outstanding, so a reader "
             "cannot tell whether the props are known to work",
+        )
+
+    def test_reads_as_pending_handles_the_wordings_these_rows_use(self):
+        """Pin the two ways this helper misread real ledger prose.
+
+        Both were found by review against wording that would plausibly be
+        written here, and both failed in a way no existing row happened to
+        trigger -- which is exactly why they need a test rather than a fix
+        alone. They are asserted as behaviour, not as the regex text, so a
+        later rewrite of the pattern still has to satisfy them.
+        """
+        outstanding = (
+            # A negator separated from the phrase by a longer auxiliary
+            # phrase must still not be read as denying it across a clause
+            # boundary marked by the ASCII "--" dash these documents use.
+            "not shipped -- qa pending",
+            "not complete: confirmation pending",
+            "blockers: none - qa pending",
+            "nothing pending in source / qa pending",
+            "confirmation is pending because it is not complete",
+            "qa pending",
+            # Subordinate clauses. Review caught the first of these as a
+            # regression from widening the negator window; checking the
+            # neighbours showed the other three were already wrong before
+            # that, so they are pinned together rather than one at a time.
+            "not complete while final qa is pending",
+            "not complete although qa is pending",
+            "not done until qa is pending",
+            # The two ledger cells are separate fields. The caller joins them
+            # with a separator so a negator in the status cell cannot reach
+            # into the evidence cell and deny it.
+            "not complete. final runtime qa remains pending",
+            # Present tense with the same modifier must stay outstanding --
+            # the guard keys on the auxiliary, not on the adverb.
+            "qa is still pending",
+            # Causal "as" joins clauses like the others.
+            "not complete as final qa remains pending",
+            "not shipped as qa is pending",
+            # PRESENT PERFECT. "had" here does not make the phrase
+            # historical -- the work is outstanding right now -- so the
+            # guard must match "had ... been" and never a bare "had".
+            "qa has had confirmation pending for two days",
+            "we had confirmation pending",
+            # "as" the PREPOSITION, where the phrase follows directly. This
+            # must not split, or the negator is severed from what it denies.
+            "marked as pending",
+            "flagged as unconfirmed",
+        )
+        for text in outstanding:
+            with self.subTest(text=text):
+                self.assertTrue(
+                    _reads_as_pending(text),
+                    f"{text!r} names outstanding work but was read as finished",
+                )
+
+        finished = (
+            # Five words between the negator and the phrase: a four-word
+            # window read this finished status as outstanding.
+            "no work is known to be pending",
+            "nothing pending",
+            "no confirmation pending",
+            # Historical mentions. These are the wordings where a misread
+            # lets a FINISHED row satisfy the gate rather than raising a
+            # false alarm, which is the direction that actually loses
+            # information -- so every conjunction is pinned, not just the
+            # one review happened to find. The past tense is what makes
+            # them historical; the conjunction is incidental.
+            "no issues since qa was pending",
+            "no issues while qa was pending",
+            "no issues although qa was pending",
+            "no issues though qa was pending",
+            "no issues until qa was pending",
+            "qa was pending and is now complete",
+            # Ordinary wording puts a modifier between the auxiliary and the
+            # phrase. An exact-suffix match misses these and reads them as
+            # current claims, which is the unsafe direction.
+            "no issues since qa was previously pending",
+            "no issues while qa was still pending",
+            "although qa had recently been pending",
+            "no issues since qa had been briefly pending",
+            # The negated preposition form: these DENY outstanding work, and
+            # splitting on "as" here would read them as claiming it.
+            "not marked as pending",
+            "not flagged as pending",
+            "not listed as outstanding",
+        )
+        for text in finished:
+            with self.subTest(text=text):
+                self.assertFalse(
+                    _reads_as_pending(text),
+                    f"{text!r} denies outstanding work but was read as pending",
+                )
+
+    def test_the_two_cells_are_read_as_separate_clauses(self):
+        """The status and evidence cells must not run together.
+
+        They are distinct fields, so a negator ending the status cell must
+        not reach into the evidence cell and deny what it says. Joining them
+        with a bare space let "Not complete" suppress the only pending claim
+        in "Final runtime QA remains pending", which is a real pair of cell
+        values rather than an invented one.
+
+        This asserts the joined text the check actually sees, so restoring a
+        bare-space join fails here rather than passing quietly.
+        """
+        status, evidence = "Not complete", "Final runtime QA remains pending"
+        self.assertTrue(
+            _reads_as_pending(_joined_row_text(status, evidence)),
+            "the evidence cell's pending claim must survive the status "
+            "cell's negator once the two are joined",
+        )
+        # And the bare-space join this replaced really does lose it, which is
+        # why the helper exists rather than a literal at the call site.
+        self.assertFalse(
+            _reads_as_pending((status + " " + evidence).lower()),
+            "a bare-space join lets the status cell's negator reach into "
+            "the evidence cell",
         )
 
 
