@@ -2996,6 +2996,6 @@ B119 venue-routing correction (2026-09-07)
   `info.point`; no Treadmill fmap is used.
 - Static generation and generated-C++ checks passed. The required B119 build
   completed with exit 0; the executable exists at 1,797,632 bytes with
-  SHA-256 CE940146EAC517EF94D981DA596AB5444F80B44D1E67B0E59F656E51108496EF.
+  SHA-256 C6482782C0F169B0B98C0D1F939A91E09B9400BBFD2443234596B14CF105D88F.
 - Runtime/player evidence is not yet available. This entry does not claim
   live venue routing or crash-free gameplay has been verified.

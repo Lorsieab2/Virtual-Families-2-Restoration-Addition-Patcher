@@ -33050,27 +33050,35 @@ static bool VF2CaptureWorkoutVenue(
     CContentMap::EObject object,
     ldwPoint *venuePoint)
 {
-    ldwPoint sample = villager.FeetPos();
-    sample.y -= 10;
-    int slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, sample);
+    (void)villager;
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
     int count = *reinterpret_cast<int *>(manager + 0x1004);
-    if (slot < 0 || slot >= count || count > 0x200) return false;
-    unsigned char *record = manager + 0x1008 + slot * 0x40;
-    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0 ||
-        *reinterpret_cast<int *>(record) != itemId) {
-        return false;
+    if (count < 0 || count > 0x200) return false;
+    // Autonomous selection occurs before the villager reaches the item, so
+    // FeetPos cannot identify the venue. Resolve each matching placement from
+    // its stored world position, then require FindFurniture's unique handle
+    // to match that record before accepting its walk-to point.
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0 ||
+            *reinterpret_cast<int *>(record) != itemId) {
+            continue;
+        }
+        ldwPoint placement = {
+            *reinterpret_cast<int *>(record + 0x14),
+            *reinterpret_cast<int *>(record + 0x18)};
+        sFurnitureInfo2 info = {};
+        if (!FurnitureManager.FindFurniture(
+                object, placement, info, true, 0, 0)) {
+            continue;
+        }
+        // info.point is only the walk-to anchor. The selected placement is
+        // identified by the handle FindFurniture returned in info.unknown0.
+        if (*reinterpret_cast<int *>(record + 0x04) != info.unknown0) continue;
+        *venuePoint = info.point;
+        return true;
     }
-
-    sFurnitureInfo2 info = {};
-    if (!FurnitureManager.FindFurniture(object, villager.FeetPos(), info, true, 0, 0)) {
-        return false;
-    }
-    // info.point is only the walk-to anchor.  The selected placement is
-    // identified by the handle FindFurniture returned in info.unknown0.
-    if (*reinterpret_cast<int *>(record + 0x04) != info.unknown0) return false;
-    *venuePoint = info.point;
-    return true;
+    return false;
 }
 
 // Runs the donor's native action, then relabels to the item's own group.
@@ -33098,14 +33106,17 @@ static void VF2RunOwnFurnitureActionAtVenue(
     ldwPoint venuePoint = {};
     bool hasVenue = VF2CaptureWorkoutVenue(
         villager, itemId, object, &venuePoint);
-    if (hasVenue) {
-        gVF2WorkoutVenueVillager = &villager;
-        gVF2WorkoutVenuePoint = venuePoint;
+    if (!hasVenue) {
+        // The added action is positional, not an availability gate. If no
+        // matching placement exists, preserve the donor's original action,
+        // destination, label, duration, and availability unchanged.
+        donorBehavior(villager);
+        return;
     }
+    gVF2WorkoutVenueVillager = &villager;
+    gVF2WorkoutVenuePoint = venuePoint;
     VF2RunOwnFurnitureAction(villager, donorBehavior, labels, labelCount);
-    if (hasVenue) {
-        gVF2WorkoutVenueVillager = 0;
-    }
+    gVF2WorkoutVenueVillager = 0;
 }
 
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
