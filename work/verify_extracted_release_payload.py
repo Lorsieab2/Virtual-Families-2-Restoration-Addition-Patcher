@@ -32,7 +32,7 @@ def _resolve_manifest_path(manifest_dir, value):
     if not isinstance(value, str) or not value.strip():
         raise ValueError("source path must be non-empty")
     raw = value.replace("\\", "/")
-    if re.match(r"^[A-Za-z]:/", raw) or raw.startswith("//"):
+    if re.match(r"^[A-Za-z]:", raw) or raw.startswith("//"):
         raise ValueError("source path must be relative and contained")
     candidate = pathlib.PurePosixPath(raw)
     if candidate.is_absolute() or ".." in candidate.parts or "." in candidate.parts:
@@ -193,12 +193,26 @@ def main():
             for row in manifest.get("settings", [])
             if isinstance(row, dict) and row.get("default")
         }
+
+        def record_requires(record):
+            values = []
+            for key in ("requires", "settings"):
+                value = record.get(key)
+                if isinstance(value, list):
+                    values.extend(value)
+                elif isinstance(value, str):
+                    values.extend(part.strip() for part in value.split(",") if part.strip())
+                elif value is not None:
+                    return None
+            for key in ("setting", "feature"):
+                if record.get(key) is not None:
+                    values.append(record[key])
+            return values
+
         installed = {}
         for key in ("asset_patches", "post_asset_patches"):
             for record in manifest.get(key, []):
-                requires = record.get("requires", record.get("settings", []))
-                if isinstance(requires, str):
-                    requires = [requires]
+                requires = record_requires(record)
                 if not isinstance(requires, list) or not set(requires).issubset(enabled_settings):
                     continue
                 target_key = record.get("file_path")

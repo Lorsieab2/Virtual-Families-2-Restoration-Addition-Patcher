@@ -71,7 +71,13 @@ class ReleaseVerifierMatchesInstaller(unittest.TestCase):
         with self.assertRaises(ValueError):
             verifier._resolve_manifest_path(pathlib.Path.cwd(), "C:/payload/map.fmap")
         with self.assertRaises(ValueError):
+            verifier._resolve_manifest_path(pathlib.Path.cwd(), "C:payload/map.fmap")
+        with self.assertRaises(ValueError):
             verifier._resolve_manifest_path(pathlib.Path.cwd(), "\\\\server\\share\\map.fmap")
+
+    def test_all_installer_requirement_aliases_are_considered(self):
+        self.assertIn('for key in ("requires", "settings")', SOURCE)
+        self.assertIn('for key in ("setting", "feature")', SOURCE)
 
     def test_a_redirected_record_is_not_treated_as_installed(self):
         target = "Assets/SpaLoungerStd.png.fmap"
