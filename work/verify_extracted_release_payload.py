@@ -42,6 +42,67 @@ def _resolve_manifest_path(manifest_dir, value):
     if root != resolved and root not in resolved.parents:
         raise ValueError("source path escapes manifest directory")
     return resolved
+
+
+def _setting_is_ready(manifest, setting_id, row):
+    metadata = {}
+    for container_name in ("setting_readiness", "feature_readiness"):
+        container = manifest.get(container_name)
+        if isinstance(container, dict) and isinstance(container.get(setting_id), dict):
+            metadata.update(container[setting_id])
+    nested = row.get("readiness")
+    if isinstance(nested, dict):
+        metadata.update(nested)
+    status = str(metadata.get("status", row.get("readiness_status", ""))).strip().lower()
+    if status in {"stop", "stopped", "pending", "unlinked"}:
+        return False
+    return metadata.get("runtime_ready", True) is not False and metadata.get("linked", True) is not False
+
+
+def _default_enabled_settings(manifest):
+    raw_settings = manifest.get("settings", [])
+    if isinstance(raw_settings, dict):
+        rows = [
+            {"id": setting_id, **(value if isinstance(value, dict) else {})}
+            for setting_id, value in raw_settings.items()
+        ]
+    elif isinstance(raw_settings, list):
+        rows = raw_settings
+    else:
+        rows = []
+    enabled = set()
+    for row in rows:
+        if not isinstance(row, dict) or not row.get("default"):
+            continue
+        setting_id = str(row.get("id", "")).strip()
+        if setting_id and _setting_is_ready(manifest, setting_id, row):
+            enabled.add(setting_id)
+    return enabled
+
+
+def _record_requires(record):
+    values = []
+    for key in ("requires", "settings"):
+        value = record.get(key)
+        if isinstance(value, list):
+            values.extend(value)
+        elif isinstance(value, str):
+            values.extend(part.strip() for part in value.split(",") if part.strip())
+        elif value is not None:
+            return None
+    for key in ("setting", "feature"):
+        if record.get(key) is not None:
+            values.append(record[key])
+    normalized = []
+    for value in values:
+        if not isinstance(value, str) or not value.strip():
+            return None
+        value = value.strip()
+        if value not in normalized:
+            normalized.append(value)
+    return normalized
+
+
 def _normalize_declared_sha256(value):
     """Accept exactly what the patcher accepts, and nothing more.
 
@@ -188,48 +249,18 @@ def main():
         # reported as "not installed" by a resolver that only reads
         # asset_patches -- a false alarm on a correct bundle, which is the
         # same class of mistake as the by-name check this replaced.
-        raw_settings = manifest.get("settings", [])
-        if isinstance(raw_settings, dict):
-            setting_rows = [
-                {"id": setting_id, **(value if isinstance(value, dict) else {})}
-                for setting_id, value in raw_settings.items()
-            ]
-        elif isinstance(raw_settings, list):
-            setting_rows = raw_settings
-        else:
-            setting_rows = []
-        enabled_settings = {
-            str(row.get("id"))
-            for row in setting_rows
-            if isinstance(row, dict) and row.get("default")
-        }
-
-        def record_requires(record):
-            values = []
-            for key in ("requires", "settings"):
-                value = record.get(key)
-                if isinstance(value, list):
-                    values.extend(value)
-                elif isinstance(value, str):
-                    values.extend(part.strip() for part in value.split(",") if part.strip())
-                elif value is not None:
-                    return None
-            for key in ("setting", "feature"):
-                if record.get(key) is not None:
-                    values.append(record[key])
-            return values
-
+        enabled_settings = _default_enabled_settings(manifest)
         installed = {}
         for key in ("asset_patches", "post_asset_patches"):
             for record in manifest.get(key, []):
-                requires = record_requires(record)
+                requires = _record_requires(record)
                 if not isinstance(requires, list) or not set(requires).issubset(enabled_settings):
                     continue
                 target_key = record.get("file_path")
                 if key == "asset_patches":
                     target_key = record.get("output_file_path") or target_key
                 if target_key:
-                    installed.setdefault(target_key, record)
+                    installed[target_key] = record
 
     for name in LOUNGER_MAPS:
         target = f"Assets/{name}"

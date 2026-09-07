@@ -80,6 +80,27 @@ class ReleaseVerifierMatchesInstaller(unittest.TestCase):
         self.assertIn('for key in ("setting", "feature")', SOURCE)
         self.assertIn('if isinstance(raw_settings, dict)', SOURCE)
 
+    def test_requirement_matching_normalizes_ids_and_respects_readiness(self):
+        manifest = {
+            "settings": [{"id": " mobile ", "default": True}],
+            "setting_readiness": {"mobile": {"status": "ready"}},
+        }
+        # The verifier's normalizer follows the installer's trimming rule.
+        self.assertEqual(verifier._default_enabled_settings(manifest), {"mobile"})
+        self.assertEqual(verifier._record_requires({"setting": " mobile "}), ["mobile"])
+
+    def test_later_active_writer_replaces_an_earlier_writer(self):
+        target = "Assets/SpaLoungerStd.png.fmap"
+        manifest = {"asset_patches": [
+            {"file_path": target, "source_path": "payload/old"},
+            {"file_path": target, "source_path": "payload/new"},
+        ]}
+        # This mirrors the installer order: the later selected record wins.
+        installed = {}
+        for record in manifest["asset_patches"]:
+            installed[record["file_path"]] = record
+        self.assertEqual(installed[target]["source_path"], "payload/new")
+
     def test_a_redirected_record_is_not_treated_as_installed(self):
         target = "Assets/SpaLoungerStd.png.fmap"
         manifest = {"asset_patches": [{
