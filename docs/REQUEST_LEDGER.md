@@ -26,9 +26,11 @@ row as a claim that the feature is broken.
 Still genuinely outstanding:
 
 - The patcher's "Please wait" window - see the row near the end of this file.
-- The twelve features that require Mobile Furniture Behaviors, which currently
-  prevents the game from starting. See `docs/Transparency Log.txt` for the
-  crash record. These cannot be tested until that is fixed.
+- The twelve features that require Mobile Furniture Behaviors. The startup
+  crash that blocked them is fixed and confirmed at runtime -- see
+  `docs/Transparency Log.txt` for the crash record and the verification. They
+  are no longer blocked, but they remain untested in play, which is a different
+  status from blocked and is why they stay listed here.
 
 ## Status meanings
 
