@@ -70,12 +70,35 @@ def settings_in_archive(archive: Path) -> set[str]:
         # JSON with the wrong top-level shape -- "[]", say -- parses fine and
         # then raises AttributeError on .get(), which would escape past the
         # catch below and unwind main() after packaging.
-        rows = data.get("settings") or []
-        offered = {
-            row["id"]
-            for row in rows
-            if isinstance(row, dict) and row.get("id")
-        }
+        # Validate the SHAPE, do not coerce it. `data.get("settings") or []`
+        # turns every malformed form -- absent, {}, a string, a list of
+        # objects with no id -- into an empty set, and an empty baseline has
+        # nothing to lose, so lost_settings() reports success and a short
+        # release stays publishable. That is the same class as the top-level
+        # "[]" case: a read that cannot fail is not a read.
+        rows = data.get("settings")
+        if not isinstance(rows, list):
+            raise UnreadableRelease(
+                "%s: manifest 'settings' is %s, expected a list"
+                % (archive.name, type(rows).__name__)
+            )
+        offered = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                raise UnreadableRelease(
+                    "%s: manifest 'settings' contains a %s, expected objects"
+                    % (archive.name, type(row).__name__)
+                )
+            identifier = row.get("id")
+            if not isinstance(identifier, str) or not identifier:
+                raise UnreadableRelease(
+                    "%s: a settings row has no usable id" % archive.name
+                )
+            offered.add(identifier)
+        if not offered:
+            raise UnreadableRelease(
+                "%s: manifest declares no settings at all" % archive.name
+            )
     except UnreadableRelease:
         raise
     except Exception as failure:
@@ -218,6 +241,10 @@ def lost_settings(archive: Path, previous: Path) -> str | None:
         before |= settings_in_archive(older)
         names.append(older.name)
     if not before:
+        # Unreachable through settings_in_archive, which now raises rather
+        # than returning an empty set. Kept because lost_settings takes a
+        # caller-supplied list, and "no baseline" must not read as "nothing
+        # was lost" if one ever arrives by another route.
         return None
     dropped = sorted(before - now)
     if not dropped:

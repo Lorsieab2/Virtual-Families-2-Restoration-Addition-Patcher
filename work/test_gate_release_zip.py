@@ -205,6 +205,41 @@ class FeatureRegressionTests(unittest.TestCase):
             )
             self.assertIsNone(gate.lost_settings(after, gate.earlier_releases(after)))
 
+    def test_a_malformed_settings_collection_never_reads_as_empty(self):
+        # An empty baseline has nothing to lose, so lost_settings() reports
+        # success and a short release stays publishable. Every one of these
+        # shapes used to produce an empty set silently: absent, a dict, a
+        # string, rows that are not objects, rows without an id, and an
+        # explicitly empty list. A read that cannot fail is not a read.
+        import zipfile as _zipfile
+
+        shapes = {
+            "settings absent": "{}",
+            "settings is a dict": '{"settings": {}}',
+            "settings is a string": '{"settings": "everything"}',
+            "row is not an object": '{"settings": [1]}',
+            "row has no id": '{"settings": [{}]}',
+            "row id is empty": '{"settings": [{"id": ""}]}',
+            "settings is empty": '{"settings": []}',
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for index, (label, body) in enumerate(shapes.items()):
+                path = root / f"VF2-B{100 + index}-Release.zip"
+                with _zipfile.ZipFile(path, "w") as bundle:
+                    bundle.writestr("x/manifest.json", body)
+                with self.subTest(shape=label):
+                    with self.assertRaises(gate.UnreadableRelease):
+                        gate.settings_in_archive(path)
+
+    def test_a_well_formed_manifest_still_reads(self):
+        # The shape checks must not reject a real release: the guard is only
+        # worth having if it still lets the thing it guards through.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            good = _bundle(root / "VF2-B181-Release.zip", ["alpha", "beta"])
+            self.assertEqual(gate.settings_in_archive(good), {"alpha", "beta"})
+
     def test_a_manifest_of_the_wrong_shape_is_reported_not_raised(self):
         # Syntactically valid JSON with the wrong top-level type: json.loads
         # succeeds and .get() raises AttributeError. If that happens outside
