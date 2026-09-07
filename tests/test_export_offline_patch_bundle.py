@@ -3182,5 +3182,66 @@ class TestBundleChangelogReachesTheWrittenLog(unittest.TestCase):
         )
 
 
+class MobileFurnitureCrashWarningScopeTests(unittest.TestCase):
+    """The B181 startup-crash warning must not outlive the builds it describes.
+
+    The warning lives in one settings table that every exported bundle shares,
+    so without scoping, a build made from repaired source would still tell
+    players that a working, default-on feature crashes and must be disabled.
+    """
+
+    def test_affected_builds_are_warned(self):
+        for label in ("B179", "B180", "B181", "B174.3", "VF2 Patcher B181"):
+            with self.subTest(label):
+                self.assertTrue(
+                    exporter.build_label_is_crash_affected(label),
+                    "B181 and earlier carry the defect and must warn",
+                )
+
+    def test_fixed_and_unlabelled_builds_are_not_warned(self):
+        # "Current" is what infer_build_label returns for a local build, which
+        # is built from current source and therefore carries the fix. Warning
+        # there is the exact defect this scoping exists to prevent.
+        for label in ("B182", "B200", "B181.1", "Current", ""):
+            with self.subTest(label):
+                self.assertFalse(
+                    exporter.build_label_is_crash_affected(label),
+                    "a build carrying the fix must not be labelled broken",
+                )
+
+    def test_warning_is_applied_only_to_affected_bundles(self):
+        def describe(label):
+            rows = [{
+                "id": "mobile_furniture_behaviors",
+                "description": "Optional patch: base text.",
+            }]
+            return exporter.apply_crash_warning_for_build(rows, label)[0]["description"]
+
+        self.assertTrue(describe("B181").startswith("KNOWN ISSUE"))
+        self.assertEqual(describe("B182"), "Optional patch: base text.")
+        self.assertEqual(describe("Current"), "Optional patch: base text.")
+
+    def test_settings_table_carries_no_release_state(self):
+        # Assert the PROPERTY -- that no release-specific claim is baked into
+        # the shared table -- rather than pinning the current wording, so a
+        # future reword cannot reintroduce the defect while staying green.
+        row = next(
+            r for r in exporter.SETTINGS
+            if r["id"] == "mobile_furniture_behaviors"
+        )
+        lowered = row["description"].lower()
+        for phrase in (
+            "known issue",
+            "not yet in a published release",
+            "turn this setting off",
+        ):
+            with self.subTest(phrase):
+                self.assertNotIn(
+                    phrase, lowered,
+                    "release state belongs in the build-scoped warning, "
+                    "not in the table every bundle shares",
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

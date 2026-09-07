@@ -391,7 +391,7 @@ SETTINGS = [
     {
         "id": "mobile_furniture_behaviors",
         "label": "Add mobile furniture behaviors",
-        "description": "KNOWN ISSUE affecting every release published so far, B181 included -- fixed in source but not yet in a published release: with this setting enabled the game does not start, it closes a few seconds after launch before reaching play. Until a fixed release is published, turn this setting OFF; that is a complete workaround and leaves every other feature working. It is not new in any one release: it happens on B179, B180 and B181 alike. The cause was found and repaired, and a rebuilt game with the setting enabled starts and runs, checked against an unfixed build that still closes -- that fix reaches players in the next release. Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes good-weather loungers choose among relaxing, reading, studying, sitting, napping, and sleeping with exhaustion-sensitive rest odds, plus spontaneous supported variants. Exact guarded manual routes cover the Patio Umbrella and tables, Picnic Table, Birthday furniture, Christmas Trees, Dreidel, Menorah, Stockings, Holiday Candles, Santa's Cookie Plate, ten Holiday figurines, Red Bow, Santa Wall Decoration, and both garlands. Invisible/custom/VF3 furniture is excluded. NOTE for the Picnic and Patio Tables: the meal and drinks props did not appear in B181 or earlier -- villagers prepared, ate and drank while the table stayed empty. Four causes were found and fixed; the props have not yet been confirmed in play.",
+        "description": "Optional patch: enables ported actions for genuine mobile furniture where implemented. B156 makes good-weather loungers choose among relaxing, reading, studying, sitting, napping, and sleeping with exhaustion-sensitive rest odds, plus spontaneous supported variants. Exact guarded manual routes cover the Patio Umbrella and tables, Picnic Table, Birthday furniture, Christmas Trees, Dreidel, Menorah, Stockings, Holiday Candles, Santa's Cookie Plate, ten Holiday figurines, Red Bow, Santa Wall Decoration, and both garlands. Invisible/custom/VF3 furniture is excluded. NOTE for the Picnic and Patio Tables: the meal and drinks props did not appear in B181 or earlier -- villagers prepared, ate and drank while the table stayed empty. Four causes were found and fixed; the props have not yet been confirmed in play.",
         "default": True,
         "category": "optional",
     },
@@ -3122,6 +3122,45 @@ def apply_final_playtest_defaults(
     return settings
 
 
+# The startup crash that "Add mobile furniture behaviors" triggers was fixed in
+# source after B181 was published.  The warning below therefore describes B181
+# and every earlier release, and must NOT be attached to a bundle built from
+# repaired source -- otherwise a later build tells players a working, default-on
+# feature is broken.  Keyed off the bundle's own build label so one settings
+# table can serve both.
+MOBILE_FURNITURE_CRASH_LAST_AFFECTED_BUILD = 181.0
+MOBILE_FURNITURE_CRASH_WARNING = (
+    'KNOWN ISSUE affecting every release published so far, B181 included -- fixed in source but not yet in a published release: with this setting enabled the game does not start, it closes a few seconds after launch before reaching play. Until a fixed release is published, turn this setting OFF; that is a complete workaround and leaves every other feature working. It is not new in any one release: it happens on B179, B180 and B181 alike. The cause was found and repaired, and a rebuilt game with the setting enabled starts and runs, checked against an unfixed build that still closes -- that fix reaches players in the next release.'
+)
+
+
+def build_label_is_crash_affected(build_label: str) -> bool:
+    """True when a bundle labelled ``build_label`` predates the crash fix.
+
+    An unrecognised or unnumbered label (``"Current"``, a local build) is
+    treated as NOT affected: those are built from current source, which carries
+    the fix.
+    """
+
+    match = re.search(r"\bB(\d+(?:\.\d+)?)\b", build_label or "", flags=re.IGNORECASE)
+    if not match:
+        return False
+    return float(match.group(1)) <= MOBILE_FURNITURE_CRASH_LAST_AFFECTED_BUILD
+
+
+def apply_crash_warning_for_build(
+    settings: list[dict[str, Any]], build_label: str
+) -> list[dict[str, Any]]:
+    """Prefix the mobile-furniture warning when the bundle predates the fix."""
+
+    if not build_label_is_crash_affected(build_label):
+        return settings
+    for row in settings:
+        if row.get("id") == "mobile_furniture_behaviors":
+            row["description"] = MOBILE_FURNITURE_CRASH_WARNING + " " + row["description"]
+    return settings
+
+
 def infer_build_label(bundle_dir: Path, manifest_name: str | None = None) -> str:
     for text in (manifest_name or "", bundle_dir.name):
         match = re.search(r"\bB\d+(?:\.\d+)?\b", text, flags=re.IGNORECASE)
@@ -4334,6 +4373,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         bool(exe_replacement_record),
         available_settings,
     )
+    settings = apply_crash_warning_for_build(settings, build_label)
     final_profile = None
     if getattr(args, "final_playtest_all_enabled", False):
         settings = apply_final_playtest_defaults(settings, available_settings)
