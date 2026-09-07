@@ -33000,7 +33000,7 @@ static void VF2EndAddedFurnitureVenue(CVillager &villager)
     }
 }
 
-extern "C" void __thiscall VF2PlanToGoAtAddedFurniture(
+static void __cdecl VF2PlanToGoAtAddedFurnitureImpl(
     CVillagerPlans *plans, ldwPoint point, ESpeed speed, EPriority priority)
 {
     if (gVF2AddedFurnitureVenueActive &&
@@ -33011,7 +33011,17 @@ extern "C" void __thiscall VF2PlanToGoAtAddedFurniture(
     plans->PlanToGo(point, speed, priority);
 }
 
-extern "C" bool __thiscall VF2PlanToGoObjectAtAddedFurniture(
+extern "C" __declspec(naked) void VF2PlanToGoAtAddedFurniture()
+{
+    __asm {
+        push ecx
+        call VF2PlanToGoAtAddedFurnitureImpl
+        add esp, 4
+        ret 16
+    }
+}
+
+static bool __cdecl VF2PlanToGoObjectAtAddedFurnitureImpl(
     CVillagerPlans *plans,
     CContentMap::EObject object,
     ESpeed speed,
@@ -33025,6 +33035,16 @@ extern "C" bool __thiscall VF2PlanToGoObjectAtAddedFurniture(
         return true;
     }
     return plans->PlanToGo(object, speed, priority, unknown);
+}
+
+extern "C" __declspec(naked) void VF2PlanToGoObjectAtAddedFurniture()
+{
+    __asm {
+        push ecx
+        call VF2PlanToGoObjectAtAddedFurnitureImpl
+        add esp, 4
+        ret 16
+    }
 }
 
 // ---- Added furniture: actions of their OWN -------------------------------
