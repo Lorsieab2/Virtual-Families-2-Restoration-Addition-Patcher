@@ -315,6 +315,16 @@ the locks, and buying a different multiplier still switches to it.
 
 The two Flea Market rows themselves are untouched base game, and both are independently repurchaseable in every patched executable — including saves where the effect flag is already cleared. Elsewhere, rebuying the Maid or Gardener fires that worker, and rebuying an owned house renovation returns it and rebuilds the native content map so it can be purchased again.
 
+## Current furniture-routing status
+
+The current source routes the Exercise Bike, Home Gym System, Yoga Equipment,
+and Ping-Pong Table by exact item id on manual drop. Their own behavior
+handlers reuse donor animations and durations, but donor `PlanToGo` calls are
+hooked so the selected placed-item destination survives. No ownership check
+gates the donor behavior; with no matching placement, the native donor action
+falls through unchanged. This is source-level status until the generated build
+and player QA are complete.
+
 ## Spa treatments
 
 Dropping an adult on a **Spa Lounger** or an **Invisible Spa Lounger** starts a
@@ -333,8 +343,8 @@ nearest and have them mime a treatment on it. The slot finder walks the placed
 furniture array and resolves an actual free Spa Lounger before anything is
 committed.
 
-A treatment runs for the same duration form as a nap, `GetRandom(5) + 5`, shared
-by both halves, and pays dirtiness and energy on the way out. The receiving
+A treatment runs for about one real minute, `GetRandom(11) + 55` plan seconds,
+shared by both halves, and pays dirtiness and energy on the way out. The receiving
 villager takes the nap's own posture, chosen from the placed lounger's
 orientation rather than assumed, so a lounger set the other way round does not
 have someone lying across its arm. `gulpahh_01.ogg` plays periodically through

@@ -78,7 +78,7 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         src = _source()
         start = src.index("static void VF2PlanSpaTreatment(")
         body = src[start:src.index("\n}", start)]
-        self.assertIn("ldwGameState::GetRandom(5) + 5", body)   # the nap's duration
+        self.assertIn("ldwGameState::GetRandom(11) + 55", body) # about one real minute
         self.assertIn("PlanToLieDown", body)                    # the nap's posture
         self.assertIn("info.orientation == 1", body)            # chosen per lounger
         self.assertIn("static_cast<ESound>(0x101)", body)       # gulpahh_01.ogg

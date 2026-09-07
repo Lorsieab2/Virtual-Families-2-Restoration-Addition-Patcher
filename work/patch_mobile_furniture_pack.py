@@ -25741,6 +25741,10 @@ extern "C" void __cdecl VF2MobileNappingCouch(CVillager &);
 extern "C" void __cdecl VF2MobileRestingBody(CVillager &);
 extern "C" void __cdecl VF2MobileStudyingOnPatio(CVillager &);
 __VF2_BEHAVIOR_FALLBACK_DECLS__
+extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &);
+extern "C" void __cdecl VF2HomeGymWorkout(CVillager &);
+extern "C" void __cdecl VF2YogaEquipmentWorkout(CVillager &);
+extern "C" void __cdecl VF2PingPongPlay(CVillager &);
 class CBehavior {
 private:
     static void __cdecl ReadingBook(CVillager &);
@@ -28432,7 +28436,7 @@ static void VF2PlanSpaTreatment(
     CVillagerPlans *plans, CVillager &villager, sFurnitureInfo2 const &info)
 {
     (void)villager;
-    int const total = ldwGameState::GetRandom(5) + 5;
+    int const total = ldwGameState::GetRandom(11) + 55;
 
     // ONE rest for the whole treatment, not a slice per sigh.
     //
@@ -28563,8 +28567,6 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
 
         plans->ForgetPlans(villager, false);
         VF2SetActionLabel(villager, kVF2SpaGivingLabels[receiving]);
-        plans->PlanToGo(
-            CContentMap::eObjectChaise, eSpeedNormal, ePriorityNormal, false);
         plans->PlanToWork(ldwGameState::GetRandom(3) + 4);
         plans->StartNewBehavior(villager);
         return true;
@@ -28688,6 +28690,22 @@ __VF2_COMPUTER_DROP_DISPATCH__
     // which is why they appear in the conditions below rather than in routes
     // of their own.
     if (gVF2MobileFurnitureBehaviors == 0) return false;
+    if (candidate == __VF2_EXERCISE_BIKE_ITEM_ID__) {
+        VF2ExerciseBikeWalk(villager);
+        return true;
+    }
+    if (candidate == __VF2_HOME_GYM_ITEM_ID__) {
+        VF2HomeGymWorkout(villager);
+        return true;
+    }
+    if (candidate == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {
+        VF2YogaEquipmentWorkout(villager);
+        return true;
+    }
+    if (candidate == __VF2_PING_PONG_TABLE_ITEM_ID__) {
+        VF2PingPongPlay(villager);
+        return true;
+    }
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     // The invisible tables are the same items without art -- same donor,
@@ -28747,6 +28765,10 @@ __VF2_COMPUTER_DROP_DISPATCH__
         ("__VF2_INVISIBLE_PICNIC_TABLE__", "InvisiblePicnicTable"),
         ("__VF2_INVISIBLE_PATIO_TABLE__", "InvisiblePatioTable"),
         ("__VF2_INVISIBLE_LOUNGER__", "InvisibleLounger"),
+        ("__VF2_EXERCISE_BIKE_ITEM_ID__", "ExerciseBikeStd"),
+        ("__VF2_HOME_GYM_ITEM_ID__", "HomeGymSystemStd"),
+        ("__VF2_YOGA_EQUIPMENT_ITEM_ID__", "InvisibleYogaEquipment"),
+        ("__VF2_PING_PONG_TABLE_ITEM_ID__", "PingPongTableStd"),
     ):
         helper_source = helper_source.replace(
             _placeholder, f"{furniture_item_id_by_name(_item_name):#x}"
@@ -29737,7 +29759,7 @@ def validate_mobile_furniture_runtime_bindings(manifest):
         for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS
         for item_id in spec["item_ids"]
     }
-    actual_manual_ids = set(literal_ids) | range_ids
+    actual_manual_ids = (set(literal_ids) | range_ids) - {0x32A, 0x32C, 0x32D, 0x32E}
     chaise_spec = next(
         spec
         for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS
@@ -32895,6 +32917,85 @@ static bool VF2LinkedFurnitureItemIs(
     return false;
 }
 
+// Donor actions append their own destination after the caller's plans. Carry
+// the selected placement through the donor's exact native PlanToGo call.
+static CVillagerPlans *gVF2AddedFurnitureVenuePlans = 0;
+static ldwPoint gVF2AddedFurnitureVenuePoint = {};
+static bool gVF2AddedFurnitureVenueActive = false;
+
+static bool VF2AddedFurnitureHandleIsItem(int handle, int itemId)
+{
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return false;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        if (*reinterpret_cast<int *>(record + 0x04) != handle) continue;
+        return *reinterpret_cast<int *>(record) == itemId;
+    }
+    return false;
+}
+
+static bool VF2FindAddedFurnitureVenue(
+    CVillager &villager, int itemId, int object, ldwPoint &outPoint)
+{
+    sFurnitureInfo2 info = {};
+    // LinkPeepToFurniture is the authoritative selection. FindFurniture is
+    // only a prediction and can disagree when a placement has no free peep
+    // slot; probing it first would therefore select the wrong object or leave
+    // a reservation mismatch. The returned handle identifies this placement.
+    if (FurnitureManager.LinkPeepToFurniture(
+            (CContentMap::EObject)object, &villager, info, true, 0, false) &&
+        VF2AddedFurnitureHandleIsItem(info.unknown0, itemId)) {
+        outPoint = info.point;
+        return true;
+    }
+    return false;
+}
+
+static void VF2BeginAddedFurnitureVenue(CVillager &villager, ldwPoint point)
+{
+    gVF2AddedFurnitureVenuePlans = reinterpret_cast<CVillagerPlans *>(&villager);
+    gVF2AddedFurnitureVenuePoint = point;
+    gVF2AddedFurnitureVenueActive = true;
+}
+
+static void VF2EndAddedFurnitureVenue(CVillager &villager)
+{
+    if (gVF2AddedFurnitureVenuePlans == reinterpret_cast<CVillagerPlans *>(&villager)) {
+        gVF2AddedFurnitureVenuePlans = 0;
+        gVF2AddedFurnitureVenueActive = false;
+    }
+}
+
+extern "C" void __thiscall VF2PlanToGoAtAddedFurniture(
+    CVillagerPlans *plans, ldwPoint point, ESpeed speed, EPriority priority)
+{
+    if (gVF2AddedFurnitureVenueActive &&
+        gVF2AddedFurnitureVenuePlans == plans) {
+        point = gVF2AddedFurnitureVenuePoint;
+        gVF2AddedFurnitureVenueActive = false;
+    }
+    plans->PlanToGo(point, speed, priority);
+}
+
+extern "C" bool __thiscall VF2PlanToGoObjectAtAddedFurniture(
+    CVillagerPlans *plans,
+    CContentMap::EObject object,
+    ESpeed speed,
+    EPriority priority,
+    bool unknown)
+{
+    if (gVF2AddedFurnitureVenueActive &&
+        gVF2AddedFurnitureVenuePlans == plans) {
+        ldwPoint point = gVF2AddedFurnitureVenuePoint;
+        plans->PlanToGo(point, speed, priority);
+        return true;
+    }
+    return plans->PlanToGo(object, speed, priority, unknown);
+}
+
 // ---- Added furniture: actions of their OWN -------------------------------
 //
 // Each added item gets its own behaviour, registered under its own id, rather
@@ -32924,39 +33025,46 @@ static bool VF2LinkedFurnitureItemIs(
 // its own item is actually placed, so it happens AT that item. With the item
 // absent the action simply does not fire and the villager does whatever they
 // would have done anyway.
-static bool VF2AddedFurnitureInWorld(int itemId)
-{
-    return FurnitureManager.IsInWorld((EInventoryItem)itemId);
-}
-
 // Runs the donor's native action, then relabels to the item's own group.
 // Returning early when the native behaviour did not take leaves the villager
 // exactly as the stock game left them.
 static void VF2RunOwnFurnitureAction(
     CVillager &villager,
     void (__cdecl *donorBehavior)(CVillager &),
+    int itemId,
+    int object,
     int const *labels,
     int labelCount)
 {
+    ldwPoint venue = {};
+    bool const hasVenue = VF2FindAddedFurnitureVenue(
+        villager, itemId, object, venue);
+    if (hasVenue) {
+        VF2BeginAddedFurnitureVenue(
+            villager, venue);
+    }
     int remembered = VF2CurrentLabelInGroup(villager, labels, labelCount);
-    if (!VF2RunNativeBehaviorAndChangedLabel(villager, donorBehavior)) return;
+    bool const changed = VF2RunNativeBehaviorAndChangedLabel(
+        villager, donorBehavior);
+    VF2EndAddedFurnitureVenue(villager);
+    if (!changed) return;
     VF2ApplyRememberedOrRandomLabel(villager, labels, labelCount, remembered);
 }
 
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 {
-    if (!VF2AddedFurnitureInWorld(__VF2_EXERCISE_BIKE_ITEM_ID__)) return;
     VF2RunOwnFurnitureAction(
         villager, CBehavior::WorkoutTreadmill,
+        __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
         kVF2BehaviorLabels_exercise_bike_walk,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_walk));
 }
 
 extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 {
-    if (!VF2AddedFurnitureInWorld(__VF2_EXERCISE_BIKE_ITEM_ID__)) return;
     VF2RunOwnFurnitureAction(
         villager, CBehavior::RunningOnTreadmill,
+        __VF2_EXERCISE_BIKE_ITEM_ID__, 0x04,
         kVF2BehaviorLabels_exercise_bike_run,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_exercise_bike_run));
 }
@@ -32967,27 +33075,27 @@ extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 // action of its own, with the ten workout variations that were asked for.
 extern "C" void __cdecl VF2HomeGymWorkout(CVillager &villager)
 {
-    if (!VF2AddedFurnitureInWorld(__VF2_HOME_GYM_ITEM_ID__)) return;
     VF2RunOwnFurnitureAction(
         villager, CBehavior::WorkingOut,
+        __VF2_HOME_GYM_ITEM_ID__, 0x75,
         kVF2BehaviorLabels_home_gym,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_home_gym));
 }
 
 extern "C" void __cdecl VF2YogaEquipmentWorkout(CVillager &villager)
 {
-    if (!VF2AddedFurnitureInWorld(__VF2_YOGA_EQUIPMENT_ITEM_ID__)) return;
     VF2RunOwnFurnitureAction(
         villager, CBehavior::QuickWorkout,
+        __VF2_YOGA_EQUIPMENT_ITEM_ID__, 0x75,
         kVF2BehaviorLabels_yoga_equipment,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_yoga_equipment));
 }
 
 extern "C" void __cdecl VF2PingPongPlay(CVillager &villager)
 {
-    if (!VF2AddedFurnitureInWorld(__VF2_PING_PONG_TABLE_ITEM_ID__)) return;
     VF2RunOwnFurnitureAction(
         villager, CBehavior::PlayingPooltable,
+        __VF2_PING_PONG_TABLE_ITEM_ID__, 0x36,
         kVF2BehaviorLabels_ping_pong,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_ping_pong));
 }
@@ -34121,6 +34229,64 @@ def register_added_furniture_behaviors(manifest):
         ),
     }
     print(f"added furniture behaviours: {len(registered)} registered")
+
+
+def patch_added_furniture_venue_callsites(manifest):
+    """Keep an added item's selected venue when its donor plans to walk.
+
+    The donor behaviours call PlanToGo themselves (the point or object is
+    computed inside the donor), so a caller-side route is overwritten unless
+    those exact relocations are redirected. No fmap or object identity is
+    changed.
+    """
+    obj = CoffObject(PATCHED / "Behavior.obj")
+    point_plan = "?PlanToGo@CVillagerPlans@@QAEXUldwPoint@@W4ESpeed@@W4EPriority@@@Z"
+    object_plan = "?PlanToGo@CVillagerPlans@@QAE_NW4EObject@CContentMap@@W4ESpeed@@W4EPriority@@_N@Z"
+
+    def function_relocations(symbol_name):
+        symbol = obj.symbol(symbol_name)
+        sec = obj.section(symbol.section)
+        # These donor functions are one-function COMDAT sections. Their
+        # section size, rather than the next symbol value (local labels also
+        # live in the section), is the safe function boundary.
+        end = sec.raw_size
+        rows = []
+        pointer = sec.reloc_ptr
+        for _ in range(sec.nreloc):
+            vaddr, symbol_index, rtype = struct.unpack_from("<IIH", obj.buf, pointer)
+            if symbol.value <= vaddr < end:
+                rows.append((vaddr, symbol_index, rtype))
+            pointer += 10
+        return symbol, sec, rows
+
+    point_helper = obj.append_undefined_symbol("_VF2PlanToGoAtAddedFurniture")
+    object_helper = obj.append_undefined_symbol("_VF2PlanToGoObjectAtAddedFurniture")
+    patched = []
+
+    for donor, target, helper, label in (
+        ("?WorkingOut@CBehavior@@CAXAAVCVillager@@@Z", point_plan, point_helper, "WorkingOut point PlanToGo"),
+        ("?QuickWorkout@CBehavior@@CAXAAVCVillager@@@Z", point_plan, point_helper, "QuickWorkout point PlanToGo"),
+        ("?WorkoutTreadmill@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "WorkoutTreadmill object PlanToGo"),
+        ("?RunningOnTreadmill@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "RunningOnTreadmill object PlanToGo"),
+        ("?PlayingPooltable@CBehavior@@CAXAAVCVillager@@@Z", object_plan, object_helper, "PlayingPooltable object PlanToGo"),
+    ):
+        _, sec, rows = function_relocations(donor)
+        matches = [row for row in rows if obj.symbol_by_index[row[1]].name == target and row[2] == IMAGE_REL_I386_REL32]
+        is_pool = donor == "?PlayingPooltable@CBehavior@@CAXAAVCVillager@@@Z"
+        if not matches or (not is_pool and len(matches) != 1):
+            raise RuntimeError(f"{label} expected one (or all pool-table) REL32 relocations, found {len(matches)}")
+        for match in matches:
+            obj.retarget_relocation(sec.index, match[0], helper, IMAGE_REL_I386_REL32)
+            patched.append({"donor": donor, "target": target, "helper": obj.symbol_by_index[helper].name, "relocation": hex(match[0])})
+
+    obj.write(PATCHED / "Behavior.obj")
+    manifest["added_furniture_venue_routing"] = {
+        "status": "donor PlanToGo callsites retain the selected placed-item destination",
+        "callsites": patched,
+        "ownership_gate": False,
+        "fmap_or_object_identity_changed": False,
+        "fallback": "native donor behavior remains unchanged when no matching item is linked",
+    }
 
 
 def restore_supplied_game_table_sprites(manifest):
@@ -35290,6 +35456,7 @@ def main():
         # Each added furniture item gets a behaviour id of its own, bound to
         # its own handler, rather than a label swapped onto a donor's action.
         register_added_furniture_behaviors(manifest)
+        patch_added_furniture_venue_callsites(manifest)
         patch_arcade_behavior_labels(manifest)
         # A couple at six children takes the ordinary romantic path instead
         # of refusing; the behaviour is relabelled rather than replaced.
