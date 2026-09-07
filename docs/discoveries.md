@@ -4209,27 +4209,56 @@ its prologue produces.
   is recorded for completeness and does NOT clear them -- see below for why a
   push/pop tally cannot decide the question either way.
 
-### What this does NOT establish
+### RESOLVED: a branch that skips a restore
 
-How esi comes to hold 0, 1 or 2. Nothing here identifies the mechanism, and
-in particular the stack-balance hypothesis remains OPEN -- the epilogue does
-not exclude it, for the reason given above.
+The mechanism is now identified, and it is a SKIPPED POP rather than a stray
+push. Every push and pop in the loop body is present and correctly paired;
+one branch jumps over one of them.
+
+    0x4C7C69  push ebx          stock save
+    0x4C8526  pop ebx           stock restore
+    0x4C84F9  jnz 0x4C853E      INJECTED -- jumps straight to the epilogue
+    0x4C853E  mov ecx,[ebp-4] / pop edi / xor ecx,ebp / pop esi / ...
+
+The injected selector's handled path branches past the stock `pop ebx`, so the
+epilogue runs with four extra bytes still on the stack. The disassembler's own
+stack-depth column states it: the branch leaves at `-3328` and its target
+expects `-3324`.
+
+Every register anomaly recorded above falls out of that one skipped pop:
+
+- `pop edi` takes the saved-ebx slot, which held the villager pointer, and the
+  caller's `inc edi` makes it pointer + 1
+- `pop esi` takes the saved-edi slot, a counter bounded to ten -- the 0, 1 or 2
+  the faulting instruction dereferences
+- `ebx` is never restored at all
+
+So the stack-balance hypothesis was right in shape, and the reason it could not
+be confirmed is recorded below.
+
+### Why the earlier analyses could not see it
 
 What is established is only that two shortcuts do not work. A linear push/pop
 scan cannot distinguish a callee-save from an argument push: the shipped loop
 body shows five `push esi` against one `pop esi`, and four of those five are
 arguments. And the trailing `mov esp, ebp` does not protect the pops that
 precede it. Three separate attempts on this crash have now reached a
-confident conclusion by one of those two routes and had to retract it. Treat
-any register-preservation claim about this frame as unproven until it comes
-from live execution.
+confident conclusion by one of those two routes and had to retract it.
 
-Nor does this entry establish any link between the furniture maps and the
-fault. The correlation with the B179-to-B180 delta is real, but no trace
-connects lost or sparse collision geometry to this register state, and none
-should be asserted without one.
+Neither shortcut could have found the real defect, and that is the transferable
+lesson. A push/pop tally counts instructions and this function's counts are
+correct. A whole-program stack-depth analysis reports every path reaching the
+epilogue at the same depth, because it reconciles at merge points -- which is
+precisely where a branch that skips a restore hides. The defect is visible only
+by comparing a branch's stack depth against its TARGET's, which is what finally
+found it.
 
-### The saved-register slots: one confirmed relation, no mechanism
+The furniture maps are not implicated and never were. The correlation with the
+B179-to-B180 delta was an artifact of which options happened to be enabled: the
+same crash reproduces on B179 with the feature on, and disappears on B180 with
+it off.
+
+### The saved-register slots, and the relation that pointed at the answer
 
 `sub_4C8660`'s prologue is `push ebp / mov ebp,esp / sub esp,0x14 / push ebx /
 push esi / push edi`, so its own saved registers sit at `[ebp-0x18]` (ebx),
