@@ -860,7 +860,12 @@ class VF2PatcherGUI:
                 time.sleep(WAIT_POLL_SECONDS)
             worker.join()
         finally:
-            wait.close()
+            # Keep the popup mapped until the caller has completed its
+            # immediate main-thread finalization (notably manifest settings
+            # widget construction).  Closing synchronously here makes the
+            # popup disappear while that work can still make the window look
+            # frozen.
+            self.root.after_idle(wait.close)
             with contextlib.suppress(tk.TclError):
                 self.root.protocol("WM_DELETE_WINDOW", previous_close)
         if "error" in outcome:
