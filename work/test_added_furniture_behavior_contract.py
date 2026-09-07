@@ -76,7 +76,8 @@ class TestAddedFurnitureContract(unittest.TestCase):
         src = source()
         start = src.index("extern \"C\" __declspec(naked) void VF2PlanToGoAtAddedFurniture()")
         body = src[start:src.index("// ---- Added furniture: actions", start)]
-        self.assertEqual(body.count("add esp, 4"), 2)
+        self.assertEqual(body.count("push dword ptr [esp+16]"), 8)
+        self.assertEqual(body.count("add esp, 20"), 2)
         self.assertEqual(body.count("ret 16"), 2)
 
 
