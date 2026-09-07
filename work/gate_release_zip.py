@@ -24,6 +24,7 @@ import argparse
 import json
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -36,6 +37,71 @@ def run(argv: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(argv, capture_output=True, text=True, cwd=ROOT)
 
 
+
+
+def settings_in_archive(archive: Path) -> set[str]:
+    """The setting ids a packaged release actually offers.
+
+    Read from the bundle manifest inside the ZIP rather than from the source
+    tree, because the question is what this ARCHIVE ships -- which is the
+    thing that regressed -- not what the exporter believed it was building.
+    """
+    with zipfile.ZipFile(archive) as bundle:
+        manifests = sorted(
+            (n for n in bundle.namelist() if n.endswith("manifest.json")),
+            key=len,
+        )
+        if not manifests:
+            return set()
+        data = json.loads(bundle.read(manifests[0]).decode("utf-8", "replace"))
+    return {
+        row["id"]
+        for row in (data.get("settings") or [])
+        if isinstance(row, dict) and row.get("id")
+    }
+
+
+def previous_release_archive(archive: Path) -> Path | None:
+    """The most recent packaged release other than this one, or None.
+
+    Compared against whatever was published last rather than a pinned name,
+    so the check keeps working as builds advance without anyone editing it.
+    """
+    others = [
+        p
+        for p in sorted(archive.parent.glob("VF2-B*-Release*.zip"))
+        if p.resolve() != archive.resolve() and not p.name.endswith(".REJECTED")
+    ]
+    return others[-1] if others else None
+
+
+def lost_settings(archive: Path, previous: Path) -> str | None:
+    """Name the settings this release drops, or None if it drops none.
+
+    B183 shipped 23 settings where B181 shipped 35 -- twelve features gone,
+    none added, 221 asset patches missing -- and the export reported success
+    throughout. default_settings() filters SOURCE_BACKED_OPTIONAL_SETTINGS
+    down to whatever the run could resolve inputs for, so an export that
+    cannot find those assets drops them SILENTLY and still packages.
+    Nothing compared the output against the previous release, so the first
+    thing that noticed was a person opening the archive.
+
+    Reported as NAMES, not a count: "23 settings, expected 35" tells someone
+    a release is short, and the list tells them which build inputs were
+    missing.
+    """
+    now = settings_in_archive(archive)
+    before = settings_in_archive(previous)
+    if not before:
+        return None
+    dropped = sorted(before - now)
+    if not dropped:
+        return None
+    return (
+        f"{archive.name} drops {len(dropped)} setting(s) present in "
+        f"{previous.name}, and adds {len(now - before)}:\n  "
+        + "\n  ".join(dropped)
+    )
 
 
 def quarantine(archive: Path, reason: str) -> int:
@@ -210,6 +276,18 @@ def main() -> int:
     if payload.returncode != 0:
         return quarantine(archive, payload.stdout + payload.stderr)
     print(payload.stdout.strip())
+
+    # A release must not be a strict subset of the one before it. The owner's
+    # standing rule is that every release uses the previous one as its base
+    # and carries every piece of its content; a build that silently ships
+    # fewer features than its predecessor breaks that, and nothing here
+    # noticed until a person opened the archive.
+    previous = previous_release_archive(archive)
+    if previous is not None:
+        lost = lost_settings(archive, previous)
+        if lost is not None:
+            return quarantine(archive, lost)
+        print(f"no features lost against {previous.name}")
 
     print(json.dumps(summary, indent=2, sort_keys=True))
     print(f"RELEASE GATE PASSED -- {archive} is ready to publish")

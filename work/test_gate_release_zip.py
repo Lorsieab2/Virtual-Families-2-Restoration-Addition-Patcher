@@ -81,6 +81,98 @@ class PayloadVerificationIsWiredInTests(unittest.TestCase):
         )
 
 
+def _bundle(path, settings, name="VF2-B999-Release"):
+    """A minimal packaged release carrying just the setting ids."""
+    import json as _json
+    import zipfile as _zipfile
+
+    with _zipfile.ZipFile(path, "w") as z:
+        z.writestr(
+            f"{name}/manifest.json",
+            _json.dumps({"settings": [{"id": s} for s in settings]}),
+        )
+    return path
+
+
+class FeatureRegressionTests(unittest.TestCase):
+    """A release must not ship fewer features than the one before it.
+
+    B183 shipped 23 settings where B181 shipped 35 -- twelve gone, none
+    added -- and every step reported success. default_settings() drops
+    SOURCE_BACKED_OPTIONAL_SETTINGS the export cannot resolve inputs for, so
+    a run that cannot find those assets silently produces a smaller patcher
+    and packages it happily. Nothing compared the output against the
+    previous release, so a person opening the archive was the first check.
+    """
+
+    def test_a_release_that_drops_settings_is_named_and_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before = _bundle(root / "VF2-B181-Release.zip", ["a", "b", "c"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            reason = gate.lost_settings(after, before)
+            self.assertIsNotNone(reason, "a release short two settings passed the gate")
+            # The names, not just the count: a count says a release is short,
+            # the names say which build inputs went missing.
+            self.assertIn("b", reason)
+            self.assertIn("c", reason)
+
+    def test_an_unchanged_release_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before = _bundle(root / "VF2-B181-Release.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a", "b"])
+            self.assertIsNone(gate.lost_settings(after, before))
+
+    def test_a_release_that_only_adds_settings_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before = _bundle(root / "VF2-B181-Release.zip", ["a"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a", "b"])
+            self.assertIsNone(
+                gate.lost_settings(after, before),
+                "adding a feature must not be mistaken for losing one",
+            )
+
+    def test_a_swap_is_still_a_loss(self):
+        # Equal counts, different contents. Comparing sizes would miss this.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before = _bundle(root / "VF2-B181-Release.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a", "c"])
+            reason = gate.lost_settings(after, before)
+            self.assertIsNotNone(reason)
+            self.assertIn("b", reason)
+
+    def test_the_previous_release_is_not_the_archive_itself(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B181-Release.zip", ["a"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            previous = gate.previous_release_archive(after)
+            self.assertIsNotNone(previous)
+            self.assertNotEqual(previous.resolve(), after.resolve())
+
+    def test_a_quarantined_archive_is_not_used_as_the_baseline(self):
+        # A rejected release must not become the standard a later one is
+        # measured against, or one bad build lowers the bar permanently.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B182-Release.zip.REJECTED", ["a"])
+            _bundle(root / "VF2-B181-Release.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            previous = gate.previous_release_archive(after)
+            self.assertEqual(previous.name, "VF2-B181-Release.zip")
+
+    def test_the_gate_runs_the_check_before_declaring_success(self):
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        checked = source.index("lost_settings(archive, previous)")
+        passed = source.index('print(f"RELEASE GATE PASSED')
+        self.assertLess(checked, passed)
+        tail = source[checked:passed]
+        self.assertIn("quarantine(archive", tail)
+
+
 class VariantCoverageTests(unittest.TestCase):
     def test_a_complete_release_passes(self):
         complete = len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
