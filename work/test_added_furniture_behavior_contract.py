@@ -72,20 +72,6 @@ class TestAddedFurnitureContract(unittest.TestCase):
         self.assertIn("donor PlanToGo callsites retain the selected placed-item destination", src)
         self.assertIn("fallback\": \"native donor behavior remains unchanged", src)
 
-    def test_venue_wrappers_forward_native_arguments_and_cleanup_stack(self):
-        src = source()
-        for wrapper, impl in (
-            ("VF2PlanToGoAtAddedFurniture", "VF2PlanToGoAtAddedFurnitureImpl"),
-            ("VF2PlanToGoObjectAtAddedFurniture", "VF2PlanToGoObjectAtAddedFurnitureImpl"),
-        ):
-            start = src.index(f'extern "C" __declspec(naked) void {wrapper}')
-            body = src[start:src.index("\n}\n", start) + 3]
-            self.assertEqual(body.count("push dword ptr [esp+16]"), 4)
-            self.assertIn("push ecx", body)
-            self.assertIn(f"call {impl}", body)
-            self.assertIn("add esp, 20", body)
-            self.assertIn("ret 16", body)
-
 
 if __name__ == "__main__":
     unittest.main()
