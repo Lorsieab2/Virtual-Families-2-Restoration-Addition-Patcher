@@ -2915,3 +2915,54 @@ B182 the crash is a stack displacement, and it was never a build regression
   pre-existing gap in the build environment, resolved by seeding from a valid
   previous-release directory, and nothing to do with the fix. A build failure
   that appears while holding a change is not evidence the change caused it.
+B182 THE CRASH WARNING WAS SCOPED TO THE BUILDS IT DESCRIBES.
+
+- THE DEFECT WAS THAT A WARNING OUTLIVES THE BUG IT WARNS ABOUT. The
+  "Add mobile furniture behaviors" setting carried B181's startup-crash warning
+  inside the shared SETTINGS table in work/export_offline_patch_bundle.py. That
+  table is release-independent: work/export_release_bundle.py imports the module
+  and exports for any --release value. So a B182 bundle built from the REPAIRED
+  source would still have told players that a working, default-on feature
+  crashes and must be turned off. The sting is that B182 is precisely the
+  release that fixes the crash, so the warning would have become false exactly
+  when it shipped. Reported by Codex on PR #206 and confirmed live on main
+  before acting on it, by following the import chain rather than trusting the
+  report.
+
+- IT WAS A DESIGN QUESTION, SO IT WENT TO THE OWNER. The text is player-facing
+  and the choice between conditioning the warning on the build, rewording it to
+  be release-neutral, and deferring it entirely leads to different work. The
+  owner chose to condition it on the build label. The warning now lives in a
+  build-scoped constant and is attached only when the bundle's own label is B181
+  or earlier, keyed off the build_label the exporter already computes through
+  infer_build_label, so no new plumbing was needed. B181 and earlier bundles
+  receive byte-for-byte the same text as before; only builds carrying the fix
+  behave differently.
+
+- AN UNNUMBERED LABEL COUNTS AS FIXED, NOT AS UNKNOWN. infer_build_label returns
+  "Current" for a local build, and such a build comes from current source, which
+  carries the crash fix. Treating an unrecognised label as affected would have
+  reintroduced the defect for every developer build.
+
+- VALIDATED AGAINST KNOWN-BAD IN BOTH DIRECTIONS, because a checker that has
+  never been shown to fail is not evidence. With the warning baked back into the
+  shared table the new tests report 3 failed; with the scoping made
+  unconditional so that every build warns they report 4 failed; on the corrected
+  file they report 4 passed. The table test asserts the PROPERTY that no
+  release-specific claim sits in the shared table, rather than pinning the
+  current wording, so a future reword cannot reintroduce the defect while
+  staying green.
+
+- TWO PROCESS HAZARDS FOUND WHILE MAKING THIS CHANGE, both recorded because they
+  would silently corrupt work rather than announce themselves. FIRST, A HEREDOC
+  DESTROYED A REGULAR EXPRESSION: writing r"\bB(\d+)\b" through a shell
+  heredoc turned each \b into a literal backspace character, 0x08, rather than a
+  word-boundary escape. The pattern would never have matched and the fix would
+  have shipped doing nothing at all. It was caught only by printing repr() of
+  the line instead of reading it on screen, and the lesson is that regex escapes
+  must not be written through a heredoc. SECOND, THE tests/ COPY MUST BE
+  BYTE-IDENTICAL: TestSuiteCopiesInSyncTests marks
+  test_export_offline_patch_bundle.py as identical, so tests/ takes NO src/ path
+  substitution, unlike the two suites marked otherwise. Applying that
+  substitution to the wrong file failed the guard a second time. The guard did
+  its job and caught real drift that would otherwise have shipped.
