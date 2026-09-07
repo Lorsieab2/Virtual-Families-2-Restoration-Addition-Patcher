@@ -93,10 +93,27 @@ _NEGATOR = re.compile(
 # join clauses the same way and were wrong before the window widened, so
 # they are fixed here too rather than left as a narrower version of the
 # same defect.
+# "since" is deliberately NOT here. It is ambiguous -- causal in "not
+# shipped since QA is pending", temporal in "no issues since QA was
+# pending" -- and splitting on it makes the second read as an
+# outstanding claim, which lets a FINISHED row satisfy the gate. Every
+# other entry here fails safe; this one would not, so the ambiguous
+# causal case stays unhandled rather than opening a hole.
 _CLAUSE_SPLIT = re.compile(
     r"[.;,/:\u2013\u2014]|\s--+\s|\s-\s"
-    r"| but | and | because | while | although | though | until | since "
+    r"| but | and | because | while | although | though | until "
 )
+
+
+def _joined_row_text(status, evidence):
+    """The two ledger cells as one string, with a clause boundary between.
+
+    They are distinct fields. Joined with a bare space, a negator ending the
+    status cell reaches into the evidence cell and denies it -- "Not
+    complete" beside "Final runtime QA remains pending" read as finished.
+    The separator keeps each cell's claim its own.
+    """
+    return (status + ". " + evidence).lower()
 
 
 def _reads_as_pending(text):
@@ -226,7 +243,7 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
         read as finished while something is outstanding -- but a bare topic
         word cannot express it.
         """
-        text = (self._row()[1] + " " + self._row()[2]).lower()
+        text = _joined_row_text(self._row()[1], self._row()[2])
         self.assertTrue(
             _reads_as_pending(text),
             "the row does not say what is still outstanding, so a reader "
@@ -259,7 +276,10 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             "not complete while final qa is pending",
             "not complete although qa is pending",
             "not done until qa is pending",
-            "not shipped since qa is pending",
+            # The two ledger cells are separate fields. The caller joins them
+            # with a separator so a negator in the status cell cannot reach
+            # into the evidence cell and deny it.
+            "not complete. final runtime qa remains pending",
         )
         for text in outstanding:
             with self.subTest(text=text):
@@ -274,6 +294,11 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             "no work is known to be pending",
             "nothing pending",
             "no confirmation pending",
+            # Temporal "since": the mention is historical, and the leading
+            # negator denies it. This is the one wording in this file where a
+            # misread would let a FINISHED row satisfy the gate rather than
+            # raise a false alarm, so it is pinned explicitly.
+            "no issues since qa was pending",
         )
         for text in finished:
             with self.subTest(text=text):
@@ -281,6 +306,32 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
                     _reads_as_pending(text),
                     f"{text!r} denies outstanding work but was read as pending",
                 )
+
+    def test_the_two_cells_are_read_as_separate_clauses(self):
+        """The status and evidence cells must not run together.
+
+        They are distinct fields, so a negator ending the status cell must
+        not reach into the evidence cell and deny what it says. Joining them
+        with a bare space let "Not complete" suppress the only pending claim
+        in "Final runtime QA remains pending", which is a real pair of cell
+        values rather than an invented one.
+
+        This asserts the joined text the check actually sees, so restoring a
+        bare-space join fails here rather than passing quietly.
+        """
+        status, evidence = "Not complete", "Final runtime QA remains pending"
+        self.assertTrue(
+            _reads_as_pending(_joined_row_text(status, evidence)),
+            "the evidence cell's pending claim must survive the status "
+            "cell's negator once the two are joined",
+        )
+        # And the bare-space join this replaced really does lose it, which is
+        # why the helper exists rather than a literal at the call site.
+        self.assertFalse(
+            _reads_as_pending((status + " " + evidence).lower()),
+            "a bare-space join lets the status cell's negator reach into "
+            "the evidence cell",
+        )
 
 
 if __name__ == "__main__":
