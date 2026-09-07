@@ -33016,7 +33016,8 @@ extern "C" __declspec(naked) void VF2PlanToGoAtAddedFurniture()
     __asm {
         push ecx
         call VF2PlanToGoAtAddedFurnitureImpl
-        ret
+        add esp, 4
+        ret 16
     }
 }
 
@@ -33041,7 +33042,8 @@ extern "C" __declspec(naked) void VF2PlanToGoObjectAtAddedFurniture()
     __asm {
         push ecx
         call VF2PlanToGoObjectAtAddedFurnitureImpl
-        ret
+        add esp, 4
+        ret 16
     }
 }
 

@@ -72,6 +72,13 @@ class TestAddedFurnitureContract(unittest.TestCase):
         self.assertIn("donor PlanToGo callsites retain the selected placed-item destination", src)
         self.assertIn("fallback\": \"native donor behavior remains unchanged", src)
 
+    def test_plan_to_go_wrappers_forward_thiscall_stack_cleanup(self):
+        src = source()
+        start = src.index("extern \"C\" __declspec(naked) void VF2PlanToGoAtAddedFurniture()")
+        body = src[start:src.index("// ---- Added furniture: actions", start)]
+        self.assertEqual(body.count("add esp, 4"), 2)
+        self.assertEqual(body.count("ret 16"), 2)
+
 
 if __name__ == "__main__":
     unittest.main()
