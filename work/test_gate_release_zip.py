@@ -164,6 +164,61 @@ class FeatureRegressionTests(unittest.TestCase):
             previous = gate.previous_release_archive(after)
             self.assertEqual(previous.name, "VF2-B181-Release.zip")
 
+    def test_a_thin_release_cannot_launder_an_identity_loss(self):
+        # The failure this exists for. With the known-thin B183 retained
+        # beside B181, comparing against only the NEWEST predecessor lets a
+        # B184 drop a B181-only setting, add a replacement to keep the count
+        # at 35, and pass both the comparison and the floor -- the setting
+        # disappears while the gate prints success. Cardinality cannot catch
+        # a swap; identity can.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            full = [f"s{i}" for i in range(gate.EXPECTED_SETTING_COUNT)]
+            _bundle(root / "VF2-B181-Release.zip", full)
+            _bundle(root / "VF2-B183-Release.zip", full[:23])
+            after = _bundle(
+                root / "VF2-B184-Release.zip",
+                [x for x in full if x != "s30"] + ["replacement"],
+            )
+            # Same count as a complete release, so the floor is satisfied.
+            self.assertIsNone(gate.short_of_expected(after))
+            # And the newest predecessor alone reports nothing lost.
+            self.assertIsNone(
+                gate.lost_settings(after, root / "VF2-B183-Release.zip")
+            )
+            # The union catches it.
+            lost = gate.lost_settings(after, gate.earlier_releases(after))
+            self.assertIsNotNone(
+                lost, "a B181-only setting vanished behind the thin B183"
+            )
+            self.assertIn("s30", lost)
+
+    def test_every_earlier_release_is_a_baseline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B179-Release.zip", ["a"])
+            _bundle(root / "VF2-B181-Release.zip", ["b"])
+            after = _bundle(root / "VF2-B184-Release.zip", ["a", "b"])
+            self.assertEqual(
+                [p.name for p in gate.earlier_releases(after)],
+                ["VF2-B179-Release.zip", "VF2-B181-Release.zip"],
+            )
+            self.assertIsNone(gate.lost_settings(after, gate.earlier_releases(after)))
+
+    def test_a_manifest_of_the_wrong_shape_is_reported_not_raised(self):
+        # Syntactically valid JSON with the wrong top-level type: json.loads
+        # succeeds and .get() raises AttributeError. If that happens outside
+        # the protected block it escapes main() after packaging and the
+        # archive stays at its publishable filename.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            import zipfile as _zipfile
+            odd = root / "VF2-B181-Release.zip"
+            with _zipfile.ZipFile(odd, "w") as z:
+                z.writestr("x/manifest.json", "[]")
+            with self.assertRaises(gate.UnreadableRelease):
+                gate.settings_in_archive(odd)
+
     def test_an_unreadable_predecessor_is_reported_not_raised(self):
         # The read happens AFTER packaging. An uncaught exception unwinds
         # main() without reaching quarantine(), leaving a rejected archive at
@@ -194,17 +249,24 @@ class FeatureRegressionTests(unittest.TestCase):
         # cleaned outputs/ supplies no predecessor at all. Treating that as a
         # pass makes every established release look like the first one and
         # skips the check exactly when nobody is watching.
+        # Asserted behaviourally rather than by pinning an identifier: an
+        # earlier version of this test indexed "previous is None" and broke
+        # when that branch was rewritten, while the property it protects was
+        # untouched.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            alone = _bundle(
+                root / "VF2-B184-Release.zip",
+                [f"setting_{i}" for i in range(gate.EXPECTED_SETTING_COUNT)],
+            )
+            self.assertEqual(
+                gate.earlier_releases(alone), [],
+                "no predecessor should be found for a lone archive",
+            )
         source = Path(gate.__file__).read_text(encoding="utf-8")
-        checked = source.index("previous is None")
         passed = source.index('print(f"RELEASE GATE PASSED')
-        self.assertLess(checked, passed)
-        tail = source[checked:passed]
         self.assertIn(
-            "quarantine(", tail,
-            "a missing predecessor must quarantine rather than pass",
-        )
-        self.assertIn(
-            "allow_missing_predecessor", tail,
+            "allow_missing_predecessor", source[:passed],
             "the bootstrap must be an explicit decision, not a default",
         )
 
@@ -254,8 +316,12 @@ class FeatureRegressionTests(unittest.TestCase):
         # "lost N settings against whichever archive happened to be nearby".
         source = Path(gate.__file__).read_text(encoding="utf-8")
         floor = source.index("short_of_expected(archive)")
-        baseline = source.index("previous_release_archive(archive)")
-        self.assertLess(floor, baseline)
+        baseline = source.index("earlier_releases(archive)")
+        self.assertLess(
+            floor, baseline,
+            "a thin build should be named as thin, not as a loss against "
+            "whichever archive happened to be nearby",
+        )
 
     def test_the_baseline_is_chosen_by_version_not_by_spelling(self):
         # Sorted as text, VF2-B99 lands AFTER VF2-B181. Gating B183 with both

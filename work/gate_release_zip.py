@@ -66,6 +66,16 @@ def settings_in_archive(archive: Path) -> set[str]:
                 raise UnreadableRelease(f"{archive.name} contains no manifest.json")
             raw = bundle.read(manifests[0]).decode("utf-8", "replace")
         data = json.loads(raw)
+        # Schema extraction belongs INSIDE this block. Syntactically valid
+        # JSON with the wrong top-level shape -- "[]", say -- parses fine and
+        # then raises AttributeError on .get(), which would escape past the
+        # catch below and unwind main() after packaging.
+        rows = data.get("settings") or []
+        offered = {
+            row["id"]
+            for row in rows
+            if isinstance(row, dict) and row.get("id")
+        }
     except UnreadableRelease:
         raise
     except Exception as failure:
@@ -76,11 +86,7 @@ def settings_in_archive(archive: Path) -> set[str]:
         # A truncated file named exactly VF2-B181-Release.zip passes the
         # grammar filter, so the name check is not enough on its own.
         raise UnreadableRelease(f"{archive.name}: {failure}") from failure
-    return {
-        row["id"]
-        for row in (data.get("settings") or [])
-        if isinstance(row, dict) and row.get("id")
-    }
+    return offered
 
 
 # The documented release filename: VF2-B<version>[-r<revision>]-Release.zip.
@@ -106,6 +112,30 @@ def release_order(path: Path):
     version = tuple(int(part) for part in match.group("version").split("."))
     revision = int(match.group("revision") or 0)
     return (version, revision)
+
+
+def earlier_releases(archive: Path) -> list[Path]:
+    """Every retained release preceding this one, oldest first.
+
+    ALL of them, not just the newest. Comparing against one predecessor lets
+    a thin release launder a loss: with B183 retained beside B181, a B184
+    that drops a B181-only setting and adds a replacement reports no loss
+    against B183 and passes a cardinality floor, so the setting disappears
+    while the gate prints success. A release must not lose a feature ANY
+    earlier release shipped, so the baseline is their union.
+    """
+    this = release_order(archive)
+    found = []
+    for candidate in archive.parent.glob("*.zip"):
+        if candidate.resolve() == archive.resolve():
+            continue
+        order = release_order(candidate)
+        if order is None:
+            continue
+        if this is not None and order >= this:
+            continue
+        found.append((order, candidate))
+    return [path for _, path in sorted(found)]
 
 
 def previous_release_archive(archive: Path) -> Path | None:
@@ -180,7 +210,13 @@ def lost_settings(archive: Path, previous: Path) -> str | None:
     missing.
     """
     now = settings_in_archive(archive)
-    before = settings_in_archive(previous)
+    if isinstance(previous, Path):
+        previous = [previous]
+    before = set()
+    names = []
+    for older in previous:
+        before |= settings_in_archive(older)
+        names.append(older.name)
     if not before:
         return None
     dropped = sorted(before - now)
@@ -188,7 +224,7 @@ def lost_settings(archive: Path, previous: Path) -> str | None:
         return None
     return (
         f"{archive.name} drops {len(dropped)} setting(s) present in "
-        f"{previous.name}, and adds {len(now - before)}:\n  "
+        f"{', '.join(names)}, and adds {len(now - before)}:\n  "
         + "\n  ".join(dropped)
     )
 
@@ -387,8 +423,8 @@ def main() -> int:
     if short is not None:
         return quarantine(archive, short)
 
-    previous = previous_release_archive(archive)
-    if previous is None:
+    previous = earlier_releases(archive)
+    if not previous:
         # A missing predecessor is not evidence of a first release. Both
         # /outputs/ and *.zip are gitignored, so a clean checkout -- or a
         # cleaned outputs/ -- supplies none, which would make every
@@ -418,7 +454,10 @@ def main() -> int:
             )
         if lost is not None:
             return quarantine(archive, lost)
-        print(f"no features lost against {previous.name}")
+        print(
+            "no features lost against %d retained release(s): %s"
+            % (len(previous), ", ".join(p.name for p in previous))
+        )
 
     print(json.dumps(summary, indent=2, sort_keys=True))
     print(f"RELEASE GATE PASSED -- {archive} is ready to publish")
