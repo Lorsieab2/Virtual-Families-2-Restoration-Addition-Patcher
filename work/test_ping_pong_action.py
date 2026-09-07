@@ -88,10 +88,25 @@ class TestTheWrapperIsInstalled(unittest.TestCase):
         ).group(1)
         self.assertIn("if (!pingPong)", body)
         # The early return must come before any label is applied.
+        #
+        # Found by matching the CALL SHAPE rather than one helper's name.
+        # This pinned "VF2ApplyRememberedOrRandomLabel" and went red when
+        # that call was renamed to VF2ApplyVenueLabel here -- while the
+        # behaviour it protects was completely unchanged. The property is
+        # that a stock table returns before ANY label is applied, and which
+        # helper applies it is not what this test is for.
         refuse = body.index("if (!pingPong)")
-        apply_at = body.index("VF2ApplyRememberedOrRandomLabel")
+        applications = [
+            match.start()
+            for match in re.finditer(r"\bVF2Apply\w*Label\w*\(", body)
+        ]
+        self.assertTrue(
+            applications,
+            "no label application found; if the mechanism changed name AND "
+            "shape, this test needs rewriting rather than relaxing",
+        )
         self.assertLess(
-            refuse, apply_at,
+            refuse, min(applications),
             "a pool table must return before the ping-pong label is applied",
         )
 
