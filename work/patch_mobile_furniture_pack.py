@@ -28640,9 +28640,38 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
     int const loungerSlot = VF2FindFreeSpaLoungerSlot(villager);
     if (loungerSlot < 0) return false;
 
+    // Knowing a free spa lounger EXISTS is not the same as knowing it is the
+    // one the villager would reach. The link searches the whole chaise family
+    // nearest-first, so an ordinary chaise closer to the villager wins and the
+    // treatment plays out on normal furniture under a spa label.
+    //
+    // Ask FindFurniture first, because it is READ-ONLY: it answers the same
+    // nearest-match question the link would, without reserving anything. A
+    // link placed and then abandoned would strand an ordinary chaise against a
+    // villager who is not going to use it.
+    sFurnitureInfo2 probe = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectChaise, villager.FeetPos(), probe, true, 0, false)) {
+        return false;
+    }
+    int const probedItem = VF2FurnitureItemAtPoint(probe.point);
+    if (probedItem != __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ &&
+        probedItem != __VF2_SPA_LOUNGER_ITEM_ID__) {
+        return false;
+    }
+
     sFurnitureInfo2 info = {};
     if (!FurnitureManager.LinkPeepToFurniture(
             CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
+        return false;
+    }
+
+    // The probe and the link are separate calls, so confirm the link landed on
+    // the same kind of item rather than assuming the world held still between
+    // them.
+    int const linkedItem = VF2FurnitureItemAtPoint(info.point);
+    if (linkedItem != __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ &&
+        linkedItem != __VF2_SPA_LOUNGER_ITEM_ID__) {
         return false;
     }
 
