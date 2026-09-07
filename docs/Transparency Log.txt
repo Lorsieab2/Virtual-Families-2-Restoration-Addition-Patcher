@@ -3052,3 +3052,20 @@ B182 PLAYTEST FOLLOW-UP: BIKE, HOME GYM AND SPA RECEIVING.
   This entry records source/static evidence only. A generated executable and
   live player confirmation are still required before calling the playtest
   complaints fixed.
+
+B183 PLAYTEST BUILD EVIDENCE.
+
+- After PR #229 merged as `9dd7ef1`, the generator completed and reported five
+  added-furniture behaviours registered plus the `RefreshDecals` tail jump
+  hooked. The required `cmd.exe /c work\\build_b119.bat` build completed with
+  exit code 0.
+- The linked executable is 1,798,144 bytes with SHA-256
+  `7045E3416D862AAFABD6650CF25F862FAB542F89410AB3D8FD06B8DC66A97446`.
+  The self-contained package contains 9,853 files and the required Assets,
+  Images, OptionalVisualMods, Original Virtual Families 2 Assets, and Sounds
+  directories.
+- Startup smoke from the final package ran for 15 seconds, stayed alive until
+  deliberately stopped, and produced zero new matching Application Error/WER
+  events. This is build/startup evidence only; the Exercise Bike, Home Gym and
+  spa visual complaints remain unconfirmed until the owner performs live
+  gameplay QA.
