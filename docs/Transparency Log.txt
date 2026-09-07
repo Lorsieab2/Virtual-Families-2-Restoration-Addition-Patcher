@@ -2827,9 +2827,51 @@ B182 the crash is a stack displacement, and it was never a build regression
   bounds. The candidate array, identical between builds with nothing above id
   0x199. The hairstyle icons, a deliberate cosmetic change.
 
-- WHAT IS NOT ESTABLISHED. Which push leaks. The displacement is proven; the
-  instruction responsible is not identified, and no build is confirmed booting
-  with the feature enabled. This entry does not claim the crash is fixed.
+- THE INSTRUCTION IS NOW IDENTIFIED, AND IT IS A SKIPPED POP RATHER THAN A
+  STRAY PUSH. Every push and pop in the function is present and correctly
+  paired; one branch jumps over one of them. The stock loop body saves ebx at
+  0x4C7C69 and restores it at 0x4C8526, and the injected selector payload's
+  handled path jumps from 0x4C84F9 straight to the common epilogue at
+  0x4C853E, past that restore. The disassembler's own stack-depth column
+  states it plainly: the branch leaves at -3328 and its target expects -3324,
+  a four-byte gap. The epilogue's pops then take the wrong slots. pop edi
+  receives the saved ebx, which held the villager pointer, and the caller's
+  inc edi makes it pointer + 1. pop esi receives the saved edi, a counter
+  bounded to ten, which is the 0, 1 or 2 the faulting instruction
+  dereferences. ebx is never restored at all. One skipped pop accounts for all
+  three registers.
+
+- WHY IT WAS NOT FOUND SOONER, which is the part worth carrying forward. One
+  audit compared every call site against its callee's declared return, and
+  every one matched. Another checked push and pop balance within each
+  function, and the totals balanced. Neither models a BRANCH THAT SKIPS A
+  RESTORE, and no push/pop tally ever will: the counts are correct and only
+  one path through the function is wrong. A whole-program stack-depth analysis
+  reports every path reaching the epilogue at the same depth precisely because
+  it reconciles at merge points, which is exactly where this hides.
+
+- ONLY THIS INJECTION HAS THE PATTERN. Three emitted payloads in the generator
+  contain a branch near an epilogue. Two of them replace the epilogue outright
+  and re-emit its pops themselves, so every restore is theirs to honour. The
+  third jumps into an epilogue it does not own and inherits an assumption it
+  does not satisfy. A sweep of all 4884 functions for branches whose stack
+  depth disagrees with their target's found twenty-nine, but the same sweep on
+  the retail executable found thirty-one, so the shape alone proves nothing:
+  it is the jump into someone else's epilogue that is the defect.
+
+- THE TEST PINNED THE DEFECT IN PLACE. The existing check asserts the faulty
+  branch bytes are PRESENT; it does not assert that registers survive across
+  them. So the suite stayed green over a crash-causing defect for as long as
+  the defect existed, and would have gone red had anyone fixed it. A test that
+  asserts a byte pattern exists is not a test that the code is correct, and
+  this one actively defended the bug. It has to change alongside the fix.
+
+- THE ORIGIN IS COMMIT 535334a, "Add autonomous mobile holiday behaviors".
+
+- WHAT IS STILL NOT ESTABLISHED. No rebuilt binary has yet been shown to boot
+  with the feature enabled. The diagnosis is verified from the shipped bytes
+  and from the dumps; it is not yet confirmed by a build that runs. This entry
+  does not claim the crash is fixed.
 
 - A METHOD WARNING EARNED THREE TIMES IN ONE DAY. Three separate stack-imbalance
   scanners, written independently, each produced a confident false positive on
