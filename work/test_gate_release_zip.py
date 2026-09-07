@@ -81,6 +81,347 @@ class PayloadVerificationIsWiredInTests(unittest.TestCase):
         )
 
 
+def _bundle(path, settings, name="VF2-B999-Release"):
+    """A minimal packaged release carrying just the setting ids."""
+    import json as _json
+    import zipfile as _zipfile
+
+    with _zipfile.ZipFile(path, "w") as z:
+        z.writestr(
+            f"{name}/manifest.json",
+            _json.dumps({"settings": [{"id": s} for s in settings]}),
+        )
+    return path
+
+
+class FeatureRegressionTests(unittest.TestCase):
+    """A release must not ship fewer features than the one before it.
+
+    B183 shipped 23 settings where B181 shipped 35 -- twelve gone, none
+    added -- and every step reported success. default_settings() drops
+    SOURCE_BACKED_OPTIONAL_SETTINGS the export cannot resolve inputs for, so
+    a run that cannot find those assets silently produces a smaller patcher
+    and packages it happily. Nothing compared the output against the
+    previous release, so a person opening the archive was the first check.
+    """
+
+    def test_a_release_that_drops_settings_is_named_and_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before = _bundle(root / "VF2-B181-Release.zip", ["a", "b", "c"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            reason = gate.lost_settings(after, before)
+            self.assertIsNotNone(reason, "a release short two settings passed the gate")
+            # The names, not just the count: a count says a release is short,
+            # the names say which build inputs went missing.
+            self.assertIn("b", reason)
+            self.assertIn("c", reason)
+
+    def test_an_unchanged_release_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before = _bundle(root / "VF2-B181-Release.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a", "b"])
+            self.assertIsNone(gate.lost_settings(after, before))
+
+    def test_a_release_that_only_adds_settings_passes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before = _bundle(root / "VF2-B181-Release.zip", ["a"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a", "b"])
+            self.assertIsNone(
+                gate.lost_settings(after, before),
+                "adding a feature must not be mistaken for losing one",
+            )
+
+    def test_a_swap_is_still_a_loss(self):
+        # Equal counts, different contents. Comparing sizes would miss this.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            before = _bundle(root / "VF2-B181-Release.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a", "c"])
+            reason = gate.lost_settings(after, before)
+            self.assertIsNotNone(reason)
+            self.assertIn("b", reason)
+
+    def test_the_previous_release_is_not_the_archive_itself(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B181-Release.zip", ["a"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            previous = gate.previous_release_archive(after)
+            self.assertIsNotNone(previous)
+            self.assertNotEqual(previous.resolve(), after.resolve())
+
+    def test_a_quarantined_archive_is_not_used_as_the_baseline(self):
+        # A rejected release must not become the standard a later one is
+        # measured against, or one bad build lowers the bar permanently.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B182-Release.zip.REJECTED", ["a"])
+            _bundle(root / "VF2-B181-Release.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            previous = gate.previous_release_archive(after)
+            self.assertEqual(previous.name, "VF2-B181-Release.zip")
+
+    def test_a_thin_release_cannot_launder_an_identity_loss(self):
+        # The failure this exists for. With the known-thin B183 retained
+        # beside B181, comparing against only the NEWEST predecessor lets a
+        # B184 drop a B181-only setting, add a replacement to keep the count
+        # at 35, and pass both the comparison and the floor -- the setting
+        # disappears while the gate prints success. Cardinality cannot catch
+        # a swap; identity can.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            full = [f"s{i}" for i in range(gate.EXPECTED_SETTING_COUNT)]
+            _bundle(root / "VF2-B181-Release.zip", full)
+            _bundle(root / "VF2-B183-Release.zip", full[:23])
+            after = _bundle(
+                root / "VF2-B184-Release.zip",
+                [x for x in full if x != "s30"] + ["replacement"],
+            )
+            # Same count as a complete release, so the floor is satisfied.
+            self.assertIsNone(gate.short_of_expected(after))
+            # And the newest predecessor alone reports nothing lost.
+            self.assertIsNone(
+                gate.lost_settings(after, root / "VF2-B183-Release.zip")
+            )
+            # The union catches it.
+            lost = gate.lost_settings(after, gate.earlier_releases(after))
+            self.assertIsNotNone(
+                lost, "a B181-only setting vanished behind the thin B183"
+            )
+            self.assertIn("s30", lost)
+
+    def test_every_earlier_release_is_a_baseline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B179-Release.zip", ["a"])
+            _bundle(root / "VF2-B181-Release.zip", ["b"])
+            after = _bundle(root / "VF2-B184-Release.zip", ["a", "b"])
+            self.assertEqual(
+                [p.name for p in gate.earlier_releases(after)],
+                ["VF2-B179-Release.zip", "VF2-B181-Release.zip"],
+            )
+            self.assertIsNone(gate.lost_settings(after, gate.earlier_releases(after)))
+
+    def test_a_malformed_settings_collection_never_reads_as_empty(self):
+        # An empty baseline has nothing to lose, so lost_settings() reports
+        # success and a short release stays publishable. Every one of these
+        # shapes used to produce an empty set silently: absent, a dict, a
+        # string, rows that are not objects, rows without an id, and an
+        # explicitly empty list. A read that cannot fail is not a read.
+        import zipfile as _zipfile
+
+        shapes = {
+            "settings absent": "{}",
+            "settings is a dict": '{"settings": {}}',
+            "settings is a string": '{"settings": "everything"}',
+            "row is not an object": '{"settings": [1]}',
+            "row has no id": '{"settings": [{}]}',
+            "row id is empty": '{"settings": [{"id": ""}]}',
+            "settings is empty": '{"settings": []}',
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for index, (label, body) in enumerate(shapes.items()):
+                path = root / f"VF2-B{100 + index}-Release.zip"
+                with _zipfile.ZipFile(path, "w") as bundle:
+                    bundle.writestr("x/manifest.json", body)
+                with self.subTest(shape=label):
+                    with self.assertRaises(gate.UnreadableRelease):
+                        gate.settings_in_archive(path)
+
+    def test_a_well_formed_manifest_still_reads(self):
+        # The shape checks must not reject a real release: the guard is only
+        # worth having if it still lets the thing it guards through.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            good = _bundle(root / "VF2-B181-Release.zip", ["alpha", "beta"])
+            self.assertEqual(gate.settings_in_archive(good), {"alpha", "beta"})
+
+    def test_a_manifest_of_the_wrong_shape_is_reported_not_raised(self):
+        # Syntactically valid JSON with the wrong top-level type: json.loads
+        # succeeds and .get() raises AttributeError. If that happens outside
+        # the protected block it escapes main() after packaging and the
+        # archive stays at its publishable filename.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            import zipfile as _zipfile
+            odd = root / "VF2-B181-Release.zip"
+            with _zipfile.ZipFile(odd, "w") as z:
+                z.writestr("x/manifest.json", "[]")
+            with self.assertRaises(gate.UnreadableRelease):
+                gate.settings_in_archive(odd)
+
+    def test_an_unreadable_predecessor_is_reported_not_raised(self):
+        # The read happens AFTER packaging. An uncaught exception unwinds
+        # main() without reaching quarantine(), leaving a rejected archive at
+        # its publishable filename -- this gate causing the accident it
+        # exists to prevent. A truncated file with the exact canonical name
+        # passes the grammar filter, so the name check does not cover this.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VF2-B181-Release.zip").write_bytes(b"truncated, not a zip")
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            previous = gate.previous_release_archive(after)
+            self.assertEqual(previous.name, "VF2-B181-Release.zip")
+            with self.assertRaises(gate.UnreadableRelease):
+                gate.lost_settings(after, previous)
+
+    def test_an_archive_with_no_manifest_is_reported_not_raised(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            import zipfile as _zipfile
+            empty = root / "VF2-B181-Release.zip"
+            with _zipfile.ZipFile(empty, "w") as z:
+                z.writestr("readme.txt", "no manifest here")
+            with self.assertRaises(gate.UnreadableRelease):
+                gate.settings_in_archive(empty)
+
+    def test_a_missing_predecessor_does_not_read_as_success(self):
+        # /outputs/ and *.zip are both gitignored, so a clean checkout or a
+        # cleaned outputs/ supplies no predecessor at all. Treating that as a
+        # pass makes every established release look like the first one and
+        # skips the check exactly when nobody is watching.
+        # Asserted behaviourally rather than by pinning an identifier: an
+        # earlier version of this test indexed "previous is None" and broke
+        # when that branch was rewritten, while the property it protects was
+        # untouched.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            alone = _bundle(
+                root / "VF2-B184-Release.zip",
+                [f"setting_{i}" for i in range(gate.EXPECTED_SETTING_COUNT)],
+            )
+            self.assertEqual(
+                gate.earlier_releases(alone), [],
+                "no predecessor should be found for a lone archive",
+            )
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        passed = source.index('print(f"RELEASE GATE PASSED')
+        self.assertIn(
+            "allow_missing_predecessor", source[:passed],
+            "the bootstrap must be an explicit decision, not a default",
+        )
+
+    def test_the_bootstrap_override_exists_and_is_opt_in(self):
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        self.assertIn("--allow-missing-predecessor", source)
+        self.assertIn('action="store_true"', source)
+
+    def test_a_thin_release_is_rejected_even_with_no_baseline(self):
+        # "No fewer than the previous release" is only as good as the release
+        # it compares against. With no prior archive there is nothing to
+        # compare against at all, and without an absolute floor a thin build
+        # would pass unexamined.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            thin = _bundle(root / "VF2-B184-Release.zip", ["a", "b"])
+            self.assertIsNone(gate.previous_release_archive(thin))
+            self.assertIsNotNone(
+                gate.short_of_expected(thin),
+                "a release with two settings passed with no baseline present",
+            )
+
+    def test_a_thin_release_cannot_become_the_new_bar(self):
+        # The failure mode the floor exists for: if a thin release is used as
+        # the baseline, every later release inherits its loss and the
+        # comparison alone reports success forever.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            thin = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            after = _bundle(root / "VF2-B184-Release.zip", ["a"])
+            # The comparison is happy -- nothing was lost against B183.
+            self.assertIsNone(gate.lost_settings(after, thin))
+            # The floor is not.
+            self.assertIsNotNone(gate.short_of_expected(after))
+
+    def test_a_complete_release_passes_the_floor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            full = _bundle(
+                root / "VF2-B184-Release.zip",
+                [f"setting_{i}" for i in range(gate.EXPECTED_SETTING_COUNT)],
+            )
+            self.assertIsNone(gate.short_of_expected(full))
+
+    def test_the_floor_runs_before_the_baseline_comparison(self):
+        # Ordered deliberately: a thin build should be named as thin, not as
+        # "lost N settings against whichever archive happened to be nearby".
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        floor = source.index("short_of_expected(archive)")
+        baseline = source.index("earlier_releases(archive)")
+        self.assertLess(
+            floor, baseline,
+            "a thin build should be named as thin, not as a loss against "
+            "whichever archive happened to be nearby",
+        )
+
+    def test_the_baseline_is_chosen_by_version_not_by_spelling(self):
+        # Sorted as text, VF2-B99 lands AFTER VF2-B181. Gating B183 with both
+        # retained would pick B99 as the baseline, and a setting present in
+        # B181 but absent from B99 and B183 would never be reported -- the
+        # gate passing the exact loss it exists to block.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B99-Release.zip", ["a"])
+            _bundle(root / "VF2-B181-Release.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            previous = gate.previous_release_archive(after)
+            self.assertEqual(previous.name, "VF2-B181-Release.zip")
+            self.assertIsNotNone(
+                gate.lost_settings(after, previous),
+                "the B181-only setting was dropped and went unreported",
+            )
+
+    def test_a_revision_outranks_the_release_it_revises(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B181-Release.zip", ["a"])
+            _bundle(root / "VF2-B181-Release-r2.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            self.assertEqual(
+                gate.previous_release_archive(after).name,
+                "VF2-B181-Release-r2.zip",
+            )
+
+    def test_a_scratch_zip_is_never_the_baseline(self):
+        # Reading a non-release ZIP raises AFTER packaging, which aborts the
+        # gate without quarantining and leaves the new archive sitting at its
+        # publishable filename.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VF2-B183-Release-corrupt.zip").write_bytes(b"not a zip")
+            _bundle(root / "VF2-B181-Release.zip", ["a", "b"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            previous = gate.previous_release_archive(after)
+            self.assertEqual(previous.name, "VF2-B181-Release.zip")
+            # And the check still reports the real loss rather than dying.
+            self.assertIsNotNone(gate.lost_settings(after, previous))
+
+    def test_a_later_release_is_not_used_as_the_baseline(self):
+        # Re-gating an older archive must not measure it against a newer one,
+        # which would report every later addition as a loss.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _bundle(root / "VF2-B190-Release.zip", ["a", "b", "c"])
+            _bundle(root / "VF2-B181-Release.zip", ["a"])
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            self.assertEqual(
+                gate.previous_release_archive(after).name,
+                "VF2-B181-Release.zip",
+            )
+
+    def test_the_gate_runs_the_check_before_declaring_success(self):
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        checked = source.index("lost_settings(archive, previous)")
+        passed = source.index('print(f"RELEASE GATE PASSED')
+        self.assertLess(checked, passed)
+        tail = source[checked:passed]
+        self.assertIn("quarantine(archive", tail)
+
+
 class VariantCoverageTests(unittest.TestCase):
     def test_a_complete_release_passes(self):
         complete = len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
