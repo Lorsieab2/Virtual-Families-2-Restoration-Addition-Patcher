@@ -123,7 +123,13 @@ def _joined_row_text(status, evidence):
 # mention, and reading it as a live claim lets a FINISHED row satisfy the
 # gate. This is checked per occurrence, like the negator, because it is a
 # property of the phrase rather than of the clause.
-_PAST_TENSE = re.compile(r"\b(?:was|were|had been)\W+$")
+# Up to two words may sit between the auxiliary and the phrase, because
+# ordinary wording puts them there -- "was still pending", "was
+# previously pending", "had recently been pending". An exact-suffix
+# match reads those as current claims, which is the unsafe direction.
+# Two is the same bounded-reach idea as the negator window: enough for
+# natural modifiers, not enough to span a clause.
+_PAST_TENSE = re.compile(r"\b(?:was|were|had been|had)\b(?:\W+\w+){0,2}\W*$")
 
 
 def _reads_as_pending(text):
@@ -292,6 +298,9 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             # with a separator so a negator in the status cell cannot reach
             # into the evidence cell and deny it.
             "not complete. final runtime qa remains pending",
+            # Present tense with the same modifier must stay outstanding --
+            # the guard keys on the auxiliary, not on the adverb.
+            "qa is still pending",
         )
         for text in outstanding:
             with self.subTest(text=text):
@@ -318,6 +327,12 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             "no issues though qa was pending",
             "no issues until qa was pending",
             "qa was pending and is now complete",
+            # Ordinary wording puts a modifier between the auxiliary and the
+            # phrase. An exact-suffix match misses these and reads them as
+            # current claims, which is the unsafe direction.
+            "no issues since qa was previously pending",
+            "no issues while qa was still pending",
+            "although qa had recently been pending",
         )
         for text in finished:
             with self.subTest(text=text):
