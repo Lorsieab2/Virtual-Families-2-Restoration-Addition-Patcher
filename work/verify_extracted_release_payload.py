@@ -188,9 +188,19 @@ def main():
         # reported as "not installed" by a resolver that only reads
         # asset_patches -- a false alarm on a correct bundle, which is the
         # same class of mistake as the by-name check this replaced.
+        raw_settings = manifest.get("settings", [])
+        if isinstance(raw_settings, dict):
+            setting_rows = [
+                {"id": setting_id, **(value if isinstance(value, dict) else {})}
+                for setting_id, value in raw_settings.items()
+            ]
+        elif isinstance(raw_settings, list):
+            setting_rows = raw_settings
+        else:
+            setting_rows = []
         enabled_settings = {
             str(row.get("id"))
-            for row in manifest.get("settings", [])
+            for row in setting_rows
             if isinstance(row, dict) and row.get("default")
         }
 

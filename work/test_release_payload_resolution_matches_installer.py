@@ -78,6 +78,7 @@ class ReleaseVerifierMatchesInstaller(unittest.TestCase):
     def test_all_installer_requirement_aliases_are_considered(self):
         self.assertIn('for key in ("requires", "settings")', SOURCE)
         self.assertIn('for key in ("setting", "feature")', SOURCE)
+        self.assertIn('if isinstance(raw_settings, dict)', SOURCE)
 
     def test_a_redirected_record_is_not_treated_as_installed(self):
         target = "Assets/SpaLoungerStd.png.fmap"
