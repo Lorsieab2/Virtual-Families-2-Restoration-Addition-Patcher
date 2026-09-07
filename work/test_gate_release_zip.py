@@ -164,6 +164,50 @@ class FeatureRegressionTests(unittest.TestCase):
             previous = gate.previous_release_archive(after)
             self.assertEqual(previous.name, "VF2-B181-Release.zip")
 
+    def test_a_thin_release_is_rejected_even_with_no_baseline(self):
+        # "No fewer than the previous release" is only as good as the release
+        # it compares against. With no prior archive there is nothing to
+        # compare against at all, and without an absolute floor a thin build
+        # would pass unexamined.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            thin = _bundle(root / "VF2-B184-Release.zip", ["a", "b"])
+            self.assertIsNone(gate.previous_release_archive(thin))
+            self.assertIsNotNone(
+                gate.short_of_expected(thin),
+                "a release with two settings passed with no baseline present",
+            )
+
+    def test_a_thin_release_cannot_become_the_new_bar(self):
+        # The failure mode the floor exists for: if a thin release is used as
+        # the baseline, every later release inherits its loss and the
+        # comparison alone reports success forever.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            thin = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            after = _bundle(root / "VF2-B184-Release.zip", ["a"])
+            # The comparison is happy -- nothing was lost against B183.
+            self.assertIsNone(gate.lost_settings(after, thin))
+            # The floor is not.
+            self.assertIsNotNone(gate.short_of_expected(after))
+
+    def test_a_complete_release_passes_the_floor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            full = _bundle(
+                root / "VF2-B184-Release.zip",
+                [f"setting_{i}" for i in range(gate.EXPECTED_SETTING_COUNT)],
+            )
+            self.assertIsNone(gate.short_of_expected(full))
+
+    def test_the_floor_runs_before_the_baseline_comparison(self):
+        # Ordered deliberately: a thin build should be named as thin, not as
+        # "lost N settings against whichever archive happened to be nearby".
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        floor = source.index("short_of_expected(archive)")
+        baseline = source.index("previous_release_archive(archive)")
+        self.assertLess(floor, baseline)
+
     def test_the_baseline_is_chosen_by_version_not_by_spelling(self):
         # Sorted as text, VF2-B99 lands AFTER VF2-B181. Gating B183 with both
         # retained would pick B99 as the baseline, and a setting present in

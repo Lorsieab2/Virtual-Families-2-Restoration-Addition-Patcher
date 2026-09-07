@@ -115,6 +115,34 @@ def previous_release_archive(archive: Path) -> Path | None:
     return max(candidates)[1]
 
 
+# The number of settings a complete release offers. B181 shipped 35; B183
+# shipped 23 because twelve overlay flags were never passed to the exporter.
+#
+# Checked as an ABSOLUTE FLOOR as well as against the baseline, because the
+# two questions are different. "No fewer than the previous release" is only
+# as good as the release it compares against: if baseline selection ever
+# resolves to a thin build, thin quietly becomes the new bar and every
+# release after it inherits the loss. An absolute number cannot drift that
+# way.
+#
+# Raise this when a release genuinely adds a setting. It failing on a real
+# addition is the intended cost -- a number nobody ever has to revisit is a
+# number that is not measuring anything.
+EXPECTED_SETTING_COUNT = 35
+
+
+def short_of_expected(archive: Path) -> str | None:
+    """Fewer settings than a complete release carries, or None."""
+    offered = settings_in_archive(archive)
+    if len(offered) >= EXPECTED_SETTING_COUNT:
+        return None
+    return (
+        f"{archive.name} offers {len(offered)} settings; a complete release "
+        f"carries {EXPECTED_SETTING_COUNT}. Twelve were missing from B183 "
+        f"because the export ran without the per-feature overlay arguments."
+    )
+
+
 def lost_settings(archive: Path, previous: Path) -> str | None:
     """Name the settings this release drops, or None if it drops none.
 
@@ -322,12 +350,21 @@ def main() -> int:
     # and carries every piece of its content; a build that silently ships
     # fewer features than its predecessor breaks that, and nothing here
     # noticed until a person opened the archive.
+    short = short_of_expected(archive)
+    if short is not None:
+        return quarantine(archive, short)
+
     previous = previous_release_archive(archive)
     if previous is not None:
         lost = lost_settings(archive, previous)
         if lost is not None:
             return quarantine(archive, lost)
         print(f"no features lost against {previous.name}")
+    else:
+        # No prior release to compare against. The absolute floor above is
+        # the only coverage check that ran, so say so rather than letting
+        # silence read as a passed comparison.
+        print("no previous release to compare against; settings count only")
 
     print(json.dumps(summary, indent=2, sort_keys=True))
     print(f"RELEASE GATE PASSED -- {archive} is ready to publish")
