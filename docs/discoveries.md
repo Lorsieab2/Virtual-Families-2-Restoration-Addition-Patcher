@@ -4108,15 +4108,42 @@ establish preservation; and that the caller's `inc edi` accounts for the `+1`,
 which presupposes the anomaly, since it explains the increment only given that
 `edi` already held `arg_0`.
 
-Static analysis is exhausted rather than conclusive. IDA's stack-pointer
-analysis over all 185 basic blocks of the loop body finds every path reaching
-the epilogue at `spd = -0xCFC` with `spd` zero at the return, and all 42 call
-sites matching their callee's declared `retn N`, but that is path-insensitive
-and trusts each declaration, so it does not clear the hypothesis. Settling it
-needs a hardware watchpoint, which is live execution and the owner's decision.
-Until then the accurate statement is that the emptied geometry was sufficient
-to trigger the crash, not that the crash is understood.
+Static analysis of this shape is exhausted rather than conclusive. IDA's
+stack-pointer analysis over all 185 basic blocks of the loop body finds every
+path reaching the epilogue at `spd = -0xCFC` with `spd` zero at the return, and
+all 42 call sites matching their callee's declared `retn N`, but that is
+path-insensitive and trusts each declaration, so none of it cleared the
+hypothesis.
 
+**Resolved.** The crash was a skipped register restore, not a call-site
+imbalance, which is why every one of the checks above passed while the defect
+was live. The stock loop saves `ebx` partway through the body and restores it
+just before the shared epilogue; the injected selector's handled path jumped
+straight to that epilogue and never passed the restore. The epilogue's
+remaining pops then took the wrong stack slots, so the caller received a
+villager pointer where it expected one register and a small loop counter where
+it expected another, and faulted dereferencing the counter. The fix adds the
+missing restore on the injected path.
+
+The transferable lesson is about what these audits actually model. A push/pop
+tally counts instructions, and the counts here were correct. A whole-program
+stack-pointer analysis reconciles at merge points, which is precisely where a
+branch that skips a restore hides. Neither can see this class of defect: it is
+visible only by comparing a branch's stack depth against its *target's*. A
+detector for it must be validated against a known-good control first — a sweep
+of this kind found 29 suspicious branches in the patched build and 31 in retail
+vanilla, so the raw count means nothing without the comparison.
+
+Two build hazards make a fix of this kind easy to believe prematurely, and both
+fail silently. The intermediate objects are untracked build products, so a build
+that reuses an existing output directory links the previous object and ships
+nothing, while every source-level check still passes; the patch has to be
+applied from the pristine objects with that directory cleared. And a freshly
+built executable carries every feature flag at zero, so launching it and seeing
+no crash proves only that the gated code never ran. Diffing a fresh build
+against a flag-enabled one gives a handful of differing bytes, of which the
+flag is one and the rest are build timestamps — the code is identical, so the
+flag is the whole difference between a real test and a meaningless one.
 ## The startup crash is a NULL dereference, not a bad villager pointer
 
 Read from the dumps' EXCEPTION RECORDS, which no earlier entry had opened.
@@ -4351,12 +4378,19 @@ callee behaves as its declared return says. An imbalance produced only on a
 particular dynamic path, or by a callee that returns differently under some
 condition, would not appear here.
 
-Static analysis has now been taken as far as it goes on this crash. What
-remains needs live execution.
+Static analysis was taken as far as it goes on this crash, and what remained
+did need live execution — though not the hardware watchpoint this entry
+originally called for.
 
-Settling the remaining question needs a hardware watchpoint or single-stepping
-under a debugger, which is a live-execution step and is the owner's call to
-authorise.
+**Settled.** The imbalance is real and dynamic, exactly as the caveat above
+predicted: the injected selector's handled path branches into the stock
+epilogue past the instruction that restores `ebx`, so the restore is skipped on
+that path only. That is invisible to both checks above — the call sites are
+balanced, and the whole-program result reconciles at the merge point the branch
+jumps to. The remaining pops then take the wrong slots, which is why `esi` holds
+a small integer rather than a pointer. Adding the missing restore on the
+injected path fixes it, confirmed by running the rebuilt game against an
+unfixed control in the same install.
 
 ### Per-build addresses differ; do not reuse them
 
