@@ -2950,8 +2950,14 @@ B182 THE CRASH WARNING WAS SCOPED TO THE BUILDS IT DESCRIBES.
   unconditional so that every build warns they report 4 failed; on the corrected
   file they report 4 passed. The table test asserts the PROPERTY that no
   release-specific claim sits in the shared table, rather than pinning the
-  current wording, so a future reword cannot reintroduce the defect while
-  staying green.
+  current wording. ITS REACH IS LIMITED AND THAT LIMIT IS RECORDED HERE
+  DELIBERATELY: it rejects three specific phrasings, so a DIFFERENTLY worded
+  warning -- "B181 crashes on launch; disable this option" -- would pass it.
+  An earlier version of this entry claimed no future reword could stay green,
+  and that was an overclaim Codex caught on PR #209; the counterexample was
+  confirmed by running the guard against it. The guard stops the exact
+  regression that occurred and is not a general detector of release-specific
+  text, which no substring test can be.
 
 - TWO PROCESS HAZARDS FOUND WHILE MAKING THIS CHANGE, both recorded because they
   would silently corrupt work rather than announce themselves. FIRST, A

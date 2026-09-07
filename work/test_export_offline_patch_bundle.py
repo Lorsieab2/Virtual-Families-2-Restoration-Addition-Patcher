@@ -3223,8 +3223,13 @@ class MobileFurnitureCrashWarningScopeTests(unittest.TestCase):
 
     def test_settings_table_carries_no_release_state(self):
         # Assert the PROPERTY -- that no release-specific claim is baked into
-        # the shared table -- rather than pinning the current wording, so a
-        # future reword cannot reintroduce the defect while staying green.
+        # the shared table -- rather than pinning the current wording.
+        #
+        # This catches the exact regression that occurred. It is NOT a general
+        # detector: a differently worded warning ('B181 crashes on launch;
+        # disable this option') would pass, because no substring test can
+        # recognise release-specific prose in general. Recorded so nobody
+        # reads this guard as broader than it is.
         row = next(
             r for r in exporter.SETTINGS
             if r["id"] == "mobile_furniture_behaviors"
