@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import re
 import sys
 import tempfile
 import threading
@@ -800,13 +801,76 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         # coordinates are legitimately negative. Clamping to zero would throw
         # the popup onto the primary display while it holds a modal grab, so
         # the app would look frozen with the explanation on another screen.
-        source = Path(gui.__file__).read_text(encoding="utf-8")
-        centre = source[source.index("def _center"):source.index("def close")]
-        self.assertNotIn("max(0, x)", centre)
-        self.assertNotIn("max(0, y)", centre)
-        # The screen-centred fallback still clamps: there a negative value
-        # really would be off-screen.
-        self.assertIn("max(0, (self.winfo_screenwidth()", centre)
+        #
+        # ASSERTED BEHAVIOURALLY, not by searching the source for one spelling
+        # of the clamp. An earlier version of this test asserted that the
+        # literal "max(0, x)" was absent, which only ever caught that exact
+        # form: writing the clamp inline as
+        # `x = max(0, parent.winfo_rootx() + ...)`, or as `if x < 0: x = 0`,
+        # reintroduced the defect and the test still passed. Driving _center
+        # with a parent at negative coordinates catches every spelling.
+        placed = {}
+
+        class FakeParent:
+            def winfo_viewable(self):
+                return 1
+
+            def winfo_rootx(self):
+                return -1400
+
+            def winfo_rooty(self):
+                return -900
+
+            def winfo_width(self):
+                return 800
+
+            def winfo_height(self):
+                return 600
+
+        wait = gui.WaitWindow(self.root, "Please wait", "Please wait" + ELLIPSIS,
+                              modal=False)
+        try:
+            wait.geometry = lambda spec: placed.setdefault("spec", spec)
+            wait._center(FakeParent())
+        finally:
+            wait.close()
+
+        self.assertIn("spec", placed, "_center never positioned the window")
+        offsets = re.search(r"\+?([+-]\d+)\+?([+-]\d+)$", placed["spec"])
+        self.assertIsNotNone(offsets)
+        self.assertLess(int(offsets.group(1)), 0,
+                        "a negative parent x was clamped: %r" % placed["spec"])
+        self.assertLess(int(offsets.group(2)), 0,
+                        "a negative parent y was clamped: %r" % placed["spec"])
+
+    def test_centering_without_a_parent_still_clamps_to_the_screen(self):
+        # The other half of the rule: with no viewable parent a negative value
+        # really would be off-screen, so that branch must keep its clamp.
+        placed = {}
+
+        class HiddenParent:
+            def winfo_viewable(self):
+                return 0
+
+            def winfo_screenwidth(self):
+                return 1
+
+            def winfo_screenheight(self):
+                return 1
+
+        wait = gui.WaitWindow(self.root, "Please wait", "Please wait" + ELLIPSIS,
+                              modal=False)
+        try:
+            wait.geometry = lambda spec: placed.setdefault("spec", spec)
+            wait._center(HiddenParent())
+        finally:
+            wait.close()
+
+        self.assertIn("spec", placed, "_center never positioned the window")
+        offsets = re.search(r"\+?([+-]\d+)\+?([+-]\d+)$", placed["spec"])
+        self.assertIsNotNone(offsets)
+        self.assertGreaterEqual(int(offsets.group(1)), 0)
+        self.assertGreaterEqual(int(offsets.group(2)), 0)
 
     def test_a_failure_in_the_work_surfaces_on_the_main_thread(self):
         # Captured on the worker and re-raised here, otherwise it vanishes
