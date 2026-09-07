@@ -32159,6 +32159,12 @@ private:
     static void __cdecl UseTelescope(CVillager &);
     static void __cdecl WorkingOut(CVillager &);
     static void __cdecl QuickWorkout(CVillager &);
+    // The rest of the general workout set. Names taken from Behavior.obj's
+    // symbol table rather than from prose: the behaviour is
+    // ?Aerobics@CBehavior@@CAXAAVCVillager@@@Z, NOT DoingAerobics.
+    static void __cdecl DoingKungFu(CVillager &);
+    static void __cdecl DoingTaiChi(CVillager &);
+    static void __cdecl Aerobics(CVillager &);
     static void __cdecl WorkKitchenDispatch(CVillager &);
     static void __cdecl WorkKitchen0(CVillager &);
     static void __cdecl OfficeCarreerWork(CVillager &);
@@ -33150,6 +33156,62 @@ static void VF2RunOwnFurnitureAction(
     VF2ApplyVenueLabel(villager, labels, labelCount, remembered);
 }
 
+// Run ONE OF SEVERAL donor behaviours at the item's venue.
+//
+// VF2RunOwnFurnitureAction takes a single donor, which is why the Home Gym and
+// the Yoga Equipment only ever showed one action out of the set they were
+// meant to have: the handlers hardcoded WorkingOut and QuickWorkout, so every
+// villager who used them did the same thing every time.
+//
+// THIS DOES NOT GATE THE DONORS. The six general workout behaviours stay
+// exactly as base-game and as autonomous as they were: nothing here is
+// registered against them, and a villager with no Home Gym placed reaches them
+// by every route they already used. VF2RunOwnFurnitureAction falls back to the
+// plain donor when no matching item is placed, so a placed item changes WHERE
+// the behaviour happens and never WHETHER it is available.
+//
+// The donor is chosen per invocation with the engine's own RNG rather than
+// held in villager state: these are interchangeable animations for one
+// activity, so there is nothing to remember between sessions. The item's LABEL
+// is still chosen by VF2RunOwnFurnitureAction, which remembers it per
+// villager, so a villager keeps a stable label while the animation underneath
+// may vary -- the stock pattern for a behaviour with several presentations.
+static void VF2RunOwnFurnitureActionVaried(
+    CVillager &villager,
+    void (__cdecl *const *donorBehaviors)(CVillager &),
+    int donorCount,
+    int itemId,
+    int object,
+    int const *labels,
+    int labelCount)
+{
+    if (donorBehaviors == 0 || donorCount <= 0) return;
+    int index = donorCount > 1 ? ldwGameState::GetRandom(donorCount) : 0;
+    // GetRandom belongs to the engine, so bound its result here rather than
+    // trust a range this code does not own.
+    if (index < 0 || index >= donorCount) index = 0;
+    VF2RunOwnFurnitureAction(
+        villager, donorBehaviors[index], itemId, object, labels, labelCount);
+}
+
+// The general workout behaviours the Home Gym System and the Yoga Equipment
+// offer as venues. Every one is a stock behaviour that consults no placed
+// item, which is what makes it safe to host: the venue comes from
+// VF2RunOwnFurnitureAction, never from the donor.
+static void (__cdecl *const kVF2GymDonorBehaviors[])(CVillager &) = {
+    CBehavior::DoingKungFu,
+    CBehavior::DoingTaiChi,
+    CBehavior::Aerobics,
+    CBehavior::QuickWorkout,
+    // "Doing X exercises" is not a separate behaviour: it is WorkingOut
+    // wearing the fourteen labels of the existing "workout" group -- leg,
+    // arm, back and abdominal exercises, crunches, cardio, and so on. So the
+    // set is six entries and WorkingOut carries two of the owner's names.
+    CBehavior::WorkingOut,
+};
+
+#define VF2_DONOR_COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
+
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
 {
     VF2RunOwnFurnitureAction(
@@ -33174,8 +33236,9 @@ extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 // action of its own, with the ten workout variations that were asked for.
 extern "C" void __cdecl VF2HomeGymWorkout(CVillager &villager)
 {
-    VF2RunOwnFurnitureAction(
-        villager, CBehavior::WorkingOut,
+    VF2RunOwnFurnitureActionVaried(
+        villager, kVF2GymDonorBehaviors,
+        VF2_DONOR_COUNT(kVF2GymDonorBehaviors),
         __VF2_HOME_GYM_ITEM_ID__, 0x75,
         kVF2BehaviorLabels_home_gym,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_home_gym));
@@ -33183,8 +33246,9 @@ extern "C" void __cdecl VF2HomeGymWorkout(CVillager &villager)
 
 extern "C" void __cdecl VF2YogaEquipmentWorkout(CVillager &villager)
 {
-    VF2RunOwnFurnitureAction(
-        villager, CBehavior::QuickWorkout,
+    VF2RunOwnFurnitureActionVaried(
+        villager, kVF2GymDonorBehaviors,
+        VF2_DONOR_COUNT(kVF2GymDonorBehaviors),
         __VF2_YOGA_EQUIPMENT_ITEM_ID__, 0x75,
         kVF2BehaviorLabels_yoga_equipment,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_yoga_equipment));
