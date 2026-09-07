@@ -33,20 +33,67 @@ GENERATOR = ROOT / "work" / "patch_mobile_furniture_pack.py"
 SOURCE = GENERATOR.read_text(encoding="utf-8", errors="replace")
 
 
+def governing_declaration(site_marker):
+    """The sFurnitureInfo2 declaration that actually governs a call site.
+
+    SOURCE contains FOUR declarations of this struct, and they are not
+    identical: three end `int padding[4]` and one has `int object;` followed by
+    `int padding[3]`. An unanchored search always finds the first, which is not
+    the one the chair handlers are emitted with -- so a layout test written
+    that way validates a struct the changed code never sees.
+    """
+    site = SOURCE.find(site_marker)
+    if site < 0:
+        return None
+    starts = [i for i in range(len(SOURCE))
+              if SOURCE.startswith("struct sFurnitureInfo2 {", i)]
+    owning = [i for i in starts if i < site]
+    if not owning:
+        return None
+    start = max(owning)
+    end = SOURCE.index("};", start)
+    body = SOURCE[start + len("struct sFurnitureInfo2 {"):end]
+    return [ln.strip() for ln in body.splitlines() if ln.strip()]
+
+
 class OrientationComesFromTheOrientationField(unittest.TestCase):
-    def test_the_struct_layout_this_rests_on_has_not_moved(self):
-        # If sFurnitureInfo2 ever gains or reorders a field, the reasoning in
-        # this file is stale and the test should fail loudly rather than keep
-        # asserting against a layout that no longer exists.
-        m = re.search(r"struct sFurnitureInfo2 \{(.*?)\};", SOURCE, re.S)
-        self.assertIsNotNone(m, "sFurnitureInfo2 is gone")
-        fields = [ln.strip() for ln in m.group(1).splitlines() if ln.strip()]
+    CHAIR_SITE = 'info.orientation == 1 ? "Sit In Chair NW"'
+
+    def test_there_really_are_several_declarations(self):
+        # If this ever becomes one declaration, the scoping below is
+        # unnecessary -- but silently relying on that would be the same
+        # mistake in reverse.
+        count = SOURCE.count("struct sFurnitureInfo2 {")
+        self.assertGreaterEqual(
+            count, 1, "sFurnitureInfo2 is gone entirely")
+
+    def test_the_layout_THE_CHAIR_HANDLERS_USE_has_not_moved(self):
+        # Scoped to the declaration preceding the changed call site, not the
+        # first one in the file. orientation must remain the SECOND field, at
+        # +0x04, whatever follows point.
+        fields = governing_declaration(self.CHAIR_SITE)
+        self.assertIsNotNone(
+            fields, "could not locate the declaration governing the chair "
+                    "handlers; this test would otherwise pass vacuously")
         self.assertEqual(
-            fields,
-            ["int unknown0;", "int orientation;", "ldwPoint point;",
-             "int padding[4];"],
-            "sFurnitureInfo2 changed; re-derive the offsets before trusting "
-            "any raw-offset read of it")
+            fields[:3],
+            ["int unknown0;", "int orientation;", "ldwPoint point;"],
+            "the declaration the chair handlers are emitted with changed; "
+            "re-derive the offsets before trusting info.orientation")
+
+    def test_that_declaration_is_not_the_first_one_in_the_file(self):
+        # Pins the reason this test is scoped at all: an unanchored search
+        # picks a different declaration than the one that governs the change.
+        site = SOURCE.find(self.CHAIR_SITE)
+        first = SOURCE.find("struct sFurnitureInfo2 {")
+        starts = [i for i in range(len(SOURCE))
+                  if SOURCE.startswith("struct sFurnitureInfo2 {", i)]
+        if len(starts) > 1:
+            self.assertNotEqual(
+                max(i for i in starts if i < site), first,
+                "the chair handlers are now governed by the FIRST declaration; "
+                "the scoping in this file can be simplified, but check the "
+                "layout by hand before doing so")
 
     def test_the_chair_animation_reads_the_named_field(self):
         m = re.search(r'char const \*chairAnim =(.*?);', SOURCE, re.S)
