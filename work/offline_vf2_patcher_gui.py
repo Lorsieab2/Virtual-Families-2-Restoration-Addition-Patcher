@@ -308,7 +308,9 @@ class WaitWindow(tk.Toplevel):
             # negative value would mean off-screen, so clamp.
             x = max(0, (self.winfo_screenwidth() - width) // 2)
             y = max(0, (self.winfo_screenheight() - height) // 2)
-        self.geometry(f"+{x}+{y}")
+        x_offset = f"+{x}" if x >= 0 else str(x)
+        y_offset = f"+{y}" if y >= 0 else str(y)
+        self.geometry(f"{x_offset}{y_offset}")
 
     def _take_grab(self) -> None:
         """Grab input, retrying until the window manager has mapped us.

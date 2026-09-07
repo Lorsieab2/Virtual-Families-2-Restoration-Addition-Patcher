@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import re
 import sys
 import tempfile
 import threading
@@ -835,10 +836,11 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
             wait.close()
 
         self.assertIn("spec", placed, "_center never positioned the window")
-        x_text, _, y_text = placed["spec"].lstrip("+").partition("+")
-        self.assertLess(int(x_text), 0,
+        match = re.fullmatch(r"([+-]\d+)([+-]\d+)", placed["spec"])
+        self.assertIsNotNone(match, "invalid Tk geometry: %r" % placed["spec"])
+        self.assertLess(int(match.group(1)), 0,
                         "a negative parent x was clamped: %r" % placed["spec"])
-        self.assertLess(int(y_text), 0,
+        self.assertLess(int(match.group(2)), 0,
                         "a negative parent y was clamped: %r" % placed["spec"])
 
     def test_centering_without_a_parent_still_clamps_to_the_screen(self):
@@ -853,15 +855,18 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         wait = gui.WaitWindow(self.root, "Please wait", "Please wait" + ELLIPSIS,
                               modal=False)
         try:
+            wait.winfo_screenwidth = lambda: 1
+            wait.winfo_screenheight = lambda: 1
             wait.geometry = lambda spec: placed.setdefault("spec", spec)
             wait._center(HiddenParent())
         finally:
             wait.close()
 
         self.assertIn("spec", placed, "_center never positioned the window")
-        x_text, _, y_text = placed["spec"].lstrip("+").partition("+")
-        self.assertGreaterEqual(int(x_text), 0)
-        self.assertGreaterEqual(int(y_text), 0)
+        match = re.fullmatch(r"([+-]\d+)([+-]\d+)", placed["spec"])
+        self.assertIsNotNone(match, "invalid Tk geometry: %r" % placed["spec"])
+        self.assertGreaterEqual(int(match.group(1)), 0)
+        self.assertGreaterEqual(int(match.group(2)), 0)
 
     def test_a_failure_in_the_work_surfaces_on_the_main_thread(self):
         # Captured on the worker and re-raised here, otherwise it vanishes
@@ -1049,7 +1054,7 @@ class UpdatesLinkTests(unittest.TestCase):
         # the sync rule that generates the tests/ copy rewrites ROOT / "src"
         # to ROOT / "src", which would make this compare src against itself and
         # never detect the drift it exists to catch.
-        shipped = ROOT.joinpath("src", "offline_vf2_patcher_gui.py")
+        shipped = ROOT.joinpath("work", "offline_vf2_patcher_gui.py")
         public = ROOT.joinpath("src", "offline_vf2_patcher_gui.py")
         self.assertEqual(shipped.read_bytes(), public.read_bytes())
 

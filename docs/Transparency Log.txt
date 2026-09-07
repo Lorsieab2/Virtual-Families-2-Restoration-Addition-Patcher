@@ -3003,3 +3003,13 @@ B182 CURRENT ADDED-FURNITURE ROUTING STATUS.
   `GetRandom(3) + 4` work interval. It now uses `GetRandom(11) + 55`, matching
   the receiving treatment's approximately one-minute real-time interval. This
   is a source/test change only until a generated build and live player check.
+
+B183 REVIEW-FINDING FOLLOW-UPS.
+
+- The GUI centering regression test now exercises a screen smaller than the
+  popup for the fallback branch and parses both valid positive and negative Tk
+  offsets. The GUI formatter now emits valid Tk geometry for negative virtual
+  desktop coordinates instead of `+-123+-456`; the mirrored `src/` and `work/`
+  implementations remain identical.
+- The release verifier follow-up is isolated in PR #222. Its automatic review
+  is still pending; no release or player claim is made here.
