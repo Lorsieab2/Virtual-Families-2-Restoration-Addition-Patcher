@@ -40,8 +40,26 @@ verifies were absent. If the answer is "the same thing", it is not evidence.
 Run this before merging, every time:
 
 ```
-git diff --stat origin/main...<your branch>
+git diff --stat origin/main <branch>
 ```
+
+Note the **two dots' worth of difference**: `origin/main...<branch>` (three
+dots) means "changes on the branch since it diverged", which is what the pull
+request shows and is exactly the wrong question here. It is defined as
+`git diff $(git merge-base A B) B`, so it **cannot** show content that exists
+only on `main` — and content missing from your branch but present on `main` is
+precisely what this check is looking for. Use the endpoint comparison above,
+which compares the two trees as they actually are.
+
+Measured on a real stale branch in this repository:
+
+```
+three-dot (origin/main...<branch>):   2 files changed,  9 deletions
+two-dot   (origin/main  <branch>):   24 files changed, 2075 deletions
+```
+
+The three-dot form hid 2,066 deletions and 22 files. That is the difference
+between seeing a branch revert someone else's work and not seeing it.
 
 Look for **deletions in any file your change has no business touching**.
 
@@ -61,12 +79,20 @@ If a change makes any toggle combination fail to build, or leaves a feature
 inert while its flag is on, that is a shipped regression even if every test
 passes.
 
-**Feature flags default to `0` in a fresh build.** If you launch the game and
-nothing crashes, you have proven only that the gated code never ran. Set the
-flags by **walking the PE section table** — the offsets move between builds.
-Three different offsets have already been observed for the same flag:
-`0x19C400`, `0x1B0E00`, `0x1B1600`. Reusing a remembered offset writes into
-the wrong section and tests nothing.
+**Most feature flags default to `0` in a fresh build.** If you launch the game
+and nothing crashes, you have usually proven only that the gated code never
+ran. Set the flags by **walking the PE section table** — the offsets move
+between builds. Three different offsets have already been observed for the
+same flag: `0x19C400`, `0x1B0E00`, `0x1B1600`. Reusing a remembered offset
+writes into the wrong section and tests nothing.
+
+**Check the default rather than assuming it is off.** Not every gate is
+opt-in: `VF2_ENABLE_HOLIDAY_BODY_TYPES` defaults to `"1"`, because holiday
+body rows are part of the normal additive build, and it affects generated
+descriptors and assets. For a change behind a default-on gate, a plain launch
+*does* exercise the gated code, and dismissing that as "the flag was off"
+throws away valid runtime evidence. Read the `os.environ.get` default in
+`work/patch_mobile_furniture_pack.py` for the specific flag you care about.
 
 ## 4. Two-way validate every fix
 

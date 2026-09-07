@@ -90,8 +90,21 @@ log (ID 1000) retains roughly two months, not fourteen days.
 > are included within the patcher and don't rely on outside, owner-exclusive
 > files!!!
 
-`validate_clean_package` enforces this on every build: it rejects owner paths,
-private keys and token-shaped values in the shipped bytes.
+Two different validators cover two different halves of this, and confusing
+them gives a false sense of safety:
+
+- `validate_mod_assets_present()` and `validate_runtime_payload_contract()`
+  check that required assets are actually THERE. These are the ones that fail
+  when an owner-provided sprite is missing.
+- `validate_clean_package()` checks that nothing which should NOT ship has
+  shipped: owner paths, private keys and token-shaped values in the bundled
+  bytes. **It has no required-asset inventory**, so it passes unchanged when a
+  required sprite is absent.
+
+An earlier version of this file credited `validate_clean_package` with
+enforcing asset inclusion. That was wrong, and wrong in the most dangerous
+direction: it named a check that prints the same result whether or not the
+asset is present.
 
 ## Documentation
 
