@@ -12,6 +12,7 @@ stock-donor additions rely on the game's native hotspot path. A doc that blurs
 the two would be claiming something the build cannot support.
 """
 import hashlib
+import json
 import unittest
 from pathlib import Path
 
@@ -65,6 +66,37 @@ ROUTED.update({
     "HomeGymSystemStd",
     "PingPongTableStd",
 })
+
+
+def _behavior_patches_enabled():
+    """Was this build made with behaviour patches on?
+
+    Read from BehaviorPatchesGate in a build manifest, which the generator
+    writes from the environment flag rather than from what it emitted. Returns
+    None when no manifest is available, so callers can skip rather than guess.
+    """
+    # The generator writes its manifest to VF2_PATCH_OUT, which defaults to
+    # outputs/VF2-Mobile-Additive-Furniture-Pack. The work/ paths are
+    # checked too so a differently-staged tree still resolves.
+    import os
+    out = Path(os.environ.get(
+        "VF2_PATCH_OUT",
+        ROOT / "outputs" / "VF2-Mobile-Additive-Furniture-Pack"))
+    for candidate in (
+        out / "patch-manifest.json",
+        ROOT / "work" / "patch-manifest.json",
+        ROOT / "work" / "patched_mobile_furniture_pack_objs" / "patch-manifest.json",
+    ):
+        if not candidate.is_file():
+            continue
+        try:
+            data = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        gate = data.get("BehaviorPatchesGate")
+        if isinstance(gate, dict) and "enabled" in gate:
+            return bool(gate["enabled"])
+    return None
 
 
 def _added_items():
@@ -182,14 +214,25 @@ class TestTheEmittedDispatcherAgreesWithTheDocs(unittest.TestCase):
         # unconditionally made this test FAIL on a perfectly good tree and
         # report a defect that was not there -- a check that cannot tell a
         # configuration from a bug.
-        # _added_items() maps name -> item_id, so iterate the mapping rather
-        # than treating its keys as records.
-        added = _added_items()
-        self.behavior_patches_on = any(
-            f"{added[name]:#x}".lower() in self.dispatcher.lower()
-            for name in BEHAVIOR_PATCH_ROUTED
-            if name in added
-        )
+        # READ THE CONFIGURATION FROM AN INDEPENDENT MARKER, NOT FROM THE
+        # OUTPUT UNDER TEST.
+        #
+        # Inferring "behaviour patches was on" from the presence of its routes
+        # is circular: a build that loses ALL FOUR routes then reads as
+        # "feature off", the direct-route test skips past them, the
+        # behaviour-patches test skips entirely, and a total regression
+        # reports success. The check would be strongest exactly when it is
+        # needed least.
+        #
+        # The generator writes manifest["BehaviorPatchesGate"]["enabled"]
+        # alongside the routes, from the flag itself rather than from what was
+        # emitted, so it still says True when the routes are missing.
+        self.behavior_patches_on = _behavior_patches_enabled()
+        if self.behavior_patches_on is None:
+            self.skipTest(
+                "no build manifest names BehaviorPatchesGate, so the build "
+                "configuration cannot be established independently of the "
+                "routes being validated; these checks would be circular")
 
     def test_no_placeholder_survived_into_the_dispatcher(self):
         # The failure this guards against emits the placeholder literally and
