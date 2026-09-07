@@ -2999,3 +2999,7 @@ B182 CURRENT ADDED-FURNITURE ROUTING STATUS.
   giver no longer appends the donor chaise walk after a manual drop. Generated
   build validation and player/runtime QA remain separate gates; no player claim
   is made by this source update.
+- Follow-up verification found the manual giver branch still used the old
+  `GetRandom(3) + 4` work interval. It now uses `GetRandom(11) + 55`, matching
+  the receiving treatment's approximately one-minute real-time interval. This
+  is a source/test change only until a generated build and live player check.

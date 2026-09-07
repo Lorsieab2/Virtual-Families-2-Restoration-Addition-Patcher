@@ -28567,7 +28567,9 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
 
         plans->ForgetPlans(villager, false);
         VF2SetActionLabel(villager, kVF2SpaGivingLabels[receiving]);
-        plans->PlanToWork(ldwGameState::GetRandom(3) + 4);
+        // Match the receiving treatment's roughly one-minute real-time
+        // duration.  This is the giver's active treatment interval.
+        plans->PlanToWork(ldwGameState::GetRandom(11) + 55);
         plans->StartNewBehavior(villager);
         return true;
     }
