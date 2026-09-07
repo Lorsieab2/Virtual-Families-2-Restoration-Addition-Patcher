@@ -28631,6 +28631,40 @@ static int VF2FindFreeSpaLoungerSlot(CVillager &villager)
     return -1;
 }
 
+// Is the placement FindFurniture or LinkPeepToFurniture just matched a spa
+// lounger?
+//
+// Identified by the PLACEMENT HANDLE, never by hit-testing info.point.
+// info.point is the WALK-TO ANCHOR -- the placement position plus the fmap's
+// hotspot offset -- so asking which furniture contains it means asking which
+// item the villager is standing INSIDE, and for anything they stand beside the
+// answer is -1. That mistake once left a villager at the Ping-Pong Table
+// labelled "Playing pool".
+//
+// AddToWorld stamps every placement with a unique handle at record[+0x04] and
+// FindFurniture hands that field straight back as info.unknown0, so the record
+// it matched can be named exactly. Two chaises of the same type are
+// indistinguishable by position and distinguishable by handle, which is the
+// whole point here.
+//
+// 0x200 is the array's real capacity, from AddToWorld's own
+// `cmp [edi+0x1004], 0x200 / jge` guard, not a guess.
+static bool VF2SpaLoungerHasHandle(int handle)
+{
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return false;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        if (*reinterpret_cast<int *>(record + 0x04) != handle) continue;
+        int itemId = *reinterpret_cast<int *>(record);
+        return itemId == __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ ||
+               itemId == __VF2_SPA_LOUNGER_ITEM_ID__;
+    }
+    return false;
+}
+
 static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
 {
     if (!VF2SpaAdult(villager)) return false;
@@ -28645,20 +28679,14 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
     // nearest-first, so an ordinary chaise closer to the villager wins and the
     // treatment plays out on normal furniture under a spa label.
     //
-    // Ask FindFurniture first, because it is READ-ONLY: it answers the same
-    // nearest-match question the link would, without reserving anything. A
-    // link placed and then abandoned would strand an ordinary chaise against a
-    // villager who is not going to use it.
+    // Ask before linking, with the read-only FindFurniture: it reserves
+    // nothing, so it cannot steal the reservation the link is about to make.
     sFurnitureInfo2 probe = {};
     if (!FurnitureManager.FindFurniture(
-            CContentMap::eObjectChaise, villager.FeetPos(), probe, true, 0, false)) {
+            CContentMap::eObjectChaise, villager.FeetPos(), probe, true, 0, 0)) {
         return false;
     }
-    int const probedItem = VF2FurnitureItemAtPoint(probe.point);
-    if (probedItem != __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ &&
-        probedItem != __VF2_SPA_LOUNGER_ITEM_ID__) {
-        return false;
-    }
+    if (!VF2SpaLoungerHasHandle(probe.unknown0)) return false;
 
     sFurnitureInfo2 info = {};
     if (!FurnitureManager.LinkPeepToFurniture(
@@ -28666,14 +28694,10 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
         return false;
     }
 
-    // The probe and the link are separate calls, so confirm the link landed on
-    // the same kind of item rather than assuming the world held still between
-    // them.
-    int const linkedItem = VF2FurnitureItemAtPoint(info.point);
-    if (linkedItem != __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ &&
-        linkedItem != __VF2_SPA_LOUNGER_ITEM_ID__) {
-        return false;
-    }
+    // The probe and the link are separate calls, so confirm the LINK landed on
+    // a spa lounger too rather than assuming the world held still between
+    // them. This is the check that actually gates the treatment.
+    if (!VF2SpaLoungerHasHandle(info.unknown0)) return false;
 
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
     plans->ForgetPlans(villager, false);
