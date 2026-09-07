@@ -1,6 +1,6 @@
 {
- "matrix_id": "vf2-19-variant-toggle-matrix-v1",
- "note": "Stable 19-variant feature-toggle matrix shared across releases. Flags map 1:1 to the generator's VF2_ENABLE_* environment variables (see work/build_matrix.ps1). mobile_renovations and ai_generated_bathroom2 are always paired: the mobile renovation renderer and the Bathroom 2 overlay ship or skip together in every existing variant.",
+ "matrix_id": "vf2-32-variant-toggle-matrix-v1",
+ "note": "Stable 32-variant feature-toggle matrix shared across releases. Flags map 1:1 to the generator's VF2_ENABLE_* environment variables (see work/build_matrix.ps1). Six toggles would yield 64 combinations, but mobile_renovations and ai_generated_bathroom2 are always paired, reducing the deliberate matrix to 32; the mobile renovation renderer and the Bathroom 2 overlay ship or skip together in every variant.",
  "variants": [
   {
    "name": "core",

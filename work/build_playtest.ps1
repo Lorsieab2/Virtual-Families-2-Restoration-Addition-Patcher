@@ -1,6 +1,6 @@
 # Fast, single-configuration playtest build. Wraps the exact recipe used by
 # build_matrix.ps1's per-variant loop (generator -> build_b119.bat link) but
-# for ONE build instead of the full 19-variant matrix, with upfront checks for
+# for ONE build instead of the full 32-variant matrix, with upfront checks for
 # the local, gitignored support directories a fresh checkout/worktree won't
 # have (these are what actually ate the time on 2026-08-16: the matrix/link
 # scripts assume they're already there and fail deep into a cryptic LNK1181
