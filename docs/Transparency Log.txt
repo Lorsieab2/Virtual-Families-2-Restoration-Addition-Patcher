@@ -2750,3 +2750,145 @@ The crash is in theGameState's CONSTRUCTOR, and it is deterministic
   decision. Until then the accurate statement is that the emptied
   geometry was sufficient to trigger the crash, not that the crash is
   understood.
+
+
+B182 the crash is a stack displacement, and it was never a build regression
+- TWO EARLIER CONCLUSIONS IN THIS LOG ARE WRONG AND ARE CORRECTED HERE. The
+  entry above closes by saying the emptied furniture geometry was "sufficient
+  to trigger the crash", and it rules out a one-slot displacement. Both are
+  false. The geometry is not sufficient and not necessary, and a one-slot
+  displacement is exactly what occurs.
+
+- IT WAS NEVER A B179-TO-B180 REGRESSION. The whole investigation was bracketed
+  between a build that was believed to work and one that crashed. That bracket
+  was an artifact of which options happened to be enabled. Setting the
+  Mobile Furniture Behaviors flag byte .vf2beh from 01 to 00, with every asset
+  and every other flag untouched, stops the crash on BOTH builds:
+      B180 stock                          crash
+      B180 with .vf2beh=0                 no crash
+      B179 stock                          crash
+      B179 with .vf2beh=0                 no crash
+      .vf2beh=1, all four other flags 0   crash
+      .vf2beh=0, all four other flags 1   no crash
+  The flag is necessary and sufficient, on both builds. B179 crashes too when
+  the feature is on; it was never the working control it was taken to be.
+
+- THE MECHANISM IS A FOUR-BYTE STACK DISPLACEMENT, proven arithmetically rather
+  than argued. In the faulting frame the stack holds [esp+0] = 0, the value
+  pop edi should take, and [esp+4] = the object pointer, the value pop esi
+  should take. Correct execution followed by the caller's inc edi would leave
+  edi = 1 and esi = the pointer. Observed is the exact opposite: edi holds
+  pointer + 1 and esi holds a small integer. The two registers took each
+  other's slots, one slot apart, and the inc then landed on the pointer. This
+  holds in every dump in which the game itself faulted -- six at the time of
+  writing, across four different builds. ebx is a third casualty: it is loaded
+  once from [ebp+8] and never rewritten, yet holds a small integer where the
+  pointer belongs.
+
+- ONE DUMP IS EXCLUDED AND THE REASON IS RECORDED RATHER THAN OMITTED. A
+  seventh dump exists from a diagnostic build and does not show the pattern,
+  because it is not the game's own fault. That build carried a hand-written
+  byte patch intended to force one branch, and the patch was malformed: a
+  six-byte conditional jump was replaced by a five-byte unconditional one
+  while reusing the original displacement, so it landed one byte early, in the
+  middle of an instruction. The process executed rubbish and faulted at an
+  address inside no module at all. It measured nothing about the game. It is
+  named here rather than quietly dropped, because a record that silently
+  discards its inconvenient sample is not a record.
+  The lesson generalises: that patch was produced after verifying the bytes AT
+  the target offset were the expected ones, and without decoding the
+  replacement to confirm it still branched to the same place. Verify the
+  output of a patch, not its input.
+
+- THE PRECEDING ENTRY'S REASONING FAILED FOR A SPECIFIC REASON WORTH KEEPING.
+  It dismissed the one-slot form on the grounds that the saved-esi slot lies in
+  the caller's frame, above the loop body's own. That is true and irrelevant:
+  the displacement is in the loop body's OWN epilogue, whose pops run before
+  mov esp,ebp reloads esp, so they read the loop body's own frame at a
+  four-byte offset. The frame-size constraint that produced the dismissal was
+  derived from the wrong candidate word.
+
+- CREDIT WHERE IT IS DUE. The automated reviewer identified this mechanism on
+  pull request 198 and was told it was wrong. Its finding was retracted by one
+  session and that retraction was reinforced by another. Both were mistaken and
+  the reviewer was right. The evidence was in the dumps throughout.
+
+- WHAT IS ELIMINATED, each by a controlled test rather than by argument. The
+  five furniture maps, by a single-variable swap on a hash-verified tree that
+  still crashed. All four added autonomous behaviours, by patching each
+  candidate-enable immediate to zero individually and then all four together,
+  with the flag still on, and crashing in all five runs. The C++ ABI boundary,
+  by cross-checking every extern "C" declaration against its definition for
+  convention and argument count: 85 declarations, 177 definitions, zero
+  mismatches. The injected selection payload, which balances on both paths. The
+  autonomous selector's calling convention, which reads exactly its two
+  declared arguments against a caller that cleans eight bytes. The four rebound
+  handlers, which all save and restore ebx, esi and edi. The picker's dispatch
+  bounds. The candidate array, identical between builds with nothing above id
+  0x199. The hairstyle icons, a deliberate cosmetic change.
+
+- THE INSTRUCTION IS NOW IDENTIFIED, AND IT IS A SKIPPED POP RATHER THAN A
+  STRAY PUSH. Every push and pop in the function is present and correctly
+  paired; one branch jumps over one of them. The stock loop body saves ebx at
+  0x4C7C69 and restores it at 0x4C8526, and the injected selector payload's
+  handled path jumps from 0x4C84F9 straight to the common epilogue at
+  0x4C853E, past that restore. The disassembler's own stack-depth column
+  states it plainly: the branch leaves at -3328 and its target expects -3324,
+  a four-byte gap. The epilogue's pops then take the wrong slots. pop edi
+  receives the saved ebx, which held the villager pointer, and the caller's
+  inc edi makes it pointer + 1. pop esi receives the saved edi, a counter
+  bounded to ten, which is the 0, 1 or 2 the faulting instruction
+  dereferences. ebx is never restored at all. One skipped pop accounts for all
+  three registers.
+
+- WHY IT WAS NOT FOUND SOONER, which is the part worth carrying forward. One
+  audit compared every call site against its callee's declared return, and
+  every one matched. Another checked push and pop balance within each
+  function, and the totals balanced. Neither models a BRANCH THAT SKIPS A
+  RESTORE, and no push/pop tally ever will: the counts are correct and only
+  one path through the function is wrong. A whole-program stack-depth analysis
+  reports every path reaching the epilogue at the same depth precisely because
+  it reconciles at merge points, which is exactly where this hides.
+
+- ONLY THIS INJECTION HAS THE PATTERN. Three emitted payloads in the generator
+  contain a branch near an epilogue. Two of them replace the epilogue outright
+  and re-emit its pops themselves, so every restore is theirs to honour. The
+  third jumps into an epilogue it does not own and inherits an assumption it
+  does not satisfy. A sweep of all 4884 functions for branches whose stack
+  depth disagrees with their target's found twenty-nine, but the same sweep on
+  the retail executable found thirty-one, so the shape alone proves nothing:
+  it is the jump into someone else's epilogue that is the defect.
+
+- THE TEST PINNED THE DEFECT IN PLACE. The existing check asserts the faulty
+  branch bytes are PRESENT; it does not assert that registers survive across
+  them. So the suite stayed green over a crash-causing defect for as long as
+  the defect existed, and would have gone red had anyone fixed it. A test that
+  asserts a byte pattern exists is not a test that the code is correct, and
+  this one actively defended the bug. It has to change alongside the fix.
+
+- THE ORIGIN IS COMMIT 535334a, "Add autonomous mobile holiday behaviors".
+
+- AND IT IS NOW CONFIRMED AT RUNTIME. A build made from the corrected source,
+  with the feature enabled, ran to a clean exit and wrote no crash dump. The
+  unfixed build, same install and same assets, faulted with the same access
+  violation and wrote one. Only the executable differed, so the difference is
+  the fix rather than the environment. That is the evidence this entry was
+  waiting for, and it is what distinguishes a diagnosis from a cure.
+
+- TWO BUILD HAZARDS MADE THAT TEST EASY TO GET WRONG, and both would have
+  produced a false pass. The intermediate objects are untracked build products
+  and the one on disk predated the fix, still carrying the pre-fix byte
+  sequence, so the patch had to be applied from the pristine object and the
+  build directory rewritten; a build reusing the old directory links the old
+  object and the fix does nothing while every source-level check passes. And a
+  fresh build ships every feature flag at zero, so the flag has to be set
+  explicitly before testing: without that the feature never runs and "no crash"
+  means only that the code under test was never reached.
+
+- A METHOD WARNING EARNED THREE TIMES IN ONE DAY. Three separate stack-imbalance
+  scanners, written independently, each produced a confident false positive on
+  this binary: one flagged a stock helper with 567 callers and no cleanup at any
+  of them, one swept an inner call's stack adjustment into an adjacent function's
+  epilogue, and one decoded an injected stub without the host prologue whose
+  registers it restores. Validate any such detector against a known-good control
+  before believing a hit.
