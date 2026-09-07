@@ -102,13 +102,26 @@ class TestTheRoutedAndUnroutedSplitIsReal(unittest.TestCase):
             "the Home Gym System does nothing. If they genuinely now work, "
             "this test is the wrong thing to edit -- the route is.",
         )
-        self.assertIn("HandleDropOnHotSpot", row)
+        self.assertIn("outside the mobile dispatcher", row)
         # And every remaining item is named, so none is quietly dropped from
         # the outstanding list.
         for name, item_id in _added_items().items():
             if name in UNROUTED:
                 with self.subTest(item=name):
                     self.assertIn(f"0x{item_id:03X}", row)
+        # The same row must also acknowledge the four stock donors now routed
+        # through the mobile dispatcher; otherwise the route split and ledger
+        # can silently contradict one another.
+        for name, item_id in _added_items().items():
+            if name in ROUTED and name in {
+                "InvisibleYogaEquipment",
+                "ExerciseBikeStd",
+                "HomeGymSystemStd",
+                "PingPongTableStd",
+            }:
+                with self.subTest(item=name):
+                    self.assertIn(f"0x{item_id:03X}", row)
+        self.assertIn("mobile-dispatcher routes", row)
 
 
 class TestTheEmittedDispatcherAgreesWithTheDocs(unittest.TestCase):
@@ -141,6 +154,10 @@ class TestTheEmittedDispatcherAgreesWithTheDocs(unittest.TestCase):
             "InvisiblePatioTable",
             "InvisibleSpaLounger",
             "SpaLoungerStd",
+            "InvisibleYogaEquipment",
+            "ExerciseBikeStd",
+            "HomeGymSystemStd",
+            "PingPongTableStd",
         ):
             with self.subTest(item=name):
                 self.assertIn(f"{items[name]:#x}".lower(), self.dispatcher.lower())
