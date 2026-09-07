@@ -3994,6 +3994,7 @@ The current bytes are right, so this is a hole in the check rather than a
 defect in the data.
 
 
+
 ## A borrowing item was given a map authored for the donor's own name
 
 `ee5c306` routed borrowing furniture items onto the donor's desktop-safe map.
@@ -4143,3 +4144,262 @@ no crash proves only that the gated code never ran. Diffing a fresh build
 against a flag-enabled one gives a handful of differing bytes, of which the
 flag is one and the rest are build timestamps — the code is identical, so the
 flag is the whole difference between a real test and a meaningless one.
+## The startup crash is a NULL dereference, not a bad villager pointer
+
+Read from the dumps' EXCEPTION RECORDS, which no earlier entry had opened.
+Every prior theory was framed around the villager record being unmapped,
+freed, or moved; all of them are wrong, and the parameter array says so
+directly.
+
+### The faulting address is the value in esi
+
+`EXCEPTION_ACCESS_VIOLATION` carries two parameters: the access type and the
+address. Across all five dumps:
+
+    B180 #44912   READ at 0x0    esi = 0
+    B180 #18188   READ at 0x0    esi = 0
+    B180 #56108   READ at 0x1    esi = 1
+    B181 #25632   READ at 0x2    esi = 2
+    B181 #48596   READ at 0x0    esi = 0
+
+The faulting address EQUALS esi in every one. The instruction is
+`cmp dword ptr [esi], 0`, so this is a null or near-null dereference. Nothing
+was unmapped and nothing was freed: esi simply is not a pointer any more.
+
+### The frame is intact and the callee has returned
+
+`ebp` is `0x42A168` and `esp` is `0x42A148`, exactly the `ebp - 0x20` that
+`push ebp / sub esp,0x14 / push ebx,esi,edi` produces, so the frame is fully
+built and undamaged. Scanning 0x200 bytes of stack finds exactly one
+executable return address, `0x4CBFAB` -- the CALLER. There is no frame beneath
+this one, so whatever the retry loop called had already returned normally.
+
+### What the register state does and does not tell us
+
+The enclosing function writes esi ONCE, at entry from ecx, and never again;
+edi is zeroed at entry and only incremented. The loop reads `[esi]` twice:
+
+    +0x28  cmp [esi], edi     <- succeeds
+    +0x38  call <the loop body>
+    +0x3D  inc edi
+    +0x3E  cmp [esi], 0       <- FAULTS
+
+Had esi been bad on entry the fault would be at +0x28, not +0x3E. So esi was
+valid, one call ran and returned, and esi came back as 0, 1 or 2. edi at the
+same moment holds a POINTER-shaped value (`0x785A91`, `0x9E2515`) where a
+0..10 counter belongs.
+
+The loop body has exactly ONE return path, and it ends:
+
+    pop edi
+    pop esi
+    call __security_check_cookie
+    mov esp, ebp
+    pop ebp
+    ret 4
+
+An earlier revision of this entry argued that the trailing `mov esp, ebp`
+makes the restore unspoilable, and therefore ruled out the loop body as the
+source of the bad registers. THAT ARGUMENT IS WRONG, and it is recorded here
+so it is not made a third time. The two pops execute BEFORE `mov esp, ebp`.
+If the loop body reaches its epilogue with `esp` displaced -- an unbalanced
+push, or wrong argument cleanup on some path -- then `pop edi` and `pop esi`
+read the WRONG STACK SLOTS, and the later `mov esp, ebp` repairs only the
+stack pointer so the function can still return. It cannot undo registers that
+were already loaded from the wrong addresses. The order of those instructions
+is what matters, and it defeats the argument.
+
+So the stack-balance hypothesis is NOT excluded. It also fits a measurement
+this entry had treated as evidence against corruption: in all five dumps
+`edi` is exactly `arg_0 + 1`, and `arg_0` falls on the caller's own object
+stride `this + 0x1CC70 + k * 0x1CC0C` (k = 0 and k = 2 both observed). A pop
+taken from a neighbouring slot is precisely how a register ends up holding a
+value that is adjacent to, but not equal to, a live pointer.
+
+What the dumps do establish is that the fault is not a stale or freed object.
+Live memory read from the dumps at `arg_0` is a well-formed object whose first
+dword is 3, not 0 -- so for the real object the loop condition `*this == 0` is
+false and the loop should have exited rather than faulted -- and the caller's
+own frame is intact at the fault, with `ebp - esp` exactly `0x20`, the value
+its prologue produces.
+
+### What was checked and came back clean
+
+- The loop body's epilogue is `pop edi`, `pop esi`, cookie check,
+  `mov esp,ebp`, `pop ebp`, `ret 4`. Recorded as measured. Note the pops come
+  FIRST -- see above for why that does not clear the loop body.
+- `__security_check_cookie` at `0x4D3B90`: `cmp ecx, ___security_cookie`,
+  `jnz`, `retn`, and on the failure path `jmp` to the report routine. It
+  touches neither esi nor edi.
+- The loop body reaches 26 distinct call targets; they were enumerated. Many
+  use esp-based frames rather than the `mov esp, ebp` form. This enumeration
+  is recorded for completeness and does NOT clear them -- see below for why a
+  push/pop tally cannot decide the question either way.
+
+### RESOLVED: a branch that skips a restore
+
+The mechanism is now identified, and it is a SKIPPED POP rather than a stray
+push. Every push and pop in the loop body is present and correctly paired;
+one branch jumps over one of them.
+
+    0x4C7C69  push ebx          stock save
+    0x4C8526  pop ebx           stock restore
+    0x4C84F9  jnz 0x4C853E      INJECTED -- jumps straight to the epilogue
+    0x4C853E  mov ecx,[ebp-4] / pop edi / xor ecx,ebp / pop esi / ...
+
+The injected selector's handled path branches past the stock `pop ebx`, so the
+epilogue runs with four extra bytes still on the stack. The disassembler's own
+stack-depth column states it: the branch leaves at `-3328` and its target
+expects `-3324`.
+
+Every register anomaly recorded above falls out of that one skipped pop:
+
+- `pop edi` takes the saved-ebx slot, which held the villager pointer, and the
+  caller's `inc edi` makes it pointer + 1
+- `pop esi` takes the saved-edi slot, a counter bounded to ten -- the 0, 1 or 2
+  the faulting instruction dereferences
+- `ebx` is never restored at all
+
+So the stack-balance hypothesis was right in shape, and the reason it could not
+be confirmed is recorded below.
+
+The fix restores the missing pop on the handled path, and it is confirmed at
+runtime: a build made from the corrected source, with the feature enabled, ran
+to a clean exit and wrote no crash dump, while the unfixed build on the same
+install and the same assets faulted and wrote one. Only the executable
+differed. The test that previously pinned the faulty bytes now asserts the
+register is restored, and fails if the payload is reverted.
+
+Two build hazards made that test easy to get wrong, and both would have
+produced a false pass rather than a visible failure. The intermediate objects
+are untracked build products and the one on disk predated the fix, so the patch
+had to be applied from the pristine object -- a build reusing the old directory
+links the old object and the fix does nothing while every source-level check
+passes. And a fresh build ships every feature flag at zero, so the flag has to
+be set explicitly; without that the feature never runs and a clean exit proves
+only that the code under test was never reached.
+
+### Why the earlier analyses could not see it
+
+What is established is only that two shortcuts do not work. A linear push/pop
+scan cannot distinguish a callee-save from an argument push: the shipped loop
+body shows five `push esi` against one `pop esi`, and four of those five are
+arguments. And the trailing `mov esp, ebp` does not protect the pops that
+precede it. Three separate attempts on this crash have now reached a
+confident conclusion by one of those two routes and had to retract it.
+
+Neither shortcut could have found the real defect, and that is the transferable
+lesson. A push/pop tally counts instructions and this function's counts are
+correct. A whole-program stack-depth analysis reports every path reaching the
+epilogue at the same depth, because it reconciles at merge points -- which is
+precisely where a branch that skips a restore hides. The defect is visible only
+by comparing a branch's stack depth against its TARGET's, which is what finally
+found it.
+
+The furniture maps are not implicated and never were. The correlation with the
+B179-to-B180 delta was an artifact of which options happened to be enabled: the
+same crash reproduces on B179 with the feature on, and disappears on B180 with
+it off.
+
+### The saved-register slots, and the relation that pointed at the answer
+
+`sub_4C8660`'s prologue is `push ebp / mov ebp,esp / sub esp,0x14 / push ebx /
+push esi / push edi`, so its own saved registers sit at `[ebp-0x18]` (ebx),
+`[ebp-0x1C]` (esi) and `[ebp-0x20]` (edi). Reading those out of the dumps:
+
+    dump          live esi   live edi     [ebp-0x18]   [ebp-0x1C]   [ebp-0x20]
+    B180 #18188      0      0x012E2515    0x00000001   0x012E2514   0x00000000
+    B180 #44912      0      0x009E2515    0x00000001   0x009E2514   0x00000000
+    B180 #56108      1      0x0131BD2D    0x00000003   0x0131BD2C   0x00000000
+    B181 #25632      2      0x00785A91    0x00000000   0x00785A90   0x00000000
+    B181 #48596      0      0x00785A91    0x00000000   0x00785A90   0x00000000
+
+MEASUREMENT, exact in all five dumps: `live edi == [ebp-0x1C] + 1`. That slot
+is the SAVED ESI slot, and it still holds the correct object pointer. The
+caller's `inc edi` immediately before the fault accounts for the `+ 1`.
+
+IT IS ONE FACT, NOT TWO. `[ebp-0x1C]` holds the same value as `arg_0`
+(`[ebp+8]`) in all five dumps, and that is structural rather than
+coincidental: the outer loop does `push esi / mov ecx,esi / call`, passing its
+own esi as BOTH the argument and ecx, and the callee pushes its incoming esi
+before overwriting esi from ecx. So "edi == saved_esi + 1" and
+"edi == arg_0 + 1" are the same statement spelled two ways. Reading it off the
+saved slot is a genuine independent confirmation of the relation, but it does
+NOT add a second data point, and it does not single out the saved-esi slot as
+the source, because that value is reachable by other routes.
+
+Also measured: the saved slots are INTACT and CORRECT. Saved esi still holds
+the real pointer and saved edi still holds 0. Nothing overwrote the stack;
+only what the live registers ended up holding is wrong. This independently
+disposes of any remaining "the object was freed or relocated" reading.
+
+A ONE-SLOT DISPLACEMENT DOES NOT EXPLAIN IT, on frame-layout grounds. The
+slots tabulated above are the CALLER's, pushed by its own prologue and popped
+by its own epilogue. The loop body has a SEPARATE frame much further down: its
+prologue is `push ebp / mov ebp,esp / sub esp,0xCF0 / ... / push esi /
+push edi`, putting its saved esi and edi at its own `ebp-0xCF4` and `-0xCF8`.
+A displacement inside the loop body's epilogue reads slots in the loop body's
+frame, which lies far BELOW the caller's `[ebp-0x1C]`; it never pops that far
+and cannot reach it. So the relation is real and this mechanism does not
+produce it.
+
+A frame-sized displacement is FALSIFIED too, and it is recorded so it is not
+retried. If the displacement were large enough for `pop edi` to reach the
+pushed argument word -- roughly the whole `0xCF0` frame -- then `pop esi`
+would have read the word above it, `[ebp+12]`. That word is `0x010B289C`,
+`0x015758A0`, `0x010B289C`, `0x0057289C`, `0x0057289C`: a pointer in every
+dump, never 0, 1 or 2.
+
+So both the small and the large displacement are ruled out, by different
+arguments, and NO mechanism currently accounts for both registers. Two
+sessions have independently reproduced the `edi` relation and neither can
+explain how edi comes to hold the object pointer at all, nor separately how
+esi comes to hold 0, 1 or 2. That is the honest state; it should not be
+written up as support for any displacement story.
+
+### The static stack-balance check, and why it does not close the question
+
+Since the epilogue argument fails, the stack-balance hypothesis was tested
+directly instead, with IDA's own SP analysis over the whole loop body
+(B181 `sub_4C7FE0`, 185 basic blocks):
+
+- Every path reaches the epilogue at the same tracked depth. The two apparent
+  predecessor/successor disagreements at `0x4C8081` and `0x4C891B` are
+  bookkeeping at jump targets, not imbalances: both routes arrive at
+  `0x4C896E` at `spd = -0xCFC`, and `spd` is `0` at `retn` on every path.
+- All 42 call sites in the loop body were checked against their callee's
+  actual `retn N`. Every site's cleanup matches the callee's purge, and no
+  callee has inconsistent purge values across its returns.
+
+So there is no STATICALLY visible imbalance. That is worth recording, but it
+does NOT clear the hypothesis, for the same reason the epilogue argument
+failed: this is a whole-program, path-insensitive result that assumes each
+callee behaves as its declared return says. An imbalance produced only on a
+particular dynamic path, or by a callee that returns differently under some
+condition, would not appear here.
+
+Static analysis was taken as far as it goes on this crash, and what remained
+did need live execution — though not the hardware watchpoint this entry
+originally called for.
+
+**Settled.** The imbalance is real and dynamic, exactly as the caveat above
+predicted: the injected selector's handled path branches into the stock
+epilogue past the instruction that restores `ebx`, so the restore is skipped on
+that path only. That is invisible to both checks above — the call sites are
+balanced, and the whole-program result reconciles at the merge point the branch
+jumps to. The remaining pops then take the wrong slots, which is why `esi` holds
+a small integer rather than a pointer. Adding the missing restore on the
+injected path fixes it, confirmed by running the rebuilt game against an
+unfixed control in the same install.
+
+### Per-build addresses differ; do not reuse them
+
+B180 and B181 fault at the SAME instruction of the SAME function, but at
+different image-relative addresses, because the builds shifted by 0x430:
+
+    B180   fault rva 0xC869E   in sub_4C8660 (0x4C8660-0x4C8749), at +0x3E
+    B181   fault rva 0xC8ACE   in sub_4C8A90 (0x4C8A90-0x4C8B79), at +0x3E
+
+In B180's layout, 0xC8ACE lands in a different function entirely. Any RVA in
+this entry is only valid for the build it was measured on; re-derive it per
+binary rather than carrying it across.
