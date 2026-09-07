@@ -2585,19 +2585,50 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertEqual(helper_type, patcher.IMAGE_REL_I386_REL32)
                 raw = sec.raw_ptr + helper_vaddr - 4
                 self.assertEqual(
-                    bytes(obj.buf[raw : raw + 16]),
+                    bytes(obj.buf[raw : raw + 17]),
                     bytes([
                         0x51, 0x51, 0x56, 0xE8, 0, 0, 0, 0,
-                        0x83, 0xC4, 0x08, 0x84, 0xC0, 0x59, 0x0F, 0x85,
+                        0x83, 0xC4, 0x08, 0x84, 0xC0, 0x59, 0x74, 0x06,
+                        0x5B,
                     ]),
                 )
+                # The 0x5B is the whole point, so assert what it is FOR and not
+                # merely that the byte is present.  The stock loop body pushes
+                # ebx partway through and pops it just before the shared
+                # epilogue; a handled selection leaves through that epilogue
+                # without passing the pop, so it has to do the restore itself.
+                # This check exists because the previous version of this test
+                # pinned the emitted bytes and said nothing about registers,
+                # which let a branch that skipped the pop stay green: the
+                # epilogue's pops then took the wrong slots, the caller's
+                # villager pointer landed in edi and a small loop counter in
+                # esi, and the caller faulted dereferencing it.
+                handled = raw + 14
+                self.assertEqual(obj.buf[handled], 0x74, "handled path must branch")
+                self.assertEqual(
+                    obj.buf[handled + 2],
+                    0x5B,
+                    "handled path must pop ebx before reaching the epilogue",
+                )
+                self.assertEqual(
+                    obj.buf[handled + 3],
+                    0xE9,
+                    "handled path must jump to the epilogue after restoring ebx",
+                )
+                # And the taken side of the je must land past that jump, on the
+                # stock selection, rather than on the restore.
+                self.assertEqual(obj.buf[handled + 1], 0x06)
                 stock_branch = decide.value + 0xAB
                 stock_branch_raw = sec.raw_ptr + stock_branch
                 self.assertEqual(obj.buf[stock_branch_raw], 0xE9)
                 stock_target = stock_branch + 5 + struct.unpack_from(
                     "<i", obj.buf, stock_branch_raw + 1
                 )[0]
-                self.assertEqual(stock_target, decide.value + 0x97E)
+                # +2 against the pre-fix 0x97E: the emitted selector payload
+                # grew by two bytes when the handled path gained its own
+                # `pop ebx` before jumping to the epilogue, and this target
+                # sits after the insertion point.
+                self.assertEqual(stock_target, decide.value + 0x980)
                 target_raw = sec.raw_ptr + stock_target
                 self.assertEqual(
                     bytes(obj.buf[target_raw : target_raw + 3]),
@@ -2615,8 +2646,8 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     {
                         "branch_offset": "0xab",
                         "original_target": "0x96a",
-                        "patched_target": "0x97e",
-                        "inserted_bytes": 20,
+                        "patched_target": "0x980",
+                        "inserted_bytes": 22,
                     },
                 )
                 self.assertEqual(
@@ -2710,8 +2741,8 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                     {
                         "branch_offset": "0xb4",
                         "original_target": "0x973",
-                        "patched_target": "0x987",
-                        "inserted_bytes": 20,
+                        "patched_target": "0x989",
+                        "inserted_bytes": 22,
                     },
                 )
         finally:

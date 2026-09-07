@@ -29508,12 +29508,14 @@ def patch_mobile_furniture_external_autonomous_selection(manifest):
         0x83, 0xC4, 0x08,             # add esp, 8
         0x84, 0xC0,                   # test al, al
         0x59,                         # pop ecx ; restore stock total
-        0x0F, 0x85, 0, 0, 0, 0,       # jne stock epilogue
+        0x74, 0x06,                   # je stock selection (skip handled cleanup/jump)
+        0x5B,                         # handled path: restore stock loop EBX save
+        0xE9, 0, 0, 0, 0,             # handled path -> common stock epilogue
     ])
     struct.pack_into(
         "<i",
         payload,
-        16,
+        18,
         epilogue - selection,
     )
     obj.insert_section_bytes(sec.index, selection, bytes(payload))
