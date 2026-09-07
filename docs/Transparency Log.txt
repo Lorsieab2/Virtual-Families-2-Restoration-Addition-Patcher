@@ -2873,6 +2873,16 @@ B182 the crash is a stack displacement, and it was never a build regression
   and from the dumps; it is not yet confirmed by a build that runs. This entry
   does not claim the crash is fixed.
 
+- AND VERIFYING IT REQUIRES A FRESH BUILD, NOT A REUSED OUTPUT DIRECTORY. The
+  intermediate objects under work/patched_mobile_furniture_pack_objs/ are build
+  products and are not tracked. The VillagerAI object sitting there was
+  produced before this change and still carries the faulty branch: searching it
+  for the pre-fix byte sequence finds it, and for the corrected one finds
+  nothing. A build that reuses that directory therefore links the OLD object
+  and the source fix does nothing at all, while every source-level check still
+  passes. Regenerate the objects, or the artifact will not contain what the
+  repository says it contains.
+
 - A METHOD WARNING EARNED THREE TIMES IN ONE DAY. Three separate stack-imbalance
   scanners, written independently, each produced a confident false positive on
   this binary: one flagged a stock helper with 567 callers and no cleanup at any
