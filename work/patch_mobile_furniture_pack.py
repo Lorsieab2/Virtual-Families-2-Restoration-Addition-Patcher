@@ -26586,11 +26586,25 @@ static bool VF2RunMobileDrinkAtPatioChair(CVillager &villager)
     }
 
     plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    // READ info.orientation, NOT a raw byte offset into the struct.
+    //
+    // This used to read *(int *)((unsigned char *)&info + 0x14), which is not
+    // the orientation at all. sFurnitureInfo2 is
+    //     +0x00 unknown0, +0x04 orientation, +0x08 point.x, +0x0C point.y,
+    //     +0x10..+0x1C padding[4]
+    // so +0x14 lands in padding[1] -- uninitialised memory. The NW/NE choice
+    // was therefore effectively arbitrary and could disagree with the
+    // furniture it was chosen for, which is what "the villager uses the wrong
+    // orientation" looks like in play.
+    //
+    // The +0x14 offset IS meaningful, but for the PLACEMENT RECORD, where
+    // +0x14/+0x18 is the world position and +0x10 is the orientation. Two
+    // different structures; this code had the offsets of one and a pointer to
+    // the other. The chaise handler a few hundred lines up reads
+    // info.orientation directly, which is the correct form and the one used
+    // here now.
     char const *chairAnim =
-        *reinterpret_cast<int *>(
-            reinterpret_cast<unsigned char *>(&info) + 0x14) == 0x14
-        ? "Sit In Chair NW"
-        : "Sit In Chair NE";
+        info.orientation == 1 ? "Sit In Chair NW" : "Sit In Chair NE";
     plans->PlanToPlayAnim(
         ldwGameState::GetRandom(8) + 10, chairAnim, false, 0.02f);
     plans->PlanToPlaySound(
@@ -26715,13 +26729,22 @@ static bool VF2RunMobileEatAtPicnicTable(CVillager &villager)
     }
 
     plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
-    int marker = *reinterpret_cast<int *>(
-        reinterpret_cast<unsigned char *>(&info) + 0x14);
-    bool useNorthwest =
-        (info.orientation == 1 && (marker == 0x13 || marker == 0x14)) ||
-        (info.orientation == 0 && (marker == 0x53 || marker == 0x54));
+    // Orientation comes from info.orientation ALONE.
+    //
+    // This used to AND that against a "marker" read from
+    // (unsigned char *)&info + 0x14, which is padding[1] of sFurnitureInfo2 --
+    // the struct is +0x00 unknown0, +0x04 orientation, +0x08 point.x,
+    // +0x0C point.y, +0x10..+0x1C padding[4]. The +0x14 offset belongs to the
+    // PLACEMENT RECORD, where +0x14/+0x18 is the world position, not to this
+    // struct.
+    //
+    // The failure mode was worse than an arbitrary choice: because the marker
+    // had to equal one of four specific values for useNorthwest to be true,
+    // uninitialised padding almost never matched, so the northwest arm was
+    // effectively unreachable and villagers faced the same way regardless of
+    // how the furniture was placed.
     char const *chairAnim =
-        useNorthwest ? "Sit In Chair NW" : "Sit In Chair NE";
+        info.orientation == 1 ? "Sit In Chair NW" : "Sit In Chair NE";
     for (int round = 0; round < 3; ++round) {
         plans->PlanToPlaySound(
             static_cast<ESound>(ldwGameState::GetRandom(3) + 0x6A),
