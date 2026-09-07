@@ -86,8 +86,16 @@ _NEGATOR = re.compile(
 # clause and the leading negator suppressed a genuine pending claim. It has
 # to come before the single-hyphen alternative, which would otherwise match
 # first and leave a stray "-" heading the next clause.
+# The subordinating conjunctions are here for the same reason as the
+# punctuation: "not complete while final QA is pending" states outstanding
+# work in its second clause, and without a boundary the leading negator
+# reaches across and denies it. "although", "though", "until" and "since"
+# join clauses the same way and were wrong before the window widened, so
+# they are fixed here too rather than left as a narrower version of the
+# same defect.
 _CLAUSE_SPLIT = re.compile(
-    r"[.;,/:\u2013\u2014]|\s--+\s|\s-\s| but | and | because "
+    r"[.;,/:\u2013\u2014]|\s--+\s|\s-\s"
+    r"| but | and | because | while | although | though | until | since "
 )
 
 
@@ -244,6 +252,14 @@ class TestTheLedgerStatusMatchesReality(unittest.TestCase):
             "nothing pending in source / qa pending",
             "confirmation is pending because it is not complete",
             "qa pending",
+            # Subordinate clauses. Review caught the first of these as a
+            # regression from widening the negator window; checking the
+            # neighbours showed the other three were already wrong before
+            # that, so they are pinned together rather than one at a time.
+            "not complete while final qa is pending",
+            "not complete although qa is pending",
+            "not done until qa is pending",
+            "not shipped since qa is pending",
         )
         for text in outstanding:
             with self.subTest(text=text):
