@@ -2983,3 +2983,19 @@ B182 THE CRASH WARNING WAS SCOPED TO THE BUILDS IT DESCRIBES.
   substitution, unlike the two suites marked otherwise. Applying that
   substitution to the wrong file failed the guard a second time. The guard did
   its job and caught real drift that would otherwise have shipped.
+
+B119 venue-routing correction (2026-09-07)
+
+- The corrected request-ledger evidence was read before implementation. The
+  four gym/yoga donors walk via point-taking PlanToGo calls but do not consult
+  placed furniture. PlanToGo appends plans, so a route installed before a
+  donor would be followed by the donor's own computed route.
+- The isolated fix redirects only the WorkingOut and QuickWorkout point-plan
+  callsites through `_VF2PlanToGoAtVenueOrOriginal@20` while a matching placed
+  venue is active. Matching uses `info.unknown0` versus record `+0x04`, not
+  `info.point`; no Treadmill fmap is used.
+- Static generation and generated-C++ checks passed. The required B119 build
+  completed with exit 0; the executable exists at 1,797,632 bytes with
+  SHA-256 CE940146EAC517EF94D981DA596AB5444F80B44D1E67B0E59F656E51108496EF.
+- Runtime/player evidence is not yet available. This entry does not claim
+  live venue routing or crash-free gameplay has been verified.

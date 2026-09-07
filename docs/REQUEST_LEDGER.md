@@ -229,3 +229,16 @@ Before each release:
    remaining in-game Brokerage text layout.
 7. Any older request found but absent here is added as **Needs source audit**
    before implementation or release; it is never silently omitted.
+
+### B119 venue-routing correction (2026-09-07)
+
+The corrected evidence was read before implementation: DoingKungFu,
+DoingTaiChi, WorkingOut, and QuickWorkout all walk through point-taking
+`PlanToGo` calls, but none consults placed furniture. `PlanToGo` appends to the
+first empty plan slot, so a venue route before the donor leaves an extra donor
+route. The isolated fix redirects only the WorkingOut and QuickWorkout
+point-plan callsites through `_VF2PlanToGoAtVenueOrOriginal@20` while a matching
+placed item is active. Matching uses `info.unknown0` against record `+0x04`,
+not `info.point`; no Treadmill fmap is used. Static generation, linked build,
+and generated-C++ checks passed. Live route, fallback, save/reload, and
+crash-free player verification remain open.

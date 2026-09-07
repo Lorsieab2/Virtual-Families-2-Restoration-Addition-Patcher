@@ -395,6 +395,13 @@ those are deliberately unchanged, and reusing them is the point. What is not
 borrowed is identity: every one of these carries its own behaviour, so it is
 never a branch inside somebody else's.
 
+For the Home Gym System and Yoga Equipment, the donor workout also computes a
+destination and appends its own plan. The venue fix redirects that donor plan
+only while the matching placed item is selected, using the placement handle
+(`info.unknown0` against the furniture record's `+0x04`); without a matching
+item the donor's original destination is retained. This is source/build
+evidence only until a player verifies the route in game.
+
 Two things follow, and both are worth stating plainly because they are what
 makes this safe:
 

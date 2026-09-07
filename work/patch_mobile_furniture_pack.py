@@ -81,6 +81,7 @@ STORE_SCROLLBAR_FLAG_SYMBOL = "_gVF2StoreScrollbar"
 MOBILE_FURNITURE_AUTONOMOUS_SELECTOR_SYMBOL = (
     "_VF2TryStartMobileFurnitureAutonomous"
 )
+WORKOUT_VENUE_PLAN_HELPER_SYMBOL = "_VF2PlanToGoAtVenueOrOriginal@20"
 MOBILE_PATIO_PROP_HELPER_SYMBOL = "@VF2PatioSetPropAndTrack@12"
 MOBILE_CHAISE_ITEM_IDS = tuple(range(0x2DE, 0x2E2))
 MOBILE_CHAISE_OBJECT = 0x95
@@ -1658,6 +1659,8 @@ SPA_LOUNGER_ITEM_ID = 0x330
 INVISIBLE_PICNIC_TABLE_ITEM_ID = 0x328
 INVISIBLE_PATIO_TABLE_ITEM_ID = 0x329
 INVISIBLE_LOUNGER_ITEM_ID = 0x32B
+INVISIBLE_YOGA_EQUIPMENT_ITEM_ID = 0x32A
+HOME_GYM_SYSTEM_ITEM_ID = 0x32D
 MOBILE_FURNITURE_MANUAL_BINDING_SPECS = (
     {
         # Checked before the chaise family: the spa lounger shares the chaise
@@ -25878,6 +25881,11 @@ public:
     void NewBehavior(EBehavior, SBehaviorData const &);
 };
 
+// These own-action entry points are emitted by the behavior-label translation
+// unit. The dispatcher only calls them for the two added gym-family item IDs.
+extern "C" void __cdecl VF2HomeGymWorkout(CVillager &);
+extern "C" void __cdecl VF2YogaEquipmentWorkout(CVillager &);
+
 class CVillagerState {
 public:
     bool IsSick();
@@ -28688,6 +28696,14 @@ __VF2_COMPUTER_DROP_DISPATCH__
     // which is why they appear in the conditions below rather than in routes
     // of their own.
     if (gVF2MobileFurnitureBehaviors == 0) return false;
+    if (candidate == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {
+        VF2YogaEquipmentWorkout(villager);
+        return true;
+    }
+    if (candidate == __VF2_HOME_GYM_ITEM_ID__) {
+        VF2HomeGymWorkout(villager);
+        return true;
+    }
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     // The invisible tables are the same items without art -- same donor,
@@ -28747,6 +28763,8 @@ __VF2_COMPUTER_DROP_DISPATCH__
         ("__VF2_INVISIBLE_PICNIC_TABLE__", "InvisiblePicnicTable"),
         ("__VF2_INVISIBLE_PATIO_TABLE__", "InvisiblePatioTable"),
         ("__VF2_INVISIBLE_LOUNGER__", "InvisibleLounger"),
+        ("__VF2_YOGA_EQUIPMENT_ITEM_ID__", "InvisibleYogaEquipment"),
+        ("__VF2_HOME_GYM_ITEM_ID__", "HomeGymSystemStd"),
     ):
         helper_source = helper_source.replace(
             _placeholder, f"{furniture_item_id_by_name(_item_name):#x}"
@@ -29263,6 +29281,73 @@ __VF2_COMPUTER_DROP_DISPATCH__
     }
 
 
+def patch_workout_venue_plan_calls(manifest):
+    """Redirect only the two added gym donor point-plan callsites.
+
+    WorkingOut and QuickWorkout each compute their own point and append it to
+    the villager plan.  The added-item handlers set a temporary venue point;
+    this narrowly scoped callsite redirect substitutes that point while the
+    donor is running and otherwise calls the original PlanToGo unchanged.
+    """
+    if not ENABLE_BEHAVIOR_PATCHES:
+        manifest["WorkoutVenuePlanRedirect"] = {
+            "enabled": False,
+            "status": "disabled with Behavior Patches; stock donor objects retained",
+        }
+        return
+    obj_path = PATCHED / "Behavior.obj"
+    obj = CoffObject(obj_path)
+    point_plan = "?PlanToGo@CVillagerPlans@@QAEXUldwPoint@@W4ESpeed@@W4EPriority@@@Z"
+    helper = obj.append_undefined_symbol(WORKOUT_VENUE_PLAN_HELPER_SYMBOL)
+    functions = (
+        "?WorkingOut@CBehavior@@CAXAAVCVillager@@@Z",
+        "?QuickWorkout@CBehavior@@CAXAAVCVillager@@@Z",
+    )
+    counts = {}
+    for function_name in functions:
+        function = obj.symbol(function_name)
+        section = obj.section(function.section)
+        hits = []
+        for index in range(section.nreloc):
+            vaddr, symbol_index, rtype = struct.unpack_from(
+                "<IIH", obj.buf, section.reloc_ptr + index * 10
+            )
+            if (
+                obj.symbol_by_index[symbol_index].name == point_plan
+                and rtype == IMAGE_REL_I386_REL32
+            ):
+                raw = section.raw_ptr + vaddr
+                if obj.buf[raw - 12 : raw + 4] != (
+                    b"\x8B\xCF\x6A\x00\x68\xC8\x00\x00\x00"
+                    b"\x56\x50\xE8\x00\x00\x00\x00"
+                ):
+                    raise RuntimeError(
+                        f"Unexpected {function_name} PlanToGo callsite bytes"
+                    )
+                hits.append(vaddr)
+        if not hits:
+            raise RuntimeError(f"Missing point-taking PlanToGo in {function_name}")
+        # The original member call leaves the CVillagerPlans pointer in ECX
+        # and pushes point/speed/priority. Insert one final push of that
+        # pointer immediately before the call, producing the ordinary stack
+        # layout for the stdcall helper without changing donor instructions.
+        for vaddr in sorted(hits, reverse=True):
+            obj.insert_section_bytes(section.index, vaddr - 1, b"\x57")
+            move_relocation(
+                obj, section.index, vaddr + 1, vaddr + 1,
+                helper, IMAGE_REL_I386_REL32
+            )
+        counts[function_name] = len(hits)
+    obj.write(obj_path)
+    manifest["WorkoutVenuePlanRedirect"] = {
+        "enabled": True,
+        "helper": WORKOUT_VENUE_PLAN_HELPER_SYMBOL,
+        "donor_functions": counts,
+        "fallback": "original point when no temporary venue is active",
+        "scope": "WorkingOut and QuickWorkout point-taking PlanToGo callsites only",
+    }
+
+
 def patch_mobile_furniture_behavior_macros(manifest):
     obj = CoffObject(PATCHED / "Behavior.obj")
     ctor = obj.symbol("??0CBehavior@@QAE@XZ")
@@ -29737,7 +29822,10 @@ def validate_mobile_furniture_runtime_bindings(manifest):
         for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS
         for item_id in spec["item_ids"]
     }
-    actual_manual_ids = set(literal_ids) | range_ids
+    actual_manual_ids = (set(literal_ids) | range_ids) - {
+        INVISIBLE_YOGA_EQUIPMENT_ITEM_ID,
+        HOME_GYM_SYSTEM_ITEM_ID,
+    }
     chaise_spec = next(
         spec
         for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS
@@ -29756,21 +29844,29 @@ def validate_mobile_furniture_runtime_bindings(manifest):
         spec["handler"] for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS
     )
     actual_handlers = Counter(
-        re.findall(r"return\s+(VF2HandleMobile\w+)\(villager\);", dispatcher)
+        re.findall(
+            r"\b(VF2(?:HandleMobile\w+|HomeGymWorkout|YogaEquipmentWorkout))\(villager\);",
+            dispatcher,
+        )
     )
+    actual_handlers.subtract(
+        Counter(("VF2HomeGymWorkout", "VF2YogaEquipmentWorkout"))
+    )
+    actual_handlers += Counter()
     if actual_handlers != expected_handlers:
         raise RuntimeError(
             f"Manual mobile furniture handler bindings drifted: {actual_handlers}"
         )
     for spec in MOBILE_FURNITURE_MANUAL_BINDING_SPECS:
-        handler_position = dispatcher.find(
-            f"return {spec['handler']}(villager);"
-        )
+        handler_position = dispatcher.find(f"{spec['handler']}(villager);")
         if handler_position < 0:
             raise RuntimeError(f"Missing manual handler: {spec['name']}")
         for item_id in spec.get("literal_ids", ()):
             marker = f"candidate == 0x{item_id:X}"
             marker_position = dispatcher.find(marker)
+            if marker_position < 0:
+                marker = f"candidate == 0x{item_id:x}"
+                marker_position = dispatcher.find(marker)
             if marker_position < 0 or not (
                 marker_position < handler_position < marker_position + 320
             ):
@@ -31846,7 +31942,7 @@ extern CAchievement Achievement;
 
 class CContentMap {
 public:
-    enum EObject { eObjectHammock = 0x5B };
+    enum EObject { eObjectYogaGear = 0x75, eObjectHammock = 0x5B };
 };
 enum ESpeed { eSpeedNormal = 0xC8 };
 enum EPriority { ePriorityNormal = 0 };
@@ -31908,6 +32004,25 @@ static bool VF2RawBehaviorLabelEquals(const char *label, const char *expected)
         if (expected[i] == 0) return true;
     }
     return false;
+}
+
+// WorkingOut and QuickWorkout append their own point plan.  The two added
+// venue handlers temporarily provide the selected placement's walk-to point;
+// only the two donor callsites patched by patch_workout_venue_plan_calls can
+// consume it.  With no active target, the helper is exactly the stock call.
+static CVillager *gVF2WorkoutVenueVillager = 0;
+static ldwPoint gVF2WorkoutVenuePoint = {};
+
+extern "C" void __stdcall VF2PlanToGoAtVenueOrOriginal(
+    CVillagerPlans *plans,
+    ldwPoint point,
+    ESpeed speed,
+    EPriority priority)
+{
+    if (gVF2WorkoutVenueVillager == reinterpret_cast<CVillager *>(plans)) {
+        point = gVF2WorkoutVenuePoint;
+    }
+    plans->PlanToGo(point, speed, priority);
 }
 
 static void VF2MaybeCompleteDisciplineProps()
@@ -32929,6 +33044,35 @@ static bool VF2AddedFurnitureInWorld(int itemId)
     return FurnitureManager.IsInWorld((EInventoryItem)itemId);
 }
 
+static bool VF2CaptureWorkoutVenue(
+    CVillager &villager,
+    int itemId,
+    CContentMap::EObject object,
+    ldwPoint *venuePoint)
+{
+    ldwPoint sample = villager.FeetPos();
+    sample.y -= 10;
+    int slot = VF2BehaviorPtOnFurnitureIndex(FurnitureManager, sample);
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (slot < 0 || slot >= count || count > 0x200) return false;
+    unsigned char *record = manager + 0x1008 + slot * 0x40;
+    if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0 ||
+        *reinterpret_cast<int *>(record) != itemId) {
+        return false;
+    }
+
+    sFurnitureInfo2 info = {};
+    if (!FurnitureManager.FindFurniture(object, villager.FeetPos(), info, true, 0, 0)) {
+        return false;
+    }
+    // info.point is only the walk-to anchor.  The selected placement is
+    // identified by the handle FindFurniture returned in info.unknown0.
+    if (*reinterpret_cast<int *>(record + 0x04) != info.unknown0) return false;
+    *venuePoint = info.point;
+    return true;
+}
+
 // Runs the donor's native action, then relabels to the item's own group.
 // Returning early when the native behaviour did not take leaves the villager
 // exactly as the stock game left them.
@@ -32941,6 +33085,27 @@ static void VF2RunOwnFurnitureAction(
     int remembered = VF2CurrentLabelInGroup(villager, labels, labelCount);
     if (!VF2RunNativeBehaviorAndChangedLabel(villager, donorBehavior)) return;
     VF2ApplyRememberedOrRandomLabel(villager, labels, labelCount, remembered);
+}
+
+static void VF2RunOwnFurnitureActionAtVenue(
+    CVillager &villager,
+    int itemId,
+    CContentMap::EObject object,
+    void (__cdecl *donorBehavior)(CVillager &),
+    int const *labels,
+    int labelCount)
+{
+    ldwPoint venuePoint = {};
+    bool hasVenue = VF2CaptureWorkoutVenue(
+        villager, itemId, object, &venuePoint);
+    if (hasVenue) {
+        gVF2WorkoutVenueVillager = &villager;
+        gVF2WorkoutVenuePoint = venuePoint;
+    }
+    VF2RunOwnFurnitureAction(villager, donorBehavior, labels, labelCount);
+    if (hasVenue) {
+        gVF2WorkoutVenueVillager = 0;
+    }
 }
 
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)
@@ -32967,18 +33132,18 @@ extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 // action of its own, with the ten workout variations that were asked for.
 extern "C" void __cdecl VF2HomeGymWorkout(CVillager &villager)
 {
-    if (!VF2AddedFurnitureInWorld(__VF2_HOME_GYM_ITEM_ID__)) return;
-    VF2RunOwnFurnitureAction(
-        villager, CBehavior::WorkingOut,
+    VF2RunOwnFurnitureActionAtVenue(
+        villager, __VF2_HOME_GYM_ITEM_ID__, (CContentMap::EObject)0x75,
+        CBehavior::WorkingOut,
         kVF2BehaviorLabels_home_gym,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_home_gym));
 }
 
 extern "C" void __cdecl VF2YogaEquipmentWorkout(CVillager &villager)
 {
-    if (!VF2AddedFurnitureInWorld(__VF2_YOGA_EQUIPMENT_ITEM_ID__)) return;
-    VF2RunOwnFurnitureAction(
-        villager, CBehavior::QuickWorkout,
+    VF2RunOwnFurnitureActionAtVenue(
+        villager, __VF2_YOGA_EQUIPMENT_ITEM_ID__, CContentMap::eObjectYogaGear,
+        CBehavior::QuickWorkout,
         kVF2BehaviorLabels_yoga_equipment,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_yoga_equipment));
 }
@@ -35333,6 +35498,7 @@ def main():
     # This final pass intentionally runs after label wrappers so the mobile
     # dispatchers can preserve those wrappers as their build-specific fallback.
     patch_mobile_furniture_behavior_macros(manifest)
+    patch_workout_venue_plan_calls(manifest)
     patch_mobile_patio_prop_execution(manifest)
     patch_maximum_resource_achievement_callsites(manifest)
     validate_custom_achievement_award_hook_objects(manifest)
