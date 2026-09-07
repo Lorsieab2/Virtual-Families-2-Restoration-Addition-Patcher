@@ -83,6 +83,14 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         self.assertIn("info.orientation == 1", body)            # chosen per lounger
         self.assertIn("static_cast<ESound>(0x101)", body)       # gulpahh_01.ogg
 
+    def test_manual_giving_uses_the_same_one_minute_duration(self):
+        src = _source()
+        start = src.index(
+            "// Somebody already on THIS lounger? Then this adult performs"
+        )
+        body = src[start:src.index("\n    // Nobody on this one", start)]
+        self.assertIn("plans->PlanToWork(ldwGameState::GetRandom(11) + 55);", body)
+
     def test_the_giving_labels_are_never_used_autonomously(self):
         src = _source()
         start = src.index(
