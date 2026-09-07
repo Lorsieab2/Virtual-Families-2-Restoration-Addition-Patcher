@@ -681,9 +681,10 @@ class VF2PatcherGUI:
             data = patcher.read_json(path)
             return path, data, patcher.manifest_settings(data)
 
+        wait = None
         try:
-            manifest_path, manifest, settings = self._run_with_wait(
-                "Please wait…\n\nLoading the patches.", load
+            (manifest_path, manifest, settings), wait = self._run_with_wait(
+                "Please wait…\n\nLoading the patches.", load, keep_open=True
             )
         except Exception as exc:
             # The wait popup is already closed by _run_with_wait's finally;
@@ -739,6 +740,14 @@ class VF2PatcherGUI:
                         details = f"{setting.id} - {state} - {setting.description}" if setting.description else f"{setting.id} - {state}"
                     self._markup_label(item, details).grid(row=1, column=0, sticky="ew", padx=(22, 0))
                     row += 1
+        # Every setting widget now exists, so the render the popup was
+        # covering is genuinely finished. This is the earliest point at which
+        # closing it does not leave the window looking frozen: each setting
+        # builds a Checkbutton AND a tk.Text description, and a full manifest
+        # has dozens.
+        if wait is not None:
+            wait.close()
+            wait = None
         self._clear_please_wait()
         self.status_var.set(f"Loaded {len(settings)} setting(s) from {manifest_path.name}.")
         self._append_log(f"Loaded manifest settings: {manifest_path}\n")
@@ -824,7 +833,7 @@ class VF2PatcherGUI:
             self.settings_canvas.yview_scroll(units, "units")
         return "break"
 
-    def _run_with_wait(self, message: str, work):
+    def _run_with_wait(self, message: str, work, keep_open: bool = False):
         """Run `work` off the main thread while a wait popup keeps painting.
 
         Ported from the VV patcher's App._run_with_wait. A single
@@ -860,18 +869,28 @@ class VF2PatcherGUI:
                 time.sleep(WAIT_POLL_SECONDS)
             worker.join()
         finally:
-            # Keep the popup mapped until the caller has completed its
-            # immediate main-thread finalization (notably manifest settings
-            # widget construction).  Closing synchronously here makes the
-            # popup disappear while that work can still make the window look
-            # frozen.
-            self.root.after_idle(wait.close)
+            # after_idle DOES NOT WORK HERE and was measured doing the wrong
+            # thing: it fires the moment the event loop next has no pending
+            # events, which happens almost immediately once widget
+            # construction starts pumping. In a 40-widget reproduction the
+            # popup closed after the FIRST widget and the remaining 39 were
+            # built with nothing on screen -- the flash-then-freeze this was
+            # meant to cure.
+            #
+            # The caller knows when its render is finished and this function
+            # cannot, so keep_open hands the popup over and the caller closes
+            # it in a finally. A failed worker still closes here, because the
+            # caller raises before it can adopt it.
+            if not keep_open or "error" in outcome:
+                wait.close()
             with contextlib.suppress(tk.TclError):
                 self.root.protocol("WM_DELETE_WINDOW", previous_close)
         if "error" in outcome:
             # Re-raised here so a failure inside `work` surfaces normally
             # instead of vanishing into the thread.
             raise outcome["error"]
+        if keep_open:
+            return outcome.get("value"), wait
         return outcome.get("value")
 
     def _show_please_wait(self, text: str) -> None:
