@@ -32553,6 +32553,26 @@ static void VF2ApplyRememberedOrRandomLabel(CVillager &villager, int const *labe
     VF2SetBehaviorLabel(villager, selectedStringId);
 }
 
+static void VF2ApplyVenueLabel(
+    CVillager &villager, int const *labels, int count, int rememberedStringId)
+{
+    if (rememberedStringId) {
+        VF2RememberBehaviorLabel(villager, (int)labels, rememberedStringId);
+        VF2SetBehaviorLabel(villager, rememberedStringId);
+        return;
+    }
+    int cachedStringId = 0;
+    if (VF2GetCachedBehaviorLabel(villager, (int)labels, &cachedStringId) &&
+        cachedStringId) {
+        VF2SetBehaviorLabel(villager, cachedStringId);
+        return;
+    }
+    if (count <= 0) return;
+    int selectedStringId = labels[ldwGameState::GetRandom(count)];
+    VF2RememberBehaviorLabel(villager, (int)labels, selectedStringId);
+    VF2SetBehaviorLabel(villager, selectedStringId);
+}
+
 static void VF2ApplyRandomLabel(CVillager &villager, int const *labels, int count)
 {
     VF2ApplyRememberedOrRandomLabel(villager, labels, count, 0);
@@ -33127,7 +33147,7 @@ static void VF2RunOwnFurnitureAction(
     // example, "Stretching" or "Walking on the treadmill"). The venue was
     // already resolved to this item, so do not mistake an unchanged label for
     // a rejected action; preserve the donor action and apply the item's label.
-    VF2ApplyRememberedOrRandomLabel(villager, labels, labelCount, remembered);
+    VF2ApplyVenueLabel(villager, labels, labelCount, remembered);
 }
 
 extern "C" void __cdecl VF2ExerciseBikeWalk(CVillager &villager)

@@ -18,6 +18,7 @@ class TestAddedFurnitureContract(unittest.TestCase):
         self.assertIn("VF2RunNativeBehaviorAndChangedLabel", block)
         self.assertNotIn("if (!changed) return;", block)
         self.assertIn("apply the item's label", block)
+        self.assertIn("static void VF2ApplyVenueLabel(", source())
 
     def test_venue_label_is_applied_when_donor_keeps_native_label(self):
         src = source()
@@ -26,7 +27,14 @@ class TestAddedFurnitureContract(unittest.TestCase):
         donor = body.index("VF2RunNativeBehaviorAndChangedLabel(villager, donorBehavior);")
         after = body[donor:]
         self.assertIn("VF2EndAddedFurnitureVenue(villager);", after)
-        self.assertIn("VF2ApplyRememberedOrRandomLabel", after)
+        self.assertIn("VF2ApplyVenueLabel", after)
+
+    def test_venue_label_selector_has_no_native_label_roll(self):
+        src = source()
+        start = src.index("static void VF2ApplyVenueLabel(")
+        body = src[start:src.index("static void VF2ApplyRandomLabel", start)]
+        self.assertNotIn("GetRandom(count + 1)", body)
+        self.assertIn("GetRandom(count)", body)
 
     def test_missing_venue_falls_back_to_native_donor(self):
         src = source()
