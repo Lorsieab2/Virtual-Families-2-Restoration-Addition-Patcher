@@ -28840,30 +28840,41 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
     int const loungerSlot = VF2FindFreeSpaLoungerSlot(villager);
     if (loungerSlot < 0) return false;
 
+    // Knowing a free spa lounger EXISTS is not knowing it is the one the
+    // villager would reach. The chaise family is searched nearest-first, so an
+    // ordinary chaise closer to the villager wins and the treatment would play
+    // out on normal furniture under a spa label -- the complaint this route is
+    // for. loungerSlot above proves one is available; this proves it is the
+    // one that would be chosen.
+    //
+    // ASKED BEFORE LINKING, WITH THE READ-ONLY FindFurniture. Checking after
+    // the link is simpler and is wrong: the link RESERVES a peep slot as a
+    // side effect, so rejecting an ordinary chaise afterwards leaves it held
+    // against a villager who then goes off to do something else, excluding
+    // everyone else from that chaise for the duration of an unrelated
+    // behaviour. This engine exposes no unlink call, so a speculative
+    // reservation cannot be given back.
+    //
+    // FindFurniture answers the same nearest-match question and reserves
+    // nothing.
+    sFurnitureInfo2 probe = {};
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectChaise, villager.FeetPos(), probe, true, 0, 0)) {
+        return false;
+    }
+    if (!VF2SpaLoungerHasHandle(probe.unknown0)) return false;
+
     sFurnitureInfo2 info = {};
     if (!FurnitureManager.LinkPeepToFurniture(
             CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
         return false;
     }
 
-    // Knowing a free spa lounger EXISTS is not knowing it is the one the
-    // villager reached. The link searches the whole chaise family
-    // nearest-first, so an ordinary chaise closer to the villager wins it and
-    // the treatment would play out on normal furniture under a spa label --
-    // which is the complaint this route is for. loungerSlot above proves one
-    // is available; this proves it is the one we got.
-    //
-    // Asked of the LINK rather than of a probe beforehand. FindFurniture
-    // considers every in-world chaise while LinkPeepToFurniture additionally
-    // skips placements with no free peep slot, so the two disagree exactly
-    // when it matters: a reserved nearest spa lounger passes a probe and the
-    // link then takes an ordinary chaise. One query cannot disagree with
-    // itself.
-    //
-    // Declining here leaves the link in place; this engine exposes no unlink
-    // call. The cost is bounded -- the villager simply does not proceed, and
-    // any stock chaise behaviour reaching that same chaise would have linked
-    // it identically.
+    // The probe and the link ask slightly different questions -- the linker
+    // additionally skips placements with no free peep slot -- so confirm what
+    // was actually reserved rather than assuming they agreed. After the probe
+    // above this can only fire when the link landed somewhere other than the
+    // lounger the probe named: a race, or that lounger being full.
     if (!VF2SpaLoungerHasHandle(info.unknown0)) return false;
 
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
