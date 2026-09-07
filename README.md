@@ -323,7 +323,9 @@ handlers reuse donor animations and durations, but donor `PlanToGo` calls are
 hooked so the selected placed-item destination survives. No ownership check
 gates the donor behavior; with no matching placement, the native donor action
 falls through unchanged. This is source-level status until the generated build
-and player QA are complete.
+The current B119 playtest was regenerated from current `main` with behavior
+patches enabled, and its complete package passed a 15-second startup smoke
+test. In-game/player QA is still separate and not complete.
 
 ## Spa treatments
 
