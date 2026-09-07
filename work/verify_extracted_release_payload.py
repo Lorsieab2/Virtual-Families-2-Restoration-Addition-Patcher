@@ -25,6 +25,23 @@ import zipfile
 from collections import Counter
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def _resolve_manifest_path(manifest_dir, value):
+    """Mirror the installer's relative, contained source-path resolution."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("source path must be non-empty")
+    raw = value.replace("\\", "/")
+    if re.match(r"^[A-Za-z]:/", raw) or raw.startswith("//"):
+        raise ValueError("source path must be relative and contained")
+    candidate = pathlib.PurePosixPath(raw)
+    if candidate.is_absolute() or ".." in candidate.parts or "." in candidate.parts:
+        raise ValueError("source path must be relative and contained")
+    root = pathlib.Path(manifest_dir).resolve()
+    resolved = (root / pathlib.Path(*candidate.parts)).resolve()
+    if root != resolved and root not in resolved.parents:
+        raise ValueError("source path escapes manifest directory")
+    return resolved
 def _normalize_declared_sha256(value):
     """Accept exactly what the patcher accepts, and nothing more.
 
@@ -171,11 +188,24 @@ def main():
         # reported as "not installed" by a resolver that only reads
         # asset_patches -- a false alarm on a correct bundle, which is the
         # same class of mistake as the by-name check this replaced.
+        enabled_settings = {
+            str(row.get("id"))
+            for row in manifest.get("settings", [])
+            if isinstance(row, dict) and row.get("default")
+        }
         installed = {}
         for key in ("asset_patches", "post_asset_patches"):
             for record in manifest.get(key, []):
-                if "file_path" in record:
-                    installed.setdefault(record["file_path"], record)
+                requires = record.get("requires", record.get("settings", []))
+                if isinstance(requires, str):
+                    requires = [requires]
+                if not isinstance(requires, list) or not set(requires).issubset(enabled_settings):
+                    continue
+                target_key = record.get("file_path")
+                if key == "asset_patches":
+                    target_key = record.get("output_file_path") or target_key
+                if target_key:
+                    installed.setdefault(target_key, record)
 
     for name in LOUNGER_MAPS:
         target = f"Assets/{name}"
@@ -183,19 +213,19 @@ def main():
         if record is None:
             problems.append(f"{target} is not installed by the manifest")
             continue
-        # Resolve the canonical payload file the record points at.
-        candidates = [
-            p for p in EXTRACT.rglob(pathlib.PurePosixPath(
-                record["source_path"]).name)
-            if p.as_posix().endswith(record["source_path"])
-        ]
-        if not candidates:
+        # Resolve the payload file exactly where the installer looks.
+        source_rel = record["source_path"]
+        try:
+            resolved = _resolve_manifest_path(manifest_path.parent, source_rel)
+        except ValueError:
+            resolved = None
+        if resolved is None or not resolved.is_file():
             problems.append(
-                f"{target}: manifest points at {record['source_path']}, "
-                "which is not in the payload"
+                f"{target}: manifest points at {source_rel}, which is not "
+                "present at that path relative to the manifest"
             )
             continue
-        maps[name] = candidates[0]
+        maps[name] = resolved
 
     print(
         f"lounger maps     : {len(maps)} of {len(LOUNGER_MAPS)} resolved "
