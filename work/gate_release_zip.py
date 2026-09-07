@@ -186,6 +186,31 @@ def main() -> int:
 
     if not summary.get("variant_identities_authenticated"):
         return quarantine(archive, "gate did not authenticate variant identities")
+
+    # The extracted-payload checks belong INSIDE the gate, not beside it.
+    # They were written, merged and correct, and nothing ever called them:
+    # a repo-wide search found this verifier's only entry point was its own
+    # __main__, so the gate could print RELEASE GATE PASSED without a single
+    # payload assertion having run. A safeguard that depends on somebody
+    # remembering a second command is a safeguard that is off by default,
+    # which is the same shape as the decal hook that was written correctly
+    # and never invoked.
+    #
+    # Run against the ARCHIVE the gate just packaged and authenticated, so
+    # what is verified is what would be published rather than whatever the
+    # verifier's own default resolution happens to pick up.
+    print("verifying the extracted payload")
+    payload = run(
+        [
+            sys.executable,
+            "work/verify_extracted_release_payload.py",
+            str(archive),
+        ]
+    )
+    if payload.returncode != 0:
+        return quarantine(archive, payload.stdout + payload.stderr)
+    print(payload.stdout.strip())
+
     print(json.dumps(summary, indent=2, sort_keys=True))
     print(f"RELEASE GATE PASSED -- {archive} is ready to publish")
     return 0

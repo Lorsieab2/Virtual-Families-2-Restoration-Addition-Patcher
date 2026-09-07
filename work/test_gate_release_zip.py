@@ -20,6 +20,67 @@ import gate_release_zip as gate
 import verify_offline_bundle_zip as verifier
 
 
+class PayloadVerificationIsWiredInTests(unittest.TestCase):
+    """The extracted-payload checks must RUN, not merely exist.
+
+    This is the defect the checks themselves were written to prevent, one
+    level up: they were written, reviewed, merged and correct, and nothing
+    ever called them -- so the gate could print RELEASE GATE PASSED with no
+    payload assertion having executed. A safeguard reachable only by
+    remembering a second command is off by default.
+
+    Asserted against the gate's source rather than by packaging a real
+    archive, because packaging needs a full build; what has to be true is
+    that the call exists, runs before the PASSED line, and quarantines on
+    failure.
+    """
+
+    def _gate_source(self):
+        return Path(gate.__file__).read_text(encoding="utf-8")
+
+    def test_the_gate_invokes_the_payload_verifier(self):
+        self.assertIn(
+            "work/verify_extracted_release_payload.py",
+            self._gate_source(),
+            "the gate does not run the extracted-payload verifier, so a "
+            "release can pass without any payload check having executed",
+        )
+
+    def test_the_verifier_runs_before_the_gate_declares_success(self):
+        source = self._gate_source()
+        invoked = source.index("work/verify_extracted_release_payload.py")
+        passed = source.index('print(f"RELEASE GATE PASSED')
+        self.assertLess(
+            invoked,
+            passed,
+            "the payload verifier runs after the gate has already declared "
+            "the archive publishable, which is the same as not running it",
+        )
+
+    def test_a_failing_payload_check_quarantines_the_archive(self):
+        source = self._gate_source()
+        invoked = source.index("work/verify_extracted_release_payload.py")
+        tail = source[invoked:source.index('print(f"RELEASE GATE PASSED')]
+        self.assertIn(
+            "quarantine(archive",
+            tail,
+            "a failed payload check must move the archive aside; leaving a "
+            "rejected bundle at the publishable filename is the accident "
+            "the gate exists to prevent",
+        )
+
+    def test_the_verifier_is_given_the_archive_the_gate_packaged(self):
+        source = self._gate_source()
+        invoked = source.index("work/verify_extracted_release_payload.py")
+        tail = source[invoked:invoked + 220]
+        self.assertIn(
+            "str(archive)",
+            tail,
+            "the verifier must check the archive this gate just packaged, "
+            "not whatever its own default resolution happens to find",
+        )
+
+
 class VariantCoverageTests(unittest.TestCase):
     def test_a_complete_release_passes(self):
         complete = len(verifier.EXECUTABLE_VARIANT_REQUIREMENTS)
@@ -72,7 +133,15 @@ class QuarantineTests(unittest.TestCase):
         # quarantine() instead.
         after_package = body.split("verified =")[1]
         self.assertNotIn("return 1", after_package)
-        self.assertEqual(after_package.count("return quarantine(archive"), 3)
+        # Not a pinned count: adding a legitimate check adds a
+        # quarantine path, and a literal here goes stale the first
+        # time that happens -- the same failure the release readback
+        # contract had when it pinned 34/34/17. What must hold is that
+        # every post-packaging failure routes through quarantine, which
+        # the assertNotIn above already proves, and that there is at
+        # least one such path per gate check.
+        self.assertGreaterEqual(
+            after_package.count("return quarantine(archive"), 3)
 
     def test_a_failed_quarantine_warns_instead_of_claiming_a_move(self):
         """A move that did not happen must never be reported as one.
