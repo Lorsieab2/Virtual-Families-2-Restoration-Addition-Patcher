@@ -57,8 +57,8 @@ class ReleaseVerifierMatchesInstaller(unittest.TestCase):
         # A record may name the expected file in file_path and redirect its
         # output elsewhere. Keying on file_path alone accepts that bundle
         # while the player never receives the map.
-        self.assertIn('record.get("output_file_path") or record.get("file_path")',
-                      SOURCE)
+        self.assertIn('target_key = record.get("file_path")', SOURCE)
+        self.assertIn('record.get("output_file_path") or target_key', SOURCE)
 
     def test_a_redirected_record_is_not_treated_as_installed(self):
         target = "Assets/SpaLoungerStd.png.fmap"
@@ -84,7 +84,7 @@ class ReleaseVerifierMatchesInstaller(unittest.TestCase):
         # stale copy deeper in the archive. The installer joins the path under
         # the manifest directory exactly, so the verifier must too.
         self.assertNotIn("EXTRACT.rglob(pathlib.PurePosixPath(", SOURCE)
-        self.assertIn("manifest_path.parent / pathlib.PurePosixPath", SOURCE)
+        self.assertIn("_resolve_manifest_path(manifest_path.parent, source_rel)", SOURCE)
 
     def test_a_stale_copy_elsewhere_in_the_archive_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

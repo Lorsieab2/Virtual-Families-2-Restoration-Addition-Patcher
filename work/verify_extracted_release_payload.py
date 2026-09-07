@@ -25,6 +25,21 @@ import zipfile
 from collections import Counter
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+def _resolve_manifest_path(manifest_dir, value):
+    """Mirror the installer's relative, contained source-path resolution."""
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("source path must be non-empty")
+    raw = value.replace("\\", "/")
+    candidate = pathlib.PurePosixPath(raw)
+    if candidate.is_absolute() or ".." in candidate.parts or "." in candidate.parts:
+        raise ValueError("source path must be relative and contained")
+    root = pathlib.Path(manifest_dir).resolve()
+    resolved = (root / pathlib.Path(*candidate.parts)).resolve()
+    if root != resolved and root not in resolved.parents:
+        raise ValueError("source path escapes manifest directory")
+    return resolved
 def _normalize_declared_sha256(value):
     """Accept exactly what the patcher accepts, and nothing more.
 
@@ -180,7 +195,9 @@ def main():
         installed = {}
         for key in ("asset_patches", "post_asset_patches"):
             for record in manifest.get(key, []):
-                target_key = record.get("output_file_path") or record.get("file_path")
+                target_key = record.get("file_path")
+                if key == "asset_patches":
+                    target_key = record.get("output_file_path") or target_key
                 if target_key:
                     installed.setdefault(target_key, record)
 
@@ -198,8 +215,11 @@ def main():
         # in the archive whose path merely ENDS WITH the same source_path would
         # satisfy the search here and still fail for the player.
         source_rel = record["source_path"]
-        resolved = manifest_path.parent / pathlib.PurePosixPath(source_rel)
-        if not resolved.is_file():
+        try:
+            resolved = _resolve_manifest_path(manifest_path.parent, source_rel)
+        except ValueError:
+            resolved = None
+        if resolved is None or not resolved.is_file():
             problems.append(
                 f"{target}: manifest points at {source_rel}, which is not "
                 "present at that path relative to the manifest"
