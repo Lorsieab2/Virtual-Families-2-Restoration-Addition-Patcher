@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import re
 import sys
 import tempfile
 import threading
@@ -835,10 +836,11 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
             wait.close()
 
         self.assertIn("spec", placed, "_center never positioned the window")
-        x_text, _, y_text = placed["spec"].lstrip("+").partition("+")
-        self.assertLess(int(x_text), 0,
+        offsets = re.search(r"\+?([+-]\d+)\+?([+-]\d+)$", placed["spec"])
+        self.assertIsNotNone(offsets)
+        self.assertLess(int(offsets.group(1)), 0,
                         "a negative parent x was clamped: %r" % placed["spec"])
-        self.assertLess(int(y_text), 0,
+        self.assertLess(int(offsets.group(2)), 0,
                         "a negative parent y was clamped: %r" % placed["spec"])
 
     def test_centering_without_a_parent_still_clamps_to_the_screen(self):
@@ -850,6 +852,12 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
             def winfo_viewable(self):
                 return 0
 
+            def winfo_screenwidth(self):
+                return 1
+
+            def winfo_screenheight(self):
+                return 1
+
         wait = gui.WaitWindow(self.root, "Please wait", "Please wait" + ELLIPSIS,
                               modal=False)
         try:
@@ -859,9 +867,10 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
             wait.close()
 
         self.assertIn("spec", placed, "_center never positioned the window")
-        x_text, _, y_text = placed["spec"].lstrip("+").partition("+")
-        self.assertGreaterEqual(int(x_text), 0)
-        self.assertGreaterEqual(int(y_text), 0)
+        offsets = re.search(r"\+?([+-]\d+)\+?([+-]\d+)$", placed["spec"])
+        self.assertIsNotNone(offsets)
+        self.assertGreaterEqual(int(offsets.group(1)), 0)
+        self.assertGreaterEqual(int(offsets.group(2)), 0)
 
     def test_a_failure_in_the_work_surfaces_on_the_main_thread(self):
         # Captured on the worker and re-raised here, otherwise it vanishes
