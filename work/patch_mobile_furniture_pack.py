@@ -28798,6 +28798,39 @@ static int VF2FindFreeSpaLoungerSlot(CVillager &villager)
     return -1;
 }
 
+// Is the placement the link just reserved actually a spa lounger?
+//
+// Identified by its PLACEMENT HANDLE, never by hit-testing info.point.
+// info.point is the WALK-TO ANCHOR -- the placement position plus the fmap's
+// hotspot offset -- so asking which furniture contains it means asking which
+// item the villager is standing INSIDE, and for anything they stand beside
+// the answer is -1. That mistake once left a villager at the Ping-Pong Table
+// labelled "Playing pool".
+//
+// AddToWorld stamps every placement with a unique handle at record[+0x04] and
+// FindFurniture hands that field straight back as info.unknown0, so the record
+// it matched can be named exactly. Two chaises of the same type are
+// indistinguishable by position and distinguishable by handle, which is the
+// whole point: a spa lounger and an ordinary chaise are both eObjectChaise.
+//
+// 0x200 is the array's real capacity, from AddToWorld's own
+// `cmp [edi+0x1004], 0x200 / jge` guard, not a guess.
+static bool VF2SpaLoungerHasHandle(int handle)
+{
+    unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
+    int count = *reinterpret_cast<int *>(manager + 0x1004);
+    if (count < 0 || count > 0x200) return false;
+    for (int slot = 0; slot < count; ++slot) {
+        unsigned char *record = manager + 0x1008 + slot * 0x40;
+        if ((*reinterpret_cast<unsigned int *>(record + 0x0C) & 1) == 0) continue;
+        if (*reinterpret_cast<int *>(record + 0x04) != handle) continue;
+        int itemId = *reinterpret_cast<int *>(record);
+        return itemId == __VF2_INVISIBLE_SPA_LOUNGER_ITEM_ID__ ||
+               itemId == __VF2_SPA_LOUNGER_ITEM_ID__;
+    }
+    return false;
+}
+
 static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
 {
     if (!VF2SpaAdult(villager)) return false;
@@ -28812,6 +28845,26 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
             CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
         return false;
     }
+
+    // Knowing a free spa lounger EXISTS is not knowing it is the one the
+    // villager reached. The link searches the whole chaise family
+    // nearest-first, so an ordinary chaise closer to the villager wins it and
+    // the treatment would play out on normal furniture under a spa label --
+    // which is the complaint this route is for. loungerSlot above proves one
+    // is available; this proves it is the one we got.
+    //
+    // Asked of the LINK rather than of a probe beforehand. FindFurniture
+    // considers every in-world chaise while LinkPeepToFurniture additionally
+    // skips placements with no free peep slot, so the two disagree exactly
+    // when it matters: a reserved nearest spa lounger passes a probe and the
+    // link then takes an ordinary chaise. One query cannot disagree with
+    // itself.
+    //
+    // Declining here leaves the link in place; this engine exposes no unlink
+    // call. The cost is bounded -- the villager simply does not proceed, and
+    // any stock chaise behaviour reaching that same chaise would have linked
+    // it identically.
+    if (!VF2SpaLoungerHasHandle(info.unknown0)) return false;
 
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
     plans->ForgetPlans(villager, false);
