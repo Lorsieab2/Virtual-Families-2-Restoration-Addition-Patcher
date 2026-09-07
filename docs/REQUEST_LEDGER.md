@@ -27,10 +27,12 @@ Still genuinely outstanding:
 
 - The patcher's "Please wait" window - see the row near the end of this file.
 - The twelve features that require Mobile Furniture Behaviors. The startup
-  crash that blocked them is fixed and confirmed at runtime -- see
-  `docs/Transparency Log.txt` for the crash record and the verification. They
-  are no longer blocked, but they remain untested in play, which is a different
-  status from blocked and is why they stay listed here.
+  crash that blocked them has been found and repaired in source, and a game
+  built from the current source runs with the setting enabled -- but that
+  repair is not in any published release, so these still cannot be tested from
+  a downloaded archive. That is why they stay listed here: no longer blocked on
+  a diagnosis, still blocked on a published build. See
+  `docs/Transparency Log.txt` for the crash record and the evidence.
 
 ## Status meanings
 
