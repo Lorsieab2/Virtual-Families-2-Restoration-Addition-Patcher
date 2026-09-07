@@ -2954,13 +2954,24 @@ B182 THE CRASH WARNING WAS SCOPED TO THE BUILDS IT DESCRIBES.
   staying green.
 
 - TWO PROCESS HAZARDS FOUND WHILE MAKING THIS CHANGE, both recorded because they
-  would silently corrupt work rather than announce themselves. FIRST, A HEREDOC
-  DESTROYED A REGULAR EXPRESSION: writing r"\bB(\d+)\b" through a shell
-  heredoc turned each \b into a literal backspace character, 0x08, rather than a
-  word-boundary escape. The pattern would never have matched and the fix would
-  have shipped doing nothing at all. It was caught only by printing repr() of
-  the line instead of reading it on screen, and the lesson is that regex escapes
-  must not be written through a heredoc. SECOND, THE tests/ COPY MUST BE
+  would silently corrupt work rather than announce themselves. FIRST, A
+  NON-RAW STRING LITERAL IN THE GENERATOR ATE A REGEX ESCAPE: the replacement
+  text was built in a non-raw triple-quoted Python string, where \b is a valid
+  escape meaning BACKSPACE, so the intended regex r"\bB(\d+)\b" reached the
+  file with each \b replaced by a literal 0x08 byte. The pattern could then
+  never match and the fix would have shipped INERT while every test stayed
+  green, because the tests exercised the surrounding logic rather than that
+  branch. The \d survived only because it is NOT a valid escape, which is why
+  Python warned about \d and said nothing about \b -- so a SyntaxWarning about
+  an invalid escape is evidence that OTHER escapes in the same literal were
+  silently consumed. Caught by printing repr() of the written line. AN EARLIER
+  VERSION OF THIS ENTRY BLAMED THE SHELL HEREDOC AND THAT WAS WRONG, as Codex
+  pointed out on PR #209: a quoted heredoc preserves backslashes faithfully,
+  verified directly, and was never involved. The correction matters because
+  avoiding heredocs would not have prevented this and would have left the real
+  hazard in place. Generated code carrying escapes must be built in RAW
+  strings and verified by scanning the result for control characters.
+  SECOND, THE tests/ COPY MUST BE
   BYTE-IDENTICAL: TestSuiteCopiesInSyncTests marks
   test_export_offline_patch_bundle.py as identical, so tests/ takes NO src/ path
   substitution, unlike the two suites marked otherwise. Applying that
