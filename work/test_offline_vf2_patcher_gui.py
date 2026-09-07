@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import re
 import sys
 import tempfile
@@ -553,15 +554,16 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         seen = {}
         original = self.app._run_with_wait
 
-        def spy(message, work):
+        def spy(message, work, keep_open=False):
             seen["message"] = message
             seen["caller_thread"] = threading.current_thread().ident
+            seen["keep_open"] = keep_open
 
             def wrapped():
                 seen["work_thread"] = threading.current_thread().ident
                 return work()
 
-            return original(message, wrapped)
+            return original(message, wrapped, keep_open=keep_open)
 
         self.app._run_with_wait = spy
         with tempfile.TemporaryDirectory() as tmp:
@@ -871,6 +873,145 @@ class PleaseWaitFeedbackTests(unittest.TestCase):
         self.assertIsNotNone(offsets)
         self.assertGreaterEqual(int(offsets.group(1)), 0)
         self.assertGreaterEqual(int(offsets.group(2)), 0)
+
+    def test_the_wait_popup_survives_the_settings_render(self):
+        # THE BUG THIS PINS: the popup used to close when the worker finished,
+        # while the slower half -- building one Checkbutton and one tk.Text
+        # description per setting, on the main thread -- ran with nothing on
+        # screen. To a player the window flashed a popup and then froze.
+        #
+        # An earlier fix scheduled the close with after_idle. Measured in a
+        # 40-widget reproduction, that closed the popup after the FIRST
+        # widget: after_idle fires as soon as the loop has no pending events,
+        # which happens the moment rendering starts pumping.
+        #
+        # A liveness check alone CANNOT tell the two apart -- verified by
+        # reverting to after_idle, and this test still passed, because a
+        # headless test loop does not idle the way a real session does. So
+        # this asserts the mechanism instead: the popup is handed to the
+        # caller, the caller closes it after the render, and the close is
+        # never deferred to the event loop.
+        alive_during_render = {}
+        real_markup = self.app._markup_label
+
+        def watched(parent, text):
+            widget = real_markup(parent, text)
+            wait = getattr(self.app, "_vf2_test_wait", None)
+            if wait is not None:
+                alive_during_render.setdefault("checked", True)
+                alive_during_render["still_open"] = bool(wait.winfo_exists())
+            return widget
+
+        original = self.app._run_with_wait
+
+        def spy(message, work, keep_open=False):
+            result = original(message, work, keep_open=keep_open)
+            if keep_open:
+                self.app._vf2_test_wait = result[1]
+            return result
+
+        self.app._run_with_wait = spy
+        self.app._markup_label = watched
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                # The shared fixture declares no settings, so nothing would
+                # render and this test would pass without exercising anything.
+                path = Path(tmp) / "manifest.json"
+                path.write_text(json.dumps({
+                    "target_files": [],
+                    "settings": [
+                        {"id": "one", "label": "One", "default": True,
+                         "description": "first setting"},
+                        {"id": "two", "label": "Two", "default": False,
+                         "description": "second setting"},
+                        {"id": "three", "label": "Three", "default": True,
+                         "description": "third setting"},
+                    ],
+                }), encoding="utf-8")
+                self.app.manifest_var.set(str(path))
+                self.assertTrue(self.app.load_manifest_settings())
+        finally:
+            self.app._markup_label = real_markup
+            self.app._run_with_wait = original
+
+        self.assertTrue(alive_during_render.get("checked"),
+                        "no setting description was rendered, so this proves nothing")
+        self.assertTrue(alive_during_render.get("still_open"),
+                        "the wait popup was already destroyed while settings "
+                        "were still being built")
+
+        # The mechanism, because the liveness check above cannot distinguish a
+        # deferred close in a headless loop.
+        source = Path(gui.__file__).read_text(encoding="utf-8")
+        run_with_wait = source[source.index("def _run_with_wait"):
+                               source.index("def _show_please_wait")]
+        self.assertNotIn(
+            "after_idle(wait.close)", run_with_wait,
+            "the close is deferred to the event loop, which fires as soon as "
+            "rendering starts pumping rather than when rendering is done")
+        self.assertIn("keep_open", run_with_wait,
+                      "_run_with_wait no longer hands the popup to the caller")
+
+        loader = source[source.index("def load_manifest_settings"):
+                        source.index("def _on_settings_canvas_configure")]
+        self.assertIn("keep_open=True", loader,
+                      "the loader no longer adopts the popup")
+        self.assertIn("wait.close()", loader,
+                      "the loader adopts the popup but never closes it")
+
+    def test_the_wait_popup_does_not_outlive_a_successful_load(self):
+        # The other half: having handed the popup to the caller, the caller
+        # must actually close it. A popup left on screen is worse than one
+        # that closes early.
+        captured = {}
+        original = self.app._run_with_wait
+
+        def spy(message, work, keep_open=False):
+            result = original(message, work, keep_open=keep_open)
+            if keep_open:
+                captured["wait"] = result[1]
+            return result
+
+        self.app._run_with_wait = spy
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                self.app.manifest_var.set(str(self._manifest(tmp)))
+                self.assertTrue(self.app.load_manifest_settings())
+        finally:
+            self.app._run_with_wait = original
+
+        self.assertIn("wait", captured, "the loader never adopted a popup")
+        self.assertFalse(captured["wait"].winfo_exists(),
+                         "the wait popup was left on screen after loading")
+
+    def test_a_failed_load_does_not_strand_the_wait_popup(self):
+        # A worker that raises must close the popup inside _run_with_wait,
+        # because the caller raises before it can adopt it.
+        captured = {}
+        original = self.app._run_with_wait
+
+        def spy(message, work, keep_open=False):
+            def boom():
+                raise RuntimeError("load exploded")
+
+            try:
+                return original(message, boom, keep_open=keep_open)
+            finally:
+                captured["ran"] = True
+
+        self.app._run_with_wait = spy
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                self.app.manifest_var.set(str(self._manifest(tmp)))
+                self.assertFalse(self.app.load_manifest_settings())
+        finally:
+            self.app._run_with_wait = original
+
+        self.assertTrue(captured.get("ran"))
+        # No popup may be left mapped.
+        leftover = [w for w in self.root.winfo_children()
+                    if isinstance(w, gui.WaitWindow) and w.winfo_exists()]
+        self.assertEqual(leftover, [], "a failed load left a wait popup on screen")
 
     def test_a_failure_in_the_work_surfaces_on_the_main_thread(self):
         # Captured on the worker and re-raised here, otherwise it vanishes
