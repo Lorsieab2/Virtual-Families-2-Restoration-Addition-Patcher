@@ -2868,20 +2868,22 @@ B182 the crash is a stack displacement, and it was never a build regression
 
 - THE ORIGIN IS COMMIT 535334a, "Add autonomous mobile holiday behaviors".
 
-- WHAT IS STILL NOT ESTABLISHED. No rebuilt binary has yet been shown to boot
-  with the feature enabled. The diagnosis is verified from the shipped bytes
-  and from the dumps; it is not yet confirmed by a build that runs. This entry
-  does not claim the crash is fixed.
+- AND IT IS NOW CONFIRMED AT RUNTIME. A build made from the corrected source,
+  with the feature enabled, ran to a clean exit and wrote no crash dump. The
+  unfixed build, same install and same assets, faulted with the same access
+  violation and wrote one. Only the executable differed, so the difference is
+  the fix rather than the environment. That is the evidence this entry was
+  waiting for, and it is what distinguishes a diagnosis from a cure.
 
-- AND VERIFYING IT REQUIRES A FRESH BUILD, NOT A REUSED OUTPUT DIRECTORY. The
-  intermediate objects under work/patched_mobile_furniture_pack_objs/ are build
-  products and are not tracked. The VillagerAI object sitting there was
-  produced before this change and still carries the faulty branch: searching it
-  for the pre-fix byte sequence finds it, and for the corrected one finds
-  nothing. A build that reuses that directory therefore links the OLD object
-  and the source fix does nothing at all, while every source-level check still
-  passes. Regenerate the objects, or the artifact will not contain what the
-  repository says it contains.
+- TWO BUILD HAZARDS MADE THAT TEST EASY TO GET WRONG, and both would have
+  produced a false pass. The intermediate objects are untracked build products
+  and the one on disk predated the fix, still carrying the pre-fix byte
+  sequence, so the patch had to be applied from the pristine object and the
+  build directory rewritten; a build reusing the old directory links the old
+  object and the fix does nothing while every source-level check passes. And a
+  fresh build ships every feature flag at zero, so the flag has to be set
+  explicitly before testing: without that the feature never runs and "no crash"
+  means only that the code under test was never reached.
 
 - A METHOD WARNING EARNED THREE TIMES IN ONE DAY. Three separate stack-imbalance
   scanners, written independently, each produced a confident false positive on
