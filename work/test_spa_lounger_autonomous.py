@@ -19,6 +19,24 @@ def _source():
     )
 
 
+def _receiving_body():
+    """The receiving handler's body, comments stripped.
+
+    Comments name the calls they explain, so an ordering assertion made
+    against the raw text would measure prose rather than code. And the
+    DEFINITION is found, not the forward declaration -- both begin
+    identically and only the definition is followed by an opening brace.
+    """
+    source = _source()
+    signature = "static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)"
+    start = source.index(signature + "\n{")
+    lines = source[start:].split("\n")
+    end = next(i for i, line in enumerate(lines) if line.rstrip() == "}")
+    return "\n".join(
+        line for line in lines[:end] if not line.strip().startswith("//")
+    )
+
+
 class TestOnlyReceivingIsAutonomous(unittest.TestCase):
     def test_the_receiving_handler_exists(self):
         self.assertIn(
@@ -61,6 +79,65 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         self.assertIn("if (!VF2SpaAdult(villager)) return false;", body)
         self.assertIn("VF2FindFreeSpaLoungerSlot(villager)", body)
         self.assertIn("if (loungerSlot < 0) return false;", body)
+
+    def test_the_read_only_probe_runs_before_the_link(self):
+        """A rejected chaise must never have been reserved first.
+
+        LinkPeepToFurniture takes a peep slot as a side effect and this
+        engine exposes no unlink call, so checking after the link means an
+        ordinary chaise nearer than the lounger gets held against a villager
+        who then goes off and does something else -- excluding everyone else
+        from it for the duration. FindFurniture answers the same
+        nearest-match question and reserves nothing.
+
+        Asserted as an ORDERING rather than by pinning either call's
+        arguments, so a rewrite that keeps the property still passes.
+        """
+        body = _receiving_body()
+        probe = body.index("FindFurniture")
+        link = body.index("LinkPeepToFurniture")
+        self.assertLess(
+            probe, link,
+            "the link reserves a peep slot, so the identity check has to "
+            "happen before it, not after",
+        )
+
+    def test_the_probe_result_is_checked_before_the_link(self):
+        body = _receiving_body()
+        check = body.index("VF2SpaLoungerHasHandle")
+        link = body.index("LinkPeepToFurniture")
+        self.assertLess(
+            check, link,
+            "probing and then linking regardless would reserve the chaise "
+            "the probe just rejected",
+        )
+
+    def test_identity_is_by_placement_handle_not_by_position(self):
+        # info.point is the WALK-TO ANCHOR, so hit-testing it asks which item
+        # the villager stands INSIDE and returns -1 for anything they stand
+        # beside. That is what once left a villager at the Ping-Pong Table
+        # labelled "Playing pool". Two chaises of the same type are
+        # distinguishable only by handle.
+        body = _receiving_body()
+        self.assertIn("unknown0", body)
+        self.assertNotIn(
+            "VF2FurnitureItemAtPoint(probe.point)", body,
+            "position lookups cannot tell two chaises of one type apart",
+        )
+        self.assertNotIn("VF2FurnitureItemAtPoint(info.point)", body)
+
+    def test_what_the_link_actually_reserved_is_confirmed(self):
+        # The probe and the link ask slightly different questions -- the
+        # linker also skips placements with no free peep slot -- so the
+        # result is confirmed rather than assumed.
+        body = _receiving_body()
+        link = body.index("LinkPeepToFurniture")
+        after = body[link:]
+        self.assertIn(
+            "VF2SpaLoungerHasHandle(info.unknown0)", after,
+            "the link's own result is never checked, so a lounger that "
+            "filled up between the probe and the link goes unnoticed",
+        )
 
     def test_the_finder_accepts_only_the_two_spa_loungers(self):
         src = _source()
