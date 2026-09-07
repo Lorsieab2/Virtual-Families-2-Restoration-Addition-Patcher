@@ -164,6 +164,55 @@ class FeatureRegressionTests(unittest.TestCase):
             previous = gate.previous_release_archive(after)
             self.assertEqual(previous.name, "VF2-B181-Release.zip")
 
+    def test_an_unreadable_predecessor_is_reported_not_raised(self):
+        # The read happens AFTER packaging. An uncaught exception unwinds
+        # main() without reaching quarantine(), leaving a rejected archive at
+        # its publishable filename -- this gate causing the accident it
+        # exists to prevent. A truncated file with the exact canonical name
+        # passes the grammar filter, so the name check does not cover this.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "VF2-B181-Release.zip").write_bytes(b"truncated, not a zip")
+            after = _bundle(root / "VF2-B183-Release.zip", ["a"])
+            previous = gate.previous_release_archive(after)
+            self.assertEqual(previous.name, "VF2-B181-Release.zip")
+            with self.assertRaises(gate.UnreadableRelease):
+                gate.lost_settings(after, previous)
+
+    def test_an_archive_with_no_manifest_is_reported_not_raised(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            import zipfile as _zipfile
+            empty = root / "VF2-B181-Release.zip"
+            with _zipfile.ZipFile(empty, "w") as z:
+                z.writestr("readme.txt", "no manifest here")
+            with self.assertRaises(gate.UnreadableRelease):
+                gate.settings_in_archive(empty)
+
+    def test_a_missing_predecessor_does_not_read_as_success(self):
+        # /outputs/ and *.zip are both gitignored, so a clean checkout or a
+        # cleaned outputs/ supplies no predecessor at all. Treating that as a
+        # pass makes every established release look like the first one and
+        # skips the check exactly when nobody is watching.
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        checked = source.index("previous is None")
+        passed = source.index('print(f"RELEASE GATE PASSED')
+        self.assertLess(checked, passed)
+        tail = source[checked:passed]
+        self.assertIn(
+            "quarantine(", tail,
+            "a missing predecessor must quarantine rather than pass",
+        )
+        self.assertIn(
+            "allow_missing_predecessor", tail,
+            "the bootstrap must be an explicit decision, not a default",
+        )
+
+    def test_the_bootstrap_override_exists_and_is_opt_in(self):
+        source = Path(gate.__file__).read_text(encoding="utf-8")
+        self.assertIn("--allow-missing-predecessor", source)
+        self.assertIn('action="store_true"', source)
+
     def test_a_thin_release_is_rejected_even_with_no_baseline(self):
         # "No fewer than the previous release" is only as good as the release
         # it compares against. With no prior archive there is nothing to

@@ -40,6 +40,15 @@ def run(argv: list[str]) -> subprocess.CompletedProcess:
 
 
 
+class UnreadableRelease(Exception):
+    """A release archive that cannot be read as one.
+
+    Its own type so the gate can quarantine rather than crash: the read
+    happens after packaging, and an uncaught failure there is worse than a
+    wrong answer.
+    """
+
+
 def settings_in_archive(archive: Path) -> set[str]:
     """The setting ids a packaged release actually offers.
 
@@ -47,14 +56,26 @@ def settings_in_archive(archive: Path) -> set[str]:
     tree, because the question is what this ARCHIVE ships -- which is the
     thing that regressed -- not what the exporter believed it was building.
     """
-    with zipfile.ZipFile(archive) as bundle:
-        manifests = sorted(
-            (n for n in bundle.namelist() if n.endswith("manifest.json")),
-            key=len,
-        )
-        if not manifests:
-            return set()
-        data = json.loads(bundle.read(manifests[0]).decode("utf-8", "replace"))
+    try:
+        with zipfile.ZipFile(archive) as bundle:
+            manifests = sorted(
+                (n for n in bundle.namelist() if n.endswith("manifest.json")),
+                key=len,
+            )
+            if not manifests:
+                raise UnreadableRelease(f"{archive.name} contains no manifest.json")
+            raw = bundle.read(manifests[0]).decode("utf-8", "replace")
+        data = json.loads(raw)
+    except UnreadableRelease:
+        raise
+    except Exception as failure:
+        # Never let this raise out of the gate. It runs AFTER packaging, so an
+        # exception unwinds main() without reaching quarantine() and leaves a
+        # rejected archive sitting at its publishable filename -- the exact
+        # accident this gate exists to prevent, reached through the gate.
+        # A truncated file named exactly VF2-B181-Release.zip passes the
+        # grammar filter, so the name check is not enough on its own.
+        raise UnreadableRelease(f"{archive.name}: {failure}") from failure
     return {
         row["id"]
         for row in (data.get("settings") or [])
@@ -229,6 +250,15 @@ def incomplete_variant_coverage(shipped_variants: object) -> str | None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--allow-missing-predecessor",
+        action="store_true",
+        help=(
+            "Publish without comparing against a previous release. Only for "
+            "a genuine first release: a missing predecessor is otherwise a "
+            "retained-archive problem, not a reason to skip the check."
+        ),
+    )
     parser.add_argument("--release", required=True, help="Release name, e.g. B175")
     parser.add_argument(
         "--bundle-dir",
@@ -350,21 +380,45 @@ def main() -> int:
     # and carries every piece of its content; a build that silently ships
     # fewer features than its predecessor breaks that, and nothing here
     # noticed until a person opened the archive.
-    short = short_of_expected(archive)
+    try:
+        short = short_of_expected(archive)
+    except UnreadableRelease as failure:
+        return quarantine(archive, f"the packaged archive is unreadable: {failure}")
     if short is not None:
         return quarantine(archive, short)
 
     previous = previous_release_archive(archive)
-    if previous is not None:
-        lost = lost_settings(archive, previous)
+    if previous is None:
+        # A missing predecessor is not evidence of a first release. Both
+        # /outputs/ and *.zip are gitignored, so a clean checkout -- or a
+        # cleaned outputs/ -- supplies none, which would make every
+        # established release indistinguishable from the genuine first one
+        # and skip the check exactly when nobody is watching.
+        #
+        # Refuse instead, and make the bootstrap an explicit decision
+        # somebody has to take rather than a default nobody notices.
+        if not args.allow_missing_predecessor:
+            return quarantine(
+                archive,
+                f"no predecessor release found beside {archive.name}, so the "
+                "feature-regression check could not run. Retain the previous "
+                "release ZIP next to this one, or pass "
+                "--allow-missing-predecessor if this really is the first "
+                "release.",
+            )
+        print("no predecessor, and the bootstrap override was given")
+    else:
+        try:
+            lost = lost_settings(archive, previous)
+        except UnreadableRelease as failure:
+            return quarantine(
+                archive,
+                f"the predecessor could not be read, so the "
+                f"feature-regression check could not run: {failure}",
+            )
         if lost is not None:
             return quarantine(archive, lost)
         print(f"no features lost against {previous.name}")
-    else:
-        # No prior release to compare against. The absolute floor above is
-        # the only coverage check that ran, so say so rather than letting
-        # silence read as a passed comparison.
-        print("no previous release to compare against; settings count only")
 
     print(json.dumps(summary, indent=2, sort_keys=True))
     print(f"RELEASE GATE PASSED -- {archive} is ready to publish")
