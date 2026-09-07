@@ -28662,9 +28662,10 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
 
 bool const theMainScene::VF2HandleDropOnMobileFurniture(CVillager &villager)
 {
-    ldwPoint sample = villager.FeetPos();
+ldwPoint sample = villager.FeetPos();
     sample.y -= 10;
     int candidate = VF2FurnitureItemAtPoint(sample);
+__VF2_ADDED_FURNITURE_DROP_DISPATCH__
 __VF2_COMPUTER_DROP_DISPATCH__
     // The Invisible Spa Lounger is a custom item, not ported mobile furniture,
     // and the Mobile Furniture Behaviors setting says in so many words that
@@ -28690,22 +28691,6 @@ __VF2_COMPUTER_DROP_DISPATCH__
     // which is why they appear in the conditions below rather than in routes
     // of their own.
     if (gVF2MobileFurnitureBehaviors == 0) return false;
-    if (candidate == __VF2_EXERCISE_BIKE_ITEM_ID__) {
-        VF2ExerciseBikeWalk(villager);
-        return true;
-    }
-    if (candidate == __VF2_HOME_GYM_ITEM_ID__) {
-        VF2HomeGymWorkout(villager);
-        return true;
-    }
-    if (candidate == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {
-        VF2YogaEquipmentWorkout(villager);
-        return true;
-    }
-    if (candidate == __VF2_PING_PONG_TABLE_ITEM_ID__) {
-        VF2PingPongPlay(villager);
-        return true;
-    }
     if (VF2IsMobileChaise(candidate)) return VF2HandleMobileChaise(villager);
     if (candidate == 0x2E7) return VF2HandleMobilePatioUmbrella(villager);
     // The invisible tables are the same items without art -- same donor,
@@ -28754,6 +28739,29 @@ __VF2_COMPUTER_DROP_DISPATCH__
     )
     helper_source = helper_source.replace(
         "__VF2_COMPUTER_DROP_DISPATCH__", computer_drop_dispatch
+    )
+    added_furniture_drop_dispatch = "" if not ENABLE_BEHAVIOR_PATCHES else """
+    // Added-item identity must win before the stock hotspot: these items use
+    // donor maps, so the stock hotspot would otherwise consume the drop first.
+    if (candidate == __VF2_EXERCISE_BIKE_ITEM_ID__) {
+        VF2ExerciseBikeWalk(villager);
+        return true;
+    }
+    if (candidate == __VF2_HOME_GYM_ITEM_ID__) {
+        VF2HomeGymWorkout(villager);
+        return true;
+    }
+    if (candidate == __VF2_YOGA_EQUIPMENT_ITEM_ID__) {
+        VF2YogaEquipmentWorkout(villager);
+        return true;
+    }
+    if (candidate == __VF2_PING_PONG_TABLE_ITEM_ID__) {
+        VF2PingPongPlay(villager);
+        return true;
+    }
+"""
+    helper_source = helper_source.replace(
+        "__VF2_ADDED_FURNITURE_DROP_DISPATCH__", added_furniture_drop_dispatch
     )
     # Added furniture routes to its donor's drop handler. The ids come from
     # the item tables so a renumbering cannot leave a route pointing at the

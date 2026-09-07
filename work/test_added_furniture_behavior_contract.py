@@ -46,8 +46,8 @@ class TestAddedFurnitureContract(unittest.TestCase):
 
     def test_manual_drop_routes_added_items_to_own_handlers(self):
         src = source()
-        start = src.index("bool const theMainScene::VF2HandleDropOnMobileFurniture")
-        body = src[start:src.index("\n}\n'''", start)]
+        start = src.index("added_furniture_drop_dispatch =")
+        body = src[start:src.index("helper_source = helper_source.replace(\n        \"__VF2_ADDED_FURNITURE_DROP_DISPATCH__\"", start)]
         for item, handler in (
             ("__VF2_EXERCISE_BIKE_ITEM_ID__", "VF2ExerciseBikeWalk"),
             ("__VF2_HOME_GYM_ITEM_ID__", "VF2HomeGymWorkout"),
