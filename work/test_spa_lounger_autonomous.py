@@ -83,6 +83,22 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         self.assertIn("info.orientation == 1", body)            # chosen per lounger
         self.assertIn("static_cast<ESound>(0x101)", body)       # gulpahh_01.ogg
 
+    def test_receiving_uses_sleep_animation_and_preserves_total_duration(self):
+        src = _source()
+        start = src.index("static void VF2PlanSpaTreatment(")
+        body = src[start:src.index("\n}", start)]
+        self.assertIn("int const settle = 10;", body)
+        self.assertIn('PlanToPlayAnim(total - settle, "SleepNW"', body)
+        self.assertIn('PlanToPlayAnim(total - settle, "SleepNE"', body)
+
+    def test_both_receiving_routes_raise_the_walk_target_slightly(self):
+        src = _source()
+        self.assertIn("static ldwPoint VF2SpaTreatmentPoint(ldwPoint point)", src)
+        self.assertEqual(src.count("VF2SpaTreatmentPoint(receiveInfo.point)"), 1)
+        self.assertEqual(src.count("VF2SpaTreatmentPoint(info.point)"), 1)
+        helper = src[src.index("static ldwPoint VF2SpaTreatmentPoint"):src.index("static char const *const kVF2SpaReceivingLabels", src.index("static ldwPoint VF2SpaTreatmentPoint"))]
+        self.assertIn("point.y -= 4;", helper)
+
     def test_manual_giving_uses_the_same_one_minute_duration(self):
         src = _source()
         start = src.index(

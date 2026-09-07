@@ -28423,7 +28423,7 @@ protected:
 // autonomous receiving route so both look the same.
 //
 // Duration and posture come from the chaise "Taking a nap" branch, which is
-// what was asked for: GetRandom(5) + 5, lying down when the lounger faces one
+// what was asked for: roughly one real minute, lying down when the lounger faces one
 // way and sitting in the chaise pose when it faces the other. Reading the
 // orientation out of sFurnitureInfo2 rather than assuming one is what keeps a
 // villager from lying across the arm of a lounger placed the other way round.
@@ -28437,6 +28437,7 @@ static void VF2PlanSpaTreatment(
 {
     (void)villager;
     int const total = ldwGameState::GetRandom(11) + 55;
+    int const settle = 10;
 
     // ONE rest for the whole treatment, not a slice per sigh.
     //
@@ -28447,9 +28448,11 @@ static void VF2PlanSpaTreatment(
     // never rested. Every working chaise route in this file issues a single
     // call for the full duration; this now does the same.
     if (info.orientation == 1) {
-        plans->PlanToWait(total, eBodyPositionChaise);
+        plans->PlanToWait(settle, eBodyPositionChaise);
+        plans->PlanToPlayAnim(total - settle, "SleepNW", false, 0.02f);
     } else {
-        plans->PlanToLieDown(total);
+        plans->PlanToLieDown(settle);
+        plans->PlanToPlayAnim(total - settle, "SleepNE", false, 0.02f);
     }
 
     // The sigh is deliberately NOT interleaved with the rest any more.
@@ -28463,6 +28466,15 @@ static void VF2PlanSpaTreatment(
     // A treatment is restful, so it pays the nap's own energy and dirtiness.
     plans->PlanToIncDirtiness(2);
     plans->PlanToIncEnergy(ldwGameState::GetRandom(5) + 7);
+}
+
+static ldwPoint VF2SpaTreatmentPoint(ldwPoint point)
+{
+    // The chaise anchor leaves the receiving villager a little too low on the
+    // lounger. Keep the furniture orientation and identity unchanged; adjust
+    // only the walk-to destination used by the receiving routes.
+    point.y -= 4;
+    return point;
 }
 
 static char const *const kVF2SpaReceivingLabels[] = {
@@ -28587,7 +28599,8 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
     VF2SetActionLabel(
         villager,
         kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
-    plans->PlanToGo(receiveInfo.point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToGo(
+        VF2SpaTreatmentPoint(receiveInfo.point), eSpeedNormal, ePriorityNormal);
     VF2PlanSpaTreatment(plans, villager, receiveInfo);
     plans->StartNewBehavior(villager);
     return true;
@@ -28655,7 +28668,8 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
     VF2SetActionLabel(
         villager,
         kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
-    plans->PlanToGo(info.point, eSpeedNormal, ePriorityNormal);
+    plans->PlanToGo(
+        VF2SpaTreatmentPoint(info.point), eSpeedNormal, ePriorityNormal);
     VF2PlanSpaTreatment(plans, villager, info);
     plans->StartNewBehavior(villager);
     return true;
@@ -33107,10 +33121,12 @@ static void VF2RunOwnFurnitureAction(
     }
     VF2BeginAddedFurnitureVenue(villager, venue);
     int remembered = VF2CurrentLabelInGroup(villager, labels, labelCount);
-    bool const changed = VF2RunNativeBehaviorAndChangedLabel(
-        villager, donorBehavior);
+    VF2RunNativeBehaviorAndChangedLabel(villager, donorBehavior);
     VF2EndAddedFurnitureVenue(villager);
-    if (!changed) return;
+    // A donor can accept the action while retaining its native label (for
+    // example, "Stretching" or "Walking on the treadmill"). The venue was
+    // already resolved to this item, so do not mistake an unchanged label for
+    // a rejected action; preserve the donor action and apply the item's label.
     VF2ApplyRememberedOrRandomLabel(villager, labels, labelCount, remembered);
 }
 

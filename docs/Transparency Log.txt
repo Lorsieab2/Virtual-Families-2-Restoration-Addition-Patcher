@@ -3032,3 +3032,23 @@ B182 CURRENT-MAIN PLAYTEST CRASH AND REBUILD PROVENANCE.
   It stayed running for 15 seconds from the package folder and produced zero
   new Application Error events. This is startup smoke evidence only; player
   gameplay QA remains outstanding.
+
+B182 PLAYTEST FOLLOW-UP: BIKE, HOME GYM AND SPA RECEIVING.
+
+- The owner reported that the Exercise Bike still displayed "Walking on the
+  treadmill" and the Home Gym still displayed "Stretching". The matching
+  placed-item venue was already being found; the narrow defect was the wrapper
+  treating an unchanged donor label as rejection and returning before applying
+  the item's label. The venue path now preserves the donor action and applies
+  the item label regardless of whether the donor changed its text. The absent
+  venue fallback remains native and unchanged.
+- Spa receiving now keeps the existing randomized roughly one-minute duration,
+  adds the stock SleepNW/SleepNE animation after a 10-unit settle, and applies
+  a four-unit negative-Y adjustment only to the receiving walk-to target in
+  both manual and autonomous receiving paths. Furniture identity, orientation,
+  linking and availability are unchanged.
+- Focused source-contract tests cover the unchanged-label venue case, both
+  sleep strips, total-duration arithmetic, and both receiving target paths.
+  This entry records source/static evidence only. A generated executable and
+  live player confirmation are still required before calling the playtest
+  complaints fixed.
