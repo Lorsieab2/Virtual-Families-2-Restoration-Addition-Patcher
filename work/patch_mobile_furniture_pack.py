@@ -24920,6 +24920,12 @@ def sync_behavior_assets(manifest):
         "invisible_transparent_fmap_donors": invisible_transparent_copied,
         "vf3_tv_fmap_donors": vf3_tv_copied,
         "small_decor_sanitized_fmaps": sanitized,
+        # Recorded so the widening is verifiable from the BUILD OUTPUT
+        # rather than only from the generator source. Each entry names
+        # the target, the donor cell count it grew from, and the count
+        # it grew to, so a run that silently widened nothing is visible
+        # in the manifest instead of passing quietly.
+        "spa_lounger_widened_hotspots": spa_widened,
         "missing": missing,
     }
 

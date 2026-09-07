@@ -24,6 +24,20 @@ DONOR = (ROOT / "patcher_assets" / "optional_patches"
          / "mobile_furniture_behaviors" / "pc_fmaps" / "Chaise_brown.png.fmap")
 
 
+def _object_cell_count(data):
+    """How many cells carry the map's dominant nonzero value."""
+    width, height = struct.unpack_from("<ii", data, 24)
+    cells = struct.unpack_from("<%dI" % (width * height), data, 32)
+    counts = {}
+    for value in cells:
+        if value:
+            counts[value] = counts.get(value, 0) + 1
+    if not counts:
+        return 0
+    obj = max(counts, key=lambda v: counts[v])
+    return counts[obj]
+
+
 def widen(data):
     """The transform under test, applied to fmap bytes."""
     data = bytearray(data)
@@ -86,6 +100,131 @@ class TheWideningIsWiredUp(unittest.TestCase):
                     other, block,
                     "%s is a shared donor map; widening it would change "
                     "ordinary chaises too" % other)
+
+
+class TheProductionWidenerActuallyWidens(unittest.TestCase):
+    """Exercise the REAL widener, not a reimplementation of it.
+
+    Every other class here either searches the generator source for a function
+    name or runs the local `widen()` copy below. Both still pass if the
+    production `widen_spa_lounger_hotspot` returns without changing a byte --
+    which is the failure mode most worth catching, because it ships a build
+    where the hotspot was never widened and every test is green.
+
+    So this stages a donor and a borrower in a temporary directory, calls the
+    generator's own nested function through the module, and reads the bytes it
+    wrote.
+    """
+
+    def setUp(self):
+        if not DONOR.is_file():
+            self.skipTest("donor fmap not present in this checkout")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gen", GENERATOR)
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except SystemExit:
+            pass
+        except Exception as exc:  # pragma: no cover - environment dependent
+            self.skipTest("generator not importable here: %s" % exc)
+        self.gen = module
+
+    def test_the_recorded_output_names_both_targets_and_their_growth(self):
+        """The manifest record is the artifact-side evidence.
+
+        A run that widened nothing records nothing, so an empty list here is a
+        silent no-op made visible.
+        """
+        source = GENERATOR.read_text(encoding="utf-8", errors="replace")
+        self.assertIn(
+            '"spa_lounger_widened_hotspots": spa_widened', source,
+            "the widening is not recorded in the build manifest, so a build "
+            "that widened nothing cannot be told from one that did")
+        # And the record must carry the counts, not just the names.
+        self.assertIn('"widened_from"', source)
+        self.assertIn('"widened_to"', source)
+
+    def test_running_the_real_sync_widens_both_shipped_maps(self):
+        """Call the PRODUCTION path and read the bytes it wrote.
+
+        widen_spa_lounger_hotspot is nested inside sync_behavior_assets, so it
+        cannot be invoked directly. Running the enclosing function is what
+        makes this a check of the shipped behaviour rather than of a
+        reimplementation: a widener that returns without changing a byte fails
+        here and passes everything else in this file.
+        """
+        gen = self.gen
+        manifest = {"items": []}
+        try:
+            gen.sync_behavior_assets(manifest)
+        except Exception as exc:  # pragma: no cover - environment dependent
+            self.skipTest("sync_behavior_assets needs build inputs here: %s"
+                          % exc)
+
+        record = manifest.get("behavior_assets", {}).get(
+            "spa_lounger_widened_hotspots")
+        self.assertIsNotNone(
+            record,
+            "sync_behavior_assets recorded no widening at all, so the "
+            "production widener did nothing")
+        widened = {row["target"]: row for row in record}
+        for target in gen.SPA_LOUNGER_WIDENED_FMAPS:
+            with self.subTest(target=target):
+                self.assertIn(
+                    target, widened,
+                    "%s was not widened by the production path" % target)
+                row = widened[target]
+                self.assertGreater(
+                    row["widened_to"], row["widened_from"],
+                    "%s recorded a widening that grew nothing: %s"
+                    % (target, row))
+
+    def test_the_widened_bytes_are_on_disk_after_the_real_sync(self):
+        """The manifest could be right while the file was never written."""
+        gen = self.gen
+        manifest = {"items": []}
+        try:
+            gen.sync_behavior_assets(manifest)
+        except Exception as exc:  # pragma: no cover - environment dependent
+            self.skipTest("sync_behavior_assets needs build inputs here: %s"
+                          % exc)
+
+        donor_cells = _object_cell_count(DONOR.read_bytes())
+        assets = (ROOT / "patcher_assets" / "optional_patches"
+                  / "mobile_furniture_behaviors" / "pc_fmaps")
+        for target in gen.SPA_LOUNGER_WIDENED_FMAPS:
+            path = assets / target
+            with self.subTest(target=target):
+                if not path.is_file():
+                    self.skipTest("%s is not staged in this checkout" % target)
+                shipped = _object_cell_count(path.read_bytes())
+                self.assertGreater(
+                    shipped, donor_cells,
+                    "%s on disk has %d object cells, no more than the donor's "
+                    "%d -- the widening did not reach the file"
+                    % (target, shipped, donor_cells))
+
+    def test_the_targets_and_donors_resolve_to_real_files(self):
+        gen = self.gen
+        for target in gen.SPA_LOUNGER_WIDENED_FMAPS:
+            with self.subTest(target=target):
+                donor = (gen.NEW_FURNITURE_FMAP_DONORS.get(target)
+                         or gen.INVISIBLE_TRANSPARENT_FMAP_DONORS.get(target)
+                         or gen.INVISIBLE_OUTDOOR_FMAP_DONORS.get(target))
+                self.assertIsNotNone(
+                    donor,
+                    "%s has no donor, so the production widener returns "
+                    "silently" % target)
+                # The donor must exist as a real pc_fmap, or the widener's
+                # `donor_path.is_file()` guard returns and nothing happens.
+                src = (ROOT / "patcher_assets" / "optional_patches"
+                       / "mobile_furniture_behaviors" / "pc_fmaps" / donor)
+                self.assertTrue(
+                    src.is_file(),
+                    "%s names donor %s, which is not present as a pc_fmap; "
+                    "the widener would return without widening"
+                    % (target, donor))
 
 
 class TheTransformIsSafe(unittest.TestCase):

@@ -53,6 +53,20 @@ LOUNGERS = (
     "SpaLoungerStd.png.fmap",
 )
 
+# The two spa loungers ship a DELIBERATELY WIDER drop target than the chaise
+# they borrow: the donor's object cells are an eleven-cell ragged diagonal and
+# dropping a villager on it was reported as very difficult. The generator
+# dilates their own copies by one cell, so they are no longer byte-identical to
+# the donor and no longer identical to the plain Invisible Lounger.
+#
+# That is the intended difference, and it is narrow: only the object-cell count
+# may change. Every other property this file checks -- no mobile-only markers,
+# no untranslated anchor, same grid, same header -- still applies to all three.
+WIDENED_LOUNGERS = (
+    "InvisibleSpaLounger.png.fmap",
+    "SpaLoungerStd.png.fmap",
+)
+
 
 def _cells(path):
     data = path.read_bytes()
@@ -134,9 +148,44 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                 if not path.is_file():
                     continue
                 with self.subTest(build=build.name, fmap=name):
+                    shipped = _cells(path)
+                    if name not in WIDENED_LOUNGERS:
+                        self.assertEqual(
+                            shipped, expected,
+                            "does not match the desktop-safe donor map",
+                        )
+                        continue
+                    # A widened spa map must be the donor map PLUS object
+                    # cells, never anything else: same length, and every cell
+                    # that is not an added object cell unchanged.
                     self.assertEqual(
-                        _cells(path), expected,
-                        "does not match the desktop-safe donor map",
+                        len(shipped), len(expected),
+                        "the widened map changed size",
+                    )
+                    counts = {}
+                    for value in expected:
+                        if value:
+                            counts[value] = counts.get(value, 0) + 1
+                    self.assertTrue(counts, "the donor map has no object cells")
+                    obj = max(counts, key=lambda v: counts[v])
+                    for index, (was, now) in enumerate(zip(expected, shipped)):
+                        if was == now:
+                            continue
+                        self.assertEqual(
+                            was, 0,
+                            "cell %d was overwritten; only EMPTY cells may "
+                            "become object cells" % index,
+                        )
+                        self.assertEqual(
+                            now, obj,
+                            "cell %d became %#x rather than the object value "
+                            "%#x" % (index, now, obj),
+                        )
+                    self.assertGreater(
+                        sum(1 for v in shipped if v == obj),
+                        sum(1 for v in expected if v == obj),
+                        "the spa map is not actually wider than the donor, so "
+                        "the widening did not reach this build",
                     )
 
     def test_every_lounger_ships_the_same_map(self):
@@ -154,10 +203,35 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                     p.name: hashlib.sha256(p.read_bytes()).hexdigest()
                     for p in present
                 }
-                self.assertEqual(
-                    len(set(digests.values())), 1,
-                    f"loungers disagree: {digests}",
-                )
+                # Two groups now, not one: the widened spa pair, and everything
+                # else which still ships the donor map untouched. Within each
+                # group they must still agree exactly -- a divergence there
+                # means one target missed a fix, which is what this test was
+                # written to catch.
+                widened = {n: d for n, d in digests.items()
+                           if n in WIDENED_LOUNGERS}
+                plain = {n: d for n, d in digests.items()
+                         if n not in WIDENED_LOUNGERS}
+                if len(widened) > 1:
+                    self.assertEqual(
+                        len(set(widened.values())), 1,
+                        f"the widened spa loungers disagree: {widened}",
+                    )
+                if len(plain) > 1:
+                    self.assertEqual(
+                        len(set(plain.values())), 1,
+                        f"the unwidened loungers disagree: {plain}",
+                    )
+                # And the two groups MUST differ, or the widening never
+                # reached this build and every check above passed on
+                # unmodified bytes.
+                if widened and plain:
+                    self.assertNotEqual(
+                        set(widened.values()), set(plain.values()),
+                        "the spa loungers are byte-identical to the plain "
+                        "one, so the hotspot widening did not reach this "
+                        "build",
+                    )
 
 
 class TestStockDonorBorrowersMatchTheirDonors(unittest.TestCase):
