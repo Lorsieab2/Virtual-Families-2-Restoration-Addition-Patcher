@@ -6,10 +6,10 @@ thing that would make it false, so that changing the code without changing the
 docs fails here rather than shipping a manual that describes a different build.
 
 The distinction that matters most is between the routed and the unrouted added
-furniture. Five items are routed through this patcher's own drop dispatcher;
-seven rely on the game's native hotspot path and have NOT been confirmed by a
-player. A doc that blurs the two would be claiming something the build cannot
-support.
+furniture. The five original mobile routes plus the four stock-donor additions
+are routed through this patcher's own drop dispatcher; the three remaining
+stock-donor additions rely on the game's native hotspot path. A doc that blurs
+the two would be claiming something the build cannot support.
 """
 import hashlib
 import unittest
@@ -47,11 +47,13 @@ UNROUTED = {
     "InvisibleKiddiePool",
     "InvisibleFullSizePool",
     "InvisibleHammock",
+}
+ROUTED.update({
     "InvisibleYogaEquipment",
     "ExerciseBikeStd",
     "HomeGymSystemStd",
     "PingPongTableStd",
-}
+})
 
 
 def _added_items():
@@ -69,13 +71,13 @@ class TestTheRoutedAndUnroutedSplitIsReal(unittest.TestCase):
         self.assertEqual(ROUTED | UNROUTED, set(_added_items()))
         self.assertEqual(ROUTED & UNROUTED, set())
 
-    def test_the_docs_do_not_claim_the_unrouted_seven_are_confirmed(self):
+    def test_the_docs_do_not_claim_the_remaining_unrouted_items_are_confirmed(self):
         ledger = LEDGER.read_text(encoding="utf-8")
         row = next(
             line for line in ledger.splitlines()
             if "Stock-donor added furniture" in line
         )
-        # The point is that the row must not present these seven as working.
+        # The point is that the row must not present the remaining items as working.
         # The status wording is allowed to change as the investigation moves
         # on -- it began as "Needs player confirmation" and became "Premise
         # disproved / route needed" once the owner reported the Home Gym does
@@ -95,13 +97,13 @@ class TestTheRoutedAndUnroutedSplitIsReal(unittest.TestCase):
         self.assertTrue(
             any(word in status.lower() for word in unresolved),
             f"the status {status!r} does not say anything is still "
-            "unresolved, so it reads as working. The seven items are not "
+            "unresolved, so it reads as working. The remaining items are not "
             "routed through HandleDropOnHotSpot and the owner has reported "
             "the Home Gym System does nothing. If they genuinely now work, "
             "this test is the wrong thing to edit -- the route is.",
         )
         self.assertIn("HandleDropOnHotSpot", row)
-        # And every one of the seven is named, so none is quietly dropped from
+        # And every remaining item is named, so none is quietly dropped from
         # the outstanding list.
         for name, item_id in _added_items().items():
             if name in UNROUTED:
@@ -152,9 +154,9 @@ class TestTheEmittedDispatcherAgreesWithTheDocs(unittest.TestCase):
         chaise = self.text[start:self.text.index("\n}", start)]
         self.assertIn(f"{items['InvisibleLounger']:#x}".lower(), chaise.lower())
 
-    def test_the_seven_stock_donor_items_have_no_dispatcher_route(self):
-        # Not a defect -- they are handled by the native hotspot path. Pinned
-        # so that adding a route here without updating the docs fails.
+    def test_the_three_remaining_stock_donors_have_no_dispatcher_route(self):
+        # These three are still handled by the native hotspot path. Pinned so
+        # that adding a route here without updating the docs fails.
         items = _added_items()
         for name in sorted(UNROUTED):
             with self.subTest(item=name):
@@ -165,11 +167,11 @@ class TestTheEmittedDispatcherAgreesWithTheDocs(unittest.TestCase):
 
 
 class TestTheStockDonorsAreNotTheChaiseCase(unittest.TestCase):
-    """The seven stock-donor items are not affected by the #135 defect.
+    """The three remaining stock-donor items are not affected by #135.
 
     #135 fixed borrowers of donors that Mobile Furniture Behaviors implements:
     those donors ship two maps, and the borrower was taking the raw mobile one.
-    The seven here borrow stock desktop furniture, which that patch does not
+    The remaining items borrow stock desktop furniture, which that patch does not
     implement, so no second map exists and there is nothing to translate.
     """
 

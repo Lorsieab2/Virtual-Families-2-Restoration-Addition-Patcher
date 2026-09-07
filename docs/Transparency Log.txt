@@ -3011,4 +3011,24 @@ B182 BUILD ABI FOLLOW-UP.
   cdecl implementations behind x86 naked entry wrappers that prepend the
   native ECX receiver, preserve the original argument stack, and perform the
   original 16-byte thiscall cleanup. The focused contract test and required
-  B119 build now pass. Runtime/player verification remains outstanding.
+  current-main build now passes. Runtime/player verification remains outstanding.
+
+B182 CURRENT-MAIN PLAYTEST CRASH AND REBUILD PROVENANCE.
+
+- The first package labeled Latest Main Playtest crashed on open with access
+  violations at offsets 0x0032C8B8 and 0x003494C4. Its executable hash matched
+  the earlier build, but the generated spontaneous-behavior source in the
+  linked intermediate object still contained the obsolete `push ecx / ret`
+  wrapper. The source on main already contained the argument-forwarding fix;
+  the build had reused stale generated objects because the generator was not
+  rerun before linking.
+- The package was not patched in place with source changes. The generator was
+  rerun from main with `VF2_ENABLE_BEHAVIOR_PATCHES=1`, the generated wrapper
+  was inspected for four argument pushes, `add esp, 20`, and `ret 16`, and the
+  executable was rebuilt with `cmd.exe /c work\\build_b119.bat` (the legacy
+  filename used by the current build script). The complete 8,037-file current
+  main playtest package now contains the rebuilt 1,798,144-byte executable with
+  SHA-256 `B22EA3E64372F7D887BBC6A65F3B556E68DFB3D4098CD27D41A50E5FF574FF5E`.
+  It stayed running for 15 seconds from the package folder and produced zero
+  new Application Error events. This is startup smoke evidence only; player
+  gameplay QA remains outstanding.
