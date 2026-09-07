@@ -28575,8 +28575,9 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
 
         plans->ForgetPlans(villager, false);
         VF2SetActionLabel(villager, kVF2SpaGivingLabels[receiving]);
-        plans->PlanToGo(
-            CContentMap::eObjectChaise, eSpeedNormal, ePriorityNormal, false);
+        // The giver was manually dropped on this exact occupied spa lounger.
+        // Do not run the shared chaise-object search here: it can walk the
+        // giver to a nearer ordinary lounger while retaining a spa label.
         plans->PlanToWork(ldwGameState::GetRandom(11) + 55);
         plans->StartNewBehavior(villager);
         return true;
