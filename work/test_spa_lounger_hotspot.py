@@ -125,9 +125,13 @@ class TheProductionWidenerActuallyWidens(unittest.TestCase):
         try:
             spec.loader.exec_module(module)
         except SystemExit:
+            # The generator calls sys.exit() when run as a script; importing it
+            # for its constants is fine.
             pass
-        except Exception as exc:  # pragma: no cover - environment dependent
-            self.skipTest("generator not importable here: %s" % exc)
+        except ImportError as exc:
+            # A missing third-party dependency is an environment problem. Any
+            # OTHER exception is a defect in the generator and must fail.
+            self.skipTest("generator dependency missing here: %s" % exc)
         self.gen = module
 
     def test_the_recorded_output_names_both_targets_and_their_growth(self):
@@ -156,11 +160,12 @@ class TheProductionWidenerActuallyWidens(unittest.TestCase):
         """
         gen = self.gen
         manifest = {"items": []}
-        try:
-            gen.sync_behavior_assets(manifest)
-        except Exception as exc:  # pragma: no cover - environment dependent
-            self.skipTest("sync_behavior_assets needs build inputs here: %s"
-                          % exc)
+        # NOT WRAPPED. A blanket except here cannot tell a missing build input
+        # from a defect in the code under test, and reports both as absence of
+        # evidence: an injected crash in widen_spa_lounger_hotspot produced
+        # "18 passed, 2 skipped" -- a green run that verified no map at all.
+        # The real prerequisites are checked in setUp instead.
+        gen.sync_behavior_assets(manifest)
 
         record = manifest.get("behavior_assets", {}).get(
             "spa_lounger_widened_hotspots")
@@ -184,11 +189,12 @@ class TheProductionWidenerActuallyWidens(unittest.TestCase):
         """The manifest could be right while the file was never written."""
         gen = self.gen
         manifest = {"items": []}
-        try:
-            gen.sync_behavior_assets(manifest)
-        except Exception as exc:  # pragma: no cover - environment dependent
-            self.skipTest("sync_behavior_assets needs build inputs here: %s"
-                          % exc)
+        # NOT WRAPPED. A blanket except here cannot tell a missing build input
+        # from a defect in the code under test, and reports both as absence of
+        # evidence: an injected crash in widen_spa_lounger_hotspot produced
+        # "18 passed, 2 skipped" -- a green run that verified no map at all.
+        # The real prerequisites are checked in setUp instead.
+        gen.sync_behavior_assets(manifest)
 
         donor_cells = _object_cell_count(DONOR.read_bytes())
         assets = (ROOT / "patcher_assets" / "optional_patches"
@@ -304,9 +310,13 @@ class TheDonorLookupResolves(unittest.TestCase):
         try:
             spec.loader.exec_module(module)
         except SystemExit:
+            # The generator calls sys.exit() when run as a script; importing it
+            # for its constants is fine.
             pass
-        except Exception as exc:  # pragma: no cover - environment dependent
-            self.skipTest("generator not importable here: %s" % exc)
+        except ImportError as exc:
+            # A missing third-party dependency is an environment problem. Any
+            # OTHER exception is a defect in the generator and must fail.
+            self.skipTest("generator dependency missing here: %s" % exc)
         self.gen = module
 
     def test_every_widened_target_resolves_to_a_real_donor(self):
@@ -421,9 +431,13 @@ class TheClaimRuleProducesTheApprovedNumber(unittest.TestCase):
         try:
             spec.loader.exec_module(module)
         except SystemExit:
+            # The generator calls sys.exit() when run as a script; importing it
+            # for its constants is fine.
             pass
-        except Exception as exc:  # pragma: no cover - environment dependent
-            self.skipTest("generator not importable here: %s" % exc)
+        except ImportError as exc:
+            # A missing third-party dependency is an environment problem. Any
+            # OTHER exception is a defect in the generator and must fail.
+            self.skipTest("generator dependency missing here: %s" % exc)
         self.gen = module
 
     def _borrower(self):
@@ -519,6 +533,99 @@ class TheClaimRuleProducesTheApprovedNumber(unittest.TestCase):
 def _cells_of(data):
     width, height = struct.unpack_from("<ii", data, 24)
     return list(struct.unpack_from("<%dI" % (width * height), data, 32))
+
+
+class TheWideningScopeIsExactlyTheTwoSpaLoungers(unittest.TestCase):
+    """The tuple names the scope, so no check that iterates it can police it.
+
+    Every other check here -- and in test_shipped_lounger_fmaps -- decides what
+    to inspect by reading SPA_LOUNGER_WIDENED_FMAPS. A tuple with an extra
+    entry is therefore correct by construction: adding
+    "InvisibleLounger.png.fmap" widens the PLAIN lounger from 11 cells to 33
+    and the whole suite still passes.
+
+    That is not a hypothetical tidy-up. The owner asked for the two SPA
+    loungers and only those, so a wrong scope ships a change to an item nobody
+    asked about -- and the plain Invisible Lounger is not covered by
+    test_no_ordinary_chaise_is_widened either, because it is not a chaise, it
+    is a third borrower of the chaise's map.
+
+    So the expected membership is written out here, independent of the tuple.
+    """
+
+    EXPECTED = ("SpaLoungerStd.png.fmap", "InvisibleSpaLounger.png.fmap")
+    MUST_NOT_BE_WIDENED = (
+        "InvisibleLounger.png.fmap",
+        "Chaise_brown.png.fmap",
+        "Chaise_blue.png.fmap",
+        "Chaise_green.png.fmap",
+        "Chaise_red.png.fmap",
+    )
+
+    def _tuple_entries(self):
+        """The EVALUATED value, not the first parenthesised literal.
+
+        A regex over the source reads only the initial tuple, so
+        `SPA_LOUNGER_WIDENED_FMAPS = (...) + ("InvisibleLounger.png.fmap",)`
+        or a later `+=` widens the plain lounger while this check still sees
+        the original two names and passes. Measured: the concatenation form
+        gave 20 passed. Importing the module asks what the generator will
+        actually use.
+        """
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gen_scope", GENERATOR)
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except SystemExit:
+            pass
+        except ImportError as exc:
+            self.skipTest("generator dependency missing here: %s" % exc)
+        entries = getattr(module, "SPA_LOUNGER_WIDENED_FMAPS", None)
+        self.assertIsNotNone(entries, "SPA_LOUNGER_WIDENED_FMAPS is gone")
+        return set(entries)
+
+    def test_it_names_exactly_the_two_spa_loungers(self):
+        self.assertEqual(
+            self._tuple_entries(), set(self.EXPECTED),
+            "the widening scope changed; the owner asked for the two spa "
+            "loungers and only those, and every other check in this suite "
+            "reads this tuple to decide what to inspect, so a wrong scope is "
+            "invisible to them")
+
+    def test_no_shared_or_plain_map_is_in_scope(self):
+        entries = self._tuple_entries()
+        for name in self.MUST_NOT_BE_WIDENED:
+            with self.subTest(fmap=name):
+                self.assertNotIn(
+                    name, entries,
+                    "%s must keep the donor's unwidened footprint; widening a "
+                    "shared or plain map changes items the owner did not ask "
+                    "about" % name)
+
+    def test_the_loop_iterates_the_tuple_and_nothing_else(self):
+        """Both checks above police what the TUPLE SAYS. Pin what it IS.
+
+        A defect that widens the plain lounger WITHOUT touching the tuple
+        walks past them:
+
+            -    for target in SPA_LOUNGER_WIDENED_FMAPS:
+            +    for target in tuple(SPA_LOUNGER_WIDENED_FMAPS) + (
+            +            "InvisibleLounger.png.fmap",):
+
+        Measured: that gives 11 -> 33 on the plain lounger with both scope
+        tests green. It is the original bug one level up -- the first version
+        trusted the tuple to DEFINE the scope, and these trust the tuple to BE
+        the scope.
+
+        Found by the peer session, whose artifact-level check catches it; this
+        pins it in a clean checkout, where artifact checks skip.
+        """
+        self.assertIn(
+            "    for target in SPA_LOUNGER_WIDENED_FMAPS:", SOURCE,
+            "the widening loop no longer iterates SPA_LOUNGER_WIDENED_FMAPS "
+            "directly, so the scope this suite checks is not the scope the "
+            "generator uses")
 
 
 if __name__ == "__main__":
