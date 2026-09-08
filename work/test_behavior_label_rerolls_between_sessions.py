@@ -33,6 +33,23 @@ PERSISTENT_LABEL_OFFSET = "0x1BBA8"
 # bug: `unsigned int`, `unsigned char *`, `VF2DonorBehavior const *` and
 # `__fastcall` all failed to match, so 32 real definitions read as absent.
 # Anchor on the NAME and accept whatever precedes it on that line.
+# TWO TERMINATORS, NOT ONE. A brace on its own line is the common closer, but
+# the island-event thunks close on the SAME line:
+#
+#     static bool __fastcall VF2MobileIslandEventCanFireBody(...) { return ...; }
+#
+# With only `^\}` as the terminator the match ran straight past that
+# definition into unrelated code. Measured: VF2MobileIslandEventCanFireBody
+# returned a 43-line "body" containing 17 other definitions. That is worse
+# than returning None, because the sweep then inspects text belonging to
+# functions it was never looking at, and a violation anywhere in that span is
+# attributed to the wrong function.
+#
+# The same-line form is tried FIRST and is anchored to the end of the line, so
+# it can only match a body that genuinely closes there.
+_DEFINITION_ONE_LINE = (
+    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\{([^\n}]*)\}[^\n]*$'
+)
 _DEFINITION = (
     r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{(.*?)^\}'
 )
@@ -49,8 +66,29 @@ def find_function_body(name):
     silently exempted from every rule in this file. has_definition() exists so
     the sweep can tell those two cases apart.
     """
-    match = re.search(_DEFINITION % re.escape(name), SOURCE, re.S | re.M)
-    return match.group(1) if match else None
+    bodies = all_function_bodies(name)
+    return bodies[0] if bodies else None
+
+
+def all_function_bodies(name):
+    """EVERY definition with this name, not just the first.
+
+    The generator emits two definitions called VF2MaybeCompleteDisciplineProps.
+    A name-only search always returned the first, so the second was never
+    checked by any rule in this file: the sweep harvested the name twice and
+    both harvests inspected the same body.
+    """
+    found = []
+    for pattern in (_DEFINITION_ONE_LINE, _DEFINITION):
+        for match in re.finditer(pattern % re.escape(name), SOURCE,
+                                 re.S | re.M):
+            found.append(match.group(1))
+        if found:
+            # A definition is spelled one way or the other, never both.
+            # Stopping here keeps a one-line match from also being picked up
+            # by the greedy multi-line form.
+            break
+    return found
 
 
 def has_definition(name):
@@ -78,9 +116,13 @@ def function_body(name):
     followed by an opening brace with no semicolon in between, which is what
     distinguishes the two.
     """
-    match = re.search(_DEFINITION % re.escape(name), SOURCE, re.S | re.M)
-    assert match, "emitted C definition %s not found" % name
-    body = match.group(1)
+    bodies = all_function_bodies(name)
+    assert bodies, "emitted C definition %s not found" % name
+    assert len(bodies) == 1, (
+        "%s has %d definitions, so a single body is the wrong question; use "
+        "all_function_bodies and check every one" % (name, len(bodies))
+    )
+    body = bodies[0]
     assert len(body.strip()) > 20, (
         "function_body(%s) returned a %d-character body; it probably matched "
         "the wrong thing" % (name, len(body.strip()))
@@ -151,8 +193,12 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
         readers = []
         unreadable = []
         for name in re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", SOURCE, re.M):
-            body = find_function_body(name)
-            if body is None:
+            # EVERY definition with this name, not just the first. The
+            # generator emits two called VF2MaybeCompleteDisciplineProps, and
+            # a first-match lookup checked the same body twice while the
+            # second went unexamined.
+            bodies = all_function_bodies(name)
+            if not bodies:
                 # A name with no definition is a forward declaration and is
                 # genuinely nothing to check. A name WITH a definition that the
                 # helper could not read is a harness fault, and skipping it
@@ -162,12 +208,15 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
                 if has_definition(name):
                     unreadable.append(name)
                 continue
-            if PERSISTENT_LABEL_OFFSET not in body:
-                continue
-            compares = re.search(r"\bstrn?cmp\b", body)
-            against_a_group = re.search(r"labels\[|kVF2BehaviorLabels_", body)
-            if compares and against_a_group:
-                readers.append(name)
+            for body in bodies:
+                if PERSISTENT_LABEL_OFFSET not in body:
+                    continue
+                compares = re.search(r"\bstrn?cmp\b", body)
+                against_a_group = re.search(r"labels\[|kVF2BehaviorLabels_",
+                                            body)
+                if compares and against_a_group:
+                    readers.append(name)
+                    break
         self.assertEqual(
             sorted(unreadable), [],
             "these functions have definitions this test could not parse, so "
@@ -545,6 +594,74 @@ class TheSweepSeesEveryEmittedDefinition(unittest.TestCase):
             "%d emitted definitions are invisible to find_function_body, so "
             "the sweep skips them as though they were forward declarations: "
             "%s" % (len(invisible), invisible[:8]))
+
+
+class TheBodyFinderStopsAtTheRightBrace(unittest.TestCase):
+    """A body that runs past its function is worse than no body at all.
+
+    None means "nothing to check" and is safe. A body that overshoots makes
+    the sweep inspect text belonging to functions it was never looking at, so
+    a rule violation is attributed to the wrong function -- and, just as bad,
+    the real function's own body is never examined.
+
+    The island-event thunks close on the same line as they open:
+
+        static bool __fastcall VF2MobileIslandEventCanFireBody(...) { ... }
+
+    Measured before the fix, that name returned a 43-line body containing 17
+    other definitions.
+    """
+
+    def test_a_one_line_definition_does_not_swallow_its_neighbours(self):
+        for name in ("VF2MobileIslandEventCanFireBody",
+                     "VF2MobileIslandEventGetAwardAmountBody"):
+            with self.subTest(function=name):
+                body = find_function_body(name)
+                self.assertIsNotNone(
+                    body, "%s has a definition but no body was found" % name)
+                self.assertNotIn(
+                    "\n", body,
+                    "%s closes on its opening line, so its body cannot span "
+                    "lines; the match ran past the closing brace" % name)
+
+    def test_no_body_contains_another_definition(self):
+        """A cheap invariant that catches overshoot wherever it appears."""
+        overshot = []
+        for name in set(re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(",
+                                   SOURCE, re.M)):
+            for body in all_function_bodies(name):
+                if re.search(r"^(?:extern \"C\" )?static [\w \*&:]+\w+\(",
+                             body, re.M):
+                    overshot.append(name)
+                    break
+        self.assertEqual(
+            sorted(overshot), [],
+            "these bodies contain another function's definition, so the "
+            "matcher ran past the closing brace: %s" % sorted(overshot)[:8])
+
+
+class EverySameNamedDefinitionIsChecked(unittest.TestCase):
+    """Two definitions can share a name, and both must be examined.
+
+    The generator emits VF2MaybeCompleteDisciplineProps twice. A name-only
+    lookup returns the first every time, so the sweep harvested the name twice
+    and inspected the same body twice while the second definition went
+    unchecked -- invisible, and green.
+    """
+
+    def test_a_duplicated_name_yields_every_body(self):
+        bodies = all_function_bodies("VF2MaybeCompleteDisciplineProps")
+        self.assertGreaterEqual(
+            len(bodies), 2,
+            "expected more than one definition for this name; if the "
+            "generator now emits one, this test has served its purpose and "
+            "can name a different duplicate or be retired")
+
+    def test_function_body_refuses_an_ambiguous_name(self):
+        """Callers naming a specific function must not silently get the first
+        of several."""
+        with self.assertRaises(AssertionError):
+            function_body("VF2MaybeCompleteDisciplineProps")
 
 
 if __name__ == "__main__":
