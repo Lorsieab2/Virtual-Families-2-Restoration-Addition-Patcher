@@ -234,6 +234,58 @@ class TestTheReadmeDoesNotOverclaimRouting(unittest.TestCase):
             with self.subTest(behavior_patches=present):
                 self.assertIn(present, gated)
 
+    def test_the_readme_states_the_gate_and_both_routing_outcomes(self):
+        """Pin the README claim itself, not just the sibling suite's constants.
+
+        The previous version of this class inspected only the two hard-coded
+        sets in test_b180_docs.py. Restoring the OLD README -- the one that said
+        only the Spa Lounger has a drop route and the others "cannot tell one
+        added item from another" -- left every test in this class green, so the
+        documentation fix these tests exist to protect was not protected at all.
+
+        The gate is Behavior Patches, the behavior-only executable overlay.
+        patch_mobile_furniture_pack.py builds the exact-item dispatch block only
+        when ENABLE_BEHAVIOR_PATCHES is true. "Add mobile furniture behaviors"
+        is a DIFFERENT setting with its own .vf2beh runtime flag: enabling it
+        while Behavior Patches is off does not produce these routes, so naming
+        it here would send a player to the wrong checkbox.
+        """
+        entry = next(
+            line for line in README.splitlines()
+            if line.startswith("- **Four new visible furniture items**")
+        )
+
+        # The controlling setting must be named, and must be the right one.
+        self.assertIn(
+            "depends on **Behavior Patches**", entry,
+            "the entry must name Behavior Patches as the setting that "
+            "controls drop routing",
+        )
+        self.assertNotIn(
+            "depends on **Add mobile furniture behaviors**", entry,
+            "Add mobile furniture behaviors is a different setting and does "
+            "not gate these routes",
+        )
+
+        # Both outcomes must be stated, so a reader knows what each state does.
+        self.assertRegex(
+            entry,
+            r"[Ww]ith Behavior Patches off, only the Spa Lounger",
+            "the entry must say what happens with the setting off",
+        )
+        self.assertIn(
+            "matched by exact item id", entry,
+            "the entry must say the four items are matched by item id when "
+            "the setting is on",
+        )
+
+        # And the superseded absolute claim must not return.
+        self.assertNotIn(
+            "Only the Spa Lounger has a drop route of its own", entry,
+            "this is false whenever Behavior Patches is enabled, which is "
+            "the default",
+        )
+
 
 class TestTheWaitWindowClaimsHold(unittest.TestCase):
     @staticmethod
