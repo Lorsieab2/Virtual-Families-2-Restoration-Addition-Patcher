@@ -106,12 +106,27 @@ def _release_glob():
     named = os.environ.get("VF2_VERIFY_RELEASE")
     if named:
         return "VF2-%s-matrix-*" % named
-    releases = {
-        m.group(1)
-        for d in OUTPUTS.glob("VF2-B*-matrix-*")
-        for m in [re.match(RELEASE_NAME_RE, d.name)]
-        if m
-    }
+    # ONLY RELEASES THAT ACTUALLY LINKED SOMETHING COUNT.
+    #
+    # build_matrix.ps1 creates its log root BEFORE building any variant, so a
+    # run that dies before linking still leaves VF2-B<n>-matrix-<date>-logs in
+    # outputs/. Counting that as a release makes max() prefer the broken run
+    # over the completed one; _finished_builds() then filters the logs
+    # directory out, yields nothing, and every check skips -- OK (skipped=5)
+    # while a complete release sat there unverified.
+    #
+    # A release qualifies only if at least one of its variant directories has
+    # a linked exe and an Assets directory, which is the same test
+    # _finished_builds() applies.
+    releases = set()
+    for d in OUTPUTS.glob("VF2-B*-matrix-*"):
+        if d.name.endswith("-logs"):
+            continue
+        m = re.match(RELEASE_NAME_RE, d.name)
+        if not m:
+            continue
+        if list(d.glob("*.exe")) and (d / "Assets").is_dir():
+            releases.add(m.group(1))
     if not releases:
         return None
     return "VF2-%s-matrix-*" % max(releases, key=_release_sort_key)
