@@ -347,7 +347,7 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             "static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)")
         body = source[start:source.index("\n}\n", start)]
         self.assertIn(
-            "VF2SpaHoldLoungerForWalk(villager, receiveInfo.unknown0, false)", body,
+            "VF2SpaHoldLoungerForWalk(villager, receiveInfo.unknown0)", body,
             "the manual route sets a receiving label without retargeting the "
             "reservation, so an interrupted walk keeps holding its lounger",
         )
@@ -399,62 +399,54 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             with self.subTest(order=label):
                 self.assertLess(earlier, later)
 
-    def test_a_chaise_linker_holds_what_it_linked(self):
-        """Evicting the previous walker is only half of it.
+    def test_the_chaise_linker_records_no_claim_of_its_own(self):
+        """A claim was tried here and REVERTED; this pins the decision.
 
-        Between a reading/napping/resting/studying villager linking a spa
-        lounger and finishing with it, a spa recipient selected afterwards
-        would find the placement free: VF2SpaOccupantIndex needs a spa
-        receiving label the linker does not have, and the spa finder does
-        not read the engine's peep-slot state. So the linker records its
-        own claim.
+        Recording one looked right -- without it a spa recipient chosen
+        while a reading villager is on the lounger can be sent to the same
+        placement. But no sound expiry is available. Keyed on the
+        villager's current furniture slot, a villager standing on bare
+        floor reports -1, which is indistinguishable from "still walking",
+        so the claim outlived the action and suppressed autonomous spa
+        treatments INDEFINITELY whenever a household has one lounger.
+
+        Permanently losing the feature is strictly worse than a reading
+        villager holding the lounger for GetRandom(20) + 20 and releasing
+        it normally. Closing it properly needs the peep-slot fields of the
+        placement record, which this repository does not decode.
         """
         source = _source()
         start = source.index(
             "static bool VF2TryLinkMobileChaise(CVillager &villager, "
             "sFurnitureInfo2 &info)")
         body = source[start:source.index("\n}\n", start)]
+        code = "\n".join(
+            l for l in body.split("\n") if not l.strip().startswith("//"))
+        self.assertNotIn(
+            "VF2SpaHoldLoungerForWalk", code,
+            "a chaise claim has no sound expiry here; the last one blocked "
+            "the lounger permanently when the villager stood on bare floor",
+        )
         self.assertIn(
-            "VF2SpaHoldLoungerForWalk(villager, info.unknown0, true)", body,
-            "nothing records the chaise linker, so a spa recipient chosen "
-            "afterwards can walk onto the lounger it is using",
-        )
-        evict = body.index("VF2SpaReleaseHoldOnLounger")
-        claim = body.index("VF2SpaHoldLoungerForWalk")
-        self.assertLess(
-            evict, claim,
-            "the claim must be recorded after the eviction, or the eviction "
-            "would clear the claim just made",
+            "VF2SpaReleaseHoldOnLounger(info.unknown0, &villager)", code,
+            "the eviction must stay -- it is what stops a displaced walker "
+            "arriving on top of whoever linked here",
         )
 
-    def test_a_chaise_claim_expires_when_the_villager_moves_on(self):
-        """A claim that cannot expire is the leak this route was rebuilt to avoid.
+    def test_the_reservation_record_carries_no_kind_flag(self):
+        # The flag existed only to give chaise claims a different expiry.
+        # With those gone, every claim expires the same way: on the spa
+        # receiving label. One rule, no second liveness test to get wrong.
+        source = _source()
+        start = source.index("struct VF2SpaWalkReservation")
+        body = source[start:source.index("};", start)]
+        self.assertNotIn("chaise", body)
 
-        A chaise holder carries no spa receiving label, so the label test
-        that expires a spa claim would hold its lounger forever. The engine's
-        own link is the authority instead: while linked, the villager is on a
-        chaise or walking to one, and VF2FurnitureSlotUnderVillager reports
-        the slot beneath it once it arrives.
-        """
+    def test_every_claim_expires_on_the_receiving_label(self):
         source = _source()
         start = source.index("static bool VF2SpaLoungerClaimedByWalker(")
         body = source[start:source.index("\n}\n", start)]
-        self.assertIn("held.chaise", body)
-        self.assertIn(
-            "VF2FurnitureSlotUnderVillager(*held.villager)", body,
-            "a chaise claim with no expiry blocks the lounger permanently",
-        )
-        self.assertIn("under != slotOfHandle) continue;", body)
-
-    def test_a_spa_claim_still_expires_on_its_label(self):
-        # The chaise arm must not swallow the spa arm: a spa recipient's
-        # claim still lapses when it stops carrying a receiving label.
-        source = _source()
-        start = source.index("static bool VF2SpaLoungerClaimedByWalker(")
-        body = source[start:source.index("\n}\n", start)]
-        chaise = body.index("held.chaise")
-        label = body.index("VF2SpaReceivingIndex(*held.villager) < 0")
-        self.assertLess(chaise, label)
+        self.assertNotIn("held.chaise", body)
         self.assertIn("VF2SpaReceivingIndex(*held.villager) < 0", body)
 
     def test_the_reservation_is_taken_only_once_the_walk_is_committed(self):
