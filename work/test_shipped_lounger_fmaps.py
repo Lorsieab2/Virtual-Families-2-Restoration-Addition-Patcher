@@ -45,6 +45,18 @@ PC_FMAP_DONOR = (
     "mobile_furniture_behaviors" / "pc_fmaps" / "Chaise_brown.png.fmap"
 )
 
+# The RAW donor, whose geometry #201 exists to carry into a borrower. The
+# desktop-safe map above is deliberately sparse -- 12 occupied cells against
+# this one's 154 -- and a borrower given only that has almost no collision
+# area: the Patio Table borrower measured 241 occupied cells down to 8. So a
+# borrower is the raw geometry with the safe map's translated cells laid over
+# it, and BOTH halves need pinning. The safe half is checked above; without
+# this one nothing notices if the geometry silently stops arriving.
+RAW_FMAP_DONOR = (
+    ROOT / "patcher_assets" / "optional_patches" /
+    "mobile_furniture_behaviors" / "mobile_fmaps" / "Chaise_brown.png.fmap"
+)
+
 # THE UNTRANSLATED PEEP-SLOT ANCHOR ALONE. That is the cell which actually
 # breaks placement, and it is the only mobile value this patcher translates:
 # desktop_safe_fmap_source's docstring states the mechanism -- "without the
@@ -321,6 +333,43 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                             "rewrote it to %#x; a translated cell was lost"
                             % (index, shipped_all[index], safe),
                         )
+                    # AND THE DONOR'S GEOMETRY MUST HAVE ARRIVED.
+                    #
+                    # The loop above skips every ZERO in the sparse safe map,
+                    # which is exactly where the donor's geometry lives, so it
+                    # cannot see that geometry going missing. #201 exists to
+                    # carry those cells; nothing else in this file pins them,
+                    # and the stock-donor borrower test names no lounger. A
+                    # regression that reverted borrowers to the sparse map
+                    # would pass every other check here.
+                    #
+                    # A widened cell legitimately replaces a donor cell, so
+                    # the object value is allowed as a substitute.
+                    # Gated on the release, exactly as the widening check is:
+                    # #201 merged 2026-09-06, AFTER B181 was built, so a
+                    # B181-or-earlier borrower legitimately carries only the
+                    # sparse map and demanding the geometry there would assert
+                    # a change onto a release that predates it.
+                    if (_release_has_widening(build.name)
+                            and RAW_FMAP_DONOR.is_file()):
+                        raw_all = _cell_list(RAW_FMAP_DONOR)
+                        if len(raw_all) == len(shipped_all):
+                            kept = sum(
+                                1 for raw, safe, now in zip(
+                                    raw_all, safe_all, shipped_all)
+                                if raw and not safe and now
+                            )
+                            carried = sum(
+                                1 for raw, safe in zip(raw_all, safe_all)
+                                if raw and not safe
+                            )
+                            self.assertEqual(
+                                kept, carried,
+                                "%d of %d donor geometry cells did not reach "
+                                "the borrower; the sparse desktop-safe map "
+                                "alone leaves it with almost no collision "
+                                "area" % (carried - kept, carried),
+                            )
                     if name not in WIDENED_LOUNGERS:
                         continue
                     shipped = _cells(path)
