@@ -28511,28 +28511,37 @@ static void VF2SpaReleaseLoungerHold(CVillager &villager)
 
 static bool VF2TryLinkMobileChaise(CVillager &villager, sFurnitureInfo2 &info)
 {
-    // NO POST-LINK REJECTION HERE, deliberately.
+    // KEEP the link, then EVICT -- never reject.
     //
     // A spa recipient's walk hold is invisible to LinkPeepToFurniture, so this
-    // call can reserve a lounger someone is already walking to. Rejecting it
-    // afterwards looks like the fix and is worse: the link has ALREADY taken
-    // the peep slot, there is no unlink, and the caller then goes off and runs
-    // the unfurnitured behaviour. The lounger stays reserved against a
-    // villager who never uses it, for the whole of that behaviour.
+    // call can reserve a lounger someone is already walking to. Two things
+    // that look like fixes are not:
     //
-    // Measured against the alternative rather than argued: accepting means a
-    // reader occupies the lounger for GetRandom(20) + 20 and then releases it
-    // normally. Rejecting holds it for the fallback behaviour's entire
-    // duration with nobody on it. The overlap is the cheaper failure.
+    //   - rejecting the link afterwards is worse than the collision. The peep
+    //     slot is already taken, there is no unlink, and the caller then runs
+    //     the unfurnitured behaviour -- so the lounger sits reserved and EMPTY
+    //     for the whole of it. Accepting costs GetRandom(20) + 20 with a
+    //     normal release at the end. Measured, not argued.
+    //   - making held loungers unavailable before the lookup would mean
+    //     clearing the occupancy bit at record +0x0C, which unplaces the
+    //     furniture outright.
     //
-    // Making held loungers unavailable BEFORE the lookup is the only shape
-    // that would work, and the engine's availability state is the occupancy
-    // bit at record +0x0C -- clearing that unplaces the furniture outright,
-    // which is far worse than either outcome above. So this stays a plain
-    // link, and the spa route absorbs the collision instead: see
-    // VF2FindFreeSpaLoungerSlot, which skips loungers other RECIPIENTS hold.
-    return FurnitureManager.LinkPeepToFurniture(
-        CContentMap::eObjectChaise, &villager, info, true, 0, false);
+    // And the spa route does NOT absorb this on its own. VF2FindFreeSpaLoungerSlot
+    // skips held loungers, but only a spa caller consults it; a villager
+    // looking for somewhere to read never does. An earlier comment here
+    // claimed otherwise and was simply wrong.
+    //
+    // So keep the reservation and turn the WALKER away instead, with the
+    // handle the link just returned -- exactly what the manual drop path does
+    // when a player takes a lounger out from under a walker. The walker's
+    // claim is dropped and its queued plans are cancelled, so it re-evaluates
+    // rather than arriving to sit on top of the villager who linked here.
+    if (!FurnitureManager.LinkPeepToFurniture(
+            CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
+        return false;
+    }
+    VF2SpaReleaseHoldOnLounger(info.unknown0, &villager);
+    return true;
 }
 
 static void VF2PlanLinkedChaiseAction(

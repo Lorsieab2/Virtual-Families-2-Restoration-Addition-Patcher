@@ -210,10 +210,48 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             l for l in body.split("\n") if not l.strip().startswith("//"))
         self.assertNotIn(
             "VF2SpaLoungerClaimedByWalker", code,
-            "rejecting here leaks the reservation the link just took; the "
-            "spa route absorbs the collision instead",
+            "rejecting here leaks the reservation the link just took",
         )
         self.assertIn("LinkPeepToFurniture", code)
+
+    def test_the_chaise_linker_evicts_the_walker_it_displaced(self):
+        """Keeping the link is not enough on its own.
+
+        The spa route does NOT absorb this collision by itself:
+        VF2FindFreeSpaLoungerSlot skips held loungers, but only a spa caller
+        consults it -- a villager looking for somewhere to read never does.
+        An earlier comment here claimed otherwise and was wrong, and nothing
+        cancelled the recipient's queued PlanToGo, so both arrived.
+
+        So the reservation is kept and the WALKER is turned away, with the
+        handle the link just returned, exactly as the manual drop path does.
+        """
+        source = _source()
+        start = source.index(
+            "static bool VF2TryLinkMobileChaise(CVillager &villager, "
+            "sFurnitureInfo2 &info)")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertIn(
+            "VF2SpaReleaseHoldOnLounger(info.unknown0, &villager)", body,
+            "the displaced spa recipient still walks to this lounger and "
+            "sits down on top of whoever linked it",
+        )
+
+    def test_the_eviction_uses_the_handle_the_link_returned(self):
+        # The engine chose the placement, so only its returned handle names
+        # the lounger actually reserved. Evicting on anything else would
+        # turn away a walker heading somewhere entirely different.
+        source = _source()
+        start = source.index(
+            "static bool VF2TryLinkMobileChaise(CVillager &villager, "
+            "sFurnitureInfo2 &info)")
+        body = source[start:source.index("\n}\n", start)]
+        link = body.index("LinkPeepToFurniture")
+        evict = body.index("VF2SpaReleaseHoldOnLounger")
+        self.assertLess(
+            link, evict,
+            "info.unknown0 is not known until the link returns",
+        )
 
     def test_a_player_drop_takes_the_lounger_from_a_walker(self):
         """The drop wins, and the stale claim is cleared rather than kept.
