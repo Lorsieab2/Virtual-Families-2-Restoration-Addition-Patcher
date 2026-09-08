@@ -1962,8 +1962,29 @@ class MobileFurnitureCatalogTests(unittest.TestCase):
                 self.assertIn(
                     "ldwGameState::GetRandom(3) + 0x6A", picnic_helper
                 )
-                self.assertIn("marker == 0x13 || marker == 0x14", picnic_helper)
-                self.assertIn("marker == 0x53 || marker == 0x54", picnic_helper)
+                # #238 (e8beb83) replaced the marker read with the
+                # orientation field, and this assertion was left behind
+                # asserting the code it deleted -- so main shipped with a
+                # failing test. Pinned to the CORRECT behaviour now.
+                #
+                # The marker was read from (unsigned char *)&info + 0x14,
+                # which is padding[1] of sFurnitureInfo2; +0x14 belongs to
+                # the PLACEMENT RECORD, not to this struct. Because the
+                # marker had to equal one of four specific values for the
+                # northwest arm to be taken, uninitialised padding almost
+                # never matched and villagers faced one way regardless of
+                # how the furniture was placed.
+                self.assertNotIn(
+                    "marker == 0x13 || marker == 0x14", picnic_helper,
+                    "the picnic table is reading orientation out of "
+                    "sFurnitureInfo2 padding again",
+                )
+                self.assertNotIn("marker == 0x53 || marker == 0x54", picnic_helper)
+                self.assertIn(
+                    'info.orientation == 1 ? "Sit In Chair NW" : "Sit In Chair NE"',
+                    picnic_helper,
+                    "orientation must come from info.orientation alone",
+                )
                 self.assertIn("plans->PlanToDecHunger(40);", picnic_helper)
                 self.assertIn("plans->PlanToIncPoo(6);", picnic_helper)
                 self.assertNotIn("0x1B4", picnic_helper)
