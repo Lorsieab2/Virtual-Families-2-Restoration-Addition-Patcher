@@ -776,14 +776,25 @@ class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
                     # 160 on the shipped map -- and these maps are written
                     # into a tracked asset directory, so that is a real
                     # defect rather than a cosmetic one.
-                    ceiling = (self.DONOR_SEEDED_RING
-                               + self.BORROWER_EXTRA_OBJECT_CELLS)
-                    self.assertLessEqual(
-                        drop, ceiling,
-                        "the drop target reached %d, past the %d the "
-                        "donor-seeded ring allows, so the dilation was "
-                        "seeded from the borrower and compounds on every "
-                        "rebuild" % (drop, ceiling))
+                    # EXACT, NOT A RANGE. "grew past its seed" and "did not
+                    # pass the ring" together still accept every partial
+                    # widening in between: measured, a claim loop that breaks
+                    # after converting ONE footprint cell passes all three
+                    # checks in this class while leaving the hotspot
+                    # essentially unwidened. The fixture is deterministic --
+                    # donor ring plus the cells the borrower already carried
+                    # -- so the exact figure is knowable and is what pins the
+                    # approved dilation to the SHIPPED transform rather than
+                    # to the local reimplementation.
+                    exact = (self.DONOR_SEEDED_RING
+                             + self.BORROWER_EXTRA_OBJECT_CELLS)
+                    self.assertEqual(
+                        drop, exact,
+                        "the drop target came out at %d where this fixture's "
+                        "donor-seeded ring gives exactly %d: fewer means the "
+                        "dilation stopped early, more means it was seeded "
+                        "from the borrower and will compound on every "
+                        "rebuild" % (drop, exact))
 
                     self.assertEqual(
                         counted.get(self.ANCHOR, 0), 1,
@@ -819,10 +830,16 @@ class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
         gen, holder, assets, _seeded, manifest, staged_donor = self._run(
             "_gen_scope_under_test")
         try:
+            # ABSENCE IS A FAILURE HERE, NOT A SKIP. _run() stages the
+            # donor and every output directory this map needs, so there is no
+            # environment in which it is legitimately missing -- if the build
+            # stopped writing it, that is the regression, and skipping would
+            # report a green run for the very artifact this test protects.
             plain = assets / "InvisibleLounger.png.fmap"
-            if not plain.is_file():
-                self.skipTest("the plain lounger is not built in this "
-                              "checkout, so there is nothing to measure")
+            self.assertTrue(
+                plain.is_file(),
+                "the build never wrote InvisibleLounger.png.fmap, so the "
+                "plain lounger cannot be checked for accidental widening")
 
             # Compared against the STAGED donor, not the tracked one on
             # disk. _stage() adds object cells to the donor so the two
