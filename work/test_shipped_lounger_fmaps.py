@@ -36,6 +36,10 @@ OUTPUTS = ROOT / "outputs"
 DESKTOP_ANCHOR = 0x00009800
 MOBILE_ANCHOR = 0x01B09800
 
+# The EObject value: the cells a villager can actually be dropped onto, and the
+# only value the widening may introduce.
+OBJECT_CELL = 0x2000A800
+
 # The desktop-safe map for the donor these all borrow. Comparing against the
 # real thing beats inventing a numeric threshold: a first attempt treated
 # anything >= 0x01000000 as a mobile marker and flagged 0x2000A800, which is a
@@ -43,6 +47,18 @@ MOBILE_ANCHOR = 0x01B09800
 PC_FMAP_DONOR = (
     ROOT / "patcher_assets" / "optional_patches" /
     "mobile_furniture_behaviors" / "pc_fmaps" / "Chaise_brown.png.fmap"
+)
+
+# The RAW donor, whose geometry #201 exists to carry into a borrower. The
+# desktop-safe map above is deliberately sparse -- 12 occupied cells against
+# this one's 154 -- and a borrower given only that has almost no collision
+# area: the Patio Table borrower measured 241 occupied cells down to 8. So a
+# borrower is the raw geometry with the safe map's translated cells laid over
+# it, and BOTH halves need pinning. The safe half is checked above; without
+# this one nothing notices if the geometry silently stops arriving.
+RAW_FMAP_DONOR = (
+    ROOT / "patcher_assets" / "optional_patches" /
+    "mobile_furniture_behaviors" / "mobile_fmaps" / "Chaise_brown.png.fmap"
 )
 
 # THE UNTRANSLATED PEEP-SLOT ANCHOR ALONE. That is the cell which actually
@@ -320,6 +336,67 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                             "cell %d carries %#x but the desktop-safe map "
                             "rewrote it to %#x; a translated cell was lost"
                             % (index, shipped_all[index], safe),
+                        )
+                    # AND THE DONOR'S GEOMETRY MUST HAVE ARRIVED.
+                    #
+                    # The loop above skips every ZERO in the sparse safe map,
+                    # which is exactly where the donor's geometry lives, so it
+                    # cannot see that geometry going missing. #201 exists to
+                    # carry those cells; nothing else in this file pins them,
+                    # and the stock-donor borrower test names no lounger. A
+                    # regression that reverted borrowers to the sparse map
+                    # would pass every other check here.
+                    #
+                    # A widened cell legitimately replaces a donor cell, so
+                    # the object value is allowed as a substitute.
+                    # Gated on the release, exactly as the widening check is:
+                    # #201 merged 2026-09-06, AFTER B181 was built, so a
+                    # B181-or-earlier borrower legitimately carries only the
+                    # sparse map and demanding the geometry there would assert
+                    # a change onto a release that predates it.
+                    if (_release_has_widening(build.name)
+                            and RAW_FMAP_DONOR.is_file()):
+                        raw_all = _cell_list(RAW_FMAP_DONOR)
+                        # A SIZE MISMATCH IS THE FAILURE, NOT A REASON TO SKIP.
+                        #
+                        # borrowed_fmap_bytes returns None when the two grids
+                        # disagree, and the caller answers that by copying the
+                        # sparse desktop-safe map verbatim -- which is exactly
+                        # the fallback regression this assertion exists to
+                        # catch. Skipping on mismatch would let it through.
+                        self.assertEqual(
+                            len(raw_all), len(shipped_all),
+                            "the raw donor and the shipped map disagree about "
+                            "grid size, which is the condition that makes the "
+                            "build fall back to the sparse map",
+                        )
+                        # COMPARE THE VALUE, NOT MERE OCCUPANCY.
+                        #
+                        # "still nonzero" is satisfied by any arbitrary
+                        # replacement, so a map whose geometry values were
+                        # corrupted -- every raw-only cell rewritten to 1 --
+                        # would pass. The merge contract is that those cells
+                        # are carried UNCHANGED, so that is what is asserted.
+                        # The object value is permitted because a widened cell
+                        # legitimately replaces a donor cell there.
+                        lost = []
+                        for index, (raw, safe, now) in enumerate(
+                            zip(raw_all, safe_all, shipped_all)
+                        ):
+                            if not raw or safe:
+                                continue
+                            if now == raw or now == OBJECT_CELL:
+                                continue
+                            lost.append((index, raw, now))
+                        carried = sum(
+                            1 for r, s in zip(raw_all, safe_all) if r and not s
+                        )
+                        self.assertEqual(
+                            lost, [],
+                            "%d of %d donor geometry cells did not reach the "
+                            "borrower unchanged; the sparse desktop-safe map "
+                            "alone leaves it with almost no collision area"
+                            % (len(lost), carried),
                         )
                     if name not in WIDENED_LOUNGERS:
                         continue
