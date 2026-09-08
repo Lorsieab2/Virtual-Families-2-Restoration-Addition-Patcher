@@ -303,18 +303,44 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         )
         self.assertIn("StartNewBehavior(*walker)", body)
 
-    def test_the_claim_is_cleared_before_the_walker_re_evaluates(self):
-        # Re-evaluation may well come straight back to this route. If the
-        # stale claim were still there the walker would rule out the lounger
-        # it is itself holding.
+    def test_the_claim_is_held_across_the_walkers_restart(self):
+        """Clearing first lets the walker take the lounger straight back.
+
+        StartNewBehavior runs SYNCHRONOUSLY, so the displaced walker's
+        re-evaluation can return to this very route. With the entry already
+        cleared, VF2FindFreeSpaLoungerSlot sees the handle as free and
+        queues the walker back onto the lounger it was just displaced from,
+        preserving the overlap the eviction exists to prevent. Nothing else
+        makes the taker visible at that instant: a chaise linker never
+        carries a receiving label, and the manual-drop caller has not set
+        the new occupant's label yet.
+
+        So the entry is cleared LAST, holding the placement excluded for
+        exactly the window in which the walker re-chooses.
+        """
         source = _source()
         start = source.index("static void VF2SpaReleaseHoldOnLounger(")
         body = source[start:source.index("\n}\n", start)]
+        restart = body.index("StartNewBehavior(*walker)")
         cleared = body.index(".handle = 0;")
-        restarted = body.index("StartNewBehavior(*walker)")
         self.assertLess(
-            cleared, restarted,
-            "the walker re-evaluates while still holding its own claim",
+            restart, cleared,
+            "the entry is cleared before the walker re-evaluates, so it can "
+            "immediately reclaim the lounger it was displaced from",
+        )
+
+    def test_the_claim_is_not_handed_to_the_taker(self):
+        # Reassigning the entry to `keep` looks equivalent and is not: one of
+        # the two callers is VF2TryLinkMobileChaise, whose villager carries no
+        # receiving label, so that claim would never expire -- the mechanism
+        # reverted in the previous commit.
+        source = _source()
+        start = source.index("static void VF2SpaReleaseHoldOnLounger(")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertNotIn(
+            "villager = keep", body,
+            "handing the claim to the taker revives the unexpirable-claim "
+            "problem when that taker is a chaise linker",
         )
 
     def test_only_a_villager_still_receiving_is_interrupted(self):
@@ -323,12 +349,15 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         source = _source()
         start = source.index("static void VF2SpaReleaseHoldOnLounger(")
         body = source[start:source.index("\n}\n", start)]
-        guard = body.index("VF2SpaReceivingIndex(*walker) < 0")
+        guard = body.index("VF2SpaReceivingIndex(*walker) >= 0")
         forget = body.index("ForgetPlans(*walker, false)")
         self.assertLess(
             guard, forget,
             "an unrelated behaviour would be cancelled",
         )
+        # And the stale entry is still released even when the walker is not
+        # interrupted, so a finished villager stops holding its lounger.
+        self.assertIn(".handle = 0;", body[forget:])
 
     def test_an_interrupted_walk_does_not_keep_holding_its_lounger(self):
         """The same-label interruption case, not just the predicate.

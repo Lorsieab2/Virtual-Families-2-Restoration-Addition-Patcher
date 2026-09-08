@@ -28484,19 +28484,35 @@ static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
         CVillager *walker = gVF2SpaWalkReservations[index].villager;
         if (!walker || walker == keep) continue;
 
-        // Cleared BEFORE the walker re-evaluates, so it cannot see its own
-        // stale claim and rule this lounger out for the wrong reason.
-        gVF2SpaWalkReservations[index].villager = 0;
-        gVF2SpaWalkReservations[index].handle = 0;
-
         // Only a villager still en route to a treatment is interrupted. One
         // that already finished, or was interrupted by something else, has
-        // plans of its own that are none of this function's business.
-        if (VF2SpaReceivingIndex(*walker) < 0) continue;
-        CVillagerPlans *walkerPlans =
-            reinterpret_cast<CVillagerPlans *>(walker);
-        walkerPlans->ForgetPlans(*walker, false);
-        walkerPlans->StartNewBehavior(*walker);
+        // plans of its own that are none of this function's business -- but
+        // its stale entry is still released below.
+        if (VF2SpaReceivingIndex(*walker) >= 0) {
+            CVillagerPlans *walkerPlans =
+                reinterpret_cast<CVillagerPlans *>(walker);
+            walkerPlans->ForgetPlans(*walker, false);
+            walkerPlans->StartNewBehavior(*walker);
+        }
+
+        // CLEARED LAST, and the order is the whole point.
+        //
+        // StartNewBehavior above runs SYNCHRONOUSLY, and the displaced
+        // walker's re-evaluation can come straight back to this route. With
+        // the entry already cleared, VF2FindFreeSpaLoungerSlot would see the
+        // handle as free and queue the walker back onto the very lounger it
+        // was displaced from -- preserving the overlap this eviction exists
+        // to prevent. Nothing else makes the taker visible at that instant: a
+        // chaise linker never carries a receiving label, and the manual-drop
+        // caller has not set the new occupant's label yet.
+        //
+        // Holding the entry across the restart excludes the placement for
+        // exactly that window, so the walker picks a different lounger or
+        // none. Reassigning it to the taker would look equivalent and is not:
+        // one of the two callers is the chaise linker, whose claim would then
+        // never expire -- the mechanism reverted in the previous commit.
+        gVF2SpaWalkReservations[index].villager = 0;
+        gVF2SpaWalkReservations[index].handle = 0;
     }
 }
 
