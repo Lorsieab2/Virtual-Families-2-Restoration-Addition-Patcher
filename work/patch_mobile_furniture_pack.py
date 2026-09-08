@@ -33062,7 +33062,13 @@ static void VF2RememberBehaviorLabel(CVillager &villager, int cacheTag, int stri
     VF2CopyCurrentBehaviorLabel(villager, slot->nativeLabel);
 }
 
-static int VF2CurrentLabelInGroup(CVillager &villager, int const *labels, int count)
+// Does the villager's persistent label text currently read as one of these?
+//
+// This is a pure text scan. It says nothing about WHEN the label was set: the
+// field at +0x1BBA8 keeps its contents after a behaviour ends, so a match here
+// may be a leftover from a session that finished hours ago. Callers must gate
+// it on VF2BehaviorLabelStillFromThisSession.
+static int VF2ScanLabelGroup(CVillager &villager, int const *labels, int count)
 {
     if (count <= 0) {
         return 0;
@@ -33078,6 +33084,54 @@ static int VF2CurrentLabelInGroup(CVillager &villager, int const *labels, int co
     return 0;
 }
 
+// Is the label on the villager still the one THIS behaviour instance set?
+//
+// Matching the persistent label text alone said "this villager is already
+// doing X" long after they had stopped, so every later session re-used the
+// first label ever rolled: a villager whose first Home Gym visit rolled
+// "Doing crunches" showed "Doing crunches" for the rest of the game and the
+// other nine labels never appeared. That is the reported symptom -- the
+// furniture "only shows one action out of their full possibilities".
+//
+// The label cache is the authority on "same instance": it is keyed on the
+// villager's behaviour id and serial, so it goes stale the moment a new
+// behaviour starts, and it deliberately tolerates a praise re-roll. Gating on
+// it preserves the case this check exists for -- a villager CONTINUING an
+// activity keeps its caption instead of flickering mid-action -- while a NEW
+// session is free to roll again.
+//
+// cacheTag must be the tag the applier writes under. The multi-group appliers
+// cache every group under the FIRST group's address, so a caller scanning
+// group B or C still has to pass group A's address here; deriving the tag from
+// the matched group would miss the slot and re-roll mid-activity.
+static bool VF2BehaviorLabelStillFromThisSession(CVillager &villager, int cacheTag)
+{
+    int cachedStringId = 0;
+    return VF2GetCachedBehaviorLabel(villager, cacheTag, &cachedStringId);
+}
+
+static int VF2CurrentLabelInGroup(CVillager &villager, int const *labels, int count)
+{
+    if (!VF2BehaviorLabelStillFromThisSession(villager, (int)labels)) {
+        return 0;
+    }
+    return VF2ScanLabelGroup(villager, labels, count);
+}
+
+// Same rule, for callers whose applier caches under a tag that is not the
+// address of the group being scanned. The appliers that pick between several
+// groups cache under the FIRST group's address, so a chain scanning group B or
+// C must still present group A's address here or the slot lookup misses and
+// the villager re-rolls mid-activity.
+static int VF2CurrentLabelInGroupTagged(
+    CVillager &villager, int cacheTag, int const *labels, int count)
+{
+    if (!VF2BehaviorLabelStillFromThisSession(villager, cacheTag)) {
+        return 0;
+    }
+    return VF2ScanLabelGroup(villager, labels, count);
+}
+
 static int VF2CurrentLabelInGroups2(
     CVillager &villager,
     int const *labelsA,
@@ -33085,11 +33139,16 @@ static int VF2CurrentLabelInGroups2(
     int const *labelsB,
     int countB)
 {
-    int remembered = VF2CurrentLabelInGroup(villager, labelsA, countA);
+    // One gate, on the tag the applier actually writes (labelsA), then scan
+    // every group: a label from group B is still this session's label.
+    if (!VF2BehaviorLabelStillFromThisSession(villager, (int)labelsA)) {
+        return 0;
+    }
+    int remembered = VF2ScanLabelGroup(villager, labelsA, countA);
     if (remembered) {
         return remembered;
     }
-    return VF2CurrentLabelInGroup(villager, labelsB, countB);
+    return VF2ScanLabelGroup(villager, labelsB, countB);
 }
 
 static int VF2CurrentLabelInGroups3(
@@ -33101,15 +33160,18 @@ static int VF2CurrentLabelInGroups3(
     int const *labelsC,
     int countC)
 {
-    int remembered = VF2CurrentLabelInGroup(villager, labelsA, countA);
+    if (!VF2BehaviorLabelStillFromThisSession(villager, (int)labelsA)) {
+        return 0;
+    }
+    int remembered = VF2ScanLabelGroup(villager, labelsA, countA);
     if (remembered) {
         return remembered;
     }
-    remembered = VF2CurrentLabelInGroup(villager, labelsB, countB);
+    remembered = VF2ScanLabelGroup(villager, labelsB, countB);
     if (remembered) {
         return remembered;
     }
-    return VF2CurrentLabelInGroup(villager, labelsC, countC);
+    return VF2ScanLabelGroup(villager, labelsC, countC);
 }
 
 static void VF2ApplyRememberedOrRandomLabel(CVillager &villager, int const *labels, int count, int rememberedStringId)
@@ -33287,11 +33349,11 @@ static int VF2CurrentShowerLabel(CVillager &villager)
     if (remembered) {
         return remembered;
     }
-    remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_shower_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_adult));
+    remembered = VF2CurrentLabelInGroupTagged(villager, (int)kVF2BehaviorLabels_shower_general, kVF2BehaviorLabels_shower_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_adult));
     if (remembered) {
         return remembered;
     }
-    return VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_shower_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_child));
+    return VF2CurrentLabelInGroupTagged(villager, (int)kVF2BehaviorLabels_shower_general, kVF2BehaviorLabels_shower_child, VF2_LABEL_COUNT(kVF2BehaviorLabels_shower_child));
 }
 
 static void VF2ApplyShowerLabel(CVillager &villager, int rememberedStringId)
@@ -34490,15 +34552,15 @@ static int VF2CurrentSitDownLabel(CVillager &villager)
 {
     int remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_general, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_general));
     if (remembered) return remembered;
-    remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_adult));
+    remembered = VF2CurrentLabelInGroupTagged(villager, (int)kVF2BehaviorLabels_sit_down_general, kVF2BehaviorLabels_sit_down_adult, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_adult));
     if (remembered) return remembered;
-    remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_work, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_work));
+    remembered = VF2CurrentLabelInGroupTagged(villager, (int)kVF2BehaviorLabels_sit_down_general, kVF2BehaviorLabels_sit_down_work, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_work));
     if (remembered) return remembered;
-    remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_school, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_school));
+    remembered = VF2CurrentLabelInGroupTagged(villager, (int)kVF2BehaviorLabels_sit_down_general, kVF2BehaviorLabels_sit_down_school, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_school));
     if (remembered) return remembered;
-    remembered = VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_teen_female, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_teen_female));
+    remembered = VF2CurrentLabelInGroupTagged(villager, (int)kVF2BehaviorLabels_sit_down_general, kVF2BehaviorLabels_sit_down_teen_female, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_teen_female));
     if (remembered) return remembered;
-    return VF2CurrentLabelInGroup(villager, kVF2BehaviorLabels_sit_down_teen_male, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_teen_male));
+    return VF2CurrentLabelInGroupTagged(villager, (int)kVF2BehaviorLabels_sit_down_general, kVF2BehaviorLabels_sit_down_teen_male, VF2_LABEL_COUNT(kVF2BehaviorLabels_sit_down_teen_male));
 }
 
 // Applies the sit-down label pools for whichever villager kind this is.
