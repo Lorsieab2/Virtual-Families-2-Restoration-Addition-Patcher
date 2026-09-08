@@ -18,6 +18,7 @@ contract tests because the emitted C cannot be executed here -- the same
 technique the widening-scope and installer-resolution suites use.
 """
 
+import collections
 import pathlib
 import re
 import unittest
@@ -33,26 +34,97 @@ PERSISTENT_LABEL_OFFSET = "0x1BBA8"
 # bug: `unsigned int`, `unsigned char *`, `VF2DonorBehavior const *` and
 # `__fastcall` all failed to match, so 32 real definitions read as absent.
 # Anchor on the NAME and accept whatever precedes it on that line.
-# TWO TERMINATORS, NOT ONE. A brace on its own line is the common closer, but
-# the island-event thunks close on the SAME line:
 #
-#     static bool __fastcall VF2MobileIslandEventCanFireBody(...) { return ...; }
+# This matches the HEADER only, up to the opening brace. The body is taken by
+# brace matching, because a regex tail anchored on `^\}` cannot end a one-line
+# definition -- and the generator emits those:
 #
-# With only `^\}` as the terminator the match ran straight past that
-# definition into unrelated code. Measured: VF2MobileIslandEventCanFireBody
-# returned a 43-line "body" containing 17 other definitions. That is worse
-# than returning None, because the sweep then inspects text belonging to
-# functions it was never looking at, and a violation anywhere in that span is
-# attributed to the wrong function.
+#   static bool __fastcall VF2MobileIslandEventCanFireBody(...) {{ ... }}
 #
-# The same-line form is tried FIRST and is anchored to the end of the line, so
-# it can only match a body that genuinely closes there.
-_DEFINITION_ONE_LINE = (
-    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\{([^\n}]*)\}[^\n]*$'
+# The match for the first of those ran 4190 characters and swallowed fifteen
+# other functions, so markers from unrelated functions were combined into one
+# "body". That is the same hazard per-definition evaluation exists to prevent.
+_DEFINITION_HEADER = (
+    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{'
 )
-_DEFINITION = (
-    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{(.*?)^\}'
-)
+
+
+def _body_from(text, open_brace_index):
+    """The text between a function's braces, found by counting them.
+
+    Skips string and character literals so a brace inside one cannot unbalance
+    the count. Returns None for an unterminated body rather than guessing.
+    """
+    depth = 0
+    i = open_brace_index
+    body_start = open_brace_index + (
+        2 if text.startswith('{{', open_brace_index) else 1)
+    n = len(text)
+    while i < n:
+        ch = text[i]
+        # Comments first: a prose apostrophe ("CVillagerManager's native
+        # RTTI") is not a character literal, and reading it as one consumes
+        # the rest of the function. That returned an unterminated body and
+        # silently exempted the function from the contract.
+        if text.startswith('//', i):
+            newline = text.find('\n', i)
+            i = len(text) if newline == -1 else newline
+            continue
+        if text.startswith('/*', i):
+            close = text.find('*/', i + 2)
+            i = len(text) if close == -1 else close + 2
+            continue
+        if ch in '"\'':
+            quote = ch
+            i += 1
+            while i < n:
+                if text[i] == '\\':
+                    i += 2
+                    continue
+                if text[i] == quote:
+                    break
+                i += 1
+        elif ch == '{':
+            # `{{` is an f-string escape for ONE literal brace. Parts of the
+            # generator emit C through f-string templates and parts through raw
+            # strings, so both dialects appear in this file. Counting a doubled
+            # brace twice leaves the depth permanently unbalanced and the body
+            # runs to end of file.
+            if text.startswith('{{', i):
+                i += 2
+                depth += 1
+                continue
+            depth += 1
+        elif ch == '}':
+            if text.startswith('}}', i):
+                depth -= 1
+                if depth == 0:
+                    return text[body_start:i]
+                i += 2
+                continue
+            depth -= 1
+            if depth == 0:
+                return text[body_start:i]
+        i += 1
+    return None
+
+
+def find_function_bodies(name, source=None):
+    """EVERY body defined under this name, in file order.
+
+    A name-only re.search returns the first match and stops, so a name with two
+    definitions -- the generator has one, VF2MaybeCompleteDisciplineProps -- is
+    inspected twice at the same body while its second definition is never read
+    at all. Any rule applied through the single-body helper is therefore
+    silently void for that function. The sweep must use this.
+    """
+    text = SOURCE if source is None else source
+    bodies = []
+    for m in re.finditer(_DEFINITION_HEADER % re.escape(name), text, re.M):
+        body = _body_from(text, m.end() - 1)
+        if body is not None:
+            bodies.append(body)
+    return bodies
 
 
 def find_function_body(name):
@@ -66,32 +138,11 @@ def find_function_body(name):
     silently exempted from every rule in this file. has_definition() exists so
     the sweep can tell those two cases apart.
     """
-    bodies = all_function_bodies(name)
+    bodies = find_function_bodies(name)
     return bodies[0] if bodies else None
 
 
-def all_function_bodies(name):
-    """EVERY definition with this name, not just the first.
-
-    The generator emits two definitions called VF2MaybeCompleteDisciplineProps.
-    A name-only search always returned the first, so the second was never
-    checked by any rule in this file: the sweep harvested the name twice and
-    both harvests inspected the same body.
-    """
-    found = []
-    for pattern in (_DEFINITION_ONE_LINE, _DEFINITION):
-        for match in re.finditer(pattern % re.escape(name), SOURCE,
-                                 re.S | re.M):
-            found.append(match.group(1))
-        if found:
-            # A definition is spelled one way or the other, never both.
-            # Stopping here keeps a one-line match from also being picked up
-            # by the greedy multi-line form.
-            break
-    return found
-
-
-def has_definition(name):
+def has_definition(name, source=None):
     """Is there a definition line for this name at all, however it is spelled?
 
     Deliberately cruder than _DEFINITION: it asks whether some line opens a
@@ -100,7 +151,7 @@ def has_definition(name):
     """
     return re.search(
         r'^[A-Za-z_][^\n;]*\b%s\([^;]*$' % re.escape(name),
-        SOURCE,
+        SOURCE if source is None else source,
         re.M,
     ) is not None
 
@@ -116,11 +167,18 @@ def function_body(name):
     followed by an opening brace with no semicolon in between, which is what
     distinguishes the two.
     """
-    bodies = all_function_bodies(name)
+    bodies = find_function_bodies(name)
     assert bodies, "emitted C definition %s not found" % name
+    # AN AMBIGUOUS NAME IS REFUSED, NOT SILENTLY RESOLVED TO THE FIRST.
+    # The generator emits two definitions called
+    # VF2MaybeCompleteDisciplineProps. A caller naming ONE specific function
+    # and receiving the first of several is told an answer about code it did
+    # not ask about, and would never learn the other definition exists. The
+    # sweep wants every body and uses find_function_bodies; a named lookup
+    # wants exactly one.
     assert len(bodies) == 1, (
         "%s has %d definitions, so a single body is the wrong question; use "
-        "all_function_bodies and check every one" % (name, len(bodies))
+        "find_function_bodies and check every one" % (name, len(bodies))
     )
     body = bodies[0]
     assert len(body.strip()) > 20, (
@@ -128,6 +186,50 @@ def function_body(name):
         "the wrong thing" % (name, len(body.strip()))
     )
     return body
+
+
+def violates_label_contract(body):
+    """Does ONE function body match the persistent label against a label group?
+
+    The single definition of the rule. The sweep applies it to every body, and
+    the fixtures below apply it to synthetic bodies, so a change here is felt
+    by both -- an earlier version had the tests carrying their own copy, which
+    meant they passed while the sweep was broken.
+
+    The defect is narrower than "reads the field": copying it, writing it,
+    comparing it to a caller-supplied snapshot, or matching it against fixed
+    NATIVE label ids are all legitimate.
+    """
+    if PERSISTENT_LABEL_OFFSET not in body:
+        return False
+    compares = re.search(r"\bstrn?cmp\b", body)
+    against_a_group = re.search(r"labels\[|kVF2BehaviorLabels_", body)
+    return bool(compares and against_a_group)
+
+
+def sweep_violations(source=None):
+    """Every VF2* function whose body violates the contract, plus unreadables.
+
+    Evaluated PER DEFINITION: joining a repeated name's bodies would let one
+    definition's field read pair with another's group comparison and report a
+    violation present in neither.
+    """
+    text = SOURCE if source is None else source
+    readers = []
+    unreadable = []
+    for name in sorted(set(
+            re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", text, re.M))):
+        bodies = find_function_bodies(name, text)
+        if not bodies:
+            # No definition is a forward declaration and genuinely nothing to
+            # check. A definition the helper could not read is a harness fault
+            # that would exempt the function while the suite stayed green.
+            if has_definition(name, text):
+                unreadable.append(name)
+            continue
+        if any(violates_label_contract(body) for body in bodies):
+            readers.append(name)
+    return readers, unreadable
 
 
 class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
@@ -181,42 +283,7 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
         VF2CurrentLabelInGroup puts a read of the persistent label back into a
         function that has no cache gate.
         """
-        # The defect is narrower than "reads the field": it is "matches the
-        # field against a MOD LABEL GROUP and concludes the villager must still
-        # be doing that". Copying the field, writing it, comparing it to a
-        # caller-supplied snapshot, or matching it against fixed NATIVE label
-        # ids are all legitimate and unrelated -- VF2CopyRawPraiseLabel,
-        # VF2SetActionLabel, VF2BehaviorLabelChangedSince,
-        # VF2IsRestingBodyNativeLabel and VF2VillagerStillPreparing all do one
-        # of those. Testing for the precise shape keeps this test meaningful
-        # instead of freezing a list of names that drifts.
-        readers = []
-        unreadable = []
-        for name in re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", SOURCE, re.M):
-            # EVERY definition with this name, not just the first. The
-            # generator emits two called VF2MaybeCompleteDisciplineProps, and
-            # a first-match lookup checked the same body twice while the
-            # second went unexamined.
-            bodies = all_function_bodies(name)
-            if not bodies:
-                # A name with no definition is a forward declaration and is
-                # genuinely nothing to check. A name WITH a definition that the
-                # helper could not read is a harness fault, and skipping it
-                # would exempt that function from this rule while the test
-                # stayed green -- which is the defect this suite exists to
-                # catch, in the suite itself.
-                if has_definition(name):
-                    unreadable.append(name)
-                continue
-            for body in bodies:
-                if PERSISTENT_LABEL_OFFSET not in body:
-                    continue
-                compares = re.search(r"\bstrn?cmp\b", body)
-                against_a_group = re.search(r"labels\[|kVF2BehaviorLabels_",
-                                            body)
-                if compares and against_a_group:
-                    readers.append(name)
-                    break
+        readers, unreadable = sweep_violations()
         self.assertEqual(
             sorted(unreadable), [],
             "these functions have definitions this test could not parse, so "
@@ -230,6 +297,209 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
             "behaviour will be mistaken for the current one and the group "
             "will stop re-rolling" % PERSISTENT_LABEL_OFFSET,
         )
+
+    # A synthetic generator: one name defined twice, clean first body, the
+    # violation in the SECOND. A sweep that reads only the first body reports
+    # nothing here, which is exactly the defect.
+    _REPEATED_NAME_SOURCE = """
+static int VF2Repeated(CVillager &villager)
+{
+    return 0;
+}
+
+static int VF2Repeated(CVillager &villager, int flag)
+{
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    if (strncmp(behaviorLabel, kVF2BehaviorLabels_home_gym, 0x27) == 0) {
+        return 1;
+    }
+    return 0;
+}
+"""
+
+    # One name defined twice: the first READS the field without comparing a
+    # group, the second COMPARES a group without reading the field. Neither
+    # violates. A sweep that joins the bodies reports a violation anyway.
+    _SPLIT_MARKER_SOURCE = """
+static int VF2Split(CVillager &villager)
+{
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    behaviorLabel[0] = 0;
+    return 0;
+}
+
+static int VF2Split(CVillager &villager, int flag)
+{
+    if (strncmp(other, kVF2BehaviorLabels_home_gym, 0x27) == 0) {
+        return 1;
+    }
+    return 0;
+}
+"""
+
+    def test_the_sweep_sees_a_violation_in_the_second_definition(self):
+        """Run the SWEEP, not a local copy of its predicate.
+
+        Asserting that find_function_bodies returns both bodies does not pin
+        anything: the sweep could still consume only the first. Codex proved
+        that by changing the sweep to bodies[:1] and watching every test pass.
+        This feeds the sweep an input on which the two implementations differ.
+        """
+        readers, unreadable = sweep_violations(self._REPEATED_NAME_SOURCE)
+        self.assertEqual(unreadable, [])
+        self.assertEqual(
+            readers, ["VF2Repeated"],
+            "the sweep did not see the violation in the SECOND definition; it "
+            "is reading only the first body",
+        )
+
+    def test_the_sweep_does_not_join_separate_definitions(self):
+        """The false-positive direction, also through the real sweep.
+
+        Codex restored the sweep's join and every test still passed, because
+        the fixture reimplemented the predicate locally instead of running the
+        sweep.
+        """
+        readers, unreadable = sweep_violations(self._SPLIT_MARKER_SOURCE)
+        self.assertEqual(unreadable, [])
+        self.assertEqual(
+            readers, [],
+            "the sweep joined two definitions and reported a violation that "
+            "exists in neither of them",
+        )
+
+    def test_a_one_line_definition_stops_at_its_own_brace(self):
+        """The generator emits one-line definitions.
+
+            static bool __fastcall VF2MobileIslandEventCanFireBody(...) {{ ... }}
+
+        A body pattern that can only end at a `}` starting a line ran 4190
+        characters past this one and swallowed fifteen other functions, so
+        markers from unrelated functions were combined -- the same hazard
+        per-definition evaluation exists to prevent, arriving by another route.
+        The synthetic fixtures are all multi-line, so none of them could see it.
+        """
+        name = "VF2MobileIslandEventCanFireBody"
+        bodies = find_function_bodies(name)
+        self.assertEqual(len(bodies), 1, "%s should have one definition" % name)
+        self.assertNotIn(
+            "VF2MobileIslandEventGetTitleBody", bodies[0],
+            "the one-line body ran past its own closing brace and swallowed "
+            "the next function",
+        )
+        self.assertIn("CanFire", bodies[0])
+        self.assertLess(
+            len(bodies[0]), 120,
+            "a one-line body should be one line, not %d characters"
+            % len(bodies[0]),
+        )
+
+    def test_a_prose_apostrophe_does_not_swallow_the_body(self):
+        """An apostrophe in a comment is not a character literal.
+
+        `// CVillagerManager's native RTTI` read as an opening char literal
+        consumed the rest of the function, returned an unterminated body, and
+        silently exempted the function from the contract.
+        """
+        for name in ("VF2EnsureDebuggerProvider", "VF2ApplyAIBathroom2Style"):
+            bodies = find_function_bodies(name)
+            self.assertTrue(
+                bodies, "%s came back unreadable; a comment apostrophe or a "
+                        "doubled brace is eating the body" % name)
+
+    def test_no_body_contains_another_function_definition(self):
+        """The strong form of the parse check.
+
+        "Unreadable" only catches bodies that never terminated. A body that
+        terminates in the WRONG PLACE is worse, because nothing reports it and
+        every rule is then evaluated against the wrong text -- which is exactly
+        what the one-line-definition bug did, producing a well-formed
+        4190-character body containing fifteen other functions.
+        """
+        header = (r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?'
+                  r'\b(VF2\w+)\([^;{]*\)\s*\n?\{')
+        offenders = []
+        names = sorted(set(re.findall(header, SOURCE, re.M)))
+        for name in names:
+            for body in find_function_bodies(name):
+                intruders = sorted(set(
+                    other for other in re.findall(header, body, re.M)
+                    if other != name))
+                if intruders:
+                    offenders.append((name, len(body), intruders[:3]))
+        self.assertEqual(
+            offenders, [],
+            "these bodies run past their own closing brace and absorb other "
+            "functions, so markers from unrelated code are attributed to them",
+        )
+        # The premise: this is only meaningful if it actually parsed the file.
+        self.assertGreater(
+            len(names), 400,
+            "only %d definitions were found; the header pattern has stopped "
+            "matching most of the generator" % len(names),
+        )
+
+    def test_no_definition_in_the_generator_is_unreadable(self):
+        """The whole-file health check.
+
+        Every "unreadable" name is a function silently exempt from every rule
+        in this file, so the count must be zero rather than small.
+        """
+        _, unreadable = sweep_violations()
+        self.assertEqual(
+            sorted(unreadable), [],
+            "these definitions cannot be parsed, so they are exempt from the "
+            "label contract without anyone noticing",
+        )
+
+    def test_the_repeated_name_case_still_exists_in_the_generator(self):
+        # The premise of the two tests above. If the generator ever stops
+        # repeating a name they still hold, but the real-world case they model
+        # is gone and that is worth knowing.
+        repeated = sorted(
+            name for name, count in collections.Counter(
+                re.findall(
+                    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b(VF2\w+)'
+                    r'\([^;{]*\)\s*\n?\{',
+                    SOURCE, re.M)).items()
+            if count > 1)
+        self.assertTrue(
+            repeated,
+            "no name in the generator has two definitions any more; the "
+            "repeated-name sweep tests now model a case that does not occur",
+        )
+        for name in repeated:
+            self.assertEqual(
+                len(find_function_bodies(name)),
+                sum(1 for _ in re.finditer(
+                    _DEFINITION_HEADER % re.escape(name), SOURCE, re.M)),
+                "%s has several definitions but the helper does not return "
+                "them all" % name,
+            )
+
+    def test_a_named_lookup_refuses_an_ambiguous_name(self):
+        """find_function_bodies returns all; function_body must return ONE.
+
+        A caller that names one specific function and silently receives the
+        first of several is told an answer about code it did not ask about,
+        and would never learn the other definition exists. The sweep wants
+        every body; a named lookup wants exactly one, and must say so rather
+        than guess.
+        """
+        repeated = sorted(
+            name for name, count in collections.Counter(
+                re.findall(
+                    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b(VF2\w+)'
+                    r'\([^;{]*\)\s*\n?\{',
+                    SOURCE, re.M)).items()
+            if count > 1)
+        if not repeated:
+            self.skipTest("no name in the generator has two definitions, so "
+                          "there is no ambiguous name to refuse")
+        for name in repeated:
+            with self.subTest(function=name):
+                with self.assertRaises(AssertionError):
+                    function_body(name)
 
     def test_every_scan_call_site_is_gated(self):
         """No caller may scan without first proving the cache is still live."""
@@ -594,74 +864,6 @@ class TheSweepSeesEveryEmittedDefinition(unittest.TestCase):
             "%d emitted definitions are invisible to find_function_body, so "
             "the sweep skips them as though they were forward declarations: "
             "%s" % (len(invisible), invisible[:8]))
-
-
-class TheBodyFinderStopsAtTheRightBrace(unittest.TestCase):
-    """A body that runs past its function is worse than no body at all.
-
-    None means "nothing to check" and is safe. A body that overshoots makes
-    the sweep inspect text belonging to functions it was never looking at, so
-    a rule violation is attributed to the wrong function -- and, just as bad,
-    the real function's own body is never examined.
-
-    The island-event thunks close on the same line as they open:
-
-        static bool __fastcall VF2MobileIslandEventCanFireBody(...) { ... }
-
-    Measured before the fix, that name returned a 43-line body containing 17
-    other definitions.
-    """
-
-    def test_a_one_line_definition_does_not_swallow_its_neighbours(self):
-        for name in ("VF2MobileIslandEventCanFireBody",
-                     "VF2MobileIslandEventGetAwardAmountBody"):
-            with self.subTest(function=name):
-                body = find_function_body(name)
-                self.assertIsNotNone(
-                    body, "%s has a definition but no body was found" % name)
-                self.assertNotIn(
-                    "\n", body,
-                    "%s closes on its opening line, so its body cannot span "
-                    "lines; the match ran past the closing brace" % name)
-
-    def test_no_body_contains_another_definition(self):
-        """A cheap invariant that catches overshoot wherever it appears."""
-        overshot = []
-        for name in set(re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(",
-                                   SOURCE, re.M)):
-            for body in all_function_bodies(name):
-                if re.search(r"^(?:extern \"C\" )?static [\w \*&:]+\w+\(",
-                             body, re.M):
-                    overshot.append(name)
-                    break
-        self.assertEqual(
-            sorted(overshot), [],
-            "these bodies contain another function's definition, so the "
-            "matcher ran past the closing brace: %s" % sorted(overshot)[:8])
-
-
-class EverySameNamedDefinitionIsChecked(unittest.TestCase):
-    """Two definitions can share a name, and both must be examined.
-
-    The generator emits VF2MaybeCompleteDisciplineProps twice. A name-only
-    lookup returns the first every time, so the sweep harvested the name twice
-    and inspected the same body twice while the second definition went
-    unchecked -- invisible, and green.
-    """
-
-    def test_a_duplicated_name_yields_every_body(self):
-        bodies = all_function_bodies("VF2MaybeCompleteDisciplineProps")
-        self.assertGreaterEqual(
-            len(bodies), 2,
-            "expected more than one definition for this name; if the "
-            "generator now emits one, this test has served its purpose and "
-            "can name a different duplicate or be retired")
-
-    def test_function_body_refuses_an_ambiguous_name(self):
-        """Callers naming a specific function must not silently get the first
-        of several."""
-        with self.assertRaises(AssertionError):
-            function_body("VF2MaybeCompleteDisciplineProps")
 
 
 if __name__ == "__main__":
