@@ -32385,6 +32385,8 @@ private:
     friend void __cdecl VF2RandomTelescopeLabel(CVillager &);
     friend void __cdecl VF2RandomWorkoutLabel(CVillager &);
     friend void __cdecl VF2RandomQuickWorkoutLabel(CVillager &);
+    // Builds the gym donor table; see VF2GymDonorBehaviors.
+    friend void(__cdecl *const *VF2GymDonorBehaviors(int *))(CVillager &);
     friend void __cdecl VF2RandomKitchenCareerDispatchLabel(CVillager &);
     friend void __cdecl VF2RandomKitchenCareerLabel(CVillager &);
     friend void __cdecl VF2RandomOfficeCareerLabel(CVillager &);
@@ -33427,13 +33429,32 @@ static void VF2RunOwnFurnitureActionVaried(
 // three of five selections do the wrong thing in play. They can be added once
 // they are venue-aware, which means extending the callsite patch and proving
 // the retarget landed -- not extending this list.
-static void (__cdecl *const kVF2GymDonorBehaviors[])(CVillager &) = {
-    // "Doing X exercises" is not a separate behaviour: it is WorkingOut
-    // wearing the fourteen labels of the existing "workout" group -- leg,
-    // arm, back and abdominal exercises, crunches, cardio, and so on.
-    CBehavior::WorkingOut,
-    CBehavior::QuickWorkout,
-};
+// The gym donor table, built inside a function rather than at file scope.
+//
+// CBehavior::WorkingOut and ::QuickWorkout are PRIVATE. This class grants
+// friendship to named free functions -- VF2RandomWorkoutLabel,
+// VF2RandomQuickWorkoutLabel and a dozen others -- and a file-scope array
+// initialiser is not one of them, so initialising the table there is a
+// C2248 in every behaviour-patches build:
+//
+//   vf2_spontaneous_behaviors.cpp(1578): error C2248: 'CBehavior::WorkingOut':
+//     cannot access private member declared in class 'CBehavior'
+//
+// The contents are unchanged. "Doing X exercises" is not a separate
+// behaviour: it is WorkingOut wearing the fourteen labels of the existing
+// "workout" group -- leg, arm, back and abdominal exercises, crunches,
+// cardio, and so on.
+typedef void(__cdecl *VF2DonorBehavior)(CVillager &);
+
+static VF2DonorBehavior const *VF2GymDonorBehaviors(int *outCount)
+{
+    static VF2DonorBehavior const donors[] = {
+        CBehavior::WorkingOut,
+        CBehavior::QuickWorkout,
+    };
+    if (outCount) *outCount = (int)(sizeof(donors) / sizeof(donors[0]));
+    return donors;
+}
 
 #define VF2_DONOR_COUNT(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
@@ -33517,9 +33538,11 @@ extern "C" void __cdecl VF2ExerciseBikeRun(CVillager &villager)
 // action of its own, with the ten workout variations that were asked for.
 extern "C" void __cdecl VF2HomeGymWorkout(CVillager &villager)
 {
+    int gymDonorCount = 0;
+    VF2DonorBehavior const *gymDonors = VF2GymDonorBehaviors(&gymDonorCount);
     VF2RunOwnFurnitureActionVaried(
-        villager, kVF2GymDonorBehaviors,
-        VF2_DONOR_COUNT(kVF2GymDonorBehaviors),
+        villager, gymDonors,
+        gymDonorCount,
         __VF2_HOME_GYM_ITEM_ID__, 0x75,
         kVF2BehaviorLabels_home_gym,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_home_gym));
@@ -33527,9 +33550,11 @@ extern "C" void __cdecl VF2HomeGymWorkout(CVillager &villager)
 
 extern "C" void __cdecl VF2YogaEquipmentWorkout(CVillager &villager)
 {
+    int gymDonorCount = 0;
+    VF2DonorBehavior const *gymDonors = VF2GymDonorBehaviors(&gymDonorCount);
     VF2RunOwnFurnitureActionVaried(
-        villager, kVF2GymDonorBehaviors,
-        VF2_DONOR_COUNT(kVF2GymDonorBehaviors),
+        villager, gymDonors,
+        gymDonorCount,
         __VF2_YOGA_EQUIPMENT_ITEM_ID__, 0x75,
         kVF2BehaviorLabels_yoga_equipment,
         VF2_LABEL_COUNT(kVF2BehaviorLabels_yoga_equipment));
