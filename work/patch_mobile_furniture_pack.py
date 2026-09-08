@@ -28501,13 +28501,6 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
 // interrupts a villager elsewhere, so the walker re-evaluates from where it
 // stands -- which may well be this same route, choosing a different lounger,
 // since its claim here is gone by then.
-// A handle no walker may claim. AddToWorld stamps real placement handles, and
-// nothing in the array is ever zero for an occupied record, so zero is free to
-// mean "this entry is parked". Parked entries hold their slot -- so a
-// reentrant VF2SpaHoldLoungerForWalk still finds and reuses it -- while
-// matching no lounger, so they exclude nothing they should not.
-#define VF2_SPA_NO_HANDLE 0
-
 static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
 {
     for (int index = 0; index < 30; ++index) {
@@ -28515,48 +28508,37 @@ static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
         CVillager *walker = gVF2SpaWalkReservations[index].villager;
         if (!walker || walker == keep) continue;
 
-        // PARKED BEFORE THE RESTART, not cleared after it.
+        // NO SYNCHRONOUS RESTART. This is the fix for the whole family of
+        // defects this function kept producing.
         //
-        // Keeping the entry pointed at this lounger across the restart does
-        // not exclude anything: VF2SpaLoungerClaimedByWalker skips every
-        // entry whose villager IS the asking villager, and the restarted
-        // walker is exactly that villager. It would see its own claim
-        // skipped and take the lounger straight back.
+        // Calling StartNewBehavior here re-entered the spa route from inside
+        // this frame, and no bookkeeping could make that safe:
+        // VF2SpaLoungerClaimedByWalker skips the ASKING villager's own entry,
+        // so a walker can never be excluded from a lounger by its own claim,
+        // whatever that claim holds. Retaining the handle, parking it, and
+        // handing it to the taker were each tried and each failed for that
+        // one reason. The nested call also reused this same slot -- entries
+        // are keyed by villager pointer -- so the outer frame's cleanup then
+        // destroyed a reservation the nested call had just made.
         //
-        // Parking the handle instead makes the entry match no lounger, so
-        // the walker cannot re-select this one through its own claim -- and
-        // the slot is still owned by this villager, so a reentrant
-        // VF2SpaHoldLoungerForWalk during the restart REUSES it rather than
-        // allocating a second entry for the same villager.
-        gVF2SpaWalkReservations[index].handle = VF2_SPA_NO_HANDLE;
-
+        // ForgetPlans alone is what nearly every other interrupt site in this
+        // file does, and the engine picks a villager with no plans up on its
+        // next tick. By then this function has returned, the entry is gone,
+        // and the taker is visible the ordinary way -- so the walker
+        // re-chooses against a settled table rather than a half-mutated one.
+        //
         // Only a villager still en route to a treatment is interrupted. One
         // that already finished, or was interrupted by something else, has
         // plans of its own that are none of this function's business.
         if (VF2SpaReceivingIndex(*walker) >= 0) {
-            CVillagerPlans *walkerPlans =
-                reinterpret_cast<CVillagerPlans *>(walker);
-            walkerPlans->ForgetPlans(*walker, false);
-            walkerPlans->StartNewBehavior(*walker);
+            reinterpret_cast<CVillagerPlans *>(walker)->ForgetPlans(
+                *walker, false);
         }
 
-        // RELEASED ONLY IF THE RESTART DID NOT CLAIM SOMETHING ELSE.
-        //
-        // The restart above runs SYNCHRONOUSLY and may re-enter the spa
-        // route. If it picked another lounger, the nested
-        // VF2SpaHoldLoungerForWalk found this villager's entry -- entries are
-        // keyed by villager pointer -- and wrote the new handle into it.
-        // Zeroing unconditionally here would destroy that fresh reservation
-        // and leave the new walk unprotected, which is worse than the overlap
-        // this function exists to prevent.
-        //
-        // A handle other than the parked value means exactly that: the
-        // restart claimed a lounger, and the entry now belongs to that walk.
-        // Leave it alone. Only a still-parked entry is genuinely finished
-        // with, and only that one is released.
-        if (gVF2SpaWalkReservations[index].handle == VF2_SPA_NO_HANDLE) {
-            gVF2SpaWalkReservations[index].villager = 0;
-        }
+        // Released unconditionally, which is safe now that nothing can run
+        // between the interrupt and here.
+        gVF2SpaWalkReservations[index].villager = 0;
+        gVF2SpaWalkReservations[index].handle = 0;
     }
 }
 
