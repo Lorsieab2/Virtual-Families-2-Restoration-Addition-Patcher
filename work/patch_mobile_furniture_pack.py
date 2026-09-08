@@ -28544,14 +28544,13 @@ static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
         // defects this function kept producing.
         //
         // Calling StartNewBehavior here re-entered the spa route from inside
-        // this frame, and no bookkeeping could make that safe:
-        // VF2SpaLoungerClaimedByWalker skips the ASKING villager's own entry,
-        // so a walker can never be excluded from a lounger by its own claim,
-        // whatever that claim holds. Retaining the handle, parking it, and
-        // handing it to the taker were each tried and each failed for that
-        // one reason. The nested call also reused this same slot -- entries
-        // are keyed by villager pointer -- so the outer frame's cleanup then
-        // destroyed a reservation the nested call had just made.
+        // this frame, and four attempts to make that safe each failed for a
+        // DIFFERENT reason -- the asking-villager skip, the receiving-label
+        // liveness check, and the pointer keying that lets a nested hold
+        // reuse this very slot. They are set out one by one in this
+        // function's header comment, and deliberately not restated here: two
+        // copies of an explanation is how one of them goes stale, which is
+        // exactly what happened to this paragraph.
         //
         // ForgetPlans alone is what nearly every other interrupt site in this
         // file does, and the engine picks a villager with no plans up on its
