@@ -187,6 +187,75 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             "a villager who stopped receiving must stop holding the lounger",
         )
 
+    def test_an_interrupted_walk_does_not_keep_holding_its_lounger(self):
+        """The same-label interruption case, not just the predicate.
+
+        A villager walking to lounger A who is dropped onto lounger B gets a
+        FRESH receiving label from the manual route. The stale-entry guard in
+        VF2SpaLoungerClaimedByWalker tests for a receiving label, so that new
+        label would keep the hold on A looking live for the whole treatment
+        at B, and other adults would skip a lounger that is actually free.
+
+        So the manual receiving route must retarget the reservation onto the
+        lounger it actually linked.
+        """
+        source = _source()
+        start = source.index(
+            "static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertIn(
+            "VF2SpaHoldLoungerForWalk(villager, receiveInfo.unknown0)", body,
+            "the manual route sets a receiving label without retargeting the "
+            "reservation, so an interrupted walk keeps holding its lounger",
+        )
+
+    def test_a_giver_stops_holding_any_lounger(self):
+        # A giver occupies no lounger of their own, so a walk they had started
+        # is over. Their receiving label is gone too, but the hold is keyed by
+        # villager and has to be dropped explicitly.
+        source = _source()
+        start = source.index(
+            "static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)")
+        body = source[start:source.index("\n}\n", start)]
+        giving = body.index("kVF2SpaGivingLabels[receiving]")
+        self.assertIn(
+            "VF2SpaReleaseLoungerHold(villager)", body[giving:],
+            "a villager who switches to giving must release the lounger they "
+            "were walking to",
+        )
+
+    def test_releasing_a_hold_clears_both_fields(self):
+        # Leaving a handle behind with a null villager would let a later
+        # villager reusing that slot inherit a stale handle.
+        source = _source()
+        start = source.index("static void VF2SpaReleaseLoungerHold(")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertIn(".villager = 0", body)
+        self.assertIn(".handle = 0", body)
+
+    def test_the_reservation_helpers_precede_every_caller(self):
+        # The manual route is emitted BEFORE the finder, so the helpers have
+        # to sit above it too. Declaring them next to the finder compiled in
+        # the autonomous route and broke this one.
+        source = _source()
+        table = source.index(
+            "static VF2SpaWalkReservation gVF2SpaWalkReservations[30]")
+        hold = source.index("static void VF2SpaHoldLoungerForWalk(")
+        release = source.index("static void VF2SpaReleaseLoungerHold(")
+        manual = source.index(
+            "static bool VF2HandleMobileInvisibleSpaLounger(")
+        receiving_index = source.index("static int VF2SpaReceivingIndex(")
+        claimed = source.index("static bool VF2SpaLoungerClaimedByWalker(")
+        for label, earlier, later in (
+            ("table before hold", table, hold),
+            ("hold before the manual route", hold, manual),
+            ("release before the manual route", release, manual),
+            ("VF2SpaReceivingIndex before its caller",
+             receiving_index, claimed),
+        ):
+            with self.subTest(order=label):
+                self.assertLess(earlier, later)
+
     def test_the_reservation_is_taken_only_once_the_walk_is_committed(self):
         # A route that returns early must never leave a lounger held.
         body = _receiving_body()

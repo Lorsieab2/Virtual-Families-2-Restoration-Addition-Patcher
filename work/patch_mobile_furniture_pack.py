@@ -28701,82 +28701,6 @@ static bool VF2SpaOccupantIndex(CVillager &dropped, int loungerSlot, CVillager *
     return false;
 }
 
-static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
-{
-    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
-    // Which lounger this is, not merely that it is one. Sampled exactly as the
-    // dispatcher samples the drop, so it resolves to the same placed slot.
-    int const loungerSlot = VF2FurnitureSlotUnderVillager(villager);
-
-    // A child dropped onto a lounger somebody is already using refuses out
-    // loud, the same way the stock game turns down anything age-gated. On an
-    // empty lounger there is nothing to refuse, so the drop falls through to
-    // stock handling instead of producing a message out of nowhere.
-    if (!VF2SpaAdult(villager)) {
-        if (!VF2SpaOccupantIndex(villager, loungerSlot, 0)) return false;
-        plans->ForgetPlans(villager, false);
-        VF2PlanChaiseRefusal(plans, villager, eStringTooYoung);
-        return true;
-    }
-
-    // Somebody already on THIS lounger? Then this adult performs the matching
-    // treatment: the index of what they are receiving is the index of what
-    // this one gives. Scoped to the dropped-on lounger, so a second lounger
-    // standing empty is treated as empty.
-    CVillager *occupant = 0;
-    if (VF2SpaOccupantIndex(villager, loungerSlot, &occupant)) {
-        int receiving = VF2SpaReceivingIndex(*occupant);
-
-        plans->ForgetPlans(villager, false);
-        VF2SetActionLabel(villager, kVF2SpaGivingLabels[receiving]);
-        // Match the receiving treatment's roughly one-minute real-time
-        // duration.  This is the giver's active treatment interval.
-        plans->PlanToWork(ldwGameState::GetRandom(11) + 55);
-        plans->StartNewBehavior(villager);
-        return true;
-    }
-
-    // Nobody on this one, so this adult takes it and receives a treatment.
-    // Link to the lounger first: the plan needs its orientation to choose
-    // between lying down and the chaise pose, and its point to walk to.
-    sFurnitureInfo2 receiveInfo = {};
-    if (!FurnitureManager.LinkPeepToFurniture(
-            CContentMap::eObjectChaise, &villager, receiveInfo, true, 0,
-            false)) {
-        return false;
-    }
-    plans->ForgetPlans(villager, false);
-    VF2SetActionLabel(
-        villager,
-        kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
-    plans->PlanToGo(
-        VF2SpaTreatmentPoint(receiveInfo.point), eSpeedNormal, ePriorityNormal);
-    VF2PlanSpaTreatment(plans, villager, receiveInfo);
-    plans->StartNewBehavior(villager);
-    return true;
-}
-
-// The RECEIVING half, chosen autonomously.
-//
-// Only this half can be autonomous. Giving a treatment requires a second
-// villager already receiving one on that same lounger, and autonomous
-// selection picks one villager at a time with no way to arrange a pair -- so
-// an autonomous "giving" would have villagers miming a massage at an empty
-// chair. Receiving has no such requirement: one adult, one free lounger.
-//
-// Adults only, matching the manual route. A free lounger is required, so a
-// villager never walks over to one that is already occupied; the give side
-// stays a deliberate manual drop.
-// A placed, in-world spa lounger -- either the invisible one or the visible
-// sibling -- or -1.
-//
-// This has to resolve an ACTUAL spa lounger. Both spa loungers share
-// eObjectChaise with every stock and mobile lounger, so a candidate gated on
-// the object alone becomes eligible whenever any chaise exists, and the
-// villager then walks to whichever chaise is nearest and mimes a spa treatment
-// on it. Checking occupancy at the villager's current position cannot prevent
-// that: it samples where they are standing now, before any destination has
-// been chosen.
 // Which lounger each villager is CURRENTLY WALKING TO, by placement handle.
 //
 // VF2SpaOccupantIndex can only see a villager who is already STANDING on a
@@ -28834,6 +28758,109 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
     spare->handle = handle;
 }
 
+// Drop whatever this villager was walking to.
+//
+// A receiving LABEL is not proof that a particular walk is still live. A
+// villager walking to lounger A who is then dropped onto lounger B gets a
+// fresh receiving label from the manual route, so the "still labelled as
+// receiving" test in VF2SpaLoungerClaimedByWalker would go on believing the
+// walk to A is active and hold A for the whole treatment at B, making other
+// adults skip a lounger that is actually free. The routes that restart or
+// end a receiving action call this so a hold cannot outlive its walk.
+static void VF2SpaReleaseLoungerHold(CVillager &villager)
+{
+    for (int index = 0; index < 30; ++index) {
+        if (gVF2SpaWalkReservations[index].villager != &villager) continue;
+        gVF2SpaWalkReservations[index].villager = 0;
+        gVF2SpaWalkReservations[index].handle = 0;
+    }
+}
+
+static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
+{
+    CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
+    // Which lounger this is, not merely that it is one. Sampled exactly as the
+    // dispatcher samples the drop, so it resolves to the same placed slot.
+    int const loungerSlot = VF2FurnitureSlotUnderVillager(villager);
+
+    // A child dropped onto a lounger somebody is already using refuses out
+    // loud, the same way the stock game turns down anything age-gated. On an
+    // empty lounger there is nothing to refuse, so the drop falls through to
+    // stock handling instead of producing a message out of nowhere.
+    if (!VF2SpaAdult(villager)) {
+        if (!VF2SpaOccupantIndex(villager, loungerSlot, 0)) return false;
+        plans->ForgetPlans(villager, false);
+        VF2PlanChaiseRefusal(plans, villager, eStringTooYoung);
+        return true;
+    }
+
+    // Somebody already on THIS lounger? Then this adult performs the matching
+    // treatment: the index of what they are receiving is the index of what
+    // this one gives. Scoped to the dropped-on lounger, so a second lounger
+    // standing empty is treated as empty.
+    CVillager *occupant = 0;
+    if (VF2SpaOccupantIndex(villager, loungerSlot, &occupant)) {
+        int receiving = VF2SpaReceivingIndex(*occupant);
+
+        plans->ForgetPlans(villager, false);
+        VF2SetActionLabel(villager, kVF2SpaGivingLabels[receiving]);
+        // Match the receiving treatment's roughly one-minute real-time
+        // duration.  This is the giver's active treatment interval.
+        plans->PlanToWork(ldwGameState::GetRandom(11) + 55);
+        plans->StartNewBehavior(villager);
+
+        // A giver occupies no lounger of their own, so a walk they had
+        // started is over and must not keep holding its destination.
+        VF2SpaReleaseLoungerHold(villager);
+        return true;
+    }
+
+    // Nobody on this one, so this adult takes it and receives a treatment.
+    // Link to the lounger first: the plan needs its orientation to choose
+    // between lying down and the chaise pose, and its point to walk to.
+    sFurnitureInfo2 receiveInfo = {};
+    if (!FurnitureManager.LinkPeepToFurniture(
+            CContentMap::eObjectChaise, &villager, receiveInfo, true, 0,
+            false)) {
+        return false;
+    }
+    plans->ForgetPlans(villager, false);
+    VF2SetActionLabel(
+        villager,
+        kVF2SpaReceivingLabels[ldwGameState::GetRandom(kVF2SpaTreatmentCount)]);
+    plans->PlanToGo(
+        VF2SpaTreatmentPoint(receiveInfo.point), eSpeedNormal, ePriorityNormal);
+    VF2PlanSpaTreatment(plans, villager, receiveInfo);
+    plans->StartNewBehavior(villager);
+
+    // This villager may already have been walking to a DIFFERENT lounger, and
+    // the fresh receiving label above would otherwise keep that older hold
+    // looking live. Retarget onto the one actually linked here.
+    VF2SpaHoldLoungerForWalk(villager, receiveInfo.unknown0);
+    return true;
+}
+
+// The RECEIVING half, chosen autonomously.
+//
+// Only this half can be autonomous. Giving a treatment requires a second
+// villager already receiving one on that same lounger, and autonomous
+// selection picks one villager at a time with no way to arrange a pair -- so
+// an autonomous "giving" would have villagers miming a massage at an empty
+// chair. Receiving has no such requirement: one adult, one free lounger.
+//
+// Adults only, matching the manual route. A free lounger is required, so a
+// villager never walks over to one that is already occupied; the give side
+// stays a deliberate manual drop.
+// A placed, in-world spa lounger -- either the invisible one or the visible
+// sibling -- or -1.
+//
+// This has to resolve an ACTUAL spa lounger. Both spa loungers share
+// eObjectChaise with every stock and mobile lounger, so a candidate gated on
+// the object alone becomes eligible whenever any chaise exists, and the
+// villager then walks to whichever chaise is nearest and mimes a spa treatment
+// on it. Checking occupancy at the villager's current position cannot prevent
+// that: it samples where they are standing now, before any destination has
+// been chosen.
 static int VF2FindFreeSpaLoungerSlot(CVillager &villager)
 {
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
