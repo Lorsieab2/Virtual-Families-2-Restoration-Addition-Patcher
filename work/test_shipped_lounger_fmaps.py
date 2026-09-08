@@ -23,6 +23,8 @@ position or changing behaviour the moment it sat down.
 Skips when no finished build is present, so a clean checkout is not red.
 """
 import hashlib
+import os
+import re
 import struct
 import unittest
 from collections import Counter
@@ -68,12 +70,103 @@ WIDENED_LOUNGERS = (
 )
 
 
-def _cells(path):
+def _cell_list(path):
+    """The map's cells IN ORDER, one entry per cell.
+
+    _cells() summarises to a Counter, which answers "how many of each value"
+    and cannot answer "what is at cell N" or even "how many cells are there".
+    Any check about positions, sizes or occupancy counts needs this instead --
+    iterating the Counter yields each distinct value once, which silently turns
+    a 266-cell map into a 3-element sequence.
+    """
     data = path.read_bytes()
     count = (len(data) - 0x20 - 0x10) // 4
-    return Counter(
+    return [
         struct.unpack_from("<I", data, 0x20 + 4 * i)[0] for i in range(count)
-    )
+    ]
+
+
+def _cells(path):
+    return Counter(_cell_list(path))
+
+
+def _release_glob():
+    """Which release's matrix output to verify.
+
+    This was pinned to "VF2-B180-matrix-*". That folder is no longer produced,
+    so every check in this file skipped -- silently, and for every release
+    after B180. The suite reported "5 skipped" and read as green while
+    verifying nothing at all, which is the failure this file exists to prevent:
+    a check that cannot fail is not evidence.
+
+    VF2_VERIFY_RELEASE names the release explicitly. Otherwise the NEWEST
+    matrix output present is used, so the checks follow the current release
+    instead of a frozen one.
+    """
+    named = os.environ.get("VF2_VERIFY_RELEASE")
+    if named:
+        return "VF2-%s-matrix-*" % named
+    # ONLY RELEASES THAT ACTUALLY LINKED SOMETHING COUNT.
+    #
+    # build_matrix.ps1 creates its log root BEFORE building any variant, so a
+    # run that dies before linking still leaves VF2-B<n>-matrix-<date>-logs in
+    # outputs/. Counting that as a release makes max() prefer the broken run
+    # over the completed one; _finished_builds() then filters the logs
+    # directory out, yields nothing, and every check skips -- OK (skipped=5)
+    # while a complete release sat there unverified.
+    #
+    # A release qualifies only if at least one of its variant directories has
+    # a linked exe and an Assets directory, which is the same test
+    # _finished_builds() applies.
+    releases = set()
+    for d in OUTPUTS.glob("VF2-B*-matrix-*"):
+        if d.name.endswith("-logs"):
+            continue
+        m = re.match(RELEASE_NAME_RE, d.name)
+        if not m:
+            continue
+        if list(d.glob("*.exe")) and (d / "Assets").is_dir():
+            releases.add(m.group(1))
+    if not releases:
+        return None
+    return "VF2-%s-matrix-*" % max(releases, key=_release_sort_key)
+
+
+# Releases are not always plain integers. data/vf2 already carries
+# build-matrix-release-b174.1.json, -b174.2.json and -b174b.json, so a pattern
+# demanding "-matrix-" straight after the digits skips every point release --
+# either verifying an older base release or, when a point release is newest,
+# returning nothing and skipping every check in this file. That is the same
+# silent-skip failure this change exists to remove, so the full naming
+# convention is parsed: B<major>, optionally .<minor>, optionally a letter.
+RELEASE_NAME_RE = r"VF2-(B\d+(?:\.\d+)?[a-z]?)-matrix-"
+
+
+def _release_sort_key(name):
+    """Order B174 < B174.1 < B174.2 < B174b < B181 < B184.
+
+    Plain-string ordering puts B181 before B84 and B174.10 before B174.2, so
+    each component is compared as its own type: the major as an integer, the
+    minor as an integer (absent sorts first), the letter suffix as text.
+    """
+    m = re.fullmatch(r"B(\d+)(?:\.(\d+))?([a-z]?)", name)
+    if not m:
+        return (0, 0, "")
+    major, minor, suffix = m.groups()
+    return (int(major), int(minor) if minor else 0, suffix)
+
+
+# The spa-lounger hotspot widening merged in #239, after the B181 matrix was
+# built. A build from B181 or earlier cannot carry it, and demanding it there
+# would be asserting a fix onto a release that predates it.
+WIDENING_FIRST_RELEASE = (182, 0, "")
+
+
+def _release_has_widening(build_name):
+    m = re.match(RELEASE_NAME_RE, build_name)
+    if not m:
+        return False
+    return _release_sort_key(m.group(1)) >= WIDENING_FIRST_RELEASE
 
 
 def _finished_builds():
@@ -83,18 +176,47 @@ def _finished_builds():
     rebuilding it, so an unlinked folder still holds the PREVIOUS release's
     maps -- and would report B179's defect against B180.
     """
-    for d in sorted(OUTPUTS.glob("VF2-B180-matrix-*")):
+    pattern = _release_glob()
+    if pattern is None:
+        return
+    for d in sorted(OUTPUTS.glob(pattern)):
         if d.name.endswith("-logs"):
             continue
         if list(d.glob("*.exe")) and (d / "Assets").is_dir():
             yield d
 
 
+def _refuse_or_skip(case):
+    """AN EXPLICIT REQUEST THAT MATCHES NOTHING IS AN ERROR, NOT A SKIP.
+
+    Setting VF2_VERIFY_RELEASE asks for a named release to be verified. If it
+    is misspelled, or names output that has since been cleaned up, skipping
+    reports the same "OK" as a real verification -- VF2_VERIFY_RELEASE=B999
+    gave OK (skipped=5). That is the silent skip this file exists to remove,
+    reintroduced through the escape hatch added to remove it.
+
+    With the variable unset there is nothing to be wrong about: a clean
+    checkout has no build output and must not be red.
+
+    Shared by both test classes deliberately. The first version of this guard
+    lived in one setUp, and the other class kept skipping -- so the same
+    request still produced a skip, just a quieter one.
+    """
+    named = os.environ.get("VF2_VERIFY_RELEASE")
+    if named:
+        case.fail(
+            "VF2_VERIFY_RELEASE=%s was requested but no finished build matches "
+            "%r under %s. Verification of a named release cannot pass by being "
+            "skipped." % (named, _release_glob(), OUTPUTS)
+        )
+    case.skipTest("no finished current-release build output")
+
+
 class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
     def setUp(self):
         self.builds = list(_finished_builds())
         if not self.builds:
-            self.skipTest("no finished current-release build output")
+            _refuse_or_skip(self)
 
     def test_no_lounger_carries_the_untranslated_mobile_anchor(self):
         for build in self.builds:
@@ -155,20 +277,33 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                             "does not match the desktop-safe donor map",
                         )
                         continue
-                    # A widened spa map must be the donor map PLUS object
-                    # cells, never anything else: same length, and every cell
-                    # that is not an added object cell unchanged.
+                    # ORDERED CELL LISTS FROM HERE DOWN.
+                    #
+                    # _cells() returns a Counter, which is right for the
+                    # equality check above and wrong for everything below it.
+                    # Iterating a Counter yields each distinct KEY once, so
+                    # `len()` was the number of distinct values rather than the
+                    # map size, `zip(expected, shipped)` walked keys instead of
+                    # cells, and the per-value tally below counted every value
+                    # exactly once -- which made `obj` an arbitrary pick rather
+                    # than the object value, and left the widening assertion
+                    # comparing 1 against 1 however much wider the map got.
+                    #
+                    # The result was a check that went red on a CORRECTLY
+                    # widened artifact. Positions matter here, so the ordered
+                    # lists are used.
+                    shipped_cells = _cell_list(path)
+                    expected_cells = _cell_list(PC_FMAP_DONOR)
                     self.assertEqual(
-                        len(shipped), len(expected),
+                        len(shipped_cells), len(expected_cells),
                         "the widened map changed size",
                     )
-                    counts = {}
-                    for value in expected:
-                        if value:
-                            counts[value] = counts.get(value, 0) + 1
+                    counts = Counter(v for v in expected_cells if v)
                     self.assertTrue(counts, "the donor map has no object cells")
-                    obj = max(counts, key=lambda v: counts[v])
-                    for index, (was, now) in enumerate(zip(expected, shipped)):
+                    obj = counts.most_common(1)[0][0]
+                    for index, (was, now) in enumerate(
+                        zip(expected_cells, shipped_cells)
+                    ):
                         if was == now:
                             continue
                         self.assertEqual(
@@ -181,9 +316,25 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                             "cell %d became %#x rather than the object value "
                             "%#x" % (index, now, obj),
                         )
+                    # The widening merged after B181 was built, so asserting it
+                    # against B181 or earlier would assert a property onto a
+                    # release that predates the fix. Every OTHER check in this
+                    # method still applies to those builds: no mobile markers,
+                    # no untranslated anchor, no overwritten cell.
+                    if not _release_has_widening(build.name):
+                        continue
+                    # COUNT OCCURRENCES, NOT DISTINCT VALUES.
+                    #
+                    # _cells() returns a Counter, and iterating a Counter
+                    # yields each distinct KEY once. `sum(1 for v in shipped
+                    # if v == obj)` is therefore at most 1 on both sides, so
+                    # this compared 1 against 1 however much wider the map
+                    # got -- red on a correctly widened artifact, which is the
+                    # opposite of what it is for. Counter[obj] is the real
+                    # occupied-cell count.
                     self.assertGreater(
-                        sum(1 for v in shipped if v == obj),
-                        sum(1 for v in expected if v == obj),
+                        sum(1 for v in shipped_cells if v == obj),
+                        sum(1 for v in expected_cells if v == obj),
                         "the spa map is not actually wider than the donor, so "
                         "the widening did not reach this build",
                     )
@@ -224,8 +375,9 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                     )
                 # And the two groups MUST differ, or the widening never
                 # reached this build and every check above passed on
-                # unmodified bytes.
-                if widened and plain:
+                # unmodified bytes. Only from the release that carries the
+                # widening: before it, byte-identical is the CORRECT result.
+                if widened and plain and _release_has_widening(build.name):
                     self.assertNotEqual(
                         set(widened.values()), set(plain.values()),
                         "the spa loungers are byte-identical to the plain "
@@ -259,7 +411,7 @@ class TestStockDonorBorrowersMatchTheirDonors(unittest.TestCase):
     def setUp(self):
         self.builds = list(_finished_builds())
         if not self.builds:
-            self.skipTest("no finished current-release build output")
+            _refuse_or_skip(self)
 
     def test_each_borrower_is_byte_identical_to_its_donor(self):
         checked = 0
