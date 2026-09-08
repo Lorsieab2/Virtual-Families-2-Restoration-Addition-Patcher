@@ -28499,19 +28499,34 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
 //
 // REJECTED, recorded so it is not reinstated: following ForgetPlans with
 // StartNewBehavior to make the walker re-evaluate immediately. That restart
-// runs SYNCHRONOUSLY and re-enters the spa route from inside this frame,
-// which produced five successive defects, all dying on one line of
-// VF2SpaLoungerClaimedByWalker:
+// runs SYNCHRONOUSLY and re-enters the spa route from inside this frame, and
+// four attempts to make it safe each failed for a DIFFERENT reason. The
+// reasons are recorded separately because conflating them hides which
+// predicate actually defeats which approach:
 //
-//     if (!held.villager || held.villager == &asking) continue;
+//   RETAINING the entry pointed at this lounger, and PARKING it on a
+//   sentinel handle, both died on the skip in VF2SpaLoungerClaimedByWalker:
 //
-// The restarted walker IS the asking villager, so its own entry is skipped
-// and it can never be excluded from the lounger it was just displaced from,
-// whatever that entry holds -- retaining the handle, parking it on a
-// sentinel, and reassigning it to the taker were each tried and each died
-// there. The nested call also reused the same slot, since entries are keyed
-// by villager pointer, so this frame's cleanup then destroyed a reservation
-// the nested call had just made.
+//       if (!held.villager || held.villager == &asking) continue;
+//
+//   The restarted walker IS the asking villager, so its own entry is skipped
+//   whatever it holds, and it can re-select the lounger it was displaced
+//   from.
+//
+//   REASSIGNING the entry to `keep` does not hit that skip -- after
+//   reassignment held.villager is keep, and the walker asking later is a
+//   different villager, so the entry IS visible to it. It fails on the
+//   liveness predicate two lines further down: a claim only blocks while its
+//   holder is labelled receiving, and one of this function's two callers is
+//   VF2TryLinkMobileChaise, whose villager never carries that label. The
+//   reassigned claim is therefore inert for a chaise taker, and permanent
+//   for a spa taker -- the unexpirable-claim defect reverted earlier.
+//
+//   Leaving the entry ALONE across the restart failed differently again:
+//   entries are keyed by villager pointer, so the nested
+//   VF2SpaHoldLoungerForWalk reused this same slot and rewrote its handle,
+//   and this frame's cleanup then destroyed the reservation the nested call
+//   had just made.
 //
 // ForgetPlans ALONE is what this file does at 34 other interrupt sites. The
 // engine picks a villager with no plans up on its next tick, by which time
