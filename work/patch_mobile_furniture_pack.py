@@ -4149,6 +4149,15 @@ NEW_FURNITURE_ITEMS = [
     },
 ]
 
+# The two spa loungers whose drop target is widened. Named explicitly rather
+# than derived from the chaise family: every other chaise, including the stock
+# ones, keeps the footprint it has.
+SPA_LOUNGER_WIDENED_FMAPS = (
+    "SpaLoungerStd.png.fmap",
+    "InvisibleSpaLounger.png.fmap",
+)
+
+
 # The Ping-Pong Table's item id, referenced by the behaviour-label wrapper that
 # tells it apart from a stock Pool Table (both answer to EObject 0x36).
 # Where the per-villager behaviour label buffer lives. Candidate records grow
@@ -24758,6 +24767,101 @@ def sync_behavior_assets(manifest):
             )
         bucket.append(record)
 
+    def widen_spa_lounger_hotspot(target, donor, bucket):
+        """Grow the drop target on the two spa loungers only.
+
+        The owner reported that "the hotspot for the spa loungers are very
+        small ... they should be widened a bit so it's easier to drop villagers
+        on them", for both the normal and the invisible one.
+
+        Measured before changing anything: Chaise_brown.png.fmap is a 19x14
+        grid whose object cells are an ELEVEN-CELL RAGGED DIAGONAL --
+        (7,8), (5..9,9), (7..9,10), (8..9,11). Small and irregular, which is
+        exactly what makes a drop fiddly.
+
+        This runs on the BORROWER'S OWN COPY, after copy_donor_fmap has
+        written the donor bytes out under the borrowing item's name. The donor
+        file is untouched, so ordinary chaises -- which share
+        Chaise_brown.png.fmap and are covered by
+        validate_mobile_chaise_pc_fmaps -- keep the footprint they have. Only
+        the two spa loungers get the wider target.
+
+        The widening is a one-cell dilation of the existing object cells,
+        clamped to the grid. It cannot move the anchor, cannot change the grid
+        size, and cannot introduce a cell value the map did not already use --
+        so the header, the trailer and the cell vocabulary are all preserved.
+        """
+        # IDEMPOTENT BY CONSTRUCTION: the footprint is dilated from the
+        # DONOR'S cells, never from the target's own. Dilating the target
+        # would compound across builds -- measured on the real map, repeated
+        # passes give 11 -> 33 -> 62 -> 92 -> 125 cells, heading for the whole
+        # grid. These maps are written into a tracked asset directory, so
+        # consecutive builds really would keep growing it.
+        if not donor:
+            return
+        path = assets / target
+        donor_path = assets / donor
+        if not path.is_file() or not donor_path.is_file():
+            return
+        source = bytearray(donor_path.read_bytes())
+        data = bytearray(path.read_bytes())
+        if len(data) < 32 or bytes(data[:4]) != b"QAMF":
+            return
+        width, height = struct.unpack_from("<ii", data, 24)
+        if width <= 0 or height <= 0 or 32 + width * height * 4 > len(data):
+            return
+        if len(source) < 32 or bytes(source[:4]) != b"QAMF":
+            return
+        if struct.unpack_from("<ii", source, 24) != (width, height):
+            return
+        cells = list(struct.unpack_from("<%dI" % (width * height), data, 32))
+        donor_cells = list(
+            struct.unpack_from("<%dI" % (width * height), source, 32))
+        # The object value is whichever nonzero value occupies the most cells:
+        # the anchor and any collision markers are rarer by construction.
+        counts = {}
+        for value in donor_cells:
+            if value:
+                counts[value] = counts.get(value, 0) + 1
+        if not counts:
+            return
+        object_value = max(counts, key=lambda v: counts[v])
+        before = [i for i, v in enumerate(donor_cells) if v == object_value]
+        if not before:
+            return
+        grown = set(before)
+        for index in before:
+            x, y = index % width, index // width
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < width and 0 <= ny < height:
+                        grown.add(ny * width + nx)
+        # Never overwrite a cell that already carries a DIFFERENT value: the
+        # anchor lives in one of those, and losing it would break placement
+        # rather than widen it.
+        added = 0
+        for index in sorted(grown):
+            if cells[index] == 0:
+                cells[index] = object_value
+                added += 1
+        if not added:
+            return
+        struct.pack_into("<%dI" % (width * height), data, 32, *cells)
+        path.write_bytes(bytes(data))
+        bucket.append({
+            "target": target,
+            "widened_from": len(before),
+            "widened_to": len(before) + added,
+            "grid": [width, height],
+            "reason": (
+                "the drop target was an eleven-cell ragged diagonal, which "
+                "made dropping a villager on it fiddly; dilated by one cell "
+                "into empty space only, so the anchor and the donor's own map "
+                "are untouched"
+            ),
+        })
+
     for target, donor in COUCH_FMAP_DONORS.items():
         copy_donor_fmap(target, donor, copied)
     for target, donor in NEW_FURNITURE_FMAP_DONORS.items():
@@ -24768,6 +24872,13 @@ def sync_behavior_assets(manifest):
         copy_donor_fmap(target, donor, invisible_transparent_copied)
     for target, donor in VF3_TV_FMAP_DONORS.items():
         copy_donor_fmap(target, donor, vf3_tv_copied)
+    # After every copy, so it operates on the borrowers' own files.
+    spa_widened = []
+    for target in SPA_LOUNGER_WIDENED_FMAPS:
+        widen_spa_lounger_hotspot(
+            target, NEW_FURNITURE_FMAP_DONORS.get(target)
+            or INVISIBLE_TRANSPARENT_FMAP_DONORS.get(target)
+            or INVISIBLE_OUTDOOR_FMAP_DONORS.get(target), spa_widened)
     for item in manifest["items"]:
         reason = safety_fmap_reason(item)
         if not reason:
@@ -24809,6 +24920,12 @@ def sync_behavior_assets(manifest):
         "invisible_transparent_fmap_donors": invisible_transparent_copied,
         "vf3_tv_fmap_donors": vf3_tv_copied,
         "small_decor_sanitized_fmaps": sanitized,
+        # Recorded so the widening is verifiable from the BUILD OUTPUT
+        # rather than only from the generator source. Each entry names
+        # the target, the donor cell count it grew from, and the count
+        # it grew to, so a run that silently widened nothing is visible
+        # in the manifest instead of passing quietly.
+        "spa_lounger_widened_hotspots": spa_widened,
         "missing": missing,
     }
 
