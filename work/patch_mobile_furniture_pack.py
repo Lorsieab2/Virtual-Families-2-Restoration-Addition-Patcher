@@ -28594,9 +28594,17 @@ static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
         //
         // ForgetPlans alone is what nearly every other interrupt site in this
         // file does, and the engine picks a villager with no plans up on its
-        // next tick. By then this function has returned, the entry is gone,
-        // and the taker is visible the ordinary way -- so the walker
-        // re-chooses against a settled table rather than a half-mutated one.
+        // next tick. By then this function has returned and the entry is
+        // gone, so the walker re-chooses against a settled table rather than
+        // a half-mutated one.
+        //
+        // WHETHER THE TAKER IS VISIBLE TO THAT CHOICE DEPENDS ON WHO TOOK IT.
+        // A manual drop sets a receiving label, so VF2SpaOccupantIndex sees
+        // it once the villager arrives. A CHAISE taker never carries that
+        // label, so it is invisible to the spa finder either way -- which is
+        // the residual VF2TryLinkMobileChaise documents at its own call to
+        // this function, and is not made better or worse by removing the
+        // restart.
         //
         // Only a villager still en route to a treatment is interrupted. One
         // that already finished, or was interrupted by something else, has

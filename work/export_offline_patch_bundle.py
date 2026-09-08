@@ -3193,6 +3193,34 @@ def refuse_to_drop_overlay_settings(
     #
     # So the release path says so, and everything else keeps working.
     # docs/offline-patcher.md's partial workflows are unaffected.
+    #
+    # RESIDUAL, STATED RATHER THAN HIDDEN: a caller that invokes this module
+    # DIRECTLY passes no flags, so is_release is False and this returns
+    # without checking anything. That is the exact path B183 was produced by.
+    #
+    # Three attempts to close it in this function all failed, and the reason
+    # is the same each time -- no property of the ARTIFACT distinguishes a
+    # release from a deliberate partial export:
+    #
+    #   "produced some overlays but not all"  B183 produced NONE of the five,
+    #                                         so the defect passes the test
+    #   "ships a replacement executable"      eleven legitimate partial
+    #                                         exports in this repo's own suite
+    #                                         ship an exe with a subset
+    #   "ships an exe and claims no subset"   those same eleven fixtures pass
+    #                                         no flag either, and drop all
+    #                                         five -- the B183 shape exactly
+    #
+    # Where the residual IS defended is the release gate, not here.
+    # work/gate_release_zip.py refuses any archive lacking
+    # data/vf2/release-identities-<release>.json, and only
+    # work/export_release_bundle.py writes that file. B180 and B181 have one;
+    # B183 does not, which is why the gate rejects B183 on that check before
+    # it ever reaches a settings comparison. A bundle built by bypassing the
+    # wrapper therefore cannot be published, even though it can be built.
+    #
+    # Closing it HERE would mean a release-intent signal the exporter can
+    # verify rather than be told, and nothing in the artifact carries one.
     if not is_release:
         return
 
