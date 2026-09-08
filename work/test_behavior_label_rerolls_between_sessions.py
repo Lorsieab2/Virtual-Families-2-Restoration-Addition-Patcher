@@ -39,7 +39,7 @@ _DEFINITION = (
 )
 
 
-def find_function_bodies(name):
+def find_function_bodies(name, source=None):
     """EVERY body defined under this name, in file order.
 
     A name-only re.search returns the first match and stops, so a name with two
@@ -48,8 +48,9 @@ def find_function_bodies(name):
     at all. Any rule applied through the single-body helper is therefore
     silently void for that function. The sweep must use this.
     """
-    return [m.group(1) for m in
-            re.finditer(_DEFINITION % re.escape(name), SOURCE, re.S | re.M)]
+    return [m.group(1) for m in re.finditer(
+        _DEFINITION % re.escape(name),
+        SOURCE if source is None else source, re.S | re.M)]
 
 
 def find_function_body(name):
@@ -67,7 +68,7 @@ def find_function_body(name):
     return match.group(1) if match else None
 
 
-def has_definition(name):
+def has_definition(name, source=None):
     """Is there a definition line for this name at all, however it is spelled?
 
     Deliberately cruder than _DEFINITION: it asks whether some line opens a
@@ -76,7 +77,7 @@ def has_definition(name):
     """
     return re.search(
         r'^[A-Za-z_][^\n;]*\b%s\([^;]*$' % re.escape(name),
-        SOURCE,
+        SOURCE if source is None else source,
         re.M,
     ) is not None
 
@@ -100,6 +101,50 @@ def function_body(name):
         "the wrong thing" % (name, len(body.strip()))
     )
     return body
+
+
+def violates_label_contract(body):
+    """Does ONE function body match the persistent label against a label group?
+
+    The single definition of the rule. The sweep applies it to every body, and
+    the fixtures below apply it to synthetic bodies, so a change here is felt
+    by both -- an earlier version had the tests carrying their own copy, which
+    meant they passed while the sweep was broken.
+
+    The defect is narrower than "reads the field": copying it, writing it,
+    comparing it to a caller-supplied snapshot, or matching it against fixed
+    NATIVE label ids are all legitimate.
+    """
+    if PERSISTENT_LABEL_OFFSET not in body:
+        return False
+    compares = re.search(r"\bstrn?cmp\b", body)
+    against_a_group = re.search(r"labels\[|kVF2BehaviorLabels_", body)
+    return bool(compares and against_a_group)
+
+
+def sweep_violations(source=None):
+    """Every VF2* function whose body violates the contract, plus unreadables.
+
+    Evaluated PER DEFINITION: joining a repeated name's bodies would let one
+    definition's field read pair with another's group comparison and report a
+    violation present in neither.
+    """
+    text = SOURCE if source is None else source
+    readers = []
+    unreadable = []
+    for name in sorted(set(
+            re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", text, re.M))):
+        bodies = find_function_bodies(name, text)
+        if not bodies:
+            # No definition is a forward declaration and genuinely nothing to
+            # check. A definition the helper could not read is a harness fault
+            # that would exempt the function while the suite stayed green.
+            if has_definition(name, text):
+                unreadable.append(name)
+            continue
+        if any(violates_label_contract(body) for body in bodies):
+            readers.append(name)
+    return readers, unreadable
 
 
 class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
@@ -153,44 +198,7 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
         VF2CurrentLabelInGroup puts a read of the persistent label back into a
         function that has no cache gate.
         """
-        # The defect is narrower than "reads the field": it is "matches the
-        # field against a MOD LABEL GROUP and concludes the villager must still
-        # be doing that". Copying the field, writing it, comparing it to a
-        # caller-supplied snapshot, or matching it against fixed NATIVE label
-        # ids are all legitimate and unrelated -- VF2CopyRawPraiseLabel,
-        # VF2SetActionLabel, VF2BehaviorLabelChangedSince,
-        # VF2IsRestingBodyNativeLabel and VF2VillagerStillPreparing all do one
-        # of those. Testing for the precise shape keeps this test meaningful
-        # instead of freezing a list of names that drifts.
-        readers = []
-        unreadable = []
-        # De-duplicated: a repeated name is inspected once PER DEFINITION by
-        # find_function_bodies, not once per mention.
-        for name in sorted(set(
-                re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", SOURCE, re.M))):
-            bodies = find_function_bodies(name)
-            if not bodies:
-                # A name with no definition is a forward declaration and is
-                # genuinely nothing to check. A name WITH a definition that the
-                # helper could not read is a harness fault, and skipping it
-                # would exempt that function from this rule while the test
-                # stayed green -- which is the defect this suite exists to
-                # catch, in the suite itself.
-                if has_definition(name):
-                    unreadable.append(name)
-                continue
-            # Per DEFINITION, never over the joined text. Joining lets one
-            # definition's read of the label field pair with another
-            # definition's group comparison and report a violation that exists
-            # in neither -- a false positive traded for the false negative.
-            for body in bodies:
-                if PERSISTENT_LABEL_OFFSET not in body:
-                    continue
-                compares = re.search(r"\bstrn?cmp\b", body)
-                against_a_group = re.search(r"labels\[|kVF2BehaviorLabels_", body)
-                if compares and against_a_group:
-                    readers.append(name)
-                    break
+        readers, unreadable = sweep_violations()
         self.assertEqual(
             sorted(unreadable), [],
             "these functions have definitions this test could not parse, so "
@@ -205,14 +213,80 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
             "will stop re-rolling" % PERSISTENT_LABEL_OFFSET,
         )
 
-    def test_a_repeated_name_is_checked_at_every_definition(self):
-        """A name-only search stops at the first body.
+    # A synthetic generator: one name defined twice, clean first body, the
+    # violation in the SECOND. A sweep that reads only the first body reports
+    # nothing here, which is exactly the defect.
+    _REPEATED_NAME_SOURCE = """
+static int VF2Repeated(CVillager &villager)
+{
+    return 0;
+}
 
-        The generator has one name with two definitions. If the sweep resolves
-        a name to a single body, the second definition is exempt from every
-        rule in this file while the suite stays green -- readable, and still
-        never read.
+static int VF2Repeated(CVillager &villager, int flag)
+{
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    if (strncmp(behaviorLabel, kVF2BehaviorLabels_home_gym, 0x27) == 0) {
+        return 1;
+    }
+    return 0;
+}
+"""
+
+    # One name defined twice: the first READS the field without comparing a
+    # group, the second COMPARES a group without reading the field. Neither
+    # violates. A sweep that joins the bodies reports a violation anyway.
+    _SPLIT_MARKER_SOURCE = """
+static int VF2Split(CVillager &villager)
+{
+    char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
+    behaviorLabel[0] = 0;
+    return 0;
+}
+
+static int VF2Split(CVillager &villager, int flag)
+{
+    if (strncmp(other, kVF2BehaviorLabels_home_gym, 0x27) == 0) {
+        return 1;
+    }
+    return 0;
+}
+"""
+
+    def test_the_sweep_sees_a_violation_in_the_second_definition(self):
+        """Run the SWEEP, not a local copy of its predicate.
+
+        Asserting that find_function_bodies returns both bodies does not pin
+        anything: the sweep could still consume only the first. Codex proved
+        that by changing the sweep to bodies[:1] and watching every test pass.
+        This feeds the sweep an input on which the two implementations differ.
         """
+        readers, unreadable = sweep_violations(self._REPEATED_NAME_SOURCE)
+        self.assertEqual(unreadable, [])
+        self.assertEqual(
+            readers, ["VF2Repeated"],
+            "the sweep did not see the violation in the SECOND definition; it "
+            "is reading only the first body",
+        )
+
+    def test_the_sweep_does_not_join_separate_definitions(self):
+        """The false-positive direction, also through the real sweep.
+
+        Codex restored the sweep's join and every test still passed, because
+        the fixture reimplemented the predicate locally instead of running the
+        sweep.
+        """
+        readers, unreadable = sweep_violations(self._SPLIT_MARKER_SOURCE)
+        self.assertEqual(unreadable, [])
+        self.assertEqual(
+            readers, [],
+            "the sweep joined two definitions and reported a violation that "
+            "exists in neither of them",
+        )
+
+    def test_the_repeated_name_case_still_exists_in_the_generator(self):
+        # The premise of the two tests above. If the generator ever stops
+        # repeating a name they still hold, but the real-world case they model
+        # is gone and that is worth knowing.
         repeated = sorted(
             name for name, count in collections.Counter(
                 re.findall(
@@ -220,6 +294,11 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
                     r'\([^;{]*\)\s*\n?\{',
                     SOURCE, re.M)).items()
             if count > 1)
+        self.assertTrue(
+            repeated,
+            "no name in the generator has two definitions any more; the "
+            "repeated-name sweep tests now model a case that does not occur",
+        )
         for name in repeated:
             self.assertEqual(
                 len(find_function_bodies(name)),
@@ -228,50 +307,6 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
                 "%s has several definitions but the helper does not return "
                 "them all" % name,
             )
-        # The premise: if the generator ever stops repeating a name, this test
-        # is checking nothing and should say so rather than pass vacuously.
-        self.assertTrue(
-            repeated,
-            "no name has two definitions any more; this test no longer "
-            "exercises the repeated-name case and should be re-aimed",
-        )
-
-    def test_markers_split_across_two_definitions_are_not_a_violation(self):
-        """The contract is per-definition, so it must be evaluated that way.
-
-        One body may legitimately read the persistent label without comparing a
-        label group, while a different body compares a group without reading
-        the field. Searching the two joined together finds both markers and
-        reports a violation that exists in neither.
-        """
-        reads_only = """
-            char *behaviorLabel = ((char *)&villager) + 0x1BBA8;
-            behaviorLabel[0] = 0;
-        """
-        compares_only = """
-            if (strncmp(other, kVF2BehaviorLabels_home_gym_text, 0x27) == 0) {
-                return 1;
-            }
-        """
-
-        def violates(body):
-            if PERSISTENT_LABEL_OFFSET not in body:
-                return False
-            return bool(re.search(r"\bstrn?cmp\b", body)
-                        and re.search(r"labels\[|kVF2BehaviorLabels_", body))
-
-        self.assertFalse(violates(reads_only))
-        self.assertFalse(violates(compares_only))
-        self.assertFalse(
-            any(violates(b) for b in (reads_only, compares_only)),
-            "evaluated per definition, neither body violates the contract",
-        )
-        # And the join is exactly what would get this wrong.
-        self.assertTrue(
-            violates(reads_only + compares_only),
-            "if this is False the demonstration no longer shows the hazard "
-            "and this test should be re-aimed",
-        )
 
     def test_every_scan_call_site_is_gated(self):
         """No caller may scan without first proving the cache is still live."""
