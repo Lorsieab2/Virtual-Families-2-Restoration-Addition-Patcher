@@ -3148,6 +3148,75 @@ def build_label_is_crash_affected(build_label: str) -> bool:
     return float(match.group(1)) <= MOBILE_FURNITURE_CRASH_LAST_AFFECTED_BUILD
 
 
+def refuse_to_drop_overlay_settings(
+    available_settings: set[str],
+    overlay_settings: set[str],
+    allow_missing: bool,
+    is_release: bool,
+) -> None:
+    """Refuse to package a bundle that silently lost its overlay features.
+
+    This is the B183 defect. Every executable-overlay setting is in
+    SOURCE_BACKED_OPTIONAL_SETTINGS, so default_settings() removes any that is
+    not in available_settings -- and available_settings is derived from the
+    asset rows that survived the overlay filter above. An export invoked
+    without the per-feature overlay arguments therefore produces a smaller
+    patcher and reports success: B183 shipped 23 settings where B181 shipped
+    35, dropping behavior_patches, cheat_upgrades, island_events,
+    mobile_renovations and holiday_ornaments_collection among them, and
+    nothing anywhere noticed until a person opened the archive.
+
+    apply_final_playtest_defaults() already refuses on exactly this condition,
+    but only for --final-playtest-all-enabled. Ordinary patcher bundles -- the
+    ones players actually download -- had no such check.
+
+    Deliberately building without an overlay stays possible, but it is now an
+    explicit argument rather than a silent default.
+    """
+    missing = sorted(EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS - available_settings)
+    if not missing:
+        return
+
+    # SCOPED TO RELEASES, because intent is not inferable from the artifact.
+    #
+    # A bundle carrying three of five overlays is correct as a test fixture
+    # and catastrophic as a release, and nothing in the output distinguishes
+    # them. Two narrower scopings were tried and both were wrong:
+    #
+    #   "produced some overlays but not all" -- B183 produced NONE of the five
+    #     optional overlays; its manifest requires only core_executable. That
+    #     test would have let the exact defect through. Measured from the
+    #     shipped archive, not assumed.
+    #   "ships a replacement executable" -- still broke eleven legitimate
+    #     partial exports in this repository's own suite, which build an exe
+    #     with a deliberate subset of overlays.
+    #
+    # So the release path says so, and everything else keeps working.
+    # docs/offline-patcher.md's partial workflows are unaffected.
+    if not is_release:
+        return
+
+    if allow_missing:
+        print(
+            "WARNING: packaging without executable overlays for: "
+            + ", ".join(missing)
+            + " (--allow-missing-overlay-settings was given)"
+        )
+        return
+    raise ValueError(
+        "this bundle would silently drop "
+        + str(len(missing))
+        + " executable-overlay setting(s), so players would never see them: "
+        + ", ".join(missing)
+        + ".\n\nThey are dropped because the export produced no overlay .exe "
+        "requiring them, which is what happens when the per-feature overlay "
+        "arguments are omitted -- the B183 defect, which shipped 23 settings "
+        "where B181 shipped 35.\n\nRe-run with the overlay executables for "
+        "those settings. If a bundle genuinely without them is intended, pass "
+        "--allow-missing-overlay-settings to say so explicitly."
+    )
+
+
 def apply_crash_warning_for_build(
     settings: list[dict[str, Any]], build_label: str
 ) -> list[dict[str, Any]]:
@@ -4368,6 +4437,13 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
     )
     available_settings.update(native_core_settings)
 
+    refuse_to_drop_overlay_settings(
+        available_settings,
+        overlay_settings,
+        bool(getattr(args, "allow_missing_overlay_settings", False)),
+        bool(getattr(args, "release_bundle", False)),
+    )
+
     settings = default_settings(
         bool(byte_patches),
         bool(exe_replacement_record),
@@ -4488,6 +4564,26 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-dir", required=True, help="Generated VF2 build folder to export.")
     parser.add_argument("--out-dir", required=True, help="Bundle output directory.")
+    parser.add_argument(
+        "--release-bundle",
+        action="store_true",
+        help=(
+            "This export is a player-facing release. Refuses to package if "
+            "any executable-overlay setting would be silently dropped -- the "
+            "B183 defect, which shipped 23 settings where B181 shipped 35. "
+            "work/export_release_bundle.py passes this."
+        ),
+    )
+    parser.add_argument(
+        "--allow-missing-overlay-settings",
+        action="store_true",
+        help=(
+            "Package even though executable-overlay settings would be "
+            "dropped. Only for a deliberately partial bundle: dropping "
+            "them silently is the B183 defect, which shipped 23 settings "
+            "where B181 shipped 35."
+        ),
+    )
     parser.add_argument("--build-manifest", help="Generated build patch-manifest.json. Defaults to BUILD_DIR/patch-manifest.json.")
     parser.add_argument("--base-payload", default=str(DEFAULT_BASE_PAYLOAD), help="Clean base asset payload used for diff filtering.")
     parser.add_argument("--vanilla-exe", help="Original vanilla VF2 EXE used for target hash and optional byte diff export.")
