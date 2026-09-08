@@ -29,15 +29,47 @@ SOURCE = GENERATOR.read_text(encoding="utf-8")
 PERSISTENT_LABEL_OFFSET = "0x1BBA8"
 
 
-def function_body(name):
-    """The body of an emitted C function, by name."""
+def find_function_body(name):
+    """Like function_body, but returns None when there is no definition.
+
+    Only the sweep over every VF2* name may use this: a name harvested from a
+    loose scan can be a forward declaration with no body, which is not a
+    failure. A test that names a specific function must use function_body, so
+    a typo or a rename fails loudly instead of silently checking nothing.
+    """
     match = re.search(
-        r"^static [\w \*&]*?\b%s\(.*?\n\{(.*?)^\}" % re.escape(name),
+        r'^(?:extern "C" )?(?:static )?[\w:]+(?: __cdecl)? \*?%s\([^;{]*\)\s*\n?\{'
+        r'(.*?)^\}' % re.escape(name),
         SOURCE,
         re.S | re.M,
     )
-    assert match, "emitted C function %s not found" % name
-    return match.group(1)
+    return match.group(1) if match else None
+
+
+def function_body(name):
+    """The body of an emitted C function, by name.
+
+    Must not match a FORWARD DECLARATION. `extern "C" void __cdecl
+    VF2RandomBigBurgerLabel(CVillager &);` precedes the real definition, and a
+    pattern that only requires a later opening brace will start there and run
+    forward into the next function's body -- returning somebody else's code
+    while looking like a successful lookup. A definition's parameter list is
+    followed by an opening brace with no semicolon in between, which is what
+    distinguishes the two.
+    """
+    match = re.search(
+        r'^(?:extern "C" )?(?:static )?[\w:]+(?: __cdecl)? \*?%s\([^;{]*\)\s*\n?\{'
+        r'(.*?)^\}' % re.escape(name),
+        SOURCE,
+        re.S | re.M,
+    )
+    assert match, "emitted C definition %s not found" % name
+    body = match.group(1)
+    assert len(body.strip()) > 20, (
+        "function_body(%s) returned a %d-character body; it probably matched "
+        "the wrong thing" % (name, len(body.strip()))
+    )
+    return body
 
 
 class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
@@ -102,8 +134,8 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
         # instead of freezing a list of names that drifts.
         readers = []
         for name in re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", SOURCE, re.M):
-            body = function_body(name)
-            if PERSISTENT_LABEL_OFFSET not in body:
+            body = find_function_body(name)
+            if body is None or PERSISTENT_LABEL_OFFSET not in body:
                 continue
             compares = re.search(r"\bstrn?cmp\b", body)
             against_a_group = re.search(r"labels\[|kVF2BehaviorLabels_", body)
@@ -232,17 +264,29 @@ class InterleavedVillagersKeepTheirOwnLabels(unittest.TestCase):
                 and villager.praiseCount != slot.praiseCount)
 
     @staticmethod
-    def slot_is_current_for(villager, slot):
-        """VF2BehaviorLabelSlotIsCurrentFor -- no global."""
+    def slot_is_current_for(villager, slot, writeback=True):
+        """VF2BehaviorLabelSlotIsCurrentFor -- no global, but it DOES advance
+        the slot when it accepts a praise restart.
+
+        ``writeback=False`` models the earlier read-only version, so the defect
+        it caused can be reproduced rather than described.
+        """
         if slot is None or slot.villager is not villager:
             return False
         if villager.behaviorId != slot.behaviorId:
             return False
         if villager.behaviorSerial == slot.behaviorSerial:
+            if writeback:
+                slot.praiseCount = villager.praiseCount
             return True
-        return (villager.behaviorSerial == slot.behaviorSerial + 1
+        if (villager.behaviorSerial == slot.behaviorSerial + 1
                 and villager.praisedBehaviorId == villager.behaviorId
-                and villager.praiseCount != slot.praiseCount)
+                and villager.praiseCount != slot.praiseCount):
+            if writeback:
+                slot.behaviorSerial = villager.behaviorSerial
+                slot.praiseCount = villager.praiseCount
+            return True
+        return False
 
     def test_the_old_gate_fails_when_another_villager_ran_last(self):
         """The P1, reproduced.
@@ -288,6 +332,77 @@ class InterleavedVillagersKeepTheirOwnLabels(unittest.TestCase):
                             praised_id=0x0B3, praise_count=3)
         self.assertTrue(self.slot_is_current_for(
             ann, self.Slot(ann, 0x0B3, 7, praise_count=2)))
+
+    def test_two_consecutive_praises_both_keep_the_label(self):
+        """The second P1, reproduced.
+
+        The serial+1 allowance is measured against the SLOT, so accepting a
+        restart has to adopt it as the new baseline. Leaving the slot at N
+        makes the second praise arrive at N+2 and be rejected as a new
+        session, and the caption re-rolls on the second praise of the same
+        action.
+        """
+        ann = self.Villager(behavior_id=0x0B3, serial=7)
+        slot = self.Slot(ann, 0x0B3, 7, praise_count=0)
+        for praise in (1, 2):
+            ann.behaviorSerial += 1
+            ann.praisedBehaviorId = 0x0B3
+            ann.praiseCount = praise
+            self.assertTrue(
+                self.slot_is_current_for(ann, slot),
+                "praise %d re-rolled the label; the accepted restart did not "
+                "advance the slot" % praise,
+            )
+
+    def test_the_read_only_version_reproduces_the_defect(self):
+        # Proof the test above can fail: without the writeback the second
+        # praise is rejected. A check that cannot fail is not evidence.
+        ann = self.Villager(behavior_id=0x0B3, serial=7)
+        slot = self.Slot(ann, 0x0B3, 7, praise_count=0)
+        results = []
+        for praise in (1, 2):
+            ann.behaviorSerial += 1
+            ann.praisedBehaviorId = 0x0B3
+            ann.praiseCount = praise
+            results.append(
+                self.slot_is_current_for(ann, slot, writeback=False))
+        self.assertEqual(results, [True, False])
+
+    def test_the_direct_set_branches_never_refresh_the_slot(self):
+        """Why the writeback cannot be left to the appliers.
+
+        Most appliers incidentally refresh the slot through
+        VF2RememberBehaviorLabel, which is why this defect hid. These four take
+        a remembered value and only restore the label text, so nothing else
+        advances the slot for them.
+        """
+        for name in ("VF2ApplyCoffeeLabel", "VF2ApplyShowerLabel",
+                     "VF2RandomBigBurgerLabel", "VF2RandomBigCoffeeLabel"):
+            body = function_body(name)
+            # The branch that honours an already-resolved label: it sets the
+            # text and returns, so nothing here advances the cache slot.
+            self.assertRegex(
+                body,
+                r"if \((?:remembered|rememberedStringId)\) \{\s*"
+                r"VF2SetBehaviorLabel\(villager, (?:remembered|rememberedStringId)\);\s*"
+                r"return;",
+                "%s no longer has a direct-set remembered branch; the premise "
+                "of the writeback test has changed" % name,
+            )
+            self.assertNotIn(
+                "VF2RememberBehaviorLabel", body,
+                "%s now refreshes the slot itself; if that is deliberate the "
+                "premise of the writeback test has changed" % name,
+            )
+
+    def test_the_predicate_advances_the_slot_on_an_accepted_restart(self):
+        body = function_body("VF2BehaviorLabelSlotIsCurrentFor")
+        self.assertIn("slot->behaviorSerial = behaviorSerial;", body)
+        self.assertEqual(
+            body.count("slot->praiseCount = praiseCount;"), 2,
+            "both accept paths must record the praise count, as "
+            "VF2BehaviorLabelCacheStillActive does",
+        )
 
     def test_serial_plus_one_without_a_praise_is_a_new_session(self):
         # The praise allowance must not become a blanket "one serial of slack".
