@@ -719,9 +719,20 @@ class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
         tmp = pathlib.Path(holder.name)
         assets, seeded, donors = self._stage(tmp)
         gen.OUT = tmp
-        # FMAP_SOURCE_DIRS is consulted first by find_fmap_source, so this
-        # feeds the production path the footprint-bearing donor.
+        # BOTH LOOKUPS HAVE TO BE OVERRIDDEN, NOT JUST ONE.
+        # find_fmap_source searches
+        #     vanilla_payload_fmap_source_dirs() + FMAP_SOURCE_DIRS
+        # so prepending to FMAP_SOURCE_DIRS alone does NOT win: a clone with a
+        # vanilla runtime payload -- which is the prescribed full-clone test
+        # environment -- resolves the real 11-cell Chaise_brown first and the
+        # fixture's staged donor is never read. Reproduced by pointing
+        # VF2_VANILLA_RUNTIME_DIR at a payload holding that donor: the correct
+        # generator then produced 33 where this fixture expects 35, and the
+        # plain lounger 11 where it expects 13, failing 5 tests. The tests
+        # passed here only because this worktree happens to have no vanilla
+        # payload carrying the map.
         gen.FMAP_SOURCE_DIRS = (donors,) + tuple(gen.FMAP_SOURCE_DIRS)
+        gen.vanilla_payload_fmap_source_dirs = lambda: ()
         # PREREQUISITES ARE CHECKED BEFORE THE CALL, AND THE CALL IS NOT
         # WRAPPED. A blanket "except Exception -> skipTest" around
         # sync_behavior_assets turns a generator regression into a green run:
