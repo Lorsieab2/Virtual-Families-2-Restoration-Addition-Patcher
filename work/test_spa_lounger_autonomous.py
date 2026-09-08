@@ -187,6 +187,65 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             "a villager who stopped receiving must stop holding the lounger",
         )
 
+    def test_the_native_chaise_routes_respect_the_walk_holds(self):
+        """The holds live outside the engine's peep-slot bookkeeping.
+
+        LinkPeepToFurniture therefore cannot see them, and the four mobile
+        chaise behaviours -- reading, napping, resting, studying -- link ANY
+        chaise, spa loungers included. Without this they would reserve a
+        lounger a spa recipient is already walking to, and the recipient
+        would arrive to find a reader on it.
+
+        Every one of those behaviours funnels through VF2TryLinkMobileChaise,
+        so the check belongs at that chokepoint rather than in each caller.
+        """
+        source = _source()
+        start = source.index(
+            "static bool VF2TryLinkMobileChaise(CVillager &villager, "
+            "sFurnitureInfo2 &info)")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertIn(
+            "VF2SpaLoungerClaimedByWalker(villager, info.unknown0)", body,
+            "the mobile chaise routes can still take a lounger out from "
+            "under a spa recipient who is walking to it",
+        )
+
+    def test_the_chaise_check_runs_after_the_link_that_chooses(self):
+        # The engine picks the placement, so the handle is only known after
+        # the call. There is no unlink, so this rejects the BEHAVIOUR rather
+        # than pretending the reservation can be given back -- the callers
+        # already handle "no chaise" by doing the unfurnitured version.
+        source = _source()
+        start = source.index(
+            "static bool VF2TryLinkMobileChaise(CVillager &villager, "
+            "sFurnitureInfo2 &info)")
+        body = source[start:source.index("\n}\n", start)]
+        link = body.index("LinkPeepToFurniture")
+        check = body.index("VF2SpaLoungerClaimedByWalker")
+        self.assertLess(
+            link, check,
+            "info.unknown0 is not known until the link returns",
+        )
+
+    def test_the_reservation_helpers_precede_the_chaise_linker(self):
+        # VF2TryLinkMobileChaise is emitted well above the spa routes, so the
+        # helpers had to move above it too. VF2SpaReceivingIndex is emitted
+        # BELOW it and cannot move, hence the forward declaration.
+        source = _source()
+        forward = source.index(
+            "static int VF2SpaReceivingIndex(CVillager &villager);")
+        claimed = source.index("static bool VF2SpaLoungerClaimedByWalker(")
+        linker = source.index("static bool VF2TryLinkMobileChaise(")
+        definition = source.index(
+            "static int VF2SpaReceivingIndex(CVillager &villager)\n{")
+        for label, earlier, later in (
+            ("the forward declaration precedes its caller", forward, claimed),
+            ("the helper precedes the chaise linker", claimed, linker),
+            ("the definition may follow the linker", linker, definition),
+        ):
+            with self.subTest(order=label):
+                self.assertLess(earlier, later)
+
     def test_an_interrupted_walk_does_not_keep_holding_its_lounger(self):
         """The same-label interruption case, not just the predicate.
 

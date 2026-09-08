@@ -28390,10 +28390,110 @@ static bool VF2WeatherAllowsOutdoorFurniture()
     return static_cast<unsigned int>(Weather.currentType) < 2;
 }
 
+// Forward declaration only. The definition stays with the other spa label
+// helpers further down; it is declared here because the reservation block
+// below has to be emitted above VF2TryLinkMobileChaise, which is itself
+// above that definition.
+static int VF2SpaReceivingIndex(CVillager &villager);
+
+// Which lounger each villager is CURRENTLY WALKING TO, by placement handle.
+//
+// VF2SpaOccupantIndex can only see a villager who is already STANDING on a
+// lounger, because it asks which furniture slot is under their feet. Between
+// choosing a lounger and arriving at it a recipient is invisible to it, so a
+// second adult evaluated in that window would pick the same lounger even when
+// another was free.
+//
+// The route used to get this for free: LinkPeepToFurniture reserved a peep
+// slot as a side effect. That call was removed because its reservation could
+// not be released when it landed on the wrong item (see the receiving handler),
+// so the in-flight part of it is kept explicitly here.
+//
+// Sized for the thirty villagers VF2SpaVillagerByIndex can address. Unlike
+// gVF2MobileExternalWeights this cannot leak a slot: an entry only counts while
+// its villager still carries a receiving label, so a villager who dies, is
+// interrupted, or finishes the treatment stops matching and the slot is reused.
+struct VF2SpaWalkReservation {
+    CVillager *villager;
+    int handle;
+};
+static VF2SpaWalkReservation gVF2SpaWalkReservations[30] = {};
+
+// True when some OTHER villager is already walking to this placement.
+static bool VF2SpaLoungerClaimedByWalker(CVillager &asking, int handle)
+{
+    for (int index = 0; index < 30; ++index) {
+        VF2SpaWalkReservation const &held = gVF2SpaWalkReservations[index];
+        if (!held.villager || held.villager == &asking) continue;
+        if (held.handle != handle) continue;
+        // Only a villager still labelled as receiving is really en route.
+        // Anything else -- interrupted, finished, or a reused villager
+        // record -- leaves a stale entry that must not block the lounger.
+        if (VF2SpaReceivingIndex(*held.villager) < 0) continue;
+        return true;
+    }
+    return false;
+}
+
+static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
+{
+    VF2SpaWalkReservation *spare = 0;
+    for (int index = 0; index < 30; ++index) {
+        VF2SpaWalkReservation &held = gVF2SpaWalkReservations[index];
+        if (held.villager == &villager) { held.handle = handle; return; }
+        if (!spare && (!held.villager || VF2SpaReceivingIndex(*held.villager) < 0)) {
+            spare = &held;
+        }
+    }
+    // No free or stale slot: every villager the walk can address is already
+    // en route to a lounger, so there is nothing to record and nothing this
+    // reservation would protect.
+    if (!spare) return;
+    spare->villager = &villager;
+    spare->handle = handle;
+}
+
+// Drop whatever this villager was walking to.
+//
+// A receiving LABEL is not proof that a particular walk is still live. A
+// villager walking to lounger A who is then dropped onto lounger B gets a
+// fresh receiving label from the manual route, so the "still labelled as
+// receiving" test in VF2SpaLoungerClaimedByWalker would go on believing the
+// walk to A is active and hold A for the whole treatment at B, making other
+// adults skip a lounger that is actually free. The routes that restart or
+// end a receiving action call this so a hold cannot outlive its walk.
+static void VF2SpaReleaseLoungerHold(CVillager &villager)
+{
+    for (int index = 0; index < 30; ++index) {
+        if (gVF2SpaWalkReservations[index].villager != &villager) continue;
+        gVF2SpaWalkReservations[index].villager = 0;
+        gVF2SpaWalkReservations[index].handle = 0;
+    }
+}
+
 static bool VF2TryLinkMobileChaise(CVillager &villager, sFurnitureInfo2 &info)
 {
-    return FurnitureManager.LinkPeepToFurniture(
-        CContentMap::eObjectChaise, &villager, info, true, 0, false);
+    if (!FurnitureManager.LinkPeepToFurniture(
+            CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
+        return false;
+    }
+
+    // The spa walk holds live outside the engine's peep-slot bookkeeping, so
+    // the link above cannot see them: it will happily reserve a lounger a spa
+    // recipient is already walking to, and the recipient arrives to find a
+    // reader on it. Every mobile chaise behaviour funnels through here, so
+    // this one check covers all of them.
+    //
+    // Asked AFTER the link because the engine chooses the placement, and
+    // there is no unlink call to undo a wrong choice -- the same constraint
+    // the spa route itself ran into. Returning false here therefore leaves
+    // the reservation standing; the villager simply does the unfurnitured
+    // version of the behaviour on it, which is what the callers already do
+    // when no chaise is free at all. That is a strictly better outcome than
+    // two villagers on one lounger, and it costs nothing when no spa walk is
+    // in flight, which is the overwhelmingly common case.
+    if (VF2SpaLoungerClaimedByWalker(villager, info.unknown0)) return false;
+    return true;
 }
 
 static void VF2PlanLinkedChaiseAction(
@@ -28699,81 +28799,6 @@ static bool VF2SpaOccupantIndex(CVillager &dropped, int loungerSlot, CVillager *
         return true;
     }
     return false;
-}
-
-// Which lounger each villager is CURRENTLY WALKING TO, by placement handle.
-//
-// VF2SpaOccupantIndex can only see a villager who is already STANDING on a
-// lounger, because it asks which furniture slot is under their feet. Between
-// choosing a lounger and arriving at it a recipient is invisible to it, so a
-// second adult evaluated in that window would pick the same lounger even when
-// another was free.
-//
-// The route used to get this for free: LinkPeepToFurniture reserved a peep
-// slot as a side effect. That call was removed because its reservation could
-// not be released when it landed on the wrong item (see the receiving handler),
-// so the in-flight part of it is kept explicitly here.
-//
-// Sized for the thirty villagers VF2SpaVillagerByIndex can address. Unlike
-// gVF2MobileExternalWeights this cannot leak a slot: an entry only counts while
-// its villager still carries a receiving label, so a villager who dies, is
-// interrupted, or finishes the treatment stops matching and the slot is reused.
-struct VF2SpaWalkReservation {
-    CVillager *villager;
-    int handle;
-};
-static VF2SpaWalkReservation gVF2SpaWalkReservations[30] = {};
-
-// True when some OTHER villager is already walking to this placement.
-static bool VF2SpaLoungerClaimedByWalker(CVillager &asking, int handle)
-{
-    for (int index = 0; index < 30; ++index) {
-        VF2SpaWalkReservation const &held = gVF2SpaWalkReservations[index];
-        if (!held.villager || held.villager == &asking) continue;
-        if (held.handle != handle) continue;
-        // Only a villager still labelled as receiving is really en route.
-        // Anything else -- interrupted, finished, or a reused villager
-        // record -- leaves a stale entry that must not block the lounger.
-        if (VF2SpaReceivingIndex(*held.villager) < 0) continue;
-        return true;
-    }
-    return false;
-}
-
-static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
-{
-    VF2SpaWalkReservation *spare = 0;
-    for (int index = 0; index < 30; ++index) {
-        VF2SpaWalkReservation &held = gVF2SpaWalkReservations[index];
-        if (held.villager == &villager) { held.handle = handle; return; }
-        if (!spare && (!held.villager || VF2SpaReceivingIndex(*held.villager) < 0)) {
-            spare = &held;
-        }
-    }
-    // No free or stale slot: every villager the walk can address is already
-    // en route to a lounger, so there is nothing to record and nothing this
-    // reservation would protect.
-    if (!spare) return;
-    spare->villager = &villager;
-    spare->handle = handle;
-}
-
-// Drop whatever this villager was walking to.
-//
-// A receiving LABEL is not proof that a particular walk is still live. A
-// villager walking to lounger A who is then dropped onto lounger B gets a
-// fresh receiving label from the manual route, so the "still labelled as
-// receiving" test in VF2SpaLoungerClaimedByWalker would go on believing the
-// walk to A is active and hold A for the whole treatment at B, making other
-// adults skip a lounger that is actually free. The routes that restart or
-// end a receiving action call this so a hold cannot outlive its walk.
-static void VF2SpaReleaseLoungerHold(CVillager &villager)
-{
-    for (int index = 0; index < 30; ++index) {
-        if (gVF2SpaWalkReservations[index].villager != &villager) continue;
-        gVF2SpaWalkReservations[index].villager = 0;
-        gVF2SpaWalkReservations[index].handle = 0;
-    }
 }
 
 static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
