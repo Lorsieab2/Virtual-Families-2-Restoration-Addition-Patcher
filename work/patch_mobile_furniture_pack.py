@@ -24874,7 +24874,10 @@ def sync_behavior_assets(manifest):
         # geometry, which occupies 20 of the 25 ring cells around the drop
         # target, so the dilation had almost nowhere to go: measured on the
         # shipped map, the drop target moved 11 -> 13 where the ring allows
-        # 38.
+        # 33. (The seed is the DONOR's object cells, not the borrower's, so
+        # the ring is the donor's 11-cell dilation -- 33 positions. Seeding
+        # from the already-widened borrower would give 38 and would also
+        # compound on every rebuild, which is why it is not done.)
         #
         # A footprint cell is SOLID BUT NOT DROPPABLE. Converting it to the
         # object value adds droppability without removing solidity -- the cell
