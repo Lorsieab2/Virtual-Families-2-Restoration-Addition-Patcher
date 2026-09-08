@@ -37,6 +37,21 @@ def _receiving_body():
     )
 
 
+def _release_hold_body():
+    """VF2SpaReleaseHoldOnLounger's body, comments stripped.
+
+    The comments name the calls they explain -- StartNewBehavior above all,
+    since the fix is that it is NOT called -- so an assertion against the raw
+    text measures prose rather than code.
+    """
+    source = _source()
+    start = source.index("static void VF2SpaReleaseHoldOnLounger(")
+    body = source[start:source.index("\n}\n", start)]
+    return "\n".join(
+        line for line in body.split("\n") if not line.strip().startswith("//")
+    )
+
+
 class TestOnlyReceivingIsAutonomous(unittest.TestCase):
     def test_the_receiving_handler_exists(self):
         self.assertIn(
@@ -298,36 +313,10 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         start = source.index("static void VF2SpaReleaseHoldOnLounger(")
         body = source[start:source.index("\n}\n", start)]
         self.assertIn(
-            "ForgetPlans(*walker, false)", body,
+            "ForgetPlans(", body,
             "the walker keeps its queued plans and still arrives",
         )
-        self.assertIn("StartNewBehavior(*walker)", body)
-
-    def test_the_claim_is_held_across_the_walkers_restart(self):
-        """Clearing first lets the walker take the lounger straight back.
-
-        StartNewBehavior runs SYNCHRONOUSLY, so the displaced walker's
-        re-evaluation can return to this very route. With the entry already
-        cleared, VF2FindFreeSpaLoungerSlot sees the handle as free and
-        queues the walker back onto the lounger it was just displaced from,
-        preserving the overlap the eviction exists to prevent. Nothing else
-        makes the taker visible at that instant: a chaise linker never
-        carries a receiving label, and the manual-drop caller has not set
-        the new occupant's label yet.
-
-        So the entry is cleared LAST, holding the placement excluded for
-        exactly the window in which the walker re-chooses.
-        """
-        source = _source()
-        start = source.index("static void VF2SpaReleaseHoldOnLounger(")
-        body = source[start:source.index("\n}\n", start)]
-        restart = body.index("StartNewBehavior(*walker)")
-        cleared = body.index(".handle = 0;")
-        self.assertLess(
-            restart, cleared,
-            "the entry is cleared before the walker re-evaluates, so it can "
-            "immediately reclaim the lounger it was displaced from",
-        )
+        self.assertIn("*walker, false)", body)
 
     def test_the_claim_is_not_handed_to_the_taker(self):
         # Reassigning the entry to `keep` looks equivalent and is not: one of
@@ -343,6 +332,45 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             "problem when that taker is a chaise linker",
         )
 
+    def test_the_displaced_walker_is_not_restarted_synchronously(self):
+        """No StartNewBehavior here -- that is the whole fix.
+
+        Four attempts to make a synchronous restart safe each failed for a
+        DIFFERENT reason -- the asking-villager skip, the receiving-label
+        liveness check, and the pointer keying that lets a nested hold reuse
+        the same slot. VF2SpaReleaseHoldOnLounger's header comment sets them
+        out one by one and is the single source of truth for that history;
+        this docstring deliberately does not restate it, because three
+        copies of one explanation is how two of them went stale.
+
+        ForgetPlans alone is what nearly every other interrupt site in this
+        file does. The engine picks a villager with no plans up on its next
+        tick, by which time this function has returned and the table is
+        settled.
+        """
+        body = _release_hold_body()
+        self.assertNotIn(
+            "StartNewBehavior", body,
+            "a synchronous restart re-enters the spa route from inside this "
+            "frame, and the walker cannot be excluded from its own claim",
+        )
+        self.assertIn("ForgetPlans(", body)
+        self.assertIn("*walker, false)", body)
+
+    def test_the_entry_is_released_unconditionally(self):
+        # With nothing running between the interrupt and the release, the
+        # conditional cleanup the reentrant version needed is gone.
+        source = _source()
+        start = source.index("static void VF2SpaReleaseHoldOnLounger(")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertIn("villager = 0;", body)
+        self.assertIn("handle = 0;", body)
+        self.assertNotIn("VF2_SPA_NO_HANDLE", body)
+
+    def test_no_sentinel_handle_remains(self):
+        # The sentinel existed only to survive the restart.
+        self.assertNotIn("VF2_SPA_NO_HANDLE", _source())
+
     def test_only_a_villager_still_receiving_is_interrupted(self):
         # One that finished, or was already interrupted by something else,
         # has plans of its own that this must not throw away.
@@ -350,14 +378,14 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         start = source.index("static void VF2SpaReleaseHoldOnLounger(")
         body = source[start:source.index("\n}\n", start)]
         guard = body.index("VF2SpaReceivingIndex(*walker) >= 0")
-        forget = body.index("ForgetPlans(*walker, false)")
+        forget = body.index("ForgetPlans(")
         self.assertLess(
             guard, forget,
             "an unrelated behaviour would be cancelled",
         )
-        # And the stale entry is still released even when the walker is not
+        # And the entry is released even when the walker was not
         # interrupted, so a finished villager stops holding its lounger.
-        self.assertIn(".handle = 0;", body[forget:])
+        self.assertIn("villager = 0;", body[forget:])
 
     def test_an_interrupted_walk_does_not_keep_holding_its_lounger(self):
         """The same-label interruption case, not just the predicate.

@@ -28494,13 +28494,45 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
 //
 // Clearing the bookkeeping is NOT enough on its own, and an earlier version
 // that did only that was wrong: the walker's PlanToGo and treatment sequence
-// were already queued by StartNewBehavior, so it would still have arrived and
-// sat down on top of the dropped villager. The plans have to be dropped too.
+// were already queued, so it would still have arrived and sat down on top of
+// the dropped villager. The plans have to be dropped too.
 //
-// ForgetPlans(villager, false) then StartNewBehavior is how this file
-// interrupts a villager elsewhere, so the walker re-evaluates from where it
-// stands -- which may well be this same route, choosing a different lounger,
-// since its claim here is gone by then.
+// REJECTED, recorded so it is not reinstated: following ForgetPlans with
+// StartNewBehavior to make the walker re-evaluate immediately. That restart
+// runs SYNCHRONOUSLY and re-enters the spa route from inside this frame, and
+// four attempts to make it safe each failed for a DIFFERENT reason. The
+// reasons are recorded separately because conflating them hides which
+// predicate actually defeats which approach:
+//
+//   RETAINING the entry pointed at this lounger, and PARKING it on a
+//   sentinel handle, both died on the skip in VF2SpaLoungerClaimedByWalker:
+//
+//       if (!held.villager || held.villager == &asking) continue;
+//
+//   The restarted walker IS the asking villager, so its own entry is skipped
+//   whatever it holds, and it can re-select the lounger it was displaced
+//   from.
+//
+//   REASSIGNING the entry to `keep` does not hit that skip -- after
+//   reassignment held.villager is keep, and the walker asking later is a
+//   different villager, so the entry IS visible to it. It fails on the
+//   liveness predicate two lines further down: a claim only blocks while its
+//   holder is labelled receiving, and one of this function's two callers is
+//   VF2TryLinkMobileChaise, whose villager never carries that label. The
+//   reassigned claim is therefore inert for a chaise taker, and permanent
+//   for a spa taker -- the unexpirable-claim defect reverted earlier.
+//
+//   Leaving the entry ALONE across the restart failed differently again:
+//   entries are keyed by villager pointer, so the nested
+//   VF2SpaHoldLoungerForWalk reused this same slot and rewrote its handle,
+//   and this frame's cleanup then destroyed the reservation the nested call
+//   had just made.
+//
+// ForgetPlans ALONE is what this file does at 34 other interrupt sites. The
+// engine picks a villager with no plans up on its next tick, by which time
+// this function has returned, the entry is gone, and the taker is visible
+// the ordinary way -- so the walker re-chooses against a settled table
+// rather than a half-mutated one.
 static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
 {
     for (int index = 0; index < 30; ++index) {
@@ -28508,33 +28540,34 @@ static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
         CVillager *walker = gVF2SpaWalkReservations[index].villager;
         if (!walker || walker == keep) continue;
 
+        // NO SYNCHRONOUS RESTART. This is the fix for the whole family of
+        // defects this function kept producing.
+        //
+        // Calling StartNewBehavior here re-entered the spa route from inside
+        // this frame, and four attempts to make that safe each failed for a
+        // DIFFERENT reason -- the asking-villager skip, the receiving-label
+        // liveness check, and the pointer keying that lets a nested hold
+        // reuse this very slot. They are set out one by one in this
+        // function's header comment, and deliberately not restated here: two
+        // copies of an explanation is how one of them goes stale, which is
+        // exactly what happened to this paragraph.
+        //
+        // ForgetPlans alone is what nearly every other interrupt site in this
+        // file does, and the engine picks a villager with no plans up on its
+        // next tick. By then this function has returned, the entry is gone,
+        // and the taker is visible the ordinary way -- so the walker
+        // re-chooses against a settled table rather than a half-mutated one.
+        //
         // Only a villager still en route to a treatment is interrupted. One
         // that already finished, or was interrupted by something else, has
-        // plans of its own that are none of this function's business -- but
-        // its stale entry is still released below.
+        // plans of its own that are none of this function's business.
         if (VF2SpaReceivingIndex(*walker) >= 0) {
-            CVillagerPlans *walkerPlans =
-                reinterpret_cast<CVillagerPlans *>(walker);
-            walkerPlans->ForgetPlans(*walker, false);
-            walkerPlans->StartNewBehavior(*walker);
+            reinterpret_cast<CVillagerPlans *>(walker)->ForgetPlans(
+                *walker, false);
         }
 
-        // CLEARED LAST, and the order is the whole point.
-        //
-        // StartNewBehavior above runs SYNCHRONOUSLY, and the displaced
-        // walker's re-evaluation can come straight back to this route. With
-        // the entry already cleared, VF2FindFreeSpaLoungerSlot would see the
-        // handle as free and queue the walker back onto the very lounger it
-        // was displaced from -- preserving the overlap this eviction exists
-        // to prevent. Nothing else makes the taker visible at that instant: a
-        // chaise linker never carries a receiving label, and the manual-drop
-        // caller has not set the new occupant's label yet.
-        //
-        // Holding the entry across the restart excludes the placement for
-        // exactly that window, so the walker picks a different lounger or
-        // none. Reassigning it to the taker would look equivalent and is not:
-        // one of the two callers is the chaise linker, whose claim would then
-        // never expire -- the mechanism reverted in the previous commit.
+        // Released unconditionally, which is safe now that nothing can run
+        // between the interrupt and here.
         gVF2SpaWalkReservations[index].villager = 0;
         gVF2SpaWalkReservations[index].handle = 0;
     }
