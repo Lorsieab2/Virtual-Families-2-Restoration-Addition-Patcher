@@ -3152,6 +3152,7 @@ def refuse_to_drop_overlay_settings(
     available_settings: set[str],
     overlay_settings: set[str],
     allow_missing: bool,
+    is_release: bool,
 ) -> None:
     """Refuse to package a bundle that silently lost its overlay features.
 
@@ -3175,6 +3176,26 @@ def refuse_to_drop_overlay_settings(
     missing = sorted(EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS - available_settings)
     if not missing:
         return
+
+    # SCOPED TO RELEASES, because intent is not inferable from the artifact.
+    #
+    # A bundle carrying three of five overlays is correct as a test fixture
+    # and catastrophic as a release, and nothing in the output distinguishes
+    # them. Two narrower scopings were tried and both were wrong:
+    #
+    #   "produced some overlays but not all" -- B183 produced NONE of the five
+    #     optional overlays; its manifest requires only core_executable. That
+    #     test would have let the exact defect through. Measured from the
+    #     shipped archive, not assumed.
+    #   "ships a replacement executable" -- still broke eleven legitimate
+    #     partial exports in this repository's own suite, which build an exe
+    #     with a deliberate subset of overlays.
+    #
+    # So the release path says so, and everything else keeps working.
+    # docs/offline-patcher.md's partial workflows are unaffected.
+    if not is_release:
+        return
+
     if allow_missing:
         print(
             "WARNING: packaging without executable overlays for: "
@@ -4420,6 +4441,7 @@ def build_manifest(args: argparse.Namespace) -> dict[str, Any]:
         available_settings,
         overlay_settings,
         bool(getattr(args, "allow_missing_overlay_settings", False)),
+        bool(getattr(args, "release_bundle", False)),
     )
 
     settings = default_settings(
@@ -4542,6 +4564,16 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--build-dir", required=True, help="Generated VF2 build folder to export.")
     parser.add_argument("--out-dir", required=True, help="Bundle output directory.")
+    parser.add_argument(
+        "--release-bundle",
+        action="store_true",
+        help=(
+            "This export is a player-facing release. Refuses to package if "
+            "any executable-overlay setting would be silently dropped -- the "
+            "B183 defect, which shipped 23 settings where B181 shipped 35. "
+            "work/export_release_bundle.py passes this."
+        ),
+    )
     parser.add_argument(
         "--allow-missing-overlay-settings",
         action="store_true",

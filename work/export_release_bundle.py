@@ -125,6 +125,11 @@ def main() -> int:
         "--final-playtest-all-enabled",
         "--include-patcher-scripts",
         "--include-exe-replacement",
+        # Declares this a player-facing release, so the exporter
+        # refuses to package if any executable-overlay setting would
+        # be silently dropped. B183 shipped 23 settings where B181
+        # shipped 35 and every step reported success.
+        "--release-bundle",
         "--asset-mode", args.asset_mode,
         "--mobile-sound-assets-dir",
         str(ROOT / "patcher_assets" / "optional_patches" / "mobile_sound_assets"),

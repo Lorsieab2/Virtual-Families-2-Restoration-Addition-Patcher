@@ -36,12 +36,13 @@ class OverlaySettingsCannotVanish(unittest.TestCase):
             set(ex.EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS) | {"core_assets"},
             set(ex.EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS),
             False,
+            True,
         )
 
     def test_the_b183_shape_is_refused(self):
         # No overlay produced, so every overlay setting would be dropped.
         with self.assertRaises(ValueError) as caught:
-            ex.refuse_to_drop_overlay_settings({"core_assets"}, set(), False)
+            ex.refuse_to_drop_overlay_settings({"core_assets"}, set(), False, True)
         message = str(caught.exception)
         for setting in ex.EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS:
             with self.subTest(setting=setting):
@@ -54,7 +55,7 @@ class OverlaySettingsCannotVanish(unittest.TestCase):
             available = set(ex.EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS) - {setting}
             with self.subTest(missing=setting):
                 with self.assertRaises(ValueError) as caught:
-                    ex.refuse_to_drop_overlay_settings(available, available, False)
+                    ex.refuse_to_drop_overlay_settings(available, available, False, True)
                 self.assertIn(setting, str(caught.exception))
 
     def test_behavior_patches_specifically_cannot_be_dropped(self):
@@ -62,12 +63,12 @@ class OverlaySettingsCannotVanish(unittest.TestCase):
         # one B183 dropped while its executable carried the crash fix.
         available = set(ex.EXECUTABLE_OVERLAY_OPTIONAL_SETTINGS) - {"behavior_patches"}
         with self.assertRaises(ValueError) as caught:
-            ex.refuse_to_drop_overlay_settings(available, available, False)
+            ex.refuse_to_drop_overlay_settings(available, available, False, True)
         self.assertIn("behavior_patches", str(caught.exception))
 
     def test_the_refusal_says_how_to_proceed(self):
         with self.assertRaises(ValueError) as caught:
-            ex.refuse_to_drop_overlay_settings({"core_assets"}, set(), False)
+            ex.refuse_to_drop_overlay_settings({"core_assets"}, set(), False, True)
         message = str(caught.exception)
         with self.subTest(part="names the cause"):
             self.assertIn("overlay", message.lower())
@@ -77,7 +78,7 @@ class OverlaySettingsCannotVanish(unittest.TestCase):
     def test_an_explicit_partial_bundle_is_still_possible(self):
         # Deliberately building without an overlay stays available; it is now
         # an argument somebody passes rather than a silent default.
-        ex.refuse_to_drop_overlay_settings({"core_assets"}, set(), True)
+        ex.refuse_to_drop_overlay_settings({"core_assets"}, set(), True, True)
 
     def test_behavior_patches_ships_enabled_by_default(self):
         # Offered is not the same as on. The owner asked for both.
@@ -113,6 +114,24 @@ class OverlaySettingsCannotVanish(unittest.TestCase):
         drop = source.index("settings = default_settings(", call)
         self.assertLess(call, drop)
 
+
+    def test_a_non_release_export_is_left_alone(self):
+        """Partial exports are supported workflows, not defects.
+
+        Asset previews, byte-patch exports and single-feature checks
+        deliberately build a subset of overlays; docs/offline-patcher.md
+        documents them and the repository's own suite exercises them. A
+        guard that refused those would break eleven passing tests to
+        protect against a defect they cannot have.
+        """
+        ex.refuse_to_drop_overlay_settings({"core_assets"}, set(), False, False)
+
+    def test_the_release_wrapper_declares_itself(self):
+        # The guard only fires when the release path says so, so that path
+        # has to actually say so or it never fires where it matters.
+        wrapper = (Path(ex.__file__).parent / "export_release_bundle.py").read_text(
+            encoding="utf-8")
+        self.assertIn('"--release-bundle"', wrapper)
 
 if __name__ == "__main__":
     unittest.main()
