@@ -28494,13 +28494,30 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
 //
 // Clearing the bookkeeping is NOT enough on its own, and an earlier version
 // that did only that was wrong: the walker's PlanToGo and treatment sequence
-// were already queued by StartNewBehavior, so it would still have arrived and
-// sat down on top of the dropped villager. The plans have to be dropped too.
+// were already queued, so it would still have arrived and sat down on top of
+// the dropped villager. The plans have to be dropped too.
 //
-// ForgetPlans(villager, false) then StartNewBehavior is how this file
-// interrupts a villager elsewhere, so the walker re-evaluates from where it
-// stands -- which may well be this same route, choosing a different lounger,
-// since its claim here is gone by then.
+// REJECTED, recorded so it is not reinstated: following ForgetPlans with
+// StartNewBehavior to make the walker re-evaluate immediately. That restart
+// runs SYNCHRONOUSLY and re-enters the spa route from inside this frame,
+// which produced five successive defects, all dying on one line of
+// VF2SpaLoungerClaimedByWalker:
+//
+//     if (!held.villager || held.villager == &asking) continue;
+//
+// The restarted walker IS the asking villager, so its own entry is skipped
+// and it can never be excluded from the lounger it was just displaced from,
+// whatever that entry holds -- retaining the handle, parking it on a
+// sentinel, and reassigning it to the taker were each tried and each died
+// there. The nested call also reused the same slot, since entries are keyed
+// by villager pointer, so this frame's cleanup then destroyed a reservation
+// the nested call had just made.
+//
+// ForgetPlans ALONE is what this file does at 34 other interrupt sites. The
+// engine picks a villager with no plans up on its next tick, by which time
+// this function has returned, the entry is gone, and the taker is visible
+// the ordinary way -- so the walker re-chooses against a settled table
+// rather than a half-mutated one.
 static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
 {
     for (int index = 0; index < 30; ++index) {
