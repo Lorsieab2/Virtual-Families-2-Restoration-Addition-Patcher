@@ -28495,24 +28495,33 @@ static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
             walkerPlans->StartNewBehavior(*walker);
         }
 
-        // CLEARED LAST, and the order is the whole point.
+        // CLEAR ONLY WHAT WE STILL OWN.
         //
-        // StartNewBehavior above runs SYNCHRONOUSLY, and the displaced
-        // walker's re-evaluation can come straight back to this route. With
-        // the entry already cleared, VF2FindFreeSpaLoungerSlot would see the
-        // handle as free and queue the walker back onto the very lounger it
-        // was displaced from -- preserving the overlap this eviction exists
-        // to prevent. Nothing else makes the taker visible at that instant: a
-        // chaise linker never carries a receiving label, and the manual-drop
-        // caller has not set the new occupant's label yet.
+        // StartNewBehavior above runs SYNCHRONOUSLY, so the displaced walker
+        // can re-enter this route before control returns here. If it picks a
+        // DIFFERENT lounger, the nested VF2SpaHoldLoungerForWalk finds this
+        // same villager's slot -- entries are keyed by villager pointer -- and
+        // rewrites its handle to the new destination. Zeroing unconditionally
+        // at that point destroys the walk the inner frame just recorded,
+        // leaving the walker unreserved so somebody else can take the lounger
+        // it is heading to.
         //
-        // Holding the entry across the restart excludes the placement for
-        // exactly that window, so the walker picks a different lounger or
-        // none. Reassigning it to the taker would look equivalent and is not:
-        // one of the two callers is the chaise linker, whose claim would then
-        // never expire -- the mechanism reverted in the previous commit.
-        gVF2SpaWalkReservations[index].villager = 0;
-        gVF2SpaWalkReservations[index].handle = 0;
+        // So the pair captured BEFORE the restart is compared against what is
+        // in the slot now, and the entry is cleared only when both still
+        // match. A slot the inner frame re-pointed is left alone; a slot
+        // nothing touched is released exactly as before.
+        //
+        // The previous version held the entry across the restart on the
+        // theory that it would exclude this lounger from the walker's own
+        // re-evaluation. It does not: VF2SpaLoungerClaimedByWalker skips
+        // every entry whose villager is the asking villager, and the restarted
+        // walker IS the asking villager, so its own retained entry was never
+        // consulted. That exclusion never existed.
+        if (gVF2SpaWalkReservations[index].villager == walker &&
+            gVF2SpaWalkReservations[index].handle == handle) {
+            gVF2SpaWalkReservations[index].villager = 0;
+            gVF2SpaWalkReservations[index].handle = 0;
+        }
     }
 }
 

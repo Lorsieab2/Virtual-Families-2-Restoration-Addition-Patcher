@@ -584,5 +584,63 @@ class TestTheDeclarationPrecedesItsUse(unittest.TestCase):
         )
 
 
+class TestTheReleaseSurvivesAReentrantRestart(unittest.TestCase):
+    """VF2SpaReleaseHoldOnLounger must not clobber a reservation it no longer owns.
+
+    StartNewBehavior runs SYNCHRONOUSLY inside the eviction, so the displaced
+    walker can re-enter the spa route before control returns. If it picks a
+    DIFFERENT lounger, the nested VF2SpaHoldLoungerForWalk finds this same
+    villager's slot -- entries are keyed by villager pointer -- and rewrites
+    its handle to the new destination. An unconditional clear afterwards
+    destroys the walk the inner frame just recorded, leaving the walker
+    unreserved so somebody else can take the lounger it is heading to.
+
+    The previous version instead RETAINED the entry across the restart, on the
+    theory that this would exclude the lounger from the walker's own
+    re-evaluation. It does not: VF2SpaLoungerClaimedByWalker skips every entry
+    whose villager is the asking villager, and the restarted walker IS the
+    asking villager. That exclusion never existed, which is why retaining the
+    entry bought nothing and cost a clobbered reservation.
+    """
+
+    def _release_body(self):
+        src = _source()
+        start = src.index(
+            "static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)\n{"
+        )
+        return src[start:src.index("\n}", start)]
+
+    def test_the_clear_is_guarded_by_what_the_slot_still_holds(self):
+        body = self._release_body()
+        self.assertIn(
+            "gVF2SpaWalkReservations[index].villager == walker &&", body,
+            "the clear must confirm the slot still holds the walker it "
+            "captured before the restart",
+        )
+        self.assertIn(
+            "gVF2SpaWalkReservations[index].handle == handle", body,
+            "the clear must confirm the handle is still the one being released",
+        )
+
+    def test_the_clear_is_not_unconditional(self):
+        # The defect shape: two bare assignments with nothing testing what the
+        # slot currently contains. A reentrant inner frame's write is lost.
+        body = self._release_body()
+        guarded = (
+            "if (gVF2SpaWalkReservations[index].villager == walker &&"
+        )
+        self.assertIn(guarded, body)
+        after = body[body.index(guarded):]
+        self.assertIn("villager = 0;", after)
+        self.assertIn("handle = 0;", after)
+
+    def test_it_does_not_claim_an_exclusion_that_does_not_exist(self):
+        # VF2SpaLoungerClaimedByWalker skips held.villager == &asking, so a
+        # retained entry cannot exclude the lounger from its own owner. Any
+        # comment asserting otherwise is false and must not return.
+        body = self._release_body()
+        self.assertNotIn("Holding the entry across the restart excludes", body)
+
+
 if __name__ == "__main__":
     unittest.main()
