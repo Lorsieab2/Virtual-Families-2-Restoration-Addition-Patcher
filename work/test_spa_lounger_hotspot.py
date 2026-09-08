@@ -365,8 +365,8 @@ class TheDonorLookupResolves(unittest.TestCase):
         checks passing. So this one names the production code.
 
         Empty-only barely widened a borrower: #201 gives it the donor's mobile
-        geometry, which occupies 20 of the 25 ring cells, so the drop target
-        moved 11 -> 13 where the ring allows 38. A footprint cell is solid but
+        geometry, which occupies 20 of the ring cells, so the drop target
+        moved 11 -> 13 where the ring allows 33. A footprint cell is solid but
         not droppable, and converting it adds droppability without removing
         solidity. The peep-slot anchor must survive either form -- overwriting
         it breaks placement outright, which is the failure the desktop-safe
@@ -395,6 +395,130 @@ class TheDonorLookupResolves(unittest.TestCase):
             "so a build that claimed none is distinguishable from one that "
             "did",
         )
+
+
+class TheClaimRuleProducesTheApprovedNumber(unittest.TestCase):
+    """Run the claim rule and count the result, rather than grep for it.
+
+    The checks above assert SUBSTRINGS of the generator's text. That is
+    stronger than the local widen() copy, which tests itself, but it still
+    passes if the rule is present and unreachable, fails on a harmless rename,
+    and never observes that the drop target actually grew.
+
+    Two wrong numbers were reported for this widening before it landed -- 13
+    from the empty-only rule, and 38 from seeding the dilation off the
+    already-widened borrower instead of the donor. Neither would have survived
+    this check, because it seeds the way production seeds and counts what comes
+    out.
+    """
+
+    def setUp(self):
+        if not DONOR.is_file():
+            self.skipTest("donor fmap not present in this checkout")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("gen", GENERATOR)
+        module = importlib.util.module_from_spec(spec)
+        try:
+            spec.loader.exec_module(module)
+        except SystemExit:
+            pass
+        except Exception as exc:  # pragma: no cover - environment dependent
+            self.skipTest("generator not importable here: %s" % exc)
+        self.gen = module
+
+    def _borrower(self):
+        """A borrower as #201 builds one: donor geometry, safe map's cells."""
+        mobile = (ROOT / "patcher_assets" / "optional_patches"
+                  / "mobile_furniture_behaviors" / "mobile_fmaps"
+                  / "Chaise_brown.png.fmap")
+        if not mobile.is_file():
+            self.skipTest("mobile donor not present in this checkout")
+        raw = _cells_of(mobile.read_bytes())
+        safe = _cells_of(DONOR.read_bytes())
+        if len(raw) != len(safe):
+            self.skipTest("donor grids disagree in this checkout")
+        return [s if s and s != d else d for d, s in zip(raw, safe)], safe
+
+    def test_the_drop_target_reaches_the_donor_ring(self):
+        gen = self.gen
+        borrower, safe = self._borrower()
+        width, height = struct.unpack_from("<ii", DONOR.read_bytes(), 24)
+        obj = gen.MOBILE_CHAISE_PC_CELL_VALUE
+
+        # SEEDED FROM THE DONOR, exactly as the generator does. Seeding from
+        # the borrower gives 38 here and compounds on every rebuild --
+        # 38, 63, 92, 125, 160 -- because each pass dilates its own output.
+        before = [i for i, v in enumerate(safe) if v == obj]
+        grown = set(before)
+        for index in before:
+            x, y = index % width, index // width
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < width and 0 <= ny < height:
+                        grown.add(ny * width + nx)
+
+        claimable = (0,) + gen.MOBILE_CHAISE_FOOTPRINT_CELL_VALUES
+        protected = (gen.MOBILE_CHAISE_PC_SLOT_CELL_VALUE,
+                     gen.MOBILE_CHAISE_MOBILE_SLOT_CELL_VALUE)
+        out = list(borrower)
+        claimed = 0
+        for index in sorted(grown):
+            if out[index] in protected or out[index] not in claimable:
+                continue
+            if out[index] != 0:
+                claimed += 1
+            out[index] = obj
+
+        # THE RING SIZE IS ASSERTED ABSOLUTELY, not against itself.
+        #
+        # Comparing out.count(obj) to len(grown) passes for ANY seed, because
+        # both move together -- seeding from the borrower gives ring 38 and
+        # 38 claimed, and reads as success. The donor's 11 object cells dilate
+        # to exactly 33 positions on this 19x14 grid, so that is the number
+        # this must produce. It is also the number the owner approved.
+        self.assertEqual(
+            len(grown), 33,
+            "the donor's dilation ring is %d positions, not 33; the seed is "
+            "no longer the donor's object cells, which also makes the "
+            "widening compound on every rebuild" % len(grown))
+        self.assertEqual(
+            out.count(obj), 33,
+            "the drop target is %d cells, not 33; %d ring cells were not "
+            "claimed" % (out.count(obj), 33 - out.count(obj)))
+        self.assertGreater(
+            claimed, 0,
+            "no cell was claimed from the borrowed footprint, so this is the "
+            "empty-only rule that moved the drop target 11 -> 13")
+        self.assertIn(
+            gen.MOBILE_CHAISE_PC_SLOT_CELL_VALUE, out,
+            "the translated peep-slot anchor was consumed by the widening")
+        self.assertNotIn(
+            gen.MOBILE_CHAISE_MOBILE_SLOT_CELL_VALUE, out,
+            "an untranslated anchor appeared, which the claim must never "
+            "introduce")
+
+        # IDEMPOTENT: a second pass over the OUTPUT must change nothing.
+        #
+        # This is what makes the fixed donor seed load-bearing rather than
+        # incidental. Re-seeding from the widened map gives 62 here, then 92,
+        # 125, 160 -- and these maps are written into a tracked asset
+        # directory, so consecutive builds really would keep growing it until
+        # the whole grid is a drop target.
+        again = list(out)
+        for index in sorted(grown):
+            if again[index] in protected or again[index] not in claimable:
+                continue
+            again[index] = obj
+        self.assertEqual(
+            again.count(obj), out.count(obj),
+            "a second pass changed the map, so the widening is not "
+            "idempotent and will compound across builds")
+
+
+def _cells_of(data):
+    width, height = struct.unpack_from("<ii", data, 24)
+    return list(struct.unpack_from("<%dI" % (width * height), data, 32))
 
 
 if __name__ == "__main__":
