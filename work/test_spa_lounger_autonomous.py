@@ -8,6 +8,9 @@ at an empty chair. Receiving has no such requirement -- one adult, one free
 lounger -- so that half, and only that half, is offered autonomously.
 """
 import re
+import pathlib
+import tempfile
+import shutil
 import unittest
 
 import patch_mobile_furniture_pack as patcher
@@ -630,44 +633,123 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
 
     OBJS = "patched_mobile_furniture_pack_objs"
 
-    @classmethod
-    def _emitted(cls):
-        """Every emitted .cpp, joined.
+    # The emitters this class drives, and the file each must produce. Naming
+    # them is the point: an emitter that silently stops writing its file would
+    # otherwise leave every assertion below searching an empty string and
+    # passing for the wrong reason.
+    REQUIRED_EMITTERS = (
+        "patch_spontaneous_behaviors",
+        "patch_mobile_furniture_behavior_dispatch",
+    )
 
-        Deliberately NOT a hardcoded filename. The release handler currently
-        lands in vf2_mobile_furniture_behaviors.cpp, but which file a function
-        is emitted into is an implementation detail of the generator's
-        layout -- naming one would make this test fail on a harmless
-        reorganisation while still passing if the code vanished from the file
-        it was moved out of.
+    @classmethod
+    def _generate(cls):
+        """Emit the sources into a TEMP directory and return them joined.
+
+        NOT a glob of work/patched_mobile_furniture_pack_objs. That directory
+        is gitignored and persistent, so globbing it means: on a clean checkout
+        every test here skips, and after an older or interrupted run they
+        validate STALE C++ even when the current generator no longer emits the
+        handler -- the exact regression this class exists to catch. Measured on
+        main before this change: the directory held three unrelated .cpp files
+        from a partial run and the class reported "3 failed" against code that
+        has nothing to do with the spa lounger.
+
+        Deliberately NOT a hardcoded filename either. Which file a function is
+        emitted into is an implementation detail of the generator's layout, so
+        naming one would fail on a harmless reorganisation while still passing
+        if the code vanished from the file it moved out of.
         """
-        objs = patcher.ROOT / "work" / cls.OBJS
-        sources = sorted(objs.glob("*.cpp")) if objs.is_dir() else []
-        if not sources:
-            return None
-        return "\n".join(p.read_text(encoding="utf-8", errors="replace")
-                         for p in sources)
+        with tempfile.TemporaryDirectory() as tmp:
+            temp_root = pathlib.Path(tmp)
+            for name in ("Villager.obj", "VillagerAI.obj", "Behavior.obj",
+                         "theMainScene.obj"):
+                src = patcher.SRC_OBJS / name
+                if not src.is_file():
+                    return None, "missing build input %s" % name
+                shutil.copy2(src, temp_root / name)
+            old = patcher.PATCHED
+            try:
+                patcher.PATCHED = temp_root
+                # An exception here is the regression, not a missing
+                # prerequisite, so it is deliberately NOT caught.
+                patcher.patch_spontaneous_behaviors({})
+                # The spa release handler is emitted by the DISPATCH pass, not
+                # the spontaneous one. Verified rather than assumed:
+                # VF2SpaReleaseHoldOnLounger lives inside
+                # patch_mobile_furniture_behavior_dispatch.
+                patcher.patch_mobile_furniture_behavior_dispatch({})
+            finally:
+                patcher.PATCHED = old
+            sources = sorted(temp_root.glob("*.cpp"))
+            if not sources:
+                return None, "the generator emitted no .cpp at all"
+            return ("\n".join(p.read_text(encoding="utf-8", errors="replace")
+                              for p in sources), len(sources))
+
+    @staticmethod
+    def _strip_comments(text):
+        """Code, not prose. A guard that is commented out is not a guard."""
+        text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+        return re.sub(r"//[^\n]*", "", text)
 
     def setUp(self):
-        text = self._emitted()
-        if text is None:
+        result = self._generate()
+        if result is None or result[0] is None:
+            reason = result[1] if result else "generation failed"
             self.skipTest(
-                "work/%s holds no generated .cpp in this checkout; run the "
-                "generator with VF2_ENABLE_BEHAVIOR_PATCHES=1 first"
-                % self.OBJS)
+                "cannot emit the C++ in this checkout: %s" % reason)
+        text, count = result
         self.emitted = text
+        # Every assertion below runs against comment-stripped code, so a
+        # commented-out guard cannot satisfy a substring search.
+        self.code = self._strip_comments(text)
+        self.source_count = count
+
+    def test_the_emission_actually_produced_something_to_inspect(self):
+        """An empty emission must not pass by searching an empty string.
+
+        This is the residual on "decode the compiled helper rather than its
+        source": reading the .cpp still does not prove the compiler was handed
+        it -- test_generated_cpp_compiles.py answers that. What this can do is
+        refuse to draw conclusions from an emission that produced nothing,
+        which is how the stale-directory defect presented.
+
+        An earlier version of this asserted a source count of ten, carried over
+        from a FULL generator run. This class drives only the two emitters that
+        produce the handler under test, so ten was never the right number and
+        the assertion failed on correct output -- a fact about the threshold,
+        not the artifact.
+        """
+        self.assertGreater(
+            self.source_count, 0,
+            "the emitters produced no .cpp at all, so every assertion in this "
+            "class would be searching an empty string")
+        self.assertGreater(
+            len(self.code.strip()), 1000,
+            "the emitted C++ is only %d characters after stripping comments; "
+            "that is not a real emission"
+            % len(self.code.strip()))
+        for name in self.REQUIRED_EMITTERS:
+            self.assertTrue(
+                hasattr(patcher, name),
+                "%s no longer exists, so this class is no longer driving the "
+                "pass that emits the handler it checks" % name)
 
     def test_the_reservation_release_is_in_the_shipped_source(self):
         self.assertIn(
-            "VF2SpaReleaseHoldOnLounger", self.emitted,
+            "VF2SpaReleaseHoldOnLounger", self.code,
             "the release handler never reached the emitted C++, so every "
             "source-contract check in this file is describing code the build "
             "does not compile")
 
     def test_the_walker_skip_is_in_the_shipped_source(self):
         """A villager must never be excluded by its own claim."""
+        # Against COMMENT-STRIPPED code: `// if (!walker || walker == keep)`
+        # satisfies a raw substring search while the shipped build has no
+        # guard at all.
         self.assertIn(
-            "walker == keep", self.emitted,
+            "walker == keep", self.code,
             "the self-claim skip is absent from the emitted C++")
 
     def test_no_synchronous_restart_reached_the_artifact(self):
@@ -679,13 +761,13 @@ class TheGuardSurvivesIntoTheEmittedArtifact(unittest.TestCase):
         matches that prose and fails on correct code -- which it did on the
         first draft of this test. Measuring code means measuring code.
         """
-        body = self.emitted
+        body = self.code
         start = body.find("VF2SpaReleaseHoldOnLounger(int handle")
         self.assertGreater(
             start, -1, "the release handler's definition is not in the "
             "emitted C++")
         end = body.find("\n}", start)
-        code = re.sub(r"//[^\n]*", "", body[start:end])
+        code = body[start:end]
         self.assertNotIn(
             "StartNewBehavior", code,
             "a synchronous restart is back inside the release handler in the "
