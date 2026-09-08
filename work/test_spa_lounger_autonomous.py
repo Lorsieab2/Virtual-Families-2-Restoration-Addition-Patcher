@@ -145,6 +145,59 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             "the lookup's result must be tied back to the chosen record",
         )
 
+    def test_a_lounger_walked_toward_is_not_offered_twice(self):
+        """VF2SpaOccupantIndex cannot see a villager still walking.
+
+        It asks which furniture slot is under the occupant's feet, so between
+        choosing a lounger and arriving at it a recipient is invisible and a
+        second adult would be handed the same lounger. The route used to get
+        this for free from LinkPeepToFurniture's peep-slot reservation; that
+        call was removed because its reservation could not be released, so
+        the in-flight part is now kept explicitly.
+        """
+        source = _source()
+        signature = "static int VF2FindFreeSpaLoungerSlot(CVillager &villager)"
+        start = source.index(signature + "\n{")
+        lines = source[start:].split("\n")
+        end = next(i for i, line in enumerate(lines) if line.rstrip() == "}")
+        body = "\n".join(
+            l for l in lines[:end] if not l.strip().startswith("//"))
+        self.assertIn(
+            "VF2SpaLoungerClaimedByWalker", body,
+            "the finder still offers a lounger someone is walking to",
+        )
+
+    def test_the_walk_reservation_is_by_handle(self):
+        # Two loungers of the same item id are distinguishable only by the
+        # unique handle AddToWorld stamps at record +0x04.
+        source = _source()
+        start = source.index("static bool VF2SpaLoungerClaimedByWalker(")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertIn("held.handle != handle", body)
+
+    def test_a_stale_walk_reservation_cannot_block_a_lounger(self):
+        # An entry only counts while its villager still carries a receiving
+        # label, so an interrupted or dead villager releases the lounger
+        # without anything having to clean up after them.
+        source = _source()
+        start = source.index("static bool VF2SpaLoungerClaimedByWalker(")
+        body = source[start:source.index("\n}\n", start)]
+        self.assertIn(
+            "VF2SpaReceivingIndex(*held.villager) < 0", body,
+            "a villager who stopped receiving must stop holding the lounger",
+        )
+
+    def test_the_reservation_is_taken_only_once_the_walk_is_committed(self):
+        # A route that returns early must never leave a lounger held.
+        body = _receiving_body()
+        hold = body.index("VF2SpaHoldLoungerForWalk")
+        start = body.index("StartNewBehavior")
+        self.assertLess(
+            start, hold,
+            "the lounger is held before the behaviour is committed, so an "
+            "early return above would leak it",
+        )
+
     def test_the_occupancy_bit_is_rechecked(self):
         # record[+0x0C] & 1 is the occupancy bit. A slot index alone is not a
         # guarantee the record is still live.

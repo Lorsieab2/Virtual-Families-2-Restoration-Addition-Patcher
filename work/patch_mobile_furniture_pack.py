@@ -28777,6 +28777,63 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
 // on it. Checking occupancy at the villager's current position cannot prevent
 // that: it samples where they are standing now, before any destination has
 // been chosen.
+// Which lounger each villager is CURRENTLY WALKING TO, by placement handle.
+//
+// VF2SpaOccupantIndex can only see a villager who is already STANDING on a
+// lounger, because it asks which furniture slot is under their feet. Between
+// choosing a lounger and arriving at it a recipient is invisible to it, so a
+// second adult evaluated in that window would pick the same lounger even when
+// another was free.
+//
+// The route used to get this for free: LinkPeepToFurniture reserved a peep
+// slot as a side effect. That call was removed because its reservation could
+// not be released when it landed on the wrong item (see the receiving handler),
+// so the in-flight part of it is kept explicitly here.
+//
+// Sized for the thirty villagers VF2SpaVillagerByIndex can address. Unlike
+// gVF2MobileExternalWeights this cannot leak a slot: an entry only counts while
+// its villager still carries a receiving label, so a villager who dies, is
+// interrupted, or finishes the treatment stops matching and the slot is reused.
+struct VF2SpaWalkReservation {
+    CVillager *villager;
+    int handle;
+};
+static VF2SpaWalkReservation gVF2SpaWalkReservations[30] = {};
+
+// True when some OTHER villager is already walking to this placement.
+static bool VF2SpaLoungerClaimedByWalker(CVillager &asking, int handle)
+{
+    for (int index = 0; index < 30; ++index) {
+        VF2SpaWalkReservation const &held = gVF2SpaWalkReservations[index];
+        if (!held.villager || held.villager == &asking) continue;
+        if (held.handle != handle) continue;
+        // Only a villager still labelled as receiving is really en route.
+        // Anything else -- interrupted, finished, or a reused villager
+        // record -- leaves a stale entry that must not block the lounger.
+        if (VF2SpaReceivingIndex(*held.villager) < 0) continue;
+        return true;
+    }
+    return false;
+}
+
+static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
+{
+    VF2SpaWalkReservation *spare = 0;
+    for (int index = 0; index < 30; ++index) {
+        VF2SpaWalkReservation &held = gVF2SpaWalkReservations[index];
+        if (held.villager == &villager) { held.handle = handle; return; }
+        if (!spare && (!held.villager || VF2SpaReceivingIndex(*held.villager) < 0)) {
+            spare = &held;
+        }
+    }
+    // No free or stale slot: every villager the walk can address is already
+    // en route to a lounger, so there is nothing to record and nothing this
+    // reservation would protect.
+    if (!spare) return;
+    spare->villager = &villager;
+    spare->handle = handle;
+}
+
 static int VF2FindFreeSpaLoungerSlot(CVillager &villager)
 {
     unsigned char *manager = reinterpret_cast<unsigned char *>(&FurnitureManager);
@@ -28793,6 +28850,12 @@ static int VF2FindFreeSpaLoungerSlot(CVillager &villager)
         // Free means nobody is already receiving on THIS lounger. A taken one
         // is the giving half's business, and that stays a manual drop.
         if (VF2SpaOccupantIndex(villager, slot, 0)) continue;
+        // Standing on it is not the only way a lounger is taken; someone may
+        // be walking to it, which VF2SpaOccupantIndex cannot see.
+        if (VF2SpaLoungerClaimedByWalker(
+                villager, *reinterpret_cast<int *>(record + 0x04))) {
+            continue;
+        }
         return slot;
     }
     return -1;
@@ -28914,6 +28977,12 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
         VF2SpaTreatmentPoint(info.point), eSpeedNormal, ePriorityNormal);
     VF2PlanSpaTreatment(plans, villager, info);
     plans->StartNewBehavior(villager);
+
+    // Recorded only now that the walk is committed and the label is set, so a
+    // route that returned early above never holds a lounger. Nothing needs to
+    // release this: the entry stops counting as soon as the villager no longer
+    // carries a receiving label.
+    VF2SpaHoldLoungerForWalk(villager, info.unknown0);
     return true;
 }
 
