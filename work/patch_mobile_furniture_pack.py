@@ -28462,6 +28462,21 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
 // walk to A is active and hold A for the whole treatment at B, making other
 // adults skip a lounger that is actually free. The routes that restart or
 // end a receiving action call this so a hold cannot outlive its walk.
+// Drop any OTHER villager's claim on one placement.
+//
+// Used when a player drop lands a villager on a lounger somebody else was
+// walking to: the drop wins, so the stale claim must not go on blocking that
+// lounger for everyone else. `keep` is the villager whose claim survives.
+static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
+{
+    for (int index = 0; index < 30; ++index) {
+        if (gVF2SpaWalkReservations[index].handle != handle) continue;
+        if (gVF2SpaWalkReservations[index].villager == keep) continue;
+        gVF2SpaWalkReservations[index].villager = 0;
+        gVF2SpaWalkReservations[index].handle = 0;
+    }
+}
+
 static void VF2SpaReleaseLoungerHold(CVillager &villager)
 {
     for (int index = 0; index < 30; ++index) {
@@ -28473,27 +28488,28 @@ static void VF2SpaReleaseLoungerHold(CVillager &villager)
 
 static bool VF2TryLinkMobileChaise(CVillager &villager, sFurnitureInfo2 &info)
 {
-    if (!FurnitureManager.LinkPeepToFurniture(
-            CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
-        return false;
-    }
-
-    // The spa walk holds live outside the engine's peep-slot bookkeeping, so
-    // the link above cannot see them: it will happily reserve a lounger a spa
-    // recipient is already walking to, and the recipient arrives to find a
-    // reader on it. Every mobile chaise behaviour funnels through here, so
-    // this one check covers all of them.
+    // NO POST-LINK REJECTION HERE, deliberately.
     //
-    // Asked AFTER the link because the engine chooses the placement, and
-    // there is no unlink call to undo a wrong choice -- the same constraint
-    // the spa route itself ran into. Returning false here therefore leaves
-    // the reservation standing; the villager simply does the unfurnitured
-    // version of the behaviour on it, which is what the callers already do
-    // when no chaise is free at all. That is a strictly better outcome than
-    // two villagers on one lounger, and it costs nothing when no spa walk is
-    // in flight, which is the overwhelmingly common case.
-    if (VF2SpaLoungerClaimedByWalker(villager, info.unknown0)) return false;
-    return true;
+    // A spa recipient's walk hold is invisible to LinkPeepToFurniture, so this
+    // call can reserve a lounger someone is already walking to. Rejecting it
+    // afterwards looks like the fix and is worse: the link has ALREADY taken
+    // the peep slot, there is no unlink, and the caller then goes off and runs
+    // the unfurnitured behaviour. The lounger stays reserved against a
+    // villager who never uses it, for the whole of that behaviour.
+    //
+    // Measured against the alternative rather than argued: accepting means a
+    // reader occupies the lounger for GetRandom(20) + 20 and then releases it
+    // normally. Rejecting holds it for the fallback behaviour's entire
+    // duration with nobody on it. The overlap is the cheaper failure.
+    //
+    // Making held loungers unavailable BEFORE the lookup is the only shape
+    // that would work, and the engine's availability state is the occupancy
+    // bit at record +0x0C -- clearing that unplaces the furniture outright,
+    // which is far worse than either outcome above. So this stays a plain
+    // link, and the spa route absorbs the collision instead: see
+    // VF2FindFreeSpaLoungerSlot, which skips loungers other RECIPIENTS hold.
+    return FurnitureManager.LinkPeepToFurniture(
+        CContentMap::eObjectChaise, &villager, info, true, 0, false);
 }
 
 static void VF2PlanLinkedChaiseAction(
@@ -28849,6 +28865,19 @@ static bool VF2HandleMobileInvisibleSpaLounger(CVillager &villager)
             false)) {
         return false;
     }
+
+    // This is a PLAYER DROP, so it wins. An autonomous recipient may already
+    // be walking to this lounger -- VF2SpaOccupantIndex cannot see them, and
+    // the link above cannot see the custom hold either -- but refusing the
+    // drop is the wrong resolution: the player put this villager here, and
+    // the engine has already reserved the slot with no way to give it back.
+    //
+    // Break the tie the other way instead. The walker's claim on this
+    // placement is released, so it stops blocking other selections, and the
+    // walker is left to re-evaluate the way any other interrupted behaviour
+    // does. Only the claim on THIS lounger goes; a walker heading elsewhere
+    // keeps theirs.
+    VF2SpaReleaseHoldOnLounger(receiveInfo.unknown0, &villager);
     plans->ForgetPlans(villager, false);
     VF2SetActionLabel(
         villager,
