@@ -45,9 +45,34 @@ PC_FMAP_DONOR = (
     "mobile_furniture_behaviors" / "pc_fmaps" / "Chaise_brown.png.fmap"
 )
 
-# The mobile-only footprint markers the behavior ledger forbids installing into
-# the desktop content map. These are the cells B179 actually shipped.
-FORBIDDEN_MOBILE_CELLS = (0x01B00000, 0x01B00001, 0x01B09800)
+# THE UNTRANSLATED PEEP-SLOT ANCHOR ALONE. That is the cell which actually
+# breaks placement, and it is the only mobile value this patcher translates:
+# desktop_safe_fmap_source's docstring states the mechanism -- "without the
+# translated anchor FindPeepSlot rejects every chair. That is why a villager
+# dropped on a Spa Lounger lay in the wrong position" -- and the generator
+# records exactly one translation, "translated_mobile_peep_slot_marker",
+# mobile 0x01b09800 -> desktop 0x00009800. No translation record, validator or
+# ledger entry exists for any other mobile value.
+#
+# 0x01B00000 and 0x01B00001 WERE listed here. They are footprint GEOMETRY, not
+# placement metadata, and listing them made this suite fail a build that #201
+# deliberately produces. #201 gives a borrower the donor's full collision
+# geometry because the desktop-safe map is too sparse to stand alone -- the
+# Patio Table borrower measured 241 occupied cells down to 8 without it.
+# Stripping those cells to satisfy this list would cost the loungers their
+# collision area, which is the "the hotspot for the spa loungers are very
+# small" complaint this work exists to fix. The owner's decision was to ship
+# the geometry.
+#
+# WHAT IS NOT ESTABLISHED, and why the anchor stays forbidden rather than the
+# check being deleted: nobody has disassembled how the desktop collision lookup
+# interprets a non-anchor cell. The evidence that the footprint values are
+# tolerated is that B179 -- a shipped, playable build -- installed a lounger
+# map carrying all three, anchor included, with no lying-position report in a
+# ledger that records lounger behaviour in detail. That is tolerance observed
+# in one build, not proof from the engine's code. If a villager is ever seen
+# lying wrong on a spa lounger, this is the first place to look.
+FORBIDDEN_MOBILE_CELLS = (0x01B09800,)
 
 LOUNGERS = (
     "InvisibleSpaLounger.png.fmap",
@@ -254,12 +279,22 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                         "reached the desktop content map",
                     )
 
-    def test_the_shipped_map_matches_the_desktop_safe_donor(self):
-        """The strongest form: identical cells to the known-good source map.
+    def test_the_shipped_map_carries_the_desktop_safe_translated_cells(self):
+        """Every cell the desktop-safe map REWRITES must reach the borrower.
 
-        This is what makes the marker list above a belt-and-braces check
-        rather than the only defence -- a mobile cell the ledger has not
-        enumerated would still show up here as a mismatch.
+        This asserted byte-identity to the desktop-safe donor, which #201 made
+        impossible on purpose. #201 gives a borrower the donor's full collision
+        geometry -- the desktop-safe map is deliberately sparse and a borrower
+        has no map of its own, so on its own it leaves almost no collision
+        area: the Patio Table borrower measured 241 occupied cells down to 8.
+        A borrower therefore carries the donor's geometry PLUS the safe map's
+        translated cells, and can never be identical to the safe map alone.
+
+        What still has to hold, and is what this now checks, is the half that
+        keeps placement working: every cell the desktop-safe map rewrote must
+        appear in the shipped map with the desktop value. That is where the
+        anchor lives, so an untranslated anchor still fails here as well as in
+        the marker check above.
         """
         if not PC_FMAP_DONOR.is_file():
             self.skipTest("pc_fmaps donor is not present in this tree")
@@ -270,13 +305,25 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                 if not path.is_file():
                     continue
                 with self.subTest(build=build.name, fmap=name):
-                    shipped = _cells(path)
-                    if name not in WIDENED_LOUNGERS:
+                    shipped_all = _cell_list(path)
+                    safe_all = _cell_list(PC_FMAP_DONOR)
+                    self.assertEqual(
+                        len(shipped_all), len(safe_all),
+                        "the shipped map is a different size from the "
+                        "desktop-safe donor",
+                    )
+                    for index, safe in enumerate(safe_all):
+                        if not safe:
+                            continue
                         self.assertEqual(
-                            shipped, expected,
-                            "does not match the desktop-safe donor map",
+                            shipped_all[index], safe,
+                            "cell %d carries %#x but the desktop-safe map "
+                            "rewrote it to %#x; a translated cell was lost"
+                            % (index, shipped_all[index], safe),
                         )
+                    if name not in WIDENED_LOUNGERS:
                         continue
+                    shipped = _cells(path)
                     # ORDERED CELL LISTS FROM HERE DOWN.
                     #
                     # _cells() returns a Counter, which is right for the
@@ -301,20 +348,30 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                     counts = Counter(v for v in expected_cells if v)
                     self.assertTrue(counts, "the donor map has no object cells")
                     obj = counts.most_common(1)[0][0]
+                    # A CELL THE SAFE MAP REWROTE MAY NEVER BE OVERWRITTEN.
+                    #
+                    # This used to also require that every DIFFERING cell hold
+                    # the object value, which assumed the borrower is the safe
+                    # map plus dilation. #201 made that false on purpose: a
+                    # borrower carries the DONOR'S GEOMETRY in cells the safe
+                    # map leaves empty, because the safe map alone is too
+                    # sparse to give a borrower any collision area -- the Patio
+                    # Table borrower measured 241 occupied cells down to 8.
+                    # Those donor cells are mobile-valued and legitimately not
+                    # the object value.
+                    #
+                    # What must still hold is the half that keeps placement
+                    # working: a cell the safe map rewrote -- the anchor and
+                    # the object cells -- must survive untouched.
                     for index, (was, now) in enumerate(
                         zip(expected_cells, shipped_cells)
                     ):
-                        if was == now:
+                        if was == now or not was:
                             continue
-                        self.assertEqual(
-                            was, 0,
-                            "cell %d was overwritten; only EMPTY cells may "
-                            "become object cells" % index,
-                        )
-                        self.assertEqual(
-                            now, obj,
-                            "cell %d became %#x rather than the object value "
-                            "%#x" % (index, now, obj),
+                        self.fail(
+                            "cell %d was rewritten from %#x to %#x; a cell "
+                            "the desktop-safe map translated must survive"
+                            % (index, was, now),
                         )
                     # The widening merged after B181 was built, so asserting it
                     # against B181 or earlier would assert a property onto a
