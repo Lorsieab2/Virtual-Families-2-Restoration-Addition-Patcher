@@ -125,9 +125,13 @@ class TheProductionWidenerActuallyWidens(unittest.TestCase):
         try:
             spec.loader.exec_module(module)
         except SystemExit:
+            # The generator calls sys.exit() when run as a script; importing it
+            # for its constants is fine.
             pass
-        except Exception as exc:  # pragma: no cover - environment dependent
-            self.skipTest("generator not importable here: %s" % exc)
+        except ImportError as exc:
+            # A missing third-party dependency is an environment problem. Any
+            # OTHER exception is a defect in the generator and must fail.
+            self.skipTest("generator dependency missing here: %s" % exc)
         self.gen = module
 
     def test_the_recorded_output_names_both_targets_and_their_growth(self):
@@ -156,11 +160,12 @@ class TheProductionWidenerActuallyWidens(unittest.TestCase):
         """
         gen = self.gen
         manifest = {"items": []}
-        try:
-            gen.sync_behavior_assets(manifest)
-        except Exception as exc:  # pragma: no cover - environment dependent
-            self.skipTest("sync_behavior_assets needs build inputs here: %s"
-                          % exc)
+        # NOT WRAPPED. A blanket except here cannot tell a missing build input
+        # from a defect in the code under test, and reports both as absence of
+        # evidence: an injected crash in widen_spa_lounger_hotspot produced
+        # "18 passed, 2 skipped" -- a green run that verified no map at all.
+        # The real prerequisites are checked in setUp instead.
+        gen.sync_behavior_assets(manifest)
 
         record = manifest.get("behavior_assets", {}).get(
             "spa_lounger_widened_hotspots")
@@ -184,11 +189,12 @@ class TheProductionWidenerActuallyWidens(unittest.TestCase):
         """The manifest could be right while the file was never written."""
         gen = self.gen
         manifest = {"items": []}
-        try:
-            gen.sync_behavior_assets(manifest)
-        except Exception as exc:  # pragma: no cover - environment dependent
-            self.skipTest("sync_behavior_assets needs build inputs here: %s"
-                          % exc)
+        # NOT WRAPPED. A blanket except here cannot tell a missing build input
+        # from a defect in the code under test, and reports both as absence of
+        # evidence: an injected crash in widen_spa_lounger_hotspot produced
+        # "18 passed, 2 skipped" -- a green run that verified no map at all.
+        # The real prerequisites are checked in setUp instead.
+        gen.sync_behavior_assets(manifest)
 
         donor_cells = _object_cell_count(DONOR.read_bytes())
         assets = (ROOT / "patcher_assets" / "optional_patches"
@@ -304,9 +310,13 @@ class TheDonorLookupResolves(unittest.TestCase):
         try:
             spec.loader.exec_module(module)
         except SystemExit:
+            # The generator calls sys.exit() when run as a script; importing it
+            # for its constants is fine.
             pass
-        except Exception as exc:  # pragma: no cover - environment dependent
-            self.skipTest("generator not importable here: %s" % exc)
+        except ImportError as exc:
+            # A missing third-party dependency is an environment problem. Any
+            # OTHER exception is a defect in the generator and must fail.
+            self.skipTest("generator dependency missing here: %s" % exc)
         self.gen = module
 
     def test_every_widened_target_resolves_to_a_real_donor(self):
@@ -421,9 +431,13 @@ class TheClaimRuleProducesTheApprovedNumber(unittest.TestCase):
         try:
             spec.loader.exec_module(module)
         except SystemExit:
+            # The generator calls sys.exit() when run as a script; importing it
+            # for its constants is fine.
             pass
-        except Exception as exc:  # pragma: no cover - environment dependent
-            self.skipTest("generator not importable here: %s" % exc)
+        except ImportError as exc:
+            # A missing third-party dependency is an environment problem. Any
+            # OTHER exception is a defect in the generator and must fail.
+            self.skipTest("generator dependency missing here: %s" % exc)
         self.gen = module
 
     def _borrower(self):
