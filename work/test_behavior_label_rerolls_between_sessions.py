@@ -247,11 +247,14 @@ class InterleavedVillagersKeepTheirOwnLabels(unittest.TestCase):
     """
 
     class Slot(object):
-        def __init__(self, villager, behavior_id, serial, praise_count=0):
+        def __init__(self, villager, behavior_id, serial, praise_count=0,
+                     string_id=0x1234):
             self.villager = villager
             self.behaviorId = behavior_id
             self.behaviorSerial = serial
             self.praiseCount = praise_count
+            # 0 means "the native label is the current one" (the roll-0 case).
+            self.stringId = string_id
 
     class Villager(object):
         def __init__(self, behavior_id, serial, praised_id=-1, praise_count=0):
@@ -413,6 +416,68 @@ class InterleavedVillagersKeepTheirOwnLabels(unittest.TestCase):
             "both accept paths must record the praise count, as "
             "VF2BehaviorLabelCacheStillActive does",
         )
+
+    def test_the_roll_zero_native_choice_survives_another_villager(self):
+        """The third P1, reproduced.
+
+        A group's roll-0 outcome means "keep the native label" and is cached as
+        stringId 0. The native text matches nothing in any mod label group, so
+        the resolver legitimately returns 0 and the applier falls through to its
+        OWN cache lookup. Reading that through the global-guarded function
+        reintroduces the defect one level down: with another villager last
+        through the wrapped-native path the lookup fails, the applier rolls
+        again, and a deliberate native-label choice becomes a mod caption
+        mid-action.
+        """
+        ann = self.Villager(behavior_id=0x0B3, serial=7)
+        bob = self.Villager(behavior_id=0x048, serial=2)
+        # stringId 0 == "the native label is the current one".
+        ann_slot = self.Slot(ann, 0x0B3, 7)
+        ann_slot.stringId = 0
+
+        # What the applier used to ask, with Bob last through the native path.
+        self.assertFalse(
+            self.cache_still_active(ann_slot, ann, before_villager=bob),
+            "this is the P1: the applier's own cache read failed and it "
+            "re-rolled over the native label",
+        )
+        # What it asks now.
+        self.assertTrue(
+            self.slot_is_current_for(ann, ann_slot),
+            "the anchored read must find Ann's roll-0 choice regardless of "
+            "which villager last ran a wrapped native behaviour",
+        )
+
+    def test_every_applier_reads_the_cache_villager_anchored(self):
+        # The resolver being anchored is not enough; the appliers do their own
+        # cache read, and that is where the roll-0 choice is honoured.
+        for name in ("VF2ApplyRememberedOrRandomLabel", "VF2ApplyVenueLabel",
+                     "VF2ApplyRememberedOrRandomLabels2",
+                     "VF2ApplyRememberedOrRandomLabels3"):
+            body = function_body(name)
+            self.assertIn(
+                "VF2GetVillagerCachedBehaviorLabel(villager, ", body,
+                "%s reads the cache through the global-guarded function" % name,
+            )
+            self.assertNotIn("VF2GetCachedBehaviorLabel(villager, ", body)
+
+    def test_the_anchored_reader_still_restores_the_native_label(self):
+        # Dropping this call would leave the roll-0 case with no text to show.
+        body = function_body("VF2GetVillagerCachedBehaviorLabel")
+        self.assertIn("if (slot->stringId == 0) {", body)
+        self.assertIn("VF2RestoreCachedNativeLabel(villager, cacheTag);", body)
+
+    def test_the_radio_handler_keeps_the_global_guarded_read(self):
+        """The one place the global IS the right question.
+
+        VF2RandomRadioBehavior sets gVF2BehaviorLabelBeforeVillager itself and
+        reads the cache inside that window, so retargeting it would change a
+        call path this work has no business touching.
+        """
+        body = function_body("VF2RandomRadioBehavior")
+        self.assertIn("gVF2BehaviorLabelBeforeVillager = &villager;", body)
+        self.assertIn("VF2GetCachedBehaviorLabel(villager, cacheTag", body)
+        self.assertNotIn("VF2GetVillagerCachedBehaviorLabel", body)
 
     def test_serial_plus_one_without_a_praise_is_a_new_session(self):
         # The praise allowance must not become a blanket "one serial of slack".

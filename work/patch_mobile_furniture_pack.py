@@ -33106,6 +33106,38 @@ static bool VF2GetCachedBehaviorLabel(CVillager &villager, int cacheTag, int *st
     return true;
 }
 
+// VF2GetCachedBehaviorLabel, anchored to the villager the caller was handed.
+//
+// The gate alone is not enough. When a group's cached choice is the roll-0
+// "keep the native label" outcome, slot->stringId is 0 and the visible native
+// text matches nothing in any mod label group, so the resolver legitimately
+// returns 0 and the applier falls through to its own cache lookup. Reading
+// that through the global-guarded function reintroduces the same defect one
+// level down: with another villager last through the wrapped-native path the
+// lookup fails, the applier rolls again, and a deliberate native-label choice
+// turns into a mod caption mid-action.
+//
+// The VF2RestoreCachedNativeLabel call is retained -- it is what puts the
+// native text back when the cached choice was roll-0.
+//
+// VF2GetCachedBehaviorLabel is deliberately left in place for
+// VF2RandomRadioBehavior, which primes the global itself and reads the cache
+// inside that window; there the global IS the right question.
+static bool VF2GetVillagerCachedBehaviorLabel(
+    CVillager &villager, int cacheTag, int *stringId)
+{
+    VF2BehaviorLabelCacheSlot *slot =
+        VF2FindBehaviorLabelCache(villager, cacheTag, false);
+    if (!VF2BehaviorLabelSlotIsCurrentFor(villager, slot)) {
+        return false;
+    }
+    *stringId = slot->stringId;
+    if (slot->stringId == 0) {
+        VF2RestoreCachedNativeLabel(villager, cacheTag);
+    }
+    return true;
+}
+
 static void VF2RememberBehaviorLabel(CVillager &villager, int cacheTag, int stringId)
 {
     VF2BehaviorLabelCacheSlot *slot = VF2FindBehaviorLabelCache(villager, cacheTag, true);
@@ -33240,7 +33272,7 @@ static void VF2ApplyRememberedOrRandomLabel(CVillager &villager, int const *labe
         return;
     }
     int cachedStringId = 0;
-    if (VF2GetCachedBehaviorLabel(villager, (int)labels, &cachedStringId)) {
+    if (VF2GetVillagerCachedBehaviorLabel(villager, (int)labels, &cachedStringId)) {
         if (cachedStringId) {
             VF2SetBehaviorLabel(villager, cachedStringId);
         }
@@ -33268,7 +33300,7 @@ static void VF2ApplyVenueLabel(
         return;
     }
     int cachedStringId = 0;
-    if (VF2GetCachedBehaviorLabel(villager, (int)labels, &cachedStringId) &&
+    if (VF2GetVillagerCachedBehaviorLabel(villager, (int)labels, &cachedStringId) &&
         cachedStringId) {
         VF2SetBehaviorLabel(villager, cachedStringId);
         return;
@@ -33299,7 +33331,7 @@ static void VF2ApplyRememberedOrRandomLabels2(
         return;
     }
     int cachedStringId = 0;
-    if (VF2GetCachedBehaviorLabel(villager, cacheTag, &cachedStringId)) {
+    if (VF2GetVillagerCachedBehaviorLabel(villager, cacheTag, &cachedStringId)) {
         if (cachedStringId) {
             VF2SetBehaviorLabel(villager, cachedStringId);
         }
@@ -33343,7 +33375,7 @@ static void VF2ApplyRememberedOrRandomLabels3(
         return;
     }
     int cachedStringId = 0;
-    if (VF2GetCachedBehaviorLabel(villager, cacheTag, &cachedStringId)) {
+    if (VF2GetVillagerCachedBehaviorLabel(villager, cacheTag, &cachedStringId)) {
         if (cachedStringId) {
             VF2SetBehaviorLabel(villager, cachedStringId);
         }
