@@ -356,6 +356,46 @@ class TheDonorLookupResolves(unittest.TestCase):
             "geometry; dilating from it adds nothing",
         )
 
+    def test_the_widening_claims_footprint_cells_and_spares_the_anchor(self):
+        """The claim rule is read from the GENERATOR, not from widen() above.
+
+        Every other check in this file runs the local widen() copy, which has
+        its own `if cells[index] == 0` and therefore tests itself rather than
+        production. Measured: changing the generator's claim rule left all 16
+        checks passing. So this one names the production code.
+
+        Empty-only barely widened a borrower: #201 gives it the donor's mobile
+        geometry, which occupies 20 of the 25 ring cells, so the drop target
+        moved 11 -> 13 where the ring allows 38. A footprint cell is solid but
+        not droppable, and converting it adds droppability without removing
+        solidity. The peep-slot anchor must survive either form -- overwriting
+        it breaks placement outright, which is the failure the desktop-safe
+        translation exists to prevent.
+        """
+        start = SOURCE.index("def widen_spa_lounger_hotspot(")
+        body = SOURCE[start:SOURCE.index("\n    def ", start + 1)]
+        self.assertIn(
+            "claimable = (0,) + MOBILE_CHAISE_FOOTPRINT_CELL_VALUES", body,
+            "the widening must be able to claim mobile footprint cells, or a "
+            "borrower's drop target stays hemmed in by the geometry #201 "
+            "gives it",
+        )
+        self.assertIn(
+            "MOBILE_CHAISE_PC_SLOT_CELL_VALUE", body,
+            "the translated peep-slot anchor must be protected from the claim",
+        )
+        self.assertIn(
+            "MOBILE_CHAISE_MOBILE_SLOT_CELL_VALUE", body,
+            "an untranslated anchor must be protected too; claiming it would "
+            "destroy the evidence that the translation was missed",
+        )
+        self.assertIn(
+            "claimed_from_footprint", body,
+            "the record must report how many cells came from the footprint, "
+            "so a build that claimed none is distinguishable from one that "
+            "did",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

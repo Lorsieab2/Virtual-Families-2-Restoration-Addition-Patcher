@@ -87,6 +87,12 @@ MOBILE_CHAISE_OBJECT = 0x95
 MOBILE_CHAISE_PC_CELL_VALUE = 0x2000A800
 MOBILE_CHAISE_PC_SLOT_CELL_VALUE = 0x00009800
 MOBILE_CHAISE_PC_SLOT_CELL = (8, 6)
+# The mobile footprint values a BORROWER carries under #201: solid geometry
+# describing where the piece blocks movement, with no desktop handler of its
+# own. The peep-slot anchor below is the value that DOES matter to placement
+# and is never overwritten.
+MOBILE_CHAISE_FOOTPRINT_CELL_VALUES = (0x01B00000, 0x01B00001)
+MOBILE_CHAISE_MOBILE_SLOT_CELL_VALUE = 0x01B09800
 MOBILE_CHAISE_PC_CELLS = (
     (7, 8),
     (5, 9), (6, 9), (7, 9), (8, 9), (9, 9),
@@ -24861,14 +24867,42 @@ def sync_behavior_assets(manifest):
                     nx, ny = x + dx, y + dy
                     if 0 <= nx < width and 0 <= ny < height:
                         grown.add(ny * width + nx)
-        # Never overwrite a cell that already carries a DIFFERENT value: the
-        # anchor lives in one of those, and losing it would break placement
-        # rather than widen it.
+        # CLAIM EMPTY CELLS *AND* MOBILE FOOTPRINT CELLS.
+        #
+        # Empty-only was the original rule, and on a borrower it barely
+        # widened anything. #201 gives the borrower the donor's mobile
+        # geometry, which occupies 20 of the 25 ring cells around the drop
+        # target, so the dilation had almost nowhere to go: measured on the
+        # shipped map, the drop target moved 11 -> 13 where the ring allows
+        # 38.
+        #
+        # A footprint cell is SOLID BUT NOT DROPPABLE. Converting it to the
+        # object value adds droppability without removing solidity -- the cell
+        # stays occupied, it just also accepts a villager. Total occupied
+        # cells are unchanged; only the type changes, and only inside the ring
+        # immediately around a drop target that was already there.
+        #
+        # THE PEEP-SLOT ANCHOR IS EXPLICITLY PROTECTED, translated or not.
+        # Overwriting it would break placement outright rather than widen it,
+        # which is the failure the desktop-safe translation exists to prevent.
+        # Any other value is left alone as well, so this can only ever convert
+        # empty space or footprint.
+        claimable = (0,) + MOBILE_CHAISE_FOOTPRINT_CELL_VALUES
+        protected = (
+            MOBILE_CHAISE_PC_SLOT_CELL_VALUE,
+            MOBILE_CHAISE_MOBILE_SLOT_CELL_VALUE,
+        )
         added = 0
+        claimed_from_footprint = 0
         for index in sorted(grown):
-            if cells[index] == 0:
-                cells[index] = object_value
-                added += 1
+            if cells[index] in protected:
+                continue
+            if cells[index] not in claimable:
+                continue
+            if cells[index] != 0:
+                claimed_from_footprint += 1
+            cells[index] = object_value
+            added += 1
         if not added:
             return
         struct.pack_into("<%dI" % (width * height), data, 32, *cells)
@@ -24877,12 +24911,15 @@ def sync_behavior_assets(manifest):
             "target": target,
             "widened_from": len(before),
             "widened_to": len(before) + added,
+            "claimed_from_footprint": claimed_from_footprint,
             "grid": [width, height],
             "reason": (
                 "the drop target was an eleven-cell ragged diagonal, which "
                 "made dropping a villager on it fiddly; dilated by one cell "
-                "into empty space only, so the anchor and the donor's own map "
-                "are untouched"
+                "into empty space and into the borrowed mobile footprint, "
+                "which is solid but not droppable, so the piece keeps the "
+                "same occupied cells and only gains drop area; the peep-slot "
+                "anchor and the donor's own map are untouched"
             ),
         })
 
