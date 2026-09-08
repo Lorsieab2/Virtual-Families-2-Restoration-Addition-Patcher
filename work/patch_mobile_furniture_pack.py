@@ -33065,13 +33065,32 @@ static bool VF2BehaviorLabelSlotIsCurrentFor(
         return false;
     }
     if (behaviorSerial == slot->behaviorSerial) {
+        slot->praiseCount = praiseCount;
         return true;
     }
     // A praise re-rolls the label and bumps the serial by one; that is still
     // the same activity, so it must not be treated as a new session.
-    return behaviorSerial == slot->behaviorSerial + 1 &&
+    //
+    // ACCEPTING THE RESTART MEANS ADOPTING IT AS THE NEW BASELINE. This
+    // function looks like a query, but the writeback below is part of the rule
+    // rather than a side effect of it: the allowance is measured against the
+    // slot, so leaving the slot at N makes the SECOND praise of the same action
+    // arrive at N+2 and be rejected as a new session. An earlier version of
+    // this predicate omitted the writeback on the reasoning that a query should
+    // not mutate state; executed against two consecutive praises, that gave
+    // praise1=keep, praise2=REROLL. Most appliers hide it by refreshing the
+    // slot through VF2RememberBehaviorLabel, but the remembered branches of
+    // VF2ApplyCoffeeLabel, VF2ApplyShowerLabel, VF2RandomBigBurgerLabel and
+    // VF2RandomBigCoffeeLabel only restore the label text and never touch the
+    // slot, so there the second praise re-rolled the caption.
+    if (behaviorSerial == slot->behaviorSerial + 1 &&
         praisedBehaviorId == behaviorId &&
-        praiseCount != slot->praiseCount;
+        praiseCount != slot->praiseCount) {
+        slot->behaviorSerial = behaviorSerial;
+        slot->praiseCount = praiseCount;
+        return true;
+    }
+    return false;
 }
 
 static bool VF2GetCachedBehaviorLabel(CVillager &villager, int cacheTag, int *stringId)
