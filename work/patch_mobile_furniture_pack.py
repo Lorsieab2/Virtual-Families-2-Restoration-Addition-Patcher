@@ -28840,66 +28840,47 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
     int const loungerSlot = VF2FindFreeSpaLoungerSlot(villager);
     if (loungerSlot < 0) return false;
 
-    // Knowing a free spa lounger EXISTS is not knowing it is the one the
-    // villager would reach. The chaise family is searched nearest-first, so an
-    // ordinary chaise closer to the villager wins and the treatment would play
-    // out on normal furniture under a spa label -- the complaint this route is
-    // for. loungerSlot above proves one is available; this proves it is the
-    // one that would be chosen.
+    // NO SPECULATIVE LINK. Earlier revisions called LinkPeepToFurniture and
+    // then rejected the result when it was not a spa lounger. Every variant of
+    // that leaks, and the leak cannot be designed away by probing first:
     //
-    // ASKED BEFORE LINKING, WITH THE READ-ONLY FindFurniture. Checking after
-    // the link is simpler and is wrong: the link RESERVES a peep slot as a
-    // side effect, so rejecting an ordinary chaise afterwards leaves it held
-    // against a villager who then goes off to do something else, excluding
-    // everyone else from that chaise for the duration of an unrelated
-    // behaviour. This engine exposes no unlink call, so a speculative
-    // reservation cannot be given back.
+    //   - LinkPeepToFurniture always searches from villager.FeetPos() and
+    //     RESERVES a peep slot as a side effect, and this engine exposes no
+    //     unlink call, so a rejection after the call holds an ordinary chaise
+    //     against a villager who then goes off and does something else.
+    //   - a probe anchored at the villager's feet cannot fix it, because
+    //     FindFurniture ignores peep-slot availability while the link does
+    //     not: a FULL nearer chaise makes the probe refuse a treatment the
+    //     link would have granted.
+    //   - and a probe anchored at the lounger cannot fix it either, because it
+    //     then answers a question the link never asked. The link still starts
+    //     from the villager's feet and can still reserve a nearer ordinary
+    //     chaise, which the post-link check rejects and leaks.
     //
-    // PROBED AT THE LOUNGER'S OWN PLACEMENT, NOT AT THE VILLAGER'S FEET. A
-    // feet-anchored probe asks "what is nearest to the villager", which is a
-    // different question from "is the free lounger reachable" in a way that
-    // fails in both directions:
+    // A preflight can only avoid the leak by predicting the link exactly, and
+    // nothing here can do that. So the link is not called at all.
     //
-    //   - FindFurniture ignores peep-slot availability, so a FULL ordinary
-    //     chaise nearer than the lounger wins the nearest-match and the probe
-    //     rejects a treatment that LinkPeepToFurniture would have granted --
-    //     it skips the full chaise and reserves the lounger. The behaviour
-    //     disappears under ordinary contention.
-    //   - and when the probe accepts a lounger whose peep slots are all
-    //     spoken for by villagers still walking to it (VF2SpaOccupantIndex
-    //     counts only those already standing on it), the link skips it and
-    //     can reserve an ordinary chaise, which the post-link check then
-    //     rejects -- leaking that reservation.
-    //
-    // Anchoring the probe on the placement record of the lounger
-    // VF2FindFreeSpaLoungerSlot already picked removes the nearest-match
-    // question entirely. This is the pattern VF2FindAddedFurnitureVenue uses
-    // for the same reason: enumerate the item's own records, ask the native
-    // read-only lookup per placement, and verify the handle it returns.
+    // It is not needed. The treatment uses only the anchor point, the
+    // orientation and the placement handle, and all three live in the
+    // placement record this slot already names: +0x14/+0x18 world position,
+    // +0x10 orientation, +0x04 the unique handle AddToWorld stamps. Reading
+    // them reserves nothing, so there is nothing to release and nothing to
+    // leak. This is what VF2FindAddedFurnitureVenue does, and why: "Do not
+    // call LinkPeepToFurniture speculatively: a shared-object stock placement
+    // could be reserved and there is no unlink API to undo it."
     unsigned char *spaManager = reinterpret_cast<unsigned char *>(&FurnitureManager);
     unsigned char *spaRecord = spaManager + 0x1008 + loungerSlot * 0x40;
-    ldwPoint loungerPlacement = {
-        *reinterpret_cast<int *>(spaRecord + 0x14),
-        *reinterpret_cast<int *>(spaRecord + 0x18)};
-    sFurnitureInfo2 probe = {};
-    if (!FurnitureManager.FindFurniture(
-            CContentMap::eObjectChaise, loungerPlacement, probe, true, 0, 0)) {
-        return false;
-    }
-    if (!VF2SpaLoungerHasHandle(probe.unknown0)) return false;
+    if ((*reinterpret_cast<unsigned int *>(spaRecord + 0x0C) & 1) == 0) return false;
 
     sFurnitureInfo2 info = {};
-    if (!FurnitureManager.LinkPeepToFurniture(
-            CContentMap::eObjectChaise, &villager, info, true, 0, false)) {
-        return false;
-    }
+    info.unknown0 = *reinterpret_cast<int *>(spaRecord + 0x04);
+    info.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);
+    info.point.x = *reinterpret_cast<int *>(spaRecord + 0x14);
+    info.point.y = *reinterpret_cast<int *>(spaRecord + 0x18);
 
-    // The probe and the link still ask slightly different questions -- the
-    // linker additionally skips placements with no free peep slot -- so
-    // confirm what was actually reserved rather than assuming they agreed.
-    // This accepts ANY spa lounger, not merely the one the probe named: a
-    // villager sent to the second lounger is doing exactly what this route is
-    // for, and the label is honest either way.
+    // The slot came from VF2FindFreeSpaLoungerSlot, which already filtered on
+    // item id, but confirm by handle rather than trusting the index: the same
+    // check every other route in this file makes, and it costs one walk.
     if (!VF2SpaLoungerHasHandle(info.unknown0)) return false;
 
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);

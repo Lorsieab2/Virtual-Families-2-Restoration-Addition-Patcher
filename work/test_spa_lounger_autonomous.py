@@ -80,78 +80,44 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         self.assertIn("VF2FindFreeSpaLoungerSlot(villager)", body)
         self.assertIn("if (loungerSlot < 0) return false;", body)
 
-    def test_the_read_only_probe_runs_before_the_link(self):
-        """A rejected chaise must never have been reserved first.
+    def test_no_speculative_link_is_taken(self):
+        """The receiving route must never call LinkPeepToFurniture.
 
-        LinkPeepToFurniture takes a peep slot as a side effect and this
-        engine exposes no unlink call, so checking after the link means an
-        ordinary chaise nearer than the lounger gets held against a villager
-        who then goes off and does something else -- excluding everyone else
-        from it for the duration. FindFurniture answers the same
-        nearest-match question and reserves nothing.
+        The call RESERVES a peep slot as a side effect and this engine
+        exposes no unlink call, so any code shaped "link, then reject if it
+        is not a lounger" holds an ordinary chaise against a villager who
+        then goes off and does something else.
 
-        Asserted as an ORDERING rather than by pinning either call's
-        arguments, so a rewrite that keeps the property still passes.
+        A preflight cannot rescue that shape. The link always searches from
+        villager.FeetPos(), so a probe anchored at the villager is defeated
+        by a FULL nearer chaise (FindFurniture ignores slot availability and
+        the link does not), and a probe anchored at the lounger answers a
+        question the link never asked. Only not calling it works.
         """
         body = _receiving_body()
-        probe = body.index("FindFurniture")
-        link = body.index("LinkPeepToFurniture")
-        self.assertLess(
-            probe, link,
-            "the link reserves a peep slot, so the identity check has to "
-            "happen before it, not after",
-        )
-
-    def test_the_probe_is_anchored_on_the_lounger_not_the_villager(self):
-        """A feet-anchored probe asks the wrong question, in both directions.
-
-        FindFurniture is nearest-match and ignores peep-slot availability, so
-        anchoring on the villager's feet means a FULL ordinary chaise nearer
-        than the lounger wins and the treatment is refused -- even though
-        LinkPeepToFurniture would have skipped that chaise and reserved the
-        lounger. The same anchoring lets the probe accept a lounger whose
-        slots are all spoken for by villagers still walking to it, after
-        which the link lands on a chaise and the post-link check leaks it.
-
-        Anchoring on the placement record of the lounger that
-        VF2FindFreeSpaLoungerSlot already chose removes the nearest-match
-        question entirely.
-        """
-        body = _receiving_body()
-        collapsed = " ".join(body.split())
         self.assertNotIn(
-            "FindFurniture( CContentMap::eObjectChaise, villager.FeetPos()",
-            collapsed,
-            "a feet-anchored probe reintroduces the nearest-match failures",
-        )
-        probe = body.index("FindFurniture")
-        window = body[:probe]
-        self.assertIn(
-            "loungerSlot * 0x40", window,
-            "the probe must be anchored on the chosen lounger's placement record",
+            "LinkPeepToFurniture", body,
+            "a speculative link cannot be released; read the placement "
+            "record instead",
         )
 
-    def test_the_probe_anchor_comes_from_the_chosen_slot(self):
-        # loungerSlot is what VF2FindFreeSpaLoungerSlot proved free. Anchoring
-        # on any other slot would probe a lounger that may be occupied.
+    def test_the_treatment_reads_the_placement_record_it_chose(self):
+        # Everything the treatment needs -- anchor point, orientation and the
+        # unique handle -- lives in the placement record that
+        # VF2FindFreeSpaLoungerSlot already named, so reading it reserves
+        # nothing and there is nothing to leak.
         body = _receiving_body()
-        record = body.index("loungerSlot * 0x40")
-        self.assertLess(
-            body.index("loungerSlot"), record + 1,
-            "loungerSlot must be established before it anchors the probe",
-        )
-        self.assertIn("+ 0x14", body)
-        self.assertIn("+ 0x18", body)
+        self.assertIn("loungerSlot * 0x40", body)
+        for offset, field in (("0x04", "handle"), ("0x10", "orientation"),
+                              ("0x14", "x"), ("0x18", "y")):
+            with self.subTest(offset=offset, field=field):
+                self.assertIn("+ " + offset, body)
 
-    def test_the_probe_result_is_checked_before_the_link(self):
+    def test_the_occupancy_bit_is_rechecked(self):
+        # record[+0x0C] & 1 is the occupancy bit. A slot index alone is not a
+        # guarantee the record is still live.
         body = _receiving_body()
-        check = body.index("VF2SpaLoungerHasHandle")
-        link = body.index("LinkPeepToFurniture")
-        self.assertLess(
-            check, link,
-            "probing and then linking regardless would reserve the chaise "
-            "the probe just rejected",
-        )
+        self.assertIn("0x0C", body)
 
     def test_identity_is_by_placement_handle_not_by_position(self):
         # info.point is the WALK-TO ANCHOR, so hit-testing it asks which item
@@ -160,24 +126,10 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
         # labelled "Playing pool". Two chaises of the same type are
         # distinguishable only by handle.
         body = _receiving_body()
-        self.assertIn("unknown0", body)
+        self.assertIn("VF2SpaLoungerHasHandle(info.unknown0)", body)
         self.assertNotIn(
-            "VF2FurnitureItemAtPoint(probe.point)", body,
+            "VF2FurnitureItemAtPoint(info.point)", body,
             "position lookups cannot tell two chaises of one type apart",
-        )
-        self.assertNotIn("VF2FurnitureItemAtPoint(info.point)", body)
-
-    def test_what_the_link_actually_reserved_is_confirmed(self):
-        # The probe and the link ask slightly different questions -- the
-        # linker also skips placements with no free peep slot -- so the
-        # result is confirmed rather than assumed.
-        body = _receiving_body()
-        link = body.index("LinkPeepToFurniture")
-        after = body[link:]
-        self.assertIn(
-            "VF2SpaLoungerHasHandle(info.unknown0)", after,
-            "the link's own result is never checked, so a lounger that "
-            "filled up between the probe and the link goes unnoticed",
         )
 
     def test_the_finder_accepts_only_the_two_spa_loungers(self):
