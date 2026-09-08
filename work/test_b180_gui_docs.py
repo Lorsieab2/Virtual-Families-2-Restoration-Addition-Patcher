@@ -204,17 +204,35 @@ class TestTheReadmeDoesNotOverclaimRouting(unittest.TestCase):
         # Reads the same source of truth the sibling docs suite uses, so the
         # prose and the route table cannot drift apart independently.
         docs = (ROOT / "work" / "test_b180_docs.py").read_text(encoding="utf-8")
-        # ANCHORED to line start on purpose. The sibling suite also declares
-        # BEHAVIOR_PATCH_ROUTED, the four items that route only under
-        # VF2_ENABLE_BEHAVIOR_PATCHES=1. An unanchored non-greedy search
-        # matches THAT set first and reads the drop-route claim off the wrong
-        # table -- which reported the four gated items as drop-routed and
-        # SpaLoungerStd as absent, the exact inverse of the truth.
-        routed = re.search(r"^ROUTED = \{(.*?)\}", docs, re.S | re.M).group(1)
-        self.assertIn("SpaLoungerStd", routed)
+        # BOTH TOGGLE STATES, because the answer differs between them.
+        #
+        # The sibling suite declares BEHAVIOR_PATCH_ROUTED immediately above
+        # ROUTED, then merges it in with a later ROUTED.update(). An unanchored
+        # non-greedy search matched the FIRST set and read this claim off the
+        # wrong table. Anchoring to line start reads only the initial literal,
+        # which is the unflagged build -- and silently drops the four items
+        # that a behaviour-patches build really does route.
+        #
+        # Neither set alone is "the routed items". The unflagged build routes
+        # the Spa Lounger and not the four; the behaviour-patches build routes
+        # all five, by exact item id, through the dispatch emitted into
+        # VF2HandleDropOnMobileFurniture. So both are asserted.
+        base = re.search(r"^ROUTED = \{(.*?)\}", docs, re.S | re.M).group(1)
+        gated = re.search(
+            r"^BEHAVIOR_PATCH_ROUTED = \{(.*?)\}", docs, re.S | re.M
+        ).group(1)
+
+        # Unflagged build: the Spa Lounger is the only routed visible item.
+        self.assertIn("SpaLoungerStd", base)
         for absent in ("ExerciseBikeStd", "HomeGymSystemStd", "PingPongTableStd"):
-            with self.subTest(absent):
-                self.assertNotIn(absent, routed)
+            with self.subTest(unflagged=absent):
+                self.assertNotIn(absent, base)
+
+        # Behaviour-patches build: the other four are routed as well, and the
+        # README must not claim they are indistinguishable to the drop path.
+        for present in ("ExerciseBikeStd", "HomeGymSystemStd", "PingPongTableStd"):
+            with self.subTest(behavior_patches=present):
+                self.assertIn(present, gated)
 
 
 class TestTheWaitWindowClaimsHold(unittest.TestCase):
