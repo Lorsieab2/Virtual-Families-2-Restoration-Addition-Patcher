@@ -101,17 +101,49 @@ class TestOnlyReceivingIsAutonomous(unittest.TestCase):
             "record instead",
         )
 
-    def test_the_treatment_reads_the_placement_record_it_chose(self):
-        # Everything the treatment needs -- anchor point, orientation and the
-        # unique handle -- lives in the placement record that
-        # VF2FindFreeSpaLoungerSlot already named, so reading it reserves
-        # nothing and there is nothing to leak.
+    def test_the_walk_anchor_is_hotspot_adjusted(self):
+        """PlanToGo must receive info.point, never the raw record position.
+
+        The record's +0x14/+0x18 are the world position. FindFurniture
+        produces the walk-to anchor by ADDING the furniture map's hotspot
+        offset -- the engine's own instructions, recorded in
+        work/test_prop_image_descriptors.py:
+
+            +0x110  sub  esi, [eax]        ; hotspot x
+            +0x121  mov  ecx, [ebx + 0x14] ; record x
+            +0x127  add  ecx, esi          ; x + hotspot -> info.point.x
+
+        Passing the raw coordinates would walk the villager into the
+        furniture footprint, and VF2SpaTreatmentPoint would then subtract
+        another four pixels from an already wrong point.
+        """
         body = _receiving_body()
-        self.assertIn("loungerSlot * 0x40", body)
-        for offset, field in (("0x04", "handle"), ("0x10", "orientation"),
-                              ("0x14", "x"), ("0x18", "y")):
-            with self.subTest(offset=offset, field=field):
-                self.assertIn("+ " + offset, body)
+        self.assertNotIn(
+            "info.point.x = ", body,
+            "info.point must come from the lookup, which applies the "
+            "hotspot offset, not be assigned from the record",
+        )
+        self.assertNotIn("info.point.y = ", body)
+        self.assertIn("VF2SpaTreatmentPoint(info.point)", body)
+
+    def test_the_lookup_is_the_read_only_one(self):
+        # FindFurniture reserves nothing, so asking it costs nothing and
+        # there is never anything to release.
+        body = _receiving_body()
+        self.assertIn("FindFurniture", body)
+        self.assertIn("loungerPlacement", body)
+
+    def test_the_lookup_is_confirmed_against_the_chosen_record(self):
+        # FindFurniture is nearest-match from the point given. Anchoring it at
+        # the record's own position should resolve that placement, but the
+        # handle at +0x04 confirms it rather than assuming.
+        body = _receiving_body()
+        collapsed = " ".join(body.split())
+        self.assertIn(
+            "*reinterpret_cast<int *>(spaRecord + 0x04) != info.unknown0",
+            collapsed,
+            "the lookup's result must be tied back to the chosen record",
+        )
 
     def test_the_occupancy_bit_is_rechecked(self):
         # record[+0x0C] & 1 is the occupancy bit. A slot index alone is not a

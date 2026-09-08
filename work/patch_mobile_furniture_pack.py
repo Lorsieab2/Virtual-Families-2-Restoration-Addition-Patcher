@@ -28872,15 +28872,37 @@ static bool VF2HandleMobileSpaLoungerReceiving(CVillager &villager)
     unsigned char *spaRecord = spaManager + 0x1008 + loungerSlot * 0x40;
     if ((*reinterpret_cast<unsigned int *>(spaRecord + 0x0C) & 1) == 0) return false;
 
+    // The record's own +0x14/+0x18 are the WORLD POSITION, which is not where
+    // a villager stands to use the item. FindFurniture computes the walk-to
+    // anchor by adding the furniture map's hotspot offset:
+    //
+    //     +0x110  sub  esi, [eax]        ; hotspot x
+    //     +0x121  mov  ecx, [ebx + 0x14] ; record x
+    //     +0x127  add  ecx, esi          ; x + hotspot -> info.point.x
+    //
+    // (disassembly recorded in work/test_prop_image_descriptors.py). So the
+    // raw record coordinates would walk the villager INTO the footprint by
+    // however much that map's hotspot is offset, and VF2SpaTreatmentPoint
+    // would then subtract another four pixels from an already wrong point.
+    //
+    // FindFurniture is the read-only lookup and reserves nothing, so it is
+    // safe to ask here. Anchoring it at the record's own position means it
+    // resolves this placement rather than whatever is nearest the villager,
+    // and the handle check below confirms that it did.
+    ldwPoint loungerPlacement = {
+        *reinterpret_cast<int *>(spaRecord + 0x14),
+        *reinterpret_cast<int *>(spaRecord + 0x18)};
     sFurnitureInfo2 info = {};
-    info.unknown0 = *reinterpret_cast<int *>(spaRecord + 0x04);
-    info.orientation = *reinterpret_cast<int *>(spaRecord + 0x10);
-    info.point.x = *reinterpret_cast<int *>(spaRecord + 0x14);
-    info.point.y = *reinterpret_cast<int *>(spaRecord + 0x18);
+    if (!FurnitureManager.FindFurniture(
+            CContentMap::eObjectChaise, loungerPlacement, info, true, 0, 0)) {
+        return false;
+    }
 
-    // The slot came from VF2FindFreeSpaLoungerSlot, which already filtered on
-    // item id, but confirm by handle rather than trusting the index: the same
-    // check every other route in this file makes, and it costs one walk.
+    // Confirm the lookup landed on THIS placement, by the unique handle
+    // AddToWorld stamps at +0x04, rather than on some other chaise that
+    // happened to be nearer to the same point. Nothing has been reserved, so
+    // returning here costs nothing.
+    if (*reinterpret_cast<int *>(spaRecord + 0x04) != info.unknown0) return false;
     if (!VF2SpaLoungerHasHandle(info.unknown0)) return false;
 
     CVillagerPlans *plans = reinterpret_cast<CVillagerPlans *>(&villager);
