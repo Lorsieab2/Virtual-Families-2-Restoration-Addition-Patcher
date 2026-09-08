@@ -70,12 +70,24 @@ WIDENED_LOUNGERS = (
 )
 
 
-def _cells(path):
+def _cell_list(path):
+    """The map's cells IN ORDER, one entry per cell.
+
+    _cells() summarises to a Counter, which answers "how many of each value"
+    and cannot answer "what is at cell N" or even "how many cells are there".
+    Any check about positions, sizes or occupancy counts needs this instead --
+    iterating the Counter yields each distinct value once, which silently turns
+    a 266-cell map into a 3-element sequence.
+    """
     data = path.read_bytes()
     count = (len(data) - 0x20 - 0x10) // 4
-    return Counter(
+    return [
         struct.unpack_from("<I", data, 0x20 + 4 * i)[0] for i in range(count)
-    )
+    ]
+
+
+def _cells(path):
+    return Counter(_cell_list(path))
 
 
 def _release_glob():
@@ -94,31 +106,52 @@ def _release_glob():
     named = os.environ.get("VF2_VERIFY_RELEASE")
     if named:
         return "VF2-%s-matrix-*" % named
-    releases = sorted(
-        {
-            m.group(1)
-            for d in OUTPUTS.glob("VF2-B*-matrix-*")
-            for m in [re.match(r"VF2-(B\d+)-matrix-", d.name)]
-            if m
-        },
-        key=lambda name: int(name[1:]),
-    )
+    releases = {
+        m.group(1)
+        for d in OUTPUTS.glob("VF2-B*-matrix-*")
+        for m in [re.match(RELEASE_NAME_RE, d.name)]
+        if m
+    }
     if not releases:
         return None
-    return "VF2-%s-matrix-*" % releases[-1]
+    return "VF2-%s-matrix-*" % max(releases, key=_release_sort_key)
+
+
+# Releases are not always plain integers. data/vf2 already carries
+# build-matrix-release-b174.1.json, -b174.2.json and -b174b.json, so a pattern
+# demanding "-matrix-" straight after the digits skips every point release --
+# either verifying an older base release or, when a point release is newest,
+# returning nothing and skipping every check in this file. That is the same
+# silent-skip failure this change exists to remove, so the full naming
+# convention is parsed: B<major>, optionally .<minor>, optionally a letter.
+RELEASE_NAME_RE = r"VF2-(B\d+(?:\.\d+)?[a-z]?)-matrix-"
+
+
+def _release_sort_key(name):
+    """Order B174 < B174.1 < B174.2 < B174b < B181 < B184.
+
+    Plain-string ordering puts B181 before B84 and B174.10 before B174.2, so
+    each component is compared as its own type: the major as an integer, the
+    minor as an integer (absent sorts first), the letter suffix as text.
+    """
+    m = re.fullmatch(r"B(\d+)(?:\.(\d+))?([a-z]?)", name)
+    if not m:
+        return (0, 0, "")
+    major, minor, suffix = m.groups()
+    return (int(major), int(minor) if minor else 0, suffix)
 
 
 # The spa-lounger hotspot widening merged in #239, after the B181 matrix was
 # built. A build from B181 or earlier cannot carry it, and demanding it there
 # would be asserting a fix onto a release that predates it.
-WIDENING_FIRST_RELEASE = 182
+WIDENING_FIRST_RELEASE = (182, 0, "")
 
 
 def _release_has_widening(build_name):
-    m = re.match(r"VF2-B(\d+)-matrix-", build_name)
+    m = re.match(RELEASE_NAME_RE, build_name)
     if not m:
         return False
-    return int(m.group(1)) >= WIDENING_FIRST_RELEASE
+    return _release_sort_key(m.group(1)) >= WIDENING_FIRST_RELEASE
 
 
 def _finished_builds():
@@ -203,20 +236,33 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                             "does not match the desktop-safe donor map",
                         )
                         continue
-                    # A widened spa map must be the donor map PLUS object
-                    # cells, never anything else: same length, and every cell
-                    # that is not an added object cell unchanged.
+                    # ORDERED CELL LISTS FROM HERE DOWN.
+                    #
+                    # _cells() returns a Counter, which is right for the
+                    # equality check above and wrong for everything below it.
+                    # Iterating a Counter yields each distinct KEY once, so
+                    # `len()` was the number of distinct values rather than the
+                    # map size, `zip(expected, shipped)` walked keys instead of
+                    # cells, and the per-value tally below counted every value
+                    # exactly once -- which made `obj` an arbitrary pick rather
+                    # than the object value, and left the widening assertion
+                    # comparing 1 against 1 however much wider the map got.
+                    #
+                    # The result was a check that went red on a CORRECTLY
+                    # widened artifact. Positions matter here, so the ordered
+                    # lists are used.
+                    shipped_cells = _cell_list(path)
+                    expected_cells = _cell_list(PC_FMAP_DONOR)
                     self.assertEqual(
-                        len(shipped), len(expected),
+                        len(shipped_cells), len(expected_cells),
                         "the widened map changed size",
                     )
-                    counts = {}
-                    for value in expected:
-                        if value:
-                            counts[value] = counts.get(value, 0) + 1
+                    counts = Counter(v for v in expected_cells if v)
                     self.assertTrue(counts, "the donor map has no object cells")
-                    obj = max(counts, key=lambda v: counts[v])
-                    for index, (was, now) in enumerate(zip(expected, shipped)):
+                    obj = counts.most_common(1)[0][0]
+                    for index, (was, now) in enumerate(
+                        zip(expected_cells, shipped_cells)
+                    ):
                         if was == now:
                             continue
                         self.assertEqual(
@@ -236,9 +282,18 @@ class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
                     # no untranslated anchor, no overwritten cell.
                     if not _release_has_widening(build.name):
                         continue
+                    # COUNT OCCURRENCES, NOT DISTINCT VALUES.
+                    #
+                    # _cells() returns a Counter, and iterating a Counter
+                    # yields each distinct KEY once. `sum(1 for v in shipped
+                    # if v == obj)` is therefore at most 1 on both sides, so
+                    # this compared 1 against 1 however much wider the map
+                    # got -- red on a correctly widened artifact, which is the
+                    # opposite of what it is for. Counter[obj] is the real
+                    # occupied-cell count.
                     self.assertGreater(
-                        sum(1 for v in shipped if v == obj),
-                        sum(1 for v in expected if v == obj),
+                        sum(1 for v in shipped_cells if v == obj),
+                        sum(1 for v in expected_cells if v == obj),
                         "the spa map is not actually wider than the donor, so "
                         "the widening did not reach this build",
                     )
