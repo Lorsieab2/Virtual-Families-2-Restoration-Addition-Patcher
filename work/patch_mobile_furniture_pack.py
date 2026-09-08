@@ -24800,8 +24800,23 @@ def sync_behavior_assets(manifest):
         if not donor:
             return
         path = assets / target
-        donor_path = assets / donor
-        if not path.is_file() or not donor_path.is_file():
+        # THE DONOR IS READ FROM ITS SOURCE, NOT FROM Assets/.
+        #
+        # Assets/<donor> is not the donor's map. The build installs an EMPTY
+        # map under the donor's own name -- B181 ships Chaise_brown.png.fmap
+        # with no object cells at all -- so reading it here found zero object
+        # cells, hit `if not counts: return`, and silently widened nothing.
+        # The spa loungers shipped at the donor's 11 cells and the owner's
+        # "the hotspot is very small" report was never actually addressed.
+        #
+        # find_fmap_source resolves the same file copy_donor_fmap used, so the
+        # cells dilated here are the ones the borrower was actually built
+        # from. It is also STABLE across builds, which is what keeps this
+        # idempotent: dilating from the target's own cells compounds on every
+        # rerun -- measured on this map, 11 -> 33 -> 62 -> 92 -> 125 -- while
+        # a fixed donor always yields the same cell set however often it runs.
+        donor_path = find_fmap_source(donor)
+        if not path.is_file() or donor_path is None or not donor_path.is_file():
             return
         source = bytearray(donor_path.read_bytes())
         data = bytearray(path.read_bytes())
