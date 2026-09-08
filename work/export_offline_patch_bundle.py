@@ -3193,6 +3193,55 @@ def refuse_to_drop_overlay_settings(
     #
     # So the release path says so, and everything else keeps working.
     # docs/offline-patcher.md's partial workflows are unaffected.
+    #
+    # RESIDUAL, STATED RATHER THAN HIDDEN: a caller that invokes this module
+    # DIRECTLY passes no flags, so is_release is False and this returns
+    # without checking anything. That is the exact path B183 was produced by.
+    #
+    # Three attempts to close it in this function all failed, and the reason
+    # is the same each time -- no property of the ARTIFACT distinguishes a
+    # release from a deliberate partial export:
+    #
+    #   "produced some overlays but not all"  B183 produced NONE of the five,
+    #                                         so the defect passes the test
+    #   "ships a replacement executable"      eleven legitimate partial
+    #                                         exports in this repo's own suite
+    #                                         ship an exe with a subset
+    #   "ships an exe and claims no subset"   those same eleven fixtures pass
+    #                                         no flag either, and drop all
+    #                                         five -- the B183 shape exactly
+    #
+    # Where the residual IS defended is the release gate, not here, and what
+    # defends it is a MEASUREMENT OF THE ARTIFACT rather than any claim about
+    # how the artifact was produced.
+    #
+    # work/gate_release_zip.py counts the settings a bundle offers and
+    # quarantines it below EXPECTED_SETTING_COUNT (35). B183 offered 23, so it
+    # fails that floor on the numbers alone -- no matter which script built
+    # it, and no matter what flags were or were not passed.
+    #
+    # THE FLOOR IS WHERE A B183-SHAPED BUNDLE STOPS, AND THAT IS THE WHOLE
+    # DEFENCE FOR THIS CASE. gate_release_zip.main() returns at the
+    # short_of_expected() quarantine, so lost_settings() -- the check that
+    # NAMES the twelve features B183 dropped -- never runs for an archive
+    # this thin. Verified by execution, not by reading: a 23-setting archive
+    # quarantines with "offers 23 settings; a complete release carries 35"
+    # and lost_settings is never invoked. It guards a different case, an
+    # archive that clears the floor but still drops something its
+    # predecessor carried.
+    #
+    # So the operator sees a COUNT here, not a feature list. Saying otherwise
+    # would send whoever hits this looking for names the run did not produce.
+    #
+    # NOT the identities file, which is a separate check and proves nothing
+    # about provenance: work/export_release_variant_identities.py:129 writes
+    # data/vf2/release-identities-<release>.json too, and the gate's own
+    # error message at gate_release_zip.py:413 tells the reader to run that
+    # standalone writer. Its presence therefore says a required artifact
+    # exists, not that the wrapper produced the bundle.
+    #
+    # Closing it HERE would mean a release-intent signal the exporter can
+    # verify rather than be told, and nothing in the artifact carries one.
     if not is_release:
         return
 

@@ -14,6 +14,7 @@ donor file is untouched and validate_mobile_chaise_pc_fmaps still holds.
 import pathlib
 import re
 import struct
+import sys
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -626,6 +627,292 @@ class TheWideningScopeIsExactlyTheTwoSpaLoungers(unittest.TestCase):
             "the widening loop no longer iterates SPA_LOUNGER_WIDENED_FMAPS "
             "directly, so the scope this suite checks is not the scope the "
             "generator uses")
+
+class TheWideningIsMeasuredOnTheMapItWrites(unittest.TestCase):
+    """Run the PRODUCTION widener and measure the bytes, not the source text.
+
+    Every other check in this file either runs the local widen() copy or greps
+    the generator for a substring. Both pass against code that never executes,
+    and both passed while two separate agents reported two wrong drop-target
+    counts for this map -- 13, because the empty-only rule could not claim the
+    footprint #201 gives a borrower, and then 38, because the dilation was
+    seeded from the borrower's own cells instead of the donor's.
+
+    This test fails on both. It stages a borrower carrying the mobile
+    footprint, runs sync_behavior_assets with OUT redirected into a temporary
+    directory, and reads the file the production path actually wrote.
+    """
+
+    OBJECT = 0x2000A800
+    ANCHOR = 0x00009800
+    MOBILE_ANCHOR = 0x01B09800
+    FOOTPRINT = 0x01B00000
+    DONOR_SEEDED_RING = 33
+    BORROWER_EXTRA_OBJECT_CELLS = 2
+
+    def setUp(self):
+        # THE ONLY LEGITIMATE SKIP IN THIS CLASS. Everything else these tests
+        # need is created in the temp directory, so a missing donor is the
+        # sole genuine prerequisite -- and it is checked HERE, before the
+        # generator runs, rather than inferred from an exception afterwards.
+        if not DONOR.is_file():
+            self.skipTest("donor fmap not present in this checkout")
+
+    def _load(self, tag):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(tag, GENERATOR)
+        gen = importlib.util.module_from_spec(spec)
+        sys.modules[tag] = gen
+        spec.loader.exec_module(gen)
+        return gen
+
+    def _stage(self, tmp):
+        """A borrower shaped like the one #201 produces: the donor's drop
+        target and anchor, with mobile footprint filling the space around it.
+        """
+        raw = DONOR.read_bytes()
+        width, height = struct.unpack_from("<ii", raw, 24)
+        cells = list(struct.unpack_from("<%dI" % (width * height), raw, 32))
+        seeded = sum(1 for value in cells if value == self.OBJECT)
+        for index, value in enumerate(cells):
+            if value == 0:
+                cells[index] = self.FOOTPRINT
+
+        # THE BORROWER MUST CARRY MORE OBJECT CELLS THAN THE DONOR, or the
+        # two candidate seeds pick the same positions and a borrower-seeded
+        # dilation is indistinguishable from a donor-seeded one. The shipped
+        # map has exactly this asymmetry -- 13 object cells against the
+        # donor's 11 -- because borrowed_fmap_bytes takes the desktop-safe
+        # map's translated cells on top of the donor's geometry. Without it
+        # this fixture cannot fail on the bug that produced 38.
+        extra = [i for i, v in enumerate(cells)
+                 if v == self.FOOTPRINT][:self.BORROWER_EXTRA_OBJECT_CELLS]
+        for index in extra:
+            cells[index] = self.OBJECT
+        data = bytearray(raw)
+        struct.pack_into("<%dI" % (width * height), data, 32, *cells)
+        # Staged as the DONOR, not as the borrowers. copy_donor_fmap runs
+        # before the widener and rewrites every borrower from the donor, so a
+        # borrower staged directly is discarded before the widener sees it.
+        # Putting the footprint in the donor is also what a release build
+        # does: borrowed_fmap_bytes carries the mobile geometry across into
+        # each borrower, which is where the 13-cell shipped map came from.
+        assets = tmp / "Assets"
+        assets.mkdir(parents=True, exist_ok=True)
+        donors = tmp / "donors"
+        donors.mkdir(parents=True, exist_ok=True)
+        (donors / DONOR.name).write_bytes(bytes(data))
+        return assets, seeded, donors
+
+    def _counts(self, path):
+        blob = path.read_bytes()
+        width, height = struct.unpack_from("<ii", blob, 24)
+        counted = {}
+        for value in struct.unpack_from("<%dI" % (width * height), blob, 32):
+            counted[value] = counted.get(value, 0) + 1
+        return counted
+
+    def _run(self, tag):
+        import tempfile
+        gen = self._load(tag)
+        holder = tempfile.TemporaryDirectory()
+        tmp = pathlib.Path(holder.name)
+        assets, seeded, donors = self._stage(tmp)
+        gen.OUT = tmp
+        # BOTH LOOKUPS HAVE TO BE OVERRIDDEN, NOT JUST ONE.
+        # find_fmap_source searches
+        #     vanilla_payload_fmap_source_dirs() + FMAP_SOURCE_DIRS
+        # so prepending to FMAP_SOURCE_DIRS alone does NOT win: a clone with a
+        # vanilla runtime payload -- which is the prescribed full-clone test
+        # environment -- resolves the real 11-cell Chaise_brown first and the
+        # fixture's staged donor is never read. Reproduced by pointing
+        # VF2_VANILLA_RUNTIME_DIR at a payload holding that donor: the correct
+        # generator then produced 33 where this fixture expects 35, and the
+        # plain lounger 11 where it expects 13, failing 5 tests. The tests
+        # passed here only because this worktree happens to have no vanilla
+        # payload carrying the map.
+        gen.FMAP_SOURCE_DIRS = (donors,) + tuple(gen.FMAP_SOURCE_DIRS)
+        gen.vanilla_payload_fmap_source_dirs = lambda: ()
+        # PREREQUISITES ARE CHECKED BEFORE THE CALL, AND THE CALL IS NOT
+        # WRAPPED. A blanket "except Exception -> skipTest" around
+        # sync_behavior_assets turns a generator regression into a green run:
+        # measured by raising inside the widener, the suite reported
+        # "16 passed, 5 skipped" and verified no map at all. A skip is not a
+        # pass, and an exception from the production path is the failure
+        # these tests exist to surface.
+        #
+        # The one genuine prerequisite is the donor, which setUp already
+        # requires. Anything else that raises here is a real defect.
+        manifest = {"items": []}
+        try:
+            gen.sync_behavior_assets(manifest)
+        except Exception:
+            holder.cleanup()
+            raise
+        return gen, holder, assets, seeded, manifest, donors / DONOR.name
+
+    def test_it_claims_the_footprint_and_leaves_the_anchor_alone(self):
+        gen, holder, assets, seeded, _m, _d = self._run(
+            "_gen_bytes_under_test")
+        try:
+            for target in gen.SPA_LOUNGER_WIDENED_FMAPS:
+                with self.subTest(target=target):
+                    path = assets / target
+                    self.assertTrue(
+                        path.is_file(),
+                        "%s was never written, so there is nothing to "
+                        "measure" % target)
+                    counted = self._counts(path)
+                    drop = counted.get(self.OBJECT, 0)
+
+                    # THE POINT OF THIS TEST. An empty-only rule cannot grow a
+                    # borrower at all, because a borrower's ring is footprint
+                    # rather than empty space. That is the state that shipped
+                    # at 13.
+                    self.assertGreater(
+                        drop, seeded,
+                        "the drop target never grew past its %d seeded "
+                        "cells, so no footprint was claimed" % seeded)
+
+                    # SEEDED FROM THE DONOR, so the reachable set is the
+                    # donor's own dilation (33 on this map) plus whatever
+                    # object cells the borrower already carried and the
+                    # widener preserves. Computed rather than hardcoded: an
+                    # earlier draft asserted a bare 33 and failed on correct
+                    # code, because it had been measured on a fixture whose
+                    # borrower carried no extra cells.
+                    #
+                    # Seeding from the BORROWER instead reaches further and
+                    # compounds on every rebuild -- measured 38, 63, 92, 125,
+                    # 160 on the shipped map -- and these maps are written
+                    # into a tracked asset directory, so that is a real
+                    # defect rather than a cosmetic one.
+                    # EXACT, NOT A RANGE. "grew past its seed" and "did not
+                    # pass the ring" together still accept every partial
+                    # widening in between: measured, a claim loop that breaks
+                    # after converting ONE footprint cell passes all three
+                    # checks in this class while leaving the hotspot
+                    # essentially unwidened. The fixture is deterministic --
+                    # donor ring plus the cells the borrower already carried
+                    # -- so the exact figure is knowable and is what pins the
+                    # approved dilation to the SHIPPED transform rather than
+                    # to the local reimplementation.
+                    exact = (self.DONOR_SEEDED_RING
+                             + self.BORROWER_EXTRA_OBJECT_CELLS)
+                    self.assertEqual(
+                        drop, exact,
+                        "the drop target came out at %d where this fixture's "
+                        "donor-seeded ring gives exactly %d: fewer means the "
+                        "dilation stopped early, more means it was seeded "
+                        "from the borrower and will compound on every "
+                        "rebuild" % (drop, exact))
+
+                    self.assertEqual(
+                        counted.get(self.ANCHOR, 0), 1,
+                        "the peep-slot anchor was claimed; that breaks "
+                        "placement outright rather than widening it")
+                    self.assertEqual(
+                        counted.get(self.MOBILE_ANCHOR, 0), 0,
+                        "an untranslated mobile anchor reached a desktop map")
+        finally:
+            holder.cleanup()
+
+
+    def test_the_plain_lounger_is_never_widened(self):
+        """InvisibleLounger must come out of a build at the donor's count.
+
+        The owner named the two SPA loungers and only those. The plain
+        InvisibleLounger borrows the same donor, so a widener that grows it
+        would change an item nobody asked to change -- and the suite could not
+        see it happen. Adding InvisibleLounger.png.fmap to
+        SPA_LOUNGER_WIDENED_FMAPS takes it from 11 cells to 33 and every other
+        check in this file still passes, including the two behavioural ones
+        above: they only ever look at the targets the tuple names, so a tuple
+        with an extra entry is measured as correct by construction.
+
+        test_no_ordinary_chaise_is_widened guards Chaise_brown and
+        Chaise_blue by name, which does not cover this: the plain lounger is
+        not a chaise, it is a third borrower of the chaise's map.
+
+        So this measures the file the build wrote rather than the tuple that
+        chose it. It is the same reason the behavioural checks exist -- a name
+        list can be wrong, bytes on disk cannot.
+        """
+        gen, holder, assets, _seeded, manifest, staged_donor = self._run(
+            "_gen_scope_under_test")
+        try:
+            # ABSENCE IS A FAILURE HERE, NOT A SKIP. _run() stages the
+            # donor and every output directory this map needs, so there is no
+            # environment in which it is legitimately missing -- if the build
+            # stopped writing it, that is the regression, and skipping would
+            # report a green run for the very artifact this test protects.
+            plain = assets / "InvisibleLounger.png.fmap"
+            self.assertTrue(
+                plain.is_file(),
+                "the build never wrote InvisibleLounger.png.fmap, so the "
+                "plain lounger cannot be checked for accidental widening")
+
+            # Compared against the STAGED donor, not the tracked one on
+            # disk. _stage() adds object cells to the donor so the two
+            # candidate dilation seeds are distinguishable, and the plain
+            # lounger inherits those through copy_donor_fmap. Measuring
+            # against the tracked donor reports 13 vs 11 and fails on correct
+            # code -- the borrower was never widened, it was copied from a
+            # donor that already had 13.
+            expected = self._counts(staged_donor)[self.OBJECT]
+            counted = self._counts(plain)
+            self.assertEqual(
+                counted.get(self.OBJECT, 0), expected,
+                "the plain InvisibleLounger left the build with %d drop "
+                "cells where its donor has %d, so it was widened; only the "
+                "two spa loungers were approved for that"
+                % (counted.get(self.OBJECT, 0), expected))
+
+            # And the reverse: silence here must mean "not widened", not
+            # "not built". A build that never writes the file would satisfy
+            # the count check above by skipping, so the record is checked too.
+            record = manifest.get("behavior_assets", {}).get(
+                "spa_lounger_widened_hotspots") or []
+            widened = [row.get("target") for row in record]
+            self.assertNotIn(
+                "InvisibleLounger.png.fmap", widened,
+                "the widener recorded the plain lounger as a target: %s"
+                % widened)
+        finally:
+            holder.cleanup()
+
+    def test_the_record_reports_what_came_from_the_footprint(self):
+        """A build that claimed nothing must be distinguishable from one that
+        did, without re-reading every map."""
+        gen, holder, _assets, _seeded, manifest, _d = self._run(
+            "_gen_record_under_test")
+        try:
+            record = manifest.get("behavior_assets", {}).get(
+                "spa_lounger_widened_hotspots")
+
+            # NOT assertIsNotNone ALONE. When the widener claims nothing it
+            # returns before recording, so the key is missing entirely and a
+            # bare "for row in record" iterates nothing and passes. That is
+            # the empty-only shape this test exists to catch, so the count is
+            # asserted before the rows are examined.
+            self.assertTrue(
+                record,
+                "no widening was recorded at all, which is what an "
+                "empty-only claim rule produces on a borrower whose ring is "
+                "footprint rather than empty space")
+            self.assertEqual(
+                len(record), len(gen.SPA_LOUNGER_WIDENED_FMAPS),
+                "expected one record per widened target, got %s"
+                % [row.get("target") for row in record])
+            for row in record:
+                with self.subTest(target=row["target"]):
+                    self.assertGreater(
+                        row["claimed_from_footprint"], 0,
+                        "no footprint claimed, so this build is the "
+                        "empty-only shape that shipped at 13: %s" % row)
+        finally:
+            holder.cleanup()
+
 
 
 if __name__ == "__main__":

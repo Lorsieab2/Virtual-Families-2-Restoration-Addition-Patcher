@@ -28570,9 +28570,18 @@ static void VF2SpaHoldLoungerForWalk(CVillager &villager, int handle)
 //
 // ForgetPlans ALONE is what this file does at 34 other interrupt sites. The
 // engine picks a villager with no plans up on its next tick, by which time
-// this function has returned, the entry is gone, and the taker is visible
-// the ordinary way -- so the walker re-chooses against a settled table
-// rather than a half-mutated one.
+// this function has returned and the entry is gone, so the walker re-chooses
+// against a settled table rather than a half-mutated one. Whether the TAKER
+// is visible to that choice depends on who took it; the body says so at the
+// point the interrupt happens, and that is the only place it is stated.
+//
+// REJECTED, so nobody rederives it: "the taker is visible the ordinary way".
+// That was asserted here unconditionally through #252 and it is FALSE for the
+// chaise caller -- a chaise taker never sets a receiving label, so
+// VF2SpaOccupantIndex cannot see it however long the walker waits. Only a
+// manual drop is visible that way. Stating it without the qualifier reads as
+// a guarantee that the walker will find the lounger occupied, which is
+// exactly the assumption VF2TryLinkMobileChaise documents as NOT holding.
 static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
 {
     for (int index = 0; index < 30; ++index) {
@@ -28594,9 +28603,17 @@ static void VF2SpaReleaseHoldOnLounger(int handle, CVillager *keep)
         //
         // ForgetPlans alone is what nearly every other interrupt site in this
         // file does, and the engine picks a villager with no plans up on its
-        // next tick. By then this function has returned, the entry is gone,
-        // and the taker is visible the ordinary way -- so the walker
-        // re-chooses against a settled table rather than a half-mutated one.
+        // next tick. By then this function has returned and the entry is
+        // gone, so the walker re-chooses against a settled table rather than
+        // a half-mutated one.
+        //
+        // WHETHER THE TAKER IS VISIBLE TO THAT CHOICE DEPENDS ON WHO TOOK IT.
+        // A manual drop sets a receiving label, so VF2SpaOccupantIndex sees
+        // it once the villager arrives. A CHAISE taker never carries that
+        // label, so it is invisible to the spa finder either way -- which is
+        // the residual VF2TryLinkMobileChaise documents at its own call to
+        // this function, and is not made better or worse by removing the
+        // restart.
         //
         // Only a villager still en route to a treatment is interrupted. One
         // that already finished, or was interrupted by something else, has
