@@ -417,12 +417,21 @@ def main():
         if resolved is None or not resolved.is_file():
             continue
         drop = cells(resolved).get(OBJECT_CELL, 0)
-        if drop < WIDENED_DROP_CELLS:
+        # EQUALITY, NOT A LOWER BOUND. `drop < 33` catches an incomplete
+        # widening and admits an over-widened one, which is the compounding
+        # defect: seeding the dilation from the widened output instead of the
+        # donor gives 38, and a second pass over that gives 62, then 92, 125,
+        # 160 into a tracked asset directory. Both of those are numbers this
+        # project actually produced today. The ring is deterministic, so the
+        # exact figure is knowable and anything else is wrong.
+        if drop != WIDENED_DROP_CELLS:
             problems.append(
-                f"Assets/{name}: {drop} drop-target cells, expected "
-                f"{WIDENED_DROP_CELLS}; the hotspot widening is incomplete "
-                f"(the empty-only rule produces 13 and still passes every "
-                f"digest check)"
+                f"Assets/{name}: {drop} drop-target cells, expected exactly "
+                f"{WIDENED_DROP_CELLS}. Fewer means the widening is "
+                f"incomplete (the empty-only rule produces 13 and still "
+                f"passes every digest check); more means it compounded, "
+                f"which happens when the dilation is seeded from its own "
+                f"output rather than from the donor"
             )
     for name in LOUNGER_MAPS:
         if name in WIDENED_LOUNGER_MAPS:
