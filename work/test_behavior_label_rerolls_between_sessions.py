@@ -37,8 +37,18 @@ def find_function_body(name):
     failure. A test that names a specific function must use function_body, so
     a typo or a rename fails loudly instead of silently checking nothing.
     """
+    # MULTI-WORD RETURN TYPES MUST MATCH, or the sweep skips real code.
+    # `[\w:]+` is a SINGLE token, so `unsigned int`, `unsigned char *` and
+    # `VF2DonorBehavior const *` never matched and this returned None for
+    # them. Measured on the generator at the time of writing: 494 emitted
+    # VF2* definitions, 50 of which returned None. The sweep treats None as
+    # "forward declaration, nothing to check", so those 50 were silently
+    # exempt from the ungated-persistent-label check this file exists to
+    # enforce -- a hole that looks exactly like a passing test.
     match = re.search(
-        r'^(?:extern "C" )?(?:static )?[\w:]+(?: __cdecl)? \*?%s\([^;{]*\)\s*\n?\{'
+        r'^(?:extern "C" )?(?:static )?'
+        r'[\w:]+(?:\s+(?:const|unsigned|signed|long|short|char|int|\w+))*'
+        r'(?: __cdecl)?[ *]+\*?%s\([^;{]*\)\s*\n?\{'
         r'(.*?)^\}' % re.escape(name),
         SOURCE,
         re.S | re.M,
@@ -411,6 +421,43 @@ class InterleavedVillagersKeepTheirOwnLabels(unittest.TestCase):
         self.assertFalse(self.slot_is_current_for(
             ann, self.Slot(ann, 0x0B3, 7, praise_count=2)))
 
+
+
+class TheSweepSeesEveryEmittedDefinition(unittest.TestCase):
+    """A definition the body finder cannot parse is silently exempt.
+
+    The sweep over every VF2* name treats a None body as "forward
+    declaration, nothing to check". That is correct for a real forward
+    declaration and catastrophic for a definition the regex merely failed to
+    match: the function is then exempt from the ungated-persistent-label check
+    this file exists to enforce, and the run still reports green.
+
+    Measured before the fix: 494 emitted VF2* definitions, 50 of which
+    returned None because the return type was multi-word -- `unsigned int`,
+    `unsigned char *`, `VF2DonorBehavior const *`. All 50 went unchecked.
+
+    This pins the PROPERTY rather than the count, so it keeps working as the
+    generator grows.
+    """
+
+    DEFINITION = (
+        r'^(?:extern "C" )?(?:static )?[A-Za-z_][\w:<>, ]*?[ *]+'
+        r'(VF2\w+)\([^;{]*\)\s*\n?\{'
+    )
+
+    def test_no_emitted_definition_is_invisible_to_the_sweep(self):
+        definitions = set(re.findall(self.DEFINITION, SOURCE, re.M))
+        self.assertGreater(
+            len(definitions), 100,
+            "the definition scan found almost nothing, so this test is not "
+            "measuring what it claims to")
+        invisible = sorted(name for name in definitions
+                           if find_function_body(name) is None)
+        self.assertEqual(
+            invisible, [],
+            "%d emitted definitions are invisible to find_function_body, so "
+            "the sweep skips them as though they were forward declarations: "
+            "%s" % (len(invisible), invisible[:8]))
 
 
 if __name__ == "__main__":
