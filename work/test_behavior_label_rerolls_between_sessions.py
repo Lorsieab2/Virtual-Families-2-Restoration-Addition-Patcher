@@ -29,31 +29,42 @@ SOURCE = GENERATOR.read_text(encoding="utf-8")
 PERSISTENT_LABEL_OFFSET = "0x1BBA8"
 
 
-def find_function_body(name):
-    """Like function_body, but returns None when there is no definition.
+# Any return type, including multi-token ones. Enumerating the shapes was the
+# bug: `unsigned int`, `unsigned char *`, `VF2DonorBehavior const *` and
+# `__fastcall` all failed to match, so 32 real definitions read as absent.
+# Anchor on the NAME and accept whatever precedes it on that line.
+_DEFINITION = (
+    r'^(?:extern "C" )?[A-Za-z_][\w \*&:]*?\b%s\([^;{]*\)\s*\n?\{(.*?)^\}'
+)
 
-    Only the sweep over every VF2* name may use this: a name harvested from a
-    loose scan can be a forward declaration with no body, which is not a
-    failure. A test that names a specific function must use function_body, so
-    a typo or a rename fails loudly instead of silently checking nothing.
+
+def find_function_body(name):
+    """The body of an emitted C definition, or None if the file has none.
+
+    None means THERE IS NO DEFINITION -- a forward declaration such as
+    `extern "C" void __cdecl VF2RandomBigBurgerLabel(CVillager &);` with the
+    real one elsewhere, or a name that only appears in a comment. It must never
+    mean "there is a definition and this helper could not parse it": callers
+    treat None as nothing-to-check, so an unparseable definition would be
+    silently exempted from every rule in this file. has_definition() exists so
+    the sweep can tell those two cases apart.
     """
-    # MULTI-WORD RETURN TYPES MUST MATCH, or the sweep skips real code.
-    # `[\w:]+` is a SINGLE token, so `unsigned int`, `unsigned char *` and
-    # `VF2DonorBehavior const *` never matched and this returned None for
-    # them. Measured on the generator at the time of writing: 494 emitted
-    # VF2* definitions, 50 of which returned None. The sweep treats None as
-    # "forward declaration, nothing to check", so those 50 were silently
-    # exempt from the ungated-persistent-label check this file exists to
-    # enforce -- a hole that looks exactly like a passing test.
-    match = re.search(
-        r'^(?:extern "C" )?(?:static )?'
-        r'[\w:]+(?:\s+(?:const|unsigned|signed|long|short|char|int|\w+))*'
-        r'(?: __cdecl)?[ *]+\*?%s\([^;{]*\)\s*\n?\{'
-        r'(.*?)^\}' % re.escape(name),
-        SOURCE,
-        re.S | re.M,
-    )
+    match = re.search(_DEFINITION % re.escape(name), SOURCE, re.S | re.M)
     return match.group(1) if match else None
+
+
+def has_definition(name):
+    """Is there a definition line for this name at all, however it is spelled?
+
+    Deliberately cruder than _DEFINITION: it asks whether some line opens a
+    body for this name, without trying to parse the return type. When this is
+    true and find_function_body is None, the helper is at fault, not the code.
+    """
+    return re.search(
+        r'^[A-Za-z_][^\n;]*\b%s\([^;]*$' % re.escape(name),
+        SOURCE,
+        re.M,
+    ) is not None
 
 
 def function_body(name):
@@ -67,12 +78,7 @@ def function_body(name):
     followed by an opening brace with no semicolon in between, which is what
     distinguishes the two.
     """
-    match = re.search(
-        r'^(?:extern "C" )?(?:static )?[\w:]+(?: __cdecl)? \*?%s\([^;{]*\)\s*\n?\{'
-        r'(.*?)^\}' % re.escape(name),
-        SOURCE,
-        re.S | re.M,
-    )
+    match = re.search(_DEFINITION % re.escape(name), SOURCE, re.S | re.M)
     assert match, "emitted C definition %s not found" % name
     body = match.group(1)
     assert len(body.strip()) > 20, (
@@ -143,14 +149,30 @@ class ThePersistentLabelIsOnlyReadBehindTheCacheGate(unittest.TestCase):
         # of those. Testing for the precise shape keeps this test meaningful
         # instead of freezing a list of names that drifts.
         readers = []
+        unreadable = []
         for name in re.findall(r"^static [\w \*&]*?\b(VF2\w+)\(", SOURCE, re.M):
             body = find_function_body(name)
-            if body is None or PERSISTENT_LABEL_OFFSET not in body:
+            if body is None:
+                # A name with no definition is a forward declaration and is
+                # genuinely nothing to check. A name WITH a definition that the
+                # helper could not read is a harness fault, and skipping it
+                # would exempt that function from this rule while the test
+                # stayed green -- which is the defect this suite exists to
+                # catch, in the suite itself.
+                if has_definition(name):
+                    unreadable.append(name)
+                continue
+            if PERSISTENT_LABEL_OFFSET not in body:
                 continue
             compares = re.search(r"\bstrn?cmp\b", body)
             against_a_group = re.search(r"labels\[|kVF2BehaviorLabels_", body)
             if compares and against_a_group:
                 readers.append(name)
+        self.assertEqual(
+            sorted(unreadable), [],
+            "these functions have definitions this test could not parse, so "
+            "they were exempted from the rule below without anyone noticing",
+        )
         self.assertEqual(
             sorted(set(readers) - {"VF2ScanLabelGroup"}),
             [],
@@ -247,11 +269,14 @@ class InterleavedVillagersKeepTheirOwnLabels(unittest.TestCase):
     """
 
     class Slot(object):
-        def __init__(self, villager, behavior_id, serial, praise_count=0):
+        def __init__(self, villager, behavior_id, serial, praise_count=0,
+                     string_id=0x1234):
             self.villager = villager
             self.behaviorId = behavior_id
             self.behaviorSerial = serial
             self.praiseCount = praise_count
+            # 0 means "the native label is the current one" (the roll-0 case).
+            self.stringId = string_id
 
     class Villager(object):
         def __init__(self, behavior_id, serial, praised_id=-1, praise_count=0):
@@ -413,6 +438,68 @@ class InterleavedVillagersKeepTheirOwnLabels(unittest.TestCase):
             "both accept paths must record the praise count, as "
             "VF2BehaviorLabelCacheStillActive does",
         )
+
+    def test_the_roll_zero_native_choice_survives_another_villager(self):
+        """The third P1, reproduced.
+
+        A group's roll-0 outcome means "keep the native label" and is cached as
+        stringId 0. The native text matches nothing in any mod label group, so
+        the resolver legitimately returns 0 and the applier falls through to its
+        OWN cache lookup. Reading that through the global-guarded function
+        reintroduces the defect one level down: with another villager last
+        through the wrapped-native path the lookup fails, the applier rolls
+        again, and a deliberate native-label choice becomes a mod caption
+        mid-action.
+        """
+        ann = self.Villager(behavior_id=0x0B3, serial=7)
+        bob = self.Villager(behavior_id=0x048, serial=2)
+        # stringId 0 == "the native label is the current one".
+        ann_slot = self.Slot(ann, 0x0B3, 7)
+        ann_slot.stringId = 0
+
+        # What the applier used to ask, with Bob last through the native path.
+        self.assertFalse(
+            self.cache_still_active(ann_slot, ann, before_villager=bob),
+            "this is the P1: the applier's own cache read failed and it "
+            "re-rolled over the native label",
+        )
+        # What it asks now.
+        self.assertTrue(
+            self.slot_is_current_for(ann, ann_slot),
+            "the anchored read must find Ann's roll-0 choice regardless of "
+            "which villager last ran a wrapped native behaviour",
+        )
+
+    def test_every_applier_reads_the_cache_villager_anchored(self):
+        # The resolver being anchored is not enough; the appliers do their own
+        # cache read, and that is where the roll-0 choice is honoured.
+        for name in ("VF2ApplyRememberedOrRandomLabel", "VF2ApplyVenueLabel",
+                     "VF2ApplyRememberedOrRandomLabels2",
+                     "VF2ApplyRememberedOrRandomLabels3"):
+            body = function_body(name)
+            self.assertIn(
+                "VF2GetVillagerCachedBehaviorLabel(villager, ", body,
+                "%s reads the cache through the global-guarded function" % name,
+            )
+            self.assertNotIn("VF2GetCachedBehaviorLabel(villager, ", body)
+
+    def test_the_anchored_reader_still_restores_the_native_label(self):
+        # Dropping this call would leave the roll-0 case with no text to show.
+        body = function_body("VF2GetVillagerCachedBehaviorLabel")
+        self.assertIn("if (slot->stringId == 0) {", body)
+        self.assertIn("VF2RestoreCachedNativeLabel(villager, cacheTag);", body)
+
+    def test_the_radio_handler_keeps_the_global_guarded_read(self):
+        """The one place the global IS the right question.
+
+        VF2RandomRadioBehavior sets gVF2BehaviorLabelBeforeVillager itself and
+        reads the cache inside that window, so retargeting it would change a
+        call path this work has no business touching.
+        """
+        body = function_body("VF2RandomRadioBehavior")
+        self.assertIn("gVF2BehaviorLabelBeforeVillager = &villager;", body)
+        self.assertIn("VF2GetCachedBehaviorLabel(villager, cacheTag", body)
+        self.assertNotIn("VF2GetVillagerCachedBehaviorLabel", body)
 
     def test_serial_plus_one_without_a_praise_is_a_new_session(self):
         # The praise allowance must not become a blanket "one serial of slack".
