@@ -171,11 +171,37 @@ def _finished_builds():
             yield d
 
 
+def _refuse_or_skip(case):
+    """AN EXPLICIT REQUEST THAT MATCHES NOTHING IS AN ERROR, NOT A SKIP.
+
+    Setting VF2_VERIFY_RELEASE asks for a named release to be verified. If it
+    is misspelled, or names output that has since been cleaned up, skipping
+    reports the same "OK" as a real verification -- VF2_VERIFY_RELEASE=B999
+    gave OK (skipped=5). That is the silent skip this file exists to remove,
+    reintroduced through the escape hatch added to remove it.
+
+    With the variable unset there is nothing to be wrong about: a clean
+    checkout has no build output and must not be red.
+
+    Shared by both test classes deliberately. The first version of this guard
+    lived in one setUp, and the other class kept skipping -- so the same
+    request still produced a skip, just a quieter one.
+    """
+    named = os.environ.get("VF2_VERIFY_RELEASE")
+    if named:
+        case.fail(
+            "VF2_VERIFY_RELEASE=%s was requested but no finished build matches "
+            "%r under %s. Verification of a named release cannot pass by being "
+            "skipped." % (named, _release_glob(), OUTPUTS)
+        )
+    case.skipTest("no finished current-release build output")
+
+
 class TestShippedLoungerMapsAreDesktopSafe(unittest.TestCase):
     def setUp(self):
         self.builds = list(_finished_builds())
         if not self.builds:
-            self.skipTest("no finished current-release build output")
+            _refuse_or_skip(self)
 
     def test_no_lounger_carries_the_untranslated_mobile_anchor(self):
         for build in self.builds:
@@ -370,7 +396,7 @@ class TestStockDonorBorrowersMatchTheirDonors(unittest.TestCase):
     def setUp(self):
         self.builds = list(_finished_builds())
         if not self.builds:
-            self.skipTest("no finished current-release build output")
+            _refuse_or_skip(self)
 
     def test_each_borrower_is_byte_identical_to_its_donor(self):
         checked = 0
